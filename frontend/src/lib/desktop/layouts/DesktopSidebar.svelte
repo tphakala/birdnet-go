@@ -80,6 +80,10 @@ Performance Optimizations:
     Moon,
   } from '@lucide/svelte';
   import { t } from '$lib/i18n';
+  import { onMount } from 'svelte';
+  import { api } from '$lib/utils/api';
+  import UpdateAvailableModal from '$lib/desktop/components/modals/UpdateAvailableModal.svelte';
+  import type { UpdateInfo } from '$lib/types/update';
   import type { Component } from 'svelte';
   import CollapsibleNavSection from './CollapsibleNavSection.svelte';
   import type { NavItem } from './CollapsibleNavSection.svelte';
@@ -117,6 +121,35 @@ Performance Optimizations:
       enabledProviders: [],
     },
   }: Props = $props();
+
+  // Update availability for the running build's channel (see
+  // /api/v2/system/update-check). Best-effort: any failure (offline, dev build,
+  // unauthorized) leaves this null and no indicator is shown.
+  let updateInfo = $state<UpdateInfo | null>(null);
+  let showUpdateModal = $state(false);
+
+  // Accent for the version link by state: up to date (muted), update (warning),
+  // critical update (error).
+  let versionClass = $derived.by(() => {
+    if (!updateInfo) {
+      return 'text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)]/80';
+    }
+    if (updateInfo.critical) {
+      return 'italic text-[var(--color-error)] hover:text-[var(--color-error)]/80';
+    }
+    return 'italic text-[var(--color-warning)] hover:text-[var(--color-warning)]/80';
+  });
+
+  onMount(async () => {
+    try {
+      const info = await api.get<UpdateInfo>('/api/v2/system/update-check');
+      if (info.updateAvailable) {
+        updateInfo = info;
+      }
+    } catch {
+      // No update indicator when the check can't be reached.
+    }
+  });
 
   // Logo variant: solid uses flat color, gradient uses per-scheme handcrafted gradient
   let logoVariant: LogoVariant = $derived(
@@ -765,22 +798,45 @@ Performance Optimizations:
         {/if}
       {/if}
 
-      <!-- Version -->
+      <!-- Version: italic + asterisk when a newer build exists; opens the modal -->
       {#if !isCollapsed}
         <div class="mt-3 text-center">
-          <a
-            href={appState.projectLinks.repoUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="text-xs text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)]/80 transition-colors duration-150"
-            aria-label={t('navigation.viewOnGithubAriaLabel')}
-          >
-            {version}
-          </a>
+          {#if updateInfo}
+            <button
+              type="button"
+              class={cn('text-xs transition-colors duration-150', versionClass)}
+              title={t('navigation.updateAvailable', { version: updateInfo.latestVersion ?? '' })}
+              aria-label={t('navigation.updateAvailable', {
+                version: updateInfo.latestVersion ?? '',
+              })}
+              onclick={() => (showUpdateModal = true)}
+            >
+              {version}<span aria-hidden="true">*</span>
+            </button>
+          {:else}
+            <a
+              href={appState.projectLinks.repoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              class={cn('text-xs transition-colors duration-150', versionClass)}
+              aria-label={t('navigation.viewOnGithubAriaLabel')}
+            >
+              {version}
+            </a>
+          {/if}
         </div>
       {/if}
     </div>
   </nav>
+
+  {#if updateInfo}
+    <UpdateAvailableModal
+      isOpen={showUpdateModal}
+      info={updateInfo}
+      currentVersion={version}
+      onClose={() => (showUpdateModal = false)}
+    />
+  {/if}
 
   <!-- Fixed-position tooltip for collapsed sidebar (escapes overflow containers).
        z-[210] keeps it above the drawer (z-[200] = Z_INDEX.SIDEBAR_DRAWER): the

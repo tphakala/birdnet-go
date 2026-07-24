@@ -246,6 +246,17 @@
     "reportBugAriaLabel": "Segnala un bug su GitHub (si apre in una nuova finestra)",
     "askQuestionAriaLabel": "Fai una domanda su GitHub Discussions (si apre in una nuova finestra)",
     "viewOnGithubAriaLabel": "Visualizza BirdNET-Go su GitHub (si apre in una nuova finestra)",
+    "updateAvailable": "Aggiornamento disponibile: {version}",
+    "update": {
+      "title": "Aggiornamento disponibile",
+      "critical": "Questo è un aggiornamento di sicurezza critico. Aggiorna il prima possibile.",
+      "currentVersion": "Versione attuale",
+      "latestVersion": "Ultima versione",
+      "released": "Pubblicato",
+      "channel": "Canale",
+      "whatsChanged": "Novità",
+      "viewRelease": "Visualizza la versione"
+    },
     "health": "Health",
     "sections": {
       "explore": "Esplora",

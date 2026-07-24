@@ -246,6 +246,17 @@
     "reportBugAriaLabel": "Ziņot par kļūdu GitHub (atveras jaunā logā)",
     "askQuestionAriaLabel": "Uzdot jautājumu GitHub Discussions (atveras jaunā logā)",
     "viewOnGithubAriaLabel": "Skatīt BirdNET-Go GitHub (atveras jaunā logā)",
+    "updateAvailable": "Pieejams atjauninājums: {version}",
+    "update": {
+      "title": "Pieejams atjauninājums",
+      "critical": "Šis ir kritisks drošības atjauninājums. Lūdzu, atjauniniet pēc iespējas ātrāk.",
+      "currentVersion": "Pašreizējā versija",
+      "latestVersion": "Jaunākā versija",
+      "released": "Izlaists",
+      "channel": "Kanāls",
+      "whatsChanged": "Kas jauns",
+      "viewRelease": "Skatīt laidienu"
+    },
     "health": "Health",
     "sections": {
       "explore": "Izpētīt",

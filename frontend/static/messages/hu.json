@@ -246,6 +246,17 @@
     "reportBugAriaLabel": "Hiba bejelentése a GitHubon (új ablakban nyílik meg)",
     "askQuestionAriaLabel": "Kérdés feltevése a GitHub Discussions oldalon (új ablakban nyílik meg)",
     "viewOnGithubAriaLabel": "BirdNET-Go megtekintése a GitHubon (új ablakban nyílik meg)",
+    "updateAvailable": "Elérhető frissítés: {version}",
+    "update": {
+      "title": "Elérhető frissítés",
+      "critical": "Ez egy kritikus biztonsági frissítés. Kérjük, frissítsen a lehető leghamarabb.",
+      "currentVersion": "Jelenlegi verzió",
+      "latestVersion": "Legújabb verzió",
+      "released": "Kiadva",
+      "channel": "Csatorna",
+      "whatsChanged": "Változások",
+      "viewRelease": "Kiadás megtekintése"
+    },
     "health": "Rendszerállapot",
     "sections": {
       "explore": "Felfedezés",

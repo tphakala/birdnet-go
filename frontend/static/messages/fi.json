@@ -246,6 +246,17 @@
     "reportBugAriaLabel": "Ilmoita virheestä GitHubissa (avautuu uuteen ikkunaan)",
     "askQuestionAriaLabel": "Esitä kysymys GitHub Discussions -foorumilla (avautuu uuteen ikkunaan)",
     "viewOnGithubAriaLabel": "Näytä BirdNET-Go GitHubissa (avautuu uuteen ikkunaan)",
+    "updateAvailable": "Päivitys saatavilla: {version}",
+    "update": {
+      "title": "Päivitys saatavilla",
+      "critical": "Tämä on kriittinen tietoturvapäivitys. Päivitä mahdollisimman pian.",
+      "currentVersion": "Nykyinen versio",
+      "latestVersion": "Uusin versio",
+      "released": "Julkaistu",
+      "channel": "Kanava",
+      "whatsChanged": "Mitä uutta",
+      "viewRelease": "Näytä julkaisu"
+    },
     "health": "Health",
     "sections": {
       "explore": "Selaa",

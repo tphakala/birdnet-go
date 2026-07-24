@@ -246,6 +246,17 @@
     "reportBugAriaLabel": "Rapportér en fejl på GitHub (åbner i nyt vindue)",
     "askQuestionAriaLabel": "Stil et spørgsmål på GitHub Discussions (åbner i nyt vindue)",
     "viewOnGithubAriaLabel": "Se BirdNET-Go på GitHub (åbner i nyt vindue)",
+    "updateAvailable": "Opdatering tilgængelig: {version}",
+    "update": {
+      "title": "Opdatering tilgængelig",
+      "critical": "Dette er en sikkerhedskritisk opdatering. Opdater så hurtigt som muligt.",
+      "currentVersion": "Nuværende version",
+      "latestVersion": "Seneste version",
+      "released": "Udgivet",
+      "channel": "Kanal",
+      "whatsChanged": "Hvad er nyt",
+      "viewRelease": "Se udgivelse"
+    },
     "health": "Health",
     "sections": {
       "explore": "Udforsk",
