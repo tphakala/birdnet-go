@@ -158,23 +158,27 @@ read -rs -p 'password: ' PASS; echo
 Then the rest:
 
 ```bash
-JAR=$(mktemp) || return
-BASE=http://localhost:8080
+(
+  set -e
+  JAR=$(mktemp)
+  trap 'rm -f "$JAR"' EXIT
+  BASE=http://localhost:8080
 
-curl -s -c "$JAR" "$BASE/" -o /dev/null
+  curl -s -c "$JAR" "$BASE/" -o /dev/null
 
-REDIRECT=$(printf '{"username":"admin","password":"%s"}' "$PASS" |
-  curl -s -b "$JAR" -c "$JAR" -X POST "$BASE/api/v2/auth/login" \
-    -H 'Content-Type: application/json' --data @- |
-  sed -n 's/.*"redirectUrl":"\([^"]*\)".*/\1/p' | sed 's/\\u0026/\&/g')
+  REDIRECT=$(printf '{"username":"admin","password":"%s"}' "$PASS" |
+    curl -s -b "$JAR" -c "$JAR" -X POST "$BASE/api/v2/auth/login" \
+      -H 'Content-Type: application/json' --data @- |
+    sed -n 's/.*"redirectUrl":"\([^"]*\)".*/\1/p' | sed 's/\\u0026/\&/g')
 
-if [ -z "$REDIRECT" ]; then
-  echo 'login failed, or this instance does not require authentication'
-else
+  if [ -z "$REDIRECT" ]; then
+    echo 'login failed, or this instance does not require authentication'
+    exit 1
+  fi
+
   curl -s -b "$JAR" -c "$JAR" -L -o /dev/null "$BASE$REDIRECT"
   curl -s -b "$JAR" -o heap.pprof -w 'fetch: %{http_code}\n' "$BASE/debug/pprof/heap"
-fi
-rm -f "$JAR"
+)
 ```
 
 ```bash
@@ -194,11 +198,15 @@ a failed login prints the whole error body instead of nothing, `$REDIRECT` is
 never empty, and the flow limps on to write an error page into `heap.pprof`.
 
 The login endpoint is exempt from CSRF, so no token is needed for it. The cookie
-jar holds a live session, which is why it goes in `mktemp` and is removed as soon
-as the fetch is done, and the password is piped rather than passed as an argument
-so it stays out of `ps`. Reading it with `read -rs` on its own line, before the
-block, keeps it out of shell history and stops the `read` from swallowing the
-next pasted line.
+jar holds a live session, which is why it goes in `mktemp` and is removed by the
+`trap` on the way out, whichever branch exits; and the password is piped rather
+than passed as an argument so it stays out of `ps`. Reading it with `read -rs` on
+its own line, before the block, keeps it out of shell history and stops the
+`read` from swallowing the next pasted line.
+
+The whole block runs in a subshell so `set -e` and `exit 1` abort just that
+block. Pasted into an interactive terminal, a bare `exit` would close the
+terminal and a bare `return` would error, since neither is inside a function.
 
 Everything after that is the ordinary two-step fetch-then-analyse workflow, and it
 applies to every endpoint in the table below.
