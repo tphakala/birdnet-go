@@ -5224,6 +5224,16 @@
       "title": "Geavanceerd",
       "description": "Verwerking en aangepaste modelconfiguratie."
     },
+    "downloadSource": {
+      "title": "Downloadbron",
+      "description": "Waar modelbestanden vandaan worden gedownload.",
+      "note": "Laat dit veld leeg tenzij huggingface.co is geblokkeerd of traag is op uw netwerk. De omgevingsvariabele HF_ENDPOINT wordt gebruikt wanneer dit veld leeg is, en huggingface.co wanneer geen van beide is ingesteld. Een waarde die geen geldig http- of https-adres is, wordt genegeerd en in plaats daarvan wordt de standaardwaarde gebruikt.",
+      "endpoint": {
+        "label": "HuggingFace-eindpunt",
+        "helpText": "Spiegelserver om modellen van te downloaden, bijvoorbeeld https://hf-mirror.com. Van toepassing op de volgende download; opnieuw opstarten is niet nodig.",
+        "validationMessage": "Voer een volledig adres in dat begint met http:// of https://, of laat het veld leeg."
+      }
+    },
     "gallery": {
       "title": "Modellengalerij",
       "description": "Beheer classificatiemodellen voor vogel- en vleermuisdetectie.",

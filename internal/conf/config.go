@@ -1272,6 +1272,12 @@ type BirdNETConfig struct {
 	OpenVINOPath       string              `yaml:"openvinopath,omitempty" json:"openVinoPath,omitempty"`       // path to libopenvino_c shared library (OpenVINO image variants only)
 	Backend            string              `yaml:"backend,omitempty" json:"backend,omitempty"`                 // inference backend preference: "auto" (default), "onnx", or "openvino"
 	OpenVINODevice     string              `yaml:"openvinodevice,omitempty" json:"openVinoDevice,omitempty"`   // OpenVINO device preference: "auto" (default), "cpu", or "gpu"
+	// HuggingFaceEndpoint overrides the host used for model catalog and model
+	// file downloads, e.g. "https://hf-mirror.com" where huggingface.co is
+	// unreachable. Empty falls back to the HF_ENDPOINT environment variable and
+	// then to conf.DefaultHuggingFaceEndpoint. Read fresh on every fetch, so a
+	// change takes effect without a restart.
+	HuggingFaceEndpoint string `yaml:"huggingfaceendpoint,omitempty" json:"huggingFaceEndpoint,omitempty"`
 }
 
 // Inference backend preferences for BirdNET.Backend.

@@ -5224,6 +5224,16 @@
       "title": "Avancerat",
       "description": "Bearbetning och anpassad modellkonfiguration."
     },
+    "downloadSource": {
+      "title": "Nedladdningskälla",
+      "description": "Varifrån modellfiler laddas ned.",
+      "note": "Lämna detta fält tomt såvida inte huggingface.co är blockerat eller långsamt på ditt nätverk. Miljövariabeln HF_ENDPOINT används när detta fält är tomt, och huggingface.co när ingetdera är angivet. Ett värde som inte är en giltig http- eller https-adress ignoreras och standardvärdet används i stället.",
+      "endpoint": {
+        "label": "HuggingFace-slutpunkt",
+        "helpText": "Spegelserver att ladda ned modeller från, till exempel https://hf-mirror.com. Gäller för nästa nedladdning; ingen omstart krävs.",
+        "validationMessage": "Ange en fullständig adress som börjar med http:// eller https://, eller lämna fältet tomt."
+      }
+    },
     "gallery": {
       "title": "Modellgalleri",
       "description": "Hantera klassificeringsmodeller för fågel- och fladdermusdetektion.",

@@ -5224,6 +5224,16 @@
       "title": "Advanced",
       "description": "Processing and custom model configuration."
     },
+    "downloadSource": {
+      "title": "Download Source",
+      "description": "Where model files are downloaded from.",
+      "note": "Leave this empty unless huggingface.co is blocked or slow on your network. The HF_ENDPOINT environment variable is used when this field is empty, and huggingface.co when neither is set. A value that is not a valid http or https address is ignored and the default is used instead.",
+      "endpoint": {
+        "label": "HuggingFace endpoint",
+        "helpText": "Mirror to download models from, for example https://hf-mirror.com. Applies to the next download; no restart needed.",
+        "validationMessage": "Enter a full address starting with http:// or https://, or leave the field empty."
+      }
+    },
     "gallery": {
       "title": "Model Gallery",
       "description": "Manage classifier models for bird and bat detection.",

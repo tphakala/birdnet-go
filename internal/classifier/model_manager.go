@@ -946,6 +946,10 @@ func (mm *ModelManager) downloadModelFiles(ctx context.Context, entry *CatalogEn
 		}
 	}
 
+	// Resolve the HuggingFace host once per install so every file in the same
+	// install comes from the same mirror.
+	endpoint := mm.huggingFaceEndpoint()
+
 	// Download each file.
 	var modelPath, labelsPath string
 	var completedBytes int64
@@ -978,7 +982,7 @@ func (mm *ModelManager) downloadModelFiles(ctx context.Context, entry *CatalogEn
 			if f.HuggingFaceRepo != "" {
 				repo = f.HuggingFaceRepo
 			}
-			url = buildHuggingFaceURL(repo, f.RemotePath)
+			url = buildHuggingFaceURL(endpoint, repo, f.RemotePath)
 		}
 
 		fileIndex++
@@ -1492,9 +1496,24 @@ func (mm *ModelManager) downloadFile(ctx context.Context, catalogID, url, destPa
 	return nil
 }
 
-// buildHuggingFaceURL constructs the download URL for a file in a HuggingFace repo.
-func buildHuggingFaceURL(repo, filePath string) string {
-	return "https://huggingface.co/" + repo + "/resolve/main/" + filePath
+// buildHuggingFaceURL constructs the download URL for a file in a HuggingFace
+// repo. The endpoint is the resolved host (see huggingFaceEndpoint) and must
+// not end in a slash.
+func buildHuggingFaceURL(endpoint, repo, filePath string) string {
+	return endpoint + "/" + repo + "/resolve/main/" + filePath
+}
+
+// huggingFaceEndpoint resolves the HuggingFace host for this fetch. It reads
+// the live settings on every call rather than caching, so a mirror configured
+// through the UI takes effect without a restart.
+func (mm *ModelManager) huggingFaceEndpoint() string {
+	var configured string
+	if mm.settings != nil {
+		if current := conf.GetSettings(); current != nil {
+			configured = current.BirdNET.HuggingFaceEndpoint
+		}
+	}
+	return conf.ResolveHuggingFaceEndpoint(configured)
 }
 
 // verifySHA256 checks whether the file at path matches the expected hex-encoded

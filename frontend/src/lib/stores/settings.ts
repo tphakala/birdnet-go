@@ -75,6 +75,9 @@ export interface BirdNetSettings {
   longitude: number;
   locationConfigured: boolean; // true when location has been explicitly configured
   rangeFilter: RangeFilterSettings;
+  // Host used for model downloads, e.g. https://hf-mirror.com where
+  // huggingface.co is unreachable. Empty means the default host.
+  huggingFaceEndpoint?: string;
 }
 
 export interface DynamicThresholdSettings {
@@ -879,6 +882,7 @@ function createEmptySettings(): SettingsFormData {
         speciesCount: null,
         species: [],
       },
+      huggingFaceEndpoint: '',
     },
     bat: {
       enabled: false,

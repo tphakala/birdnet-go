@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -958,7 +959,7 @@ func TestModelManager_Install_PerFileHuggingFaceRepo(t *testing.T) {
 		if f.HuggingFaceRepo != "" {
 			repo = f.HuggingFaceRepo
 		}
-		got := buildHuggingFaceURL(repo, f.RemotePath)
+		got := buildHuggingFaceURL(conf.DefaultHuggingFaceEndpoint, repo, f.RemotePath)
 		if f.HuggingFaceRepo != "" {
 			assert.Contains(t, got, "companion-repo", "file with per-file repo should use companion-repo")
 			assert.Equal(t, "https://huggingface.co/companion-repo/resolve/main/companion.bin", got)
@@ -1326,31 +1327,178 @@ func TestBuildHuggingFaceURL(t *testing.T) {
 
 	tests := []struct {
 		name     string
+		endpoint string
 		repo     string
 		filePath string
 		want     string
 	}{
 		{
 			name:     "simple file",
+			endpoint: conf.DefaultHuggingFaceEndpoint,
 			repo:     "tphakala/BirdNET-v3.0",
 			filePath: "birdnet_v3.0.onnx",
 			want:     "https://huggingface.co/tphakala/BirdNET-v3.0/resolve/main/birdnet_v3.0.onnx",
 		},
 		{
 			name:     "nested path",
+			endpoint: conf.DefaultHuggingFaceEndpoint,
 			repo:     "tphakala/BattyBirdNET-onnx",
 			filePath: "fp32/BattyBirdNET-EU-256kHz_fp32.onnx",
 			want:     "https://huggingface.co/tphakala/BattyBirdNET-onnx/resolve/main/fp32/BattyBirdNET-EU-256kHz_fp32.onnx",
+		},
+		{
+			name:     "mirror host",
+			endpoint: "https://hf-mirror.com",
+			repo:     "tphakala/BirdNET-v3.0",
+			filePath: "birdnet_v3.0.onnx",
+			want:     "https://hf-mirror.com/tphakala/BirdNET-v3.0/resolve/main/birdnet_v3.0.onnx",
+		},
+		{
+			name:     "mirror host with a path prefix",
+			endpoint: "https://mirror.example.com/hf",
+			repo:     "tphakala/BattyBirdNET-onnx",
+			filePath: "fp32/BattyBirdNET-EU-256kHz_fp32.onnx",
+			want:     "https://mirror.example.com/hf/tphakala/BattyBirdNET-onnx/resolve/main/fp32/BattyBirdNET-EU-256kHz_fp32.onnx",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := buildHuggingFaceURL(tt.repo, tt.filePath)
+			got := buildHuggingFaceURL(tt.endpoint, tt.repo, tt.filePath)
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// TestModelManager_HuggingFaceEndpoint verifies the resolution the download
+// path uses: the settings field when config sync is enabled, HF_ENDPOINT
+// otherwise, and the default host when neither is set.
+func TestModelManager_HuggingFaceEndpoint(t *testing.T) {
+	// Not parallel: mutates global settings via conf.StoreSettings and the
+	// HF_ENDPOINT environment variable.
+
+	// Save original settings to restore after test.
+	origSettings := conf.GetSettings()
+	t.Cleanup(func() { conf.StoreSettings(origSettings) })
+
+	// newManager publishes settings with the given endpoint override and
+	// returns a manager wired to them, mirroring production where the manager
+	// holds the published settings pointer.
+	newManager := func(t *testing.T, configured string) *ModelManager {
+		t.Helper()
+		settings := conftest.GetTestSettings()
+		settings.BirdNET.HuggingFaceEndpoint = configured
+		conf.StoreSettings(settings)
+		return NewModelManager(t.TempDir(), nil, settings)
+	}
+
+	t.Run("default when no override is configured", func(t *testing.T) {
+		mm := newManager(t, "")
+		assert.Equal(t, conf.DefaultHuggingFaceEndpoint, mm.huggingFaceEndpoint())
+	})
+
+	t.Run("settings field is honoured", func(t *testing.T) {
+		mm := newManager(t, "https://hf-mirror.com/")
+		assert.Equal(t, "https://hf-mirror.com", mm.huggingFaceEndpoint())
+	})
+
+	t.Run("settings change takes effect without recreating the manager", func(t *testing.T) {
+		mm := newManager(t, "")
+		require.Equal(t, conf.DefaultHuggingFaceEndpoint, mm.huggingFaceEndpoint())
+
+		updated := conf.CloneSettings(conf.GetSettings())
+		updated.BirdNET.HuggingFaceEndpoint = "https://hf-mirror.com"
+		conf.StoreSettings(updated)
+
+		assert.Equal(t, "https://hf-mirror.com", mm.huggingFaceEndpoint(),
+			"endpoint must be read fresh so a settings change hot-reloads")
+	})
+
+	t.Run("env var is honoured when the settings field is empty", func(t *testing.T) {
+		t.Setenv(conf.HuggingFaceEndpointEnvVar, "https://hf-mirror.com")
+		mm := newManager(t, "")
+		assert.Equal(t, "https://hf-mirror.com", mm.huggingFaceEndpoint())
+	})
+
+	t.Run("env var is honoured when config sync is disabled", func(t *testing.T) {
+		t.Setenv(conf.HuggingFaceEndpointEnvVar, "https://hf-mirror.com")
+		mm := NewModelManager(t.TempDir(), nil, nil)
+		assert.Equal(t, "https://hf-mirror.com", mm.huggingFaceEndpoint())
+	})
+
+	t.Run("malformed settings field falls back to the default", func(t *testing.T) {
+		mm := newManager(t, "hf-mirror.com")
+		assert.Equal(t, conf.DefaultHuggingFaceEndpoint, mm.huggingFaceEndpoint())
+	})
+}
+
+// TestModelManager_Install_UsesConfiguredEndpoint drives a real install through
+// the repo-construction path (baseURL empty) with the endpoint override
+// pointing at a local server, proving the mirror host reaches every file
+// download rather than only the URL helper.
+func TestModelManager_Install_UsesConfiguredEndpoint(t *testing.T) {
+	// Not parallel: mutates global settings via conf.StoreSettings.
+
+	modelContent := []byte("fake-onnx-model-binary-data")
+	labelsContent := []byte("species_a\nspecies_b\n")
+
+	var requested []string
+	var requestedMu sync.Mutex
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestedMu.Lock()
+		requested = append(requested, r.URL.Path)
+		requestedMu.Unlock()
+
+		switch r.URL.Path {
+		case "/mirror/test/repo/resolve/main/models/test.onnx":
+			_, _ = w.Write(modelContent)
+		case "/mirror/companion/repo/resolve/main/models/labels.txt":
+			_, _ = w.Write(labelsContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	entry := CatalogEntry{
+		ID:              "test-mirror-install",
+		Name:            "Mirror Test Model",
+		Version:         "1.0",
+		HuggingFaceRepo: "test/repo",
+		Files: []CatalogFile{
+			{RemotePath: "models/test.onnx", LocalName: "test.onnx", Role: RoleModel, SHA256: sha256Hex(modelContent), SizeBytes: int64(len(modelContent))},
+			{RemotePath: "models/labels.txt", LocalName: "labels.txt", Role: RoleLabels, SHA256: sha256Hex(labelsContent), SizeBytes: int64(len(labelsContent)), HuggingFaceRepo: "companion/repo"},
+		},
+	}
+
+	origSettings := conf.GetSettings()
+	t.Cleanup(func() { conf.StoreSettings(origSettings) })
+
+	settings := conftest.GetTestSettings()
+	// Trailing slash included on purpose: normalization must not produce "//".
+	settings.BirdNET.HuggingFaceEndpoint = srv.URL + "/mirror/"
+	conf.StoreSettings(settings)
+
+	modelsDir := t.TempDir()
+	mm := NewModelManager(modelsDir, nil, settings)
+
+	// baseURL is empty so the download path builds URLs from the endpoint and
+	// the repo, which is what a real install does.
+	require.NoError(t, mm.Install(t.Context(), &entry, "", nil))
+
+	assert.True(t, mm.IsInstalled("test-mirror-install"))
+
+	gotModel, err := os.ReadFile(filepath.Join(modelsDir, "test-mirror-install", "test.onnx"))
+	require.NoError(t, err)
+	assert.Equal(t, modelContent, gotModel)
+
+	requestedMu.Lock()
+	defer requestedMu.Unlock()
+	assert.Equal(t, []string{
+		"/mirror/test/repo/resolve/main/models/test.onnx",
+		"/mirror/companion/repo/resolve/main/models/labels.txt",
+	}, requested, "both the entry repo and the per-file repo must be fetched from the mirror")
 }
 
 func TestModelManager_Reinstall(t *testing.T) {

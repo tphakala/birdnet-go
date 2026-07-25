@@ -5224,6 +5224,16 @@
       "title": "Haladó",
       "description": "Feldolgozási és egyéni modell beállítások."
     },
+    "downloadSource": {
+      "title": "Letöltési forrás",
+      "description": "Ahonnan a modellfájlok letöltésre kerülnek.",
+      "note": "Hagyja üresen, kivéve ha a huggingface.co blokkolva van vagy lassú a hálózatán. A HF_ENDPOINT környezeti változó kerül felhasználásra, ha ez a mező üres, és a huggingface.co, ha egyik sincs beállítva. A nem érvényes http vagy https címként megadott értékeket a rendszer figyelmen kívül hagyja, és helyette az alapértelmezett értéket használja.",
+      "endpoint": {
+        "label": "HuggingFace végpont",
+        "helpText": "Tükörszerver a modellek letöltéséhez, például https://hf-mirror.com. A következő letöltésre vonatkozik; nincs szükség újraindításra.",
+        "validationMessage": "Adjon meg egy teljes címet, amely a http:// vagy a https:// karakterekkel kezdődik, vagy hagyja üresen a mezőt."
+      }
+    },
     "gallery": {
       "title": "Modellgaléria",
       "description": "Osztályozó modellek kezelése madár- és denevérdetektáláshoz.",

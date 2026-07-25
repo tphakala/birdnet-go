@@ -5224,6 +5224,16 @@
       "title": "Avanceret",
       "description": "Behandling og brugerdefineret modelkonfiguration."
     },
+    "downloadSource": {
+      "title": "Downloadkilde",
+      "description": "Hvor modelfiler downloades fra.",
+      "note": "Lad dette felt være tomt, medmindre huggingface.co er blokeret eller langsomt på dit netværk. Miljøvariablen HF_ENDPOINT bruges, når dette felt er tomt, og huggingface.co, når ingen af delene er angivet. En værdi, der ikke er en gyldig http- eller https-adresse, ignoreres, og standarden bruges i stedet.",
+      "endpoint": {
+        "label": "HuggingFace-endpoint",
+        "helpText": "Spejlserver til download af modeller, for eksempel https://hf-mirror.com. Gælder for næste download; genstart er ikke nødvendig.",
+        "validationMessage": "Indtast en fuld adresse, der starter med http:// eller https://, eller lad feltet være tomt."
+      }
+    },
     "gallery": {
       "title": "Modelgalleri",
       "description": "Administrer klassifikatormodeller til fugle- og flagermusdetektion.",

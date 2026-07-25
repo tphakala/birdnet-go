@@ -5224,6 +5224,16 @@
       "title": "Avançado",
       "description": "Configuração de processamento e modelos personalizados."
     },
+    "downloadSource": {
+      "title": "Origem de download",
+      "description": "Local de onde os arquivos do modelo são baixados.",
+      "note": "Deixe este campo vazio a menos que o huggingface.co esteja bloqueado ou lento em sua rede. A variável de ambiente HF_ENDPOINT é usada quando este campo está vazio, e huggingface.co quando nenhum está configurado. Um valor que não seja um endereço http ou https válido é ignorado e o padrão é usado.",
+      "endpoint": {
+        "label": "Endpoint do HuggingFace",
+        "helpText": "Espelho para baixar modelos, por exemplo https://hf-mirror.com. Aplica-se ao próximo download; não é necessário reiniciar.",
+        "validationMessage": "Insira um endereço completo começando com http:// ou https://, ou deixe o campo vazio."
+      }
+    },
     "gallery": {
       "title": "Galeria de modelos",
       "description": "Gerenciar modelos classificadores para detecção de aves e morcegos.",

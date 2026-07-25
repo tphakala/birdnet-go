@@ -5224,6 +5224,16 @@
       "title": "Erweitert",
       "description": "Verarbeitungs- und benutzerdefinierte Modellkonfiguration."
     },
+    "downloadSource": {
+      "title": "Download-Quelle",
+      "description": "Ort, von dem Modelldateien heruntergeladen werden.",
+      "note": "Lassen Sie dieses Feld leer, außer huggingface.co ist in Ihrem Netzwerk blockiert oder langsam. Die Umgebungsvariable HF_ENDPOINT wird verwendet, wenn dieses Feld leer ist, und huggingface.co, wenn keine von beiden gesetzt ist. Ein Wert, der keine gültige http- oder https-Adresse ist, wird ignoriert und stattdessen der Standardwert verwendet.",
+      "endpoint": {
+        "label": "HuggingFace-Endpunkt",
+        "helpText": "Spiegelserver zum Herunterladen von Modellen, zum Beispiel https://hf-mirror.com. Gilt für den nächsten Download; kein Neustart erforderlich.",
+        "validationMessage": "Geben Sie eine vollständige Adresse ein, die mit http:// oder https:// beginnt, oder lassen Sie das Feld leer."
+      }
+    },
     "gallery": {
       "title": "Modellgalerie",
       "description": "Klassifikatormodelle für Vogel- und Fledermauserkennungen verwalten.",

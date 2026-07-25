@@ -5224,6 +5224,16 @@
       "title": "Avancé",
       "description": "Configuration du traitement et des modèles personnalisés."
     },
+    "downloadSource": {
+      "title": "Source de téléchargement",
+      "description": "Emplacement à partir duquel les fichiers de modèle sont téléchargés.",
+      "note": "Laissez ce champ vide sauf si huggingface.co est bloqué ou lent sur votre réseau. La variable d'environnement HF_ENDPOINT est utilisée lorsque ce champ est vide, et huggingface.co lorsque ni l'un ni l'autre n'est défini. Une valeur qui n'est pas une adresse http ou https valide est ignorée et la valeur par défaut est utilisée à la place.",
+      "endpoint": {
+        "label": "Endpoint HuggingFace",
+        "helpText": "Miroir à partir duquel télécharger les modèles, par exemple https://hf-mirror.com. S'applique au prochain téléchargement; aucun redémarrage requis.",
+        "validationMessage": "Saisissez une adresse complète commençant par http:// ou https://, ou laissez le champ vide."
+      }
+    },
     "gallery": {
       "title": "Galerie de modèles",
       "description": "Gérer les modèles classificateurs pour la détection des oiseaux et des chauves-souris.",

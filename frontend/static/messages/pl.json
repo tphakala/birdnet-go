@@ -5224,6 +5224,16 @@
       "title": "Zaawansowane",
       "description": "Konfiguracja przetwarzania i modeli niestandardowych."
     },
+    "downloadSource": {
+      "title": "Źródło pobierania",
+      "description": "Miejsce, z którego pobierane są pliki modeli.",
+      "note": "Pozostaw to pole puste, chyba że huggingface.co jest zablokowane lub wolne w Twojej sieci. Zmienna środowiskowa HF_ENDPOINT jest używana, gdy to pole jest puste, a huggingface.co, gdy żadne z nich nie jest ustawione. Wartość, która nie jest prawidłowym adresem http lub https, zostanie zignorowana i zamiast niej zostanie użyta wartość domyślna.",
+      "endpoint": {
+        "label": "Punkt końcowy HuggingFace",
+        "helpText": "Serwer lustrzany do pobierania modeli, na przykład https://hf-mirror.com. Dotyczy następnego pobierania; restart nie jest wymagany.",
+        "validationMessage": "Wprowadź pełny adres zaczynający się od http:// lub https:// lub pozostaw pole puste."
+      }
+    },
     "gallery": {
       "title": "Galeria modeli",
       "description": "Zarządzaj modelami klasyfikatorów do detekcji ptaków i nietoperzy.",

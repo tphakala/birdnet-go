@@ -5224,6 +5224,16 @@
       "title": "Avansert",
       "description": "Behandling og egendefinert modellkonfigurasjon."
     },
+    "downloadSource": {
+      "title": "Nedlastingskilde",
+      "description": "Hvor modellfiler lastes ned fra.",
+      "note": "La dette feltet stå tomt med mindre huggingface.co er blokkert eller tregt på nettverket ditt. Miljøvariabelen HF_ENDPOINT brukes når dette feltet er tomt, og huggingface.co når ingen av dem er angitt. En verdi som ikke er en gyldig http- eller https-adresse ignoreres, og standardverdien brukes i stedet.",
+      "endpoint": {
+        "label": "HuggingFace-endepunkt",
+        "helpText": "Speilserver å laste ned modeller fra, for eksempel https://hf-mirror.com. Gjelder for neste nedlasting; omstart er ikke nødvendig.",
+        "validationMessage": "Skriv inn en fullstendig adresse som starter med http:// eller https://, eller la feltet stå tomt."
+      }
+    },
     "gallery": {
       "title": "Modellgalleri",
       "description": "Administrer klassifikatormodeller for fugle- og flaggermusdeteksjon.",

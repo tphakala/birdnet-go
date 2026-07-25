@@ -5224,6 +5224,16 @@
       "title": "Pokročilé",
       "description": "Konfigurace zpracování a vlastních modelů."
     },
+    "downloadSource": {
+      "title": "Zdroj stahování",
+      "description": "Místo, odkud se stahují soubory modelů.",
+      "note": "Ponechte prázdné, pokud není huggingface.co blokováno nebo pomalé ve vaší síti. Pokud je toto pole prázdné, použije se proměnná prostředí HF_ENDPOINT, a pokud není nastaveno ani jedno, použije se huggingface.co. Hodnota, která není platnou adresou http nebo https, je ignorována a místo ní se použije výchozí hodnota.",
+      "endpoint": {
+        "label": "Koncový bod HuggingFace",
+        "helpText": "Zrcadlový server, ze kterého se stahují modely, například https://hf-mirror.com. Projeví se při příštím stahování; není vyžadován restart.",
+        "validationMessage": "Zadejte úplnou adresu začínající na http:// nebo https://, nebo ponechte pole prázdné."
+      }
+    },
     "gallery": {
       "title": "Galerie modelů",
       "description": "Správa klasifikačních modelů pro detekci ptáků a netopýrů.",

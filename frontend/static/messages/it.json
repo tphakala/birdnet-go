@@ -5224,6 +5224,16 @@
       "title": "Avanzate",
       "description": "Configurazione dell'elaborazione e dei modelli personalizzati."
     },
+    "downloadSource": {
+      "title": "Sorgente di download",
+      "description": "Posizione da cui vengono scaricati i file del modello.",
+      "note": "Lasciare vuoto a meno che huggingface.co non sia bloccato o lento sulla rete. La variabile d'ambiente HF_ENDPOINT viene utilizzata quando questo campo è vuoto, e huggingface.co quando nessuna delle due è impostata. Un valore che non rappresenta un indirizzo http o https valido viene ignorato e viene utilizzato il valore predefinito.",
+      "endpoint": {
+        "label": "Endpoint di HuggingFace",
+        "helpText": "Mirror da cui scaricare i modelli, ad esempio https://hf-mirror.com. Si applica al download successivo; non è necessario riavviare.",
+        "validationMessage": "Inserire un indirizzo completo che inizi con http:// o https://, oppure lasciare il campo vuoto."
+      }
+    },
     "gallery": {
       "title": "Galleria modelli",
       "description": "Gestisci i modelli di classificazione per il rilevamento di uccelli e pipistrelli.",

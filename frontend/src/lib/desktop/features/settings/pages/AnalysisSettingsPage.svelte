@@ -91,6 +91,9 @@
 
   const logger = loggers.settings;
 
+  // Shown as the endpoint placeholder; must match conf.DefaultHuggingFaceEndpoint.
+  const DEFAULT_HUGGINGFACE_ENDPOINT = 'https://huggingface.co';
+
   const MODEL_LOGOS: Record<string, string> = {
     birdnet: logoBirdnet,
     perch: logoGoogle,
@@ -1445,13 +1448,44 @@
 
 <!-- ── Models Tab Content ────────────────────────────────────────────── -->
 {#snippet modelsTabContent()}
-  <SettingsSection
-    title={t('analysis.gallery.title')}
-    description={t('analysis.gallery.description')}
-    defaultOpen={true}
-  >
-    <SettingsTabs tabs={galleryTabs} bind:activeTab={galleryTab} showActions={false} />
-  </SettingsSection>
+  <div class="space-y-6">
+    <SettingsSection
+      title={t('analysis.gallery.title')}
+      description={t('analysis.gallery.description')}
+      defaultOpen={true}
+    >
+      <SettingsTabs tabs={galleryTabs} bind:activeTab={galleryTab} showActions={false} />
+    </SettingsSection>
+
+    <SettingsSection
+      title={t('analysis.downloadSource.title')}
+      description={t('analysis.downloadSource.description')}
+      defaultOpen={false}
+      originalData={{
+        huggingFaceEndpoint: store.originalData.birdnet?.huggingFaceEndpoint,
+      }}
+      currentData={{ huggingFaceEndpoint: birdnet?.huggingFaceEndpoint }}
+    >
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <TextInput
+          id="huggingface-endpoint"
+          type="url"
+          pattern="https?://.+"
+          value={birdnet?.huggingFaceEndpoint ?? ''}
+          label={t('analysis.downloadSource.endpoint.label')}
+          placeholder={DEFAULT_HUGGINGFACE_ENDPOINT}
+          helpText={t('analysis.downloadSource.endpoint.helpText')}
+          validationMessage={t('analysis.downloadSource.endpoint.validationMessage')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={value => updateBirdnetSetting('huggingFaceEndpoint', value.trim())}
+        />
+      </div>
+
+      <SettingsNote>
+        {t('analysis.downloadSource.note')}
+      </SettingsNote>
+    </SettingsSection>
+  </div>
 {/snippet}
 
 <!-- ── Gallery: Installed Tab ────────────────────────────────────────── -->
