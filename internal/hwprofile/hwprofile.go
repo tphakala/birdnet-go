@@ -57,8 +57,10 @@ const (
 	// without --device /dev/dri.
 	ReasonRenderNodeUnavailable = "render-node-unavailable"
 	// ReasonRenderNodePermission marks a GPU whose DRM render node is present
-	// but cannot be opened, the usual cause being a container that maps the
-	// device without adding the container user to the node's owning group.
+	// but cannot be opened. Two container misconfigurations produce it: the
+	// runtime user is not in the node's owning group, or the device was
+	// bind-mounted without being granted through the device cgroup, which is
+	// what "-v /dev/dri" does where "--device /dev/dri" was meant.
 	ReasonRenderNodePermission = "render-node-permission"
 	// ReasonNoRuntime marks a GPU for which this build ships no inference
 	// runtime at all (any AMD or NVIDIA GPU today).

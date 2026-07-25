@@ -1718,7 +1718,7 @@
       "capabilities": "Capabilities",
       "capabilitiesHelp": "Hardware tags used to match this machine against the available model builds.",
       "gpuReasonRenderNodeUnavailable": "No GPU device node is visible to the server. In Docker, map /dev/dri into the container; on a native install, check that the graphics driver is loaded.",
-      "gpuReasonRenderNodePermission": "The GPU device node cannot be opened. The account BirdNET-Go runs as needs access to the device's group, usually 'render'.",
+      "gpuReasonRenderNodePermission": "The GPU device node cannot be opened. Either the account BirdNET-Go runs as needs access to the device's group, usually 'render', or the container was given the device with -v instead of --device, which does not grant access to it.",
       "gpuReasonNoRuntime": "BirdNET-Go only accelerates inference on Intel graphics today, so this card will not be used.",
       "gpuReasonUnknown": "This GPU cannot be used for inference on this build.",
       "stock": "Stock",

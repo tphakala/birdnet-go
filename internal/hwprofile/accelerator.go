@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
@@ -230,7 +231,7 @@ func indexRenderNodes(root string, entries []os.DirEntry) renderNodeIndex {
 				continue
 			}
 			state := renderNodeDenied
-			if canAccessReadWrite(filepath.Join(root, devDRIDir, e.Name())) {
+			if canOpenRenderNode(filepath.Join(root, devDRIDir, e.Name())) {
 				state = renderNodeOpen
 			}
 			states[e.Name()] = state
@@ -252,6 +253,32 @@ func indexRenderNodes(root string, entries []os.DirEntry) renderNodeIndex {
 		}
 	}
 	return idx
+}
+
+// canOpenRenderNode reports whether this process can actually open the render
+// node for reading and writing, which is what submitting work to it requires.
+//
+// It performs a real open rather than a permission check. faccessat answers only
+// the mode-bit and ACL question, and an open can still fail after that passes: a
+// container's device cgroup denies the open without touching the permission
+// bits, which is exactly what "docker run -v /dev/dri:/dev/dri" produces when
+// the operator meant "--device /dev/dri". Reporting that GPU as reachable would
+// be a false green on the very misconfiguration this panel exists to catch.
+// SELinux and AppArmor deny at the same layer.
+//
+// The cost accepted for that accuracy is that opening a DRM node can resume a
+// runtime-suspended GPU. That happens at most once per process, behind the
+// hardware cache, and only when someone loads the page.
+//
+// O_NONBLOCK keeps a wedged driver from parking the probe in an uninterruptible
+// open while it holds the process-wide hardware mutex.
+func canOpenRenderNode(path string) bool {
+	file, err := os.OpenFile(path, os.O_RDWR|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return false
+	}
+	_ = file.Close()
+	return true
 }
 
 // isCardDir reports whether a DRM class entry is a card device rather than one
