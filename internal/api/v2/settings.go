@@ -1045,6 +1045,8 @@ func getSettingsSectionValue(settings *conf.Settings, section string) (any, erro
 		return &settings.Realtime.Telemetry, nil
 	case "sentry":
 		return &settings.Sentry, nil
+	case "diagnostics":
+		return &settings.Diagnostics, nil
 	case "notification":
 		return &settings.Notification, nil
 	case "logging":

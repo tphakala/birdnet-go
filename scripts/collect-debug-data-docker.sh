@@ -183,6 +183,11 @@ PROFILING_TOKEN="${BIRDNET_PROFILING_TOKEN:-}"
 # The generated token is base64url and needs no encoding, but a hand-configured
 # one may contain &, =, + or spaces, which would silently corrupt the request.
 urlencode() {
+    # LC_ALL=C forces byte-oriented iteration. Under a UTF-8 locale bash walks
+    # CHARACTERS, so a token containing e.g. 'e-acute' would be emitted as its
+    # single code point (%E9) rather than its UTF-8 bytes (%C3%A9), and the
+    # server would receive a different token than the one configured.
+    local LC_ALL=C
     local raw=$1
     local i char out=""
     for (( i = 0; i < ${#raw}; i++ )); do

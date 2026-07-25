@@ -83,6 +83,26 @@ func TestEnsureProfilingTokenForSave_NoOpCases(t *testing.T) {
 	}
 }
 
+// TestDiagnosticsSectionIsWritable closes the read/write asymmetry review
+// found: GET /api/v2/settings/diagnostics resolved by reflection over the
+// Settings fields and worked, while PATCH went through a hardcoded switch that
+// had no diagnostics case and answered 400. The section was readable but not
+// writable, so a client could see the feature's config and never change it.
+func TestDiagnosticsSectionIsWritable(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.Diagnostics.Profiling.Enabled = true
+
+	value, err := getSettingsSectionValue(settings, "diagnostics")
+	require.NoError(t, err, "the diagnostics section must be writable via PATCH")
+
+	section, ok := value.(*conf.DiagnosticsConfig)
+	require.True(t, ok, "expected the diagnostics section, got %T", value)
+	assert.True(t, section.Profiling.Enabled,
+		"the returned section must alias the live settings, not a copy")
+}
+
 // TestEnsureProfilingTokenForSave_KeepsExistingToken guards token stability: a
 // settings save must not rotate a token the operator has already copied into a
 // profiling command.
