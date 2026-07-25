@@ -2214,10 +2214,10 @@ func getBlockedFieldMap() map[string]any {
 }
 
 // restoreBlockedFields reverts every field getBlockedFieldMap marks as
-// never-updatable-via-API back to its value in current, and returns the paths it
-// actually had to revert (sorted, so the response is stable across map iteration
-// order). A path appears only when the incoming request really did carry a
-// different value, so an empty result means the client changed nothing blocked.
+// never-updatable-via-API back to its value in current. It reverts them all, and
+// returns only the subset whose value had actually changed (sorted, so the
+// response is stable across map iteration order), so an empty result means the
+// client changed nothing blocked rather than that nothing was written.
 //
 // This is what ENFORCES the map on the PATCH path. PATCH merges the incoming
 // JSON straight into the section struct (handleGenericSection ->
@@ -2231,8 +2231,10 @@ func getBlockedFieldMap() map[string]any {
 // anything is written: updateAllowedFieldsRecursivelyWithTracking walks into
 // handleFieldPermission, which returns early ("return nil // Skip this field")
 // for a blocked leaf, so the value from the request is never assigned.
-// TestPutCannotChangeBlockedFields pins that, so this paragraph cannot quietly
-// become false.
+// TestPutCannotChangeBlockedFields pins that arm against four of the leaves.
+// Note it is not the only thing protecting the other fifteen there: PUT's walk
+// skips every yaml:"-" field earlier, before the blocked map is consulted at all,
+// so most blocked leaves are covered twice on that path and once on this one.
 //
 // The two paths report differently, and only PATCH matches the description
 // above: PUT appends every blocked path it walks past whether or not the request
@@ -2321,22 +2323,35 @@ func restoreBlockedLeaf(currentField, updatedField reflect.Value, fieldPath stri
 // round-trips the section through JSON and JSON cannot carry everything a Go
 // value holds:
 //
-//   - time.Time loses its monotonic clock reading, which time.Now() attaches, so
-//     DeepEqual would call every such timestamp "changed" on every request
-//     touching its section. Round(0) strips the monotonic reading from both
-//     sides; DeepEqual then still compares the Location, so resending the same
-//     instant in a different offset is correctly reported rather than waved
-//     through. BirdNET.RangeFilter.LastUpdated is the live case
+//   - time.Time is compared by instant, with Equal. DeepEqual sees the monotonic
+//     clock reading that time.Now() attaches, and the Location, neither of which
+//     survives the round trip intact. Comparing the Location is specifically
+//     wrong: at UTC offset 0 the value marshals as "...Z" and parses back to
+//     time.UTC, which is a different *Location from the time.Local that
+//     time.Now() attached even when the local zone IS UTC, so a Location-
+//     sensitive comparison reports a phantom rejection on every request touching
+//     the section — on the default Docker configuration, and only there.
+//     BirdNET.RangeFilter.LastUpdated is the live case
 //     (conf.UpdateIncludedSpecies sets it from time.Now()).
+//
+//     Comparing by instant costs no enforcement: a client resending the same
+//     instant in a different offset still has the whole value, Location
+//     included, overwritten from the snapshot, because restoreBlockedLeaf
+//     restores unconditionally. It is only left out of skippedFields, which is
+//     correct, since the instant it asked for is the instant it already had.
+//
 //   - A nil slice and an empty non-nil slice are the same JSON (`[]`, or absent
 //     under omitempty) but differ under DeepEqual. BirdNET.RangeFilter.Species is
 //     the live case: a range filter admitting zero species leaves a non-nil empty
 //     slice (conf.UpdateIncludedSpecies allocates with make), which the merge
-//     turns back into nil.
+//     turns back into nil. A nil-vs-empty MAP is the same asymmetry and is NOT
+//     covered here, because no blocked leaf is a map today; add an arm before
+//     adding one (conf.RangeFilterSettings.IncludedScientificNames is the
+//     candidate, kept out of reach today only by json:"-").
 func blockedValuesEqual(currentField, updatedField reflect.Value) bool {
 	if cur, ok := reflect.TypeAssert[time.Time](currentField); ok {
 		if upd, isTime := reflect.TypeAssert[time.Time](updatedField); isTime {
-			return reflect.DeepEqual(cur.Round(0), upd.Round(0))
+			return cur.Equal(upd)
 		}
 	}
 	if currentField.Kind() == reflect.Slice && updatedField.Kind() == reflect.Slice &&
@@ -2412,12 +2427,18 @@ func restoreBlockedSubtree(
 
 	case !currentField.IsNil() && updatedField.CanSet():
 		// The client nulled a whole struct holding blocked leaves. Rebuild just
-		// those leaves, and only when there was something to rebuild, so a no-op
-		// restore cannot turn a nil pointer into a non-nil one.
+		// those leaves, and publish the rebuild only when it carries something, so
+		// a no-op restore cannot turn a nil pointer into a non-nil one.
+		//
+		// The predicate is whether the rebuild came out non-zero, NOT whether
+		// anything was reported. Those differ now that restoreBlockedLeaf restores
+		// unconditionally and reports only on difference: a blocked leaf that
+		// compares equal is still restored, and gating the write on the report
+		// count would let a client delete a struct holding blocked fields by
+		// nulling it whenever every leaf under it happened to compare equal.
 		rebuilt := reflect.New(updatedField.Type().Elem())
-		before := len(*restored)
 		restoreBlockedFieldsRecursively(currentField.Elem(), rebuilt.Elem(), blockedFields, restored, fieldPath)
-		if len(*restored) > before {
+		if !rebuilt.Elem().IsZero() {
 			updatedField.Set(rebuilt)
 		}
 	}

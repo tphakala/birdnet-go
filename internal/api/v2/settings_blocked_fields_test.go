@@ -313,11 +313,16 @@ func TestPatchCannotChangeBlockedFields(t *testing.T) {
 	}
 }
 
-// TestPatchCannotChangeBlockedTimestampLocation covers the bypass that made the
-// restore unconditional: time.Time.Equal ignores Location, so resending
-// BirdNET.RangeFilter.LastUpdated as the same instant in a different UTC offset
-// compared "unchanged" while shifting the calendar day conf.LocalNoon derives
-// from it, which gates the daily range-filter rebuild.
+// TestPatchCannotChangeBlockedTimestampLocation is the regression test for the
+// bypass that made the restore unconditional, and it is what pins that the
+// restore IS unconditional.
+//
+// blockedValuesEqual compares timestamps by instant, so this request compares
+// equal and is deliberately NOT reported in skippedFields. It is still fully
+// overwritten from the snapshot, Location included. Make the restore conditional
+// on that comparison again and the attacker's Location survives, moving the
+// calendar day conf.LocalNoon derives from it, which gates the daily
+// range-filter rebuild and is reported to the UI by GET /api/v2/range.
 func TestPatchCannotChangeBlockedTimestampLocation(t *testing.T) {
 	seeded := time.Date(2026, 7, 25, 11, 0, 0, 0, time.UTC)
 
@@ -331,10 +336,26 @@ func TestPatchCannotChangeBlockedTimestampLocation(t *testing.T) {
 	})
 
 	stored := controller.Settings.Load().BirdNET.RangeFilter.LastUpdated
-	assert.Equal(t, seeded.Day(), stored.In(stored.Location()).Day(),
-		"a Location change must not move the calendar day the range filter reads")
-	assert.Contains(t, skippedFieldsOf(t, rec), "BirdNET.RangeFilter.LastUpdated",
-		"a same-instant-different-offset write is still a change and must be reported")
+	assert.Equal(t, seeded.Day(), stored.Day(),
+		"the attacker's Location must be overwritten, not just the instant")
+	assert.Equal(t, seeded.Location().String(), stored.Location().String(),
+		"the whole value is restored from the snapshot, Location included")
+	assert.Empty(t, skippedFieldsOf(t, rec),
+		"the same instant is not a reported change; reporting it would fire on every "+
+			"ordinary birdnet save on a UTC server, where the JSON round trip rewrites Location")
+}
+
+// TestPatchReportsEmptyArrayNotNull pins the wire shape the endpoint
+// documentation promises. skippedFieldsOf decodes into []string, where null and
+// [] are both nil, so no other assertion in this file can tell them apart.
+func TestPatchReportsEmptyArrayNotNull(t *testing.T) {
+	e := echo.New()
+	controller := getTestController(t, e)
+
+	rec := patchSection(t, e, controller, "security", map[string]any{"host": "birds.example.com"})
+
+	assert.Contains(t, rec.Body.String(), `"skippedFields":[]`,
+		"a request that rejected nothing must report [] rather than null")
 }
 
 // TestPutCannotChangeBlockedFields pins the PUT half of the contract.
@@ -645,9 +666,15 @@ func TestRestoreBlockedFieldsIsQuietWhenNothingChanged(t *testing.T) {
 
 	updated := conf.CloneSettings(current)
 	updated.Main.Name = "renamed node"
-	// The JSON round trip the PATCH merge performs drops the monotonic reading
-	// without changing the instant, and turns an empty slice back into nil.
-	updated.BirdNET.RangeFilter.LastUpdated = current.BirdNET.RangeFilter.LastUpdated.Round(0)
+	// Model the merge's JSON round trip exactly rather than approximating it:
+	// Round(0) alone drops the monotonic reading but leaves Location untouched,
+	// whereas a real marshal/unmarshal also rewrites Location (to time.UTC at
+	// offset 0). Approximating it here is what let a Location-sensitive
+	// comparison look correct while phantom-rejecting on every UTC server.
+	roundTripped, err := json.Marshal(current.BirdNET.RangeFilter.LastUpdated)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(roundTripped, &updated.BirdNET.RangeFilter.LastUpdated))
+	// An empty slice comes back from the merge as nil.
 	updated.BirdNET.RangeFilter.Species = nil
 
 	assert.Empty(t, restoreBlockedFields(current, updated),
@@ -682,6 +709,7 @@ func TestRestoreBlockedFieldsDoesNotAliasCurrent(t *testing.T) {
 // reached through restoreBlockedFields at all.
 type pointerSubtreeLeaf struct {
 	Token string
+	List  []string
 	Other string
 }
 
@@ -698,7 +726,7 @@ func TestRestoreBlockedFieldsHandlesPointerSubtrees(t *testing.T) {
 	t.Parallel()
 
 	blocked := map[string]any{
-		"Sub":  map[string]any{"Token": true},
+		"Sub":  map[string]any{"Token": true, "List": true},
 		"Tags": true,
 	}
 
@@ -740,6 +768,21 @@ func TestRestoreBlockedFieldsHandlesPointerSubtrees(t *testing.T) {
 
 		assert.Empty(t, restore(current, updated))
 		assert.Nil(t, updated.Sub, "a no-op restore must not resurrect a pointer the client nulled")
+	})
+
+	t.Run("a nulled struct is rebuilt even when nothing is REPORTED", func(t *testing.T) {
+		t.Parallel()
+		// An empty non-nil slice compares equal to the rebuild's nil (they are the
+		// same JSON), so this restores without reporting. The rebuild must still be
+		// published: gating the write on the report count instead of on whether the
+		// rebuild carries anything would let a client delete a struct holding
+		// blocked fields simply by nulling it.
+		current := &pointerSubtreeHolder{Sub: &pointerSubtreeLeaf{List: []string{}}}
+		updated := &pointerSubtreeHolder{}
+
+		assert.Empty(t, restore(current, updated), "an empty-vs-nil slice is not a reported change")
+		require.NotNil(t, updated.Sub, "the blocked leaf must survive the client nulling its parent")
+		assert.NotNil(t, updated.Sub.List, "and must keep its empty-but-present value")
 	})
 
 	t.Run("nil current zeroes the blocked leaf", func(t *testing.T) {
@@ -822,6 +865,34 @@ func TestPatchYamlDashFieldsAreEitherBlockedOrRederived(t *testing.T) {
 	assert.Equal(t, rederived, gap,
 		"a yaml:\"-\" field that JSON can still write is protected on PUT but not on PATCH; "+
 			"add it to getBlockedFieldMap, or confirm it is re-derived after the merge and list it here")
+}
+
+// TestPatchFfmpegMetadataIsRederivedNotClientSettable exercises the other half of
+// the claim above. The list in that test is only a list; this drives a real PATCH
+// and asserts the re-derivation actually happens, so removing the assignment in
+// conf.validateAudioSettings fails a test rather than silently making three
+// fields client-settable.
+//
+// Asserts what the value is NOT, deliberately: validateAudioSettings sets these
+// from the real binary when ffmpeg is present and clears them when it is absent,
+// so any assertion on the resulting value would depend on the test machine.
+func TestPatchFfmpegMetadataIsRederivedNotClientSettable(t *testing.T) {
+	e := echo.New()
+	controller := getTestController(t, e)
+	settings := controller.Settings.Load()
+	settings.Realtime.Audio.FfmpegVersion = "6.0-real"
+	settings.Realtime.Audio.FfmpegMajor = 6
+
+	patchSection(t, e, controller, "audio", map[string]any{
+		"ffmpegVersion": "99.9-attacker",
+		"ffmpegMajor":   99,
+	})
+
+	updated := controller.Settings.Load()
+	assert.NotEqual(t, "99.9-attacker", updated.Realtime.Audio.FfmpegVersion,
+		"ffmpeg metadata must be re-derived from the binary, never taken from the request")
+	assert.NotEqual(t, 99, updated.Realtime.Audio.FfmpegMajor,
+		"ffmpeg metadata must be re-derived from the binary, never taken from the request")
 }
 
 // TestBlockedFieldMapNamesRealFields pins that every name in getBlockedFieldMap
