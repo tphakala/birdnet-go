@@ -2231,10 +2231,12 @@ func getBlockedFieldMap() map[string]any {
 // anything is written: updateAllowedFieldsRecursivelyWithTracking walks into
 // handleFieldPermission, which returns early ("return nil // Skip this field")
 // for a blocked leaf, so the value from the request is never assigned.
-// TestPutCannotChangeBlockedFields pins that arm against four of the leaves.
-// Note it is not the only thing protecting the other fifteen there: PUT's walk
-// skips every yaml:"-" field earlier, before the blocked map is consulted at all,
-// so most blocked leaves are covered twice on that path and once on this one.
+// TestPutCannotChangeBlockedFields pins that arm against four of the 19 leaves.
+// Of the rest, 9 are yaml:"-" and are skipped by an earlier arm of the same walk
+// before the blocked map is consulted at all, so they are covered twice on that
+// path. That leaves 6 resting on the blocked arm alone with no test of their own
+// on the PUT path: the two audio tool paths, Security.SessionDuration, and the
+// three Security.BasicAuth lifetime and client-id fields.
 //
 // The two paths report differently, and only PATCH matches the description
 // above: PUT appends every blocked path it walks past whether or not the request
@@ -2330,8 +2332,9 @@ func restoreBlockedLeaf(currentField, updatedField reflect.Value, fieldPath stri
 //     time.UTC, which is a different *Location from the time.Local that
 //     time.Now() attached even when the local zone IS UTC, so a Location-
 //     sensitive comparison reports a phantom rejection on every request touching
-//     the section, on the default Docker configuration, and only there.
-//     BirdNET.RangeFilter.LastUpdated is the live case
+//     the section. That fires wherever the local zone sits at offset 0: a bare
+//     container or TZ=UTC, Reykjavik and Abidjan year round, London, Dublin and
+//     Lisbon every winter. BirdNET.RangeFilter.LastUpdated is the live case
 //     (conf.UpdateIncludedSpecies sets it from time.Now()).
 //
 //     Comparing by instant costs no enforcement: a client resending the same
@@ -2339,6 +2342,9 @@ func restoreBlockedLeaf(currentField, updatedField reflect.Value, fieldPath stri
 //     included, overwritten from the snapshot, because restoreBlockedLeaf
 //     restores unconditionally. It is only left out of skippedFields, which is
 //     correct, since the instant it asked for is the instant it already had.
+//     The one thing it does cost is a log line: a client deliberately probing
+//     with a shifted offset no longer trips the blocked-field warning, because
+//     that fires on the reported list. The write is still prevented.
 //
 //   - A nil slice and an empty non-nil slice are the same JSON (`[]`, or absent
 //     under omitempty) but differ under DeepEqual. BirdNET.RangeFilter.Species is

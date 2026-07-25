@@ -247,7 +247,7 @@ The two verbs report differently under the same `skippedFields` response key, so
 
 | | `PATCH /settings/:section` | `PUT /settings` |
 | --- | --- | --- |
-| Contents | only the paths actually reverted, sorted | every blocked path the walk passed, plus every `yaml:"-"` field as `<path> (runtime-only)` |
+| Contents | only the paths whose value the request actually changed, sorted (every blocked field is reverted regardless; the list is the subset that differed) | every blocked path the walk passed, plus every `yaml:"-"` field as `<path> (runtime-only)` |
 | Depends on the request | yes | no |
 | Empty when nothing was rejected | yes (`[]`) | never (a no-op request returns ~25 entries) |
 

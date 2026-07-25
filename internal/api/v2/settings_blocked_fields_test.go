@@ -322,7 +322,12 @@ func TestPatchCannotChangeBlockedFields(t *testing.T) {
 // overwritten from the snapshot, Location included. Make the restore conditional
 // on that comparison again and the attacker's Location survives, moving the
 // calendar day conf.LocalNoon derives from it, which gates the daily
-// range-filter rebuild and is reported to the UI by GET /api/v2/range.
+// range-filter rebuild and is reported to the UI by GET /api/v2/range/status.
+//
+// This is also the TZ-independent guard on that comparison: the +14:00 offset
+// below differs from every local zone the suite might run in, so this fails in
+// any TZ. The sibling assertion in TestRestoreBlockedFieldsIsQuietWhenNothingChanged
+// only catches the offset-0 case.
 func TestPatchCannotChangeBlockedTimestampLocation(t *testing.T) {
 	seeded := time.Date(2026, 7, 25, 11, 0, 0, 0, time.UTC)
 
@@ -869,13 +874,19 @@ func TestPatchYamlDashFieldsAreEitherBlockedOrRederived(t *testing.T) {
 
 // TestPatchFfmpegMetadataIsRederivedNotClientSettable exercises the other half of
 // the claim above. The list in that test is only a list; this drives a real PATCH
-// and asserts the re-derivation actually happens, so removing the assignment in
-// conf.validateAudioSettings fails a test rather than silently making three
-// fields client-settable.
+// and asserts the re-derivation actually happens for two of the three fields.
 //
 // Asserts what the value is NOT, deliberately: validateAudioSettings sets these
 // from the real binary when ffmpeg is present and clears them when it is absent,
 // so any assertion on the resulting value would depend on the test machine.
+//
+// Two limits worth knowing before trusting it. It only distinguishes re-derivation
+// from enforcement when ffmpeg is ON PATH: without it, validateAudioSettings takes
+// its failure arm and clearFfmpegMetadata zeroes the same fields for an unrelated
+// reason, so the assertions hold even if the re-derivation were deleted. CI
+// installs ffmpeg on all three platforms, so that gap is a slim dev container
+// only. And it asserts the value rather than the wiring, so renaming the json tag
+// would make the PATCH stop reaching the field and the test pass vacuously.
 func TestPatchFfmpegMetadataIsRederivedNotClientSettable(t *testing.T) {
 	e := echo.New()
 	controller := getTestController(t, e)
