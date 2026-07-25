@@ -84,44 +84,60 @@ func TestEnsureProfilingTokenForSave_NoOpCases(t *testing.T) {
 	}
 }
 
-// TestDiagnosticsSectionIsNotPatchable pins that PATCH on the diagnostics
-// section is refused, and records why, because the obvious "fix" reopens a hole.
+// TestPatchDiagnosticsSectionIsWritable pins that the diagnostics section is
+// PATCHable. It was deliberately withheld from getSettingsSectionValue while the
+// PATCH merge path ignored getBlockedFieldMap, because adding it would have made
+// the generated profiling token client-settable. UpdateSectionSettings now
+// enforces the map via restoreBlockedFields, so the section is writable again.
 //
-// The section carries a generated credential that getBlockedFieldMap marks
-// never-updatable-via-API. The PATCH merge path does NOT enforce that map:
-// handleGenericSection merges the incoming JSON into the section and then only
-// records that restrictions exist, so a client could set a token it chose. On a
-// no-auth instance the settings API is itself unauthenticated, which is exactly
-// the configuration where the token is the only thing gating pprof.
+// This replaces TestDiagnosticsSectionIsNotPatchable, which pinned the 400.
 //
-// PUT /api/v2/settings does enforce the blocked map, so enabling profiling at
-// runtime still works. Re-add the PATCH case once the merge path enforces
-// blocked fields.
-func TestDiagnosticsSectionIsNotPatchable(t *testing.T) {
-	t.Parallel()
+// Deliberately changes only Enabled, not the sampling rates: the rates are
+// process-global runtime state (see the note further down this file), and this
+// test needs neither of them to prove the section is writable.
+func TestPatchDiagnosticsSectionIsWritable(t *testing.T) {
+	e := echo.New()
+	controller := getTestController(t, e)
+	require.False(t, controller.Settings.Load().Diagnostics.Profiling.Enabled,
+		"setup must start from profiling disabled")
 
-	_, err := getSettingsSectionValue(&conf.Settings{}, "diagnostics")
-	require.Error(t, err,
-		"PATCH must refuse the diagnostics section while the merge path ignores blocked fields")
+	patchSection(t, e, controller, "diagnostics", map[string]any{
+		"profiling": map[string]any{"enabled": true},
+	})
+
+	assert.True(t, controller.Settings.Load().Diagnostics.Profiling.Enabled,
+		"the enable flag must be writable, or profiling could not be turned on through PATCH at all")
 }
 
-// TestProfilingTokenIsBlockedFromAPIWrites pins the blocked-field entry that
-// keeps a client from choosing the token on the PUT path.
-func TestProfilingTokenIsBlockedFromAPIWrites(t *testing.T) {
-	t.Parallel()
+// TestPatchDiagnosticsCannotSetProfilingToken is the reason the section case was
+// withheld in the first place: with no auth provider configured the settings API
+// is itself unauthenticated, so a client that could choose the token could then
+// read pprof profiles with a value it already knew.
+//
+// The general enforcement is covered by TestPatchCannotChangeBlockedFields; this
+// keeps the profiling-specific case next to the code it protects, since that is
+// where the reasoning lives.
+func TestPatchDiagnosticsCannotSetProfilingToken(t *testing.T) {
+	const minted = "server-minted-profiling-token"
 
-	blocked := getBlockedFieldMap()
+	e := echo.New()
+	controller := getTestController(t, e)
+	controller.Settings.Load().Diagnostics.Profiling.Token = minted
 
-	diagnostics, ok := blocked["Diagnostics"].(map[string]any)
-	require.True(t, ok, "Diagnostics must carry field-level restrictions: %#v", blocked)
+	rec := patchSection(t, e, controller, "diagnostics", map[string]any{
+		"profiling": map[string]any{
+			"enabled": true,
+			"token":   "attacker-known-token",
+		},
+	})
 
-	profiling, ok := diagnostics["Profiling"].(map[string]any)
-	require.True(t, ok, "Profiling must carry field-level restrictions: %#v", diagnostics)
-
-	assert.Equal(t, true, profiling["Token"],
-		"the generated profiling token must never be settable through the API")
-	assert.NotContains(t, profiling, "Enabled",
-		"the enable flag must stay writable, or profiling could not be turned on at all")
+	updated := controller.Settings.Load()
+	assert.Equal(t, minted, updated.Diagnostics.Profiling.Token,
+		"PATCH must not let a client pin the profiling token")
+	assert.True(t, updated.Diagnostics.Profiling.Enabled,
+		"rejecting the token must not also reject the enable flag beside it")
+	assert.Contains(t, skippedFieldsOf(t, rec), "Diagnostics.Profiling.Token",
+		"the rejected token must be reported, not silently dropped")
 }
 
 // TestEnsureProfilingTokenForSave_KeepsExistingToken guards token stability: a
