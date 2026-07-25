@@ -468,6 +468,15 @@ diagnostics:
     # profiling is enabled, and must then be passed as ?token=... Keep it secret.
     # token: ""
 
+    # Runtime sampling rates for the block and mutex profiles, both off by
+    # default and independent of the endpoint above: sampling costs CPU on the
+    # audio path whether or not anyone ever fetches a profile. The two use
+    # different units, and both sample less as the number grows. Edited here
+    # they apply at the next restart; changed through the settings API they
+    # apply immediately. See doc/PROFILING.md.
+    blockrate: 0          # ns of blocked time per sample; 0 disables. Try 10000
+    mutexfraction: 0      # report 1 in N contention events; 0 disables. Try 100
+
 # Notification settings
 notification:
   templates:

@@ -1532,6 +1532,14 @@
         "token": {
           "type": "string",
           "description": "secret required when no auth provider is configured; generated automatically"
+        },
+        "blockrate": {
+          "type": "integer",
+          "description": "nanoseconds of blocked time per sample; 0 disables. Independent of enabled: sampling costs CPU continuously whether or not a profile is ever fetched, so 0 is the only free setting and a very coarse rate still pays most of the cost. Recommended starting point: 10000. Hot-reloadable via the settings API."
+        },
+        "mutexfraction": {
+          "type": "integer",
+          "description": "reports one sampled event per this many contention events; 0 disables. Independent of enabled: sampling costs CPU continuously whether or not a profile is ever fetched. Recommended starting point: 100. Hot-reloadable via the settings API."
         }
       },
       "additionalProperties": false,

@@ -1,6 +1,9 @@
 package conf
 
 import (
+	"math"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -210,4 +213,175 @@ func TestConfigTemplateShipsProfilingDisabled(t *testing.T) {
 		"profiling must ship disabled")
 	assert.Empty(t, settings.Diagnostics.Profiling.Token,
 		"the shipped template must not carry a profiling token")
+	assert.Zero(t, settings.Diagnostics.Profiling.BlockRate,
+		"block profiling must ship off; sampling costs CPU whether or not a profile is ever fetched")
+	assert.Zero(t, settings.Diagnostics.Profiling.MutexFraction,
+		"mutex profiling must ship off for the same reason")
+
+	// Zero is also what an absent, misspelled or misnested key produces, so
+	// assert the keys are actually present and land where they are meant to.
+	// Without this the two assertions above pass just as happily against a
+	// template that stopped shipping them at all.
+	assert.Contains(t, string(template), "blockrate:", "the template must ship the blockrate key")
+	assert.Contains(t, string(template), "mutexfraction:", "the template must ship the mutexfraction key")
+}
+
+// TestResolvedRates covers the clamping the two runtime setters need.
+//
+// The mutex case is the one that matters. runtime.SetMutexProfileFraction reads
+// the current fraction and leaves it alone when handed a negative, so passing a
+// negative config value through unclamped would quietly keep mutex profiling at
+// whatever it already was rather than turning it off.
+func TestResolvedRates(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		blockRate         int
+		mutexFraction     int
+		wantBlockRate     int
+		wantMutexFraction int
+	}{
+		{
+			name: "unset resolves to off",
+		},
+		{
+			name:              "an arbitrary user value passes through",
+			blockRate:         50000,
+			mutexFraction:     250,
+			wantBlockRate:     50000,
+			wantMutexFraction: 250,
+		},
+		{
+			name:              "the recommended rates pass through unchanged",
+			blockRate:         RecommendedBlockProfileRate,
+			mutexFraction:     RecommendedMutexProfileFraction,
+			wantBlockRate:     RecommendedBlockProfileRate,
+			wantMutexFraction: RecommendedMutexProfileFraction,
+		},
+		{
+			name:              "a block rate above the ceiling is clamped",
+			blockRate:         maxBlockProfileRate + 1,
+			mutexFraction:     1,
+			wantBlockRate:     maxBlockProfileRate,
+			wantMutexFraction: 1,
+		},
+		{
+			name:              "math.MaxInt block rate is clamped rather than wrapping negative",
+			blockRate:         math.MaxInt,
+			wantBlockRate:     maxBlockProfileRate,
+			wantMutexFraction: 0,
+		},
+		{
+			name:              "the mutex fraction has no ceiling; a huge value degrades to never sampling",
+			mutexFraction:     math.MaxInt,
+			wantMutexFraction: math.MaxInt,
+		},
+		{
+			name:              "rate 1 is honoured rather than overridden",
+			blockRate:         1,
+			mutexFraction:     1,
+			wantBlockRate:     1,
+			wantMutexFraction: 1,
+		},
+		{
+			name:          "negatives clamp to off",
+			blockRate:     -1,
+			mutexFraction: -1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			profiling := &ProfilingConfig{
+				BlockRate:     tt.blockRate,
+				MutexFraction: tt.mutexFraction,
+			}
+
+			assert.Equal(t, tt.wantBlockRate, profiling.ResolvedBlockRate())
+			assert.Equal(t, tt.wantMutexFraction, profiling.ResolvedMutexFraction())
+		})
+	}
+}
+
+// TestResolvedRatesNilReceiver pins the nil guard.
+//
+// Not reachable from production today: every caller takes the address of a
+// ProfilingConfig field on a non-nil Settings, so the pointer cannot be nil.
+// These are exported methods on an exported config type, though, so the guard
+// is the contract for any future caller that holds the section on its own, and
+// a panic in a diagnostics accessor would be a poor trade for two comparisons.
+func TestResolvedRatesNilReceiver(t *testing.T) {
+	t.Parallel()
+
+	var profiling *ProfilingConfig
+
+	assert.Zero(t, profiling.ResolvedBlockRate())
+	assert.Zero(t, profiling.ResolvedMutexFraction())
+}
+
+// TestSamplingDefaultsAreNotRateOne is the regression guard for the change that
+// introduced these constants. Both rates used to be set to 1 by debug: true,
+// which records essentially every blocking and contention event. Anyone tempted
+// to "simplify" these constants back toward the Go documentation's rate 1 has to
+// delete this test to do it.
+func TestSamplingDefaultsAreNotRateOne(t *testing.T) {
+	t.Parallel()
+
+	assert.Greater(t, RecommendedBlockProfileRate, 1,
+		"the recommended block rate must sample, not record every blocking event")
+	assert.Greater(t, RecommendedMutexProfileFraction, 1,
+		"the recommended mutex fraction must sample, not record every contention event")
+}
+
+// TestRecommendedRatesMatchShippedConfig keeps the constants in step with the
+// numbers quoted to users in the shipped config template.
+//
+// It reads config.yaml rather than restating the constants, which is what makes
+// it a drift guard rather than a second copy of the same literal: editing
+// either the constant or the template alone fails it. The other published
+// copies divide as follows. The struct field comments feed config.schema.json
+// and doc/wiki/configuration-reference.md, and cmd/gen-schema's TestSchemaUpToDate
+// regenerates and byte-compares both, so those cannot drift from the comments.
+// doc/PROFILING.md is hand-maintained with no mechanical guard, which is why the
+// failure message names it.
+func TestRecommendedRatesMatchShippedConfig(t *testing.T) {
+	t.Parallel()
+
+	template, err := configFiles.ReadFile("config.yaml")
+	require.NoError(t, err)
+
+	// HasSuffix, scoped to the line carrying each key, rather than a whole-file
+	// Contains. Two distinct prefix hazards make the obvious spelling useless:
+	// across keys, "Try 100" is contained in the blockrate line's "Try 10000",
+	// so the mutex guard passes with its comment deleted outright; and within a
+	// key, "Try 100" is a prefix of "Try 1000", so a drift that lengthens the
+	// number is invisible. Both template lines end with the number, so
+	// anchoring at the end closes both.
+	assert.True(t,
+		strings.HasSuffix(shippedLineFor(t, template, "blockrate:"),
+			"Try "+strconv.Itoa(RecommendedBlockProfileRate)),
+		"config.yaml must recommend the same block rate as RecommendedBlockProfileRate; update doc/PROFILING.md too")
+	assert.True(t,
+		strings.HasSuffix(shippedLineFor(t, template, "mutexfraction:"),
+			"Try "+strconv.Itoa(RecommendedMutexProfileFraction)),
+		"config.yaml must recommend the same mutex fraction as RecommendedMutexProfileFraction; update doc/PROFILING.md too")
+}
+
+// shippedLineFor returns the single line of the embedded template that declares
+// the given key, failing the test if it is absent or ambiguous.
+func shippedLineFor(t *testing.T, template []byte, key string) string {
+	t.Helper()
+
+	var found []string
+	for line := range strings.Lines(string(template)) {
+		if strings.Contains(line, key) {
+			found = append(found, strings.TrimRight(line, "\n"))
+		}
+	}
+
+	require.Len(t, found, 1, "expected exactly one line declaring %q in the shipped config template", key)
+	return found[0]
 }

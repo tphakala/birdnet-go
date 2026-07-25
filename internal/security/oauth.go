@@ -965,14 +965,16 @@ func (s *OAuth2Server) IsAuthenticationEnabled(ip string) bool {
 		return false // Authentication not required for allowed subnets
 	}
 
-	// Check if basic auth is enabled
+	// Both values are read for the log line only. The decision itself goes
+	// through conf.Settings.IsAuthProviderConfigured so that this middleware and the
+	// pprof gate cannot disagree about what "authentication is configured"
+	// means: the gate falls back to its generated token when the predicate is
+	// false, and no token is minted when it is true, so a third authentication
+	// mechanism learned by only one copy would lock a legitimate admin out.
 	basicEnabled := settings.Security.BasicAuth.Enabled
-
-	// Check if any OAuth provider is enabled using the new array
 	enabledOAuthProviders := settings.GetEnabledOAuthProviders()
-	oauthEnabled := len(enabledOAuthProviders) > 0
 
-	if basicEnabled || oauthEnabled {
+	if settings.IsAuthProviderConfigured() {
 		authLog.Info("Authentication required: at least one provider enabled and IP not in allowed subnet",
 			logger.Bool("basic_enabled", basicEnabled),
 			logger.Any("oauth_providers", enabledOAuthProviders),
