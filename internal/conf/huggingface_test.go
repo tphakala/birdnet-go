@@ -250,6 +250,12 @@ func TestNormalizeHuggingFaceEndpoint_ErrorsNeverEchoCredentials(t *testing.T) {
 		{name: "empty username parses cleanly", configured: "https://:" + password + "@hf-mirror.com"},
 		// A literal "@" inside the password leaked its tail through the scrubber.
 		{name: "at sign inside the password", configured: "https://user:p@" + password + "@hf-mirror.com:notaport"},
+		// Shapes with no "://" at all. All are rejected, and all would be echoed
+		// with credentials intact by a redactor that keys on the "://" separator.
+		{name: "opaque url", configured: "https:user:" + password + "@hf-mirror.com"},
+		{name: "scheme-less", configured: "user:" + password + "@hf-mirror.com"},
+		{name: "scheme-relative", configured: "//user:" + password + "@hf-mirror.com"},
+		{name: "unsupported scheme", configured: "ftp://user:" + password + "@hf-mirror.com"},
 	}
 
 	for _, tt := range tests {

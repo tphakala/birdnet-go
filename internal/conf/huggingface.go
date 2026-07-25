@@ -139,15 +139,30 @@ func normalizeHuggingFaceEndpoint(raw string) (string, error) {
 // here: this function is called precisely on values that failed validation, and
 // a value that fails url.Parse cannot be normalized by parsing it.
 //
-// Everything from the scheme separator to the LAST "@" in the authority is
-// replaced, which covers both shapes without needing the value to parse.
+// Everything from the start of the authority to the LAST "@" before a path
+// delimiter is replaced, which covers both shapes without needing the value to
+// parse.
+//
+// The authority is located without relying on "://", because the values that
+// reach here are exactly the ones that failed validation: an opaque URL
+// ("https:user:pw@host") and a scheme-less value ("user:pw@host") are both
+// rejected, and both would otherwise be echoed with their credentials intact.
 func redactEndpointUserinfo(raw string) string {
-	schemeEnd := strings.Index(raw, "://")
-	if schemeEnd < 0 {
-		// No authority, so no userinfo to hide.
-		return raw
+	authorityStart := 0
+	switch {
+	case strings.Contains(raw, "://"):
+		authorityStart = strings.Index(raw, "://") + len("://")
+	case strings.HasPrefix(raw, "//"):
+		// Scheme-relative.
+		authorityStart = len("//")
+	default:
+		// Opaque ("scheme:rest") or scheme-less. url.Parse treats a leading
+		// run of scheme characters followed by ":" as a scheme, so skip it when
+		// present; otherwise the whole string is treated as the authority.
+		if i := strings.Index(raw, ":"); i > 0 && isSchemeName(raw[:i]) {
+			authorityStart = i + 1
+		}
 	}
-	authorityStart := schemeEnd + len("://")
 
 	// The authority ends at the first "/", "?" or "#"; an "@" after that point
 	// belongs to the path and must not be treated as a userinfo delimiter.
@@ -156,12 +171,29 @@ func redactEndpointUserinfo(raw string) string {
 		authorityEnd = authorityStart + i
 	}
 
-	authority := raw[authorityStart:authorityEnd]
-	at := strings.LastIndex(authority, "@")
+	at := strings.LastIndex(raw[authorityStart:authorityEnd], "@")
 	if at < 0 {
 		return raw
 	}
 	return raw[:authorityStart] + "[REDACTED]" + raw[authorityStart+at:]
+}
+
+// isSchemeName reports whether s is shaped like a URL scheme, i.e. an ASCII
+// letter followed by letters, digits, "+", "-" or "." (RFC 3986 section 3.1).
+func isSchemeName(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := range len(s) {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z':
+		case i > 0 && (c >= '0' && c <= '9' || c == '+' || c == '-' || c == '.'):
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // parseFailureReason extracts the reason from a url.Parse failure without the
