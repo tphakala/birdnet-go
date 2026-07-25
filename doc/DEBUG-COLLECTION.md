@@ -161,12 +161,16 @@ instance that has an authentication provider configured.
 Pass the URL to `go tool pprof` directly. It does not read a profile from stdin,
 so piping `curl` into it does not work:
 
+Note the single quotes. They keep the token out of the long-lived `watch`
+process's command line, where `ps` would show it to every user on the box; the
+shell `watch` spawns expands it from the exported environment on each iteration.
+
 ```bash
 # Watch memory usage in real-time
-watch -n 30 "go tool pprof -top -unit=mb -nodecount=15 'http://localhost:8080/debug/pprof/heap?token=$BIRDNET_PROFILING_TOKEN'"
+watch -n 30 'go tool pprof -top -unit=mb -nodecount=15 "http://localhost:8080/debug/pprof/heap?token=$BIRDNET_PROFILING_TOKEN"'
 
 # Monitor goroutine count
-watch -n 10 "curl -s 'http://localhost:8080/debug/pprof/goroutine?token=$BIRDNET_PROFILING_TOKEN&debug=1' | head -1"
+watch -n 10 'curl -s "http://localhost:8080/debug/pprof/goroutine?token=$BIRDNET_PROFILING_TOKEN&debug=1" | head -1'
 ```
 
 Note that `go tool pprof` saves a copy of every profile it fetches under
@@ -296,10 +300,13 @@ If collection fails:
 2. Check connectivity: `curl http://localhost:8080/`
 3. Verify the token: a `403` on an instance with no authentication provider means
    `BIRDNET_PROFILING_TOKEN` is unset or stale. Re-read it from config.yaml.
-4. Verify authentication: the scripts cannot log in to an instance behind basic
-   auth or OAuth. Collect those profiles manually.
+4. Verify authentication: a `401`, or a `302` to `/login`, means an authentication
+   provider is configured. The scripts cannot log in, and neither can
+   `go tool pprof`. Collect those profiles with the login-then-fetch recipe in
+   [PROFILING.md](PROFILING.md#on-an-instance-that-does-have-authentication-configured).
 5. Check the port: a `410` means you are on the telemetry listener (default 8090).
-   Profiling moved to the web server port (default 8080).
+   Profiling moved to the web server port (default 8080). A refused connection on
+   8090 means the same thing on an instance where telemetry is switched off.
 6. Check permissions: ensure write access to current directory
 
 ### For Docker Installation
@@ -309,11 +316,11 @@ If collection fails:
 1. Verify container is running: `docker ps | grep birdnet`
 2. Check profiling is enabled in the container:
    ```bash
-   docker exec <container-name> grep -A2 "^diagnostics:" /config/config.yaml
+   docker exec <container-name> grep -A5 "^diagnostics:" /config/config.yaml
    ```
 3. Read the profiling token, if the instance has no authentication provider:
    ```bash
-   docker exec <container-name> awk '/^diagnostics:/{f=1} f && /^[[:space:]]*token:/{print $2; exit}' /config/config.yaml
+   docker exec <container-name> awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*token:/{sub(/^[[:space:]]*token:[[:space:]]*/,"");gsub(/^"|"$/,"");print;exit}' /config/config.yaml
    ```
 4. Verify port mapping: `docker port <container-name>`
 5. Check container logs: `docker logs <container-name>`

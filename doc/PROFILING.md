@@ -9,6 +9,34 @@ to diagnose performance issues and memory usage.
 - `curl`, or any HTTP client, to collect profiles
 - The `go` tool, to analyse them (not needed to collect them)
 
+> **Availability.** The `diagnostics.profiling` section and the endpoints on the
+> web server are newer than the `20260716` release. On an older build there is no
+> such config section, `/debug/pprof/` on the web server port answers `404` no
+> matter what you set, and the endpoints are still on the telemetry listener. If
+> you set the key, restart, and still get `404`, your build predates the feature.
+
+## Migrating from the old telemetry-port workflow
+
+If you were profiling before this changed, four things moved:
+
+1. **The port.** Profiling is on the web server port (default 8080), not the
+   telemetry listener (default 8090). The old location answers `410 Gone` if the
+   telemetry listener is still enabled, and refuses the connection if it is not,
+   since telemetry is off by default. Both mean the same thing.
+2. **The gate.** `debug: true` never enabled the endpoints, despite what this
+   guide used to say. Set `diagnostics.profiling.enabled: true` and restart.
+3. **Block and mutex sampling.** `debug: true` used to switch both on at their
+   most aggressive setting as a side effect. It no longer does, so
+   `/debug/pprof/block` and `/debug/pprof/mutex` come back empty until you set
+   `blockrate` and `mutexfraction` explicitly. See below for why the old
+   behaviour was worth removing.
+4. **Credentials.** The endpoints are now behind the web server's authentication,
+   or behind a generated token where none is configured.
+
+One thing you can now turn off: if `realtime.telemetry.enabled` was on only to
+reach pprof, it no longer serves any profiling purpose. Turning it off closes an
+unauthenticated listener, which is the point of the change.
+
 ## Enabling profiling
 
 Profiling is off by default. It is not related to `debug: true`, which controls
@@ -31,9 +59,12 @@ curl -X PATCH http://localhost:8080/api/v2/settings/diagnostics \
 ```
 
 That request needs whatever authentication and CSRF token the settings API
-already requires on your instance; it is the same path the settings UI uses.
-Prefer `PATCH` over `PUT` here: `PUT` replaces the whole section and zeroes any
-field the request body omits.
+already requires on your instance. Use `PATCH /api/v2/settings/diagnostics`, as
+above: there is no section-level `PUT`, and the whole-document
+`PUT /api/v2/settings` zeroes every field the request body omits.
+
+There is no switch for any of this in the settings UI; the config file and the
+settings API are the only two ways in.
 
 The endpoints are served by **the main web server, on the same port as the web
 UI** (default 8080), behind whatever authentication you have configured. They are
@@ -55,32 +86,41 @@ first time profiling is switched on, and every request must carry it as a
 **The token cannot be read back through the API.** `GET /api/v2/settings` and
 `GET /api/v2/settings/diagnostics` both return it as `**********`, and it is
 never written to the log or included in a support dump. That is deliberate, but
-it means enabling profiling from the web UI mints a credential the UI will never
-show you. The only place to read it is `config.yaml`.
+it means switching profiling on through the settings API mints a credential that
+same API will never show you. The only place to read it is `config.yaml`.
 
-Read it from the config file, scoping the match to the `diagnostics` section.
-A bare search for `token:` also matches notification provider secrets elsewhere
-in the file:
+Read it from the config file. The command has to stop at the end of the
+`diagnostics` section, because other sections have `token:` keys of their own; a
+search that just runs forward from `diagnostics:` will happily print a
+notification provider's secret instead:
 
 ```bash
-awk '/^diagnostics:/{f=1} f && /^[[:space:]]*token:/{print $2; exit}' config.yaml
+awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*token:/{sub(/^[[:space:]]*token:[[:space:]]*/,"");gsub(/^"|"$/,"");print;exit}' config.yaml
 ```
 
 For a container installation the config lives inside the config volume, so read
 it through the container:
 
 ```bash
-docker exec birdnet-go awk '/^diagnostics:/{f=1} f && /^[[:space:]]*token:/{print $2; exit}' /config/config.yaml
+docker exec birdnet-go awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*token:/{sub(/^[[:space:]]*token:[[:space:]]*/,"");gsub(/^"|"$/,"");print;exit}' /config/config.yaml
 ```
 
 The host-side copy of that file is under the directory bind-mounted at `/config`
 (`~/birdnet-go-app/config/config.yaml` for a default `install.sh` deployment), so
 reading it there works too.
 
-Every example below assumes the token is in a shell variable:
+If that prints nothing, or prints an empty string, no token has been minted yet.
+Check that `diagnostics.profiling.enabled` is `true`, that the instance has been
+restarted since, and that it has no authentication provider configured (with one,
+no token is generated because none is needed). If all three hold and there is
+still no `token:` line, generation or persistence failed: the startup log carries
+the reason, and a config file the process cannot write is the usual cause.
+
+Every example below assumes the token is in a shell variable. This is the same
+name the collection scripts in `scripts/` read, so exporting it once serves both:
 
 ```bash
-export BIRDNET_TOKEN="$(awk '/^diagnostics:/{f=1} f && /^[[:space:]]*token:/{print $2; exit}' config.yaml)"
+export BIRDNET_PROFILING_TOKEN="$(awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*token:/{sub(/^[[:space:]]*token:[[:space:]]*/,"");gsub(/^"|"$/,"");print;exit}' config.yaml)"
 ```
 
 `go tool pprof` has no flag for custom headers, but it does preserve query
@@ -88,18 +128,42 @@ parameters it did not set and merges its own into them, so the token survives an
 the one-command workflow is intact:
 
 ```bash
-go tool pprof "http://localhost:8080/debug/pprof/heap?token=$BIRDNET_TOKEN"
+go tool pprof "http://localhost:8080/debug/pprof/heap?token=$BIRDNET_PROFILING_TOKEN"
 ```
 
-**On an instance that does have an authentication provider configured**, no token
-is generated and none is needed: the web server's own auth middleware is the
-gate. Drop the `?token=...` from every command below and authenticate the way you
-normally do. For basic auth, `go tool pprof` honours credentials embedded in the
-URL:
+### On an instance that does have authentication configured
+
+No token is generated and none is accepted: the web server's own auth middleware
+is the gate, and it runs instead of the token check. Passing `?token=...` there
+gets you a `401`, not access.
+
+**`go tool pprof` cannot authenticate against such an instance.** It has no flag
+for headers and no cookie jar, and BirdNET-Go's `security.basicauth` is a form
+login that mints a session cookie, not HTTP Basic. Credentials embedded in the
+URL (`http://user:pass@host/...`) are therefore rejected with a `401`, because
+the middleware accepts only a `Bearer` token or a session cookie. Presenting them
+makes the request fail harder than sending nothing.
+
+Log in with `curl`, keep the session cookie, fetch the profile to a file, and
+analyse the file locally:
 
 ```bash
-go tool pprof "http://user:password@localhost:8080/debug/pprof/heap"
+curl -s -c jar.txt http://localhost:8080/ -o /dev/null
+CSRF=$(awk '$6=="csrf"{print $7}' jar.txt)
+REDIRECT=$(curl -s -b jar.txt -c jar.txt -X POST http://localhost:8080/api/v2/auth/login \
+  -H 'Content-Type: application/json' -H "X-CSRF-Token: $CSRF" \
+  -d '{"username":"admin","password":"YOUR_PASSWORD"}' |
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["redirectUrl"])')
+curl -s -b jar.txt -c jar.txt -L -o /dev/null "http://localhost:8080$REDIRECT"
+
+curl -s -b jar.txt -o heap.pprof "http://localhost:8080/debug/pprof/heap"
+go tool pprof heap.pprof
 ```
+
+The login response carries an OAuth2 callback URL that has to be followed before
+the session cookie is valid, which is what the third command does. Everything
+after that is the ordinary two-step fetch-then-analyse workflow, and it applies to
+every endpoint in the table below.
 
 ## Available profiling endpoints
 
@@ -122,15 +186,22 @@ All of these sit under `/debug/pprof/` on the web server port.
 Requesting `/debug/pprof` without the trailing slash redirects to
 `/debug/pprof/`, carrying the query string across so the token is not lost.
 
-The response codes are worth knowing, because they distinguish the three ways
-this goes wrong:
+The response codes are worth knowing, because they distinguish the ways this goes
+wrong, and which one you get depends on whether authentication is configured:
 
 | Code  | Meaning                                                                         |
 | ----- | ------------------------------------------------------------------------------- |
 | `200` | Success                                                                         |
-| `403` | Token missing or wrong, or the server's own authentication rejected you         |
+| `302` | Auth configured, and you look like a browser. Redirected to the login page      |
+| `401` | Auth configured, and you sent no valid session or `Bearer` token                |
+| `403` | No auth provider configured, and the `token=` parameter is missing or wrong     |
 | `404` | Profiling is disabled. The feature does not announce that it exists but is shut |
 | `410` | You are on the old telemetry-listener location. Use the web server port         |
+
+`403` and `401` are mutually exclusive: the token is only consulted when no
+authentication provider is configured, so an instance never returns both. The
+`enabled` check runs before either, which is why a correct token still gets `404`
+when profiling is off.
 
 ## Common profiling tasks
 
@@ -138,10 +209,10 @@ this goes wrong:
 
 ```bash
 # Analyse directly
-go tool pprof "http://localhost:8080/debug/pprof/heap?token=$BIRDNET_TOKEN"
+go tool pprof "http://localhost:8080/debug/pprof/heap?token=$BIRDNET_PROFILING_TOKEN"
 
 # Or save it first
-curl -o heap.pprof "http://localhost:8080/debug/pprof/heap?token=$BIRDNET_TOKEN"
+curl -o heap.pprof "http://localhost:8080/debug/pprof/heap?token=$BIRDNET_PROFILING_TOKEN"
 go tool pprof heap.pprof
 ```
 
@@ -150,33 +221,36 @@ Useful commands in pprof interactive mode:
 - `top` - show the largest consumers
 - `web` - open an interactive graph in a browser (requires graphviz)
 - `list <function>` - show the annotated source. This one needs the matching
-  source checked out locally; against a release binary it reports
-  `could not find file ... on path` because the build is trimmed to
-  module-relative paths. `top` and `web` need nothing but the profile.
+  source available at the path recorded in the profile. Against a release binary
+  that path is module-relative (`-trimpath`), so a plain checkout is not enough
+  and it reports `could not find file ... on path`; point pprof at your checkout
+  with `-trim_path=github.com/tphakala/birdnet-go` or `-source_path=<dir>`.
+  `top` and `web` need nothing but the profile.
 
 ### 2. CPU profiling
 
 ```bash
 # 30 seconds by default
-go tool pprof "http://localhost:8080/debug/pprof/profile?token=$BIRDNET_TOKEN"
+go tool pprof "http://localhost:8080/debug/pprof/profile?token=$BIRDNET_PROFILING_TOKEN"
 
 # Or a specific duration, saved to a file
-curl -o cpu.pprof "http://localhost:8080/debug/pprof/profile?token=$BIRDNET_TOKEN&seconds=30"
+curl -o cpu.pprof "http://localhost:8080/debug/pprof/profile?token=$BIRDNET_PROFILING_TOKEN&seconds=30"
 go tool pprof cpu.pprof
 ```
 
-Put the token first in the query string and append `&seconds=N` after it, as
-above. Long profiles need no special handling: the server extends its own write
-deadline for the requested sampling duration.
+Query-parameter order does not matter. Long profiles need no special handling
+either: `net/http/pprof` extends the response write deadline itself for the
+requested sampling duration, so the default 30-second profile completes against
+the server's 30-second write timeout.
 
 ### 3. Analysing goroutine leaks
 
 ```bash
 # Human-readable count and stacks
-curl "http://localhost:8080/debug/pprof/goroutine?token=$BIRDNET_TOKEN&debug=1" | head -1
+curl "http://localhost:8080/debug/pprof/goroutine?token=$BIRDNET_PROFILING_TOKEN&debug=1" | head -1
 
 # Or analyse with pprof
-go tool pprof "http://localhost:8080/debug/pprof/goroutine?token=$BIRDNET_TOKEN"
+go tool pprof "http://localhost:8080/debug/pprof/goroutine?token=$BIRDNET_PROFILING_TOKEN"
 ```
 
 ### 4. Finding lock contention
@@ -185,7 +259,7 @@ Requires `mutexfraction` to be non-zero; see below. An empty profile means
 sampling was never switched on, not that nothing contended.
 
 ```bash
-go tool pprof "http://localhost:8080/debug/pprof/mutex?token=$BIRDNET_TOKEN"
+go tool pprof "http://localhost:8080/debug/pprof/mutex?token=$BIRDNET_PROFILING_TOKEN"
 ```
 
 ### 5. Analysing blocking operations
@@ -193,13 +267,13 @@ go tool pprof "http://localhost:8080/debug/pprof/mutex?token=$BIRDNET_TOKEN"
 Requires `blockrate` to be non-zero; see below. Same caveat about empty profiles.
 
 ```bash
-go tool pprof "http://localhost:8080/debug/pprof/block?token=$BIRDNET_TOKEN"
+go tool pprof "http://localhost:8080/debug/pprof/block?token=$BIRDNET_PROFILING_TOKEN"
 ```
 
 ### 6. Execution traces
 
 ```bash
-curl -o trace.out "http://localhost:8080/debug/pprof/trace?token=$BIRDNET_TOKEN&seconds=5"
+curl -o trace.out "http://localhost:8080/debug/pprof/trace?token=$BIRDNET_PROFILING_TOKEN&seconds=5"
 go tool trace trace.out
 ```
 
@@ -268,8 +342,11 @@ consequences, both of which have caused real confusion:
   isolate the interval between them.
 
 To compare two states cleanly, restart the process between them. This does not
-apply to heap or CPU profiles: `heap` reports live objects at the moment you ask,
-and `profile` samples only the window you requested.
+apply to CPU profiles, which sample only the window you requested, nor to the
+default `inuse_space` view of `heap`, which reports live objects at the moment you
+ask. Note that a heap profile also carries `alloc_space` and `alloc_objects`
+views, and those two are cumulative since process start in exactly the way block
+and mutex profiles are, as is `/debug/pprof/allocs`.
 
 ## Environment variable CPU profiling
 
@@ -391,18 +468,19 @@ anyone runs.
    moment of the request, so a diff between two of them is meaningful:
 
    ```bash
-   curl -o heap1.pprof "http://localhost:8080/debug/pprof/heap?token=$BIRDNET_TOKEN"
+   curl -o heap1.pprof "http://localhost:8080/debug/pprof/heap?token=$BIRDNET_PROFILING_TOKEN"
    # wait
-   curl -o heap2.pprof "http://localhost:8080/debug/pprof/heap?token=$BIRDNET_TOKEN"
+   curl -o heap2.pprof "http://localhost:8080/debug/pprof/heap?token=$BIRDNET_PROFILING_TOKEN"
    go tool pprof -base heap1.pprof heap2.pprof
    ```
 
 3. **CPU profiles.** Profile during a representative workload. A profile taken
    while the instance is idle mostly reports that it is idle.
 
-4. **Rotate the token** if you have shared a config file or a support archive
-   with someone. Delete the `token:` line under `diagnostics.profiling`, restart,
-   and a new one is generated.
+4. **Rotate the token** if you have shared a config file with someone. Delete the
+   `token:` line under `diagnostics.profiling`, restart, and a new one is
+   generated. A support archive does not need this: the token is redacted from
+   it.
 
 ## Security note
 
@@ -439,8 +517,9 @@ directions:
   load the box for anyone who can reach them.
 
 The accurate summary is code-structure and configuration disclosure, plus a way
-to spend CPU. Real, and worth keeping behind authentication, but not a dump of
-your secrets.
+to spend CPU. Real, but not a dump of your secrets. Never expose these endpoints
+to an untrusted network without authentication, and turn profiling off again when
+you are done with it.
 
 ## Troubleshooting
 
@@ -449,25 +528,45 @@ If the profiling endpoints are not behaving:
 1. **`404`** - Profiling is disabled. Verify `diagnostics.profiling.enabled` is
    `true`. `debug: true` does not enable profiling; it only controls logging
    verbosity. If you set it in `config.yaml`, remember it applies at the next
-   restart.
-2. **`403`** - On an instance with no authentication provider, check you are
-   passing `?token=` with the value from `diagnostics.profiling.token`. Remember
-   the API returns that field as `**********`, so read it from `config.yaml`. On
-   an instance with authentication configured, authenticate normally and send no
-   token.
-3. **`410`** - You are talking to the telemetry listener (default port 8090). The
+   restart. If the key is set, the instance has been restarted, and you still get
+   `404`, your build predates the feature; see Availability above.
+2. **`403`** - You are on an instance with no authentication provider, and the
+   `token=` parameter is missing or wrong. Read the value from `config.yaml`; the
+   API returns that field as `**********` by design.
+3. **`401`** - The opposite case: an authentication provider is configured, so the
+   token is never consulted and a session or `Bearer` token is required instead.
+   `go tool pprof` cannot supply either. Use the login-then-fetch recipe above.
+4. **`302` to `/login`** - Same cause as `401`, but your client sent
+   `Accept: text/html`, so it was redirected rather than refused.
+5. **The token command prints nothing, or an empty string** - No token has been
+   minted. Either an authentication provider is configured (in which case none is
+   needed), or profiling was never enabled and restarted, or generation or
+   persistence failed. The last case is usually a config file the process cannot
+   write, and the startup log says so.
+6. **`410`** - You are talking to the telemetry listener (default port 8090). The
    endpoints moved to the web server port (default 8080). The telemetry listener
    now serves Prometheus metrics only.
-4. **Connection refused** - Check the web server is running and you have the right
-   port. It is the same port as the web UI.
-5. **Empty `block` or `mutex` profile, everything else working** - `blockrate`
+7. **Connection refused on 8090** - The same situation as `410`, on an instance
+   where the telemetry listener is not enabled at all. Use the web server port.
+8. **Connection refused on the web server port** - Check the web server is running
+   and you have the right port. It is the same port as the web UI.
+9. **Empty `block` or `mutex` profile, everything else working** - `blockrate`
    and `mutexfraction` are still 0. The endpoints answer `200` with a profile
    containing no samples, which reads as "nothing is contending" but means
    "nothing was recorded". `go tool pprof` shows this as
    `Showing nodes accounting for 0, 0% of 0 total`. The startup log says so too,
-   if profiling was enabled at startup with both rates at 0.
-6. **A profile looks like it has stale or doubled data** - Block and mutex
-   profiles are cumulative and cannot be reset; see the sampling section above.
+   if profiling was enabled at startup with both rates at 0. If you previously
+   relied on `debug: true` switching sampling on, that coupling is gone; see
+   Migrating above.
+10. **A profile looks like it has stale or doubled data** - Block and mutex
+    profiles are cumulative and cannot be reset; see the sampling section above.
+11. **A `BIRDNET_GO_PROFILE` file that `go tool pprof` rejects** with
+    `failed to fetch any source profiles` - the file is 0 bytes because the
+    process was hard-killed before the profile was flushed. See the environment
+    variable section above.
+12. **`could not find file ... on path` from `list`** - expected against a release
+    binary, which records module-relative paths. Pass
+    `-trim_path=github.com/tphakala/birdnet-go` or `-source_path=<dir>`.
 
 For more information about pprof, see the
 [official Go documentation](https://pkg.go.dev/net/http/pprof).

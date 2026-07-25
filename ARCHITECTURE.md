@@ -2525,10 +2525,10 @@ go run -race . serve
 # are on the web server port, behind its authentication; where no auth provider
 # is configured, pass the token generated into diagnostics.profiling.token.
 # Profile CPU
-go tool pprof "http://localhost:8080/debug/pprof/profile?token=$BIRDNET_TOKEN"
+go tool pprof "http://localhost:8080/debug/pprof/profile?token=$BIRDNET_PROFILING_TOKEN"
 
 # Profile memory
-go tool pprof "http://localhost:8080/debug/pprof/heap?token=$BIRDNET_TOKEN"
+go tool pprof "http://localhost:8080/debug/pprof/heap?token=$BIRDNET_PROFILING_TOKEN"
 ```
 
 See [doc/PROFILING.md](doc/PROFILING.md) for the full profiling workflow.
