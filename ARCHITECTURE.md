@@ -2516,17 +2516,22 @@ See [.husky/pre-commit](.husky/pre-commit) for complete implementation.
 
 ```bash
 # Run with debug logging
-LOG_LEVEL=debug birdnet-go realtime
+birdnet-go serve --debug
 
-# Run with profiling
-go run -race ./cmd/birdnet/
+# Run from source with the race detector
+go run -race . serve
 
+# Profiling requires diagnostics.profiling.enabled in config.yaml. The endpoints
+# are on the web server port, behind its authentication; where no auth provider
+# is configured, pass the token generated into diagnostics.profiling.token.
 # Profile CPU
-go tool pprof http://localhost:8080/debug/pprof/profile
+go tool pprof "http://localhost:8080/debug/pprof/profile?token=$BIRDNET_TOKEN"
 
 # Profile memory
-go tool pprof http://localhost:8080/debug/pprof/heap
+go tool pprof "http://localhost:8080/debug/pprof/heap?token=$BIRDNET_TOKEN"
 ```
+
+See [doc/PROFILING.md](doc/PROFILING.md) for the full profiling workflow.
 
 ### Documentation
 

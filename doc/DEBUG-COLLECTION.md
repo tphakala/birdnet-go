@@ -4,10 +4,20 @@ This guide explains how to collect and analyze debug data from BirdNET-Go for pe
 
 ## Prerequisites
 
-1. BirdNET-Go running with `debug: true` in config.yaml
-2. `go` tool installed for profile analysis (optional - scripts will offer automatic installation)
-3. `curl` command available
-4. Python 3.x (for advanced analysis, optional)
+1. BirdNET-Go running with `diagnostics.profiling.enabled: true` in config.yaml.
+   Note this is not `debug: true`, which only controls logging verbosity.
+2. On an instance with no authentication provider configured, the profiling token
+   from `diagnostics.profiling.token`, exported as `BIRDNET_PROFILING_TOKEN`. The
+   collection scripts pass it on every request. See
+   [PROFILING.md](PROFILING.md#getting-the-token-on-an-instance-with-no-authentication)
+   for how to read it, since the API deliberately will not return it.
+3. `go` tool installed for profile analysis (optional - scripts will offer automatic installation)
+4. `curl` command available
+5. Python 3.x (for advanced analysis, optional)
+
+The collection scripts support unauthenticated and token-gated instances. They
+cannot log in to an instance behind basic auth or OAuth; collect those profiles
+manually as described in [PROFILING.md](PROFILING.md).
 
 ## Installing Go (Optional)
 
@@ -74,7 +84,7 @@ BIRDNET_CONTAINER=my-birdnet-container ./scripts/collect-debug-data-docker.sh
 This will:
 
 - Check for Go installation (and offer automatic installation if missing)
-- Verify debug mode is enabled
+- Verify the profiling endpoints are reachable
 - Collect all profiling data
 - Create a timestamped archive
 - Generate an analysis script
@@ -145,13 +155,23 @@ PROFILE_DURATION=60 ./scripts/collect-debug-data.sh
 
 While BirdNET-Go is running:
 
+These assume `BIRDNET_PROFILING_TOKEN` is exported; drop the `?token=...` on an
+instance that has an authentication provider configured.
+
+Pass the URL to `go tool pprof` directly. It does not read a profile from stdin,
+so piping `curl` into it does not work:
+
 ```bash
 # Watch memory usage in real-time
-watch -n 5 'curl -s http://localhost:8080/debug/pprof/heap | go tool pprof -top -unit=mb'
+watch -n 30 "go tool pprof -top -unit=mb -nodecount=15 'http://localhost:8080/debug/pprof/heap?token=$BIRDNET_PROFILING_TOKEN'"
 
 # Monitor goroutine count
-watch -n 10 'curl -s http://localhost:8080/debug/pprof/goroutine?debug=1 | grep "goroutine profile:" | head -1'
+watch -n 10 "curl -s 'http://localhost:8080/debug/pprof/goroutine?token=$BIRDNET_PROFILING_TOKEN&debug=1' | head -1"
 ```
+
+Note that `go tool pprof` saves a copy of every profile it fetches under
+`~/pprof/`, so a tight `watch` interval fills that directory quickly. Use a
+generous interval and clean up afterwards.
 
 ### Interactive Analysis
 
@@ -258,7 +278,11 @@ Set up a cron job for periodic collection:
 - Debug data may contain sensitive information
 - Only share data with trusted parties
 - Consider sanitizing system information before sharing
-- Disable debug mode in production after troubleshooting
+- Set `diagnostics.profiling.enabled` back to `false` after troubleshooting, and
+  reset `blockrate` and `mutexfraction` to `0` if you changed them, since those
+  two cost CPU continuously
+- Treat the profiling token as a credential. Rotate it, by deleting the `token:`
+  line under `diagnostics.profiling` and restarting, if you shared a config file
 
 ## Troubleshooting Collection
 
@@ -266,25 +290,36 @@ Set up a cron job for periodic collection:
 
 If collection fails:
 
-1. Verify debug mode: Check `debug: true` in config.yaml
+1. Verify profiling is enabled: check `diagnostics.profiling.enabled: true` in
+   config.yaml, and that BirdNET-Go was restarted after the edit. `debug: true`
+   does not enable profiling. A `404` from `/debug/pprof/` means it is off.
 2. Check connectivity: `curl http://localhost:8080/`
-3. Verify authentication: If using auth, the script may need credentials
-4. Check permissions: Ensure write access to current directory
+3. Verify the token: a `403` on an instance with no authentication provider means
+   `BIRDNET_PROFILING_TOKEN` is unset or stale. Re-read it from config.yaml.
+4. Verify authentication: the scripts cannot log in to an instance behind basic
+   auth or OAuth. Collect those profiles manually.
+5. Check the port: a `410` means you are on the telemetry listener (default 8090).
+   Profiling moved to the web server port (default 8080).
+6. Check permissions: ensure write access to current directory
 
 ### For Docker Installation
 
 If collection fails:
 
 1. Verify container is running: `docker ps | grep birdnet`
-2. Check debug mode in container:
+2. Check profiling is enabled in the container:
    ```bash
-   docker exec <container-name> grep "debug:" /path/to/config.yaml
+   docker exec <container-name> grep -A2 "^diagnostics:" /config/config.yaml
    ```
-3. Verify port mapping: `docker port <container-name>`
-4. Check container logs: `docker logs <container-name>`
-5. Ensure debug mode is enabled and container was restarted:
+3. Read the profiling token, if the instance has no authentication provider:
    ```bash
-   # Edit config.yaml to set debug: true
+   docker exec <container-name> awk '/^diagnostics:/{f=1} f && /^[[:space:]]*token:/{print $2; exit}' /config/config.yaml
+   ```
+4. Verify port mapping: `docker port <container-name>`
+5. Check container logs: `docker logs <container-name>`
+6. Ensure profiling is enabled and the container was restarted:
+   ```bash
+   # Edit config.yaml to set diagnostics.profiling.enabled: true
    docker restart <container-name>
    ```
 
