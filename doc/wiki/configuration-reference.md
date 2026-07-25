@@ -394,6 +394,15 @@ SentrySettings contains settings for Sentry error tracking
 | `sentry.enabled` | boolean | true to enable Sentry error tracking (opt-in) |
 | `sentry.debug` | boolean | true to enable transparent telemetry logging |
 
+## diagnostics
+
+DiagnosticsConfig groups the developer-facing diagnostics features.
+
+| Setting | Type | Description |
+|---------|------|-------------|
+| `diagnostics.profiling.enabled` | boolean | true to serve /debug/pprof/* on the web server |
+| `diagnostics.profiling.token` | string | secret required when no auth provider is configured; generated automatically |
+
 ## output
 
 | Setting | Type | Description |

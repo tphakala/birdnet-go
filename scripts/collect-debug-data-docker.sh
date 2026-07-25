@@ -171,18 +171,57 @@ check_connectivity() {
     print_status "✓ Connected to BirdNET-Go"
 }
 
-# Function to check if debug mode is enabled
+# Profiling token, required when BirdNET-Go has no authentication provider
+# configured. Set BIRDNET_PROFILING_TOKEN to the diagnostics.profiling.token
+# value from config.yaml. When authentication IS configured, the endpoints sit
+# behind it instead and this stays empty.
+# Note: these collectors support unauthenticated and token-gated instances only;
+# they cannot log in to an instance protected by basic auth or OAuth.
+PROFILING_TOKEN="${BIRDNET_PROFILING_TOKEN:-}"
+
+# urlencode percent-encodes a string for safe use in a URL query value.
+# The generated token is base64url and needs no encoding, but a hand-configured
+# one may contain &, =, + or spaces, which would silently corrupt the request.
+urlencode() {
+    # LC_ALL=C forces byte-oriented iteration. Under a UTF-8 locale bash walks
+    # CHARACTERS, so a token containing e.g. 'e-acute' would be emitted as its
+    # single code point (%E9) rather than its UTF-8 bytes (%C3%A9), and the
+    # server would receive a different token than the one configured.
+    local LC_ALL=C
+    local raw=$1
+    local i char out=""
+    for (( i = 0; i < ${#raw}; i++ )); do
+        char=${raw:i:1}
+        case "$char" in
+            [a-zA-Z0-9.~_-]) out+="$char" ;;
+            *) out+=$(printf '%%%02X' "'$char") ;;
+        esac
+    done
+    printf '%s' "$out"
+}
+
+# auth_query returns the query-string fragment carrying the profiling token,
+# with the correct separator for a URL that may already have parameters.
+auth_query() {
+    local separator=${1:-?}
+    if [ -n "${PROFILING_TOKEN}" ]; then
+        printf '%stoken=%s' "${separator}" "$(urlencode "${PROFILING_TOKEN}")"
+    fi
+}
+
+# Function to check that the profiling endpoints are reachable
 check_debug_mode() {
-    print_status "Checking if debug mode is enabled..."
-    if ! curl -s -f "${BASE_URL}/debug/pprof/" > /dev/null 2>&1; then
-        print_error "Debug mode is not enabled or pprof endpoints are not accessible"
-        print_error "Please set 'debug: true' in your config.yaml and restart the container"
-        print_warning "You may need to restart the container with debug mode enabled:"
-        print_warning "  1. Update config.yaml with 'debug: true'"
+    print_status "Checking if profiling is enabled..."
+    if ! curl -s -f "${BASE_URL}/debug/pprof/$(auth_query)" > /dev/null 2>&1; then
+        print_error "Profiling endpoints are not accessible"
+        print_error "Set 'diagnostics.profiling.enabled: true' in your config.yaml and restart the container:"
+        print_warning "  1. Update config.yaml with 'diagnostics.profiling.enabled: true'"
         print_warning "  2. docker restart ${CONTAINER_NAME}"
+        print_warning "  3. If no authentication provider is configured, export the generated token:"
+        print_warning "     export BIRDNET_PROFILING_TOKEN=\"<diagnostics.profiling.token from config.yaml>\""
         exit 1
     fi
-    print_status "✓ Debug mode is enabled"
+    print_status "✓ Profiling is enabled"
 }
 
 # Function to collect a profile
@@ -190,9 +229,13 @@ collect_profile() {
     local profile_type=$1
     local output_file=$2
     local url_params=${3:-""}
-    
+    local separator="?"
+    if [ -n "${url_params}" ]; then
+        separator="&"
+    fi
+
     print_status "Collecting ${profile_type} profile..."
-    if curl -s -f -o "${output_file}" "${BASE_URL}/debug/pprof/${profile_type}${url_params}"; then
+    if curl -s -f -o "${output_file}" "${BASE_URL}/debug/pprof/${profile_type}${url_params}$(auth_query "${separator}")"; then
         print_status "✓ Collected ${profile_type} profile → ${output_file}"
     else
         print_warning "Failed to collect ${profile_type} profile"
@@ -449,12 +492,12 @@ main() {
     
     # Check if debug mode is actually enabled in config
     if [ -f "${OUTPUT_DIR}/config.yaml" ]; then
-        if ! grep -q "^debug: true" "${OUTPUT_DIR}/config.yaml" 2>/dev/null; then
+        if ! grep -A3 '^diagnostics:' "${OUTPUT_DIR}/config.yaml" 2>/dev/null | grep -q "enabled: true"; then
             print_warning ""
-            print_warning "⚠️  IMPORTANT: Debug mode may not be properly enabled!"
-            print_warning "Found 'debug: false' in config.yaml"
-            print_warning "To enable debug mode:"
-            print_warning "1. Edit your config.yaml and set 'debug: true'"
+            print_warning "⚠️  IMPORTANT: Profiling may not be properly enabled!"
+            print_warning "Did not find 'diagnostics.profiling.enabled: true' in config.yaml"
+            print_warning "To enable profiling:"
+            print_warning "1. Edit your config.yaml and set 'diagnostics.profiling.enabled: true'"
             print_warning "2. Restart the container: sudo systemctl restart birdnet-go"
             print_warning "3. Run this script again"
         fi

@@ -289,6 +289,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	// (controllerSettings) return the freshly published value. Both stores are
 	// lock-free; settingsMutex here only serialises this read-modify-write
 	// against other update handlers, not against readers.
+	c.ensureProfilingTokenForSave(updated)
 	if publishGlobal {
 		conf.StoreSettings(updated)
 	}
@@ -571,7 +572,34 @@ func handlePrimitiveField(
 // publishAndSaveSettings publishes updated settings and persists to disk.
 // Must be called while c.settingsMutex is held. On save failure, the atomic
 // Settings snapshot is rolled back to current.
+// ensureProfilingTokenForSave mints the profiling token into a settings
+// snapshot that is about to be published and persisted, so enabling pprof at
+// runtime on an instance with no authentication provider yields a usable
+// credential rather than an endpoint that refuses every request until restart.
+//
+// It is called at each of the three publish points rather than from one shared
+// save helper because the settings-write paths each inline their own
+// publish-then-persist sequence. Hooking only one of them is exactly how the
+// first attempt at this shipped a dead feature: publishAndSaveSettings is used
+// by the TLS, integrations and detections writers, none of which can carry a
+// diagnostics change, so the two handlers that CAN (PUT /settings and
+// PATCH /settings/:section) never minted anything.
+//
+// Non-fatal by design. The pprof routes fail closed without a token, and a
+// diagnostics credential must not cost the user the rest of their settings
+// change. EnsureProfilingToken is a no-op unless profiling is enabled, the
+// token is empty, and no auth provider is configured, so the normal save path
+// pays a boolean check and nothing else.
+func (c *Controller) ensureProfilingTokenForSave(updated *conf.Settings) {
+	if _, err := conf.EnsureProfilingToken(updated); err != nil {
+		apicore.GetLogger().Warn(
+			"Failed to generate profiling token; the profiling endpoints will refuse requests",
+			logger.Error(err))
+	}
+}
+
 func (c *Controller) publishAndSaveSettings(current, updated *conf.Settings) error {
+	c.ensureProfilingTokenForSave(updated)
 	if c.isGlobalOwner {
 		conf.StoreSettings(updated)
 	}
@@ -710,6 +738,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	// republish the controller's own atomic snapshot. See the matching comment
 	// in UpdateSettings for why Debug reads via conf.GetSettings() (the global)
 	// rather than the per-controller snapshot.
+	c.ensureProfilingTokenForSave(updated)
 	if publishGlobal {
 		conf.StoreSettings(updated)
 	}
@@ -1016,6 +1045,15 @@ func getSettingsSectionValue(settings *conf.Settings, section string) (any, erro
 		return &settings.Realtime.Telemetry, nil
 	case "sentry":
 		return &settings.Sentry, nil
+	// NOTE: "diagnostics" is deliberately absent, so PATCH on it returns 400.
+	// The section holds a generated credential that getBlockedFieldMap marks
+	// never-updatable-via-API, and the PATCH merge path does not enforce that
+	// map: handleGenericSection merges the incoming JSON into the section and
+	// then only RECORDS that restrictions exist. Adding the case here would let
+	// an unauthenticated client on a no-auth instance set a token it chose and
+	// read profiles with it. PUT /api/v2/settings does enforce the map, so
+	// enabling profiling at runtime still works there.
+	// Re-add this once the PATCH path enforces blocked fields.
 	case "notification":
 		return &settings.Notification, nil
 	case "logging":
@@ -1748,6 +1786,9 @@ func sanitizeSettingsForAPI(s *conf.Settings) *conf.Settings {
 	sanitized.Security.BasicAuth.ClientID = ""
 	sanitized.Security.BasicAuth.ClientSecret = ""
 
+	// --- Diagnostics section ---
+	sanitized.Diagnostics.Profiling.Token = redact(s.Diagnostics.Profiling.Token)
+
 	// Legacy OAuth providers
 	sanitized.Security.GoogleAuth.ClientSecret = redact(s.Security.GoogleAuth.ClientSecret)
 	sanitized.Security.GithubAuth.ClientSecret = redact(s.Security.GithubAuth.ClientSecret)
@@ -1862,6 +1903,9 @@ func restoreRedactedSecrets(current, incoming *conf.Settings) error {
 	restore(&current.Security.GithubAuth.ClientSecret, &incoming.Security.GithubAuth.ClientSecret)
 	restore(&current.Security.MicrosoftAuth.ClientSecret, &incoming.Security.MicrosoftAuth.ClientSecret)
 
+	// Diagnostics
+	restore(&current.Diagnostics.Profiling.Token, &incoming.Diagnostics.Profiling.Token)
+
 	// Array-based OAuth providers — match by Provider name to handle reordering
 	for i := range incoming.Security.OAuthProviders {
 		if incoming.Security.OAuthProviders[i].ClientSecret != redactedValue {
@@ -1973,6 +2017,7 @@ func validateNoRedactedSentinels(s *conf.Settings) error {
 	check(s.Security.GoogleAuth.ClientSecret, "security.googleAuth.clientSecret")
 	check(s.Security.GithubAuth.ClientSecret, "security.githubAuth.clientSecret")
 	check(s.Security.MicrosoftAuth.ClientSecret, "security.microsoftAuth.clientSecret")
+	check(s.Diagnostics.Profiling.Token, "diagnostics.profiling.token")
 	check(s.Realtime.MQTT.Password, "realtime.mqtt.password")
 	check(s.Output.MySQL.Password, "output.mysql.password")
 	check(s.Realtime.Weather.OpenWeather.APIKey, "realtime.weather.openWeather.apiKey")
@@ -2040,6 +2085,7 @@ func clearRedactedSentinels(s *conf.Settings) {
 	clearField(&s.Security.GoogleAuth.ClientSecret)
 	clearField(&s.Security.GithubAuth.ClientSecret)
 	clearField(&s.Security.MicrosoftAuth.ClientSecret)
+	clearField(&s.Diagnostics.Profiling.Token)
 	clearField(&s.Realtime.MQTT.Password)
 	clearField(&s.Output.MySQL.Password)
 	clearField(&s.Realtime.Weather.OpenWeather.APIKey)
@@ -2121,6 +2167,19 @@ func getBlockedFieldMap() map[string]any {
 				"ClientSecret":   true, // OAuth2 server internal field (different from user's password)
 				"AuthCodeExp":    true, // OAuth2 server internal field
 				"AccessTokenExp": true, // OAuth2 server internal field
+			},
+		},
+
+		// Diagnostics section - block the generated credential, same class as
+		// Security.SessionSecret above. Enabled stays writable; the token is
+		// minted server-side when the config is loaded, so letting a client
+		// pin it to a chosen value would only weaken it. This matters most in
+		// the configuration the token exists for: with no auth provider the
+		// settings API has no auth either, so an unblocked field would let any
+		// LAN client set a token it knows and then read profiles.
+		"Diagnostics": map[string]any{
+			"Profiling": map[string]any{
+				"Token": true, // Generated internally, never updated via API
 			},
 		},
 

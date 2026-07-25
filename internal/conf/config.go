@@ -1720,6 +1720,31 @@ type BackupConfig struct {
 	} `yaml:"operationtimeouts" json:"operationTimeouts"`
 }
 
+// ProfilingConfig gates the Go pprof HTTP endpoints.
+//
+// The endpoints are served by the main web server behind its authentication
+// middleware, never by the Prometheus telemetry listener. When no
+// authentication provider is configured (the common home-LAN default), Token is
+// required instead, and is generated automatically: on the config load path
+// when profiling is already enabled, and on the settings-save path when it is
+// switched on at runtime.
+//
+// The leaf key is deliberately named "token" and not "profilingtoken": support
+// dump scrubbing matches sensitive keys on word boundaries, so a squashed name
+// would not be redacted. See isSensitiveKey in internal/support/collector.go.
+type ProfilingConfig struct {
+	Enabled bool   `yaml:"enabled" json:"enabled"` // true to serve /debug/pprof/* on the web server
+	Token   string `yaml:"token" json:"token"`     // secret required when no auth provider is configured; generated automatically
+}
+
+// DiagnosticsConfig groups the developer-facing diagnostics features. It is a
+// sibling of Logging and WebServer rather than a member of the telemetry
+// settings, because decoupling profiling from Prometheus metrics is the point:
+// enabling metrics must not expose profiling.
+type DiagnosticsConfig struct {
+	Profiling ProfilingConfig `yaml:"profiling" json:"profiling"` // pprof HTTP endpoint configuration
+}
+
 // Settings contains all configuration options for the BirdNET-Go application.
 type Settings struct {
 	Debug bool `yaml:"debug" json:"debug"` // true to enable debug mode
@@ -1755,6 +1780,8 @@ type Settings struct {
 	WebServer WebServerSettings `yaml:"webserver" json:"webServer"` // web server configuration
 	Security  Security          `yaml:"security" json:"security"`   // security configuration
 	Sentry    SentrySettings    `yaml:"sentry" json:"sentry"`       // Sentry error tracking configuration
+
+	Diagnostics DiagnosticsConfig `yaml:"diagnostics" json:"diagnostics"` // developer diagnostics (pprof profiling)
 
 	Output struct {
 		File struct {
@@ -1836,6 +1863,19 @@ func (s *Settings) GetEnabledOAuthProviders() []string {
 		}
 	}
 	return enabled
+}
+
+// IsAuthProviderConfigured reports whether this instance has any way to
+// authenticate a user: basic auth is enabled, or at least one OAuth provider is
+// enabled and fully configured.
+//
+// It deliberately ignores the allowed-subnet bypass, which is a per-request
+// concern handled by OAuth2Server.IsAuthenticationEnabled. This answers the
+// global question "can this instance authenticate anyone at all", which is what
+// decides whether an endpoint can rely on the auth middleware or has to carry
+// its own credential.
+func (s *Settings) IsAuthProviderConfigured() bool {
+	return s.Security.BasicAuth.Enabled || len(s.GetEnabledOAuthProviders()) > 0
 }
 
 // GenerateRandomSecret generates a URL-safe base64 encoded random string

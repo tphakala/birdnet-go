@@ -748,6 +748,17 @@
       "type": "object",
       "description": "DetectionsGridConfig holds configuration for the detections grid element."
     },
+    "DiagnosticsConfig": {
+      "properties": {
+        "profiling": {
+          "$ref": "#/$defs/ProfilingConfig",
+          "description": "pprof HTTP endpoint configuration"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "DiagnosticsConfig groups the developer-facing diagnostics features."
+    },
     "DiskMonitorConfig": {
       "properties": {
         "enabled": {
@@ -1512,6 +1523,21 @@
       "type": "object",
       "description": "PrivacyFilterSettings contains settings for the privacy filter."
     },
+    "ProfilingConfig": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to serve /debug/pprof/* on the web server"
+        },
+        "token": {
+          "type": "string",
+          "description": "secret required when no auth provider is configured; generated automatically"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ProfilingConfig gates the Go pprof HTTP endpoints."
+    },
     "PublicAccess": {
       "properties": {
         "liveaudio": {
@@ -2204,6 +2230,10 @@
         "sentry": {
           "$ref": "#/$defs/SentrySettings",
           "description": "Sentry error tracking configuration"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/DiagnosticsConfig",
+          "description": "developer diagnostics (pprof profiling)"
         },
         "output": {
           "properties": {

@@ -489,6 +489,10 @@ func (s *Server) setupRoutes() error {
 	// These must be at /auth/:provider to match frontend expectations
 	s.registerOAuthRoutes()
 
+	// pprof endpoints, registered unconditionally and gated per request so the
+	// setting hot-reloads. They are refused with 404 until profiling is enabled.
+	s.registerPprofRoutes()
+
 	// Initialize static file server for frontend assets (uses centralized logger)
 	s.staticServer = NewStaticFileServer()
 	s.staticServer.RegisterRoutes(s.echo)

@@ -239,6 +239,15 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	// --- Sentry ---
 	"Sentry": {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_telemetry"},
 
+	// --- Diagnostics ---
+	// The pprof routes are registered unconditionally and gated by middleware
+	// that reads the live snapshot per request, so a change to either field is
+	// observed on the next request with no restart and no action. Enabling
+	// profiling also mints the token during the same save
+	// (ensureProfilingTokenForSave), so the endpoint is usable immediately
+	// rather than refusing until the next start.
+	"Diagnostics": {categories: []hotReloadCategory{hotReloadFresh}},
+
 	// --- Output ---
 	"Output": {categories: []hotReloadCategory{hotReloadRestart}},
 

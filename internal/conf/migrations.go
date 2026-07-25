@@ -85,6 +85,54 @@ func ensureSessionSecret(settings *Settings) error {
 	return nil
 }
 
+// EnsureProfilingToken mints diagnostics.profiling.token when the pprof
+// endpoints are enabled on an instance that has no way to authenticate a user.
+// It follows the SessionSecret pattern deliberately: a stable secret generated
+// from crypto/rand and persisted to the config file, so a profiling session
+// survives the restart it often spans.
+//
+// Nothing is generated when an authentication provider is configured. There the
+// web server's auth middleware already gates the routes, and a second
+// credential sitting in the config would only widen the way in.
+//
+// It runs on the config load path AND on every settings-save path, so switching
+// profiling on at runtime yields a usable credential rather than an endpoint
+// that refuses everything until the next restart.
+//
+// Unlike ensureSessionSecret this does NOT mirror the value into viper. That
+// mirror is vestigial there: nothing in this repository persists through viper
+// (SaveYAMLConfig marshals the struct), and viper.Set is not goroutine-safe, so
+// staging a value it would never write is cost without a payer.
+//
+// The caller owns persistence, and is told whether anything changed so it can
+// decide whether a write is needed.
+func EnsureProfilingToken(settings *Settings) (bool, error) {
+	if settings == nil {
+		return false, nil
+	}
+
+	profiling := &settings.Diagnostics.Profiling
+	if !profiling.Enabled || profiling.Token != "" || settings.IsAuthProviderConfigured() {
+		return false, nil
+	}
+
+	token, err := GenerateRandomSecret()
+	if err != nil {
+		return false, errors.New(err).
+			Component("conf").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "generate_profiling_token").
+			Build()
+	}
+
+	profiling.Token = token
+
+	// The value itself is never logged.
+	GetLogger().Info("Generated profiling token; no authentication provider is configured, so /debug/pprof/ requires the token from diagnostics.profiling.token")
+
+	return true, nil
+}
+
 // migrateLegacyProvider converts a legacy SocialProvider to the new OAuthProviderConfig format.
 // Returns nil if the legacy provider is not configured (no ClientID).
 func migrateLegacyProvider(providerName string, legacy SocialProvider) *OAuthProviderConfig {

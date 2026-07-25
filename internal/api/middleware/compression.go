@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	pathpkg "path"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -109,6 +110,8 @@ func NewGzipWithSkipper(level int, skipper middleware.Skipper) echo.MiddlewareFu
 //   - Server-Sent Events endpoints (see SSESkipper).
 //   - Binary media routes serving audio, images, or HLS content (see MediaPathSkipper).
 //   - Routes that serve already-compressed responses (see precompressedRoutes).
+//   - The Go pprof endpoints, whose profiles are already gzip streams (see
+//     PprofSkipper).
 //   - NDJSON/JSON progress-streaming routes (see streamingJSONRoutes), where a
 //     gzip buffering boundary would withhold flushed results and defeat the
 //     live progress UX.
@@ -127,7 +130,30 @@ func DefaultGzipSkipper(c echo.Context) bool {
 	if _, ok := streamingJSONRoutes[c.Path()]; ok {
 		return true
 	}
+	if PprofSkipper(c) {
+		return true
+	}
 	return c.Request().Header.Get(headerRange) != ""
+}
+
+// PprofSkipper returns true for the Go pprof endpoints.
+//
+// The profile endpoints dominate the traffic here and are already
+// gzip-compressed protobuf (a profile response starts with the gzip magic
+// bytes), so compressing them again spends CPU to make the payload slightly
+// larger, and the execution trace is a long-lived stream a compressor would
+// buffer, like the SSE and progress-stream routes above. The index, /cmdline
+// and /symbol are plain text and would compress fine; they are covered by the
+// same prefix because splitting the subtree would buy a few hundred bytes on
+// endpoints nobody polls, at the cost of a second rule to keep in sync.
+//
+// Unlike its siblings above this matches the cleaned REQUEST path rather than
+// the route template, because it shares isPprofPath with the CSRF skipper,
+// which must match on the request path to stay traversal-safe. Matching both on
+// the same value is what guarantees the two exemptions cannot disagree about
+// which requests are pprof requests.
+func PprofSkipper(c echo.Context) bool {
+	return isPprofPath(pathpkg.Clean(c.Request().URL.Path))
 }
 
 // SSESkipper is a skipper function that skips compression for Server-Sent Events endpoints.

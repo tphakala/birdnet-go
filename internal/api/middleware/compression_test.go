@@ -154,6 +154,25 @@ func TestDefaultGzipSkipper(t *testing.T) {
 		assert.True(t, DefaultGzipSkipper(c),
 			"the species dictionary route serves precompressed bytes and must not be re-gzipped")
 	})
+
+	t.Run("skips pprof routes", func(t *testing.T) {
+		t.Parallel()
+		// Matched on the request path, not the route template, because the
+		// named profiles are served by one wildcard route.
+		for _, path := range []string{"/debug/pprof", "/debug/pprof/heap", "/debug/pprof/profile"} {
+			c, _ := newTestContext(t, http.MethodGet, path)
+			setPathForContext(t, c, "/debug/pprof/*")
+			assert.True(t, DefaultGzipSkipper(c),
+				"a pprof profile is already a gzip stream: %s", path)
+		}
+	})
+
+	t.Run("does not skip a pprof lookalike path", func(t *testing.T) {
+		t.Parallel()
+		c, _ := newTestContext(t, http.MethodGet, "/debug/pprofiler")
+		setPathForContext(t, c, "/debug/pprofiler")
+		assert.False(t, DefaultGzipSkipper(c))
+	})
 }
 
 func TestDefaultGzipSkipper_SkipsStreamingJSONRoutes(t *testing.T) {

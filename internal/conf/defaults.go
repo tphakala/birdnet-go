@@ -445,6 +445,11 @@ func setDefaultConfig() {
 
 	// Alerting rules engine
 	viper.SetDefault("alerting.history_retention_days", 30)
+
+	// Diagnostics: pprof profiling endpoints. Off by default; the token is
+	// generated on demand when profiling is enabled without an auth provider.
+	viper.SetDefault("diagnostics.profiling.enabled", false)
+	viper.SetDefault("diagnostics.profiling.token", "")
 }
 
 // setModuleLogDefaults sets default values for a module log configuration

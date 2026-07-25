@@ -153,6 +153,26 @@ func Load() (*Settings, error) {
 		return nil, err
 	}
 
+	// Mint the profiling token when pprof is enabled without an authentication
+	// provider. Deliberately non-fatal: without a token the pprof routes refuse
+	// every request, which is the safe outcome, and a diagnostics feature must
+	// not be able to stop the application from starting.
+	if generated, err := EnsureProfilingToken(settings); err != nil {
+		GetLogger().Warn("Failed to generate profiling token; the profiling endpoints will refuse requests", logger.Error(err))
+	} else if generated {
+		// A token that is minted but never written to disk is worse than none:
+		// it gates the endpoints for this process while being unreadable (it is
+		// never logged), and the next start mints a different one. Say so
+		// plainly, because persistMigration is silent when there is no config
+		// file to write and only warns on a write failure.
+		if viper.ConfigFileUsed() == "" {
+			GetLogger().Warn("Generated a profiling token but there is no config file to save it to; " +
+				"the profiling endpoints will be unusable and the token will differ on the next start")
+		} else {
+			persistMigration(settings, "profiling token")
+		}
+	}
+
 	// Resolve features that are switched on but were never configured, before the
 	// validators get to see them. A config file can age into that state across
 	// upgrades, and rejecting the file leaves no UI in which to correct it, so
