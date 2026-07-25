@@ -24,28 +24,39 @@ export interface InferenceBoard {
   tier?: string;
 }
 
+/** Reason codes the server can attach to an accelerator. */
+export type GpuReasonCode = 'render-node-unavailable' | 'render-node-permission' | 'no-runtime';
+
 /**
- * A GPU present on the host. Reported whether or not this build can use it, so
- * the panel can explain an unusable one instead of hiding it.
+ * A GPU present on the host. Reported whether or not it can be reached, so the
+ * panel can explain an unreachable one instead of hiding it.
  */
 export interface InferenceAccelerator {
   /** "igpu" or "dgpu". */
   kind: string;
   /** "intel", "amd" or "nvidia". */
   vendor: string;
-  /** Display name pairing the vendor with the PCI IDs. */
-  name?: string;
-  /** Runtime that executes inference on this device ("openvino"), when any can. */
-  via?: string;
-  /** Whether inference can run on this device now. */
-  usable: boolean;
   /**
-   * Every reason code explaining `usable === false`, most fundamental first.
-   * Rendered through the i18n catalog under `system.inference.gpuReason.*`.
-   * A list because the blockers stack in a containerised install: the stock
-   * image has no OpenVINO *and* often no /dev/dri mapping.
+   * Display name pairing the vendor with the PCI IDs. Not unique: two identical
+   * cards produce the same name, so it must never be used as a list key.
    */
-  reasons?: string[];
+  name?: string;
+  /**
+   * Whether the server can open this device's DRM render node. This is not a
+   * prediction that inference will run here; the device a model actually uses
+   * is reported per model in `models[].device`.
+   */
+  accessible: boolean;
+  /**
+   * Every reason code explaining why this GPU is not an inference target, most
+   * fundamental first. Each is rendered by `gpuReasonLabel`, which maps it to a
+   * flat `system.inference.gpuReason<Code>` translation key.
+   *
+   * A list because the blockers stack: a card can be both unreachable and of a
+   * vendor no build supports, and learning that one restart at a time is the
+   * outcome worth avoiding.
+   */
+  reasons?: GpuReasonCode[];
 }
 
 /** Host hardware and runtime environment the models run on. */

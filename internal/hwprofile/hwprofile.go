@@ -52,9 +52,6 @@ const (
 	// ReasonUnavailable is recorded when a probe returned no usable value on a
 	// host where one was expected (e.g. total RAM could not be determined).
 	ReasonUnavailable = "unavailable"
-	// ReasonOpenVINONotBuilt marks an Intel GPU that is physically present but
-	// unreachable because this binary was not built with the OpenVINO backend.
-	ReasonOpenVINONotBuilt = "openvino-not-built"
 	// ReasonRenderNodeUnavailable marks a GPU whose DRM render node is not
 	// present in this mount namespace, the usual cause being a container started
 	// without --device /dev/dri.
@@ -63,9 +60,6 @@ const (
 	// but cannot be opened, the usual cause being a container that maps the
 	// device without adding the container user to the node's owning group.
 	ReasonRenderNodePermission = "render-node-permission"
-	// ReasonOpenVINODeviceMissing marks an Intel GPU that OpenVINO is built for
-	// but does not enumerate as a device, typically a missing compute runtime.
-	ReasonOpenVINODeviceMissing = "openvino-device-missing"
 	// ReasonNoRuntime marks a GPU for which this build ships no inference
 	// runtime at all (any AMD or NVIDIA GPU today).
 	ReasonNoRuntime = "no-runtime"
@@ -141,23 +135,22 @@ type Accelerator struct {
 	// Generation is the Intel graphics generation (9, 11, 12), 0 for other
 	// vendors and for Intel parts not in the known-generation table.
 	Generation int
-	// Via is the runtime that would execute inference on this device
-	// ("openvino"), empty when no runtime in this build can reach it.
-	Via string
-	// Usable reports whether inference can actually run on this device now.
-	Usable bool
-	// Reasons lists every reason code explaining Usable == false, most
-	// fundamental first, and is empty when the device is usable. It is a list
-	// rather than a single code because the blockers stack in the default
-	// containerised deployment, and a user fixing them one round trip at a time
-	// is the outcome worth avoiding.
+	// Accessible reports whether this process can open the device's DRM render
+	// node, which every runtime needs and is the strongest claim a filesystem
+	// probe can make.
+	//
+	// It deliberately does not predict whether inference will run here. That
+	// depends on the configured backend and device preference and on what the
+	// OpenVINO core enumerates once loaded, all of which the classifier's device
+	// planner already decides; this package has no settings dependency and
+	// cannot second-guess it without contradicting it.
+	Accessible bool
+	// Reasons lists every reason code explaining why this GPU is not an
+	// inference target, most fundamental first, and is empty when nothing this
+	// probe can see stands in the way. It is a list rather than a single code
+	// because the blockers stack in the default containerised deployment, and a
+	// user fixing them one restart at a time is the outcome worth avoiding.
 	Reasons []string
-
-	// renderNode is how reachable this GPU's DRM render node is. It is a
-	// property of the hardware and the mount namespace, so it is probed once
-	// and kept, and it is unexported because callers should read the conclusion
-	// (Usable, Reasons) rather than re-derive it.
-	renderNode renderNodeState
 }
 
 // Backends reports the availability of each inference backend in this build.
@@ -205,25 +198,55 @@ var (
 	cachedHardware *Profile
 )
 
-// Detect returns the host profile. The hardware facts are probed on the first
-// call and cached; the inference backends are probed on every call, because
-// backend availability changes without the hardware changing (loading a model
-// initializes the OpenVINO core, at which point its GPU device appears) and a
-// cached answer would leave the UI contradicting itself. It is safe for
-// concurrent use.
+// Detect returns the host profile, probing the hardware on the first call and
+// serving a cached copy afterwards. Backend availability is probed on every
+// call, because it changes without the hardware changing: installing an ONNX
+// Runtime library, or loading a model that initializes the OpenVINO core, both
+// take effect without a restart. It is safe for concurrent use.
+//
+// A caller that has already probed the backends itself should use Hardware and
+// WithBackends instead, so one probe decides every field of its answer.
 func Detect() Profile {
-	return evaluateBackends(hardwareProfile(false))
+	return hardwareProfile(false).WithBackends(probeBackends())
 }
 
-// Refresh re-probes the hardware as well, discarding the cache. It exists for
-// the settings hot-reload path; the backend state that changes most often is
-// already re-probed by every Detect call.
+// Refresh discards the cached hardware facts and probes them again. Use it when
+// the host may have changed underneath a running process, for instance after a
+// GPU device node is mapped in or its group membership is granted.
 func Refresh() Profile {
-	return evaluateBackends(hardwareProfile(true))
+	return hardwareProfile(true).WithBackends(probeBackends())
+}
+
+// Hardware returns the cached hardware facts with no backend state attached.
+// Pair it with WithBackends when the caller already holds an authoritative
+// backend probe; Detect is the convenience form for callers that do not.
+func Hardware() Profile {
+	return hardwareProfile(false)
+}
+
+// WithBackends returns a copy of the profile carrying the given backend state.
+// Backends feed capability-token derivation, so a caller whose probe honours a
+// user-configured library path passes it here rather than letting this package
+// re-probe with defaults and silently drop the corresponding token.
+//
+// The value receiver is what makes this safe: it returns a modified copy, so a
+// caller can attach backends to the shared cached snapshot without writing
+// through to the cache. A pointer receiver would.
+//
+//nolint:gocritic // hugeParam: the copy is the point; see the note above.
+func (p Profile) WithBackends(backends Backends) Profile {
+	p.Backends = backends
+	return p
 }
 
 // hardwareProfile returns the cached hardware facts, probing them when the
 // cache is empty or when force is set.
+//
+// The returned Profile is a copy whose slices are cloned, so a caller may sort,
+// filter or append to any of them without writing through to the cache. A plain
+// struct copy would share the backing arrays: detectSIMD builds with spare
+// capacity, so a single append on a returned profile would land in the cached
+// array and be visible to every later caller.
 func hardwareProfile(force bool) Profile {
 	hardwareMu.Lock()
 	defer hardwareMu.Unlock()
@@ -231,7 +254,11 @@ func hardwareProfile(force bool) Profile {
 		probed := probeHardware(rootFS)
 		cachedHardware = &probed
 	}
-	return *cachedHardware
+	snapshot := *cachedHardware
+	snapshot.SIMD = slices.Clone(cachedHardware.SIMD)
+	snapshot.Issues = slices.Clone(cachedHardware.Issues)
+	snapshot.Accelerators = slices.Clone(cachedHardware.Accelerators)
+	return snapshot
 }
 
 // probeHardware collects everything that cannot change while the process runs.
@@ -265,32 +292,5 @@ func probeHardware(root string) Profile {
 	p.Accelerators = accelerators
 	p.Issues = append(p.Issues, accIssues...)
 
-	return p
-}
-
-// evaluateBackends probes the inference backends and decides each
-// accelerator's usability against them.
-func evaluateBackends(p Profile) Profile {
-	return applyBackends(p, probeBackends())
-}
-
-// applyBackends returns a copy of the profile carrying the given backend state,
-// with every accelerator's usability decided against it. The returned profile
-// shares no mutable accelerator state with the input, so evaluating the cached
-// hardware snapshot never writes through to the cache.
-func applyBackends(p Profile, backends Backends) Profile {
-	p.Backends = backends
-	if len(p.Accelerators) == 0 {
-		return p
-	}
-
-	openvinoGPU := backends.OpenVINO.Supported && slices.Contains(backends.OpenVINO.Devices, deviceGPU)
-	evaluated := make([]Accelerator, len(p.Accelerators))
-	for i := range p.Accelerators {
-		accelerator := p.Accelerators[i]
-		applyUsability(&accelerator, backends, openvinoGPU, accelerator.renderNode)
-		evaluated[i] = accelerator
-	}
-	p.Accelerators = evaluated
 	return p
 }

@@ -40,14 +40,19 @@ const (
 	raspberryPiModelKey = "raspberry pi"
 )
 
-// socTiers maps a system-on-chip identifier to the performance tier the model
-// catalog bands it into. Pi 1 and 2 (bcm2835, bcm2836) are absent on purpose:
-// they cannot run any current model, so there is no tier to recommend for them.
+// socTiers bands a system-on-chip into the performance tier the model catalog
+// distinguishes. Keys are device-tree compatible parts, i.e. exactly the
+// strings socFromCompatible produces, not die names or marketing names: a Pi 3
+// reports "brcm,bcm2837", and the bcm2710 spelling appears only in downstream
+// DTS filenames, which this never reads.
+//
+// bcm2835 and bcm2836 are absent because no current model runs on them. Note
+// that a Pi 2 v1.2 and a Pi Zero 2 W both report bcm2837 and are therefore
+// banded pi3, which is correct for the SoC even though the boards differ.
 var socTiers = map[string]string{
 	"bcm2712": TierPi5,
 	"bcm2711": TierPi4,
 	"bcm2837": TierPi3,
-	"bcm2710": TierPi3,
 }
 
 // detectBoard identifies the host board from the device tree under root. A host

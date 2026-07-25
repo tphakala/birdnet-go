@@ -122,7 +122,7 @@ func TestProfileCapabilities(t *testing.T) {
 				Arch:     archAMD64,
 				Backends: Backends{TFLite: BackendStatus{Available: true}},
 				Accelerators: []Accelerator{
-					{Vendor: VendorIntel, Generation: 12, Reasons: []string{ReasonOpenVINONotBuilt}},
+					{Vendor: VendorIntel, Generation: 12, Reasons: []string{ReasonRenderNodeUnavailable}},
 				},
 			},
 			want: []string{CapX86_64, CapTFLite, "openvino-gpu-intel-gen12"},

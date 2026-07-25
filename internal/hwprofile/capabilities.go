@@ -57,6 +57,12 @@ const deviceGPU = "GPU"
 //
 // Order is stable (architecture, backends, modifiers) and duplicates are
 // removed, so the result can be compared or logged directly.
+//
+// The value receiver is the contract, not an oversight: the method is
+// documented as pure, and a pointer receiver would let it mutate a profile that
+// may be the caller's only handle on the cached snapshot.
+//
+//nolint:gocritic // hugeParam: see the note above; the copy is deliberate.
 func (p Profile) Capabilities() []string {
 	caps := make([]string, 0, 8)
 
@@ -110,11 +116,16 @@ func (p Profile) Capabilities() []string {
 	return dedupe(caps)
 }
 
-// dedupe removes repeated tokens while preserving first-seen order. Two GPUs of
-// the same generation would otherwise emit the same token twice.
+// dedupe returns the tokens with repeats removed, preserving first-seen order.
+// Two GPUs of the same generation would otherwise emit the same token twice.
+//
+// It allocates rather than reusing the input's backing array. Writing into
+// tokens[:0] is safe for the one caller that builds a fresh slice, but this
+// package hands out profiles that share arrays with a process-global cache, so
+// a helper that quietly destroys its argument is a trap not worth leaving.
 func dedupe(tokens []string) []string {
 	seen := make(map[string]struct{}, len(tokens))
-	out := tokens[:0]
+	out := make([]string, 0, len(tokens))
 	for _, t := range tokens {
 		if _, ok := seen[t]; ok {
 			continue

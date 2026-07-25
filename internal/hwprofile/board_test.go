@@ -159,9 +159,7 @@ func TestReadDeviceTreeStringStopsAtNul(t *testing.T) {
 func TestDetectBoardRecordsIssueWhenDeviceTreeIsUnreadable(t *testing.T) {
 	t.Parallel()
 
-	if isRunningAsRoot() {
-		t.Skip("root bypasses the permission bits this test relies on")
-	}
+	skipIfPermissionBitsIneffective(t)
 
 	root := writeTree(t, map[string]string{
 		"proc/device-tree/model": "Raspberry Pi 5 Model B Rev 1.0\x00",

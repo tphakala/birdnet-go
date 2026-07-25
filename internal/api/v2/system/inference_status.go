@@ -77,21 +77,23 @@ type BoardInfo struct {
 	Tier string `json:"tier,omitempty"`
 }
 
-// AcceleratorInfo describes one GPU and whether inference can run on it.
+// AcceleratorInfo describes one GPU the host exposes.
 type AcceleratorInfo struct {
 	// Kind is "igpu" or "dgpu".
 	Kind string `json:"kind"`
 	// Vendor is "intel", "amd" or "nvidia".
 	Vendor string `json:"vendor"`
-	// Name is a display name pairing the vendor with the PCI IDs.
+	// Name is a display name pairing the vendor with the PCI IDs. It is not
+	// unique: two identical cards produce the same name, so no client may key
+	// off it.
 	Name string `json:"name,omitempty"`
-	// Via is the runtime that executes inference on this device ("openvino"),
-	// empty when nothing in this build can reach it.
-	Via string `json:"via,omitempty"`
-	// Usable reports whether inference can run on this device now.
-	Usable bool `json:"usable"`
-	// Reasons lists every reason code explaining Usable == false, most
-	// fundamental first. The frontend renders them through the i18n catalog.
+	// Accessible reports whether the server can reach the device's DRM render
+	// node. It is not a prediction that inference will run here; which device a
+	// model actually runs on is reported per model in the models list.
+	Accessible bool `json:"accessible"`
+	// Reasons lists every reason code explaining why this GPU is not an
+	// inference target, most fundamental first. The frontend renders them
+	// through the i18n catalog.
 	Reasons []string `json:"reasons,omitempty"`
 }
 
@@ -388,13 +390,25 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 		}
 	}
 
-	// Hardware. hwprofile carries no settings dependency, so its probe searched
-	// the default ONNX Runtime locations rather than the configured path. This
-	// handler does honour the configured path, so its answer replaces the
-	// probe's on the local copy before capability tokens are derived; a user
-	// with a custom library path would otherwise lose the onnxruntime-cpu token.
-	profile := hwprofile.Detect()
-	profile.Backends.ONNX.Available = ort.Available
+	// Hardware. The backends probed just above are the authoritative ones: they
+	// honour the user-configured ONNX Runtime path, which hwprofile cannot see
+	// because it carries no settings dependency. Handing them to the profile
+	// rather than letting it probe again keeps one probe behind every field of
+	// this response, so the backends card and the capability tokens cannot
+	// disagree, and halves the per-request OpenVINO device queries.
+	profile := hwprofile.Hardware().WithBackends(hwprofile.Backends{
+		TFLite: hwprofile.BackendStatus{Available: resp.Backends.TFLite.Available},
+		ONNX: hwprofile.BackendStatus{
+			Available:   ort.Available,
+			Initialized: ort.Initialized,
+			Version:     ort.Version,
+		},
+		OpenVINO: hwprofile.OpenVINOStatus{
+			Supported: ov.Supported,
+			Active:    ov.Active,
+			Devices:   resp.Backends.OpenVINO.Devices,
+		},
+	})
 	envType, _ := sysinfo.GetEnvironment() // detail (sub-type) intentionally omitted in Phase 1
 	resp.Hardware = buildHardwareInfo(profile, envType)
 
@@ -528,9 +542,10 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 
 // buildHardwareInfo maps a hardware profile onto the API payload. It is a pure
 // function with no side effects, so the mapping can be asserted without a live
-// host. environment is passed separately because the profile records the
-// environment type only, while the endpoint has always reported that same value
-// from the cached sysinfo detection.
+// host. environment stays a parameter rather than being read off the profile so
+// a test can vary it independently of everything else the profile carries.
+//
+//nolint:gocritic // hugeParam: the value parameter keeps this a pure mapper.
 func buildHardwareInfo(profile hwprofile.Profile, environment string) HardwareInfo {
 	info := HardwareInfo{
 		Arch:          profile.CPUArch,
@@ -558,12 +573,11 @@ func buildHardwareInfo(profile hwprofile.Profile, environment string) HardwareIn
 		for i := range profile.Accelerators {
 			accelerator := profile.Accelerators[i]
 			info.Accelerators = append(info.Accelerators, AcceleratorInfo{
-				Kind:    accelerator.Kind,
-				Vendor:  accelerator.Vendor,
-				Name:    accelerator.Name,
-				Via:     accelerator.Via,
-				Usable:  accelerator.Usable,
-				Reasons: accelerator.Reasons,
+				Kind:       accelerator.Kind,
+				Vendor:     accelerator.Vendor,
+				Name:       accelerator.Name,
+				Accessible: accelerator.Accessible,
+				Reasons:    accelerator.Reasons,
 			})
 		}
 	}

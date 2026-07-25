@@ -4,7 +4,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -25,9 +24,6 @@ const (
 	VendorNVIDIA = "nvidia"
 )
 
-// ViaOpenVINO is the Accelerator.Via value for a GPU reached through OpenVINO.
-const ViaOpenVINO = "openvino"
-
 // Sysfs and devfs paths, relative to the filesystem root.
 const (
 	drmClassDir   = "sys/class/drm"
@@ -47,34 +43,46 @@ var pciVendors = map[string]string{
 	"0x10de": VendorNVIDIA,
 }
 
-// intelGenerations maps the high byte of an Intel GPU's PCI device ID to its
-// graphics generation. The table covers the parts that can plausibly run this
-// project; an Intel GPU outside it reports generation 0, which suppresses the
-// per-generation capability token rather than guessing.
+// intelGenerations maps an Intel GPU's PCI device ID prefix to its graphics
+// generation. An Intel GPU outside the table reports generation 0, which
+// suppresses the per-generation capability token rather than guessing.
+//
+// Adding a row has three requirements, all of which fail silently if missed and
+// all of which TestIntelGenerationsTableKeys enforces: the key is lowercase,
+// keeps the 0x prefix, and is exactly the first four characters of the sysfs
+// device ID (0x plus the high byte), because that is the slice the lookup takes.
+//
+// The table is not exhaustive and does not try to be. It covers the parts that
+// plausibly run an always-on detector, which is why the low-power SoCs that end
+// up in fanless mini-PCs are here alongside the mainstream mobile parts.
 var intelGenerations = map[string]int{
+	"0x16": 8,  // Broadwell
 	"0x19": 9,  // Skylake
 	"0x59": 9,  // Kaby Lake
-	"0x3e": 9,  // Coffee Lake
+	"0x3e": 9,  // Coffee Lake, Whiskey Lake
 	"0x9b": 9,  // Comet Lake
-	"0x87": 9,  // Amber / Whiskey Lake
+	"0x87": 9,  // Amber Lake
+	"0x31": 9,  // Gemini Lake
+	"0x5a": 9,  // Apollo Lake
 	"0x8a": 11, // Ice Lake
+	"0x4e": 11, // Jasper Lake
+	"0x45": 11, // Elkhart Lake
 	"0x9a": 12, // Tiger Lake
 	"0x4c": 12, // Rocket Lake
 	"0x46": 12, // Alder Lake
 	"0xa7": 12, // Raptor Lake
 	"0x56": 12, // DG2 / Arc
-	"0x7d": 12, // Meteor Lake
+	"0x7d": 12, // Meteor Lake, Arrow Lake
 }
 
 // detectAccelerators enumerates the GPUs on the DRM bus under root and records
-// how reachable each one's render node is. It deliberately stops short of
-// deciding usability, which depends on backend state that outlives no cache;
-// evaluateBackends makes that call.
+// how reachable each one is. Everything it reports is a property of the
+// hardware and of this mount namespace, so the result is stable for the
+// process lifetime and is cached with the rest of the hardware facts.
 //
-// Enumeration is deliberately independent of the inference build tags: OpenVINO
-// device queries only compile into an OpenVINO build, so a stock image would
-// otherwise give a user with an Intel iGPU no signal at all that different
-// packaging would give them GPU offload.
+// Enumeration is deliberately independent of the inference build tags, so a
+// user whose GPU is present but unreachable is told so rather than shown
+// nothing at all.
 func detectAccelerators(root string) (accelerators []Accelerator, issues []Issue) {
 	cards, err := os.ReadDir(filepath.Join(root, drmClassDir))
 	if err != nil {
@@ -101,58 +109,55 @@ func detectAccelerators(root string) (accelerators []Accelerator, issues []Issue
 		deviceID := strings.ToLower(readSysfsValue(filepath.Join(devDir, "device")))
 		slot := pciSlot(filepath.Join(devDir, "uevent"))
 
-		accelerators = append(accelerators, Accelerator{
+		accelerator := Accelerator{
 			Kind:       acceleratorKind(vendor, slot),
 			Vendor:     vendor,
 			Name:       acceleratorName(vendor, vendorID, deviceID),
 			Generation: intelGeneration(vendor, deviceID),
-			renderNode: render.state(slot),
-		})
+		}
+		applyAccessibility(&accelerator, render.state(slot))
+		accelerators = append(accelerators, accelerator)
 	}
 
 	return accelerators, issues
 }
 
-// applyUsability decides whether inference can run on acc now, and records
-// every reason it cannot.
+// applyAccessibility records whether this process can reach the GPU's DRM
+// render node, and every reason it cannot use the device for inference.
 //
-// All applicable blockers are reported rather than only the first, because the
-// default deployment is a Docker container and its two failure modes stack: a
-// user on the stock image with no /dev/dri mapping has to fix both the image
-// and the compose file, and being told about one at a time costs a round trip
-// each. Order is most fundamental first, so the panel reads as a checklist.
-func applyUsability(acc *Accelerator, backends Backends, openvinoGPU bool, render renderNodeState) {
+// It deliberately answers only what a filesystem probe can establish. Whether
+// inference actually runs on a GPU is decided by the classifier's device
+// planner, which consults the configured backend and device preference and
+// loads the OpenVINO core to enumerate real devices. Deriving a second verdict
+// here from backend flags alone produced one that could contradict the
+// per-model compute device shown on the same page, and that reported a missing
+// GPU driver on images that ship one.
+//
+// All applicable blockers are reported rather than only the first, because in
+// the default containerised deployment they stack, and learning about them one
+// restart at a time is the outcome worth avoiding. Order is most fundamental
+// first, so the list reads as a checklist.
+func applyAccessibility(acc *Accelerator, render renderNodeState) {
+	reasons := make([]string, 0, 2)
+
+	// No BirdNET-Go build ships a CUDA or ROCm runtime, so an AMD or NVIDIA GPU
+	// is reported as present but never an inference target, rather than hidden.
 	if acc.Vendor != VendorIntel {
-		// No BirdNET-Go build ships a CUDA or ROCm runtime, so an AMD or NVIDIA
-		// GPU is reported as present but unreachable rather than hidden.
-		acc.Reasons = []string{ReasonNoRuntime}
-		return
+		reasons = append(reasons, ReasonNoRuntime)
 	}
 
-	reasons := make([]string, 0, 2)
-	if !backends.OpenVINO.Supported {
-		reasons = append(reasons, ReasonOpenVINONotBuilt)
-	}
 	switch render {
 	case renderNodeMissing:
 		reasons = append(reasons, ReasonRenderNodeUnavailable)
 	case renderNodeDenied:
 		reasons = append(reasons, ReasonRenderNodePermission)
 	case renderNodeOpen:
-		// The device is reachable, so a missing OpenVINO GPU device is a runtime
-		// problem rather than a packaging one, and only worth reporting on a
-		// build that could have used it.
-		if backends.OpenVINO.Supported && !openvinoGPU {
-			reasons = append(reasons, ReasonOpenVINODeviceMissing)
-		}
+		acc.Accessible = true
 	}
 
-	if len(reasons) == 0 {
-		acc.Usable = true
-		acc.Via = ViaOpenVINO
-		return
+	if len(reasons) > 0 {
+		acc.Reasons = reasons
 	}
-	acc.Reasons = reasons
 }
 
 // renderNodeState is how reachable a GPU's DRM render node is from this
@@ -190,11 +195,16 @@ type renderNodeIndex struct {
 }
 
 // state reports how reachable the render node of the GPU at the given PCI slot
-// is. An unmapped or unknown slot falls back to the best state seen anywhere,
-// which is the most useful answer available rather than a false negative.
+// is. A slot the index says nothing about falls back to the best state seen
+// anywhere, because "sysfs did not attribute a render node to this card" is not
+// evidence that the card has none. Reading the map without the comma-ok would
+// turn that silence into renderNodeMissing, which is the false negative that
+// tells a user to map in a device they already mapped in.
 func (r renderNodeIndex) state(slot string) renderNodeState {
 	if r.mapped && slot != "" {
-		return r.bySlot[slot]
+		if state, ok := r.bySlot[slot]; ok {
+			return state
+		}
 	}
 	return r.fallback
 }
@@ -213,7 +223,7 @@ func indexRenderNodes(root string, entries []os.DirEntry) renderNodeIndex {
 				continue
 			}
 			state := renderNodeDenied
-			if canOpenReadWrite(filepath.Join(root, devDRIDir, e.Name())) {
+			if canAccessReadWrite(filepath.Join(root, devDRIDir, e.Name())) {
 				state = renderNodeOpen
 			}
 			states[e.Name()] = state
@@ -226,25 +236,15 @@ func indexRenderNodes(root string, entries []os.DirEntry) renderNodeIndex {
 		if !strings.HasPrefix(name, renderPrefix) {
 			continue
 		}
-		idx.mapped = true
+		// mapped is set only once a render node is actually attributed to a PCI
+		// slot. Setting it for any renderD entry would make an empty bySlot
+		// authoritative for cards it says nothing about.
 		if slot := pciSlot(filepath.Join(root, drmClassDir, name, "device", "uevent")); slot != "" {
 			idx.bySlot[slot] = states[name]
+			idx.mapped = true
 		}
 	}
 	return idx
-}
-
-// canOpenReadWrite reports whether this process may open path for reading and
-// writing. Submitting work to a DRM render node needs read-write access, so a
-// container that maps the device without granting its group can see the node
-// and still not use it.
-func canOpenReadWrite(path string) bool {
-	file, err := os.OpenFile(path, os.O_RDWR, 0)
-	if err != nil {
-		return false
-	}
-	_ = file.Close()
-	return true
 }
 
 // isCardDir reports whether a DRM class entry is a card device rather than one
@@ -254,8 +254,14 @@ func isCardDir(name string) bool {
 	if !ok || suffix == "" {
 		return false
 	}
-	_, err := strconv.Atoi(suffix)
-	return err == nil
+	// Digits only. strconv.Atoi would accept a leading sign, so "card+1" and
+	// "card-1" would both parse; the intent is "cardN", not "parses as an int".
+	for i := range len(suffix) {
+		if suffix[i] < '0' || suffix[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // acceleratorKind classifies a GPU as integrated or discrete from its PCI

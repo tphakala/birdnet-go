@@ -1,8 +1,10 @@
 package hwprofile
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -77,15 +79,42 @@ func writeTree(t *testing.T, trees ...map[string]string) string {
 	return root
 }
 
-// isRunningAsRoot reports whether the test process can read files regardless of
-// their permission bits, which makes any "unreadable file" assertion vacuous.
-func isRunningAsRoot() bool {
-	return os.Geteuid() == 0
+// mergeTrees combines fixtures into one tree definition, so a test can compose
+// "a host with a discrete card that also has a render node" without restating
+// either fixture.
+func mergeTrees(trees ...map[string]string) map[string]string {
+	merged := make(map[string]string)
+	for _, tree := range trees {
+		maps.Copy(merged, tree)
+	}
+	return merged
 }
 
-// makeUnreadable strips read permission from a file inside a fixture tree, so a
-// probe sees a path that exists but cannot be opened.
+// skipIfPermissionBitsIneffective skips a test that depends on chmod actually
+// denying access.
+//
+// Two hosts cannot honour that. Root bypasses the bits entirely. Windows, which
+// this repo's CI does run this package on, maps chmod onto the read-only
+// attribute and keeps reads working, and its Geteuid returns -1 so a root check
+// alone would not catch it: the test would fail on CI rather than skip.
+func skipIfPermissionBitsIneffective(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod does not deny reads on Windows, so the unreadable-path case cannot be staged")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses the permission bits this test relies on")
+	}
+}
+
+// makeUnreadable strips permissions from a path inside a fixture tree, so a
+// probe sees something that exists but cannot be read. The mode is restored on
+// cleanup so t.TempDir can remove the tree.
 func makeUnreadable(t *testing.T, root, rel string) {
 	t.Helper()
-	require.NoError(t, os.Chmod(filepath.Join(root, rel), 0o000))
+	full := filepath.Join(root, rel)
+	info, err := os.Stat(full)
+	require.NoError(t, err)
+	require.NoError(t, os.Chmod(full, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(full, info.Mode().Perm()) })
 }

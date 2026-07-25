@@ -17,12 +17,16 @@ var openvinoDevices = []string{deviceCPU, deviceGPU}
 // The ONNX Runtime probe deliberately passes an empty library path, so it
 // searches the default locations rather than a user-configured one: this
 // package has no settings dependency, and loading settings from a hardware
-// probe would make the probe write to disk on first use. A caller that holds
-// the configured path (the inference status endpoint does) overrides
-// Backends.ONNX.Available on its copy of the Profile before deriving tokens.
+// probe would make the probe write to disk on first use.
+//
+// A caller that holds the configured path therefore must not use this result.
+// It should build its own Backends and pass them to Profile.WithBackends, so
+// one probe decides every field it reports; otherwise a user with a custom
+// library path silently loses the onnxruntime-cpu token.
 func probeBackends() Backends {
-	// TFLite is compiled into every build, so it needs no probe.
-	backends := Backends{TFLite: BackendStatus{Available: true}}
+	// TFLite needs no runtime probe: whether it is linked is decided at compile
+	// time by the notflite build tag.
+	backends := Backends{TFLite: BackendStatus{Available: tfliteLinked}}
 
 	ort := inference.CheckORTAvailability("")
 	backends.ONNX = BackendStatus{

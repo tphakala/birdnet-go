@@ -2,11 +2,13 @@ package hwprofile
 
 import (
 	"runtime"
+	"slices"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/mempolicy"
 )
 
 // TestProbeAgainstFixtureTrees exercises the filesystem-backed probes against
@@ -57,9 +59,9 @@ func TestProbeAgainstFixtureTrees(t *testing.T) {
 				assert.Equal(t, BoardGeneric, p.Board.Kind)
 				assert.Empty(t, p.Board.Tier)
 				require.Len(t, p.Accelerators, 1)
-				// Usability depends on how this binary was built, so only the
+				// Accessibility depends on this host's /dev/dri, so only the
 				// hardware facts are asserted here; the reason codes are covered
-				// by TestApplyUsability against explicit backend states.
+				// by TestApplyAccessibility against explicit render-node states.
 				assert.Equal(t, VendorIntel, p.Accelerators[0].Vendor)
 				assert.Equal(t, AcceleratorIGPU, p.Accelerators[0].Kind)
 				assert.Equal(t, 12, p.Accelerators[0].Generation)
@@ -70,8 +72,14 @@ func TestProbeAgainstFixtureTrees(t *testing.T) {
 			tree: fixtureCgroupLimited,
 			assert: func(t *testing.T, p Profile) {
 				t.Helper()
-				// Host RAM would mask the real ceiling, which is exactly why the
-				// cgroup limit is consulted.
+				// The effective ceiling is the smaller of host RAM and the cgroup
+				// cap, so this only demonstrates the cgroup path on a host with
+				// more than the fixture's 512 MiB. This project's own low-memory
+				// regression VM has exactly 512 MB, so the guard is not
+				// hypothetical.
+				if hostRAM := mempolicy.DetectTotalMemoryAt(t.TempDir()); hostRAM <= cgroupLimitBytes {
+					t.Skipf("host RAM (%d bytes) is not above the fixture's cgroup cap, so the cap is not the binding limit", hostRAM)
+				}
 				assert.Equal(t, cgroupLimitBytes, p.TotalRAMBytes)
 				assert.Contains(t, p.Capabilities(), CapLowRAM)
 			},
@@ -93,7 +101,7 @@ func TestProbeAgainstFixtureTrees(t *testing.T) {
 			t.Parallel()
 			root := writeTree(t, tt.tree)
 
-			profile := evaluateBackends(probeHardware(root))
+			profile := probeHardware(root).WithBackends(probeBackends())
 
 			// Invariants that hold on every host: probing is best-effort and
 			// never leaves the profile unusable.
@@ -101,7 +109,7 @@ func TestProbeAgainstFixtureTrees(t *testing.T) {
 			assert.NotEmpty(t, profile.Arch)
 			assert.Positive(t, profile.PhysicalCores)
 			assert.Positive(t, profile.TotalRAMBytes)
-			assert.Contains(t, profile.Capabilities(), CapTFLite, "TFLite is compiled into every build")
+			assert.NotEmpty(t, profile.Capabilities(), "every host matches at least an architecture token")
 
 			tt.assert(t, profile)
 		})
@@ -116,7 +124,7 @@ func TestProbeAgainstFixtureTrees(t *testing.T) {
 func TestProbeAgainstLiveHost(t *testing.T) {
 	t.Parallel()
 
-	profile := evaluateBackends(probeHardware(rootFS))
+	profile := probeHardware(rootFS).WithBackends(probeBackends())
 
 	t.Logf("arch=%s cpuArch=%s cpu=%q env=%s cores=%d/%d ram=%dMiB fp16=%t simd=%v",
 		profile.Arch, profile.CPUArch, profile.CPUModel, profile.Environment,
@@ -135,7 +143,6 @@ func TestProbeAgainstLiveHost(t *testing.T) {
 	assert.Positive(t, profile.PhysicalCores)
 	assert.Positive(t, profile.TotalRAMBytes)
 	assert.NotEmpty(t, profile.Board.Kind)
-	assert.Contains(t, profile.Capabilities(), CapTFLite)
 
 	for i := range profile.Accelerators {
 		accelerator := profile.Accelerators[i]
@@ -143,23 +150,10 @@ func TestProbeAgainstLiveHost(t *testing.T) {
 		assert.Contains(t, []string{AcceleratorIGPU, AcceleratorDGPU}, accelerator.Kind)
 		// Usable and Reasons are complementary: a reason without a defect, or a
 		// defect without a reason, would both mislead the panel.
-		assert.Equal(t, accelerator.Usable, len(accelerator.Reasons) == 0,
-			"an unusable accelerator must carry a reason and a usable one must not")
+		assert.Equal(t, accelerator.Accessible, !slices.Contains(accelerator.Reasons, ReasonRenderNodeUnavailable) &&
+			!slices.Contains(accelerator.Reasons, ReasonRenderNodePermission),
+			"a render-node reason and Accessible must never disagree")
 	}
-}
-
-func TestProbeRecordsIssueWhenMemoryIsUnknown(t *testing.T) {
-	t.Parallel()
-
-	// Every supported platform reports host RAM, so this asserts the shape of
-	// the best-effort contract rather than a reachable state: a failed probe
-	// yields a zero value plus a recorded reason.
-	profile := Profile{}
-	profile.Issues = append(profile.Issues, Issue{Probe: ProbeMemory, Reason: ReasonUnavailable})
-
-	assert.Zero(t, profile.TotalRAMBytes)
-	assert.NotContains(t, profile.Capabilities(), CapLowRAM,
-		"unknown memory must not be reported as low memory")
 }
 
 func TestDetectCachesTheProbe(t *testing.T) {
@@ -185,6 +179,14 @@ func TestRefreshReplacesTheCachedProfile(t *testing.T) {
 func TestDetectIsSafeForConcurrentUse(t *testing.T) {
 	const callers = 8
 
+	// Drop the cache so every goroutine races on the FIRST probe, which is the
+	// only path the mutex exists to serialise. Without this the earlier
+	// non-parallel tests have already warmed it, all eight callers merely read,
+	// and removing the lock entirely still passes under -race.
+	hardwareMu.Lock()
+	cachedHardware = nil
+	hardwareMu.Unlock()
+
 	var wg sync.WaitGroup
 	profiles := make([]Profile, callers)
 	for i := range callers {
@@ -199,14 +201,15 @@ func TestDetectIsSafeForConcurrentUse(t *testing.T) {
 	}
 }
 
-func TestProbeBackendsAlwaysReportsTFLite(t *testing.T) {
+func TestProbeBackendsReportsTFLiteFromTheBuildTag(t *testing.T) {
 	t.Parallel()
 
 	backends := probeBackends()
 
-	// TFLite is linked into every build, so a profile that does not report it
-	// would mean the probe itself is broken rather than the host lacking it.
-	assert.True(t, backends.TFLite.Available)
+	// Whether TFLite is linked is a compile-time fact, so the probe must report
+	// exactly what the build decided. Emitting the tflite capability token on a
+	// notflite build would offer the user models the binary cannot execute.
+	assert.Equal(t, tfliteLinked, backends.TFLite.Available)
 }
 
 func TestDetectSIMDMatchesArchitecture(t *testing.T) {

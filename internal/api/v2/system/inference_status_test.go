@@ -477,7 +477,7 @@ func TestBuildHardwareInfo(t *testing.T) {
 					Vendor:     hwprofile.VendorIntel,
 					Name:       "Intel Graphics [8086:46a6]",
 					Generation: 12,
-					Reasons:    []string{hwprofile.ReasonOpenVINONotBuilt, hwprofile.ReasonRenderNodeUnavailable},
+					Reasons:    []string{hwprofile.ReasonRenderNodeUnavailable},
 				}},
 			},
 			assert: func(t *testing.T, info HardwareInfo) {
@@ -486,11 +486,15 @@ func TestBuildHardwareInfo(t *testing.T) {
 				// omitted rather than sent empty.
 				assert.Nil(t, info.Board)
 				require.Len(t, info.Accelerators, 1)
-				assert.False(t, info.Accelerators[0].Usable)
+				assert.False(t, info.Accelerators[0].Accessible)
 				assert.Equal(t,
-					[]string{hwprofile.ReasonOpenVINONotBuilt, hwprofile.ReasonRenderNodeUnavailable},
+					[]string{hwprofile.ReasonRenderNodeUnavailable},
 					info.Accelerators[0].Reasons,
 					"every blocker must survive the mapping, not just the first")
+				// Fields the earlier mapping silently dropped.
+				assert.Equal(t, hwprofile.AcceleratorIGPU, info.Accelerators[0].Kind)
+				assert.Equal(t, hwprofile.VendorIntel, info.Accelerators[0].Vendor)
+				assert.Equal(t, "Intel Graphics [8086:46a6]", info.Accelerators[0].Name)
 			},
 		},
 		{
@@ -535,11 +539,11 @@ func TestHardwareInfo_JSONContract(t *testing.T) {
 		Capabilities:  []string{"x86-64", "tflite"},
 		Board:         &BoardInfo{Kind: "raspberry-pi", Model: "Raspberry Pi 5 Model B Rev 1.0", SoC: "bcm2712", Tier: "pi5"},
 		Accelerators: []AcceleratorInfo{{
-			Kind:    "igpu",
-			Vendor:  "intel",
-			Name:    "Intel Graphics [8086:46a6]",
-			Usable:  false,
-			Reasons: []string{"openvino-not-built"},
+			Kind:       "igpu",
+			Vendor:     "intel",
+			Name:       "Intel Graphics [8086:46a6]",
+			Accessible: false,
+			Reasons:    []string{"render-node-unavailable"},
 		}},
 	}
 
@@ -558,7 +562,7 @@ func TestHardwareInfo_JSONContract(t *testing.T) {
 		require.Contains(t, m, key, "added key %q missing", key)
 	}
 	assert.JSONEq(t, `{"kind":"raspberry-pi","model":"Raspberry Pi 5 Model B Rev 1.0","soc":"bcm2712","tier":"pi5"}`, string(m["board"]))
-	assert.JSONEq(t, `[{"kind":"igpu","vendor":"intel","name":"Intel Graphics [8086:46a6]","usable":false,"reasons":["openvino-not-built"]}]`, string(m["accelerators"]))
+	assert.JSONEq(t, `[{"kind":"igpu","vendor":"intel","name":"Intel Graphics [8086:46a6]","accessible":false,"reasons":["render-node-unavailable"]}]`, string(m["accelerators"]))
 
 	// An unprobed host omits every added key, so a client that only knows the
 	// original four fields sees exactly the payload it saw before.

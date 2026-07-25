@@ -770,6 +770,23 @@ describe('SystemInference', () => {
       expect(container.textContent).toContain('4.0 GB');
     });
 
+    it('still shows the board when the device tree gave only an SoC', async () => {
+      // The server sends a board when it resolved a model OR an SoC. Gating the
+      // row on the model would discard the one fact the probe recovered.
+      installApi(
+        makeSnapshot([makeModel({})], {
+          board: { kind: 'generic', soc: 'rk3588' },
+        })
+      );
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('rk3588');
+      });
+      expect(container.textContent).toContain('system.inference.board');
+    });
+
     it('omits the board row on a host with no device tree', async () => {
       installApi(makeSnapshot([makeModel({})]));
 
@@ -778,23 +795,41 @@ describe('SystemInference', () => {
       await waitFor(() => {
         expect(container.textContent).toContain('system.inference.sectionHardware');
       });
-      // A "generic" board row would tell the user nothing, so nothing is shown.
       expect(container.textContent).not.toContain('system.inference.board');
       expect(container.textContent).not.toContain('system.inference.memory');
     });
 
-    it('lists every blocker for a GPU this build cannot use', async () => {
-      // The default Docker install: stock image (no OpenVINO) with no /dev/dri
-      // mapping. Both have to be fixed, so both have to be shown.
+    it('renders two identical GPUs without crashing', async () => {
+      // Two cards of the same model produce byte-identical names, because the
+      // name carries no PCI slot. A keyed {#each} on the name would throw
+      // each_key_duplicate here and blank the entire page, in production too.
+      const card = {
+        kind: 'dgpu',
+        vendor: 'nvidia',
+        name: 'NVIDIA Graphics [10de:2504]',
+        accessible: true,
+        reasons: ['no-runtime' as const],
+      };
+      installApi(makeSnapshot([makeModel({})], { accelerators: [card, { ...card }] }));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.querySelectorAll('[role="group"]')).toHaveLength(2);
+      });
+      expect(container.textContent).toContain('system.inference.gpuReasonNoRuntime');
+    });
+
+    it('lists every blocker for a GPU the server cannot reach', async () => {
       installApi(
         makeSnapshot([makeModel({})], {
           accelerators: [
             {
-              kind: 'igpu',
-              vendor: 'intel',
-              name: 'Intel Graphics [8086:46a6]',
-              usable: false,
-              reasons: ['openvino-not-built', 'render-node-unavailable'],
+              kind: 'dgpu',
+              vendor: 'amd',
+              name: 'AMD Graphics [1002:73ff]',
+              accessible: false,
+              reasons: ['no-runtime', 'render-node-unavailable'],
             },
           ],
         })
@@ -803,14 +838,16 @@ describe('SystemInference', () => {
       const { container } = inferenceTest.render({});
 
       await waitFor(() => {
-        expect(container.textContent).toContain('Intel Graphics [8086:46a6]');
+        expect(container.textContent).toContain('AMD Graphics [1002:73ff]');
       });
-      expect(container.textContent).toContain('system.inference.gpuUnavailable');
-      expect(container.textContent).toContain('system.inference.gpuReasonOpenvinoNotBuilt');
+      expect(container.textContent).toContain('system.inference.gpuNotReachable');
+      expect(container.textContent).toContain('system.inference.gpuReasonNoRuntime');
       expect(container.textContent).toContain('system.inference.gpuReasonRenderNodeUnavailable');
     });
 
-    it('shows a reachable GPU as available with no blockers', async () => {
+    it('shows a reachable GPU as reachable and still lists a vendor blocker', async () => {
+      // Reachable and unusable are independent: an AMD card can be perfectly
+      // reachable while no build ships a runtime for it.
       installApi(
         makeSnapshot([makeModel({})], {
           accelerators: [
@@ -818,8 +855,7 @@ describe('SystemInference', () => {
               kind: 'igpu',
               vendor: 'intel',
               name: 'Intel Graphics [8086:9a49]',
-              via: 'openvino',
-              usable: true,
+              accessible: true,
             },
           ],
         })
@@ -830,12 +866,12 @@ describe('SystemInference', () => {
       await waitFor(() => {
         expect(container.textContent).toContain('Intel Graphics [8086:9a49]');
       });
-      expect(container.textContent).toContain('system.inference.gpuAvailable');
+      expect(container.textContent).toContain('system.inference.gpuReachable');
       expect(container.textContent).not.toContain('system.inference.gpuReason');
     });
 
     it('falls back to a generic label for an unrecognised reason code', async () => {
-      // A newer backend can emit a reason this build has no translation for;
+      // A newer server can emit a reason this bundle has no translation for;
       // the panel must still say the GPU is unusable rather than render blank.
       installApi(
         makeSnapshot([makeModel({})], {
@@ -844,8 +880,8 @@ describe('SystemInference', () => {
               kind: 'dgpu',
               vendor: 'amd',
               name: 'AMD Graphics [1002:73ff]',
-              usable: false,
-              reasons: ['brand-new-code'],
+              accessible: false,
+              reasons: ['brand-new-code' as unknown as 'no-runtime'],
             },
           ],
         })
@@ -871,7 +907,10 @@ describe('SystemInference', () => {
       await waitFor(() => {
         expect(container.textContent).toContain('aarch64-a76');
       });
-      expect(container.textContent).toContain('system.inference.capabilities');
+      // Exact key, not a prefix: 'system.inference.capabilities' alone is also
+      // satisfied by the sr-only capabilitiesHelp span.
+      const labels = [...container.querySelectorAll('span')].map(el => el.textContent.trim());
+      expect(labels).toContain('system.inference.capabilities');
       expect(container.textContent).toContain('fp16-native');
     });
   });
