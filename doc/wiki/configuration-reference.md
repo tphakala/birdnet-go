@@ -73,6 +73,7 @@ BirdNET configuration
 | `birdnet.openvinopath` | string | path to libopenvino_c shared library (OpenVINO image variants only) |
 | `birdnet.backend` | string | inference backend preference: "auto" (default), "onnx", or "openvino" |
 | `birdnet.openvinodevice` | string | OpenVINO device preference: "auto" (default), "cpu", or "gpu" |
+| `birdnet.huggingfaceendpoint` | string | model download host, e.g. "https://hf-mirror.com" where huggingface.co is blocked; empty falls back to $HF_ENDPOINT then https://huggingface.co |
 
 ## perch
 

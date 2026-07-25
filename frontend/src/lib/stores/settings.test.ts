@@ -3,6 +3,7 @@ import { get } from 'svelte/store';
 import { settingsStore, settingsActions } from './settings';
 import type { BirdNetSettings, RealtimeSettings, SettingsFormData } from './settings';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
+import { hasSettingsChanged } from '$lib/utils/settingsChanges';
 
 // Mock the settings API
 vi.mock('$lib/utils/settingsApi.js', () => ({
@@ -774,5 +775,117 @@ describe('Settings Store - Unmodelled Section Round-Trip', () => {
     expect(settingsAPI.save).toHaveBeenCalledWith(
       expect.objectContaining({ diagnostics: expected })
     );
+  });
+});
+
+describe('Settings Store - HuggingFace endpoint', () => {
+  // Mirrors the shape the API returns for a fresh install: the backend tags the
+  // field `omitempty`, so an unset endpoint arrives absent rather than as ''.
+  function baseBirdnet(overrides: Partial<BirdNetSettings> = {}): BirdNetSettings {
+    return {
+      modelPath: '',
+      labelPath: '',
+      sensitivity: 1.0,
+      threshold: 0.8,
+      overlap: 0.0,
+      locale: 'en',
+      threads: 4,
+      latitude: 40.7128,
+      longitude: -74.006,
+      locationConfigured: true,
+      rangeFilter: {
+        threshold: 0.03,
+        passUnmappedSpecies: false,
+        speciesCount: null,
+        species: [],
+      },
+      ...overrides,
+    };
+  }
+
+  function setStore(current: BirdNetSettings, original: BirdNetSettings) {
+    settingsStore.set({
+      formData: { main: { name: 'TestNode' }, birdnet: current },
+      originalData: {
+        main: { name: 'TestNode' },
+        birdnet: original,
+      } as SettingsFormData,
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'birdnet',
+      error: null,
+      dataLoaded: true,
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setStore(baseBirdnet(), baseBirdnet());
+  });
+
+  it('persists the endpoint the form submits, including a trimmed value', () => {
+    // The page's onchange trims before calling updateBirdnetSetting, so this
+    // asserts the store keeps exactly what the form hands it.
+    settingsActions.updateSection('birdnet', {
+      huggingFaceEndpoint: '  https://hf-mirror.com  '.trim(),
+    });
+
+    expect(get(settingsStore).formData.birdnet.huggingFaceEndpoint).toBe('https://hf-mirror.com');
+  });
+
+  it('keeps an empty endpoint as an empty string rather than dropping it', () => {
+    settingsActions.updateSection('birdnet', {
+      huggingFaceEndpoint: 'https://hf-mirror.com',
+    });
+    settingsActions.updateSection('birdnet', { huggingFaceEndpoint: '' });
+
+    // Empty means "fall back to HF_ENDPOINT, then the default host". It must
+    // survive as '' so clearing the field is actually persisted.
+    expect(get(settingsStore).formData.birdnet.huggingFaceEndpoint).toBe('');
+  });
+
+  // The remaining cases go through hasSettingsChanged, the same function the
+  // section wrapper uses, rather than comparing locally coalesced values: a
+  // local comparison would still pass if change detection itself regressed.
+  it('reports no change when an absent endpoint is cleared to an empty string', () => {
+    // The API omits the key when unset (omitempty), so originalData has no
+    // endpoint at all while formData has ''. The wrapper coalesces both sides
+    // with ?? '' precisely so this does not read as a pending change.
+    setStore(baseBirdnet({ huggingFaceEndpoint: '' }), baseBirdnet());
+    const store = get(settingsStore);
+
+    expect(
+      hasSettingsChanged(
+        { huggingFaceEndpoint: store.originalData.birdnet.huggingFaceEndpoint ?? '' },
+        { huggingFaceEndpoint: store.formData.birdnet.huggingFaceEndpoint ?? '' }
+      )
+    ).toBe(false);
+  });
+
+  it('reports a change when the endpoint actually differs', () => {
+    setStore(baseBirdnet({ huggingFaceEndpoint: 'https://hf-mirror.com' }), baseBirdnet());
+    const store = get(settingsStore);
+
+    expect(
+      hasSettingsChanged(
+        { huggingFaceEndpoint: store.originalData.birdnet.huggingFaceEndpoint ?? '' },
+        { huggingFaceEndpoint: store.formData.birdnet.huggingFaceEndpoint ?? '' }
+      )
+    ).toBe(true);
+  });
+
+  it('reports a change when an absent endpoint is set to a mirror', () => {
+    setStore(baseBirdnet(), baseBirdnet());
+    settingsActions.updateSection('birdnet', {
+      huggingFaceEndpoint: 'https://hf-mirror.com',
+    });
+    const store = get(settingsStore);
+
+    expect(
+      hasSettingsChanged(
+        { huggingFaceEndpoint: store.originalData.birdnet.huggingFaceEndpoint ?? '' },
+        { huggingFaceEndpoint: store.formData.birdnet.huggingFaceEndpoint ?? '' }
+      )
+    ).toBe(true);
   });
 });

@@ -5224,6 +5224,16 @@
       "title": "Papildu",
       "description": "Apstrādes un pielāgotu modeļu konfigurācija."
     },
+    "downloadSource": {
+      "title": "Lejupielādes avots",
+      "description": "Vieta, no kuras tiek lejupielādēti modeļa faili.",
+      "note": "Atstājiet šo lauku tukšu, ja vien jūsu tīklā vietne huggingface.co nav bloķēta vai lēna. Vides mainīgais HF_ENDPOINT tiek izmantots, ja šis lauks ir tukšs, un huggingface.co, ja neviens no tiem nav iestatīts. Vērtība, kas nav derīga http vai https adrese, tiek ignorēta, un tās vietā tiek izmantota noklusējuma vērtība.",
+      "endpoint": {
+        "label": "HuggingFace galapunkts",
+        "helpText": "Spoguļvietne modeļu lejupielādei, piemēram, https://hf-mirror.com. Attiecas uz nākamo lejupielādi; nav nepieciešams restartēt.",
+        "validationMessage": "Ievadiet pilnu adresi, kas sākas ar http:// vai https://, vai atstājiet lauku tukšu."
+      }
+    },
     "gallery": {
       "title": "Modeļu galerija",
       "description": "Pārvaldiet klasifikācijas modeļus putnu un sikspārņu noteikšanai.",

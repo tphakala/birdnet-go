@@ -204,6 +204,20 @@ func ValidateSettings(settings *Settings) error {
 		settings.LowMemory.Mode = LowMemoryModeAuto
 	}
 
+	// An unusable HuggingFace endpoint falls back to the default host rather than
+	// failing, so this is a warning. It is recorded here rather than appended to
+	// ValidateBirdNETSettings' warning list because that list only reaches a Debug
+	// log line, whereas recordValidationWarning also raises a notification the
+	// user actually sees. Without it the only signal is a log line emitted when a
+	// download is next attempted, which can be long after the value was set, and
+	// the user behind a blocked huggingface.co is left with silent failures.
+	if raw := strings.TrimSpace(settings.BirdNET.HuggingFaceEndpoint); raw != "" {
+		if _, err := normalizeHuggingFaceEndpoint(raw); err != nil {
+			settings.recordValidationWarning(warnComponentModels,
+				"model download endpoint is unusable (%v); using %s", err, DefaultHuggingFaceEndpoint)
+		}
+	}
+
 	// Default empty BirdNET locale to "en" so downstream label loading
 	// always has a valid locale to work with.
 	if settings.BirdNET.Locale == "" {

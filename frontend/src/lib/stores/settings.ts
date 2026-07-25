@@ -75,6 +75,11 @@ export interface BirdNetSettings {
   longitude: number;
   locationConfigured: boolean; // true when location has been explicitly configured
   rangeFilter: RangeFilterSettings;
+  // Host used for model downloads, e.g. https://hf-mirror.com where
+  // huggingface.co is unreachable. When empty the backend falls back to the
+  // HF_ENDPOINT environment variable first and only then to https://huggingface.co,
+  // so an empty value here does not necessarily mean the default host is in use.
+  huggingFaceEndpoint?: string;
 }
 
 export interface DynamicThresholdSettings {
@@ -879,6 +884,7 @@ function createEmptySettings(): SettingsFormData {
         speciesCount: null,
         species: [],
       },
+      huggingFaceEndpoint: '',
     },
     bat: {
       enabled: false,
@@ -1362,7 +1368,7 @@ export const settingsActions = {
       // session. Read newLocale from coercedFormData (the value we actually
       // persisted) and compare to originalData (the snapshot loaded from
       // the backend). This avoids clobbering a locale chosen via the sidebar
-      // LanguageSelector — which updates localStorage but not the backend —
+      // LanguageSelector (which updates localStorage but not the backend)
       // with whatever stale value the backend still holds, and matches the
       // coercedFormData-based comparison used by the TLS check below.
       const newLocale = coercedFormData.realtime?.dashboard?.locale;

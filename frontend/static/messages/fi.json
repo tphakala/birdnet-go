@@ -5224,6 +5224,16 @@
       "title": "Lisäasetukset",
       "description": "Käsittelyn ja mukautettujen mallien asetukset."
     },
+    "downloadSource": {
+      "title": "Latauslähde",
+      "description": "Paikka, josta mallitiedostot ladataan.",
+      "note": "Jätä tämä tyhjäksi, ellei huggingface.co ole estetty tai hidas verkossasi. Ympäristömuuttujaa HF_ENDPOINT käytetään, kun tämä kenttä on tyhjä, ja osoitetta huggingface.co, jos kumpaakaan ei ole asetettu. Arvo, joka ei ole kelvollinen http- tai https-osoite, ohitetaan ja sen sijaan käytetään oletusta.",
+      "endpoint": {
+        "label": "HuggingFace-päätepiste",
+        "helpText": "Peilipalvelin mallien lataamiseen, esimerkiksi https://hf-mirror.com. Koskee seuraavaa latausta; uudelleenkäynnistystä ei tarvita.",
+        "validationMessage": "Syötä täydellinen osoite, joka alkaa merkinnällä http:// tai https://, tai jätä kenttä tyhjäksi."
+      }
+    },
     "gallery": {
       "title": "Malligalleria",
       "description": "Hallitse lintu- ja lepakkotunnistuksen luokittelumalleja.",

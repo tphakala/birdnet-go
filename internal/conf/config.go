@@ -1253,25 +1253,26 @@ type InputConfig struct {
 }
 
 type BirdNETConfig struct {
-	Version            string              `yaml:"version,omitempty" json:"version,omitempty"`                 // model version: "2.4", "3.0"
-	Debug              bool                `yaml:"debug" json:"debug"`                                         // true to enable debug mode
-	Sensitivity        float64             `yaml:"sensitivity" json:"sensitivity"`                             // birdnet analysis sigmoid sensitivity
-	Threshold          float64             `yaml:"threshold" json:"threshold"`                                 // threshold for prediction confidence to report
-	Overlap            float64             `yaml:"overlap" json:"overlap"`                                     // birdnet analysis overlap between chunks
-	Longitude          float64             `yaml:"longitude" json:"longitude"`                                 // longitude of recording location for prediction filtering
-	Latitude           float64             `yaml:"latitude" json:"latitude"`                                   // latitude of recording location for prediction filtering
-	LocationConfigured bool                `yaml:"locationconfigured" json:"locationConfigured"`               // true when location has been explicitly configured by the user
-	Threads            int                 `yaml:"threads" json:"threads"`                                     // number of CPU threads to use for analysis
-	Locale             string              `yaml:"locale" json:"locale"`                                       // language to use for labels
-	RangeFilter        RangeFilterSettings `yaml:"rangefilter" json:"rangeFilter"`                             // range filter settings
-	ModelPath          string              `yaml:"modelpath,omitempty" json:"modelPath,omitempty"`             // path to external model file (empty for embedded)
-	LabelPath          string              `yaml:"labelpath,omitempty" json:"labelPath,omitempty"`             // path to external label file (empty for embedded)
-	Labels             []string            `yaml:"-" json:"-"`                                                 // list of available species labels, runtime value
-	UseXNNPACK         bool                `yaml:"usexnnpack" json:"useXnnpack"`                               // true to use XNNPACK delegate for inference acceleration
-	ONNXRuntimePath    string              `yaml:"onnxruntimepath,omitempty" json:"onnxRuntimePath,omitempty"` // path to ONNX Runtime shared library (required for ONNX models)
-	OpenVINOPath       string              `yaml:"openvinopath,omitempty" json:"openVinoPath,omitempty"`       // path to libopenvino_c shared library (OpenVINO image variants only)
-	Backend            string              `yaml:"backend,omitempty" json:"backend,omitempty"`                 // inference backend preference: "auto" (default), "onnx", or "openvino"
-	OpenVINODevice     string              `yaml:"openvinodevice,omitempty" json:"openVinoDevice,omitempty"`   // OpenVINO device preference: "auto" (default), "cpu", or "gpu"
+	Version             string              `yaml:"version,omitempty" json:"version,omitempty"`                         // model version: "2.4", "3.0"
+	Debug               bool                `yaml:"debug" json:"debug"`                                                 // true to enable debug mode
+	Sensitivity         float64             `yaml:"sensitivity" json:"sensitivity"`                                     // birdnet analysis sigmoid sensitivity
+	Threshold           float64             `yaml:"threshold" json:"threshold"`                                         // threshold for prediction confidence to report
+	Overlap             float64             `yaml:"overlap" json:"overlap"`                                             // birdnet analysis overlap between chunks
+	Longitude           float64             `yaml:"longitude" json:"longitude"`                                         // longitude of recording location for prediction filtering
+	Latitude            float64             `yaml:"latitude" json:"latitude"`                                           // latitude of recording location for prediction filtering
+	LocationConfigured  bool                `yaml:"locationconfigured" json:"locationConfigured"`                       // true when location has been explicitly configured by the user
+	Threads             int                 `yaml:"threads" json:"threads"`                                             // number of CPU threads to use for analysis
+	Locale              string              `yaml:"locale" json:"locale"`                                               // language to use for labels
+	RangeFilter         RangeFilterSettings `yaml:"rangefilter" json:"rangeFilter"`                                     // range filter settings
+	ModelPath           string              `yaml:"modelpath,omitempty" json:"modelPath,omitempty"`                     // path to external model file (empty for embedded)
+	LabelPath           string              `yaml:"labelpath,omitempty" json:"labelPath,omitempty"`                     // path to external label file (empty for embedded)
+	Labels              []string            `yaml:"-" json:"-"`                                                         // list of available species labels, runtime value
+	UseXNNPACK          bool                `yaml:"usexnnpack" json:"useXnnpack"`                                       // true to use XNNPACK delegate for inference acceleration
+	ONNXRuntimePath     string              `yaml:"onnxruntimepath,omitempty" json:"onnxRuntimePath,omitempty"`         // path to ONNX Runtime shared library (required for ONNX models)
+	OpenVINOPath        string              `yaml:"openvinopath,omitempty" json:"openVinoPath,omitempty"`               // path to libopenvino_c shared library (OpenVINO image variants only)
+	Backend             string              `yaml:"backend,omitempty" json:"backend,omitempty"`                         // inference backend preference: "auto" (default), "onnx", or "openvino"
+	OpenVINODevice      string              `yaml:"openvinodevice,omitempty" json:"openVinoDevice,omitempty"`           // OpenVINO device preference: "auto" (default), "cpu", or "gpu"
+	HuggingFaceEndpoint string              `yaml:"huggingfaceendpoint,omitempty" json:"huggingFaceEndpoint,omitempty"` // model download host, e.g. "https://hf-mirror.com" where huggingface.co is blocked; empty falls back to $HF_ENDPOINT then https://huggingface.co
 }
 
 // Inference backend preferences for BirdNET.Backend.

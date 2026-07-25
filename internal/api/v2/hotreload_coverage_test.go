@@ -67,6 +67,9 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"BirdNET.Backend":            {categories: []hotReloadCategory{hotReloadFresh}, action: "reload_birdnet"},
 	"BirdNET.OpenVINODevice":     {categories: []hotReloadCategory{hotReloadFresh}, action: "reload_birdnet"},
 	"BirdNET.Version":            {categories: []hotReloadCategory{hotReloadFresh}, action: "reload_birdnet"},
+	// Read fresh by the model manager on every download, so a mirror change
+	// applies to the next install with no reload or restart.
+	"BirdNET.HuggingFaceEndpoint": {categories: []hotReloadCategory{hotReloadFresh}},
 
 	// --- Perch ---
 	"Perch": {categories: []hotReloadCategory{hotReloadRestart}},
