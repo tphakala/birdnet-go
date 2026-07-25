@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // TestResolveHuggingFaceEndpoint_Precedence covers the documented resolution
@@ -241,6 +242,14 @@ func TestNormalizeHuggingFaceEndpoint_ErrorsNeverEchoCredentials(t *testing.T) {
 		{name: "invalid port", configured: "https://user:" + password + "@hf-mirror.com:notaport"},
 		{name: "invalid escape", configured: "https://user:" + password + "@hf-mirror.com/%zz"},
 		{name: "control character", configured: "https://user:" + password + "@hf-mirror.com/\x7f"},
+		// Empty username: privacy.ScrubCredentialURL's patterns require at least
+		// one character before the colon, so scrubbing the url.Error string left
+		// this shape untouched. Pinned so the reason can never go back to being
+		// derived from the raw value.
+		{name: "empty username with invalid port", configured: "https://:" + password + "@hf-mirror.com:notaport"},
+		{name: "empty username parses cleanly", configured: "https://:" + password + "@hf-mirror.com"},
+		// A literal "@" inside the password leaked its tail through the scrubber.
+		{name: "at sign inside the password", configured: "https://user:p@" + password + "@hf-mirror.com:notaport"},
 	}
 
 	for _, tt := range tests {
@@ -251,6 +260,18 @@ func TestNormalizeHuggingFaceEndpoint_ErrorsNeverEchoCredentials(t *testing.T) {
 			require.Error(t, err, "a credential-bearing endpoint must be rejected")
 			assert.NotContains(t, err.Error(), password,
 				"the rejection reason is logged and embedded in a settings warning, so it must not echo the password")
+
+			// The error context is reported to telemetry, so it is a second sink
+			// and needs its own assertion; asserting on the message alone let a
+			// context-scrubbing regression survive.
+			var enhanced *errors.EnhancedError
+			require.True(t, errors.As(err, &enhanced), "endpoint errors must be enhanced errors")
+			for k, v := range enhanced.GetContext() {
+				if s, ok := v.(string); ok {
+					assert.NotContains(t, s, password,
+						"error context %q is reported to telemetry and must not echo the password", k)
+				}
+			}
 		})
 	}
 }

@@ -12,7 +12,6 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 const (
@@ -61,7 +60,7 @@ func ResolveHuggingFaceEndpoint(configured string) string {
 		// password that must not reach the log file or a support dump.
 		GetLogger().Warn("Ignoring invalid HuggingFace endpoint, using the default host",
 			logger.String("source", source),
-			logger.CredentialURL("endpoint", raw),
+			logger.String("endpoint", redactEndpointUserinfo(raw)),
 			logger.String("fallback", DefaultHuggingFaceEndpoint),
 			logger.Error(err))
 		return DefaultHuggingFaceEndpoint
@@ -84,11 +83,7 @@ func normalizeHuggingFaceEndpoint(raw string) (string, error) {
 
 	parsed, err := url.Parse(trimmed)
 	if err != nil {
-		// url.Error formats as `parse %q: ...`, embedding the whole raw value,
-		// so the reason has to be scrubbed too. Scrubbing only the error context
-		// would still leak a password through the message, which is what the
-		// caller logs and what the settings validator embeds in its warning.
-		return "", newEndpointError(raw, privacy.ScrubCredentialURL(err.Error()))
+		return "", newEndpointError(raw, parseFailureReason(err))
 	}
 
 	switch parsed.Scheme {
@@ -133,6 +128,63 @@ func normalizeHuggingFaceEndpoint(raw string) (string, error) {
 	return strings.TrimRight(parsed.String(), "/"), nil
 }
 
+// redactEndpointUserinfo returns raw with any userinfo replaced by a marker, so
+// a rejected endpoint can be echoed to a log or to error context without its
+// credentials.
+//
+// This is done by hand rather than with privacy.ScrubCredentialURL because that
+// helper's patterns require at least one character before the colon, so
+// "https://:password@host" passes through untouched, and they stop at the first
+// "@", so a password containing a literal "@" leaks its tail. Both shapes reach
+// here: this function is called precisely on values that failed validation, and
+// a value that fails url.Parse cannot be normalized by parsing it.
+//
+// Everything from the scheme separator to the LAST "@" in the authority is
+// replaced, which covers both shapes without needing the value to parse.
+func redactEndpointUserinfo(raw string) string {
+	schemeEnd := strings.Index(raw, "://")
+	if schemeEnd < 0 {
+		// No authority, so no userinfo to hide.
+		return raw
+	}
+	authorityStart := schemeEnd + len("://")
+
+	// The authority ends at the first "/", "?" or "#"; an "@" after that point
+	// belongs to the path and must not be treated as a userinfo delimiter.
+	authorityEnd := len(raw)
+	if i := strings.IndexAny(raw[authorityStart:], "/?#"); i >= 0 {
+		authorityEnd = authorityStart + i
+	}
+
+	authority := raw[authorityStart:authorityEnd]
+	at := strings.LastIndex(authority, "@")
+	if at < 0 {
+		return raw
+	}
+	return raw[:authorityStart] + "[REDACTED]" + raw[authorityStart+at:]
+}
+
+// parseFailureReason extracts the reason from a url.Parse failure without the
+// URL it failed on.
+//
+// url.Error stringifies as `parse "<the whole raw URL>": <reason>`, so using
+// err.Error() here would embed a credential-bearing value in a message that is
+// logged and is quoted in the settings validation warning. Scrubbing that
+// string is not sufficient: privacy.ScrubCredentialURL's patterns require at
+// least one character before the colon, so an empty username
+// ("https://:password@host") passes through untouched, and a password
+// containing a literal "@" leaks its tail. Taking the inner error removes the
+// raw value entirely rather than trying to redact it, and the inner reason
+// ("invalid port ...", "invalid URL escape ...") never contains userinfo.
+func parseFailureReason(err error) string {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && urlErr.Err != nil {
+		return urlErr.Err.Error()
+	}
+	// Unknown error shape: report nothing rather than risk echoing the value.
+	return "value is not a valid URL"
+}
+
 // hasDotDotSegment reports whether an already-decoded URL path contains a ".."
 // segment. Callers must pass url.URL.Path, which url.Parse has already
 // percent-decoded; decoding again here would reject a legitimate literal "%"
@@ -159,6 +211,6 @@ func newEndpointError(raw, reason string) error {
 	return errors.Newf("invalid HuggingFace endpoint: %s", reason).
 		Component("conf").
 		Category(errors.CategoryValidation).
-		Context("endpoint", privacy.ScrubCredentialURL(raw)).
+		Context("endpoint", redactEndpointUserinfo(raw)).
 		Build()
 }

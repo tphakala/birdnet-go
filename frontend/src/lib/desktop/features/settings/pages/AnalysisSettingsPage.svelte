@@ -1471,13 +1471,17 @@
         <!--
           Pattern kept deliberately close to conf.normalizeHuggingFaceEndpoint so
           the field neither accepts a value the backend will discard nor rejects
-          one it would take: the scheme is matched case-insensitively because the
-          backend canonicalizes it, and "?", "#" and "@" are excluded because the
-          backend rejects a query, a fragment and userinfo. An empty host is
-          rejected by type="url" rather than by this pattern. The backend stays
-          authoritative for what neither can express (a ".." path segment, a
-          non-ASCII host, a hostless authority such as "https://:8080"), and
-          reports those as a startup validation warning.
+          one it would take. Specifically: the scheme is matched case-insensitively
+          because the backend canonicalizes it; "?" and "#" are excluded
+          everywhere, because the backend rejects a query or a fragment; and "@"
+          is excluded from the authority only, because that is where userinfo
+          lives. An "@" later in the path is legitimate and stays allowed.
+
+          The two validators split the rest of the work. type="url" rejects a
+          hostless authority such as "https://:8080", which this pattern accepts.
+          The backend alone rejects what neither can express (a ".." path
+          segment, a non-ASCII host, a backslash in the host) and reports those
+          as a startup validation warning.
 
           Two things must not change: every "/" stays escaped, because browsers
           compile this attribute with the `v` flag where a bare "/" in a

@@ -712,3 +712,91 @@ describe('Settings Store - syncTLSMode preserves unsaved Security edits', () => 
     expect(s.originalData.security?.basicAuth).toBeDefined();
   });
 });
+
+describe('Settings Store - HuggingFace endpoint', () => {
+  // Mirrors the shape the API returns for a fresh install: the backend tags the
+  // field `omitempty`, so an unset endpoint arrives absent rather than as ''.
+  function baseBirdnet(overrides: Partial<BirdNetSettings> = {}): BirdNetSettings {
+    return {
+      modelPath: '',
+      labelPath: '',
+      sensitivity: 1.0,
+      threshold: 0.8,
+      overlap: 0.0,
+      locale: 'en',
+      threads: 4,
+      latitude: 40.7128,
+      longitude: -74.006,
+      locationConfigured: true,
+      rangeFilter: {
+        threshold: 0.03,
+        passUnmappedSpecies: false,
+        speciesCount: null,
+        species: [],
+      },
+      ...overrides,
+    };
+  }
+
+  function setStore(current: BirdNetSettings, original: BirdNetSettings) {
+    settingsStore.set({
+      formData: { main: { name: 'TestNode' }, birdnet: current },
+      originalData: {
+        main: { name: 'TestNode' },
+        birdnet: original,
+      } as SettingsFormData,
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'birdnet',
+      error: null,
+      dataLoaded: true,
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setStore(baseBirdnet(), baseBirdnet());
+  });
+
+  it('stores a trimmed mirror endpoint', () => {
+    settingsActions.updateSection('birdnet', {
+      huggingFaceEndpoint: 'https://hf-mirror.com',
+    });
+
+    expect(get(settingsStore).formData.birdnet.huggingFaceEndpoint).toBe('https://hf-mirror.com');
+  });
+
+  it('keeps an empty endpoint as an empty string rather than dropping it', () => {
+    settingsActions.updateSection('birdnet', {
+      huggingFaceEndpoint: 'https://hf-mirror.com',
+    });
+    settingsActions.updateSection('birdnet', { huggingFaceEndpoint: '' });
+
+    // Empty means "fall back to HF_ENDPOINT, then the default host". It must
+    // survive as '' so clearing the field is actually persisted.
+    expect(get(settingsStore).formData.birdnet.huggingFaceEndpoint).toBe('');
+  });
+
+  it('does not report a change when an absent endpoint is normalized to an empty string', () => {
+    // The section wrappers coalesce both sides with ?? '' precisely so that an
+    // API response omitting the key does not read as a pending change against a
+    // field the user cleared back to empty.
+    setStore(baseBirdnet({ huggingFaceEndpoint: '' }), baseBirdnet());
+
+    const store = get(settingsStore);
+    const original = store.originalData.birdnet?.huggingFaceEndpoint ?? '';
+    const current = store.formData.birdnet.huggingFaceEndpoint ?? '';
+
+    expect(current).toBe(original);
+  });
+
+  it('reports a change when the endpoint actually differs', () => {
+    setStore(baseBirdnet({ huggingFaceEndpoint: 'https://hf-mirror.com' }), baseBirdnet());
+
+    const store = get(settingsStore);
+    const original = store.originalData.birdnet?.huggingFaceEndpoint ?? '';
+    const current = store.formData.birdnet.huggingFaceEndpoint ?? '';
+
+    expect(current).not.toBe(original);
+  });
+});

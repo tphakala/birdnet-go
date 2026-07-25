@@ -76,7 +76,9 @@ export interface BirdNetSettings {
   locationConfigured: boolean; // true when location has been explicitly configured
   rangeFilter: RangeFilterSettings;
   // Host used for model downloads, e.g. https://hf-mirror.com where
-  // huggingface.co is unreachable. Empty means the default host.
+  // huggingface.co is unreachable. When empty the backend falls back to the
+  // HF_ENDPOINT environment variable first and only then to https://huggingface.co,
+  // so an empty value here does not necessarily mean the default host is in use.
   huggingFaceEndpoint?: string;
 }
 

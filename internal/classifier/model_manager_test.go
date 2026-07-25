@@ -1378,8 +1378,10 @@ func TestModelManager_HuggingFaceEndpoint(t *testing.T) {
 	// Not parallel: mutates global settings via conf.StoreSettings and the
 	// HF_ENDPOINT environment variable.
 
-	// Save original settings to restore after test.
-	origSettings := conf.GetSettings()
+	// Save original settings to restore after test. Cloned, not captured by
+	// pointer: conf.GetSettings returns the live snapshot, so restoring the same
+	// pointer would restore any in-place mutation along with it.
+	origSettings := conf.CloneSettings(conf.GetSettings())
 	t.Cleanup(func() { conf.StoreSettings(origSettings) })
 
 	// newManager publishes settings with the given endpoint override and
@@ -1491,7 +1493,9 @@ func TestModelManager_Install_UsesConfiguredEndpoint(t *testing.T) {
 		},
 	}
 
-	origSettings := conf.GetSettings()
+	// Cloned rather than captured by pointer, so an in-place mutation cannot be
+	// restored along with the snapshot.
+	origSettings := conf.CloneSettings(conf.GetSettings())
 	t.Cleanup(func() { conf.StoreSettings(origSettings) })
 
 	t.Setenv(conf.HuggingFaceEndpointEnvVar, "")
