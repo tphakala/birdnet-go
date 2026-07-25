@@ -178,13 +178,18 @@ func TestDefaultRatesProduceUsableProfiles(t *testing.T) {
 		// rounds, which is exactly how the first version of this test accepted
 		// a fraction 10,000x coarser than the recommended one.
 		//
-		// Genuinely statistical, unlike the block case. contendMutex produces
-		// a few thousand contention events and 1-in-100 is sampled, so the
-		// chance of a round recording nothing is vanishingly small, while a
-		// fraction two orders of magnitude coarser routinely records nothing at
-		// all within one round. That is the discrimination here; see
+		// Genuinely statistical, unlike the block case. contendMutex produces a
+		// few thousand contention events and 1-in-100 is sampled, so the chance
+		// of a round recording nothing at the shipped fraction is vanishingly
+		// small.
+		//
+		// Its discriminating power is limited and worth stating rather than
+		// overselling: measured, a fraction 100x coarser fails this about half
+		// the time, because a single sample is enough and one is often still
+		// taken. What it does catch every time is sampling not being applied at
+		// all, which is the regression that actually matters. See
 		// countProfileEvents for why the magnitude of the number cannot carry a
-		// finer claim than that.
+		// finer claim.
 		before := countProfileEvents(t, "mutex", "contendMutex")
 		contendMutex()
 		after := countProfileEvents(t, "mutex", "contendMutex")
@@ -203,12 +208,13 @@ func TestDefaultRatesProduceUsableProfiles(t *testing.T) {
 // frame left by the first run satisfies the second even if sampling was never
 // switched on. Comparing a count before and against after does fail there.
 //
-// What the number is NOT is the raw number of samples taken. saveBlockEventStack
-// scales both columns by the sampling rate (count += rate, cycles += rate *
-// cycles), so each column estimates the whole event population rather than the
-// sampled subset, and is therefore close to rate-invariant wherever sampling
-// happens at all. So this discriminates "sampling produced records" from
-// "sampling produced none", not one rate from a slightly coarser one.
+// What the number is NOT is the raw count of samples taken. saveBlockEventStack
+// up-scales by the sampling rate so the recorded value estimates the whole
+// event population rather than the sampled subset: for the mutex profile it
+// adds rate per sample, and for the block profile it adds rate/cycles when the
+// event was shorter than the rate. Either way the result is close to
+// rate-invariant wherever sampling happens at all, so this discriminates
+// "sampling produced records" from "sampling produced none" and nothing finer.
 //
 // The legacy text format writes one record per unique stack as
 // "<cycles> <count> @ <addrs>" (runtime/pprof.writeProfileInternal:

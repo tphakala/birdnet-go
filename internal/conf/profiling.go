@@ -1,5 +1,7 @@
 package conf
 
+import "math"
+
 // Recommended sampling rates for the two runtime profilers.
 //
 // Named Recommended rather than Default because they are deliberately NOT what
@@ -52,7 +54,12 @@ const (
 	// package already declines to clamp a too-aggressive rate on the grounds
 	// that silently overriding what the user typed is worse than the overhead,
 	// and the same reasoning applies at the other end.
-	maxBlockProfileRate = 1_000_000_000_000_000
+	//
+	// Capped at MaxInt so the package still builds for a 32-bit GOARCH, where
+	// the literal does not fit an int. No behaviour is lost there: a 32-bit int
+	// cannot hold a rate large enough to overflow the conversion in the first
+	// place, so the clamp correctly becomes unreachable rather than absent.
+	maxBlockProfileRate = min(1_000_000_000_000_000, math.MaxInt)
 )
 
 // ResolvedBlockRate returns the value to hand runtime.SetBlockProfileRate.

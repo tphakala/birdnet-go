@@ -260,7 +260,7 @@ func TestResolvedRates(t *testing.T) {
 			wantMutexFraction: RecommendedMutexProfileFraction,
 		},
 		{
-			name:              "a block rate past the overflow ceiling is clamped rather than wrapping to off",
+			name:              "a block rate above the ceiling is clamped",
 			blockRate:         maxBlockProfileRate + 1,
 			mutexFraction:     1,
 			wantBlockRate:     maxBlockProfileRate,
@@ -353,15 +353,20 @@ func TestRecommendedRatesMatchShippedConfig(t *testing.T) {
 	template, err := configFiles.ReadFile("config.yaml")
 	require.NoError(t, err)
 
-	// Scoped to the line carrying each key, not a whole-file Contains. "Try
-	// 100" is a prefix of "Try 10000", so a file-wide search for the mutex
-	// value is satisfied by the blockrate line and the guard would pass with
-	// the mutexfraction comment deleted outright.
-	assert.Contains(t, shippedLineFor(t, template, "blockrate:"),
-		"Try "+strconv.Itoa(RecommendedBlockProfileRate),
+	// HasSuffix, scoped to the line carrying each key, rather than a whole-file
+	// Contains. Two distinct prefix hazards make the obvious spelling useless:
+	// across keys, "Try 100" is contained in the blockrate line's "Try 10000",
+	// so the mutex guard passes with its comment deleted outright; and within a
+	// key, "Try 100" is a prefix of "Try 1000", so a drift that lengthens the
+	// number is invisible. Both template lines end with the number, so
+	// anchoring at the end closes both.
+	assert.True(t,
+		strings.HasSuffix(shippedLineFor(t, template, "blockrate:"),
+			"Try "+strconv.Itoa(RecommendedBlockProfileRate)),
 		"config.yaml must recommend the same block rate as RecommendedBlockProfileRate; update doc/PROFILING.md too")
-	assert.Contains(t, shippedLineFor(t, template, "mutexfraction:"),
-		"Try "+strconv.Itoa(RecommendedMutexProfileFraction),
+	assert.True(t,
+		strings.HasSuffix(shippedLineFor(t, template, "mutexfraction:"),
+			"Try "+strconv.Itoa(RecommendedMutexProfileFraction)),
 		"config.yaml must recommend the same mutex fraction as RecommendedMutexProfileFraction; update doc/PROFILING.md too")
 }
 
