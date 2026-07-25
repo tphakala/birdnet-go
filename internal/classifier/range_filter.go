@@ -22,8 +22,10 @@ import (
 
 // SpeciesScore holds a species label and its associated score.
 type SpeciesScore struct {
-	Score float64
-	Label string
+	Score              float64
+	Label              string
+	HasCustomConfig    bool
+	IsManuallyIncluded bool
 }
 
 // ByScore implements sort.Interface for []SpeciesScore based on the Score field.
@@ -284,16 +286,49 @@ func canonicalOverrideLabels(speciesName string, geoLabels, classifierLabels []s
 	return matchingLabels(classifierLabels, speciesName)
 }
 
-// overrideSpeciesNames returns the user's force-include overrides: the
-// realtime.species.include entries followed by the realtime.species.config keys.
-func overrideSpeciesNames(settings *conf.Settings) []string {
-	names := make([]string, 0, len(settings.Realtime.Species.Include)+len(settings.Realtime.Species.Config))
-	names = append(names, settings.Realtime.Species.Include...)
+// overrideSource records which user setting named an override entry. A species
+// can be listed in realtime.species.include and keyed in realtime.species.config
+// at the same time, so the two flags are independent rather than exclusive.
+type overrideSource struct {
+	manuallyIncluded bool
+	customConfig     bool
+}
+
+// overrideSpeciesEntry pairs a raw user override entry with the setting that named it.
+type overrideSpeciesEntry struct {
+	name   string
+	source overrideSource
+}
+
+// overrideSpeciesEntries returns the user's force-include overrides in canonical
+// order (the realtime.species.include entries, then the realtime.species.config
+// keys) together with the setting each one came from. The provenance is what lets
+// the settings UI tell an "Included" badge from a "Configured" one after alias
+// resolution has replaced the user's key with a canonical model label (issue #3974).
+func overrideSpeciesEntries(settings *conf.Settings) []overrideSpeciesEntry {
 	// Sort the config keys: Go map iteration is non-deterministic, and the override
 	// order flows into the inclusion working set, debug logs, and the species-list API.
 	configKeys := slices.Collect(maps.Keys(settings.Realtime.Species.Config))
 	slices.Sort(configKeys)
-	names = append(names, configKeys...)
+
+	entries := make([]overrideSpeciesEntry, 0, len(settings.Realtime.Species.Include)+len(configKeys))
+	for _, name := range settings.Realtime.Species.Include {
+		entries = append(entries, overrideSpeciesEntry{name: name, source: overrideSource{manuallyIncluded: true}})
+	}
+	for _, name := range configKeys {
+		entries = append(entries, overrideSpeciesEntry{name: name, source: overrideSource{customConfig: true}})
+	}
+	return entries
+}
+
+// overrideSpeciesNames returns the user's force-include overrides: the
+// realtime.species.include entries followed by the realtime.species.config keys.
+func overrideSpeciesNames(settings *conf.Settings) []string {
+	entries := overrideSpeciesEntries(settings)
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.name)
+	}
 	return names
 }
 
@@ -310,34 +345,81 @@ func overrideSpeciesNames(settings *conf.Settings) []string {
 // resolution for every otherwise-unresolved entry is batched into one dataset scan,
 // keeping the cost off the per-entry path on the (cold) range-filter rebuild.
 func resolveOverrideLabels(settings *conf.Settings, geoLabels []string) []string {
-	names := overrideSpeciesNames(settings)
-	out := make([]string, 0, len(names))
-	var unresolved []string
-	for _, name := range names {
-		if labels := canonicalOverrideLabels(name, geoLabels, settings.BirdNET.Labels); len(labels) > 0 {
-			out = append(out, labels...)
-		} else {
-			unresolved = append(unresolved, name)
+	labels, _ := resolveOverrideLabelsWithSource(settings, geoLabels)
+	return labels
+}
+
+// resolveOverrideLabelsWithSource is resolveOverrideLabels plus provenance: it
+// additionally reports, per resolved label, whether the label was reached from
+// realtime.species.include, from a realtime.species.config key, or from both.
+// Resolution is otherwise identical, so the returned label slice matches
+// resolveOverrideLabels exactly, order included, and the OpenFauna reverse lookup
+// stays batched into the single dataset scan shared by both lists.
+func resolveOverrideLabelsWithSource(settings *conf.Settings, geoLabels []string) (labels []string, sources map[string]overrideSource) {
+	entries := overrideSpeciesEntries(settings)
+	labels = make([]string, 0, len(entries))
+	sources = make(map[string]overrideSource, len(entries))
+
+	// mark unions the provenance rather than overwriting it: the same label can be
+	// reached from both lists, either because the user named the species in both or
+	// because two different entries resolve to one canonical label.
+	mark := func(label string, src overrideSource) {
+		existing := sources[label]
+		existing.manuallyIncluded = existing.manuallyIncluded || src.manuallyIncluded
+		existing.customConfig = existing.customConfig || src.customConfig
+		sources[label] = existing
+	}
+
+	// collect appends every resolved label for one entry and records its provenance.
+	collect := func(resolved []string, src overrideSource) {
+		for _, label := range resolved {
+			labels = append(labels, label)
+			mark(label, src)
 		}
 	}
+
+	var unresolved []overrideSpeciesEntry
+	for _, entry := range entries {
+		resolved := canonicalOverrideLabels(entry.name, geoLabels, settings.BirdNET.Labels)
+		if len(resolved) == 0 {
+			unresolved = append(unresolved, entry)
+			continue
+		}
+		collect(resolved, entry.source)
+	}
+
 	if len(unresolved) > 0 {
-		reverse := openfauna.LookupScientificNames(unresolved, settings.BirdNET.Locale)
-		for _, name := range unresolved {
-			if sci := reverse[name]; len(sci) > 0 {
-				out = append(out, sci...)
-			} else {
-				out = append(out, name)
+		names := make([]string, len(unresolved))
+		for i := range unresolved {
+			names[i] = unresolved[i].name
+		}
+		reverse := openfauna.LookupScientificNames(names, settings.BirdNET.Locale)
+		for _, entry := range unresolved {
+			// An entry OpenFauna cannot reverse-resolve is kept verbatim, so the name
+			// resolver still reports a genuinely unresolvable entry to the user.
+			resolved := reverse[entry.name]
+			if len(resolved) == 0 {
+				resolved = []string{entry.name}
 			}
+			collect(resolved, entry.source)
 		}
 	}
-	return out
+	return labels, sources
 }
 
 // addUserOverrideSpeciesScores appends species from the explicit include list
 // and species with configured actions to a SpeciesScore slice with score 1.0.
 // Used by the universal geomodel path in getProbableSpecies. Each entry is
-// canonicalized via resolveOverrideLabels so localized common names enter the
-// set as their canonical model labels rather than the raw user string.
+// canonicalized via resolveOverrideLabelsWithSource so localized common names
+// enter the set as their canonical model labels rather than the raw user string.
+//
+// Every entry the overrides name also carries its provenance
+// (HasCustomConfig/IsManuallyIncluded), including entries the range filter had
+// already scored, which are flagged in place without disturbing their score.
+// Once an alias resolves to a canonical label the user's original key is gone,
+// so the settings UI cannot recover that provenance by string-matching the
+// displayed names against the settings; carrying it here is what keeps the
+// "Configured" and "Included" badges correct (issue #3974).
 //
 // Dedup here is by exact label and intentionally narrow: it only avoids
 // re-appending a label already present verbatim. A force-included species that
@@ -348,16 +430,37 @@ func resolveOverrideLabels(settings *conf.Settings, geoLabels []string) []string
 // the display boundary (dedupeSpeciesForDisplay in internal/api/v2/range/range.go),
 // not here, so the functional inclusion set keeps every scientific name.
 func addUserOverrideSpeciesScores(bn *BirdNET, speciesScores *[]SpeciesScore, settings *conf.Settings, geoLabels []string) {
+	labels, sources := resolveOverrideLabelsWithSource(settings, geoLabels)
+
+	// Flag the entries the range filter already scored. An override does not
+	// re-append those, but the settings UI still has to badge them, and the score
+	// they carry must survive untouched.
 	seen := make(map[string]bool, len(*speciesScores))
-	for _, ss := range *speciesScores {
-		seen[ss.Label] = true
-	}
-	for _, label := range resolveOverrideLabels(settings, geoLabels) {
-		if !seen[label] {
-			bn.Debug("Adding override species with max score: %s", label)
-			*speciesScores = append(*speciesScores, SpeciesScore{Score: 1.0, Label: label})
-			seen[label] = true
+	for i := range *speciesScores {
+		label := (*speciesScores)[i].Label
+		seen[label] = true
+		src := sources[label]
+		if src.customConfig {
+			(*speciesScores)[i].HasCustomConfig = true
 		}
+		if src.manuallyIncluded {
+			(*speciesScores)[i].IsManuallyIncluded = true
+		}
+	}
+
+	for _, label := range labels {
+		if seen[label] {
+			continue
+		}
+		src := sources[label]
+		bn.Debug("Adding override species with max score: %s", label)
+		*speciesScores = append(*speciesScores, SpeciesScore{
+			Score:              1.0,
+			Label:              label,
+			HasCustomConfig:    src.customConfig,
+			IsManuallyIncluded: src.manuallyIncluded,
+		})
+		seen[label] = true
 	}
 }
 

@@ -289,3 +289,169 @@ func TestOverrideSpeciesNames_SortsConfigKeysDeterministically(t *testing.T) {
 		got,
 		"include entries keep user order; config keys follow in sorted order")
 }
+
+// overrideProvenanceSettings builds the issue #3974 scenario on top of the shared
+// override harness: the geomodel labels carry English common names while the active
+// classifier is Finnish, so an English config key resolves to a canonical label whose
+// displayed (Finnish) common name is nothing like the key the user typed. That is what
+// broke the settings UI's string matching. Parus major stays out of the range-filter
+// scores so it can only arrive via the override, and Turdus merula stays in them so the
+// flag-in-place path is exercised too.
+func overrideProvenanceSettings(t *testing.T) (*conf.Settings, *fakeUniversalRangeFilter) {
+	t.Helper()
+	settings, rf := overrideTestSettings(t, "fi")
+	settings.Realtime.Species.Include = nil
+	settings.Realtime.Species.Config = nil
+	return settings, rf
+}
+
+// requireScoreForLabel returns the SpeciesScore carrying label, failing the test if
+// absent. It wraps the shared scoreForLabel lookup so each assertion below can read
+// the entry directly instead of repeating the found check.
+func requireScoreForLabel(t *testing.T, scores []SpeciesScore, label string) SpeciesScore {
+	t.Helper()
+	got, ok := scoreForLabel(scores, label)
+	require.True(t, ok, "label %q not present in scores %+v", label, scores)
+	return got
+}
+
+// probableSpeciesFor runs the override-appending path over the given settings.
+func probableSpeciesFor(t *testing.T, settings *conf.Settings, rf *fakeUniversalRangeFilter) []SpeciesScore {
+	t.Helper()
+	bn := &BirdNET{
+		Settings:     settings,
+		rangeFilter:  rf,
+		speciesCache: make(map[string]*speciesCacheEntry),
+	}
+	scores, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
+	require.NoError(t, err)
+	return scores
+}
+
+// TestAddUserOverrideSpeciesScores_Provenance is the regression test for issue
+// #3974 and its neighbours. Each case configures the overrides differently and
+// asserts the provenance that reaches the settings UI, plus the score, since a
+// species the range filter already scored must be flagged in place rather than
+// promoted to the always-active 1.0 sentinel.
+func TestAddUserOverrideSpeciesScores_Provenance(t *testing.T) {
+	tests := []struct {
+		name              string
+		include           []string
+		config            map[string]conf.SpeciesConfig
+		label             string
+		wantCustomConfig  bool
+		wantManualInclude bool
+		wantScore         float64
+	}{
+		{
+			// Issue #3974: the config key is an alias ("Great Tit", the geomodel's
+			// English common name) that resolves to a canonical label the settings UI
+			// cannot match against the key, so the provenance has to travel with the
+			// score instead. A config key alone must not claim manual inclusion: the
+			// two badges mean different things.
+			name:             "config alias carries custom-config provenance",
+			config:           map[string]conf.SpeciesConfig{"Great Tit": {Threshold: 0.5}},
+			label:            "Parus major_Great Tit",
+			wantCustomConfig: true,
+			wantScore:        1.0,
+		},
+		{
+			// The range filter already scored this species, so the override appends
+			// nothing and the flag must be set on the existing entry. The
+			// range-filter score has to survive, or a merely configured species would
+			// be silently promoted to always-active.
+			name:             "config on an already-scored species flags in place",
+			config:           map[string]conf.SpeciesConfig{"Common Blackbird": {Threshold: 0.5}},
+			label:            "Turdus merula_Common Blackbird",
+			wantCustomConfig: true,
+			wantScore:        0.9,
+		},
+		{
+			name:              "include entry is not reported as configured",
+			include:           []string{"Great Tit"},
+			label:             "Parus major_Great Tit",
+			wantManualInclude: true,
+			wantScore:         1.0,
+		},
+		{
+			name:              "include and config union onto one entry",
+			include:           []string{"Great Tit"},
+			config:            map[string]conf.SpeciesConfig{"Great Tit": {Threshold: 0.5}},
+			label:             "Parus major_Great Tit",
+			wantCustomConfig:  true,
+			wantManualInclude: true,
+			wantScore:         1.0,
+		},
+		{
+			// Guards against the flags leaking onto species the user never named.
+			name:      "species the user never named carries no provenance",
+			config:    map[string]conf.SpeciesConfig{"Great Tit": {Threshold: 0.5}},
+			label:     "Turdus merula_Common Blackbird",
+			wantScore: 0.9,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settings, rf := overrideProvenanceSettings(t)
+			settings.Realtime.Species.Include = tt.include
+			settings.Realtime.Species.Config = tt.config
+
+			scores := probableSpeciesFor(t, settings, rf)
+
+			// A species named by both settings must be appended once, not twice, or
+			// it would show up doubled in the Active Species list and the CSV export.
+			count := 0
+			for _, s := range scores {
+				if s.Label == tt.label {
+					count++
+				}
+			}
+			assert.Equal(t, 1, count, "species must appear exactly once")
+
+			got := requireScoreForLabel(t, scores, tt.label)
+			assert.Equal(t, tt.wantCustomConfig, got.HasCustomConfig, "HasCustomConfig")
+			assert.Equal(t, tt.wantManualInclude, got.IsManuallyIncluded, "IsManuallyIncluded")
+			assert.InDelta(t, tt.wantScore, got.Score, 1e-9, "score")
+		})
+	}
+}
+
+// TestResolveOverrideLabelsWithSource_MatchesResolveOverrideLabels pins the two
+// resolvers together: resolveOverrideLabels is a thin wrapper, and the label slice must
+// stay byte-identical (order included) so adding provenance cannot perturb the
+// inclusion working set or the deterministic append order of the 1.0 species.
+func TestResolveOverrideLabelsWithSource_MatchesResolveOverrideLabels(t *testing.T) {
+	t.Parallel()
+
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Labels = []string{"Turdus merula_Mustarastas", "Parus major_Talitiainen"}
+	settings.Realtime.Species.Include = []string{"Talitiainen", "definitely not a species"}
+	settings.Realtime.Species.Config = map[string]conf.SpeciesConfig{
+		"zzz species": {}, "Mustarastas": {},
+	}
+	geoLabels := []string{"Turdus merula_Common Blackbird", "Parus major_Great Tit"}
+
+	withSource, sources := resolveOverrideLabelsWithSource(settings, geoLabels)
+
+	// Assert the labels concretely rather than only against resolveOverrideLabels:
+	// the wrapper delegates, so a self-comparison would pass even if both returned
+	// nothing. Order is part of the contract, since these labels feed the inclusion
+	// working set and the deterministic append order of the equal-scored 1.0 species.
+	assert.Equal(t, []string{
+		"Parus major_Talitiainen",   // include entry, resolved via the classifier labels
+		"Turdus merula_Mustarastas", // config key, resolved via the classifier labels
+		"definitely not a species",  // unresolvable include entry, kept verbatim
+		"zzz species",               // unresolvable config key, kept verbatim
+	}, withSource)
+
+	assert.Equal(t, resolveOverrideLabels(settings, geoLabels), withSource,
+		"the provenance-carrying resolver must return the same labels in the same order")
+
+	assert.Equal(t, map[string]overrideSource{
+		"Parus major_Talitiainen":   {manuallyIncluded: true},
+		"definitely not a species":  {manuallyIncluded: true},
+		"Turdus merula_Mustarastas": {customConfig: true},
+		"zzz species":               {customConfig: true},
+	}, sources, "each label must record exactly the setting that named it")
+}
