@@ -153,6 +153,16 @@ func Load() (*Settings, error) {
 		return nil, err
 	}
 
+	// Mint the profiling token when pprof is enabled without an authentication
+	// provider. Deliberately non-fatal: without a token the pprof routes refuse
+	// every request, which is the safe outcome, and a diagnostics feature must
+	// not be able to stop the application from starting.
+	if generated, err := EnsureProfilingToken(settings); err != nil {
+		GetLogger().Warn("Failed to generate profiling token; the profiling endpoints will refuse requests", logger.Error(err))
+	} else if generated {
+		persistMigration(settings, "profiling token")
+	}
+
 	// Resolve features that are switched on but were never configured, before the
 	// validators get to see them. A config file can age into that state across
 	// upgrades, and rejecting the file leaves no UI in which to correct it, so

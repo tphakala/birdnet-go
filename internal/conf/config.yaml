@@ -459,6 +459,15 @@ output:
 sentry:
   enabled: false          # false by default, must be explicitly enabled by user (opt-in)
 
+# Developer diagnostics, off by default
+diagnostics:
+  profiling:
+    enabled: false        # true to serve Go pprof endpoints at /debug/pprof/ on the web server
+    # The pprof routes sit behind the web server's authentication. When no auth
+    # provider is configured, a token is generated here the first time profiling
+    # is enabled and must be passed as ?token=... Keep it secret.
+    # token: ""
+
 # Notification settings
 notification:
   templates:

@@ -57,7 +57,9 @@ func NewEndpoint(settings *conf.Settings, metrics *Metrics) (*Endpoint, error) {
 func (e *Endpoint) Start(wg *sync.WaitGroup, quitChan <-chan struct{}) {
 	mux := http.NewServeMux()
 	e.metrics.RegisterHandlers(mux)
-	RegisterDebugHandlers(mux)
+	// This listener serves Prometheus metrics only. pprof moved to the
+	// authenticated web server; all that is left here is the breadcrumb.
+	RegisterMovedDebugHandler(mux)
 
 	e.server = &http.Server{
 		Addr:    e.listenAddress,

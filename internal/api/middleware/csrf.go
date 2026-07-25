@@ -28,6 +28,12 @@ const (
 	csrfTokenLength = 32
 )
 
+// pprofBasePath is the URL prefix under which the api package mounts the Go
+// pprof endpoints. It is duplicated here rather than imported because the api
+// package imports this one; net/http/pprof pins the prefix anyway, so it cannot
+// drift. Used by the CSRF and gzip skippers.
+const pprofBasePath = "/debug/pprof"
+
 // IsSecureRequest determines if the request is over HTTPS.
 // Checks direct TLS connection first, then X-Forwarded-Proto but only when
 // the request originates from a trusted source (loopback or private network).
@@ -150,6 +156,17 @@ func DefaultCSRFSkipper(c echo.Context) bool {
 
 	// Skip for social OAuth endpoints (GET requests for OAuth flow)
 	if strings.HasPrefix(path, "/auth/") {
+		return true
+	}
+
+	// Skip for the pprof endpoints. `go tool pprof` resolves addresses with a
+	// POST to /debug/pprof/symbol and sends no CSRF token, so requiring one
+	// would break symbolization for the tool the endpoints exist to serve.
+	// Exempting them is safe on both counts CSRF protects: the handlers are
+	// read-only (symbol lookup returns names, it changes nothing), and the
+	// routes carry their own gate, which is either the auth middleware or a
+	// secret query token that a cross-site request cannot supply.
+	if path == pprofBasePath || strings.HasPrefix(path, pprofBasePath+"/") {
 		return true
 	}
 

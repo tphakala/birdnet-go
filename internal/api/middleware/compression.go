@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	pathpkg "path"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -127,7 +128,21 @@ func DefaultGzipSkipper(c echo.Context) bool {
 	if _, ok := streamingJSONRoutes[c.Path()]; ok {
 		return true
 	}
+	if PprofSkipper(c) {
+		return true
+	}
 	return c.Request().Header.Get(headerRange) != ""
+}
+
+// PprofSkipper returns true for the Go pprof endpoints.
+//
+// A pprof profile is already a gzip-compressed protobuf (it starts with the
+// gzip magic bytes), so compressing it again spends CPU to make the payload
+// slightly larger. The execution trace is a long-lived stream that a compressor
+// would buffer, like the SSE and progress-stream routes above.
+func PprofSkipper(c echo.Context) bool {
+	path := pathpkg.Clean(c.Request().URL.Path)
+	return path == pprofBasePath || strings.HasPrefix(path, pprofBasePath+"/")
 }
 
 // SSESkipper is a skipper function that skips compression for Server-Sent Events endpoints.

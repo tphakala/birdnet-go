@@ -572,6 +572,16 @@ func handlePrimitiveField(
 // Must be called while c.settingsMutex is held. On save failure, the atomic
 // Settings snapshot is rolled back to current.
 func (c *Controller) publishAndSaveSettings(current, updated *conf.Settings) error {
+	// Mint the profiling token before publishing, so enabling pprof at runtime
+	// on an instance without an authentication provider produces a usable
+	// credential instead of an enabled-but-unreachable endpoint. Non-fatal: the
+	// routes fail closed without it, which must not cost the user their other
+	// settings changes.
+	if _, err := conf.EnsureProfilingToken(updated); err != nil {
+		apicore.GetLogger().Warn("Failed to generate profiling token; the profiling endpoints will refuse requests",
+			logger.Error(err))
+	}
+
 	if c.isGlobalOwner {
 		conf.StoreSettings(updated)
 	}
