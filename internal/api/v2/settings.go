@@ -1045,8 +1045,15 @@ func getSettingsSectionValue(settings *conf.Settings, section string) (any, erro
 		return &settings.Realtime.Telemetry, nil
 	case "sentry":
 		return &settings.Sentry, nil
-	case "diagnostics":
-		return &settings.Diagnostics, nil
+	// NOTE: "diagnostics" is deliberately absent, so PATCH on it returns 400.
+	// The section holds a generated credential that getBlockedFieldMap marks
+	// never-updatable-via-API, and the PATCH merge path does not enforce that
+	// map: handleGenericSection merges the incoming JSON into the section and
+	// then only RECORDS that restrictions exist. Adding the case here would let
+	// an unauthenticated client on a no-auth instance set a token it chose and
+	// read profiles with it. PUT /api/v2/settings does enforce the map, so
+	// enabling profiling at runtime still works there.
+	// Re-add this once the PATCH path enforces blocked fields.
 	case "notification":
 		return &settings.Notification, nil
 	case "logging":

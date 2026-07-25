@@ -83,24 +83,44 @@ func TestEnsureProfilingTokenForSave_NoOpCases(t *testing.T) {
 	}
 }
 
-// TestDiagnosticsSectionIsWritable closes the read/write asymmetry review
-// found: GET /api/v2/settings/diagnostics resolved by reflection over the
-// Settings fields and worked, while PATCH went through a hardcoded switch that
-// had no diagnostics case and answered 400. The section was readable but not
-// writable, so a client could see the feature's config and never change it.
-func TestDiagnosticsSectionIsWritable(t *testing.T) {
+// TestDiagnosticsSectionIsNotPatchable pins that PATCH on the diagnostics
+// section is refused, and records why, because the obvious "fix" reopens a hole.
+//
+// The section carries a generated credential that getBlockedFieldMap marks
+// never-updatable-via-API. The PATCH merge path does NOT enforce that map:
+// handleGenericSection merges the incoming JSON into the section and then only
+// records that restrictions exist, so a client could set a token it chose. On a
+// no-auth instance the settings API is itself unauthenticated, which is exactly
+// the configuration where the token is the only thing gating pprof.
+//
+// PUT /api/v2/settings does enforce the blocked map, so enabling profiling at
+// runtime still works. Re-add the PATCH case once the merge path enforces
+// blocked fields.
+func TestDiagnosticsSectionIsNotPatchable(t *testing.T) {
 	t.Parallel()
 
-	settings := &conf.Settings{}
-	settings.Diagnostics.Profiling.Enabled = true
+	_, err := getSettingsSectionValue(&conf.Settings{}, "diagnostics")
+	require.Error(t, err,
+		"PATCH must refuse the diagnostics section while the merge path ignores blocked fields")
+}
 
-	value, err := getSettingsSectionValue(settings, "diagnostics")
-	require.NoError(t, err, "the diagnostics section must be writable via PATCH")
+// TestProfilingTokenIsBlockedFromAPIWrites pins the blocked-field entry that
+// keeps a client from choosing the token on the PUT path.
+func TestProfilingTokenIsBlockedFromAPIWrites(t *testing.T) {
+	t.Parallel()
 
-	section, ok := value.(*conf.DiagnosticsConfig)
-	require.True(t, ok, "expected the diagnostics section, got %T", value)
-	assert.True(t, section.Profiling.Enabled,
-		"the returned section must alias the live settings, not a copy")
+	blocked := getBlockedFieldMap()
+
+	diagnostics, ok := blocked["Diagnostics"].(map[string]any)
+	require.True(t, ok, "Diagnostics must carry field-level restrictions: %#v", blocked)
+
+	profiling, ok := diagnostics["Profiling"].(map[string]any)
+	require.True(t, ok, "Profiling must carry field-level restrictions: %#v", diagnostics)
+
+	assert.Equal(t, true, profiling["Token"],
+		"the generated profiling token must never be settable through the API")
+	assert.NotContains(t, profiling, "Enabled",
+		"the enable flag must stay writable, or profiling could not be turned on at all")
 }
 
 // TestEnsureProfilingTokenForSave_KeepsExistingToken guards token stability: a
