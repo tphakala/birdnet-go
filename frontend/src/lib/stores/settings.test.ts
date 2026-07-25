@@ -848,7 +848,7 @@ describe('Settings Store - HuggingFace endpoint', () => {
     setStore(baseBirdnet({ huggingFaceEndpoint: '' }), baseBirdnet());
 
     const store = get(settingsStore);
-    const original = store.originalData.birdnet?.huggingFaceEndpoint ?? '';
+    const original = store.originalData.birdnet.huggingFaceEndpoint ?? '';
     const current = store.formData.birdnet.huggingFaceEndpoint ?? '';
 
     expect(current).toBe(original);
@@ -858,7 +858,7 @@ describe('Settings Store - HuggingFace endpoint', () => {
     setStore(baseBirdnet({ huggingFaceEndpoint: 'https://hf-mirror.com' }), baseBirdnet());
 
     const store = get(settingsStore);
-    const original = store.originalData.birdnet?.huggingFaceEndpoint ?? '';
+    const original = store.originalData.birdnet.huggingFaceEndpoint ?? '';
     const current = store.formData.birdnet.huggingFaceEndpoint ?? '';
 
     expect(current).not.toBe(original);
