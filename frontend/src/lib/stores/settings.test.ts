@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import { settingsStore, settingsActions } from './settings';
 import type { BirdNetSettings, RealtimeSettings, SettingsFormData } from './settings';
@@ -710,6 +710,70 @@ describe('Settings Store - syncTLSMode preserves unsaved Security edits', () => 
     expect(s.formData.security?.basicAuth).toBeDefined();
     expect(s.originalData.security?.tlsMode).toBe('manual');
     expect(s.originalData.security?.basicAuth).toBeDefined();
+  });
+});
+
+// The settings store has no TypeScript model for the diagnostics section: there
+// is deliberately no UI for the profiling switches, so nothing here declares
+// them. That makes the section's survival an accident of implementation rather
+// than something anyone states, and the accident is load-bearing.
+//
+// GET /api/v2/settings returns the whole Settings struct, and PUT replaces what
+// it is given: the backend merges the request body field by field over the
+// current config WITHOUT skipping zero values, so a body that omits diagnostics
+// writes 0 over diagnostics.profiling.blockrate and mutexfraction and false
+// over enabled. Sampling that an operator turned on in config.yaml would then be
+// silently switched off the next time anyone saved an unrelated setting from the
+// UI, and the block and mutex profiles would go quietly empty.
+//
+// Two things keep that from happening: object spread in loadSettings copies
+// properties the interfaces do not declare, and coerceSettings returns unknown
+// sections untouched. Both are easy to remove while "cleaning up types".
+describe('Settings Store - Unmodelled Section Round-Trip', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    // clearAllMocks resets call history but LEAVES mockResolvedValue in place,
+    // so without this the stub below keeps answering settingsAPI.load for
+    // whatever describe block is appended after this one.
+    vi.mocked(settingsAPI.load).mockReset();
+  });
+
+  it('preserves the diagnostics section through load and save', async () => {
+    const diagnostics = {
+      profiling: {
+        enabled: true,
+        // The sentinel the backend actually substitutes, so the fixture looks
+        // like a real GET response rather than an invented one.
+        token: '**********',
+        blockRate: 10000,
+        mutexFraction: 100,
+      },
+    };
+    // Compare against a deep snapshot, not against the object the mock resolves.
+    // The store spreads the response, so formData.diagnostics is the SAME
+    // reference; asserting it equals itself would pass even against a coercer
+    // that stripped fields in place on the object it was handed.
+    const expected = JSON.parse(JSON.stringify(diagnostics));
+
+    vi.mocked(settingsAPI.load).mockResolvedValue({
+      main: { name: 'TestNode' },
+      diagnostics,
+    } as unknown as SettingsFormData);
+
+    await settingsActions.loadSettings();
+
+    expect((get(settingsStore).formData as unknown as Record<string, unknown>).diagnostics).toEqual(
+      expected
+    );
+
+    await settingsActions.saveSettings();
+
+    expect(settingsAPI.save).toHaveBeenCalledWith(
+      expect.objectContaining({ diagnostics: expected })
+    );
   });
 });
 

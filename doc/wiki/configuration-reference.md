@@ -403,6 +403,8 @@ DiagnosticsConfig groups the developer-facing diagnostics features.
 |---------|------|-------------|
 | `diagnostics.profiling.enabled` | boolean | true to serve /debug/pprof/* on the web server |
 | `diagnostics.profiling.token` | string | secret required when no auth provider is configured; generated automatically |
+| `diagnostics.profiling.blockrate` | integer | nanoseconds of blocked time per sample; 0 disables. Independent of enabled: sampling costs CPU continuously whether or not a profile is ever fetched, so 0 is the only free setting and a very coarse rate still pays most of the cost. Recommended starting point: 10000. Hot-reloadable via the settings API. |
+| `diagnostics.profiling.mutexfraction` | integer | reports one sampled event per this many contention events; 0 disables. Independent of enabled: sampling costs CPU continuously whether or not a profile is ever fetched. Recommended starting point: 100. Hot-reloadable via the settings API. |
 
 ## output
 

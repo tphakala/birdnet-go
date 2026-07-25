@@ -243,12 +243,21 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"Sentry": {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_telemetry"},
 
 	// --- Diagnostics ---
-	// The pprof routes are registered unconditionally and gated by middleware
-	// that reads the live snapshot per request, so a change to either field is
-	// observed on the next request with no restart and no action. Enabling
+	// Two different mechanisms, both actionless, which is why this stays one
+	// coarse entry.
+	//
+	// Enabled and Token: the pprof routes are registered unconditionally and
+	// gated by middleware that reads the live snapshot per request, so a change
+	// is observed on the next request with no restart and no action. Enabling
 	// profiling also mints the token during the same save
 	// (ensureProfilingTokenForSave), so the endpoint is usable immediately
 	// rather than refusing until the next start.
+	//
+	// BlockRate and MutexFraction: applied directly by handleSettingsChanges via
+	// profiling.ApplyRates. They declare no action because the runtime setters
+	// are process-global calls with no dependencies; routing them through
+	// controlChan would queue them behind audio reconfiguration and would apply
+	// them only in realtime analysis mode, where the control monitor runs.
 	"Diagnostics": {categories: []hotReloadCategory{hotReloadFresh}},
 
 	// --- Output ---

@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"runtime"
 	"runtime/pprof"
 	"strings"
 	"time"
@@ -22,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/profiling"
 	"github.com/tphakala/birdnet-go/internal/restart"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
@@ -171,6 +171,16 @@ func mainWithExitCode() int {
 	// Create main module logger
 	mainLog := centralLogger.Module("main")
 
+	// Apply the configured block and mutex sampling rates. The rationale lives
+	// on profiling.ApplyRates; changes made through the settings API are applied
+	// by profilingRatesChanged in internal/api/v2/settings.go.
+	//
+	// As early as the logger allows, and deliberately ahead of telemetry init:
+	// that path blocks for up to five seconds waiting for readiness, which is
+	// itself a plausible thing to reach for block profiling to explain. The old
+	// debug-gated version sat after it and could not see it.
+	profiling.ApplyRates(&settings.Diagnostics.Profiling)
+
 	// Load or create system ID for telemetry
 	systemID, err := telemetry.LoadOrCreateSystemID(filepath.Dir(viper.ConfigFileUsed()))
 	if err != nil {
@@ -200,17 +210,6 @@ func mainWithExitCode() int {
 		mainLog.Debug("Core systems initialization incomplete",
 			logger.Error(err))
 		// Continue - not critical for operation
-	}
-
-	// Enable runtime profiling if debug mode is enabled
-	if settings.Debug {
-		// Enable mutex profiling for detecting lock contention
-		runtime.SetMutexProfileFraction(1)
-
-		// Enable block profiling for detecting blocking operations
-		runtime.SetBlockProfileRate(1)
-
-		mainLog.Debug("Runtime profiling enabled (mutex and block profiling active)")
 	}
 
 	// Process configuration validation warnings that occurred before Sentry initialization.

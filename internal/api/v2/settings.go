@@ -24,6 +24,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/profiling"
 	"github.com/tphakala/birdnet-go/internal/restart"
 	"github.com/tphakala/birdnet-go/internal/support"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
@@ -317,6 +318,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 			// Rollback in-memory; disk write never happened successfully.
 			conf.StoreSettings(current)
 			c.Settings.Store(current)
+			c.restoreProfilingRates(current)
 			c.LogAPIRequest(ctx, logger.LogLevelError, "Failed to save settings to disk, rolling back", logger.Error(err))
 			return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 		}
@@ -760,6 +762,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		if err := conf.SaveSettings(); err != nil {
 			conf.StoreSettings(current)
 			c.Settings.Store(current)
+			c.restoreProfilingRates(current)
 			return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 		}
 		c.LogAPIRequest(ctx, logger.LogLevelInfo, "Section settings saved successfully",
@@ -2213,8 +2216,15 @@ const (
 	reasonOAuthRestart     = "restart.reasons.oauth"
 )
 
-// settingsChangeChecks defines all settings change detectors in order of execution.
-// Each check has a detection function, action to trigger, and toast notification.
+// settingsChangeChecks defines the settings change detectors that dispatch an
+// action or a toast, in order of execution. Each check has a detection
+// function, action to trigger, and toast notification.
+//
+// It is not quite every detector: profilingRatesChanged is applied directly by
+// handleSettingsChanges instead, because the runtime setters it drives are
+// atomic stores that cannot fail and so need neither the controlChan queue nor
+// a toast. Anyone adding a diagnostics setting will look here first, hence this
+// pointer; the reasoning is at that call site.
 var settingsChangeChecks = []settingsChangeCheck{
 	{"BirdNET", "reload_birdnet", birdnetSettingsChanged, "Reloading BirdNET model with new settings...", notification.MsgSettingsReloadingBirdnet, ToastTypeInfo, toastDurationLong},
 	{"Range filter", "rebuild_range_filter", rangeFilterSettingsChanged, "Rebuilding species range filter...", notification.MsgSettingsRebuildingRangeFilter, ToastTypeInfo, toastDurationMedium},
@@ -2289,6 +2299,34 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 	// possible error/rollback would leave a stuck banner.
 	for _, reason := range restartReasons {
 		restart.MarkRestartRequired(reason)
+	}
+
+	// Apply the runtime block and mutex sampling rates.
+	//
+	// Deliberately NOT a settingsChangeChecks entry routed through controlChan
+	// like the reconfigure_* actions above. The property that separates these
+	// from those is not "process-global" (reconfigure_push_notifications and
+	// reconfigure_log_deduplication are process-global too): it is that both
+	// runtime setters are single atomic stores that cannot fail and cost
+	// microseconds. There is nothing to serialize, nothing that can report an
+	// error, and no success worth a toast, so the queue that sendReconfigActions
+	// maintains, with its delay between sends, buys nothing here.
+	//
+	// Placed after the fallible audio reconfiguration for the same reason the
+	// restart marks are: a change that is about to be rolled back should not
+	// have left the process sampling.
+	//
+	// Both handlers that can carry a diagnostics change route through
+	// handleSettingsChanges, and neither routes through publishAndSaveSettings,
+	// whose callers are the TLS, MQTT-TLS and detections writers. That is what
+	// makes this the one seam covering this section rather than something to be
+	// remembered at each write path; getting it backwards is how the token mint
+	// first shipped dead, see ensureProfilingTokenForSave. handleSettingsChanges
+	// does have those three writers as callers too, which is harmless: each
+	// clones the current snapshot and touches only its own section, so the gate
+	// below is false on those paths.
+	if profilingRatesChanged(oldSettings, currentSettings) {
+		profiling.ApplyRates(&currentSettings.Diagnostics.Profiling)
 	}
 
 	// Trigger reconfigurations asynchronously.
@@ -2562,6 +2600,46 @@ func birdWeatherSettingsChanged(oldSettings, currentSettings *conf.Settings) boo
 // pushNotificationSettingsChanged checks if push notification settings have changed.
 func pushNotificationSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	return !reflect.DeepEqual(oldSettings.Notification.Push, currentSettings.Notification.Push)
+}
+
+// restoreProfilingRates puts the runtime sampling rates back to what the
+// restored snapshot says, after a failed save has rolled the settings back.
+//
+// Without this the divergence is permanent, not merely temporary, which is what
+// separates it from the other side effects handleSettingsChanges triggers. The
+// reconfigure_* actions re-read the live snapshot when the control monitor
+// processes them (conf.Setting()), so a rollback makes them converge on the
+// persisted config by themselves. ApplyRates reads the snapshot at call time
+// and is never invoked again on its own, and the change gate then seals it: the
+// rolled-back config and the next save both say 0, the comparison finds no
+// change, and the process keeps sampling forever at a rate nothing records.
+// That is exactly the cost this feature exists to remove, made invisible.
+//
+// Cheap and idempotent, so it runs unconditionally rather than re-deriving
+// whether this particular save touched the rates.
+func (c *Controller) restoreProfilingRates(current *conf.Settings) {
+	if current == nil {
+		return
+	}
+	profiling.ApplyRates(&current.Diagnostics.Profiling)
+}
+
+// profilingRatesChanged reports whether either runtime sampling rate differs
+// between the two snapshots.
+//
+// Only the rates. diagnostics.profiling.enabled and .token need no action at
+// all: the pprof routes are registered unconditionally and their middleware
+// reads the live snapshot per request, so those two are observed on the next
+// request without anything being applied here.
+func profilingRatesChanged(oldSettings, currentSettings *conf.Settings) bool {
+	oldProfiling := &oldSettings.Diagnostics.Profiling
+	newProfiling := &currentSettings.Diagnostics.Profiling
+	// Resolved rather than raw, so two values that mean the same thing to the
+	// runtime do not count as a change. Editing -1 to -5 leaves both profilers
+	// off either way, and firing on it would re-log the applied rates for a
+	// save that altered nothing.
+	return oldProfiling.ResolvedBlockRate() != newProfiling.ResolvedBlockRate() ||
+		oldProfiling.ResolvedMutexFraction() != newProfiling.ResolvedMutexFraction()
 }
 
 // telemetrySettingsChanged checks if telemetry/observability settings have changed
