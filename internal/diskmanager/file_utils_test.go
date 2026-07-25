@@ -123,7 +123,7 @@ func TestProcessFileSkipsUnrecognizedFilenames(t *testing.T) {
 	}
 }
 
-// TestStripDurationSuffix tests the stripDurationSuffix helper
+// TestStripDurationSuffix tests the StripDurationSuffix helper.
 func TestStripDurationSuffix(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -147,7 +147,7 @@ func TestStripDurationSuffix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			assert.Equal(t, tt.expected, stripDurationSuffix(tt.input))
+			assert.Equal(t, tt.expected, StripDurationSuffix(tt.input))
 		})
 	}
 }

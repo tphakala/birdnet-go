@@ -348,7 +348,7 @@ func parseFileInfo(path string, info os.FileInfo, allowedExts []string) (FileInf
 	nameWithoutExt = strings.TrimSuffix(nameWithoutExt, "_400px")
 
 	// Strip optional duration suffix (e.g., _86s) added by extended capture mode
-	nameWithoutExt = stripDurationSuffix(nameWithoutExt)
+	nameWithoutExt = StripDurationSuffix(nameWithoutExt)
 
 	parts := strings.Split(nameWithoutExt, "_")
 	if len(parts) < 3 {
@@ -411,10 +411,10 @@ func parseFileInfo(path string, info os.FileInfo, allowedExts []string) (FileInf
 	}, nil
 }
 
-// stripDurationSuffix removes an optional duration suffix like "_86s" from the
+// StripDurationSuffix removes an optional duration suffix like "_86s" from the
 // end of a filename (without extension). Duration suffixes are added by extended
 // capture mode and follow the pattern _<digits>s.
-func stripDurationSuffix(name string) string {
+func StripDurationSuffix(name string) string {
 	lastUnderscore := strings.LastIndex(name, "_")
 	if lastUnderscore < 0 {
 		return name
