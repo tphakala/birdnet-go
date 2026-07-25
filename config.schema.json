@@ -1531,7 +1531,7 @@
         },
         "token": {
           "type": "string",
-          "description": "secret required when no auth provider is configured; generated at startup"
+          "description": "secret required when no auth provider is configured; generated automatically"
         }
       },
       "additionalProperties": false,

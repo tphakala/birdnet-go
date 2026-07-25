@@ -187,7 +187,9 @@ func DefaultCSRFSkipper(c echo.Context) bool {
 	// the media/streams block above uses, so a future state-changing route
 	// under this prefix does not inherit the exemption by accident.
 	if isPprofPath(path) {
-		return isSafeHTTPMethod(c.Request().Method) || path == pprofBasePath+"/symbol"
+		method := c.Request().Method
+		return isSafeHTTPMethod(method) ||
+			(method == http.MethodPost && path == pprofBasePath+"/symbol")
 	}
 
 	return false

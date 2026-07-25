@@ -1725,16 +1725,16 @@ type BackupConfig struct {
 // The endpoints are served by the main web server behind its authentication
 // middleware, never by the Prometheus telemetry listener. When no
 // authentication provider is configured (the common home-LAN default), Token is
-// required instead. It is generated on the first startup with profiling
-// enabled, not at the moment the setting is flipped, so enabling profiling
-// through the settings API needs a restart before the endpoints will answer.
+// required instead, and is generated automatically: on the config load path
+// when profiling is already enabled, and on the settings-save path when it is
+// switched on at runtime.
 //
 // The leaf key is deliberately named "token" and not "profilingtoken": support
 // dump scrubbing matches sensitive keys on word boundaries, so a squashed name
 // would not be redacted. See isSensitiveKey in internal/support/collector.go.
 type ProfilingConfig struct {
 	Enabled bool   `yaml:"enabled" json:"enabled"` // true to serve /debug/pprof/* on the web server
-	Token   string `yaml:"token" json:"token"`     // secret required when no auth provider is configured; generated at startup
+	Token   string `yaml:"token" json:"token"`     // secret required when no auth provider is configured; generated automatically
 }
 
 // DiagnosticsConfig groups the developer-facing diagnostics features. It is a

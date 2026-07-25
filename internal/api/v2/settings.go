@@ -289,6 +289,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	// (controllerSettings) return the freshly published value. Both stores are
 	// lock-free; settingsMutex here only serialises this read-modify-write
 	// against other update handlers, not against readers.
+	c.ensureProfilingTokenForSave(updated)
 	if publishGlobal {
 		conf.StoreSettings(updated)
 	}
@@ -571,7 +572,34 @@ func handlePrimitiveField(
 // publishAndSaveSettings publishes updated settings and persists to disk.
 // Must be called while c.settingsMutex is held. On save failure, the atomic
 // Settings snapshot is rolled back to current.
+// ensureProfilingTokenForSave mints the profiling token into a settings
+// snapshot that is about to be published and persisted, so enabling pprof at
+// runtime on an instance with no authentication provider yields a usable
+// credential rather than an endpoint that refuses every request until restart.
+//
+// It is called at each of the three publish points rather than from one shared
+// save helper because the settings-write paths each inline their own
+// publish-then-persist sequence. Hooking only one of them is exactly how the
+// first attempt at this shipped a dead feature: publishAndSaveSettings is used
+// by the TLS, integrations and detections writers, none of which can carry a
+// diagnostics change, so the two handlers that CAN (PUT /settings and
+// PATCH /settings/:section) never minted anything.
+//
+// Non-fatal by design. The pprof routes fail closed without a token, and a
+// diagnostics credential must not cost the user the rest of their settings
+// change. EnsureProfilingToken is a no-op unless profiling is enabled, the
+// token is empty, and no auth provider is configured, so the normal save path
+// pays a boolean check and nothing else.
+func (c *Controller) ensureProfilingTokenForSave(updated *conf.Settings) {
+	if _, err := conf.EnsureProfilingToken(updated); err != nil {
+		apicore.GetLogger().Warn(
+			"Failed to generate profiling token; the profiling endpoints will refuse requests",
+			logger.Error(err))
+	}
+}
+
 func (c *Controller) publishAndSaveSettings(current, updated *conf.Settings) error {
+	c.ensureProfilingTokenForSave(updated)
 	if c.isGlobalOwner {
 		conf.StoreSettings(updated)
 	}
@@ -710,6 +738,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	// republish the controller's own atomic snapshot. See the matching comment
 	// in UpdateSettings for why Debug reads via conf.GetSettings() (the global)
 	// rather than the per-controller snapshot.
+	c.ensureProfilingTokenForSave(updated)
 	if publishGlobal {
 		conf.StoreSettings(updated)
 	}

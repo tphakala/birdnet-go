@@ -242,11 +242,10 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	// --- Diagnostics ---
 	// The pprof routes are registered unconditionally and gated by middleware
 	// that reads the live snapshot per request, so a change to either field is
-	// observed on the next request with no restart and no action. Note this is
-	// about when a CHANGED value takes effect, which is what this registry
-	// tracks; minting a token that does not exist yet happens on the config
-	// load path, so enabling profiling via the API on an instance with no auth
-	// provider still needs a restart before the endpoints answer.
+	// observed on the next request with no restart and no action. Enabling
+	// profiling also mints the token during the same save
+	// (ensureProfilingTokenForSave), so the endpoint is usable immediately
+	// rather than refusing until the next start.
 	"Diagnostics": {categories: []hotReloadCategory{hotReloadFresh}},
 
 	// --- Output ---

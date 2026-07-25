@@ -95,11 +95,9 @@ func ensureSessionSecret(settings *Settings) error {
 // web server's auth middleware already gates the routes, and a second
 // credential sitting in the config would only widen the way in.
 //
-// This runs on the config load path only, which makes profiling a config-file
-// feature: enabling it takes effect for the enable flag immediately (the gate
-// reads settings per request) but the token appears on the next start. That is
-// the deliberate first-pass scope; there is no UI toggle, and wiring the mint
-// into the settings-write handlers is follow-up work.
+// It runs on the config load path AND on every settings-save path, so switching
+// profiling on at runtime yields a usable credential rather than an endpoint
+// that refuses everything until the next restart.
 //
 // Unlike ensureSessionSecret this does NOT mirror the value into viper. That
 // mirror is vestigial there: nothing in this repository persists through viper

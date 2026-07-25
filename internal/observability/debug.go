@@ -6,9 +6,16 @@ import (
 	"net/http"
 )
 
-// debugPath is the base URL path that used to serve the pprof debugging
-// endpoints on this listener.
-const debugPath = "/debug/pprof/"
+// debugRootPath is the exact old pprof path; debugPath is its subtree form.
+//
+// Both are registered. The subtree pattern alone would leave a request for the
+// unslashed path answered by ServeMux's own redirect, so a client that does not
+// follow redirects (plain curl, a scripted probe) would get a bare 3xx instead
+// of the explanation this handler exists to give.
+const (
+	debugRootPath = "/debug/pprof"
+	debugPath     = debugRootPath + "/"
+)
 
 // movedNotice is the body returned at the old pprof location.
 //
@@ -47,7 +54,7 @@ The telemetry listener serves Prometheus metrics only.
 // breadcrumb answers "where did the old endpoint go", a question whose answer
 // does not depend on the current setting.
 func RegisterMovedDebugHandler(mux *http.ServeMux) {
-	mux.HandleFunc(debugPath, func(w http.ResponseWriter, _ *http.Request) {
+	handler := func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.WriteHeader(http.StatusGone)
@@ -55,5 +62,7 @@ func RegisterMovedDebugHandler(mux *http.ServeMux) {
 		// reachable unauthenticated and unthrottled, so the per-request copy of
 		// the constant would be attacker-paced for no reason.
 		_, _ = io.WriteString(w, movedNotice)
-	})
+	}
+	mux.HandleFunc(debugRootPath, handler)
+	mux.HandleFunc(debugPath, handler)
 }

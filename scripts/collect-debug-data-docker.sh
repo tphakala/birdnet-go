@@ -175,18 +175,36 @@ check_connectivity() {
 # configured. Set BIRDNET_PROFILING_TOKEN to the diagnostics.profiling.token
 # value from config.yaml. When authentication IS configured, the endpoints sit
 # behind it instead and this stays empty.
+# Note: these collectors support unauthenticated and token-gated instances only;
+# they cannot log in to an instance protected by basic auth or OAuth.
 PROFILING_TOKEN="${BIRDNET_PROFILING_TOKEN:-}"
+
+# urlencode percent-encodes a string for safe use in a URL query value.
+# The generated token is base64url and needs no encoding, but a hand-configured
+# one may contain &, =, + or spaces, which would silently corrupt the request.
+urlencode() {
+    local raw=$1
+    local i char out=""
+    for (( i = 0; i < ${#raw}; i++ )); do
+        char=${raw:i:1}
+        case "$char" in
+            [a-zA-Z0-9.~_-]) out+="$char" ;;
+            *) out+=$(printf '%%%02X' "'$char") ;;
+        esac
+    done
+    printf '%s' "$out"
+}
 
 # auth_query returns the query-string fragment carrying the profiling token,
 # with the correct separator for a URL that may already have parameters.
 auth_query() {
     local separator=${1:-?}
     if [ -n "${PROFILING_TOKEN}" ]; then
-        printf '%stoken=%s' "${separator}" "${PROFILING_TOKEN}"
+        printf '%stoken=%s' "${separator}" "$(urlencode "${PROFILING_TOKEN}")"
     fi
 }
 
-# Function to check if debug mode is enabled
+# Function to check that the profiling endpoints are reachable
 check_debug_mode() {
     print_status "Checking if profiling is enabled..."
     if ! curl -s -f "${BASE_URL}/debug/pprof/$(auth_query)" > /dev/null 2>&1; then
