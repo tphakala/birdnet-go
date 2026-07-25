@@ -1532,6 +1532,14 @@
         "token": {
           "type": "string",
           "description": "secret required when no auth provider is configured; generated automatically"
+        },
+        "blockrate": {
+          "type": "integer",
+          "description": "nanoseconds of blocked time per sample; 0 disables. Recommended starting point: 10000"
+        },
+        "mutexfraction": {
+          "type": "integer",
+          "description": "report 1 in N contention events; 0 disables. Recommended starting point: 100"
         }
       },
       "additionalProperties": false,

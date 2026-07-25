@@ -402,6 +402,8 @@ DiagnosticsConfig groups the developer-facing diagnostics features.
 |---------|------|-------------|
 | `diagnostics.profiling.enabled` | boolean | true to serve /debug/pprof/* on the web server |
 | `diagnostics.profiling.token` | string | secret required when no auth provider is configured; generated automatically |
+| `diagnostics.profiling.blockrate` | integer | nanoseconds of blocked time per sample; 0 disables. Recommended starting point: 10000 |
+| `diagnostics.profiling.mutexfraction` | integer | report 1 in N contention events; 0 disables. Recommended starting point: 100 |
 
 ## output
 

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -139,4 +140,114 @@ func TestEnsureProfilingTokenForSave_KeepsExistingToken(t *testing.T) {
 
 	assert.Equal(t, existing, updated.Diagnostics.Profiling.Token,
 		"an existing token must survive unrelated settings saves")
+}
+
+// The profiling rate tests below must not call t.Parallel(): the block and
+// mutex profile rates are process-global runtime state.
+
+// resetProfileRates restores both runtime sampling rates to off after a test.
+func resetProfileRates(t *testing.T) {
+	t.Helper()
+	t.Cleanup(func() {
+		runtime.SetBlockProfileRate(0)
+		runtime.SetMutexProfileFraction(0)
+	})
+}
+
+// TestProfilingRatesHotReload verifies the rates take effect through the real
+// settings-change path, in both directions, with no restart.
+//
+// The mutex fraction carries the assertion because it is the only one of the
+// two the runtime will read back (a negative argument to
+// SetMutexProfileFraction reports the current value and leaves it alone). There
+// is no equivalent for the block rate; internal/profiling covers that one by
+// showing samples appear.
+func TestProfilingRatesHotReload(t *testing.T) {
+	resetProfileRates(t)
+
+	c := newProfilingTestController(t)
+
+	off := &conf.Settings{}
+	on := &conf.Settings{}
+	on.Diagnostics.Profiling.BlockRate = conf.DefaultBlockProfileRate
+	on.Diagnostics.Profiling.MutexFraction = conf.DefaultMutexProfileFraction
+
+	require.NoError(t, c.handleSettingsChanges(off, on))
+	assert.Equal(t, conf.DefaultMutexProfileFraction, runtime.SetMutexProfileFraction(-1),
+		"turning the rates on must take effect without a restart")
+
+	require.NoError(t, c.handleSettingsChanges(on, off))
+	assert.Zero(t, runtime.SetMutexProfileFraction(-1),
+		"turning the rates back off must take effect without a restart")
+}
+
+// TestProfilingRatesUnchangedByUnrelatedSave pins the change gate. Applying
+// unconditionally would be harmless to the runtime but would log the applied
+// rates on every settings save, so an operator saving a node name would see
+// profiling chatter.
+func TestProfilingRatesUnchangedByUnrelatedSave(t *testing.T) {
+	resetProfileRates(t)
+
+	c := newProfilingTestController(t)
+
+	const sentinel = 777
+	runtime.SetMutexProfileFraction(sentinel)
+
+	before := &conf.Settings{}
+	after := &conf.Settings{}
+	after.Main.Name = "renamed node"
+
+	require.NoError(t, c.handleSettingsChanges(before, after))
+	assert.Equal(t, sentinel, runtime.SetMutexProfileFraction(-1),
+		"a settings change that does not touch the rates must not reapply them")
+}
+
+// TestProfilingRatesChangedScope pins which fields the detector watches.
+// enabled and token deliberately do not trigger it: the pprof routes are gated
+// by middleware reading the live snapshot per request, so they need nothing
+// applied, and treating them as a rate change would reapply sampling every time
+// somebody toggled the endpoint.
+func TestProfilingRatesChangedScope(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		mutate  func(*conf.Settings)
+		changed bool
+	}{
+		{
+			name:   "no change",
+			mutate: func(*conf.Settings) {},
+		},
+		{
+			name:    "block rate",
+			mutate:  func(s *conf.Settings) { s.Diagnostics.Profiling.BlockRate = conf.DefaultBlockProfileRate },
+			changed: true,
+		},
+		{
+			name:    "mutex fraction",
+			mutate:  func(s *conf.Settings) { s.Diagnostics.Profiling.MutexFraction = conf.DefaultMutexProfileFraction },
+			changed: true,
+		},
+		{
+			name:   "endpoint enabled",
+			mutate: func(s *conf.Settings) { s.Diagnostics.Profiling.Enabled = true },
+		},
+		{
+			name:   "token minted",
+			mutate: func(s *conf.Settings) { s.Diagnostics.Profiling.Token = "generated-secret" },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			old := &conf.Settings{}
+			updated := &conf.Settings{}
+			tt.mutate(updated)
+
+			assert.Equal(t, tt.changed, profilingRatesChanged(old, updated))
+		})
+	}
 }

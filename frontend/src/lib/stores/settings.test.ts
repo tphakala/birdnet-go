@@ -712,3 +712,51 @@ describe('Settings Store - syncTLSMode preserves unsaved Security edits', () => 
     expect(s.originalData.security?.basicAuth).toBeDefined();
   });
 });
+
+// The settings store has no TypeScript model for the diagnostics section: there
+// is deliberately no UI for the profiling switches, so nothing here declares
+// them. That makes the section's survival an accident of implementation rather
+// than something anyone states, and the accident is load-bearing.
+//
+// GET /api/v2/settings returns the whole Settings struct, and PUT replaces what
+// it is given: the backend merges the request body field by field over the
+// current config WITHOUT skipping zero values, so a body that omits diagnostics
+// writes 0 over diagnostics.profiling.blockrate and mutexfraction and false
+// over enabled. Sampling that an operator turned on in config.yaml would then be
+// silently switched off the next time anyone saved an unrelated setting from the
+// UI, and the block and mutex profiles would go quietly empty.
+//
+// Two things keep that from happening: object spread in loadSettings copies
+// properties the interfaces do not declare, and coerceSettings returns unknown
+// sections untouched. Both are easy to remove while "cleaning up types".
+describe('Settings Store - Unmodelled Section Round-Trip', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('preserves the diagnostics section through load and save', async () => {
+    const diagnostics = {
+      profiling: {
+        enabled: true,
+        token: '_REDACTED_',
+        blockRate: 10000,
+        mutexFraction: 100,
+      },
+    };
+
+    vi.mocked(settingsAPI.load).mockResolvedValue({
+      main: { name: 'TestNode' },
+      diagnostics,
+    } as unknown as SettingsFormData);
+
+    await settingsActions.loadSettings();
+
+    expect((get(settingsStore).formData as unknown as Record<string, unknown>).diagnostics).toEqual(
+      diagnostics
+    );
+
+    await settingsActions.saveSettings();
+
+    expect(settingsAPI.save).toHaveBeenCalledWith(expect.objectContaining({ diagnostics }));
+  });
+});

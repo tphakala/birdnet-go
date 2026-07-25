@@ -448,8 +448,16 @@ func setDefaultConfig() {
 
 	// Diagnostics: pprof profiling endpoints. Off by default; the token is
 	// generated on demand when profiling is enabled without an auth provider.
+	//
+	// The two sampling rates default to 0, meaning off, and are independent of
+	// the endpoint: serving /debug/pprof must not start charging the audio path
+	// for block and mutex samples. DefaultBlockProfileRate and
+	// DefaultMutexProfileFraction are the values to reach for when turning them
+	// on, not what an unset config resolves to.
 	viper.SetDefault("diagnostics.profiling.enabled", false)
 	viper.SetDefault("diagnostics.profiling.token", "")
+	viper.SetDefault("diagnostics.profiling.blockrate", 0)
+	viper.SetDefault("diagnostics.profiling.mutexfraction", 0)
 }
 
 // setModuleLogDefaults sets default values for a module log configuration

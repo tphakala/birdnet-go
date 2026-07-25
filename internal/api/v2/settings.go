@@ -24,6 +24,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/profiling"
 	"github.com/tphakala/birdnet-go/internal/restart"
 	"github.com/tphakala/birdnet-go/internal/support"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
@@ -2291,6 +2292,38 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		restart.MarkRestartRequired(reason)
 	}
 
+	// Apply the runtime block and mutex sampling rates.
+	//
+	// Deliberately NOT a settingsChangeChecks entry routed through controlChan
+	// like the reconfigure_* actions above. Those exist because the thing being
+	// reconfigured lives in the realtime analysis pipeline and must be touched
+	// from its own goroutine; sendReconfigActions therefore queues them with a
+	// delay between each. These two are process-global runtime calls with no
+	// dependencies and no ordering relationship to anything else, so queueing
+	// them behind a model reload would only add latency, and routing them
+	// through a monitor that exists solely in realtime analysis mode would make
+	// them silently do nothing anywhere else.
+	//
+	// Placed here, after the fallible audio reconfiguration, for the same reason
+	// the restart marks are: a change that is about to be rolled back should not
+	// have left the process sampling. It still runs before conf.SaveSettings, so
+	// a failed disk write leaves the rates applied; that matches how every other
+	// side effect in this function behaves (a failed write equally leaves MQTT
+	// reconnected and the model reloaded) and is not worth a bespoke unwind for
+	// a sampling rate.
+	//
+	// Not in publishAndSaveSettings, which does run after persistence: nothing
+	// that reaches it can carry a diagnostics change. Its only callers are the
+	// TLS, MQTT-TLS and detections writers. handleSettingsChanges is called by
+	// exactly the two handlers that can (UpdateSettings and
+	// UpdateSectionSettings), which makes it the one seam that covers this
+	// section without needing to be remembered at each write path separately.
+	// Getting that backwards is how the token mint first shipped dead; see
+	// ensureProfilingTokenForSave.
+	if profilingRatesChanged(oldSettings, currentSettings) {
+		profiling.ApplyRates(currentSettings)
+	}
+
 	// Trigger reconfigurations asynchronously.
 	// Capture debug flag from the settings snapshot so the goroutine never
 	// reloads settings (which may be republished by a concurrent update).
@@ -2562,6 +2595,20 @@ func birdWeatherSettingsChanged(oldSettings, currentSettings *conf.Settings) boo
 // pushNotificationSettingsChanged checks if push notification settings have changed.
 func pushNotificationSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	return !reflect.DeepEqual(oldSettings.Notification.Push, currentSettings.Notification.Push)
+}
+
+// profilingRatesChanged reports whether either runtime sampling rate differs
+// between the two snapshots.
+//
+// Only the rates. diagnostics.profiling.enabled and .token need no action at
+// all: the pprof routes are registered unconditionally and their middleware
+// reads the live snapshot per request, so those two are observed on the next
+// request without anything being applied here.
+func profilingRatesChanged(oldSettings, currentSettings *conf.Settings) bool {
+	oldProfiling := &oldSettings.Diagnostics.Profiling
+	newProfiling := &currentSettings.Diagnostics.Profiling
+	return oldProfiling.BlockRate != newProfiling.BlockRate ||
+		oldProfiling.MutexFraction != newProfiling.MutexFraction
 }
 
 // telemetrySettingsChanged checks if telemetry/observability settings have changed

@@ -4,22 +4,56 @@ This guide explains how to use the built-in profiling capabilities in BirdNET-Go
 
 ## Prerequisites
 
-- BirdNET-Go running with debug mode enabled
+- BirdNET-Go running with `diagnostics.profiling.enabled` set
 - `go` tool installed on your system (for analyzing profiles)
 
-## Enabling Debug Mode
+## Enabling Profiling
 
-To enable profiling endpoints, you need to run BirdNET-Go with debug mode enabled. Set `debug: true` in your config.yaml:
+Profiling is off by default and is not related to `debug: true`, which controls
+logging verbosity only. Set it in your config.yaml:
 
 ```yaml
-debug: true
+diagnostics:
+  profiling:
+    enabled: true
 ```
 
-When debug mode is enabled:
+The endpoints are served by the main web server, behind whatever authentication
+you have configured. On an instance with no authentication provider, a token is
+generated into `diagnostics.profiling.token` when profiling is switched on, and
+must be passed as a `token=` query parameter. `go tool pprof` preserves query
+parameters, so the one-command workflow still works:
 
-- pprof HTTP endpoints are exposed at `/debug/pprof/`
-- Mutex profiling is enabled to detect lock contention
-- Block profiling is enabled to detect blocking operations
+```bash
+go tool pprof "http://localhost:8080/debug/pprof/heap?token=YOUR_TOKEN"
+```
+
+The setting takes effect immediately, with no restart.
+
+### Block and mutex sampling
+
+The heap, goroutine, CPU and trace profiles need nothing beyond the setting
+above. The block and mutex profiles are different: they require the Go runtime
+to be sampling, which costs CPU on the audio path whether or not anyone ever
+fetches a profile. They are therefore off by default and configured separately:
+
+```yaml
+diagnostics:
+  profiling:
+    blockrate: 10000      # ns of blocked time per sample; 0 disables
+    mutexfraction: 100    # report 1 in N contention events; 0 disables
+```
+
+Note the two have different units. `blockrate` is nanoseconds of blocked time
+per sample, so a larger number samples less. `mutexfraction` reports one in
+every N contention events. Go's own documentation suggests 1 for both, which
+records essentially every event; the values above are the recommended starting
+points and keep enough signal to find a contention problem without recording
+all of it. Both take effect immediately, with no restart.
+
+One caveat when changing a rate on a running instance: lowering or zeroing a
+rate does not discard samples already collected, so a profile taken shortly
+after a change can mix rates.
 
 ## Available Profiling Endpoints
 
@@ -83,7 +117,8 @@ go tool pprof http://localhost:8080/debug/pprof/goroutine
 
 ### 4. Finding Lock Contention
 
-To analyze mutex contention:
+To analyze mutex contention (requires `mutexfraction` to be set; see above, an
+empty profile means sampling was never switched on):
 
 ```bash
 go tool pprof http://localhost:8080/debug/pprof/mutex
@@ -91,7 +126,8 @@ go tool pprof http://localhost:8080/debug/pprof/mutex
 
 ### 5. Analyzing Blocking Operations
 
-To find where goroutines are blocking:
+To find where goroutines are blocking (requires `blockrate` to be set; see
+above, an empty profile means sampling was never switched on):
 
 ```bash
 go tool pprof http://localhost:8080/debug/pprof/block

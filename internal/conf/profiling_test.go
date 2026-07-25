@@ -210,4 +210,118 @@ func TestConfigTemplateShipsProfilingDisabled(t *testing.T) {
 		"profiling must ship disabled")
 	assert.Empty(t, settings.Diagnostics.Profiling.Token,
 		"the shipped template must not carry a profiling token")
+	assert.Zero(t, settings.Diagnostics.Profiling.BlockRate,
+		"block profiling must ship off; sampling costs CPU whether or not a profile is ever fetched")
+	assert.Zero(t, settings.Diagnostics.Profiling.MutexFraction,
+		"mutex profiling must ship off for the same reason")
+}
+
+// TestResolvedRates covers the clamping the two runtime setters need.
+//
+// The mutex case is the one that matters. runtime.SetMutexProfileFraction reads
+// the current fraction and leaves it alone when handed a negative, so passing a
+// negative config value through unclamped would quietly keep mutex profiling at
+// whatever it already was rather than turning it off.
+func TestResolvedRates(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		blockRate         int
+		mutexFraction     int
+		wantBlockRate     int
+		wantMutexFraction int
+	}{
+		{
+			name: "unset resolves to off",
+		},
+		{
+			name:              "explicit values pass through",
+			blockRate:         10000,
+			mutexFraction:     100,
+			wantBlockRate:     10000,
+			wantMutexFraction: 100,
+		},
+		{
+			name:              "the recommended defaults pass through unchanged",
+			blockRate:         DefaultBlockProfileRate,
+			mutexFraction:     DefaultMutexProfileFraction,
+			wantBlockRate:     DefaultBlockProfileRate,
+			wantMutexFraction: DefaultMutexProfileFraction,
+		},
+		{
+			name:              "rate 1 is honoured rather than overridden",
+			blockRate:         1,
+			mutexFraction:     1,
+			wantBlockRate:     1,
+			wantMutexFraction: 1,
+		},
+		{
+			name:          "negatives clamp to off",
+			blockRate:     -1,
+			mutexFraction: -1,
+		},
+		{
+			name:          "large negatives clamp to off",
+			blockRate:     -999999,
+			mutexFraction: -999999,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			profiling := &ProfilingConfig{
+				BlockRate:     tt.blockRate,
+				MutexFraction: tt.mutexFraction,
+			}
+
+			assert.Equal(t, tt.wantBlockRate, profiling.ResolvedBlockRate())
+			assert.Equal(t, tt.wantMutexFraction, profiling.ResolvedMutexFraction())
+		})
+	}
+}
+
+// TestResolvedRatesNilReceiver pins the nil guard. Both resolvers are called
+// from an apply path that walks in from a settings pointer, so a nil section
+// must read as "off" rather than panicking on a diagnostics setting.
+func TestResolvedRatesNilReceiver(t *testing.T) {
+	t.Parallel()
+
+	var profiling *ProfilingConfig
+
+	assert.Zero(t, profiling.ResolvedBlockRate())
+	assert.Zero(t, profiling.ResolvedMutexFraction())
+}
+
+// TestSamplingDefaultsAreNotRateOne is the regression guard for the change that
+// introduced these constants. Both rates used to be set to 1 by debug: true,
+// which records essentially every blocking and contention event. Anyone tempted
+// to "simplify" these constants back toward the Go documentation's rate 1 has to
+// delete this test to do it.
+func TestSamplingDefaultsAreNotRateOne(t *testing.T) {
+	t.Parallel()
+
+	assert.Greater(t, DefaultBlockProfileRate, 1,
+		"the recommended block rate must sample, not record every blocking event")
+	assert.Greater(t, DefaultMutexProfileFraction, 1,
+		"the recommended mutex fraction must sample, not record every contention event")
+}
+
+// TestSamplingDefaultsMatchDocumentedValues keeps the constants in step with the
+// numbers quoted to users.
+//
+// The struct field comments become the generated config schema and the wiki's
+// configuration reference, and config.yaml repeats them, so those places spell
+// the numbers out rather than naming these constants. That is three copies that
+// can drift apart silently; changing a constant without this test would leave
+// the documentation quietly recommending the old value.
+func TestSamplingDefaultsMatchDocumentedValues(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, 10000, DefaultBlockProfileRate,
+		"update the blockrate field comment, config.yaml and doc/PROFILING.md together with this constant")
+	assert.Equal(t, 100, DefaultMutexProfileFraction,
+		"update the mutexfraction field comment, config.yaml and doc/PROFILING.md together with this constant")
 }

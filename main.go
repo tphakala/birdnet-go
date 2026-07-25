@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"runtime"
 	"runtime/pprof"
 	"strings"
 	"time"
@@ -22,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/profiling"
 	"github.com/tphakala/birdnet-go/internal/restart"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
@@ -202,16 +202,16 @@ func mainWithExitCode() int {
 		// Continue - not critical for operation
 	}
 
-	// Enable runtime profiling if debug mode is enabled
-	if settings.Debug {
-		// Enable mutex profiling for detecting lock contention
-		runtime.SetMutexProfileFraction(1)
-
-		// Enable block profiling for detecting blocking operations
-		runtime.SetBlockProfileRate(1)
-
-		mainLog.Debug("Runtime profiling enabled (mutex and block profiling active)")
-	}
+	// Apply the configured block and mutex sampling rates.
+	//
+	// These used to be switched on at rate 1, the most aggressive value the
+	// runtime accepts, whenever debug: true was set. That is a flag people turn
+	// on to get verbose logging while chasing something unrelated, so it charged
+	// the real-time audio path for recording every blocking and contention event
+	// on behalf of users who had not asked for a profile. They are now explicit
+	// settings under diagnostics.profiling, off unless set, and independent of
+	// the pprof endpoint. They hot-reload; see reconfigure_profiling.
+	profiling.ApplyRates(settings)
 
 	// Process configuration validation warnings that occurred before Sentry initialization.
 	//
