@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -526,6 +527,29 @@ func TestBuildHardwareInfo(t *testing.T) {
 // predate the hardware profile and the frontend already reads them, so the
 // extension has to be additive: renaming or retyping any of them is a breaking
 // change this test is here to catch.
+// TestGetInferenceStatus_TFLiteFollowsTheBuildTag pins the endpoint to the
+// compile-time fact rather than a hardcoded true. Hardcoding it fed straight
+// into capability derivation, which would have offered a notflite build models
+// it cannot execute.
+func TestGetInferenceStatus_TFLiteFollowsTheBuildTag(t *testing.T) {
+	t.Parallel()
+
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(httptest.NewRequest(http.MethodGet, "/api/v2/system/inference", http.NoBody), rec)
+	h := &Handler{Core: apitest.NewCore(t)}
+
+	require.NoError(t, h.GetInferenceStatus(ctx))
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp InferenceStatusResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, hwprofile.TFLiteLinked(), resp.Backends.TFLite.Available)
+	assert.Equal(t, hwprofile.TFLiteLinked(),
+		slices.Contains(resp.Hardware.Capabilities, hwprofile.CapTFLite),
+		"the capability token must agree with the backend the build actually links")
+}
+
 func TestHardwareInfo_JSONContract(t *testing.T) {
 	t.Parallel()
 

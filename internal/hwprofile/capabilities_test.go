@@ -179,7 +179,7 @@ func TestProfileCapabilitiesIsPure(t *testing.T) {
 	second := profile.Capabilities()
 
 	// Capabilities is the join key against manifest selection rules, so a second
-	// call has to produce the same tokens; dedupe reuses the backing array and
-	// would corrupt the result if it ever touched profile state.
+	// call has to produce the same tokens. The receiver is a value and dedupe
+	// allocates, so neither can leave residue in the profile between calls.
 	assert.Equal(t, first, second)
 }

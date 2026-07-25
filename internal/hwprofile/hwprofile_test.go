@@ -232,3 +232,48 @@ func TestDetectSIMDMatchesArchitecture(t *testing.T) {
 		}
 	}
 }
+
+// TestHardwareProfileDoesNotShareSlicesWithTheCache is the regression test for
+// the aliasing class: a struct copy duplicates slice headers, not the arrays
+// behind them, so a caller appending to anything on a returned profile would
+// write into the process-global cache and every later caller would see it.
+//
+// Reasons is the subtle one. It is nested inside Accelerator, so cloning the
+// accelerator slice is not enough, and applyAccessibility builds it with spare
+// capacity, which is exactly what makes a stray append land in the cache
+// instead of allocating.
+func TestHardwareProfileDoesNotShareSlicesWithTheCache(t *testing.T) {
+	// Not parallel: it mutates the package-level cache.
+	hardwareMu.Lock()
+	cachedHardware = &Profile{
+		SIMD:   append(make([]string, 0, 2), SIMDAVX2),
+		Issues: append(make([]Issue, 0, 2), Issue{Probe: ProbeBoard, Reason: ReasonReadFailed}),
+		Accelerators: []Accelerator{{
+			Vendor:  VendorAMD,
+			Reasons: append(make([]string, 0, 2), ReasonNoRuntime),
+		}},
+	}
+	hardwareMu.Unlock()
+	t.Cleanup(func() {
+		hardwareMu.Lock()
+		cachedHardware = nil
+		hardwareMu.Unlock()
+	})
+
+	// Writing an existing element, which is what sorting or normalising a
+	// returned slice does. An append would not do: these slices carry spare
+	// capacity, so an append lands past the cached slice's length where a
+	// read of the cache can never observe it, and the test would pass against
+	// the very sharing it is meant to catch.
+	first := hardwareProfile(false)
+	first.SIMD[0] = "scribble"
+	first.Issues[0] = Issue{Probe: ProbeMemory, Reason: ReasonUnavailable}
+	first.Accelerators[0].Reasons[0] = "scribble"
+
+	second := hardwareProfile(false)
+
+	assert.Equal(t, []string{SIMDAVX2}, second.SIMD)
+	assert.Equal(t, []Issue{{Probe: ProbeBoard, Reason: ReasonReadFailed}}, second.Issues)
+	assert.Equal(t, []string{ReasonNoRuntime}, second.Accelerators[0].Reasons,
+		"a write through a returned accelerator must not reach the cached one")
+}

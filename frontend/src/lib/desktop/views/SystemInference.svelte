@@ -616,11 +616,13 @@
                role="group" ties each GPU to its own reason list for a screen
                reader, which DOM order alone does not do once there are two. -->
           {#each snapshot.hardware.accelerators ?? [] as accelerator}
-            <div role="group" aria-label={accelerator.name} class="space-y-1">
+            <div role="group" aria-label={accelerator.name ?? accelerator.vendor} class="space-y-1">
               <div class="flex items-center gap-3 flex-wrap">
                 <span class="text-sm text-muted shrink-0">{t('system.inference.gpu')}</span>
-                <span class="text-sm truncate min-w-0" title={accelerator.name}
-                  >{accelerator.name}</span
+                <span
+                  class="text-sm truncate min-w-0"
+                  title={accelerator.name ?? accelerator.vendor}
+                  >{accelerator.name ?? accelerator.vendor}</span
                 >
                 {#if accelerator.accessible}
                   <StatusPill

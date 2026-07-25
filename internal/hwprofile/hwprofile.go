@@ -258,6 +258,13 @@ func hardwareProfile(force bool) Profile {
 	snapshot.SIMD = slices.Clone(cachedHardware.SIMD)
 	snapshot.Issues = slices.Clone(cachedHardware.Issues)
 	snapshot.Accelerators = slices.Clone(cachedHardware.Accelerators)
+	// Cloning the accelerator slice copies the structs, whose Reasons field is
+	// itself a slice header still pointing at the cached array. applyAccessibility
+	// builds it with spare capacity, so a single append by a caller would land in
+	// the cache.
+	for i := range snapshot.Accelerators {
+		snapshot.Accelerators[i].Reasons = slices.Clone(snapshot.Accelerators[i].Reasons)
+	}
 	return snapshot
 }
 

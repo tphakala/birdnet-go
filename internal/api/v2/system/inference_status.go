@@ -377,7 +377,7 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 
 	// Backends: TFLite is always compiled in; ORT and OpenVINO are probed.
 	// Probed before hardware because the ORT result feeds capability derivation.
-	resp.Backends.TFLite = BackendStatus{Available: true}
+	resp.Backends.TFLite = BackendStatus{Available: hwprofile.TFLiteLinked()}
 	ort := inference.CheckORTAvailability(settings.BirdNET.ONNXRuntimePath)
 	resp.Backends.ONNX = BackendStatus{Available: ort.Available, Initialized: ort.Initialized, Version: ort.Version}
 	ov := inference.CheckOpenVINOAvailability()

@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -116,5 +117,7 @@ func makeUnreadable(t *testing.T, root, rel string) {
 	info, err := os.Stat(full)
 	require.NoError(t, err)
 	require.NoError(t, os.Chmod(full, 0o000))
-	t.Cleanup(func() { _ = os.Chmod(full, info.Mode().Perm()) })
+	t.Cleanup(func() {
+		assert.NoError(t, os.Chmod(full, info.Mode().Perm()), "restoring the mode lets t.TempDir clean up")
+	})
 }

@@ -4,6 +4,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/inference"
 )
 
+// TFLiteLinked reports whether this build links the TensorFlow Lite backend.
+// It is a compile-time fact, decided by the notflite build tag, and is exported
+// so a caller assembling its own Backends does not have to hardcode it: doing so
+// emits the tflite capability token on a build that cannot execute those models.
+func TFLiteLinked() bool { return tfliteLinked }
+
 // deviceCPU is the OpenVINO device name for the host CPU.
 const deviceCPU = "CPU"
 

@@ -17,10 +17,17 @@ const (
 	AcceleratorDGPU = "dgpu"
 )
 
-// Accelerator vendors reported in Accelerator.Vendor.
+// Accelerator vendors reported in Accelerator.Vendor, resolved from the PCI
+// vendor ID in sysfs.
 const (
-	VendorIntel  = "intel"
-	VendorAMD    = "amd"
+	// VendorIntel is an Intel GPU, the only vendor this project can currently
+	// accelerate inference on.
+	VendorIntel = "intel"
+	// VendorAMD is an AMD GPU. Reported for diagnostics; no build ships a ROCm
+	// runtime.
+	VendorAMD = "amd"
+	// VendorNVIDIA is an NVIDIA GPU. Reported for diagnostics; no build ships a
+	// CUDA runtime.
 	VendorNVIDIA = "nvidia"
 )
 
