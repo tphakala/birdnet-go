@@ -95,14 +95,14 @@ search that just runs forward from `diagnostics:` will happily print a
 notification provider's secret instead:
 
 ```bash
-awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*token:/{sub(/\r$/,"");sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*/,"");gsub(/"/,"");print;exit}' config.yaml
+awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*token:/{sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*/,"");gsub(/[[:space:]]|"|\r/,"");print;exit}' config.yaml
 ```
 
 For a container installation the config lives inside the config volume, so read
 it through the container:
 
 ```bash
-docker exec birdnet-go awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*token:/{sub(/\r$/,"");sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*/,"");gsub(/"/,"");print;exit}' /config/config.yaml
+docker exec birdnet-go awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*token:/{sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*/,"");gsub(/[[:space:]]|"|\r/,"");print;exit}' /config/config.yaml
 ```
 
 The host-side copy of that file is under the directory bind-mounted at `/config`
@@ -120,7 +120,7 @@ Every example below assumes the token is in a shell variable. This is the same
 name the collection scripts in `scripts/` read, so exporting it once serves both:
 
 ```bash
-export BIRDNET_PROFILING_TOKEN="$(awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*token:/{sub(/\r$/,"");sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*/,"");gsub(/"/,"");print;exit}' config.yaml)"
+export BIRDNET_PROFILING_TOKEN="$(awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*token:/{sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*/,"");gsub(/[[:space:]]|"|\r/,"");print;exit}' config.yaml)"
 ```
 
 `go tool pprof` has no flag for custom headers, but it does preserve query
@@ -149,38 +149,56 @@ makes the request fail harder than sending nothing.
 Log in with `curl`, keep the session cookie, fetch the profile to a file, and
 analyse the file locally:
 
-```bash
-JAR=$(mktemp)
-read -rs -p 'password: ' PASS; echo
+Run this line on its own first, so the password is not left in your shell history:
 
-curl -s -c "$JAR" http://localhost:8080/ -o /dev/null
+```bash
+read -rs -p 'password: ' PASS; echo
+```
+
+Then the rest:
+
+```bash
+JAR=$(mktemp) || return
+BASE=http://localhost:8080
+
+curl -s -c "$JAR" "$BASE/" -o /dev/null
 
 REDIRECT=$(printf '{"username":"admin","password":"%s"}' "$PASS" |
-  curl -s -b "$JAR" -c "$JAR" -X POST http://localhost:8080/api/v2/auth/login \
+  curl -s -b "$JAR" -c "$JAR" -X POST "$BASE/api/v2/auth/login" \
     -H 'Content-Type: application/json' --data @- |
-  sed -e 's/.*"redirectUrl":"\([^"]*\)".*/\1/' -e 's/\\u0026/\&/g')
-curl -s -b "$JAR" -c "$JAR" -L -o /dev/null "http://localhost:8080$REDIRECT"
+  sed -n 's/.*"redirectUrl":"\([^"]*\)".*/\1/p' | sed 's/\\u0026/\&/g')
 
-curl -s -b "$JAR" -o heap.pprof "http://localhost:8080/debug/pprof/heap"
-go tool pprof heap.pprof
-
+if [ -z "$REDIRECT" ]; then
+  echo 'login failed, or this instance does not require authentication'
+else
+  curl -s -b "$JAR" -c "$JAR" -L -o /dev/null "$BASE$REDIRECT"
+  curl -s -b "$JAR" -o heap.pprof -w 'fetch: %{http_code}\n' "$BASE/debug/pprof/heap"
+fi
 rm -f "$JAR"
 ```
 
+```bash
+go tool pprof heap.pprof
+```
+
 Three steps in there are not obvious and all three are load-bearing. The opening
-`curl` exists only to prime the cookie jar; without it the callback fails and the
-session is never established. The login response carries an OAuth2 callback URL
-that has to be followed before the session cookie is valid, which is the second
-`curl`. And the second `sed` expression is required because Go's JSON encoder
+`curl` primes the cookie jar. The login response carries an OAuth2 callback URL
+that has to be followed before the session cookie is valid, which is the `curl`
+inside the `if`. And the second `sed` is required because Go's JSON encoder
 escapes ampersands, so the raw `redirectUrl` string carries the six characters
 `\u0026` where the URL needs a literal `&`; without that substitution the callback
 receives a mangled query string and returns `401`.
 
+Note the `sed -n` with a trailing `p` rather than a bare substitution. Without it
+a failed login prints the whole error body instead of nothing, `$REDIRECT` is
+never empty, and the flow limps on to write an error page into `heap.pprof`.
+
 The login endpoint is exempt from CSRF, so no token is needed for it. The cookie
-jar holds a live session, which is why it goes in `mktemp` and is deleted at the
-end, and the password is read into a variable and piped rather than passed as an
-argument, so it stays out of `ps` and out of shell history. If `$REDIRECT` comes
-back empty the login failed.
+jar holds a live session, which is why it goes in `mktemp` and is removed as soon
+as the fetch is done, and the password is piped rather than passed as an argument
+so it stays out of `ps`. Reading it with `read -rs` on its own line, before the
+block, keeps it out of shell history and stops the `read` from swallowing the
+next pasted line.
 
 Everything after that is the ordinary two-step fetch-then-analyse workflow, and it
 applies to every endpoint in the table below.
@@ -243,12 +261,19 @@ Useful commands in pprof interactive mode:
 - `top` - show the largest consumers
 - `web` - open an interactive graph in a browser (requires graphviz)
 - `list <function>` - show the annotated source. This one needs the matching
-  source available. Against a release binary the recorded path is
-  module-relative (`-trimpath`), which pprof resolves against the current
-  directory, so running it from the root of a matching checkout works with no
-  extra flags. From anywhere else it reports `could not find file ... on path`;
-  pass `-source_path=<checkout>` in that case. `top` and `web` need nothing but
-  the profile.
+  source available. Every build target passes `-trimpath`, so the recorded path
+  is module-relative (`github.com/tphakala/birdnet-go/internal/...`). pprof
+  resolves that by matching the last element of the module path against the
+  basename of your source directory, so it works with no flags at all from a
+  checkout in a directory named `birdnet-go`. If your directory is named
+  anything else, which is the case for a release tarball
+  (`birdnet-go-<tag>/`) or most `git worktree` layouts, you need both:
+
+  ```bash
+  go tool pprof -trim_path=github.com/tphakala/birdnet-go -source_path=<dir> heap.pprof
+  ```
+
+  `top` and `web` need nothing but the profile.
 
 ### 2. CPU profiling
 
@@ -553,9 +578,9 @@ If the profiling endpoints are not behaving:
    verbosity. If you set it in `config.yaml`, remember it applies at the next
    restart. If the key is set, the instance has been restarted, and you still get
    `404`, your build predates the feature; see Availability above.
-2. **`403`** - You are on an instance with no authentication provider, and the
-   `token=` parameter is missing or wrong. Read the value from `config.yaml`; the
-   API returns that field as `**********` by design.
+2. **`403`** - On an instance with no authentication provider, the `token=`
+   parameter is missing or wrong. Read the value from `config.yaml`; the API
+   returns that field as `**********` by design.
 3. **`401`** - The opposite case: an authentication provider is configured, so the
    token is never consulted and a session or `Bearer` token is required instead.
    `go tool pprof` cannot supply either. Use the login-then-fetch recipe above.
@@ -587,10 +612,10 @@ If the profiling endpoints are not behaving:
     `failed to fetch any source profiles` - the file is 0 bytes because the
     process was hard-killed before the profile was flushed. See the environment
     variable section above.
-12. **`could not find file ... on path` from `list`** - expected against a release
-    binary, which records module-relative paths that pprof resolves against the
-    current directory. Run it from the root of a matching checkout, or pass
-    `-source_path=<checkout>`.
+12. **`could not find file ... on path` from `list`** - expected against any build,
+    since all of them are `-trimpath`ed. Run it from a checkout in a directory
+    named `birdnet-go`, or pass both
+    `-trim_path=github.com/tphakala/birdnet-go` and `-source_path=<dir>`.
 
 For more information about pprof, see the
 [official Go documentation](https://pkg.go.dev/net/http/pprof).

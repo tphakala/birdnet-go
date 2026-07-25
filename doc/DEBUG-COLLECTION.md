@@ -320,7 +320,7 @@ If collection fails:
    ```
 3. Read the profiling token, if the instance has no authentication provider:
    ```bash
-   docker exec <container-name> awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*token:/{sub(/\r$/,"");sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*/,"");gsub(/"/,"");print;exit}' /config/config.yaml
+   docker exec <container-name> awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*token:/{sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*/,"");gsub(/[[:space:]]|"|\r/,"");print;exit}' /config/config.yaml
    ```
 4. Verify port mapping: `docker port <container-name>`
 5. Check container logs: `docker logs <container-name>`
