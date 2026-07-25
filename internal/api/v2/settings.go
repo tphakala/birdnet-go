@@ -726,9 +726,13 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	// existed.
 	skippedFields := restoreBlockedFields(current, updated)
 	if len(skippedFields) > 0 {
+		// Same field key as the PUT path and as the response JSON, so one query
+		// finds a rejection on either verb. The two are still distinguishable:
+		// this one is Warn and fires only on a real rejection, PUT's is Debug and
+		// lists every blocked and runtime-only field on every request.
 		c.LogAPIRequest(ctx, logger.LogLevelWarn, "Rejected update to blocked settings fields",
 			logger.String("section", section),
-			logger.Any("blocked_fields", skippedFields))
+			logger.Any("skipped_fields", skippedFields))
 	}
 
 	// Ensure LocationConfigured is set when birdnet coordinates are present.
