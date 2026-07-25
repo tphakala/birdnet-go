@@ -71,26 +71,35 @@ type CatalogFile struct {
 // information to drive the download process.
 var EmbeddedCatalog = []CatalogEntry{
 	// Wildlife models (multi-taxa classifiers)
+	// BirdNET v3.0 acoustic classifier (developer preview). Global GPU-native model
+	// (EfficientNetV2-S backbone, 11,560 species, 32kHz/5s), paired with the v3.0
+	// geomodel range filter. Kept Hidden until GA: the HuggingFace repo is private
+	// during preview and the file checksums/sizes are finalized in a follow-up (as
+	// was done for Perch v2), so the gallery Install path is not wired yet. The
+	// backend loader is fully functional, so v3.0 can be enabled via config
+	// (models.enabled + birdnetv3 model/label paths) for evaluation. The empty
+	// SHA256 on this hidden entry is intentional: it avoids a false checksum
+	// mismatch and, being Hidden, the entry is never installed from the gallery.
 	{
 		ID:              "birdnet-v3.0",
 		Name:            "BirdNET v3.0",
-		Description:     "Global wildlife classifier using BirdNET v3.0 architecture",
+		Description:     "Global wildlife classifier using the BirdNET v3.0 architecture (11,560 species, birds and other fauna; scientific and common names)",
 		Author:          "Cornell Lab of Ornithology & Chemnitz University of Technology",
-		License:         "TBD",
+		License:         "CC-BY-SA-4.0",
 		CommercialUse:   false,
 		Category:        CategoryWildlife,
 		Region:          "",
-		SpeciesCount:    0, // determined at runtime from label file
+		SpeciesCount:    11560,
 		Version:         "3.0",
 		GeomodelVersion: "v3",
 		RegistryID:      RegistryIDBirdNETV3,
 		Hidden:          true,
 		RequiresONNX:    true,
 		UpstreamURL:     "https://github.com/birdnet-team/BirdNET-Analyzer",
-		HuggingFaceRepo: "tphakala/BirdNET-v3.0",
+		HuggingFaceRepo: "tphakala/BirdNET-v3.0-Models",
 		Files: slices.Concat([]CatalogFile{
-			{RemotePath: "birdnet_v3.0.onnx", LocalName: "birdnet_v3.0.onnx", Role: RoleModel, SHA256: "", SizeBytes: 0},
-			{RemotePath: "labels.txt", LocalName: "birdnet_v3.0_labels.txt", Role: RoleLabels, SHA256: "", SizeBytes: 0},
+			{RemotePath: "full/birdnet_v3.0_fp32.onnx", LocalName: "birdnet_v3.0_fp32.onnx", Role: RoleModel, SHA256: "", SizeBytes: 0},
+			{RemotePath: "full/birdnet_v3.0_labels.txt", LocalName: "birdnet_v3.0_labels.txt", Role: RoleLabels, SHA256: "", SizeBytes: 0},
 		}, geomodelFiles(), taxonomyFiles()),
 	},
 	{
@@ -136,6 +145,67 @@ var EmbeddedCatalog = []CatalogEntry{
 			{RemotePath: "BSG_birds_Finland_v4_4_calibration.csv", LocalName: "BSG_birds_Finland_v4_4_calibration.csv", Role: RoleData, SHA256: "b248ca8dac8205b427604ccc2832afdc2ab4672653c7e35ca78f44cc36ee5b28", SizeBytes: 6800},
 			{RemotePath: "BSG_birds_Finland_v4_4_distribution.bin", LocalName: "BSG_birds_Finland_v4_4_distribution.bin", Role: RoleData, SHA256: "0617f19f3eca7f7bc409e3d853d742a171a835464862dc3ced2f5b72ef3093f5", SizeBytes: 25828768},
 			{RemotePath: "BSG_birds_Finland_v4_4_migration.csv", LocalName: "BSG_birds_Finland_v4_4_migration.csv", Role: RoleData, SHA256: "a3fdbfc744645f6945def7fbfa3ee19e347c31d1b46ae78fba75e7059b54a86b", SizeBytes: 17054},
+		},
+	},
+
+	// BirdNET v2.4 DFT-truncated variants: opt-in, faster drop-in files for the
+	// primary classifier. DFT-bin truncation drops the mel-DFT bins the filterbank
+	// discards, so the output is bit-exact (single classification head, unchanged
+	// labels) while CPU/OpenVINO inference is about 1.4-2x faster. The files are
+	// published under NEW HuggingFace filenames, so existing installs are untouched.
+	//
+	// These entries are Hidden on purpose. The primary BirdNET v2.4 classifier is
+	// resolved at startup from config and the standard model paths (see NewBirdNET),
+	// NOT from the gallery, and nothing in the install path wires an installed file
+	// into BirdNET.ModelPath or hot-swaps the primary model. A visible "Install"
+	// button would therefore download a file that nothing activates. So these entries
+	// only record the authoritative checksums, sizes, and repo paths as a catalog
+	// foundation; a future primary-variant selector (tracked separately) will make
+	// them selectable. RegistryID is the permanent BirdNET v2.4 ID because these ARE
+	// that model in an alternate file: being Hidden they are never hot-loaded (there
+	// is no secondary loader for the primary), and Uninstall refuses them via the
+	// permanent-model guard. Labels are the embedded v2.4 set (data/labels/V2.4), so
+	// no labels file is downloaded. If a power user points birdnet.modelpath at a
+	// manually fetched file, the primary loader uses it as-is (remapV24ToONNXOnARM64
+	// honors an explicit CustomPath).
+	{
+		ID:              "birdnet-v2.4-fp32-dfttrunc",
+		Name:            "BirdNET v2.4 (DFT-truncated, FP32)",
+		Description:     "Drop-in BirdNET v2.4 classifier with DFT-bin truncation: bit-exact output, about 1.4-2x faster CPU and OpenVINO inference. FP32 ONNX for OpenVINO (A76/Pi5, amd64 CPU and Intel iGPU).",
+		Author:          "Cornell Lab of Ornithology & Chemnitz University of Technology",
+		License:         "CC-BY-NC-SA-4.0",
+		CommercialUse:   false,
+		Category:        CategoryBird,
+		Region:          "",
+		SpeciesCount:    0, // determined at runtime from the embedded v2.4 labels (no labels file is downloaded)
+		Version:         "2.4",
+		RegistryID:      permanentRegistryID,
+		Hidden:          true,
+		RequiresONNX:    true,
+		UpstreamURL:     "https://github.com/birdnet-team/BirdNET-Analyzer",
+		HuggingFaceRepo: "tphakala/BirdNET-v2.4",
+		Files: []CatalogFile{
+			{RemotePath: "BirdNET_v2.4_fp32_dfttrunc.onnx", LocalName: "BirdNET_v2.4_fp32_dfttrunc.onnx", Role: RoleModel, SHA256: "3b72e88b3ad0c310a41adabccf8cf75b1a05daeeb40884ebd38038c91d0e423d", SizeBytes: 54068648},
+		},
+	},
+	{
+		ID:              "birdnet-v2.4-int8-arm-dfttrunc",
+		Name:            "BirdNET v2.4 (DFT-truncated, INT8 ARM)",
+		Description:     "Drop-in BirdNET v2.4 classifier with DFT-bin truncation: bit-exact output, about 1.4-2x faster inference. INT8 ONNX for low-RAM ARM via ONNX Runtime (Pi4/Pi3, no native f16).",
+		Author:          "Cornell Lab of Ornithology & Chemnitz University of Technology",
+		License:         "CC-BY-NC-SA-4.0",
+		CommercialUse:   false,
+		Category:        CategoryBird,
+		Region:          "",
+		SpeciesCount:    0, // determined at runtime from the embedded v2.4 labels (no labels file is downloaded)
+		Version:         "2.4",
+		RegistryID:      permanentRegistryID,
+		Hidden:          true,
+		RequiresONNX:    true,
+		UpstreamURL:     "https://github.com/birdnet-team/BirdNET-Analyzer",
+		HuggingFaceRepo: "tphakala/BirdNET-v2.4",
+		Files: []CatalogFile{
+			{RemotePath: "BirdNET_v2.4_int8_arm_dfttrunc.onnx", LocalName: "BirdNET_v2.4_int8_arm_dfttrunc.onnx", Role: RoleModel, SHA256: "7550498ba996064feca12005ff4133eb1d35741c4061376e7a987d8227518893", SizeBytes: 38727042},
 		},
 	},
 
@@ -185,9 +255,17 @@ var EmbeddedCatalog = []CatalogEntry{
 }
 
 // Shared BirdNET v2.4 embeddings model, used by all BattyBirdNET classifiers.
+// This is the DFT-truncated variant (remote birdnet-v2.4-embeddings-fp32-dfttrunc.onnx):
+// bit-exact with the original 2-output backbone (embedding max|delta| = 0.0, identical
+// output order, so no inference-code change) but about 2x faster on CPU and roughly 8 MB
+// smaller. The local filename is deliberately kept as birdnet-v24-embeddings.onnx so
+// existing installs keep their on-disk shared/birdnet-v24-embeddings.onnx: the startup
+// scan only stats each bat model's own regional file and never inspects or re-verifies
+// the shared embeddings file, so nothing is flagged, and installs upgrade transparently
+// the next time a bat model is reinstalled or another bat region is installed.
 const (
-	embeddingsSHA256          = "b6b8f24dc9c3d43f2deb14a6f2c7b5b233e7477b6baf1b52341291e714903fb0"
-	embeddingsSizeBytes int64 = 66932350
+	embeddingsSHA256          = "b91139d3c63d55d742779a56531078bc88366a09bcc9bd6a9b703d425914c380"
+	embeddingsSizeBytes int64 = 58763257
 )
 
 // Shared v3.0 geomodel, used as range filter companion by Perch v2 and BirdNET v3.0.
@@ -366,7 +444,9 @@ func batCatalogEntry(id, name, region string, speciesCount int, fileRegion strin
 				SizeBytes:  checksums.labelsSize,
 			},
 			{
-				RemotePath: "birdnet-v24-embeddings.onnx",
+				// RemotePath is the DFT-truncated backbone; LocalName stays the
+				// original filename for drop-in compatibility (see embeddingsSHA256).
+				RemotePath: "birdnet-v2.4-embeddings-fp32-dfttrunc.onnx",
 				LocalName:  "birdnet-v24-embeddings.onnx",
 				Role:       RoleEmbeddings,
 				SHA256:     embeddingsSHA256,

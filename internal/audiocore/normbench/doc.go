@@ -2,11 +2,26 @@
 // native Go loudness normalization (audiocore/audionorm plus audiocore/pcmgain)
 // against FFmpeg's loudnorm filter on the same PCM.
 //
+// The export path no longer normalises with FFmpeg at all: it plans a gain in Go
+// and, for the formats FFmpeg still encodes, hands that gain over as a plain
+// volume filter. So loudnorm now exists here only as a reference point, built by
+// the harness itself (loudnormFilter in compare_test.go) rather than borrowed
+// from production. Keeping the comparison is the point: it is what says the
+// removal did not change what listeners hear.
+//
 // It has no production code. The harness lives behind the "normcompare" build
 // tag so it never runs in CI, where FFmpeg availability would make the numbers
 // meaningless. Run it deliberately:
 //
 //	go test -tags normcompare -v ./internal/audiocore/normbench/
+//
+// Two harnesses run under that tag:
+//
+//   - TestCompareNormalization compares gain planning through a lossless FLAC
+//     output, isolating the normalisation decision from codec loss.
+//   - TestCompareLossyFormats runs both paths end to end for MP3, AAC and Opus,
+//     the formats FFmpeg still encodes, and reports the per-format loudness delta
+//     between the old loudnorm path and the resolved-gain path that replaced it.
 //
 // It needs an ffmpeg binary on PATH (or in BIRDNET_NORMCOMPARE_FFMPEG) and a
 // corpus of real recordings. Synthetic tones are deliberately not used: the two

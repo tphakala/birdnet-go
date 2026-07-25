@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -19,7 +18,6 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
-	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
@@ -224,7 +222,7 @@ func BuildProcessingFilterChain(f AudioFilters) string {
 
 	// 2. Normalize (loudnorm).
 	if f.Normalize {
-		if f.LoudnessStats != nil && f.LoudnessStats.isValid() {
+		if f.LoudnessStats != nil && f.LoudnessStats.IsValid() {
 			// Pass 2: apply with measured values using linear normalisation.
 			filters = append(filters, fmt.Sprintf(
 				"loudnorm=I=%.1f:LRA=%.1f:TP=%.1f:measured_I=%s:measured_LRA=%s:measured_TP=%s:measured_thresh=%s:linear=true:offset=%s",
@@ -242,13 +240,11 @@ func BuildProcessingFilterChain(f AudioFilters) string {
 		}
 	}
 
-	// 3. Gain (volume).
-	if f.GainDB != 0 && !math.IsNaN(f.GainDB) {
-		sign := "+"
-		if f.GainDB < 0 {
-			sign = ""
-		}
-		filters = append(filters, fmt.Sprintf("volume=%s%.1fdB", sign, f.GainDB))
+	// 3. Gain (volume). Rendered by the same helper the export path uses, so the
+	// two filter builders in this package cannot drift in precision or sign
+	// handling again.
+	if f.GainDB != 0 && IsValidGainDB(f.GainDB) {
+		filters = append(filters, buildVolumeFilter(f.GainDB))
 	}
 
 	return strings.Join(filters, ",")
@@ -268,9 +264,9 @@ type LoudnessStats struct {
 	TargetOffset      string `json:"target_offset"` // Not used for 2-pass.
 }
 
-// isValid returns true if the measured loudness stats contain valid numeric values.
+// IsValid returns true if the measured loudness stats contain valid numeric values.
 // This prevents injection of malformed values into FFmpeg filter chains.
-func (s *LoudnessStats) isValid() bool {
+func (s *LoudnessStats) IsValid() bool {
 	for _, v := range []string{s.InputI, s.InputTP, s.InputLRA, s.InputThresh, s.TargetOffset} {
 		f, err := strconv.ParseFloat(v, 64)
 		if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
@@ -359,27 +355,6 @@ func parseLoudnessJSON(stderr string) (*LoudnessStats, error) {
 	}
 
 	return &stats, nil
-}
-
-// AnalyzePCMLoudness analyzes the loudness of raw mono PCM audio data using
-// FFmpeg's loudnorm filter. It writes pcmData to a temporary WAV file, runs
-// loudness analysis via AnalyzeFileLoudness, and cleans up the temp file.
-// sampleRate and bitDepth describe the PCM encoding (e.g. 48000, 16).
-func AnalyzePCMLoudness(ctx context.Context, pcmData []byte, ffmpegPath string, sampleRate, bitDepth int) (*LoudnessStats, error) {
-	if len(pcmData) == 0 {
-		return nil, fmt.Errorf("empty PCM data provided for loudness analysis")
-	}
-
-	// Write PCM to a temporary WAV file so AnalyzeFileLoudness can process it.
-	tempDir := os.TempDir()
-	wavPath := filepath.Join(tempDir, fmt.Sprintf("birdnet-loudness-%d.wav", time.Now().UnixNano()))
-	defer os.Remove(wavPath) //nolint:errcheck // best-effort cleanup
-
-	if err := convert.SavePCMDataToWAV(wavPath, pcmData, sampleRate, bitDepth); err != nil {
-		return nil, fmt.Errorf("failed to write temp WAV for loudness analysis: %w", err)
-	}
-
-	return AnalyzeFileLoudness(ctx, wavPath, ffmpegPath, AudioFilters{}, nil)
 }
 
 // processingTimeout is the maximum time allowed for the entire processing operation
@@ -577,6 +552,15 @@ func buildOutputArgs(args []string, cfg *StreamConfig) []string {
 	return args
 }
 
+// channelModeLeft and channelModeRight are the ChannelMode values that make
+// appendChannelArgs insert a pan filter and force mono output. They are shared
+// with effectiveOutputChannels so the frame-size derivation and the argument
+// builder cannot drift apart.
+const (
+	channelModeLeft  = "left"
+	channelModeRight = "right"
+)
+
 // appendChannelArgs appends the appropriate FFmpeg channel selection flags.
 // When channelMode is "left" or "right" and the source has >1 channel,
 // it uses a pan filter to extract the selected channel. Falls back to
@@ -584,13 +568,28 @@ func buildOutputArgs(args []string, cfg *StreamConfig) []string {
 func appendChannelArgs(args []string, channelMode string, sourceChannels int, numChannels string) []string {
 	if sourceChannels > 1 {
 		switch strings.ToLower(channelMode) {
-		case "left":
+		case channelModeLeft:
 			return append(args, "-af", "pan=mono|c0=c0", "-ac", "1")
-		case "right":
+		case channelModeRight:
 			return append(args, "-af", "pan=mono|c0=c1", "-ac", "1")
 		}
 	}
 	return append(args, "-ac", numChannels)
+}
+
+// effectiveOutputChannels returns the channel count of the PCM stream FFmpeg
+// actually emits for cfg. The left and right channel modes make
+// appendChannelArgs pan a multi-channel source down to mono regardless of
+// cfg.Channels, so readers of the output stream must use this, not the
+// configured count. Every other configuration emits cfg.Channels unchanged.
+func effectiveOutputChannels(cfg *StreamConfig) int {
+	if cfg.SourceChannels > 1 {
+		switch strings.ToLower(cfg.ChannelMode) {
+		case channelModeLeft, channelModeRight:
+			return 1
+		}
+	}
+	return cfg.Channels
 }
 
 // buildInputArgs constructs the pre-input FFmpeg flags (transport, timeout, extra parameters).

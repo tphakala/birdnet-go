@@ -71,6 +71,9 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	// --- Perch ---
 	"Perch": {categories: []hotReloadCategory{hotReloadRestart}},
 
+	// --- BirdNET v3.0 ---
+	"BirdNETV3": {categories: []hotReloadCategory{hotReloadRestart}},
+
 	// --- Bat ---
 	"Bat": {categories: []hotReloadCategory{hotReloadFresh}},
 

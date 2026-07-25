@@ -1708,7 +1708,8 @@ func (r *detectionRepository) GetDetectionTrends(ctx context.Context, period str
 	return r.GetDailyAnalytics(ctx, startTime, now, tzOffsetSeconds, nil, modelID)
 }
 
-// GetNewSpecies returns species detected for the first time ever within the range.
+// GetNewSpecies returns species detected for the first time ever within the range, false positives
+// excluded, so a species whose qualifying detections were all reviewed away is not reported as new.
 // Groups by scientific_name to aggregate across all models for the same species.
 // Uses MIN(id) as tie-breaker to avoid duplicates when multiple detections share the same timestamp.
 func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int64, limit, offset int) ([]NewSpeciesData, error) {
@@ -1720,6 +1721,12 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 	// Approach: Use a derived table to compute lifetime first detection per species,
 	// then filter and join back to get detection details. This is O(n) instead of
 	// the O(n²) correlated subquery approach.
+	// Both levels exclude false positives (same filter as buildAnalyticsBaseQuery): the derived table
+	// so a reviewed-away detection cannot pin a species' lifetime first-seen (or make an
+	// all-false-positive species look new at all), and the outer join so the reported
+	// detection_id/confidence never come from a false-positive row sharing that timestamp.
+	// DetectionReview has a unique index on detection_id, so neither LEFT JOIN multiplies rows.
+	fpFilter := string(entities.VerificationFalsePositive)
 	rawSQL := fmt.Sprintf(`
 		SELECT
 			MIN(d.label_id) as label_id,
@@ -1735,17 +1742,21 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 				MAX(d2.detected_at) as lifetime_last
 			FROM %s d2
 			JOIN %s l2 ON l2.id = d2.label_id
+			LEFT JOIN %s dr2 ON dr2.detection_id = d2.id
+			WHERE (dr2.verified IS NULL OR dr2.verified != ?)
 			GROUP BY l2.scientific_name
 			HAVING MIN(d2.detected_at) >= ? AND MIN(d2.detected_at) < ?
 		) species_first
 		JOIN %s l ON l.scientific_name = species_first.scientific_name
 		JOIN %s d ON d.label_id = l.id AND d.detected_at = species_first.lifetime_first
-		GROUP BY species_first.scientific_name, species_first.lifetime_first
+		LEFT JOIN %s dr ON dr.detection_id = d.id
+		WHERE (dr.verified IS NULL OR dr.verified != ?)
+		GROUP BY species_first.scientific_name, species_first.lifetime_first, species_first.lifetime_last
 		ORDER BY first_detected DESC
 		LIMIT ? OFFSET ?
-	`, r.tableName(), r.labelsTable(), r.labelsTable(), r.tableName())
+	`, r.tableName(), r.labelsTable(), r.reviewsTable(), r.labelsTable(), r.tableName(), r.reviewsTable())
 
-	err := r.db.WithContext(ctx).Raw(rawSQL, start, end, limit, offset).Scan(&results).Error
+	err := r.db.WithContext(ctx).Raw(rawSQL, fpFilter, start, end, fpFilter, limit, offset).Scan(&results).Error
 	return results, err
 }
 

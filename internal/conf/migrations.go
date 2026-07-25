@@ -405,15 +405,14 @@ func (s *Settings) applyModelValidation() error {
 	// Default known IDs - matches classifier.KnownConfigIDs() at compile time.
 	// This fallback is used during config loading before the classifier package
 	// is available. The orchestrator re-validates with the authoritative list.
-	knownIDs := map[string]bool{ModelIDBirdNET: true, ModelIDPerchV2: true, ModelIDBat: true, ModelIDBSG: true}
+	knownIDs := map[string]bool{ModelIDBirdNET: true, ModelIDBirdNETV3: true, ModelIDPerchV2: true, ModelIDBat: true, ModelIDBSG: true}
 	modelIssues := s.ValidateModelConfig(knownIDs, false)
 	var fatalErrors []string
 	for _, issue := range modelIssues {
 		if strings.HasPrefix(issue, "error:") {
 			fatalErrors = append(fatalErrors, strings.TrimPrefix(issue, "error: "))
 		} else {
-			GetLogger().Warn("model configuration issue", logger.String("issue", issue))
-			s.ValidationWarnings = append(s.ValidationWarnings, issue)
+			s.recordValidationWarning(warnComponentModels, "%s", strings.TrimPrefix(issue, "warning: "))
 		}
 	}
 	if len(fatalErrors) > 0 {
@@ -515,9 +514,9 @@ func (s *Settings) ReconcileMisplacedAudioSources() bool {
 		}
 
 		if src.SampleRate > 0 {
-			s.ValidationWarnings = append(s.ValidationWarnings,
-				fmt.Sprintf("audio source %q sample rate %d Hz was not carried to stream %q: stream sample rate is auto-detected",
-					src.Name, src.SampleRate, privacy.SanitizeStreamUrl(device)))
+			s.recordValidationWarning(warnComponentStreams,
+				"audio source %q sample rate %d Hz was not carried to stream %q; a stream's sample rate is auto-detected",
+				src.Name, src.SampleRate, privacy.SanitizeStreamUrl(device))
 		}
 
 		changed = true
@@ -575,9 +574,9 @@ func (s *Settings) appendStreamFromSource(src *AudioSourceConfig, url, streamTyp
 		Models:     src.Models,
 	})
 
-	s.ValidationWarnings = append(s.ValidationWarnings,
-		fmt.Sprintf("moved misplaced stream URL %q from realtime.audio.sources to realtime.rtsp.streams as %q",
-			privacy.SanitizeStreamUrl(url), name))
+	s.recordValidationWarning(warnComponentStreams,
+		"moved misplaced stream URL %q from realtime.audio.sources to realtime.rtsp.streams as %q",
+		privacy.SanitizeStreamUrl(url), name)
 }
 
 // uniqueStreamName derives a stream name from the requested source name that
@@ -689,7 +688,7 @@ func (s *Settings) mergeSourceIntoStream(src *AudioSourceConfig, stream *StreamC
 		kept = append(kept, "quietHours")
 	}
 
-	s.ValidationWarnings = append(s.ValidationWarnings,
+	s.recordValidationWarning(warnComponentStreams, "%s",
 		formatReconcileMergeWarning(privacy.SanitizeStreamUrl(url), stream.Name, applied, kept))
 }
 

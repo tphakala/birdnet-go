@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	diagpkg "github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -775,6 +776,53 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 	return buf.Bytes(), nil
 }
 
+// collectRuntimeEnv reads the environment variables on the supplied allowlist
+// that are set, so a dump can report runtime behaviour that config.yaml does not
+// record (see the allowlist's own comment for why the gates are invisible
+// otherwise, and why this is an allowlist rather than a prefix scan).
+//
+// Variables that are unset OR set to the empty string are both skipped, so the
+// map is nil-and-omitted on the overwhelmingly common install where no gate is
+// set, instead of adding a block of empty strings to every dump. os.Getenv
+// cannot tell those two states apart, and for these gates nothing does: an
+// empty value fails nativeEncoderSelected exactly as an unset one does, so a
+// dump loses no triage signal by collapsing them.
+//
+// Values are redacted by key even though the allowlist is supposed to make that
+// unnecessary. SystemInfo is the one dump section no scrubber touches: it has
+// only ever held machine-derived facts (GOOS, CPU count, disk usage), so
+// scrubConfig and AnonymizePII both pass it by, and these values are the first
+// operator-supplied strings to land in it. The allowlist is currently the only
+// thing keeping a secret out, and it is a list a future maintainer will extend
+// while thinking "a path is not a password" (BIRDNET_MODELPATH under a home
+// directory, or an MQTT URL with embedded credentials, would both be plausible
+// additions). Every other env-capture route in this package already redacts by
+// key: scrubEnvironmentLine does it for systemd unit-file Environment= lines.
+// This costs nothing today and makes a bad future allowlist entry fail safe
+// rather than silently upload a credential to a third party.
+//
+// A method rather than a free function purely so it can reach c.sensitiveKeys.
+// The allowlist is a parameter rather than read inline so a test can inject the
+// entry a future maintainer might wrongly add, and prove the net catches it.
+func (c *Collector) collectRuntimeEnv(allowlist []string) map[string]string {
+	var env map[string]string
+	for _, name := range allowlist {
+		value := os.Getenv(name)
+		if value == "" {
+			continue
+		}
+		if env == nil {
+			env = make(map[string]string, len(allowlist))
+		}
+		if MatchesSensitiveKey(name, c.sensitiveKeys) {
+			env[name] = redactedPlaceholder
+			continue
+		}
+		env[name] = value
+	}
+	return env
+}
+
 // collectSystemInfo gathers system information
 func (c *Collector) collectSystemInfo() SystemInfo {
 	info := SystemInfo{
@@ -783,6 +831,7 @@ func (c *Collector) collectSystemInfo() SystemInfo {
 		GoVersion:    runtime.Version(),
 		CPUCount:     runtime.NumCPU(),
 		DiskInfo:     []DiskInfo{},
+		RuntimeEnv:   c.collectRuntimeEnv(conf.SupportEnvAllowlist()),
 	}
 
 	// Get system memory info using gopsutil

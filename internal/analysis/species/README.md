@@ -99,7 +99,7 @@ The tracker manages three independent time periods:
 
 Each period has a configurable "new species" window:
 
-- **Lifetime Window**: Days after first-ever detection (default: 14 days)
+- **Lifetime Window**: Days after first-ever detection (default: 7 days)
 - **Yearly Window**: Days after first detection this year
 - **Seasonal Window**: Days after first detection this season
 

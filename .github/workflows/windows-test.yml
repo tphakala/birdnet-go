@@ -168,7 +168,12 @@ jobs:
           # ~2000 tests) intermittently exceeded the old 600s per-package ceiling
           # under runner load (cumulative race-instrumented work, not a deadlock).
           # 900s adds headroom and stays under the 25m step cap below.
-          go test -tags noembed,skipfrontend -race -json -v -short -timeout 900s ./... > gotest.log 2>&1
+          # goaac_simd matches BASE_BUILD_TAGS in Taskfile.yml, so the AAC tests
+          # compile the same kernel set the shipped windows/amd64 binary does.
+          # Which kernel actually executes still depends on the runner's CPU
+          # features (AVX2 for the trellis, AVX/SSE2 for AbsPow34), not on the tag.
+          # This job is advisory: continue-on-error, and on a PR it needs full-ci.
+          go test -tags noembed,skipfrontend,goaac_simd -race -json -v -short -timeout 900s ./... > gotest.log 2>&1
           TEST_EXIT_CODE=$?
           grep '"Action":"fail"' gotest.log | jq -r 'select(.Test) | "FAIL  \(.Package)  \(.Test)"' | sort -u || true
 

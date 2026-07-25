@@ -499,6 +499,29 @@
       "additionalProperties": false,
       "type": "object"
     },
+    "BirdNETV3Config": {
+      "properties": {
+        "modelpath": {
+          "type": "string",
+          "description": "path to BirdNET v3.0 ONNX model file"
+        },
+        "labelpath": {
+          "type": "string",
+          "description": "path to BirdNET v3.0 label file"
+        },
+        "threshold": {
+          "type": "number",
+          "description": "confidence threshold for detections"
+        },
+        "locale": {
+          "type": "string",
+          "description": "locale for species label translation"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "BirdNETV3Config holds configuration for the BirdNET v3.0 acoustic classifier."
+    },
     "BirdweatherSettings": {
       "properties": {
         "enabled": {
@@ -1344,7 +1367,7 @@
         },
         "loudnessrange": {
           "type": "number",
-          "description": "loudness range in LU (default: 7)"
+          "description": "Deprecated: no longer applied; retained so existing configs keep loading."
         },
         "truepeak": {
           "type": "number",
@@ -1353,7 +1376,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "description": "NormalizationSettings contains audio normalization configuration based on EBU R128 standard"
+      "description": "NormalizationSettings contains audio normalization configuration based on EBU R128 standard."
     },
     "NotificationConfig": {
       "properties": {
@@ -1974,7 +1997,7 @@
         },
         "windowdays": {
           "type": "integer",
-          "description": "Days to show \"new this season\" indicator (default: 21)"
+          "description": "Days to show \"new this season\" indicator (default: 7)"
         },
         "seasons": {
           "oneOf": [
@@ -2131,6 +2154,10 @@
         "perch": {
           "$ref": "#/$defs/PerchConfig",
           "description": "Perch v2 model configuration"
+        },
+        "birdnetv3": {
+          "$ref": "#/$defs/BirdNETV3Config",
+          "description": "BirdNET v3.0 acoustic classifier configuration"
         },
         "bat": {
           "$ref": "#/$defs/BatConfig",
@@ -2388,7 +2415,7 @@
         },
         "newspecieswindowdays": {
           "type": "integer",
-          "description": "Days to consider a species \"new\" (default: 14)"
+          "description": "Days to consider a species \"new\" (default: 7)"
         },
         "syncintervalminutes": {
           "type": "integer",
@@ -2793,7 +2820,7 @@
         },
         "windowdays": {
           "type": "integer",
-          "description": "Days to show \"new this year\" indicator (default: 30)"
+          "description": "Days to show \"new this year\" indicator (default: 7)"
         }
       },
       "additionalProperties": false,

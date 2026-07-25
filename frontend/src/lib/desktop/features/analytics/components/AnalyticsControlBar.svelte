@@ -261,7 +261,7 @@
       <p id="analyticsSpeciesHint" class="mb-2 text-xs text-[var(--color-base-content)]/60">
         {t('analytics.advanced.speciesSelectionHint')}
       </p>
-      <div class="w-full min-h-[100px] relative">
+      <div class="w-full relative">
         <SpeciesSelector
           species={availableSpecies}
           selected={params.species}

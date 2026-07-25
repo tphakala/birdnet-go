@@ -30,7 +30,13 @@
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import BaseChart from './BaseChart.svelte';
   import { createLinearScale } from './utils/scales';
-  import { createAxis, styleAxis, addAxisLabel, createHourAxisFormatter } from './utils/axes';
+  import {
+    createAxis,
+    styleAxis,
+    addAxisLabel,
+    createHourAxisFormatter,
+    hourAxisTickValues,
+  } from './utils/axes';
   import { ChartTooltip } from './utils/interactions';
   import type { ChartTheme } from './utils/theme';
   import { getSpeciesColor, registerChart } from './utils/speciesColor';
@@ -192,7 +198,13 @@
     }
     if (!Number.isFinite(yMin) || !Number.isFinite(yMax) || yMax - yMin < MIN_Y_SPAN) return;
 
-    const xScale = createLinearScale({ domain: [0, SUCCESSION_HOURS - 1], range: [0, innerWidth] });
+    // nice: false - the hour domain is exact; rounding it outward would leave the final hour short
+    // of the right edge and open a gap the bands never reach.
+    const xScale = createLinearScale({
+      domain: [0, SUCCESSION_HOURS - 1],
+      range: [0, innerWidth],
+      nice: false,
+    });
     const yScale = scaleLinear().domain([yMin, yMax]).range([innerHeight, 0]);
 
     // X axis: sampled hour ticks along the bottom. No y-axis (the wiggle baseline is meaningless).
@@ -201,9 +213,7 @@
       orientation: 'bottom',
       tickFormat: (d: AxisDomain) => hourFmt(Number(d)),
     });
-    xAxis.tickValues(
-      Array.from({ length: Math.ceil(SUCCESSION_HOURS / X_TICK_STEP) }, (_, i) => i * X_TICK_STEP)
-    );
+    xAxis.tickValues(hourAxisTickValues(SUCCESSION_HOURS - 1, X_TICK_STEP));
     const xAxisGroup = chartGroup
       .append('g')
       .attr('class', 'x-axis')

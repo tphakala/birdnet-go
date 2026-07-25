@@ -54,12 +54,18 @@ type ExportSettings struct {
 	Normalization NormalizationSettings `yaml:"normalization" json:"normalization" mapstructure:"normalization"` // audio normalization settings (EBU R128)
 }
 
-// NormalizationSettings contains audio normalization configuration based on EBU R128 standard
+// NormalizationSettings contains audio normalization configuration based on EBU R128 standard.
+//
+// Clip normalization applies a single linear gain to reach TargetLUFS without
+// exceeding TruePeak (internal/audiocore/audionorm). There is no dynamic-range
+// stage, so LoudnessRange is accepted and validated but never applied; it is
+// retained only so existing config.yaml files keep loading unchanged.
 type NormalizationSettings struct {
-	Enabled       bool    `yaml:"enabled" json:"enabled" mapstructure:"enabled"`                   // true to enable loudness normalization
-	TargetLUFS    float64 `yaml:"targetlufs" json:"targetLUFS" mapstructure:"targetLUFS"`          // target integrated loudness in LUFS (default: -23)
-	LoudnessRange float64 `yaml:"loudnessrange" json:"loudnessRange" mapstructure:"loudnessRange"` // loudness range in LU (default: 7)
-	TruePeak      float64 `yaml:"truepeak" json:"truePeak" mapstructure:"truePeak"`                // true peak limit in dBTP (default: -2)
+	Enabled    bool    `yaml:"enabled" json:"enabled" mapstructure:"enabled"`          // true to enable loudness normalization
+	TargetLUFS float64 `yaml:"targetlufs" json:"targetLUFS" mapstructure:"targetLUFS"` // target integrated loudness in LUFS (default: -23)
+	// Deprecated: no longer applied; retained so existing configs keep loading.
+	LoudnessRange float64 `yaml:"loudnessrange" json:"loudnessRange" mapstructure:"loudnessRange"`
+	TruePeak      float64 `yaml:"truepeak" json:"truePeak" mapstructure:"truePeak"` // true peak limit in dBTP (default: -2)
 }
 
 type RetentionSettings struct {
@@ -922,7 +928,7 @@ type LogDeduplicationSettings struct {
 // SpeciesTrackingSettings contains settings for tracking new species
 type SpeciesTrackingSettings struct {
 	Enabled                      bool                     `yaml:"enabled" json:"enabled"`                                           // true to enable new species tracking
-	NewSpeciesWindowDays         int                      `yaml:"newspecieswindowdays" json:"newSpeciesWindowDays"`                 // Days to consider a species "new" (default: 14)
+	NewSpeciesWindowDays         int                      `yaml:"newspecieswindowdays" json:"newSpeciesWindowDays"`                 // Days to consider a species "new" (default: 7)
 	SyncIntervalMinutes          int                      `yaml:"syncintervalminutes" json:"syncIntervalMinutes"`                   // Interval to sync with database (default: 60)
 	NotificationSuppressionHours int                      `yaml:"notificationsuppressionhours" json:"notificationSuppressionHours"` // Hours to suppress duplicate notifications (default: 168)
 	YearlyTracking               YearlyTrackingSettings   `yaml:"yearlytracking" json:"yearlyTracking"`                             // Settings for yearly species tracking
@@ -934,13 +940,13 @@ type YearlyTrackingSettings struct {
 	Enabled    bool `yaml:"enabled" json:"enabled"`       // true to enable yearly tracking
 	ResetMonth int  `yaml:"resetmonth" json:"resetMonth"` // Month to reset yearly tracking (1=January, default: 1)
 	ResetDay   int  `yaml:"resetday" json:"resetDay"`     // Day to reset yearly tracking (default: 1)
-	WindowDays int  `yaml:"windowdays" json:"windowDays"` // Days to show "new this year" indicator (default: 30)
+	WindowDays int  `yaml:"windowdays" json:"windowDays"` // Days to show "new this year" indicator (default: 7)
 }
 
 // SeasonalTrackingSettings contains settings for tracking first arrivals each season
 type SeasonalTrackingSettings struct {
 	Enabled    bool              `yaml:"enabled" json:"enabled"`                       // true to enable seasonal tracking
-	WindowDays int               `yaml:"windowdays" json:"windowDays"`                 // Days to show "new this season" indicator (default: 21)
+	WindowDays int               `yaml:"windowdays" json:"windowDays"`                 // Days to show "new this season" indicator (default: 7)
 	Seasons    map[string]Season `yaml:"seasons" json:"seasons" jsonschema:"nullable"` // Season definitions
 }
 
@@ -1301,6 +1307,14 @@ type RangeFilterSettings struct {
 type PerchConfig struct {
 	ModelPath string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to Perch v2 ONNX model file
 	LabelPath string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to Perch v2 label CSV file
+	Threshold float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for detections
+	Locale    string  `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation
+}
+
+// BirdNETV3Config holds configuration for the BirdNET v3.0 acoustic classifier.
+type BirdNETV3Config struct {
+	ModelPath string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to BirdNET v3.0 ONNX model file
+	LabelPath string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to BirdNET v3.0 label file
 	Threshold float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for detections
 	Locale    string  `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation
 }
@@ -1724,11 +1738,12 @@ type Settings struct {
 		TimeAs24h bool   `yaml:"timeas24h" json:"timeAs24h"` // true 24-hour time format, false 12-hour time format
 	} `yaml:"main" json:"main"`
 
-	BirdNET BirdNETConfig `yaml:"birdnet" json:"birdnet"` // BirdNET configuration
-	Perch   PerchConfig   `yaml:"perch" json:"perch"`     // Perch v2 model configuration
-	Bat     BatConfig     `yaml:"bat" json:"bat"`         // Bat detection configuration
-	BSG     BSGConfig     `yaml:"bsg" json:"bsg"`         // BSG regional bird model configuration
-	Models  ModelsConfig  `yaml:"models" json:"models"`   // Global model enablement and management
+	BirdNET   BirdNETConfig   `yaml:"birdnet" json:"birdnet"`     // BirdNET configuration
+	Perch     PerchConfig     `yaml:"perch" json:"perch"`         // Perch v2 model configuration
+	BirdNETV3 BirdNETV3Config `yaml:"birdnetv3" json:"birdnetv3"` // BirdNET v3.0 acoustic classifier configuration
+	Bat       BatConfig       `yaml:"bat" json:"bat"`             // Bat detection configuration
+	BSG       BSGConfig       `yaml:"bsg" json:"bsg"`             // BSG regional bird model configuration
+	Models    ModelsConfig    `yaml:"models" json:"models"`       // Global model enablement and management
 
 	LowMemory LowMemoryConfig `yaml:"lowmemory" json:"lowMemory" mapstructure:"lowmemory"` // Low-memory mode override (auto/on/off) for constrained systems
 

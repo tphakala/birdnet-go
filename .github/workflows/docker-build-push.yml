@@ -145,8 +145,8 @@ jobs:
           #
           # Invariant: GHCR is both the build target and the Docker Hub mirror
           # source, so push-to-ghcr must be true whenever Docker Hub is enabled.
-          # All callers (nightly-build.yml, release-build.yml, docker-build.yml)
-          # set push-to-ghcr true.
+          # All callers (release-build.yml, docker-build.yml) set push-to-ghcr
+          # true.
           DATE=$(date +'%Y%m%d')
 
           acc=""

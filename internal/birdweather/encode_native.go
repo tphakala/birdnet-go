@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audionorm"
+	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
 	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -51,6 +52,7 @@ func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audi
 			Component("birdweather").
 			Category(errors.CategoryAudio).
 			Context("operation", "native_flac_measure").
+			Context("encoder", clipenc.NativeFLAC).
 			Context("timestamp", timestamp).
 			Build()
 	}
@@ -95,8 +97,34 @@ func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audi
 			Build()
 	}
 
+	// encoder and gain_db are on the Info line, not just the Debug one above, so
+	// that a default-level support dump answers for uploads the two questions it
+	// already answers for saved clips: which encoder produced the audio, and how
+	// much gain it applied ("my BirdWeather uploads are too quiet"). The Debug
+	// line keeps the full measurement detail.
+	//
+	// operation names the line for grep and for the system-events classifier,
+	// and pairs with birdweather_soundscape_encode_failed (emitted by
+	// logFLACEncodingError in birdweather_client.go) so success and failure are
+	// distinguishable without parsing the message.
+	//
+	// Whether it reaches GET /api/v2/system/events/operational depends on the
+	// logging configuration, and an earlier version of this comment wrongly said
+	// it always does. That endpoint reads two configured base paths (plus their
+	// rotated variants): GetDefaultOutputPath() and GetOutputPath("audio").
+	// CentralLogger.Module routes to a module's own writer only when that module
+	// has an output entry AND it is enabled, otherwise it falls back to the
+	// shared base handler. On a default install birdweather gets its own file
+	// (ensureModuleOutput, DefaultBirdweatherLogPath), so these lines land
+	// outside what the endpoint reads and never appear there. Disable or
+	// redirect the birdweather module output and they land in the default output
+	// instead, at which point they DO appear, which is what the matching
+	// noiseOperations entry is for.
 	log.Info("Encoded audio to FLAC format (native go-flac)",
 		logger.String("timestamp", timestamp),
-		logger.Int("bytes", buf.Len()))
+		logger.String("encoder", clipenc.NativeFLAC),
+		logger.Float64("gain_db", gainDB),
+		logger.Int("bytes", buf.Len()),
+		logger.String("operation", "birdweather_soundscape_encode"))
 	return &audioEncodingResult{buffer: buf, ext: "flac"}, nil
 }

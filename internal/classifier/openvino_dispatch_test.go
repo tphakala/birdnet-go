@@ -121,7 +121,9 @@ func TestTryBatOpenVINO_FallsBackWithoutTag(t *testing.T) {
 // logs why OpenVINO was declined rather than falling back silently.
 func TestOpenVINOPlanForBat_NotBuilt(t *testing.T) {
 	t.Parallel()
-	_, ok, reason := openVINOPlanFor(conf.BackendPrefOpenVINO, conf.OVDeviceGPU, RegistryIDBat, "", batEmbeddingOutputIndex)
+	// Output index 1 is the 2-output backbone's embedding port; its exact value is
+	// immaterial here since the no-tag planner declines before using it.
+	_, ok, reason := openVINOPlanFor(conf.BackendPrefOpenVINO, conf.OVDeviceGPU, RegistryIDBat, "", 1)
 	assert.False(t, ok)
 	assert.Equal(t, ovReasonNotBuilt, reason)
 }

@@ -1457,7 +1457,10 @@ func TestProcessAudio_ResponsiveToRestart(t *testing.T) {
 func TestProcessAudio_DataFlowsThroughReaderGoroutine(t *testing.T) {
 	t.Parallel()
 
-	testData := []byte("audio-payload-12345")
+	// An even byte count: readStdout emits whole PCM frames only and holds a
+	// trailing partial frame back for the next read, so an odd payload would
+	// arrive one byte short here. See TestReadStdout_EmitsWholeFrames.
+	testData := []byte("audio-payload-123456")
 	var received []byte
 
 	cfg := newTestConfig()
@@ -1808,7 +1811,10 @@ func TestStream_ReadStdout_AttachesRefWhenPooled(t *testing.T) {
 	cfg := newTestConfig()
 	stream := NewStream(&cfg, nil, nil, nil, bufMgr)
 
-	reader := io.NopCloser(bytes.NewReader([]byte{1, 2, 3}))
+	// A whole number of PCM frames: readStdout holds a trailing partial frame
+	// back for the next read, so an odd payload would arrive short here for
+	// reasons unrelated to what this test is about. See TestReadStdout_EmitsWholeFrames.
+	reader := io.NopCloser(bytes.NewReader([]byte{1, 2, 3, 4}))
 	readCh := make(chan readResult, 1)
 	readerDone := make(chan struct{})
 	t.Cleanup(func() { close(readerDone) })
@@ -1819,7 +1825,7 @@ func TestStream_ReadStdout_AttachesRefWhenPooled(t *testing.T) {
 	case result := <-readCh:
 		require.NoError(t, result.err)
 		require.NotNil(t, result.ref, "pooled readStdout must attach a FrameRef to every readResult")
-		assert.Equal(t, []byte{1, 2, 3}, result.data)
+		assert.Equal(t, []byte{1, 2, 3, 4}, result.data)
 		result.ref.Release()
 	case <-time.After(time.Second):
 		t.Fatal("readStdout did not produce a readResult within 1s")
@@ -1835,7 +1841,8 @@ func TestStream_ReadStdout_NilRefWhenNoBufMgr(t *testing.T) {
 	cfg := newTestConfig()
 	stream := NewStream(&cfg, nil, nil, nil, nil)
 
-	reader := io.NopCloser(bytes.NewReader([]byte{1, 2, 3}))
+	// Whole PCM frames, for the same reason as the pooled test above.
+	reader := io.NopCloser(bytes.NewReader([]byte{1, 2, 3, 4}))
 	readCh := make(chan readResult, 1)
 	readerDone := make(chan struct{})
 	t.Cleanup(func() { close(readerDone) })
@@ -1846,7 +1853,7 @@ func TestStream_ReadStdout_NilRefWhenNoBufMgr(t *testing.T) {
 	case result := <-readCh:
 		require.NoError(t, result.err)
 		assert.Nil(t, result.ref, "non-pooled readStdout must dispatch nil ref")
-		assert.Equal(t, []byte{1, 2, 3}, result.data)
+		assert.Equal(t, []byte{1, 2, 3, 4}, result.data)
 	case <-time.After(time.Second):
 		t.Fatal("readStdout did not produce a readResult within 1s")
 	}

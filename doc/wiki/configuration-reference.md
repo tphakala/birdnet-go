@@ -85,6 +85,17 @@ PerchConfig holds configuration for the Google Perch v2 model.
 | `perch.threshold` | number | confidence threshold for detections |
 | `perch.locale` | string | locale for species label translation |
 
+## birdnetv3
+
+BirdNETV3Config holds configuration for the BirdNET v3.0 acoustic classifier.
+
+| Setting | Type | Description |
+|---------|------|-------------|
+| `birdnetv3.modelpath` | string | path to BirdNET v3.0 ONNX model file |
+| `birdnetv3.labelpath` | string | path to BirdNET v3.0 label file |
+| `birdnetv3.threshold` | number | confidence threshold for detections |
+| `birdnetv3.locale` | string | locale for species label translation |
+
 ## bat
 
 BatConfig holds configuration for bat detection using BirdNET v2.4 embeddings.
@@ -167,7 +178,7 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.audio.export.gain` | number | gain in dB for audio capture |
 | `realtime.audio.export.normalization.enabled` | boolean | true to enable loudness normalization |
 | `realtime.audio.export.normalization.targetlufs` | number | target integrated loudness in LUFS (default: -23) |
-| `realtime.audio.export.normalization.loudnessrange` | number | loudness range in LU (default: 7) |
+| `realtime.audio.export.normalization.loudnessrange` | number | Deprecated: no longer applied; retained so existing configs keep loading. |
 | `realtime.audio.export.normalization.truepeak` | number | true peak limit in dBTP (default: -2) |
 | `realtime.audio.soundlevel.enabled` | boolean | true to enable sound level monitoring |
 | `realtime.audio.soundlevel.interval` | integer | measurement interval in seconds (default: 10) |
@@ -296,15 +307,15 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.weather.wunderground.endpoint` | string | WeatherUnderground API endpoint |
 | `realtime.weather.wunderground.units` | string | units of measurement: "e" (imperial), "m" (metric), "h" (UK hybrid) |
 | `realtime.speciestracking.enabled` | boolean | true to enable new species tracking |
-| `realtime.speciestracking.newspecieswindowdays` | integer | Days to consider a species "new" (default: 14) |
+| `realtime.speciestracking.newspecieswindowdays` | integer | Days to consider a species "new" (default: 7) |
 | `realtime.speciestracking.syncintervalminutes` | integer | Interval to sync with database (default: 60) |
 | `realtime.speciestracking.notificationsuppressionhours` | integer | Hours to suppress duplicate notifications (default: 168) |
 | `realtime.speciestracking.yearlytracking.enabled` | boolean | true to enable yearly tracking |
 | `realtime.speciestracking.yearlytracking.resetmonth` | integer | Month to reset yearly tracking (1=January, default: 1) |
 | `realtime.speciestracking.yearlytracking.resetday` | integer | Day to reset yearly tracking (default: 1) |
-| `realtime.speciestracking.yearlytracking.windowdays` | integer | Days to show "new this year" indicator (default: 30) |
+| `realtime.speciestracking.yearlytracking.windowdays` | integer | Days to show "new this year" indicator (default: 7) |
 | `realtime.speciestracking.seasonaltracking.enabled` | boolean | true to enable seasonal tracking |
-| `realtime.speciestracking.seasonaltracking.windowdays` | integer | Days to show "new this season" indicator (default: 21) |
+| `realtime.speciestracking.seasonaltracking.windowdays` | integer | Days to show "new this season" indicator (default: 7) |
 | `realtime.speciestracking.seasonaltracking.seasons` | any |  |
 | `realtime.extendedcapture.enabled` | boolean |  |
 | `realtime.extendedcapture.maxduration` | integer |  |

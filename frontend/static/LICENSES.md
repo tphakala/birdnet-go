@@ -109,7 +109,7 @@ Source: MIT
 
 ### github.com/go-logr/logr
 
-License: https://github.com/go-logr/logr/blob/v1.4.3/LICENSE
+License: https://github.com/go-logr/logr/blob/v1.4.4/LICENSE
 Source: Apache-2.0
 
 ### github.com/go-logr/stdr
@@ -244,12 +244,12 @@ Source: BSD-3-Clause
 
 ### github.com/nicholas-fedor/shoutrrr
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.16.1/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.16.2/LICENSE.md
 Source: MIT
 
 ### github.com/nicholas-fedor/shoutrrr/pkg/color
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.16.1/pkg/color/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.16.2/pkg/color/LICENSE.md
 Source: MIT
 
 ### github.com/patrickmn/go-cache
@@ -284,7 +284,7 @@ Source: BSD-3-Clause
 
 ### github.com/prometheus/client_golang/prometheus
 
-License: https://github.com/prometheus/client_golang/blob/v1.23.2/LICENSE
+License: https://github.com/prometheus/client_golang/blob/v1.24.0/LICENSE
 Source: Apache-2.0
 
 ### github.com/prometheus/client_model/go
@@ -427,15 +427,30 @@ Source: Unknown
 License: Unknown
 Source: Unknown
 
+### github.com/tphakala/go-aac
+
+License: https://github.com/tphakala/go-aac/blob/v0.4.0/LICENSE
+Source: LGPL-2.1
+
 ### github.com/tphakala/go-audio-resampler
 
-License: https://github.com/tphakala/go-audio-resampler/blob/v1.4.0/LICENSE
-Source: LGPL-3.0
+License: https://github.com/tphakala/go-audio-resampler/blob/v1.5.0/LICENSE
+Source: LGPL-2.1
 
 ### github.com/tphakala/go-flac
 
-License: https://github.com/tphakala/go-flac/blob/v0.4.0/LICENSE
+License: https://github.com/tphakala/go-flac/blob/v0.4.3/LICENSE
 Source: MIT
+
+### github.com/tphakala/go-m4a
+
+License: https://github.com/tphakala/go-m4a/blob/v0.3.0/LICENSE
+Source: MIT
+
+### github.com/tphakala/go-opus
+
+License: https://github.com/tphakala/go-opus/blob/v0.1.2/LICENSE
+Source: BSD-3-Clause
 
 ### github.com/tphakala/go-tflite
 
@@ -444,7 +459,7 @@ Source: MIT
 
 ### github.com/tphakala/simd
 
-License: https://github.com/tphakala/simd/blob/v1.4.0-rc.2/LICENSE
+License: https://github.com/tphakala/simd/blob/v1.6.0/LICENSE
 Source: MIT
 
 ### github.com/valyala/bytebufferpool
@@ -539,7 +554,7 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.288.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.289.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc

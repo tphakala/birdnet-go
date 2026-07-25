@@ -105,11 +105,13 @@ type Interface interface {
 	// GetTopBirdsData returns daily detection summaries, ordered by detection count descending.
 	// The limit parameter (if > 0) restricts the number of unique species returned.
 	GetTopBirdsData(ctx context.Context, selectedDate string, minConfidenceNormalized float64, limit int) ([]Note, error)
-	// GetBatchHourlyOccurrences retrieves hourly detection counts for multiple species on a given date.
+	// GetBatchHourlyOccurrences retrieves hourly detection counts for multiple species over the
+	// inclusive [startDate, endDate] calendar-date range, summed across every day in the range.
+	// Pass the same date for both to cover a single day.
 	// The species slice holds scientific names; the returned map is keyed by scientific name.
 	// Keying on scientific name keeps the result robust across models and locales.
 	// This batches the per-species hourly lookups into a single query for performance.
-	GetBatchHourlyOccurrences(ctx context.Context, date string, species []string, minConfidence float64) (map[string][24]int, error)
+	GetBatchHourlyOccurrences(ctx context.Context, startDate, endDate string, species []string, minConfidence float64) (map[string][24]int, error)
 	SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit int, offset int) ([]Note, error)
 	GetLastDetections(numDetections int) ([]Note, error)
 	GetAllDetectedSpecies() ([]Note, error)
@@ -853,11 +855,13 @@ func (ds *DataStore) GetDateFormat(columnName string) string {
 	}
 }
 
-// GetBatchHourlyOccurrences retrieves hourly detection counts for multiple species on a given date.
+// GetBatchHourlyOccurrences retrieves hourly detection counts for multiple species over the
+// inclusive [startDate, endDate] calendar-date range, summed across every day in the range (pass
+// the same date for both to cover a single day).
 // The species parameter holds scientific names, and the returned map is keyed by
 // scientific name. Keying on scientific name (rather than the localized common
 // name) keeps the daily summary robust across models and locales.
-func (ds *DataStore) GetBatchHourlyOccurrences(ctx context.Context, date string, species []string, minConfidence float64) (map[string][24]int, error) {
+func (ds *DataStore) GetBatchHourlyOccurrences(ctx context.Context, startDate, endDate string, species []string, minConfidence float64) (map[string][24]int, error) {
 	if len(species) == 0 {
 		return make(map[string][24]int), nil
 	}
@@ -874,7 +878,8 @@ func (ds *DataStore) GetBatchHourlyOccurrences(ctx context.Context, date string,
 	err := ds.DB.WithContext(ctx).Model(&Note{}).
 		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
 		Select(fmt.Sprintf("notes.scientific_name, %s as hour, COUNT(*) as count", hourFormat)).
-		Where("notes.scientific_name IN ? AND notes.date = ? AND notes.confidence >= ?", species, date, minConfidence).
+		Where("notes.scientific_name IN ? AND notes.date >= ? AND notes.date <= ? AND notes.confidence >= ?",
+			species, startDate, endDate, minConfidence).
 		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", string(entities.VerificationFalsePositive)).
 		Group(fmt.Sprintf("notes.scientific_name, %s", hourFormat)).
 		Order("notes.scientific_name, hour").
@@ -885,7 +890,8 @@ func (ds *DataStore) GetBatchHourlyOccurrences(ctx context.Context, date string,
 			Component("datastore").
 			Category(errors.CategoryDatabase).
 			Context("operation", "get_batch_hourly_occurrences").
-			Context("date", date).
+			Context("start_date", startDate).
+			Context("end_date", endDate).
 			Context("species_count", len(species)).
 			Build()
 	}

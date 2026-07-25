@@ -1848,9 +1848,9 @@ func (_c *MockInterface_GetAudioSources_Call) RunAndReturn(run func(context.Cont
 	return _c
 }
 
-// GetBatchHourlyOccurrences provides a mock function with given fields: ctx, date, species, minConfidence
-func (_m *MockInterface) GetBatchHourlyOccurrences(ctx context.Context, date string, species []string, minConfidence float64) (map[string][24]int, error) {
-	ret := _m.Called(ctx, date, species, minConfidence)
+// GetBatchHourlyOccurrences provides a mock function with given fields: ctx, startDate, endDate, species, minConfidence
+func (_m *MockInterface) GetBatchHourlyOccurrences(ctx context.Context, startDate string, endDate string, species []string, minConfidence float64) (map[string][24]int, error) {
+	ret := _m.Called(ctx, startDate, endDate, species, minConfidence)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetBatchHourlyOccurrences")
@@ -1858,19 +1858,19 @@ func (_m *MockInterface) GetBatchHourlyOccurrences(ctx context.Context, date str
 
 	var r0 map[string][24]int
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, []string, float64) (map[string][24]int, error)); ok {
-		return rf(ctx, date, species, minConfidence)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, []string, float64) (map[string][24]int, error)); ok {
+		return rf(ctx, startDate, endDate, species, minConfidence)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, []string, float64) map[string][24]int); ok {
-		r0 = rf(ctx, date, species, minConfidence)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, []string, float64) map[string][24]int); ok {
+		r0 = rf(ctx, startDate, endDate, species, minConfidence)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(map[string][24]int)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, []string, float64) error); ok {
-		r1 = rf(ctx, date, species, minConfidence)
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, []string, float64) error); ok {
+		r1 = rf(ctx, startDate, endDate, species, minConfidence)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -1885,16 +1885,17 @@ type MockInterface_GetBatchHourlyOccurrences_Call struct {
 
 // GetBatchHourlyOccurrences is a helper method to define mock.On call
 //   - ctx context.Context
-//   - date string
+//   - startDate string
+//   - endDate string
 //   - species []string
 //   - minConfidence float64
-func (_e *MockInterface_Expecter) GetBatchHourlyOccurrences(ctx interface{}, date interface{}, species interface{}, minConfidence interface{}) *MockInterface_GetBatchHourlyOccurrences_Call {
-	return &MockInterface_GetBatchHourlyOccurrences_Call{Call: _e.mock.On("GetBatchHourlyOccurrences", ctx, date, species, minConfidence)}
+func (_e *MockInterface_Expecter) GetBatchHourlyOccurrences(ctx interface{}, startDate interface{}, endDate interface{}, species interface{}, minConfidence interface{}) *MockInterface_GetBatchHourlyOccurrences_Call {
+	return &MockInterface_GetBatchHourlyOccurrences_Call{Call: _e.mock.On("GetBatchHourlyOccurrences", ctx, startDate, endDate, species, minConfidence)}
 }
 
-func (_c *MockInterface_GetBatchHourlyOccurrences_Call) Run(run func(ctx context.Context, date string, species []string, minConfidence float64)) *MockInterface_GetBatchHourlyOccurrences_Call {
+func (_c *MockInterface_GetBatchHourlyOccurrences_Call) Run(run func(ctx context.Context, startDate string, endDate string, species []string, minConfidence float64)) *MockInterface_GetBatchHourlyOccurrences_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].([]string), args[3].(float64))
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].([]string), args[4].(float64))
 	})
 	return _c
 }
@@ -1904,7 +1905,7 @@ func (_c *MockInterface_GetBatchHourlyOccurrences_Call) Return(_a0 map[string][2
 	return _c
 }
 
-func (_c *MockInterface_GetBatchHourlyOccurrences_Call) RunAndReturn(run func(context.Context, string, []string, float64) (map[string][24]int, error)) *MockInterface_GetBatchHourlyOccurrences_Call {
+func (_c *MockInterface_GetBatchHourlyOccurrences_Call) RunAndReturn(run func(context.Context, string, string, []string, float64) (map[string][24]int, error)) *MockInterface_GetBatchHourlyOccurrences_Call {
 	_c.Call.Return(run)
 	return _c
 }
