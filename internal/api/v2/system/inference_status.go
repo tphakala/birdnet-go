@@ -13,7 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/inferencestats"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/cpuspec"
+	"github.com/tphakala/birdnet-go/internal/hwprofile"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
@@ -40,11 +40,59 @@ type InferenceStatusResponse struct {
 }
 
 // HardwareInfo describes the host CPU/environment reported at snapshot time.
+// The first four fields predate the hardware profile and keep their names,
+// types and sources; everything below them is additive and omitted when the
+// probe found nothing to report.
 type HardwareInfo struct {
 	Arch        string `json:"arch"`
 	CPUModel    string `json:"cpuModel"`
 	Environment string `json:"environment"`
 	FP16        bool   `json:"fp16"`
+	// Board identifies the single-board computer this runs on, absent on hosts
+	// with no device tree (every PC).
+	Board *BoardInfo `json:"board,omitempty"`
+	// Accelerators lists the GPUs present on the host, whether or not this build
+	// can use them, so the UI can explain an unusable one instead of hiding it.
+	Accelerators []AcceleratorInfo `json:"accelerators,omitempty"`
+	// TotalRamBytes is the effective memory ceiling, host RAM clamped by any
+	// cgroup limit.
+	TotalRAMBytes int64 `json:"totalRamBytes,omitempty"`
+	// PhysicalCores is the physical core count.
+	PhysicalCores int `json:"physicalCores,omitempty"`
+	// Capabilities are the capability tokens this host matches, in the same
+	// vocabulary the published model manifests use.
+	Capabilities []string `json:"capabilities,omitempty"`
+}
+
+// BoardInfo identifies the host board as named by its device tree.
+type BoardInfo struct {
+	// Kind is the board family ("raspberry-pi", "generic").
+	Kind string `json:"kind"`
+	// Model is the device-tree model string.
+	Model string `json:"model,omitempty"`
+	// SoC is the system-on-chip identifier, e.g. "bcm2712".
+	SoC string `json:"soc,omitempty"`
+	// Tier is the performance band ("pi5", "pi4", "pi3"), empty for boards the
+	// model catalog does not distinguish.
+	Tier string `json:"tier,omitempty"`
+}
+
+// AcceleratorInfo describes one GPU and whether inference can run on it.
+type AcceleratorInfo struct {
+	// Kind is "igpu" or "dgpu".
+	Kind string `json:"kind"`
+	// Vendor is "intel", "amd" or "nvidia".
+	Vendor string `json:"vendor"`
+	// Name is a display name pairing the vendor with the PCI IDs.
+	Name string `json:"name,omitempty"`
+	// Via is the runtime that executes inference on this device ("openvino"),
+	// empty when nothing in this build can reach it.
+	Via string `json:"via,omitempty"`
+	// Usable reports whether inference can run on this device now.
+	Usable bool `json:"usable"`
+	// Reasons lists every reason code explaining Usable == false, most
+	// fundamental first. The frontend renders them through the i18n catalog.
+	Reasons []string `json:"reasons,omitempty"`
 }
 
 // BackendsInfo groups availability status for all supported inference backends.
@@ -325,16 +373,8 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 		SnapshotAtUnix: time.Now().Unix(),
 	}
 
-	// Hardware.
-	envType, _ := sysinfo.GetEnvironment() // detail (sub-type) intentionally omitted in Phase 1
-	resp.Hardware = HardwareInfo{
-		Arch:        sysinfo.GetCPUArch(),
-		CPUModel:    sysinfo.GetCPUModel(),
-		Environment: envType,
-		FP16:        cpuspec.HasNativeF16(),
-	}
-
 	// Backends: TFLite is always compiled in; ORT and OpenVINO are probed.
+	// Probed before hardware because the ORT result feeds capability derivation.
 	resp.Backends.TFLite = BackendStatus{Available: true}
 	ort := inference.CheckORTAvailability(settings.BirdNET.ONNXRuntimePath)
 	resp.Backends.ONNX = BackendStatus{Available: ort.Available, Initialized: ort.Initialized, Version: ort.Version}
@@ -347,6 +387,16 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 			}
 		}
 	}
+
+	// Hardware. hwprofile carries no settings dependency, so its probe searched
+	// the default ONNX Runtime locations rather than the configured path. This
+	// handler does honour the configured path, so its answer replaces the
+	// probe's on the local copy before capability tokens are derived; a user
+	// with a custom library path would otherwise lose the onnxruntime-cpu token.
+	profile := hwprofile.Detect()
+	profile.Backends.ONNX.Available = ort.Available
+	envType, _ := sysinfo.GetEnvironment() // detail (sub-type) intentionally omitted in Phase 1
+	resp.Hardware = buildHardwareInfo(profile, envType)
 
 	// Models: fetch loaded model list, RSS, and inference counters.
 	var infos []classifier.ModelInfo
@@ -474,6 +524,51 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 	sortInferenceModelsByName(resp.Models)
 
 	return ctx.JSON(http.StatusOK, resp)
+}
+
+// buildHardwareInfo maps a hardware profile onto the API payload. It is a pure
+// function with no side effects, so the mapping can be asserted without a live
+// host. environment is passed separately because the profile records the
+// environment type only, while the endpoint has always reported that same value
+// from the cached sysinfo detection.
+func buildHardwareInfo(profile hwprofile.Profile, environment string) HardwareInfo {
+	info := HardwareInfo{
+		Arch:          profile.CPUArch,
+		CPUModel:      profile.CPUModel,
+		Environment:   environment,
+		FP16:          profile.HasNativeF16,
+		TotalRAMBytes: profile.TotalRAMBytes,
+		PhysicalCores: profile.PhysicalCores,
+		Capabilities:  profile.Capabilities(),
+	}
+
+	// A board is reported only when the device tree named one. Every PC would
+	// otherwise carry an empty "generic" row that tells the user nothing.
+	if profile.Board.Model != "" || profile.Board.SoC != "" {
+		info.Board = &BoardInfo{
+			Kind:  profile.Board.Kind,
+			Model: profile.Board.Model,
+			SoC:   profile.Board.SoC,
+			Tier:  profile.Board.Tier,
+		}
+	}
+
+	if len(profile.Accelerators) > 0 {
+		info.Accelerators = make([]AcceleratorInfo, 0, len(profile.Accelerators))
+		for i := range profile.Accelerators {
+			accelerator := profile.Accelerators[i]
+			info.Accelerators = append(info.Accelerators, AcceleratorInfo{
+				Kind:    accelerator.Kind,
+				Vendor:  accelerator.Vendor,
+				Name:    accelerator.Name,
+				Via:     accelerator.Via,
+				Usable:  accelerator.Usable,
+				Reasons: accelerator.Reasons,
+			})
+		}
+	}
+
+	return info
 }
 
 // sortInferenceModelsByName orders model statuses by display name

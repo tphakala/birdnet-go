@@ -385,6 +385,26 @@
     snapshot ? snapshot.backends.openvino : null
   );
 
+  // Reason codes are produced by the backend hardware probe (internal/hwprofile).
+  // The mapping is an explicit switch rather than a key built from the code so
+  // every translation key stays a literal the i18n tooling can find.
+  function gpuReasonLabel(reason: string): string {
+    switch (reason) {
+      case 'openvino-not-built':
+        return t('system.inference.gpuReasonOpenvinoNotBuilt');
+      case 'render-node-unavailable':
+        return t('system.inference.gpuReasonRenderNodeUnavailable');
+      case 'render-node-permission':
+        return t('system.inference.gpuReasonRenderNodePermission');
+      case 'openvino-device-missing':
+        return t('system.inference.gpuReasonOpenvinoDeviceMissing');
+      case 'no-runtime':
+        return t('system.inference.gpuReasonNoRuntime');
+      default:
+        return t('system.inference.gpuReasonUnknown');
+    }
+  }
+
   // Spec line for a model: sample rate in kHz, segment length in seconds.
   function sampleRateKhz(hz: number): string {
     return (hz / HZ_PER_KHZ).toFixed(hz % HZ_PER_KHZ === 0 ? 0 : 1);
@@ -517,6 +537,38 @@
               >
             </div>
           {/if}
+          {#if snapshot.hardware.board?.model}
+            <div class="flex items-center gap-3">
+              <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
+              <span class="text-sm text-muted">{t('system.inference.board')}</span>
+              <span class="text-sm truncate" title={snapshot.hardware.board.model}
+                >{snapshot.hardware.board.model}</span
+              >
+              {#if snapshot.hardware.board.soc}
+                <span class="text-xs text-muted font-mono">
+                  {t('system.inference.soc')}: {snapshot.hardware.board.soc}
+                </span>
+              {/if}
+            </div>
+          {/if}
+          {#if snapshot.hardware.physicalCores}
+            <div class="flex items-center gap-3">
+              <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
+              <span class="text-sm text-muted">{t('system.inference.cores')}</span>
+              <span class="text-sm font-mono tabular-nums"
+                >{formatNumber(snapshot.hardware.physicalCores)}</span
+              >
+            </div>
+          {/if}
+          {#if snapshot.hardware.totalRamBytes}
+            <div class="flex items-center gap-3">
+              <MemoryStick class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
+              <span class="text-sm text-muted">{t('system.inference.memory')}</span>
+              <span class="text-sm font-mono tabular-nums"
+                >{formatBytesCompact(snapshot.hardware.totalRamBytes)}</span
+              >
+            </div>
+          {/if}
           {#if snapshot.hardware.environment}
             <div class="flex items-center gap-3">
               <span class="text-sm text-muted">{t('system.inference.environment')}</span>
@@ -544,6 +596,59 @@
               />
             {/if}
           </div>
+
+          <!-- Accelerators. Listed whether or not this build can reach them, so
+               a user whose GPU is present but unusable is told why rather than
+               shown nothing. The common case is the default Docker install:
+               the stock image has no OpenVINO and often no /dev/dri mapping. -->
+          {#each snapshot.hardware.accelerators ?? [] as accelerator (accelerator.name ?? accelerator.vendor)}
+            <div class="flex items-center gap-3 flex-wrap">
+              <span class="text-sm text-muted">{t('system.inference.gpu')}</span>
+              <span class="text-sm truncate" title={accelerator.name}>{accelerator.name}</span>
+              {#if accelerator.usable}
+                <StatusPill
+                  variant="success"
+                  label={t('system.inference.gpuAvailable')}
+                  size="xs"
+                />
+              {:else}
+                <StatusPill
+                  variant="neutral"
+                  label={t('system.inference.gpuUnavailable')}
+                  size="xs"
+                />
+              {/if}
+            </div>
+            {#if !accelerator.usable && accelerator.reasons?.length}
+              <ul class="list-disc ps-9 space-y-1 text-xs text-muted">
+                {#each accelerator.reasons as reason (reason)}
+                  <li>{gpuReasonLabel(reason)}</li>
+                {/each}
+              </ul>
+            {/if}
+          {/each}
+
+          {#if snapshot.hardware.capabilities?.length}
+            <div class="flex items-start gap-3">
+              <span
+                class="text-sm text-muted shrink-0"
+                title={t('system.inference.capabilitiesHelp')}
+                aria-describedby="help-capabilities"
+              >
+                {t('system.inference.capabilities')}
+              </span>
+              <span id="help-capabilities" class="sr-only"
+                >{t('system.inference.capabilitiesHelp')}</span
+              >
+              <!-- The tokens wrap as their own block so a second row lines up
+                   under the first badge instead of under the label. -->
+              <div class="flex flex-wrap items-center gap-2">
+                {#each snapshot.hardware.capabilities as capability (capability)}
+                  <Badge variant="neutral" size="sm" text={capability} />
+                {/each}
+              </div>
+            </div>
+          {/if}
         </div>
       </div>
 

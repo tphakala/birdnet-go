@@ -9,12 +9,58 @@
  * omitempty.
  */
 
+/**
+ * Single-board computer the host runs on, as named by its device tree. Absent
+ * on hosts with no device tree, which is every PC.
+ */
+export interface InferenceBoard {
+  /** Board family, e.g. "raspberry-pi" or "generic". */
+  kind: string;
+  /** Device-tree model string, e.g. "Raspberry Pi 5 Model B Rev 1.0". */
+  model?: string;
+  /** System-on-chip identifier, e.g. "bcm2712". */
+  soc?: string;
+  /** Performance band ("pi5", "pi4", "pi3"); absent for undistinguished boards. */
+  tier?: string;
+}
+
+/**
+ * A GPU present on the host. Reported whether or not this build can use it, so
+ * the panel can explain an unusable one instead of hiding it.
+ */
+export interface InferenceAccelerator {
+  /** "igpu" or "dgpu". */
+  kind: string;
+  /** "intel", "amd" or "nvidia". */
+  vendor: string;
+  /** Display name pairing the vendor with the PCI IDs. */
+  name?: string;
+  /** Runtime that executes inference on this device ("openvino"), when any can. */
+  via?: string;
+  /** Whether inference can run on this device now. */
+  usable: boolean;
+  /**
+   * Every reason code explaining `usable === false`, most fundamental first.
+   * Rendered through the i18n catalog under `system.inference.gpuReason.*`.
+   * A list because the blockers stack in a containerised install: the stock
+   * image has no OpenVINO *and* often no /dev/dri mapping.
+   */
+  reasons?: string[];
+}
+
 /** Host hardware and runtime environment the models run on. */
 export interface InferenceHardware {
   arch: string;
   cpuModel: string;
   environment: string;
   fp16: boolean;
+  board?: InferenceBoard;
+  accelerators?: InferenceAccelerator[];
+  /** Effective memory ceiling: host RAM clamped by any cgroup limit. */
+  totalRamBytes?: number;
+  physicalCores?: number;
+  /** Capability tokens this host matches, in the model manifests' vocabulary. */
+  capabilities?: string[];
 }
 
 /** Availability state for a compiled-in inference backend. */

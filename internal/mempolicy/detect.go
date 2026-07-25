@@ -34,7 +34,15 @@ const cgroupV1UnlimitedThreshold int64 = 1 << 62
 // The cgroup check matters inside containers (e.g. Docker --memory=512m), where
 // host RAM reporting would otherwise mask the real limit.
 func DetectTotalMemory() int64 {
-	return effectiveTotal(hostTotalMemory(), detectCgroupLimit("/"))
+	return DetectTotalMemoryAt("/")
+}
+
+// DetectTotalMemoryAt is DetectTotalMemory with the filesystem root
+// parameterized so a caller can probe a fixture tree instead of the live
+// system. Host RAM still comes from the running kernel; only the cgroup limit
+// is read from under root.
+func DetectTotalMemoryAt(root string) int64 {
+	return effectiveTotal(hostTotalMemory(), detectCgroupLimit(root))
 }
 
 // hostTotalMemory returns total physical RAM in bytes via gopsutil, or 0 on error.

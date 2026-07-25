@@ -5,6 +5,7 @@ import SystemInference from './SystemInference.svelte';
 import type {
   InferenceStatusResponse,
   InferenceModel,
+  InferenceHardware,
 } from '$lib/desktop/features/system/inference.types';
 
 // The component talks to the JSON API and opens an SSE stream. The API is mocked
@@ -85,9 +86,18 @@ function makeModel(overrides: Partial<InferenceModel> = {}): InferenceModel {
 }
 
 /** Build a minimal valid snapshot, overridable per test. */
-function makeSnapshot(models: InferenceModel[]): InferenceStatusResponse {
+function makeSnapshot(
+  models: InferenceModel[],
+  hardware: Partial<InferenceHardware> = {}
+): InferenceStatusResponse {
   return {
-    hardware: { arch: 'amd64', cpuModel: 'Test CPU', environment: 'docker', fp16: true },
+    hardware: {
+      arch: 'amd64',
+      cpuModel: 'Test CPU',
+      environment: 'docker',
+      fp16: true,
+      ...hardware,
+    },
     backends: {
       tflite: { available: true },
       onnx: { available: true, initialized: true, version: '1.18' },
@@ -732,5 +742,137 @@ describe('SystemInference', () => {
     // Neither active nor idle indicators render while paused.
     expect(container.querySelector('[aria-label="system.inference.activityActive"]')).toBeNull();
     expect(container.querySelector('[aria-label="system.inference.activityIdle"]')).toBeNull();
+  });
+
+  describe('detected hardware panel', () => {
+    it('renders board, cores and memory when the probe found them', async () => {
+      installApi(
+        makeSnapshot([makeModel({})], {
+          board: {
+            kind: 'raspberry-pi',
+            model: 'Raspberry Pi 5 Model B Rev 1.0',
+            soc: 'bcm2712',
+            tier: 'pi5',
+          },
+          physicalCores: 4,
+          totalRamBytes: 4 * 1024 * 1024 * 1024,
+        })
+      );
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('Raspberry Pi 5 Model B Rev 1.0');
+      });
+      expect(container.textContent).toContain('bcm2712');
+      expect(container.textContent).toContain('system.inference.cores');
+      expect(container.textContent).toContain('system.inference.memory');
+      expect(container.textContent).toContain('4.0 GB');
+    });
+
+    it('omits the board row on a host with no device tree', async () => {
+      installApi(makeSnapshot([makeModel({})]));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('system.inference.sectionHardware');
+      });
+      // A "generic" board row would tell the user nothing, so nothing is shown.
+      expect(container.textContent).not.toContain('system.inference.board');
+      expect(container.textContent).not.toContain('system.inference.memory');
+    });
+
+    it('lists every blocker for a GPU this build cannot use', async () => {
+      // The default Docker install: stock image (no OpenVINO) with no /dev/dri
+      // mapping. Both have to be fixed, so both have to be shown.
+      installApi(
+        makeSnapshot([makeModel({})], {
+          accelerators: [
+            {
+              kind: 'igpu',
+              vendor: 'intel',
+              name: 'Intel Graphics [8086:46a6]',
+              usable: false,
+              reasons: ['openvino-not-built', 'render-node-unavailable'],
+            },
+          ],
+        })
+      );
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('Intel Graphics [8086:46a6]');
+      });
+      expect(container.textContent).toContain('system.inference.gpuUnavailable');
+      expect(container.textContent).toContain('system.inference.gpuReasonOpenvinoNotBuilt');
+      expect(container.textContent).toContain('system.inference.gpuReasonRenderNodeUnavailable');
+    });
+
+    it('shows a reachable GPU as available with no blockers', async () => {
+      installApi(
+        makeSnapshot([makeModel({})], {
+          accelerators: [
+            {
+              kind: 'igpu',
+              vendor: 'intel',
+              name: 'Intel Graphics [8086:9a49]',
+              via: 'openvino',
+              usable: true,
+            },
+          ],
+        })
+      );
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('Intel Graphics [8086:9a49]');
+      });
+      expect(container.textContent).toContain('system.inference.gpuAvailable');
+      expect(container.textContent).not.toContain('system.inference.gpuReason');
+    });
+
+    it('falls back to a generic label for an unrecognised reason code', async () => {
+      // A newer backend can emit a reason this build has no translation for;
+      // the panel must still say the GPU is unusable rather than render blank.
+      installApi(
+        makeSnapshot([makeModel({})], {
+          accelerators: [
+            {
+              kind: 'dgpu',
+              vendor: 'amd',
+              name: 'AMD Graphics [1002:73ff]',
+              usable: false,
+              reasons: ['brand-new-code'],
+            },
+          ],
+        })
+      );
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('AMD Graphics [1002:73ff]');
+      });
+      expect(container.textContent).toContain('system.inference.gpuReasonUnknown');
+    });
+
+    it('renders capability tokens', async () => {
+      installApi(
+        makeSnapshot([makeModel({})], {
+          capabilities: ['aarch64', 'aarch64-a76', 'tflite', 'fp16-native'],
+        })
+      );
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('aarch64-a76');
+      });
+      expect(container.textContent).toContain('system.inference.capabilities');
+      expect(container.textContent).toContain('fp16-native');
+    });
   });
 });
