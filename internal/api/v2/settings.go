@@ -254,6 +254,11 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to update settings", http.StatusInternalServerError)
 	}
 	if len(skippedFields) > 0 {
+		// Debug, not Warn as on the PATCH path, and deliberately so: this walk
+		// appends every blocked and every yaml:"-" field it passes regardless of
+		// what the request contained, so the list is long on every request and
+		// says nothing about client intent. PATCH reports only fields it actually
+		// had to revert, which is worth a Warn.
 		c.LogAPIRequest(ctx, logger.LogLevelDebug, "Skipped protected fields during settings update", logger.Any("skipped_fields", skippedFields))
 	}
 
@@ -694,11 +699,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to parse request body", http.StatusBadRequest)
 	}
 
-	var skippedFields []string
-	if err := updateSettingsSectionWithTracking(updated, section, requestBody, &skippedFields); err != nil {
-		if len(skippedFields) > 0 {
-			c.Debug("Protected fields that were skipped in update of section %s: %s", section, strings.Join(skippedFields, ", "))
-		}
+	if err := updateSettingsSection(updated, section, requestBody); err != nil {
 		return c.HandleError(ctx, err, fmt.Sprintf("Failed to update %s settings", section), http.StatusBadRequest)
 	}
 
@@ -708,6 +709,30 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	if err := restoreRedactedSecrets(current, updated); err != nil {
 		c.LogAPIRequest(ctx, logger.LogLevelWarn, "Redacted sentinel validation failed", logger.Error(err))
 		return c.HandleError(ctx, err, "Cannot save: some secret fields contain the redacted placeholder because their identifying key was changed while the secret was hidden. Re-enter the secret values.", http.StatusBadRequest)
+	}
+
+	// Enforce the blocked-field map. The section merge above writes whatever the
+	// request contained, so this is the only thing standing between a client and
+	// a field the map marks never-updatable-via-API (Security.SessionSecret,
+	// Diagnostics.Profiling.Token, the audio tool paths, ...). It runs after
+	// restoreRedactedSecrets so that a normal GET-modify-PATCH round trip, which
+	// sends the redacted placeholder back for SessionSecret, is not reported as
+	// an attempt to change it; TestPatchReportsBlockedFieldsItRejected pins that
+	// ordering. The exception is Security.BasicAuth.ClientID/ClientSecret, which
+	// sanitizeSettingsForAPI BLANKS rather than redacts, so restoreRedactedSecrets
+	// does not cover them and such a round trip does report them. That is honest
+	// (the request really did carry a different value) and it is also what stops
+	// the round trip from wiping both credentials, as it did before this check
+	// existed.
+	skippedFields := restoreBlockedFields(current, updated)
+	if len(skippedFields) > 0 {
+		// Same field key as the PUT path and as the response JSON, so one query
+		// finds a rejection on either verb. The two are still distinguishable:
+		// this one is Warn and fires only on a real rejection, PUT's is Debug and
+		// lists every blocked and runtime-only field on every request.
+		c.LogAPIRequest(ctx, logger.LogLevelWarn, "Rejected update to blocked settings fields",
+			logger.String("section", section),
+			logger.Any("skipped_fields", skippedFields))
 	}
 
 	// Ensure LocationConfigured is set when birdnet coordinates are present.
@@ -798,8 +823,10 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	})
 }
 
-// updateSettingsSectionWithTracking updates a specific section of the settings and tracks skipped fields
-func updateSettingsSectionWithTracking(settings *conf.Settings, section string, data json.RawMessage, skippedFields *[]string) error {
+// updateSettingsSection validates and merges a request body into one section of
+// settings. It does not enforce the blocked-field map; UpdateSectionSettings
+// calls restoreBlockedFields after this returns. See handleGenericSection.
+func updateSettingsSection(settings *conf.Settings, section string, data json.RawMessage) error {
 	section = strings.ToLower(section)
 
 	var tempValue any
@@ -822,7 +849,7 @@ func updateSettingsSectionWithTracking(settings *conf.Settings, section string, 
 	}
 
 	// Use the generic handler with merging for ALL sections
-	return handleGenericSection(sectionValue, data, section, skippedFields)
+	return handleGenericSection(sectionValue, data, section)
 }
 
 // mergeJSONIntoStruct merges JSON data into an existing struct, preserving fields not
@@ -1048,15 +1075,13 @@ func getSettingsSectionValue(settings *conf.Settings, section string) (any, erro
 		return &settings.Realtime.Telemetry, nil
 	case "sentry":
 		return &settings.Sentry, nil
-	// NOTE: "diagnostics" is deliberately absent, so PATCH on it returns 400.
-	// The section holds a generated credential that getBlockedFieldMap marks
-	// never-updatable-via-API, and the PATCH merge path does not enforce that
-	// map: handleGenericSection merges the incoming JSON into the section and
-	// then only RECORDS that restrictions exist. Adding the case here would let
-	// an unauthenticated client on a no-auth instance set a token it chose and
-	// read profiles with it. PUT /api/v2/settings does enforce the map, so
-	// enabling profiling at runtime still works there.
-	// Re-add this once the PATCH path enforces blocked fields.
+	case "diagnostics":
+		// The generated profiling token in this section is never client-settable:
+		// UpdateSectionSettings reverts it via restoreBlockedFields after the
+		// merge. This case was withheld until that enforcement existed, because
+		// without it an unauthenticated client on a no-auth instance could set a
+		// token it chose and read pprof profiles with it.
+		return &settings.Diagnostics, nil
 	case "notification":
 		return &settings.Notification, nil
 	case "logging":
@@ -1081,7 +1106,7 @@ func getSettingsSectionValue(settings *conf.Settings, section string) (any, erro
 }
 
 // handleGenericSection handles updates to any settings section using merging
-func handleGenericSection(sectionPtr any, data json.RawMessage, sectionName string, skippedFields *[]string) error {
+func handleGenericSection(sectionPtr any, data json.RawMessage, sectionName string) error {
 	// Normalize species config keys in the incoming data BEFORE merging
 	// This ensures case-insensitive key matching during the deep merge
 	normalizedData, err := normalizeSpeciesConfigKeysInJSON(data, sectionName)
@@ -1094,33 +1119,20 @@ func handleGenericSection(sectionPtr any, data json.RawMessage, sectionName stri
 		return fmt.Errorf("failed to merge settings for section %s: %w", sectionName, err)
 	}
 
-	// Apply field-level permissions if needed
-	// Note: getBlockedFieldMap uses capitalized section names (e.g., "BirdNET", "Realtime")
-	// We need to map our lowercase section names to the expected capitalized format
-	capitalizedSectionName := ""
-	switch sectionName {
-	case SettingsSectionBirdnet:
-		capitalizedSectionName = "BirdNET"
-	case SettingsSectionRealtime:
-		capitalizedSectionName = "Realtime"
-	case SettingsSectionWebserver:
-		capitalizedSectionName = "WebServer"
-	default:
-		// For other sections, capitalize first letter
-		if sectionName != "" {
-			capitalizedSectionName = strings.ToUpper(sectionName[:1]) + sectionName[1:]
-		}
-	}
-
-	blockedFieldsMap := getBlockedFieldMap()
-	if blockedFields, exists := blockedFieldsMap[capitalizedSectionName]; exists {
-		if _, ok := blockedFields.(map[string]any); ok {
-			// For now, just note that we have blocked fields
-			// The actual blocking happens in updateAllowedFieldsRecursivelyWithTracking
-			*skippedFields = append(*skippedFields, fmt.Sprintf("Section %s has field-level restrictions", sectionName))
-		}
-	}
-
+	// Blocked fields are NOT enforced here. This function only merges; the merge
+	// deliberately writes every key the request carried, and UpdateSectionSettings
+	// then calls restoreBlockedFields to revert the blocked ones against the
+	// pre-update snapshot. Enforcing here is not possible anyway: a section name
+	// does not always map to a top-level key of getBlockedFieldMap (PATCH
+	// /settings/audio targets Realtime.Audio), so a per-section lookup would
+	// silently miss exactly the nested section that carries blocked leaves: the
+	// audio tool paths live under the map's "Realtime" key, which a lookup keyed
+	// on the section name "audio" would never find.
+	//
+	// A note claiming "the actual blocking happens in
+	// updateAllowedFieldsRecursivelyWithTracking" used to live here. That function
+	// is only reachable from PUT, so it read as enforcement while nothing on this
+	// path enforced anything. Do not reintroduce enforcement here.
 	return nil
 }
 
@@ -2134,12 +2146,22 @@ func redact(s string) string {
 }
 
 // getBlockedFieldMap returns a map of fields that are BLOCKED from being updated
-// Using BLACKLIST approach - all fields are allowed by default except:
-// 1. Fields marked with yaml:"-" tag (automatically skipped)
-// 2. Fields explicitly listed here for security reasons
+// THROUGH THE SETTINGS API. It governs the two request-driven write paths only;
+// server-side writers (the range filter rebuild, the model manager) set these
+// fields directly and are not subject to it.
 //
-// IMPORTANT: Only add fields here if they pose a security risk
-// Most runtime-only fields should use yaml:"-" tag instead
+// Using BLACKLIST approach - all fields are allowed by default except the fields
+// listed here.
+//
+// IMPORTANT: Only add fields here if they pose a security risk.
+//
+// A yaml:"-" tag is NOT an equivalent protection, and the two write paths differ
+// on it: PUT additionally skips every yaml:"-" field, while PATCH enforces this
+// map alone (a yaml:"-" field with a live json tag is merged like any other, and
+// PATCH relies on whatever re-derives it downstream). Any runtime-only field
+// that must not be client-settable on BOTH paths belongs in this map, whatever
+// its yaml tag. TestPatchYamlDashFieldsAreEitherBlockedOrRederived pins the
+// current set so a new one cannot slip in unnoticed.
 func getBlockedFieldMap() map[string]any {
 	return map[string]any{
 		// Block these top-level runtime fields
@@ -2192,6 +2214,243 @@ func getBlockedFieldMap() map[string]any {
 		},
 
 		// All other fields are allowed by default
+	}
+}
+
+// restoreBlockedFields reverts every field getBlockedFieldMap marks as
+// never-updatable-via-API back to its value in current. It reverts them all, and
+// returns only the subset whose value had actually changed (sorted, so the
+// response is stable across map iteration order), so an empty result means the
+// client changed nothing blocked rather than that nothing was written.
+//
+// This is what ENFORCES the map on the PATCH path. PATCH merges the incoming
+// JSON straight into the section struct (handleGenericSection ->
+// mergeJSONIntoStruct), so by the time control reaches here a blocked field can
+// already hold a client-supplied value; restoring from the pre-update snapshot
+// is what undoes that. It is deliberately a sibling of restoreRedactedSecrets,
+// which sits on this same path and also restores from the snapshot after a
+// merge.
+//
+// PUT does not call this. It enforces the same map field by field BEFORE
+// anything is written: updateAllowedFieldsRecursivelyWithTracking walks into
+// handleFieldPermission, which returns early ("return nil // Skip this field")
+// for a blocked leaf, so the value from the request is never assigned.
+// TestPutCannotChangeBlockedFields pins that arm against four of the 19 leaves.
+// Of the rest, 9 are yaml:"-" and are skipped by an earlier arm of the same walk
+// before the blocked map is consulted at all, so they are covered twice on that
+// path. That leaves 6 resting on the blocked arm alone with no test of their own
+// on the PUT path: the two audio tool paths, Security.SessionDuration, and the
+// three Security.BasicAuth lifetime and client-id fields.
+//
+// The two paths report differently, and only PATCH matches the description
+// above: PUT appends every blocked path it walks past whether or not the request
+// changed it, plus every yaml:"-" field as "<path> (runtime-only)", so its list
+// is never empty and is not a rejection report.
+func restoreBlockedFields(current, updated *conf.Settings) []string {
+	// Non-nil so the response carries [] rather than null when nothing was
+	// rejected, matching what the endpoint documentation promises.
+	restored := []string{}
+	restoreBlockedFieldsRecursively(
+		reflect.ValueOf(current).Elem(),
+		reflect.ValueOf(updated).Elem(),
+		getBlockedFieldMap(),
+		&restored,
+		"",
+	)
+	slices.Sort(restored)
+	return restored
+}
+
+// restoreBlockedFieldsRecursively walks the blocked map rather than the struct,
+// so its cost is the size of the map and not the size of conf.Settings.
+func restoreBlockedFieldsRecursively(
+	currentValue, updatedValue reflect.Value,
+	blockedFields map[string]any,
+	restored *[]string,
+	prefix string,
+) {
+	if currentValue.Kind() != reflect.Struct || updatedValue.Kind() != reflect.Struct {
+		return
+	}
+
+	for fieldName, rule := range blockedFields {
+		currentField := currentValue.FieldByName(fieldName)
+		updatedField := updatedValue.FieldByName(fieldName)
+		// A map entry naming a field that no longer exists (renamed or removed)
+		// must not panic a live request. TestBlockedFieldMapNamesRealFields is
+		// what turns such an entry into a test failure instead.
+		if !currentField.IsValid() || !updatedField.IsValid() || !currentField.CanInterface() {
+			continue
+		}
+
+		fieldPath := fieldName
+		if prefix != "" {
+			fieldPath = prefix + "." + fieldName
+		}
+
+		switch rule := rule.(type) {
+		case bool:
+			if rule {
+				restoreBlockedLeaf(currentField, updatedField, fieldPath, restored)
+			}
+		case map[string]any:
+			restoreBlockedSubtree(currentField, updatedField, rule, fieldPath, restored)
+		}
+	}
+}
+
+// restoreBlockedLeaf reverts one blocked leaf and records the path when the
+// value actually differed.
+//
+// The restore is UNCONDITIONAL; only the reporting consults blockedValuesEqual.
+// That split is deliberate: enforcement must not depend on a comparison being
+// right. An earlier revision restored only when the values compared unequal, so
+// every gap in blockedValuesEqual was a bypass, and it had one: time.Time.Equal
+// ignores Location, so a client could resend BirdNET.RangeFilter.LastUpdated as
+// the same instant in a different offset, have it compare "unchanged", and shift
+// the calendar day conf.LocalNoon derives from it. Writing current's value back
+// every time makes a comparison bug cost an inaccurate skippedFields list rather
+// than a leaked write.
+func restoreBlockedLeaf(currentField, updatedField reflect.Value, fieldPath string, restored *[]string) {
+	if !updatedField.CanSet() {
+		return
+	}
+	if !blockedValuesEqual(currentField, updatedField) {
+		*restored = append(*restored, fieldPath)
+	}
+	updatedField.Set(defensiveCopy(currentField))
+}
+
+// blockedValuesEqual reports whether a blocked leaf came through the merge
+// unchanged. It decides only whether the path is REPORTED in skippedFields (and
+// logged); restoreBlockedLeaf reverts the value either way.
+//
+// Two kinds need more than reflect.DeepEqual, both because the PATCH merge
+// round-trips the section through JSON and JSON cannot carry everything a Go
+// value holds:
+//
+//   - time.Time is compared by instant, with Equal. DeepEqual sees the monotonic
+//     clock reading that time.Now() attaches, and the Location, neither of which
+//     survives the round trip intact. Comparing the Location is specifically
+//     wrong: at UTC offset 0 the value marshals as "...Z" and parses back to
+//     time.UTC, which is a different *Location from the time.Local that
+//     time.Now() attached even when the local zone IS UTC, so a Location-
+//     sensitive comparison reports a phantom rejection on every request touching
+//     the section. That fires wherever the local zone sits at offset 0: a bare
+//     container or TZ=UTC, Reykjavik and Abidjan year round, London, Dublin and
+//     Lisbon every winter. BirdNET.RangeFilter.LastUpdated is the live case
+//     (conf.UpdateIncludedSpecies sets it from time.Now()).
+//
+//     Comparing by instant costs no enforcement: a client resending the same
+//     instant in a different offset still has the whole value, Location
+//     included, overwritten from the snapshot, because restoreBlockedLeaf
+//     restores unconditionally. It is only left out of skippedFields, which is
+//     correct, since the instant it asked for is the instant it already had.
+//     The one thing it does cost is a log line: a client deliberately probing
+//     with a shifted offset no longer trips the blocked-field warning, because
+//     that fires on the reported list. The write is still prevented.
+//
+//   - A nil slice and an empty non-nil slice are the same JSON (`[]`, or absent
+//     under omitempty) but differ under DeepEqual. BirdNET.RangeFilter.Species is
+//     the live case: a range filter admitting zero species leaves a non-nil empty
+//     slice (conf.UpdateIncludedSpecies allocates with make), which the merge
+//     turns back into nil. A nil-vs-empty MAP is the same asymmetry and is NOT
+//     covered here, because no blocked leaf is a map today; add an arm before
+//     adding one (conf.RangeFilterSettings.IncludedScientificNames is the
+//     candidate, kept out of reach today only by json:"-").
+func blockedValuesEqual(currentField, updatedField reflect.Value) bool {
+	if cur, ok := reflect.TypeAssert[time.Time](currentField); ok {
+		if upd, isTime := reflect.TypeAssert[time.Time](updatedField); isTime {
+			return cur.Equal(upd)
+		}
+	}
+	if currentField.Kind() == reflect.Slice && updatedField.Kind() == reflect.Slice &&
+		currentField.Len() == 0 && updatedField.Len() == 0 {
+		return true
+	}
+	return reflect.DeepEqual(currentField.Interface(), updatedField.Interface())
+}
+
+// defensiveCopy returns a value safe to store in the snapshot that is about to
+// be published. A slice or map at the TOP level of a blocked leaf is copied
+// rather than shared: conf.CloneSettings deliberately gives the clone its own
+// backing storage, and restoring a blocked field must not quietly re-alias it to
+// the outgoing snapshot. The copy is shallow, matching the slices.Clone /
+// maps.Clone that CloneSettings uses.
+//
+// Scope worth knowing before adding a leaf: a struct-typed leaf falls through to
+// the default arm and is copied by assignment, so any slice or map INSIDE it
+// stays shared with the outgoing snapshot. That is safe for the only such leaf
+// today (Input, three scalars) and would need revisiting for a struct leaf
+// holding reference types.
+func defensiveCopy(v reflect.Value) reflect.Value {
+	switch v.Kind() {
+	case reflect.Slice:
+		if v.IsNil() {
+			return v
+		}
+		dst := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		reflect.Copy(dst, v)
+		return dst
+	case reflect.Map:
+		if v.IsNil() {
+			return v
+		}
+		dst := reflect.MakeMapWithSize(v.Type(), v.Len())
+		for iter := v.MapRange(); iter.Next(); {
+			dst.SetMapIndex(iter.Key(), iter.Value())
+		}
+		return dst
+	default:
+		return v
+	}
+}
+
+// restoreBlockedSubtree descends into a struct that carries blocked leaves.
+//
+// No blocked path crosses a pointer today: every node the walk descends through
+// is a value struct. The pointer arms exist so that turning any one of them into
+// a pointer later cannot silently disable enforcement for everything underneath
+// it. They are unreachable through restoreBlockedFields, so
+// TestRestoreBlockedFieldsHandlesPointerSubtrees drives them directly.
+func restoreBlockedSubtree(
+	currentField, updatedField reflect.Value,
+	blockedFields map[string]any,
+	fieldPath string,
+	restored *[]string,
+) {
+	if currentField.Kind() != reflect.Pointer {
+		restoreBlockedFieldsRecursively(currentField, updatedField, blockedFields, restored, fieldPath)
+		return
+	}
+
+	switch {
+	case !updatedField.IsNil():
+		// A nil current means every blocked leaf under it is the zero value, and
+		// zeroing them in updated is the correct restore. Read from a throwaway
+		// zero struct so current is never allocated into.
+		source := currentField
+		if source.IsNil() {
+			source = reflect.New(currentField.Type().Elem())
+		}
+		restoreBlockedFieldsRecursively(source.Elem(), updatedField.Elem(), blockedFields, restored, fieldPath)
+
+	case !currentField.IsNil() && updatedField.CanSet():
+		// The client nulled a whole struct holding blocked leaves. Rebuild just
+		// those leaves, and publish the rebuild only when it carries something, so
+		// a no-op restore cannot turn a nil pointer into a non-nil one.
+		//
+		// The predicate is whether the rebuild came out non-zero, NOT whether
+		// anything was reported. Those differ now that restoreBlockedLeaf restores
+		// unconditionally and reports only on difference: a blocked leaf that
+		// compares equal is still restored, and gating the write on the report
+		// count would let a client delete a struct holding blocked fields by
+		// nulling it whenever every leaf under it happened to compare equal.
+		rebuilt := reflect.New(updatedField.Type().Elem())
+		restoreBlockedFieldsRecursively(currentField.Elem(), rebuilt.Elem(), blockedFields, restored, fieldPath)
+		if !rebuilt.Elem().IsZero() {
+			updatedField.Set(rebuilt)
+		}
 	}
 }
 

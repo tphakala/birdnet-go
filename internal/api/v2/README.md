@@ -239,6 +239,18 @@ The `GET /settings/dashboard` endpoint is intentionally public so that unauthent
 
 **Restart-required signal:** `PUT /settings` and `PATCH /settings/:section` responses include `restart_required` (bool) and `restart_reasons` (string[]), reflecting the global restart state also served by `GET /system/restart-status`. Settings bound once at startup that cannot hot-reload set this flag: web server / TLS settings, database (`output`), logging, and TLS certificate operations. `restart_reasons` carries i18n message keys (e.g. `restart.reasons.database`), not English text; the SPA resolves them via the translation catalog. The flag is sticky (it clears when the process actually restarts) and is not cleared by reverting the change.
 
+**Blocked fields:** a set of fields can never be written through the settings API, on either write path. `PUT /settings` skips them during its field walk; `PATCH /settings/:section` merges the request and then restores them from the pre-update snapshot. Sending such a field is not an error: the rest of the request is applied normally and only the blocked values are reverted.
+
+The set covers generated credentials (`Security.SessionSecret`, `Security.BasicAuth.ClientID`/`ClientSecret`, `Diagnostics.Profiling.Token`), the session and OAuth2 lifetimes (`Security.SessionDuration`, `Security.BasicAuth.AuthCodeExp`/`AccessTokenExp`), the server-validated ffmpeg/sox tool paths and the sox format list (`Realtime.Audio.FfmpegPath`/`SoxPath`/`SoxAudioTypes`), the range-filter model selection (`BirdNET.RangeFilter.Model`), and runtime state the process populates for itself (`Version`, `BuildDate`, `SystemID`, `ValidationWarnings`, `Input`, `BirdNET.Labels`, `BirdNET.RangeFilter.Species`/`LastUpdated`). Note that several of these are ordinary `config.yaml` keys: they are settable by editing the config file, just not through the API.
+
+The two verbs report differently under the same `skippedFields` response key, so do not treat a non-empty list from `PUT` as a rejection:
+
+| | `PATCH /settings/:section` | `PUT /settings` |
+| --- | --- | --- |
+| Contents | only the paths whose value the request actually changed, sorted (every blocked field is reverted regardless; the list is the subset that differed) | every blocked path the walk passed, plus every `yaml:"-"` field as `<path> (runtime-only)` |
+| Depends on the request | yes | no |
+| Empty when nothing was rejected | yes (`[]`) | never (a no-op request returns ~25 entries) |
+
 **Quiet Hours** (`settings_audio.go`): The `realtime` settings section includes quiet hours configuration for both individual RTSP streams (`realtime.rtsp.streams[].quietHours`) and the sound card (`realtime.audio.quietHours`). Each `QuietHoursConfig` supports:
 
 - `enabled` (bool): Enable/disable quiet hours for this source
