@@ -5227,10 +5227,10 @@
     "downloadSource": {
       "title": "Zdroj sťahovania",
       "description": "Miesto, odkiaľ sa sťahujú súbory modelov.",
-      "note": "Ponechajte toto pole prázdne, ak huggingface.co nie je vo vašej sieti zablokované alebo pomalé. Premenná prostredia HF_ENDPOINT sa použije, ak je toto pole prázdne, a huggingface.co, ak nie je nastavená ani jedna z možností. Hodnota, ktorá nie je platnou adresou http alebo https, sa ignoruje a namiesto nej sa použije predvolená hodnota.",
+      "note": "Ponechajte toto pole prázdne, ak huggingface.co nie je vo vašej sieti zablokované ani pomalé. Premenná prostredia HF_ENDPOINT sa použije, ak je toto pole prázdne, a huggingface.co, ak nie je nastavená ani jedna z možností. Hodnota, ktorá nie je platnou adresou http alebo https, sa ignoruje a namiesto nej sa použije predvolená hodnota.",
       "endpoint": {
         "label": "Koncový bod HuggingFace",
-        "helpText": "Zrkadlo na sťahovanie modelov, napríklad https://hf-mirror.com. Vzťahuje sa na nasledujúce sťahovanie; nie je potrebný reštart.",
+        "helpText": "Zrkadlový server na sťahovanie modelov, napríklad https://hf-mirror.com. Vzťahuje sa na nasledujúce sťahovanie; nie je potrebný reštart.",
         "validationMessage": "Zadajte úplnú adresu začínajúcu na http:// alebo https://, alebo ponechajte pole prázdne."
       }
     },

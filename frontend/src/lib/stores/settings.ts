@@ -1366,7 +1366,7 @@ export const settingsActions = {
       // session. Read newLocale from coercedFormData (the value we actually
       // persisted) and compare to originalData (the snapshot loaded from
       // the backend). This avoids clobbering a locale chosen via the sidebar
-      // LanguageSelector — which updates localStorage but not the backend —
+      // LanguageSelector (which updates localStorage but not the backend)
       // with whatever stale value the backend still holds, and matches the
       // coercedFormData-based comparison used by the TLS check below.
       const newLocale = coercedFormData.realtime?.dashboard?.locale;

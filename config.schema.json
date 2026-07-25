@@ -494,6 +494,10 @@
         "openvinodevice": {
           "type": "string",
           "description": "OpenVINO device preference: \"auto\" (default), \"cpu\", or \"gpu\""
+        },
+        "huggingfaceendpoint": {
+          "type": "string",
+          "description": "model download host, e.g. \"https://hf-mirror.com\" where huggingface.co is blocked; empty falls back to $HF_ENDPOINT then https://huggingface.co"
         }
       },
       "additionalProperties": false,

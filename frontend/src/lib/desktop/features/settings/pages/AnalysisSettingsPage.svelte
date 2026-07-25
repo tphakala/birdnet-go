@@ -91,7 +91,9 @@
 
   const logger = loggers.settings;
 
-  // Shown as the endpoint placeholder; must match conf.DefaultHuggingFaceEndpoint.
+  // Shown as the endpoint placeholder. Mirrors conf.DefaultHuggingFaceEndpoint
+  // by hand; nothing enforces it, but it is only placeholder text, so drift
+  // would be cosmetic.
   const DEFAULT_HUGGINGFACE_ENDPOINT = 'https://huggingface.co';
 
   const MODEL_LOGOS: Record<string, string> = {
@@ -1460,17 +1462,33 @@
     <SettingsSection
       title={t('analysis.downloadSource.title')}
       description={t('analysis.downloadSource.description')}
-      defaultOpen={false}
       originalData={{
-        huggingFaceEndpoint: store.originalData.birdnet?.huggingFaceEndpoint,
+        huggingFaceEndpoint: store.originalData.birdnet?.huggingFaceEndpoint ?? '',
       }}
-      currentData={{ huggingFaceEndpoint: birdnet?.huggingFaceEndpoint }}
+      currentData={{ huggingFaceEndpoint: birdnet?.huggingFaceEndpoint ?? '' }}
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!--
+          Pattern kept deliberately close to conf.normalizeHuggingFaceEndpoint so
+          the field neither accepts a value the backend will discard nor rejects
+          one it would take: the scheme is matched case-insensitively because the
+          backend canonicalizes it, and "?", "#" and "@" are excluded because the
+          backend rejects a query, a fragment and userinfo. An empty host is
+          rejected by type="url" rather than by this pattern. The backend stays
+          authoritative for what neither can express (a ".." path segment, a
+          non-ASCII host, a hostless authority such as "https://:8080"), and
+          reports those as a startup validation warning.
+
+          Two things must not change: every "/" stays escaped, because browsers
+          compile this attribute with the `v` flag where a bare "/" in a
+          character class throws and silently disables validation altogether;
+          and it stays a static attribute, so svelte-pattern-attributes.test.ts
+          keeps compiling it the way the browser does.
+        -->
         <TextInput
           id="huggingface-endpoint"
           type="url"
-          pattern="https?://.+"
+          pattern="[Hh][Tt][Tt][Pp][Ss]?:\/\/[^\/?#@]+(\/[^?#]*)?"
           value={birdnet?.huggingFaceEndpoint ?? ''}
           label={t('analysis.downloadSource.endpoint.label')}
           placeholder={DEFAULT_HUGGINGFACE_ENDPOINT}

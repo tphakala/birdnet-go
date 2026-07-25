@@ -156,7 +156,11 @@ They were intentionally removed from the UI. They are values that should be left
 
 ### The model download fails (e.g. Hugging Face is blocked here)
 
-You can install a model manually. The exact names matter: the folder must be `perch-v2`, the model file `perch_v2.onnx`, and a `perch_v2_labels.txt` alongside it (rename Hugging Face's `labels.txt`). Place the folder under your models directory (logged at startup as `models_dir=...`). The mirror `hf-mirror.com` uses the same path layout.
+Point the downloads at a mirror. Go to **Settings > Analysis > Models > Download Source** and set the endpoint to `https://hf-mirror.com`, which serves the same path layout. It applies to the next download, so no restart is needed, and you can then install models from the gallery as normal. If you already set the `HF_ENDPOINT` environment variable for the Hugging Face Python tooling, BirdNET-Go picks that up automatically and you do not need to fill the field in.
+
+A value that is not a valid `http` or `https` address is ignored and the default host is used instead; you will see a warning about it at startup.
+
+Failing that, you can still install a model manually. The exact names matter: the folder must be `perch-v2`, the model file `perch_v2.onnx`, and a `perch_v2_labels.txt` alongside it (rename Hugging Face's `labels.txt`). Place the folder under your models directory (logged at startup as `models_dir=...`).
 
 ## Improving accuracy and reducing false positives
 

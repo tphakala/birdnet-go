@@ -5231,7 +5231,7 @@
       "endpoint": {
         "label": "Punkt końcowy HuggingFace",
         "helpText": "Serwer lustrzany do pobierania modeli, na przykład https://hf-mirror.com. Dotyczy następnego pobierania; restart nie jest wymagany.",
-        "validationMessage": "Wprowadź pełny adres zaczynający się od http:// lub https:// lub pozostaw pole puste."
+        "validationMessage": "Wprowadź pełny adres zaczynający się od http:// lub https://, albo pozostaw pole puste."
       }
     },
     "gallery": {

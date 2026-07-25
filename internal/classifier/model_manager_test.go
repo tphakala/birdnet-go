@@ -1384,9 +1384,13 @@ func TestModelManager_HuggingFaceEndpoint(t *testing.T) {
 
 	// newManager publishes settings with the given endpoint override and
 	// returns a manager wired to them, mirroring production where the manager
-	// holds the published settings pointer.
-	newManager := func(t *testing.T, configured string) *ModelManager {
+	// holds the published settings pointer. It also pins HF_ENDPOINT, which
+	// would otherwise be inherited from the environment running the test; the
+	// people most likely to have it exported are the mirror users this feature
+	// exists for, so an unpinned test would fail for exactly them.
+	newManager := func(t *testing.T, configured, env string) *ModelManager {
 		t.Helper()
+		t.Setenv(conf.HuggingFaceEndpointEnvVar, env)
 		settings := conftest.GetTestSettings()
 		settings.BirdNET.HuggingFaceEndpoint = configured
 		conf.StoreSettings(settings)
@@ -1394,17 +1398,17 @@ func TestModelManager_HuggingFaceEndpoint(t *testing.T) {
 	}
 
 	t.Run("default when no override is configured", func(t *testing.T) {
-		mm := newManager(t, "")
+		mm := newManager(t, "", "")
 		assert.Equal(t, conf.DefaultHuggingFaceEndpoint, mm.huggingFaceEndpoint())
 	})
 
 	t.Run("settings field is honoured", func(t *testing.T) {
-		mm := newManager(t, "https://hf-mirror.com/")
+		mm := newManager(t, "https://hf-mirror.com/", "")
 		assert.Equal(t, "https://hf-mirror.com", mm.huggingFaceEndpoint())
 	})
 
 	t.Run("settings change takes effect without recreating the manager", func(t *testing.T) {
-		mm := newManager(t, "")
+		mm := newManager(t, "", "")
 		require.Equal(t, conf.DefaultHuggingFaceEndpoint, mm.huggingFaceEndpoint())
 
 		updated := conf.CloneSettings(conf.GetSettings())
@@ -1416,20 +1420,35 @@ func TestModelManager_HuggingFaceEndpoint(t *testing.T) {
 	})
 
 	t.Run("env var is honoured when the settings field is empty", func(t *testing.T) {
-		t.Setenv(conf.HuggingFaceEndpointEnvVar, "https://hf-mirror.com")
-		mm := newManager(t, "")
+		mm := newManager(t, "", "https://hf-mirror.com")
 		assert.Equal(t, "https://hf-mirror.com", mm.huggingFaceEndpoint())
 	})
 
-	t.Run("env var is honoured when config sync is disabled", func(t *testing.T) {
-		t.Setenv(conf.HuggingFaceEndpointEnvVar, "https://hf-mirror.com")
+	t.Run("settings field wins over the env var", func(t *testing.T) {
+		mm := newManager(t, "https://settings-mirror.example.com", "https://hf-mirror.com")
+		assert.Equal(t, "https://settings-mirror.example.com", mm.huggingFaceEndpoint())
+	})
+
+	t.Run("published settings are read when none were injected", func(t *testing.T) {
+		t.Setenv(conf.HuggingFaceEndpointEnvVar, "")
+		settings := conftest.GetTestSettings()
+		settings.BirdNET.HuggingFaceEndpoint = "https://hf-mirror.com"
+		conf.StoreSettings(settings)
+
 		mm := NewModelManager(t.TempDir(), nil, nil)
-		assert.Equal(t, "https://hf-mirror.com", mm.huggingFaceEndpoint())
+		assert.Equal(t, "https://hf-mirror.com", mm.huggingFaceEndpoint(),
+			"conf.CurrentOrFallback must prefer the published snapshot")
 	})
 
 	t.Run("malformed settings field falls back to the default", func(t *testing.T) {
-		mm := newManager(t, "hf-mirror.com")
+		mm := newManager(t, "hf-mirror.com", "")
 		assert.Equal(t, conf.DefaultHuggingFaceEndpoint, mm.huggingFaceEndpoint())
+	})
+
+	t.Run("credential-bearing settings field falls back to the default", func(t *testing.T) {
+		mm := newManager(t, "https://user:hunter2@hf-mirror.com", "")
+		assert.Equal(t, conf.DefaultHuggingFaceEndpoint, mm.huggingFaceEndpoint(),
+			"credentials must never reach a download URL, a log line, or a support dump")
 	})
 }
 
@@ -1475,13 +1494,25 @@ func TestModelManager_Install_UsesConfiguredEndpoint(t *testing.T) {
 	origSettings := conf.GetSettings()
 	t.Cleanup(func() { conf.StoreSettings(origSettings) })
 
+	t.Setenv(conf.HuggingFaceEndpointEnvVar, "")
 	settings := conftest.GetTestSettings()
 	// Trailing slash included on purpose: normalization must not produce "//".
 	settings.BirdNET.HuggingFaceEndpoint = srv.URL + "/mirror/"
 	conf.StoreSettings(settings)
 
 	modelsDir := t.TempDir()
-	mm := NewModelManager(modelsDir, nil, settings)
+	// Injected settings are deliberately nil: a non-nil value makes a successful
+	// install run applyConfigForInstall, which calls conf.SaveSettings and writes
+	// the developer's real ~/.config/birdnet-go/config.yaml. The endpoint still
+	// resolves from the published snapshot above via conf.CurrentOrFallback, so
+	// the download path under test is unaffected.
+	//
+	// The trade, stated so it is not rediscovered as a surprise: production always
+	// passes non-nil settings, so this test does not cover the install-then-persist
+	// step. That step is covered by the geomodel install tests, which need non-nil
+	// settings to assert on what gets persisted, and which write the real config
+	// for the same reason. Fixing that properly needs a config-path seam.
+	mm := NewModelManager(modelsDir, nil, nil)
 
 	// baseURL is empty so the download path builds URLs from the endpoint and
 	// the repo, which is what a real install does.

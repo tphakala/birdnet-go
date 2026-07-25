@@ -947,8 +947,20 @@ func (mm *ModelManager) downloadModelFiles(ctx context.Context, entry *CatalogEn
 	}
 
 	// Resolve the HuggingFace host once per install so every file in the same
-	// install comes from the same mirror.
-	endpoint := mm.huggingFaceEndpoint()
+	// install comes from the same mirror. Skipped when baseURL is set, because
+	// that path bypasses repo construction entirely.
+	var endpoint string
+	if baseURL == "" {
+		endpoint = mm.huggingFaceEndpoint()
+		// A non-default host is worth a log line: it can come from the
+		// HF_ENDPOINT environment variable, which the settings UI cannot show,
+		// so this is the only record of where the files actually came from.
+		if endpoint != conf.DefaultHuggingFaceEndpoint {
+			log.Info("Downloading model files from a non-default HuggingFace host",
+				logger.String("catalog_id", entry.ID),
+				logger.String("endpoint", endpoint))
+		}
+	}
 
 	// Download each file.
 	var modelPath, labelsPath string
@@ -1508,10 +1520,8 @@ func buildHuggingFaceURL(endpoint, repo, filePath string) string {
 // through the UI takes effect without a restart.
 func (mm *ModelManager) huggingFaceEndpoint() string {
 	var configured string
-	if mm.settings != nil {
-		if current := conf.GetSettings(); current != nil {
-			configured = current.BirdNET.HuggingFaceEndpoint
-		}
+	if current := conf.CurrentOrFallback(mm.settings); current != nil {
+		configured = current.BirdNET.HuggingFaceEndpoint
 	}
 	return conf.ResolveHuggingFaceEndpoint(configured)
 }

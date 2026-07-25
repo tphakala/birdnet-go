@@ -45,6 +45,16 @@ var supportEnvAllowlist = []string{
 	// nothing" from "the operator set a variable that stopped doing anything",
 	// which otherwise look identical from the outside.
 	"BIRDNET_FLAC_ENCODER",
+	// Not a BIRDNET_ variable, and the one entry here whose value is withheld:
+	// the name matches the "endpoint" sensitive-key pattern on its underscore
+	// boundary, so a dump records that it is set but redacts what it is set to.
+	// That is the point. It silently redirects every model download and is
+	// recorded nowhere in config.yaml, so a dump from a user whose installs fail
+	// or fetch from an unexpected host cannot otherwise distinguish "unset" from
+	// "pointed at a broken mirror"; and because users set it for the HuggingFace
+	// Python tooling rather than for BirdNET-Go, the value can carry credentials
+	// this project never asked for.
+	HuggingFaceEndpointEnvVar,
 }
 
 // SupportEnvAllowlist returns a copy of the environment variables a support dump
