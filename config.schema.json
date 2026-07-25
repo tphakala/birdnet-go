@@ -1535,11 +1535,11 @@
         },
         "blockrate": {
           "type": "integer",
-          "description": "nanoseconds of blocked time per sample; 0 disables. Recommended starting point: 10000"
+          "description": "nanoseconds of blocked time per sample; 0 disables, and values above 10000000 (10ms) are clamped to it. Independent of enabled: sampling costs CPU continuously whether or not a profile is ever fetched, so 0 is the only free setting. Recommended starting point: 10000. Hot-reloadable via the settings API."
         },
         "mutexfraction": {
           "type": "integer",
-          "description": "report 1 in N contention events; 0 disables. Recommended starting point: 100"
+          "description": "reports one sampled event per this many contention events; 0 disables. Independent of enabled: sampling costs CPU continuously whether or not a profile is ever fetched. Recommended starting point: 100. Hot-reloadable via the settings API."
         }
       },
       "additionalProperties": false,

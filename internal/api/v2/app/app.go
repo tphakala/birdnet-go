@@ -166,7 +166,7 @@ func (c *Handler) GetAppConfig(ctx echo.Context) error {
 	}
 
 	// Determine if any security method is enabled
-	securityEnabled := settings.Security.BasicAuth.Enabled || len(enabledProviders) > 0
+	securityEnabled := settings.IsAuthProviderConfigured()
 
 	// Determine if access is currently allowed
 	accessAllowed := c.determineAccessAllowed(ctx, securityEnabled)
@@ -327,7 +327,7 @@ func (c *Handler) isExistingInstall(ctx context.Context, settings *conf.Settings
 	if len(settings.Realtime.Audio.Sources) > 0 {
 		return true
 	}
-	if settings.Security.BasicAuth.Enabled || len(settings.GetEnabledOAuthProviders()) > 0 {
+	if settings.IsAuthProviderConfigured() {
 		return true
 	}
 	if !c.hasZeroDetections(ctx) {

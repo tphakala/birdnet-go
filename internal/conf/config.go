@@ -1732,28 +1732,31 @@ type BackupConfig struct {
 // The leaf key is deliberately named "token" and not "profilingtoken": support
 // dump scrubbing matches sensitive keys on word boundaries, so a squashed name
 // would not be redacted. See isSensitiveKey in internal/support/collector.go.
-// The two rate fields have different units and opposite senses, which is a
-// documented footgun in the Go API rather than an inconsistency here:
-// SetBlockProfileRate takes nanoseconds of blocked time per sample, so a LARGER
-// number samples LESS, while SetMutexProfileFraction takes a 1-in-N fraction of
-// contention events, so a larger number also samples less but on a different
-// scale entirely. Both are independent of Enabled: collecting samples and
+// The two rate fields have different units on entirely different scales, which
+// is a documented footgun in the Go API rather than an inconsistency here:
+// SetBlockProfileRate takes nanoseconds of blocked time per sample, while
+// SetMutexProfileFraction takes a 1-in-N fraction of contention events. Both
+// sample LESS as the number grows, so the senses agree; only the units and the
+// magnitudes differ. Both are independent of Enabled: collecting samples and
 // serving /debug/pprof are separate decisions, and turning on the endpoint to
 // grab a heap profile must not silently start taxing the audio path.
 //
-// Use ResolvedBlockRate and ResolvedMutexFraction rather than reading the fields
-// directly; they clamp values the runtime would otherwise misread.
+// Use ResolvedBlockRate and ResolvedMutexFraction when handing these to the
+// runtime rather than reading the fields directly; they clamp values the
+// runtime would otherwise misread.
 //
 // The two rate comments below are lifted verbatim into the generated config
 // schema and the wiki's configuration reference, so they spell the recommended
-// numbers out rather than naming the constants that hold them.
-// TestSamplingDefaultsMatchDocumentedValues keeps those copies in step.
+// numbers out rather than naming the constants that hold them. Those two copies
+// cannot drift: TestSchemaUpToDate regenerates and byte-compares them. The
+// copies in config.yaml and doc/PROFILING.md are hand-maintained, and
+// TestRecommendedRatesMatchShippedConfig covers the config.yaml one.
 type ProfilingConfig struct {
 	Enabled bool   `yaml:"enabled" json:"enabled"` // true to serve /debug/pprof/* on the web server
 	Token   string `yaml:"token" json:"token"`     // secret required when no auth provider is configured; generated automatically
 
-	BlockRate     int `yaml:"blockrate" json:"blockRate"`         // nanoseconds of blocked time per sample; 0 disables. Recommended starting point: 10000
-	MutexFraction int `yaml:"mutexfraction" json:"mutexFraction"` // report 1 in N contention events; 0 disables. Recommended starting point: 100
+	BlockRate     int `yaml:"blockrate" json:"blockRate"`         // nanoseconds of blocked time per sample; 0 disables, and values above 10000000 (10ms) are clamped to it. Independent of enabled: sampling costs CPU continuously whether or not a profile is ever fetched, so 0 is the only free setting. Recommended starting point: 10000. Hot-reloadable via the settings API.
+	MutexFraction int `yaml:"mutexfraction" json:"mutexFraction"` // reports one sampled event per this many contention events; 0 disables. Independent of enabled: sampling costs CPU continuously whether or not a profile is ever fetched. Recommended starting point: 100. Hot-reloadable via the settings API.
 }
 
 // DiagnosticsConfig groups the developer-facing diagnostics features. It is a

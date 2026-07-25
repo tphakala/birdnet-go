@@ -169,11 +169,11 @@ func TestProfilingRatesHotReload(t *testing.T) {
 
 	off := &conf.Settings{}
 	on := &conf.Settings{}
-	on.Diagnostics.Profiling.BlockRate = conf.DefaultBlockProfileRate
-	on.Diagnostics.Profiling.MutexFraction = conf.DefaultMutexProfileFraction
+	on.Diagnostics.Profiling.BlockRate = conf.RecommendedBlockProfileRate
+	on.Diagnostics.Profiling.MutexFraction = conf.RecommendedMutexProfileFraction
 
 	require.NoError(t, c.handleSettingsChanges(off, on))
-	assert.Equal(t, conf.DefaultMutexProfileFraction, runtime.SetMutexProfileFraction(-1),
+	assert.Equal(t, conf.RecommendedMutexProfileFraction, runtime.SetMutexProfileFraction(-1),
 		"turning the rates on must take effect without a restart")
 
 	require.NoError(t, c.handleSettingsChanges(on, off))
@@ -211,7 +211,12 @@ func TestProfilingRatesChangedScope(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name    string
+		name string
+		// base seeds BOTH snapshots, so a case can start from a non-zero rate.
+		// Without it every case starts from zero, and a detector written as
+		// "either new rate is non-zero" would pass the whole table while
+		// reapplying sampling on every save that merely kept it on.
+		base    func(*conf.Settings)
 		mutate  func(*conf.Settings)
 		changed bool
 	}{
@@ -220,13 +225,41 @@ func TestProfilingRatesChangedScope(t *testing.T) {
 			mutate: func(*conf.Settings) {},
 		},
 		{
+			name: "equal non-zero rates are not a change",
+			base: func(s *conf.Settings) {
+				s.Diagnostics.Profiling.BlockRate = conf.RecommendedBlockProfileRate
+				s.Diagnostics.Profiling.MutexFraction = conf.RecommendedMutexProfileFraction
+			},
+			mutate: func(s *conf.Settings) {
+				s.Diagnostics.Profiling.BlockRate = conf.RecommendedBlockProfileRate
+				s.Diagnostics.Profiling.MutexFraction = conf.RecommendedMutexProfileFraction
+			},
+		},
+		{
+			name: "turning a rate off is a change",
+			base: func(s *conf.Settings) {
+				s.Diagnostics.Profiling.BlockRate = conf.RecommendedBlockProfileRate
+			},
+			mutate:  func(s *conf.Settings) { s.Diagnostics.Profiling.BlockRate = 0 },
+			changed: true,
+		},
+		{
+			name: "two negatives both meaning off are not a change",
+			base: func(s *conf.Settings) {
+				s.Diagnostics.Profiling.BlockRate = -1
+			},
+			mutate: func(s *conf.Settings) {
+				s.Diagnostics.Profiling.BlockRate = -5
+			},
+		},
+		{
 			name:    "block rate",
-			mutate:  func(s *conf.Settings) { s.Diagnostics.Profiling.BlockRate = conf.DefaultBlockProfileRate },
+			mutate:  func(s *conf.Settings) { s.Diagnostics.Profiling.BlockRate = conf.RecommendedBlockProfileRate },
 			changed: true,
 		},
 		{
 			name:    "mutex fraction",
-			mutate:  func(s *conf.Settings) { s.Diagnostics.Profiling.MutexFraction = conf.DefaultMutexProfileFraction },
+			mutate:  func(s *conf.Settings) { s.Diagnostics.Profiling.MutexFraction = conf.RecommendedMutexProfileFraction },
 			changed: true,
 		},
 		{
@@ -245,9 +278,54 @@ func TestProfilingRatesChangedScope(t *testing.T) {
 
 			old := &conf.Settings{}
 			updated := &conf.Settings{}
+			if tt.base != nil {
+				tt.base(old)
+				tt.base(updated)
+			}
 			tt.mutate(updated)
 
 			assert.Equal(t, tt.changed, profilingRatesChanged(old, updated))
 		})
 	}
+}
+
+// TestRestoreProfilingRatesUndoesAFailedSave is the closure test for the
+// rollback gap.
+//
+// The failure it pins is not "the rates are briefly wrong". It is that they
+// stay wrong forever: a save that applies a rate and then fails its disk write
+// rolls the snapshot back to the old value, and the change gate then compares
+// the rolled-back config against the next save's config, finds them equal, and
+// never reapplies. The process keeps sampling on the audio path at a rate no
+// config records and no later save can clear, which is precisely the cost this
+// whole change exists to remove, made invisible.
+//
+// The other side effects handleSettingsChanges triggers do not have this shape:
+// the reconfigure_* actions re-read the live snapshot when the control monitor
+// processes them, so a rollback makes them converge on their own.
+func TestRestoreProfilingRatesUndoesAFailedSave(t *testing.T) {
+	resetProfileRates(t)
+
+	c := newProfilingTestController(t)
+
+	current := &conf.Settings{}
+	updated := &conf.Settings{}
+	updated.Diagnostics.Profiling.MutexFraction = conf.RecommendedMutexProfileFraction
+
+	// The save-succeeded path: the requested rate is live.
+	require.NoError(t, c.handleSettingsChanges(current, updated))
+	require.Equal(t, conf.RecommendedMutexProfileFraction, runtime.SetMutexProfileFraction(-1),
+		"setup: the rate must be applied before the rollback is exercised")
+
+	// Now the disk write fails and the handler republishes the old snapshot.
+	c.restoreProfilingRates(current)
+
+	assert.Zero(t, runtime.SetMutexProfileFraction(-1),
+		"a rolled-back save must leave the runtime matching the config that survived, not the one that failed to persist")
+
+	// And the process is not wedged: because the runtime now agrees with the
+	// persisted config, an ordinary later save can still turn sampling on.
+	require.NoError(t, c.handleSettingsChanges(current, updated))
+	assert.Equal(t, conf.RecommendedMutexProfileFraction, runtime.SetMutexProfileFraction(-1),
+		"a later save must still be able to apply the rate")
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import { settingsStore, settingsActions } from './settings';
 import type { BirdNetSettings, RealtimeSettings, SettingsFormData } from './settings';
@@ -734,15 +734,29 @@ describe('Settings Store - Unmodelled Section Round-Trip', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    // clearAllMocks resets call history but LEAVES mockResolvedValue in place,
+    // so without this the stub below keeps answering settingsAPI.load for
+    // whatever describe block is appended after this one.
+    vi.mocked(settingsAPI.load).mockReset();
+  });
+
   it('preserves the diagnostics section through load and save', async () => {
     const diagnostics = {
       profiling: {
         enabled: true,
-        token: '_REDACTED_',
+        // The sentinel the backend actually substitutes, so the fixture looks
+        // like a real GET response rather than an invented one.
+        token: '**********',
         blockRate: 10000,
         mutexFraction: 100,
       },
     };
+    // Compare against a deep snapshot, not against the object the mock resolves.
+    // The store spreads the response, so formData.diagnostics is the SAME
+    // reference; asserting it equals itself would pass even against a coercer
+    // that stripped fields in place on the object it was handed.
+    const expected = JSON.parse(JSON.stringify(diagnostics));
 
     vi.mocked(settingsAPI.load).mockResolvedValue({
       main: { name: 'TestNode' },
@@ -752,11 +766,13 @@ describe('Settings Store - Unmodelled Section Round-Trip', () => {
     await settingsActions.loadSettings();
 
     expect((get(settingsStore).formData as unknown as Record<string, unknown>).diagnostics).toEqual(
-      diagnostics
+      expected
     );
 
     await settingsActions.saveSettings();
 
-    expect(settingsAPI.save).toHaveBeenCalledWith(expect.objectContaining({ diagnostics }));
+    expect(settingsAPI.save).toHaveBeenCalledWith(
+      expect.objectContaining({ diagnostics: expected })
+    );
   });
 });

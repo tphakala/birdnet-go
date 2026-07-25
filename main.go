@@ -171,6 +171,16 @@ func mainWithExitCode() int {
 	// Create main module logger
 	mainLog := centralLogger.Module("main")
 
+	// Apply the configured block and mutex sampling rates. The rationale lives
+	// on profiling.ApplyRates; changes made through the settings API are applied
+	// by profilingRatesChanged in internal/api/v2/settings.go.
+	//
+	// As early as the logger allows, and deliberately ahead of telemetry init:
+	// that path blocks for up to five seconds waiting for readiness, which is
+	// itself a plausible thing to reach for block profiling to explain. The old
+	// debug-gated version sat after it and could not see it.
+	profiling.ApplyRates(&settings.Diagnostics.Profiling)
+
 	// Load or create system ID for telemetry
 	systemID, err := telemetry.LoadOrCreateSystemID(filepath.Dir(viper.ConfigFileUsed()))
 	if err != nil {
@@ -201,17 +211,6 @@ func mainWithExitCode() int {
 			logger.Error(err))
 		// Continue - not critical for operation
 	}
-
-	// Apply the configured block and mutex sampling rates.
-	//
-	// These used to be switched on at rate 1, the most aggressive value the
-	// runtime accepts, whenever debug: true was set. That is a flag people turn
-	// on to get verbose logging while chasing something unrelated, so it charged
-	// the real-time audio path for recording every blocking and contention event
-	// on behalf of users who had not asked for a profile. They are now explicit
-	// settings under diagnostics.profiling, off unless set, and independent of
-	// the pprof endpoint. They hot-reload; see reconfigure_profiling.
-	profiling.ApplyRates(settings)
 
 	// Process configuration validation warnings that occurred before Sentry initialization.
 	//

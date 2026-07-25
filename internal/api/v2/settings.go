@@ -318,6 +318,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 			// Rollback in-memory; disk write never happened successfully.
 			conf.StoreSettings(current)
 			c.Settings.Store(current)
+			c.restoreProfilingRates(current)
 			c.LogAPIRequest(ctx, logger.LogLevelError, "Failed to save settings to disk, rolling back", logger.Error(err))
 			return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 		}
@@ -761,6 +762,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		if err := conf.SaveSettings(); err != nil {
 			conf.StoreSettings(current)
 			c.Settings.Store(current)
+			c.restoreProfilingRates(current)
 			return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 		}
 		c.LogAPIRequest(ctx, logger.LogLevelInfo, "Section settings saved successfully",
@@ -2295,33 +2297,29 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 	// Apply the runtime block and mutex sampling rates.
 	//
 	// Deliberately NOT a settingsChangeChecks entry routed through controlChan
-	// like the reconfigure_* actions above. Those exist because the thing being
-	// reconfigured lives in the realtime analysis pipeline and must be touched
-	// from its own goroutine; sendReconfigActions therefore queues them with a
-	// delay between each. These two are process-global runtime calls with no
-	// dependencies and no ordering relationship to anything else, so queueing
-	// them behind a model reload would only add latency, and routing them
-	// through a monitor that exists solely in realtime analysis mode would make
-	// them silently do nothing anywhere else.
+	// like the reconfigure_* actions above. The property that separates these
+	// from those is not "process-global" (reconfigure_push_notifications and
+	// reconfigure_log_deduplication are process-global too): it is that both
+	// runtime setters are single atomic stores that cannot fail and cost
+	// microseconds. There is nothing to serialize, nothing that can report an
+	// error, and no success worth a toast, so the queue that sendReconfigActions
+	// maintains, with its delay between sends, buys nothing here.
 	//
-	// Placed here, after the fallible audio reconfiguration, for the same reason
-	// the restart marks are: a change that is about to be rolled back should not
-	// have left the process sampling. It still runs before conf.SaveSettings, so
-	// a failed disk write leaves the rates applied; that matches how every other
-	// side effect in this function behaves (a failed write equally leaves MQTT
-	// reconnected and the model reloaded) and is not worth a bespoke unwind for
-	// a sampling rate.
+	// Placed after the fallible audio reconfiguration for the same reason the
+	// restart marks are: a change that is about to be rolled back should not
+	// have left the process sampling.
 	//
-	// Not in publishAndSaveSettings, which does run after persistence: nothing
-	// that reaches it can carry a diagnostics change. Its only callers are the
-	// TLS, MQTT-TLS and detections writers. handleSettingsChanges is called by
-	// exactly the two handlers that can (UpdateSettings and
-	// UpdateSectionSettings), which makes it the one seam that covers this
-	// section without needing to be remembered at each write path separately.
-	// Getting that backwards is how the token mint first shipped dead; see
-	// ensureProfilingTokenForSave.
+	// Both handlers that can carry a diagnostics change route through
+	// handleSettingsChanges, and neither routes through publishAndSaveSettings,
+	// whose callers are the TLS, MQTT-TLS and detections writers. That is what
+	// makes this the one seam covering this section rather than something to be
+	// remembered at each write path; getting it backwards is how the token mint
+	// first shipped dead, see ensureProfilingTokenForSave. handleSettingsChanges
+	// does have those three writers as callers too, which is harmless: each
+	// clones the current snapshot and touches only its own section, so the gate
+	// below is false on those paths.
 	if profilingRatesChanged(oldSettings, currentSettings) {
-		profiling.ApplyRates(currentSettings)
+		profiling.ApplyRates(&currentSettings.Diagnostics.Profiling)
 	}
 
 	// Trigger reconfigurations asynchronously.
@@ -2597,6 +2595,28 @@ func pushNotificationSettingsChanged(oldSettings, currentSettings *conf.Settings
 	return !reflect.DeepEqual(oldSettings.Notification.Push, currentSettings.Notification.Push)
 }
 
+// restoreProfilingRates puts the runtime sampling rates back to what the
+// restored snapshot says, after a failed save has rolled the settings back.
+//
+// Without this the divergence is permanent, not merely temporary, which is what
+// separates it from the other side effects handleSettingsChanges triggers. The
+// reconfigure_* actions re-read the live snapshot when the control monitor
+// processes them (conf.Setting()), so a rollback makes them converge on the
+// persisted config by themselves. ApplyRates reads the snapshot at call time
+// and is never invoked again on its own, and the change gate then seals it: the
+// rolled-back config and the next save both say 0, the comparison finds no
+// change, and the process keeps sampling forever at a rate nothing records.
+// That is exactly the cost this feature exists to remove, made invisible.
+//
+// Cheap and idempotent, so it runs unconditionally rather than re-deriving
+// whether this particular save touched the rates.
+func (c *Controller) restoreProfilingRates(current *conf.Settings) {
+	if current == nil {
+		return
+	}
+	profiling.ApplyRates(&current.Diagnostics.Profiling)
+}
+
 // profilingRatesChanged reports whether either runtime sampling rate differs
 // between the two snapshots.
 //
@@ -2607,8 +2627,12 @@ func pushNotificationSettingsChanged(oldSettings, currentSettings *conf.Settings
 func profilingRatesChanged(oldSettings, currentSettings *conf.Settings) bool {
 	oldProfiling := &oldSettings.Diagnostics.Profiling
 	newProfiling := &currentSettings.Diagnostics.Profiling
-	return oldProfiling.BlockRate != newProfiling.BlockRate ||
-		oldProfiling.MutexFraction != newProfiling.MutexFraction
+	// Resolved rather than raw, so two values that mean the same thing to the
+	// runtime do not count as a change. Editing -1 to -5 leaves both profilers
+	// off either way, and firing on it would re-log the applied rates for a
+	// save that altered nothing.
+	return oldProfiling.ResolvedBlockRate() != newProfiling.ResolvedBlockRate() ||
+		oldProfiling.ResolvedMutexFraction() != newProfiling.ResolvedMutexFraction()
 }
 
 // telemetrySettingsChanged checks if telemetry/observability settings have changed

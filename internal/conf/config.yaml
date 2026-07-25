@@ -467,20 +467,13 @@ diagnostics:
     # provider is configured, a token is generated here automatically once
     # profiling is enabled, and must then be passed as ?token=... Keep it secret.
     # token: ""
-    #
-    # Runtime sampling rates for the block and mutex profiles. Both are 0 (off)
-    # by default and are independent of the endpoint above: turning on
-    # /debug/pprof does not start sampling, and sampling costs CPU on the audio
-    # path whether or not anyone ever fetches a profile. Both take effect
-    # immediately, with no restart.
-    #
-    # Note the two have different units. blockrate is nanoseconds of blocked
-    # time per sample, so a larger number samples less; 10000 is one sample per
-    # 10 microseconds and is the recommended starting point. mutexfraction
-    # reports 1 in N contention events; 100 is the recommended starting point.
-    # Go's own documentation suggests 1 for both, which records essentially
-    # every event: fine for a benchmark, expensive for a machine doing
-    # real-time audio around the clock.
+
+    # Runtime sampling rates for the block and mutex profiles, both off by
+    # default and independent of the endpoint above: sampling costs CPU on the
+    # audio path whether or not anyone ever fetches a profile. The two use
+    # different units, and both sample less as the number grows. Edited here
+    # they apply at the next restart; changed through the settings API they
+    # apply immediately. See doc/PROFILING.md.
     blockrate: 0          # ns of blocked time per sample; 0 disables. Try 10000
     mutexfraction: 0      # report 1 in N contention events; 0 disables. Try 100
 

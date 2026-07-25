@@ -1,6 +1,8 @@
 package conf
 
 import (
+	"math"
+	"strconv"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -214,6 +216,13 @@ func TestConfigTemplateShipsProfilingDisabled(t *testing.T) {
 		"block profiling must ship off; sampling costs CPU whether or not a profile is ever fetched")
 	assert.Zero(t, settings.Diagnostics.Profiling.MutexFraction,
 		"mutex profiling must ship off for the same reason")
+
+	// Zero is also what an absent, misspelled or misnested key produces, so
+	// assert the keys are actually present and land where they are meant to.
+	// Without this the two assertions above pass just as happily against a
+	// template that stopped shipping them at all.
+	assert.Contains(t, string(template), "blockrate:", "the template must ship the blockrate key")
+	assert.Contains(t, string(template), "mutexfraction:", "the template must ship the mutexfraction key")
 }
 
 // TestResolvedRates covers the clamping the two runtime setters need.
@@ -236,18 +245,36 @@ func TestResolvedRates(t *testing.T) {
 			name: "unset resolves to off",
 		},
 		{
-			name:              "explicit values pass through",
-			blockRate:         10000,
-			mutexFraction:     100,
-			wantBlockRate:     10000,
-			wantMutexFraction: 100,
+			name:              "an arbitrary user value passes through",
+			blockRate:         50000,
+			mutexFraction:     250,
+			wantBlockRate:     50000,
+			wantMutexFraction: 250,
 		},
 		{
-			name:              "the recommended defaults pass through unchanged",
-			blockRate:         DefaultBlockProfileRate,
-			mutexFraction:     DefaultMutexProfileFraction,
-			wantBlockRate:     DefaultBlockProfileRate,
-			wantMutexFraction: DefaultMutexProfileFraction,
+			name:              "the recommended rates pass through unchanged",
+			blockRate:         RecommendedBlockProfileRate,
+			mutexFraction:     RecommendedMutexProfileFraction,
+			wantBlockRate:     RecommendedBlockProfileRate,
+			wantMutexFraction: RecommendedMutexProfileFraction,
+		},
+		{
+			name:              "a block rate above the ceiling is clamped, not passed to the runtime's overflowing conversion",
+			blockRate:         maxBlockProfileRate + 1,
+			mutexFraction:     1,
+			wantBlockRate:     maxBlockProfileRate,
+			wantMutexFraction: 1,
+		},
+		{
+			name:              "math.MaxInt block rate is clamped rather than wrapping negative",
+			blockRate:         math.MaxInt,
+			wantBlockRate:     maxBlockProfileRate,
+			wantMutexFraction: 0,
+		},
+		{
+			name:              "the mutex fraction has no ceiling; a huge value degrades to never sampling",
+			mutexFraction:     math.MaxInt,
+			wantMutexFraction: math.MaxInt,
 		},
 		{
 			name:              "rate 1 is honoured rather than overridden",
@@ -260,11 +287,6 @@ func TestResolvedRates(t *testing.T) {
 			name:          "negatives clamp to off",
 			blockRate:     -1,
 			mutexFraction: -1,
-		},
-		{
-			name:          "large negatives clamp to off",
-			blockRate:     -999999,
-			mutexFraction: -999999,
 		},
 	}
 
@@ -283,9 +305,13 @@ func TestResolvedRates(t *testing.T) {
 	}
 }
 
-// TestResolvedRatesNilReceiver pins the nil guard. Both resolvers are called
-// from an apply path that walks in from a settings pointer, so a nil section
-// must read as "off" rather than panicking on a diagnostics setting.
+// TestResolvedRatesNilReceiver pins the nil guard.
+//
+// Not reachable from production today: every caller takes the address of a
+// ProfilingConfig field on a non-nil Settings, so the pointer cannot be nil.
+// These are exported methods on an exported config type, though, so the guard
+// is the contract for any future caller that holds the section on its own, and
+// a panic in a diagnostics accessor would be a poor trade for two comparisons.
 func TestResolvedRatesNilReceiver(t *testing.T) {
 	t.Parallel()
 
@@ -303,25 +329,32 @@ func TestResolvedRatesNilReceiver(t *testing.T) {
 func TestSamplingDefaultsAreNotRateOne(t *testing.T) {
 	t.Parallel()
 
-	assert.Greater(t, DefaultBlockProfileRate, 1,
+	assert.Greater(t, RecommendedBlockProfileRate, 1,
 		"the recommended block rate must sample, not record every blocking event")
-	assert.Greater(t, DefaultMutexProfileFraction, 1,
+	assert.Greater(t, RecommendedMutexProfileFraction, 1,
 		"the recommended mutex fraction must sample, not record every contention event")
 }
 
-// TestSamplingDefaultsMatchDocumentedValues keeps the constants in step with the
-// numbers quoted to users.
+// TestRecommendedRatesMatchShippedConfig keeps the constants in step with the
+// numbers quoted to users in the shipped config template.
 //
-// The struct field comments become the generated config schema and the wiki's
-// configuration reference, and config.yaml repeats them, so those places spell
-// the numbers out rather than naming these constants. That is three copies that
-// can drift apart silently; changing a constant without this test would leave
-// the documentation quietly recommending the old value.
-func TestSamplingDefaultsMatchDocumentedValues(t *testing.T) {
+// It reads config.yaml rather than restating the constants, which is what makes
+// it a drift guard rather than a second copy of the same literal: editing
+// either the constant or the template alone fails it. The other published
+// copies divide as follows. The struct field comments feed config.schema.json
+// and doc/wiki/configuration-reference.md, and cmd/gen-schema's TestSchemaUpToDate
+// regenerates and byte-compares both, so those cannot drift from the comments.
+// doc/PROFILING.md is hand-maintained with no mechanical guard, which is why the
+// failure message names it.
+func TestRecommendedRatesMatchShippedConfig(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, 10000, DefaultBlockProfileRate,
-		"update the blockrate field comment, config.yaml and doc/PROFILING.md together with this constant")
-	assert.Equal(t, 100, DefaultMutexProfileFraction,
-		"update the mutexfraction field comment, config.yaml and doc/PROFILING.md together with this constant")
+	template, err := configFiles.ReadFile("config.yaml")
+	require.NoError(t, err)
+	shipped := string(template)
+
+	assert.Contains(t, shipped, "Try "+strconv.Itoa(RecommendedBlockProfileRate),
+		"config.yaml must recommend the same block rate as RecommendedBlockProfileRate; update doc/PROFILING.md too")
+	assert.Contains(t, shipped, "Try "+strconv.Itoa(RecommendedMutexProfileFraction),
+		"config.yaml must recommend the same mutex fraction as RecommendedMutexProfileFraction; update doc/PROFILING.md too")
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"runtime"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -19,6 +20,11 @@ import (
 // profile rates are process-global runtime state, so two tests setting them
 // concurrently would read each other's values.
 
+// sentinelMutexFraction is a value no code under test can produce, so an
+// assertion that the fraction is something else proves the setter actually ran
+// rather than that it happened to already hold the expected value.
+const sentinelMutexFraction = 999
+
 // resetRatesAfterTest restores both rates to off once the test finishes, so a
 // test that turns sampling on cannot leave the rest of the package's tests, or
 // the test binary itself, paying for samples nobody reads.
@@ -30,20 +36,20 @@ func resetRatesAfterTest(t *testing.T) {
 	})
 }
 
-// settingsWithRates builds a settings snapshot carrying only the two rates.
-func settingsWithRates(blockRate, mutexFraction int) *conf.Settings {
-	settings := &conf.Settings{}
-	settings.Diagnostics.Profiling.BlockRate = blockRate
-	settings.Diagnostics.Profiling.MutexFraction = mutexFraction
-	return settings
+// profilingConfig builds a config section carrying only the two rates.
+func profilingConfig(blockRate, mutexFraction int) *conf.ProfilingConfig {
+	return &conf.ProfilingConfig{
+		BlockRate:     blockRate,
+		MutexFraction: mutexFraction,
+	}
 }
 
 // currentMutexFraction reads the live mutex fraction without changing it.
 //
 // A negative argument to SetMutexProfileFraction means "report the current
 // value and leave it alone", which is the only way to read either rate back
-// from the runtime. There is no equivalent for the block rate, which is why
-// ApplyRates returns what it applied.
+// from the runtime. There is no equivalent for the block rate, which is why the
+// block-rate assertions in this file go through an actual profile instead.
 func currentMutexFraction() int {
 	return runtime.SetMutexProfileFraction(-1)
 }
@@ -53,24 +59,20 @@ func TestApplyRates(t *testing.T) {
 		name              string
 		blockRate         int
 		mutexFraction     int
-		wantBlockRate     int
 		wantMutexFraction int
 	}{
 		{
 			name: "unset leaves both profilers off",
 		},
 		{
-			name:              "recommended sampling defaults",
-			blockRate:         conf.DefaultBlockProfileRate,
-			mutexFraction:     conf.DefaultMutexProfileFraction,
-			wantBlockRate:     conf.DefaultBlockProfileRate,
-			wantMutexFraction: conf.DefaultMutexProfileFraction,
+			name:              "recommended sampling rates",
+			blockRate:         conf.RecommendedBlockProfileRate,
+			mutexFraction:     conf.RecommendedMutexProfileFraction,
+			wantMutexFraction: conf.RecommendedMutexProfileFraction,
 		},
 		{
-			name:              "block only",
-			blockRate:         50000,
-			wantBlockRate:     50000,
-			wantMutexFraction: 0,
+			name:      "block only",
+			blockRate: 50000,
 		},
 		{
 			name:              "mutex only",
@@ -88,18 +90,17 @@ func TestApplyRates(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			resetRatesAfterTest(t)
 
-			// Start from a known non-zero mutex fraction so a case expecting 0
-			// proves the value was actively cleared rather than never set. This
-			// is what catches an unclamped negative being passed through to the
-			// runtime, where it would read the fraction and leave it at 999.
-			runtime.SetMutexProfileFraction(999)
+			// Start from a value nothing under test produces, so a case
+			// expecting 0 proves the fraction was actively cleared rather than
+			// never set. Without this the zero-expecting cases pass with the
+			// SetMutexProfileFraction call deleted, and an unclamped negative
+			// would read the fraction and leave it at the sentinel.
+			runtime.SetMutexProfileFraction(sentinelMutexFraction)
 
-			blockRate, mutexFraction := ApplyRates(settingsWithRates(tt.blockRate, tt.mutexFraction))
+			ApplyRates(profilingConfig(tt.blockRate, tt.mutexFraction))
 
-			assert.Equal(t, tt.wantBlockRate, blockRate, "applied block rate")
-			assert.Equal(t, tt.wantMutexFraction, mutexFraction, "applied mutex fraction")
 			assert.Equal(t, tt.wantMutexFraction, currentMutexFraction(),
-				"the runtime's live mutex fraction must match what ApplyRates reported")
+				"the runtime's live mutex fraction after ApplyRates")
 		})
 	}
 }
@@ -112,93 +113,131 @@ func TestApplyRates(t *testing.T) {
 func TestApplyRatesIgnoresDebug(t *testing.T) {
 	resetRatesAfterTest(t)
 
-	settings := settingsWithRates(0, 0)
+	settings := &conf.Settings{}
 	settings.Debug = true
 	settings.WebServer.Debug = true
 	settings.Realtime.Telemetry.Enabled = true
 	settings.Diagnostics.Profiling.Enabled = true
 
-	blockRate, mutexFraction := ApplyRates(settings)
+	// Same sentinel discipline as TestApplyRates: without it this asserts 0
+	// against a fraction that was already 0, and passes with the setter gone.
+	runtime.SetMutexProfileFraction(sentinelMutexFraction)
 
-	assert.Zero(t, blockRate,
-		"debug: true must not switch on block profiling")
-	assert.Zero(t, mutexFraction,
-		"debug: true must not switch on mutex profiling")
+	ApplyRates(&settings.Diagnostics.Profiling)
+
 	assert.Zero(t, currentMutexFraction(),
-		"nothing but the explicit rate settings may move the runtime's mutex fraction")
+		"debug: true must not switch on mutex profiling, and nothing but the rate settings may move the fraction")
 }
 
-// TestApplyRatesNilSettings pins the nil guard: a diagnostics setting must not
-// be able to panic the startup path.
-func TestApplyRatesNilSettings(t *testing.T) {
+// TestApplyRatesNilConfig pins that a nil section is a no-op rather than a
+// reset: it must not silently disable a profiler the operator asked for.
+func TestApplyRatesNilConfig(t *testing.T) {
 	resetRatesAfterTest(t)
 
-	blockRate, mutexFraction := ApplyRates(nil)
+	runtime.SetMutexProfileFraction(sentinelMutexFraction)
+	ApplyRates(nil)
 
-	assert.Zero(t, blockRate)
-	assert.Zero(t, mutexFraction)
+	assert.Equal(t, sentinelMutexFraction, currentMutexFraction(),
+		"a nil config must leave the runtime alone")
 }
 
 // TestDefaultRatesProduceUsableProfiles is the acceptance test for the sampling
-// defaults: coarser rates are only worth having if a real contention problem
-// still shows up in the profile.
+// rates: coarser rates are only worth having if a real contention problem still
+// shows up in the profile.
 //
 // It exercises genuine blocking and genuine lock contention rather than
 // asserting the rates were stored, because "the value was applied" and "the
 // profile is usable at that value" are different claims and only the second one
-// matters to someone debugging a stall.
+// matters to someone debugging a stall. It is also the only coverage that
+// SetBlockProfileRate is called at all, since the runtime exposes no getter for
+// it.
 func TestDefaultRatesProduceUsableProfiles(t *testing.T) {
 	resetRatesAfterTest(t)
 
-	applied, fraction := ApplyRates(settingsWithRates(conf.DefaultBlockProfileRate, conf.DefaultMutexProfileFraction))
-	require.Equal(t, conf.DefaultBlockProfileRate, applied)
-	require.Equal(t, conf.DefaultMutexProfileFraction, fraction)
+	ApplyRates(profilingConfig(conf.RecommendedBlockProfileRate, conf.RecommendedMutexProfileFraction))
+	require.Equal(t, conf.RecommendedMutexProfileFraction, currentMutexFraction())
 
 	t.Run("block profile records a blocked channel receive", func(t *testing.T) {
-		// A 2ms block is 200x the 10µs sampling rate, and the runtime always
-		// records an event at least as long as the rate, so one call suffices.
-		// The loop is insurance against a scheduler that returns early, not a
-		// statistical requirement.
-		requireProfileContains(t, "block", "blockOnChannel", blockOnChannel)
+		// Deterministic, so it gets exactly one round and no retries.
+		// blocksampled records an event unconditionally once its blocked time
+		// reaches the rate, and 2ms is 200x the 10us rate, so a single call
+		// must produce a sample. Retrying here is what would let a rate orders
+		// of magnitude too coarse pass by accumulating lucky rounds.
+		before := countProfileSamples(t, "block", "blockOnChannel")
+		blockOnChannel()
+		after := countProfileSamples(t, "block", "blockOnChannel")
+
+		assert.Greater(t, after, before,
+			"one 2ms channel block must be sampled at rate %d; a single round failing means the rate is far too coarse or sampling was never applied",
+			conf.RecommendedBlockProfileRate)
 	})
 
 	t.Run("mutex profile records real lock contention", func(t *testing.T) {
-		// Unlike the block case this genuinely is statistical: at 1-in-100,
-		// each contention event has a 1% chance of being sampled, so the
-		// generator produces thousands of events per round.
-		requireProfileContains(t, "mutex", "contendMutex", contendMutex)
+		// Statistical, so this asserts a sample COUNT rather than mere
+		// presence. contendMutex produces a few thousand contention events, of
+		// which 1-in-100 is sampled, so tens of samples are expected. Asserting
+		// presence alone would pass at a fraction 10,000x coarser, which is
+		// exactly the mutation this floor exists to kill; a floor this far
+		// below the expectation cannot flake.
+		const wantAtLeast = 5
+
+		before := countProfileSamples(t, "mutex", "contendMutex")
+		contendMutex()
+		after := countProfileSamples(t, "mutex", "contendMutex")
+
+		assert.GreaterOrEqual(t, after-before, wantAtLeast,
+			"expected at least %d sampled contention events at fraction %d, got %d",
+			wantAtLeast, conf.RecommendedMutexProfileFraction, after-before)
 	})
 }
 
-// profileSampleDeadline bounds the retry loop below. Both generators are
-// expected to succeed on the first round; this only stops a pathological
-// scheduler from hanging the suite.
-const profileSampleDeadline = 30 * time.Second
-
-// requireProfileContains runs generate until the named runtime profile contains
-// a frame mentioning wantFrame, or the deadline expires.
+// countProfileSamples returns how many sampled events in the named runtime
+// profile have wantFrame somewhere in their stack.
 //
-// Block and mutex profiles are cumulative for the life of the process and
-// cannot be reset, so the assertion is scoped to a frame only this test
-// produces rather than to a sample count.
-func requireProfileContains(t *testing.T, profileName, wantFrame string, generate func()) {
+// It counts events rather than testing for the frame's presence for two
+// reasons. Presence cannot fail on a repeat run: block and mutex profiles
+// accumulate for the life of the process and cannot be reset, so under
+// go test -count=2 a frame left by the first run satisfies the second even if
+// sampling was never switched on. And presence is insensitive to the rate,
+// which is the one property these tests exist to check.
+//
+// The legacy text format writes one record per unique stack as
+// "<count> <cycles> @ <addrs>" followed by "#\t<addr>\t<function>..." lines, so
+// a record's count is attributed to wantFrame when any of its frame lines
+// mentions it.
+func countProfileSamples(t *testing.T, profileName, wantFrame string) int {
 	t.Helper()
 
-	deadline := time.Now().Add(profileSampleDeadline)
-	for rounds := 1; ; rounds++ {
-		generate()
-
-		if strings.Contains(dumpProfile(t, profileName), wantFrame) {
-			t.Logf("%s profile contained %q after %d round(s)", profileName, wantFrame, rounds)
-			return
+	var (
+		total        int
+		pendingCount int
+		matched      bool
+	)
+	flush := func() {
+		if matched {
+			total += pendingCount
 		}
+		pendingCount, matched = 0, false
+	}
 
-		if time.Now().After(deadline) {
-			t.Fatalf("%s profile contained no %q frame after %d round(s) at the default sampling rate; "+
-				"the default is too coarse to be usable, or sampling was never applied",
-				profileName, wantFrame, rounds)
+	for line := range strings.Lines(dumpProfile(t, profileName)) {
+		line = strings.TrimRight(line, "\n")
+		switch {
+		case strings.HasPrefix(line, "#"):
+			if strings.Contains(line, wantFrame) {
+				matched = true
+			}
+		case strings.Contains(line, " @ "):
+			flush()
+			// "<count> <cycles> @ ..." -- the record header.
+			if count, err := strconv.Atoi(strings.Fields(line)[0]); err == nil {
+				pendingCount = count
+			}
 		}
 	}
+	flush()
+
+	return total
 }
 
 // dumpProfile renders a runtime profile in the legacy text format, which is
@@ -212,6 +251,38 @@ func dumpProfile(t *testing.T, name string) string {
 	var buf bytes.Buffer
 	require.NoError(t, profile.WriteTo(&buf, 1))
 	return buf.String()
+}
+
+// TestAggressiveRateThresholds covers the two branches that produce the
+// advisory log lines.
+//
+// Without this, inverting either comparison is invisible: the branches only
+// log, so the whole suite stays green with the guidance firing on exactly the
+// rates it was written to bless.
+func TestAggressiveRateThresholds(t *testing.T) {
+	t.Parallel()
+
+	t.Run("block rate", func(t *testing.T) {
+		t.Parallel()
+
+		assert.False(t, blockRateIsAggressive(0), "off is not aggressive")
+		assert.True(t, blockRateIsAggressive(1), "rate 1 records every blocking event")
+		assert.True(t, blockRateIsAggressive(aggressiveBlockRateNanos-1))
+		assert.False(t, blockRateIsAggressive(aggressiveBlockRateNanos))
+		assert.False(t, blockRateIsAggressive(conf.RecommendedBlockProfileRate),
+			"the rate we recommend must never trigger our own warning")
+	})
+
+	t.Run("mutex fraction", func(t *testing.T) {
+		t.Parallel()
+
+		assert.False(t, mutexFractionIsAggressive(0), "off is not aggressive")
+		assert.True(t, mutexFractionIsAggressive(1), "fraction 1 records every contention event")
+		assert.True(t, mutexFractionIsAggressive(aggressiveMutexFraction-1))
+		assert.False(t, mutexFractionIsAggressive(aggressiveMutexFraction))
+		assert.False(t, mutexFractionIsAggressive(conf.RecommendedMutexProfileFraction),
+			"the fraction we recommend must never trigger our own warning")
+	})
 }
 
 // blockOnChannel blocks the calling goroutine on a channel receive for long
