@@ -188,7 +188,7 @@ go tool pprof heap.pprof
 Three steps in there are not obvious and all three are load-bearing. The opening
 `curl` primes the cookie jar. The login response carries an OAuth2 callback URL
 that has to be followed before the session cookie is valid, which is the `curl`
-inside the `if`. And the second `sed` is required because Go's JSON encoder
+after the `if`. And the second `sed` is required because Go's JSON encoder
 escapes ampersands, so the raw `redirectUrl` string carries the six characters
 `\u0026` where the URL needs a literal `&`; without that substitution the callback
 receives a mangled query string and returns `401`.
