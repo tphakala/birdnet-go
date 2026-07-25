@@ -2299,7 +2299,7 @@ func restoreBlockedFieldsRecursively(
 // The restore is UNCONDITIONAL; only the reporting consults blockedValuesEqual.
 // That split is deliberate: enforcement must not depend on a comparison being
 // right. An earlier revision restored only when the values compared unequal, so
-// every gap in blockedValuesEqual was a bypass, and it had one — time.Time.Equal
+// every gap in blockedValuesEqual was a bypass, and it had one: time.Time.Equal
 // ignores Location, so a client could resend BirdNET.RangeFilter.LastUpdated as
 // the same instant in a different offset, have it compare "unchanged", and shift
 // the calendar day conf.LocalNoon derives from it. Writing current's value back
@@ -2330,7 +2330,7 @@ func restoreBlockedLeaf(currentField, updatedField reflect.Value, fieldPath stri
 //     time.UTC, which is a different *Location from the time.Local that
 //     time.Now() attached even when the local zone IS UTC, so a Location-
 //     sensitive comparison reports a phantom rejection on every request touching
-//     the section — on the default Docker configuration, and only there.
+//     the section, on the default Docker configuration, and only there.
 //     BirdNET.RangeFilter.LastUpdated is the live case
 //     (conf.UpdateIncludedSpecies sets it from time.Now()).
 //
