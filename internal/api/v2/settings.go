@@ -2216,8 +2216,15 @@ const (
 	reasonOAuthRestart     = "restart.reasons.oauth"
 )
 
-// settingsChangeChecks defines all settings change detectors in order of execution.
-// Each check has a detection function, action to trigger, and toast notification.
+// settingsChangeChecks defines the settings change detectors that dispatch an
+// action or a toast, in order of execution. Each check has a detection
+// function, action to trigger, and toast notification.
+//
+// It is not quite every detector: profilingRatesChanged is applied directly by
+// handleSettingsChanges instead, because the runtime setters it drives are
+// atomic stores that cannot fail and so need neither the controlChan queue nor
+// a toast. Anyone adding a diagnostics setting will look here first, hence this
+// pointer; the reasoning is at that call site.
 var settingsChangeChecks = []settingsChangeCheck{
 	{"BirdNET", "reload_birdnet", birdnetSettingsChanged, "Reloading BirdNET model with new settings...", notification.MsgSettingsReloadingBirdnet, ToastTypeInfo, toastDurationLong},
 	{"Range filter", "rebuild_range_filter", rangeFilterSettingsChanged, "Rebuilding species range filter...", notification.MsgSettingsRebuildingRangeFilter, ToastTypeInfo, toastDurationMedium},
