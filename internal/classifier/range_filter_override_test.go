@@ -328,94 +328,93 @@ func probableSpeciesFor(t *testing.T, settings *conf.Settings, rf *fakeUniversal
 	return scores
 }
 
-// TestAddUserOverrideSpeciesScores_ConfigAliasCarriesCustomConfigProvenance is the
-// regression test for issue #3974. A config key given as an alias ("Great Tit", the
-// geomodel's English common name) resolves to a canonical label the settings UI cannot
-// match against the key, so the provenance has to travel with the score instead. The
-// species must be flagged as configured and NOT as manually included: the two badges
-// mean different things and the config key alone does not put a species in the include
-// list.
-func TestAddUserOverrideSpeciesScores_ConfigAliasCarriesCustomConfigProvenance(t *testing.T) {
-	settings, rf := overrideProvenanceSettings(t)
-	settings.Realtime.Species.Config = map[string]conf.SpeciesConfig{
-		"Great Tit": {Threshold: 0.5},
+// TestAddUserOverrideSpeciesScores_Provenance is the regression test for issue
+// #3974 and its neighbours. Each case configures the overrides differently and
+// asserts the provenance that reaches the settings UI, plus the score, since a
+// species the range filter already scored must be flagged in place rather than
+// promoted to the always-active 1.0 sentinel.
+func TestAddUserOverrideSpeciesScores_Provenance(t *testing.T) {
+	tests := []struct {
+		name              string
+		include           []string
+		config            map[string]conf.SpeciesConfig
+		label             string
+		wantCustomConfig  bool
+		wantManualInclude bool
+		wantScore         float64
+	}{
+		{
+			// Issue #3974: the config key is an alias ("Great Tit", the geomodel's
+			// English common name) that resolves to a canonical label the settings UI
+			// cannot match against the key, so the provenance has to travel with the
+			// score instead. A config key alone must not claim manual inclusion: the
+			// two badges mean different things.
+			name:             "config alias carries custom-config provenance",
+			config:           map[string]conf.SpeciesConfig{"Great Tit": {Threshold: 0.5}},
+			label:            "Parus major_Great Tit",
+			wantCustomConfig: true,
+			wantScore:        1.0,
+		},
+		{
+			// The range filter already scored this species, so the override appends
+			// nothing and the flag must be set on the existing entry. The
+			// range-filter score has to survive, or a merely configured species would
+			// be silently promoted to always-active.
+			name:             "config on an already-scored species flags in place",
+			config:           map[string]conf.SpeciesConfig{"Common Blackbird": {Threshold: 0.5}},
+			label:            "Turdus merula_Common Blackbird",
+			wantCustomConfig: true,
+			wantScore:        0.9,
+		},
+		{
+			name:              "include entry is not reported as configured",
+			include:           []string{"Great Tit"},
+			label:             "Parus major_Great Tit",
+			wantManualInclude: true,
+			wantScore:         1.0,
+		},
+		{
+			name:              "include and config union onto one entry",
+			include:           []string{"Great Tit"},
+			config:            map[string]conf.SpeciesConfig{"Great Tit": {Threshold: 0.5}},
+			label:             "Parus major_Great Tit",
+			wantCustomConfig:  true,
+			wantManualInclude: true,
+			wantScore:         1.0,
+		},
+		{
+			// Guards against the flags leaking onto species the user never named.
+			name:      "species the user never named carries no provenance",
+			config:    map[string]conf.SpeciesConfig{"Great Tit": {Threshold: 0.5}},
+			label:     "Turdus merula_Common Blackbird",
+			wantScore: 0.9,
+		},
 	}
 
-	got := requireScoreForLabel(t, probableSpeciesFor(t, settings, rf), "Parus major_Great Tit")
-	assert.True(t, got.HasCustomConfig,
-		"a config key that resolves through an alias must still be marked as configured")
-	assert.False(t, got.IsManuallyIncluded,
-		"a config key alone must not claim the species is manually included")
-	assert.InDelta(t, 1.0, got.Score, 1e-9,
-		"an override-appended species is always-active at the 1.0 sentinel")
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settings, rf := overrideProvenanceSettings(t)
+			settings.Realtime.Species.Include = tt.include
+			settings.Realtime.Species.Config = tt.config
 
-// TestAddUserOverrideSpeciesScores_ConfigOnScoredSpeciesFlagsInPlace covers the other
-// half: when the range filter already scored the configured species, the override does
-// not append a second entry, so the flag has to be set on the existing one. The
-// range-filter score must survive, or a configured species would be silently promoted
-// to always-active.
-func TestAddUserOverrideSpeciesScores_ConfigOnScoredSpeciesFlagsInPlace(t *testing.T) {
-	settings, rf := overrideProvenanceSettings(t)
-	settings.Realtime.Species.Config = map[string]conf.SpeciesConfig{
-		"Common Blackbird": {Threshold: 0.5},
+			scores := probableSpeciesFor(t, settings, rf)
+
+			// A species named by both settings must be appended once, not twice, or
+			// it would show up doubled in the Active Species list and the CSV export.
+			count := 0
+			for _, s := range scores {
+				if s.Label == tt.label {
+					count++
+				}
+			}
+			assert.Equal(t, 1, count, "species must appear exactly once")
+
+			got := requireScoreForLabel(t, scores, tt.label)
+			assert.Equal(t, tt.wantCustomConfig, got.HasCustomConfig, "HasCustomConfig")
+			assert.Equal(t, tt.wantManualInclude, got.IsManuallyIncluded, "IsManuallyIncluded")
+			assert.InDelta(t, tt.wantScore, got.Score, 1e-9, "score")
+		})
 	}
-
-	got := requireScoreForLabel(t, probableSpeciesFor(t, settings, rf), "Turdus merula_Common Blackbird")
-	assert.True(t, got.HasCustomConfig,
-		"a species the range filter already scored must be flagged in place")
-	assert.InDelta(t, 0.9, got.Score, 1e-9,
-		"flagging must not overwrite the range-filter score with the 1.0 sentinel")
-}
-
-// TestAddUserOverrideSpeciesScores_IncludeOnlyIsNotConfigured guards the negative
-// direction: an include entry must not light up the "Configured" badge.
-func TestAddUserOverrideSpeciesScores_IncludeOnlyIsNotConfigured(t *testing.T) {
-	settings, rf := overrideProvenanceSettings(t)
-	settings.Realtime.Species.Include = []string{"Great Tit"}
-
-	got := requireScoreForLabel(t, probableSpeciesFor(t, settings, rf), "Parus major_Great Tit")
-	assert.True(t, got.IsManuallyIncluded)
-	assert.False(t, got.HasCustomConfig,
-		"an include entry must not claim the species has a custom config")
-}
-
-// TestAddUserOverrideSpeciesScores_IncludeAndConfigUnionWithoutDuplicate proves the
-// two provenance sources union onto one entry rather than appending the species twice,
-// which would double it in the Active Species list and the CSV export.
-func TestAddUserOverrideSpeciesScores_IncludeAndConfigUnionWithoutDuplicate(t *testing.T) {
-	settings, rf := overrideProvenanceSettings(t)
-	settings.Realtime.Species.Include = []string{"Great Tit"}
-	settings.Realtime.Species.Config = map[string]conf.SpeciesConfig{
-		"Great Tit": {Threshold: 0.5},
-	}
-
-	scores := probableSpeciesFor(t, settings, rf)
-
-	count := 0
-	for _, s := range scores {
-		if s.Label == "Parus major_Great Tit" {
-			count++
-		}
-	}
-	assert.Equal(t, 1, count, "a species named by both settings must be appended once")
-
-	got := requireScoreForLabel(t, scores, "Parus major_Great Tit")
-	assert.True(t, got.HasCustomConfig)
-	assert.True(t, got.IsManuallyIncluded)
-}
-
-// TestAddUserOverrideSpeciesScores_UnconfiguredSpeciesCarriesNoProvenance guards
-// against the flags leaking onto species the user never named.
-func TestAddUserOverrideSpeciesScores_UnconfiguredSpeciesCarriesNoProvenance(t *testing.T) {
-	settings, rf := overrideProvenanceSettings(t)
-	settings.Realtime.Species.Config = map[string]conf.SpeciesConfig{
-		"Great Tit": {Threshold: 0.5},
-	}
-
-	got := requireScoreForLabel(t, probableSpeciesFor(t, settings, rf), "Turdus merula_Common Blackbird")
-	assert.False(t, got.HasCustomConfig)
-	assert.False(t, got.IsManuallyIncluded)
 }
 
 // TestResolveOverrideLabelsWithSource_MatchesResolveOverrideLabels pins the two
