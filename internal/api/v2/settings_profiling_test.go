@@ -142,8 +142,11 @@ func TestEnsureProfilingTokenForSave_KeepsExistingToken(t *testing.T) {
 		"an existing token must survive unrelated settings saves")
 }
 
-// The profiling rate tests below must not call t.Parallel(): the block and
-// mutex profile rates are process-global runtime state.
+// The tests below that APPLY a rate must not call t.Parallel(): the block and
+// mutex profile rates are process-global runtime state, shared by every test in
+// this binary rather than just this file. TestProfilingRatesChangedScope is
+// parallel and may stay that way, since it only evaluates the change predicate
+// and never reaches the runtime.
 
 // resetProfileRates restores both runtime sampling rates to off after a test.
 func resetProfileRates(t *testing.T) {

@@ -966,7 +966,7 @@ func (s *OAuth2Server) IsAuthenticationEnabled(ip string) bool {
 	}
 
 	// Both values are read for the log line only. The decision itself goes
-	// through conf.IsAuthProviderConfigured so that this middleware and the
+	// through conf.Settings.IsAuthProviderConfigured so that this middleware and the
 	// pprof gate cannot disagree about what "authentication is configured"
 	// means: the gate falls back to its generated token when the predicate is
 	// false, and no token is minted when it is true, so a third authentication

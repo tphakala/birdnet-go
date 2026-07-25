@@ -16,9 +16,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// None of the tests in this file may call t.Parallel(). The block and mutex
-// profile rates are process-global runtime state, so two tests setting them
-// concurrently would read each other's values.
+// Any test here that applies a rate must NOT call t.Parallel(). The block and
+// mutex profile rates are process-global runtime state, so two tests setting
+// them concurrently would read each other's values. TestAggressiveRateThresholds
+// is the exception and is parallel: it exercises the threshold predicates as
+// pure functions and never touches the runtime.
 
 // sentinelMutexFraction is a value no code under test can produce, so an
 // assertion that the fraction is something else proves the setter actually ran
