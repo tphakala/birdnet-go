@@ -385,6 +385,27 @@
     snapshot ? snapshot.backends.openvino : null
   );
 
+  // Reason codes are produced by the backend hardware probe (the Reason*
+  // constants in internal/hwprofile/hwprofile.go). The mapping is an explicit
+  // switch rather than a key built from the code, so every translation key
+  // stays a literal the i18n tooling can find.
+  //
+  // The default arm is load-bearing: a server newer than this bundle can emit a
+  // code that is not here yet, and a generic sentence is better than a blank
+  // bullet.
+  function gpuReasonLabel(reason: string): string {
+    switch (reason) {
+      case 'render-node-unavailable':
+        return t('system.inference.gpuReasonRenderNodeUnavailable');
+      case 'render-node-permission':
+        return t('system.inference.gpuReasonRenderNodePermission');
+      case 'no-runtime':
+        return t('system.inference.gpuReasonNoRuntime');
+      default:
+        return t('system.inference.gpuReasonUnknown');
+    }
+  }
+
   // Spec line for a model: sample rate in kHz, segment length in seconds.
   function sampleRateKhz(hz: number): string {
     return (hz / HZ_PER_KHZ).toFixed(hz % HZ_PER_KHZ === 0 ? 0 : 1);
@@ -517,6 +538,44 @@
               >
             </div>
           {/if}
+          <!-- Gated on the board object, not on board.model: the server sends a
+               board whenever it resolved a model OR an SoC, and a device tree
+               that exposes only `compatible` yields the SoC alone. Gating on the
+               model would silently drop the one fact the probe recovered. -->
+          {#if snapshot.hardware.board}
+            <div class="flex items-center gap-3">
+              <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
+              <span class="text-sm text-muted shrink-0">{t('system.inference.board')}</span>
+              {#if snapshot.hardware.board.model}
+                <span class="text-sm truncate min-w-0" title={snapshot.hardware.board.model}
+                  >{snapshot.hardware.board.model}</span
+                >
+              {/if}
+              {#if snapshot.hardware.board.soc}
+                <span class="text-xs text-muted font-mono shrink-0">
+                  {t('system.inference.soc')}: {snapshot.hardware.board.soc}
+                </span>
+              {/if}
+            </div>
+          {/if}
+          {#if snapshot.hardware.physicalCores}
+            <div class="flex items-center gap-3">
+              <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
+              <span class="text-sm text-muted">{t('system.inference.cores')}</span>
+              <span class="text-sm font-mono tabular-nums"
+                >{formatNumber(snapshot.hardware.physicalCores)}</span
+              >
+            </div>
+          {/if}
+          {#if snapshot.hardware.totalRamBytes}
+            <div class="flex items-center gap-3">
+              <MemoryStick class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
+              <span class="text-sm text-muted">{t('system.inference.memory')}</span>
+              <span class="text-sm font-mono tabular-nums"
+                >{formatBytesCompact(snapshot.hardware.totalRamBytes)}</span
+              >
+            </div>
+          {/if}
           {#if snapshot.hardware.environment}
             <div class="flex items-center gap-3">
               <span class="text-sm text-muted">{t('system.inference.environment')}</span>
@@ -544,6 +603,74 @@
               />
             {/if}
           </div>
+
+          <!-- Accelerators. Listed whether or not this build can reach them, so
+               a user whose GPU is present but unusable is told why rather than
+               shown nothing. The common case is the default Docker install:
+               the stock image has no OpenVINO and often no /dev/dri mapping. -->
+          <!-- Deliberately unkeyed. The only candidate key is the name, and two
+               identical cards produce the same one, which makes Svelte throw
+               each_key_duplicate and take the whole page down (it throws in
+               production too, and there is no error boundary above this). These
+               rows hold no per-item state, so index reconciliation is correct.
+               role="group" ties each GPU to its own reason list for a screen
+               reader, which DOM order alone does not do once there are two. -->
+          {#each snapshot.hardware.accelerators ?? [] as accelerator}
+            <div role="group" aria-label={accelerator.name ?? accelerator.vendor} class="space-y-1">
+              <div class="flex items-center gap-3 flex-wrap">
+                <span class="text-sm text-muted shrink-0">{t('system.inference.gpu')}</span>
+                <span
+                  class="text-sm truncate min-w-0"
+                  title={accelerator.name ?? accelerator.vendor}
+                  >{accelerator.name ?? accelerator.vendor}</span
+                >
+                {#if accelerator.accessible}
+                  <StatusPill
+                    variant="success"
+                    label={t('system.inference.gpuReachable')}
+                    size="xs"
+                  />
+                {:else}
+                  <StatusPill
+                    variant="neutral"
+                    label={t('system.inference.gpuNotReachable')}
+                    size="xs"
+                  />
+                {/if}
+              </div>
+              <!-- Shown whenever present, not only when unreachable: a card can
+                   be perfectly reachable and still be one no build supports. -->
+              {#if accelerator.reasons?.length}
+                <ul class="list-disc ps-9 space-y-1 text-xs text-muted">
+                  {#each accelerator.reasons as reason}
+                    <li>{gpuReasonLabel(reason)}</li>
+                  {/each}
+                </ul>
+              {/if}
+            </div>
+          {/each}
+
+          {#if snapshot.hardware.capabilities?.length}
+            <div class="flex items-start gap-3">
+              <span
+                class="text-sm text-muted shrink-0"
+                title={t('system.inference.capabilitiesHelp')}
+                aria-describedby="help-capabilities"
+              >
+                {t('system.inference.capabilities')}
+              </span>
+              <span id="help-capabilities" class="sr-only"
+                >{t('system.inference.capabilitiesHelp')}</span
+              >
+              <!-- The tokens wrap as their own block so a second row lines up
+                   under the first badge instead of under the label. -->
+              <div class="flex flex-wrap items-center gap-2">
+                {#each snapshot.hardware.capabilities as capability (capability)}
+                  <Badge variant="neutral" size="sm" text={capability} />
+                {/each}
+              </div>
+            </div>
+          {/if}
         </div>
       </div>
 
