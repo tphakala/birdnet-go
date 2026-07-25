@@ -50,10 +50,18 @@ const (
 // WriteTimeout plus the requested sampling duration, so the default 30-second
 // CPU profile completes against the server's 30-second WriteTimeout. It reaches
 // the connection through http.ResponseController, which walks the writer chain
-// via Unwrap; both echo.Response and Echo's gzip writer implement Unwrap, so
-// the chain holds. TestProfilingCPUProfileOutlivesWriteTimeout is the guard on
-// that, since SetWriteDeadline's error is discarded inside pprof and a broken
-// chain would truncate profiles silently.
+// via Unwrap, and it discards SetWriteDeadline's error, so a middleware that
+// wraps the ResponseWriter without implementing Unwrap would truncate long
+// profiles with no log line. echo.Response implements Unwrap; gzip is not in
+// this chain at all, because PprofSkipper takes these routes out of it.
+// TestProfilingCPUProfileOutlivesWriteTimeout drives the real middleware stack
+// over a real listener to keep that true.
+//
+// Note the gate is route middleware, so it runs only for the methods registered
+// below. A request with another method is answered by Echo's own 405/204
+// handler before the gate, which reveals that the routes are mounted but
+// nothing about whether profiling is enabled or what it would serve. Every
+// build mounts them, so that discloses nothing instance-specific.
 func (s *Server) registerPprofRoutes() {
 	gate := s.profilingGate()
 
@@ -64,7 +72,7 @@ func (s *Server) registerPprofRoutes() {
 	// would answer them with "Unknown profile".
 	index := echo.WrapHandler(http.HandlerFunc(pprof.Index))
 
-	s.echo.GET(PprofBasePath, index, gate)
+	s.echo.GET(PprofBasePath, s.redirectToPprofIndex, gate)
 	s.echo.GET(PprofBasePath+"/cmdline", echo.WrapHandler(http.HandlerFunc(pprof.Cmdline)), gate)
 	s.echo.GET(PprofBasePath+"/profile", echo.WrapHandler(http.HandlerFunc(pprof.Profile)), gate)
 	s.echo.GET(PprofBasePath+"/trace", echo.WrapHandler(http.HandlerFunc(pprof.Trace)), gate)
@@ -76,6 +84,29 @@ func (s *Server) registerPprofRoutes() {
 
 	s.slogger.Debug("pprof routes registered (gated by diagnostics.profiling.enabled)",
 		logger.String("path", PprofBasePath))
+}
+
+// redirectToPprofIndex sends /debug/pprof to /debug/pprof/.
+//
+// pprof.Index emits RELATIVE links (`<a href="goroutine?debug=2">`). A browser
+// resolves those against /debug/ from the unslashed path and against
+// /debug/pprof/ from the slashed one, so serving the index directly here would
+// render a page on which every link 404s. net/http.ServeMux issued this
+// redirect implicitly for a subtree pattern, which is why the endpoints did not
+// need it in their previous home; Echo matches the two paths as distinct routes
+// and does not.
+//
+// The query string is carried across, or the hop would drop the token and land
+// on a 403. The basepath is resolved per request so the Location stays valid
+// behind a reverse-proxy prefix. 302 rather than 301: the URL can carry a
+// credential and a permanent redirect is worth neither the cache entry nor the
+// risk of pinning a stale path in browsers.
+func (s *Server) redirectToPprofIndex(c echo.Context) error {
+	target := ingressPath(c, s.currentSettings()) + PprofBasePath + "/"
+	if q := c.Request().URL.RawQuery; q != "" {
+		target += "?" + q
+	}
+	return c.Redirect(http.StatusFound, target)
 }
 
 // profilingGate guards every pprof route.
@@ -95,16 +126,27 @@ func (s *Server) profilingGate() echo.MiddlewareFunc {
 			}
 
 			// With an authentication provider configured, the server's own auth
-			// middleware is the gate. It also applies the allowed-subnet bypass
-			// exactly as it does for every other protected route, so profiling
-			// is not held to a stricter standard than the settings pages that
-			// already expose real credentials.
+			// middleware is the gate, and it applies the allowed-subnet bypass
+			// exactly as it does for every other protected route.
+			//
+			// That bypass is worth stating plainly rather than filing under
+			// consistency: with security.allowsubnetbypass on, enabling
+			// profiling gives the whole configured subnet /debug/pprof with no
+			// credential, and no token is minted to stand in the way (none is,
+			// when an auth provider exists). The settings pages reachable the
+			// same way redact their secrets on read; /debug/pprof/cmdline
+			// returns argv verbatim and goroutine dumps carry live stacks, so
+			// this is a wider grant than the bypass already implies. It is
+			// opt-in and off by default, which is why it is documented here
+			// rather than special-cased.
 			if settings.IsAuthProviderConfigured() {
 				if s.authMiddleware == nil {
 					// Configured but never wired (no OAuth2Server injected).
 					// Fail closed rather than fall through to the token branch,
 					// where no token was minted precisely because auth exists.
-					s.slogger.Error("Profiling request refused: authentication is configured but the auth middleware is not initialized",
+					// Credential events go to the security log, where #3381
+					// established admins look for them, not the api log.
+					s.securityLog().Error("Profiling request refused: authentication is configured but the auth middleware is not initialized",
 						logger.String("ip", c.RealIP()))
 					return echo.NewHTTPError(http.StatusForbidden, profilingRefusedMessage)
 				}

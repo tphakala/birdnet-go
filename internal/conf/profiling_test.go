@@ -62,16 +62,25 @@ func TestEnsureProfilingToken(t *testing.T) {
 			got := tt.settings.Diagnostics.Profiling.Token
 			if !tt.wantGenerated {
 				assert.Equal(t, before, got, "the token must not change")
-				assert.Nil(t, viper.Get("diagnostics.profiling.token"),
-					"nothing should be staged for persistence")
 				return
 			}
 
 			assert.NotEmpty(t, got)
-			assert.Len(t, got, 43,
-				"a token should carry the same 256 bits of entropy as the session secret")
-			assert.Equal(t, got, viper.GetString("diagnostics.profiling.token"),
-				"the generated token must be staged for persistence")
+			// Length is derived, not hardcoded, so raising the entropy in
+			// GenerateRandomSecret does not silently leave this assertion
+			// pinning the old size.
+			expected, err := GenerateRandomSecret()
+			require.NoError(t, err)
+			assert.Len(t, got, len(expected),
+				"a token should carry the same entropy as any other generated secret")
+
+			// The token is deliberately NOT mirrored into viper: nothing in
+			// this repository persists through viper (SaveYAMLConfig marshals
+			// the struct), and viper.Set is not goroutine-safe. Asserting the
+			// absence keeps a well-meaning "mirror it like ensureSessionSecret
+			// does" from creeping back in.
+			assert.Empty(t, viper.GetString("diagnostics.profiling.token"),
+				"the token must not be staged into viper")
 		})
 	}
 }

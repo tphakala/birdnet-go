@@ -2,6 +2,7 @@
 package observability
 
 import (
+	"io"
 	"net/http"
 )
 
@@ -9,17 +10,18 @@ import (
 // endpoints on this listener.
 const debugPath = "/debug/pprof/"
 
-// movedNotice is the body returned at the old pprof location. It names the new
-// path and the setting that opens it, so an existing profiling workflow gets an
-// answer instead of a bare status code.
+// movedNotice is the body returned at the old pprof location.
+//
+// It is deliberately terse. This listener has no authentication and no rate
+// limiting, so the notice points at the configuration section and stops there:
+// naming the credential mechanism would hand a scanner both the parameter to
+// brute-force and the port shape to aim at, for no benefit to the operator,
+// who has the documentation. Pointing at the setting is enough to reconnect
+// someone whose profiling workflow just broke, which is the entire job here.
 const movedNotice = `The pprof endpoints have moved off the telemetry listener.
 
-They are now served by the main web server at /debug/pprof/, gated by the
-diagnostics.profiling.enabled setting and placed behind the web server's
-authentication. When no authentication provider is configured, pass the
-generated diagnostics.profiling.token as a query parameter:
-
-    go tool pprof "http://<host>:<webserver-port>/debug/pprof/heap?token=<token>"
+They are now served by the main web server and are configured under the
+"diagnostics.profiling" section. See the profiling documentation for details.
 
 The telemetry listener serves Prometheus metrics only.
 `
@@ -31,13 +33,27 @@ The telemetry listener serves Prometheus metrics only.
 // middleware of any kind, so enabling Prometheus metrics also published
 // profiling on every interface with no authentication. They now live on the
 // authenticated web server instead. Removing them outright would turn every
-// existing profiling workflow into a connection error with nothing to go on;
-// this handler costs nothing, discloses nothing, and explains itself.
+// existing profiling workflow into a connection error with nothing to go on.
+//
+// What it discloses, stated plainly rather than claimed away: any unauthenticated
+// caller on this port learns that this is a BirdNET-Go instance and that its
+// profiling endpoints moved. It discloses no profile data, no credential, and
+// no instance-specific state; the response is a compile-time constant and no
+// request data reaches it. That is judged worth the support cost of an
+// unexplained break, on a port the operator opted into exposing.
+//
+// Note this is registered whether or not profiling is enabled, which is a
+// weaker stance than the web-server gate's 404. That is deliberate: the
+// breadcrumb answers "where did the old endpoint go", a question whose answer
+// does not depend on the current setting.
 func RegisterMovedDebugHandler(mux *http.ServeMux) {
 	mux.HandleFunc(debugPath, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.WriteHeader(http.StatusGone)
-		_, _ = w.Write([]byte(movedNotice))
+		// io.WriteString rather than Write([]byte(const)): this handler is
+		// reachable unauthenticated and unthrottled, so the per-request copy of
+		// the constant would be attacker-paced for no reason.
+		_, _ = io.WriteString(w, movedNotice)
 	})
 }

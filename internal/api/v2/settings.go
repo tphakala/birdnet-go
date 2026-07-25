@@ -572,16 +572,6 @@ func handlePrimitiveField(
 // Must be called while c.settingsMutex is held. On save failure, the atomic
 // Settings snapshot is rolled back to current.
 func (c *Controller) publishAndSaveSettings(current, updated *conf.Settings) error {
-	// Mint the profiling token before publishing, so enabling pprof at runtime
-	// on an instance without an authentication provider produces a usable
-	// credential instead of an enabled-but-unreachable endpoint. Non-fatal: the
-	// routes fail closed without it, which must not cost the user their other
-	// settings changes.
-	if _, err := conf.EnsureProfilingToken(updated); err != nil {
-		apicore.GetLogger().Warn("Failed to generate profiling token; the profiling endpoints will refuse requests",
-			logger.Error(err))
-	}
-
 	if c.isGlobalOwner {
 		conf.StoreSettings(updated)
 	}
@@ -1758,6 +1748,9 @@ func sanitizeSettingsForAPI(s *conf.Settings) *conf.Settings {
 	sanitized.Security.BasicAuth.ClientID = ""
 	sanitized.Security.BasicAuth.ClientSecret = ""
 
+	// --- Diagnostics section ---
+	sanitized.Diagnostics.Profiling.Token = redact(s.Diagnostics.Profiling.Token)
+
 	// Legacy OAuth providers
 	sanitized.Security.GoogleAuth.ClientSecret = redact(s.Security.GoogleAuth.ClientSecret)
 	sanitized.Security.GithubAuth.ClientSecret = redact(s.Security.GithubAuth.ClientSecret)
@@ -1872,6 +1865,9 @@ func restoreRedactedSecrets(current, incoming *conf.Settings) error {
 	restore(&current.Security.GithubAuth.ClientSecret, &incoming.Security.GithubAuth.ClientSecret)
 	restore(&current.Security.MicrosoftAuth.ClientSecret, &incoming.Security.MicrosoftAuth.ClientSecret)
 
+	// Diagnostics
+	restore(&current.Diagnostics.Profiling.Token, &incoming.Diagnostics.Profiling.Token)
+
 	// Array-based OAuth providers — match by Provider name to handle reordering
 	for i := range incoming.Security.OAuthProviders {
 		if incoming.Security.OAuthProviders[i].ClientSecret != redactedValue {
@@ -1983,6 +1979,7 @@ func validateNoRedactedSentinels(s *conf.Settings) error {
 	check(s.Security.GoogleAuth.ClientSecret, "security.googleAuth.clientSecret")
 	check(s.Security.GithubAuth.ClientSecret, "security.githubAuth.clientSecret")
 	check(s.Security.MicrosoftAuth.ClientSecret, "security.microsoftAuth.clientSecret")
+	check(s.Diagnostics.Profiling.Token, "diagnostics.profiling.token")
 	check(s.Realtime.MQTT.Password, "realtime.mqtt.password")
 	check(s.Output.MySQL.Password, "output.mysql.password")
 	check(s.Realtime.Weather.OpenWeather.APIKey, "realtime.weather.openWeather.apiKey")
@@ -2050,6 +2047,7 @@ func clearRedactedSentinels(s *conf.Settings) {
 	clearField(&s.Security.GoogleAuth.ClientSecret)
 	clearField(&s.Security.GithubAuth.ClientSecret)
 	clearField(&s.Security.MicrosoftAuth.ClientSecret)
+	clearField(&s.Diagnostics.Profiling.Token)
 	clearField(&s.Realtime.MQTT.Password)
 	clearField(&s.Output.MySQL.Password)
 	clearField(&s.Realtime.Weather.OpenWeather.APIKey)
@@ -2131,6 +2129,19 @@ func getBlockedFieldMap() map[string]any {
 				"ClientSecret":   true, // OAuth2 server internal field (different from user's password)
 				"AuthCodeExp":    true, // OAuth2 server internal field
 				"AccessTokenExp": true, // OAuth2 server internal field
+			},
+		},
+
+		// Diagnostics section - block the generated credential, same class as
+		// Security.SessionSecret above. Enabled stays writable; the token is
+		// minted server-side when the config is loaded, so letting a client
+		// pin it to a chosen value would only weaken it. This matters most in
+		// the configuration the token exists for: with no auth provider the
+		// settings API has no auth either, so an unblocked field would let any
+		// LAN client set a token it knows and then read profiles.
+		"Diagnostics": map[string]any{
+			"Profiling": map[string]any{
+				"Token": true, // Generated internally, never updated via API
 			},
 		},
 

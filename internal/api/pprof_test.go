@@ -9,6 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	mw "github.com/tphakala/birdnet-go/internal/api/middleware"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
@@ -62,21 +63,75 @@ func doPprofRequest(t *testing.T, s *Server, target string) *httptest.ResponseRe
 	return rec
 }
 
+// gatedRoute is one registered pprof route, as (method, path).
+type gatedRoute struct {
+	method string
+	path   string
+}
+
+// gatedRoutes enumerates EVERY route registerPprofRoutes mounts.
+//
+// It is a single shared list precisely so the refusal tests cannot drift into
+// covering a subset. The earlier version of this file drove only /heap through
+// the gate, which meant deleting the gate from /trace or /symbol left the whole
+// suite green while republishing an execution trace and the symbol table
+// unauthenticated. Any route added to registerPprofRoutes must be added here,
+// and TestProfilingRoutesAreAllGated fails if the two ever disagree in the
+// direction that matters.
+var gatedRoutes = []gatedRoute{
+	{http.MethodGet, PprofBasePath},
+	{http.MethodGet, PprofBasePath + "/"},
+	{http.MethodGet, PprofBasePath + "/cmdline"},
+	{http.MethodGet, PprofBasePath + "/profile"},
+	{http.MethodGet, PprofBasePath + "/trace"},
+	{http.MethodGet, PprofBasePath + "/symbol"},
+	{http.MethodPost, PprofBasePath + "/symbol"},
+	{http.MethodGet, PprofBasePath + "/heap"},
+	{http.MethodGet, PprofBasePath + "/allocs"},
+	{http.MethodGet, PprofBasePath + "/goroutine"},
+	{http.MethodGet, PprofBasePath + "/block"},
+	{http.MethodGet, PprofBasePath + "/mutex"},
+	{http.MethodGet, PprofBasePath + "/threadcreate"},
+}
+
+// doGatedRequest issues one route's request with an optional query.
+func doGatedRequest(t *testing.T, s *Server, r gatedRoute, query string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := httptest.NewRequest(r.method, r.path+query, http.NoBody)
+	rec := httptest.NewRecorder()
+	s.echo.ServeHTTP(rec, req)
+	return rec
+}
+
 // TestProfilingGate_DisabledReturns404 covers the acceptance criterion that a
-// disabled feature must not advertise itself: 404, never 403.
+// disabled feature must not advertise itself: 404, never 403. Every registered
+// route, not a sample.
 func TestProfilingGate_DisabledReturns404(t *testing.T) {
 	s := newPprofTestServer(t, profilingSettings(false, testProfilingToken))
 
-	for _, path := range []string{
-		PprofBasePath,
-		heapPath,
-		PprofBasePath + "/cmdline",
-		PprofBasePath + "/profile",
-	} {
-		t.Run(path, func(t *testing.T) {
-			rec := doPprofRequest(t, s, path)
+	for _, r := range gatedRoutes {
+		t.Run(r.method+r.path, func(t *testing.T) {
+			rec := doGatedRequest(t, s, r, "")
 			assert.Equal(t, http.StatusNotFound, rec.Code,
 				"disabled profiling must be indistinguishable from an unrouted path")
+		})
+	}
+}
+
+// TestProfilingRoutesAreAllGated drives every registered route with no
+// credential on an ENABLED instance. This is the fail-open guard: a route that
+// lost its gate would answer 200 here.
+func TestProfilingRoutesAreAllGated(t *testing.T) {
+	s := newPprofTestServer(t, profilingSettings(true, testProfilingToken))
+
+	for _, r := range gatedRoutes {
+		t.Run(r.method+r.path, func(t *testing.T) {
+			rec := doGatedRequest(t, s, r, "")
+			assert.Equal(t, http.StatusForbidden, rec.Code,
+				"every pprof route must refuse a request carrying no token")
+			assert.NotContains(t, rec.Body.String(), "runtime.",
+				"a refused request must not carry profile content")
 		})
 	}
 }
@@ -279,7 +334,7 @@ func TestProfilingRoutes_NamedProfilesAndHandlers(t *testing.T) {
 
 	// trace and profile are excluded: both sample for seconds before responding.
 	for _, path := range []string{
-		PprofBasePath,
+		PprofBasePath + "/",
 		PprofBasePath + "/heap",
 		PprofBasePath + "/allocs",
 		PprofBasePath + "/goroutine",
@@ -292,6 +347,81 @@ func TestProfilingRoutes_NamedProfilesAndHandlers(t *testing.T) {
 		t.Run(path, func(t *testing.T) {
 			rec := doPprofRequest(t, s, path+"?token="+testProfilingToken)
 			assert.Equal(t, http.StatusOK, rec.Code)
+		})
+	}
+}
+
+// TestProfilingIndexRedirectsToSlashedPath guards a bug that static review
+// missed and only rendering the page exposes.
+//
+// pprof.Index emits RELATIVE links. Served at /debug/pprof they resolve against
+// /debug/ and every link on the index 404s; served at /debug/pprof/ they
+// resolve correctly. net/http.ServeMux issued this redirect implicitly, so the
+// endpoints never needed it in their previous home and the regression is
+// invisible unless something actually follows a link.
+func TestProfilingIndexRedirectsToSlashedPath(t *testing.T) {
+	s := newPprofTestServer(t, profilingSettings(true, testProfilingToken))
+
+	rec := doPprofRequest(t, s, PprofBasePath+"?token="+testProfilingToken)
+
+	require.Equal(t, http.StatusFound, rec.Code,
+		"the unslashed index path must redirect, not render links that 404")
+
+	location := rec.Header().Get("Location")
+	assert.Equal(t, PprofBasePath+"/?token="+testProfilingToken, location,
+		"the redirect must keep the query, or the hop drops the token into a 403")
+}
+
+// TestProfilingRefusalIsUniform pins the anti-oracle property the gate's own
+// comment commits to: absent, malformed, and simply-wrong tokens must be
+// indistinguishable to a caller probing the endpoint. Asserting the status code
+// alone would not notice a helpful "token missing" vs "token invalid" split.
+func TestProfilingRefusalIsUniform(t *testing.T) {
+	s := newPprofTestServer(t, profilingSettings(true, testProfilingToken))
+
+	queries := []string{
+		"",
+		"?token=",
+		"?token=wrong",
+		"?token=" + testProfilingToken[:10],
+		"?token=" + testProfilingToken + "x",
+	}
+
+	var first string
+	for i, q := range queries {
+		rec := doPprofRequest(t, s, heapPath+q)
+		require.Equal(t, http.StatusForbidden, rec.Code, "query %q", q)
+		if i == 0 {
+			first = rec.Body.String()
+			continue
+		}
+		assert.Equal(t, first, rec.Body.String(),
+			"refusal bodies must be byte-identical; query %q differs and is an oracle", q)
+	}
+}
+
+// TestPprofSkippersMatchMountPath couples the two duplicated path constants.
+//
+// middleware.pprofBasePath is a hand-copy of api.PprofBasePath (the api package
+// imports middleware, so the dependency cannot be reversed). Nothing else makes
+// them agree, and a silent divergence would re-enable CSRF on the symbol POST
+// that go tool pprof needs and start double-gzipping every profile, with no
+// other test failing. This is the coupling.
+func TestPprofSkippersMatchMountPath(t *testing.T) {
+	t.Parallel()
+
+	e := echo.New()
+	for _, path := range []string{PprofBasePath, PprofBasePath + "/heap", PprofBasePath + "/symbol"} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodGet, path, http.NoBody)
+			c := e.NewContext(req, httptest.NewRecorder())
+
+			assert.True(t, mw.PprofSkipper(c),
+				"the gzip skipper must recognise the path the api package actually mounts")
+			assert.True(t, mw.DefaultCSRFSkipper(c),
+				"the CSRF skipper must recognise the path the api package actually mounts")
 		})
 	}
 }

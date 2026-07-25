@@ -95,9 +95,24 @@ func ensureSessionSecret(settings *Settings) error {
 // web server's auth middleware already gates the routes, and a second
 // credential sitting in the config would only widen the way in.
 //
-// The caller owns persistence. It reports whether the token was generated so a
-// caller that is not about to save anyway can persist the change.
+// This runs on the config load path only, which makes profiling a config-file
+// feature: enabling it takes effect for the enable flag immediately (the gate
+// reads settings per request) but the token appears on the next start. That is
+// the deliberate first-pass scope; there is no UI toggle, and wiring the mint
+// into the settings-write handlers is follow-up work.
+//
+// Unlike ensureSessionSecret this does NOT mirror the value into viper. That
+// mirror is vestigial there: nothing in this repository persists through viper
+// (SaveYAMLConfig marshals the struct), and viper.Set is not goroutine-safe, so
+// staging a value it would never write is cost without a payer.
+//
+// The caller owns persistence, and is told whether anything changed so it can
+// decide whether a write is needed.
 func EnsureProfilingToken(settings *Settings) (bool, error) {
+	if settings == nil {
+		return false, nil
+	}
+
 	profiling := &settings.Diagnostics.Profiling
 	if !profiling.Enabled || profiling.Token != "" || settings.IsAuthProviderConfigured() {
 		return false, nil
@@ -113,9 +128,6 @@ func EnsureProfilingToken(settings *Settings) (bool, error) {
 	}
 
 	profiling.Token = token
-
-	// Mirror into viper so a viper-driven save path writes the same value.
-	viper.Set("diagnostics.profiling.token", token)
 
 	// The value itself is never logged.
 	GetLogger().Info("Generated profiling token; no authentication provider is configured, so /debug/pprof/ requires the token from diagnostics.profiling.token")

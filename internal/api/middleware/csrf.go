@@ -29,10 +29,26 @@ const (
 )
 
 // pprofBasePath is the URL prefix under which the api package mounts the Go
-// pprof endpoints. It is duplicated here rather than imported because the api
-// package imports this one; net/http/pprof pins the prefix anyway, so it cannot
-// drift. Used by the CSRF and gzip skippers.
+// pprof endpoints. It is duplicated from api.PprofBasePath rather than imported
+// because the api package imports this one, so the dependency cannot be
+// reversed.
+//
+// Nothing mechanically couples the two constants, so TestPprofSkippersMatchMountPath
+// in package api feeds api.PprofBasePath through both skippers. Without it a
+// relocated mount would silently re-enable CSRF on the symbol POST and
+// double-gzip every profile, with no test failing.
 const pprofBasePath = "/debug/pprof"
+
+// isPprofPath reports whether an already-cleaned request path addresses the
+// pprof mount. Shared by the CSRF and gzip skippers so the two cannot drift
+// into different spellings of the same predicate.
+//
+// The caller passes a path that has been through path.Clean, which is what
+// keeps a traversal such as /debug/pprof/../api/v2/settings from inheriting the
+// exemption: it cleans to the settings path and stops matching here.
+func isPprofPath(cleanPath string) bool {
+	return cleanPath == pprofBasePath || strings.HasPrefix(cleanPath, pprofBasePath+"/")
+}
 
 // IsSecureRequest determines if the request is over HTTPS.
 // Checks direct TLS connection first, then X-Forwarded-Proto but only when
@@ -162,12 +178,16 @@ func DefaultCSRFSkipper(c echo.Context) bool {
 	// Skip for the pprof endpoints. `go tool pprof` resolves addresses with a
 	// POST to /debug/pprof/symbol and sends no CSRF token, so requiring one
 	// would break symbolization for the tool the endpoints exist to serve.
-	// Exempting them is safe on both counts CSRF protects: the handlers are
-	// read-only (symbol lookup returns names, it changes nothing), and the
-	// routes carry their own gate, which is either the auth middleware or a
-	// secret query token that a cross-site request cannot supply.
-	if path == pprofBasePath || strings.HasPrefix(path, pprofBasePath+"/") {
-		return true
+	// Exempting it is safe on both counts CSRF protects: pprof.Symbol is
+	// read-only (it returns function names for addresses, changing nothing),
+	// and the routes carry their own gate, either the auth middleware or a
+	// secret query token a cross-site request cannot supply.
+	//
+	// Scoped to safe methods plus that one POST, matching the narrower idiom
+	// the media/streams block above uses, so a future state-changing route
+	// under this prefix does not inherit the exemption by accident.
+	if isPprofPath(path) {
+		return isSafeHTTPMethod(c.Request().Method) || path == pprofBasePath+"/symbol"
 	}
 
 	return false

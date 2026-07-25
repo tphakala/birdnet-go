@@ -464,8 +464,10 @@ diagnostics:
   profiling:
     enabled: false        # true to serve Go pprof endpoints at /debug/pprof/ on the web server
     # The pprof routes sit behind the web server's authentication. When no auth
-    # provider is configured, a token is generated here the first time profiling
-    # is enabled and must be passed as ?token=... Keep it secret.
+    # provider is configured, a token is generated here on the first startup
+    # with profiling enabled, and must then be passed as ?token=... Keep it
+    # secret. Enabling profiling without restarting leaves the endpoints
+    # refusing requests until the token exists.
     # token: ""
 
 # Notification settings

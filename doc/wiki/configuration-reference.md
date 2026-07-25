@@ -401,7 +401,7 @@ DiagnosticsConfig groups the developer-facing diagnostics features.
 | Setting | Type | Description |
 |---------|------|-------------|
 | `diagnostics.profiling.enabled` | boolean | true to serve /debug/pprof/* on the web server |
-| `diagnostics.profiling.token` | string | secret required when no auth provider is configured; generated automatically |
+| `diagnostics.profiling.token` | string | secret required when no auth provider is configured; generated at startup |
 
 ## output
 

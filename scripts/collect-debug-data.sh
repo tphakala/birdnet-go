@@ -120,15 +120,32 @@ check_connectivity() {
     print_status "✓ Connected to BirdNET-Go"
 }
 
-# Function to check if debug mode is enabled
+# Profiling token, required when BirdNET-Go has no authentication provider
+# configured. Set BIRDNET_PROFILING_TOKEN to the diagnostics.profiling.token
+# value from config.yaml. When authentication IS configured, the endpoints sit
+# behind it instead and this stays empty.
+PROFILING_TOKEN="${BIRDNET_PROFILING_TOKEN:-}"
+
+# auth_query returns the query-string fragment carrying the profiling token,
+# with the correct separator for a URL that may already have parameters.
+auth_query() {
+    local separator=${1:-?}
+    if [ -n "${PROFILING_TOKEN}" ]; then
+        printf '%stoken=%s' "${separator}" "${PROFILING_TOKEN}"
+    fi
+}
+
+# Function to check that the profiling endpoints are reachable
 check_debug_mode() {
-    print_status "Checking if debug mode is enabled..."
-    if ! curl -s -f "${BASE_URL}/debug/pprof/" > /dev/null 2>&1; then
-        print_error "Debug mode is not enabled or pprof endpoints are not accessible"
-        print_error "Please set 'debug: true' in your config.yaml and restart BirdNET-Go"
+    print_status "Checking if profiling is enabled..."
+    if ! curl -s -f "${BASE_URL}/debug/pprof/$(auth_query)" > /dev/null 2>&1; then
+        print_error "Profiling endpoints are not accessible"
+        print_error "Set 'diagnostics.profiling.enabled: true' in config.yaml and restart BirdNET-Go."
+        print_error "If no authentication provider is configured, also export the generated token:"
+        print_error "  export BIRDNET_PROFILING_TOKEN=\"\$(grep -A3 '^diagnostics:' config.yaml | awk '/token:/{print \$2}')\""
         exit 1
     fi
-    print_status "✓ Debug mode is enabled"
+    print_status "✓ Profiling is enabled"
 }
 
 # Function to collect a profile
@@ -136,9 +153,13 @@ collect_profile() {
     local profile_type=$1
     local output_file=$2
     local url_params=${3:-""}
-    
+    local separator="?"
+    if [ -n "${url_params}" ]; then
+        separator="&"
+    fi
+
     print_status "Collecting ${profile_type} profile..."
-    if curl -s -f -o "${output_file}" "${BASE_URL}/debug/pprof/${profile_type}${url_params}"; then
+    if curl -s -f -o "${output_file}" "${BASE_URL}/debug/pprof/${profile_type}${url_params}$(auth_query "${separator}")"; then
         print_status "✓ Collected ${profile_type} profile → ${output_file}"
     else
         print_warning "Failed to collect ${profile_type} profile"

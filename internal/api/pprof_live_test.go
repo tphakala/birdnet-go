@@ -2,6 +2,8 @@
 package api
 
 import (
+	"bytes"
+	"compress/gzip"
 	"io"
 	"net"
 	"net/http"
@@ -9,11 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
 
 // TestProfilingCPUProfileOutlivesWriteTimeout serves the routes over a real
@@ -41,20 +40,11 @@ func TestProfilingCPUProfileOutlivesWriteTimeout(t *testing.T) {
 	require.Greater(t, profileSeconds*time.Second, serverWriteTimeout,
 		"the test is meaningless unless the profile outlasts the write timeout")
 
-	settings := profilingSettings(true, testProfilingToken)
-
-	previous := conf.GetSettings()
-	t.Cleanup(func() { conf.StoreSettings(previous) })
-	conftest.SetTestSettings(settings)
-
-	s := &Server{
-		echo:     echo.New(),
-		config:   DefaultConfig(),
-		settings: settings,
-		slogger:  GetLogger(),
-	}
-	s.echo.HideBanner = true
-	s.registerPprofRoutes()
+	s := newPprofTestServer(t, profilingSettings(true, testProfilingToken))
+	// The real middleware stack, which is the entire point: the Unwrap chain
+	// this test guards runs through whatever setupMiddleware installs, and a
+	// bare echo.New() would prove only that echo.Response implements Unwrap.
+	s.setupMiddleware()
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
@@ -83,31 +73,28 @@ func TestProfilingCPUProfileOutlivesWriteTimeout(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode,
 		"pprof refused the request; body: %s", string(body))
 	assert.NotEmpty(t, body)
-	// A CPU profile is a gzip stream; the magic bytes confirm a complete,
-	// well-formed response rather than a truncated or error body.
-	require.GreaterOrEqual(t, len(body), 2)
-	assert.Equal(t, []byte{0x1f, 0x8b}, body[:2],
-		"expected a gzip-framed pprof profile")
+
+	// Decompress rather than checking the gzip magic bytes. Magic bytes are the
+	// FIRST two, so a response truncated at 99% still has them: the assertion
+	// would hold for exactly the failure it claims to detect. gzip.Reader
+	// verifies the trailing CRC32 and length, so a short read fails here.
+	zr, err := gzip.NewReader(bytes.NewReader(body))
+	require.NoError(t, err, "response is not a gzip-framed pprof profile")
+	defer func() { _ = zr.Close() }()
+
+	raw, err := io.ReadAll(zr)
+	require.NoError(t, err,
+		"the profile was truncated: the write deadline cut the response short")
+	assert.NotEmpty(t, raw, "a complete profile must decompress to a non-empty payload")
 }
 
-// TestProfilingLiveTokenRefusal confirms the refusal path over a real listener
-// too, so the gate is not accidentally bypassed by anything in the real serving
-// stack that the in-process tests skip.
+// TestProfilingLiveTokenRefusal confirms the refusal survives the full
+// middleware stack over a real transport. The in-process tests drive Echo
+// directly with no middleware, so this is the one that would notice a
+// middleware ordering change letting a request past the gate.
 func TestProfilingLiveTokenRefusal(t *testing.T) {
-	settings := profilingSettings(true, testProfilingToken)
-
-	previous := conf.GetSettings()
-	t.Cleanup(func() { conf.StoreSettings(previous) })
-	conftest.SetTestSettings(settings)
-
-	s := &Server{
-		echo:     echo.New(),
-		config:   DefaultConfig(),
-		settings: settings,
-		slogger:  GetLogger(),
-	}
-	s.echo.HideBanner = true
-	s.registerPprofRoutes()
+	s := newPprofTestServer(t, profilingSettings(true, testProfilingToken))
+	s.setupMiddleware()
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
