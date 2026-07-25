@@ -95,14 +95,14 @@ search that just runs forward from `diagnostics:` will happily print a
 notification provider's secret instead:
 
 ```bash
-awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*token:/{sub(/^[[:space:]]*token:[[:space:]]*/,"");gsub(/^"|"$/,"");print;exit}' config.yaml
+awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*token:/{sub(/\r$/,"");sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*/,"");gsub(/"/,"");print;exit}' config.yaml
 ```
 
 For a container installation the config lives inside the config volume, so read
 it through the container:
 
 ```bash
-docker exec birdnet-go awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*token:/{sub(/^[[:space:]]*token:[[:space:]]*/,"");gsub(/^"|"$/,"");print;exit}' /config/config.yaml
+docker exec birdnet-go awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*token:/{sub(/\r$/,"");sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*/,"");gsub(/"/,"");print;exit}' /config/config.yaml
 ```
 
 The host-side copy of that file is under the directory bind-mounted at `/config`
@@ -120,7 +120,7 @@ Every example below assumes the token is in a shell variable. This is the same
 name the collection scripts in `scripts/` read, so exporting it once serves both:
 
 ```bash
-export BIRDNET_PROFILING_TOKEN="$(awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*token:/{sub(/^[[:space:]]*token:[[:space:]]*/,"");gsub(/^"|"$/,"");print;exit}' config.yaml)"
+export BIRDNET_PROFILING_TOKEN="$(awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*token:/{sub(/\r$/,"");sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*/,"");gsub(/"/,"");print;exit}' config.yaml)"
 ```
 
 `go tool pprof` has no flag for custom headers, but it does preserve query
@@ -133,9 +133,11 @@ go tool pprof "http://localhost:8080/debug/pprof/heap?token=$BIRDNET_PROFILING_T
 
 ### On an instance that does have authentication configured
 
-No token is generated and none is accepted: the web server's own auth middleware
-is the gate, and it runs instead of the token check. Passing `?token=...` there
-gets you a `401`, not access.
+No token is generated and none is consulted: the web server's own auth middleware
+runs instead of the token check, so adding `?token=...` changes nothing. Without a
+valid session you get a `401` whether or not you send one. (The exception is
+`security.allowsubnetbypass`, which lets a client on the configured subnet
+through with no credential at all; see the security note below.)
 
 **`go tool pprof` cannot authenticate against such an instance.** It has no flag
 for headers and no cookie jar, and BirdNET-Go's `security.basicauth` is a form
@@ -148,22 +150,40 @@ Log in with `curl`, keep the session cookie, fetch the profile to a file, and
 analyse the file locally:
 
 ```bash
-curl -s -c jar.txt http://localhost:8080/ -o /dev/null
-CSRF=$(awk '$6=="csrf"{print $7}' jar.txt)
-REDIRECT=$(curl -s -b jar.txt -c jar.txt -X POST http://localhost:8080/api/v2/auth/login \
-  -H 'Content-Type: application/json' -H "X-CSRF-Token: $CSRF" \
-  -d '{"username":"admin","password":"YOUR_PASSWORD"}' |
-  python3 -c 'import json,sys; print(json.load(sys.stdin)["redirectUrl"])')
-curl -s -b jar.txt -c jar.txt -L -o /dev/null "http://localhost:8080$REDIRECT"
+JAR=$(mktemp)
+read -rs -p 'password: ' PASS; echo
 
-curl -s -b jar.txt -o heap.pprof "http://localhost:8080/debug/pprof/heap"
+curl -s -c "$JAR" http://localhost:8080/ -o /dev/null
+
+REDIRECT=$(printf '{"username":"admin","password":"%s"}' "$PASS" |
+  curl -s -b "$JAR" -c "$JAR" -X POST http://localhost:8080/api/v2/auth/login \
+    -H 'Content-Type: application/json' --data @- |
+  sed -e 's/.*"redirectUrl":"\([^"]*\)".*/\1/' -e 's/\\u0026/\&/g')
+curl -s -b "$JAR" -c "$JAR" -L -o /dev/null "http://localhost:8080$REDIRECT"
+
+curl -s -b "$JAR" -o heap.pprof "http://localhost:8080/debug/pprof/heap"
 go tool pprof heap.pprof
+
+rm -f "$JAR"
 ```
 
-The login response carries an OAuth2 callback URL that has to be followed before
-the session cookie is valid, which is what the third command does. Everything
-after that is the ordinary two-step fetch-then-analyse workflow, and it applies to
-every endpoint in the table below.
+Three steps in there are not obvious and all three are load-bearing. The opening
+`curl` exists only to prime the cookie jar; without it the callback fails and the
+session is never established. The login response carries an OAuth2 callback URL
+that has to be followed before the session cookie is valid, which is the second
+`curl`. And the second `sed` expression is required because Go's JSON encoder
+escapes ampersands, so the raw `redirectUrl` string carries the six characters
+`\u0026` where the URL needs a literal `&`; without that substitution the callback
+receives a mangled query string and returns `401`.
+
+The login endpoint is exempt from CSRF, so no token is needed for it. The cookie
+jar holds a live session, which is why it goes in `mktemp` and is deleted at the
+end, and the password is read into a variable and piped rather than passed as an
+argument, so it stays out of `ps` and out of shell history. If `$REDIRECT` comes
+back empty the login failed.
+
+Everything after that is the ordinary two-step fetch-then-analyse workflow, and it
+applies to every endpoint in the table below.
 
 ## Available profiling endpoints
 
@@ -189,17 +209,19 @@ Requesting `/debug/pprof` without the trailing slash redirects to
 The response codes are worth knowing, because they distinguish the ways this goes
 wrong, and which one you get depends on whether authentication is configured:
 
-| Code  | Meaning                                                                         |
-| ----- | ------------------------------------------------------------------------------- |
-| `200` | Success                                                                         |
-| `302` | Auth configured, and you look like a browser. Redirected to the login page      |
-| `401` | Auth configured, and you sent no valid session or `Bearer` token                |
-| `403` | No auth provider configured, and the `token=` parameter is missing or wrong     |
-| `404` | Profiling is disabled. The feature does not announce that it exists but is shut |
-| `410` | You are on the old telemetry-listener location. Use the web server port         |
+| Code  | Meaning                                                                                                                                                         |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `200` | Success                                                                                                                                                         |
+| `302` | The trailing-slash redirect above, or auth is configured and your client looks like a browser, so it was sent to the login page. The `Location` tells you which |
+| `401` | Auth configured, and you sent no valid session or `Bearer` token                                                                                                |
+| `403` | The `token=` parameter is missing or wrong                                                                                                                      |
+| `404` | Profiling is disabled, or your build predates the feature                                                                                                       |
+| `410` | You are on the old telemetry-listener location. Use the web server port                                                                                         |
 
-`403` and `401` are mutually exclusive: the token is only consulted when no
-authentication provider is configured, so an instance never returns both. The
+An instance normally returns `401` or `403` but not both, because the token is
+consulted only when no authentication provider is configured. One case returns
+`403` with auth configured: if the auth middleware was never wired up it fails
+closed, rather than falling through to a token that was never minted. The
 `enabled` check runs before either, which is why a correct token still gets `404`
 when profiling is off.
 
@@ -221,11 +243,12 @@ Useful commands in pprof interactive mode:
 - `top` - show the largest consumers
 - `web` - open an interactive graph in a browser (requires graphviz)
 - `list <function>` - show the annotated source. This one needs the matching
-  source available at the path recorded in the profile. Against a release binary
-  that path is module-relative (`-trimpath`), so a plain checkout is not enough
-  and it reports `could not find file ... on path`; point pprof at your checkout
-  with `-trim_path=github.com/tphakala/birdnet-go` or `-source_path=<dir>`.
-  `top` and `web` need nothing but the profile.
+  source available. Against a release binary the recorded path is
+  module-relative (`-trimpath`), which pprof resolves against the current
+  directory, so running it from the root of a matching checkout works with no
+  extra flags. From anywhere else it reports `could not find file ... on path`;
+  pass `-source_path=<checkout>` in that case. `top` and `web` need nothing but
+  the profile.
 
 ### 2. CPU profiling
 
@@ -447,9 +470,9 @@ stripping.
 `-trimpath`, also used by the release build, is harmless for profiling. It
 rewrites source paths to module-relative form
 (`github.com/tphakala/birdnet-go/internal/...` rather than a path on the build
-machine). The only thing it costs is that `list <function>` cannot find the
-source unless you have a matching checkout; `top`, `web` and every aggregate view
-are unaffected.
+machine). The only thing it costs is that `list <function>` needs a matching
+checkout to resolve against, as described above; `top`, `web` and every aggregate
+view are unaffected.
 
 Building with `-gcflags=all=-N -l` to get better symbols would be actively
 counterproductive: disabling optimization and inlining changes the performance of
@@ -565,8 +588,9 @@ If the profiling endpoints are not behaving:
     process was hard-killed before the profile was flushed. See the environment
     variable section above.
 12. **`could not find file ... on path` from `list`** - expected against a release
-    binary, which records module-relative paths. Pass
-    `-trim_path=github.com/tphakala/birdnet-go` or `-source_path=<dir>`.
+    binary, which records module-relative paths that pprof resolves against the
+    current directory. Run it from the root of a matching checkout, or pass
+    `-source_path=<checkout>`.
 
 For more information about pprof, see the
 [official Go documentation](https://pkg.go.dev/net/http/pprof).

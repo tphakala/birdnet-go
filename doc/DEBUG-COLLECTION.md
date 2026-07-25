@@ -158,12 +158,12 @@ While BirdNET-Go is running:
 These assume `BIRDNET_PROFILING_TOKEN` is exported; drop the `?token=...` on an
 instance that has an authentication provider configured.
 
-Pass the URL to `go tool pprof` directly. It does not read a profile from stdin,
-so piping `curl` into it does not work:
-
-Note the single quotes. They keep the token out of the long-lived `watch`
-process's command line, where `ps` would show it to every user on the box; the
-shell `watch` spawns expands it from the exported environment on each iteration.
+Two things about the form below. Pass the URL to `go tool pprof` directly, because
+it does not read a profile from stdin, so piping `curl` into it does not work. And
+note the single quotes: they keep the token out of the long-lived `watch`
+process's own command line, since the shell `watch` spawns expands it from the
+exported environment on each iteration. The short-lived child still carries it in
+its argv, so this narrows the `ps` exposure rather than removing it.
 
 ```bash
 # Watch memory usage in real-time
@@ -316,11 +316,11 @@ If collection fails:
 1. Verify container is running: `docker ps | grep birdnet`
 2. Check profiling is enabled in the container:
    ```bash
-   docker exec <container-name> grep -A5 "^diagnostics:" /config/config.yaml
+   docker exec <container-name> awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*enabled:/{print;exit}' /config/config.yaml
    ```
 3. Read the profiling token, if the instance has no authentication provider:
    ```bash
-   docker exec <container-name> awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*token:/{sub(/^[[:space:]]*token:[[:space:]]*/,"");gsub(/^"|"$/,"");print;exit}' /config/config.yaml
+   docker exec <container-name> awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*token:/{sub(/\r$/,"");sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*/,"");gsub(/"/,"");print;exit}' /config/config.yaml
    ```
 4. Verify port mapping: `docker port <container-name>`
 5. Check container logs: `docker logs <container-name>`
