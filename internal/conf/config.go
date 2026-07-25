@@ -1755,7 +1755,7 @@ type ProfilingConfig struct {
 	Enabled bool   `yaml:"enabled" json:"enabled"` // true to serve /debug/pprof/* on the web server
 	Token   string `yaml:"token" json:"token"`     // secret required when no auth provider is configured; generated automatically
 
-	BlockRate     int `yaml:"blockrate" json:"blockRate"`         // nanoseconds of blocked time per sample; 0 disables, and values above 10000000 (10ms) are clamped to it. Independent of enabled: sampling costs CPU continuously whether or not a profile is ever fetched, so 0 is the only free setting. Recommended starting point: 10000. Hot-reloadable via the settings API.
+	BlockRate     int `yaml:"blockrate" json:"blockRate"`         // nanoseconds of blocked time per sample; 0 disables. Independent of enabled: sampling costs CPU continuously whether or not a profile is ever fetched, so 0 is the only free setting and a very coarse rate still pays most of the cost. Recommended starting point: 10000. Hot-reloadable via the settings API.
 	MutexFraction int `yaml:"mutexfraction" json:"mutexFraction"` // reports one sampled event per this many contention events; 0 disables. Independent of enabled: sampling costs CPU continuously whether or not a profile is ever fetched. Recommended starting point: 100. Hot-reloadable via the settings API.
 }
 

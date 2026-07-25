@@ -25,28 +25,34 @@ const (
 	// of the profile survives the sampling.
 	RecommendedMutexProfileFraction = 100
 
-	// maxBlockProfileRate bounds ResolvedBlockRate from above, at 10ms.
+	// maxBlockProfileRate bounds ResolvedBlockRate from above, for correctness
+	// only, and is deliberately far coarser than any sane configuration.
 	//
-	// Two reasons, and the second is why the bound is this low rather than
-	// merely finite.
+	// The runtime converts nanoseconds to cycles as
+	// int64(float64(rate) * float64(ticksPerSecond()) / 1e9), and the Go spec
+	// leaves an out-of-range float-to-int conversion implementation-defined.
+	// amd64 (CVTTSD2SI) yields MinInt64, which blocksampled reads as off, so the
+	// profiler silently stops while the log reports the rate as applied. arm64
+	// (FCVTZS) saturates to MaxInt64 instead, so it stays armed and merely never
+	// samples. Different failure, same root cause, and neither is what the
+	// operator asked for; the bound removes the whole class rather than the one
+	// architecture's version of it. Overflow needs roughly 9e17 even on an
+	// implausible 10GHz clock; 1e15 ns is about 11 days per sample, which is
+	// already meaningless, so the clamp cannot reach a rate anyone chose on
+	// purpose.
 	//
-	// First, correctness: the runtime converts nanoseconds to cycles as
-	// int64(float64(rate) * float64(ticksPerSecond()) / 1e9), which on a ~3GHz
-	// TSC overflows int64 above roughly 3e18 and wraps negative, and
-	// blocksampled reads a negative rate as "off". A large enough rate would
-	// therefore disable the profiler while the log reported it as applied.
-	//
-	// Second, and the reason for 10ms specifically: the cost of block profiling
-	// is dominated by the on/off decision rather than by the rate. Any non-zero
-	// rate arms an unconditional cputicks() read at every channel send, channel
+	// It deliberately does NOT enforce a rate worth its cost. Block profiling is
+	// dominated by the on/off decision rather than the rate: any non-zero value
+	// arms an unconditional cputicks() read at every channel send, channel
 	// receive, select and semacquire. Benchmarked on a Raspberry Pi 5, a
 	// blocking channel round-trip costs +55% at rate 1 and still +28% at rate
-	// 100000, against rate 0. So a very coarse rate buys most of the cost and
-	// almost none of the signal. At 10ms the profiler still records every block
-	// long enough to matter on an audio path, which keeps the accepted range one
-	// where the profile is worth what it costs. Zero remains the only free
-	// setting, and the field documentation says so.
-	maxBlockProfileRate = 10_000_000
+	// 100000, against rate 0. So a very coarse rate does buy most of the cost
+	// and little of the signal, and coarseBlockProfileRate exists to say so in
+	// the log. Saying so is the right response, not overriding the number: this
+	// package already declines to clamp a too-aggressive rate on the grounds
+	// that silently overriding what the user typed is worse than the overhead,
+	// and the same reasoning applies at the other end.
+	maxBlockProfileRate = 1_000_000_000_000_000
 )
 
 // ResolvedBlockRate returns the value to hand runtime.SetBlockProfileRate.

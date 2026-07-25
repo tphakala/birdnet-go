@@ -3,6 +3,7 @@ package conf
 import (
 	"math"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -259,7 +260,7 @@ func TestResolvedRates(t *testing.T) {
 			wantMutexFraction: RecommendedMutexProfileFraction,
 		},
 		{
-			name:              "a block rate above the ceiling is clamped, not passed to the runtime's overflowing conversion",
+			name:              "a block rate past the overflow ceiling is clamped rather than wrapping to off",
 			blockRate:         maxBlockProfileRate + 1,
 			mutexFraction:     1,
 			wantBlockRate:     maxBlockProfileRate,
@@ -351,10 +352,31 @@ func TestRecommendedRatesMatchShippedConfig(t *testing.T) {
 
 	template, err := configFiles.ReadFile("config.yaml")
 	require.NoError(t, err)
-	shipped := string(template)
 
-	assert.Contains(t, shipped, "Try "+strconv.Itoa(RecommendedBlockProfileRate),
+	// Scoped to the line carrying each key, not a whole-file Contains. "Try
+	// 100" is a prefix of "Try 10000", so a file-wide search for the mutex
+	// value is satisfied by the blockrate line and the guard would pass with
+	// the mutexfraction comment deleted outright.
+	assert.Contains(t, shippedLineFor(t, template, "blockrate:"),
+		"Try "+strconv.Itoa(RecommendedBlockProfileRate),
 		"config.yaml must recommend the same block rate as RecommendedBlockProfileRate; update doc/PROFILING.md too")
-	assert.Contains(t, shipped, "Try "+strconv.Itoa(RecommendedMutexProfileFraction),
+	assert.Contains(t, shippedLineFor(t, template, "mutexfraction:"),
+		"Try "+strconv.Itoa(RecommendedMutexProfileFraction),
 		"config.yaml must recommend the same mutex fraction as RecommendedMutexProfileFraction; update doc/PROFILING.md too")
+}
+
+// shippedLineFor returns the single line of the embedded template that declares
+// the given key, failing the test if it is absent or ambiguous.
+func shippedLineFor(t *testing.T, template []byte, key string) string {
+	t.Helper()
+
+	var found []string
+	for line := range strings.Lines(string(template)) {
+		if strings.Contains(line, key) {
+			found = append(found, strings.TrimRight(line, "\n"))
+		}
+	}
+
+	require.Len(t, found, 1, "expected exactly one line declaring %q in the shipped config template", key)
+	return found[0]
 }

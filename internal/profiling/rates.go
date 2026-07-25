@@ -32,6 +32,16 @@ const (
 
 	// aggressiveMutexFraction reports more than one in ten contention events.
 	aggressiveMutexFraction = 10
+
+	// coarseBlockProfileRate is the other end of the same advice. Above 100ms
+	// per sample the profile records almost nothing, while the process still
+	// pays the unconditional cputicks() read that any non-zero rate arms at
+	// every channel and semaphore operation: measured on a Raspberry Pi 5, a
+	// blocking channel round-trip costs +28% at rate 100000 against rate 0, so
+	// most of the cost survives however coarse the rate goes. Zero is the only
+	// free setting, and someone who set a very large number probably believed
+	// otherwise.
+	coarseBlockProfileRate = 100_000_000
 )
 
 // blockRateIsAggressive reports whether a configured block rate records so
@@ -48,6 +58,12 @@ func blockRateIsAggressive(rate int) bool {
 // blockRateIsAggressive.
 func mutexFractionIsAggressive(fraction int) bool {
 	return fraction > 0 && fraction < aggressiveMutexFraction
+}
+
+// blockRateIsCoarse reports whether a configured block rate is so coarse that
+// the operator is paying for sampling that records almost nothing.
+func blockRateIsCoarse(rate int) bool {
+	return rate > coarseBlockProfileRate
 }
 
 // GetLogger returns the package logger.
@@ -76,10 +92,11 @@ func GetLogger() logger.Logger {
 // retroactively discard samples already collected, so such a profile can mix
 // rates.
 //
-// A nil config is a no-op rather than a reset: the callers all pass the address
-// of a struct field, so nil means "something is badly wrong upstream", and
-// silently disabling a profiler the operator asked for is not an improvement on
-// leaving it alone.
+// A nil config is a no-op rather than a reset, because disabling a profiler the
+// operator asked for is not an improvement on leaving it alone. Note what that
+// guard does NOT buy: every caller passes the address of a struct field, so a
+// nil settings pointer upstream panics on the address-of before this function is
+// entered. It covers a literal ApplyRates(nil) and nothing else.
 func ApplyRates(cfg *conf.ProfilingConfig) {
 	if cfg == nil {
 		return
@@ -100,6 +117,14 @@ func ApplyRates(cfg *conf.ProfilingConfig) {
 		// "nothing was recorded". That false negative is worth one line at a
 		// level the operator will actually see, since they just asked for
 		// profiling.
+		//
+		// In practice this is a startup line. The settings-API path reaches
+		// ApplyRates only when profilingRatesChanged fires, and that compares
+		// the two rates and not Enabled, so switching the endpoint on at runtime
+		// with both rates at 0 does not produce it. That is the right trade:
+		// widening the gate to Enabled would reapply sampling every time
+		// somebody toggled the endpoint, and with no UI for this section the
+		// realistic path is editing config.yaml and restarting anyway.
 		if cfg.Enabled {
 			log.Info("Profiling endpoints are enabled but block and mutex sampling are off; those two profiles will be empty until blockrate or mutexfraction is set",
 				logger.Int("suggested_block_rate_ns", conf.RecommendedBlockProfileRate),
@@ -122,6 +147,11 @@ func ApplyRates(cfg *conf.ProfilingConfig) {
 	// degraded-health thresholds.
 	if blockRateIsAggressive(blockRate) {
 		log.Info("Block profile rate records a large share of blocking events and costs CPU on the audio path; consider a coarser rate",
+			logger.Int("block_rate_ns", blockRate),
+			logger.Int("suggested_block_rate_ns", conf.RecommendedBlockProfileRate))
+	}
+	if blockRateIsCoarse(blockRate) {
+		log.Info("Block profile rate is coarse enough to record almost nothing, but sampling still costs CPU on the audio path; set blockrate to 0 to stop paying for it",
 			logger.Int("block_rate_ns", blockRate),
 			logger.Int("suggested_block_rate_ns", conf.RecommendedBlockProfileRate))
 	}

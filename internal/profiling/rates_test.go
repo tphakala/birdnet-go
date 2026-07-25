@@ -163,9 +163,9 @@ func TestDefaultRatesProduceUsableProfiles(t *testing.T) {
 		// reaches the rate, and 2ms is 200x the 10us rate, so a single call
 		// must produce a sample. Retrying here is what would let a rate orders
 		// of magnitude too coarse pass by accumulating lucky rounds.
-		before := countProfileSamples(t, "block", "blockOnChannel")
+		before := countProfileEvents(t, "block", "blockOnChannel")
 		blockOnChannel()
-		after := countProfileSamples(t, "block", "blockOnChannel")
+		after := countProfileEvents(t, "block", "blockOnChannel")
 
 		assert.Greater(t, after, before,
 			"one 2ms channel block must be sampled at rate %d; a single round failing means the rate is far too coarse or sampling was never applied",
@@ -173,39 +173,49 @@ func TestDefaultRatesProduceUsableProfiles(t *testing.T) {
 	})
 
 	t.Run("mutex profile records real lock contention", func(t *testing.T) {
-		// Statistical, so this asserts a sample COUNT rather than mere
-		// presence. contendMutex produces a few thousand contention events, of
-		// which 1-in-100 is sampled, so tens of samples are expected. Asserting
-		// presence alone would pass at a fraction 10,000x coarser, which is
-		// exactly the mutation this floor exists to kill; a floor this far
-		// below the expectation cannot flake.
-		const wantAtLeast = 5
-
-		before := countProfileSamples(t, "mutex", "contendMutex")
+		// One round, no retries, for the same reason as the block case: a retry
+		// loop lets a rate too coarse to be usable pass by accumulating lucky
+		// rounds, which is exactly how the first version of this test accepted
+		// a fraction 10,000x coarser than the recommended one.
+		//
+		// Genuinely statistical, unlike the block case. contendMutex produces
+		// a few thousand contention events and 1-in-100 is sampled, so the
+		// chance of a round recording nothing is vanishingly small, while a
+		// fraction two orders of magnitude coarser routinely records nothing at
+		// all within one round. That is the discrimination here; see
+		// countProfileEvents for why the magnitude of the number cannot carry a
+		// finer claim than that.
+		before := countProfileEvents(t, "mutex", "contendMutex")
 		contendMutex()
-		after := countProfileSamples(t, "mutex", "contendMutex")
+		after := countProfileEvents(t, "mutex", "contendMutex")
 
-		assert.GreaterOrEqual(t, after-before, wantAtLeast,
-			"expected at least %d sampled contention events at fraction %d, got %d",
-			wantAtLeast, conf.RecommendedMutexProfileFraction, after-before)
+		assert.Greater(t, after, before,
+			"contention must be recorded at fraction %d", conf.RecommendedMutexProfileFraction)
 	})
 }
 
-// countProfileSamples returns how many sampled events in the named runtime
-// profile have wantFrame somewhere in their stack.
+// countProfileEvents returns the event count the named runtime profile
+// attributes to stacks mentioning wantFrame.
 //
-// It counts events rather than testing for the frame's presence for two
-// reasons. Presence cannot fail on a repeat run: block and mutex profiles
-// accumulate for the life of the process and cannot be reset, so under
-// go test -count=2 a frame left by the first run satisfies the second even if
-// sampling was never switched on. And presence is insensitive to the rate,
-// which is the one property these tests exist to check.
+// It returns a count rather than testing for the frame's presence because
+// presence cannot fail on a repeat run: block and mutex profiles accumulate for
+// the life of the process and cannot be reset, so under go test -count=2 a
+// frame left by the first run satisfies the second even if sampling was never
+// switched on. Comparing a count before and against after does fail there.
+//
+// What the number is NOT is the raw number of samples taken. saveBlockEventStack
+// scales both columns by the sampling rate (count += rate, cycles += rate *
+// cycles), so each column estimates the whole event population rather than the
+// sampled subset, and is therefore close to rate-invariant wherever sampling
+// happens at all. So this discriminates "sampling produced records" from
+// "sampling produced none", not one rate from a slightly coarser one.
 //
 // The legacy text format writes one record per unique stack as
-// "<count> <cycles> @ <addrs>" followed by "#\t<addr>\t<function>..." lines, so
-// a record's count is attributed to wantFrame when any of its frame lines
-// mentions it.
-func countProfileSamples(t *testing.T, profileName, wantFrame string) int {
+// "<cycles> <count> @ <addrs>" (runtime/pprof.writeProfileInternal:
+// Fprintf(w, "%v %v @", r.Cycles, r.Count), cycles FIRST) followed by
+// "#\t<addr>\t<function>..." lines, so a record's count is attributed to
+// wantFrame when any of its frame lines mentions it.
+func countProfileEvents(t *testing.T, profileName, wantFrame string) int {
 	t.Helper()
 
 	var (
@@ -229,9 +239,12 @@ func countProfileSamples(t *testing.T, profileName, wantFrame string) int {
 			}
 		case strings.Contains(line, " @ "):
 			flush()
-			// "<count> <cycles> @ ..." -- the record header.
-			if count, err := strconv.Atoi(strings.Fields(line)[0]); err == nil {
-				pendingCount = count
+			// "<cycles> <count> @ ..." -- the record header. Field 1, not 0:
+			// cycles come first.
+			if fields := strings.Fields(line); len(fields) >= 2 {
+				if count, err := strconv.Atoi(fields[1]); err == nil {
+					pendingCount = count
+				}
 			}
 		}
 	}
@@ -271,6 +284,21 @@ func TestAggressiveRateThresholds(t *testing.T) {
 		assert.False(t, blockRateIsAggressive(aggressiveBlockRateNanos))
 		assert.False(t, blockRateIsAggressive(conf.RecommendedBlockProfileRate),
 			"the rate we recommend must never trigger our own warning")
+	})
+
+	t.Run("coarse block rate", func(t *testing.T) {
+		t.Parallel()
+
+		assert.False(t, blockRateIsCoarse(0), "off is not coarse, it is free")
+		assert.False(t, blockRateIsCoarse(conf.RecommendedBlockProfileRate),
+			"the rate we recommend must never trigger the coarse advisory either")
+		assert.False(t, blockRateIsCoarse(coarseBlockProfileRate))
+		assert.True(t, blockRateIsCoarse(coarseBlockProfileRate+1))
+
+		// The two advisories must not both fire for one value, or the operator
+		// gets told to go in both directions at once.
+		assert.False(t, blockRateIsAggressive(coarseBlockProfileRate+1))
+		assert.False(t, blockRateIsCoarse(1))
 	})
 
 	t.Run("mutex fraction", func(t *testing.T) {

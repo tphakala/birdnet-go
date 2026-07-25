@@ -1535,7 +1535,7 @@
         },
         "blockrate": {
           "type": "integer",
-          "description": "nanoseconds of blocked time per sample; 0 disables, and values above 10000000 (10ms) are clamped to it. Independent of enabled: sampling costs CPU continuously whether or not a profile is ever fetched, so 0 is the only free setting. Recommended starting point: 10000. Hot-reloadable via the settings API."
+          "description": "nanoseconds of blocked time per sample; 0 disables. Independent of enabled: sampling costs CPU continuously whether or not a profile is ever fetched, so 0 is the only free setting and a very coarse rate still pays most of the cost. Recommended starting point: 10000. Hot-reloadable via the settings API."
         },
         "mutexfraction": {
           "type": "integer",
