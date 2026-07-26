@@ -139,6 +139,36 @@ func imageDownloadUserAgent() string {
 	return ua
 }
 
+// imageRejectionLogged latches the first permanent image-host rejection so the
+// escalated log below is emitted once per process rather than once per download.
+var imageRejectionLogged atomic.Bool
+
+// logPermanentImageRejection escalates a 401/403 from the image host to Error, once.
+//
+// A 401 or 403 is a policy or credential rejection: permanent, and identical on every
+// subsequent request. The caller logs download failures at Info deliberately, so that
+// transient upstream errors (404s, throttling) do not trip the diagnostics health
+// check's elevated-error-count rule. That choice also meant a 100%-failure condition
+// such as a User-Agent block was logged at the level chosen for transient faults and so
+// never escalated: the cache stayed empty for every species indefinitely and nothing
+// said why. Escalating once keeps the transient-noise property while making a blanket
+// block visible the first time it happens.
+func logPermanentImageRejection(statusCode int, provider, scientificName, imageURL string) {
+	if statusCode != http.StatusForbidden && statusCode != http.StatusUnauthorized {
+		return
+	}
+	if !imageRejectionLogged.CompareAndSwap(false, true) {
+		return
+	}
+	GetLogger().Error("Image host rejected the download; this is a permanent condition, not a transient failure",
+		logger.String("provider", provider),
+		logger.String("species", scientificName),
+		logger.Int("status", statusCode),
+		logger.String("user_agent", imageDownloadUserAgent()),
+		logger.String("url", imageURL),
+	)
+}
+
 // ImageFileCache manages disk-based image caching organized by provider.
 type ImageFileCache struct {
 	basePath    string
@@ -385,6 +415,7 @@ func (fc *ImageFileCache) DownloadAndStore(ctx context.Context, provider, scient
 		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode != http.StatusOK {
+			logPermanentImageRejection(resp.StatusCode, provider, scientificName, imageURL)
 			return nil, fmt.Errorf("non-200 status downloading image: %d", resp.StatusCode)
 		}
 

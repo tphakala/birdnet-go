@@ -1113,6 +1113,17 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(ctx context.Context, reqID 
 
 	var lastErr error
 	for attempt := range l.maxRetries {
+		// Re-check the breaker before every retry, not only once before the loop.
+		// A 429, a policy rejection or a network failure on attempt 1 opens the
+		// circuit, and continuing regardless sent attempts 2 and 3 to an endpoint
+		// that had just told us to stop. That tripled our request volume at exactly
+		// the moment Wikimedia was asking for less of it.
+		if attempt > 0 {
+			if err := l.checkCircuitBreaker(reqID, params); err != nil {
+				return nil, err
+			}
+		}
+
 		log.Debug("Attempting Wikipedia API request",
 			logger.Int("attempt", attempt+1),
 			logger.Int("max_attempts", l.maxRetries),
@@ -1143,14 +1154,20 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(ctx context.Context, reqID 
 			logger.Int("attempt", attempt+1),
 			logger.Bool("will_retry", attempt < l.maxRetries-1))
 
-		waitDuration := calculateRetryDelay(attempt)
-		log.Debug("Waiting before retry", logger.Duration("duration", waitDuration))
-		timer := time.NewTimer(waitDuration)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return nil, ctx.Err()
-		case <-timer.C:
+		// Only back off when another attempt actually follows. The loop used to sleep
+		// its full backoff after the final attempt too, holding the caller for up to
+		// an extra 4s per exhausted fetch with nothing left to wait for. The log line
+		// above already computed will_retry; this honours it.
+		if attempt < l.maxRetries-1 {
+			waitDuration := calculateRetryDelay(attempt)
+			log.Debug("Waiting before retry", logger.Duration("duration", waitDuration))
+			timer := time.NewTimer(waitDuration)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return nil, ctx.Err()
+			case <-timer.C:
+			}
 		}
 	}
 

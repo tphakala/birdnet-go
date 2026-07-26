@@ -2,8 +2,10 @@ package imageprovider
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -135,6 +137,95 @@ func TestNetworkErrorOpensCircuitBreaker(t *testing.T) {
 		assert.True(t, open, "circuit should be open after the retry loop exhausts on a network error")
 		assert.Contains(t, reason, "Network/DNS failure", "reason should mention network failure")
 		assert.Contains(t, reason, "server misbehaving", "reason should contain original error")
+	})
+}
+
+// statusRoundTripper answers every request with a fixed status and counts the calls.
+type statusRoundTripper struct {
+	status int
+	body   string
+	calls  atomic.Int64
+}
+
+func (rt *statusRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	rt.calls.Add(1)
+	body := rt.body
+	if body == "" {
+		body = "{}"
+	}
+	return &http.Response{
+		StatusCode: rt.status,
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Request:    req,
+	}, nil
+}
+
+// TestRateLimitStopsFurtherAttempts asserts that a 429 which opens the circuit breaker
+// also stops the retry loop.
+//
+// The breaker was checked once BEFORE the loop and never again, so a 429 on attempt 1
+// opened the circuit and attempts 2 and 3 were still sent. That tripled outbound volume
+// at precisely the moment Wikimedia was asking for less, which is the traffic profile
+// that gets a User-Agent blocked. Fails without the in-loop re-check.
+func TestRateLimitStopsFurtherAttempts(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		rt := &statusRoundTripper{status: http.StatusTooManyRequests}
+		provider := &wikiMediaProvider{
+			httpClient:    &http.Client{Transport: rt},
+			userAgent:     buildUserAgent("test"),
+			maxRetries:    3,
+			globalLimiter: rate.NewLimiter(rate.Inf, 1),
+		}
+
+		_, err := provider.queryWithRetryAndLimiter(t.Context(), "test-429",
+			map[string]string{"action": "query", "titles": "Parus major"}, nil)
+		require.Error(t, err)
+
+		open, _ := provider.isCircuitOpen()
+		require.True(t, open, "a 429 should open the circuit breaker")
+
+		assert.Equal(t, int64(1), rt.calls.Load(),
+			"once the 429 opened the circuit, no further request should have been sent")
+	})
+}
+
+// TestRetryLoopDoesNotBackOffAfterFinalAttempt asserts the loop stops as soon as the
+// last attempt fails, instead of sleeping a backoff it will never use.
+//
+// The loop slept calculateRetryDelay(attempt) unconditionally, so an exhausted fetch
+// held its caller for an extra retryMinDelay after the final attempt for nothing. With
+// synctest the virtual clock makes that wasted sleep directly observable.
+func TestRetryLoopDoesNotBackOffAfterFinalAttempt(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		// 500 is retryable and does not open the circuit, so all attempts run and the
+		// only thing under test is the trailing sleep.
+		rt := &statusRoundTripper{status: http.StatusInternalServerError}
+		provider := &wikiMediaProvider{
+			httpClient:    &http.Client{Transport: rt},
+			userAgent:     buildUserAgent("test"),
+			maxRetries:    3,
+			globalLimiter: rate.NewLimiter(rate.Inf, 1),
+		}
+
+		start := time.Now()
+		_, err := provider.queryWithRetryAndLimiter(t.Context(), "test-500",
+			map[string]string{"action": "query", "titles": "Parus major"}, nil)
+		elapsed := time.Since(start)
+		require.Error(t, err)
+
+		require.Equal(t, int64(3), rt.calls.Load(), "all three attempts should have been made")
+
+		// Backoff runs only BETWEEN attempts: delays for attempts 0 and 1, none after
+		// attempt 2. Sleeping after the final attempt would add calculateRetryDelay(2).
+		wantMax := calculateRetryDelay(0) + calculateRetryDelay(1)
+		assert.LessOrEqual(t, elapsed, wantMax,
+			"the loop must not back off after the final attempt (extra wait would be %s)",
+			calculateRetryDelay(2))
 	})
 }
 
