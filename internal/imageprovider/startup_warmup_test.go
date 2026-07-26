@@ -38,7 +38,7 @@ func TestLoadCachedImagesWarmupPopulatesMemory(t *testing.T) {
 		require.NoError(t, store.SaveImageCache(&datastore.ImageCache{
 			ScientificName: s,
 			ProviderName:   providerWikimedia, // matches CreateDefaultCache's provider name
-			URL:            "https://example.com/" + s + ".jpg",
+			URL:            "https://127.0.0.1/" + s + ".jpg",
 			AuthorName:     "Test Author",
 			LicenseName:    "CC BY-SA 4.0",
 			CachedAt:       time.Now(),
@@ -97,7 +97,7 @@ func TestGetWarmedNegativePrimaryConsultsFallback(t *testing.T) {
 	require.NoError(t, store.SaveImageCache(&datastore.ImageCache{
 		ScientificName: species,
 		ProviderName:   providerWikimedia,
-		URL:            "https://wiki.example.com/sparrow.jpg",
+		URL:            "https://127.0.0.1/sparrow.jpg",
 		AuthorName:     "Cephas",
 		LicenseName:    "CC BY-SA 3.0",
 		CachedAt:       time.Now(),
@@ -118,7 +118,7 @@ func TestGetWarmedNegativePrimaryConsultsFallback(t *testing.T) {
 
 	img, err := primaryCache.Get(species)
 	require.NoError(t, err, "a warmed negative primary entry must not block the fallback")
-	assert.Equal(t, "https://wiki.example.com/sparrow.jpg", img.URL,
+	assert.Equal(t, "https://127.0.0.1/sparrow.jpg", img.URL,
 		"Get must return the fallback provider's image, not the primary's negative entry")
 }
 
@@ -154,7 +154,7 @@ func TestGetDBFallbackHonorsPolicy(t *testing.T) {
 			require.NoError(t, store.SaveImageCache(&datastore.ImageCache{
 				ScientificName: species,
 				ProviderName:   providerWikimedia,
-				URL:            "https://wiki.example.com/parus.jpg",
+				URL:            "https://127.0.0.1/parus.jpg",
 				CachedAt:       time.Now(),
 			}))
 
@@ -175,7 +175,7 @@ func TestGetDBFallbackHonorsPolicy(t *testing.T) {
 			img, err := primaryCache.Get(species)
 			if tc.expectImage {
 				require.NoError(t, err, "policy=all should resolve via the fallback DB row")
-				assert.Equal(t, "https://wiki.example.com/parus.jpg", img.URL,
+				assert.Equal(t, "https://127.0.0.1/parus.jpg", img.URL,
 					"Get must return the fallback provider's cached image")
 				assert.True(t, store.WasProviderQueried(providerWikimedia),
 					"fallback provider DB must be consulted under policy=all")

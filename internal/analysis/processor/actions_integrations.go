@@ -234,7 +234,7 @@ func (a *MqttAction) Execute(_ context.Context, data any) error {
 	}
 
 	// Get bird image of detected bird using the shared helper
-	birdImage := getBirdImageFromCache(a.BirdImageCache, a.Result.Species.ScientificName, a.Result.Species.CommonName, a.CorrelationID)
+	birdImage := getBirdImageFromCache(a.DetectionCtx, a.BirdImageCache, a.Result.Species.ScientificName, a.Result.Species.CommonName, a.CorrelationID)
 	// The URL stays the provider's upstream address. An MQTT subscriber is not a
 	// browser with an origin to resolve against, and the usual consumer (Home
 	// Assistant, a dashboard, an automation forwarding the image to a phone) may be
@@ -448,7 +448,7 @@ func (a *SSEAction) Execute(_ context.Context, data any) error {
 	// Get bird image of detected bird using the shared helper. NewSSEDetectionData
 	// substitutes the media-proxy URL, so only the attribution metadata is taken
 	// from here.
-	birdImage := getBirdImageFromCache(a.BirdImageCache, a.Result.Species.ScientificName, a.Result.Species.CommonName, a.CorrelationID)
+	birdImage := getBirdImageFromCache(a.DetectionCtx, a.BirdImageCache, a.Result.Species.ScientificName, a.Result.Species.CommonName, a.CorrelationID)
 
 	// Convert Result to Note for SSEBroadcaster (backward compatible SSE payload)
 	note := datastore.NoteFromResult(&a.Result)

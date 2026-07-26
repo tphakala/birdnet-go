@@ -207,7 +207,7 @@ func TestBackgroundRefreshIsolation(t *testing.T) {
 	err = mockStore.SaveImageCache(&datastore.ImageCache{
 		ScientificName: species,
 		ProviderName:   "wikimedia",
-		URL:            "http://example.com/old.jpg",
+		URL:            "http://127.0.0.1/old.jpg",
 		CachedAt:       staleTime,
 	})
 	require.NoError(t, err, "Failed to save stale cache entry")
@@ -227,7 +227,7 @@ func TestBackgroundRefreshIsolation(t *testing.T) {
 	require.NoError(t, err, "Failed to get image")
 	assert.Less(t, duration, userLatencyBudget,
 		"user request blocked on the background provider fetch (%s delay)", providerFetchDelay)
-	assert.Equal(t, "http://example.com/old.jpg", img.URL, "Expected stale URL")
+	assert.Equal(t, "http://127.0.0.1/old.jpg", img.URL, "Expected stale URL")
 
 	// Background refresh must actually run. Poll rather than sleep a fixed interval.
 	assert.Eventually(t, func() bool {

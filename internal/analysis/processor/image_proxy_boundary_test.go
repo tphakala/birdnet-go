@@ -144,7 +144,7 @@ func TestGetBirdImageFromCache_DoesNotBlock(t *testing.T) {
 
 	done := make(chan imageprovider.BirdImage, 1)
 	go func() {
-		done <- getBirdImageFromCache(cache, "Turdus merula", "Eurasian Blackbird", "test-correlation")
+		done <- getBirdImageFromCache(&DetectionContext{}, cache, "Turdus merula", "Eurasian Blackbird", "test-correlation")
 	}()
 
 	select {
@@ -153,4 +153,43 @@ func TestGetBirdImageFromCache_DoesNotBlock(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("getBirdImageFromCache blocked on the image provider")
 	}
+}
+
+// TestGetBirdImageFromCache_ResolvesOncePerDetection pins the shared lookup.
+//
+// CompositeAction runs Database, then SSE, then MQTT for one detection, and each
+// of the three used to resolve the species image independently. The prefetch
+// deduplicates, so what multiplied was the database read: three per detection for
+// a cold species, on a path whose whole purpose is to stay off slow work.
+func TestGetBirdImageFromCache_ResolvesOncePerDetection(t *testing.T) {
+	t.Parallel()
+
+	detectionCtx := &DetectionContext{}
+	cache := newStallingCache(t)
+
+	// First action resolves. The cache is empty and the provider stalls, so the
+	// verdict is an empty image, which is exactly the case that must be shared:
+	// the later actions have to learn "already looked, nothing there".
+	first := getBirdImageFromCache(detectionCtx, cache, "Turdus merula", "Eurasian Blackbird", "test-correlation")
+	assert.Empty(t, first.URL)
+
+	stored, resolved := detectionCtx.LoadBirdImage()
+	require.True(t, resolved, "the verdict must be published for the later actions")
+	assert.Empty(t, stored.URL)
+
+	// A resolved image is handed straight back, without the cache being consulted:
+	// passing a nil cache would log and return empty if the lookup ran again.
+	detectionCtx.StoreBirdImage(&imageprovider.BirdImage{URL: "https://example.invalid/blackbird.jpg"})
+	second := getBirdImageFromCache(detectionCtx, nil, "Turdus merula", "Eurasian Blackbird", "test-correlation")
+	assert.Equal(t, "https://example.invalid/blackbird.jpg", second.URL,
+		"later actions in the same detection reuse the resolution instead of repeating it")
+}
+
+// TestGetBirdImageFromCache_WithoutADetectionContext keeps the helper usable
+// outside a CompositeAction, where there is nothing to share through.
+func TestGetBirdImageFromCache_WithoutADetectionContext(t *testing.T) {
+	t.Parallel()
+
+	img := getBirdImageFromCache(nil, newStallingCache(t), "Turdus merula", "Eurasian Blackbird", "test")
+	assert.Empty(t, img.URL)
 }

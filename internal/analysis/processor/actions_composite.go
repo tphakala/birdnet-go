@@ -122,9 +122,10 @@ func buildTimeoutError(action Action, timeout time.Duration, step, total int) er
 		Build()
 }
 
-// getBirdImageFromCache retrieves already-cached bird image metadata for MqttAction
-// and SSEAction. Returns an empty BirdImage if the cache is nil or nothing is cached
-// yet, in which case a background fetch is scheduled for the next detection.
+// getBirdImageFromCache retrieves already-cached bird image metadata for the
+// detection-pipeline actions. Returns an empty BirdImage if the cache is nil or
+// nothing is cached yet, in which case a background fetch is scheduled for the
+// next detection.
 //
 // This deliberately does NOT fetch on the caller's goroutine. Both callers run inside
 // the CompositeAction that chains Database -> SSE -> MQTT under a 30s timeout, and a
@@ -133,24 +134,38 @@ func buildTimeoutError(action Action, timeout time.Duration, step, total int) er
 // actions_database.go; Sentry BIRDNET-GO-WD); the image lookup was the same hazard
 // left behind. Attribution metadata is best-effort here: the URL the consumers
 // publish is the media-proxy URL, which does not depend on this lookup succeeding.
-func getBirdImageFromCache(cache *imageprovider.BirdImageCache, scientificName, commonName, correlationID string) imageprovider.BirdImage {
+// It also resolves at most once per detection: the result is published to the
+// shared DetectionContext so the Database, SSE and MQTT actions of one
+// CompositeAction share a single lookup instead of each making their own.
+func getBirdImageFromCache(detectionCtx *DetectionContext, cache *imageprovider.BirdImageCache, scientificName, commonName, correlationID string) imageprovider.BirdImage {
+	if img, resolved := detectionCtx.LoadBirdImage(); resolved {
+		return img
+	}
+
 	if cache == nil {
 		GetLogger().Warn("BirdImageCache is nil, cannot fetch image",
 			logger.String("detection_id", correlationID),
 			logger.String("species", commonName),
 			logger.String("scientific_name", scientificName),
 			logger.String("operation", "check_bird_image_cache"))
+		// Published like any other verdict, so the later actions of this
+		// detection do not each repeat the same warning.
+		detectionCtx.StoreBirdImage(&imageprovider.BirdImage{})
 		return imageprovider.BirdImage{}
 	}
 
 	birdImage, found, negative := cache.GetCached(scientificName)
-	if found {
-		return birdImage
+	if !found {
+		birdImage = imageprovider.BirdImage{}
+		if !negative {
+			cache.PrefetchAsync(scientificName)
+		}
 	}
-	if !negative {
-		cache.PrefetchAsync(scientificName)
-	}
-	return imageprovider.BirdImage{}
+
+	// Published even when empty: that is the verdict the later actions need, and
+	// it also keeps them from re-queueing the prefetch this call just scheduled.
+	detectionCtx.StoreBirdImage(&birdImage)
+	return birdImage
 }
 
 // Execute runs all actions sequentially, stopping on first error

@@ -14,7 +14,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/httpclient"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -107,46 +106,6 @@ var imageHTTPClient = func() *http.Client {
 	}
 }()
 
-// cachedImageUserAgent memoizes the image-download User-Agent. It is an atomic.Pointer
-// rather than a sync.OnceValue because conf.Setting() can return nil, and Version is
-// published after startup: latching at first call could pin a version-less string for
-// the process lifetime. Only a non-empty version is memoized, so an early call does not
-// poison the value.
-var cachedImageUserAgent atomic.Pointer[string]
-
-// currentAppVersion returns the running application version. It is empty both when
-// conf.Setting() returns nil (the config failed to load) and when Version has not been
-// published yet; callers only need "not yet usable", so the two are equivalent here.
-func currentAppVersion() string {
-	if settings := conf.Setting(); settings != nil {
-		return settings.Version
-	}
-	return ""
-}
-
-// imageDownloadUserAgent returns a User-Agent for the image byte download that satisfies
-// the Wikimedia Foundation User-Agent policy.
-//
-// Wikimedia answers 403 to Go's default "Go-http-client/1.1", so the byte fetch needs the
-// same policy-compliant header the MediaWiki API path already sends. Reusing
-// buildUserAgent keeps the two in one format.
-//
-// Do not "correct" userAgentName to the hyphenated project name: Wikimedia refuses any
-// User-Agent starting with "BirdNET-Go", so the current hyphen-less spelling is the one
-// that works. See internal/imageprovider/wikipedia.go for where that name is defined.
-func imageDownloadUserAgent() string {
-	if ua := cachedImageUserAgent.Load(); ua != nil {
-		return *ua
-	}
-	version := currentAppVersion()
-	ua := buildUserAgent(version)
-	if version != "" {
-		// CompareAndSwap rather than Store so concurrent first callers publish once.
-		cachedImageUserAgent.CompareAndSwap(nil, &ua)
-	}
-	return ua
-}
-
 // ImageFileCache manages disk-based image caching organized by provider.
 type ImageFileCache struct {
 	basePath    string
@@ -233,6 +192,9 @@ func NewImageFileCache(basePath string) *ImageFileCache {
 // between the request and the log, which is exactly the wrong thing to do in a
 // diagnostic about which User-Agent was refused.
 func (c *ImageFileCache) logPermanentImageRejection(statusCode int, provider, scientificName, imageURL, userAgent string) {
+	// Narrower than openDownloadCooldown's {401, 403, 429} on purpose: 429 is the
+	// host asking us to slow down, which the cooldown handles quietly, while 401
+	// and 403 are the host refusing us and are worth one escalated log.
 	if statusCode != http.StatusForbidden && statusCode != http.StatusUnauthorized {
 		return
 	}
@@ -246,6 +208,28 @@ func (c *ImageFileCache) logPermanentImageRejection(statusCode int, provider, sc
 		logger.String("user_agent", userAgent),
 		logger.String("url", imageURL),
 	)
+}
+
+// cacheFileError wraps a disk-cache filesystem failure, which is the one class
+// of failure in this file worth reporting.
+//
+// A permanently empty image cache used to reach Sentry as nothing at all, since
+// every error here was a bare fmt.Errorf and the only signal was a log line.
+// The transient paths - DNS, dial, HTTP status, the download cooldown - are
+// deliberately NOT built through this: ErrorBuilder.Build reports to telemetry
+// whenever reporting is active, so doing so would emit one event per attempt for
+// exactly the
+// throttling and blanket-refusal conditions that already have a cooldown and a
+// once-per-cache escalated log. It would also stack two or three reports on one
+// failure, since a wrapped EnhancedError is reported again by each wrap.
+func cacheFileError(err error, operation, provider, scientificName string) error {
+	return errors.New(err).
+		Component("imageprovider").
+		Category(errors.CategoryImageCache).
+		Context("provider", provider).
+		Context("scientific_name", scientificName).
+		Context("operation", operation).
+		Build()
 }
 
 // normalizeSpeciesName converts a species name to a filesystem-safe form:
@@ -316,7 +300,7 @@ func (c *ImageFileCache) Store(provider, scientificName string, data []byte, sou
 	}
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", "", fmt.Errorf("create cache directory: %w", err)
+		return "", "", cacheFileError(err, "create_cache_directory", provider, scientificName)
 	}
 
 	// Prefer upstream Content-Type; fall back to sniffing if missing or generic.
@@ -330,23 +314,24 @@ func (c *ImageFileCache) Store(provider, scientificName string, data []byte, sou
 	// Atomic write: write to temp file then rename.
 	tmpFile, err := os.CreateTemp(dir, namePrefix+"-*.tmp")
 	if err != nil {
-		return "", "", fmt.Errorf("create temp file: %w", err)
+		return "", "", cacheFileError(err, "create_temp_file", provider, scientificName)
 	}
 	tmpPath := tmpFile.Name()
+	// Unconditional cleanup rather than one removal per error branch: after a
+	// successful rename the path no longer exists and this is a no-op, while a
+	// branch added later cannot silently start orphaning temp files.
+	defer func() { _ = os.Remove(tmpPath) }()
 
 	if _, writeErr := tmpFile.Write(data); writeErr != nil {
 		_ = tmpFile.Close()
-		_ = os.Remove(tmpPath)
-		return "", "", fmt.Errorf("write temp file: %w", writeErr)
+		return "", "", cacheFileError(writeErr, "write_temp_file", provider, scientificName)
 	}
 	if closeErr := tmpFile.Close(); closeErr != nil {
-		_ = os.Remove(tmpPath)
-		return "", "", fmt.Errorf("close temp file: %w", closeErr)
+		return "", "", cacheFileError(closeErr, "close_temp_file", provider, scientificName)
 	}
 
 	if renameErr := os.Rename(tmpPath, finalPath); renameErr != nil {
-		_ = os.Remove(tmpPath)
-		return "", "", fmt.Errorf("rename temp file: %w", renameErr)
+		return "", "", cacheFileError(renameErr, "rename_temp_file", provider, scientificName)
 	}
 
 	// Remove stale files with different extensions (e.g. old .png when new file is .jpg).
@@ -459,7 +444,7 @@ func (fc *ImageFileCache) DownloadAndStore(ctx context.Context, provider, scient
 		// conf.Setting(), whose slow path takes a package-global lock and can read from
 		// disk, and doing that while holding one of only five download slots would
 		// serialize unrelated downloads behind it.
-		userAgent := imageDownloadUserAgent()
+		userAgent := appUserAgent()
 
 		// An already-cancelled context must not acquire a slot and issue a request.
 		// With a free semaphore both select cases are ready and the choice is random,

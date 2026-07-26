@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/branding"
 )
 
 const (
@@ -34,9 +36,24 @@ const (
 	defaultDialTimeout           = 30 * time.Second
 	defaultDialKeepAlive         = 30 * time.Second
 
-	// Default User-Agent
-	defaultUserAgent = "BirdNET-Go"
+	// userAgentName is the leading token of the default User-Agent.
+	//
+	// Do not "correct" this to the hyphenated project name. Wikimedia's edge
+	// refuses any User-Agent whose leading token is "birdnet-go",
+	// case-insensitively, on both upload.wikimedia.org and api.php, even when
+	// the rest of the header is fully policy-compliant with a version and a
+	// contact URL. Nothing routes Wikimedia traffic through this client today,
+	// so the hyphenated form was a latent trap rather than an active bug: any
+	// future code that did would get a hard 403 with a confusing symptom.
+	userAgentName = "BirdNETGo"
 )
+
+// defaultUserAgent returns the User-Agent used when a Config does not set one.
+// The contact URL follows the same robot-policy convention as the image
+// provider's, and resolves to a fork's own repository when rebranded.
+func defaultUserAgent() string {
+	return userAgentName + " (" + branding.RepoURL() + ")"
+}
 
 // Client is a production-grade HTTP client with context management and timeouts.
 // It wraps the standard http.Client with additional features for reliability.
@@ -97,7 +114,7 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		DefaultTimeout:        DefaultTimeout,
-		UserAgent:             defaultUserAgent,
+		UserAgent:             defaultUserAgent(),
 		MaxIdleConns:          defaultMaxIdleConns,
 		MaxIdleConnsPerHost:   defaultMaxIdleConnsPerHost,
 		IdleConnTimeout:       defaultIdleConnTimeout,
@@ -123,7 +140,7 @@ func New(cfg *Config) *Client {
 			c.DefaultTimeout = DefaultTimeout
 		}
 		if c.UserAgent == "" {
-			c.UserAgent = defaultUserAgent
+			c.UserAgent = defaultUserAgent()
 		}
 		if c.MaxIdleConns == 0 {
 			c.MaxIdleConns = defaultMaxIdleConns
