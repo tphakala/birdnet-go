@@ -327,11 +327,16 @@ func (a *DatabaseAction) populateEventMetadata(detectionEvent events.DetectionEv
 	// root-relative or an absolute one built from a private host. The provider URL is a
 	// public CDN address and is the only form that renders. Tracked separately.
 	if a.processor != nil && a.processor.BirdImageCache != nil {
-		if birdImage, found, _ := a.processor.BirdImageCache.GetCached(a.Result.Species.ScientificName); found && birdImage.URL != "" {
+		birdImage, found, negative := a.processor.BirdImageCache.GetCached(a.Result.Species.ScientificName)
+		switch {
+		case found && birdImage.URL != "":
 			metadata["image_url"] = birdImage.URL
-		} else {
+		case !negative:
 			// Nothing cached yet, so this notification carries no image. Warm it for
 			// the next detection of this species instead of blocking on it here.
+			// Gated on !negative, matching the sibling call sites: a species every
+			// provider has already failed for would otherwise re-queue a prefetch on
+			// every single detection, and a noise class fires constantly.
 			a.processor.BirdImageCache.PrefetchAsync(a.Result.Species.ScientificName)
 		}
 	}

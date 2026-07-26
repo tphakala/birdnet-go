@@ -147,5 +147,11 @@ export function handleBirdImageError(e: Event): boolean {
 
   const failedUrl = target.src;
   target.src = buildAppUrl(BIRD_PLACEHOLDER_PATH);
+
+  // An element that is not in the document has nothing to retry into: the timer would
+  // fire, find it still detached, and do nothing. Skipping keeps real timers from
+  // outliving an unmounted component.
+  if (!target.isConnected) return false;
+
   return scheduleThumbnailRetry(target, failedUrl);
 }

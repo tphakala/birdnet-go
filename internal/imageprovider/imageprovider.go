@@ -230,9 +230,13 @@ type BirdImageCache struct {
 	// (and the refresh path short-circuits too) without touching the DB, so the cache continues
 	// to serve fresh fetches from the provider instead of generating an
 	// unbounded stream of Sentry events (Forgejo #762, BIRDNET-GO-ZR/ZS).
-	dbCorrupted  atomic.Bool
-	wg           sync.WaitGroup                        // Tracks in-flight DB and background operations
-	Initializing sync.Map                              // Track which species are being initialized
+	dbCorrupted atomic.Bool
+	wg          sync.WaitGroup // Tracks in-flight DB and background operations
+	// initializing holds the per-species initialization lock (see initLock). It is
+	// unexported because its value is a synchronization primitive whose type is an
+	// implementation detail: exporting it invited an unchecked type assertion on a map
+	// any caller could write a different type into.
+	initializing sync.Map
 	registry     atomic.Pointer[ImageProviderRegistry] // Use atomic pointer
 	// exhaustedSpecies tracks species whose primary + fallback providers have
 	// all returned "not found" within the current TTL window. It maps a
@@ -727,8 +731,7 @@ func (c *BirdImageCache) tryRefreshFallback(scientificName string) (BirdImage, b
 		logger.String("provider", c.providerName),
 		logger.String("scientific_name", scientificName))
 
-	settings := conf.Setting()
-	if settings.Realtime.Dashboard.Thumbnails.FallbackPolicy != fallbackPolicyAll {
+	if normalizedFallbackPolicy() != fallbackPolicyAll {
 		return BirdImage{}, false
 	}
 
@@ -1221,10 +1224,10 @@ func (c *BirdImageCache) initLock(scientificName string) chan struct{} {
 	// that is immediately garbage. Measured at 128 B / 2 allocs / ~96ns per call
 	// versus 0 B / 0 allocs / ~10ns for the Load-first form, on a path that now runs
 	// once per thumbnail request. LoadOrStore still resolves the create race.
-	if val, ok := c.Initializing.Load(scientificName); ok {
+	if val, ok := c.initializing.Load(scientificName); ok {
 		return val.(chan struct{})
 	}
-	val, _ := c.Initializing.LoadOrStore(scientificName, make(chan struct{}, 1))
+	val, _ := c.initializing.LoadOrStore(scientificName, make(chan struct{}, 1))
 	return val.(chan struct{})
 }
 
@@ -1275,8 +1278,7 @@ func (c *BirdImageCache) logInitializeError(err error, scientificName string, lo
 // tryFallbackOnGetError attempts to get the image from fallback providers on error.
 // Returns (image, found).
 func (c *BirdImageCache) tryFallbackOnGetError(ctx context.Context, err error, scientificName string, log logger.Logger) (BirdImage, bool) {
-	settings := conf.Setting()
-	if settings.Realtime.Dashboard.Thumbnails.FallbackPolicy != fallbackPolicyAll {
+	if normalizedFallbackPolicy() != fallbackPolicyAll {
 		log.Debug("Primary provider failed but fallback policy is 'none'",
 			logger.Error(err))
 		return BirdImage{}, false

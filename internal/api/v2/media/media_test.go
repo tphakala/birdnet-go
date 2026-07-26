@@ -14,7 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1495,25 +1494,17 @@ func TestSpeciesImageColdMiss_ReturnsPendingNot500(t *testing.T) {
 func TestSpeciesImageColdMiss_ConcurrentRequestsAllReturnPromptly(t *testing.T) {
 	t.Attr("component", "media")
 
+	e := echo.New()
+	controller := New(apitest.NewCore(t, apitest.WithEcho(e)))
+
 	blocked := make(chan struct{})
 	t.Cleanup(func() { close(blocked) })
-	var fetches atomic.Int64
-	provider := &apitest.TestImageProvider{
+	controller.BirdImageCache.SetImageProvider(&apitest.TestImageProvider{
 		FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
-			fetches.Add(1)
 			<-blocked
 			return imageprovider.BirdImage{}, imageprovider.ErrImageNotFound
 		},
-	}
-	// Built via InitCache rather than the shared mock: PrefetchAsync declines to
-	// schedule on a cache assembled outside InitCache, because such a cache has
-	// neither the bounding semaphore nor the cancellable parent context. Observing the
-	// dedup therefore needs the real thing.
-	cache := imageprovider.InitCache("wikimedia", provider, nil, nil)
-	t.Cleanup(func() { assert.NoError(t, cache.Close()) })
-
-	e := echo.New()
-	controller := New(apitest.NewCore(t, apitest.WithEcho(e), apitest.WithBirdImageCache(cache)))
+	})
 
 	const concurrency = 10
 	codes := make(chan int, concurrency)
@@ -1543,14 +1534,10 @@ func TestSpeciesImageColdMiss_ConcurrentRequestsAllReturnPromptly(t *testing.T) 
 		assert.Equal(t, http.StatusServiceUnavailable, code)
 	}
 
-	// wg.Wait() returns as soon as the handlers return, which is well before the
-	// background prefetch reaches the provider. Waiting for the first fetch and then
-	// asserting no second one ever arrives is what makes a broken dedup fail: a bare
-	// "at most one" check immediately after the handlers is satisfied by zero.
-	require.Eventually(t, func() bool { return fetches.Load() >= 1 }, 3*time.Second, 10*time.Millisecond,
-		"the cold miss should have scheduled a background fetch")
-	require.Never(t, func() bool { return fetches.Load() > 1 }, 500*time.Millisecond, 20*time.Millisecond,
-		"ten requests for one cold species must not schedule ten provider fetches")
+	// Prefetch deduplication is asserted where it lives, in
+	// TestPrefetchAsync_DeduplicatesBySpecies. What this test owns is the handler
+	// contract: every concurrent request answers immediately instead of queueing
+	// behind one fetch, which is what exhausted the browser's connection budget.
 }
 
 // TestServeSpeciesImageProxy_NeverRedirects asserts the D2 boundary for a species that

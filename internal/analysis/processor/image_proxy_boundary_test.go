@@ -15,11 +15,6 @@ import (
 // stallingImageProvider parks every Fetch until released, so a caller that still
 // resolves an image on its own goroutine hangs the test instead of merely running
 // slowly.
-//
-// It parks on a channel rather than a bare select{} so the fetch can be released at
-// cleanup. fetchFromProvider runs a context-free provider on its own goroutine and
-// abandons it on cancellation, so a permanently-parked Fetch would outlive the test
-// and fail the package's goleak check.
 type stallingImageProvider struct {
 	enteredOnce sync.Once
 	entered     chan struct{}
@@ -42,6 +37,21 @@ func (p *stallingImageProvider) Fetch(scientificName string) (imageprovider.Bird
 	return imageprovider.BirdImage{}, imageprovider.ErrImageNotFound
 }
 
+// newStallingCache builds a cache around a provider that never returns.
+//
+// Deliberately NOT imageprovider.InitCache: that reads conf.Setting(), which
+// lazy-loads settings from disk when the global is unset and publishes them over
+// whatever this package's other tests installed, breaking every sibling test that
+// reads settings. Nothing under test here needs the parts InitCache supplies; the
+// prefetch machinery it would enable is covered in the imageprovider package, where
+// InitCache is the subject rather than incidental setup.
+func newStallingCache(t *testing.T) *imageprovider.BirdImageCache {
+	t.Helper()
+	cache := &imageprovider.BirdImageCache{}
+	cache.SetImageProvider(newStallingImageProvider(t))
+	return cache
+}
+
 // TestGetThumbnailURL_DoesNotConsultTheCache is the regression test for a stall that
 // reached far beyond thumbnails.
 //
@@ -54,8 +64,8 @@ func TestGetThumbnailURL_DoesNotConsultTheCache(t *testing.T) {
 	t.Parallel()
 
 	stalling := newStallingImageProvider(t)
-	cache := imageprovider.InitCache("wikimedia", stalling, nil, nil)
-	t.Cleanup(func() { assert.NoError(t, cache.Close()) })
+	cache := &imageprovider.BirdImageCache{}
+	cache.SetImageProvider(stalling)
 
 	p := &Processor{BirdImageCache: cache}
 
@@ -98,9 +108,7 @@ func TestGetThumbnailURL_EmitsAURLWithNoCacheConfigured(t *testing.T) {
 func TestPopulateEventMetadata_DoesNotBlockOnTheProvider(t *testing.T) {
 	t.Parallel()
 
-	stalling := newStallingImageProvider(t)
-	cache := imageprovider.InitCache("wikimedia", stalling, nil, nil)
-	t.Cleanup(func() { assert.NoError(t, cache.Close()) })
+	cache := newStallingCache(t)
 
 	action := &DatabaseAction{processor: &Processor{BirdImageCache: cache}}
 	action.Result.Species.ScientificName = "Turdus merula"
@@ -124,10 +132,25 @@ func TestPopulateEventMetadata_DoesNotBlockOnTheProvider(t *testing.T) {
 	// Nothing is cached, so no image is advertised at all rather than a URL that has
 	// not been resolved yet.
 	assert.NotContains(t, event.GetMetadata(), "image_url")
+}
+
+// TestGetBirdImageFromCache_DoesNotBlock covers the helper both the SSE and MQTT
+// actions use, which runs inside the same CompositeAction. A cache miss must return
+// promptly with an empty image rather than resolving one on the caller's goroutine.
+func TestGetBirdImageFromCache_DoesNotBlock(t *testing.T) {
+	t.Parallel()
+
+	cache := newStallingCache(t)
+
+	done := make(chan imageprovider.BirdImage, 1)
+	go func() {
+		done <- getBirdImageFromCache(cache, "Turdus merula", "Eurasian Blackbird", "test-correlation")
+	}()
 
 	select {
-	case <-stalling.entered:
+	case img := <-done:
+		assert.Empty(t, img.URL, "a miss yields an empty image, not a resolved one")
 	case <-time.After(2 * time.Second):
-		t.Fatal("a cache miss should have scheduled a background prefetch")
+		t.Fatal("getBirdImageFromCache blocked on the image provider")
 	}
 }

@@ -173,6 +173,7 @@
       speciesController?.abort();
       taxonomyController?.abort();
       attributionController?.abort();
+      cancelAttributionRetry();
     };
   });
 
@@ -265,11 +266,27 @@
    */
   const ATTRIBUTION_RETRY_DELAYS_MS = [5000, 15000, 40000];
 
+  /**
+   * Pending 503 retry. Tracked separately from attributionController because the
+   * controller is released as soon as its request settles: without this the scheduled
+   * retry would still fire after the view was unmounted or navigated to a different
+   * detection, since aborting the (already-nulled) controller could no longer reach it.
+   */
+  let attributionRetryTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+
+  function cancelAttributionRetry() {
+    if (attributionRetryTimer !== undefined) {
+      globalThis.clearTimeout(attributionRetryTimer);
+      attributionRetryTimer = undefined;
+    }
+  }
+
   // Fetch image attribution metadata
   async function fetchImageAttribution(attempt = 0) {
     if (!detection?.scientificName?.trim()) return;
 
     attributionController?.abort();
+    cancelAttributionRetry();
     const controller = new AbortController();
     attributionController = controller;
     const { signal } = controller;
@@ -293,9 +310,13 @@
       // cosmetic one.
       if (response.status === 503 && attempt < ATTRIBUTION_RETRY_DELAYS_MS.length) {
         const delay = ATTRIBUTION_RETRY_DELAYS_MS.at(attempt) ?? 0;
-        globalThis.setTimeout(() => {
+        attributionRetryTimer = globalThis.setTimeout(() => {
+          attributionRetryTimer = undefined;
           if (!signal.aborted) void fetchImageAttribution(attempt + 1);
         }, delay);
+        // Return before the finally block releases the controller, so this request's
+        // signal stays reachable and an abort can still cancel the pending retry.
+        return;
       }
     } catch (error) {
       if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) return;

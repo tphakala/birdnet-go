@@ -907,6 +907,9 @@
                           )}
                           alt={displayName || t('search.detailsPanel.unknownSpecies')}
                           class="w-full h-full object-cover"
+                          onload={e => {
+                            (e.currentTarget as HTMLImageElement).classList.remove('p-2');
+                          }}
                           onerror={e => {
                             (e.currentTarget as HTMLImageElement).classList.add('p-2');
                             handleBirdImageError(e);
@@ -1113,6 +1116,9 @@
                                 )}
                                 alt={displayName || t('search.detailsPanel.unknownSpecies')}
                                 class="w-full h-full object-cover"
+                                onload={e => {
+                                  (e.currentTarget as HTMLImageElement).classList.remove('p-2');
+                                }}
                                 onerror={e => {
                                   (e.currentTarget as HTMLImageElement).classList.add('p-2');
                                   handleBirdImageError(e);

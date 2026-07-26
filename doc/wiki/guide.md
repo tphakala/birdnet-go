@@ -3128,8 +3128,11 @@ Perfect for web dashboards or browser-based applications:
     <div id="detections"></div>
 
     <script>
+      // birdImage.url is a path on the BirdNET-Go instance, so it has to be resolved
+      // against the same base URL the stream itself came from.
+      const BIRDNET_BASE_URL = "http://localhost:8080";
       const eventSource = new EventSource(
-        "http://localhost:8080/api/v2/detections/stream",
+        `${BIRDNET_BASE_URL}/api/v2/detections/stream`,
       );
       const detectionsDiv = document.getElementById("detections");
 
@@ -3150,7 +3153,7 @@ Perfect for web dashboards or browser-based applications:
                  <p>Confidence: ${(detection.confidence * 100).toFixed(1)}%</p>
                  <p>Time: ${detection.time}</p>
                  <p>Source: ${detection.source}</p>
-                 ${detection.birdImage?.url ? `<img src="${detection.birdImage.url}" alt="${detection.commonName}" style="max-width: 200px;" onerror="this.style.display='none'">` : ""}
+                 ${detection.birdImage?.url ? `<img src="${BIRDNET_BASE_URL}${detection.birdImage.url}" alt="${detection.commonName}" style="max-width: 200px;" onerror="this.style.display='none'">` : ""}
              `;
 
         // Add to top of list
