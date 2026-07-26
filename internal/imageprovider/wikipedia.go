@@ -611,6 +611,12 @@ func (l *LazyWikiMediaProvider) waitForValidConfig(ctx context.Context, timeout 
 				logger.String("version", settings.Version))
 			return true
 		}
+		// Caller first: when both its context and our deadline have expired, the
+		// caller giving up is the truthful answer, and it is the one that must
+		// not be recorded as a configuration failure.
+		if ctx.Err() != nil {
+			return false
+		}
 		if !time.Now().Before(deadline) {
 			return false
 		}
@@ -1759,26 +1765,27 @@ func redirectLeftSpecies(scientificName string, redirects []wikiRedirect) (targe
 		return "", false
 	}
 
-	// Every word is tested, not just a single-word title, so that a
-	// parenthetically disambiguated or otherwise qualified taxon article
-	// ("Accipitridae (family)") is caught too. This is safe because no English
-	// common name and no binomial has a word ending in a supra-generic suffix.
-	for word := range strings.FieldsFuncSeq(strings.ToLower(target), isTitleSeparator) {
-		for _, suffix := range supraGenericSuffixes {
-			if strings.HasSuffix(word, suffix) {
-				return target, true
-			}
+	// Only a single-word target is tested. A supra-generic name is one word, and
+	// a binomial is two, so this cannot reject a species article.
+	//
+	// Testing every word instead would: nine binomials in the shipped label set
+	// carry a Latin genitive epithet that ends in one of these suffixes
+	// (Pyrrhura molinae, Setophaga adelaidae, Crypturellus duidae and six more),
+	// so a synonym redirect landing on one of them would be discarded and, since
+	// the rejection is reported as ErrImageNotFound, cached as "no image". No
+	// common name in that label set collides.
+	if strings.ContainsAny(target, " _") {
+		return "", false
+	}
+
+	targetLower := strings.ToLower(target)
+	for _, suffix := range supraGenericSuffixes {
+		if strings.HasSuffix(targetLower, suffix) {
+			return target, true
 		}
 	}
 
 	return "", false
-}
-
-// isTitleSeparator reports whether r separates words in a MediaWiki title.
-// Underscore is title syntax for a space, and parentheses delimit a
-// disambiguating qualifier.
-func isTitleSeparator(r rune) bool {
-	return r == ' ' || r == '_' || r == '(' || r == ')'
 }
 
 // resolveRedirectTarget walks the redirect chain from the requested title.

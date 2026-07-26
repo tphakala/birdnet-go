@@ -217,7 +217,8 @@ func (c *ImageFileCache) logPermanentImageRejection(statusCode int, provider, sc
 // every error here was a bare fmt.Errorf and the only signal was a log line.
 // The transient paths - DNS, dial, HTTP status, the download cooldown - are
 // deliberately NOT built through this: ErrorBuilder.Build reports to telemetry
-// unconditionally, so doing so would emit one event per attempt for exactly the
+// whenever reporting is active, so doing so would emit one event per attempt for
+// exactly the
 // throttling and blanket-refusal conditions that already have a cooldown and a
 // once-per-cache escalated log. It would also stack two or three reports on one
 // failure, since a wrapped EnhancedError is reported again by each wrap.

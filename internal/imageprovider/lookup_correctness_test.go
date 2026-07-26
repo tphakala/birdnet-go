@@ -120,18 +120,26 @@ func TestRedirectLeftSpecies(t *testing.T) {
 			wantTarget: "Passeriformes",
 		},
 		{
-			name:       "disambiguated family article is still a family article",
-			species:    "Accipiter nisus",
-			redirects:  []wikiRedirect{{From: "Accipiter nisus", To: "Accipitridae (family)"}},
-			wantLeft:   true,
-			wantTarget: "Accipitridae (family)",
+			// Only a single-word target is tested, so a qualified title passes.
+			// Wikipedia keeps bird families at the bare name, so this shape does
+			// not arise; the alternative, testing every word, rejects the nine
+			// binomials below and is the worse trade by far.
+			name:      "a qualified title is not tested",
+			species:   "Accipiter nisus",
+			redirects: []wikiRedirect{{From: "Accipiter nisus", To: "Accipitridae (family)"}},
 		},
 		{
-			name:       "underscored family title",
-			species:    "Accipiter nisus",
-			redirects:  []wikiRedirect{{From: "Accipiter nisus", To: "Accipitridae_(family)"}},
-			wantLeft:   true,
-			wantTarget: "Accipitridae_(family)",
+			// Regression guard. These epithets are Latin genitives that happen to
+			// end in a supra-generic suffix. Nine such binomials are in the
+			// shipped V2.4 label set, and rejecting one caches it as "no image".
+			name:      "a binomial whose epithet ends in -inae is not a higher taxon",
+			species:   "Pyrrhura emma",
+			redirects: []wikiRedirect{{From: "Pyrrhura emma", To: "Pyrrhura molinae"}},
+		},
+		{
+			name:      "a binomial whose epithet ends in -idae is not a higher taxon",
+			species:   "Setophaga petechia",
+			redirects: []wikiRedirect{{From: "Setophaga petechia", To: "Setophaga adelaidae"}},
 		},
 		{
 			name:      "underscores and case are title syntax, not a different page",

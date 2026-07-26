@@ -69,8 +69,11 @@ var (
 	// answers ".../by/4.0/de/" with a 301 to the German TRANSLATION of the
 	// international deed rather than a 404; it is the display name that would be
 	// false. A port on an unported version is therefore dropped.
+	// 2.1 is absent for the same reason it is absent above: it is checked only
+	// after aviCommonsKnownVersions has already accepted the version, so an
+	// entry here would be unreachable.
 	aviCommonsPortedVersions = map[string]bool{
-		"1.0": true, "2.0": true, "2.1": true, "2.5": true, "3.0": true,
+		"1.0": true, "2.0": true, "2.5": true, "3.0": true,
 	}
 
 	// aviCommonsLicenseFamilies maps a normalized license family to its display

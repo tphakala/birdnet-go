@@ -258,24 +258,72 @@ func TestRunPrefetch_RecordsBackoffOnTransientFailure(t *testing.T) {
 
 // TestRunPrefetch_ClearsMarkersOnSuccess is the other half: the backoff must not
 // outlive the condition it was recorded for.
+//
+// The markers are recorded while the prefetch is parked inside the provider, so
+// only runPrefetch's own clear can satisfy the assertion. Recording them before
+// scheduling would make the check vacuous: the predicate would already hold at
+// the first tick, and deleting the production clear would leave the test green.
 func TestRunPrefetch_ClearsMarkersOnSuccess(t *testing.T) {
 	t.Parallel()
 
 	const species = "Turdus merula"
-	cache := InitCache(wikiProviderName, &recordingProvider{
-		fetched: make(chan string, 1),
-		result:  BirdImage{URL: "https://127.0.0.1/blackbird.jpg", ScientificName: species},
-	}, nil, nil)
+	provider := newBlockingProvider(t)
+	provider.result = BirdImage{URL: "https://127.0.0.1/blackbird.jpg", ScientificName: species}
+	cache := InitCache(wikiProviderName, provider, nil, nil)
 	t.Cleanup(func() { assert.NoError(t, cache.Close()) })
 
+	require.True(t, cache.PrefetchAsync(species))
+	require.Eventually(t, func() bool { return provider.calls.Load() > 0 },
+		2*time.Second, 5*time.Millisecond, "the prefetch must be parked in the provider")
+
+	// Recorded mid-flight, so the production clear is the only thing that can
+	// remove them.
 	cache.recordFailedAttempt(species)
 	cache.recordDBAbsent(species)
 	require.True(t, cache.recentlyAttempted(species))
+	require.True(t, cache.dbKnownAbsent(species))
 
-	cache.clearResolutionMarkers(species)
-	require.True(t, cache.PrefetchAsync(species))
+	close(provider.release)
+
 	require.Eventually(t, func() bool {
 		return !cache.recentlyAttempted(species) && !cache.dbKnownAbsent(species)
 	}, 2*time.Second, 5*time.Millisecond,
 		"a resolved species must not keep either marker")
+}
+
+// TestGetCachedLocal_StaleMemoryEntryIsRefreshed is the closure test for serving
+// a stale positive entry instead of deleting it.
+//
+// Serving it is only correct if the refresh that re-derives it is still
+// scheduled. Without that the entry stays resident for the whole 30-day TTL and
+// nothing on the request path can correct it, which is the exact condition the
+// memory TTL exists to end: a wrong image immortal in memory.
+func TestGetCachedLocal_StaleMemoryEntryIsRefreshed(t *testing.T) {
+	t.Parallel()
+
+	const species = "Turdus merula"
+	provider := &recordingProvider{
+		fetched: make(chan string, 1),
+		result:  BirdImage{URL: "https://127.0.0.1/fresh.jpg", ScientificName: species},
+	}
+	cache := InitCache(wikiProviderName, provider, nil, nil)
+	t.Cleanup(func() { assert.NoError(t, cache.Close()) })
+
+	cache.dataMap.Store(species, &BirdImage{
+		URL:            "https://127.0.0.1/stale.jpg",
+		ScientificName: species,
+		CachedAt:       time.Now().Add(-defaultCacheTTL - time.Hour),
+	})
+
+	img, found, negative := cache.getCachedLocal(species)
+	require.True(t, found, "a stale entry is still served")
+	assert.False(t, negative)
+	assert.Equal(t, "https://127.0.0.1/stale.jpg", img.URL)
+
+	select {
+	case got := <-provider.fetched:
+		assert.Equal(t, species, got, "serving a stale entry must also schedule its refresh")
+	case <-time.After(2 * time.Second):
+		t.Fatal("no refresh was scheduled for the stale memory entry, so nothing can ever re-derive it")
+	}
 }

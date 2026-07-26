@@ -126,7 +126,7 @@ func thumbnailSettings() conf.Thumbnails {
 // normalizedFallbackPolicy reads the configured fallback policy, trimmed and
 // lowercased, so that "All" or a stray trailing space is not read as "off".
 func normalizedFallbackPolicy() string {
-	return strings.ToLower(strings.TrimSpace(thumbnailSettings().FallbackPolicy))
+	return normalizeProviderName(thumbnailSettings().FallbackPolicy)
 }
 
 // normalizeProviderName folds a configured provider name for comparison.
@@ -653,6 +653,22 @@ func (c *BirdImageCache) processStaleEntriesInBatches(staleEntries []string) {
 			}
 			c.refreshEntry(scientificName)
 		}
+	}
+}
+
+// scheduleRefresh registers a background refresh for a species already served
+// from cache, deduplicated against any prefetch already in flight. The dedup
+// entry is rolled back if the goroutine could not be started, so a species is
+// never left marked as refreshing when nothing is.
+func (c *BirdImageCache) scheduleRefresh(scientificName string) {
+	if _, alreadyQueued := c.prefetching.LoadOrStore(scientificName, struct{}{}); alreadyQueued {
+		return
+	}
+	if !c.tryGo(func() {
+		defer c.prefetching.Delete(scientificName)
+		c.refreshEntry(scientificName)
+	}) {
+		c.prefetching.Delete(scientificName)
 	}
 }
 
@@ -1520,6 +1536,15 @@ func (c *BirdImageCache) getCachedLocal(scientificName string) (img BirdImage, f
 	case isNegativeEntry:
 		return BirdImage{}, false, true
 	case foundInMemory:
+		// Serving a stale entry without scheduling its refresh would leave a
+		// wrong image resident for the process lifetime, which is the whole
+		// condition the memory TTL exists to end. Both sibling sites that serve
+		// a stale positive pair it with this same scheduling.
+		if isCacheEntryStale(memImg.CachedAt, false) {
+			log.Debug("Serving a stale memory cache entry and refreshing it in the background",
+				logger.Time("cached_at", memImg.CachedAt))
+			c.scheduleRefresh(scientificName)
+		}
 		return memImg, true, false
 	}
 
@@ -1607,15 +1632,7 @@ func (c *BirdImageCache) getCachedLocal(scientificName string) (img BirdImage, f
 	if isCacheEntryStale(dbImage.CachedAt, false) {
 		log.Debug("Serving a stale DB cache entry and refreshing it in the background",
 			logger.Time("cached_at", dbImage.CachedAt))
-		if _, alreadyQueued := c.prefetching.LoadOrStore(scientificName, struct{}{}); !alreadyQueued {
-			scheduled := c.tryGo(func() {
-				defer c.prefetching.Delete(scientificName)
-				c.refreshEntry(scientificName)
-			})
-			if !scheduled {
-				c.prefetching.Delete(scientificName)
-			}
-		}
+		c.scheduleRefresh(scientificName)
 	}
 
 	return *dbImage, true, false
@@ -1730,11 +1747,13 @@ func (c *BirdImageCache) runPrefetch(scientificName string, log logger.Logger) {
 		// else is a failed attempt and needs its own short backoff, or the next
 		// client poll schedules an identical attempt immediately.
 		//
-		// Except a context error: ctx here is bgCtx plus prefetchTimeout, so a
-		// cancellation means this cache is shutting down, not that the species
-		// is hard to resolve, and recording it would back the species off for
-		// the first 30 seconds of the next run.
-		if ctx.Err() == nil && !errors.Is(err, ErrImageNotFound) {
+		// Cancellation, and only cancellation, is exempt: ctx is bgCtx plus
+		// prefetchTimeout, so a Canceled means this cache is shutting down and
+		// recording it would back the species off for the first 30 seconds of
+		// the next run. A DeadlineExceeded is the opposite case - the provider
+		// chain took longer than prefetchTimeout, which is a hung or throttled
+		// upstream and precisely what the backoff is for.
+		if !errors.Is(ctx.Err(), context.Canceled) && !errors.Is(err, ErrImageNotFound) {
 			c.recordFailedAttempt(scientificName)
 		}
 		log.Debug("Background image prefetch did not resolve", logger.Error(err))
@@ -1826,15 +1845,7 @@ func (c *BirdImageCache) handleDBCacheHit(scientificName string, dbImage *BirdIm
 	if isCacheEntryStale(dbImage.CachedAt, false) {
 		log.Debug("DB cache entry is stale, returning stale data and triggering background refresh",
 			logger.Time("cached_at", dbImage.CachedAt))
-		if _, alreadyQueued := c.prefetching.LoadOrStore(scientificName, struct{}{}); !alreadyQueued {
-			scheduled := c.tryGo(func() {
-				defer c.prefetching.Delete(scientificName)
-				c.refreshEntry(scientificName)
-			})
-			if !scheduled {
-				c.prefetching.Delete(scientificName)
-			}
-		}
+		c.scheduleRefresh(scientificName)
 	} else {
 		log.Debug("Image loaded from DB cache")
 	}
@@ -2160,9 +2171,13 @@ func markerLive(markers *sync.Map, scientificName string) bool {
 // accounting and cannot itself become a source of error.
 const maxMarkerEntries = 8192
 
-// recordMarker stamps a marker map, clearing it first if it has grown past the
-// bound. count tracks insertions since the last clear rather than live size, so
-// it is an upper bound on the entries retained, which is all the bound needs.
+// recordMarker stamps a marker map, clearing it whole once the insertion count
+// since the last clear passes the bound.
+//
+// count is not the live size: deletions do not decrement it, and concurrent
+// callers can both trip the bound and clear. So the map is kept near the bound
+// rather than strictly under it, which is all that is needed here, since both
+// markers are optimizations whose loss costs one database read.
 func recordMarker(markers *sync.Map, count *atomic.Int64, scientificName string) {
 	if scientificName == "" {
 		return
