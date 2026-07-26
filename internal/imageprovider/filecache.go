@@ -99,15 +99,16 @@ var imageHTTPClient = func() *http.Client {
 	}
 }()
 
-// cachedImageUserAgent memoizes the image-download User-Agent once the app version is
-// known. It is a pointer rather than a sync.OnceValue because conf.Setting() can return
-// nil early: latching a version-less string for the whole process lifetime would send
-// weaker identification to Wikimedia than the policy asks for.
+// cachedImageUserAgent memoizes the image-download User-Agent. It is an atomic.Pointer
+// rather than a sync.OnceValue because conf.Setting() can return nil, and Version is
+// published after startup: latching at first call could pin a version-less string for
+// the process lifetime. Only a non-empty version is memoized, so an early call does not
+// poison the value.
 var cachedImageUserAgent atomic.Pointer[string]
 
-// currentAppVersion returns the running application version, or "" if settings cannot
-// be loaded. conf.Setting() returns nil when the config fails to load, so the nil check
-// is required rather than defensive.
+// currentAppVersion returns the running application version. It is empty both when
+// conf.Setting() returns nil (the config failed to load) and when Version has not been
+// published yet; callers only need "not yet usable", so the two are equivalent here.
 func currentAppVersion() string {
 	if settings := conf.Setting(); settings != nil {
 		return settings.Version
@@ -115,58 +116,24 @@ func currentAppVersion() string {
 	return ""
 }
 
-// imageDownloadUserAgent returns a User-Agent for the image byte download that complies
-// with the Wikimedia Foundation User-Agent policy.
+// imageDownloadUserAgent returns a User-Agent for the image byte download that satisfies
+// the Wikimedia Foundation User-Agent policy.
 //
-// upload.wikimedia.org answers 403 to Go's default "Go-http-client/1.1" and to an empty
-// User-Agent. Without this header the download failed for every species on every
-// request, the disk cache stayed permanently empty, and the media proxy fell back to
-// redirecting clients to the external URL, where non-browser clients hit the same 403.
-//
-// It reuses buildUserAgent so this path and the MediaWiki API path cannot drift apart.
-// Note that httpclient's own default User-Agent ("BirdNET-Go", no version, no contact
-// URL) does not satisfy the policy and would not lift the 403.
+// Wikimedia answers 403 both to Go's default "Go-http-client/1.1" and to any User-Agent
+// beginning with "BirdNET-Go", so the byte fetch needs the same policy-compliant header
+// the MediaWiki API path already sends. It reuses buildUserAgent to keep the two in the
+// same format.
 func imageDownloadUserAgent() string {
 	if ua := cachedImageUserAgent.Load(); ua != nil {
 		return *ua
 	}
 	version := currentAppVersion()
 	ua := buildUserAgent(version)
-	// Only memoize once a real version is available.
 	if version != "" {
-		cachedImageUserAgent.Store(&ua)
+		// CompareAndSwap rather than Store so concurrent first callers publish once.
+		cachedImageUserAgent.CompareAndSwap(nil, &ua)
 	}
 	return ua
-}
-
-// imageRejectionLogged latches the first permanent image-host rejection so the
-// escalated log below is emitted once per process rather than once per download.
-var imageRejectionLogged atomic.Bool
-
-// logPermanentImageRejection escalates a 401/403 from the image host to Error, once.
-//
-// A 401 or 403 is a policy or credential rejection: permanent, and identical on every
-// subsequent request. The caller logs download failures at Info deliberately, so that
-// transient upstream errors (404s, throttling) do not trip the diagnostics health
-// check's elevated-error-count rule. That choice also meant a 100%-failure condition
-// such as a User-Agent block was logged at the level chosen for transient faults and so
-// never escalated: the cache stayed empty for every species indefinitely and nothing
-// said why. Escalating once keeps the transient-noise property while making a blanket
-// block visible the first time it happens.
-func logPermanentImageRejection(statusCode int, provider, scientificName, imageURL string) {
-	if statusCode != http.StatusForbidden && statusCode != http.StatusUnauthorized {
-		return
-	}
-	if !imageRejectionLogged.CompareAndSwap(false, true) {
-		return
-	}
-	GetLogger().Error("Image host rejected the download; this is a permanent condition, not a transient failure",
-		logger.String("provider", provider),
-		logger.String("species", scientificName),
-		logger.Int("status", statusCode),
-		logger.String("user_agent", imageDownloadUserAgent()),
-		logger.String("url", imageURL),
-	)
 }
 
 // ImageFileCache manages disk-based image caching organized by provider.
@@ -174,11 +141,15 @@ type ImageFileCache struct {
 	basePath    string
 	downloadSem chan struct{}      // limits concurrent external downloads
 	sfGroup     singleflight.Group // deduplicates concurrent fetches for same species
-	// httpClient performs the image byte downloads. It defaults to imageHTTPClient,
-	// whose DialContext rejects loopback and private IPs as SSRF protection. Tests
-	// override it to reach an httptest server, which binds 127.0.0.1 and is therefore
-	// unreachable through the production client.
+	// httpClient performs the image byte downloads. imageHTTPClient's DialContext
+	// rejects loopback and private IPs as SSRF protection, so tests override this to
+	// reach an httptest server, which binds 127.0.0.1.
 	httpClient *http.Client
+	// rejectionLogged suppresses repeat escalations of a permanent host rejection.
+	// Scoped per cache and cleared by a successful download, mirroring how
+	// wikiMediaProvider.networkErrorLogged is cleared by resetCircuit: a
+	// never-reset process-global latch would hide a second block entirely.
+	rejectionLogged atomic.Bool
 }
 
 // NewImageFileCache creates a new ImageFileCache rooted at basePath.
@@ -190,13 +161,33 @@ func NewImageFileCache(basePath string) *ImageFileCache {
 	}
 }
 
-// client returns the HTTP client used for image downloads, falling back to the
-// shared SSRF-protected client so a zero-value ImageFileCache never nil-panics.
-func (c *ImageFileCache) client() *http.Client {
-	if c.httpClient != nil {
-		return c.httpClient
+// logPermanentImageRejection escalates a 401/403 from the image host to Error, at most
+// once until the next successful download.
+//
+// A 401 or 403 is treated as a policy or credential rejection rather than a transient
+// fault. Callers log download failures at Info on purpose, so that ordinary upstream
+// errors (404s, throttling) do not inflate the diagnostics error count. The side effect
+// was that a blanket condition such as a User-Agent block, which fails every species on
+// every request, was reported at the level chosen for transient faults and so never
+// stood out. Escalating once preserves the low-noise property while making a blanket
+// rejection visible.
+//
+// Note this is a heuristic: Wikimedia's edge also answers 403 for transient bot
+// challenges, so a single escalation is a signal to investigate, not proof of a block.
+func (c *ImageFileCache) logPermanentImageRejection(statusCode int, provider, scientificName, imageURL string) {
+	if statusCode != http.StatusForbidden && statusCode != http.StatusUnauthorized {
+		return
 	}
-	return imageHTTPClient
+	if !c.rejectionLogged.CompareAndSwap(false, true) {
+		return
+	}
+	GetLogger().Error("Image host rejected the download; treating as a permanent condition, not a transient failure",
+		logger.String("provider", provider),
+		logger.String("species", scientificName),
+		logger.Int("status", statusCode),
+		logger.String("user_agent", imageDownloadUserAgent()),
+		logger.String("url", imageURL),
+	)
 }
 
 // normalizeSpeciesName converts a species name to a filesystem-safe form:
@@ -394,6 +385,19 @@ func (fc *ImageFileCache) DownloadAndStore(ctx context.Context, provider, scient
 	key := provider + "/" + normalizeSpeciesName(scientificName)
 
 	result, err, _ := fc.sfGroup.Do(key, func() (any, error) {
+		// Build the User-Agent before taking a semaphore slot. It can reach
+		// conf.Setting(), whose slow path takes a package-global lock and can read from
+		// disk, and doing that while holding one of only five download slots would
+		// serialize unrelated downloads behind it.
+		userAgent := imageDownloadUserAgent()
+
+		// An already-cancelled context must not acquire a slot and issue a request.
+		// With a free semaphore both select cases are ready and the choice is random,
+		// so check first rather than relying on the select.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
+
 		// Acquire semaphore to limit concurrent downloads, respecting context cancellation.
 		select {
 		case fc.downloadSem <- struct{}{}:
@@ -406,16 +410,16 @@ func (fc *ImageFileCache) DownloadAndStore(ctx context.Context, provider, scient
 		if err != nil {
 			return nil, fmt.Errorf("failed to create image request: %w", err)
 		}
-		// Required: upload.wikimedia.org rejects Go's default User-Agent with 403.
-		req.Header.Set("User-Agent", imageDownloadUserAgent())
-		resp, err := fc.client().Do(req)
+		// Required: Wikimedia rejects Go's default User-Agent with 403.
+		req.Header.Set("User-Agent", userAgent)
+		resp, err := fc.httpClient.Do(req)
 		if err != nil {
 			return nil, fmt.Errorf("failed to download image: %w", err)
 		}
 		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode != http.StatusOK {
-			logPermanentImageRejection(resp.StatusCode, provider, scientificName, imageURL)
+			fc.logPermanentImageRejection(resp.StatusCode, provider, scientificName, imageURL)
 			return nil, fmt.Errorf("non-200 status downloading image: %d", resp.StatusCode)
 		}
 
@@ -434,12 +438,19 @@ func (fc *ImageFileCache) DownloadAndStore(ctx context.Context, provider, scient
 		if storeErr != nil {
 			return nil, storeErr
 		}
+
+		// A success means any earlier rejection is over, so re-arm the escalated log.
+		fc.rejectionLogged.Store(false)
+
 		return &downloadResult{path: path, contentType: ct}, nil
 	})
 
 	if err != nil {
 		return "", "", err
 	}
-	dr := result.(*downloadResult)
+	dr, ok := result.(*downloadResult)
+	if !ok {
+		return "", "", fmt.Errorf("unexpected download result type %T", result)
+	}
 	return dr.path, dr.contentType, nil
 }

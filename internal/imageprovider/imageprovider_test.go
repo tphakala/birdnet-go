@@ -28,10 +28,6 @@ const (
 	// backgroundFetchWaitTimeout bounds how long a test waits for the background
 	// refresh goroutine to issue its first fetch. Generous for slow CI runners.
 	backgroundFetchWaitTimeout = 10 * time.Second
-
-	// backgroundFetchSettleWindow is how long to keep collecting background fetches
-	// after the first one arrives, so the rate-limit ceiling can be asserted.
-	backgroundFetchSettleWindow = 500 * time.Millisecond
 )
 
 // mockImageProvider is a mock implementation of the ImageProvider interface
@@ -1004,44 +1000,48 @@ func populateStaleEntries(t *testing.T, store *mockStore, count int) {
 	}
 }
 
-// monitorBackgroundFetches waits for background refresh to issue fetches and asserts
-// that at least one happened and that the count stays within maxExpected.
+// awaitPacedBackgroundFetches waits for the background sweep's first two fetches and
+// asserts they are spaced by at least the configured refresh delay.
 //
 // Zero fetches is a failure, not a skip: background refresh not running at all is
-// exactly the regression this test exists to catch, and skipping on that condition
-// made the test green for the bug.
-func monitorBackgroundFetches(t *testing.T, fetchAttempts <-chan struct{}, maxExpected int) {
+// exactly the regression this helper exists to catch, and the earlier version skipped
+// on that condition, which made the test green for the bug.
+//
+// The gap is the assertion that actually pins pacing. A count ceiling does not: the
+// sweep waits refreshDelay (2s) before each entry, so within any short window the count
+// is deterministically 1 and "count <= number of stale entries" can never fail, even
+// with the pacing removed entirely.
+func awaitPacedBackgroundFetches(t *testing.T, fetchAttempts <-chan time.Time) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), backgroundFetchWaitTimeout)
 	defer cancel()
 
-	// The first fetch must arrive: its absence means background refresh never ran.
-	select {
-	case <-fetchAttempts:
-	case <-ctx.Done():
+	first, ok := awaitFetch(ctx, fetchAttempts)
+	if !ok {
 		t.Fatalf("no background fetch observed within %s: background refresh did not run", backgroundFetchWaitTimeout)
 	}
-	fetchCount := 1
+	second, ok := awaitFetch(ctx, fetchAttempts)
+	if !ok {
+		t.Fatalf("only one background fetch observed within %s: cannot verify pacing", backgroundFetchWaitTimeout)
+	}
 
-	// Drain any further fetches over a settle window so the rate-limit ceiling can be
-	// asserted. The refresh is rate limited, so fetches trickle in rather than burst.
-	settle := time.NewTimer(backgroundFetchSettleWindow)
-	defer settle.Stop()
-	for {
-		select {
-		case <-fetchAttempts:
-			fetchCount++
-		case <-settle.C:
-			t.Logf("Observed %d background fetch(es), ceiling %d", fetchCount, maxExpected)
-			assert.LessOrEqual(t, fetchCount, maxExpected,
-				"background refresh issued more fetches than there are stale entries")
-			return
-		case <-ctx.Done():
-			t.Logf("Observed %d background fetch(es) before timeout, ceiling %d", fetchCount, maxExpected)
-			assert.LessOrEqual(t, fetchCount, maxExpected,
-				"background refresh issued more fetches than there are stale entries")
-			return
-		}
+	gap := second.Sub(first)
+	t.Logf("Gap between the first two background fetches: %s (minimum %s)", gap, imageprovider.RefreshDelay)
+
+	// Allow a small tolerance: the sweep sleeps refreshDelay, and the timestamp is taken
+	// inside the provider, so scheduling can shave a little off the observed gap.
+	minGap := imageprovider.RefreshDelay - imageprovider.RefreshDelay/10
+	assert.GreaterOrEqual(t, gap, minGap,
+		"background refresh must pace its fetches by at least %s", imageprovider.RefreshDelay)
+}
+
+// awaitFetch returns the next fetch timestamp, or ok=false if the context expires first.
+func awaitFetch(ctx context.Context, fetchAttempts <-chan time.Time) (ts time.Time, ok bool) {
+	select {
+	case ts = <-fetchAttempts:
+		return ts, true
+	case <-ctx.Done():
+		return time.Time{}, false
 	}
 }
 
@@ -1059,7 +1059,7 @@ func TestBackgroundRequestsRateLimited(t *testing.T) {
 
 	const numStaleEntries = 5
 
-	fetchAttempts := make(chan struct{}, 2*numStaleEntries)
+	fetchAttempts := make(chan time.Time, 2*numStaleEntries)
 	mockProvider := &mockProviderWithContext{
 		mockImageProvider: mockImageProvider{fetchDelay: 5 * time.Millisecond},
 		fetchChannel:      fetchAttempts,
@@ -1076,7 +1076,7 @@ func TestBackgroundRequestsRateLimited(t *testing.T) {
 		require.NoError(t, cache.Close(), "Failed to close cache")
 	})
 
-	monitorBackgroundFetches(t, fetchAttempts, numStaleEntries)
+	awaitPacedBackgroundFetches(t, fetchAttempts)
 }
 
 // mockProviderWithContext extends mockImageProvider to support context-aware fetching
@@ -1084,7 +1084,7 @@ type mockProviderWithContext struct {
 	mockImageProvider
 	backgroundFetches int
 	mu2               sync.Mutex
-	fetchChannel      chan<- struct{}
+	fetchChannel      chan<- time.Time
 }
 
 func (m *mockProviderWithContext) FetchWithContext(ctx context.Context, scientificName string) (imageprovider.BirdImage, error) {
@@ -1098,7 +1098,7 @@ func (m *mockProviderWithContext) FetchWithContext(ctx context.Context, scientif
 			// Signal through channel if available
 			if m.fetchChannel != nil {
 				select {
-				case m.fetchChannel <- struct{}{}:
+				case m.fetchChannel <- time.Now():
 				default:
 				}
 			}

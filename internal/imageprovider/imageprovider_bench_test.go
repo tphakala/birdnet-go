@@ -3,6 +3,7 @@ package imageprovider_test
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -243,7 +244,9 @@ func BenchmarkConcurrentCacheAccess(b *testing.B) {
 // and produce numbers that depend on someone else's rate limiting. Run it with
 // BIRDNET_BENCH_LIVE=1 when measuring the limiter deliberately.
 func BenchmarkRateLimitedFetch(b *testing.B) {
-	if os.Getenv(benchLiveNetworkEnv) == "" {
+	// ParseBool, not a non-empty check: BIRDNET_BENCH_LIVE=0 is how anyone would
+	// disable a flag, and an emptiness test would have enabled it instead.
+	if live, err := strconv.ParseBool(os.Getenv(benchLiveNetworkEnv)); err != nil || !live {
 		b.Skipf("skipping live-network benchmark; set %s=1 to run it", benchLiveNetworkEnv)
 	}
 

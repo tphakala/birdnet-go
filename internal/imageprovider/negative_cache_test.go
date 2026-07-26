@@ -65,11 +65,18 @@ func TestNegativeCachingBehavior(t *testing.T) {
 
 	t.Run("NegativeCacheExpiry", func(t *testing.T) {
 		t.Parallel()
-		// A negative entry older than the 15-minute negative TTL must be re-queried
-		// rather than served from cache. The previous version of this subtest was named
-		// for expiry, exercised none of it, and ended in a t.Logf with no assertion:
-		// it would have passed with negativeCacheTTL set to ten years.
-		const species = "Expiredbird species"
+		// A negative entry older than the negative TTL must be re-queried rather than
+		// served from cache.
+		//
+		// The seed age below is a reviewed literal, deliberately NOT derived from
+		// NegativeCacheTTL. Deriving it (e.g. -2 * NegativeCacheTTL) makes the test
+		// self-referential: raising the constant moves the seed with it and the test
+		// keeps passing, so it cannot detect a wrong TTL. The companion assertion in
+		// TestNegativeCacheTTLValue pins the constant itself.
+		const (
+			species         = "Expiredbird species"
+			expiredEntryAge = 30 * time.Minute
+		)
 
 		mockProvider := &mockProviderWithNotFound{notFoundSpecies: map[string]bool{species: true}}
 		mockStore := newMockStore()
@@ -81,7 +88,7 @@ func TestNegativeCachingBehavior(t *testing.T) {
 			ScientificName: species,
 			ProviderName:   "wikimedia",
 			URL:            imageprovider.NegativeEntryMarker,
-			CachedAt:       time.Now().Add(-2 * imageprovider.NegativeCacheTTL),
+			CachedAt:       time.Now().Add(-expiredEntryAge),
 		}), "Failed to seed expired negative cache entry")
 
 		cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
@@ -155,7 +162,7 @@ func TestNegativeCachePersistence(t *testing.T) {
 	dbEntries := mockStore.GetAllTestEntries()
 	foundNegative := false
 	for _, entry := range dbEntries {
-		if entry.ScientificName == species && entry.URL == "__NOT_FOUND__" {
+		if entry.ScientificName == species && entry.URL == imageprovider.NegativeEntryMarker {
 			foundNegative = true
 			t.Logf("Found negative cache entry in DB: %+v", entry)
 			break
@@ -236,4 +243,16 @@ func (m *mockProviderWithTransientError) Fetch(scientificName string) (imageprov
 
 func (m *mockProviderWithTransientError) getAPICallCount() int64 {
 	return atomic.LoadInt64(&m.apiCallCount)
+}
+
+// TestNegativeCacheTTLValue pins the negative-cache TTL.
+//
+// TestNegativeCachingBehavior/NegativeCacheExpiry exercises the expiry BEHAVIOUR with a
+// literal seed age, which deliberately cannot detect a change to the constant. This
+// asserts the value, so the two together catch both a broken staleness check and a
+// wrong TTL. Mirrors TestCircuitBreakerNetworkDuration in network_failure_test.go.
+func TestNegativeCacheTTLValue(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, 15*time.Minute, imageprovider.NegativeCacheTTL,
+		"negative cache TTL changed; confirm the expiry seed age in NegativeCacheExpiry still exceeds it")
 }

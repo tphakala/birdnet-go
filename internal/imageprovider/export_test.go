@@ -1,40 +1,18 @@
 package imageprovider
 
-import (
-	"context"
-	"net/http"
-)
+import "context"
 
 // This file exposes package internals to the external imageprovider_test package.
 // It is a _test.go file, so nothing here is compiled into production builds.
 
-// IsBackgroundContext reports whether ctx carries the background-operation marker
-// set by refreshStaleEntries.
+// IsBackgroundContext reports whether ctx carries the background-operation marker.
 //
-// Test mocks must not spell the key as an untyped string: backgroundOperationKey has
-// the unexported named type contextKey, and context.Value compares the dynamic type
-// of the key, so ctx.Value("background") never matches ctx.Value(backgroundOperationKey).
-// Mocks that made that mistake silently classified every background fetch as a user
-// fetch, which permanently skipped the tests asserting on background behaviour.
+// backgroundOperationKey has the unexported named type contextKey, and context.Value
+// compares the dynamic type of the key, so a mock spelling it as the untyped string
+// "background" never matches. Test mocks must go through this helper, which forwards to
+// the production predicate rather than restating it.
 func IsBackgroundContext(ctx context.Context) bool {
-	if ctx == nil {
-		return false
-	}
-	bg, ok := ctx.Value(backgroundOperationKey).(bool)
-	return ok && bg
-}
-
-// SetFileCacheHTTPClient overrides the HTTP client used for image byte downloads.
-// The production client (imageHTTPClient) rejects loopback addresses as SSRF
-// protection, so an httptest server is unreachable without this override.
-func SetFileCacheHTTPClient(fc *ImageFileCache, client *http.Client) {
-	fc.httpClient = client
-}
-
-// BuildUserAgent exposes buildUserAgent so external tests can assert that the
-// image download sends the same policy-compliant User-Agent as the API path.
-func BuildUserAgent(appVersion string) string {
-	return buildUserAgent(appVersion)
+	return isBackgroundContext(ctx)
 }
 
 // NegativeEntryMarker is the sentinel URL stored for "no image exists" entries.
@@ -45,3 +23,6 @@ const NegativeEntryMarker = negativeEntryMarker
 // NegativeCacheTTL is how long a negative cache entry is honoured before the
 // request path re-queries the provider.
 const NegativeCacheTTL = negativeCacheTTL
+
+// RefreshDelay is the pacing gap the background sweep leaves between entries.
+const RefreshDelay = refreshDelay

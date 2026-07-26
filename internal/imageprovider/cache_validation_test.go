@@ -15,10 +15,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
-// backgroundRefreshWait bounds how long a test waits for the background refresh
-// goroutine to record a fetch.
-const backgroundRefreshWait = 10 * time.Second
-
 // setupTestCache creates a new cache instance with mock provider for testing
 func setupTestCache(t *testing.T) (*mockProviderWithAPICounter, *imageprovider.BirdImageCache) {
 	t.Helper()
@@ -236,7 +232,7 @@ func TestBackgroundRefreshIsolation(t *testing.T) {
 	// Background refresh must actually run. Poll rather than sleep a fixed interval.
 	assert.Eventually(t, func() bool {
 		return mockProvider.getBackgroundFetchCount() > 0
-	}, backgroundRefreshWait, 20*time.Millisecond, "Expected background refresh to occur")
+	}, backgroundFetchWaitTimeout, 20*time.Millisecond, "Expected background refresh to occur")
 
 	t.Logf("User fetches: %d, Background fetches: %d",
 		mockProvider.getUserFetchCount(), mockProvider.getBackgroundFetchCount())

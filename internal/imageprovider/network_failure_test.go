@@ -114,8 +114,7 @@ func (rt *dnsFailureRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 func TestNetworkErrorOpensCircuitBreaker(t *testing.T) {
 	t.Parallel()
 
-	// synctest makes the retry backoff (retryMinDelay, 2s) virtual, so the test is
-	// instant rather than waiting out a real sleep.
+	// synctest bubbles the clock so any backoff is virtual and the test stays instant.
 	synctest.Test(t, func(t *testing.T) {
 		rt := &dnsFailureRoundTripper{}
 		provider := &wikiMediaProvider{
@@ -143,31 +142,21 @@ func TestNetworkErrorOpensCircuitBreaker(t *testing.T) {
 // statusRoundTripper answers every request with a fixed status and counts the calls.
 type statusRoundTripper struct {
 	status int
-	body   string
 	calls  atomic.Int64
 }
 
 func (rt *statusRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	rt.calls.Add(1)
-	body := rt.body
-	if body == "" {
-		body = "{}"
-	}
 	return &http.Response{
 		StatusCode: rt.status,
-		Body:       io.NopCloser(strings.NewReader(body)),
+		Body:       io.NopCloser(strings.NewReader("{}")),
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
 		Request:    req,
 	}, nil
 }
 
 // TestRateLimitStopsFurtherAttempts asserts that a 429 which opens the circuit breaker
-// also stops the retry loop.
-//
-// The breaker was checked once BEFORE the loop and never again, so a 429 on attempt 1
-// opened the circuit and attempts 2 and 3 were still sent. That tripled outbound volume
-// at precisely the moment Wikimedia was asking for less, which is the traffic profile
-// that gets a User-Agent blocked. Fails without the in-loop re-check.
+// stops the retry loop immediately, spending neither another request nor a backoff.
 func TestRateLimitStopsFurtherAttempts(t *testing.T) {
 	t.Parallel()
 
@@ -180,8 +169,10 @@ func TestRateLimitStopsFurtherAttempts(t *testing.T) {
 			globalLimiter: rate.NewLimiter(rate.Inf, 1),
 		}
 
+		start := time.Now()
 		_, err := provider.queryWithRetryAndLimiter(t.Context(), "test-429",
 			map[string]string{"action": "query", "titles": "Parus major"}, nil)
+		elapsed := time.Since(start)
 		require.Error(t, err)
 
 		open, _ := provider.isCircuitOpen()
@@ -189,6 +180,18 @@ func TestRateLimitStopsFurtherAttempts(t *testing.T) {
 
 		assert.Equal(t, int64(1), rt.calls.Load(),
 			"once the 429 opened the circuit, no further request should have been sent")
+
+		// Bailing out must also skip the backoff that precedes the abandoned attempt.
+		// Checking the breaker only at the top of the next iteration still burned
+		// calculateRetryDelay(0) first, which this pins.
+		assert.Zero(t, elapsed,
+			"no backoff should be paid once the circuit is open")
+
+		// The invariant the whole design rests on: a transient breaker error must never
+		// be mistaken for a permanent "no image exists" and persisted as a negative
+		// cache entry. Without this, a rate-limit episode could blank species for ~10y.
+		require.NotErrorIs(t, err, ErrImageNotFound,
+			"a circuit-breaker error must never be classified as image-not-found")
 	})
 }
 
@@ -196,8 +199,8 @@ func TestRateLimitStopsFurtherAttempts(t *testing.T) {
 // last attempt fails, instead of sleeping a backoff it will never use.
 //
 // The loop slept calculateRetryDelay(attempt) unconditionally, so an exhausted fetch
-// held its caller for an extra retryMinDelay after the final attempt for nothing. With
-// synctest the virtual clock makes that wasted sleep directly observable.
+// held its caller a further calculateRetryDelay(maxRetries-1) with nothing left to wait
+// for. synctest makes that wasted sleep directly observable as virtual time.
 func TestRetryLoopDoesNotBackOffAfterFinalAttempt(t *testing.T) {
 	t.Parallel()
 
@@ -222,9 +225,12 @@ func TestRetryLoopDoesNotBackOffAfterFinalAttempt(t *testing.T) {
 
 		// Backoff runs only BETWEEN attempts: delays for attempts 0 and 1, none after
 		// attempt 2. Sleeping after the final attempt would add calculateRetryDelay(2).
-		wantMax := calculateRetryDelay(0) + calculateRetryDelay(1)
-		assert.LessOrEqual(t, elapsed, wantMax,
-			"the loop must not back off after the final attempt (extra wait would be %s)",
+		// Exact, not LessOrEqual: the virtual clock makes this deterministic, and a
+		// one-sided bound also passes at elapsed == 0, so it would stay green if the
+		// between-attempt backoff were removed entirely.
+		wantTotal := calculateRetryDelay(0) + calculateRetryDelay(1)
+		assert.Equal(t, wantTotal, elapsed,
+			"backoff must run between attempts only (a trailing sleep would add %s)",
 			calculateRetryDelay(2))
 	})
 }

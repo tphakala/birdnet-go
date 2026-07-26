@@ -316,7 +316,7 @@ func TestRefreshEntryFallbackPolicyNone(t *testing.T) {
 	// was not used" becomes a meaningful assertion rather than a race.
 	require.Eventually(t, func() bool {
 		return primaryProvider.getFetchCount() > 0
-	}, 10*time.Second, 20*time.Millisecond, "background refresh never reached the primary provider")
+	}, backgroundFetchWaitTimeout, 20*time.Millisecond, "background refresh never reached the primary provider")
 
 	// After refresh with policy "none", primary cache must NOT have the wikimedia image.
 	// The assertion is unconditional: previously it sat inside `if err == nil`, so any

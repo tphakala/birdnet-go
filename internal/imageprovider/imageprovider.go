@@ -72,6 +72,17 @@ type contextKey string
 // backgroundOperationKey is the context key for background operations
 const backgroundOperationKey contextKey = "background"
 
+// isBackgroundContext reports whether ctx was created by the background refresh path.
+// The key has an unexported named type, so this is the only correct way to read it:
+// context.Value compares key dynamic types, and an untyped string never matches.
+func isBackgroundContext(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	bg, ok := ctx.Value(backgroundOperationKey).(bool)
+	return ok && bg
+}
+
 // isRealError checks if an error is a genuine error (not a cache miss)
 func isRealError(err error) bool {
 	return err != nil && !errors.Is(err, ErrCacheMiss)

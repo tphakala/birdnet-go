@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -164,9 +165,15 @@ func newServedCache(t *testing.T, handler http.HandlerFunc) (*ImageFileCache, *h
 func TestDownloadAndStore_SendsUserAgent(t *testing.T) {
 	t.Parallel()
 
-	var gotUA string
+	// Buffered channel rather than a shared variable: the handler runs on the server's
+	// goroutine, and a channel gives the read a happens-before edge without relying on
+	// net/http incidentally providing one.
+	uaCh := make(chan string, 1)
 	cache, server := newServedCache(t, func(w http.ResponseWriter, r *http.Request) {
-		gotUA = r.Header.Get("User-Agent")
+		select {
+		case uaCh <- r.Header.Get("User-Agent"):
+		default:
+		}
 		w.Header().Set("Content-Type", "image/jpeg")
 		_, _ = w.Write([]byte{0xFF, 0xD8, 0xFF, 0xE0})
 	})
@@ -174,10 +181,16 @@ func TestDownloadAndStore_SendsUserAgent(t *testing.T) {
 	_, _, err := cache.DownloadAndStore(t.Context(), "wikimedia", "Delichon urbicum", server.URL+"/img.jpg")
 	require.NoError(t, err)
 
+	var gotUA string
+	select {
+	case gotUA = <-uaCh:
+	default:
+		t.Fatal("handler never observed a request")
+	}
 	require.NotEmpty(t, gotUA, "image download must send a User-Agent")
 	assert.NotContains(t, gotUA, "Go-http-client",
 		"Go's default User-Agent is rejected with 403 by upload.wikimedia.org")
-	assert.Contains(t, gotUA, userAgentName+"/", "User-Agent must identify the client by name and version")
+	assert.Contains(t, gotUA, userAgentName+"/", "User-Agent must carry the client name and a version token")
 	assert.Contains(t, gotUA, branding.RepoURL(), "Wikimedia policy requires contact information")
 
 	// Assert against the shared builder rather than re-spelling the string, so the API
@@ -365,10 +378,7 @@ func TestImageFileCache_DetectsContentType(t *testing.T) {
 
 	cache := NewImageFileCache(filepath.Join(t.TempDir(), "cache"))
 
-	// PNG file signature.
-	pngData := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52}
-
-	storedPath, storedCT, err := cache.Store("wikimedia", "Cyanistes caeruleus", pngData, "https://example.com/img.png", "")
+	storedPath, storedCT, err := cache.Store("wikimedia", "Cyanistes caeruleus", pngBytes, "https://example.com/img.png", "")
 	require.NoError(t, err)
 	assert.Equal(t, ".png", filepath.Ext(storedPath), "expected .png extension")
 	assert.Equal(t, "image/png", storedCT)
@@ -377,4 +387,69 @@ func TestImageFileCache_DetectsContentType(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, path)
 	assert.Equal(t, "image/png", contentType)
+}
+
+// TestDownloadAndStore_PermanentRejectionLatch asserts the escalation bookkeeping for a
+// permanent host rejection.
+//
+// Without this, deleting the logPermanentImageRejection call site entirely left the whole
+// package green: the 403 tests execute that function incidentally, so it reported 100%
+// coverage while no assertion depended on it. Coverage proves a line ran, never that a
+// regression would fail a test.
+func TestDownloadAndStore_PermanentRejectionLatch(t *testing.T) {
+	t.Parallel()
+
+	// status is switched per request so one cache can be walked through
+	// reject -> reject-again -> succeed.
+	var status atomic.Int64
+	status.Store(http.StatusForbidden)
+
+	cache, server := newServedCache(t, func(w http.ResponseWriter, _ *http.Request) {
+		code := int(status.Load())
+		if code != http.StatusOK {
+			w.WriteHeader(code)
+			return
+		}
+		w.Header().Set("Content-Type", "image/jpeg")
+		_, _ = w.Write([]byte{0xFF, 0xD8, 0xFF, 0xE0})
+	})
+
+	require.False(t, cache.rejectionLogged.Load(), "latch should start clear")
+
+	// A 403 latches the escalation.
+	_, _, err := cache.DownloadAndStore(t.Context(), "wikimedia", "Rejected one", server.URL+"/a.jpg")
+	require.Error(t, err)
+	assert.True(t, cache.rejectionLogged.Load(), "a 403 must latch the escalated log")
+
+	// A second rejection must not re-escalate, which is what keeps the log quiet.
+	_, _, err = cache.DownloadAndStore(t.Context(), "wikimedia", "Rejected two", server.URL+"/b.jpg")
+	require.Error(t, err)
+	assert.True(t, cache.rejectionLogged.Load(), "latch stays set while rejections continue")
+
+	// A success clears it, so a later block is visible again rather than silent forever.
+	status.Store(http.StatusOK)
+	_, _, err = cache.DownloadAndStore(t.Context(), "wikimedia", "Recovered", server.URL+"/c.jpg")
+	require.NoError(t, err)
+	assert.False(t, cache.rejectionLogged.Load(),
+		"a successful download must re-arm the escalation, mirroring resetCircuit")
+}
+
+// TestDownloadAndStore_TransientStatusDoesNotLatch asserts the escalation is reserved for
+// policy rejections, so ordinary upstream failures stay at the quiet log level.
+func TestDownloadAndStore_TransientStatusDoesNotLatch(t *testing.T) {
+	t.Parallel()
+
+	for _, status := range []int{http.StatusNotFound, http.StatusTooManyRequests, http.StatusInternalServerError} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			t.Parallel()
+			cache, server := newServedCache(t, func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(status)
+			})
+
+			_, _, err := cache.DownloadAndStore(t.Context(), "wikimedia", "Parus major", server.URL+"/img.jpg")
+			require.Error(t, err)
+			assert.False(t, cache.rejectionLogged.Load(),
+				"HTTP %d is transient and must not escalate as a permanent rejection", status)
+		})
+	}
 }
