@@ -424,17 +424,11 @@
   // Tracking settings state
   let trackingSettings = $derived($speciesTrackingSettings);
 
-  // Life list settings state. `species` can legitimately arrive as `null`
-  // (a Go nil slice marshals to JSON null, not []) on any install that has
-  // never saved a life list yet, so guard it explicitly rather than relying
-  // on the outer `??` fallback, which only covers `lifeList` itself being nullish.
-  let lifeList = $derived.by(() => {
-    const base = $lifeListSettings ?? { enabled: false, species: [] as string[] };
-    return {
-      enabled: base.enabled ?? false,
-      species: Array.isArray(base.species) ? base.species : [],
-    };
-  });
+  // Life list settings state. `species` is normalized to an array inside the
+  // `lifeListSettings` derived store (a Go nil slice marshals to JSON null) —
+  // that store is the single source of truth for this invariant, so the guard
+  // is deliberately not repeated here.
+  let lifeList = $derived($lifeListSettings);
 
   function setLifeListEnabled(enabled: boolean) {
     settingsActions.updateSection('realtime', {

@@ -36,6 +36,11 @@
   // saves the user from hunting through eBird's UI for the export option.
   const EBIRD_LIFE_LIST_EXPORT_URL = 'https://ebird.org/lifelist?r=world&time=life&fmt=csv';
 
+  // Upper bound for the uploaded CSV. Well above a maximal eBird world life list
+  // (~11k rows, a few hundred KB) while still bounding what we read into memory.
+  // fileHelpers' own 1 MB default is too small for this file type.
+  const MAX_LIFE_LIST_CSV_BYTES = 5_242_880; // 5 MB
+
   interface Props {
     speciesCount: number;
     disabled?: boolean;
@@ -73,7 +78,7 @@
     if (!file) return;
 
     try {
-      const text = await readFileAsText(file, 5_242_880); // 5MB — generous for even a large life list
+      const text = await readFileAsText(file, MAX_LIFE_LIST_CSV_BYTES);
       const result = parseLifeListCsv(text);
 
       if (result.accepted.length === 0 && result.rejected.length === 0) {
@@ -81,11 +86,25 @@
         return;
       }
 
+      const totalRows = result.accepted.length + result.rejected.length;
+
       importSummary = {
         acceptedCount: result.accepted.length,
-        totalRows: result.accepted.length + result.rejected.length,
+        totalRows,
         rejected: result.rejected,
       };
+
+      // An import replaces the whole life list (see component doc comment), so
+      // calling onImport with an empty array would silently wipe a saved list.
+      // A file where every row was rejected is a user error, not an intent to
+      // clear — bail out and leave the existing list untouched. The per-row
+      // reasons are the entire explanation here, so surface them expanded.
+      if (result.accepted.length === 0) {
+        showRejectedRows = true;
+        toastActions.error(t('settings.species.lifeList.noAcceptedRows', { total: totalRows }));
+        return;
+      }
+
       showRejectedRows = false;
 
       // Replaces the whole life list — see component doc comment.
@@ -129,6 +148,7 @@
         <button
           type="button"
           class="mt-1 text-xs text-[var(--color-warning)] underline cursor-pointer"
+          aria-expanded={showRejectedRows}
           onclick={() => (showRejectedRows = !showRejectedRows)}
         >
           {showRejectedRows

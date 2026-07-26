@@ -17,6 +17,7 @@ const KEY_SPECIES_COUNT = 'settings.species.lifeList.speciesCount';
 const KEY_UPLOAD_CSV = 'settings.species.lifeList.uploadCsv';
 const KEY_DISMISS = 'common.ui.dismiss';
 const KEY_SHOW_REJECTED_ROWS = 'settings.species.lifeList.showRejectedRows';
+const KEY_HIDE_REJECTED_ROWS = 'settings.species.lifeList.hideRejectedRows';
 const KEY_IMPORT_SUMMARY = 'settings.species.lifeList.importSummary';
 const KEY_CLEAR_LIST = 'settings.species.lifeList.clearList';
 
@@ -94,6 +95,41 @@ describe('LifeListImportField', () => {
 
     await user.click(screen.getByText(KEY_SHOW_REJECTED_ROWS));
     expect(screen.getByText(/not a species/i)).toBeInTheDocument();
+  });
+
+  // Regression: an import REPLACES the whole life list, so calling onImport with
+  // an empty accepted set silently wiped a previously-saved list. A CSV whose
+  // rows are all rejected is a user error (wrong columns, garbled export), not
+  // an intent to clear.
+  it('does not call onImport when every row is rejected (must not wipe a saved list)', async () => {
+    const { onImport } = renderField({ speciesCount: 426 });
+    const user = userEvent.setup();
+
+    const csv = [
+      'Common Name,Scientific Name',
+      'Garbage,not a species',
+      'Also garbage,still not a species',
+    ].join('\n');
+    const file = new File([csv], 'life-list.csv', { type: 'text/csv' });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, file);
+
+    // Same completion signal the sibling tests use — the summary renders for the
+    // all-rejected case too, so this is a valid await point.
+    expect(await screen.findByText(KEY_IMPORT_SUMMARY)).toBeInTheDocument();
+
+    // The load-bearing assertion: the saved list must be left untouched.
+    expect(onImport).not.toHaveBeenCalled();
+
+    // The rejection reasons are the entire explanation of the failure, so they
+    // are auto-expanded (toggle already reads "hide", no click needed).
+    expect(screen.getByText(KEY_HIDE_REJECTED_ROWS)).toBeInTheDocument();
+    // Both rejected rows are listed (getAllBy: each reason contains the
+    // substring of the other, so a single-match query is ambiguous here).
+    expect(
+      screen.getAllByText(/does not look like a single scientific species name/i)
+    ).toHaveLength(2);
   });
 
   it('dismisses the import summary when Dismiss is clicked', async () => {
