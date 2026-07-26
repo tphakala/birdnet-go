@@ -12,10 +12,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
-// negativeCacheURL mirrors the unexported imageprovider.negativeEntryMarker. It is
+// imageprovider.NegativeEntryMarker mirrors the unexported imageprovider.negativeEntryMarker. It is
 // the persisted URL of a negative ("no image anywhere") cache entry; the value is
 // effectively frozen because changing it would invalidate existing on-disk caches.
-const negativeCacheURL = "__NOT_FOUND__"
 
 // TestLoadCachedImagesWarmupPopulatesMemory is a regression test for the
 // loadCachedImages double-pointer bug (Forgejo #1311): the warmup loop stored
@@ -91,7 +90,7 @@ func TestGetWarmedNegativePrimaryConsultsFallback(t *testing.T) {
 	require.NoError(t, store.SaveImageCache(&datastore.ImageCache{
 		ScientificName: species,
 		ProviderName:   providerAvicommons,
-		URL:            negativeCacheURL,
+		URL:            imageprovider.NegativeEntryMarker,
 		CachedAt:       time.Now(),
 	}))
 	// Positive fallback (wikimedia) DB row that the fallback chain must resolve.

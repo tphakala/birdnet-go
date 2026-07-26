@@ -1,6 +1,7 @@
 package imageprovider_test
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -120,24 +121,25 @@ func TestFallbackPolicyEnforcement(t *testing.T) {
 			primaryCache.SetRegistry(registry)
 
 			// Test Get method
-			_, err := primaryCache.Get("Parus major")
+			img, err := primaryCache.Get("Parus major")
 
+			// Whether the fallback provider was actually consulted is the user-visible
+			// symptom (a thumbnail appears or it does not). Asserting only on the
+			// returned error let a policy that silently skipped fallback pass, and the
+			// "all" branch was vacuous: err == nil || isImageNotFoundError(err) is
+			// satisfied by nearly any outcome.
 			if tt.expectFallback {
-				// With fallback enabled, the primary provider fails but fallback should work
-				// So we should get a result (no error or specific not found error)
-				assert.True(t, err == nil || isImageNotFoundError(err),
-					"Expected success or not found error with fallback enabled, got: %v", err)
+				require.NoError(t, err, "fallback provider should have satisfied the request")
+				assert.Equal(t, 1, fallbackProvider.getFetchCount(),
+					"fallback provider must be consulted when policy is %q", tt.fallbackPolicy)
+				assert.NotEmpty(t, img.URL, "fallback should have produced an image URL")
 			} else {
-				// Without fallback, we should get an error from the primary provider
-				assert.Error(t, err, "Expected error when primary provider fails and fallback is disabled")
+				require.Error(t, err, "Expected error when primary provider fails and fallback is disabled")
+				assert.Equal(t, 0, fallbackProvider.getFetchCount(),
+					"fallback provider must NOT be consulted when policy is %q", tt.fallbackPolicy)
 			}
 		})
 	}
-}
-
-// isImageNotFoundError checks if an error is an image not found error
-func isImageNotFoundError(err error) bool {
-	return err != nil && err.Error() == "image not found by provider"
 }
 
 // mockStoreWithTracking extends mockStore to track which providers had their DB
@@ -308,24 +310,41 @@ func TestRefreshEntryFallbackPolicyNone(t *testing.T) {
 	_, err := primaryCache.Get(species)
 	require.NoError(t, err)
 
-	// Wait for background refresh goroutine to complete. Since policy is "none",
-	// no observable state change occurs (no fallback, no DB update), so we must
-	// use a fixed wait. 2s is generous for CI where the goroutine does minimal work.
-	time.Sleep(2 * time.Second)
+	// Wait for the background refresh to actually consult the primary provider. This
+	// replaces a fixed 2s sleep: the primary provider's call counter is the observable
+	// signal that the refresh ran, so there is a defined point at which "the fallback
+	// was not used" becomes a meaningful assertion rather than a race.
+	require.Eventually(t, func() bool {
+		return primaryProvider.getFetchCount() > 0
+	}, backgroundFetchWaitTimeout, 20*time.Millisecond, "background refresh never reached the primary provider")
 
-	// After refresh with policy "none", primary cache should NOT have wikimedia image
+	// After refresh with policy "none", primary cache must NOT have the wikimedia image.
+	// The assertion is unconditional: previously it sat inside `if err == nil`, so any
+	// error made the whole test vacuous. img.URL is empty when err is non-nil, which
+	// still satisfies the inequality, so no branch is needed.
 	img, err := primaryCache.Get(species)
-
-	// The image should still be the old stale one (or a negative entry)
-	if err == nil {
-		assert.NotEqual(t, "https://upload.wikimedia.org/Carduelis_flammea_CT6.jpg", img.URL,
-			"Should NOT use wikimedia fallback when policy is 'none'")
+	if err != nil {
+		require.ErrorIs(t, err, imageprovider.ErrImageNotFound,
+			"only a not-found error is acceptable here")
 	}
+	assert.NotEqual(t, "https://upload.wikimedia.org/Carduelis_flammea_CT6.jpg", img.URL,
+		"Should NOT use wikimedia fallback when policy is 'none'")
+	assert.Zero(t, fallbackProvider.getFetchCount(),
+		"wikimedia fallback provider must not be consulted when policy is 'none'")
 }
 
-// mockNotFoundProvider always returns ErrImageNotFound
-type mockNotFoundProvider struct{}
+// mockNotFoundProvider always returns ErrImageNotFound. It counts calls so tests can
+// wait for a background refresh to reach the primary provider instead of sleeping for
+// a fixed interval.
+type mockNotFoundProvider struct {
+	fetchCount atomic.Int64
+}
 
 func (m *mockNotFoundProvider) Fetch(_ string) (imageprovider.BirdImage, error) {
+	m.fetchCount.Add(1)
 	return imageprovider.BirdImage{}, imageprovider.ErrImageNotFound
+}
+
+func (m *mockNotFoundProvider) getFetchCount() int64 {
+	return m.fetchCount.Load()
 }
