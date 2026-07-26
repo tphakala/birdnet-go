@@ -26,15 +26,11 @@ function descResponse() {
         id: '20481',
         timestamp: '2026-07-26T08:14:40-04:00',
         confidence: 0.94,
-        verified: 'unverified',
-        locked: false,
       },
       {
         id: '20480',
         timestamp: '2026-07-26T08:14:00-04:00',
         confidence: 0.9,
-        verified: 'unverified',
-        locked: false,
       },
     ],
   };
@@ -51,8 +47,6 @@ function ascResponse() {
         id: '1',
         timestamp: '2026-06-25T09:21:51-04:00',
         confidence: 0.81,
-        verified: 'unverified',
-        locked: false,
       },
     ],
   };
@@ -69,8 +63,6 @@ function cardinalAscResponse() {
         id: '100',
         timestamp: '2026-05-01T10:30:00-04:00', // Completely different timestamp
         confidence: 0.88,
-        verified: 'unverified',
-        locked: false,
       },
     ],
   };
@@ -87,16 +79,16 @@ function cardinalDescResponse() {
         id: '200',
         timestamp: '2026-07-20T15:45:00-04:00', // Different from Spinus
         confidence: 0.91,
-        verified: 'verified',
-        locked: true,
       },
     ],
   };
 }
 
 /**
- * Daily analytics as the server actually returns it: descending by date, and
- * days with no detections omitted entirely.
+ * Daily analytics with days that had no detections omitted entirely, and the
+ * rows deliberately not in ascending date order: the two datastore backends
+ * disagree on direction (legacy orders ascending, v2 descending), so the
+ * composable must be order-agnostic.
  */
 function dailyResponse() {
   return {
