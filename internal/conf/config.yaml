@@ -222,7 +222,7 @@ realtime:
   dashboard:
     thumbnails:
       debug: false        # true to enable debug mode for image provider
-      summary: false      # show thumbnails on summary table
+      summary: true       # show thumbnails on summary table
       recent: true        # show thumbnails on recent table
       imageprovider: avicommons # preferred image provider: avicommons, wikimedia, auto
       fallbackpolicy: none # fallback policy: none (no fallback), all (try all available providers)

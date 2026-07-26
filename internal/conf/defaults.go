@@ -166,7 +166,7 @@ func setDefaultConfig() {
 
 	// Dashboard thumbnails configuration
 	viper.SetDefault("realtime.dashboard.thumbnails.debug", false)
-	viper.SetDefault("realtime.dashboard.thumbnails.summary", false)
+	viper.SetDefault("realtime.dashboard.thumbnails.summary", true)
 	viper.SetDefault("realtime.dashboard.thumbnails.recent", true)
 	viper.SetDefault("realtime.dashboard.thumbnails.imageprovider", "avicommons")
 	viper.SetDefault("realtime.dashboard.thumbnails.fallbackpolicy", "none")
