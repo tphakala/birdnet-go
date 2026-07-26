@@ -2,6 +2,7 @@ package imageprovider_test
 
 import (
 	"fmt"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -11,6 +12,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
+
+// benchLiveNetworkEnv gates benchmarks that issue real requests to third-party APIs.
+const benchLiveNetworkEnv = "BIRDNET_BENCH_LIVE"
 
 // Benchmark scenarios:
 // 1. Cache hit performance - measuring in-memory lookup speed
@@ -232,8 +236,17 @@ func BenchmarkConcurrentCacheAccess(b *testing.B) {
 	})
 }
 
-// BenchmarkRateLimitedFetch measures the impact of rate limiting on fetch operations
+// BenchmarkRateLimitedFetch measures the impact of rate limiting on fetch operations.
+//
+// This benchmark issues real requests to the live Wikipedia API, so it is opt-in: an
+// unguarded `go test -bench=.` would otherwise hammer a third-party service from CI
+// and produce numbers that depend on someone else's rate limiting. Run it with
+// BIRDNET_BENCH_LIVE=1 when measuring the limiter deliberately.
 func BenchmarkRateLimitedFetch(b *testing.B) {
+	if os.Getenv(benchLiveNetworkEnv) == "" {
+		b.Skipf("skipping live-network benchmark; set %s=1 to run it", benchLiveNetworkEnv)
+	}
+
 	// This benchmark will use the actual Wikipedia provider to test rate limiting
 	provider, err := imageprovider.NewWikiMediaProvider()
 	if err != nil {

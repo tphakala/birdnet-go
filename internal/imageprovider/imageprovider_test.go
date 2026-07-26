@@ -24,6 +24,16 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	// backgroundFetchWaitTimeout bounds how long a test waits for the background
+	// refresh goroutine to issue its first fetch. Generous for slow CI runners.
+	backgroundFetchWaitTimeout = 10 * time.Second
+
+	// backgroundFetchSettleWindow is how long to keep collecting background fetches
+	// after the first one arrives, so the rate-limit ceiling can be asserted.
+	backgroundFetchSettleWindow = 500 * time.Millisecond
+)
+
 // mockImageProvider is a mock implementation of the ImageProvider interface
 type mockImageProvider struct {
 	fetchCounter int
@@ -31,6 +41,14 @@ type mockImageProvider struct {
 	fetchDelay   time.Duration
 	mu           sync.Mutex
 	lastURL      string // Track last generated URL for consistency
+}
+
+// getFetchCount returns the number of Fetch calls under the mock's lock, so tests
+// can read it from a background refresh goroutine without racing.
+func (m *mockImageProvider) getFetchCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.fetchCounter
 }
 
 func (m *mockImageProvider) Fetch(scientificName string) (imageprovider.BirdImage, error) {
@@ -483,16 +501,25 @@ func (m *mockFailingStore) GetSpeciesFirstDetectionInPeriod(ctx context.Context,
 
 // verifyCacheEntry validates that an image was cached correctly in the store.
 // Note: CreateDefaultCache uses "wikimedia" as the provider name.
+//
+// The entry must exist. Treating "not cached yet" as acceptable made this helper
+// vacuous: a total saveToDB breakage would return ErrImageCacheNotFound for every
+// species and every caller would still pass. saveToDB is asynchronous, so the
+// lookup is retried briefly rather than checked once.
 func verifyCacheEntry(t *testing.T, store *mockStore, scientificName, expectedURL string) {
 	t.Helper()
-	cached, err := store.GetImageCache(datastore.ImageCacheQuery{ScientificName: scientificName, ProviderName: "wikimedia"})
-	if errors.Is(err, datastore.ErrImageCacheNotFound) {
-		return // Not cached yet is acceptable
-	}
-	require.NoError(t, err, "Failed to get cached image")
-	if cached != nil {
-		assert.Equal(t, expectedURL, cached.URL, "Cached URL mismatch")
-	}
+
+	var cached *datastore.ImageCache
+	require.Eventuallyf(t, func() bool {
+		entry, err := store.GetImageCache(datastore.ImageCacheQuery{ScientificName: scientificName, ProviderName: "wikimedia"})
+		if err != nil || entry == nil {
+			return false
+		}
+		cached = entry
+		return true
+	}, 2*time.Second, 10*time.Millisecond, "image for %q was never written to the DB cache", scientificName)
+
+	assert.Equal(t, expectedURL, cached.URL, "Cached URL mismatch")
 }
 
 // TestBirdImageCache tests the BirdImageCache implementation
@@ -977,41 +1004,62 @@ func populateStaleEntries(t *testing.T, store *mockStore, count int) {
 	}
 }
 
-// monitorBackgroundFetches collects fetch attempts and returns when enough are detected or timeout.
+// monitorBackgroundFetches waits for background refresh to issue fetches and asserts
+// that at least one happened and that the count stays within maxExpected.
+//
+// Zero fetches is a failure, not a skip: background refresh not running at all is
+// exactly the regression this test exists to catch, and skipping on that condition
+// made the test green for the bug.
 func monitorBackgroundFetches(t *testing.T, fetchAttempts <-chan struct{}, maxExpected int) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), backgroundFetchWaitTimeout)
 	defer cancel()
 
-	fetchCount := 0
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
+	// The first fetch must arrive: its absence means background refresh never ran.
+	select {
+	case <-fetchAttempts:
+	case <-ctx.Done():
+		t.Fatalf("no background fetch observed within %s: background refresh did not run", backgroundFetchWaitTimeout)
+	}
+	fetchCount := 1
 
+	// Drain any further fetches over a settle window so the rate-limit ceiling can be
+	// asserted. The refresh is rate limited, so fetches trickle in rather than burst.
+	settle := time.NewTimer(backgroundFetchSettleWindow)
+	defer settle.Stop()
 	for {
 		select {
 		case <-fetchAttempts:
 			fetchCount++
-			t.Logf("Background fetch attempt %d detected", fetchCount)
-		case <-ticker.C:
-			if fetchCount > 0 && fetchCount <= maxExpected {
-				t.Logf("Background fetches completed: %d (expected <= %d)", fetchCount, maxExpected)
-				return
-			}
+		case <-settle.C:
+			t.Logf("Observed %d background fetch(es), ceiling %d", fetchCount, maxExpected)
+			assert.LessOrEqual(t, fetchCount, maxExpected,
+				"background refresh issued more fetches than there are stale entries")
+			return
 		case <-ctx.Done():
-			if fetchCount == 0 {
-				t.Skip("No background fetches detected - background refresh might not have started")
-			}
-			t.Logf("Test completed with %d background fetches", fetchCount)
+			t.Logf("Observed %d background fetch(es) before timeout, ceiling %d", fetchCount, maxExpected)
+			assert.LessOrEqual(t, fetchCount, maxExpected,
+				"background refresh issued more fetches than there are stale entries")
 			return
 		}
 	}
 }
 
-// TestBackgroundRequestsRateLimited tests that background requests are subject to rate limiting
+// TestBackgroundRequestsRateLimited tests that background requests are subject to rate limiting.
+//
+// Ordering here is load-bearing. refreshInterval is one hour, so the only prompt sweep
+// is the immediate one startCacheRefresh runs at construction. The previous version
+// created the cache first and populated the stale entries afterwards, so that sweep
+// almost always read an empty store and no background fetch ever happened; the test
+// only passed by winning a race. The store is now seeded first, and the provider is
+// passed to InitCache rather than attached afterwards with SetImageProvider, so the
+// sweep cannot start before the provider exists.
 func TestBackgroundRequestsRateLimited(t *testing.T) {
 	t.Parallel()
 
-	fetchAttempts := make(chan struct{}, 10)
+	const numStaleEntries = 5
+
+	fetchAttempts := make(chan struct{}, 2*numStaleEntries)
 	mockProvider := &mockProviderWithContext{
 		mockImageProvider: mockImageProvider{fetchDelay: 5 * time.Millisecond},
 		fetchChannel:      fetchAttempts,
@@ -1021,15 +1069,13 @@ func TestBackgroundRequestsRateLimited(t *testing.T) {
 	metrics, err := observability.NewMetrics()
 	require.NoError(t, err, "Failed to create metrics")
 
-	cache, err := imageprovider.CreateDefaultCache(metrics, store)
-	require.NoError(t, err, "Failed to create default cache")
-	cache.SetImageProvider(mockProvider)
+	populateStaleEntries(t, store, numStaleEntries)
+
+	cache := imageprovider.InitCache("wikimedia", mockProvider, metrics, store)
 	t.Cleanup(func() {
 		require.NoError(t, cache.Close(), "Failed to close cache")
 	})
 
-	numStaleEntries := 5
-	populateStaleEntries(t, store, numStaleEntries)
 	monitorBackgroundFetches(t, fetchAttempts, numStaleEntries)
 }
 
@@ -1044,7 +1090,7 @@ type mockProviderWithContext struct {
 func (m *mockProviderWithContext) FetchWithContext(ctx context.Context, scientificName string) (imageprovider.BirdImage, error) {
 	// Check if it's a background operation
 	if ctx != nil {
-		if bg, ok := ctx.Value("background").(bool); ok && bg {
+		if imageprovider.IsBackgroundContext(ctx) {
 			m.mu2.Lock()
 			m.backgroundFetches++
 			m.mu2.Unlock()
@@ -1069,8 +1115,8 @@ func TestMain(m *testing.M) {
 		goleak.IgnoreTopFunction("testing.(*T).Run"),
 		goleak.IgnoreTopFunction("runtime.gopark"),
 		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-		// Ignore the cache refresh goroutine pattern - it should be properly cleaned up by Close()
-		goleak.IgnoreTopFunction("github.com/tphakala/birdnet-go/internal/imageprovider.(*BirdImageCache).startCacheRefresh.func1"),
+		// NOTE: startCacheRefresh.func1 is deliberately NOT ignored. Close() stops it, so
+		// ignoring it hid every test that constructed a cache and never closed it.
 		// Ignore HTTP/2 client connection goroutines from the shared imageHTTPClient
 		goleak.IgnoreAnyFunction("net/http.(*http2clientConnReadLoop).run"),
 	)

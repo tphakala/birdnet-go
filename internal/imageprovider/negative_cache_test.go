@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/observability"
@@ -25,6 +26,9 @@ func setupNegativeCacheTest(t *testing.T, notFoundSpecies map[string]bool) (*moc
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
 	require.NoError(t, err, "Failed to create cache")
 	cache.SetImageProvider(mockProvider)
+	t.Cleanup(func() {
+		assert.NoError(t, cache.Close(), "Failed to close cache")
+	})
 
 	return mockProvider, cache
 }
@@ -61,18 +65,41 @@ func TestNegativeCachingBehavior(t *testing.T) {
 
 	t.Run("NegativeCacheExpiry", func(t *testing.T) {
 		t.Parallel()
-		mockProvider, cache := setupNegativeCacheTest(t, map[string]bool{"Missingbird species": true})
-		species := "Missingbird species"
+		// A negative entry older than the 15-minute negative TTL must be re-queried
+		// rather than served from cache. The previous version of this subtest was named
+		// for expiry, exercised none of it, and ended in a t.Logf with no assertion:
+		// it would have passed with negativeCacheTTL set to ten years.
+		const species = "Expiredbird species"
 
-		// First request
-		_, err := cache.Get(species)
-		assertImageNotFoundError(t, err, "first request")
+		mockProvider := &mockProviderWithNotFound{notFoundSpecies: map[string]bool{species: true}}
+		mockStore := newMockStore()
+		metrics, err := observability.NewMetrics()
+		require.NoError(t, err, "Failed to create metrics")
 
-		// Immediate second request should use cache
+		// Seed an already-expired negative entry, as a restart would load from the DB.
+		require.NoError(t, mockStore.SaveImageCache(&datastore.ImageCache{
+			ScientificName: species,
+			ProviderName:   "wikimedia",
+			URL:            imageprovider.NegativeEntryMarker,
+			CachedAt:       time.Now().Add(-2 * imageprovider.NegativeCacheTTL),
+		}), "Failed to seed expired negative cache entry")
+
+		cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
+		require.NoError(t, err, "Failed to create cache")
+		cache.SetImageProvider(mockProvider)
+		t.Cleanup(func() { assert.NoError(t, cache.Close(), "Failed to close cache") })
+
+		// The expired negative entry must not be served: the provider is consulted again.
 		_, err = cache.Get(species)
-		assertImageNotFoundError(t, err, "cached request")
+		assertImageNotFoundError(t, err, "request against expired negative entry")
+		assert.Equal(t, int64(1), mockProvider.getAPICallCount(),
+			"expired negative entry must be re-queried, not served from cache")
 
-		t.Logf("Negative cache confirmed: %d API call(s) for multiple requests", mockProvider.getAPICallCount())
+		// The fresh negative entry written by that lookup is now honoured.
+		_, err = cache.Get(species)
+		assertImageNotFoundError(t, err, "request against refreshed negative entry")
+		assert.Equal(t, int64(1), mockProvider.getAPICallCount(),
+			"fresh negative entry must be served from cache without a second provider call")
 	})
 
 	t.Run("TransientErrorsNotCached", func(t *testing.T) {
@@ -85,6 +112,7 @@ func TestNegativeCachingBehavior(t *testing.T) {
 		cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
 		require.NoError(t, err, "Failed to create cache")
 		cache.SetImageProvider(errorProvider)
+		t.Cleanup(func() { assert.NoError(t, cache.Close(), "Failed to close cache") })
 
 		species := "Any species"
 
@@ -116,6 +144,7 @@ func TestNegativeCachePersistence(t *testing.T) {
 	cache1, err := imageprovider.CreateDefaultCache(metrics, mockStore)
 	require.NoError(t, err, "Failed to create cache")
 	cache1.SetImageProvider(mockProvider)
+	t.Cleanup(func() { assert.NoError(t, cache1.Close(), "Failed to close first cache") })
 
 	// Get a not-found species
 	species := "Persisticus negative"
@@ -139,6 +168,7 @@ func TestNegativeCachePersistence(t *testing.T) {
 	cache2, err := imageprovider.CreateDefaultCache(metrics, mockStore)
 	require.NoError(t, err, "Failed to create second cache")
 	cache2.SetImageProvider(mockProvider)
+	t.Cleanup(func() { assert.NoError(t, cache2.Close(), "Failed to close second cache") })
 
 	mockProvider.resetCounters()
 
@@ -146,10 +176,10 @@ func TestNegativeCachePersistence(t *testing.T) {
 	_, err = cache2.Get(species)
 	require.ErrorIs(t, err, imageprovider.ErrImageNotFound, "Expected ErrImageNotFound from cached negative entry")
 
-	// Check API calls - if negative cache was loaded from DB, should be 0
-	// (Unless the 15-minute TTL expired, which is unlikely in test)
-	apiCalls := mockProvider.getAPICallCount()
-	t.Logf("API calls after restart: %d (0 means negative cache was loaded from DB)", apiCalls)
+	// The negative entry was written moments ago, so it is well inside the negative
+	// TTL and the fresh cache must serve it from the DB without touching the provider.
+	assert.Equal(t, int64(0), mockProvider.getAPICallCount(),
+		"negative cache entry was not loaded from the DB after restart")
 }
 
 // mockProviderWithNotFound returns not found for specific species

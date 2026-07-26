@@ -102,6 +102,11 @@ type ImageFileCache struct {
 	basePath    string
 	downloadSem chan struct{}      // limits concurrent external downloads
 	sfGroup     singleflight.Group // deduplicates concurrent fetches for same species
+	// httpClient performs the image byte downloads. It defaults to imageHTTPClient,
+	// whose DialContext rejects loopback and private IPs as SSRF protection. Tests
+	// override it to reach an httptest server, which binds 127.0.0.1 and is therefore
+	// unreachable through the production client.
+	httpClient *http.Client
 }
 
 // NewImageFileCache creates a new ImageFileCache rooted at basePath.
@@ -109,7 +114,17 @@ func NewImageFileCache(basePath string) *ImageFileCache {
 	return &ImageFileCache{
 		basePath:    basePath,
 		downloadSem: make(chan struct{}, maxConcurrentDownloads),
+		httpClient:  imageHTTPClient,
 	}
+}
+
+// client returns the HTTP client used for image downloads, falling back to the
+// shared SSRF-protected client so a zero-value ImageFileCache never nil-panics.
+func (c *ImageFileCache) client() *http.Client {
+	if c.httpClient != nil {
+		return c.httpClient
+	}
+	return imageHTTPClient
 }
 
 // normalizeSpeciesName converts a species name to a filesystem-safe form:
@@ -319,7 +334,7 @@ func (fc *ImageFileCache) DownloadAndStore(ctx context.Context, provider, scient
 		if err != nil {
 			return nil, fmt.Errorf("failed to create image request: %w", err)
 		}
-		resp, err := imageHTTPClient.Do(req)
+		resp, err := fc.client().Do(req)
 		if err != nil {
 			return nil, fmt.Errorf("failed to download image: %w", err)
 		}

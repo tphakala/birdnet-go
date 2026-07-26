@@ -3,10 +3,15 @@ package imageprovider
 import (
 	"fmt"
 	"net"
+	"net/http"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/time/rate"
 )
 
 // TestIsNetworkError tests detection of DNS and network-level errors.
@@ -81,51 +86,76 @@ func TestIsNetworkError(t *testing.T) {
 	}
 }
 
-// TestNetworkErrorOpensCircuitBreaker tests that network/DNS failures open the circuit breaker.
+// dnsFailureRoundTripper fails every request with a DNS resolution error without
+// touching the network, so the production retry-and-circuit-breaker path can be
+// driven end to end in a unit test.
+type dnsFailureRoundTripper struct {
+	calls atomic.Int64
+}
+
+func (rt *dnsFailureRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	rt.calls.Add(1)
+	return nil, &net.OpError{
+		Op:  "dial",
+		Net: "tcp",
+		Err: &net.DNSError{Err: "server misbehaving", Name: req.URL.Hostname()},
+	}
+}
+
+// TestNetworkErrorOpensCircuitBreaker tests that network/DNS failures open the circuit
+// breaker through the real request path.
+//
+// The previous version called provider.openCircuit itself and then asserted the circuit
+// was open, which only proved that a setter sets. It would have stayed green if
+// queryWithRetryAndLimiter stopped calling openCircuit altogether. This drives the
+// production retry loop with a failing transport instead.
 func TestNetworkErrorOpensCircuitBreaker(t *testing.T) {
 	t.Parallel()
 
-	provider := &wikiMediaProvider{
-		maxRetries: 1,
-	}
+	// synctest makes the retry backoff (retryMinDelay, 2s) virtual, so the test is
+	// instant rather than waiting out a real sleep.
+	synctest.Test(t, func(t *testing.T) {
+		rt := &dnsFailureRoundTripper{}
+		provider := &wikiMediaProvider{
+			httpClient:    &http.Client{Transport: rt},
+			userAgent:     buildUserAgent("test"),
+			maxRetries:    1,
+			globalLimiter: rate.NewLimiter(rate.Inf, 1),
+		}
 
-	// Verify circuit is initially closed
-	open, _ := provider.isCircuitOpen()
-	assert.False(t, open, "circuit should start closed")
+		open, _ := provider.isCircuitOpen()
+		require.False(t, open, "circuit should start closed")
 
-	// Simulate a DNS error triggering circuit open
-	dnsErr := &net.DNSError{
-		Err:  "server misbehaving",
-		Name: "en.wikipedia.org",
-	}
-	provider.openCircuit(circuitBreakerNetworkDuration,
-		fmt.Sprintf("Network/DNS failure: %s", dnsErr.Error()))
+		_, err := provider.queryWithRetryAndLimiter(t.Context(), "test-req-1",
+			map[string]string{"action": "query", "titles": "Parus major"}, nil)
+		require.Error(t, err, "a failing transport must surface an error")
+		assert.Positive(t, rt.calls.Load(), "the production path should have attempted the request")
 
-	// Verify circuit is now open
-	open, reason := provider.isCircuitOpen()
-	assert.True(t, open, "circuit should be open after network error")
-	assert.Contains(t, reason, "Network/DNS failure", "reason should mention network failure")
-	assert.Contains(t, reason, "server misbehaving", "reason should contain original error")
+		open, reason := provider.isCircuitOpen()
+		assert.True(t, open, "circuit should be open after the retry loop exhausts on a network error")
+		assert.Contains(t, reason, "Network/DNS failure", "reason should mention network failure")
+		assert.Contains(t, reason, "server misbehaving", "reason should contain original error")
+	})
 }
 
-// TestNetworkErrorLogDowngrade tests that repeated network errors are downgraded to debug level.
-func TestNetworkErrorLogDowngrade(t *testing.T) {
+// TestResetCircuitReenablesErrorLevelLogging tests that circuit recovery clears the
+// latch that downgrades repeated network-error logs to Debug.
+//
+// The previous TestNetworkErrorLogDowngrade asserted the first two CompareAndSwap
+// results directly, which only restated sync/atomic.Bool semantics. Only the
+// resetCircuit behaviour below belongs to this package.
+func TestResetCircuitReenablesErrorLevelLogging(t *testing.T) {
 	t.Parallel()
 
 	provider := &wikiMediaProvider{}
 
-	// First call: CompareAndSwap(false, true) should succeed
-	swapped := provider.networkErrorLogged.CompareAndSwap(false, true)
-	assert.True(t, swapped, "first network error should log at Error level")
+	// Latch the flag as the first logged network error would.
+	require.True(t, provider.networkErrorLogged.CompareAndSwap(false, true))
 
-	// Second call: CompareAndSwap(false, true) should fail (already true)
-	swapped = provider.networkErrorLogged.CompareAndSwap(false, true)
-	assert.False(t, swapped, "repeated network error should be downgraded to Debug level")
-
-	// Reset on circuit recovery
 	provider.resetCircuit()
-	swapped = provider.networkErrorLogged.CompareAndSwap(false, true)
-	assert.True(t, swapped, "after circuit reset, first error should log at Error level again")
+
+	assert.True(t, provider.networkErrorLogged.CompareAndSwap(false, true),
+		"resetCircuit must clear the log-downgrade latch so recovery is visible at Error level")
 }
 
 // TestCircuitBreakerNetworkDuration tests the constant value is reasonable.
