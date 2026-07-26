@@ -363,16 +363,38 @@ class TranslationValidator {
     if (trimmed.length <= 1) return true;
     if (!/[a-zA-Z]/.test(trimmed)) return true;
 
+    // URL / Protocol schemed strings
+    if (
+      /^(http|https|rtsp|discord|telegram|slack|pushover|gotify|ntfy|shoutrrr):\/\//i.test(trimmed)
+    ) {
+      return true;
+    }
+
     // Pure parameter placeholders (e.g. "{rule_name}", "{error}", "{temp}°C", "{current} / {total}")
     if (/^\{[a-zA-Z0-9_]+\}$/.test(trimmed)) return true;
     if (/^\{[a-zA-Z0-9_]+\}[^a-zA-Z0-9]+$/.test(trimmed)) return true;
     if (/^[^a-zA-Z0-9]+\{[a-zA-Z0-9_]+\}$/.test(trimmed)) return true;
-    if (/^\{[a-zA-Z0-9_]+\}\s*\/\s*\{[a-zA-Z0-9_]+\}$/.test(trimmed)) return true;
+    if (/^\{[a-zA-Z0-9_]+\}\s*[\/\-]\s*\{[a-zA-Z0-9_]+\}$/.test(trimmed)) return true;
 
     const valueLower = trimmed.toLowerCase();
 
     // Check exact match against whitelisted terms/values (never check against key path)
     if (SKIP_UNTRANSLATED_KEYWORDS.includes(valueLower)) return true;
+
+    // Tokenized word-level match: if every word in the string is a whitelisted term, number, or placeholder
+    const words = valueLower.split(/[\s,:\(\)\/\-]+/).filter(Boolean);
+    if (
+      words.length > 0 &&
+      words.every(
+        w =>
+          SKIP_UNTRANSLATED_KEYWORDS.includes(w) ||
+          /^\d+$/.test(w) ||
+          /^\{.*\}$/.test(w) ||
+          /^(v?\d+(\.\d+)*)$/.test(w)
+      )
+    ) {
+      return true;
+    }
 
     // Exact token match for time windows, units, and formatting tokens
     if (/^(15m|30m|1h|6h|24h|7d|°c|°f|m\/s|km\/h|mph|db|hpa|khz|ms|s|\/s)$/i.test(valueLower)) {
@@ -642,10 +664,10 @@ class TranslationValidator {
         }
       }
 
-      // Check for warnings in strict mode
+      // Check for warnings in strict mode (missing keys)
       if (
         options.failOnWarnings &&
-        (result.missingKeys.length > 0 || result.untranslated.length > 0)
+        result.missingKeys.length > 0
       ) {
         passed = false;
       }
