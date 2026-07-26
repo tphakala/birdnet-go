@@ -620,45 +620,49 @@
                rows hold no per-item state, so index reconciliation is correct.
                role="group" ties each GPU to its own reason list for a screen
                reader, which DOM order alone does not do once there are two. It
-               sits on the <dd> because that is the element holding the name,
-               the pill and the reasons; a wrapper would break the grid. -->
+               goes on a div INSIDE the <dd>, never on the <dd> itself: a <dd>
+               carries an implicit `definition` role, and overriding that with
+               `group` strips the pairing so the <dt> is announced as a term
+               with no definition. -->
           {#each snapshot.hardware.accelerators ?? [] as accelerator}
             <Microchip class="w-3.5 h-3.5 shrink-0 text-muted self-start" aria-hidden="true" />
             <dt class="text-sm text-muted self-start">{t('system.inference.gpu')}</dt>
-            <dd
-              role="group"
-              aria-label={accelerator.name ?? accelerator.vendor}
-              class="min-w-0 space-y-1"
-            >
-              <div class="flex items-center gap-3 flex-wrap">
-                <span
-                  class="text-sm truncate min-w-0"
-                  title={accelerator.name ?? accelerator.vendor}
-                  >{accelerator.name ?? accelerator.vendor}</span
-                >
-                {#if accelerator.accessible}
-                  <StatusPill
-                    variant="success"
-                    label={t('system.inference.gpuReachable')}
-                    size="xs"
-                  />
-                {:else}
-                  <StatusPill
-                    variant="neutral"
-                    label={t('system.inference.gpuNotReachable')}
-                    size="xs"
-                  />
+            <dd class="min-w-0">
+              <div
+                role="group"
+                aria-label={accelerator.name ?? accelerator.vendor}
+                class="space-y-1"
+              >
+                <div class="flex items-center gap-3 flex-wrap">
+                  <span
+                    class="text-sm truncate min-w-0"
+                    title={accelerator.name ?? accelerator.vendor}
+                    >{accelerator.name ?? accelerator.vendor}</span
+                  >
+                  {#if accelerator.accessible}
+                    <StatusPill
+                      variant="success"
+                      label={t('system.inference.gpuReachable')}
+                      size="xs"
+                    />
+                  {:else}
+                    <StatusPill
+                      variant="neutral"
+                      label={t('system.inference.gpuNotReachable')}
+                      size="xs"
+                    />
+                  {/if}
+                </div>
+                <!-- Shown whenever present, not only when unreachable: a card can
+                     be perfectly reachable and still be one no build supports. -->
+                {#if accelerator.reasons?.length}
+                  <ul class="list-disc ps-4 space-y-1 text-xs text-muted">
+                    {#each accelerator.reasons as reason}
+                      <li>{gpuReasonLabel(reason)}</li>
+                    {/each}
+                  </ul>
                 {/if}
               </div>
-              <!-- Shown whenever present, not only when unreachable: a card can
-                   be perfectly reachable and still be one no build supports. -->
-              {#if accelerator.reasons?.length}
-                <ul class="list-disc ps-4 space-y-1 text-xs text-muted">
-                  {#each accelerator.reasons as reason}
-                    <li>{gpuReasonLabel(reason)}</li>
-                  {/each}
-                </ul>
-              {/if}
             </dd>
           {/each}
         </dl>
