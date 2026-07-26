@@ -1154,24 +1154,29 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(ctx context.Context, reqID 
 			logger.Int("attempt", attempt+1),
 			logger.Bool("will_retry", attempt < l.maxRetries-1))
 
-		// Nothing follows the final attempt, so neither the backoff nor a breaker
-		// check is worth paying for.
-		if attempt == l.maxRetries-1 {
-			break
-		}
-
-		// This failure may itself have opened the circuit: handleCircuitBreaker does
-		// so for 403, 429 and 503. Check before sleeping, so a refused endpoint costs
-		// neither another request nor the backoff that would precede it. Checking
-		// only at the top of the next iteration still burned the full delay first.
+		// This failure may itself have opened the circuit: handleCircuitBreaker does so
+		// for 403, 429 and 503. Check before sleeping, so a refused endpoint costs
+		// neither another request nor the backoff that would precede it. Checking only
+		// at the top of the next iteration still burned the full delay first.
+		//
+		// This runs on the final attempt too, not just before a retry. The breaker
+		// error deliberately keeps its own message because telemetry suppression
+		// matches on it (internal/errors/telemetry_integration.go); returning the
+		// retry-exhausted error instead, purely because the circuit happened to open on
+		// the last attempt rather than an earlier one, would report a throttle as a
+		// novel failure.
 		if cbErr := l.checkCircuitBreaker(reqID, params); cbErr != nil {
-			// The breaker error deliberately keeps its own message: Sentry suppression
-			// matches on it (internal/errors/telemetry_integration.go). Log the failure
-			// that tripped it so the cause is not lost with the retry-exhausted path.
+			// Log the failure that tripped it, so the cause is not lost along with the
+			// retry-exhausted path's diagnostics.
 			log.Warn("Abandoning retries because the circuit breaker opened",
 				logger.Error(lastErr),
 				logger.Int("attempts_made", attempt+1))
 			return nil, cbErr
+		}
+
+		// Nothing follows the final attempt, so the backoff has nothing to wait for.
+		if attempt == l.maxRetries-1 {
+			break
 		}
 
 		waitDuration := calculateRetryDelay(attempt)

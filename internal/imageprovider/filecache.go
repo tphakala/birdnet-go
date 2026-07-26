@@ -119,10 +119,13 @@ func currentAppVersion() string {
 // imageDownloadUserAgent returns a User-Agent for the image byte download that satisfies
 // the Wikimedia Foundation User-Agent policy.
 //
-// Wikimedia answers 403 both to Go's default "Go-http-client/1.1" and to any User-Agent
-// beginning with "BirdNET-Go", so the byte fetch needs the same policy-compliant header
-// the MediaWiki API path already sends. It reuses buildUserAgent to keep the two in the
-// same format.
+// Wikimedia answers 403 to Go's default "Go-http-client/1.1", so the byte fetch needs the
+// same policy-compliant header the MediaWiki API path already sends. Reusing
+// buildUserAgent keeps the two in one format.
+//
+// Do not "correct" userAgentName to the hyphenated project name: Wikimedia refuses any
+// User-Agent starting with "BirdNET-Go", so the current hyphen-less spelling is the one
+// that works. See internal/imageprovider/wikipedia.go for where that name is defined.
 func imageDownloadUserAgent() string {
 	if ua := cachedImageUserAgent.Load(); ua != nil {
 		return *ua
@@ -174,7 +177,11 @@ func NewImageFileCache(basePath string) *ImageFileCache {
 //
 // Note this is a heuristic: Wikimedia's edge also answers 403 for transient bot
 // challenges, so a single escalation is a signal to investigate, not proof of a block.
-func (c *ImageFileCache) logPermanentImageRejection(statusCode int, provider, scientificName, imageURL string) {
+// userAgent must be the value actually sent on the rejected request, not a fresh
+// lookup: re-deriving it could report a different string if the memoized value latched
+// between the request and the log, which is exactly the wrong thing to do in a
+// diagnostic about which User-Agent was refused.
+func (c *ImageFileCache) logPermanentImageRejection(statusCode int, provider, scientificName, imageURL, userAgent string) {
 	if statusCode != http.StatusForbidden && statusCode != http.StatusUnauthorized {
 		return
 	}
@@ -185,7 +192,7 @@ func (c *ImageFileCache) logPermanentImageRejection(statusCode int, provider, sc
 		logger.String("provider", provider),
 		logger.String("species", scientificName),
 		logger.Int("status", statusCode),
-		logger.String("user_agent", imageDownloadUserAgent()),
+		logger.String("user_agent", userAgent),
 		logger.String("url", imageURL),
 	)
 }
@@ -419,7 +426,7 @@ func (fc *ImageFileCache) DownloadAndStore(ctx context.Context, provider, scient
 		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode != http.StatusOK {
-			fc.logPermanentImageRejection(resp.StatusCode, provider, scientificName, imageURL)
+			fc.logPermanentImageRejection(resp.StatusCode, provider, scientificName, imageURL, userAgent)
 			return nil, fmt.Errorf("non-200 status downloading image: %d", resp.StatusCode)
 		}
 
