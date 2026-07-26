@@ -260,9 +260,10 @@ describe('useSpeciesHistory', () => {
     post.mockImplementation((url: string, body: { sortBy: string }) => {
       const species = body.speciesScientific?.[0];
 
-      // Species A (Spinus tristis) returns the controlled pending promise
+      // Species A (Spinus tristis) branches on sortBy and returns controlled pending
       if (species === 'Spinus tristis') {
-        return pendingA;
+        // Resolve with the appropriate fixture based on sort order when resolved
+        return pendingA.then(() => (body.sortBy === 'date_asc' ? ascResponse() : descResponse()));
       }
 
       // Species B (Cardinalis cardinalis) branches on sortBy
@@ -310,6 +311,89 @@ describe('useSpeciesHistory', () => {
     expect(h.data?.firstHeard).toBe(speciesBData.firstHeard);
     expect(h.isLoading).toBe(false);
     expect(h.error).toBeNull();
+  });
+
+  it('maintains correct isLoading with three overlapping requests (finally guard)', async () => {
+    /**
+     * Regression test for the `controller === active` guard in the finally block.
+     *
+     * If the guard is removed, a superseded request's finally block will
+     * unconditionally set `isLoading = false`, reporting "not loading" while
+     * a genuinely newer request is still in flight.
+     *
+     * Scenario:
+     * 1. Start load A (Spinus tristis) — hangs
+     * 2. Start load B (Cardinalis cardinalis) — hangs, aborts A
+     * 3. Start load C (third species) — hangs, aborts B
+     * 4. Do NOT await C — leave it pending
+     * 5. Resolve A's promise → A's finally must not clear isLoading
+     * 6. Assert isLoading is still true because C is genuinely in flight
+     */
+    let resolveSpeciesA: (value: unknown) => void = () => {};
+    let resolveSpeciesB: (value: unknown) => void = () => {};
+    let resolveSpeciesC: (value: unknown) => void = () => {};
+
+    const pendingA = new Promise(resolve => {
+      resolveSpeciesA = resolve;
+    });
+    const pendingB = new Promise(resolve => {
+      resolveSpeciesB = resolve;
+    });
+    const pendingC = new Promise(resolve => {
+      resolveSpeciesC = resolve;
+    });
+
+    post.mockImplementation((url: string, body: { sortBy: string }) => {
+      const species = body.speciesScientific?.[0];
+
+      if (species === 'Spinus tristis') {
+        return pendingA.then(() => (body.sortBy === 'date_asc' ? ascResponse() : descResponse()));
+      }
+
+      if (species === 'Cardinalis cardinalis') {
+        return pendingB.then(() => (body.sortBy === 'date_asc' ? cardinalAscResponse() : cardinalDescResponse()));
+      }
+
+      // Species C (any other species): use a third deferred promise
+      return pendingC.then(() => (body.sortBy === 'date_asc' ? ascResponse() : descResponse()));
+    });
+
+    get.mockResolvedValue(dailyResponse());
+
+    const h = useSpeciesHistory();
+
+    // Start load A (Spinus tristis) — will hang on pendingA
+    h.load('Spinus tristis', '2026-07-26', '20481');
+
+    // Start load B (Cardinalis cardinalis) without awaiting A — aborts A
+    h.load('Cardinalis cardinalis', '2026-07-26', '20481');
+
+    // Start load C (third species: Turdus migratorius) without awaiting B — aborts B
+    // This will use pendingC
+    h.load('Turdus migratorius', '2026-07-26', '20481');
+
+    // Do NOT await C yet — leave it pending in flight
+    flushSync();
+
+    // C is now the active load and should still be loading
+    expect(h.isLoading).toBe(true);
+
+    // Resolve A's pending promise — it was superseded before reaching finally
+    resolveSpeciesA(descResponse());
+    await new Promise(resolve => setTimeout(resolve, 0)); // Let microtasks run
+    flushSync();
+
+    // A's finally must not have cleared isLoading — C is still in flight
+    expect(h.isLoading).toBe(true);
+    expect(h.error).toBeNull();
+
+    // Now resolve C to complete the load
+    resolveSpeciesC(descResponse());
+    await new Promise(resolve => setTimeout(resolve, 0));
+    flushSync();
+
+    // Only now should isLoading be false (C completed)
+    expect(h.isLoading).toBe(false);
   });
 
 });
