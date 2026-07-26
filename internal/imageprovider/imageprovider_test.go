@@ -991,11 +991,14 @@ func TestUserRequestsNotRateLimited(t *testing.T) {
 
 	duration := time.Since(start)
 
-	// If rate limiting was applied (2 req/s), 10 requests would take at least 5 seconds.
-	// This bound catches rate limiting on the user-request path; the provider is a 1ms mock, so it is a coarse ceiling.
-	assert.LessOrEqual(t, duration, 30*time.Second, "User requests appear to be rate limited. Duration: %v, expected < 30s", duration)
+	// Rate limiting at 2 req/s would put 10 requests at 5 seconds or more, so the
+	// bound has to sit below that to detect it at all. The provider is a 1ms
+	// mock, so the real figure is milliseconds and 4s is pure CI headroom.
+	const rateLimitDetectionBound = 4 * time.Second
+	assert.LessOrEqual(t, duration, rateLimitDetectionBound,
+		"User requests appear to be rate limited. Duration: %v, expected < %v", duration, rateLimitDetectionBound)
 
-	t.Logf("10 user requests completed in %v (no rate limiting, threshold: 4s)", duration)
+	t.Logf("10 user requests completed in %v (no rate limiting, threshold: %v)", duration, rateLimitDetectionBound)
 }
 
 // populateStaleEntries adds stale cache entries to the store to trigger background refresh.

@@ -148,6 +148,9 @@ func getBirdImageFromCache(detectionCtx *DetectionContext, cache *imageprovider.
 			logger.String("species", commonName),
 			logger.String("scientific_name", scientificName),
 			logger.String("operation", "check_bird_image_cache"))
+		// Published like any other verdict, so the later actions of this
+		// detection do not each repeat the same warning.
+		detectionCtx.StoreBirdImage(&imageprovider.BirdImage{})
 		return imageprovider.BirdImage{}
 	}
 

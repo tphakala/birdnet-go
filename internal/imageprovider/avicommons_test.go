@@ -136,12 +136,16 @@ func TestParseAviCommonsLicense(t *testing.T) {
 // so they fell through to the unknown branch and rendered the raw code with no
 // license URL at all, plus one Warn per unique code straight into Sentry.
 func TestMapAviCommonsLicense_CoversTheShippedDataset(t *testing.T) {
-	t.Parallel()
+	// No t.Parallel(): mapAviCommonsLicense mutates the package-global
+	// loggedUnknownLicenses, the same reason the sibling test above gives.
 
-	// Read from the repository rather than through internal/api's embed: that
-	// package imports this one, so an import cycle rules the embed out here.
-	data, err := os.ReadFile(filepath.Join("..", "..", "data", "latest.json"))
-	require.NoError(t, err, "the shipped Avicommons dataset must be readable")
+	// data/latest.json inside THIS package is the file main.go embeds
+	// (//go:embed internal/imageprovider/data/latest.json). The repo-root copy
+	// is a different, larger file that nothing ships, so asserting against it
+	// would guard data the binary never sees. Read directly rather than through
+	// internal/api's embed, which imports this package.
+	data, err := os.ReadFile(filepath.Join("data", "latest.json"))
+	require.NoError(t, err, "the embedded Avicommons dataset must be readable")
 
 	var entries []struct {
 		License string `json:"license"`

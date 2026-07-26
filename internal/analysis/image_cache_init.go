@@ -105,25 +105,27 @@ func selectImageProvider(log logger.Logger, registry *imageprovider.ImageProvide
 }
 
 const (
-	// warmUpRetryDelay is the first backoff after the prefetch queue declines a
-	// species. It doubles on each further attempt.
-	warmUpRetryDelay = 100 * time.Millisecond
-	// warmUpMaxRetries bounds the backoff for one species to roughly 12 seconds.
-	warmUpMaxRetries = 7
+	// warmUpRetryDelay is how long warm-up waits for the prefetch queue to drain
+	// before retrying one species: roughly the time it takes a running prefetch
+	// to finish and free its slot.
+	warmUpRetryDelay = 2 * time.Second
 	// warmUpMaxConsecutiveDrops stops the whole warm-up once this many species in
-	// a row exhaust their retries. A queue that will not drain means the cache is
-	// closing or the pipeline is stuck, and there is nothing to be gained by
-	// walking the remaining species.
-	warmUpMaxConsecutiveDrops = 2
+	// a row are refused. PrefetchAsync answers with a bare bool and declines for
+	// several unrelated reasons, only one of which is worth waiting out, so
+	// warm-up cannot tell a full queue from a closing cache or from a species
+	// whose last resolution just failed. Bounding the run of refusals is what
+	// keeps a shutting-down cache from walking the entire species list, and it
+	// costs a few seconds at most.
+	warmUpMaxConsecutiveDrops = 3
 )
 
 // warmUpImageCache pre-fetches images for species not yet in the cache.
 //
 // It schedules through the cache's own prefetch machinery rather than calling
 // the blocking Get on raw goroutines. That older loop had its own 5-slot
-// semaphore, so it ignored the cache's concurrency and queue bounds, ran on
-// context.Background() where Close's cancellation could not reach it, and was
-// untracked by the cache's WaitGroup, leaving goroutines running past Close.
+// semaphore, so it ignored the cache's concurrency and queue bounds, and its
+// fetches ran on context.Background(), untracked by the cache's WaitGroup and
+// so still running past Close.
 //
 // PrefetchAsync declines once its queue is full, so this applies backpressure
 // rather than substituting for it: a straight call per species would silently
@@ -136,7 +138,7 @@ func warmUpImageCache(cache *imageprovider.BirdImageCache, species []string) {
 	log := GetLogger()
 	log.Info("starting image cache warm-up", logger.Int("species_count", len(species)))
 
-	scheduled, dropped, consecutiveDrops := 0, 0, 0
+	scheduled, consecutiveDrops := 0, 0
 	for _, name := range species {
 		if warmUpSchedule(cache, name) {
 			scheduled++
@@ -144,11 +146,13 @@ func warmUpImageCache(cache *imageprovider.BirdImageCache, species []string) {
 			continue
 		}
 
-		dropped++
 		consecutiveDrops++
 		log.Debug("warm-up could not schedule a species", logger.String("species", name))
 		if consecutiveDrops >= warmUpMaxConsecutiveDrops {
-			log.Info("stopping image cache warm-up: the prefetch queue is not draining",
+			// Deliberately not blamed on the queue: the refusal carries no
+			// reason, and a closing cache, a species in backoff and a full queue
+			// are indistinguishable from here.
+			log.Info("stopping image cache warm-up: prefetches are being declined",
 				logger.Int("scheduled", scheduled),
 				logger.Int("not_scheduled", len(species)-scheduled))
 			return
@@ -157,21 +161,22 @@ func warmUpImageCache(cache *imageprovider.BirdImageCache, species []string) {
 
 	log.Info("image cache warm-up scheduled",
 		logger.Int("scheduled", scheduled),
-		logger.Int("not_scheduled", dropped))
+		logger.Int("not_scheduled", len(species)-scheduled))
 }
 
-// warmUpSchedule registers one species for prefetching, backing off while the
-// queue is full. It reports whether the species was accepted.
+// warmUpSchedule registers one species for prefetching, waiting once for the
+// queue to drain.
+//
+// A single retry is deliberate. If the refusal is queue pressure, a slot frees
+// as running prefetches complete. If it is anything else no amount of waiting
+// helps: a species backed off after a failed resolution holds that marker for
+// longer than any retry ladder worth running, and the request path resolves it
+// on demand anyway. The previous exponential ladder spent 12.7 seconds per
+// species discovering that, and burned it again on every species after Close.
 func warmUpSchedule(cache *imageprovider.BirdImageCache, name string) bool {
-	delay := warmUpRetryDelay
-	for attempt := 0; ; attempt++ {
-		if cache.PrefetchAsync(name) {
-			return true
-		}
-		if attempt >= warmUpMaxRetries {
-			return false
-		}
-		time.Sleep(delay)
-		delay *= 2
+	if cache.PrefetchAsync(name) {
+		return true
 	}
+	time.Sleep(warmUpRetryDelay)
+	return cache.PrefetchAsync(name)
 }

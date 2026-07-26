@@ -129,6 +129,22 @@ func normalizedFallbackPolicy() string {
 	return strings.ToLower(strings.TrimSpace(thumbnailSettings().FallbackPolicy))
 }
 
+// normalizeProviderName folds a configured provider name for comparison.
+func normalizeProviderName(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
+}
+
+// normalizedImageProvider reads the configured image provider, folded.
+//
+// It exists for the same reason as normalizedFallbackPolicy: the fetch gate and
+// the refresh gate must agree about which provider is configured, and they
+// previously each folded the field their own way. The refresh gate has to stay
+// a subset of the fetch gate, and two independent normalizations are how that
+// relationship silently breaks.
+func normalizedImageProvider() string {
+	return normalizeProviderName(thumbnailSettings().ImageProvider)
+}
+
 // fetchFromProvider calls the provider's context-aware Fetch when it has one and falls
 // back to the context-free Fetch otherwise. Without this, a cancelled caller still
 // waits out the provider's full retry and rate-limit budget.
@@ -282,6 +298,11 @@ type BirdImageCache struct {
 	// row also has a refresh in flight, and suppressing its database read would
 	// answer 503 for an image we hold.
 	dbAbsent sync.Map
+	// recentAttemptsCount and dbAbsentCount count insertions since each map was
+	// last cleared, so the maps can be bounded without per-entry accounting.
+	// See maxMarkerEntries for why a bound is needed at all.
+	recentAttemptsCount atomic.Int64
+	dbAbsentCount       atomic.Int64
 	// prefetchQueued counts registered prefetches (queued plus running) so an
 	// unbounded species list cannot spawn an unbounded number of goroutines.
 	prefetchQueued atomic.Int64
@@ -1188,21 +1209,18 @@ func (c *BirdImageCache) checkCachedEntryAfterLock(scientificName string, log lo
 		return BirdImage{}, false, false, nil
 	}
 
-	// Both positive and negative memory entries expire. Positive ones used to be
-	// returned unconditionally, so once a wrong image landed in dataMap nothing
-	// on the request path could re-derive it for the process lifetime, and
-	// clearing the DB cache still handed back the same wrong image. Expiring
-	// here falls through to the DB, which serves the row and schedules the
-	// refresh, so staleness is handled in exactly one place.
 	cutoff := time.Now().Add(-imgPtr.GetTTL())
 	expired := imgPtr.CachedAt.Before(cutoff)
 
 	if !imgPtr.IsNegativeEntry() {
-		if expired {
-			log.Debug("Memory cache entry expired, removing from memory")
-			c.dataMap.Delete(scientificName)
-			return BirdImage{}, false, false, nil
-		}
+		// A stale positive entry is still served, exactly as a stale DB row is;
+		// the caller schedules the refresh that re-derives it. Deleting it here
+		// instead would make every request for a species older than the TTL pay
+		// a fresh SQLite read, because the DB row is the same age and gets
+		// promoted back into memory with the same timestamp, so the next lookup
+		// expires it again. That loop never converges while the provider is
+		// unreachable, and on a store-less or corruption-latched cache it would
+		// discard the only copy of the image the process has.
 		log.Debug("Initialization check: found in memory cache after acquiring lock")
 		return *imgPtr, true, false, nil
 	}
@@ -1509,7 +1527,17 @@ func (c *BirdImageCache) getCachedLocal(scientificName string) (img BirdImage, f
 	// 503 + Retry-After contract the client polls, so without this every poll for
 	// a species nothing is known about costs its own SQLite SELECT: on a cold
 	// dashboard with ~20 unresolved species, several per second on a 1-core Pi.
+	//
+	// The exhausted marker is re-checked here rather than skipped with the read.
+	// It is the one verdict the shortcut can lose: it is consulted inside the
+	// no-row branch below, so bypassing that branch would turn a definitive "no
+	// image" (404, cacheable) into "not resolved yet" (503 + a scheduled
+	// prefetch) for the marker's lifetime, and would skip GetCached's fallback
+	// sweep, which runs only on a negative verdict.
 	if c.dbKnownAbsent(scientificName) {
+		if c.isSpeciesExhausted(scientificName) {
+			return BirdImage{}, false, true
+		}
 		return BirdImage{}, false, false
 	}
 
@@ -1525,8 +1553,14 @@ func (c *BirdImageCache) getCachedLocal(scientificName string) (img BirdImage, f
 	}
 	if dbImage == nil {
 		// Remember the miss so the client's polling does not repeat this read
-		// every few seconds.
-		c.recordDBAbsent(scientificName)
+		// every few seconds. Only a genuine "the database answered, and it holds
+		// no row" counts: loadFromDBCache also reports a miss when it did not
+		// consult the database at all (shutting down, corruption latched, no
+		// store configured), and recording those would assert an observation
+		// that never happened and would re-arm the marker on every lookup.
+		if c.dbWasConsulted() {
+			c.recordDBAbsent(scientificName)
+		}
 
 		// Nothing is known yet. The exhausted marker is consulted only here, AFTER
 		// memory and the DB: it records that every provider failed within the TTL
@@ -1695,7 +1729,12 @@ func (c *BirdImageCache) runPrefetch(scientificName string, log logger.Logger) {
 		// A not-found answer is already durable in the negative cache; anything
 		// else is a failed attempt and needs its own short backoff, or the next
 		// client poll schedules an identical attempt immediately.
-		if !errors.Is(err, ErrImageNotFound) {
+		//
+		// Except a context error: ctx here is bgCtx plus prefetchTimeout, so a
+		// cancellation means this cache is shutting down, not that the species
+		// is hard to resolve, and recording it would back the species off for
+		// the first 30 seconds of the next run.
+		if ctx.Err() == nil && !errors.Is(err, ErrImageNotFound) {
 			c.recordFailedAttempt(scientificName)
 		}
 		log.Debug("Background image prefetch did not resolve", logger.Error(err))
@@ -2106,13 +2145,39 @@ func markerLive(markers *sync.Map, scientificName string) bool {
 	return true
 }
 
-// recordFailedAttempt notes that a background resolution for this species just
-// failed, so the next attempt is deferred by recentAttemptTTL.
-func (c *BirdImageCache) recordFailedAttempt(scientificName string) {
+// maxMarkerEntries bounds each marker map.
+//
+// The keys are scientific names supplied by the caller: the media endpoints
+// hand the client's string straight to GetCached and PrefetchAsync, so the key
+// space is request traffic rather than the model's label set, and a marker map
+// with only lazy expiry would grow at request rate. Measured at ~150 B per
+// distinct name, an unbounded map reaches ~100 MB in 250k distinct requests,
+// which a 512 MB target does not survive.
+//
+// Both markers are pure optimizations: declining to record one, or dropping the
+// whole set, only costs a database read or an earlier retry. So the bound is
+// enforced by clearing rather than by evicting, which needs no per-entry
+// accounting and cannot itself become a source of error.
+const maxMarkerEntries = 8192
+
+// recordMarker stamps a marker map, clearing it first if it has grown past the
+// bound. count tracks insertions since the last clear rather than live size, so
+// it is an upper bound on the entries retained, which is all the bound needs.
+func recordMarker(markers *sync.Map, count *atomic.Int64, scientificName string) {
 	if scientificName == "" {
 		return
 	}
-	c.recentAttempts.Store(scientificName, time.Now())
+	if count.Add(1) > maxMarkerEntries {
+		markers.Clear()
+		count.Store(1)
+	}
+	markers.Store(scientificName, time.Now())
+}
+
+// recordFailedAttempt notes that a background resolution for this species just
+// failed, so the next attempt is deferred by recentAttemptTTL.
+func (c *BirdImageCache) recordFailedAttempt(scientificName string) {
+	recordMarker(&c.recentAttempts, &c.recentAttemptsCount, scientificName)
 }
 
 // clearResolutionMarkers drops both short-lived markers after a resolution
@@ -2129,12 +2194,17 @@ func (c *BirdImageCache) recentlyAttempted(scientificName string) bool {
 	return markerLive(&c.recentAttempts, scientificName)
 }
 
+// dbWasConsulted reports whether a database read could actually have reached the
+// store. loadFromDBCache reports the same ErrCacheMiss whether the row is
+// genuinely absent or the read never happened, and only the former is an
+// observation about the species.
+func (c *BirdImageCache) dbWasConsulted() bool {
+	return c.store != nil && !c.closed.Load() && !c.dbCorrupted.Load()
+}
+
 // recordDBAbsent notes that a database read found no row for this species.
 func (c *BirdImageCache) recordDBAbsent(scientificName string) {
-	if scientificName == "" {
-		return
-	}
-	c.dbAbsent.Store(scientificName, time.Now())
+	recordMarker(&c.dbAbsent, &c.dbAbsentCount, scientificName)
 }
 
 // dbKnownAbsent reports whether a recent database read found no row for this
@@ -2266,9 +2336,12 @@ func (img *BirdImage) EstimateSize() int {
 	return size
 }
 
-// MemoryUsage estimates the total memory usage of the cache maps.
-// Includes both the per-species image data map and the exhausted-species
-// short-circuit map so cache metrics reflect the full footprint.
+// MemoryUsage estimates the total memory usage of the cache's per-species maps:
+// the image data map plus the three timestamp maps (exhausted species, and the
+// two short-lived resolution markers).
+//
+// The in-flight bookkeeping maps (initializing, prefetching) are not counted;
+// they hold only entries for work currently in progress.
 func (c *BirdImageCache) MemoryUsage() int {
 	totalSize := 0
 	c.dataMap.Range(func(key, value any) bool {
@@ -2280,16 +2353,18 @@ func (c *BirdImageCache) MemoryUsage() int {
 		}
 		return true
 	})
-	c.exhaustedSpecies.Range(func(key, value any) bool {
-		if scientificName, ok := key.(string); ok {
-			totalSize += len(scientificName)
-		}
-		// Each entry stores a time.Time (24 bytes on 64-bit). Use a constant
-		// here to avoid an unsafe.Sizeof import for one constant value.
-		const timeStructBytes = 24
-		totalSize += timeStructBytes
-		return true
-	})
+	// Each timestamp map entry stores a time.Time (24 bytes on 64-bit). Use a
+	// constant here to avoid an unsafe.Sizeof import for one constant value.
+	const timeStructBytes = 24
+	for _, markers := range []*sync.Map{&c.exhaustedSpecies, &c.recentAttempts, &c.dbAbsent} {
+		markers.Range(func(key, value any) bool {
+			if scientificName, ok := key.(string); ok {
+				totalSize += len(scientificName)
+			}
+			totalSize += timeStructBytes
+			return true
+		})
+	}
 	return totalSize
 }
 

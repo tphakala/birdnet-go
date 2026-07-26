@@ -346,16 +346,17 @@ func BenchmarkCacheRefreshCycle(b *testing.B) {
 		}
 	}
 
-	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-	if err != nil {
-		b.Fatalf("Failed to create cache: %v", err)
-	}
+	// InitCache with the mock already installed, not CreateDefaultCache followed
+	// by SetImageProvider: the refresh goroutine starts immediately, and if it
+	// reaches shouldSkipRefresh while the lazy Wikipedia provider is still in
+	// place it returns and does not run again for an hour, so the poll below
+	// would never see a fetch. Same reason TestBirdImageCacheRefresh gives.
+	cache := imageprovider.InitCache("wikimedia", mockProvider, metrics, mockStore)
 	defer func() {
 		if err := cache.Close(); err != nil {
 			b.Errorf("Failed to close cache: %v", err)
 		}
 	}()
-	cache.SetImageProvider(mockProvider)
 
 	// Wait until the refresh cycle has actually started working rather than
 	// sleeping for a duration guessed from refreshDelay. The sweep waits

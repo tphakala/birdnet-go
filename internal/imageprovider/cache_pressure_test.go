@@ -6,6 +6,7 @@
 package imageprovider
 
 import (
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -14,23 +15,24 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
-// countingStore records how many image-cache reads reach the database and serves
+// dbReadCountingStore records how many image-cache reads reach the database and serves
 // nothing, so a lookup that consults it is visible as a count.
-type countingStore struct {
+type dbReadCountingStore struct {
 	datastore.Interface
 	reads atomic.Int64
 }
 
-func (s *countingStore) GetImageCache(datastore.ImageCacheQuery) (*datastore.ImageCache, error) {
+func (s *dbReadCountingStore) GetImageCache(datastore.ImageCacheQuery) (*datastore.ImageCache, error) {
 	s.reads.Add(1)
 	return nil, datastore.ErrImageCacheNotFound
 }
 
-func (s *countingStore) SaveImageCache(*datastore.ImageCache) error { return nil }
+func (s *dbReadCountingStore) SaveImageCache(*datastore.ImageCache) error { return nil }
 
-func (s *countingStore) GetAllImageCaches(string) ([]datastore.ImageCache, error) {
+func (s *dbReadCountingStore) GetAllImageCaches(string) ([]datastore.ImageCache, error) {
 	return nil, nil
 }
 
@@ -43,7 +45,7 @@ func TestGetCachedLocal_DoesNotRepeatADatabaseMissPerPoll(t *testing.T) {
 	t.Parallel()
 
 	const species = "Turdus merula"
-	store := &countingStore{}
+	store := &dbReadCountingStore{}
 	cache := &BirdImageCache{providerName: wikiProviderName, store: store}
 
 	// The first lookup reads the database and finds nothing.
@@ -138,41 +140,142 @@ func TestRecentlyAttempted_ExpiresLazily(t *testing.T) {
 	assert.False(t, stillStored, "an expired marker is dropped rather than re-checked forever")
 }
 
-// TestCheckCachedEntryAfterLock_PositiveEntriesExpire is the memory-cache TTL.
+// TestCheckCachedEntryAfterLock_ServesAStalePositiveEntry pins the memory-cache
+// TTL decision.
 //
-// A positive memory entry used to be returned with no staleness check at all, so
-// once a wrong image landed in dataMap nothing on the request path could
-// re-derive it for the process lifetime, and clearing the database cache still
-// handed back the same wrong image.
-func TestCheckCachedEntryAfterLock_PositiveEntriesExpire(t *testing.T) {
+// A stale positive entry is served rather than discarded, exactly as a stale
+// database row is, and the caller schedules the refresh that re-derives it.
+// Deleting it here instead would make every request for a species older than
+// the TTL pay a fresh SQLite read, because the row is the same age and is
+// promoted back with the same timestamp, so the next lookup expires it again;
+// and on a store-less or corruption-latched cache it would throw away the only
+// copy the process has.
+func TestCheckCachedEntryAfterLock_ServesAStalePositiveEntry(t *testing.T) {
 	t.Parallel()
 
 	const species = "Turdus merula"
 	cache := &BirdImageCache{providerName: wikiProviderName}
 	log := GetLogger()
 
-	fresh := &BirdImage{
-		URL:            "https://example.invalid/blackbird.jpg",
+	stale := &BirdImage{
+		URL:            "https://127.0.0.1/blackbird.jpg",
 		ScientificName: species,
-		CachedAt:       time.Now(),
+		CachedAt:       time.Now().Add(-defaultCacheTTL - time.Hour),
 	}
-	cache.dataMap.Store(species, fresh)
+	cache.dataMap.Store(species, stale)
 
 	img, found, shouldReturn, err := cache.checkCachedEntryAfterLock(species, log)
 	require.NoError(t, err)
-	assert.True(t, found)
+	assert.True(t, found, "a stale image is still an image")
 	assert.False(t, shouldReturn)
-	assert.Equal(t, fresh.URL, img.URL)
-
-	stale := *fresh
-	stale.CachedAt = time.Now().Add(-defaultCacheTTL - time.Hour)
-	cache.dataMap.Store(species, &stale)
-
-	_, found, shouldReturn, err = cache.checkCachedEntryAfterLock(species, log)
-	require.NoError(t, err)
-	assert.False(t, found, "an expired positive entry is not an answer")
-	assert.False(t, shouldReturn)
+	assert.Equal(t, stale.URL, img.URL)
 	_, stillInMemory := cache.dataMap.Load(species)
-	assert.False(t, stillInMemory,
-		"the expired entry is dropped so the database, which schedules the refresh, is consulted")
+	assert.True(t, stillInMemory, "the entry must not be discarded; the refresh replaces it")
+}
+
+// TestCheckCachedEntryAfterLock_NegativeEntriesExpire keeps the other half of
+// the TTL: a negative entry that has aged out is not an answer.
+func TestCheckCachedEntryAfterLock_NegativeEntriesExpire(t *testing.T) {
+	t.Parallel()
+
+	const species = "Turdus merula"
+	cache := &BirdImageCache{providerName: wikiProviderName}
+	log := GetLogger()
+
+	fresh := &BirdImage{URL: negativeEntryMarker, ScientificName: species, CachedAt: time.Now()}
+	cache.dataMap.Store(species, fresh)
+	_, _, shouldReturn, err := cache.checkCachedEntryAfterLock(species, log)
+	require.Error(t, err)
+	assert.True(t, shouldReturn, "a live negative entry is a definitive answer")
+
+	expired := *fresh
+	expired.CachedAt = time.Now().Add(-negativeCacheTTL - time.Minute)
+	cache.dataMap.Store(species, &expired)
+	_, found, shouldReturn, err := cache.checkCachedEntryAfterLock(species, log)
+	require.NoError(t, err)
+	assert.False(t, found)
+	assert.False(t, shouldReturn, "an expired negative entry must let the caller re-derive")
+	_, stillInMemory := cache.dataMap.Load(species)
+	assert.False(t, stillInMemory)
+}
+
+// TestRecordMarkerIsBounded pins the cap on the marker maps.
+//
+// The keys are caller-supplied scientific names that the media endpoints pass
+// straight through, so the key space is request traffic rather than the label
+// set. Both markers are pure optimizations, so clearing is always safe.
+func TestRecordMarkerIsBounded(t *testing.T) {
+	t.Parallel()
+
+	cache := &BirdImageCache{providerName: wikiProviderName}
+	for i := range maxMarkerEntries + 100 {
+		cache.recordDBAbsent(fmt.Sprintf("Species %d", i))
+	}
+
+	live := 0
+	cache.dbAbsent.Range(func(_, _ any) bool { live++; return true })
+	assert.LessOrEqual(t, live, maxMarkerEntries,
+		"the marker map must stay bounded however many distinct names arrive")
+	assert.Positive(t, live, "clearing must not leave the map permanently empty")
+}
+
+// failingProvider always fails with a transient error, which is the case
+// runPrefetch must record a backoff for.
+type failingProvider struct{ calls atomic.Int64 }
+
+func (p *failingProvider) Fetch(scientificName string) (BirdImage, error) {
+	p.calls.Add(1)
+	return BirdImage{}, errors.Newf("simulated transient provider failure").
+		Component("imageprovider").
+		Category(errors.CategoryNetwork).
+		Build()
+}
+
+// TestRunPrefetch_RecordsBackoffOnTransientFailure covers the production wiring
+// of the backoff, not just the marker helpers.
+//
+// Without it the retry rate is the client's: the proxy answers 503 with a
+// Retry-After, and every poll would schedule a fresh goroutine and a fresh
+// provider attempt because nothing recorded that the last one had just failed.
+func TestRunPrefetch_RecordsBackoffOnTransientFailure(t *testing.T) {
+	t.Parallel()
+
+	const species = "Turdus merula"
+	provider := &failingProvider{}
+	cache := InitCache(wikiProviderName, provider, nil, nil)
+	t.Cleanup(func() { assert.NoError(t, cache.Close()) })
+
+	require.True(t, cache.PrefetchAsync(species))
+	require.Eventually(t, func() bool { return provider.calls.Load() > 0 },
+		2*time.Second, 5*time.Millisecond, "the prefetch should reach the provider")
+	require.Eventually(t, func() bool { return cache.recentlyAttempted(species) },
+		2*time.Second, 5*time.Millisecond,
+		"a transient provider failure must arm the backoff, or the client sets the retry rate")
+
+	assert.False(t, cache.PrefetchAsync(species),
+		"the next poll must be declined while the backoff is live")
+}
+
+// TestRunPrefetch_ClearsMarkersOnSuccess is the other half: the backoff must not
+// outlive the condition it was recorded for.
+func TestRunPrefetch_ClearsMarkersOnSuccess(t *testing.T) {
+	t.Parallel()
+
+	const species = "Turdus merula"
+	cache := InitCache(wikiProviderName, &recordingProvider{
+		fetched: make(chan string, 1),
+		result:  BirdImage{URL: "https://127.0.0.1/blackbird.jpg", ScientificName: species},
+	}, nil, nil)
+	t.Cleanup(func() { assert.NoError(t, cache.Close()) })
+
+	cache.recordFailedAttempt(species)
+	cache.recordDBAbsent(species)
+	require.True(t, cache.recentlyAttempted(species))
+
+	cache.clearResolutionMarkers(species)
+	require.True(t, cache.PrefetchAsync(species))
+	require.Eventually(t, func() bool {
+		return !cache.recentlyAttempted(species) && !cache.dbKnownAbsent(species)
+	}, 2*time.Second, 5*time.Millisecond,
+		"a resolved species must not keep either marker")
 }

@@ -23,8 +23,15 @@ func TestNew(t *testing.T) {
 		require.NotNil(t, client, "expected non-nil client")
 		assert.Equal(t, DefaultTimeout, client.defaultTimeout, "expected default timeout")
 		assert.Equal(t, defaultUserAgent(), client.userAgent, "expected default user agent")
-		assert.NotContains(t, strings.ToLower(client.userAgent), "birdnet-go/",
-			"the leading token must not be the hyphenated project name: Wikimedia's edge refuses it")
+		// The rule is about the LEADING TOKEN, so assert on that and not on a
+		// substring: searching the whole header for "birdnet-go/" passes for the
+		// literal "BirdNET-Go" this guards against, and fails spuriously when the
+		// configured repo URL happens to end in "birdnet-go/".
+		leadingToken, _, _ := strings.Cut(client.userAgent, " ")
+		assert.Equal(t, userAgentName, leadingToken,
+			"Wikimedia's edge refuses any User-Agent whose leading token is the hyphenated project name")
+		assert.NotContains(t, strings.ToLower(leadingToken), "-",
+			"the leading token must not be hyphenated")
 	})
 
 	t.Run("custom config", func(t *testing.T) {

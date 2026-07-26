@@ -52,11 +52,22 @@ var (
 	// "CC BY-NC 3.0-de".
 	aviCommonsPortToken = regexp.MustCompile(`^[a-z]{2,3}$`)
 
-	// aviCommonsKnownVersions are the versions Creative Commons actually
+	// aviCommonsKnownVersions are the unported versions Creative Commons actually
 	// published. A license string carrying anything else names no real license,
 	// so its version is dropped rather than turned into a deed URL that 404s.
+	//
+	// 2.1 is absent deliberately: it exists only as jurisdiction ports (AU, JP,
+	// ES, CA), so an unported 2.1 deed URL does not resolve.
 	aviCommonsKnownVersions = map[string]bool{
-		"1.0": true, "2.0": true, "2.1": true, "2.5": true, "3.0": true, "4.0": true,
+		"1.0": true, "2.0": true, "2.5": true, "3.0": true, "4.0": true,
+	}
+
+	// aviCommonsPortedVersions are the versions Creative Commons ported to
+	// jurisdictions. Porting ended with 3.0: the 4.0 suite was written to be
+	// international and was never ported, so ".../by/4.0/de/" is a 404. A port
+	// on any other version is therefore not a real license and is dropped.
+	aviCommonsPortedVersions = map[string]bool{
+		"1.0": true, "2.0": true, "2.1": true, "2.5": true, "3.0": true,
 	}
 
 	// aviCommonsLicenseFamilies maps a normalized license family to its display
@@ -252,10 +263,11 @@ func (p *AviCommonsProvider) Fetch(scientificName string) (BirdImage, error) {
 //	"CC0 2.0"         -> "cc0",      "2.0", ""
 //
 // The version used to be stripped and thrown away, which is what made every
-// entry render as 4.0 with a link to legal text that does not govern it. The
-// ported codes defeated the strip entirely (the trailing "-de" moved the
-// version off the end of the string), so they fell through to the unknown
-// branch and rendered the raw code with no license URL at all.
+// entry whose code ended in a version render as 4.0, with a link to legal text
+// that does not govern it. The 22 ported codes did not even get that far: the
+// trailing "-de" moved the version off the end of the string and defeated the
+// strip, so they fell through to the unknown branch and rendered the raw code
+// with no license URL at all.
 func parseAviCommonsLicense(code string) (family, version, port string) {
 	// Fold whitespace to hyphens so "CC BY-NC 3.0-de" and "cc-by-nc-3.0-de"
 	// tokenize identically.
@@ -324,7 +336,7 @@ func mapAviCommonsLicense(code string) (name, url string) {
 
 	name = licenseFamily.display + " " + version
 	url = "https://creativecommons.org/licenses/" + licenseFamily.slug + "/" + version + "/"
-	if port != "" {
+	if port != "" && aviCommonsPortedVersions[version] {
 		name += " " + strings.ToUpper(port)
 		url += port + "/"
 	}

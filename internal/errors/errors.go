@@ -572,9 +572,11 @@ func matchesPathSegment(s, pattern string) bool {
 // category when it carries none.
 //
 // This accessor exists because "return the category this error already carries"
-// kept being rewritten: the package exported IsCategory, IsNetwork and IsNotFound
-// but no way to read the category itself, so callers that needed to preserve a
-// cause's category across a wrap open-coded it. Preserving it matters because
+// kept being rewritten. (*EnhancedError).GetCategory reads one error's own
+// field and returns a string; this is package-level, unwraps the chain, honours
+// the CategorizedError interface, and returns the typed ErrorCategory, which is
+// what a caller preserving a cause's category across a wrap actually needs.
+// Preserving it matters because
 // telemetry suppression and category-based matching both key on it: re-tagging a
 // network throttle as an image-fetch failure turns a suppressed transient into a
 // per-species Sentry event.

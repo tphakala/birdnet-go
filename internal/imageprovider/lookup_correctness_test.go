@@ -9,6 +9,9 @@ package imageprovider
 
 import (
 	"net/http"
+	"slices"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -19,6 +22,27 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
+// titleRecorder collects the titles a stub handler was asked for. The handler
+// runs on the server's goroutine, and a loopback socket is not a happens-before
+// edge, so the slice needs its own lock; wikipedia_http_test.go uses atomic
+// counters for the same reason.
+type titleRecorder struct {
+	mu     sync.Mutex
+	titles []string
+}
+
+func (r *titleRecorder) add(title string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.titles = append(r.titles, title)
+}
+
+func (r *titleRecorder) snapshot() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.titles)
+}
+
 // writeJSON is the shape every MediaWiki stub in this file answers with.
 func writeJSON(w http.ResponseWriter, body string) {
 	w.Header().Set("Content-Type", "application/json")
@@ -28,10 +52,16 @@ func writeJSON(w http.ResponseWriter, body string) {
 // TestRedirectLeftSpecies is the unit-level half of root cause C2.
 //
 // Redirect following has to stay on, because most bird articles are titled by
-// common name and a scientific name only resolves through its redirect. What
-// must not pass is a redirect up the taxonomy: Wikipedia sends a species with no
-// article of its own to its genus or family article, whose pageimage is
-// routinely a distribution map or a congener.
+// common name and a scientific name only resolves through its redirect
+// (measured: 548 of 550 shipped species redirect). What must not pass is a
+// redirect up to a family or order article, whose pageimage is a different
+// bird or a distribution map.
+//
+// A redirect to the bare genus deliberately DOES pass: a monotypic genus keeps
+// one combined article at the genus title and that article's image is this
+// species' image, so rejecting it would discard a correct photo and, because
+// the rejection is reported as ErrImageNotFound, persist the species as
+// image-less for the negative TTL.
 func TestRedirectLeftSpecies(t *testing.T) {
 	t.Parallel()
 
@@ -57,11 +87,16 @@ func TestRedirectLeftSpecies(t *testing.T) {
 			redirects: []wikiRedirect{{From: "Opisthocomus hoazin", To: "Hoatzin"}},
 		},
 		{
-			name:       "genus article",
-			species:    "Delichon urbicum",
-			redirects:  []wikiRedirect{{From: "Delichon urbicum", To: "Delichon"}},
-			wantLeft:   true,
-			wantTarget: "Delichon",
+			// Every single-word redirect target in a 550-species live sample was
+			// one of these, and none was a genus article.
+			name:      "measured single-word common names",
+			species:   "Lullula arborea",
+			redirects: []wikiRedirect{{From: "Lullula arborea", To: "Woodlark"}},
+		},
+		{
+			name:      "genus article passes: it may be a monotypic genus",
+			species:   "Steatornis caripensis",
+			redirects: []wikiRedirect{{From: "Steatornis caripensis", To: "Steatornis"}},
 		},
 		{
 			name:       "family article",
@@ -85,24 +120,57 @@ func TestRedirectLeftSpecies(t *testing.T) {
 			wantTarget: "Passeriformes",
 		},
 		{
+			name:       "disambiguated family article is still a family article",
+			species:    "Accipiter nisus",
+			redirects:  []wikiRedirect{{From: "Accipiter nisus", To: "Accipitridae (family)"}},
+			wantLeft:   true,
+			wantTarget: "Accipitridae (family)",
+		},
+		{
+			name:       "underscored family title",
+			species:    "Accipiter nisus",
+			redirects:  []wikiRedirect{{From: "Accipiter nisus", To: "Accipitridae_(family)"}},
+			wantLeft:   true,
+			wantTarget: "Accipitridae_(family)",
+		},
+		{
 			name:      "underscores and case are title syntax, not a different page",
 			species:   "Turdus merula",
 			redirects: []wikiRedirect{{From: "Turdus_merula", To: "Common_blackbird"}},
 		},
 		{
-			name:    "chained redirect ending on the genus",
+			name:    "chained redirect ending on a family",
 			species: "Delichon urbica",
 			redirects: []wikiRedirect{
 				{From: "Delichon urbica", To: "Delichon urbicum"},
-				{From: "Delichon urbicum", To: "Delichon"},
+				{From: "Delichon urbicum", To: "Hirundinidae"},
 			},
 			wantLeft:   true,
-			wantTarget: "Delichon",
+			wantTarget: "Hirundinidae",
 		},
 		{
 			name:      "a synonym redirect to another binomial is fine",
 			species:   "Delichon urbica",
 			redirects: []wikiRedirect{{From: "Delichon urbica", To: "Delichon urbicum"}},
+		},
+		{
+			// A cycle must not spin and must fail open, keeping the image.
+			name:    "cycle fails open",
+			species: "Turdus merula",
+			redirects: []wikiRedirect{
+				{From: "Turdus merula", To: "Blackbird"},
+				{From: "Blackbird", To: "Turdus merula"},
+			},
+		},
+		{
+			name:      "self redirect fails open",
+			species:   "Turdus merula",
+			redirects: []wikiRedirect{{From: "Turdus merula", To: "Turdus merula"}},
+		},
+		{
+			name:      "empty target fails open",
+			species:   "Turdus merula",
+			redirects: []wikiRedirect{{From: "Turdus merula", To: ""}},
 		},
 	}
 
@@ -117,18 +185,29 @@ func TestRedirectLeftSpecies(t *testing.T) {
 	}
 }
 
-// TestQueryThumbnail_RedirectToGenusIsNotAnImage is the end-to-end half of C2.
+// TestResolveRedirectTargetEmptyIsSafe pins the guard on the only indexing
+// expression in the function, which its single caller currently makes
+// unreachable.
+func TestResolveRedirectTargetEmptyIsSafe(t *testing.T) {
+	t.Parallel()
+
+	assert.NotPanics(t, func() {
+		assert.Empty(t, resolveRedirectTarget("Turdus merula", nil))
+	})
+}
+
+// TestQueryThumbnail_RedirectToFamilyIsNotAnImage is the end-to-end half of C2.
 //
 // The lookup succeeds at the HTTP level, which is exactly why this was so
 // durable: a positive entry was written, and the taxonomy-synonym map, which is
 // only consulted on failure, never got a chance to correct it.
-func TestQueryThumbnail_RedirectToGenusIsNotAnImage(t *testing.T) {
+func TestQueryThumbnail_RedirectToFamilyIsNotAnImage(t *testing.T) {
 	t.Parallel()
 
 	provider := newTestWikiProvider(t, func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, `{"query":{
-			"redirects":[{"from":"Delichon urbicum","to":"Delichon"}],
-			"pages":[{"title":"Delichon","pageimage":"Delichon_distribution.png",
+			"redirects":[{"from":"Delichon urbicum","to":"Hirundinidae"}],
+			"pages":[{"title":"Hirundinidae","pageimage":"Hirundinidae_distribution.png",
 			          "thumbnail":{"source":"https://example.invalid/map.png"}}]}}`)
 	})
 
@@ -136,7 +215,7 @@ func TestQueryThumbnail_RedirectToGenusIsNotAnImage(t *testing.T) {
 
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrImageNotFound,
-		"a genus article's image is not this species' image, and the synonym retry only runs on not-found")
+		"a family article's image is not this species' image, and the synonym retry only runs on not-found")
 	assert.Empty(t, url)
 	assert.Empty(t, file)
 }
@@ -164,9 +243,9 @@ func TestQueryThumbnail_MissingPageImageStillYieldsTheThumbnail(t *testing.T) {
 func TestFetch_MissingPageImageUsesUnknownAttribution(t *testing.T) {
 	t.Parallel()
 
-	var requests int
+	var requests atomic.Int64
 	provider := newTestWikiProvider(t, func(w http.ResponseWriter, _ *http.Request) {
-		requests++
+		requests.Add(1)
 		writeJSON(w, `{"query":{"pages":[{"title":"Turdus merula",
 			"thumbnail":{"source":"https://example.invalid/blackbird.jpg"}}]}}`)
 	})
@@ -177,7 +256,7 @@ func TestFetch_MissingPageImageUsesUnknownAttribution(t *testing.T) {
 	assert.Equal(t, "https://example.invalid/blackbird.jpg", img.URL)
 	assert.Equal(t, unknownMetadataValue, img.AuthorName)
 	assert.Equal(t, unknownMetadataValue, img.LicenseName)
-	assert.Equal(t, 1, requests, "with no pageimage there is no file page to query")
+	assert.Equal(t, int64(1), requests.Load(), "with no pageimage there is no file page to query")
 }
 
 // TestQueryAndGetFirstPage_StructuredErrorIsNotNotFound is the negative-cache
@@ -301,9 +380,6 @@ func TestWikiFetchAllowed(t *testing.T) {
 		// side, which lowercased and trimmed, read them as "on".
 		{name: "capitalised policy", settings: newSettings("avicommons", "All"), wantAllowed: true},
 		{name: "policy with a trailing space", settings: newSettings("avicommons", "all "), wantAllowed: true},
-		// Settings are nil only before the config loads or when loading failed.
-		// Allowing traffic in that window contradicts a configured fallbackpolicy.
-		{name: "no settings fails closed", settings: nil},
 	}
 
 	for _, tt := range tests {
@@ -318,6 +394,18 @@ func TestWikiFetchAllowed(t *testing.T) {
 			}
 		})
 	}
+
+	// Settings are nil only before the config loads or when loading failed.
+	// Allowing outbound traffic in that window contradicts a configured
+	// fallbackpolicy. Asserted through the seam because conf.Setting() lazy-loads
+	// from disk, so installing nil in the global does NOT produce a nil read: a
+	// subtest that tried would pass on the loaded config's policy instead, and
+	// stay green with the guard removed.
+	t.Run("no settings fails closed", func(t *testing.T) {
+		allowed, reason := wikiFetchAllowedFor(nil)
+		assert.False(t, allowed, "an unreadable configuration must not permit outbound fetches")
+		assert.Equal(t, reasonSettingsUnavailable, reason)
+	})
 }
 
 // TestShouldRefreshCacheImpliesFetchAllowed is the invariant that matters between
@@ -325,21 +413,27 @@ func TestWikiFetchAllowed(t *testing.T) {
 // schedules are denied. It used to be, both through the case-sensitivity
 // mismatch and through accepting a provider name as a policy value.
 func TestShouldRefreshCacheImpliesFetchAllowed(t *testing.T) {
+	// No t.Parallel(): mutates the settings global.
 	prev := conf.GetSettings()
 	t.Cleanup(func() { conftest.SetTestSettings(prev) })
 
 	lazy := NewLazyWikiMediaProvider()
+	refreshEnabled := 0
 	for _, provider := range []string{"wikimedia", "avicommons", "auto", "", "WikiMedia"} {
 		for _, policy := range []string{"none", "all", "All", "all ", "wikimedia", ""} {
 			conftest.SetTestSettings(conftest.NewTestSettings().WithImageProvider(provider, policy).Build())
 
 			if lazy.ShouldRefreshCache() {
+				refreshEnabled++
 				allowed, _ := wikiFetchAllowed()
 				assert.True(t, allowed,
 					"refresh enabled but fetch denied for provider=%q policy=%q", provider, policy)
 			}
 		}
 	}
+	// Without this the whole matrix passes vacuously if ShouldRefreshCache ever
+	// starts returning false everywhere.
+	require.Positive(t, refreshEnabled, "the matrix must exercise the refresh-enabled case")
 }
 
 // TestFetch_QueriesTheSynonymFirst pins the inversion.
@@ -359,10 +453,10 @@ func TestFetch_QueriesTheSynonymFirst(t *testing.T) {
 	require.True(t, hasSynonym, "this test needs a name carrying a built-in synonym")
 	require.Equal(t, synonymName, synonym)
 
-	var titles []string
+	var titles titleRecorder
 	provider := newTestWikiProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		title := r.URL.Query().Get("titles")
-		titles = append(titles, title)
+		titles.add(title)
 		writeJSON(w, `{"query":{"pages":[{"title":"`+title+`",
 			"thumbnail":{"source":"https://example.invalid/goshawk.jpg"}}]}}`)
 	})
@@ -370,9 +464,10 @@ func TestFetch_QueriesTheSynonymFirst(t *testing.T) {
 	img, err := provider.fetchWithLimiter(t.Context(), birdnetName, nil)
 
 	require.NoError(t, err)
-	require.NotEmpty(t, titles)
-	assert.Equal(t, synonymName, titles[0], "the synonym is queried first, not as a retry")
-	assert.Len(t, titles, 1, "a successful synonym lookup must not also query the original name")
+	got := titles.snapshot()
+	require.NotEmpty(t, got)
+	assert.Equal(t, synonymName, got[0], "the synonym is queried first, not as a retry")
+	assert.Len(t, got, 1, "a successful synonym lookup must not also query the original name")
 	assert.Equal(t, birdnetName, img.ScientificName,
 		"the result is still keyed by the name the caller asked for")
 }
@@ -384,10 +479,10 @@ func TestFetch_FallsBackToTheOriginalNameWhenTheSynonymMisses(t *testing.T) {
 
 	const birdnetName = "Accipiter gentilis"
 
-	var titles []string
+	var titles titleRecorder
 	provider := newTestWikiProvider(t, func(w http.ResponseWriter, r *http.Request) {
 		title := r.URL.Query().Get("titles")
-		titles = append(titles, title)
+		titles.add(title)
 		if title != birdnetName {
 			writeJSON(w, `{"query":{"pages":[{"title":"`+title+`","missing":true}]}}`)
 			return
@@ -400,6 +495,7 @@ func TestFetch_FallsBackToTheOriginalNameWhenTheSynonymMisses(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "https://example.invalid/goshawk.jpg", img.URL)
-	require.Len(t, titles, 2)
-	assert.Equal(t, birdnetName, titles[1], "the original name is still tried when the synonym misses")
+	got := titles.snapshot()
+	require.Len(t, got, 2)
+	assert.Equal(t, birdnetName, got[1], "the original name is still tried when the synonym misses")
 }
