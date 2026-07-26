@@ -183,15 +183,16 @@ func (t *SpeciesTracker) PruneOldEntries() int {
 	// Prune seasonal tracking maps if enabled
 	pruned += t.pruneSeasonalEntriesLocked(now)
 
-	// Also cleanup old notification records (only if suppression is enabled).
-	// Lifer cleanup shares this gate with new-species even though its window is
-	// fixed rather than user-configurable: RecordLiferNotificationSent only
-	// persists lifer rows to the database under this same condition (see its
-	// doc comment), so there's nothing here to clean up when it's disabled.
-	if t.notificationSuppressionWindow > 0 {
-		pruned += t.cleanupOldNotificationRecordsLocked(t.notificationLastSent, now, t.notificationSuppressionWindow)
-		pruned += t.cleanupOldNotificationRecordsLocked(t.liferNotificationLastSent, now, liferNotificationSuppressionWindow)
-	}
+	// Clean up old notification records. The two maps are gated differently on
+	// purpose. New-species suppression uses the user-configurable window, so
+	// there is nothing to prune when the user has disabled it — the zero window
+	// makes the call below a no-op. Lifer suppression uses the fixed
+	// liferNotificationSuppressionWindow and keeps recording to its in-memory map
+	// regardless of that setting (see RecordLiferNotificationSent), so its map
+	// must be pruned unconditionally or it grows for the life of the process on
+	// installs with NotificationSuppressionHours=0.
+	pruned += t.cleanupOldNotificationRecordsLocked(t.notificationLastSent, now, t.notificationSuppressionWindow)
+	pruned += t.cleanupOldNotificationRecordsLocked(t.liferNotificationLastSent, now, liferNotificationSuppressionWindow)
 
 	return pruned
 }
@@ -359,9 +360,9 @@ func (t *SpeciesTracker) ShouldSuppressLiferNotification(scientificName string, 
 // regardless of NotificationSuppressionHours. Database persistence for
 // restart-survival, however, piggybacks on that same setting being enabled
 // (matching loadLiferNotificationsFromDatabase's gate) — writing rows that
-// would never be reloaded or cleaned up when it's disabled would just leak
-// storage, so it's skipped in that case; suppression still works correctly
-// in-memory for the life of the process either way.
+// would never be reloaded when it's disabled would just leak storage, so it's
+// skipped in that case. In-memory suppression, and the pruning of this map by
+// CleanupOldNotificationRecords/PruneOldEntries, work correctly either way.
 func (t *SpeciesTracker) RecordLiferNotificationSent(scientificName string, sentTime time.Time) {
 	// Record and persist under the canonical name so suppression survives a restart
 	// and matches a later detection under either the legacy or canonical name.
@@ -380,20 +381,23 @@ func (t *SpeciesTracker) RecordLiferNotificationSent(scientificName string, sent
 	t.persistNotificationSent(scientificName, sentTime, liferNotificationSuppressionWindow, notificationTypeLifer, "lifer notification")
 }
 
-// CleanupOldNotificationRecords removes notification records older than the
-// suppression window to prevent unbounded memory growth. Lifer cleanup shares
-// this gate with new-species even though its window is fixed rather than
-// user-configurable: RecordLiferNotificationSent only persists lifer rows to
-// the database under this same condition, so there's nothing to clean up when
-// it's disabled (see that function's doc comment).
+// CleanupOldNotificationRecords removes notification records older than their
+// suppression window to prevent unbounded memory growth.
+//
+// The new-species map and the database cleanup are both gated on
+// NotificationSuppressionHours: with suppression disabled nothing is recorded
+// in-memory under a positive window, and RecordLiferNotificationSent skips
+// database persistence entirely, so neither has anything to remove. The lifer
+// in-memory map is different — RecordLiferNotificationSent always writes it,
+// because lifer suppression uses the fixed liferNotificationSuppressionWindow
+// and works regardless of the setting — so it is always pruned here.
 // BG-17 fix: Also cleans up expired records from database
 func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) int {
-	// Early return if suppression is disabled (0 window)
-	if t.notificationSuppressionWindow <= 0 {
-		return 0
-	}
+	suppressionEnabled := t.notificationSuppressionWindow > 0
 
-	// Clean up in-memory records (removes entries older than currentTime - suppressionWindow)
+	// Clean up in-memory records (removes entries older than currentTime - window).
+	// cleanupOldNotificationRecordsLocked is a no-op for a non-positive window,
+	// which covers the new-species map when suppression is disabled.
 	t.mu.Lock()
 	cleaned := t.cleanupOldNotificationRecordsLocked(t.notificationLastSent, currentTime, t.notificationSuppressionWindow)
 	cleaned += t.cleanupOldNotificationRecordsLocked(t.liferNotificationLastSent, currentTime, liferNotificationSuppressionWindow)
@@ -407,7 +411,9 @@ func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) in
 	// Clean up database records asynchronously (BG-17 fix)
 	// Deletes records where ExpiresAt < currentTime (i.e., suppression has expired).
 	// Runs under a bounded context so a stuck delete cannot leak this goroutine.
-	if t.ds != nil {
+	// Gated on suppressionEnabled: with the setting disabled nothing was ever
+	// persisted, matching the pre-existing early-return behaviour.
+	if suppressionEnabled && t.ds != nil {
 		t.asyncOpsWg.Go(func() {
 			ctx, cancel := context.WithTimeout(context.Background(), notificationPersistTimeout)
 			defer cancel()

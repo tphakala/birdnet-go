@@ -211,6 +211,60 @@ func TestLiferNotificationSuppression_IndependentOfNewSpecies(t *testing.T) {
 		"Lifer notification should now be suppressed from its own record")
 }
 
+// TestLiferNotificationSuppression_PrunedWhenSuppressionDisabled guards a
+// memory leak. RecordLiferNotificationSent always writes the in-memory lifer
+// map, even with NotificationSuppressionHours=0, because lifer suppression uses
+// the fixed liferNotificationSuppressionWindow. Cleanup must therefore also run
+// with the setting at 0 — that map, unlike the database rows, is not empty just
+// because the user disabled new-species suppression.
+//
+// Asserts on map length rather than only on ShouldSuppressLiferNotification:
+// the latter returns false past the window whether or not the entry was
+// actually pruned, so a behaviour-only assertion passes against the bug.
+func TestLiferNotificationSuppression_PrunedWhenSuppressionDisabled(t *testing.T) {
+	mockDS := &mockSpeciesDatastore{}
+
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:                      true,
+		NewSpeciesWindowDays:         7,
+		NotificationSuppressionHours: 0, // disabled — must NOT disable lifer pruning
+		SyncIntervalMinutes:          60,
+	}
+
+	tracker := NewTrackerFromSettings(mockDS, settings)
+	require.Equal(t, time.Duration(0), tracker.notificationSuppressionWindow,
+		"sanity check: new-species suppression really is disabled")
+
+	species := "Cardinalis cardinalis" //nolint:misspell // Scientific name, not a misspelling
+	now := time.Now()
+
+	// Suppression itself still works with the setting at 0 (fixed 5-minute window).
+	tracker.RecordLiferNotificationSent(species, now)
+	require.Len(t, tracker.liferNotificationLastSent, 1,
+		"lifer record must be written in-memory even with suppression disabled")
+	assert.True(t, tracker.ShouldSuppressLiferNotification(species, now.Add(1*time.Minute)),
+		"fixed 5-minute lifer window applies regardless of NotificationSuppressionHours")
+
+	// A record older than the fixed window must be pruned, or the map leaks.
+	tracker.RecordLiferNotificationSent("Turdus migratorius", now.Add(-6*time.Minute))
+	require.Len(t, tracker.liferNotificationLastSent, 2)
+
+	cleaned := tracker.CleanupOldNotificationRecords(now)
+	assert.Equal(t, 1, cleaned,
+		"the record past the fixed 5-minute window must be cleaned even with the setting at 0")
+	assert.Len(t, tracker.liferNotificationLastSent, 1,
+		"only the still-current record should remain")
+
+	// PruneOldEntries (the periodic maintenance path that actually runs in
+	// production) must prune it too. It uses time.Now() internally, so seed the
+	// stale record well past the 5-minute window.
+	tracker.RecordLiferNotificationSent("Passer domesticus", time.Now().Add(-10*time.Minute))
+	require.Len(t, tracker.liferNotificationLastSent, 2)
+	tracker.PruneOldEntries()
+	assert.Len(t, tracker.liferNotificationLastSent, 1,
+		"PruneOldEntries must prune the lifer map with suppression disabled")
+}
+
 // TestNotificationSuppressionThreadSafety tests thread safety of notification suppression
 func TestNotificationSuppressionThreadSafety(t *testing.T) {
 	t.Parallel()
