@@ -40,7 +40,7 @@ function descResponse() {
   };
 }
 
-/** Search response for the date_asc call: oldest first. */
+/** Search response for the date_asc call: oldest first (Spinus tristis). */
 function ascResponse() {
   return {
     total: 820,
@@ -53,6 +53,42 @@ function ascResponse() {
         confidence: 0.81,
         verified: 'unverified',
         locked: false,
+      },
+    ],
+  };
+}
+
+/** Search response for Cardinalis cardinalis (date_asc: oldest first). */
+function cardinalAscResponse() {
+  return {
+    total: 42,
+    pages: 3,
+    currentPage: 1,
+    results: [
+      {
+        id: '100',
+        timestamp: '2026-05-01T10:30:00-04:00', // Completely different timestamp
+        confidence: 0.88,
+        verified: 'unverified',
+        locked: false,
+      },
+    ],
+  };
+}
+
+/** Search response for Cardinalis cardinalis (date_desc: newest first). */
+function cardinalDescResponse() {
+  return {
+    total: 42,
+    pages: 3,
+    currentPage: 1,
+    results: [
+      {
+        id: '200',
+        timestamp: '2026-07-20T15:45:00-04:00', // Different from Spinus
+        confidence: 0.91,
+        verified: 'verified',
+        locked: true,
       },
     ],
   };
@@ -202,31 +238,39 @@ describe('useSpeciesHistory', () => {
     expect(h.data?.totalDetections).toBe(820);
   });
 
-  it('rejects stale responses from superseded requests (race condition guard)', async () => {
+  it('rejects stale responses when newer load completes first (signal-captured check)', async () => {
     /**
      * Regression test for signal-capture guard against overlapping requests.
-     * If the code changes to check `controller` directly instead of the captured
-     * `signal`, or removes the `controller === active` guard in finally, this test
-     * will fail (stale data will overwrite the newer response).
+     * If changed to check `controller?.signal.aborted` instead of the captured `signal`,
+     * this test fails (stale data overwrites newer).
      *
      * Scenario:
-     * 1. Start load for species A — api.post hangs (pending promise)
-     * 2. Start load for species B — api.post resolves immediately
-     * 3. Await load for B → completes, data set to species B results
-     * 4. Resolve pending promise for species A → must not overwrite data
+     * 1. Start load for species A (Spinus tristis, total: 820) — hangs
+     * 2. Start load for species B (Cardinalis cardinalis, total: 42) — resolves immediately
+     * 3. Await B → data reflects species B
+     * 4. Resolve A's pending response → must not overwrite B's data
+     *
+     * With distinct fixtures (different totals, timestamps), any overwrite is detectable.
      */
-    // Create controlled promise for species A that we can resolve manually
     let resolveSpeciesA: (value: unknown) => void = () => {};
     const pendingA = new Promise(resolve => {
       resolveSpeciesA = resolve;
     });
 
     post.mockImplementation((url: string, body: { sortBy: string }) => {
-      // species A (Spinus tristis) returns the pending promise
-      if (body.speciesScientific?.[0] === 'Spinus tristis') {
+      const species = body.speciesScientific?.[0];
+
+      // Species A (Spinus tristis) returns the controlled pending promise
+      if (species === 'Spinus tristis') {
         return pendingA;
       }
-      // species B (Cardinalis cardinalis) resolves immediately
+
+      // Species B (Cardinalis cardinalis) branches on sortBy
+      if (species === 'Cardinalis cardinalis') {
+        return Promise.resolve(body.sortBy === 'date_asc' ? cardinalAscResponse() : cardinalDescResponse());
+      }
+
+      // Fallback
       return Promise.resolve(body.sortBy === 'date_asc' ? ascResponse() : descResponse());
     });
 
@@ -234,28 +278,38 @@ describe('useSpeciesHistory', () => {
 
     const h = useSpeciesHistory();
 
-    // Start load for species A (will hang)
+    // Start load for species A (will hang indefinitely)
     h.load('Spinus tristis', '2026-07-26', '20481');
 
-    // Without awaiting A, start load for species B (resolves immediately)
+    // Without awaiting A, start and await load for species B (resolves immediately)
     await h.load('Cardinalis cardinalis', '2026-07-26', '20481');
     flushSync();
 
-    // Species B should be loaded
-    expect(h.data?.totalDetections).toBe(820);
+    // Species B should be loaded: total is 42, not 820
+    expect(h.data?.totalDetections).toBe(42);
+    expect(h.data?.lastHeard).toBe('2026-07-20T15:45:00-04:00'); // Cardinal's timestamp
+    expect(h.data?.firstHeard).toBe('2026-05-01T10:30:00-04:00'); // Cardinal's first
     expect(h.isLoading).toBe(false);
     expect(h.error).toBeNull();
-    const speciesBLastHeard = h.data?.lastHeard;
 
-    // Now resolve the stale promise from species A
+    // Save reference to species B's data
+    const speciesBData = {
+      totalDetections: h.data?.totalDetections,
+      lastHeard: h.data?.lastHeard,
+      firstHeard: h.data?.firstHeard,
+    };
+
+    // Now resolve the stale promise from species A (with Spinus data: total 820)
     resolveSpeciesA(descResponse());
     await new Promise(resolve => setTimeout(resolve, 0)); // Let microtasks run
     flushSync();
 
-    // Species B must still be the loaded data (not overwritten by stale A response)
-    expect(h.data?.lastHeard).toBe(speciesBLastHeard);
-    expect(h.data?.totalDetections).toBe(820);
+    // Species B data must still be present (stale A response must not overwrite it)
+    expect(h.data?.totalDetections).toBe(speciesBData.totalDetections);
+    expect(h.data?.lastHeard).toBe(speciesBData.lastHeard);
+    expect(h.data?.firstHeard).toBe(speciesBData.firstHeard);
     expect(h.isLoading).toBe(false);
     expect(h.error).toBeNull();
   });
+
 });
