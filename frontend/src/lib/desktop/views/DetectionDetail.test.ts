@@ -174,6 +174,7 @@ describe('DetectionDetail history tab', () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it('does not request species history until the history tab is opened', async () => {
@@ -205,6 +206,13 @@ describe('DetectionDetail history tab', () => {
   });
 
   it('requests species history when the history tab is activated', async () => {
+    // Freeze "today" far from the fixture's detection date (2026-07-26). If the
+    // window were ever anchored on the current date instead of the viewed
+    // detection's date, the asserted start/end below would not match and this
+    // test would fail — proving the anchoring, not just that a request happened.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2020-01-01T00:00:00Z'));
+
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes('/api/v2/detections/')) {
