@@ -134,7 +134,7 @@
       "visitEbirdLink": "Avaa eBird.org uuteen välilehteen",
       "learnEbirdTaxonomyLink": "Avaa eBird-taksonomia uuteen välilehteen",
       "resizeHandle": "Vedä muuttaaksesi kokoa",
-      "imageCredit": "Image credit: {name}"
+      "imageCredit": "Kuvan luotto: {name}"
     },
     "labels": {
       "confidence": "Luottamus",
@@ -207,11 +207,11 @@
     "speciesAnalytics": "Lajianalytiikka",
     "detectionDetails": "Tunnistuksen tiedot",
     "settingsNotAvailable": "Asetukset eivät ole käytettävissä",
-    "analyticsSummary": "Analytics - Summary",
-    "analyticsActivity": "Analytics - Activity Patterns",
-    "analyticsTrends": "Analytics - Trends",
-    "analyticsBiodiversity": "Analytics - Biodiversity",
-    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsSummary": "Analytiikka - Yhteenveto",
+    "analyticsActivity": "Analytiikka - Aktiivisuusmallit",
+    "analyticsTrends": "Analytiikka - Trendit",
+    "analyticsBiodiversity": "Analytiikka - Biodiversiteetti",
+    "analyticsReview": "Analytiikka - Tarkastelu & Tarkkuus",
     "analyticsNocturnal": "Analytiikka - Yöaktiviteetti",
     "analyticsWeather": "Analytiikka - Sääkorrelaatio",
     "analyticsSoundscape": "Analytiikka - Äänimaisema"
@@ -246,7 +246,7 @@
     "reportBugAriaLabel": "Ilmoita virheestä GitHubissa (avautuu uuteen ikkunaan)",
     "askQuestionAriaLabel": "Esitä kysymys GitHub Discussions -foorumilla (avautuu uuteen ikkunaan)",
     "viewOnGithubAriaLabel": "Näytä BirdNET-Go GitHubissa (avautuu uuteen ikkunaan)",
-    "health": "Health",
+    "health": "Tila",
     "sections": {
       "explore": "Selaa",
       "patterns": "Kaavat",
@@ -420,8 +420,8 @@
         "reconfiguringDynamicThresholds": "Määritetään dynaamisia kynnysarvoja uudelleen...",
         "webserverRestartRequired": "Verkkopalvelimen asetukset muuttuivat. Uudelleenkäynnistys vaaditaan.",
         "oauthRestartRequired": "Tunnistautumispalveluntarjoajan asetukset muuttuivat. Uudelleenkäynnistys vaaditaan.",
-        "databaseRestartRequired": "Database settings changed. Restart required.",
-        "loggingRestartRequired": "Logging settings changed. Restart required.",
+        "databaseRestartRequired": "Tietokannan asetuksia muutettu. Uudelleenkäynnistys vaaditaan.",
+        "loggingRestartRequired": "Lokin asetuksia muutettu. Uudelleenkäynnistys vaaditaan.",
         "reconfiguringSoundLevel": "Päivitetään äänitason seurantaa...",
         "reconfiguringAudioSources": "Määritetään äänilähteitä uudelleen...",
         "rebuildingExtendedCapture": "Rakennetaan laajennetun tallennuksen suodatinta uudelleen...",
@@ -464,17 +464,17 @@
         "errorOccurred": "{error}",
         "disconnected": "{source_name} yhteys katkaistu",
         "error": {
-          "authError": "Tunnistautuminen epäonnistui — tarkista API-avain tai tunnistetiedot",
-          "rateLimited": "Pyyntöraja saavutettu — pyyntöjä hidastetaan automaattisesti",
+          "authError": "Tunnistautuminen epäonnistui - tarkista API-avain tai tunnistetiedot",
+          "rateLimited": "Pyyntöraja saavutettu - pyyntöjä hidastetaan automaattisesti",
           "gatewayTimeout": "Palvelu saattaa olla ylikuormitettu",
           "serverError": "Palvelu on tilapäisesti poissa käytöstä",
-          "connectionRefused": "Palveluun ei saada yhteyttä — tarkista osoite ja että palvelu on käynnissä",
-          "dnsError": "Isäntänimeä ei voitu selvittää — tarkista osoite",
-          "tlsError": "TLS/varmennevirhe — tarkista suojausasetukset",
-          "timeout": "Yhteys aikakatkaistiin — palvelu voi olla hidas tai tavoittamattomissa",
-          "connectionInterrupted": "Yhteys katkesi — yritetään automaattisesti uudelleen",
-          "diskFull": "Levy on täynnä — vapauta tilaa",
-          "permissionDenied": "Käyttö estetty — tarkista tiedosto- tai palveluoikeudet"
+          "connectionRefused": "Palveluun ei saada yhteyttä - tarkista osoite ja että palvelu on käynnissä",
+          "dnsError": "Isäntänimeä ei voitu selvittää - tarkista osoite",
+          "tlsError": "TLS/varmennevirhe - tarkista suojausasetukset",
+          "timeout": "Yhteys aikakatkaistiin - palvelu voi olla hidas tai tavoittamattomissa",
+          "connectionInterrupted": "Yhteys katkesi - yritetään automaattisesti uudelleen",
+          "diskFull": "Levy on täynnä - vapauta tilaa",
+          "permissionDenied": "Käyttö estetty - tarkista tiedosto- tai palveluoikeudet"
         }
       }
     },
@@ -612,7 +612,7 @@
     "currentlyHearing": {
       "title": "Kuunnellaan nyt",
       "subtitle": "Lajeja tunnistetaan reaaliajassa",
-      "empty": "Kaikki hiljaista — lintuja ei havaittu juuri nyt"
+      "empty": "Kaikki hiljaista - lintuja ei havaittu juuri nyt"
     },
     "rejected": "Hylätty",
     "newSpeciesHighlights": {
@@ -754,7 +754,7 @@
       "closeExpandedMap": "Sulje laajennettu kartta"
     },
     "videoEmbed": {
-      "youtubeUrl": "YouTube URL",
+      "youtubeUrl": "YouTube-osoite",
       "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
       "youtubeUrlHelp": "Liitä mikä tahansa YouTube-URL (katselu-, upotus- tai lyhytlinkki). Se muunnetaan yksityisyyttä suojaavaksi upotukseksi.",
       "titleLabel": "Otsikko (valinnainen)",
@@ -813,8 +813,8 @@
       "species": "Laji",
       "observation": "Havainto",
       "aria": {
-        "downloadAudioClip": "Download audio clip for {name} detection",
-        "audioRecordingFor": "Audio recording and spectrogram for {name}",
+        "downloadAudioClip": "Lataa äänileike {name} havainnolle",
+        "audioRecordingFor": "Äänitallenne ja spektrogrammi lajille {name}",
         "scientificName": "Tieteellinen nimi",
         "classificationBadges": "Lajin luokitusmerkit",
         "confidence": "Havainnon luottamus {confidence}%",
@@ -956,7 +956,7 @@
       "viewDetails": "Näytä {species} tiedot",
       "play": "Toista",
       "playAudio": "Toista ääni",
-      "imageFailedToLoad": "Image failed to load"
+      "imageFailedToLoad": "Kuvan lataus epäonnistui"
     },
     "media": {
       "title": "Tallenne ja spektrogrammi",
@@ -1169,9 +1169,9 @@
     "sections": {
       "overview": "Yleiskatsaus",
       "database": "Tietokanta",
-      "inference": "AI Models",
+      "inference": "Tekoälymallit",
       "terminal": "Terminaali",
-      "importExport": "Import / Export"
+      "importExport": "Tuonti / Vienti"
     },
     "importExport": {
       "available": "Saatavilla",
@@ -1389,7 +1389,7 @@
         "details": {
           "title": "Tietokannan tiedot",
           "engine": "Moottori",
-          "journal": "Journal",
+          "journal": "Päiväkirja",
           "pageSize": "Sivukoko",
           "cacheHit": "Välimuistiosumat",
           "integrity": "Eheys",
@@ -1522,10 +1522,10 @@
           "targetV2": "Kohde (V2)",
           "recordsLabel": "Tietueet",
           "sizeLabel": "Koko",
-          "prerequisitesNotMet": "Edellytykset eivät täyty – ratkaise alla olevat kriittiset ongelmat",
+          "prerequisitesNotMet": "Edellytykset eivät täyty - ratkaise alla olevat kriittiset ongelmat",
           "validatingTitle": "Tietojen tarkistus",
           "validatingBody": "Verrataan {count} vanhaa tietuetta V2-tietokantaan...",
-          "dirtyRecordsCatchup": "{count} muuttunutta tietuetta — yritetään täsmäytystä",
+          "dirtyRecordsCatchup": "{count} muuttunutta tietuetta - yritetään täsmäytystä",
           "cutoverTitle": "Viimeistellään siirtymä",
           "cutoverBody": "Viimeistellään siirtymä V2-tietokantaan...",
           "migratingPhase": "Siirretään {phase}",
@@ -1534,7 +1534,7 @@
           "percentComplete": "{percent}% valmis",
           "recordsPerSec": "{rate} tietuetta/s",
           "calculating": "Lasketaan...",
-          "dirtyWriteFailed": "{count} tietueen kirjoitus epäonnistui — täsmäytetään tarkistuksen aikana"
+          "dirtyWriteFailed": "{count} tietueen kirjoitus epäonnistui - täsmäytetään tarkistuksen aikana"
         },
         "details": {
           "title": "Tietokannan tiedot",
@@ -1685,70 +1685,70 @@
       }
     },
     "inference": {
-      "title": "AI Models & Inference",
-      "loading": "Loading inference status",
-      "error": "Could not load inference status",
-      "sectionHardware": "Hardware",
-      "sectionBackends": "Inference Backends",
-      "sectionModels": "Models",
+      "title": "Tekoälymallit & Inferenssi",
+      "loading": "Ladataan inferenssin tilaa",
+      "error": "Inferenssin tilaa ei voitu ladata",
+      "sectionHardware": "Laitteisto",
+      "sectionBackends": "Inferenssin Taustajärjestelmät",
+      "sectionModels": "Mallit",
       "noModels": "No models are currently loaded",
-      "architecture": "Architecture",
+      "architecture": "Arkkitehtuuri",
       "cpu": "CPU",
-      "environment": "Environment",
+      "environment": "Ympäristö",
       "fp16": "FP16",
-      "fp16Supported": "FP16 supported",
-      "fp16Unsupported": "FP16 not supported",
+      "fp16Supported": "FP16 tuettu",
+      "fp16Unsupported": "FP16 ei tuettu",
       "backendTflite": "TensorFlow Lite",
       "backendOnnx": "ONNX Runtime",
       "backendOpenvino": "OpenVINO",
-      "available": "Available",
-      "notAvailable": "Not available",
-      "active": "Active",
-      "inactive": "Inactive",
-      "initialized": "Initialized",
-      "version": "Version",
-      "devices": "Devices",
-      "board": "Board",
-      "soc": "SoC",
-      "memory": "Memory",
-      "cores": "Cores",
-      "gpu": "Graphics",
-      "gpuReachable": "Reachable",
-      "gpuNotReachable": "Not reachable",
-      "capabilities": "Capabilities",
-      "capabilitiesHelp": "Hardware tags used to match this machine against the available model builds.",
-      "gpuReasonRenderNodeUnavailable": "No GPU device node is visible to the server. In Docker, map /dev/dri into the container; on a native install, check that the graphics driver is loaded.",
-      "gpuReasonRenderNodePermission": "The GPU device node cannot be opened. Either the account BirdNET-Go runs as needs access to the device's group, usually 'render', or the container was given the device with -v instead of --device, which does not grant access to it.",
-      "gpuReasonNoRuntime": "BirdNET-Go only accelerates inference on Intel graphics today, so this card will not be used.",
-      "gpuReasonUnknown": "This GPU cannot be used for inference on this build.",
-      "stock": "Stock",
-      "custom": "Custom",
-      "sampleRate": "Sample rate",
+      "available": "Saatavilla",
+      "notAvailable": "Ei saatavilla",
+      "active": "Aktiivinen",
+      "inactive": "Epäaktiivinen",
+      "initialized": "Alustettu",
+      "version": "Versio",
+      "devices": "Laitteet",
+      "board": "Emolevy",
+      "soc": "Järjestelmäpiiri",
+      "memory": "Muisti",
+      "cores": "Ytimet",
+      "gpu": "Näytönohjain",
+      "gpuReachable": "Tavoitettavissa",
+      "gpuNotReachable": "Ei tavoitettavissa",
+      "capabilities": "Ominaisuudet",
+      "capabilitiesHelp": "Laitteiston tunnisteet, joita käytetään vertaamaan konetta saatavilla oleviin malleihin.",
+      "gpuReasonRenderNodeUnavailable": "Palvelin ei näe näytönohjaimen laitesolmua. Dockerissa yhdistä /dev/dri säiliöön; natiiviasennuksessa tarkista, että grafiikka-ajuri on ladattu.",
+      "gpuReasonRenderNodePermission": "Näytönohjaimen laitesolmua ei voi avata. BirdNET-Go -tilin on kuuluttava laitteen ryhmään (yleensä 'render') tai säiliölle on annettu laite -v parametrilla --device sijaan, jolloin käyttöoikeutta ei ole.",
+      "gpuReasonNoRuntime": "BirdNET-Go nopeuttaa toistaiseksi inferenssiä vain Intelin näytönohjaimilla, joten tätä korttia ei käytetä.",
+      "gpuReasonUnknown": "Tätä näytönohjainta ei voida käyttää inferenssiin tässä versiossa.",
+      "stock": "Vakio",
+      "custom": "Mukautettu",
+      "sampleRate": "Näytteenottotaajuus",
       "clipLength": "Segmentin pituus",
-      "species": "Species",
-      "invocations": "Segments analysed",
-      "avgLatency": "Avg latency",
-      "maxLatency": "Max latency",
+      "species": "Lajit",
+      "invocations": "Analysoidut segmentit",
+      "avgLatency": "Keskimääräinen viive",
+      "maxLatency": "Maksimiviive",
       "rtf": "RTF",
-      "rtfLabel": "Real-time factor",
-      "approxRam": "Approx. host RAM (RSS)",
-      "approxRamTooltip": "Approximate host RAM (RSS) measured at model load. Excludes GPU VRAM, and may be skewed by shared runtime memory arenas and OS page reclamation.",
-      "latencyChart": "Latency (ms)",
-      "rtfChart": "Real-time factor",
-      "sources": "Audio sources",
-      "noSources": "No sources attached",
-      "primaryFallback": "primary (fallback)",
-      "notMeasured": "n/a",
+      "rtfLabel": "Reaaliaikakerroin",
+      "approxRam": "Arvioitu keskusmuisti (RSS)",
+      "approxRamTooltip": "Arvioitu isännän RAM (RSS) mallia ladattaessa. Ei sisällä GPU:n VRAM-muistia.",
+      "latencyChart": "Viive (ms)",
+      "rtfChart": "Reaaliaikakerroin",
+      "sources": "Äänilähteet",
+      "noSources": "Ei liitettyjä lähteitä",
+      "primaryFallback": "ensisijainen (vara)",
+      "notMeasured": "-",
       "unitMs": "ms",
       "unitKhz": "kHz",
       "unitSec": "s",
-      "sectionAudio": "Audio",
-      "queueDepth": "Queue depth",
-      "queueDepthChart": "Queue depth",
-      "droppedChunks": "Dropped chunks",
-      "queueCapacity": "Capacity",
-      "lastSeen": "Last seen",
-      "lastSeenNever": "No detections yet",
+      "sectionAudio": "Ääni",
+      "queueDepth": "Jonon pituus",
+      "queueDepthChart": "Jonon pituus",
+      "droppedChunks": "Pudotetut pätkät",
+      "queueCapacity": "Kapasiteetti",
+      "lastSeen": "Viimeksi nähty",
+      "lastSeenNever": "Ei vielä havaintoja",
       "deviceHelp": "Laskentalaite, jolla tämä malli suorittaa päättelyn (CPU, GPU tai tuntematon).",
       "paused": "Tauolla",
       "pausedScheduleHelp": "Tämä malli toimii vain aikataulun mukaan ja on tällä hetkellä tauolla, joten se ei käsittele ääntä.",
@@ -1762,24 +1762,24 @@
       "coDetectedHelp": "Muut mallit, jotka havaitsivat tämän lajin {seconds}s sisällä",
       "outOfRangeHelp": "Aluesuodattimen ulkopuolella (näytetään diagnostiikkaa varten, ei tallenneta havaintona)",
       "peak": "huippu",
-      "activityActive": "Inference active",
-      "activityIdle": "Idle",
-      "throughput": "Throughput",
+      "activityActive": "Inferenssi aktiivinen",
+      "activityIdle": "Valmiustila",
+      "throughput": "Suoritusteho",
       "throughputUnit": "/s",
-      "throughputChart": "Throughput (/s)",
-      "errorRate": "Error rate",
-      "loadFailures": "Load failures",
-      "rtfHelp": "Real-time factor: inference time divided by clip length. Below 1.0 means the model analyses a segment faster than real time (keeping up); above 1.0 means it is falling behind.",
-      "queueDepthHelp": "Audio segments waiting to be analysed. Stays near zero when analysis keeps up; a rising number means it is falling behind.",
-      "queueCapacityHelp": "Maximum number of segments the queue can hold before new audio is dropped.",
-      "droppedChunksHelp": "Audio chunks discarded because the queue was full. Should stay at zero.",
-      "throughputHelp": "Segments analysed per second by this model.",
-      "errorRateHelp": "Share of analysis attempts that failed.",
-      "loadFailuresHelp": "Number of times this model failed to load.",
-      "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
-      "invocationsHelp": "Total audio segments this model has analysed since startup.",
-      "noModelsHint": "No audio source configured yet?",
-      "noModelsHintLink": "Configure audio sources"
+      "throughputChart": "Suoritusteho (/s)",
+      "errorRate": "Virheprosentti",
+      "loadFailures": "Latausvirheet",
+      "rtfHelp": "Reaaliaikakerroin: inferenssiaika jaettuna leikkeen pituudella. Alle 1,0 tarkoittaa reaaliaikaa nopeampaa analysointia; yli 1,0 tarkoittaa viivästymistä.",
+      "queueDepthHelp": "Äänisegmentit, jotka odottavat analyysia. Pysyy lähellä nollaa, kun analyysi pysyy perässä; nouseva luku tarkoittaa viivästymistä.",
+      "queueCapacityHelp": "Maksimimäärä segmenttejä, joita jono voi pitää ennen uuden äänen pudottamista.",
+      "droppedChunksHelp": "Äänipätkät, jotka on hylätty täyden jonon takia. Tämän tulisi olla nolla.",
+      "throughputHelp": "Analysoituja segmenttejä sekunnissa tällä mallilla.",
+      "errorRateHelp": "Osuus epäonnistuneista analyysiyrityksistä.",
+      "loadFailuresHelp": "Kertojen määrä, kun tämä malli epäonnistui latautumaan.",
+      "fp16Help": "16-bittinen liukuluku. Sitä tukeva laitteisto voi suorittaa jotkin mallit nopeammin ja vähemmällä muistilla.",
+      "invocationsHelp": "Tämän mallin analysoimien äänisegmenttien kokonaismäärä käynnistyksen jälkeen.",
+      "noModelsHint": "Ei äänilähteitä määritettynä vielä?",
+      "noModelsHintLink": "Määritä äänilähteet"
     },
     "metrics": {
       "cpu": "CPU",
@@ -1842,7 +1842,7 @@
         "trends": "Trendit",
         "biodiversity": "Luonnon monimuotoisuus",
         "quality": "Tarkistus ja tarkkuus",
-        "summary": "Summary",
+        "summary": "Yhteenveto",
         "nocturnal": "Yöaktiviteetti",
         "weather": "Sää",
         "soundscape": "Äänimaisema"
@@ -1853,9 +1853,9 @@
       "controls": {
         "source": "Lähde",
         "sourceAll": "Kaikki lähteet",
-        "sourceLoading": "Loading audio sources…",
-        "sourceNone": "No audio sources with detections yet.",
-        "sourceNotApplicable": "The charts in this section do not filter by source.",
+        "sourceLoading": "Ladataan äänilähteitä...",
+        "sourceNone": "Ei äänilähteitä joilla olisi havaintoja vielä.",
+        "sourceNotApplicable": "Tämän osion kaaviot eivät suodata lähteen perusteella.",
         "speciesNotApplicable": "Tämän osion kaaviot eivät suodata lajin mukaan."
       },
       "card": {
@@ -2038,124 +2038,124 @@
           "axisUniqueSpecies": "Yksilölliset lajit"
         },
         "accumulation": {
-          "title": "Species Accumulation Curve",
+          "title": "Lajien kertymiskäyrä",
           "description": "Cumulative number of distinct species detected within the selected period. The curve climbs as new species appear and flattens toward an asymptote once the common ones have been recorded; a still-rising tail means more species are likely waiting to be found.",
-          "noData": "No species accumulation data available",
-          "noDataHint": "Select a wider date range to watch the species list build up over time",
-          "ariaLabel": "Species accumulation curve: cumulative distinct species detected over the period",
-          "axisDate": "Date",
-          "axisSpecies": "Cumulative species",
-          "totalSpecies": "{species} species",
-          "tooltipCumulative": "Cumulative species",
-          "tooltipNew": "New in period",
-          "summary": "Cumulative species accumulation across {days} days, reaching {species} distinct species by the end of the period."
+          "noData": "Lajien kertymistietoja ei ole saatavilla",
+          "noDataHint": "Valitse laajempi aikaväli seurataksesi lajilistan kertymistä ajan myötä",
+          "ariaLabel": "Lajien kertymiskäyrä: kumulatiiviset erilliset lajit ajanjaksolla",
+          "axisDate": "Päivämäärä",
+          "axisSpecies": "Kumulatiiviset lajit",
+          "totalSpecies": "{species} lajia",
+          "tooltipCumulative": "Kumulatiiviset lajit",
+          "tooltipNew": "Uusi jaksolla",
+          "summary": "Kumulatiivinen lajien kertyminen {days} päivän aikana, saavuttaen {species} erillistä lajia jakson loppuun mennessä."
         },
         "yearOverYear": {
-          "title": "Year-over-Year Tracker",
-          "description": "Cumulative detections so far this year versus the same calendar dates last year. The shaded band is the running gap between the two; this year's line sitting above last year's means you are ahead of last year's pace.",
-          "noData": "No year-over-year data available",
-          "noDataHint": "Detections from this year and last year build up here as the year progresses",
-          "ariaLabel": "Year-over-year tracker: cumulative detections this year versus the same span last year",
-          "axisDate": "Date",
-          "axisCount": "Cumulative detections",
-          "legendThis": "{year} (this year)",
-          "legendLast": "{year} (last year)",
-          "tooltipDelta": "Difference",
-          "summary": "Year over year: by {monthDay}, {currentYear} has {thisYear} cumulative detections versus {lastYear} for {previousYear} (a difference of {delta})."
+          "title": "Vuosi vuodelta -seuranta",
+          "description": "Kumulatiiviset havainnot tähän mennessä tänä vuonna verrattuna samoihin kalenteripäiviin viime vuonna. Varjostettu alue on jatkuva ero näiden kahden välillä; jos tämän vuoden viiva on viime vuoden viivan yläpuolella, olet edellä viime vuoden tahtia.",
+          "noData": "Vuosi vuodelta -tietoja ei ole saatavilla",
+          "noDataHint": "Tämän ja viime vuoden havainnot kertyvät tänne vuoden edetessä",
+          "ariaLabel": "Vuosi vuodelta -seuranta: kumulatiiviset havainnot tänä vuonna verrattuna samaan jaksoon viime vuonna",
+          "axisDate": "Päivämäärä",
+          "axisCount": "Kumulatiiviset havainnot",
+          "legendThis": "{year} (tämä vuosi)",
+          "legendLast": "{year} (viime vuosi)",
+          "tooltipDelta": "Ero",
+          "summary": "Vuosi vuodelta: päivämäärään {monthDay} mennessä, vuodella {currentYear} on {thisYear} kumulatiivista havaintoa verrattuna vuoden {previousYear} {lastYear} havaintoon (ero {delta})."
         },
         "phenology": {
-          "title": "Arrival & Departure Phenology",
-          "description": "First and last detection of each species within the selected period, drawn as residency bars for the most-detected species. Read it top to bottom in arrival order to see who shows up first and who lingers latest across the season.",
-          "noData": "No phenology data available",
-          "noDataHint": "Select a wider date range to see when species arrive and depart",
-          "ariaLabel": "Arrival and departure phenology: residency bars showing each species' first-to-last detection span",
-          "axisDate": "Date",
-          "summary": "Arrival and departure residency spans for {species} species across the selected period.",
-          "tooltipFirst": "First detected",
-          "tooltipLast": "Last detected",
-          "tooltipResidency": "Residency",
-          "tooltipCount": "Detections",
-          "residencyDays": "{days} days"
+          "title": "Saapumis- ja lähtöfenologia",
+          "description": "Kunkin lajin ensimmäinen ja viimeinen havainto valitulla ajanjaksolla, piirrettynä oleskelupalkkeina eniten havaituille lajeille. Lue ylhäältä alas saapumisjärjestyksessä nähdäksesi kuka ilmestyy ensin ja kuka viipyy pisimpään kauden aikana.",
+          "noData": "Fenologiatietoja ei ole saatavilla",
+          "noDataHint": "Valitse laajempi aikaväli nähdäksesi milloin lajit saapuvat ja lähtevät",
+          "ariaLabel": "Saapumis- ja lähtöfenologia: oleskelupalkit, jotka osoittavat kunkin lajin ensimmäisen ja viimeisen havainnon välin",
+          "axisDate": "Päivämäärä",
+          "summary": "Saapumis- ja lähtöoleskeluvälit {species} lajille valitulla ajanjaksolla.",
+          "tooltipFirst": "Ensimmäinen havainto",
+          "tooltipLast": "Viimeinen havainto",
+          "tooltipResidency": "Paikallisuus",
+          "tooltipCount": "Havainnot",
+          "residencyDays": "{days} päivää"
         },
         "heatmap": {
-          "title": "Seasonal Activity Heatmap",
+          "title": "Kausittainen aktiivisuuslämpökartta",
           "description": "Detection density by date and time of day, revealing migration waves and dawn-chorus drift",
-          "noData": "No activity data available",
+          "noData": "Aktiivisuustietoja ei ole saatavilla",
           "noDataHint": "Select a date range to view seasonal activity patterns",
-          "axisDate": "Date",
-          "axisTime": "Time of Day",
-          "tooltipTime": "Time",
-          "tooltipCount": "Detections",
-          "legendLess": "Less",
-          "legendMore": "More ({max})",
-          "ariaLabel": "Seasonal activity heatmap: detection density by date and time of day",
-          "summary": "{total} detections across {days} days. Busiest around {time} on {date}."
+          "axisDate": "Päivämäärä",
+          "axisTime": "Kellonaika",
+          "tooltipTime": "Aika",
+          "tooltipCount": "Havainnot",
+          "legendLess": "Vähemmän",
+          "legendMore": "Enemmän ({max})",
+          "ariaLabel": "Kausittainen aktiivisuuslämpökartta: havaintotiheys päivämäärän ja kellonajan mukaan",
+          "summary": "{total} havaintoa {days} päivän aikana. Vilkkainta noin kello {time} päivänä {date}."
         },
         "ridgeline": {
-          "title": "Who Sings When",
+          "title": "Kuka laulaa milloinkin",
           "description": "Hour-of-day activity for the most-detected species, sorting dawn singers from all-day and nocturnal birds",
-          "noData": "No species activity data available",
+          "noData": "Lajien aktiivisuustietoja ei ole saatavilla",
           "noDataHint": "Select a wider date range to compare species activity patterns",
-          "ariaLabel": "Who-sings-when ridgeline: hour-of-day activity distribution per species",
-          "axisTime": "Time of Day",
-          "note": "Showing the top {count} species by detection volume",
-          "tooltipDetections": "Detections",
-          "tooltipPeak": "Peak",
-          "summary": "Hour-of-day activity for {count} species. Most active: {species} around {time}."
+          "ariaLabel": "Aktiivisuusaikajana: vuorokaudenaikainen aktiivisuusjakauma lajeittain",
+          "axisTime": "Vuorokaudenaika",
+          "note": "Näytetään {count} havaittuinta lajia",
+          "tooltipDetections": "Havainnot",
+          "tooltipPeak": "Huippu",
+          "summary": "Vuorokaudenaikainen aktiivisuus {count} lajille. Aktiivisin: {species} noin klo {time}."
         },
         "succession": {
-          "title": "Acoustic Succession",
+          "title": "Akustinen sukkessio",
           "description": "How the soundscape's top species hand off through the day, shown as stacked bands of hourly detections from pre-dawn through night",
-          "noData": "No acoustic succession data available",
+          "noData": "Akustisia sukkessiotietoja ei ole saatavilla",
           "noDataHint": "Select a wider date range to see how species hand off through the day",
           "ariaLabel": "Acoustic succession streamgraph: stacked hour-of-day detections for the top species",
-          "axisTime": "Time of Day",
-          "note": "Combined hourly activity of the top {count} species by detection volume",
-          "tooltipDetections": "Detections",
-          "tooltipPeak": "Peak",
-          "summary": "Hour-of-day succession for {count} species. Most active: {species} around {time}."
+          "axisTime": "Kellonaika",
+          "note": "Havaintomäärältään {count} kärkilajin yhdistetty tuntikohtainen aktiivisuus",
+          "tooltipDetections": "Havainnot",
+          "tooltipPeak": "Huippu",
+          "summary": "Kellonajan sukkessio {count} lajille. Aktiivisin: {species} noin kello {time}."
         },
         "dawnOnset": {
-          "title": "Dawn Chorus Onset",
-          "description": "When the morning chorus starts each day relative to civil dawn, isolating the seasonal shift from clock time",
-          "noData": "No dawn chorus data available",
+          "title": "Aamukuoron alku",
+          "description": "Milloin aamukuoro alkaa joka päivä suhteessa porvarilliseen hämärään, eristäen vuodenaikojen muutoksen kellonajasta",
+          "noData": "Aamukuoron tietoja ei ole saatavilla",
           "noDataHint": "Select a wider date range to track how the dawn chorus shifts across the seasons",
-          "ariaLabel": "Dawn chorus onset tracker: daily chorus onset relative to civil dawn",
-          "axisDate": "Date",
-          "axisOnset": "Minutes from civil dawn",
-          "civilDawn": "Civil dawn",
-          "tooltipOnset": "Onset",
-          "tooltipOnsetAfter": "{minutes} min after civil dawn",
-          "tooltipOnsetBefore": "{minutes} min before civil dawn",
-          "tooltipOnsetAt": "At civil dawn",
-          "tooltipCount": "Detections",
-          "summary": "Dawn chorus onset relative to civil dawn across {days} days ({plotted} with a measurable onset)."
+          "ariaLabel": "Aamukuoron alun seuranta: päivittäinen kuoron alku suhteessa porvarilliseen hämärään",
+          "axisDate": "Päivämäärä",
+          "axisOnset": "Minuuttia porvarillisesta hämärästä",
+          "civilDawn": "Porvarillinen hämärä",
+          "tooltipOnset": "Alku",
+          "tooltipOnsetAfter": "{minutes} min porvarillisen hämärän jälkeen",
+          "tooltipOnsetBefore": "{minutes} min ennen porvarillista hämärää",
+          "tooltipOnsetAt": "Porvarillisen hämärän aikaan",
+          "tooltipCount": "Havainnot",
+          "summary": "Aamukuoron alku suhteessa porvarilliseen hämärään {days} päivän aikana ({plotted} mitattavissa olevalla alulla)."
         },
         "nocturnal": {
-          "title": "Nocturnal Activity Clock",
-          "description": "Detections around the 24-hour clock with the daytime hours shaded, making nighttime activity stand out",
-          "noData": "No activity data available",
-          "noDataHint": "Select a wider date range or a more active period to see the daily activity pattern",
-          "ariaLabel": "Nocturnal activity clock: detections by hour of day with daytime shading",
-          "axisHour": "Hour of day",
-          "tooltipHour": "{start} to {end}",
-          "tooltipCount": "Detections",
-          "summary": "Detection activity by hour of day ({total} detections, most active around {peak}). Daytime hours are shaded.",
-          "legendDay": "Day",
-          "legendTwilight": "Twilight",
-          "legendNight": "Night"
+          "title": "Yöaktiivisuuskello",
+          "description": "Havainnot 24 tunnin kellon ympäri varjostetuilla päivätunneilla, jotta yöaktiivisuus erottuu",
+          "noData": "Aktiivisuustietoja ei ole saatavilla",
+          "noDataHint": "Valitse laajempi aikaväli tai aktiivisempi jakso nähdäksesi päivittäisen aktiivisuusmallin",
+          "ariaLabel": "Yöaktiivisuuskello: havainnot vuorokauden tunneittain päivävarjostuksella",
+          "axisHour": "Vuorokauden tunti",
+          "tooltipHour": "{start} - {end}",
+          "tooltipCount": "Havainnot",
+          "summary": "Havaintoaktiivisuus vuorokauden tunneittain ({total} havaintoa, aktiivisin noin kello {peak}). Päivätunnit on varjostettu.",
+          "legendDay": "Päivä",
+          "legendTwilight": "Hämärä",
+          "legendNight": "Yö"
         },
         "confidence": {
-          "title": "Confidence Distribution",
-          "description": "How confident the model is per species, so you can spot the birds it most often second-guesses",
-          "noData": "No confidence data available",
-          "noDataHint": "Select a wider date range to compare how confident the model is across species",
-          "ariaLabel": "Confidence distribution: per-species histogram of detection confidence scores",
-          "axisLabel": "Confidence",
-          "note": "Showing the top {count} species by detection volume",
-          "tooltipCount": "Detections",
-          "tooltipPeak": "Peak confidence",
-          "summary": "Detection-confidence distribution for {count} species. {species} clusters around {time} confidence."
+          "title": "Varmuusjakauma",
+          "description": "Kuinka varma malli on lajeittain, jotta voit huomata linnut, joista se on useimmiten epävarma",
+          "noData": "Varmuustietoja ei ole saatavilla",
+          "noDataHint": "Valitse laajempi ajanjakso vertaillaksesi mallin varmuutta eri lajien välillä",
+          "ariaLabel": "Varmuusjakauma: lajikohtainen histogrammi havaintojen varmuuspisteistä",
+          "axisLabel": "Varmuus",
+          "note": "Näytetään {count} havaittuinta lajia",
+          "tooltipCount": "Havainnot",
+          "tooltipPeak": "Huippuvarmuus",
+          "summary": "Havaintojen varmuusjakauma {count} lajille. {species} keskittyy {time} varmuuden ympärille."
         },
         "tooltips": {
           "date": "Päivämäärä",
@@ -2736,7 +2736,7 @@
         "fields": {
           "commonName": "Linnun yleisnimi (esim. \"Punakardinaali\")",
           "scientificName": "Tieteellinen nimi (esim. \"Cardinalis cardinalis\")",
-          "confidence": "Luottamusarvo (0,0–1,0)",
+          "confidence": "Luottamusarvo (0,0-1,0)",
           "confidencePercent": "Luottamus prosentteina (esim. \"99\")",
           "detectionTime": "Havainnon aika (esim. \"14:30:45\")",
           "detectionDate": "Havainnon päivämäärä (esim. \"2024-10-05\")",
@@ -2930,9 +2930,9 @@
             "testConnection": "Testaa yhteys",
             "connectionOk": {
               "https": "HTTPS toimii",
-              "http": "HTTP toimii — palvelin ei käytä HTTPS:ää"
+              "http": "HTTP toimii - palvelin ei käytä HTTPS:ää"
             },
-            "connectionFailed": "Yhteys epäonnistui — tarkista isäntänimi ja palvelimen tila",
+            "connectionFailed": "Yhteys epäonnistui - tarkista isäntänimi ja palvelimen tila",
             "auth": {
               "label": "Todennus (valinnainen)",
               "username": {
@@ -3030,11 +3030,11 @@
             },
             "basicUser": {
               "label": "Käyttäjänimi",
-              "placeholder": "username"
+              "placeholder": "käyttäjätunnus"
             },
             "basicPass": {
               "label": "Salasana",
-              "placeholder": "password"
+              "placeholder": "salasana"
             },
             "basicAuth": {
               "helpText": "Tunnistetiedot lähetetään HTTP-perustunnistautumisella"
@@ -3455,7 +3455,7 @@
         "offsetMinutes": "Poikkeama (min)",
         "sunrise": "Auringonnousu",
         "sunset": "Auringonlasku",
-        "fixedHint": "Tallennus keskeytyy päivittäin alku- ja loppuaikojen välillä. Yön yli -ikkunat (esim. 22:00–06:00) ovat tuettuja.",
+        "fixedHint": "Tallennus keskeytyy päivittäin alku- ja loppuaikojen välillä. Yön yli -ikkunat (esim. 22:00-06:00) ovat tuettuja.",
         "solarHint": "Ajat lasketaan auringonnousun/-laskun perusteella määritetyssä sijainnissasi. Käytä negatiivisia poikkeamia ennen tapahtumaa, positiivisia sen jälkeen.",
         "badge": "Hiljainen",
         "enabledBadge": "Hiljaiset tunnit käytössä tälle striimille"
@@ -3693,7 +3693,7 @@
         "typeHelp": "Tallennettujen leikkeiden äänimuoto. WAV ja FLAC ovat häviöttömiä (paras laatu, suuremmat tiedostot). MP3, AAC ja Opus ovat häviöllisiä (pienemmät tiedostot, pieni laatutappio).",
         "bitrateLabel": "Bittinopeus",
         "bitrateHelp": "Äänen pakkauksen bittinopeus häviöllisille muodoille. Alue: {min}-{max} kbps. Korkeammat arvot tarjoavat parempaa laatua mutta suurempia tiedostoja.",
-        "losslessBitrateValue": "N/A - Lossless",
+        "losslessBitrateValue": "Ei saatavilla - Häviötön",
         "losslessNote": "Häviöttömät muodot säilyttävät alkuperäisen äänenlaadun ilman pakkaushäiriöitä."
       },
       "audioNormalization": {
@@ -3867,7 +3867,7 @@
           "userIdLabel": "Käyttäjätunnus"
         },
         "line": {
-          "title": "LINE Login",
+          "title": "LINE-kirjautuminen",
           "enableLabel": "Salli OAuth2-kirjautuminen LINE:llä",
           "redirectUriTitle": "Uudelleenohjaus-URI LINE Developers Consolea varten:",
           "getCredentialsLabel": "Hae tunnukset LINE Developers Consolesta",
@@ -3878,7 +3878,7 @@
           "userIdLabel": "Käyttäjätunnus"
         },
         "kakao": {
-          "title": "Kakao Login",
+          "title": "Kakao-kirjautuminen",
           "enableLabel": "Salli OAuth2-kirjautuminen Kakaolla",
           "redirectUriTitle": "Uudelleenohjaus-URI Kakao Developers Consolea varten:",
           "getCredentialsLabel": "Hae tunnukset Kakao Developers Consolesta",
@@ -3924,8 +3924,8 @@
         "warningText": "Julkisen pääsyn ominaisuuksien käyttöönotto altistaa ne kaikille, jotka pääsevät tälle palvelimelle. Ota käyttöön vain, jos luotat verkkoympäristöösi."
       },
       "privateMode": {
-        "label": "Require login for all UI pages (private mode)",
-        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
+        "label": "Vaadi kirjautuminen kaikille käyttöliittymäsivuille (yksityinen tila)",
+        "help": "Kun käytössä, kojelauta, havainnot, analytiikka, haku, tietoja ja ilmoitukset vaativat tunnistautumisen. Asetukset ja järjestelmäsivut on suojattu riippumatta tästä asetuksesta. Oletusarvoisesti pois päältä."
       },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
@@ -4442,8 +4442,8 @@
         "templateTitlePlaceholder": "Jätä tyhjäksi oletusarvolle",
         "templateMessage": "Viestipohja",
         "templateMessagePlaceholder": "Jätä tyhjäksi oletusarvolle",
-        "noConditionsEvent": "Ei ehtoja — sääntö laukeaa jokaisesta tapahtumasta",
-        "noConditionsMetric": "Ei ehtoja — sääntö laukeaa jokaisesta mittaripäivityksestä",
+        "noConditionsEvent": "Ei ehtoja - sääntö laukeaa jokaisesta tapahtumasta",
+        "noConditionsMetric": "Ei ehtoja - sääntö laukeaa jokaisesta mittaripäivityksestä",
         "eventsCount": "tapahtumaa",
         "metricsCount": "mittaria",
         "durationFor": "ajan",
@@ -4808,10 +4808,10 @@
       "spectrogramLoaded": "Spektrogrammi ladattu",
       "spectrogramLoadingAria": "Ladataan spektrogrammia",
       "spectrogramAlt": "Äänispektrogrammi",
-      "spectrogramForSpecies": "Spectrogram for {species}",
+      "spectrogramForSpecies": "Spektrogrammi lajille {species}",
       "spectrogramGeneratingAria": "Luodaan spektrogrammia",
       "generating": "Luodaan...",
-      "waiting": "Waiting...",
+      "waiting": "Odotetaan...",
       "queuePosition": "Jono: {position}",
       "loadError": "Äänitiedoston lataaminen epäonnistui"
     },
@@ -4824,7 +4824,7 @@
         "addNewStream": "Lisää uusi RTSP-striimi",
         "maxStreamsReached": "RTSP-striimien enimmäismäärä ({max}) saavutettu.",
         "cameraPlaceholder": "Kamera 1",
-        "urlPlaceholder": "rtsp://username:password@192.168.1.100:554/stream"
+        "urlPlaceholder": "rtsp://kayttaja:salasana@192.168.1.100:554/stream"
       },
       "subnet": {
         "maxSubnetsReached": "Aliverkkojen enimmäismäärä ({max}) saavutettu."
@@ -4924,9 +4924,9 @@
       "loading": "Ladataan sertifikaattitietoja..."
     },
     "birdThumbnail": {
-      "viewDetections": "View {name} detections",
-      "largeView": "Large view of {name}",
-      "clickToView": "Click to view detections"
+      "viewDetections": "Näytä lajin {name} havainnot",
+      "largeView": "Suuri kuva lajista {name}",
+      "clickToView": "Napsauta nähdäksesi havainnot"
     }
   },
   "connectivity": {
@@ -4941,7 +4941,7 @@
   },
   "quietHours": {
     "indicator": {
-      "tooltip": "Hiljaiset tunnit aktiiviset — {count} lähde tauolla"
+      "tooltip": "Hiljaiset tunnit aktiiviset - {count} lähde tauolla"
     }
   },
   "errors": {
@@ -4965,7 +4965,7 @@
       "duplicateName": "Tämänniminen sääntö on jo olemassa",
       "invalidJSON": "Virheellinen JSON",
       "invalidEscalation": "Eskalaatioaskeleet ovat virheellisiä",
-      "engineUnavailable": "Alerting engine is unavailable"
+      "engineUnavailable": "Hälytysjärjestelmä ei ole käytettävissä"
     },
     "detection": {
       "invalidDate": "Virheellinen {paramName}-muoto, käytä VVVV-KK-PP"
@@ -4979,7 +4979,7 @@
       "createFailed": "Varmuuskopiointitehtävän luominen epäonnistui",
       "notFound": "Varmuuskopiointitehtävää ei löytynyt tai se on vanhentunut",
       "notReady": "Varmuuskopio ei ole vielä ladattavissa",
-      "fileNotFound": "Varmuuskopiotiedostoa ei löytynyt — tehtävä on saattanut vanhentua",
+      "fileNotFound": "Varmuuskopiotiedostoa ei löytynyt - tehtävä on saattanut vanhentua",
       "sqliteOnly": "Varmuuskopiointi on käytettävissä vain SQLite-tietokannoille",
       "dbNotConfigured": "Tietokantaa ei ole määritetty",
       "unsupportedType": "Varmuuskopiointia ei voi suorittaa tälle tietovarastotyypille",
@@ -4998,7 +4998,7 @@
       "noLegacyDB": "Vanhaa tietokantaa ei löytynyt",
       "accessFailed": "Vanhaan tietokantaan ei voida yhdistää",
       "restartRequired": "Sovellus on käynnistettävä uudelleen siirron jälkeen ennen kuin siivoaminen on käytettävissä",
-      "safetyCheck": "Kohdetiedosto vaikuttaa olevan V2-tietokanta — siivoaminen ei sallittu turvallisuussyistä",
+      "safetyCheck": "Kohdetiedosto vaikuttaa olevan V2-tietokanta - siivoaminen ei sallittu turvallisuussyistä",
       "noLegacyTables": "Vanhoja tauluja ei löytynyt",
       "restartNeeded": "Siivoaminen ei onnistu: sovellus on käynnistettävä uudelleen siirron jälkeen",
       "alreadyRunning": "Siivoaminen on jo käynnissä"
@@ -5070,9 +5070,9 @@
       "waningCrescent": "Vähenevä sirppi"
     },
     "birding": {
-      "excellent": "Tyyntä — erinomaiset olosuhteet lintuhavainnoille",
-      "moderate": "Kohtalaista tuulta — osa linnunäänistä voi jäädä kuulematta",
-      "poor": "Kovaa tuulta — linnunäänet tuskin kuultavissa"
+      "excellent": "Tyyntä - erinomaiset olosuhteet lintuhavainnoille",
+      "moderate": "Kohtalaista tuulta - osa linnunäänistä voi jäädä kuulematta",
+      "poor": "Kovaa tuulta - linnunäänet tuskin kuultavissa"
     }
   },
   "wizard": {
@@ -5123,10 +5123,10 @@
         "deviceLoading": "Ladataan äänilaitteita...",
         "noDevicesFound": "Äänilaitteita ei havaittu. Kokeile RTSP-lähetyksen määritystä.",
         "rtspUrlLabel": "Lähetyksen URL",
-        "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
+        "rtspUrlPlaceholder": "rtsp://kayttaja:salasana@host:port/stream",
         "rtspUrlHelp": "Syötä RTSP-äänilähetyksesi URL",
         "additionalSourcesHint": "Voit lisätä äänilähteitä myöhemmin Asetuksissa.",
-        "configureLater": "Ohita — määritä myöhemmin"
+        "configureLater": "Ohita - määritä myöhemmin"
       },
       "detection": {
         "title": "Tunnistuskynnys",
@@ -5338,11 +5338,11 @@
     "bannerAction": "Käynnistä uudelleen nyt",
     "restartFailed": "Uudelleenkäynnistyksen aloittaminen epäonnistui",
     "reasons": {
-      "webserver": "Web server / network settings",
-      "oauth": "Authentication provider settings",
-      "database": "Database settings",
-      "logging": "Logging settings",
-      "tlsCertificate": "TLS certificate"
+      "webserver": "Verkkopalvelimen / verkon asetukset",
+      "oauth": "Tunnistautumispalveluntarjoajan asetukset",
+      "database": "Tietokannan asetukset",
+      "logging": "Lokin asetukset",
+      "tlsCertificate": "TLS-varmenne"
     }
   },
   "help": {
@@ -5408,20 +5408,20 @@
     }
   },
   "health": {
-    "title": "System Health",
-    "running": "Running diagnostics...",
-    "lastRun": "Last run",
+    "title": "Järjestelmän tila",
+    "running": "Suoritetaan vianmääritystä...",
+    "lastRun": "Viimeisin ajo",
     "refresh": "Päivitä",
-    "exportText": "Copy Report",
-    "exportJSON": "Download JSON",
-    "copied": "Report copied to clipboard",
-    "duration": "Duration",
+    "exportText": "Kopioi raportti",
+    "exportJSON": "Lataa JSON",
+    "copied": "Raportti kopioitu leikepöydälle",
+    "duration": "Kesto",
     "summary": {
-      "healthy": "Healthy",
-      "warnings": "Warnings",
-      "critical": "Critical",
-      "skipped": "Skipped",
-      "total": "Total checks"
+      "healthy": "Kunnossa",
+      "warnings": "Varoitukset",
+      "critical": "Kriittinen",
+      "skipped": "Ohitettu",
+      "total": "Tarkistukset yhteensä"
     },
     "metricFooter": {
       "allPassing": "Kaikki kunnossa",
@@ -5433,33 +5433,33 @@
     },
     "diagnostics": "Diagnostiikka",
     "categories": {
-      "system": "System",
-      "audio": "Audio Pipeline",
-      "analysis": "Analysis",
-      "streams": "Audio Streams",
-      "database": "Database",
-      "network": "Network",
-      "config": "Configuration",
-      "logs": "Logs"
+      "system": "Järjestelmä",
+      "audio": "Ääniputki",
+      "analysis": "Analyysi",
+      "streams": "Äänivirrat",
+      "database": "Tietokanta",
+      "network": "Verkko",
+      "config": "Asetukset",
+      "logs": "Lokit"
     },
     "status": {
-      "healthy": "Healthy",
-      "warning": "Warning",
-      "critical": "Critical",
-      "unknown": "Unknown",
-      "skipped": "Skipped"
+      "healthy": "Kunnossa",
+      "warning": "Varoitus",
+      "critical": "Kriittinen",
+      "unknown": "Tuntematon",
+      "skipped": "Ohitettu"
     },
     "errors": {
-      "title": "Recent Errors",
-      "noErrors": "No recent errors",
-      "fetchFailed": "Failed to load diagnostics"
+      "title": "Viimeaikaiset virheet",
+      "noErrors": "Ei viimeaikaisia virheitä",
+      "fetchFailed": "Vianmääritystietoja ei voitu ladata"
     },
     "export": {
-      "reportTitle": "BirdNET-Go System Health Report",
-      "statusLabel": "Status",
-      "timeLabel": "Time",
-      "durationLabel": "Duration",
-      "checksLabel": "Checks"
+      "reportTitle": "BirdNET-Go -järjestelmän tilaraportti",
+      "statusLabel": "Tila",
+      "timeLabel": "Aika",
+      "durationLabel": "Kesto",
+      "checksLabel": "Tarkistukset"
     },
     "logs": {
       "topErrors": "Yleisimmät virheet",
@@ -5470,12 +5470,12 @@
     },
     "window": {
       "label": "Arviointijakso",
-      "15m": "15m",
-      "30m": "30m",
-      "1h": "1h",
-      "6h": "6h",
-      "24h": "24h",
-      "7d": "7d"
+      "15m": "15 min",
+      "30m": "30 min",
+      "1h": "1 h",
+      "6h": "6 h",
+      "24h": "24 h",
+      "7d": "7 pv"
     },
     "detail": {
       "lastEvent": "Viimeisin tapahtuma",

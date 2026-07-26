@@ -464,17 +464,17 @@
         "errorOccurred": "{error}",
         "disconnected": "{source_name} disconnected",
         "error": {
-          "authError": "Authentication failed — check your API key or credentials",
-          "rateLimited": "Rate limited — requests will slow down automatically",
+          "authError": "Authentication failed - check your API key or credentials",
+          "rateLimited": "Rate limited - requests will slow down automatically",
           "gatewayTimeout": "Service may be experiencing high load",
           "serverError": "Service is temporarily unavailable",
-          "connectionRefused": "Service is unreachable — check the address and that it's running",
-          "dnsError": "Could not resolve hostname — check the address",
-          "tlsError": "TLS/certificate error — check your security settings",
-          "timeout": "Connection timed out — the service may be slow or unreachable",
-          "connectionInterrupted": "Connection was interrupted — will retry automatically",
-          "diskFull": "Disk is full — free some space",
-          "permissionDenied": "Permission denied — check file or service permissions"
+          "connectionRefused": "Service is unreachable - check the address and that it's running",
+          "dnsError": "Could not resolve hostname - check the address",
+          "tlsError": "TLS/certificate error - check your security settings",
+          "timeout": "Connection timed out - the service may be slow or unreachable",
+          "connectionInterrupted": "Connection was interrupted - will retry automatically",
+          "diskFull": "Disk is full - free some space",
+          "permissionDenied": "Permission denied - check file or service permissions"
         }
       }
     },
@@ -612,7 +612,7 @@
     "currentlyHearing": {
       "title": "Currently Hearing",
       "subtitle": "Real-time species being identified",
-      "empty": "All quiet — no birds detected right now"
+      "empty": "All quiet - no birds detected right now"
     },
     "rejected": "Rejected",
     "newSpeciesHighlights": {
@@ -1522,10 +1522,10 @@
           "targetV2": "Target (V2)",
           "recordsLabel": "Records",
           "sizeLabel": "Size",
-          "prerequisitesNotMet": "Prerequisites not met — resolve critical issues below",
+          "prerequisitesNotMet": "Prerequisites not met - resolve critical issues below",
           "validatingTitle": "Validating Data",
           "validatingBody": "Comparing {count} legacy records against V2 database...",
-          "dirtyRecordsCatchup": "{count} dirty records — will attempt catch-up reconciliation",
+          "dirtyRecordsCatchup": "{count} dirty records - will attempt catch-up reconciliation",
           "cutoverTitle": "Completing Cutover",
           "cutoverBody": "Finalizing transition to V2 database...",
           "migratingPhase": "Migrating {phase}",
@@ -1534,7 +1534,7 @@
           "percentComplete": "{percent}% complete",
           "recordsPerSec": "{rate} records/sec",
           "calculating": "Calculating...",
-          "dirtyWriteFailed": "{count} records failed to write — will be reconciled during validation"
+          "dirtyWriteFailed": "{count} records failed to write - will be reconciled during validation"
         },
         "details": {
           "title": "Database Details",
@@ -2930,9 +2930,9 @@
             "testConnection": "Test Connection",
             "connectionOk": {
               "https": "HTTPS works",
-              "http": "HTTP works — server is not using HTTPS"
+              "http": "HTTP works - server is not using HTTPS"
             },
-            "connectionFailed": "Could not connect — check hostname and server status",
+            "connectionFailed": "Could not connect - check hostname and server status",
             "auth": {
               "label": "Authentication (optional)",
               "username": {
@@ -3925,7 +3925,7 @@
       },
       "privateMode": {
         "label": "Require login for all UI pages (private mode)",
-        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
+        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently - leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
       },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
@@ -4442,8 +4442,8 @@
         "templateTitlePlaceholder": "Leave empty for default",
         "templateMessage": "Message Template",
         "templateMessagePlaceholder": "Leave empty for default",
-        "noConditionsEvent": "No conditions — rule fires on every event",
-        "noConditionsMetric": "No conditions — rule fires on every metric update",
+        "noConditionsEvent": "No conditions - rule fires on every event",
+        "noConditionsMetric": "No conditions - rule fires on every metric update",
         "eventsCount": "events",
         "metricsCount": "metrics",
         "durationFor": "for",
@@ -4883,7 +4883,7 @@
         "extracting": "Extracting clip...",
         "extractError": "Failed to extract clip",
         "formatLabel": "Format",
-        "rangeLabel": "{start}s – {end}s"
+        "rangeLabel": "{start}s - {end}s"
       },
       "processing": {
         "playSelection": "Play selection",
@@ -4941,7 +4941,7 @@
   },
   "quietHours": {
     "indicator": {
-      "tooltip": "Quiet hours active — {count} source(s) paused"
+      "tooltip": "Quiet hours active - {count} source(s) paused"
     }
   },
   "errors": {
@@ -4979,7 +4979,7 @@
       "createFailed": "Failed to create backup job",
       "notFound": "Backup job not found or expired",
       "notReady": "Backup not ready for download",
-      "fileNotFound": "Backup file not found — job may have expired",
+      "fileNotFound": "Backup file not found - job may have expired",
       "sqliteOnly": "Backup only available for SQLite databases",
       "dbNotConfigured": "Database not configured",
       "unsupportedType": "Cannot perform backup on this datastore type",
@@ -4998,7 +4998,7 @@
       "noLegacyDB": "No legacy database found",
       "accessFailed": "Cannot access legacy database",
       "restartRequired": "Application must be restarted after migration before cleanup is available",
-      "safetyCheck": "Target file appears to be a V2 database — cleanup not allowed for safety",
+      "safetyCheck": "Target file appears to be a V2 database - cleanup not allowed for safety",
       "noLegacyTables": "No legacy tables found",
       "restartNeeded": "Cannot cleanup: Application must be restarted after migration",
       "alreadyRunning": "Cleanup already in progress"
@@ -5070,9 +5070,9 @@
       "waningCrescent": "Waning Crescent"
     },
     "birding": {
-      "excellent": "Calm — excellent for hearing bird calls",
-      "moderate": "Moderate wind — some bird calls may be harder to hear",
-      "poor": "High wind — bird calls unlikely to be heard"
+      "excellent": "Calm - excellent for hearing bird calls",
+      "moderate": "Moderate wind - some bird calls may be harder to hear",
+      "poor": "High wind - bird calls unlikely to be heard"
     }
   },
   "wizard": {
@@ -5126,7 +5126,7 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Enter the URL of your RTSP audio stream",
         "additionalSourcesHint": "You can add more audio sources later in Settings.",
-        "configureLater": "Skip — configure later"
+        "configureLater": "Skip - configure later"
       },
       "detection": {
         "title": "Detection Threshold",

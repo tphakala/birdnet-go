@@ -57,7 +57,7 @@
     "generate:i18n-types:check": "npx tsx src/lib/i18n/generateTypes.ts --check",
     "i18n:validate": "npx tsx src/lib/i18n/validateTranslations.ts",
     "i18n:validate:strict": "npx tsx src/lib/i18n/validateTranslations.ts --strict",
-    "i18n:validate:ci": "npx tsx src/lib/i18n/validateTranslations.ts --min-coverage 85 --fail-on-warnings",
+    "i18n:validate:ci": "npx tsx src/lib/i18n/validateTranslations.ts --min-coverage 100 --fail-on-warnings --strict",
     "i18n:validate:json": "npx tsx src/lib/i18n/validateTranslations.ts --json",
     "i18n:report": "npx tsx src/lib/i18n/validateTranslations.ts --report",
     "i18n:report:md": "npx tsx src/lib/i18n/validateTranslations.ts --report --format=markdown",
