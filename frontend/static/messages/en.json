@@ -4293,6 +4293,7 @@
         "emptyMessageHint": "Upload a CSV export from eBird.",
         "speciesCount": "{count} species",
         "emptyFile": "The uploaded file did not contain any recognizable rows.",
+        "noAcceptedRows": "None of the {total} rows could be imported, so your life list was left unchanged.",
         "fileReadError": "Failed to read the uploaded file.",
         "importSummary": "Imported {accepted} of {total} rows.",
         "showRejectedRows": "Show {count} rows that could not be imported",

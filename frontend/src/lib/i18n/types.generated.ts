@@ -3135,6 +3135,7 @@ export type TranslationKey =
   | 'settings.species.lifeList.emptyMessageHint'
   | 'settings.species.lifeList.speciesCount' // params: count
   | 'settings.species.lifeList.emptyFile'
+  | 'settings.species.lifeList.noAcceptedRows' // params: total
   | 'settings.species.lifeList.fileReadError'
   | 'settings.species.lifeList.importSummary' // params: accepted, total
   | 'settings.species.lifeList.showRejectedRows' // params: count
@@ -4325,6 +4326,7 @@ export type TranslationParams = {
   'settings.species.customConfiguration.configuredCount': { count: string | number };
   'settings.species.actionsModal.title': { species: string | number };
   'settings.species.lifeList.speciesCount': { count: string | number };
+  'settings.species.lifeList.noAcceptedRows': { total: string | number };
   'settings.species.lifeList.importSummary': { accepted: string | number; total: string | number };
   'settings.species.lifeList.showRejectedRows': { count: string | number };
   'settings.species.lifeList.rejectedRow': { row: string | number };
