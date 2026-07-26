@@ -747,13 +747,20 @@ describe('SystemInference', () => {
   });
 
   describe('compute precision (Inference Backends footer)', () => {
+    // The contract this suite pins, in one place: the mocked t() returns the key
+    // itself, so these are the strings that actually reach the DOM.
+    const LABEL_KEY = 'system.inference.fp16';
+    const SUPPORTED_KEY = 'system.inference.fp16Supported';
+    const UNSUPPORTED_KEY = 'system.inference.fp16Unsupported';
+    const BACKENDS_HEADING_KEY = 'system.inference.sectionBackends';
+    const CARD_SELECTOR = 'div.rounded-xl';
+
     // The label key must be matched EXACTLY, never as a substring of
-    // textContent: 'system.inference.fp16' is a prefix of the pill's own
-    // 'system.inference.fp16Supported', so a contains-check passes even when
-    // the label is missing entirely and asserts nothing.
+    // textContent: LABEL_KEY is a prefix of SUPPORTED_KEY, so a contains-check
+    // passes even when the label is missing entirely and asserts nothing.
     function precisionLabel(container: HTMLElement): Element | undefined {
       return [...container.querySelectorAll('span')].find(
-        el => el.textContent.trim() === 'system.inference.fp16'
+        el => el.textContent.trim() === LABEL_KEY
       );
     }
 
@@ -767,10 +774,10 @@ describe('SystemInference', () => {
       const { container } = inferenceTest.render({});
 
       await waitFor(() => {
-        expect(container.textContent).toContain('system.inference.fp16Supported');
+        expect(container.textContent).toContain(SUPPORTED_KEY);
       });
       expect(precisionLabel(container)).toBeDefined();
-      expect(container.textContent).not.toContain('system.inference.fp16Unsupported');
+      expect(container.textContent).not.toContain(UNSUPPORTED_KEY);
     });
 
     // Placement, not just presence. Every other assertion here passes equally
@@ -782,14 +789,12 @@ describe('SystemInference', () => {
       const { container } = inferenceTest.render({});
 
       await waitFor(() => {
-        expect(container.textContent).toContain('system.inference.fp16Supported');
+        expect(container.textContent).toContain(SUPPORTED_KEY);
       });
-      const card = precisionLabel(container)?.closest('div.rounded-xl');
-      expect(card?.textContent).toContain('system.inference.sectionBackends');
+      const card = precisionLabel(container)?.closest(CARD_SELECTOR);
+      expect(card?.textContent).toContain(BACKENDS_HEADING_KEY);
       // The Hardware card is the definition list; the row must have left it.
-      expect(container.querySelector('dl')?.textContent).not.toContain(
-        'system.inference.fp16Supported'
-      );
+      expect(container.querySelector('dl')?.textContent).not.toContain(SUPPORTED_KEY);
     });
 
     it('reports FP16 as unsupported when the CPU lacks native half precision', async () => {
@@ -798,10 +803,10 @@ describe('SystemInference', () => {
       const { container } = inferenceTest.render({});
 
       await waitFor(() => {
-        expect(container.textContent).toContain('system.inference.fp16Unsupported');
+        expect(container.textContent).toContain(UNSUPPORTED_KEY);
       });
       expect(precisionLabel(container)).toBeDefined();
-      expect(container.textContent).not.toContain('system.inference.fp16Supported');
+      expect(container.textContent).not.toContain(SUPPORTED_KEY);
     });
 
     // The label carries aria-describedby pointing at an sr-only span, so the
@@ -813,7 +818,7 @@ describe('SystemInference', () => {
       const { container } = inferenceTest.render({});
 
       await waitFor(() => {
-        expect(container.textContent).toContain('system.inference.fp16Supported');
+        expect(container.textContent).toContain(SUPPORTED_KEY);
       });
       const label = precisionLabel(container);
       const describedBy = label?.getAttribute('aria-describedby');
