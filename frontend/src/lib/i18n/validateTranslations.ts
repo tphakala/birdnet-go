@@ -665,10 +665,7 @@ class TranslationValidator {
       }
 
       // Check for warnings in strict mode (missing keys)
-      if (
-        options.failOnWarnings &&
-        result.missingKeys.length > 0
-      ) {
+      if (options.failOnWarnings && result.missingKeys.length > 0) {
         passed = false;
       }
     }
