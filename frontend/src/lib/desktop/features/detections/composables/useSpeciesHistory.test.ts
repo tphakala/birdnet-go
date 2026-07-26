@@ -201,4 +201,61 @@ describe('useSpeciesHistory', () => {
     flushSync();
     expect(h.data?.totalDetections).toBe(820);
   });
+
+  it('rejects stale responses from superseded requests (race condition guard)', async () => {
+    /**
+     * Regression test for signal-capture guard against overlapping requests.
+     * If the code changes to check `controller` directly instead of the captured
+     * `signal`, or removes the `controller === active` guard in finally, this test
+     * will fail (stale data will overwrite the newer response).
+     *
+     * Scenario:
+     * 1. Start load for species A — api.post hangs (pending promise)
+     * 2. Start load for species B — api.post resolves immediately
+     * 3. Await load for B → completes, data set to species B results
+     * 4. Resolve pending promise for species A → must not overwrite data
+     */
+    // Create controlled promise for species A that we can resolve manually
+    let resolveSpeciesA: (value: unknown) => void = () => {};
+    const pendingA = new Promise(resolve => {
+      resolveSpeciesA = resolve;
+    });
+
+    post.mockImplementation((url: string, body: { sortBy: string }) => {
+      // species A (Spinus tristis) returns the pending promise
+      if (body.speciesScientific?.[0] === 'Spinus tristis') {
+        return pendingA;
+      }
+      // species B (Cardinalis cardinalis) resolves immediately
+      return Promise.resolve(body.sortBy === 'date_asc' ? ascResponse() : descResponse());
+    });
+
+    get.mockResolvedValue(dailyResponse());
+
+    const h = useSpeciesHistory();
+
+    // Start load for species A (will hang)
+    h.load('Spinus tristis', '2026-07-26', '20481');
+
+    // Without awaiting A, start load for species B (resolves immediately)
+    await h.load('Cardinalis cardinalis', '2026-07-26', '20481');
+    flushSync();
+
+    // Species B should be loaded
+    expect(h.data?.totalDetections).toBe(820);
+    expect(h.isLoading).toBe(false);
+    expect(h.error).toBeNull();
+    const speciesBLastHeard = h.data?.lastHeard;
+
+    // Now resolve the stale promise from species A
+    resolveSpeciesA(descResponse());
+    await new Promise(resolve => setTimeout(resolve, 0)); // Let microtasks run
+    flushSync();
+
+    // Species B must still be the loaded data (not overwritten by stale A response)
+    expect(h.data?.lastHeard).toBe(speciesBLastHeard);
+    expect(h.data?.totalDetections).toBe(820);
+    expect(h.isLoading).toBe(false);
+    expect(h.error).toBeNull();
+  });
 });
