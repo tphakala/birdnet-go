@@ -268,7 +268,9 @@ describe('useSpeciesHistory', () => {
 
       // Species B (Cardinalis cardinalis) branches on sortBy
       if (species === 'Cardinalis cardinalis') {
-        return Promise.resolve(body.sortBy === 'date_asc' ? cardinalAscResponse() : cardinalDescResponse());
+        return Promise.resolve(
+          body.sortBy === 'date_asc' ? cardinalAscResponse() : cardinalDescResponse()
+        );
       }
 
       // Fallback
@@ -330,15 +332,14 @@ describe('useSpeciesHistory', () => {
      * 6. Assert isLoading is still true because C is genuinely in flight
      */
     let resolveSpeciesA: (value: unknown) => void = () => {};
-    let resolveSpeciesB: (value: unknown) => void = () => {};
     let resolveSpeciesC: (value: unknown) => void = () => {};
 
     const pendingA = new Promise(resolve => {
       resolveSpeciesA = resolve;
     });
-    const pendingB = new Promise(resolve => {
-      resolveSpeciesB = resolve;
-    });
+    // Species B's promise is intentionally never resolved: B is superseded by C
+    // before its resolution would matter to the `controller === active` guard.
+    const pendingB = new Promise<never>(() => {});
     const pendingC = new Promise(resolve => {
       resolveSpeciesC = resolve;
     });
@@ -351,7 +352,9 @@ describe('useSpeciesHistory', () => {
       }
 
       if (species === 'Cardinalis cardinalis') {
-        return pendingB.then(() => (body.sortBy === 'date_asc' ? cardinalAscResponse() : cardinalDescResponse()));
+        return pendingB.then(() =>
+          body.sortBy === 'date_asc' ? cardinalAscResponse() : cardinalDescResponse()
+        );
       }
 
       // Species C (any other species): use a third deferred promise
@@ -395,5 +398,4 @@ describe('useSpeciesHistory', () => {
     // Only now should isLoading be false (C completed)
     expect(h.isLoading).toBe(false);
   });
-
 });
