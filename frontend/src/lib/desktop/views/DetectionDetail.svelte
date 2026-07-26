@@ -29,6 +29,7 @@
   import { loggers } from '$lib/utils/logger';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
+  import { useSpeciesHistory } from '$lib/desktop/features/detections/composables/useSpeciesHistory.svelte';
   import {
     Download,
     Camera,
@@ -98,6 +99,7 @@
 
   // State
   let activeTab = $state<TabType>('overview');
+  const speciesHistory = useSpeciesHistory();
 
   // Dynamic review component loading
   let ReviewCard: ReviewCardComponent | null = $state(null);
@@ -174,7 +176,17 @@
       taxonomyController?.abort();
       attributionController?.abort();
       cancelAttributionRetry();
+      speciesHistory.reset();
     };
+  });
+
+  // Load species history the first time the History tab is opened. The composable
+  // caches per (species, date), so switching tabs away and back does not refetch.
+  $effect(() => {
+    if (activeTab !== 'history') return;
+    const det = detection;
+    if (!det?.scientificName || !det.date) return;
+    void speciesHistory.load(det.scientificName, det.date, String(det.id));
   });
 
   // Fetch detection data
