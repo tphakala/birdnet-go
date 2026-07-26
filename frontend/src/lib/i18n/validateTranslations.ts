@@ -341,12 +341,7 @@ class TranslationValidator {
       // Check for untranslated (same as English)
       // Skip keys that contain technical terms, service names, etc. that legitimately stay the same
       if (!options.allowUntranslated && value === referenceValue) {
-        const keyLower = key.toLowerCase();
-        const valueLower = typeof value === 'string' ? value.toLowerCase() : '';
-        const shouldSkip = SKIP_UNTRANSLATED_KEYWORDS.some(
-          keyword => keyLower.includes(keyword) || valueLower === keyword
-        );
-        if (!shouldSkip) {
+        if (!this.shouldSkipUntranslated(key, value)) {
           result.untranslated.push(key);
         }
       }
@@ -359,6 +354,32 @@ class TranslationValidator {
     }
 
     return result;
+  }
+
+  private shouldSkipUntranslated(key: string, value: unknown): boolean {
+    if (typeof value !== 'string') return false;
+
+    const trimmed = value.trim();
+    if (trimmed.length <= 1) return true;
+    if (!/[a-zA-Z]/.test(trimmed)) return true;
+
+    // Pure parameter placeholders (e.g. "{rule_name}", "{error}", "{temp}°C", "{current} / {total}")
+    if (/^\{[a-zA-Z0-9_]+\}$/.test(trimmed)) return true;
+    if (/^\{[a-zA-Z0-9_]+\}[^a-zA-Z0-9]+$/.test(trimmed)) return true;
+    if (/^[^a-zA-Z0-9]+\{[a-zA-Z0-9_]+\}$/.test(trimmed)) return true;
+    if (/^\{[a-zA-Z0-9_]+\}\s*\/\s*\{[a-zA-Z0-9_]+\}$/.test(trimmed)) return true;
+
+    const valueLower = trimmed.toLowerCase();
+
+    // Check exact match against whitelisted terms/values (never check against key path)
+    if (SKIP_UNTRANSLATED_KEYWORDS.includes(valueLower)) return true;
+
+    // Exact token match for time windows, units, and formatting tokens
+    if (/^(15m|30m|1h|6h|24h|7d|°c|°f|m\/s|km\/h|mph|db|hpa|khz|ms|s|\/s)$/i.test(valueLower)) {
+      return true;
+    }
+
+    return false;
   }
 
   private validateICUSyntax(key: string, value: string, result: ValidationResult): void {

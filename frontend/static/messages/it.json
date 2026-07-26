@@ -1763,7 +1763,7 @@
       "outOfRangeHelp": "Fuori dal filtro di area (mostrato per diagnostica, non salvato come rilevamento)",
       "peak": "picco",
       "activityActive": "Inferenza attiva",
-      "activityIdle": "Idle",
+      "activityIdle": "Inattivo",
       "throughput": "Throughput",
       "throughputUnit": "/s",
       "throughputChart": "Throughput (/s)",
@@ -2073,7 +2073,7 @@
           "summary": "Tempi di residenza di arrivo e partenza per {species} specie nel periodo selezionato.",
           "tooltipFirst": "Primo rilevamento",
           "tooltipLast": "Ultimo rilevamento",
-          "tooltipResidency": "Residency",
+          "tooltipResidency": "Residenza",
           "tooltipCount": "Rilevamenti",
           "residencyDays": "{days} giorni"
         },
@@ -2099,8 +2099,8 @@
           "ariaLabel": "Grafico chi canta quando: distribuzione dell'attività oraria per specie",
           "axisTime": "Ora del giorno",
           "note": "Mostrando le prime {count} specie per volume di rilevamento",
-          "tooltipDetections": "Detections",
-          "tooltipPeak": "Peak",
+          "tooltipDetections": "Rilevamenti",
+          "tooltipPeak": "Picco",
           "summary": "Attività oraria per {count} specie. Più attivo: {species} intorno alle {time}."
         },
         "succession": {
@@ -2151,9 +2151,9 @@
           "noData": "Nessun dato sulla confidenza disponibile",
           "noDataHint": "Seleziona un intervallo di date più ampio per confrontare la confidenza del modello tra le specie",
           "ariaLabel": "Distribuzione della confidenza: istogramma dei punteggi di confidenza del rilevamento per specie",
-          "axisLabel": "Confidence",
+          "axisLabel": "Confidenza",
           "note": "Mostrando le prime {count} specie per volume di rilevamento",
-          "tooltipCount": "Detections",
+          "tooltipCount": "Rilevamenti",
           "tooltipPeak": "Confidenza massima",
           "summary": "Distribuzione della confidenza di rilevamento per {count} specie. {species} si concentra intorno a una confidenza di {time}."
         },
@@ -3480,7 +3480,7 @@
         "mediaModeLabel": "Modalità multimediale",
         "mediaModeHelp": "Il flusso completo richiede audio e video (il video viene scartato dopo la decodifica) e funziona con la maggior parte delle telecamere. Auto prova prima solo l'audio e passa al flusso completo se la telecamera non è in grado di fornire solo l'audio. Solo audio non occupa mai uno slot video della telecamera, ma fallisce se la telecamera non è in grado di fornire la traccia audio da sola.",
         "mediaMode": {
-          "auto": "Auto",
+          "auto": "Automatico",
           "audioOnly": "Solo audio",
           "fullStream": "Flusso completo"
         },

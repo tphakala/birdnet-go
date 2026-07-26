@@ -1763,7 +1763,7 @@
       "outOfRangeHelp": "Buiten het bereikfilter (getoond voor diagnostiek, niet opgeslagen als detectie)",
       "peak": "piek",
       "activityActive": "Inferentie actief",
-      "activityIdle": "Idle",
+      "activityIdle": "Inactief",
       "throughput": "Doorvoer",
       "throughputUnit": "/s",
       "throughputChart": "Doorvoer (/s)",
@@ -2073,7 +2073,7 @@
           "summary": "Verblijfsduur voor {species} soorten.",
           "tooltipFirst": "Eerst gedetecteerd",
           "tooltipLast": "Laatst gedetecteerd",
-          "tooltipResidency": "Residency",
+          "tooltipResidency": "Verblijf",
           "tooltipCount": "Detecties",
           "residencyDays": "{days} dagen"
         },
@@ -2099,8 +2099,8 @@
           "ariaLabel": "Activiteitsgrafiek: activiteitsverdeling per uur per soort",
           "axisTime": "Tijdstip",
           "note": "Toont de {count} meest gedetecteerde soorten",
-          "tooltipDetections": "Detections",
-          "tooltipPeak": "Peak",
+          "tooltipDetections": "Detecties",
+          "tooltipPeak": "Piek",
           "summary": "Activiteit per uur voor {count} soorten. Meest actief: {species} rond {time}."
         },
         "succession": {
@@ -2151,9 +2151,9 @@
           "noData": "Geen betrouwbaarheidsgegevens beschikbaar",
           "noDataHint": "Selecteer een breder datumbereik om te vergelijken hoe zeker het model is voor verschillende soorten",
           "ariaLabel": "Betrouwbaarheidsverdeling: histogram per soort van detectiebetrouwbaarheid",
-          "axisLabel": "Confidence",
+          "axisLabel": "Zekerheid",
           "note": "Toont de {count} meest gedetecteerde soorten",
-          "tooltipCount": "Detections",
+          "tooltipCount": "Detecties",
           "tooltipPeak": "Hoogste betrouwbaarheid",
           "summary": "Verdeling van detectiebetrouwbaarheid voor {count} soorten. {species} ligt rond de {time} betrouwbaarheid."
         },

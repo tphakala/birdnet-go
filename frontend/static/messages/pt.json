@@ -1763,7 +1763,7 @@
       "outOfRangeHelp": "Fora do filtro de área (mostrado para diagnóstico, não guardado como deteção)",
       "peak": "pico",
       "activityActive": "Inferência ativa",
-      "activityIdle": "Idle",
+      "activityIdle": "Inativo",
       "throughput": "Taxa de transferência",
       "throughputUnit": "/s",
       "throughputChart": "Taxa de transferência (/s)",
@@ -2073,7 +2073,7 @@
           "summary": "Tempos de residência de chegada e partida para {species} espécies no período selecionado.",
           "tooltipFirst": "Primeira detecção",
           "tooltipLast": "Última detecção",
-          "tooltipResidency": "Residency",
+          "tooltipResidency": "Residência",
           "tooltipCount": "Detecções",
           "residencyDays": "{days} dias"
         },
@@ -2099,8 +2099,8 @@
           "ariaLabel": "Gráfico de quem canta quando: distribuição da atividade por hora do dia por espécie",
           "axisTime": "Hora do dia",
           "note": "Mostrando as {count} espécies com maior volume de detecção",
-          "tooltipDetections": "Detections",
-          "tooltipPeak": "Peak",
+          "tooltipDetections": "Detecções",
+          "tooltipPeak": "Pico",
           "summary": "Atividade por hora do dia para {count} espécies. Mais ativo: {species} por volta de {time}."
         },
         "succession": {
@@ -2151,9 +2151,9 @@
           "noData": "Nenhum dado de confiança disponível",
           "noDataHint": "Selecione um intervalo de datas mais amplo para comparar a confiança do modelo entre as espécies",
           "ariaLabel": "Distribuição de confiança: histograma de pontuações de confiança de detecção por espécie",
-          "axisLabel": "Confidence",
+          "axisLabel": "Confiança",
           "note": "Mostrando as {count} espécies com maior volume de detecção",
-          "tooltipCount": "Detections",
+          "tooltipCount": "Detecções",
           "tooltipPeak": "Confiança máxima",
           "summary": "Distribuição de confiança de detecção para {count} espécies. {species} agrupa-se em torno de uma confiança de {time}."
         },
@@ -3480,7 +3480,7 @@
         "mediaModeLabel": "Modo de mídia",
         "mediaModeHelp": "O fluxo completo solicita áudio e vídeo (o vídeo é descartado após a decodificação) e funciona com a maioria das câmeras. Auto tenta primeiro apenas áudio e recorre ao fluxo completo se a câmera não conseguir fornecer áudio sozinha. Apenas áudio nunca ocupa um slot de vídeo da câmera, mas falha se a câmera não conseguir fornecer a faixa de áudio por conta própria.",
         "mediaMode": {
-          "auto": "Auto",
+          "auto": "Automático",
           "audioOnly": "Apenas áudio",
           "fullStream": "Fluxo completo"
         },

@@ -1763,7 +1763,7 @@
       "outOfRangeHelp": "Ārpus apgabala filtra (rādīts diagnostikai, nav saglabāts kā atklājums)",
       "peak": "pīķis",
       "activityActive": "Secinājumi aktīvi",
-      "activityIdle": "Idle",
+      "activityIdle": "Dīkstāve",
       "throughput": "Caurlaidspēja",
       "throughputUnit": "/s",
       "throughputChart": "Caurlaidspēja (/s)",
@@ -2073,7 +2073,7 @@
           "summary": "Sugu ({species}) uzturēšanās intervāli izvēlētajā periodā.",
           "tooltipFirst": "Pirmais novērojums",
           "tooltipLast": "Pēdējais novērojums",
-          "tooltipResidency": "Residency",
+          "tooltipResidency": "Sastopamība",
           "tooltipCount": "Skaits",
           "residencyDays": "{days} dienas"
         },
@@ -2099,8 +2099,8 @@
           "ariaLabel": "Diagramma kurš kad dzied: sugu aktivitātes sadalījums pa diennakts stundām",
           "axisTime": "Diennakts laiks",
           "note": "Parāda top {count} sugas pēc noteikšanas apjoma",
-          "tooltipDetections": "Detections",
-          "tooltipPeak": "Peak",
+          "tooltipDetections": "Detekcijas",
+          "tooltipPeak": "Virsotne",
           "summary": "{count} sugu aktivitāte atkarībā no diennakts laika. Visaktīvākās: {species} ap {time}."
         },
         "succession": {
@@ -2151,9 +2151,9 @@
           "noData": "Pārliecības dati nav pieejami",
           "noDataHint": "Izvēlieties plašāku datumu diapazonu, lai salīdzinātu modeļa pārliecību starp sugām",
           "ariaLabel": "Pārliecības sadalījums: noteikšanas pārliecības rezultātu histogramma katrai sugai",
-          "axisLabel": "Confidence",
+          "axisLabel": "Pārliecība",
           "note": "Parāda top {count} sugas pēc noteikšanas apjoma",
-          "tooltipCount": "Detections",
+          "tooltipCount": "Detekcijas",
           "tooltipPeak": "Maksimālā pārliecība",
           "summary": "Noteikšanas pārliecības sadalījums {count} sugām. {species} grupējas ap {time} pārliecību."
         },
@@ -2941,7 +2941,7 @@
               },
               "password": {
                 "label": "Parole / Piekļuves tokens",
-                "placeholder": "tk_AgQdq7mVBoFD37zQVN29RioLJNGht"
+                "placeholder": "parole"
               }
             },
             "topic": {
@@ -3030,11 +3030,11 @@
             },
             "basicUser": {
               "label": "Lietotājvārds",
-              "placeholder": "username"
+              "placeholder": "lietotajs"
             },
             "basicPass": {
               "label": "Parole",
-              "placeholder": "password"
+              "placeholder": "parole"
             },
             "basicAuth": {
               "helpText": "Akreditācijas dati, kas nosūtīti, izmantojot HTTP pamata autentifikāciju"
@@ -4178,10 +4178,10 @@
           "tooltip": "Izmantojiet pogas zemāk vai ievadiet tieši (ar komatiem atdalīti)",
           "availableTitle": "Pieejamie parametri",
           "buttons": {
-            "commonName": "CommonName",
-            "scientificName": "ScientificName",
-            "confidence": "Confidence",
-            "time": "Time",
+            "commonName": "Parastais nosaukums",
+            "scientificName": "Zinātniskais nosaukums",
+            "confidence": "Pārliecība",
+            "time": "Laiks",
             "source": "Source",
             "clearParameters": "Notīrīt parametrus"
           }

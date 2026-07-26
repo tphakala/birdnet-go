@@ -1763,7 +1763,7 @@
       "outOfRangeHelp": "Mimo oblastní filtr (zobrazeno pro diagnostiku, neuloženo jako detekce)",
       "peak": "špička",
       "activityActive": "Inference aktivní",
-      "activityIdle": "Idle",
+      "activityIdle": "Nečinný",
       "throughput": "Propustnost",
       "throughputUnit": "/s",
       "throughputChart": "Propustnost (/s)",
@@ -2073,7 +2073,7 @@
           "summary": "Rozpětí příletů a odletů pro {species} druhů za vybrané období.",
           "tooltipFirst": "První detekce",
           "tooltipLast": "Poslední detekce",
-          "tooltipResidency": "Residency",
+          "tooltipResidency": "Výskyt",
           "tooltipCount": "Detekce",
           "residencyDays": "{days} dní"
         },
@@ -2099,8 +2099,8 @@
           "ariaLabel": "Graf kdo kdy zpívá: rozložení aktivity druhů podle denní doby",
           "axisTime": "Denní doba",
           "note": "Zobrazení top {count} druhů podle objemu detekcí",
-          "tooltipDetections": "Detections",
-          "tooltipPeak": "Peak",
+          "tooltipDetections": "Detekce",
+          "tooltipPeak": "Vrchol",
           "summary": "Aktivita v závislosti na denní době pro {count} druhů. Nejaktivnější: {species} kolem {time}."
         },
         "succession": {
@@ -2151,9 +2151,9 @@
           "noData": "Nejsou k dispozici žádná data o spolehlivosti",
           "noDataHint": "Vyberte širší časové období pro porovnání spolehlivosti modelu napříč druhy",
           "ariaLabel": "Rozložení spolehlivosti: histogram skóre spolehlivosti detekcí pro každý druh",
-          "axisLabel": "Confidence",
+          "axisLabel": "Spolehlivost",
           "note": "Zobrazení top {count} druhů podle objemu detekcí",
-          "tooltipCount": "Detections",
+          "tooltipCount": "Detekce",
           "tooltipPeak": "Maximální spolehlivost",
           "summary": "Rozložení spolehlivosti detekcí pro {count} druhů. {species} se shlukuje kolem spolehlivosti {time}."
         },
@@ -2941,7 +2941,7 @@
               },
               "password": {
                 "label": "Heslo / Přístupový token",
-                "placeholder": "tk_AgQdq7mVBoFD37zQVN29RioLJNGht"
+                "placeholder": "heslo"
               }
             },
             "topic": {
@@ -3030,7 +3030,7 @@
             },
             "basicUser": {
               "label": "Uživatelské jméno",
-              "placeholder": "username"
+              "placeholder": "uzivatel"
             },
             "basicPass": {
               "label": "Heslo",
@@ -4178,10 +4178,10 @@
           "tooltip": "Použijte tlačítka níže nebo zadejte přímo (oddělené čárkou)",
           "availableTitle": "Dostupné parametry",
           "buttons": {
-            "commonName": "CommonName",
-            "scientificName": "ScientificName",
-            "confidence": "Confidence",
-            "time": "Time",
+            "commonName": "Běžný název",
+            "scientificName": "Vědecký název",
+            "confidence": "Spolehlivost",
+            "time": "Čas",
             "source": "Source",
             "clearParameters": "Vymazat parametry"
           }

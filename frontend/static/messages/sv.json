@@ -1763,7 +1763,7 @@
       "outOfRangeHelp": "Utanför områdesfiltret (visas för diagnostik, sparas inte som detektering)",
       "peak": "topp",
       "activityActive": "Inferens aktiv",
-      "activityIdle": "Idle",
+      "activityIdle": "Inaktiv",
       "throughput": "Genomströmning",
       "throughputUnit": "/s",
       "throughputChart": "Genomströmning (/s)",
@@ -2073,7 +2073,7 @@
           "summary": "Ankomst och avfärd för {species} arter över den valda perioden.",
           "tooltipFirst": "Först detekterad",
           "tooltipLast": "Senast detekterad",
-          "tooltipResidency": "Residency",
+          "tooltipResidency": "Vistelse",
           "tooltipCount": "Detektioner",
           "residencyDays": "{days} dagar"
         },
@@ -2099,8 +2099,8 @@
           "ariaLabel": "Aktivitetsdiagram: aktivitetsfördelning per timme och art",
           "axisTime": "Tid på dygnet",
           "note": "Visar de {count} mest upptäckta arterna",
-          "tooltipDetections": "Detections",
-          "tooltipPeak": "Peak",
+          "tooltipDetections": "Detektioner",
+          "tooltipPeak": "Topp",
           "summary": "Aktivitet per timme för {count} arter. Mest aktiv: {species} runt {time}."
         },
         "succession": {
@@ -2151,9 +2151,9 @@
           "noData": "Ingen konfidensdata tillgänglig",
           "noDataHint": "Välj ett bredare datumintervall för att jämföra modellens konfidens mellan olika arter",
           "ariaLabel": "Konfidensfördelning: histogram per art av detekteringens konfidensvärden",
-          "axisLabel": "Confidence",
+          "axisLabel": "Konfidens",
           "note": "Visar de {count} mest upptäckta arterna",
-          "tooltipCount": "Detections",
+          "tooltipCount": "Detektioner",
           "tooltipPeak": "Högsta konfidens",
           "summary": "Fördelning av detekteringskonfidens för {count} arter. {species} ligger runt {time} konfidens."
         },
@@ -3030,11 +3030,11 @@
             },
             "basicUser": {
               "label": "Användarnamn",
-              "placeholder": "username"
+              "placeholder": "användarnamn"
             },
             "basicPass": {
               "label": "Lösenord",
-              "placeholder": "password"
+              "placeholder": "lösenord"
             },
             "basicAuth": {
               "helpText": "Autentiseringsuppgifter skickas via HTTP Basic Authentication"

@@ -1763,7 +1763,7 @@
       "outOfRangeHelp": "Poza filtrem zasięgu (pokazane do diagnostyki, niezapisane jako wykrycie)",
       "peak": "szczyt",
       "activityActive": "Wnioskowanie aktywne",
-      "activityIdle": "Idle",
+      "activityIdle": "Bezczynny",
       "throughput": "Przepustowość",
       "throughputUnit": "/s",
       "throughputChart": "Przepustowość (/s)",
@@ -2073,7 +2073,7 @@
           "summary": "Czas pobytu dla {species} gatunków w wybranym okresie.",
           "tooltipFirst": "Pierwsza detekcja",
           "tooltipLast": "Ostatnia detekcja",
-          "tooltipResidency": "Residency",
+          "tooltipResidency": "Występowanie",
           "tooltipCount": "Detekcje",
           "residencyDays": "{days} dni"
         },
@@ -2099,8 +2099,8 @@
           "ariaLabel": "Wykres kto kiedy śpiewa: rozkład aktywności gatunków w zależności od pory dnia",
           "axisTime": "Pora dnia",
           "note": "Wyświetlanie top {count} gatunków według liczby detekcji",
-          "tooltipDetections": "Detections",
-          "tooltipPeak": "Peak",
+          "tooltipDetections": "Wykrycia",
+          "tooltipPeak": "Szczyt",
           "summary": "Aktywność {count} gatunków w zależności od pory dnia. Najaktywniejsze: {species} około {time}."
         },
         "succession": {
@@ -2151,9 +2151,9 @@
           "noData": "Brak danych o pewności",
           "noDataHint": "Wybierz szerszy zakres dat, aby porównać pewność modelu dla różnych gatunków",
           "ariaLabel": "Rozkład pewności: histogram wyników pewności detekcji dla każdego gatunku",
-          "axisLabel": "Confidence",
+          "axisLabel": "Pewność",
           "note": "Wyświetlanie top {count} gatunków według liczby detekcji",
-          "tooltipCount": "Detections",
+          "tooltipCount": "Wykrycia",
           "tooltipPeak": "Maksymalna pewność",
           "summary": "Rozkład pewności detekcji dla {count} gatunków. {species} skupia się wokół pewności {time}."
         },
@@ -2941,7 +2941,7 @@
               },
               "password": {
                 "label": "Hasło / Token dostępu",
-                "placeholder": "tk_AgQdq7mVBoFD37zQVN29RioLJNGht"
+                "placeholder": "hasło"
               }
             },
             "topic": {
@@ -3030,7 +3030,7 @@
             },
             "basicUser": {
               "label": "Nazwa użytkownika",
-              "placeholder": "username"
+              "placeholder": "użytkownik"
             },
             "basicPass": {
               "label": "Hasło",

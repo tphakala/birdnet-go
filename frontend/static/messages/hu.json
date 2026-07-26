@@ -1171,7 +1171,7 @@
       "database": "Adatbázis",
       "inference": "AI Modellek",
       "terminal": "Terminál",
-      "importExport": "Import / Export"
+      "importExport": "Importálás / Exportálás"
     },
     "importExport": {
       "available": "Elérhető",
@@ -1763,7 +1763,7 @@
       "outOfRangeHelp": "A területszűrőn kívül (diagnosztikához megjelenítve, nem mentve észlelésként)",
       "peak": "csúcs",
       "activityActive": "Következtetés aktív",
-      "activityIdle": "Idle",
+      "activityIdle": "Tétlen",
       "throughput": "Áteresztőképesség",
       "throughputUnit": "/s",
       "throughputChart": "Áteresztőképesség (/s)",
@@ -2073,7 +2073,7 @@
           "summary": "Érkezési és indulási időszakok {species} faj esetén.",
           "tooltipFirst": "Első észlelés",
           "tooltipLast": "Utolsó észlelés",
-          "tooltipResidency": "Residency",
+          "tooltipResidency": "Előfordulás",
           "tooltipCount": "Észlelések",
           "residencyDays": "{days} nap"
         },
@@ -2099,8 +2099,8 @@
           "ariaLabel": "Ki mikor énekel grafikon: fajonkénti aktivitásmegoszlás a napszak függvényében",
           "axisTime": "Napszak",
           "note": "A top {count} faj megjelenítése az észlelések száma alapján",
-          "tooltipDetections": "Detections",
-          "tooltipPeak": "Peak",
+          "tooltipDetections": "Észlelések",
+          "tooltipPeak": "Csúcs",
           "summary": "{count} faj aktivitása a napszak függvényében. Legaktívabb: {species} {time} körül."
         },
         "succession": {
@@ -2151,9 +2151,9 @@
           "noData": "Nem állnak rendelkezésre megbízhatósági adatok",
           "noDataHint": "Válasszon tágabb dátumtartományt a modell megbízhatóságának összehasonlításához a fajok között",
           "ariaLabel": "Megbízhatóság eloszlása: észlelési megbízhatósági pontszámok hisztogramja fajonként",
-          "axisLabel": "Confidence",
+          "axisLabel": "Megbízhatóság",
           "note": "A top {count} faj megjelenítése az észlelések száma alapján",
-          "tooltipCount": "Detections",
+          "tooltipCount": "Észlelések",
           "tooltipPeak": "Maximális megbízhatóság",
           "summary": "Észlelésmegbízhatósági eloszlás {count} fajnál. A(z) {species} {time} megbízhatóság körül csoportosul."
         },
@@ -2941,7 +2941,7 @@
               },
               "password": {
                 "label": "Jelszó / Hozzáférési token",
-                "placeholder": "tk_AgQdq7mVBoFD37zQVN29RioLJNGht"
+                "placeholder": "jelszó"
               }
             },
             "topic": {
@@ -3030,11 +3030,11 @@
             },
             "basicUser": {
               "label": "Felhasználónév",
-              "placeholder": "username"
+              "placeholder": "felhasználónév"
             },
             "basicPass": {
               "label": "Jelszó",
-              "placeholder": "password"
+              "placeholder": "jelszó"
             },
             "basicAuth": {
               "helpText": "Hitelesítési adatok HTTP Basic hitelesítéssel küldve"

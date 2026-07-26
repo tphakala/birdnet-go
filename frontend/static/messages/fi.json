@@ -1763,7 +1763,7 @@
       "outOfRangeHelp": "Aluesuodattimen ulkopuolella (näytetään diagnostiikkaa varten, ei tallenneta havaintona)",
       "peak": "huippu",
       "activityActive": "Inferenssi aktiivinen",
-      "activityIdle": "Idle",
+      "activityIdle": "Valmiustila",
       "throughput": "Suoritusteho",
       "throughputUnit": "/s",
       "throughputChart": "Suoritusteho (/s)",
@@ -2073,7 +2073,7 @@
           "summary": "Saapumis- ja lähtöoleskeluvälit {species} lajille valitulla ajanjaksolla.",
           "tooltipFirst": "Ensimmäinen havainto",
           "tooltipLast": "Viimeinen havainto",
-          "tooltipResidency": "Residency",
+          "tooltipResidency": "Paikallisuus",
           "tooltipCount": "Havainnot",
           "residencyDays": "{days} päivää"
         },
@@ -2099,8 +2099,8 @@
           "ariaLabel": "Aktiivisuusaikajana: vuorokaudenaikainen aktiivisuusjakauma lajeittain",
           "axisTime": "Vuorokaudenaika",
           "note": "Näytetään {count} havaittuinta lajia",
-          "tooltipDetections": "Detections",
-          "tooltipPeak": "Peak",
+          "tooltipDetections": "Havainnot",
+          "tooltipPeak": "Huippu",
           "summary": "Vuorokaudenaikainen aktiivisuus {count} lajille. Aktiivisin: {species} noin klo {time}."
         },
         "succession": {
@@ -2151,9 +2151,9 @@
           "noData": "Varmuustietoja ei ole saatavilla",
           "noDataHint": "Valitse laajempi ajanjakso vertaillaksesi mallin varmuutta eri lajien välillä",
           "ariaLabel": "Varmuusjakauma: lajikohtainen histogrammi havaintojen varmuuspisteistä",
-          "axisLabel": "Confidence",
+          "axisLabel": "Varmuus",
           "note": "Näytetään {count} havaittuinta lajia",
-          "tooltipCount": "Detections",
+          "tooltipCount": "Havainnot",
           "tooltipPeak": "Huippuvarmuus",
           "summary": "Havaintojen varmuusjakauma {count} lajille. {species} keskittyy {time} varmuuden ympärille."
         },
@@ -3030,11 +3030,11 @@
             },
             "basicUser": {
               "label": "Käyttäjänimi",
-              "placeholder": "username"
+              "placeholder": "käyttäjätunnus"
             },
             "basicPass": {
               "label": "Salasana",
-              "placeholder": "password"
+              "placeholder": "salasana"
             },
             "basicAuth": {
               "helpText": "Tunnistetiedot lähetetään HTTP-perustunnistautumisella"
@@ -4824,7 +4824,7 @@
         "addNewStream": "Lisää uusi RTSP-striimi",
         "maxStreamsReached": "RTSP-striimien enimmäismäärä ({max}) saavutettu.",
         "cameraPlaceholder": "Kamera 1",
-        "urlPlaceholder": "rtsp://username:password@192.168.1.100:554/stream"
+        "urlPlaceholder": "rtsp://kayttaja:salasana@192.168.1.100:554/stream"
       },
       "subnet": {
         "maxSubnetsReached": "Aliverkkojen enimmäismäärä ({max}) saavutettu."
@@ -5123,7 +5123,7 @@
         "deviceLoading": "Ladataan äänilaitteita...",
         "noDevicesFound": "Äänilaitteita ei havaittu. Kokeile RTSP-lähetyksen määritystä.",
         "rtspUrlLabel": "Lähetyksen URL",
-        "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
+        "rtspUrlPlaceholder": "rtsp://kayttaja:salasana@host:port/stream",
         "rtspUrlHelp": "Syötä RTSP-äänilähetyksesi URL",
         "additionalSourcesHint": "Voit lisätä äänilähteitä myöhemmin Asetuksissa.",
         "configureLater": "Ohita - määritä myöhemmin"

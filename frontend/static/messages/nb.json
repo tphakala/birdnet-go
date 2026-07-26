@@ -1763,7 +1763,7 @@
       "outOfRangeHelp": "Utenfor områdefilteret (vist for diagnostikk, ikke lagret som deteksjon)",
       "peak": "topp",
       "activityActive": "Inferens aktiv",
-      "activityIdle": "Idle",
+      "activityIdle": "Inaktiv",
       "throughput": "Gjennomstrømming",
       "throughputUnit": "/s",
       "throughputChart": "Gjennomstrømming (/s)",
@@ -2073,7 +2073,7 @@
           "summary": "Oppholdsspenn for {species} arter.",
           "tooltipFirst": "Først detektert",
           "tooltipLast": "Sist detektert",
-          "tooltipResidency": "Residency",
+          "tooltipResidency": "Opphold",
           "tooltipCount": "Deteksjoner",
           "residencyDays": "{days} dager"
         },
@@ -2099,8 +2099,8 @@
           "ariaLabel": "Aktivitetsdiagram: fordeling av aktivitet per time for hver art",
           "axisTime": "Tid på dagen",
           "note": "Viser de {count} mest oppdagede artene",
-          "tooltipDetections": "Detections",
-          "tooltipPeak": "Peak",
+          "tooltipDetections": "Deteksjoner",
+          "tooltipPeak": "Topp",
           "summary": "Aktivitet per time for {count} arter. Mest aktiv: {species} rundt {time}."
         },
         "succession": {
@@ -2151,9 +2151,9 @@
           "noData": "Ingen konfidensdata tilgjengelig",
           "noDataHint": "Velg et bredere datointervall for å sammenligne modellens konfidens på tvers av arter",
           "ariaLabel": "Konfidensfordeling: histogram per art av deteksjonskonfidens",
-          "axisLabel": "Confidence",
+          "axisLabel": "Konfidens",
           "note": "Viser de {count} mest oppdagede artene",
-          "tooltipCount": "Detections",
+          "tooltipCount": "Deteksjoner",
           "tooltipPeak": "Høyeste konfidens",
           "summary": "Fordeling av deteksjonskonfidens for {count} arter. {species} ligger rundt {time} konfidens."
         },

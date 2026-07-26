@@ -297,7 +297,7 @@
     "taxonomyDataTitle": "Datos de taxonomía",
     "taxonomyDataIntro": "BirdNET-Go incluye datos de taxonomía de aves incorporados derivados de la lista eBird/Clements, proporcionando búsquedas locales rápidas por género y familia.",
     "source": "Fuente",
-    "ebirdApiV2": "eBird API v2",
+    "ebirdApiV2": "API de eBird v2",
     "copyright": "Derechos de autor",
     "coverage": "Cobertura",
     "taxonomyCoverage": "2374 géneros, 254 familias, 11 145 especies",
@@ -1423,7 +1423,7 @@
           "bufferPoolHitRate": "Tasa de aciertos del buffer pool",
           "bufferPoolSize": "Tamaño del buffer pool",
           "lockWaits": "Esperas de bloqueo",
-          "deadlocks": "Deadlocks",
+          "deadlocks": "Bloqueos (Deadlocks)",
           "avgLockWait": "Espera prom. de bloqueo",
           "tableLocksWaited": "Bloqueos de tabla esperados",
           "tableLocksImmediate": "Bloqueos de tabla inmediatos"
@@ -1763,7 +1763,7 @@
       "outOfRangeHelp": "Fuera del filtro de rango (mostrado para diagnóstico, no guardado como detección)",
       "peak": "pico",
       "activityActive": "Inferencia activa",
-      "activityIdle": "Idle",
+      "activityIdle": "Inactivo",
       "throughput": "Rendimiento",
       "throughputUnit": "/s",
       "throughputChart": "Rendimiento (/s)",
@@ -2073,8 +2073,8 @@
           "summary": "Tiempos de residencia de llegada y salida para {species} especies durante el período seleccionado.",
           "tooltipFirst": "Primera detección",
           "tooltipLast": "Última detección",
-          "tooltipResidency": "Residency",
-          "tooltipCount": "Detections",
+          "tooltipResidency": "Residencia",
+          "tooltipCount": "Detecciones",
           "residencyDays": "{days} días"
         },
         "heatmap": {
@@ -2099,8 +2099,8 @@
           "ariaLabel": "Gráfico de quién canta cuándo: distribución de actividad por hora del día por especie",
           "axisTime": "Hora del día",
           "note": "Mostrando las {count} especies con mayor volumen de detección",
-          "tooltipDetections": "Detections",
-          "tooltipPeak": "Peak",
+          "tooltipDetections": "Detecciones",
+          "tooltipPeak": "Pico",
           "summary": "Actividad por hora del día para {count} especies. Más activo: {species} alrededor de las {time}."
         },
         "succession": {
@@ -2128,7 +2128,7 @@
           "tooltipOnsetAfter": "{minutes} min después del amanecer civil",
           "tooltipOnsetBefore": "{minutes} min antes del amanecer civil",
           "tooltipOnsetAt": "En el amanecer civil",
-          "tooltipCount": "Detections",
+          "tooltipCount": "Detecciones",
           "summary": "Inicio del coro del amanecer en relación con el amanecer civil a lo largo de {days} días ({plotted} con un inicio medible)."
         },
         "nocturnal": {
@@ -2151,9 +2151,9 @@
           "noData": "No hay datos de confianza disponibles",
           "noDataHint": "Seleccione un rango de fechas más amplio para comparar la confianza del modelo entre especies",
           "ariaLabel": "Distribución de confianza: histograma de puntuaciones de confianza de detección por especie",
-          "axisLabel": "Confidence",
+          "axisLabel": "Confianza",
           "note": "Mostrando las {count} especies con mayor volumen de detección",
-          "tooltipCount": "Detections",
+          "tooltipCount": "Detecciones",
           "tooltipPeak": "Confianza máxima",
           "summary": "Distribución de confianza de detección para {count} especies. {species} se agrupa en torno a una confianza de {time}."
         },
@@ -3025,16 +3025,16 @@
             },
             "bearerToken": {
               "label": "Token Bearer",
-              "placeholder": "your-api-token",
+              "placeholder": "su-token-api",
               "helpText": "Token enviado en el encabezado Authorization: Bearer"
             },
             "basicUser": {
               "label": "Nombre de usuario",
-              "placeholder": "username"
+              "placeholder": "usuario"
             },
             "basicPass": {
               "label": "Contraseña",
-              "placeholder": "password"
+              "placeholder": "contraseña"
             },
             "basicAuth": {
               "helpText": "Credenciales enviadas mediante autenticación HTTP básica"
@@ -3047,7 +3047,7 @@
             "name": "URL personalizada",
             "url": {
               "label": "URL de Shoutrrr",
-              "placeholder": "service://credentials@host",
+              "placeholder": "service://credenciales@host",
               "helpText": "Ingresa una URL de Shoutrrr para cualquier servicio compatible"
             },
             "invalidUrl": "Formato de URL no válido. La URL debe comenzar con service://"
@@ -3480,7 +3480,7 @@
         "mediaModeLabel": "Modo de medios",
         "mediaModeHelp": "El flujo completo solicita audio y vídeo (el vídeo se descarta tras la decodificación) y funciona con la mayoría de las cámaras. Auto intenta primero solo audio y recurre al flujo completo si la cámara no puede entregar audio por sí sola. Solo audio nunca ocupa una ranura de vídeo de la cámara, pero falla si la cámara no puede entregar la pista de audio por sí misma.",
         "mediaMode": {
-          "auto": "Auto",
+          "auto": "Automático",
           "audioOnly": "Solo audio",
           "fullStream": "Flujo completo"
         },

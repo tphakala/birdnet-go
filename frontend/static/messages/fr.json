@@ -1423,7 +1423,7 @@
           "bufferPoolHitRate": "Taux de succès du buffer pool",
           "bufferPoolSize": "Taille du buffer pool",
           "lockWaits": "Attentes de verrou",
-          "deadlocks": "Deadlocks",
+          "deadlocks": "Blocages (Deadlocks)",
           "avgLockWait": "Attente moy. de verrou",
           "tableLocksWaited": "Verrous de table en attente",
           "tableLocksImmediate": "Verrous de table immédiats"
@@ -1763,7 +1763,7 @@
       "outOfRangeHelp": "Hors du filtre de zone (affiché pour diagnostic, non enregistré comme détection)",
       "peak": "pic",
       "activityActive": "Inférence active",
-      "activityIdle": "Idle",
+      "activityIdle": "Inactif",
       "throughput": "Débit",
       "throughputUnit": "/s",
       "throughputChart": "Débit (/s)",
@@ -2073,7 +2073,7 @@
           "summary": "Durées de résidence d'arrivée et de départ pour {species} espèces sur la période sélectionnée.",
           "tooltipFirst": "Première détection",
           "tooltipLast": "Dernière détection",
-          "tooltipResidency": "Residency",
+          "tooltipResidency": "Résidence",
           "tooltipCount": "Détections",
           "residencyDays": "{days} jours"
         },
@@ -2099,8 +2099,8 @@
           "ariaLabel": "Graphique de qui chante quand : distribution de l'activité par heure de la journée par espèce",
           "axisTime": "Heure de la journée",
           "note": "Affichage des {count} espèces les plus détectées",
-          "tooltipDetections": "Detections",
-          "tooltipPeak": "Peak",
+          "tooltipDetections": "Détections",
+          "tooltipPeak": "Pic",
           "summary": "Activité par heure de la journée pour {count} espèces. Plus actif : {species} vers {time}."
         },
         "succession": {
@@ -2151,9 +2151,9 @@
           "noData": "Aucune donnée de confiance disponible",
           "noDataHint": "Sélectionnez une plage de dates plus large pour comparer la confiance du modèle entre les espèces",
           "ariaLabel": "Distribution de la confiance : histogramme des scores de confiance de détection par espèce",
-          "axisLabel": "Confidence",
+          "axisLabel": "Confiance",
           "note": "Affichage des {count} espèces les plus détectées",
-          "tooltipCount": "Detections",
+          "tooltipCount": "Détections",
           "tooltipPeak": "Confiance maximale",
           "summary": "Distribution de la confiance de détection pour {count} espèces. {species} se concentre autour d'une confiance de {time}."
         },
@@ -3025,16 +3025,16 @@
             },
             "bearerToken": {
               "label": "Token Bearer",
-              "placeholder": "your-api-token",
+              "placeholder": "votre-jeton-api",
               "helpText": "Token envoyé dans l'en-tête Authorization: Bearer"
             },
             "basicUser": {
               "label": "Nom d'utilisateur",
-              "placeholder": "username"
+              "placeholder": "utilisateur"
             },
             "basicPass": {
               "label": "Mot de passe",
-              "placeholder": "password"
+              "placeholder": "mot-de-passe"
             },
             "basicAuth": {
               "helpText": "Identifiants envoyés via l'authentification HTTP basique"
@@ -3047,7 +3047,7 @@
             "name": "URL personnalisée",
             "url": {
               "label": "URL Shoutrrr",
-              "placeholder": "service://credentials@host",
+              "placeholder": "service://identifiants@hôte",
               "helpText": "Entrez une URL Shoutrrr pour tout service pris en charge"
             },
             "invalidUrl": "Format d'URL invalide. L'URL doit commencer par service://"

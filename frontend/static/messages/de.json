@@ -1763,7 +1763,7 @@
       "outOfRangeHelp": "Außerhalb des Bereichsfilters (zur Diagnose angezeigt, nicht als Erkennung gespeichert)",
       "peak": "Peak",
       "activityActive": "Inferenz aktiv",
-      "activityIdle": "Idle",
+      "activityIdle": "Leerlauf",
       "throughput": "Durchsatz",
       "throughputUnit": "/s",
       "throughputChart": "Durchsatz (/s)",
@@ -2073,7 +2073,7 @@
           "summary": "Ankunfts- und Abfahrtsspannen für {species} Arten.",
           "tooltipFirst": "Zuerst erkannt",
           "tooltipLast": "Zuletzt erkannt",
-          "tooltipResidency": "Residency",
+          "tooltipResidency": "Vorkommen",
           "tooltipCount": "Erkennungen",
           "residencyDays": "{days} Tage"
         },
@@ -2099,8 +2099,8 @@
           "ariaLabel": "Aktivitätsdiagramm: Aktivitätsverteilung pro Tagesstunde nach Art",
           "axisTime": "Tageszeit",
           "note": "Zeigt die {count} am häufigsten erkannten Arten",
-          "tooltipDetections": "Detections",
-          "tooltipPeak": "Peak",
+          "tooltipDetections": "Erkennungen",
+          "tooltipPeak": "Höhepunkt",
           "summary": "Stündliche Aktivität für {count} Arten. Am aktivsten: {species} gegen {time} Uhr."
         },
         "succession": {
@@ -2151,9 +2151,9 @@
           "noData": "Keine Konfidenzdaten verfügbar",
           "noDataHint": "Wählen Sie einen größeren Datumsbereich, um die Konfidenz des Modells über verschiedene Arten hinweg zu vergleichen",
           "ariaLabel": "Konfidenzverteilung: Histogramm der Erkennungskonfidenzwerte nach Art",
-          "axisLabel": "Confidence",
+          "axisLabel": "Konfidenz",
           "note": "Zeigt die {count} am häufigsten erkannten Arten",
-          "tooltipCount": "Detections",
+          "tooltipCount": "Erkennungen",
           "tooltipPeak": "Höchste Konfidenz",
           "summary": "Verteilung der Erkennungskonfidenz für {count} Arten. {species} konzentriert sich um {time} Konfidenz."
         },
