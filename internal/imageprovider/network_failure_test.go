@@ -262,3 +262,45 @@ func TestCircuitBreakerNetworkDuration(t *testing.T) {
 	assert.Equal(t, 2*time.Minute, circuitBreakerNetworkDuration,
 		"network circuit breaker duration should be 2 minutes")
 }
+
+// TestQueryWithNonPositiveMaxRetriesReturnsError covers the guard added for a
+// non-positive maxRetries.
+//
+// Without it the loop body never runs, lastErr stays nil, and the post-loop error
+// construction dereferences it: buildRetryExhaustedError calls lastErr.Error() and
+// logAPIError does the same, so the call panics rather than returning. Production always
+// sets defaultMaxRetries, but the provider is a plain struct that tests construct
+// directly, so a zero value is one forgotten field away.
+func TestQueryWithNonPositiveMaxRetriesReturnsError(t *testing.T) {
+	t.Parallel()
+
+	for _, maxRetries := range []int{0, -1} {
+		t.Run(fmt.Sprintf("maxRetries=%d", maxRetries), func(t *testing.T) {
+			t.Parallel()
+
+			rt := &statusRoundTripper{status: http.StatusOK}
+			provider := &wikiMediaProvider{
+				httpClient:    &http.Client{Transport: rt},
+				userAgent:     buildUserAgent("test"),
+				maxRetries:    maxRetries,
+				globalLimiter: rate.NewLimiter(rate.Inf, 1),
+			}
+
+			// require.NotPanics is the assertion that matters: the pre-guard code
+			// panicked here rather than returning.
+			var (
+				resp *wikiAPIResponse
+				err  error
+			)
+			require.NotPanics(t, func() {
+				resp, err = provider.queryWithRetryAndLimiter(t.Context(), "test-maxretries",
+					map[string]string{"action": "query", "titles": "Parus major"}, nil)
+			})
+
+			require.Error(t, err, "a non-positive maxRetries must be reported, not silently ignored")
+			assert.Nil(t, resp)
+			assert.Contains(t, err.Error(), "maxRetries")
+			assert.Zero(t, rt.calls.Load(), "no request should be attempted with a non-positive retry count")
+		})
+	}
+}
