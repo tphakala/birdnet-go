@@ -147,17 +147,22 @@ func NewSSEDetectionData(note *datastore.Note, birdImage *imageprovider.BirdImag
 		}
 	}
 
-	// Map bird image with proper camelCase tags
+	// The image URL always points at the media proxy, never at the upstream host.
+	// The proxy is the only URL whose availability this process controls, and it is
+	// the same URL every REST producer emits, so a species cannot render on one
+	// surface and fail on another. It is set unconditionally: the attribution
+	// metadata below may be absent while the image itself is still being resolved in
+	// the background, and an empty URL would make the client give up permanently.
+	det.BirdImage = SSEBirdImage{
+		URL:            imageprovider.ProxyImageURL(note.ScientificName),
+		ScientificName: note.ScientificName,
+	}
 	if birdImage != nil {
-		det.BirdImage = SSEBirdImage{
-			URL:            birdImage.URL,
-			ScientificName: birdImage.ScientificName,
-			LicenseName:    birdImage.LicenseName,
-			LicenseURL:     birdImage.LicenseURL,
-			AuthorName:     birdImage.AuthorName,
-			AuthorURL:      birdImage.AuthorURL,
-			SourceProvider: birdImage.SourceProvider,
-		}
+		det.BirdImage.LicenseName = birdImage.LicenseName
+		det.BirdImage.LicenseURL = birdImage.LicenseURL
+		det.BirdImage.AuthorName = birdImage.AuthorName
+		det.BirdImage.AuthorURL = birdImage.AuthorURL
+		det.BirdImage.SourceProvider = birdImage.SourceProvider
 	}
 
 	return det

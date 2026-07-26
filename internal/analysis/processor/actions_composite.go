@@ -122,9 +122,17 @@ func buildTimeoutError(action Action, timeout time.Duration, step, total int) er
 		Build()
 }
 
-// getBirdImageFromCache retrieves a bird image from cache with proper error handling and logging.
-// This helper consolidates duplicate image retrieval logic used by MqttAction and SSEAction.
-// Returns an empty BirdImage if the cache is nil or if retrieval fails.
+// getBirdImageFromCache retrieves already-cached bird image metadata for MqttAction
+// and SSEAction. Returns an empty BirdImage if the cache is nil or nothing is cached
+// yet, in which case a background fetch is scheduled for the next detection.
+//
+// This deliberately does NOT fetch on the caller's goroutine. Both callers run inside
+// the CompositeAction that chains Database -> SSE -> MQTT under a 30s timeout, and a
+// cold species can take minutes to resolve through the provider chain. Audio export
+// was moved out of this CompositeAction for exactly this reason (see the note in
+// actions_database.go; Sentry BIRDNET-GO-WD); the image lookup was the same hazard
+// left behind. Attribution metadata is best-effort here: the URL the consumers
+// publish is the media-proxy URL, which does not depend on this lookup succeeding.
 func getBirdImageFromCache(cache *imageprovider.BirdImageCache, scientificName, commonName, correlationID string) imageprovider.BirdImage {
 	if cache == nil {
 		GetLogger().Warn("BirdImageCache is nil, cannot fetch image",
@@ -135,18 +143,14 @@ func getBirdImageFromCache(cache *imageprovider.BirdImageCache, scientificName, 
 		return imageprovider.BirdImage{}
 	}
 
-	birdImage, err := cache.Get(scientificName)
-	if err != nil {
-		GetLogger().Warn("Error getting bird image from cache",
-			logger.String("detection_id", correlationID),
-			logger.Error(err),
-			logger.String("species", commonName),
-			logger.String("scientific_name", scientificName),
-			logger.String("operation", "get_bird_image"))
-		return imageprovider.BirdImage{}
+	birdImage, found, negative := cache.GetCached(scientificName)
+	if found {
+		return birdImage
 	}
-
-	return birdImage
+	if !negative {
+		cache.PrefetchAsync(scientificName)
+	}
+	return imageprovider.BirdImage{}
 }
 
 // Execute runs all actions sequentially, stopping on first error

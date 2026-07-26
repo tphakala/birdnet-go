@@ -173,7 +173,7 @@ func TestPublishDetectionEvent_OrdinaryDetection(t *testing.T) {
 		CorrelationID: "test-ordinary-det",
 	}
 
-	action.publishDetectionEvent(false, 30, species.NoveltyStatus{})
+	action.publishDetectionEvent(t.Context(), false, 30, species.NoveltyStatus{})
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		received := consumer.GetReceivedEvents()
@@ -201,7 +201,7 @@ func TestPublishDetectionEvent_InactiveNoveltyOmitsEpisodeSentinel(t *testing.T)
 		CorrelationID: "test-inactive-novelty",
 	}
 
-	action.publishDetectionEvent(false, 30, species.NoveltyStatus{
+	action.publishDetectionEvent(t.Context(), false, 30, species.NoveltyStatus{
 		DaysSinceLastSeen:    0,
 		NoveltyEpisodeDays:   inactiveNoveltyEpisodeDays,
 		NoveltyEpisodeActive: false,
@@ -229,7 +229,7 @@ func TestPublishDetectionEvent_ActiveNoveltyIncludesSameDayLastSeen(t *testing.T
 	}
 
 	episodeStart := time.Date(2026, 5, 23, 8, 0, 0, 0, time.UTC)
-	action.publishDetectionEvent(false, 30, species.NoveltyStatus{
+	action.publishDetectionEvent(t.Context(), false, 30, species.NoveltyStatus{
 		DaysSinceLastSeen:    0,
 		NoveltyEpisodeDays:   12,
 		NoveltyEpisodeStart:  episodeStart,
@@ -259,7 +259,7 @@ func TestPublishDetectionEvent_NewSpecies(t *testing.T) {
 		CorrelationID: "test-new-species-det",
 	}
 
-	action.publishDetectionEvent(true, 0, species.NoveltyStatus{})
+	action.publishDetectionEvent(t.Context(), true, 0, species.NoveltyStatus{})
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		received := consumer.GetReceivedEvents()
@@ -305,7 +305,7 @@ func TestPublishDetectionEvent_SuppressedNewSpecies(t *testing.T) {
 		NewSpeciesTracker: tracker,
 	}
 
-	action.publishDetectionEvent(true, 0, species.NoveltyStatus{})
+	action.publishDetectionEvent(t.Context(), true, 0, species.NoveltyStatus{})
 
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		received := consumer.GetReceivedEvents()
@@ -332,7 +332,7 @@ func TestPublishDetectionEvent_NoEventBus(t *testing.T) {
 
 	// Should not panic when event bus is not initialized
 	assert.NotPanics(t, func() {
-		action.publishDetectionEvent(false, 10, species.NoveltyStatus{})
-		action.publishDetectionEvent(true, 0, species.NoveltyStatus{})
+		action.publishDetectionEvent(t.Context(), false, 10, species.NoveltyStatus{})
+		action.publishDetectionEvent(t.Context(), true, 0, species.NoveltyStatus{})
 	})
 }

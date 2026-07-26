@@ -258,8 +258,15 @@
     }
   }
 
+  /**
+   * Delays before re-requesting attribution that answered "not resolved yet".
+   * Deliberately shorter and fewer than the thumbnail's own schedule: attribution is
+   * supporting detail, and the image itself is what the user is waiting on.
+   */
+  const ATTRIBUTION_RETRY_DELAYS_MS = [5000, 15000, 40000];
+
   // Fetch image attribution metadata
-  async function fetchImageAttribution() {
+  async function fetchImageAttribution(attempt = 0) {
     if (!detection?.scientificName?.trim()) return;
 
     attributionController?.abort();
@@ -277,6 +284,18 @@
         const data = await response.json();
         if (signal.aborted) return;
         imageAttribution = data as ImageAttribution;
+        return;
+      }
+      // 503 means the image is still being resolved in the background, not that it
+      // has no attribution. Without a retry the CC-BY/CC-BY-SA photo that the
+      // thumbnail's own retry recovers seconds later would be displayed with no
+      // author or licence credit, which is a licensing problem and not merely a
+      // cosmetic one.
+      if (response.status === 503 && attempt < ATTRIBUTION_RETRY_DELAYS_MS.length) {
+        const delay = ATTRIBUTION_RETRY_DELAYS_MS.at(attempt) ?? 0;
+        globalThis.setTimeout(() => {
+          if (!signal.aborted) void fetchImageAttribution(attempt + 1);
+        }, delay);
       }
     } catch (error) {
       if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) return;

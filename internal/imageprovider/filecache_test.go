@@ -422,16 +422,111 @@ func TestDownloadAndStore_PermanentRejectionLatch(t *testing.T) {
 	assert.True(t, cache.rejectionLogged.Load(), "a 403 must latch the escalated log")
 
 	// A second rejection must not re-escalate, which is what keeps the log quiet.
+	// The cooldown armed by the first 403 is lifted first: this test is about the log
+	// latch, and leaving the cooldown open would short-circuit the request before it
+	// could reach the logging path at all.
+	cache.blockedUntil.Delete("wikimedia")
 	_, _, err = cache.DownloadAndStore(t.Context(), "wikimedia", "Rejected two", server.URL+"/b.jpg")
 	require.Error(t, err)
 	assert.True(t, cache.rejectionLogged.Load(), "latch stays set while rejections continue")
 
 	// A success clears it, so a later block is visible again rather than silent forever.
+	cache.blockedUntil.Delete("wikimedia")
 	status.Store(http.StatusOK)
 	_, _, err = cache.DownloadAndStore(t.Context(), "wikimedia", "Recovered", server.URL+"/c.jpg")
 	require.NoError(t, err)
 	assert.False(t, cache.rejectionLogged.Load(),
 		"a successful download must re-arm the escalation, mirroring resetCircuit")
+}
+
+// TestDownloadAndStore_RefusalOpensCooldown covers the breaker the byte-download path
+// never had.
+//
+// The MediaWiki API path opens a circuit on a policy rejection, but the image download
+// path retried on every request forever: with the proxy re-attempting a download for
+// any species whose file is missing, a blanket 403 meant one guaranteed-failing
+// outbound request per uncached species on every page load, indefinitely. That is the
+// traffic profile that earns a block in the first place.
+func TestDownloadAndStore_RefusalOpensCooldown(t *testing.T) {
+	t.Parallel()
+
+	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusTooManyRequests} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			t.Parallel()
+
+			var requests atomic.Int64
+			cache, server := newServedCache(t, func(w http.ResponseWriter, _ *http.Request) {
+				requests.Add(1)
+				w.WriteHeader(status)
+			})
+
+			_, _, err := cache.DownloadAndStore(t.Context(), "wikimedia", "Parus major", server.URL+"/a.jpg")
+			require.Error(t, err)
+			require.Equal(t, int64(1), requests.Load())
+
+			// A different species: the refusal is about the host, not the file, so this
+			// must not reach the network at all.
+			_, _, err = cache.DownloadAndStore(t.Context(), "wikimedia", "Turdus merula", server.URL+"/b.jpg")
+			require.ErrorIs(t, err, ErrImageDownloadBlocked)
+			assert.Equal(t, int64(1), requests.Load(),
+				"a refused host must not be contacted again during the cooldown")
+
+			// The cooldown is per provider, so an unrelated provider keeps working.
+			_, _, err = cache.DownloadAndStore(t.Context(), "avicommons", "Turdus merula", server.URL+"/c.jpg")
+			require.NotErrorIs(t, err, ErrImageDownloadBlocked)
+			assert.Equal(t, int64(2), requests.Load())
+		})
+	}
+}
+
+// TestDownloadAndStore_SuccessClearsCooldown asserts recovery does not have to wait out
+// the full cooldown once the host is serving us again.
+func TestDownloadAndStore_SuccessClearsCooldown(t *testing.T) {
+	t.Parallel()
+
+	var status atomic.Int64
+	status.Store(http.StatusForbidden)
+	cache, server := newServedCache(t, func(w http.ResponseWriter, _ *http.Request) {
+		if code := int(status.Load()); code != http.StatusOK {
+			w.WriteHeader(code)
+			return
+		}
+		w.Header().Set("Content-Type", "image/jpeg")
+		_, _ = w.Write([]byte{0xFF, 0xD8, 0xFF, 0xE0})
+	})
+
+	_, _, err := cache.DownloadAndStore(t.Context(), "wikimedia", "Parus major", server.URL+"/a.jpg")
+	require.Error(t, err)
+	_, open := cache.downloadBlockedUntil("wikimedia")
+	require.True(t, open)
+
+	// Simulate the cooldown elapsing rather than sleeping for ten minutes.
+	cache.blockedUntil.Store("wikimedia", time.Now().Add(-time.Second))
+	_, open = cache.downloadBlockedUntil("wikimedia")
+	require.False(t, open, "an elapsed deadline must not count as an open cooldown")
+
+	status.Store(http.StatusOK)
+	_, _, err = cache.DownloadAndStore(t.Context(), "wikimedia", "Turdus merula", server.URL+"/b.jpg")
+	require.NoError(t, err)
+
+	_, open = cache.downloadBlockedUntil("wikimedia")
+	assert.False(t, open, "a successful download must clear the cooldown")
+}
+
+// TestDownloadAndStore_NotFoundDoesNotOpenCooldown keeps the breaker scoped to host
+// refusals. A 404 is about one image; suppressing every other species because one file
+// moved would be a far worse failure than the one being prevented.
+func TestDownloadAndStore_NotFoundDoesNotOpenCooldown(t *testing.T) {
+	t.Parallel()
+
+	cache, server := newServedCache(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+
+	_, _, err := cache.DownloadAndStore(t.Context(), "wikimedia", "Parus major", server.URL+"/a.jpg")
+	require.Error(t, err)
+	_, open := cache.downloadBlockedUntil("wikimedia")
+	assert.False(t, open)
 }
 
 // TestDownloadAndStore_TransientStatusDoesNotLatch asserts the escalation is reserved for

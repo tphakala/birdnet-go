@@ -3069,7 +3069,7 @@ Sent when a new bird detection occurs and passes all filters.
   "longitude": 24.9384,
   "clipName": "eurasian_blackbird_87p_20240115T083045Z.wav",
   "birdImage": {
-    "url": "https://example.com/bird-image.jpg",
+    "url": "/api/v2/media/image/Turdus%20merula",
     "attribution": "Image by Photographer Name",
     "license": "CC BY-SA 4.0",
     "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
@@ -3078,6 +3078,13 @@ Sent when a new bird detection occurs and passes all filters.
   "eventType": "new_detection"
 }
 ```
+
+`birdImage.url` is a path on this BirdNET-Go instance, not an address on the image
+provider. It is always present, so it is not a signal that an image exists: the server
+resolves species images in the background, and the endpoint answers `503` while a fetch
+is still in flight and `404` for a species that has no image. Resolve it against your
+BirdNET-Go base URL and handle both statuses, retrying a `503` after the `Retry-After`
+it advertises.
 
 #### 3. Heartbeat Event
 
@@ -3143,7 +3150,7 @@ Perfect for web dashboards or browser-based applications:
                  <p>Confidence: ${(detection.confidence * 100).toFixed(1)}%</p>
                  <p>Time: ${detection.time}</p>
                  <p>Source: ${detection.source}</p>
-                 ${detection.birdImage?.url ? `<img src="${detection.birdImage.url}" alt="${detection.commonName}" style="max-width: 200px;">` : ""}
+                 ${detection.birdImage?.url ? `<img src="${detection.birdImage.url}" alt="${detection.commonName}" style="max-width: 200px;" onerror="this.style.display='none'">` : ""}
              `;
 
         // Add to top of list
