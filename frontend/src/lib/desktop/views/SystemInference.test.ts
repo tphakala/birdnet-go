@@ -94,7 +94,9 @@ function makeSnapshot(
     hardware: {
       arch: 'amd64',
       cpuModel: 'Test CPU',
-      environment: 'docker',
+      // Capitalised to match sysinfo.GetEnvironment's EnvDocker verbatim; the
+      // container/host icon choice is a case-sensitive prefix match on it.
+      environment: 'Docker',
       fp16: true,
       ...hardware,
     },
@@ -893,25 +895,6 @@ describe('SystemInference', () => {
         expect(container.textContent).toContain('AMD Graphics [1002:73ff]');
       });
       expect(container.textContent).toContain('system.inference.gpuReasonUnknown');
-    });
-
-    it('renders capability tokens', async () => {
-      installApi(
-        makeSnapshot([makeModel({})], {
-          capabilities: ['aarch64', 'aarch64-a76', 'tflite', 'fp16-native'],
-        })
-      );
-
-      const { container } = inferenceTest.render({});
-
-      await waitFor(() => {
-        expect(container.textContent).toContain('aarch64-a76');
-      });
-      // Exact key, not a prefix: 'system.inference.capabilities' alone is also
-      // satisfied by the sr-only capabilitiesHelp span.
-      const labels = [...container.querySelectorAll('span')].map(el => el.textContent.trim());
-      expect(labels).toContain('system.inference.capabilities');
-      expect(container.textContent).toContain('fp16-native');
     });
   });
 });

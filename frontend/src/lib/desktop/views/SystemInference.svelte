@@ -31,7 +31,22 @@
   import Badge from '$lib/desktop/components/ui/Badge.svelte';
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import Sparkline from '$lib/desktop/features/system/components/Sparkline.svelte';
-  import { Brain, Cpu, MemoryStick, Activity, Minus, Pause, MapPinOff } from '@lucide/svelte';
+  import {
+    Brain,
+    Binary,
+    CircuitBoard,
+    Container,
+    Cpu,
+    Grid2x2,
+    MemoryStick,
+    Microchip,
+    Server,
+    Activity,
+    Minus,
+    Pause,
+    MapPinOff,
+  } from '@lucide/svelte';
+  import { isContainerEnvironment } from '$lib/desktop/features/system/environment';
   import type {
     InferenceStatusResponse,
     InferenceModel,
@@ -511,7 +526,10 @@
   {:else if snapshot}
     <!-- Top context row: hardware and inference backends as compact cards.
          The Audio pipeline card is intentionally hidden for now (see below). -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+    <!-- items-start: without it the shorter card stretches to the taller one and
+         shows dead space inside its border. Hardware grows past Backends as soon
+         as a GPU carries reason text, or in the locales whose strings run long. -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
       <!-- Hardware -->
       <div
         class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm"
@@ -519,33 +537,37 @@
         <h3 class="text-xs font-semibold uppercase tracking-wider mb-3 text-muted">
           {t('system.inference.sectionHardware')}
         </h3>
-        <div class="space-y-2.5">
+        <!-- Three real columns (icon, label, value) rather than a stack of
+             independent flex rows: the auto label track sizes to the widest
+             label, so every value starts at the same x instead of wherever its
+             own label happened to end. Absent facts emit no grid children at
+             all, so they leave no gap. -->
+        <dl class="grid grid-cols-[auto_auto_1fr] items-center gap-x-3 gap-y-2.5">
           {#if snapshot.hardware.arch}
-            <div class="flex items-center gap-3">
-              <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
-              <span class="text-sm text-muted">{t('system.inference.architecture')}</span>
-              <span class="text-sm font-mono tabular-nums truncate" title={snapshot.hardware.arch}
-                >{snapshot.hardware.arch}</span
-              >
-            </div>
+            <Binary class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
+            <dt class="text-sm text-muted">{t('system.inference.architecture')}</dt>
+            <dd
+              class="text-sm font-mono tabular-nums truncate min-w-0"
+              title={snapshot.hardware.arch}
+            >
+              {snapshot.hardware.arch}
+            </dd>
           {/if}
           {#if snapshot.hardware.cpuModel}
-            <div class="flex items-center gap-3">
-              <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
-              <span class="text-sm text-muted">{t('system.inference.cpu')}</span>
-              <span class="text-sm truncate" title={snapshot.hardware.cpuModel}
-                >{snapshot.hardware.cpuModel}</span
-              >
-            </div>
+            <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
+            <dt class="text-sm text-muted">{t('system.inference.cpu')}</dt>
+            <dd class="text-sm truncate min-w-0" title={snapshot.hardware.cpuModel}>
+              {snapshot.hardware.cpuModel}
+            </dd>
           {/if}
           <!-- Gated on the board object, not on board.model: the server sends a
                board whenever it resolved a model OR an SoC, and a device tree
                that exposes only `compatible` yields the SoC alone. Gating on the
                model would silently drop the one fact the probe recovered. -->
           {#if snapshot.hardware.board}
-            <div class="flex items-center gap-3">
-              <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
-              <span class="text-sm text-muted shrink-0">{t('system.inference.board')}</span>
+            <CircuitBoard class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
+            <dt class="text-sm text-muted">{t('system.inference.board')}</dt>
+            <dd class="flex items-center gap-3 min-w-0">
               {#if snapshot.hardware.board.model}
                 <span class="text-sm truncate min-w-0" title={snapshot.hardware.board.model}
                   >{snapshot.hardware.board.model}</span
@@ -556,53 +578,36 @@
                   {t('system.inference.soc')}: {snapshot.hardware.board.soc}
                 </span>
               {/if}
-            </div>
+            </dd>
           {/if}
           {#if snapshot.hardware.physicalCores}
-            <div class="flex items-center gap-3">
-              <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
-              <span class="text-sm text-muted">{t('system.inference.cores')}</span>
-              <span class="text-sm font-mono tabular-nums"
-                >{formatNumber(snapshot.hardware.physicalCores)}</span
-              >
-            </div>
+            <Grid2x2 class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
+            <dt class="text-sm text-muted">{t('system.inference.cores')}</dt>
+            <dd class="text-sm font-mono tabular-nums">
+              {formatNumber(snapshot.hardware.physicalCores)}
+            </dd>
           {/if}
           {#if snapshot.hardware.totalRamBytes}
-            <div class="flex items-center gap-3">
-              <MemoryStick class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
-              <span class="text-sm text-muted">{t('system.inference.memory')}</span>
-              <span class="text-sm font-mono tabular-nums"
-                >{formatBytesCompact(snapshot.hardware.totalRamBytes)}</span
-              >
-            </div>
+            <MemoryStick class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
+            <dt class="text-sm text-muted">{t('system.inference.memory')}</dt>
+            <dd class="text-sm font-mono tabular-nums">
+              {formatBytesCompact(snapshot.hardware.totalRamBytes)}
+            </dd>
           {/if}
           {#if snapshot.hardware.environment}
-            <div class="flex items-center gap-3">
-              <span class="text-sm text-muted">{t('system.inference.environment')}</span>
-              <span class="text-sm truncate" title={snapshot.hardware.environment}
-                >{snapshot.hardware.environment}</span
-              >
-            </div>
-          {/if}
-          <div class="flex items-center gap-3">
-            <span
-              class="text-sm text-muted"
-              title={t('system.inference.fp16Help')}
-              aria-describedby="help-fp16"
-            >
-              {t('system.inference.fp16')}
-            </span>
-            <span id="help-fp16" class="sr-only">{t('system.inference.fp16Help')}</span>
-            {#if snapshot.hardware.fp16}
-              <StatusPill variant="success" label={t('system.inference.fp16Supported')} size="xs" />
+            <!-- Container vs host, resolved by the same predicate the Overview's
+                 SystemDetailsCard uses, so the two pages never disagree about
+                 what the one environment string means. -->
+            {#if isContainerEnvironment(snapshot.hardware.environment)}
+              <Container class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
             {:else}
-              <StatusPill
-                variant="neutral"
-                label={t('system.inference.fp16Unsupported')}
-                size="xs"
-              />
+              <Server class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
             {/if}
-          </div>
+            <dt class="text-sm text-muted">{t('system.inference.environment')}</dt>
+            <dd class="text-sm truncate min-w-0" title={snapshot.hardware.environment}>
+              {snapshot.hardware.environment}
+            </dd>
+          {/if}
 
           <!-- Accelerators. Listed whether or not this build can reach them, so
                a user whose GPU is present but unusable is told why rather than
@@ -614,11 +619,18 @@
                production too, and there is no error boundary above this). These
                rows hold no per-item state, so index reconciliation is correct.
                role="group" ties each GPU to its own reason list for a screen
-               reader, which DOM order alone does not do once there are two. -->
+               reader, which DOM order alone does not do once there are two. It
+               sits on the <dd> because that is the element holding the name,
+               the pill and the reasons; a wrapper would break the grid. -->
           {#each snapshot.hardware.accelerators ?? [] as accelerator}
-            <div role="group" aria-label={accelerator.name ?? accelerator.vendor} class="space-y-1">
+            <Microchip class="w-3.5 h-3.5 shrink-0 text-muted self-start" aria-hidden="true" />
+            <dt class="text-sm text-muted self-start">{t('system.inference.gpu')}</dt>
+            <dd
+              role="group"
+              aria-label={accelerator.name ?? accelerator.vendor}
+              class="min-w-0 space-y-1"
+            >
               <div class="flex items-center gap-3 flex-wrap">
-                <span class="text-sm text-muted shrink-0">{t('system.inference.gpu')}</span>
                 <span
                   class="text-sm truncate min-w-0"
                   title={accelerator.name ?? accelerator.vendor}
@@ -641,37 +653,15 @@
               <!-- Shown whenever present, not only when unreachable: a card can
                    be perfectly reachable and still be one no build supports. -->
               {#if accelerator.reasons?.length}
-                <ul class="list-disc ps-9 space-y-1 text-xs text-muted">
+                <ul class="list-disc ps-4 space-y-1 text-xs text-muted">
                   {#each accelerator.reasons as reason}
                     <li>{gpuReasonLabel(reason)}</li>
                   {/each}
                 </ul>
               {/if}
-            </div>
+            </dd>
           {/each}
-
-          {#if snapshot.hardware.capabilities?.length}
-            <div class="flex items-start gap-3">
-              <span
-                class="text-sm text-muted shrink-0"
-                title={t('system.inference.capabilitiesHelp')}
-                aria-describedby="help-capabilities"
-              >
-                {t('system.inference.capabilities')}
-              </span>
-              <span id="help-capabilities" class="sr-only"
-                >{t('system.inference.capabilitiesHelp')}</span
-              >
-              <!-- The tokens wrap as their own block so a second row lines up
-                   under the first badge instead of under the label. -->
-              <div class="flex flex-wrap items-center gap-2">
-                {#each snapshot.hardware.capabilities as capability (capability)}
-                  <Badge variant="neutral" size="sm" text={capability} />
-                {/each}
-              </div>
-            </div>
-          {/if}
-        </div>
+        </dl>
       </div>
 
       <!-- Inference backends -->
@@ -722,6 +712,29 @@
                 {/each}
               {/if}
             </div>
+          {/if}
+        </div>
+
+        <!-- Card-scoped, below a divider, rather than a fourth row in the list
+             above: FP16 here is hwprofile's Profile.HasNativeF16, a property of
+             the CPU every one of these backends executes on, not a backend of
+             its own. It sits here because it is what makes the FP16 badge on a
+             model card below reachable at full speed. -->
+        <div
+          class="mt-3 pt-3 border-t border-[var(--border-100)] flex items-center gap-3 flex-wrap"
+        >
+          <span
+            class="text-sm min-w-32"
+            title={t('system.inference.fp16Help')}
+            aria-describedby="help-fp16"
+          >
+            {t('system.inference.computePrecision')}
+          </span>
+          <span id="help-fp16" class="sr-only">{t('system.inference.fp16Help')}</span>
+          {#if snapshot.hardware.fp16}
+            <StatusPill variant="success" label={t('system.inference.fp16Supported')} size="xs" />
+          {:else}
+            <StatusPill variant="neutral" label={t('system.inference.fp16Unsupported')} size="xs" />
           {/if}
         </div>
       </div>
