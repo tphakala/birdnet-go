@@ -64,8 +64,11 @@ var (
 
 	// aviCommonsPortedVersions are the versions Creative Commons ported to
 	// jurisdictions. Porting ended with 3.0: the 4.0 suite was written to be
-	// international and was never ported, so ".../by/4.0/de/" is a 404. A port
-	// on any other version is therefore not a real license and is dropped.
+	// international and was never ported, so "CC BY 4.0 DE" names a license that
+	// does not exist. The URL is not the tell, because creativecommons.org
+	// answers ".../by/4.0/de/" with a 301 to the German TRANSLATION of the
+	// international deed rather than a 404; it is the display name that would be
+	// false. A port on an unported version is therefore dropped.
 	aviCommonsPortedVersions = map[string]bool{
 		"1.0": true, "2.0": true, "2.1": true, "2.5": true, "3.0": true,
 	}
