@@ -257,25 +257,27 @@ describe('useSpeciesHistory', () => {
       resolveSpeciesA = resolve;
     });
 
-    post.mockImplementation((url: string, body: { sortBy: string }) => {
-      const species = body.speciesScientific?.[0];
+    post.mockImplementation(
+      (url: string, body: { sortBy: string; speciesScientific: string[] }) => {
+        const species = body.speciesScientific[0];
 
-      // Species A (Spinus tristis) branches on sortBy and returns controlled pending
-      if (species === 'Spinus tristis') {
-        // Resolve with the appropriate fixture based on sort order when resolved
-        return pendingA.then(() => (body.sortBy === 'date_asc' ? ascResponse() : descResponse()));
+        // Species A (Spinus tristis) branches on sortBy and returns controlled pending
+        if (species === 'Spinus tristis') {
+          // Resolve with the appropriate fixture based on sort order when resolved
+          return pendingA.then(() => (body.sortBy === 'date_asc' ? ascResponse() : descResponse()));
+        }
+
+        // Species B (Cardinalis cardinalis) branches on sortBy
+        if (species === 'Cardinalis cardinalis') {
+          return Promise.resolve(
+            body.sortBy === 'date_asc' ? cardinalAscResponse() : cardinalDescResponse()
+          );
+        }
+
+        // Fallback
+        return Promise.resolve(body.sortBy === 'date_asc' ? ascResponse() : descResponse());
       }
-
-      // Species B (Cardinalis cardinalis) branches on sortBy
-      if (species === 'Cardinalis cardinalis') {
-        return Promise.resolve(
-          body.sortBy === 'date_asc' ? cardinalAscResponse() : cardinalDescResponse()
-        );
-      }
-
-      // Fallback
-      return Promise.resolve(body.sortBy === 'date_asc' ? ascResponse() : descResponse());
-    });
+    );
 
     get.mockResolvedValue(dailyResponse());
 
@@ -344,22 +346,24 @@ describe('useSpeciesHistory', () => {
       resolveSpeciesC = resolve;
     });
 
-    post.mockImplementation((url: string, body: { sortBy: string }) => {
-      const species = body.speciesScientific?.[0];
+    post.mockImplementation(
+      (url: string, body: { sortBy: string; speciesScientific: string[] }) => {
+        const species = body.speciesScientific[0];
 
-      if (species === 'Spinus tristis') {
-        return pendingA.then(() => (body.sortBy === 'date_asc' ? ascResponse() : descResponse()));
+        if (species === 'Spinus tristis') {
+          return pendingA.then(() => (body.sortBy === 'date_asc' ? ascResponse() : descResponse()));
+        }
+
+        if (species === 'Cardinalis cardinalis') {
+          return pendingB.then(() =>
+            body.sortBy === 'date_asc' ? cardinalAscResponse() : cardinalDescResponse()
+          );
+        }
+
+        // Species C (any other species): use a third deferred promise
+        return pendingC.then(() => (body.sortBy === 'date_asc' ? ascResponse() : descResponse()));
       }
-
-      if (species === 'Cardinalis cardinalis') {
-        return pendingB.then(() =>
-          body.sortBy === 'date_asc' ? cardinalAscResponse() : cardinalDescResponse()
-        );
-      }
-
-      // Species C (any other species): use a third deferred promise
-      return pendingC.then(() => (body.sortBy === 'date_asc' ? ascResponse() : descResponse()));
-    });
+    );
 
     get.mockResolvedValue(dailyResponse());
 
