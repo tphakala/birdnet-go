@@ -996,7 +996,21 @@
     },
     "history": {
       "title": "História detekcií",
-      "comingSoon": "Sledovanie histórie bude k dispozícii čoskoro..."
+      "firstHeard": "First heard",
+      "lastHeard": "Last heard",
+      "totalDetections": "Detections",
+      "dailyWindow": "Daily detections, 30 days to {date}",
+      "dailyEmpty": "No detections in this period.",
+      "recentTitle": "Other recent detections",
+      "viewAll": "View all {count} in Detections",
+      "noOthers": "This is the only detection of this species so far.",
+      "loading": "Loading species history...",
+      "loadError": "Could not load history for this species.",
+      "aria": {
+        "sparkline": "Daily detection counts for the 30 days ending {date}",
+        "recentList": "Other recent detections of this species",
+        "openDetection": "Open detection from {timestamp}"
+      }
     },
     "notes": {
       "title": "Poznámky a komentáre",
