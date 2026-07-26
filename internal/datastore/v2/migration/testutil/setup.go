@@ -661,8 +661,18 @@ func (s *testLegacyInterface) GetAllHourlyWeather() ([]datastore.HourlyWeather, 
 // Stub implementations for unused datastore.Interface methods.
 // These are required by the interface but not used in migration tests.
 
-func (s *testLegacyInterface) Open() error                                         { return nil }
-func (s *testLegacyInterface) Close() error                                        { return nil }
+func (s *testLegacyInterface) Open() error  { return nil }
+func (s *testLegacyInterface) Close() error { return nil }
+func (s *testLegacyInterface) GetSpeciesNotes(_ context.Context, _ string) ([]datastore.SpeciesNote, error) {
+	return nil, nil
+}
+func (s *testLegacyInterface) SaveSpeciesNote(_ context.Context, _ *datastore.SpeciesNote) error {
+	return nil
+}
+func (s *testLegacyInterface) DeleteSpeciesNote(_ context.Context, _ string) error { return nil }
+func (s *testLegacyInterface) UpdateSpeciesNote(_ context.Context, _, _ string) error {
+	return nil
+}
 func (s *testLegacyInterface) Save(_ *datastore.Note, _ []datastore.Results) error { return nil }
 func (s *testLegacyInterface) EnsureModelRegistered(_ detection.ModelInfo) error   { return nil }
 func (s *testLegacyInterface) Delete(_ string) error                               { return nil }
