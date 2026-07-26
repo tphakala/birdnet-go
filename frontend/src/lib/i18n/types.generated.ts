@@ -793,12 +793,12 @@ export type TranslationKey =
   | 'detections.history.lastHeard'
   | 'detections.history.totalDetections'
   | 'detections.history.dailyWindow' // params: date
-  | 'detections.history.dailyEmpty'
   | 'detections.history.recentTitle'
   | 'detections.history.viewAll' // params: count
   | 'detections.history.noOthers'
   | 'detections.history.loading'
   | 'detections.history.loadError'
+  | 'detections.history.unavailable'
   | 'detections.history.aria.sparkline' // params: date
   | 'detections.history.aria.recentList'
   | 'detections.history.aria.openDetection' // params: timestamp
