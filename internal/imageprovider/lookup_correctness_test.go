@@ -8,11 +8,13 @@
 package imageprovider
 
 import (
+	"context"
 	"net/http"
 	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -506,4 +508,58 @@ func TestFetch_FallsBackToTheOriginalNameWhenTheSynonymMisses(t *testing.T) {
 	got := titles.snapshot()
 	require.Len(t, got, 2)
 	assert.Equal(t, birdnetName, got[1], "the original name is still tried when the synonym misses")
+}
+
+// TestWikiFetchAllowedFor_DecidesFromItsArgument pins the seam's contract.
+//
+// The fallback-policy half used to be read from the global settings while the
+// provider half came from the argument, so a caller passing anything other than
+// the global got a verdict spliced from two sources.
+func TestWikiFetchAllowedFor_DecidesFromItsArgument(t *testing.T) {
+	// No t.Parallel(): installs a global to prove the argument overrides it.
+	prev := conf.GetSettings()
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
+
+	// Global says fallback is off; the argument says it is on.
+	conftest.SetTestSettings(conftest.NewTestSettings().WithImageProvider("avicommons", "none").Build())
+	passed := conftest.NewTestSettings().WithImageProvider("avicommons", "all").Build()
+
+	allowed, _ := wikiFetchAllowedFor(passed)
+	assert.True(t, allowed, "the decision must come from the settings passed in, not the global")
+
+	// And the reverse, so the assertion cannot pass by reading the global.
+	conftest.SetTestSettings(conftest.NewTestSettings().WithImageProvider("avicommons", "all").Build())
+	denied := conftest.NewTestSettings().WithImageProvider("avicommons", "none").Build()
+
+	allowed, reason := wikiFetchAllowedFor(denied)
+	assert.False(t, allowed)
+	assert.NotEmpty(t, reason)
+}
+
+// TestEnsureInitialized_AcquisitionIsCancellable covers the other half of the
+// same hazard: a caller with a short deadline must be able to give up rather
+// than block on another caller's config wait, which runs for up to 10 seconds.
+func TestEnsureInitialized_AcquisitionIsCancellable(t *testing.T) {
+	t.Parallel()
+
+	lazy := NewLazyWikiMediaProvider()
+	// Hold the slot, as an in-flight initialization would.
+	lazy.initSem <- struct{}{}
+	t.Cleanup(func() { <-lazy.initSem })
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() {
+		_, err := lazy.ensureInitialized(ctx)
+		done <- err
+	}()
+
+	cancel()
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, context.Canceled,
+			"a caller that gives up must not wait out the holder's config wait")
+	case <-time.After(2 * time.Second):
+		t.Fatal("ensureInitialized blocked on the init slot after its context was cancelled")
+	}
 }

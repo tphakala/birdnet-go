@@ -518,7 +518,13 @@ func (l *wikiMediaProvider) handleJSONParseError(body []byte, parseErr error) er
 // preventing race conditions during startup where conf.Setting() might return nil
 // or have an empty Version field.
 type LazyWikiMediaProvider struct {
-	mu       sync.Mutex
+	// initSem is a one-slot semaphore rather than a sync.Mutex so that
+	// acquisition is cancellable. Initialization waits up to configWaitTimeout
+	// for the configuration, and a caller with a shorter deadline (the
+	// new-species image warm allows 3s) must be able to give up rather than
+	// block on a lock for another caller's full wait. Same reason the
+	// per-species init lock is a buffered channel.
+	initSem  chan struct{}
 	provider *wikiMediaProvider
 	// lastErr and nextRetry replace a sync.Once. The Once latched the first
 	// initialization error for the whole process lifetime, so a config wait that
@@ -531,15 +537,18 @@ type LazyWikiMediaProvider struct {
 // NewLazyWikiMediaProvider creates a new lazy-initialized Wikipedia provider.
 // The actual provider creation is deferred until first use.
 func NewLazyWikiMediaProvider() *LazyWikiMediaProvider {
-	return &LazyWikiMediaProvider{}
+	return &LazyWikiMediaProvider{initSem: make(chan struct{}, 1)}
 }
 
 // ensureInitialized creates the actual provider on first use, with validation.
 // A mutex plus a retry deadline, rather than a sync.Once: the Once latched the
 // first failure for the process lifetime (see the struct fields).
 func (l *LazyWikiMediaProvider) ensureInitialized(ctx context.Context) (*wikiMediaProvider, error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	release, err := l.acquireInit(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 
 	if l.provider != nil {
 		return l.provider, nil
@@ -590,8 +599,23 @@ func (l *LazyWikiMediaProvider) ensureInitialized(ctx context.Context) (*wikiMed
 	return provider, nil
 }
 
+// acquireInit takes the one-slot init semaphore, abandoning the attempt if the
+// caller's context ends first. A zero-valued provider (only tests build one)
+// has no semaphore, so it falls back to an uncontended acquire.
+func (l *LazyWikiMediaProvider) acquireInit(ctx context.Context) (release func(), err error) {
+	if l.initSem == nil {
+		return func() {}, nil
+	}
+	select {
+	case l.initSem <- struct{}{}:
+		return func() { <-l.initSem }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
 // failInit records an initialization failure and schedules the next attempt.
-// Callers must hold l.mu.
+// Callers must hold the init semaphore.
 func (l *LazyWikiMediaProvider) failInit(err error) {
 	l.lastErr = err
 	l.nextRetry = time.Now().Add(lazyInitRetryInterval)
@@ -1457,8 +1481,11 @@ func wikiFetchAllowedFor(settings *conf.Settings) (allowed bool, reason string) 
 		return true, ""
 	}
 
-	// Case 3: WikiMedia can be used as a fallback.
-	if normalizedFallbackPolicy() == fallbackPolicyAll {
+	// Case 3: WikiMedia can be used as a fallback. Read from the settings passed
+	// in, not through normalizedFallbackPolicy, which re-reads the global: a
+	// seam that decided half its answer from its argument and half from a global
+	// would give a caller passing anything else a spliced verdict.
+	if normalizeProviderName(thumbnails.FallbackPolicy) == fallbackPolicyAll {
 		return true, ""
 	}
 
