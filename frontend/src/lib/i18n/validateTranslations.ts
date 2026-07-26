@@ -374,7 +374,7 @@ class TranslationValidator {
     if (/^\{[a-zA-Z0-9_]+\}$/.test(trimmed)) return true;
     if (/^\{[a-zA-Z0-9_]+\}[^a-zA-Z0-9]+$/.test(trimmed)) return true;
     if (/^[^a-zA-Z0-9]+\{[a-zA-Z0-9_]+\}$/.test(trimmed)) return true;
-    if (/^\{[a-zA-Z0-9_]+\}\s*[\/\-]\s*\{[a-zA-Z0-9_]+\}$/.test(trimmed)) return true;
+    if (/^\{[a-zA-Z0-9_]+\}\s*[//-]\s*\{[a-zA-Z0-9_]+\}$/.test(trimmed)) return true;
 
     const valueLower = trimmed.toLowerCase();
 
@@ -382,7 +382,7 @@ class TranslationValidator {
     if (SKIP_UNTRANSLATED_KEYWORDS.includes(valueLower)) return true;
 
     // Tokenized word-level match: if every word in the string is a whitelisted term, number, or placeholder
-    const words = valueLower.split(/[\s,:\(\)\/\-]+/).filter(Boolean);
+    const words = valueLower.split(/[\s,:()/-]+/).filter(Boolean);
     if (
       words.length > 0 &&
       words.every(
@@ -390,7 +390,8 @@ class TranslationValidator {
           SKIP_UNTRANSLATED_KEYWORDS.includes(w) ||
           /^\d+$/.test(w) ||
           /^\{.*\}$/.test(w) ||
-          /^(v?\d+(\.\d+)*)$/.test(w)
+          // eslint-disable-next-line security/detect-unsafe-regex -- Safe bounded version string pattern
+          /^v?\d+(\.\d+){0,5}$/.test(w)
       )
     ) {
       return true;
