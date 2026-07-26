@@ -229,6 +229,142 @@ func TestSupportDumpArchiveTruncatesOversizedLog(t *testing.T) {
 	assert.Equal(t, byte('{'), tailContent[0], "archived tail must start on a JSON log-line boundary")
 }
 
+// TestSupportDumpArchiveCollectsAllLogsWhenOneIsHuge is the regression guard for
+// issue #3902: one very large log file (access.log) that sorts alphabetically
+// BEFORE the file the maintainer actually needs (audio.log) consumed the entire
+// shared size budget, so the collector stopped before adding any later file.
+// Every eligible log file must appear in the archive with (at least) its recent
+// tail; a single large file must never starve the others.
+func TestSupportDumpArchiveCollectsAllLogsWhenOneIsHuge(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	logsDir := filepath.Join(tmp, "logs")
+	require.NoError(t, os.MkdirAll(logsDir, 0o755))
+
+	// access.log: large, and sorts before audio.log. Under the old shared-budget
+	// logic its tail alone filled the cap and every later file was skipped.
+	var big bytes.Buffer
+	for big.Len() < 4<<20 { // 4 MB, far larger than the cap below
+		big.WriteString(recentLogLine(time.Hour, "web access GET /api/v2/detections"))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(logsDir, "access.log"), big.Bytes(), 0o644))
+
+	// audio.log: the small file needed to diagnose the RTSP/FFmpeg failure.
+	audioLine := recentLogLine(time.Hour, "ffmpeg rtsp connection failed 401 unauthorized")
+	require.NoError(t, os.WriteFile(filepath.Join(logsDir, "audio.log"), []byte(audioLine), 0o644))
+
+	c := NewCollector(tmp, tmp, "ALLLOGS-TEST", "v0")
+	opts := CollectorOptions{
+		IncludeLogs:  true,
+		LogDuration:  30 * 24 * time.Hour,
+		MaxLogSize:   512 << 10, // 512 KB, smaller than access.log alone
+		AnonymizePII: false,
+	}
+	dump, err := c.Collect(t.Context(), opts)
+	require.NoError(t, err)
+	data, err := c.CreateArchive(t.Context(), dump, opts)
+	require.NoError(t, err)
+
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	require.NoError(t, err)
+	names := zipEntryNames(zr)
+	assert.Contains(t, names, "logs/access.log", "large early-alphabet log should still be present as a tail")
+	require.Contains(t, names, "logs/audio.log",
+		"small later-alphabet log MUST NOT be starved by the large one; entries=%v", names)
+
+	// audio.log is tiny, so it must be captured in full.
+	var audioEntry *zip.File
+	for _, f := range zr.File {
+		if f.Name == "logs/audio.log" {
+			audioEntry = f
+		}
+	}
+	require.NotNil(t, audioEntry)
+	rc, err := audioEntry.Open()
+	require.NoError(t, err)
+	defer func() { assert.NoError(t, rc.Close()) }()
+	got, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	assert.Equal(t, audioLine, string(got), "small audio.log must be captured in full, not starved")
+}
+
+// TestAllocateTailBudgets pins down the fair-share allocator that prevents one
+// large log file from starving the others (issue #3902).
+func TestAllocateTailBudgets(t *testing.T) {
+	t.Parallel()
+
+	sum := func(ts []logFileTarget) int64 {
+		var s int64
+		for i := range ts {
+			s += ts[i].budget
+		}
+		return s
+	}
+
+	t.Run("all files larger than fair share split evenly", func(t *testing.T) {
+		t.Parallel()
+		// Two 10 MB files, 4 MB budget => 2 MB each; neither starves.
+		targets := []logFileTarget{{size: 10 << 20}, {size: 10 << 20}}
+		allocateTailBudgets(targets, 4<<20)
+		assert.Equal(t, int64(2<<20), targets[0].budget)
+		assert.Equal(t, int64(2<<20), targets[1].budget)
+		assert.LessOrEqual(t, sum(targets), int64(4<<20), "total must not exceed budget")
+	})
+
+	t.Run("small file taken whole, surplus rolls to large file", func(t *testing.T) {
+		t.Parallel()
+		// Sorted ascending: a tiny file then a huge one, 1 MB budget.
+		targets := []logFileTarget{{size: 100}, {size: 10 << 20}}
+		allocateTailBudgets(targets, 1<<20)
+		assert.Equal(t, int64(100), targets[0].budget, "tiny file taken in full")
+		assert.Equal(t, int64(1<<20)-100, targets[1].budget, "large file gets the rest")
+	})
+
+	t.Run("every file gets a non-zero budget when budget covers the count", func(t *testing.T) {
+		t.Parallel()
+		targets := make([]logFileTarget, 8)
+		for i := range targets {
+			targets[i].size = 100 << 20 // all large
+		}
+		allocateTailBudgets(targets, 8<<20) // exactly 1 MB per file
+		for i := range targets {
+			assert.Positive(t, targets[i].budget, "file %d must not be starved", i)
+		}
+		assert.LessOrEqual(t, sum(targets), int64(8<<20))
+	})
+
+	t.Run("non-positive budget means whole files", func(t *testing.T) {
+		t.Parallel()
+		targets := []logFileTarget{{size: 123}, {size: 456}}
+		allocateTailBudgets(targets, 0)
+		assert.Equal(t, int64(123), targets[0].budget)
+		assert.Equal(t, int64(456), targets[1].budget)
+	})
+
+	t.Run("empty slice does not panic", func(t *testing.T) {
+		t.Parallel()
+		assert.NotPanics(t, func() { allocateTailBudgets(nil, 50<<20) })
+		assert.NotPanics(t, func() { allocateTailBudgets([]logFileTarget{}, 50<<20) })
+	})
+
+	t.Run("budget smaller than file count drops the smallest, never over-allocates", func(t *testing.T) {
+		t.Parallel()
+		// 3 equal-size files but only 2 bytes of budget: integer division gives
+		// the leading (smallest) file a 0 budget (it is skipped by the caller),
+		// while the budget rolls to the later files. The invariant that matters is
+		// that the total never exceeds maxSize.
+		targets := []logFileTarget{{size: 1000}, {size: 1000}, {size: 1000}}
+		allocateTailBudgets(targets, 2)
+		var total int64
+		for i := range targets {
+			assert.GreaterOrEqual(t, targets[i].budget, int64(0), "budget never negative")
+			total += targets[i].budget
+		}
+		assert.LessOrEqual(t, total, int64(2), "total must never exceed maxSize")
+		assert.Zero(t, targets[0].budget, "smallest file yields to the budget it cannot share")
+	})
+}
+
 func zipEntryNames(zr *zip.Reader) []string {
 	names := make([]string, 0, len(zr.File))
 	for _, f := range zr.File {

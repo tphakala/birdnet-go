@@ -208,6 +208,14 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "unknown catalog ID: "+catalogID, http.StatusNotFound)
 	}
 
+	// Hidden entries are foundation-only: excluded from the gallery and not meant
+	// to be installed by ID. Some (the DFT-truncated BirdNET v2.4 variants) carry
+	// the permanent registry ID, which Uninstall then refuses, so an inadvertent
+	// install would leave an unremovable, unused model on disk. Reject them here.
+	if entry.Hidden {
+		return c.HandleError(ctx, nil, "catalog entry "+catalogID+" is not available for installation", http.StatusNotFound)
+	}
+
 	if c.ModelManager == nil {
 		return c.HandleError(ctx, nil, "model manager is not available", http.StatusServiceUnavailable)
 	}
@@ -263,6 +271,11 @@ func (c *Handler) ReinstallModel(ctx echo.Context) error {
 	entry, ok := classifier.GetCatalogEntry(catalogID)
 	if !ok {
 		return c.HandleError(ctx, nil, "unknown catalog ID: "+catalogID, http.StatusNotFound)
+	}
+
+	// Hidden entries are foundation-only and not installable by ID (see InstallModel).
+	if entry.Hidden {
+		return c.HandleError(ctx, nil, "catalog entry "+catalogID+" is not available for installation", http.StatusNotFound)
 	}
 
 	if c.ModelManager == nil {

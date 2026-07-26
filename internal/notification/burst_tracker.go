@@ -102,3 +102,16 @@ func (t *ErrorBurstTracker) Record(component, category, errMsg string) (BurstAct
 
 	return BurstActionSuppress, nil
 }
+
+// Reset clears any burst state for a component+category so the next Record for
+// that key starts a fresh window. Use it after handling a significant state
+// change out-of-band (for example a critical escalation that bypasses
+// coalescing) so a following recovery event is not suppressed by the window
+// still open from the preceding burst. Resetting an unknown key is a no-op.
+func (t *ErrorBurstTracker) Reset(component, category string) {
+	key := component + ":" + category
+
+	t.mu.Lock()
+	delete(t.buckets, key)
+	t.mu.Unlock()
+}

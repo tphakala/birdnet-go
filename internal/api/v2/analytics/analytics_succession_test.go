@@ -46,7 +46,7 @@ func TestGetAcousticSuccession_Shape(t *testing.T) {
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
 	// Default limit (no ?limit) is the streamgraph's top-6.
-	mockDS.On("GetAcousticSuccession", mock.Anything, "2026-03-01", "2026-03-02", 6).
+	mockDS.On("GetAcousticSuccession", mock.Anything, "2026-03-01", "2026-03-02", []string(nil), 6).
 		Return(sampleAcousticSuccession(), nil)
 
 	c, rec := newSuccessionContext(e, "/api/v2/analytics/time/succession?start_date=2026-03-01&end_date=2026-03-02")
@@ -65,11 +65,33 @@ func TestGetAcousticSuccession_Shape(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
+// TestGetAcousticSuccession_ForwardsSpeciesFilter verifies the succession endpoint parses the
+// repeated ?species query param (trimming, dropping empties, and collapsing case-insensitive
+// duplicates) and forwards the resulting scientific-name filter to the datastore.
+func TestGetAcousticSuccession_ForwardsSpeciesFilter(t *testing.T) {
+	t.Parallel()
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+
+	// A repeated ?species filter is trimmed, empty-filtered, case-insensitively de-duplicated, and
+	// forwarded to the datastore so the streamgraph narrows to the selection instead of the top-N
+	// default. The trailing "turdus migratorius" is a case-variant duplicate that must collapse.
+	mockDS.On("GetAcousticSuccession", mock.Anything, "2026-03-01", "2026-03-02",
+		[]string{"Turdus migratorius", "Turdus merula"}, 6).
+		Return(sampleAcousticSuccession(), nil)
+
+	c, rec := newSuccessionContext(e,
+		"/api/v2/analytics/time/succession?start_date=2026-03-01&end_date=2026-03-02"+
+			"&species=Turdus+migratorius&species=+Turdus+merula+&species=&species=turdus+migratorius")
+	require.NoError(t, controller.GetAcousticSuccession(c))
+	require.Equal(t, http.StatusOK, rec.Code)
+	mockDS.AssertExpectations(t)
+}
+
 func TestGetAcousticSuccession_EmptyArrayNotNull(t *testing.T) {
 	t.Parallel()
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
-	mockDS.On("GetAcousticSuccession", mock.Anything, "2026-03-01", "2026-03-02", 6).
+	mockDS.On("GetAcousticSuccession", mock.Anything, "2026-03-01", "2026-03-02", []string(nil), 6).
 		Return([]datastore.SpeciesHourlyCounts{}, nil)
 
 	c, rec := newSuccessionContext(e, "/api/v2/analytics/time/succession?start_date=2026-03-01&end_date=2026-03-02")
@@ -87,7 +109,7 @@ func TestGetAcousticSuccession_DefaultsEndDate(t *testing.T) {
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
 	// With end_date omitted the handler defaults it to a 30-day window: 2026-03-01 + 30d = 2026-03-31.
-	mockDS.On("GetAcousticSuccession", mock.Anything, "2026-03-01", "2026-03-31", 6).
+	mockDS.On("GetAcousticSuccession", mock.Anything, "2026-03-01", "2026-03-31", []string(nil), 6).
 		Return(sampleAcousticSuccession(), nil)
 
 	c, rec := newSuccessionContext(e, "/api/v2/analytics/time/succession?start_date=2026-03-01")
@@ -99,11 +121,7 @@ func TestGetAcousticSuccession_DefaultsEndDate(t *testing.T) {
 func TestGetAcousticSuccession_ClampsLimit(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name      string
-		limitParm string
-		wantLimit int
-	}{
+	tests := []LimitClampTestCase{
 		{"valid in range passes through", "3", 3},
 		{"max allowed passes through", "10", 10},
 		{"over max falls back to default", "99", defaultSpeciesSuccessionLimit},
@@ -111,21 +129,28 @@ func TestGetAcousticSuccession_ClampsLimit(t *testing.T) {
 		{"non-numeric falls back to default", "abc", defaultSpeciesSuccessionLimit},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+	runLimitClampTests(t, tests, func(t *testing.T, tc LimitClampTestCase) {
+		t.Helper()
 
-			mockDS.On("GetAcousticSuccession", mock.Anything, "2026-03-01", "2026-03-02", tt.wantLimit).
-				Return(sampleAcousticSuccession(), nil)
+		e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
-			c, rec := newSuccessionContext(e,
-				"/api/v2/analytics/time/succession?start_date=2026-03-01&end_date=2026-03-02&limit="+tt.limitParm)
-			require.NoError(t, controller.GetAcousticSuccession(c))
-			require.Equal(t, http.StatusOK, rec.Code)
-			mockDS.AssertExpectations(t)
-		})
-	}
+		mockDS.On("GetAcousticSuccession",
+			mock.Anything,
+			"2026-03-01",
+			"2026-03-02",
+			[]string(nil),
+			tc.WantLimit,
+		).Return(sampleAcousticSuccession(), nil)
+
+		c, rec := newSuccessionContext(
+			e,
+			"/api/v2/analytics/time/succession?start_date=2026-03-01&end_date=2026-03-02&limit="+tc.LimitParm,
+		)
+
+		require.NoError(t, controller.GetAcousticSuccession(c))
+		require.Equal(t, http.StatusOK, rec.Code)
+		mockDS.AssertExpectations(t)
+	})
 }
 
 func TestGetAcousticSuccession_MissingStartDate(t *testing.T) {
@@ -152,7 +177,7 @@ func TestGetAcousticSuccession_QueryTimeout(t *testing.T) {
 	t.Parallel()
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
-	mockDS.On("GetAcousticSuccession", mock.Anything, "2026-03-01", "2026-03-02", 6).
+	mockDS.On("GetAcousticSuccession", mock.Anything, "2026-03-01", "2026-03-02", []string(nil), 6).
 		Return([]datastore.SpeciesHourlyCounts(nil), context.DeadlineExceeded)
 
 	c, rec := newSuccessionContext(e, "/api/v2/analytics/time/succession?start_date=2026-03-01&end_date=2026-03-02")

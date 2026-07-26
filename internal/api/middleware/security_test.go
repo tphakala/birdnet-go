@@ -369,3 +369,26 @@ func TestNewCORS_WildcardWithCredentials(t *testing.T) {
 		assert.Equal(t, "true", rec.Header().Get(echo.HeaderAccessControlAllowCredentials))
 	})
 }
+
+// TestNewCORS_AllowsCacheControlHeader guards the CORS side of moving SSE CORS
+// from SetSSEHeaders to the middleware: SSE clients send a Cache-Control request
+// header, so the preflight must allow it now that SetSSEHeaders no longer
+// hardcodes Access-Control-Allow-Headers: Cache-Control.
+func TestNewCORS_AllowsCacheControlHeader(t *testing.T) {
+	t.Parallel()
+
+	corsMiddleware := NewCORS(&SecurityConfig{
+		AllowedOrigins: []string{"*"},
+	})
+
+	c, rec := newCORSTestContext(t, http.MethodOptions, "/api/v2/detections/stream", "https://example.com")
+	c.Request().Header.Set(echo.HeaderAccessControlRequestHeaders, echo.HeaderCacheControl)
+
+	handler := corsMiddleware(func(c echo.Context) error {
+		return c.String(http.StatusOK, "ok")
+	})
+	require.NoError(t, handler(c))
+
+	assert.Contains(t, rec.Header().Get(echo.HeaderAccessControlAllowHeaders), echo.HeaderCacheControl,
+		"CORS preflight must allow the Cache-Control request header for cross-origin SSE")
+}

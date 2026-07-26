@@ -54,12 +54,18 @@ type ExportSettings struct {
 	Normalization NormalizationSettings `yaml:"normalization" json:"normalization" mapstructure:"normalization"` // audio normalization settings (EBU R128)
 }
 
-// NormalizationSettings contains audio normalization configuration based on EBU R128 standard
+// NormalizationSettings contains audio normalization configuration based on EBU R128 standard.
+//
+// Clip normalization applies a single linear gain to reach TargetLUFS without
+// exceeding TruePeak (internal/audiocore/audionorm). There is no dynamic-range
+// stage, so LoudnessRange is accepted and validated but never applied; it is
+// retained only so existing config.yaml files keep loading unchanged.
 type NormalizationSettings struct {
-	Enabled       bool    `yaml:"enabled" json:"enabled" mapstructure:"enabled"`                   // true to enable loudness normalization
-	TargetLUFS    float64 `yaml:"targetlufs" json:"targetLUFS" mapstructure:"targetLUFS"`          // target integrated loudness in LUFS (default: -23)
-	LoudnessRange float64 `yaml:"loudnessrange" json:"loudnessRange" mapstructure:"loudnessRange"` // loudness range in LU (default: 7)
-	TruePeak      float64 `yaml:"truepeak" json:"truePeak" mapstructure:"truePeak"`                // true peak limit in dBTP (default: -2)
+	Enabled    bool    `yaml:"enabled" json:"enabled" mapstructure:"enabled"`          // true to enable loudness normalization
+	TargetLUFS float64 `yaml:"targetlufs" json:"targetLUFS" mapstructure:"targetLUFS"` // target integrated loudness in LUFS (default: -23)
+	// Deprecated: no longer applied; retained so existing configs keep loading.
+	LoudnessRange float64 `yaml:"loudnessrange" json:"loudnessRange" mapstructure:"loudnessRange"`
+	TruePeak      float64 `yaml:"truepeak" json:"truePeak" mapstructure:"truePeak"` // true peak limit in dBTP (default: -2)
 }
 
 type RetentionSettings struct {
@@ -582,6 +588,51 @@ var ValidChannelModes = map[ChannelMode]bool{
 	ChannelModeRight:   true,
 }
 
+// MediaMode controls which RTSP media a stream requests from the camera. It
+// only affects RTSP sources; other stream types ignore it.
+type MediaMode string
+
+const (
+	// MediaModeAuto requests audio-only first and falls back to the full stream
+	// (video decoded then discarded via -vn) only after repeated failures with no
+	// audio ever received. This is the bandwidth-conserving mode that avoids
+	// opening a camera video slot when the camera can deliver audio alone (#3798).
+	MediaModeAuto MediaMode = "auto"
+	// MediaModeAudioOnly forces the audio-only request and never falls back, so a
+	// camera that cannot deliver the audio track alone fails visibly instead of
+	// silently opening a video slot.
+	MediaModeAudioOnly MediaMode = "audio-only"
+	// MediaModeFullStream requests the full stream from the start (video decoded
+	// then discarded via -vn). It never sends -allowed_media_types audio, so it
+	// works with cameras that cannot SETUP the audio track in isolation.
+	MediaModeFullStream MediaMode = "full-stream"
+)
+
+// DefaultMediaMode is used when a stream does not specify a media mode. Full
+// stream is the most compatible request (every RTSP camera can deliver it) and
+// avoids the fragile audio-only handshake that some cameras (e.g. Unifi) complete
+// just long enough to mislead the audio-only fallback (#3953). Users who want to
+// conserve a camera video slot can select "auto" or "audio-only".
+const DefaultMediaMode = MediaModeFullStream
+
+// Canonical returns the effective media mode, treating an empty value as the
+// default. Callers comparing modes (e.g. hot-reload change detection) should
+// compare canonical values so an unset field and an explicit default are not
+// treated as a real change that would needlessly restart the stream.
+func (m MediaMode) Canonical() MediaMode {
+	if m == "" {
+		return DefaultMediaMode
+	}
+	return m
+}
+
+// ValidMediaModes is the set of accepted media mode values.
+var ValidMediaModes = map[MediaMode]bool{
+	MediaModeAuto:       true,
+	MediaModeAudioOnly:  true,
+	MediaModeFullStream: true,
+}
+
 // StreamConfig represents a single audio stream source
 type StreamConfig struct {
 	Name        string             `yaml:"name" json:"name" mapstructure:"name"`                                    // Required: descriptive name like "Front Yard"
@@ -590,6 +641,7 @@ type StreamConfig struct {
 	Type        string             `yaml:"type" json:"type" mapstructure:"type"`                                    // Stream type: rtsp, http, hls, rtmp, udp
 	Transport   string             `yaml:"transport" json:"transport" mapstructure:"transport"`                     // Transport: tcp or udp (for RTSP/RTMP)
 	ChannelMode ChannelMode        `yaml:"channelMode,omitempty" json:"channelMode" mapstructure:"channelMode"`     // Channel handling: downmix, left, or right
+	MediaMode   MediaMode          `yaml:"mediaMode,omitempty" json:"mediaMode" mapstructure:"mediaMode"`           // RTSP media request: auto, audio-only, or full-stream (ignored for non-RTSP)
 	Gain        float64            `yaml:"gain" json:"gain" mapstructure:"gain"`                                    // Input gain in dB (0 = no adjustment)
 	Equalizer   *EqualizerSettings `yaml:"equalizer,omitempty" json:"equalizer,omitempty" mapstructure:"equalizer"` // Per-stream EQ (nil = use global)
 	QuietHours  QuietHoursConfig   `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"`                  // Quiet hours configuration
@@ -877,7 +929,7 @@ type LogDeduplicationSettings struct {
 // SpeciesTrackingSettings contains settings for tracking new species
 type SpeciesTrackingSettings struct {
 	Enabled                      bool                     `yaml:"enabled" json:"enabled"`                                           // true to enable new species tracking
-	NewSpeciesWindowDays         int                      `yaml:"newspecieswindowdays" json:"newSpeciesWindowDays"`                 // Days to consider a species "new" (default: 14)
+	NewSpeciesWindowDays         int                      `yaml:"newspecieswindowdays" json:"newSpeciesWindowDays"`                 // Days to consider a species "new" (default: 7)
 	SyncIntervalMinutes          int                      `yaml:"syncintervalminutes" json:"syncIntervalMinutes"`                   // Interval to sync with database (default: 60)
 	NotificationSuppressionHours int                      `yaml:"notificationsuppressionhours" json:"notificationSuppressionHours"` // Hours to suppress duplicate notifications (default: 168)
 	YearlyTracking               YearlyTrackingSettings   `yaml:"yearlytracking" json:"yearlyTracking"`                             // Settings for yearly species tracking
@@ -889,13 +941,13 @@ type YearlyTrackingSettings struct {
 	Enabled    bool `yaml:"enabled" json:"enabled"`       // true to enable yearly tracking
 	ResetMonth int  `yaml:"resetmonth" json:"resetMonth"` // Month to reset yearly tracking (1=January, default: 1)
 	ResetDay   int  `yaml:"resetday" json:"resetDay"`     // Day to reset yearly tracking (default: 1)
-	WindowDays int  `yaml:"windowdays" json:"windowDays"` // Days to show "new this year" indicator (default: 30)
+	WindowDays int  `yaml:"windowdays" json:"windowDays"` // Days to show "new this year" indicator (default: 7)
 }
 
 // SeasonalTrackingSettings contains settings for tracking first arrivals each season
 type SeasonalTrackingSettings struct {
 	Enabled    bool              `yaml:"enabled" json:"enabled"`                       // true to enable seasonal tracking
-	WindowDays int               `yaml:"windowdays" json:"windowDays"`                 // Days to show "new this season" indicator (default: 21)
+	WindowDays int               `yaml:"windowdays" json:"windowDays"`                 // Days to show "new this season" indicator (default: 7)
 	Seasons    map[string]Season `yaml:"seasons" json:"seasons" jsonschema:"nullable"` // Season definitions
 }
 
@@ -1202,25 +1254,26 @@ type InputConfig struct {
 }
 
 type BirdNETConfig struct {
-	Version            string              `yaml:"version,omitempty" json:"version,omitempty"`                 // model version: "2.4", "3.0"
-	Debug              bool                `yaml:"debug" json:"debug"`                                         // true to enable debug mode
-	Sensitivity        float64             `yaml:"sensitivity" json:"sensitivity"`                             // birdnet analysis sigmoid sensitivity
-	Threshold          float64             `yaml:"threshold" json:"threshold"`                                 // threshold for prediction confidence to report
-	Overlap            float64             `yaml:"overlap" json:"overlap"`                                     // birdnet analysis overlap between chunks
-	Longitude          float64             `yaml:"longitude" json:"longitude"`                                 // longitude of recording location for prediction filtering
-	Latitude           float64             `yaml:"latitude" json:"latitude"`                                   // latitude of recording location for prediction filtering
-	LocationConfigured bool                `yaml:"locationconfigured" json:"locationConfigured"`               // true when location has been explicitly configured by the user
-	Threads            int                 `yaml:"threads" json:"threads"`                                     // number of CPU threads to use for analysis
-	Locale             string              `yaml:"locale" json:"locale"`                                       // language to use for labels
-	RangeFilter        RangeFilterSettings `yaml:"rangefilter" json:"rangeFilter"`                             // range filter settings
-	ModelPath          string              `yaml:"modelpath,omitempty" json:"modelPath,omitempty"`             // path to external model file (empty for embedded)
-	LabelPath          string              `yaml:"labelpath,omitempty" json:"labelPath,omitempty"`             // path to external label file (empty for embedded)
-	Labels             []string            `yaml:"-" json:"-"`                                                 // list of available species labels, runtime value
-	UseXNNPACK         bool                `yaml:"usexnnpack" json:"useXnnpack"`                               // true to use XNNPACK delegate for inference acceleration
-	ONNXRuntimePath    string              `yaml:"onnxruntimepath,omitempty" json:"onnxRuntimePath,omitempty"` // path to ONNX Runtime shared library (required for ONNX models)
-	OpenVINOPath       string              `yaml:"openvinopath,omitempty" json:"openVinoPath,omitempty"`       // path to libopenvino_c shared library (OpenVINO image variants only)
-	Backend            string              `yaml:"backend,omitempty" json:"backend,omitempty"`                 // inference backend preference: "auto" (default), "onnx", or "openvino"
-	OpenVINODevice     string              `yaml:"openvinodevice,omitempty" json:"openVinoDevice,omitempty"`   // OpenVINO device preference: "auto" (default), "cpu", or "gpu"
+	Version             string              `yaml:"version,omitempty" json:"version,omitempty"`                         // model version: "2.4", "3.0"
+	Debug               bool                `yaml:"debug" json:"debug"`                                                 // true to enable debug mode
+	Sensitivity         float64             `yaml:"sensitivity" json:"sensitivity"`                                     // birdnet analysis sigmoid sensitivity
+	Threshold           float64             `yaml:"threshold" json:"threshold"`                                         // threshold for prediction confidence to report
+	Overlap             float64             `yaml:"overlap" json:"overlap"`                                             // birdnet analysis overlap between chunks
+	Longitude           float64             `yaml:"longitude" json:"longitude"`                                         // longitude of recording location for prediction filtering
+	Latitude            float64             `yaml:"latitude" json:"latitude"`                                           // latitude of recording location for prediction filtering
+	LocationConfigured  bool                `yaml:"locationconfigured" json:"locationConfigured"`                       // true when location has been explicitly configured by the user
+	Threads             int                 `yaml:"threads" json:"threads"`                                             // number of CPU threads to use for analysis
+	Locale              string              `yaml:"locale" json:"locale"`                                               // language to use for labels
+	RangeFilter         RangeFilterSettings `yaml:"rangefilter" json:"rangeFilter"`                                     // range filter settings
+	ModelPath           string              `yaml:"modelpath,omitempty" json:"modelPath,omitempty"`                     // path to external model file (empty for embedded)
+	LabelPath           string              `yaml:"labelpath,omitempty" json:"labelPath,omitempty"`                     // path to external label file (empty for embedded)
+	Labels              []string            `yaml:"-" json:"-"`                                                         // list of available species labels, runtime value
+	UseXNNPACK          bool                `yaml:"usexnnpack" json:"useXnnpack"`                                       // true to use XNNPACK delegate for inference acceleration
+	ONNXRuntimePath     string              `yaml:"onnxruntimepath,omitempty" json:"onnxRuntimePath,omitempty"`         // path to ONNX Runtime shared library (required for ONNX models)
+	OpenVINOPath        string              `yaml:"openvinopath,omitempty" json:"openVinoPath,omitempty"`               // path to libopenvino_c shared library (OpenVINO image variants only)
+	Backend             string              `yaml:"backend,omitempty" json:"backend,omitempty"`                         // inference backend preference: "auto" (default), "onnx", or "openvino"
+	OpenVINODevice      string              `yaml:"openvinodevice,omitempty" json:"openVinoDevice,omitempty"`           // OpenVINO device preference: "auto" (default), "cpu", or "gpu"
+	HuggingFaceEndpoint string              `yaml:"huggingfaceendpoint,omitempty" json:"huggingFaceEndpoint,omitempty"` // model download host, e.g. "https://hf-mirror.com" where huggingface.co is blocked; empty falls back to $HF_ENDPOINT then https://huggingface.co
 }
 
 // Inference backend preferences for BirdNET.Backend.
@@ -1256,6 +1309,14 @@ type RangeFilterSettings struct {
 type PerchConfig struct {
 	ModelPath string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to Perch v2 ONNX model file
 	LabelPath string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to Perch v2 label CSV file
+	Threshold float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for detections
+	Locale    string  `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation
+}
+
+// BirdNETV3Config holds configuration for the BirdNET v3.0 acoustic classifier.
+type BirdNETV3Config struct {
+	ModelPath string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to BirdNET v3.0 ONNX model file
+	LabelPath string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to BirdNET v3.0 label file
 	Threshold float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for detections
 	Locale    string  `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation
 }
@@ -1661,6 +1722,53 @@ type BackupConfig struct {
 	} `yaml:"operationtimeouts" json:"operationTimeouts"`
 }
 
+// ProfilingConfig gates the Go pprof HTTP endpoints.
+//
+// The endpoints are served by the main web server behind its authentication
+// middleware, never by the Prometheus telemetry listener. When no
+// authentication provider is configured (the common home-LAN default), Token is
+// required instead, and is generated automatically: on the config load path
+// when profiling is already enabled, and on the settings-save path when it is
+// switched on at runtime.
+//
+// The leaf key is deliberately named "token" and not "profilingtoken": support
+// dump scrubbing matches sensitive keys on word boundaries, so a squashed name
+// would not be redacted. See isSensitiveKey in internal/support/collector.go.
+// The two rate fields have different units on entirely different scales, which
+// is a documented footgun in the Go API rather than an inconsistency here:
+// SetBlockProfileRate takes nanoseconds of blocked time per sample, while
+// SetMutexProfileFraction takes a 1-in-N fraction of contention events. Both
+// sample LESS as the number grows, so the senses agree; only the units and the
+// magnitudes differ. Both are independent of Enabled: collecting samples and
+// serving /debug/pprof are separate decisions, and turning on the endpoint to
+// grab a heap profile must not silently start taxing the audio path.
+//
+// Use ResolvedBlockRate and ResolvedMutexFraction when handing these to the
+// runtime rather than reading the fields directly; they clamp values the
+// runtime would otherwise misread.
+//
+// The two rate comments below are lifted verbatim into the generated config
+// schema and the wiki's configuration reference, so they spell the recommended
+// numbers out rather than naming the constants that hold them. Those two copies
+// cannot drift: TestSchemaUpToDate regenerates and byte-compares them. The
+// copies in config.yaml and doc/PROFILING.md are hand-maintained, and
+// TestRecommendedRatesMatchShippedConfig covers the config.yaml one.
+type ProfilingConfig struct {
+	Enabled bool   `yaml:"enabled" json:"enabled"` // true to serve /debug/pprof/* on the web server
+	Token   string `yaml:"token" json:"token"`     // secret required when no auth provider is configured; generated automatically
+
+	BlockRate     int `yaml:"blockrate" json:"blockRate"`         // nanoseconds of blocked time per sample; 0 disables. Independent of enabled: sampling costs CPU continuously whether or not a profile is ever fetched, so 0 is the only free setting and a very coarse rate still pays most of the cost. Recommended starting point: 10000. Hot-reloadable via the settings API.
+	MutexFraction int `yaml:"mutexfraction" json:"mutexFraction"` // reports one sampled event per this many contention events; 0 disables. Independent of enabled: sampling costs CPU continuously whether or not a profile is ever fetched. Recommended starting point: 100. Hot-reloadable via the settings API.
+}
+
+// DiagnosticsConfig groups the developer-facing diagnostics features. It is a
+// sibling of Logging and WebServer rather than a member of the telemetry
+// settings, because decoupling profiling from Prometheus metrics is the point:
+// enabling metrics must not expose profiling.
+type DiagnosticsConfig struct {
+	Profiling ProfilingConfig `yaml:"profiling" json:"profiling"` // pprof HTTP endpoint configuration
+}
+
 // Settings contains all configuration options for the BirdNET-Go application.
 type Settings struct {
 	Debug bool `yaml:"debug" json:"debug"` // true to enable debug mode
@@ -1679,11 +1787,12 @@ type Settings struct {
 		TimeAs24h bool   `yaml:"timeas24h" json:"timeAs24h"` // true 24-hour time format, false 12-hour time format
 	} `yaml:"main" json:"main"`
 
-	BirdNET BirdNETConfig `yaml:"birdnet" json:"birdnet"` // BirdNET configuration
-	Perch   PerchConfig   `yaml:"perch" json:"perch"`     // Perch v2 model configuration
-	Bat     BatConfig     `yaml:"bat" json:"bat"`         // Bat detection configuration
-	BSG     BSGConfig     `yaml:"bsg" json:"bsg"`         // BSG regional bird model configuration
-	Models  ModelsConfig  `yaml:"models" json:"models"`   // Global model enablement and management
+	BirdNET   BirdNETConfig   `yaml:"birdnet" json:"birdnet"`     // BirdNET configuration
+	Perch     PerchConfig     `yaml:"perch" json:"perch"`         // Perch v2 model configuration
+	BirdNETV3 BirdNETV3Config `yaml:"birdnetv3" json:"birdnetv3"` // BirdNET v3.0 acoustic classifier configuration
+	Bat       BatConfig       `yaml:"bat" json:"bat"`             // Bat detection configuration
+	BSG       BSGConfig       `yaml:"bsg" json:"bsg"`             // BSG regional bird model configuration
+	Models    ModelsConfig    `yaml:"models" json:"models"`       // Global model enablement and management
 
 	LowMemory LowMemoryConfig `yaml:"lowmemory" json:"lowMemory" mapstructure:"lowmemory"` // Low-memory mode override (auto/on/off) for constrained systems
 
@@ -1695,6 +1804,8 @@ type Settings struct {
 	WebServer WebServerSettings `yaml:"webserver" json:"webServer"` // web server configuration
 	Security  Security          `yaml:"security" json:"security"`   // security configuration
 	Sentry    SentrySettings    `yaml:"sentry" json:"sentry"`       // Sentry error tracking configuration
+
+	Diagnostics DiagnosticsConfig `yaml:"diagnostics" json:"diagnostics"` // developer diagnostics (pprof profiling)
 
 	Output struct {
 		File struct {
@@ -1776,6 +1887,19 @@ func (s *Settings) GetEnabledOAuthProviders() []string {
 		}
 	}
 	return enabled
+}
+
+// IsAuthProviderConfigured reports whether this instance has any way to
+// authenticate a user: basic auth is enabled, or at least one OAuth provider is
+// enabled and fully configured.
+//
+// It deliberately ignores the allowed-subnet bypass, which is a per-request
+// concern handled by OAuth2Server.IsAuthenticationEnabled. This answers the
+// global question "can this instance authenticate anyone at all", which is what
+// decides whether an endpoint can rely on the auth middleware or has to carry
+// its own credential.
+func (s *Settings) IsAuthProviderConfigured() bool {
+	return s.Security.BasicAuth.Enabled || len(s.GetEnabledOAuthProviders()) > 0
 }
 
 // GenerateRandomSecret generates a URL-safe base64 encoded random string

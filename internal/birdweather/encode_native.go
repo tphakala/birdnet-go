@@ -1,15 +1,15 @@
 // encode_native.go implements the FFmpeg-free FLAC encoding path for BirdWeather
-// soundscape uploads. It is selected by the same BIRDNET_FLAC_ENCODER=native gate
-// as the detection save path (see internal/audiocore/flac). Loudness is matched
-// to the FFmpeg path's target (-23 LUFS) using the native audionorm library,
-// which additionally applies true-peak limiting the old volume-filter path
-// lacked.
+// soundscape uploads. It is the sole encoder for the FLAC-only upload API (see
+// internal/audiocore/flac). Loudness is matched to the historical FFmpeg target
+// (-23 LUFS) using the native audionorm library, which additionally applies
+// true-peak limiting the old volume-filter path lacked.
 package birdweather
 
 import (
 	"context"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audionorm"
+	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
 	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -34,18 +34,6 @@ func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audi
 	ctx, cancel := context.WithTimeout(context.Background(), encodingTimeout)
 	defer cancel()
 
-	// Pass 1: measure loudness + true peak directly from the PCM bytes; the
-	// original bytes are never mutated.
-	meas, err := audionorm.MeasureInt16Bytes(pcmData, conf.SampleRate, conf.NumChannels)
-	if err != nil {
-		return nil, errors.New(err).
-			Component("birdweather").
-			Category(errors.CategoryAudio).
-			Context("operation", "native_flac_measure").
-			Context("timestamp", timestamp).
-			Build()
-	}
-
 	opts := audionorm.DefaultOptions()
 	opts.SampleRate = conf.SampleRate
 	opts.Channels = conf.NumChannels
@@ -53,12 +41,22 @@ func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audi
 	// is kept, adding inter-sample-peak protection the volume filter lacked.
 	opts.TargetLUFS = targetIntegratedLoudnessLUFS
 
-	res := audionorm.PlanGain(meas, opts)
+	// Pass 1: measure loudness + true peak directly from the PCM bytes (never
+	// mutated), plan the gain toward opts.TargetLUFS, and clamp to the same
+	// +/-audionorm.DefaultMaxGainDB bound the FFmpeg path used. Silence yields
+	// GainDB == 0 (audionorm returns -Inf LUFS), so quiet clips stay quiet instead
+	// of being boosted into noise.
+	gainDB, meas, res, limited, err := audionorm.PlanClampedGainInt16Bytes(pcmData, opts, audionorm.DefaultMaxGainDB)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("birdweather").
+			Category(errors.CategoryAudio).
+			Context("operation", "native_flac_measure").
+			Context("encoder", clipenc.NativeFLAC).
+			Context("timestamp", timestamp).
+			Build()
+	}
 
-	// Clamp to the same +/-audionorm.DefaultMaxGainDB bound the FFmpeg path used.
-	// Silence yields GainDB == 0 (audionorm returns -Inf LUFS), so quiet clips stay quiet
-	// instead of being boosted into noise.
-	gainDB, limited := audionorm.ClampGainDB(res.GainDB, audionorm.DefaultMaxGainDB)
 	if limited {
 		if res.GainDB > 0 {
 			b.logGainLimit(log, "Limiting gain to prevent excessive amplification",
@@ -99,8 +97,34 @@ func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audi
 			Build()
 	}
 
+	// encoder and gain_db are on the Info line, not just the Debug one above, so
+	// that a default-level support dump answers for uploads the two questions it
+	// already answers for saved clips: which encoder produced the audio, and how
+	// much gain it applied ("my BirdWeather uploads are too quiet"). The Debug
+	// line keeps the full measurement detail.
+	//
+	// operation names the line for grep and for the system-events classifier,
+	// and pairs with birdweather_soundscape_encode_failed (emitted by
+	// logFLACEncodingError in birdweather_client.go) so success and failure are
+	// distinguishable without parsing the message.
+	//
+	// Whether it reaches GET /api/v2/system/events/operational depends on the
+	// logging configuration, and an earlier version of this comment wrongly said
+	// it always does. That endpoint reads two configured base paths (plus their
+	// rotated variants): GetDefaultOutputPath() and GetOutputPath("audio").
+	// CentralLogger.Module routes to a module's own writer only when that module
+	// has an output entry AND it is enabled, otherwise it falls back to the
+	// shared base handler. On a default install birdweather gets its own file
+	// (ensureModuleOutput, DefaultBirdweatherLogPath), so these lines land
+	// outside what the endpoint reads and never appear there. Disable or
+	// redirect the birdweather module output and they land in the default output
+	// instead, at which point they DO appear, which is what the matching
+	// noiseOperations entry is for.
 	log.Info("Encoded audio to FLAC format (native go-flac)",
 		logger.String("timestamp", timestamp),
-		logger.Int("bytes", buf.Len()))
+		logger.String("encoder", clipenc.NativeFLAC),
+		logger.Float64("gain_db", gainDB),
+		logger.Int("bytes", buf.Len()),
+		logger.String("operation", "birdweather_soundscape_encode"))
 	return &audioEncodingResult{buffer: buf, ext: "flac"}, nil
 }

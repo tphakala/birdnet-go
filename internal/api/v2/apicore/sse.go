@@ -259,22 +259,26 @@ func (m *SSEManager) BroadcastDetection(detection *SSEDetectionData) {
 	var blockedClients []string
 
 	for clientID, client := range m.clients {
-		select {
-		case client.Channel <- *detection:
-			// Successfully sent to client - reset health counter atomically
-			client.consecutiveDrops.Store(0)
+		if client.StreamType == StreamTypeDetections || client.StreamType == StreamTypeAll {
+			if client.Channel != nil {
+				select {
+				case client.Channel <- *detection:
+					// Successfully sent to client - reset health counter atomically
+					client.consecutiveDrops.Store(0)
 
-		default:
-			// Channel full - drop this update, increment counter atomically
-			drops := client.consecutiveDrops.Add(1)
+				default:
+					// Channel full - drop this update, increment counter atomically
+					drops := client.consecutiveDrops.Add(1)
 
-			// Only log when reaching disconnect threshold to avoid log spam
-			if drops >= maxConsecutiveDrops {
-				GetLogger().Info("SSE client disconnected after consecutive drops",
-					logger.String("client_id", clientID),
-					logger.Int("consecutive_drops", int(drops)),
-				)
-				blockedClients = append(blockedClients, clientID)
+					// Only log when reaching disconnect threshold to avoid log spam
+					if drops >= maxConsecutiveDrops {
+						GetLogger().Info("SSE client disconnected after consecutive drops",
+							logger.String("client_id", clientID),
+							logger.Int("consecutive_drops", int(drops)),
+						)
+						blockedClients = append(blockedClients, clientID)
+					}
+				}
 			}
 		}
 	}

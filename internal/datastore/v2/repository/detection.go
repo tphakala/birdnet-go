@@ -104,7 +104,7 @@ type DetectionRepository interface {
 
 	// GetTopSpecies returns the most frequently detected species in a time range.
 	// modelID is optional; pass nil to include all models.
-	GetTopSpecies(ctx context.Context, start, end int64, minConfidence float64, modelID *uint, limit int) ([]SpeciesCount, error)
+	GetTopSpecies(ctx context.Context, start, end int64, minConfidence float64, modelID *uint, species []string, limit int) ([]SpeciesCount, error)
 
 	// GetBatchHourlyOccurrences returns per-label-ID hourly detection counts (0-23)
 	// for the given label IDs in a single grouped query (per chunk). The result maps

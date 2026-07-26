@@ -58,7 +58,7 @@ func (m *MockDatastore) GetAllNotes() ([]datastore.Note, error) {
 func (m *MockDatastore) GetTopBirdsData(context.Context, string, float64, int) ([]datastore.Note, error) {
 	return make([]datastore.Note, 0), nil
 }
-func (m *MockDatastore) GetBatchHourlyOccurrences(context.Context, string, []string, float64) (map[string][24]int, error) {
+func (m *MockDatastore) GetBatchHourlyOccurrences(context.Context, string, string, []string, float64) (map[string][24]int, error) {
 	return make(map[string][24]int), nil
 }
 func (m *MockDatastore) SpeciesDetections(string, string, string, int, bool, int, int) ([]datastore.Note, error) {
@@ -167,7 +167,7 @@ func (m *MockDatastore) GetSpeciesDiversityData(context.Context, string, string)
 func (m *MockDatastore) GetActivityHeatmap(context.Context, string, string, string) (datastore.ActivityHeatmapData, error) {
 	return datastore.ActivityHeatmapData{}, nil
 }
-func (m *MockDatastore) GetHourlyDistributionBySpecies(context.Context, string, string, int) ([]datastore.SpeciesHourlyDistribution, error) {
+func (m *MockDatastore) GetHourlyDistributionBySpecies(context.Context, string, string, []string, int) ([]datastore.SpeciesHourlyDistribution, error) {
 	return []datastore.SpeciesHourlyDistribution{}, nil
 }
 func (m *MockDatastore) GetDailyActivityOnset(context.Context, string, string, string) ([]datastore.DailyActivityOnset, error) {
@@ -189,7 +189,7 @@ func (m *MockDatastore) GetYearOverYear(_ context.Context, _ string) (datastore.
 func (m *MockDatastore) GetSpeciesPhenology(context.Context, string, string, int) ([]datastore.SpeciesPhenologyPoint, error) {
 	return []datastore.SpeciesPhenologyPoint{}, nil
 }
-func (m *MockDatastore) GetAcousticSuccession(context.Context, string, string, int) ([]datastore.SpeciesHourlyCounts, error) {
+func (m *MockDatastore) GetAcousticSuccession(context.Context, string, string, []string, int) ([]datastore.SpeciesHourlyCounts, error) {
 	return []datastore.SpeciesHourlyCounts{}, nil
 }
 func (m *MockDatastore) SearchDetections(*datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {

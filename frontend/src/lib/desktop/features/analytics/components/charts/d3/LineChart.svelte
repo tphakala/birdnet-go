@@ -15,6 +15,7 @@
     addAxisLabel,
     createDateAxisFormatter,
     pickDateRangeBucket,
+    boundaryDateTicks,
   } from './utils/axes';
   import { ChartTooltip, addCrosshair, createLegend } from './utils/interactions';
   import { generateSpeciesColors, type ChartRenderContext } from './utils/theme';
@@ -71,6 +72,9 @@
   const TRANSITION_MS = 150;
   const LEGEND_WIDTH = 150;
 
+  // Per-instance clip-path id. Math.random (not crypto) so it works on plain HTTP.
+  const clipId = `line-plot-clip-${Math.random().toString(36).slice(2, 10)}`;
+
   let tooltip: ChartTooltip | null = null;
   let chartContainer: HTMLDivElement | null = null;
 
@@ -118,12 +122,15 @@
     const span = xScale.domain();
     const dateTick = createDateAxisFormatter(pickDateRangeBucket([span[0], span[1]]));
 
+    const xTickCount = Math.min(MAX_X_TICKS, Math.max(2, Math.floor(innerWidth / TICK_SPACING_PX)));
     const xAxis = createAxis({
       scale: xScale,
       orientation: 'bottom',
       tickFormat: (d: AxisDomain) => dateTick(d as Date),
-      tickCount: Math.min(MAX_X_TICKS, Math.max(2, Math.floor(innerWidth / TICK_SPACING_PX))),
     });
+    // Always label the domain endpoints (esp. the most recent day at the right
+    // edge, which d3's nice ticks otherwise drop). See boundaryDateTicks.
+    xAxis.tickValues(boundaryDateTicks(xScale, xTickCount));
     const yAxis = createAxis({
       scale: yScale,
       orientation: 'left',
@@ -140,6 +147,21 @@
 
     styleAxis(xAxisGroup, theme.axis);
     styleAxis(yAxisGroup, theme.axis);
+
+    // Keep the forced boundary labels inside the plot: anchor the first label to
+    // its start and the last to its end so neither overflows the side margins
+    // (the container clips overflow, so a centered edge label loses characters).
+    const xTickNodes = xAxisGroup.selectAll<globalThis.SVGGElement, Date>('.tick').nodes();
+    if (xTickNodes.length > 0) {
+      select(xTickNodes[0]).select('text').style('text-anchor', 'start');
+      // Only anchor the last tick to 'end' when it's a distinct node — a lone tick
+      // (zero-width domain) must stay 'start' or it shifts left off the origin.
+      if (xTickNodes.length > 1) {
+        select(xTickNodes[xTickNodes.length - 1])
+          .select('text')
+          .style('text-anchor', 'end');
+      }
+    }
 
     if (dateAxisLabel) {
       addAxisLabel(
@@ -183,7 +205,22 @@
       .y(p => yScale(p.value))
       .curve(curveMonotoneX);
 
-    const seriesGroup = chartGroup.append('g').attr('class', 'series');
+    // Clip the series to the plot area so points/line for dates outside the fixed
+    // domain can't draw over the Y-axis and its label (or spill past the right
+    // edge). Padded vertically so edge points/hover aren't trimmed top or bottom.
+    chartGroup
+      .append('clipPath')
+      .attr('id', clipId)
+      .append('rect')
+      .attr('x', 0)
+      .attr('y', -POINT_HOVER_RADIUS)
+      .attr('width', innerWidth)
+      .attr('height', innerHeight + 2 * POINT_HOVER_RADIUS);
+
+    const seriesGroup = chartGroup
+      .append('g')
+      .attr('class', 'series')
+      .attr('clip-path', `url(#${clipId})`);
 
     resolved.forEach(s => {
       const group = seriesGroup.append('g').attr('class', 'series-group').attr('data-series', s.id);

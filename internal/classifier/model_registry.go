@@ -159,7 +159,7 @@ var ModelRegistry = map[string]ModelInfo{
 		DetectionVersion: "3.0",
 		Description:      "BirdNET v3.0 model (32kHz, 5s clips, embeddings)", // NumSpecies omitted: determined at runtime from label file
 		Spec:             ModelSpec{SampleRate: 32000, ClipLength: 5 * time.Second},
-		ConfigAliases:    []string{"birdnet_v3.0"},
+		ConfigAliases:    []string{conf.ModelIDBirdNETV3},
 		SupportedLocales: []string{"af", "ar", "bg", "ca", "cs", "da", "de", "el", "en-uk", "en-us", "es",
 			"et", "fi", "fr", "he", "hr", "hu", "id", "is", "it", "ja", "ko", "lt", "lv", "ml", "nl",
 			"no", "pl", "pt", "pt-br", "pt-pt", "ro", "ru", "sk", "sl", "sr", "sv", "th", "tr", "uk", "zh"},
@@ -206,18 +206,27 @@ func isBirdNETV24Family(id string) bool {
 	return id == DefaultModelVersion
 }
 
-// remapV24ForONNXOnly remaps a registry-resolved BirdNET v2.4 TFLite model to the
-// INT8-ARM ONNX entry when this build has no TFLite backend (notflite, i.e. the
-// ONNX-only arm64 image) and the ONNX model is present in the standard paths.
-// This keeps arm64 configs that select v2.4 via `version: "2.4"` or the default
-// working on ONNX-only images instead of failing to start on the missing TFLite
-// backend. An explicit model path (CustomPath set) is left untouched so a
-// user-supplied model is never silently swapped.
-func remapV24ForONNXOnly(info *ModelInfo, tfliteAvailable bool, find func(name string) (path string, ok bool)) ModelInfo {
-	if tfliteAvailable || info.CustomPath != "" {
+// remapV24ToONNXOnARM64 remaps a registry-resolved BirdNET v2.4 TFLite model to the
+// INT8-ARM ONNX entry when ONNX is the appropriate stock backend and the ONNX model
+// is present in the standard paths. That holds in two cases: on arm64 (where INT8-ARM
+// ONNX is the reduced-memory stock default; arm64 container images also link
+// libtensorflowlite_c so custom `.tflite` models still load), and on any build with
+// no TFLite backend (the notflite tag), whose stub classifier cannot run TFLite and
+// would otherwise fail to start. A normal non-arm64 build keeps its FP32 TFLite v2.4
+// default even when the ONNX file happens to be present, so a stray copy never
+// silently switches backends. An explicit model path (CustomPath set) is left
+// untouched so a user-supplied model is never swapped.
+func remapV24ToONNXOnARM64(info *ModelInfo, goarch string, tfliteAvailable bool, find func(name string) (path string, ok bool)) ModelInfo {
+	if info.CustomPath != "" {
 		return *info
 	}
 	if info.Backend != BackendTFLite || info.ID != DefaultModelVersion {
+		return *info
+	}
+	// Remap to ONNX on arm64 (its stock default) or on a build with no TFLite
+	// backend (notflite), where TFLite cannot run. A normal non-arm64 build keeps
+	// FP32 TFLite even when the ONNX file is present, so nothing silently switches.
+	if goarch != defaultBirdNETClassifierARM64Arch && tfliteAvailable {
 		return *info
 	}
 	if path, ok := find(DefaultBirdNETINT8ONNXModelName); ok {
@@ -300,6 +309,32 @@ func defaultRangeFilterONNXPath(goarch string, find func(name string) (path stri
 		return "", false
 	}
 	return find(DefaultRangeFilterV2ONNXModelName)
+}
+
+// isAutoSelectRangeFilterModel reports whether the configured range-filter model
+// requests automatic backend selection. Both "" and the "latest" sentinel (the
+// config default in defaults.go) mean "pick the best available range filter": the
+// v3 geomodel when its files are present, then the shipped ONNX MData model, then
+// the classifier's embedded/shipped TFLite MData model.
+//
+// Without treating "latest" as auto-select, the default config dead-ends at the
+// TFLite backend, which has no model file on ONNX-only (arm64) container images,
+// leaving the instance with no range filter and every species unfiltered (#3932).
+func isAutoSelectRangeFilterModel(model string) bool {
+	return model == "" || model == conf.RangeFilterModelLatest
+}
+
+// shouldSelectDefaultONNXRangeFilter reports the ONNX MData range-filter model path
+// to use as the arm64 default. It returns ("", false) unless the config requests
+// auto-selection (isAutoSelectRangeFilterModel), no explicit range-filter ModelPath
+// is set, the classifier is the BirdNET v2.4 family (whose labels match the MData V2
+// output dimension), and defaultRangeFilterONNXPath locates the ONNX MData model
+// (arm64 only). find resolves a model filename within the standard search paths.
+func shouldSelectDefaultONNXRangeFilter(model, modelPath, classifierID, goarch string, find func(name string) (path string, ok bool)) (string, bool) {
+	if !isAutoSelectRangeFilterModel(model) || modelPath != "" || !isBirdNETV24Family(classifierID) {
+		return "", false
+	}
+	return defaultRangeFilterONNXPath(goarch, find)
 }
 
 // birdnetVersionToRegistryID maps user-facing BirdNET version strings to registry IDs.

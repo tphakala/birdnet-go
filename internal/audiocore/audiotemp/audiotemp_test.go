@@ -1,6 +1,7 @@
 package audiotemp_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -177,4 +178,41 @@ func TestIsTempFor(t *testing.T) {
 	unique := audiotemp.UniquePath("clip.wav")
 	assert.True(t, audiotemp.IsTempFor(filepath.Base(unique), "clip.wav"),
 		"UniquePath output must match IsTempFor for the same base")
+}
+
+// A write fault reaching the caller through the codec must be recognisable, so
+// a full disk is reported as a filesystem failure rather than blamed on the
+// encoder. The payload write happens inside the encode callback, which is why
+// WriteFile cannot classify it on the caller's behalf.
+func TestIsWriteFault(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a real write to a closed file is a write fault", func(t *testing.T) {
+		t.Parallel()
+		f, err := os.CreateTemp(t.TempDir(), "wf")
+		require.NoError(t, err)
+		require.NoError(t, f.Close())
+
+		_, writeErr := f.WriteString("x") // fails: already closed
+		require.Error(t, writeErr)
+		assert.True(t, audiotemp.IsWriteFault(writeErr), "os.File write errors must classify as write faults")
+	})
+
+	t.Run("a wrapped write fault is still a write fault", func(t *testing.T) {
+		t.Parallel()
+		f, err := os.CreateTemp(t.TempDir(), "wf")
+		require.NoError(t, err)
+		require.NoError(t, f.Close())
+
+		_, writeErr := f.WriteString("x")
+		require.Error(t, writeErr)
+		// Codecs wrap the sink error before returning it.
+		assert.True(t, audiotemp.IsWriteFault(fmt.Errorf("aac: encode frame: %w", writeErr)))
+	})
+
+	t.Run("a codec error is not a write fault", func(t *testing.T) {
+		t.Parallel()
+		assert.False(t, audiotemp.IsWriteFault(fmt.Errorf("aac: unsupported channel configuration")))
+		assert.False(t, audiotemp.IsWriteFault(nil))
+	})
 }

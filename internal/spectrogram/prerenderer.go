@@ -64,9 +64,13 @@ type PreRenderer struct {
 
 // Job represents a single spectrogram generation task.
 type Job struct {
-	PCMData          []byte           // Raw PCM data from memory (s16le, mono)
-	SampleRate       int              // PCM sample rate in Hz (0 = use conf.SampleRate default)
-	ClipPath         string           // Full absolute path to audio clip; PNG path is derived by swapping extension
+	PCMData    []byte // Raw PCM data from memory (s16le, mono)
+	SampleRate int    // PCM sample rate in Hz (0 = use conf.SampleRate default)
+	// ClipPath is the audio clip joined against the configured export directory,
+	// so it is absolute whenever that directory is. The PNG path is derived by
+	// swapping the extension. It is the full path because the renderer has to
+	// open the file; never log it directly, run it through exportRelPath.
+	ClipPath         string
 	NoteID           uint             // For logging correlation
 	Timestamp        time.Time        // Job submission time
 	FrequencyProfile FrequencyProfile // Frequency profile for spectrogram generation (bird vs bat)
@@ -113,6 +117,62 @@ func (pr *PreRenderer) normalizeSpectrogramPath(settings *conf.Settings, spectro
 		return filepath.Join(pr.sfs.BaseDir(), relToExport)
 	}
 	return filepath.Join(pr.sfs.BaseDir(), spectrogramPath)
+}
+
+// exportRelPath is the name of a clip or spectrogram relative to the export
+// directory, and is the only shape a path may take in a log field or an error
+// context here.
+//
+// The pre-renderer is handed the full path (it has to open the file), but a
+// support log and an uploaded support dump are read by someone other than the
+// operator, and an absolute path leaks the account name and the directory
+// layout of their machine. The year/month segments leak nothing and are what
+// makes the value resolvable back to a file, so they are kept. This mirrors
+// SaveAudioAction.relativeClipPath, which strips the same prefix on the export
+// side; without the same treatment here, a dump that no longer leaks the path
+// from the export logs still leaks it from the pre-render logs.
+//
+// Two roots are tried because the two available answers can disagree. The
+// clip path arrives joined against settings.Realtime.Audio.Export.Path, which
+// is hot-reloadable and may be relative; sfs.BaseDir() is that same directory
+// resolved to absolute, but frozen at construction (securefs.New is called once
+// with the startup value). Either can be the one that matches, so both get a
+// turn before falling back.
+//
+// IsLocal rejects a result that walks UP out of the export directory: Rel
+// happily answers "../../../etc/passwd" when both paths are absolute but the
+// input sits outside, and that both leaks the layout above the export directory
+// and names nothing any consumer can resolve. The basename is the safe answer
+// in that case; it still identifies the file and still contains no directory.
+func exportRelPath(settings *conf.Settings, sfs *securefs.SecureFS, p string) string {
+	if p == "" {
+		return ""
+	}
+	roots := [2]string{}
+	if settings != nil {
+		roots[0] = settings.Realtime.Audio.Export.Path
+	}
+	if sfs != nil {
+		roots[1] = sfs.BaseDir()
+	}
+	for _, root := range roots {
+		if root == "" {
+			continue
+		}
+		if rel, err := filepath.Rel(root, p); err == nil && filepath.IsLocal(rel) {
+			return filepath.ToSlash(rel)
+		}
+	}
+	return filepath.Base(p)
+}
+
+// relPath is the Generator's access to the same helper. The generator receives
+// the derived ABSOLUTE spectrogram and audio paths from the pre-renderer (it has
+// to, it opens and writes them), so without this every path the pre-renderer
+// strips is re-leaked microseconds later by the code it calls, including at Info
+// level where a default-level support dump picks it up.
+func (g *Generator) relPath(p string) string {
+	return exportRelPath(g.currentSettings(), g.sfs, p)
 }
 
 // NewPreRenderer creates a new pre-renderer instance.
@@ -217,6 +277,11 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 		modelType:        modelType,
 	}
 
+	// One settings snapshot for this submission, for the same reason processJob
+	// captures one: a UI edit to the export path landing mid-call must not make
+	// two path fields on the same log line resolve against different roots.
+	settings := pr.currentSettings()
+
 	// Early check: skip if spectrogram already exists (avoid queueing duplicate jobs)
 	// Note: TOCTOU (time-of-check-time-of-use) race condition is intentional here.
 	// The file might be created between this check and processJob(), which is fine:
@@ -227,7 +292,7 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 	if err != nil {
 		pr.logger.Error("Invalid clip path, rejecting job",
 			logger.Any("note_id", job.NoteID),
-			logger.String("clip_path", job.ClipPath),
+			logger.String("clip_path", exportRelPath(settings, pr.sfs, job.ClipPath)),
 			logger.Error(err))
 		// Increment Failed stat for validation errors
 		pr.mu.Lock()
@@ -238,7 +303,7 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 			Category(errors.CategoryValidation).
 			Context("operation", "build_spectrogram_path").
 			Context("note_id", job.NoteID).
-			Context("clip_path", job.ClipPath).
+			Context("clip_path", exportRelPath(settings, pr.sfs, job.ClipPath)).
 			Build()
 	}
 
@@ -250,16 +315,36 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 
 	// Make spectrogram path absolute using SecureFS base dir, stripping export
 	// prefix to avoid path doubling (e.g., "clips/clips/..."). See #2342.
-	absOut := pr.normalizeSpectrogramPath(pr.currentSettings(), spectrogramPath)
+	absOut := pr.normalizeSpectrogramPath(settings, spectrogramPath)
 
 	relPath, err := filepath.Rel(absRoot, absOut)
 	if err != nil || relPath == ".." || strings.HasPrefix(relPath, ".."+string(os.PathSeparator)) {
+		// export_path is deliberately not logged: it IS the absolute export
+		// directory, so reporting it here would leak exactly what exportRelPath
+		// strips everywhere else on this line.
+		//
+		// reason carries what export_path used to. The two arms of this guard
+		// fail for different causes and only one of them explains itself:
+		// on the escape arm relative_path holds the "../..." result and says it
+		// all, but on the Rel-error arm (different Windows volumes) Rel returns
+		// "" and exportRelPath likewise falls through to a bare basename, so
+		// without reason the line would report a traversal and give the operator
+		// nothing to act on.
+		//
+		// relative_path is ToSlash'd to match the other two path fields; mixing
+		// separators within one line makes it unparseable by any consumer that
+		// normalizes on one convention.
+		reason := "escapes_export_root"
+		if err != nil {
+			reason = "path_not_relatable_to_export_root"
+		}
 		pr.logger.Error("Path traversal attempt detected, rejecting job",
 			logger.Any("note_id", job.NoteID),
-			logger.String("clip_path", job.ClipPath),
-			logger.String("spectrogram_path", absOut),
-			logger.String("export_path", absRoot),
-			logger.String("relative_path", relPath))
+			logger.String("clip_path", exportRelPath(settings, pr.sfs, job.ClipPath)),
+			logger.String("spectrogram_path", exportRelPath(settings, pr.sfs, absOut)),
+			logger.String("relative_path", filepath.ToSlash(relPath)),
+			logger.String("reason", reason),
+			logger.String("operation", "spectrogram_path_validation"))
 		pr.mu.Lock()
 		pr.stats.Failed++
 		pr.mu.Unlock()
@@ -268,10 +353,10 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 			Category(errors.CategoryValidation).
 			Context("operation", "path_validation").
 			Context("note_id", job.NoteID).
-			Context("clip_path", job.ClipPath).
-			Context("spectrogram_path", absOut).
-			Context("export_path", absRoot).
-			Context("relative_path", relPath).
+			Context("clip_path", exportRelPath(settings, pr.sfs, job.ClipPath)).
+			Context("spectrogram_path", exportRelPath(settings, pr.sfs, absOut)).
+			Context("relative_path", filepath.ToSlash(relPath)).
+			Context("reason", reason).
 			Build()
 	}
 
@@ -282,7 +367,7 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 		pr.mu.Unlock()
 		pr.logger.Debug("Spectrogram already exists, skipping queue",
 			logger.Any("note_id", job.NoteID),
-			logger.String("spectrogram_path", absOut))
+			logger.String("spectrogram_path", exportRelPath(settings, pr.sfs, absOut)))
 		return nil
 	}
 
@@ -327,7 +412,7 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 	default:
 		pr.logger.Warn("Pre-render queue full, dropping job",
 			logger.Any("note_id", job.NoteID),
-			logger.String("clip_path", job.ClipPath),
+			logger.String("clip_path", exportRelPath(settings, pr.sfs, job.ClipPath)),
 			logger.Int("queue_size", defaultQueueSize))
 		pr.mu.Lock()
 		pr.stats.Failed++
@@ -375,7 +460,7 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 	pr.logger.Debug("Processing pre-render job",
 		logger.Int("worker_id", workerID),
 		logger.Any("note_id", job.NoteID),
-		logger.String("clip_path", job.ClipPath),
+		logger.String("clip_path", exportRelPath(settings, pr.sfs, job.ClipPath)),
 		logger.Int("pcm_bytes", len(job.PCMData)))
 
 	// Build spectrogram path from clip path
@@ -384,7 +469,7 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 		pr.logger.Error("Failed to build spectrogram path",
 			logger.Int("worker_id", workerID),
 			logger.Any("note_id", job.NoteID),
-			logger.String("clip_path", job.ClipPath),
+			logger.String("clip_path", exportRelPath(settings, pr.sfs, job.ClipPath)),
 			logger.Error(err))
 		pr.mu.Lock()
 		pr.stats.Failed++
@@ -406,7 +491,7 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 		pr.logger.Debug("Spectrogram already exists, skipping",
 			logger.Int("worker_id", workerID),
 			logger.Any("note_id", job.NoteID),
-			logger.String("spectrogram_path", spectrogramPath))
+			logger.String("spectrogram_path", exportRelPath(settings, pr.sfs, spectrogramPath)))
 		pr.mu.Lock()
 		pr.stats.Skipped++
 		pr.mu.Unlock()
@@ -435,7 +520,7 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 	// This provides visibility into the generation pipeline
 	pr.logger.Info("Spectrogram generation started",
 		logger.Any("note_id", job.NoteID),
-		logger.String("audio_path", job.ClipPath),
+		logger.String("audio_path", exportRelPath(settings, pr.sfs, job.ClipPath)),
 		logger.String("size", specSettings.Size),
 		logger.String("operation", "spectrogram_generation_start"))
 
@@ -448,8 +533,8 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 			pr.logger.Debug("Spectrogram generation canceled or interrupted",
 				logger.Int("worker_id", workerID),
 				logger.Any("note_id", job.NoteID),
-				logger.String("clip_path", job.ClipPath),
-				logger.String("spectrogram_path", spectrogramPath),
+				logger.String("clip_path", exportRelPath(settings, pr.sfs, job.ClipPath)),
+				logger.String("spectrogram_path", exportRelPath(settings, pr.sfs, spectrogramPath)),
 				logger.Error(err),
 				logger.Int64("duration_ms", time.Since(start).Milliseconds()),
 				logger.String("operation", "spectrogram_generation_canceled"))
@@ -458,8 +543,8 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 			pr.logger.Error("Failed to generate spectrogram",
 				logger.Int("worker_id", workerID),
 				logger.Any("note_id", job.NoteID),
-				logger.String("clip_path", job.ClipPath),
-				logger.String("spectrogram_path", spectrogramPath),
+				logger.String("clip_path", exportRelPath(settings, pr.sfs, job.ClipPath)),
+				logger.String("spectrogram_path", exportRelPath(settings, pr.sfs, spectrogramPath)),
 				logger.Error(err),
 				logger.Int64("duration_ms", time.Since(start).Milliseconds()),
 				logger.String("operation", "spectrogram_generation_failed"))
@@ -481,14 +566,14 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 		pr.logger.Debug("Failed to stat spectrogram file for size logging",
 			logger.Any("note_id", job.NoteID),
 			logger.Error(err),
-			logger.String("path", spectrogramPath))
+			logger.String("path", exportRelPath(settings, pr.sfs, spectrogramPath)))
 	}
 
 	// Log at INFO level when generation succeeds (BG-18)
 	// This provides confirmation that spectrograms are being created successfully
 	pr.logger.Info("Spectrogram generated successfully",
 		logger.Any("note_id", job.NoteID),
-		logger.String("output_path", spectrogramPath),
+		logger.String("output_path", exportRelPath(settings, pr.sfs, spectrogramPath)),
 		logger.Int64("file_size_bytes", fileSize),
 		logger.Int64("duration_ms", time.Since(start).Milliseconds()),
 		logger.String("operation", "spectrogram_generation_success"))

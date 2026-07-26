@@ -33,6 +33,26 @@ var (
 	loadMu           sync.Mutex
 )
 
+// defaultConfigCreatedPath records the path of a default config generated
+// during this process's Load(). internal/conf must NOT import
+// internal/diagnostics (import cycle), so the journal event is emitted by
+// diagnostics.RecordBoot reading this marker via its caller.
+var defaultConfigCreatedPath atomic.Pointer[string]
+
+// markDefaultConfigCreated records that a default config was generated.
+func markDefaultConfigCreated(path string) {
+	defaultConfigCreatedPath.Store(&path)
+}
+
+// DefaultConfigCreated reports whether this process generated a default
+// config file during Load, and at which path.
+func DefaultConfigCreated() (created bool, path string) {
+	if p := defaultConfigCreatedPath.Load(); p != nil && *p != "" {
+		return true, *p
+	}
+	return false, ""
+}
+
 // Load reads the configuration file and environment variables into GlobalConfig.
 //
 //nolint:gocognit // Config loading is inherently complex; splitting adds indirection without clarity.
@@ -133,10 +153,41 @@ func Load() (*Settings, error) {
 		return nil, err
 	}
 
+	// Mint the profiling token when pprof is enabled without an authentication
+	// provider. Deliberately non-fatal: without a token the pprof routes refuse
+	// every request, which is the safe outcome, and a diagnostics feature must
+	// not be able to stop the application from starting.
+	if generated, err := EnsureProfilingToken(settings); err != nil {
+		GetLogger().Warn("Failed to generate profiling token; the profiling endpoints will refuse requests", logger.Error(err))
+	} else if generated {
+		// A token that is minted but never written to disk is worse than none:
+		// it gates the endpoints for this process while being unreadable (it is
+		// never logged), and the next start mints a different one. Say so
+		// plainly, because persistMigration is silent when there is no config
+		// file to write and only warns on a write failure.
+		if viper.ConfigFileUsed() == "" {
+			GetLogger().Warn("Generated a profiling token but there is no config file to save it to; " +
+				"the profiling endpoints will be unusable and the token will differ on the next start")
+		} else {
+			persistMigration(settings, "profiling token")
+		}
+	}
+
+	// Resolve features that are switched on but were never configured, before the
+	// validators get to see them. A config file can age into that state across
+	// upgrades, and rejecting the file leaves no UI in which to correct it, so
+	// those features are disabled or defaulted with a warning instead. This is
+	// deliberately scoped to loading a file: the settings API validates without
+	// normalizing, so a half-finished section submitted from the UI is still
+	// answered with an error the user can act on rather than silently discarded.
+	// See validate_incomplete.go for the policy and the per-rule reasoning.
+	normalizeIncompleteFeatures(settings)
+
 	// Validate settings. Any error ValidateSettings returns is a fatal
 	// misconfiguration that must block startup; non-fatal findings live on the
 	// separate settings.ValidationWarnings channel (recorded during config
-	// migration), never demoted from a fatal error by matching its message text.
+	// migration and normalization), never demoted from a fatal error by matching
+	// its message text.
 	if err := finalizeValidation(ValidateSettings(settings)); err != nil {
 		return nil, err
 	}
@@ -164,9 +215,10 @@ func Load() (*Settings, error) {
 //
 // Severity is structural: every error a validator returns (collected into
 // ValidationError.Errors) is fatal and blocks startup. Non-fatal configuration
-// findings use a separate channel, Settings.ValidationWarnings, recorded during
-// config migration (see applyModelValidation), not by the ValidateSettings
-// validators. Severity is never inferred from the error message text;
+// findings use a separate channel, Settings.ValidationWarnings, written during
+// config migration, during normalizeIncompleteFeatures, and by the few validators
+// that normalize a value rather than rejecting it. Severity is never inferred from
+// the error message text;
 // an earlier heuristic that demoted errors whose message contained substrings
 // like "fallback" or "not supported" to warnings could silently start the app
 // with invalid config, so it was removed.
@@ -337,6 +389,10 @@ func createDefaultConfig() error {
 			Context("path", configPath).
 			Build()
 	}
+	// Record that this process generated a default config so the diagnostics
+	// boot journal can emit a config_defaulted event (conf must not import
+	// diagnostics, so the marker is read by the caller of RecordBoot).
+	markDefaultConfigCreated(configPath)
 
 	fmt.Println("Created default config file at:", configPath)
 	return viper.ReadInConfig()

@@ -372,7 +372,7 @@ func TestUnionLabels_SkipsEmptyEntries(t *testing.T) {
 
 // TestModelInfos_LivePrimaryInfo verifies that ModelInfos returns the live
 // o.ModelInfo for the primary model entry rather than the static registry
-// template. This matters for the arm64 ONNX-only default, where o.ModelInfo
+// template. This matters for the arm64 ONNX default, where o.ModelInfo
 // carries Backend=ONNX and Quantization=INT8 while the registry template has
 // Backend=TFLite and Quantization=FP32.
 func TestModelInfos_LivePrimaryInfo(t *testing.T) {

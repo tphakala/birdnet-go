@@ -148,6 +148,13 @@ func (w *NotificationWorker) Name() string {
 func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 	w.logEventProcessingStart(event)
 
+	// Drop expected operational interruptions (context cancellation/deadline on
+	// database/system operations) before they become critical notifications, so a
+	// normal client disconnect or graceful shutdown does not raise a false alarm.
+	if w.shouldSuppressOperationalEvent(event) {
+		return nil
+	}
+
 	if !w.circuitBreaker.Allow() {
 		return w.handleCircuitBreakerOpen(event)
 	}
@@ -204,6 +211,32 @@ func (w *NotificationWorker) shouldSkipLowPriority(event events.ErrorEvent, prio
 		logger.String("category", event.GetCategory()),
 		logger.String("priority", string(priority)),
 		logger.String("component", event.GetComponent()))
+	return true
+}
+
+// shouldSuppressOperationalEvent reports whether the event is an expected
+// operational interruption (a context cancellation/deadline on a database or
+// system operation) that must not become a user-facing notification. The
+// datastore tags these context.Canceled failures CategoryDatabase, which maps
+// to PriorityCritical, so a normal RTSP client disconnect or graceful shutdown
+// would otherwise raise a false "Critical database error ... context canceled"
+// alert (issue #3891). It reuses the errors package's canonical predicate so
+// this path and the Sentry path share one definition of "expected
+// interruption". Events that are not *errors.EnhancedError (the type the errors
+// package publishes) are never suppressed here.
+func (w *NotificationWorker) shouldSuppressOperationalEvent(event events.ErrorEvent) bool {
+	ee, ok := event.(*errors.EnhancedError)
+	if !ok {
+		return false
+	}
+	if !errors.IsSuppressibleOperationalError(ee) {
+		return false
+	}
+	if w.config.Debug {
+		w.log.Debug("suppressing expected operational interruption",
+			logger.String("category", event.GetCategory()),
+			logger.String("component", event.GetComponent()))
+	}
 	return true
 }
 
@@ -295,14 +328,17 @@ func (w *NotificationWorker) ProcessBatch(errorEvents []events.ErrorEvent) error
 			logger.Int("batch_size", len(errorEvents)))
 	}
 
-	eventGroups := w.groupEventsByKey(errorEvents)
+	eventGroups, skipped := w.groupEventsByKey(errorEvents)
 	aggregatedErrors, successCount := w.processEventGroups(eventGroups)
 
+	// Intentionally skipped events (low priority, suppressed cancellations) are
+	// neither successes nor failures, so exclude them from the failure count.
 	w.log.Debug("processed event batch with aggregation",
 		logger.Int("total", len(errorEvents)),
 		logger.Int("groups", len(eventGroups)),
 		logger.Int("success", successCount),
-		logger.Int("failed", len(errorEvents)-successCount))
+		logger.Int("skipped", skipped),
+		logger.Int("failed", len(errorEvents)-successCount-skipped))
 
 	if len(aggregatedErrors) > 0 {
 		return errors.Join(aggregatedErrors...)
@@ -311,10 +347,22 @@ func (w *NotificationWorker) ProcessBatch(errorEvents []events.ErrorEvent) error
 }
 
 // groupEventsByKey groups events by component, category, and priority, skipping low priority.
-func (w *NotificationWorker) groupEventsByKey(errorEvents []events.ErrorEvent) map[eventKey][]events.ErrorEvent {
-	eventGroups := make(map[eventKey][]events.ErrorEvent)
+// groupEventsByKey groups events by component, category, and priority, skipping
+// low-priority and suppressed operational events. It also returns how many
+// events were intentionally skipped so batch accounting does not count those
+// skips as failures.
+func (w *NotificationWorker) groupEventsByKey(errorEvents []events.ErrorEvent) (eventGroups map[eventKey][]events.ErrorEvent, skipped int) {
+	eventGroups = make(map[eventKey][]events.ErrorEvent)
 
 	for _, event := range errorEvents {
+		// Same operational-interruption suppression as the single-event path, so
+		// batched context.Canceled database events are not aggregated into a
+		// critical notification either.
+		if w.shouldSuppressOperationalEvent(event) {
+			skipped++
+			continue
+		}
+
 		explicitPriority := ""
 		if enhancedErr, ok := event.(*errors.EnhancedError); ok {
 			explicitPriority = enhancedErr.GetPriority()
@@ -322,6 +370,7 @@ func (w *NotificationWorker) groupEventsByKey(errorEvents []events.ErrorEvent) m
 		priority := getNotificationPriority(event.GetCategory(), explicitPriority)
 
 		if priority == PriorityLow {
+			skipped++
 			continue
 		}
 
@@ -333,7 +382,7 @@ func (w *NotificationWorker) groupEventsByKey(errorEvents []events.ErrorEvent) m
 		eventGroups[key] = append(eventGroups[key], event)
 	}
 
-	return eventGroups
+	return eventGroups, skipped
 }
 
 // processEventGroups processes each event group and returns aggregated errors and success count.

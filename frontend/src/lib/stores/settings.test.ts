@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import { settingsStore, settingsActions } from './settings';
 import type { BirdNetSettings, RealtimeSettings, SettingsFormData } from './settings';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
+import { hasSettingsChanged } from '$lib/utils/settingsChanges';
 
 // Mock the settings API
 vi.mock('$lib/utils/settingsApi.js', () => ({
@@ -710,5 +711,181 @@ describe('Settings Store - syncTLSMode preserves unsaved Security edits', () => 
     expect(s.formData.security?.basicAuth).toBeDefined();
     expect(s.originalData.security?.tlsMode).toBe('manual');
     expect(s.originalData.security?.basicAuth).toBeDefined();
+  });
+});
+
+// The settings store has no TypeScript model for the diagnostics section: there
+// is deliberately no UI for the profiling switches, so nothing here declares
+// them. That makes the section's survival an accident of implementation rather
+// than something anyone states, and the accident is load-bearing.
+//
+// GET /api/v2/settings returns the whole Settings struct, and PUT replaces what
+// it is given: the backend merges the request body field by field over the
+// current config WITHOUT skipping zero values, so a body that omits diagnostics
+// writes 0 over diagnostics.profiling.blockrate and mutexfraction and false
+// over enabled. Sampling that an operator turned on in config.yaml would then be
+// silently switched off the next time anyone saved an unrelated setting from the
+// UI, and the block and mutex profiles would go quietly empty.
+//
+// Two things keep that from happening: object spread in loadSettings copies
+// properties the interfaces do not declare, and coerceSettings returns unknown
+// sections untouched. Both are easy to remove while "cleaning up types".
+describe('Settings Store - Unmodelled Section Round-Trip', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    // clearAllMocks resets call history but LEAVES mockResolvedValue in place,
+    // so without this the stub below keeps answering settingsAPI.load for
+    // whatever describe block is appended after this one.
+    vi.mocked(settingsAPI.load).mockReset();
+  });
+
+  it('preserves the diagnostics section through load and save', async () => {
+    const diagnostics = {
+      profiling: {
+        enabled: true,
+        // The sentinel the backend actually substitutes, so the fixture looks
+        // like a real GET response rather than an invented one.
+        token: '**********',
+        blockRate: 10000,
+        mutexFraction: 100,
+      },
+    };
+    // Compare against a deep snapshot, not against the object the mock resolves.
+    // The store spreads the response, so formData.diagnostics is the SAME
+    // reference; asserting it equals itself would pass even against a coercer
+    // that stripped fields in place on the object it was handed.
+    const expected = JSON.parse(JSON.stringify(diagnostics));
+
+    vi.mocked(settingsAPI.load).mockResolvedValue({
+      main: { name: 'TestNode' },
+      diagnostics,
+    } as unknown as SettingsFormData);
+
+    await settingsActions.loadSettings();
+
+    expect((get(settingsStore).formData as unknown as Record<string, unknown>).diagnostics).toEqual(
+      expected
+    );
+
+    await settingsActions.saveSettings();
+
+    expect(settingsAPI.save).toHaveBeenCalledWith(
+      expect.objectContaining({ diagnostics: expected })
+    );
+  });
+});
+
+describe('Settings Store - HuggingFace endpoint', () => {
+  // Mirrors the shape the API returns for a fresh install: the backend tags the
+  // field `omitempty`, so an unset endpoint arrives absent rather than as ''.
+  function baseBirdnet(overrides: Partial<BirdNetSettings> = {}): BirdNetSettings {
+    return {
+      modelPath: '',
+      labelPath: '',
+      sensitivity: 1.0,
+      threshold: 0.8,
+      overlap: 0.0,
+      locale: 'en',
+      threads: 4,
+      latitude: 40.7128,
+      longitude: -74.006,
+      locationConfigured: true,
+      rangeFilter: {
+        threshold: 0.03,
+        passUnmappedSpecies: false,
+        speciesCount: null,
+        species: [],
+      },
+      ...overrides,
+    };
+  }
+
+  function setStore(current: BirdNetSettings, original: BirdNetSettings) {
+    settingsStore.set({
+      formData: { main: { name: 'TestNode' }, birdnet: current },
+      originalData: {
+        main: { name: 'TestNode' },
+        birdnet: original,
+      } as SettingsFormData,
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'birdnet',
+      error: null,
+      dataLoaded: true,
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setStore(baseBirdnet(), baseBirdnet());
+  });
+
+  it('persists the endpoint the form submits, including a trimmed value', () => {
+    // The page's onchange trims before calling updateBirdnetSetting, so this
+    // asserts the store keeps exactly what the form hands it.
+    settingsActions.updateSection('birdnet', {
+      huggingFaceEndpoint: '  https://hf-mirror.com  '.trim(),
+    });
+
+    expect(get(settingsStore).formData.birdnet.huggingFaceEndpoint).toBe('https://hf-mirror.com');
+  });
+
+  it('keeps an empty endpoint as an empty string rather than dropping it', () => {
+    settingsActions.updateSection('birdnet', {
+      huggingFaceEndpoint: 'https://hf-mirror.com',
+    });
+    settingsActions.updateSection('birdnet', { huggingFaceEndpoint: '' });
+
+    // Empty means "fall back to HF_ENDPOINT, then the default host". It must
+    // survive as '' so clearing the field is actually persisted.
+    expect(get(settingsStore).formData.birdnet.huggingFaceEndpoint).toBe('');
+  });
+
+  // The remaining cases go through hasSettingsChanged, the same function the
+  // section wrapper uses, rather than comparing locally coalesced values: a
+  // local comparison would still pass if change detection itself regressed.
+  it('reports no change when an absent endpoint is cleared to an empty string', () => {
+    // The API omits the key when unset (omitempty), so originalData has no
+    // endpoint at all while formData has ''. The wrapper coalesces both sides
+    // with ?? '' precisely so this does not read as a pending change.
+    setStore(baseBirdnet({ huggingFaceEndpoint: '' }), baseBirdnet());
+    const store = get(settingsStore);
+
+    expect(
+      hasSettingsChanged(
+        { huggingFaceEndpoint: store.originalData.birdnet.huggingFaceEndpoint ?? '' },
+        { huggingFaceEndpoint: store.formData.birdnet.huggingFaceEndpoint ?? '' }
+      )
+    ).toBe(false);
+  });
+
+  it('reports a change when the endpoint actually differs', () => {
+    setStore(baseBirdnet({ huggingFaceEndpoint: 'https://hf-mirror.com' }), baseBirdnet());
+    const store = get(settingsStore);
+
+    expect(
+      hasSettingsChanged(
+        { huggingFaceEndpoint: store.originalData.birdnet.huggingFaceEndpoint ?? '' },
+        { huggingFaceEndpoint: store.formData.birdnet.huggingFaceEndpoint ?? '' }
+      )
+    ).toBe(true);
+  });
+
+  it('reports a change when an absent endpoint is set to a mirror', () => {
+    setStore(baseBirdnet(), baseBirdnet());
+    settingsActions.updateSection('birdnet', {
+      huggingFaceEndpoint: 'https://hf-mirror.com',
+    });
+    const store = get(settingsStore);
+
+    expect(
+      hasSettingsChanged(
+        { huggingFaceEndpoint: store.originalData.birdnet.huggingFaceEndpoint ?? '' },
+        { huggingFaceEndpoint: store.formData.birdnet.huggingFaceEndpoint ?? '' }
+      )
+    ).toBe(true);
   });
 });

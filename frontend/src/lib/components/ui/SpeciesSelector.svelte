@@ -4,7 +4,7 @@
   import { createEventDispatcher, onDestroy } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
   import { generateId } from '$lib/utils/uuid';
-  import { X, Trash2, Plus, Search, TriangleAlert } from '@lucide/svelte';
+  import { X, Trash2, Plus, Search, TriangleAlert, Check } from '@lucide/svelte';
   import type { Species } from '$lib/types/species';
 
   interface Props {
@@ -58,38 +58,40 @@
   // Generate unique ID for dropdown (client-only to avoid SSR hydration mismatch)
   let dropdownId = $state('');
 
-  // Size configurations
+  // Size configurations. Container height is a floor (min-h-*), not a fixed height: the chip
+  // and list variants wrap to multiple rows, and a fixed h-* made the extra rows overflow onto
+  // the content below instead of pushing it down.
   const sizeConfig = {
     xs: {
-      container: 'h-6 text-xs',
+      container: 'min-h-6 text-xs',
       chip: 'h-5 px-2 text-xs',
       button: 'h-6 w-6 text-xs',
       input: 'input-xs',
       list: 'text-xs py-1',
     },
     sm: {
-      container: 'h-8 text-sm',
+      container: 'min-h-8 text-sm',
       chip: 'h-6 px-3 text-sm',
       button: 'h-8 w-8 text-sm',
       input: 'input-sm',
       list: 'text-sm py-2',
     },
     md: {
-      container: 'h-10 text-base',
+      container: 'min-h-10 text-base',
       chip: 'h-7 px-3 text-sm',
       button: 'h-10 w-10',
       input: 'input-md',
       list: 'text-sm py-2',
     },
     lg: {
-      container: 'h-12 text-base',
+      container: 'min-h-12 text-base',
       chip: 'h-8 px-4',
       button: 'h-12 w-12',
       input: 'input-lg',
       list: 'py-3',
     },
     xl: {
-      container: 'h-14 text-lg',
+      container: 'min-h-14 text-lg',
       chip: 'h-9 px-4 text-base',
       button: 'h-14 w-14 text-lg',
       input: 'input-lg',
@@ -435,15 +437,19 @@
                 onclick={() => canSelect && toggleSpecies(species)}
               >
                 <div class="flex items-center gap-4 flex-1 min-w-0">
-                  <!-- Visual checkbox indicator -->
+                  <!-- Visual checkbox indicator (button row is non-interactive content-wise) -->
                   <span
                     class={cn(
-                      'checkbox checkbox-primary checkbox-sm shrink-0',
-                      isSelected && 'checkbox-checked',
-                      !canSelect && 'checkbox-disabled'
+                      'inline-flex items-center justify-center size-4 rounded border shrink-0 transition-colors',
+                      isSelected
+                        ? 'bg-primary border-primary text-primary-content'
+                        : 'border-base-content/30'
                     )}
+                    data-checked={isSelected ? 'true' : 'false'}
                     aria-hidden="true"
-                  ></span>
+                  >
+                    {#if isSelected}<Check class="size-3" />{/if}
+                  </span>
 
                   <!-- Species Info -->
                   <div class="text-left flex-1 min-w-0">

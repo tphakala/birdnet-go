@@ -22,6 +22,8 @@ Welcome to the BirdNET-Go documentation. This index will help you navigate throu
 
 - [External Media (USB, SD, File Shares)](external-media.md) - Mounting removable and network storage for import and backup
 - [Detection Pipeline Architecture](detection-pipeline.md) - How audio flows through multi-model inference, filtering, and action dispatch
+- [ONNX Runtime Installation](onnx-runtime-installation.md) - Installing the default inference backend library for native/binary installs
+- [OpenVINO Acceleration](openvino-acceleration.md) - Enabling Intel iGPU offload and OpenVINO CPU acceleration on containers and native installs
 - [BirdNET Detection Pipeline](guide.md#birdnet-detection-pipeline) - Understanding how settings affect detections
 - [BirdNET Range Filter](guide.md#birdnet-range-filter) - Location and time-based species filtering
 - [Web Dashboard](guide.md#web-dashboard) - Using the visualization dashboard

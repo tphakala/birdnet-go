@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"runtime"
 	"runtime/pprof"
 	"strings"
 	"time"
@@ -21,9 +20,28 @@ import (
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/profiling"
 	"github.com/tphakala/birdnet-go/internal/restart"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
+
+// fallbackWarningComponent labels a validation warning that was recorded without
+// the "component: message" prefix conf.recordValidationWarning produces.
+const fallbackWarningComponent = "config"
+
+// splitValidationWarning separates a validation warning into its component and its
+// message. Every producer goes through conf.recordValidationWarning, which always
+// prefixes, so the fallback is defence rather than a live path: an unprefixed entry
+// used to be discarded here, which meant it reached neither telemetry nor the user,
+// and a future producer that forgets the prefix should be reported whole rather than
+// silently dropped again.
+func splitValidationWarning(warning string) (component, message string) {
+	if component, message, found := strings.Cut(warning, ": "); found {
+		return component, message
+	}
+	return fallbackWarningComponent, warning
+}
 
 // buildTime is the time when the binary was built.
 var buildDate string
@@ -153,6 +171,16 @@ func mainWithExitCode() int {
 	// Create main module logger
 	mainLog := centralLogger.Module("main")
 
+	// Apply the configured block and mutex sampling rates. The rationale lives
+	// on profiling.ApplyRates; changes made through the settings API are applied
+	// by profilingRatesChanged in internal/api/v2/settings.go.
+	//
+	// As early as the logger allows, and deliberately ahead of telemetry init:
+	// that path blocks for up to five seconds waiting for readiness, which is
+	// itself a plausible thing to reach for block profiling to explain. The old
+	// debug-gated version sat after it and could not see it.
+	profiling.ApplyRates(&settings.Diagnostics.Profiling)
+
 	// Load or create system ID for telemetry
 	systemID, err := telemetry.LoadOrCreateSystemID(filepath.Dir(viper.ConfigFileUsed()))
 	if err != nil {
@@ -184,26 +212,19 @@ func mainWithExitCode() int {
 		// Continue - not critical for operation
 	}
 
-	// Enable runtime profiling if debug mode is enabled
-	if settings.Debug {
-		// Enable mutex profiling for detecting lock contention
-		runtime.SetMutexProfileFraction(1)
-
-		// Enable block profiling for detecting blocking operations
-		runtime.SetBlockProfileRate(1)
-
-		mainLog.Debug("Runtime profiling enabled (mutex and block profiling active)")
-	}
-
-	// Process configuration validation warnings that occurred before Sentry initialization
+	// Process configuration validation warnings that occurred before Sentry initialization.
+	//
+	// These are settings that were switched on but never finished, which the config
+	// loader disabled or defaulted instead of refusing to start. Sentry only sees
+	// them when telemetry is enabled, and the field is cleared below, so without a
+	// notification the user's only clue that a feature stopped working would be a
+	// line in the log they will never read. Both core systems are initialized by
+	// this point; NotifyWarning is a no-op if they are not.
 	if len(settings.ValidationWarnings) > 0 {
 		for _, warning := range settings.ValidationWarnings {
-			parts := strings.SplitN(warning, ": ", 2)
-			if len(parts) == 2 {
-				component := parts[0]
-				message := parts[1]
-				telemetry.CaptureMessage(message, sentry.LevelWarning, component)
-			}
+			component, message := splitValidationWarning(warning)
+			telemetry.CaptureMessage(message, sentry.LevelWarning, component)
+			notification.NotifyWarning(component, "Configuration Problem", message)
 		}
 		// Clear the warnings as they've been processed
 		settings.ValidationWarnings = nil

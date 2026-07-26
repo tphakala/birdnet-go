@@ -91,6 +91,11 @@
 
   const logger = loggers.settings;
 
+  // Shown as the endpoint placeholder. Mirrors conf.DefaultHuggingFaceEndpoint
+  // by hand; nothing enforces it, but it is only placeholder text, so drift
+  // would be cosmetic.
+  const DEFAULT_HUGGINGFACE_ENDPOINT = 'https://huggingface.co';
+
   const MODEL_LOGOS: Record<string, string> = {
     birdnet: logoBirdnet,
     perch: logoGoogle,
@@ -1445,13 +1450,64 @@
 
 <!-- ── Models Tab Content ────────────────────────────────────────────── -->
 {#snippet modelsTabContent()}
-  <SettingsSection
-    title={t('analysis.gallery.title')}
-    description={t('analysis.gallery.description')}
-    defaultOpen={true}
-  >
-    <SettingsTabs tabs={galleryTabs} bind:activeTab={galleryTab} showActions={false} />
-  </SettingsSection>
+  <div class="space-y-6">
+    <SettingsSection
+      title={t('analysis.gallery.title')}
+      description={t('analysis.gallery.description')}
+      defaultOpen={true}
+    >
+      <SettingsTabs tabs={galleryTabs} bind:activeTab={galleryTab} showActions={false} />
+    </SettingsSection>
+
+    <SettingsSection
+      title={t('analysis.downloadSource.title')}
+      description={t('analysis.downloadSource.description')}
+      originalData={{
+        huggingFaceEndpoint: store.originalData.birdnet?.huggingFaceEndpoint ?? '',
+      }}
+      currentData={{ huggingFaceEndpoint: birdnet?.huggingFaceEndpoint ?? '' }}
+    >
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!--
+          Pattern kept deliberately close to conf.normalizeHuggingFaceEndpoint so
+          the field neither accepts a value the backend will discard nor rejects
+          one it would take. Specifically: the scheme is matched case-insensitively
+          because the backend canonicalizes it; "?" and "#" are excluded
+          everywhere, because the backend rejects a query or a fragment; and "@"
+          is excluded from the authority only, because that is where userinfo
+          lives. An "@" later in the path is legitimate and stays allowed.
+
+          The two validators split the rest of the work. type="url" rejects a
+          hostless authority such as "https://:8080", which this pattern accepts.
+          The backend alone rejects what neither can express (a ".." path
+          segment, a non-ASCII host, a backslash in the host) and reports those
+          as a startup validation warning.
+
+          Two things must not change: every "/" stays escaped, because browsers
+          compile this attribute with the `v` flag where a bare "/" in a
+          character class throws and silently disables validation altogether;
+          and it stays a static attribute, so svelte-pattern-attributes.test.ts
+          keeps compiling it the way the browser does.
+        -->
+        <TextInput
+          id="huggingface-endpoint"
+          type="url"
+          pattern="[Hh][Tt][Tt][Pp][Ss]?:\/\/[^\/?#@]+(\/[^?#]*)?"
+          value={birdnet?.huggingFaceEndpoint ?? ''}
+          label={t('analysis.downloadSource.endpoint.label')}
+          placeholder={DEFAULT_HUGGINGFACE_ENDPOINT}
+          helpText={t('analysis.downloadSource.endpoint.helpText')}
+          validationMessage={t('analysis.downloadSource.endpoint.validationMessage')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={value => updateBirdnetSetting('huggingFaceEndpoint', value.trim())}
+        />
+      </div>
+
+      <SettingsNote>
+        {t('analysis.downloadSource.note')}
+      </SettingsNote>
+    </SettingsSection>
+  </div>
 {/snippet}
 
 <!-- ── Gallery: Installed Tab ────────────────────────────────────────── -->

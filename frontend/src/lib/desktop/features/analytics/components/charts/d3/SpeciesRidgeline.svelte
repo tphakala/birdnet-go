@@ -6,8 +6,9 @@
 
   Each ridge is a d3-shape area with curveBasis; a shared amplitude scale maps the global-max
   density to a fixed pixel height, so a species with concentrated activity rises taller than an
-  all-day one. Species color comes from theme.ts generateSpeciesColors (rgba, so it is never fed to
-  a d3 color interpolator). The scientific name is the stable D3 key; the localized common name is
+  all-day one. Species color comes from utils/speciesColor.ts getSpeciesColor (rgba, so it is never
+  fed to a d3 color interpolator), a shared page-scoped map so a species keeps the same color across
+  the sibling charts. The scientific name is the stable D3 key; the localized common name is
   the row label (re-localized here so it tracks the visitor's locale, matching the sibling charts).
 -->
 <script lang="ts">
@@ -22,9 +23,17 @@
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import BaseChart from './BaseChart.svelte';
   import { createLinearScale } from './utils/scales';
-  import { createAxis, styleAxis, addAxisLabel, createHourAxisFormatter } from './utils/axes';
+  import {
+    createAxis,
+    styleAxis,
+    addAxisLabel,
+    createHourAxisFormatter,
+    hourAxisTickValues,
+  } from './utils/axes';
   import { ChartTooltip } from './utils/interactions';
-  import { generateSpeciesColors, type ChartTheme } from './utils/theme';
+  import type { ChartTheme } from './utils/theme';
+  import { fitTextNode } from './utils/labels';
+  import { getSpeciesColor, registerChart } from './utils/speciesColor';
   import {
     ridgelineLayout,
     peakIndex,
@@ -75,8 +84,10 @@
   const RIDGE_FILL_OPACITY = 0.55; // translucent so overlapping ridges blend
   const RIDGE_STROKE_WIDTH = 1.5;
   const RIDGE_STROKE_WIDTH_HOVER = 2.5;
-  const LABEL_MAX_CHARS = 18;
   const LABEL_GAP = 10; // px between the left edge and a row label
+  // Labels are end-anchored at x = -LABEL_GAP, so they grow left into the margin; this is all the
+  // room they have before the SVG viewport clips them.
+  const LABEL_BUDGET_PX = MARGIN.left - LABEL_GAP;
   const X_AXIS_LABEL_OFFSET = 34;
   const MIN_DENSITY_DOMAIN = 1e-6; // floor so an all-zero set never yields a degenerate amp domain
 
@@ -121,10 +132,6 @@
     theme: ChartTheme;
   } | null>(null);
 
-  function truncateLabel(label: string): string {
-    return label.length > LABEL_MAX_CHARS ? `${label.slice(0, LABEL_MAX_CHARS - 1)}…` : label;
-  }
-
   // Force a palette color to full opacity for the crisp ridge top line; the fill keeps the
   // translucent original so overlaps blend. d3-color robustly parses the rgba palette strings and
   // returns null for anything it can't (e.g. oklch theme tokens), in which case we keep the input.
@@ -152,13 +159,18 @@
     if (innerWidth <= 0 || innerHeight <= 0 || rows.length === 0) return;
 
     // layout.rows[i] aligns with rows[i]: both derive from `series` in order (rows is a 1:1
-    // localized map of series), so layoutRow.index indexes `rows`, `colors`, and `series` alike.
+    // localized map of series), so layoutRow.index indexes `rows` and `series` alike.
     const layout = ridgelineLayout(series, innerHeight, RIDGE_OVERLAP);
-    const colors = generateSpeciesColors(rows.length, theme);
 
     // x: density index -> px. All series share the same length (24 hours / N bins); use the widest.
     const xLen = Math.max(1, ...rows.map(r => r.density.length));
-    const xScale = createLinearScale({ domain: [0, xLen - 1], range: [0, innerWidth] });
+    // nice: false - the bin domain is exact; rounding it outward would leave the last bin short of
+    // the right edge and open a gap the ridges never reach.
+    const xScale = createLinearScale({
+      domain: [0, xLen - 1],
+      range: [0, innerWidth],
+      nice: false,
+    });
 
     // Shared amplitude scale: global-max density -> layout.amplitude px above the baseline.
     const ampScale = scaleLinear()
@@ -172,7 +184,7 @@
       tickFormat: (d: AxisDomain) => tickFmt(Number(d)),
     });
     const step = Math.max(1, xTickStep);
-    xAxis.tickValues(Array.from({ length: Math.ceil(xLen / step) }, (_, i) => i * step));
+    xAxis.tickValues(hourAxisTickValues(xLen - 1, step));
     const xAxisGroup = chartGroup
       .append('g')
       .attr('class', 'x-axis')
@@ -195,7 +207,7 @@
     // Ridges, drawn top row first so lower (front) ridges overlap onto the ones above them.
     for (const layoutRow of layout.rows) {
       const row = rows[layoutRow.index];
-      const color = colors[layoutRow.index] ?? theme.primary;
+      const color = getSpeciesColor(row.scientificName, theme);
       const baseline = layoutRow.baseline;
 
       const gen = d3Area<number>()
@@ -229,7 +241,8 @@
           tooltip?.hide();
         });
 
-      // Row label in the left margin, anchored at the baseline; full name in a native <title>.
+      // Row label in the left margin, anchored at the baseline; fitted to the margin by measured
+      // width, with the full name in a native <title> (appended after fitting, which sets the text).
       const labelText = group
         .append('text')
         .attr('class', 'ridge-label')
@@ -239,8 +252,8 @@
         .attr('dominant-baseline', 'middle')
         .style('fill', theme.text)
         .style('font-size', theme.axis.fontSize)
-        .style('font-family', theme.axis.fontFamily)
-        .text(truncateLabel(row.label));
+        .style('font-family', theme.axis.fontFamily);
+      fitTextNode(labelText.node(), row.label, LABEL_BUDGET_PX);
       labelText.append('title').text(row.label);
     }
   }
@@ -256,6 +269,10 @@
       tooltip = new ChartTooltip(chartContainer);
     }
   });
+
+  // Reference-count this chart so the shared species→color map clears when the
+  // last patterns chart unmounts (fresh colors per page view; no session growth).
+  onMount(() => registerChart());
 
   onDestroy(() => {
     tooltip?.destroy();

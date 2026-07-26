@@ -27,7 +27,7 @@ type mockWriteDeadlineResponseWriter struct {
 	lastDeadline           time.Time
 }
 
-// SetWriteDeadline implements apicore.WriteDeadlineSetter interface
+// SetWriteDeadline lets http.NewResponseController find and set a write deadline
 func (m *mockWriteDeadlineResponseWriter) SetWriteDeadline(t time.Time) error {
 	m.setWriteDeadlineCalled.Store(true)
 	m.lastDeadline = t

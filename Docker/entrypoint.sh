@@ -179,6 +179,41 @@ if [ -d "/dev/snd" ]; then
     fi
 fi
 
+# If Intel GPU device present, add user to render group for OpenVINO iGPU inference
+if [ -d "/dev/dri" ]; then
+    if [ "$RUNNING_AS_ROOT" = true ]; then
+        # Detect the actual GID of the first render node on the host; it varies
+        # across distributions (105, 109, 44, 989 …) and Docker preserves the
+        # host GID when passing --device /dev/dri. Using a hardcoded GID would
+        # mismatch. Use a glob so the code works whether the device landed as
+        # renderD128, renderD129, etc. (e.g. when only one specific node is
+        # passed via --device /dev/dri/renderD129).
+        DRI_DEVICE=""
+        for _dev in /dev/dri/renderD*; do
+            [ -e "$_dev" ] && DRI_DEVICE="$_dev" && break
+        done
+        if [ -n "$DRI_DEVICE" ]; then
+            RENDER_GID=$(stat -c '%g' "$DRI_DEVICE")
+            # Create a group for this GID if one doesn't already exist
+            if ! getent group "$RENDER_GID" >/dev/null 2>&1; then
+                addgroup --gid "$RENDER_GID" drm-render 2>/dev/null || \
+                    groupadd --gid "$RENDER_GID" drm-render 2>/dev/null || true
+            fi
+            DRM_GROUP=$(getent group "$RENDER_GID" | cut -d: -f1)
+            if [ -n "$DRM_GROUP" ]; then
+                adduser "$USER_NAME" "$DRM_GROUP" 2>/dev/null || \
+                    usermod -aG "$DRM_GROUP" "$USER_NAME" 2>/dev/null || true
+                echo "Added $USER_NAME to group $DRM_GROUP (GID $RENDER_GID) for Intel iGPU access"
+            fi
+        fi
+    else
+        # Rootless: cannot create or join groups. Intel iGPU access still works if
+        # the container user was started already in the host render group (e.g. via
+        # --group-add on docker run). This is a heads-up, not an error.
+        echo "Note: /dev/dri present but running rootless; relying on pre-set render group membership for Intel iGPU access"
+    fi
+fi
+
 # Pre-flight checks before starting application
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🔍 Running pre-flight checks..."

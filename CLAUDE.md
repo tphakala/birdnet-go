@@ -149,17 +149,15 @@ Full documentation in the birdnet-go-qa Forgejo wiki: `http://localhost:3000/tph
 
 ## PR Review Workflow
 
-After pushing updates to a PR, request automated reviews:
+Automated code review (CodeRabbit, plus the repo's configured review checks) runs on new PRs automatically and checks for bugs, security issues, and best practices. After pushing fixes, you can request a fresh CodeRabbit pass:
 
 ```bash
-# Request Gemini review
-gh pr comment <PR_NUMBER> --body "/gemini review"
+# Re-request a CodeRabbit review
+gh pr comment <PR_NUMBER> --body "@coderabbitai review"
 
 # Or from current branch
-gh pr comment $(gh pr view --json number -q .number) --body "/gemini review"
+gh pr comment $(gh pr view --json number -q .number) --body "@coderabbitai review"
 ```
-
-This triggers automated code review that checks for bugs, security issues, and best practices.
 
 ### Handling PR Review Comments
 

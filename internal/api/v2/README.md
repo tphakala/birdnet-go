@@ -100,12 +100,13 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | GET    | `/analytics/species/accumulation`     | `GetSpeciesAccumulation`   | ❌   | Species accumulation curve (biodiversity collector's curve): per calendar day, the cumulative count of distinct species first detected within the range (false positives excluded; "first seen" is bounded to the window, not lifetime). All-species (no species filter). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days) |
 | GET    | `/analytics/species/phenology`        | `GetSpeciesPhenology`      | ❌   | Arrival/departure phenology (residency-bar Gantt): per species, the first and last detection date (station-local, false positives excluded) plus the in-range detection count, for the top-N species by volume. All-species top-N (no species filter). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `limit` optional (default 12, max 20) |
 | GET    | `/analytics/time/hourly`              | `GetHourlyAnalytics`       | ❌   | Hourly detection patterns          |
+| GET    | `/analytics/time/hourly/batch`        | `GetBatchHourlySpeciesData` | ❌  | Hour-of-day detection counts (24 buckets) for several species in one request, summed over the requested range. `species` required (repeatable; scientific or common name, capped at the batch limit); either `start_date`+`end_date` (both inclusive) for a range, or the legacy single `date` (equivalent to a one-day range); `min_confidence` optional |
 | GET    | `/analytics/time/daily`               | `GetDailyAnalytics`        | ❌   | Daily detection patterns           |
 | GET    | `/analytics/time/distribution/hourly` | `GetTimeOfDayDistribution` | ❌   | Time-of-day detection distribution |
-| GET    | `/analytics/time/distribution/species` | `GetSpeciesHourlyDistribution` | ❌ | Who-sings-when ridgeline: per-species hour-of-day distribution for the top N species by volume. `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `limit` optional (default 5, max 8) |
+| GET    | `/analytics/time/distribution/species` | `GetSpeciesHourlyDistribution` | ❌ | Who-sings-when ridgeline: per-species hour-of-day distribution. `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `species` optional (repeatable scientific-name filter; when omitted, the top N species by volume; when set, just those species, still volume-ordered and capped at `limit`); `limit` optional (default 5, max 8) |
 | GET    | `/analytics/time/heatmap`             | `GetActivityHeatmap`       | ❌   | Seasonal density heatmap (date x intra-day slot; `?format=csv`) |
 | GET    | `/analytics/time/dawn-onset`          | `GetDawnChorusOnset`       | ❌   | Dawn-chorus onset tracker: per-day onset relative to civil dawn (minutes; negative = before civil dawn). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `species` optional |
-| GET    | `/analytics/time/succession`          | `GetAcousticSuccession`    | ❌   | Acoustic succession streamgraph: per species, the raw hour-of-day detection counts (24 buckets, false positives excluded) for the top-N species by volume, stacked into a streamgraph showing the diel acoustic handover. All-species top-N (no species filter). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `limit` optional (default 6, max 10) |
+| GET    | `/analytics/time/succession`          | `GetAcousticSuccession`    | ❌   | Acoustic succession streamgraph: per species, the raw hour-of-day detection counts (24 buckets, false positives excluded), stacked into a streamgraph showing the diel acoustic handover. `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `species` optional (repeatable scientific-name filter; when omitted, the top-N species by volume; when set, just those species, still volume-ordered and capped at `limit`); `limit` optional (default 6, max 10) |
 | GET    | `/analytics/time/year-over-year`      | `GetYearOverYear`          | ❌   | Year-over-year tracker: current year-to-date cumulative detection counts versus the same calendar span one year earlier (false positives excluded), one point per current-year day with a per-day delta, aligned by calendar (month, day) with leap-day Feb 29 handled. All-species (no species filter). `date` optional (station-local YYYY-MM-DD; defaults to today) sets the inclusive end of both windows. Returns `{currentYear, previousYear, points[]}` |
 | GET    | `/analytics/sun`                      | `GetAnalyticsSun`          | ❌   | Sun times for the nocturnal activity clock's day/night shading: sunrise/sunset/civil-dawn/civil-dusk as minute-of-day in server-local time. `date` for a single day, or `start_date`/`end_date` for a range (collapsed to its midpoint); defaults to today. Returns `available:false` (not an error) on polar day/night or when SunCalc is unconfigured |
 | GET    | `/analytics/confidence/distribution`  | `GetConfidenceDistribution` | ❌  | Confidence distribution per species: per-species normalized histogram of detection confidence scores (Review & Accuracy tab). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `species` optional (single species filter; default is the top-N species by volume); `bins` optional (default 20, clamped to 5-50); `limit` optional (default 5, max 8) |
@@ -183,6 +184,17 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | GET    | `/spectrogram/:id/status`            | `GetSpectrogramStatus`   | ❌   | Get spectrogram generation status  |
 | POST   | `/audio/:id/clip`                    | `ExtractAudioClipByID`   | ✅   | Extract audio clip from time range |
 
+**Pending clip handling (`503 + Retry-After`).** A detection's DB record and SSE
+broadcast are emitted before its audio clip is written, and with Extended Capture the
+clip write is deferred until the capture tail is recorded (up to the capture-buffer
+size). While a clip is still legitimately pending, the by-ID audio and spectrogram
+endpoints (`GET /audio/:id`, `GET /spectrogram/:id`) return `503 Service Unavailable`
+with a `Retry-After` header sized to the remaining time, instead of `404`. Clients
+should honor `Retry-After` and retry; the clip appears once the capture completes. A
+`404` from these endpoints means the clip is genuinely absent (never produced, or purged
+by retention). These pending 503s are intentionally not logged as errors and are not
+reported to telemetry, since they are expected, self-resolving backpressure.
+
 ### Notifications (`notifications/notifications.go`)
 
 | Method | Route                              | Handler                            | Auth | Description                                                                                                         |
@@ -232,6 +244,18 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 The `GET /settings/dashboard` endpoint is intentionally public so that unauthenticated guests can render the SPA dashboard (species summary limit, layout, locale, thumbnails). The Dashboard section contains no secrets, tokens, or PII, and the layout is already exposed via `/app/config`. All mutations (PATCH) on the dashboard section remain auth-protected.
 
 **Restart-required signal:** `PUT /settings` and `PATCH /settings/:section` responses include `restart_required` (bool) and `restart_reasons` (string[]), reflecting the global restart state also served by `GET /system/restart-status`. Settings bound once at startup that cannot hot-reload set this flag: web server / TLS settings, database (`output`), logging, and TLS certificate operations. `restart_reasons` carries i18n message keys (e.g. `restart.reasons.database`), not English text; the SPA resolves them via the translation catalog. The flag is sticky (it clears when the process actually restarts) and is not cleared by reverting the change.
+
+**Blocked fields:** a set of fields can never be written through the settings API, on either write path. `PUT /settings` skips them during its field walk; `PATCH /settings/:section` merges the request and then restores them from the pre-update snapshot. Sending such a field is not an error: the rest of the request is applied normally and only the blocked values are reverted.
+
+The set covers generated credentials (`Security.SessionSecret`, `Security.BasicAuth.ClientID`/`ClientSecret`, `Diagnostics.Profiling.Token`), the session and OAuth2 lifetimes (`Security.SessionDuration`, `Security.BasicAuth.AuthCodeExp`/`AccessTokenExp`), the server-validated ffmpeg/sox tool paths and the sox format list (`Realtime.Audio.FfmpegPath`/`SoxPath`/`SoxAudioTypes`), the range-filter model selection (`BirdNET.RangeFilter.Model`), and runtime state the process populates for itself (`Version`, `BuildDate`, `SystemID`, `ValidationWarnings`, `Input`, `BirdNET.Labels`, `BirdNET.RangeFilter.Species`/`LastUpdated`). Note that several of these are ordinary `config.yaml` keys: they are settable by editing the config file, just not through the API.
+
+The two verbs report differently under the same `skippedFields` response key, so do not treat a non-empty list from `PUT` as a rejection:
+
+| | `PATCH /settings/:section` | `PUT /settings` |
+| --- | --- | --- |
+| Contents | only the paths whose value the request actually changed, sorted (every blocked field is reverted regardless; the list is the subset that differed) | every blocked path the walk passed, plus every `yaml:"-"` field as `<path> (runtime-only)` |
+| Depends on the request | yes | no |
+| Empty when nothing was rejected | yes (`[]`) | never (a no-op request returns ~25 entries) |
 
 **Quiet Hours** (`settings_audio.go`): The `realtime` settings section includes quiet hours configuration for both individual RTSP streams (`realtime.rtsp.streams[].quietHours`) and the sound card (`realtime.audio.quietHours`). Each `QuietHoursConfig` supports:
 

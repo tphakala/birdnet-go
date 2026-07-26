@@ -121,6 +121,10 @@ type AudioSource struct {
 	// Values: "downmix" (default), "left", "right".
 	ChannelMode string `json:"channelMode,omitempty"`
 
+	// MediaMode controls which RTSP media is requested from the camera.
+	// Values: "auto", "audio-only", "full-stream" (empty = full-stream).
+	MediaMode string `json:"mediaMode,omitempty"`
+
 	// Gain is the configured input gain in dB. 0 means no adjustment.
 	Gain float64 `json:"gain"`
 
@@ -236,6 +240,10 @@ type SourceConfig struct {
 	// ChannelMode controls how multi-channel audio is handled.
 	// Values: "downmix" (default), "left", "right".
 	ChannelMode string
+
+	// MediaMode controls which RTSP media is requested from the camera.
+	// Values: "auto", "audio-only", "full-stream" (empty = full-stream).
+	MediaMode string
 
 	// Gain is the input gain adjustment in dB. 0 means no adjustment.
 	// Positive values amplify, negative values attenuate.

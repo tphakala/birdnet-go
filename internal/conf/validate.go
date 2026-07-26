@@ -67,19 +67,23 @@ var (
 // ValidAudioModels contains recognized AI model identifiers.
 // Empty string is also valid (defaults to birdnet).
 var ValidAudioModels = map[string]bool{
-	"":             true, // default (birdnet)
-	ModelIDBirdNET: true,
-	ModelIDPerchV2: true,
-	ModelIDBat:     true,
-	ModelIDBSG:     true,
+	"":               true, // default (birdnet)
+	ModelIDBirdNET:   true,
+	ModelIDBirdNETV3: true,
+	ModelIDPerchV2:   true,
+	ModelIDBat:       true,
+	ModelIDBSG:       true,
 }
 
 // ValidationError is the set of fatal validation findings produced by
 // ValidateSettings. Every entry in Errors blocks startup: severity is decided
 // structurally by whether a validator returned an error, never by inspecting
 // the message text. Non-fatal configuration findings use a separate channel,
-// Settings.ValidationWarnings, recorded during config migration (see
-// applyModelValidation), not derived from the text of a fatal error.
+// Settings.ValidationWarnings, written through recordValidationWarning during
+// config migration, during the incomplete-feature normalization Load runs before
+// validating (see validate_incomplete.go), and by the few validators that
+// normalize a value instead of rejecting it. None of them is derived from the text
+// of a fatal error.
 type ValidationError struct {
 	Errors []string
 }
@@ -195,9 +199,23 @@ func ValidateSettings(settings *Settings) error {
 	case "", LowMemoryModeAuto, LowMemoryModeOn, LowMemoryModeOff:
 		settings.LowMemory.Mode = normalized
 	default:
-		settings.ValidationWarnings = append(settings.ValidationWarnings,
-			fmt.Sprintf("invalid lowmemory.mode %q; using %q", settings.LowMemory.Mode, LowMemoryModeAuto))
+		settings.recordValidationWarning(warnComponentLowMemory,
+			"invalid lowmemory.mode %q; using %q", settings.LowMemory.Mode, LowMemoryModeAuto)
 		settings.LowMemory.Mode = LowMemoryModeAuto
+	}
+
+	// An unusable HuggingFace endpoint falls back to the default host rather than
+	// failing, so this is a warning. It is recorded here rather than appended to
+	// ValidateBirdNETSettings' warning list because that list only reaches a Debug
+	// log line, whereas recordValidationWarning also raises a notification the
+	// user actually sees. Without it the only signal is a log line emitted when a
+	// download is next attempted, which can be long after the value was set, and
+	// the user behind a blocked huggingface.co is left with silent failures.
+	if raw := strings.TrimSpace(settings.BirdNET.HuggingFaceEndpoint); raw != "" {
+		if _, err := normalizeHuggingFaceEndpoint(raw); err != nil {
+			settings.recordValidationWarning(warnComponentModels,
+				"model download endpoint is unusable (%v); using %s", err, DefaultHuggingFaceEndpoint)
+		}
 	}
 
 	// Default empty BirdNET locale to "en" so downstream label loading

@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"math"
 	"net/http"
 	"path/filepath"
 	"slices"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-	"github.com/shirou/gopsutil/v3/host"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
@@ -92,24 +90,27 @@ func (c *Handler) registerHealthChecks() {
 		checks.NewDiskSpaceCheck(c.getDataPaths()),
 		checks.NewMemoryCheck(),
 		checks.NewCPULoadCheck(apicore.GetCachedCPUUsage),
-		checks.NewTemperatureCheck(func() (float64, error) {
-			temps, err := host.SensorsTemperatures()
-			// gopsutil returns partial results with warnings when some sensors
-			// are unreadable (common on RPi). Use data if available.
-			if len(temps) == 0 {
+		checks.NewTemperatureCheck(
+			func() (float64, error) {
+				celsius, _, err := observability.ReadCPUTemperature(thermalBasePath)
 				if err != nil {
+					// Surface the real reason (no sensor, unreadable, or out of
+					// range) so the health check reports an accurate cause.
 					return 0, err
 				}
-				return 0, errNoTempSensors
-			}
-			maxTemp := math.Inf(-1)
-			for _, t := range temps {
-				if t.Temperature > maxTemp {
-					maxTemp = t.Temperature
+				return celsius, nil
+			},
+			// Read the configured display unit per Run so a live settings
+			// change is reflected without a restart. Guard against a nil
+			// settings snapshot (possible only on a controller that never
+			// stored settings, e.g. standalone tests); "" displays Celsius.
+			func() string {
+				if s := c.CurrentSettings(); s != nil {
+					return s.Realtime.Dashboard.TemperatureUnit
 				}
-			}
-			return maxTemp, nil
-		}),
+				return ""
+			},
+		),
 		checks.NewUptimeCheck(c.startTime),
 
 		// Audio checks
@@ -386,9 +387,6 @@ func mapInferenceSnapshots(snapshots map[string]inferencestats.PeekSnapshot, inf
 	}
 	return result
 }
-
-// errNoTempSensors is returned when no temperature sensors are found on the system.
-var errNoTempSensors = errors.NewStd("no temperature sensors found")
 
 // buildStreamHealthProvider returns a closure that bridges the FFmpegManager's
 // stream health data to the checks.StreamHealthInfo format. The closure

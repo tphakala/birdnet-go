@@ -13,10 +13,22 @@ const (
 	GeomodelLabelsLocalName = "geomodel_v3.0.2_labels.txt"
 )
 
+// Range filter model sentinels for birdnet.rangefilter.model. The empty string
+// and RangeFilterModelLatest both request automatic backend selection (see
+// classifier.isAutoSelectRangeFilterModel); RangeFilterModelLegacy pins the V1
+// MData model; RangeFilterModelV3 selects the geomodel. Defined here in conf
+// (which classifier imports) so the sentinels are shared, not duplicated per
+// package.
+const (
+	RangeFilterModelLatest = "latest"
+	RangeFilterModelLegacy = "legacy"
+	RangeFilterModelV3     = "v3"
+)
+
 // rangeFilterGeomodelV3 is the literal that the runtime, status code, and UI
 // key off to recognize the geomodel v3 range filter (see
 // internal/classifier/birdnet.go and internal/conf/validate_services.go).
-const rangeFilterGeomodelV3 = "v3"
+const rangeFilterGeomodelV3 = RangeFilterModelV3
 
 // ResolveModelsDir computes the model gallery directory. If Models.Directory is set,
 // it is used verbatim; otherwise the OS user config directory is used (falling back to

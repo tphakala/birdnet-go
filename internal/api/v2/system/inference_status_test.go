@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/inferencestats"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/hwprofile"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
@@ -417,4 +419,182 @@ func TestSortInferenceModelsByName(t *testing.T) {
 func TestEventInferenceTopologyChangedNameContract(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, eventInferenceTopologyChangedName, eventInferenceTopologyChanged)
+}
+
+// TestBuildHardwareInfo verifies the mapping from a hardware profile onto the
+// API payload, including the two shapes that decide whether a field appears at
+// all: a board is reported only when the device tree named one, and an
+// accelerator list is reported only when a GPU was found.
+func TestBuildHardwareInfo(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		profile hwprofile.Profile
+		assert  func(t *testing.T, info HardwareInfo)
+	}{
+		{
+			name: "raspberry pi 5 reports its board and tier",
+			profile: hwprofile.Profile{
+				Arch:          "arm64",
+				CPUArch:       "aarch64",
+				CPUModel:      "Cortex-A76",
+				PhysicalCores: 4,
+				TotalRAMBytes: 4 * 1024 * 1024 * 1024,
+				HasNativeF16:  true,
+				Board: hwprofile.Board{
+					Kind:  hwprofile.BoardRaspberryPi,
+					Model: "Raspberry Pi 5 Model B Rev 1.0",
+					SoC:   "bcm2712",
+					Tier:  hwprofile.TierPi5,
+				},
+				Backends: hwprofile.Backends{TFLite: hwprofile.BackendStatus{Available: true}},
+			},
+			assert: func(t *testing.T, info HardwareInfo) {
+				t.Helper()
+				assert.Equal(t, "aarch64", info.Arch)
+				assert.Equal(t, "Cortex-A76", info.CPUModel)
+				assert.True(t, info.FP16)
+				assert.Equal(t, 4, info.PhysicalCores)
+				require.NotNil(t, info.Board)
+				assert.Equal(t, hwprofile.TierPi5, info.Board.Tier)
+				assert.Equal(t, "bcm2712", info.Board.SoC)
+				assert.Nil(t, info.Accelerators)
+				assert.Equal(t,
+					[]string{hwprofile.CapAArch64, hwprofile.CapAArch64A76, hwprofile.CapTFLite, hwprofile.CapFP16Native},
+					info.Capabilities)
+			},
+		},
+		{
+			name: "generic amd64 host reports no board but does report its gpu",
+			profile: hwprofile.Profile{
+				Arch:          "amd64",
+				CPUArch:       "x86_64",
+				PhysicalCores: 8,
+				Board:         hwprofile.Board{Kind: hwprofile.BoardGeneric},
+				Backends:      hwprofile.Backends{TFLite: hwprofile.BackendStatus{Available: true}},
+				Accelerators: []hwprofile.Accelerator{{
+					Kind:       hwprofile.AcceleratorIGPU,
+					Vendor:     hwprofile.VendorIntel,
+					Name:       "Intel Graphics [8086:46a6]",
+					Generation: 12,
+					Reasons:    []string{hwprofile.ReasonRenderNodeUnavailable},
+				}},
+			},
+			assert: func(t *testing.T, info HardwareInfo) {
+				t.Helper()
+				// A "generic" board row would tell the user nothing, so it is
+				// omitted rather than sent empty.
+				assert.Nil(t, info.Board)
+				require.Len(t, info.Accelerators, 1)
+				assert.False(t, info.Accelerators[0].Accessible)
+				assert.Equal(t,
+					[]string{hwprofile.ReasonRenderNodeUnavailable},
+					info.Accelerators[0].Reasons,
+					"every blocker must survive the mapping, not just the first")
+				// Fields the earlier mapping silently dropped.
+				assert.Equal(t, hwprofile.AcceleratorIGPU, info.Accelerators[0].Kind)
+				assert.Equal(t, hwprofile.VendorIntel, info.Accelerators[0].Vendor)
+				assert.Equal(t, "Intel Graphics [8086:46a6]", info.Accelerators[0].Name)
+			},
+		},
+		{
+			name:    "an unprobed profile produces an empty payload rather than wrong values",
+			profile: hwprofile.Profile{},
+			assert: func(t *testing.T, info HardwareInfo) {
+				t.Helper()
+				assert.Nil(t, info.Board)
+				assert.Nil(t, info.Accelerators)
+				assert.Zero(t, info.TotalRAMBytes)
+				assert.Zero(t, info.PhysicalCores)
+				assert.Empty(t, info.Capabilities)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			info := buildHardwareInfo(tt.profile, "Docker")
+
+			assert.Equal(t, "Docker", info.Environment, "environment always comes from the caller")
+			tt.assert(t, info)
+		})
+	}
+}
+
+// TestHardwareInfo_JSONContract pins the wire names. The first four fields
+// predate the hardware profile and the frontend already reads them, so the
+// extension has to be additive: renaming or retyping any of them is a breaking
+// change this test is here to catch.
+// TestGetInferenceStatus_TFLiteFollowsTheBuildTag pins the endpoint to the
+// compile-time fact rather than a hardcoded true. Hardcoding it fed straight
+// into capability derivation, which would have offered a notflite build models
+// it cannot execute.
+func TestGetInferenceStatus_TFLiteFollowsTheBuildTag(t *testing.T) {
+	t.Parallel()
+
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(httptest.NewRequest(http.MethodGet, "/api/v2/system/inference", http.NoBody), rec)
+	h := &Handler{Core: apitest.NewCore(t)}
+
+	require.NoError(t, h.GetInferenceStatus(ctx))
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp InferenceStatusResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, hwprofile.TFLiteLinked(), resp.Backends.TFLite.Available)
+	assert.Equal(t, hwprofile.TFLiteLinked(),
+		slices.Contains(resp.Hardware.Capabilities, hwprofile.CapTFLite),
+		"the capability token must agree with the backend the build actually links")
+}
+
+func TestHardwareInfo_JSONContract(t *testing.T) {
+	t.Parallel()
+
+	info := HardwareInfo{
+		Arch:          "x86_64",
+		CPUModel:      "12th Gen Intel(R) Core(TM) i7-1260P",
+		Environment:   "Docker",
+		FP16:          false,
+		TotalRAMBytes: 32 * 1024 * 1024 * 1024,
+		PhysicalCores: 12,
+		Capabilities:  []string{"x86-64", "tflite"},
+		Board:         &BoardInfo{Kind: "raspberry-pi", Model: "Raspberry Pi 5 Model B Rev 1.0", SoC: "bcm2712", Tier: "pi5"},
+		Accelerators: []AcceleratorInfo{{
+			Kind:       "igpu",
+			Vendor:     "intel",
+			Name:       "Intel Graphics [8086:46a6]",
+			Accessible: false,
+			Reasons:    []string{"render-node-unavailable"},
+		}},
+	}
+
+	raw, err := json.Marshal(info)
+	require.NoError(t, err)
+	var m map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(raw, &m))
+
+	for _, key := range []string{"arch", "cpuModel", "environment", "fp16"} {
+		require.Contains(t, m, key, "pre-existing key %q must keep its name", key)
+	}
+	assert.JSONEq(t, `"x86_64"`, string(m["arch"]))
+	assert.JSONEq(t, `false`, string(m["fp16"]))
+
+	for _, key := range []string{"board", "accelerators", "totalRamBytes", "physicalCores", "capabilities"} {
+		require.Contains(t, m, key, "added key %q missing", key)
+	}
+	assert.JSONEq(t, `{"kind":"raspberry-pi","model":"Raspberry Pi 5 Model B Rev 1.0","soc":"bcm2712","tier":"pi5"}`, string(m["board"]))
+	assert.JSONEq(t, `[{"kind":"igpu","vendor":"intel","name":"Intel Graphics [8086:46a6]","accessible":false,"reasons":["render-node-unavailable"]}]`, string(m["accelerators"]))
+
+	// An unprobed host omits every added key, so a client that only knows the
+	// original four fields sees exactly the payload it saw before.
+	rawEmpty, err := json.Marshal(HardwareInfo{Arch: "x86_64", Environment: "Bare Metal"})
+	require.NoError(t, err)
+	var empty map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(rawEmpty, &empty))
+	for _, key := range []string{"board", "accelerators", "totalRamBytes", "physicalCores", "capabilities"} {
+		assert.NotContains(t, empty, key, "added key %q must be omitted when unset", key)
+	}
 }

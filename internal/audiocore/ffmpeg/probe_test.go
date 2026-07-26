@@ -143,7 +143,7 @@ func TestBuildProbeArgs(t *testing.T) {
 	t.Run("RTSP URL includes tcp transport", func(t *testing.T) {
 		t.Parallel()
 
-		args := buildProbeArgs("rtsp://192.168.1.10:554/stream1")
+		args := buildProbeArgs("rtsp://192.168.1.10:554/stream1", true)
 
 		assert.Contains(t, args, "-rtsp_transport")
 		assert.Contains(t, args, "tcp")
@@ -162,7 +162,7 @@ func TestBuildProbeArgs(t *testing.T) {
 	t.Run("RTSPS URL includes tcp transport", func(t *testing.T) {
 		t.Parallel()
 
-		args := buildProbeArgs("rtsps://camera.example.com/live")
+		args := buildProbeArgs("rtsps://camera.example.com/live", true)
 
 		assert.Contains(t, args, "-rtsp_transport")
 		assert.Contains(t, args, "tcp")
@@ -181,7 +181,7 @@ func TestBuildProbeArgs(t *testing.T) {
 	t.Run("HTTP URL does not include rtsp transport", func(t *testing.T) {
 		t.Parallel()
 
-		args := buildProbeArgs("http://example.com/stream.m3u8")
+		args := buildProbeArgs("http://example.com/stream.m3u8", true)
 
 		assert.NotContains(t, args, "-rtsp_transport")
 		assert.NotContains(t, args, "-allowed_media_types")
@@ -190,5 +190,19 @@ func TestBuildProbeArgs(t *testing.T) {
 		assert.Contains(t, args, "quiet")
 		assert.Contains(t, args, "-print_format")
 		assert.Contains(t, args, "json")
+	})
+
+	t.Run("RTSP fallback drops audio-only restriction", func(t *testing.T) {
+		t.Parallel()
+
+		// audioOnly=false is the full-stream fallback for cameras that cannot
+		// SETUP the audio track alone (issue #3902); transport stays, but the
+		// -allowed_media_types restriction is dropped so the handshake succeeds.
+		args := buildProbeArgs("rtsp://192.168.1.10:554/stream1", false)
+
+		assert.Contains(t, args, "-rtsp_transport")
+		assert.Contains(t, args, "tcp")
+		assert.NotContains(t, args, "-allowed_media_types")
+		assert.Equal(t, "rtsp://192.168.1.10:554/stream1", args[len(args)-1])
 	})
 }

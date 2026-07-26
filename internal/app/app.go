@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/inference"
@@ -136,6 +137,10 @@ func (a *App) Shutdown(ctx context.Context) error {
 			allErrs = append(allErrs, errors.New(err).Component(componentApp).Category(errors.CategorySystem).Context("operation", "destroy_openvino").Build())
 		}
 	}
+
+	// Journal shutdown (best-effort). Clean means every service stopped
+	// within budget and the inference runtimes were released.
+	diagnostics.RecordShutdown(diagnostics.Default(), len(allErrs) == 0)
 
 	return errors.Join(allErrs...)
 }

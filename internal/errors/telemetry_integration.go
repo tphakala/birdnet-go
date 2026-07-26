@@ -178,6 +178,15 @@ func isContextCancellation(err error) bool {
 	return Is(err, context.Canceled) || Is(err, context.DeadlineExceeded)
 }
 
+// IsContextCancellation reports whether err (or any wrapped error in its chain)
+// is context.Canceled or context.DeadlineExceeded. It is exported so callers
+// outside this package (e.g. the datastore GORM logger) classify these expected
+// interruptions using the same two-sentinel definition the suppression
+// predicates use, instead of re-checking a single sentinel inline and drifting.
+func IsContextCancellation(err error) bool {
+	return isContextCancellation(err)
+}
+
 // isSuppressibleOperationalError reports whether ee is an expected operational
 // interruption that should not be forwarded to Sentry. Such interruptions arise
 // routinely during graceful shutdown, client disconnects, and request timeouts
@@ -202,6 +211,22 @@ func isSuppressibleOperationalError(ee *EnhancedError) bool {
 		return ee.Category == CategoryDatabase || ee.Category == CategorySystem
 	}
 	return ee.Category == CategorySystem && ee.GetPriority() == PriorityLow
+}
+
+// IsSuppressibleOperationalError reports whether ee is an expected operational
+// interruption (a context cancellation/deadline on a database or system
+// operation, or a PriorityLow system error) that should not be surfaced to the
+// user as a critical notification. It exposes the same predicate that
+// shouldReportToSentry uses internally so the notification path and the Sentry
+// path share a single definition of "expected interruption". Without it, a
+// normal client disconnect or graceful shutdown still produced a false-positive
+// "Critical database error" notification even though Sentry already suppressed
+// the identical event.
+func IsSuppressibleOperationalError(ee *EnhancedError) bool {
+	if ee == nil {
+		return false
+	}
+	return isSuppressibleOperationalError(ee)
 }
 
 // shouldReportToSentry determines if an error should be sent to Sentry
