@@ -1715,8 +1715,6 @@
       "gpu": "Gráficos",
       "gpuReachable": "Accesible",
       "gpuNotReachable": "Inaccesible",
-      "capabilities": "Capacidades",
-      "capabilitiesHelp": "Etiquetas de hardware utilizadas para emparejar esta máquina con las compilaciones de modelos disponibles.",
       "gpuReasonRenderNodeUnavailable": "Ningún nodo de dispositivo GPU es visible para el servidor. En Docker, asigne /dev/dri al contenedor; en una instalación nativa, verifique que el controlador de gráficos esté cargado.",
       "gpuReasonRenderNodePermission": "No se puede abrir el nodo del dispositivo GPU. O la cuenta en la que se ejecuta BirdNET-Go necesita acceso al grupo del dispositivo, generalmente 'render', o al contenedor se le dio el dispositivo con -v en lugar de --device, lo que no otorga acceso a él.",
       "gpuReasonNoRuntime": "BirdNET-Go solo acelera la inferencia en gráficos Intel actualmente, por lo que no se utilizará esta tarjeta.",

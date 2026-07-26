@@ -1715,8 +1715,6 @@
       "gpu": "Grafik",
       "gpuReachable": "Nås",
       "gpuNotReachable": "Nås ej",
-      "capabilities": "Kapacitet",
-      "capabilitiesHelp": "Hårdvarutaggar som används för att matcha denna maskin mot tillgängliga modeller.",
       "gpuReasonRenderNodeUnavailable": "Ingen GPU-nod är synlig för servern. I Docker, mappa /dev/dri in i containern; vid en inbyggd installation, kontrollera att grafikdrivrutinen är laddad.",
       "gpuReasonRenderNodePermission": "GPU-noden kan inte öppnas. BirdNET-Go-kontot behöver tillgång till enhetens grupp, vanligtvis 'render', eller så gavs containern enheten med -v istället för --device, vilket inte ger åtkomst.",
       "gpuReasonNoRuntime": "BirdNET-Go accelererar inferens enbart på Intel-grafik idag, så det här kortet kommer inte att användas.",

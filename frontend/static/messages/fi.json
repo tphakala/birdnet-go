@@ -1715,8 +1715,6 @@
       "gpu": "Näytönohjain",
       "gpuReachable": "Tavoitettavissa",
       "gpuNotReachable": "Ei tavoitettavissa",
-      "capabilities": "Ominaisuudet",
-      "capabilitiesHelp": "Laitteiston tunnisteet, joita käytetään vertaamaan konetta saatavilla oleviin malleihin.",
       "gpuReasonRenderNodeUnavailable": "Palvelin ei näe näytönohjaimen laitesolmua. Dockerissa yhdistä /dev/dri säiliöön; natiiviasennuksessa tarkista, että grafiikka-ajuri on ladattu.",
       "gpuReasonRenderNodePermission": "Näytönohjaimen laitesolmua ei voi avata. BirdNET-Go -tilin on kuuluttava laitteen ryhmään (yleensä 'render') tai säiliölle on annettu laite -v parametrilla --device sijaan, jolloin käyttöoikeutta ei ole.",
       "gpuReasonNoRuntime": "BirdNET-Go nopeuttaa toistaiseksi inferenssiä vain Intelin näytönohjaimilla, joten tätä korttia ei käytetä.",

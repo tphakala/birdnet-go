@@ -1715,8 +1715,6 @@
       "gpu": "Videokaart",
       "gpuReachable": "Bereikbaar",
       "gpuNotReachable": "Niet bereikbaar",
-      "capabilities": "Mogelijkheden",
-      "capabilitiesHelp": "Hardwaretags die worden gebruikt om deze machine te matchen met de beschikbare model-builds.",
       "gpuReasonRenderNodeUnavailable": "Er is geen GPU-apparaatknooppunt zichtbaar voor de server.",
       "gpuReasonRenderNodePermission": "Het GPU-apparaatknooppunt kan niet worden geopend.",
       "gpuReasonNoRuntime": "BirdNET-Go versnelt momenteel inferentie alleen op Intel graphics, dus deze kaart wordt niet gebruikt.",

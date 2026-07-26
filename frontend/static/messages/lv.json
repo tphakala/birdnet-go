@@ -1715,8 +1715,6 @@
       "gpu": "Grafikas karte",
       "gpuReachable": "Sasniedzams",
       "gpuNotReachable": "Nav sasniedzams",
-      "capabilities": "Spējas",
-      "capabilitiesHelp": "Aparatūras atzīmes izmanto modelim piemērota risinājuma izvēlei.",
       "gpuReasonRenderNodeUnavailable": "GPU mezgls serverim nav pieejams. Dockerā pievieno /dev/dri.",
       "gpuReasonRenderNodePermission": "Nav atļaujas piekļūt GPU mezglam. Kontam nepieciešama piekļuve 'render' grupai.",
       "gpuReasonNoRuntime": "BirdNET-Go pašlaik izmanto tikai Intel grafikas kartes paātrināšanai.",

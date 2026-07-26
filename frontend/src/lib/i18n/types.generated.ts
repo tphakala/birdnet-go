@@ -1318,8 +1318,6 @@ export type TranslationKey =
   | 'system.inference.gpu'
   | 'system.inference.gpuReachable'
   | 'system.inference.gpuNotReachable'
-  | 'system.inference.capabilities'
-  | 'system.inference.capabilitiesHelp'
   | 'system.inference.gpuReasonRenderNodeUnavailable'
   | 'system.inference.gpuReasonRenderNodePermission'
   | 'system.inference.gpuReasonNoRuntime'

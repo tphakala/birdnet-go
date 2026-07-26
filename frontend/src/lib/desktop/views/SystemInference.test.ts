@@ -94,7 +94,9 @@ function makeSnapshot(
     hardware: {
       arch: 'amd64',
       cpuModel: 'Test CPU',
-      environment: 'docker',
+      // Capitalised to match sysinfo.GetEnvironment's EnvDocker verbatim; the
+      // container/host icon choice is a case-sensitive prefix match on it.
+      environment: 'Docker',
       fp16: true,
       ...hardware,
     },
@@ -744,6 +746,87 @@ describe('SystemInference', () => {
     expect(container.querySelector('[aria-label="system.inference.activityIdle"]')).toBeNull();
   });
 
+  describe('compute precision (Inference Backends footer)', () => {
+    // The contract this suite pins, in one place: the mocked t() returns the key
+    // itself, so these are the strings that actually reach the DOM.
+    const LABEL_KEY = 'system.inference.fp16';
+    const SUPPORTED_KEY = 'system.inference.fp16Supported';
+    const UNSUPPORTED_KEY = 'system.inference.fp16Unsupported';
+    const BACKENDS_HEADING_KEY = 'system.inference.sectionBackends';
+    const CARD_SELECTOR = 'div.rounded-xl';
+
+    // The label key must be matched EXACTLY, never as a substring of
+    // textContent: LABEL_KEY is a prefix of SUPPORTED_KEY, so a contains-check
+    // passes even when the label is missing entirely and asserts nothing.
+    function precisionLabel(container: HTMLElement): Element | undefined {
+      return [...container.querySelectorAll('span')].find(
+        el => el.textContent.trim() === LABEL_KEY
+      );
+    }
+
+    // The row lives in the Inference Backends card rather than the Hardware
+    // card, because native FP16 is a property of the CPU every backend executes
+    // on. Both branches are asserted: the label renders either way, so only the
+    // pill distinguishes a working readout from one stuck on one variant.
+    it('reports FP16 as supported when the CPU has native half precision', async () => {
+      installApi(makeSnapshot([makeModel({})], { fp16: true }));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain(SUPPORTED_KEY);
+      });
+      expect(precisionLabel(container)).toBeDefined();
+      expect(container.textContent).not.toContain(UNSUPPORTED_KEY);
+    });
+
+    // Placement, not just presence. Every other assertion here passes equally
+    // against the pre-move code, because the row kept its keys and its id when
+    // it changed cards; only these two fail if it moves back.
+    it('places the precision row in the Backends card, not the Hardware card', async () => {
+      installApi(makeSnapshot([makeModel({})], { fp16: true }));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain(SUPPORTED_KEY);
+      });
+      const card = precisionLabel(container)?.closest(CARD_SELECTOR);
+      expect(card?.textContent).toContain(BACKENDS_HEADING_KEY);
+      // The Hardware card is the definition list; the row must have left it.
+      expect(container.querySelector('dl')?.textContent).not.toContain(SUPPORTED_KEY);
+    });
+
+    it('reports FP16 as unsupported when the CPU lacks native half precision', async () => {
+      installApi(makeSnapshot([makeModel({})], { fp16: false }));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain(UNSUPPORTED_KEY);
+      });
+      expect(precisionLabel(container)).toBeDefined();
+      expect(container.textContent).not.toContain(SUPPORTED_KEY);
+    });
+
+    // The label carries aria-describedby pointing at an sr-only span, so the
+    // explanation reaches a screen reader and not only a hovering mouse. The id
+    // and the reference come from one constant; this proves they still resolve.
+    it('links the precision label to its screen-reader description', async () => {
+      installApi(makeSnapshot([makeModel({})], { fp16: true }));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain(SUPPORTED_KEY);
+      });
+      const label = precisionLabel(container);
+      const describedBy = label?.getAttribute('aria-describedby');
+      expect(describedBy).toBeTruthy();
+      expect(container.querySelector(`#${describedBy}`)).not.toBeNull();
+    });
+  });
+
   describe('detected hardware panel', () => {
     it('renders board, cores and memory when the probe found them', async () => {
       installApi(
@@ -893,25 +976,6 @@ describe('SystemInference', () => {
         expect(container.textContent).toContain('AMD Graphics [1002:73ff]');
       });
       expect(container.textContent).toContain('system.inference.gpuReasonUnknown');
-    });
-
-    it('renders capability tokens', async () => {
-      installApi(
-        makeSnapshot([makeModel({})], {
-          capabilities: ['aarch64', 'aarch64-a76', 'tflite', 'fp16-native'],
-        })
-      );
-
-      const { container } = inferenceTest.render({});
-
-      await waitFor(() => {
-        expect(container.textContent).toContain('aarch64-a76');
-      });
-      // Exact key, not a prefix: 'system.inference.capabilities' alone is also
-      // satisfied by the sr-only capabilitiesHelp span.
-      const labels = [...container.querySelectorAll('span')].map(el => el.textContent.trim());
-      expect(labels).toContain('system.inference.capabilities');
-      expect(container.textContent).toContain('fp16-native');
     });
   });
 });

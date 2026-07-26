@@ -1715,8 +1715,6 @@
       "gpu": "Grafikus kártya",
       "gpuReachable": "Elérhető",
       "gpuNotReachable": "Nem elérhető",
-      "capabilities": "Képességek",
-      "capabilitiesHelp": "Hardver címkék a megfelelő modellek kiválasztásához.",
       "gpuReasonRenderNodeUnavailable": "A GPU render csomópont nem elérhető a szerver számára.",
       "gpuReasonRenderNodePermission": "A GPU eszközt nem sikerült megnyitni. Jogosultsági probléma.",
       "gpuReasonNoRuntime": "A BirdNET-Go jelenleg csak Intel grafikát támogat a gyorsításra, ez a kártya nem lesz használva.",

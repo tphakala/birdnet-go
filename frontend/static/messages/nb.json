@@ -1715,8 +1715,6 @@
       "gpu": "Grafikk",
       "gpuReachable": "Tilgjengelig",
       "gpuNotReachable": "Ikke tilgjengelig",
-      "capabilities": "Egenskaper",
-      "capabilitiesHelp": "Maskinvare-tags brukt til å matche denne maskinen mot tilgjengelige modeller.",
       "gpuReasonRenderNodeUnavailable": "Ingen GPU-enhetsnode er synlig for serveren.",
       "gpuReasonRenderNodePermission": "GPU-enhetsnoden kan ikke åpnes.",
       "gpuReasonNoRuntime": "BirdNET-Go akselererer for tiden bare inferens på Intel-grafikk, så dette kortet vil ikke bli brukt.",

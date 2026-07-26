@@ -1715,8 +1715,6 @@
       "gpu": "Grafikkarte",
       "gpuReachable": "Erreichbar",
       "gpuNotReachable": "Nicht erreichbar",
-      "capabilities": "Fähigkeiten",
-      "capabilitiesHelp": "Hardware-Tags, die verwendet werden, um diese Maschine mit den verfügbaren Modell-Builds abzugleichen.",
       "gpuReasonRenderNodeUnavailable": "Für den Server ist kein GPU-Geräteknoten sichtbar. Ordnen Sie in Docker /dev/dri in den Container zu; bei einer nativen Installation prüfen Sie, ob der Grafiktreiber geladen ist.",
       "gpuReasonRenderNodePermission": "Der GPU-Geräteknoten kann nicht geöffnet werden. Entweder benötigt das Konto, unter dem BirdNET-Go ausgeführt wird, Zugriff auf die Gruppe des Geräts, normalerweise 'render', oder der Container hat das Gerät mit -v anstelle von --device erhalten, was keinen Zugriff darauf gewährt.",
       "gpuReasonNoRuntime": "BirdNET-Go beschleunigt Inferenz heute nur auf Intel-Grafikkarten, daher wird diese Karte nicht verwendet.",

@@ -1715,8 +1715,6 @@
       "gpu": "Karta graficzna",
       "gpuReachable": "Osiągalna",
       "gpuNotReachable": "Nieosiągalna",
-      "capabilities": "Możliwości",
-      "capabilitiesHelp": "Tagi sprzętowe używane do dopasowania do dostępnych modeli.",
       "gpuReasonRenderNodeUnavailable": "Serwer nie widzi węzła GPU. W Dockerze należy zamapować /dev/dri.",
       "gpuReasonRenderNodePermission": "Brak uprawnień do węzła GPU. Konto potrzebuje dostępu do grupy 'render'.",
       "gpuReasonNoRuntime": "BirdNET-Go przyspiesza na razie tylko karty graficzne Intel.",

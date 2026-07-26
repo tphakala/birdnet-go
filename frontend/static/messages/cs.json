@@ -1715,8 +1715,6 @@
       "gpu": "Grafická karta",
       "gpuReachable": "Dostupná",
       "gpuNotReachable": "Nedostupná",
-      "capabilities": "Schopnosti",
-      "capabilitiesHelp": "Hardwarové značky sloužící k přiřazení tohoto stroje k dostupným modelům.",
       "gpuReasonRenderNodeUnavailable": "Server nevidí uzel grafického zařízení. V Dockeru namapujte /dev/dri do kontejneru; při nativní instalaci zkontrolujte ovladač.",
       "gpuReasonRenderNodePermission": "Uzel zařízení GPU nelze otevřít. Uživatel BirdNET-Go potřebuje přístup ke skupině zařízení, obvykle 'render'.",
       "gpuReasonNoRuntime": "BirdNET-Go aktuálně urychluje inferenci pouze na grafice Intel, takže tato karta nebude využita.",
