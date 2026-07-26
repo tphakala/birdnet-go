@@ -17,8 +17,10 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { cleanup } from '@testing-library/svelte';
+import { get } from 'svelte/store';
 import { createComponentTestFactory } from '../../../../../test/render-helpers';
 import type { PendingDetection } from '$lib/types/pending.types';
+import { settingsStore, settingsActions } from '$lib/stores/settings';
 
 // Stub the visitor dictionary store. localizeScientific feeds localizeSpeciesName.
 // Returns a Finnish label only for the mapped scientific name; undefined elsewhere
@@ -78,5 +80,56 @@ describe('CurrentlyHearingCard species-name localization', () => {
     });
 
     expect(getByText('Eurasian Wren')).toBeInTheDocument();
+  });
+});
+
+/**
+ * Clicking a currently-heard species opens the species guide. The card is only
+ * made interactive when the guide feature is enabled, so users without the guide
+ * see no change (and never get an empty modal).
+ */
+describe('CurrentlyHearingCard guide click affordance', () => {
+  function enableGuide(): void {
+    const dashboard = get(settingsStore).formData.realtime?.dashboard;
+    if (!dashboard) throw new Error('default dashboard settings missing');
+    settingsActions.updateSection('realtime', {
+      dashboard: {
+        ...dashboard,
+        speciesGuide: {
+          enabled: true,
+          enableWikipedia: false,
+          showNotes: true,
+          showEnrichments: true,
+          showSimilarSpecies: true,
+        },
+      },
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
+    settingsActions.resetAllSettings();
+  });
+
+  it('renders each species as a button when the guide is enabled', async () => {
+    enableGuide();
+    const { findByRole } = card.render({ props: { detections: [pending()] } });
+    // Gating resolves asynchronously via resolveSpeciesGuideConfig (guest-safe), so
+    // the interactive button appears after the store-backed config promise resolves.
+    // The card is then interactive: a button whose accessible name uses the
+    // parameterized viewGuide key (the test i18n mock returns the bare key) and
+    // whose visible content is the localized species name.
+    const button = await findByRole('button', { name: 'analytics.species.viewGuide' });
+    expect(button).toHaveTextContent('Punarinta');
+  });
+
+  it('is not interactive when the guide is disabled (default)', () => {
+    const { queryByRole } = card.render({ props: { detections: [pending()] } });
+    // No species-guide button is rendered when the feature is off.
+    expect(queryByRole('button', { name: 'analytics.species.viewGuide' })).toBeNull();
   });
 });

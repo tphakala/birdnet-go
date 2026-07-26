@@ -46,6 +46,10 @@ A comprehensive collection of reusable Svelte 5 components for the BirdNET-Go de
 - [SystemInfoCard](#systeminfocard) - System information display
 - [SettingsCard](#settingscard) - Configuration settings card
 - [SettingsSection](#settingssection) - Settings organization
+- [ExternalLinkBadge](#externallinkbadge) - renders a single external resource link as a badge with an icon hint and generic external-link fallback
+- [SimilarSpeciesPanel](#similarspeciespanel) - Selectable similar-species diff card (species guide)
+- [SpeciesComparison](#speciescomparison) - Similar-species comparison panel (species guide)
+- [SpeciesNotes](#speciesnotes) - Per-species user notes with CRUD (species guide)
 
 ### Media & Audio
 
@@ -513,6 +517,118 @@ interface Props {
   onDelete={() => actions.handleDelete(detection)}
   onDownload={handleDownload}
 />
+```
+
+---
+
+### ExternalLinkBadge
+
+Renders a single external resource link (Wikipedia, iNaturalist, GBIF, eBird, Xeno-canto, …) as a compact badge. Maps the link's `icon` hint to a bundled glyph, with a generic external-link icon fallback so any future source still renders. Opens in a new tab with `rel="noopener noreferrer"`.
+
+**Props:**
+
+- `link: GuideExternalLink` - `{ name, url, icon? }` (from the species guide / similar-species API response)
+- `className?: string`
+
+**Example:**
+
+```svelte
+<ExternalLinkBadge {link} />
+```
+
+---
+
+### SimilarSpeciesPanel
+
+Selectable similar-species comparison. Renders a picker rail of the focal species' similar species; selecting one fetches that species' guide (`/api/v2/species/:scientific_name/guide`) and shows its canonical sections (Appearance, Voice, Habitat & range) under a "vs {focal}" header, so the user can tell the two apart attribute by attribute. Rendered inside `SpeciesComparison`'s "Similar species" section.
+
+**Props:**
+
+```ts
+interface Props {
+  mainName: string; // focal species name, for the "vs …" header
+  similar: SimilarSpeciesEntry[];
+  className?: string;
+}
+```
+
+**Features:**
+
+- Auto-selects the first species that has a guide so the card is never empty
+- Per-species fetch cache (keyed by scientific name) avoids re-hitting the rate-limited guide endpoint
+- Species without a guide (`has_guide: false`) remain selectable and render their external resource links instead of a comparison card, never a silent 404
+- Explicit loading / no-guide (404) / error / no-sections states
+- Reuses the shared canonical-section vocabulary (`extractCanonicalSections`) in `types/species.ts`
+
+**Example:**
+
+```svelte
+<SimilarSpeciesPanel mainName="American Crow" {similar} />
+```
+
+---
+
+### SpeciesComparison
+
+Collapsible panel comparing a focal species against same-genus / same-family / similar species, sourced from the species guide cache (Wikipedia/eBird). Fetches the focal guide and the similar-species list, mapping localized Wikipedia headings to canonical section IDs. The "Similar species" section delegates to `SimilarSpeciesPanel` for the selectable diff card. Used in detection details and the species detail modal.
+
+**Props:**
+
+```ts
+interface Props {
+  scientificName: string;
+  commonName: string;
+  onclose: () => void;
+  className?: string;
+  [key: string]: unknown;
+}
+```
+
+**Features:**
+
+- Fetches focal guide (`/api/v2/species/:scientific_name/guide`) and similar species (`/api/v2/species/:scientific_name/similar`)
+- Collapsible Description, Songs & Calls, and Similar species sections
+- Best-effort localized heading mapping (en/de/fr/es/pl/fi/sv Wikipedia section names) to canonical section IDs; other locales fall back to the raw heading
+- Instance-scoped ARIA ids via `$props.id()` so multiple instances on one page do not collide
+- Loading and empty states
+
+**Example:**
+
+```svelte
+<SpeciesComparison
+  scientificName="Turdus merula"
+  commonName="Common Blackbird"
+  onclose={() => (showComparison = false)}
+/>
+```
+
+---
+
+### SpeciesNotes
+
+Per-species user notes with full CRUD (auth-gated writes). Lists notes newest-first and supports add/edit/delete with optimistic updates and a client-side length guard mirroring the server limit.
+
+**Props:**
+
+```ts
+interface Props {
+  scientificName: string;
+  className?: string;
+  [key: string]: unknown;
+}
+```
+
+**Features:**
+
+- Read public; create / edit / delete require authentication (`isAuthenticated`)
+- Client-side max-length guard (10,000 chars) mirroring `datastore.SpeciesNoteMaxLength`
+- Inline edit with optimistic entry update; server `updated_at` refreshes on reload
+- Delete confirmation, toast-based error surfacing, i18n strings under `analytics.species.notes.*`
+
+**Example:**
+
+```svelte
+<SpeciesNotes scientificName="Turdus merula" />
 ```
 
 ---
