@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { waitFor, cleanup } from '@testing-library/svelte';
+import { waitFor, cleanup, fireEvent } from '@testing-library/svelte';
 import { createComponentTestFactory } from '../../../test/render-helpers';
 import DetectionDetail from './DetectionDetail.svelte';
 import type { Detection } from '$lib/types/detection.types';
@@ -121,5 +121,80 @@ describe('DetectionDetail stale-response race (#978)', () => {
 
     expect(container.textContent).toContain(FRESH_SCIENTIFIC);
     expect(container.textContent).not.toContain(STALE_SCIENTIFIC);
+  });
+});
+
+describe('DetectionDetail history tab', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it('does not request species history until the history tab is opened', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/v2/detections/')) {
+        return Promise.resolve(
+          jsonResponse(
+            makeDetection({ id: 42, scientificName: 'Spinus tristis', date: '2026-07-26' })
+          )
+        );
+      }
+      return Promise.resolve(jsonResponse({ results: [], total: 0, data: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    detailTest.render({ detectionId: '42' });
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/api/v2/detections/42'))).toBe(
+        true
+      );
+    });
+
+    expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/api/v2/search'))).toBe(false);
+    expect(
+      fetchMock.mock.calls.some(([u]) => String(u).includes('/api/v2/analytics/time/daily'))
+    ).toBe(false);
+  });
+
+  it('requests species history when the history tab is activated', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/v2/detections/')) {
+        return Promise.resolve(
+          jsonResponse(
+            makeDetection({ id: 42, scientificName: 'Spinus tristis', date: '2026-07-26' })
+          )
+        );
+      }
+      if (url.includes('/api/v2/search')) {
+        return Promise.resolve(jsonResponse({ results: [], total: 0 }));
+      }
+      return Promise.resolve(jsonResponse({ data: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { getByRole } = detailTest.render({ detectionId: '42' });
+    await waitFor(() => getByRole('tab', { name: /history/i }));
+    await fireEvent.click(getByRole('tab', { name: /history/i }));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([u]) => String(u).includes('/api/v2/analytics/time/daily'))
+      ).toBe(true);
+    });
+
+    const dailyCall = fetchMock.mock.calls.find(([u]) =>
+      String(u).includes('/api/v2/analytics/time/daily')
+    );
+    const dailyUrl = String(dailyCall?.[0]);
+    // Window is the 30 days ending on the detection's own date, not on today.
+    expect(dailyUrl).toContain('start_date=2026-06-27');
+    expect(dailyUrl).toContain('end_date=2026-07-26');
   });
 });
