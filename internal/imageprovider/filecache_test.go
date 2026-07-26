@@ -1,6 +1,9 @@
 package imageprovider
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/branding"
 )
 
 func TestImageFileCache_StoreAndGet(t *testing.T) {
@@ -119,11 +123,241 @@ func TestImageFileCache_RejectsPathTraversal(t *testing.T) {
 	}
 }
 
-func TestImageFileCache_DownloadAndStore_InvalidURL(t *testing.T) {
+// TestImageFileCache_DownloadAndStore_SSRFGuardRejectsLoopback asserts that the
+// production HTTP client refuses a loopback target.
+//
+// This was named _InvalidURL, but "http://[::1]:0/img.jpg" parses fine; what rejects
+// it is imageHTTPClient's DialContext SSRF guard, before a wire request is ever built.
+// The old name and its bare assert.Error meant the test passed for any cause at all and
+// left the status check, size cap, content-type read and Store handoff untested. Those
+// are covered by the newServedCache tests below, which inject a client that can reach
+// an httptest server.
+func TestImageFileCache_DownloadAndStore_SSRFGuardRejectsLoopback(t *testing.T) {
 	t.Parallel()
 	cache := NewImageFileCache(t.TempDir())
 	_, _, err := cache.DownloadAndStore(t.Context(), "avicommons", "Test species", "http://[::1]:0/img.jpg")
-	assert.Error(t, err)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no safe IP addresses",
+		"the SSRF dialer, not URL parsing, should be what rejects a loopback target")
+}
+
+// pngBytes is a minimal PNG signature, enough for http.DetectContentType to sniff.
+var pngBytes = []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52}
+
+// newServedCache starts an httptest server running handler and returns a file cache
+// wired to reach it. The production client's SSRF dialer rejects the server's loopback
+// address, so the injected client is what makes DownloadAndStore testable at all.
+func newServedCache(t *testing.T, handler http.HandlerFunc) (*ImageFileCache, *httptest.Server) {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+
+	cache := NewImageFileCache(filepath.Join(t.TempDir(), "cache"))
+	cache.httpClient = server.Client()
+	return cache, server
+}
+
+// TestDownloadAndStore_SendsUserAgent is the regression test for the Wikimedia
+// User-Agent policy violation: DownloadAndStore built its request with no headers at
+// all, so Go sent "Go-http-client/1.1" and upload.wikimedia.org answered 403 for every
+// species, forever. This test fails without the fix.
+func TestDownloadAndStore_SendsUserAgent(t *testing.T) {
+	t.Parallel()
+
+	var gotUA string
+	cache, server := newServedCache(t, func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+		w.Header().Set("Content-Type", "image/jpeg")
+		_, _ = w.Write([]byte{0xFF, 0xD8, 0xFF, 0xE0})
+	})
+
+	_, _, err := cache.DownloadAndStore(t.Context(), "wikimedia", "Delichon urbicum", server.URL+"/img.jpg")
+	require.NoError(t, err)
+
+	require.NotEmpty(t, gotUA, "image download must send a User-Agent")
+	assert.NotContains(t, gotUA, "Go-http-client",
+		"Go's default User-Agent is rejected with 403 by upload.wikimedia.org")
+	assert.Contains(t, gotUA, userAgentName+"/", "User-Agent must identify the client by name and version")
+	assert.Contains(t, gotUA, branding.RepoURL(), "Wikimedia policy requires contact information")
+
+	// Assert against the shared builder rather than re-spelling the string, so the API
+	// path and the image path cannot drift apart.
+	assert.Equal(t, buildUserAgent(currentAppVersion()), gotUA,
+		"image download must send the same User-Agent as the Wikipedia API path")
+}
+
+// TestDownloadAndStore_403DoesNotPopulateCache asserts the cascade described in the bug
+// report: a rejected download must leave the file cache empty, which is what makes
+// ServeSpeciesImageProxy fall through to a 302 to the external URL on every request.
+func TestDownloadAndStore_403DoesNotPopulateCache(t *testing.T) {
+	t.Parallel()
+
+	cache, server := newServedCache(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	})
+
+	_, _, err := cache.DownloadAndStore(t.Context(), "wikimedia", "Delichon urbicum", server.URL+"/img.jpg")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "403")
+
+	path, contentType, fresh, getErr := cache.Get("wikimedia", "Delichon urbicum")
+	require.NoError(t, getErr, "a cache miss is not an error")
+	assert.Empty(t, path, "a failed download must not leave a cached file behind")
+	assert.Empty(t, contentType)
+	assert.False(t, fresh)
+}
+
+func TestDownloadAndStore_ErrorResponses(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		status     int
+		wantErrSub string
+	}{
+		{name: "forbidden", status: http.StatusForbidden, wantErrSub: "403"},
+		{name: "rate limited", status: http.StatusTooManyRequests, wantErrSub: "429"},
+		{name: "server error", status: http.StatusInternalServerError, wantErrSub: "500"},
+		{name: "not found", status: http.StatusNotFound, wantErrSub: "404"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cache, server := newServedCache(t, func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tt.status)
+			})
+
+			_, _, err := cache.DownloadAndStore(t.Context(), "wikimedia", "Parus major", server.URL+"/img.jpg")
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErrSub)
+
+			path, _, _, getErr := cache.Get("wikimedia", "Parus major")
+			require.NoError(t, getErr)
+			assert.Empty(t, path, "non-200 response must not populate the cache")
+		})
+	}
+}
+
+func TestDownloadAndStore_CancelledContext(t *testing.T) {
+	t.Parallel()
+
+	released := make(chan struct{})
+	cache, server := newServedCache(t, func(w http.ResponseWriter, _ *http.Request) {
+		<-released
+		w.WriteHeader(http.StatusOK)
+	})
+	t.Cleanup(func() { close(released) })
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	_, _, err := cache.DownloadAndStore(ctx, "wikimedia", "Parus major", server.URL+"/img.jpg")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
+}
+
+// TestDownloadAndStore_ContentTypes covers the extension mapping through the real
+// download path, including the empty-Content-Type case that forces the
+// http.DetectContentType sniff.
+func TestDownloadAndStore_ContentTypes(t *testing.T) {
+	t.Parallel()
+
+	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>`
+
+	tests := []struct {
+		name            string
+		upstreamCT      string
+		body            []byte
+		wantExt         string
+		wantContentType string
+	}{
+		{
+			name:            "png",
+			upstreamCT:      "image/png",
+			body:            pngBytes,
+			wantExt:         ".png",
+			wantContentType: "image/png",
+		},
+		{
+			name:            "webp",
+			upstreamCT:      "image/webp",
+			body:            []byte("RIFF\x00\x00\x00\x00WEBPVP8 "),
+			wantExt:         ".webp",
+			wantContentType: "image/webp",
+		},
+		{
+			name:            "svg",
+			upstreamCT:      "image/svg+xml",
+			body:            []byte(svg),
+			wantExt:         ".svg",
+			wantContentType: "image/svg+xml",
+		},
+		{
+			name:            "gif",
+			upstreamCT:      "image/gif",
+			body:            []byte("GIF89a"),
+			wantExt:         ".gif",
+			wantContentType: "image/gif",
+		},
+		{
+			name: "empty content type falls back to sniffing",
+			// No Content-Type header: Store must sniff the bytes instead.
+			upstreamCT:      "",
+			body:            pngBytes,
+			wantExt:         ".png",
+			wantContentType: "image/png",
+		},
+		{
+			name:            "unknown content type defaults to jpeg",
+			upstreamCT:      "application/octet-stream",
+			body:            []byte{0xFF, 0xD8, 0xFF, 0xE0},
+			wantExt:         ".jpg",
+			wantContentType: "image/jpeg",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cache, server := newServedCache(t, func(w http.ResponseWriter, _ *http.Request) {
+				if tt.upstreamCT != "" {
+					w.Header().Set("Content-Type", tt.upstreamCT)
+				} else {
+					// Go sniffs and sets Content-Type on write unless it is suppressed.
+					w.Header()["Content-Type"] = nil
+				}
+				_, _ = w.Write(tt.body)
+			})
+
+			path, contentType, err := cache.DownloadAndStore(t.Context(), "wikimedia", "Parus major", server.URL+"/img")
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantExt, filepath.Ext(path), "cached file extension")
+			assert.Equal(t, tt.wantContentType, contentType)
+
+			stored, readErr := os.ReadFile(path)
+			require.NoError(t, readErr)
+			assert.Equal(t, tt.body, stored, "cached bytes must match what was served")
+		})
+	}
+}
+
+func TestDownloadAndStore_RejectsOversizeBody(t *testing.T) {
+	t.Parallel()
+
+	cache, server := newServedCache(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "image/jpeg")
+		// One byte over the cap, so the limit itself is what rejects it.
+		_, _ = w.Write(make([]byte, maxImageSize+1))
+	})
+
+	_, _, err := cache.DownloadAndStore(t.Context(), "wikimedia", "Parus major", server.URL+"/img.jpg")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exceeds maximum size")
+
+	path, _, _, getErr := cache.Get("wikimedia", "Parus major")
+	require.NoError(t, getErr)
+	assert.Empty(t, path, "an oversize download must not write anything to disk")
 }
 
 func TestImageFileCache_DetectsContentType(t *testing.T) {

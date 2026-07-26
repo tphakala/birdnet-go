@@ -10,8 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/httpclient"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"golang.org/x/sync/singleflight"
@@ -96,6 +98,46 @@ var imageHTTPClient = func() *http.Client {
 		},
 	}
 }()
+
+// cachedImageUserAgent memoizes the image-download User-Agent once the app version is
+// known. It is a pointer rather than a sync.OnceValue because conf.Setting() can return
+// nil early: latching a version-less string for the whole process lifetime would send
+// weaker identification to Wikimedia than the policy asks for.
+var cachedImageUserAgent atomic.Pointer[string]
+
+// currentAppVersion returns the running application version, or "" if settings cannot
+// be loaded. conf.Setting() returns nil when the config fails to load, so the nil check
+// is required rather than defensive.
+func currentAppVersion() string {
+	if settings := conf.Setting(); settings != nil {
+		return settings.Version
+	}
+	return ""
+}
+
+// imageDownloadUserAgent returns a User-Agent for the image byte download that complies
+// with the Wikimedia Foundation User-Agent policy.
+//
+// upload.wikimedia.org answers 403 to Go's default "Go-http-client/1.1" and to an empty
+// User-Agent. Without this header the download failed for every species on every
+// request, the disk cache stayed permanently empty, and the media proxy fell back to
+// redirecting clients to the external URL, where non-browser clients hit the same 403.
+//
+// It reuses buildUserAgent so this path and the MediaWiki API path cannot drift apart.
+// Note that httpclient's own default User-Agent ("BirdNET-Go", no version, no contact
+// URL) does not satisfy the policy and would not lift the 403.
+func imageDownloadUserAgent() string {
+	if ua := cachedImageUserAgent.Load(); ua != nil {
+		return *ua
+	}
+	version := currentAppVersion()
+	ua := buildUserAgent(version)
+	// Only memoize once a real version is available.
+	if version != "" {
+		cachedImageUserAgent.Store(&ua)
+	}
+	return ua
+}
 
 // ImageFileCache manages disk-based image caching organized by provider.
 type ImageFileCache struct {
@@ -334,6 +376,8 @@ func (fc *ImageFileCache) DownloadAndStore(ctx context.Context, provider, scient
 		if err != nil {
 			return nil, fmt.Errorf("failed to create image request: %w", err)
 		}
+		// Required: upload.wikimedia.org rejects Go's default User-Agent with 403.
+		req.Header.Set("User-Agent", imageDownloadUserAgent())
 		resp, err := fc.client().Do(req)
 		if err != nil {
 			return nil, fmt.Errorf("failed to download image: %w", err)
