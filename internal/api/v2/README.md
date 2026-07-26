@@ -287,6 +287,19 @@ The two verbs report differently under the same `skippedFields` response key, so
 | GET    | `/species/:code/thumbnail`          | `GetSpeciesThumbnail`     | ❌   | Get bird thumbnail image by species code (redirects to image URL) |
 | GET    | `/species/dictionary/:locale`       | `ServeSpeciesDictionary`  | ❌   | Precompressed per-locale species name dictionary (gzip JSON)      |
 
+### Species Guide (`speciesguide/speciesguide.go`)
+
+Every endpoint in this domain is gated by `realtime.dashboard.speciesguide.enabled` (404 when disabled). Guide and similar are additionally gated by their own `show*` flags and are rate-limited. All notes endpoints — reads included — require authentication, since notes are user-authored and may contain sensitive content.
+
+| Method | Route                               | Handler             | Auth | Description                                                                                                          |
+| ------ | ----------------------------------- | ------------------- | ---- | -------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/species/:scientific_name/guide`   | `GetSpeciesGuide`   | ❌   | Offline species guide: taxonomy, localized common name, external links; optional Wikipedia description. Rate-limited. |
+| GET    | `/species/:scientific_name/similar` | `GetSimilarSpecies` | ❌   | Similar-species (same-genus, then same-family) comparison with per-candidate guide summaries/links. Rate-limited.     |
+| GET    | `/species/:scientific_name/notes`   | `GetSpeciesNotes`   | ✅   | List user notes for a species                                                                                        |
+| POST   | `/species/:scientific_name/notes`   | `CreateSpeciesNote` | ✅   | Create a user note for a species                                                                                     |
+| PUT    | `/species/notes/:id`                | `UpdateSpeciesNote` | ✅   | Update a user note by id                                                                                             |
+| DELETE | `/species/notes/:id`                | `DeleteSpeciesNote` | ✅   | Delete a user note by id                                                                                             |
+
 ### Server-Sent Events (`sse/sse.go`)
 
 | Method | Route                 | Handler             | Auth | Description                  |
