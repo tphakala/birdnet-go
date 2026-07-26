@@ -13,7 +13,7 @@ func TestWikiAPIResponseThumbnailDecode(t *testing.T) {
 
 	body := []byte(`{"query":{"pages":[{
 		"title":"Turdus merula",
-		"thumbnail":{"source":"https://upload.wikimedia.org/x.jpg","width":400,"height":300},
+		"thumbnail":{"source":"https://127.0.0.1/x.jpg","width":400,"height":300},
 		"pageimage":"Common_Blackbird.jpg"
 	}]}}`)
 
@@ -24,7 +24,7 @@ func TestWikiAPIResponseThumbnailDecode(t *testing.T) {
 
 	page := resp.Query.Pages[0]
 	require.NotNil(t, page.Thumbnail)
-	assert.Equal(t, "https://upload.wikimedia.org/x.jpg", page.Thumbnail.Source)
+	assert.Equal(t, "https://127.0.0.1/x.jpg", page.Thumbnail.Source)
 	assert.Equal(t, "Common_Blackbird.jpg", page.PageImage)
 }
 

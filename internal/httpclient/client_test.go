@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -21,7 +22,9 @@ func TestNew(t *testing.T) {
 
 		require.NotNil(t, client, "expected non-nil client")
 		assert.Equal(t, DefaultTimeout, client.defaultTimeout, "expected default timeout")
-		assert.Equal(t, defaultUserAgent, client.userAgent, "expected default user agent")
+		assert.Equal(t, defaultUserAgent(), client.userAgent, "expected default user agent")
+		assert.NotContains(t, strings.ToLower(client.userAgent), "birdnet-go/",
+			"the leading token must not be the hyphenated project name: Wikimedia's edge refuses it")
 	})
 
 	t.Run("custom config", func(t *testing.T) {

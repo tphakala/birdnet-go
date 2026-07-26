@@ -188,7 +188,7 @@ func TestRefreshEntryFallbackToDBCache(t *testing.T) {
 	require.NoError(t, store.SaveImageCache(&datastore.ImageCache{
 		ScientificName: species,
 		ProviderName:   providerAvicommons,
-		URL:            "http://old.example.com/redpoll.jpg",
+		URL:            "http://127.0.0.1/redpoll.jpg",
 		AuthorName:     "Old Author",
 		LicenseName:    "CC BY-SA 4.0",
 		CachedAt:       staleTime,
@@ -198,7 +198,7 @@ func TestRefreshEntryFallbackToDBCache(t *testing.T) {
 	require.NoError(t, store.SaveImageCache(&datastore.ImageCache{
 		ScientificName: species,
 		ProviderName:   providerWikimedia,
-		URL:            "https://upload.wikimedia.org/Carduelis_flammea_CT6.jpg",
+		URL:            "https://127.0.0.1/Carduelis_flammea_CT6.jpg",
 		AuthorName:     "Cephas",
 		LicenseName:    "CC BY-SA 3.0",
 		LicenseURL:     "https://creativecommons.org/licenses/by-sa/3.0/",
@@ -225,7 +225,7 @@ func TestRefreshEntryFallbackToDBCache(t *testing.T) {
 	// The Get itself returns stale data immediately.
 	img, err := primaryCache.Get(species)
 	require.NoError(t, err, "Get should return stale data without error")
-	assert.Equal(t, "http://old.example.com/redpoll.jpg", img.URL, "Should return stale data initially")
+	assert.Equal(t, "http://127.0.0.1/redpoll.jpg", img.URL, "Should return stale data initially")
 
 	// Poll for the background refresh to land the DB write, which is the actual
 	// observable the assertions below check. The refresh goroutine updates the
@@ -240,14 +240,14 @@ func TestRefreshEntryFallbackToDBCache(t *testing.T) {
 			ProviderName:   providerAvicommons,
 		})
 		return err == nil && dbEntry != nil &&
-			dbEntry.URL == "https://upload.wikimedia.org/Carduelis_flammea_CT6.jpg" &&
+			dbEntry.URL == "https://127.0.0.1/Carduelis_flammea_CT6.jpg" &&
 			dbEntry.CachedAt.After(staleTime)
 	}, 5*time.Second, 50*time.Millisecond, "Background refresh should persist wikimedia fallback URL to DB")
 
 	// Verify full attribution after refresh
 	img2, err := primaryCache.Get(species)
 	require.NoError(t, err, "Get after refresh should succeed")
-	assert.Equal(t, "https://upload.wikimedia.org/Carduelis_flammea_CT6.jpg", img2.URL,
+	assert.Equal(t, "https://127.0.0.1/Carduelis_flammea_CT6.jpg", img2.URL,
 		"Should have fallback wikimedia URL after refresh")
 	assert.Equal(t, "Cephas", img2.AuthorName, "Should preserve wikimedia attribution")
 	assert.Equal(t, "CC BY-SA 3.0", img2.LicenseName, "Should preserve wikimedia license")
@@ -258,7 +258,7 @@ func TestRefreshEntryFallbackToDBCache(t *testing.T) {
 		ProviderName:   providerAvicommons,
 	})
 	require.NoError(t, err, "DB should have updated avicommons entry")
-	assert.Equal(t, "https://upload.wikimedia.org/Carduelis_flammea_CT6.jpg", dbEntry.URL,
+	assert.Equal(t, "https://127.0.0.1/Carduelis_flammea_CT6.jpg", dbEntry.URL,
 		"DB entry under avicommons should have wikimedia URL")
 	assert.True(t, dbEntry.CachedAt.After(staleTime),
 		"DB entry should have fresh timestamp")
@@ -280,7 +280,7 @@ func TestRefreshEntryFallbackPolicyNone(t *testing.T) {
 	require.NoError(t, store.SaveImageCache(&datastore.ImageCache{
 		ScientificName: species,
 		ProviderName:   providerAvicommons,
-		URL:            "http://old.example.com/redpoll.jpg",
+		URL:            "http://127.0.0.1/redpoll.jpg",
 		CachedAt:       time.Now().Add(-31 * 24 * time.Hour),
 	}))
 
@@ -288,7 +288,7 @@ func TestRefreshEntryFallbackPolicyNone(t *testing.T) {
 	require.NoError(t, store.SaveImageCache(&datastore.ImageCache{
 		ScientificName: species,
 		ProviderName:   providerWikimedia,
-		URL:            "https://upload.wikimedia.org/Carduelis_flammea_CT6.jpg",
+		URL:            "https://127.0.0.1/Carduelis_flammea_CT6.jpg",
 		AuthorName:     "Cephas",
 		CachedAt:       time.Now().Add(-5 * 24 * time.Hour),
 	}))
@@ -327,7 +327,7 @@ func TestRefreshEntryFallbackPolicyNone(t *testing.T) {
 		require.ErrorIs(t, err, imageprovider.ErrImageNotFound,
 			"only a not-found error is acceptable here")
 	}
-	assert.NotEqual(t, "https://upload.wikimedia.org/Carduelis_flammea_CT6.jpg", img.URL,
+	assert.NotEqual(t, "https://127.0.0.1/Carduelis_flammea_CT6.jpg", img.URL,
 		"Should NOT use wikimedia fallback when policy is 'none'")
 	assert.Zero(t, fallbackProvider.getFetchCount(),
 		"wikimedia fallback provider must not be consulted when policy is 'none'")

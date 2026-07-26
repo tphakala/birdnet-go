@@ -27,7 +27,6 @@ func newTestWikiProvider(t *testing.T, handler http.HandlerFunc) *wikiMediaProvi
 	return &wikiMediaProvider{
 		httpClient: server.Client(),
 		apiURL:     server.URL,
-		userAgent:  buildUserAgent("1.2.3-test"),
 		// A very high limit keeps the tests fast while still exercising the limiter
 		// call sites; the production value is 1 req/s.
 		globalLimiter: rate.NewLimiter(rate.Inf, 1),

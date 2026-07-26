@@ -209,7 +209,7 @@ func (m *mockProviderWithNotFound) Fetch(scientificName string) (imageprovider.B
 
 	// Return a valid image for other species
 	return imageprovider.BirdImage{
-		URL:            "http://example.com/" + scientificName + ".jpg",
+		URL:            "http://127.0.0.1/" + scientificName + ".jpg",
 		ScientificName: scientificName,
 		AuthorName:     "Test Author",
 		LicenseName:    "CC-BY",

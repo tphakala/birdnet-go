@@ -108,14 +108,25 @@ type contextFetcher interface {
 	FetchWithContext(ctx context.Context, scientificName string) (BirdImage, error)
 }
 
+// thumbnailSettings returns the dashboard thumbnail configuration, or its zero
+// value when settings are unavailable.
+//
+// conf.Setting() returns nil when the configuration fails to load, and a hot
+// reload can publish nil, so every read in this package has to tolerate it.
+// Several sites dereferenced the result directly, which panics on a path that
+// is reachable from any non-main entry point.
+func thumbnailSettings() conf.Thumbnails {
+	settings := conf.Setting()
+	if settings == nil {
+		return conf.Thumbnails{}
+	}
+	return settings.Realtime.Dashboard.Thumbnails
+}
+
 // normalizedFallbackPolicy reads the configured fallback policy, trimmed and
 // lowercased, so that "All" or a stray trailing space is not read as "off".
 func normalizedFallbackPolicy() string {
-	settings := conf.Setting()
-	if settings == nil {
-		return ""
-	}
-	return strings.ToLower(strings.TrimSpace(settings.Realtime.Dashboard.Thumbnails.FallbackPolicy))
+	return strings.ToLower(strings.TrimSpace(thumbnailSettings().FallbackPolicy))
 }
 
 // fetchFromProvider calls the provider's context-aware Fetch when it has one and falls
@@ -256,6 +267,21 @@ type BirdImageCache struct {
 	// name, so a dashboard asking for thirty uncached thumbnails schedules at
 	// most one fetch per species rather than one per request.
 	prefetching sync.Map
+	// recentAttempts maps a scientific name to the time.Time its last background
+	// resolution failed. It is the backoff the retry contract needs: the proxy
+	// answers 503 + Retry-After and the client polls, so without it every poll
+	// scheduled a fresh goroutine and a fresh provider attempt, and the retry
+	// rate was set by the client rather than by us.
+	recentAttempts sync.Map
+	// dbAbsent maps a scientific name to the time.Time a database read last found
+	// no row for it at all. It exists to keep the same client polling from
+	// costing one SQLite SELECT per poll for a species nothing is known about.
+	//
+	// Deliberately recorded only on that exact observation, and not on "a
+	// resolution is in progress": a species with a stale but perfectly servable
+	// row also has a refresh in flight, and suppressing its database read would
+	// answer 503 for an image we hold.
+	dbAbsent sync.Map
 	// prefetchQueued counts registered prefetches (queued plus running) so an
 	// unbounded species list cannot spawn an unbounded number of goroutines.
 	prefetchQueued atomic.Int64
@@ -321,7 +347,8 @@ const (
 	negativeEntryMarker = "__NOT_FOUND__"           // Special URL marker for negative cache entries
 
 	// Configuration constants
-	fallbackPolicyAll = "all" // Fallback policy to allow all providers
+	fallbackPolicyAll = "all"  // Fallback policy to allow all providers
+	providerAuto      = "auto" // Image provider setting meaning "pick one"
 
 	// Performance threshold constants
 	dbCacheLookupSlowThreshold = 50 * time.Millisecond  // Threshold for slow DB cache lookups
@@ -835,7 +862,6 @@ func (c *BirdImageCache) tryGo(fn func()) bool {
 func InitCache(providerName string, e ImageProvider, t *observability.Metrics, store datastore.Interface) *BirdImageCache {
 	log := GetLogger().With(logger.String("provider", providerName))
 	log.Info("Initializing image cache")
-	settings := conf.Setting()
 
 	quit := make(chan struct{})
 
@@ -849,7 +875,7 @@ func InitCache(providerName string, e ImageProvider, t *observability.Metrics, s
 	cache := &BirdImageCache{
 		providerName: providerName, // Set provider name
 		metrics:      imageProviderMetrics,
-		debug:        settings.Realtime.Dashboard.Thumbnails.Debug, // Keep for potential checks
+		debug:        thumbnailSettings().Debug, // Keep for potential checks
 		store:        store,
 		fileCache:    NewImageFileCache(imageCacheDir),
 		quit:         quit,
@@ -1162,14 +1188,27 @@ func (c *BirdImageCache) checkCachedEntryAfterLock(scientificName string, log lo
 		return BirdImage{}, false, false, nil
 	}
 
+	// Both positive and negative memory entries expire. Positive ones used to be
+	// returned unconditionally, so once a wrong image landed in dataMap nothing
+	// on the request path could re-derive it for the process lifetime, and
+	// clearing the DB cache still handed back the same wrong image. Expiring
+	// here falls through to the DB, which serves the row and schedules the
+	// refresh, so staleness is handled in exactly one place.
+	cutoff := time.Now().Add(-imgPtr.GetTTL())
+	expired := imgPtr.CachedAt.Before(cutoff)
+
 	if !imgPtr.IsNegativeEntry() {
+		if expired {
+			log.Debug("Memory cache entry expired, removing from memory")
+			c.dataMap.Delete(scientificName)
+			return BirdImage{}, false, false, nil
+		}
 		log.Debug("Initialization check: found in memory cache after acquiring lock")
 		return *imgPtr, true, false, nil
 	}
 
 	// Handle negative entry
-	cutoff := time.Now().Add(-imgPtr.GetTTL())
-	if imgPtr.CachedAt.Before(cutoff) {
+	if expired {
 		log.Debug("Negative cache entry expired, removing from memory")
 		c.dataMap.Delete(scientificName)
 		return BirdImage{}, false, false, nil
@@ -1466,6 +1505,14 @@ func (c *BirdImageCache) getCachedLocal(scientificName string) (img BirdImage, f
 		return memImg, true, false
 	}
 
+	// Nothing in memory, and a read a moment ago found no row either. Under the
+	// 503 + Retry-After contract the client polls, so without this every poll for
+	// a species nothing is known about costs its own SQLite SELECT: on a cold
+	// dashboard with ~20 unresolved species, several per second on a 1-core Pi.
+	if c.dbKnownAbsent(scientificName) {
+		return BirdImage{}, false, false
+	}
+
 	dbImage, dbErr := c.loadFromDBCache(scientificName)
 	if isRealError(dbErr) {
 		// Do not fold a DB fault into "no image": that answer is cached by the
@@ -1477,6 +1524,10 @@ func (c *BirdImageCache) getCachedLocal(scientificName string) (img BirdImage, f
 		return BirdImage{}, false, false
 	}
 	if dbImage == nil {
+		// Remember the miss so the client's polling does not repeat this read
+		// every few seconds.
+		c.recordDBAbsent(scientificName)
+
 		// Nothing is known yet. The exhausted marker is consulted only here, AFTER
 		// memory and the DB: it records that every provider failed within the TTL
 		// window, and it must never pre-empt a live cache entry for the species.
@@ -1485,6 +1536,9 @@ func (c *BirdImageCache) getCachedLocal(scientificName string) (img BirdImage, f
 		}
 		return BirdImage{}, false, false
 	}
+
+	// A row exists, so any earlier "no row" observation is stale.
+	c.dbAbsent.Delete(scientificName)
 
 	if dbImage.IsNegativeEntry() {
 		// An expired negative entry is not an answer; let the caller re-fetch.
@@ -1550,6 +1604,12 @@ func (c *BirdImageCache) PrefetchAsync(scientificName string) bool {
 	// bounding semaphore nor the cancellable parent context, so a prefetch there
 	// would be unbounded and un-stoppable. Decline rather than degrade.
 	if c.prefetchSem == nil || c.bgCtx == nil {
+		return false
+	}
+	// The previous attempt failed too recently to be worth repeating. Without
+	// this the client's retry schedule became the provider retry schedule, since
+	// nothing but a not-found answer was ever recorded.
+	if c.recentlyAttempted(scientificName) {
 		return false
 	}
 
@@ -1632,9 +1692,16 @@ func (c *BirdImageCache) runPrefetch(scientificName string, log logger.Logger) {
 
 	img, err := c.GetWithContext(ctx, scientificName)
 	if err != nil {
+		// A not-found answer is already durable in the negative cache; anything
+		// else is a failed attempt and needs its own short backoff, or the next
+		// client poll schedules an identical attempt immediately.
+		if !errors.Is(err, ErrImageNotFound) {
+			c.recordFailedAttempt(scientificName)
+		}
 		log.Debug("Background image prefetch did not resolve", logger.Error(err))
 		return
 	}
+	c.clearResolutionMarkers(scientificName)
 	if img.URL == "" || img.IsNegativeEntry() || c.fileCache == nil {
 		return
 	}
@@ -1847,21 +1914,14 @@ func (c *BirdImageCache) enhanceFetchError(fetchErr error, scientificName string
 		if _, hasName := enhancedErr.Context["scientific_name"]; hasName {
 			return enhancedErr
 		}
-		// Missing context — wrap in a new error preserving the original category
-		// to avoid changing CategoryNetwork to CategoryImageFetch (which would
-		// cause false positives in errors.Is(err, ErrImageNotFound))
-		return errors.New(fetchErr).
-			Component("imageprovider").
-			Category(enhancedErr.Category).
-			Context("provider", c.providerName).
-			Context("scientific_name", scientificName).
-			Context("operation", "provider_fetch").
-			Build()
 	}
-	// Plain error — wrap with full context
+
+	// Wrap with full context, preserving whatever category the cause carries so
+	// a CategoryNetwork throttle is not re-tagged as CategoryImageFetch (which
+	// would cause false positives in errors.Is(err, ErrImageNotFound)).
 	return errors.New(fetchErr).
 		Component("imageprovider").
-		Category(errors.CategoryImageFetch).
+		Category(causeCategory(fetchErr, errors.CategoryImageFetch)).
 		Context("provider", c.providerName).
 		Context("scientific_name", scientificName).
 		Context("operation", "provider_fetch").
@@ -2014,6 +2074,75 @@ func (c *BirdImageCache) isSpeciesExhausted(scientificName string) bool {
 	return true
 }
 
+// recentAttemptTTL bounds how often a species whose last background resolution
+// failed is attempted again, and how long a database miss for it is trusted.
+//
+// It is deliberately much shorter than negativeCacheTTL: a negative entry means
+// "the providers answered, and the answer is no image", which is durable, while
+// these markers mean "the attempt failed" and "there was no row a moment ago",
+// which are both usually transient.
+const recentAttemptTTL = 30 * time.Second
+
+// markerLive reports whether a marker map holds a timestamp for this species
+// that is still within recentAttemptTTL, expiring it lazily if not.
+func markerLive(markers *sync.Map, scientificName string) bool {
+	if scientificName == "" {
+		return false
+	}
+	v, ok := markers.Load(scientificName)
+	if !ok {
+		return false
+	}
+	stamp, ok := v.(time.Time)
+	if !ok {
+		// Defensive: unexpected type, drop the bogus entry.
+		markers.Delete(scientificName)
+		return false
+	}
+	if time.Since(stamp) > recentAttemptTTL {
+		markers.Delete(scientificName) // lazy expiration
+		return false
+	}
+	return true
+}
+
+// recordFailedAttempt notes that a background resolution for this species just
+// failed, so the next attempt is deferred by recentAttemptTTL.
+func (c *BirdImageCache) recordFailedAttempt(scientificName string) {
+	if scientificName == "" {
+		return
+	}
+	c.recentAttempts.Store(scientificName, time.Now())
+}
+
+// clearResolutionMarkers drops both short-lived markers after a resolution
+// succeeds, so neither the prefetch backoff nor the database-miss shortcut
+// outlives the condition it was recorded for.
+func (c *BirdImageCache) clearResolutionMarkers(scientificName string) {
+	c.recentAttempts.Delete(scientificName)
+	c.dbAbsent.Delete(scientificName)
+}
+
+// recentlyAttempted reports whether a background resolution for this species
+// failed within the backoff window.
+func (c *BirdImageCache) recentlyAttempted(scientificName string) bool {
+	return markerLive(&c.recentAttempts, scientificName)
+}
+
+// recordDBAbsent notes that a database read found no row for this species.
+func (c *BirdImageCache) recordDBAbsent(scientificName string) {
+	if scientificName == "" {
+		return
+	}
+	c.dbAbsent.Store(scientificName, time.Now())
+}
+
+// dbKnownAbsent reports whether a recent database read found no row for this
+// species, so the request path can answer "unresolved" without repeating it.
+func (c *BirdImageCache) dbKnownAbsent(scientificName string) bool {
+	return markerLive(&c.dbAbsent, scientificName)
+}
+
 // synthesizeExhaustedResponse returns the short-circuit response used when a
 // species is already known to be exhausted. It mirrors the value returned by
 // the primary-provider negative path so callers do not need to distinguish
@@ -2105,14 +2234,17 @@ func (c *BirdImageCache) tryFallbackProviders(ctx context.Context, scientificNam
 		//
 		// CORRECTNESS GATE: only record exhaustion when at least one
 		// fallback was actually tried AND every failure was an
-		// ErrImageNotFound. The caller (Get -> tryFallbackOnGetError) only
-		// invokes this function after the primary returned
-		// ErrImageNotFound, so by construction every observed error in
-		// this run is "not found" when allFallbacksNotFound is true.
-		// Without this gate, a transient outage on a fallback (network
-		// timeout, DB error, provider init failure) would mask the
-		// species for the full TTL window, hiding real issues and
-		// suppressing legitimate retries.
+		// ErrImageNotFound.
+		//
+		// The gate cannot be relaxed on the premise that the primary already
+		// returned ErrImageNotFound: Get calls tryFallbackOnGetError for any
+		// primary error, not only a not-found one. Only the sole consumer's own
+		// additional check keeps that premise true today, so the gate is what
+		// actually guarantees it here.
+		//
+		// Without it, a transient outage on a fallback (network timeout, DB
+		// error, provider init failure) would mask the species for the full TTL
+		// window, hiding real issues and suppressing legitimate retries.
 		if anyFallbackTried && allFallbacksNotFound {
 			c.recordSpeciesExhausted(scientificName)
 		}

@@ -568,16 +568,41 @@ func matchesPathSegment(s, pattern string) bool {
 	}
 }
 
-// detectCategory automatically detects error category based on error message and component
-func detectCategory(err error, component string) ErrorCategory {
-	// First check if the error implements CategorizedError interface
-	if catErr, ok := stderrors.AsType[CategorizedError](err); ok {
-		return catErr.ErrorCategory()
+// CategoryOf returns the category an error already carries, or the empty
+// category when it carries none.
+//
+// This accessor exists because "return the category this error already carries"
+// kept being rewritten: the package exported IsCategory, IsNetwork and IsNotFound
+// but no way to read the category itself, so callers that needed to preserve a
+// cause's category across a wrap open-coded it. Preserving it matters because
+// telemetry suppression and category-based matching both key on it: re-tagging a
+// network throttle as an image-fetch failure turns a suppressed transient into a
+// per-species Sentry event.
+func CategoryOf(err error) ErrorCategory {
+	if err == nil {
+		return ""
 	}
 
-	// Check if it's already an EnhancedError with a category
+	// The interface comes first: a cause can carry a category without being an
+	// *EnhancedError.
+	if catErr, ok := stderrors.AsType[CategorizedError](err); ok {
+		if category := catErr.ErrorCategory(); category != "" {
+			return category
+		}
+	}
+
 	if enhErr, ok := stderrors.AsType[*EnhancedError](err); ok && enhErr.Category != "" {
 		return enhErr.Category
+	}
+
+	return ""
+}
+
+// detectCategory automatically detects error category based on error message and component
+func detectCategory(err error, component string) ErrorCategory {
+	// An error that already carries a category keeps it.
+	if category := CategoryOf(err); category != "" {
+		return category
 	}
 
 	// Fall back to string-based heuristics

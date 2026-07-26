@@ -3,7 +3,6 @@ package imageprovider
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -14,7 +13,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/httpclient"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -67,13 +65,21 @@ var imageHTTPClient = func() *http.Client {
 	transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(addr)
 		if err != nil {
-			return nil, fmt.Errorf("invalid address %q: %w", addr, err)
+			return nil, errors.Newf("invalid address %q: %w", addr, err).
+				Component("imageprovider").
+				Category(errors.CategoryNetwork).
+				Context("operation", "split_dial_address").
+				Build()
 		}
 
 		// Resolve the hostname to IPs and validate them.
 		ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
 		if err != nil {
-			return nil, fmt.Errorf("DNS lookup failed for %q: %w", host, err)
+			return nil, errors.Newf("DNS lookup failed for %q: %w", host, err).
+				Component("imageprovider").
+				Category(errors.CategoryNetwork).
+				Context("operation", "dns_lookup").
+				Build()
 		}
 
 		// Dial the first safe resolved IP directly to prevent TOCTOU/DNS rebinding.
@@ -91,61 +97,33 @@ var imageHTTPClient = func() *http.Client {
 			return conn, nil
 		}
 		if lastErr != nil {
-			return nil, fmt.Errorf("failed to connect to %q: %w", host, lastErr)
+			return nil, errors.Newf("failed to connect to %q: %w", host, lastErr).
+				Component("imageprovider").
+				Category(errors.CategoryNetwork).
+				Context("operation", "dial_image_host").
+				Build()
 		}
-		return nil, fmt.Errorf("no safe IP addresses for host %q", host)
+		return nil, errors.Newf("no safe IP addresses for host %q", host).
+			Component("imageprovider").
+			Category(errors.CategoryNetwork).
+			Context("operation", "dial_image_host").
+			Build()
 	}
 	return &http.Client{
 		Timeout:   10 * time.Second,
 		Transport: transport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 3 {
-				return fmt.Errorf("too many redirects")
+				return errors.Newf("too many redirects").
+					Component("imageprovider").
+					Category(errors.CategoryNetwork).
+					Context("operation", "follow_image_redirect").
+					Build()
 			}
 			return nil
 		},
 	}
 }()
-
-// cachedImageUserAgent memoizes the image-download User-Agent. It is an atomic.Pointer
-// rather than a sync.OnceValue because conf.Setting() can return nil, and Version is
-// published after startup: latching at first call could pin a version-less string for
-// the process lifetime. Only a non-empty version is memoized, so an early call does not
-// poison the value.
-var cachedImageUserAgent atomic.Pointer[string]
-
-// currentAppVersion returns the running application version. It is empty both when
-// conf.Setting() returns nil (the config failed to load) and when Version has not been
-// published yet; callers only need "not yet usable", so the two are equivalent here.
-func currentAppVersion() string {
-	if settings := conf.Setting(); settings != nil {
-		return settings.Version
-	}
-	return ""
-}
-
-// imageDownloadUserAgent returns a User-Agent for the image byte download that satisfies
-// the Wikimedia Foundation User-Agent policy.
-//
-// Wikimedia answers 403 to Go's default "Go-http-client/1.1", so the byte fetch needs the
-// same policy-compliant header the MediaWiki API path already sends. Reusing
-// buildUserAgent keeps the two in one format.
-//
-// Do not "correct" userAgentName to the hyphenated project name: Wikimedia refuses any
-// User-Agent starting with "BirdNET-Go", so the current hyphen-less spelling is the one
-// that works. See internal/imageprovider/wikipedia.go for where that name is defined.
-func imageDownloadUserAgent() string {
-	if ua := cachedImageUserAgent.Load(); ua != nil {
-		return *ua
-	}
-	version := currentAppVersion()
-	ua := buildUserAgent(version)
-	if version != "" {
-		// CompareAndSwap rather than Store so concurrent first callers publish once.
-		cachedImageUserAgent.CompareAndSwap(nil, &ua)
-	}
-	return ua
-}
 
 // ImageFileCache manages disk-based image caching organized by provider.
 type ImageFileCache struct {
@@ -233,6 +211,9 @@ func NewImageFileCache(basePath string) *ImageFileCache {
 // between the request and the log, which is exactly the wrong thing to do in a
 // diagnostic about which User-Agent was refused.
 func (c *ImageFileCache) logPermanentImageRejection(statusCode int, provider, scientificName, imageURL, userAgent string) {
+	// Narrower than openDownloadCooldown's {401, 403, 429} on purpose: 429 is the
+	// host asking us to slow down, which the cooldown handles quietly, while 401
+	// and 403 are the host refusing us and are worth one escalated log.
 	if statusCode != http.StatusForbidden && statusCode != http.StatusUnauthorized {
 		return
 	}
@@ -248,6 +229,32 @@ func (c *ImageFileCache) logPermanentImageRejection(statusCode int, provider, sc
 	)
 }
 
+// cacheFileError wraps a disk-cache filesystem failure.
+//
+// This file used to build every one of its errors with a bare fmt.Errorf and
+// never imported internal/errors, so a permanently empty image cache reached
+// Sentry as nothing at all: the only signal was a log line.
+func cacheFileError(err error, operation, provider, scientificName string) error {
+	return errors.New(err).
+		Component("imageprovider").
+		Category(errors.CategoryImageCache).
+		Context("provider", provider).
+		Context("scientific_name", scientificName).
+		Context("operation", operation).
+		Build()
+}
+
+// downloadError wraps a failure on the image byte-download path.
+func downloadError(err error, operation, provider, imageURL string) error {
+	return errors.New(err).
+		Component("imageprovider").
+		Category(errors.CategoryNetwork).
+		Context("provider", provider).
+		Context("image_url", imageURL).
+		Context("operation", operation).
+		Build()
+}
+
 // normalizeSpeciesName converts a species name to a filesystem-safe form:
 // lowercase with spaces replaced by underscores.
 func normalizeSpeciesName(name string) string {
@@ -259,11 +266,19 @@ func normalizeSpeciesName(name string) string {
 // filepath.IsLocal for comprehensive validation.
 func validatePathComponent(component string) error {
 	if strings.ContainsAny(component, "/\\") {
-		return fmt.Errorf("path component contains separator: %q", component)
+		return errors.Newf("path component contains separator: %q", component).
+			Component("imageprovider").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_path_component").
+			Build()
 	}
 	cleaned := filepath.Clean(component)
 	if !filepath.IsLocal(cleaned) {
-		return fmt.Errorf("path component is not local: %q", component)
+		return errors.Newf("path component is not local: %q", component).
+			Component("imageprovider").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_path_component").
+			Build()
 	}
 	return nil
 }
@@ -289,11 +304,22 @@ func extensionFromContentType(contentType string) string {
 // It returns the directory path and the base filename (without extension).
 func (c *ImageFileCache) buildPath(provider, scientificName string) (dir, namePrefix string, err error) {
 	if err := validatePathComponent(provider); err != nil {
-		return "", "", fmt.Errorf("invalid provider: %w", err)
+		return "", "", errors.Newf("invalid provider: %w", err).
+			Component("imageprovider").
+			Category(errors.CategoryValidation).
+			Context("provider", provider).
+			Context("operation", "validate_provider_path").
+			Build()
 	}
 	normalized := normalizeSpeciesName(scientificName)
 	if err := validatePathComponent(normalized); err != nil {
-		return "", "", fmt.Errorf("invalid species name: %w", err)
+		return "", "", errors.Newf("invalid species name: %w", err).
+			Component("imageprovider").
+			Category(errors.CategoryValidation).
+			Context("provider", provider).
+			Context("scientific_name", scientificName).
+			Context("operation", "validate_species_path").
+			Build()
 	}
 	dir = filepath.Join(c.basePath, provider)
 	namePrefix = normalized
@@ -312,11 +338,11 @@ func (c *ImageFileCache) Store(provider, scientificName string, data []byte, sou
 
 	dir, namePrefix, err := c.buildPath(provider, scientificName)
 	if err != nil {
-		return "", "", fmt.Errorf("build path: %w", err)
+		return "", "", cacheFileError(err, "build_cache_path", provider, scientificName)
 	}
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", "", fmt.Errorf("create cache directory: %w", err)
+		return "", "", cacheFileError(err, "create_cache_directory", provider, scientificName)
 	}
 
 	// Prefer upstream Content-Type; fall back to sniffing if missing or generic.
@@ -330,23 +356,24 @@ func (c *ImageFileCache) Store(provider, scientificName string, data []byte, sou
 	// Atomic write: write to temp file then rename.
 	tmpFile, err := os.CreateTemp(dir, namePrefix+"-*.tmp")
 	if err != nil {
-		return "", "", fmt.Errorf("create temp file: %w", err)
+		return "", "", cacheFileError(err, "create_temp_file", provider, scientificName)
 	}
 	tmpPath := tmpFile.Name()
+	// Unconditional cleanup rather than one removal per error branch: after a
+	// successful rename the path no longer exists and this is a no-op, while a
+	// branch added later cannot silently start orphaning temp files.
+	defer func() { _ = os.Remove(tmpPath) }()
 
 	if _, writeErr := tmpFile.Write(data); writeErr != nil {
 		_ = tmpFile.Close()
-		_ = os.Remove(tmpPath)
-		return "", "", fmt.Errorf("write temp file: %w", writeErr)
+		return "", "", cacheFileError(writeErr, "write_temp_file", provider, scientificName)
 	}
 	if closeErr := tmpFile.Close(); closeErr != nil {
-		_ = os.Remove(tmpPath)
-		return "", "", fmt.Errorf("close temp file: %w", closeErr)
+		return "", "", cacheFileError(closeErr, "close_temp_file", provider, scientificName)
 	}
 
 	if renameErr := os.Rename(tmpPath, finalPath); renameErr != nil {
-		_ = os.Remove(tmpPath)
-		return "", "", fmt.Errorf("rename temp file: %w", renameErr)
+		return "", "", cacheFileError(renameErr, "rename_temp_file", provider, scientificName)
 	}
 
 	// Remove stale files with different extensions (e.g. old .png when new file is .jpg).
@@ -377,7 +404,7 @@ func (c *ImageFileCache) Store(provider, scientificName string, data []byte, sou
 func (c *ImageFileCache) Get(provider, scientificName string) (path, contentType string, fresh bool, err error) {
 	dir, namePrefix, err := c.buildPath(provider, scientificName)
 	if err != nil {
-		return "", "", false, fmt.Errorf("build path: %w", err)
+		return "", "", false, cacheFileError(err, "build_cache_path", provider, scientificName)
 	}
 
 	for _, ext := range knownExtensions {
@@ -452,14 +479,19 @@ func (fc *ImageFileCache) DownloadAndStore(ctx context.Context, provider, scient
 		// A refused host stays refused for the cooldown. Checked before anything
 		// else so a blanket rejection costs neither a request nor a semaphore slot.
 		if deadline, open := fc.downloadBlockedUntil(provider); open {
-			return nil, fmt.Errorf("%w: retry after %s", ErrImageDownloadBlocked, deadline.UTC().Format(time.RFC3339))
+			return nil, errors.Newf("%w: retry after %s", ErrImageDownloadBlocked, deadline.UTC().Format(time.RFC3339)).
+				Component("imageprovider").
+				Category(errors.CategoryImageFetch).
+				Context("provider", provider).
+				Context("operation", "image_download_cooldown").
+				Build()
 		}
 
 		// Build the User-Agent before taking a semaphore slot. It can reach
 		// conf.Setting(), whose slow path takes a package-global lock and can read from
 		// disk, and doing that while holding one of only five download slots would
 		// serialize unrelated downloads behind it.
-		userAgent := imageDownloadUserAgent()
+		userAgent := appUserAgent()
 
 		// An already-cancelled context must not acquire a slot and issue a request.
 		// With a free semaphore both select cases are ready and the choice is random,
@@ -478,30 +510,42 @@ func (fc *ImageFileCache) DownloadAndStore(ctx context.Context, provider, scient
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, imageURL, http.NoBody) //nolint:gosec // URL comes from trusted DB entries, not user input
 		if err != nil {
-			return nil, fmt.Errorf("failed to create image request: %w", err)
+			return nil, downloadError(err, "create_image_request", provider, imageURL)
 		}
 		// Required: Wikimedia rejects Go's default User-Agent with 403.
 		req.Header.Set("User-Agent", userAgent)
 		resp, err := fc.httpClient.Do(req)
 		if err != nil {
-			return nil, fmt.Errorf("failed to download image: %w", err)
+			return nil, downloadError(err, "download_image", provider, imageURL)
 		}
 		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode != http.StatusOK {
 			fc.logPermanentImageRejection(resp.StatusCode, provider, scientificName, imageURL, userAgent)
 			fc.openDownloadCooldown(resp.StatusCode, provider)
-			return nil, fmt.Errorf("non-200 status downloading image: %d", resp.StatusCode)
+			return nil, errors.Newf("non-200 status downloading image: %d", resp.StatusCode).
+				Component("imageprovider").
+				Category(errors.CategoryNetwork).
+				Context("provider", provider).
+				Context("http_status", resp.StatusCode).
+				Context("operation", "download_image").
+				Build()
 		}
 
 		// Limit read size to prevent OOM from malicious or malformed responses.
 		limited := io.LimitReader(resp.Body, maxImageSize+1)
 		data, err := io.ReadAll(limited)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read image body: %w", err)
+			return nil, downloadError(err, "read_image_body", provider, imageURL)
 		}
 		if len(data) > maxImageSize {
-			return nil, fmt.Errorf("image exceeds maximum size of %d bytes", maxImageSize)
+			return nil, errors.Newf("image exceeds maximum size of %d bytes", maxImageSize).
+				Component("imageprovider").
+				Category(errors.CategoryLimit).
+				Context("provider", provider).
+				Context("max_image_size", maxImageSize).
+				Context("operation", "download_image").
+				Build()
 		}
 
 		upstreamCT := resp.Header.Get("Content-Type")
@@ -523,7 +567,12 @@ func (fc *ImageFileCache) DownloadAndStore(ctx context.Context, provider, scient
 	}
 	dr, ok := result.(*downloadResult)
 	if !ok {
-		return "", "", fmt.Errorf("unexpected download result type %T", result)
+		return "", "", errors.Newf("unexpected download result type %T", result).
+			Component("imageprovider").
+			Category(errors.CategorySystem).
+			Context("provider", provider).
+			Context("operation", "download_and_store").
+			Build()
 	}
 	return dr.path, dr.contentType, nil
 }

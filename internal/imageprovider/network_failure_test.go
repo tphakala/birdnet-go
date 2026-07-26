@@ -119,7 +119,6 @@ func TestNetworkErrorOpensCircuitBreaker(t *testing.T) {
 		rt := &dnsFailureRoundTripper{}
 		provider := &wikiMediaProvider{
 			httpClient:    &http.Client{Transport: rt},
-			userAgent:     buildUserAgent("test"),
 			maxRetries:    1,
 			globalLimiter: rate.NewLimiter(rate.Inf, 1),
 		}
@@ -164,7 +163,6 @@ func TestRateLimitStopsFurtherAttempts(t *testing.T) {
 		rt := &statusRoundTripper{status: http.StatusTooManyRequests}
 		provider := &wikiMediaProvider{
 			httpClient:    &http.Client{Transport: rt},
-			userAgent:     buildUserAgent("test"),
 			maxRetries:    3,
 			globalLimiter: rate.NewLimiter(rate.Inf, 1),
 		}
@@ -210,7 +208,6 @@ func TestRetryLoopDoesNotBackOffAfterFinalAttempt(t *testing.T) {
 		rt := &statusRoundTripper{status: http.StatusInternalServerError}
 		provider := &wikiMediaProvider{
 			httpClient:    &http.Client{Transport: rt},
-			userAgent:     buildUserAgent("test"),
 			maxRetries:    3,
 			globalLimiter: rate.NewLimiter(rate.Inf, 1),
 		}
@@ -281,7 +278,6 @@ func TestQueryWithNonPositiveMaxRetriesReturnsError(t *testing.T) {
 			rt := &statusRoundTripper{status: http.StatusOK}
 			provider := &wikiMediaProvider{
 				httpClient:    &http.Client{Transport: rt},
-				userAgent:     buildUserAgent("test"),
 				maxRetries:    maxRetries,
 				globalLimiter: rate.NewLimiter(rate.Inf, 1),
 			}

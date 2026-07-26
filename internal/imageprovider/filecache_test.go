@@ -23,7 +23,7 @@ func TestImageFileCache_StoreAndGet(t *testing.T) {
 	// Minimal valid JPEG: FFD8FF header triggers image/jpeg detection.
 	jpegData := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46}
 
-	storedPath, storeCT, err := cache.Store("wikimedia", "Parus major", jpegData, "https://example.com/img.jpg", "image/jpeg")
+	storedPath, storeCT, err := cache.Store("wikimedia", "Parus major", jpegData, "https://127.0.0.1/img.jpg", "image/jpeg")
 	require.NoError(t, err)
 	assert.Contains(t, storedPath, "parus_major.jpg")
 	assert.Equal(t, "image/jpeg", storeCT)
@@ -378,7 +378,7 @@ func TestImageFileCache_DetectsContentType(t *testing.T) {
 
 	cache := NewImageFileCache(filepath.Join(t.TempDir(), "cache"))
 
-	storedPath, storedCT, err := cache.Store("wikimedia", "Cyanistes caeruleus", pngBytes, "https://example.com/img.png", "")
+	storedPath, storedCT, err := cache.Store("wikimedia", "Cyanistes caeruleus", pngBytes, "https://127.0.0.1/img.png", "")
 	require.NoError(t, err)
 	assert.Equal(t, ".png", filepath.Ext(storedPath), "expected .png extension")
 	assert.Equal(t, "image/png", storedCT)

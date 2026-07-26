@@ -52,6 +52,39 @@ type DetectionContext struct {
 	// This flag is available for any late consumers that need to know whether the
 	// audio file exists on disk.
 	ClipSaved atomic.Bool
+
+	// birdImage holds the species image resolved once per detection, so the
+	// Database, SSE and MQTT actions of a single CompositeAction do not each
+	// repeat the lookup. Three independent lookups per detection meant three
+	// SQLite reads for a cold species, on a path whose whole purpose is to stay
+	// off slow work. A stored empty BirdImage is a resolved verdict of "nothing
+	// available", which is why it is a pointer: nil means nobody has looked yet.
+	birdImage atomic.Pointer[imageprovider.BirdImage]
+}
+
+// StoreBirdImage records the image resolution for this detection, including the
+// negative result. Callers must store even an empty image, since that is what
+// tells the later actions the lookup has already happened. The value is copied,
+// so the caller keeps ownership of what it passes.
+func (d *DetectionContext) StoreBirdImage(img *imageprovider.BirdImage) {
+	if d == nil || img == nil {
+		return
+	}
+	stored := *img
+	d.birdImage.Store(&stored)
+}
+
+// LoadBirdImage returns the image resolved earlier in this detection and whether
+// a resolution has happened at all.
+func (d *DetectionContext) LoadBirdImage() (img imageprovider.BirdImage, resolved bool) {
+	if d == nil {
+		return imageprovider.BirdImage{}, false
+	}
+	stored := d.birdImage.Load()
+	if stored == nil {
+		return imageprovider.BirdImage{}, false
+	}
+	return *stored, true
 }
 
 // Action is the base interface for all actions that can be executed.

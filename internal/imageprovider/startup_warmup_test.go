@@ -38,7 +38,7 @@ func TestLoadCachedImagesWarmupPopulatesMemory(t *testing.T) {
 		require.NoError(t, store.SaveImageCache(&datastore.ImageCache{
 			ScientificName: s,
 			ProviderName:   providerWikimedia, // matches CreateDefaultCache's provider name
-			URL:            "https://example.com/" + s + ".jpg",
+			URL:            "https://127.0.0.1/" + s + ".jpg",
 			AuthorName:     "Test Author",
 			LicenseName:    "CC BY-SA 4.0",
 			CachedAt:       time.Now(),

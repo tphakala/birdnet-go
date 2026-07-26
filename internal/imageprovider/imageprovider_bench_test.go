@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -125,7 +127,7 @@ func BenchmarkCacheMissWithDBHit(b *testing.B) {
 		if err := mockStore.SaveImageCache(&datastore.ImageCache{
 			ScientificName: species,
 			ProviderName:   "wikimedia",
-			URL:            fmt.Sprintf("http://example.com/%s.jpg", species),
+			URL:            fmt.Sprintf("http://127.0.0.1/%s.jpg", species),
 			CachedAt:       time.Now(),
 		}); err != nil {
 			b.Fatalf("Failed to pre-populate DB store: %v", err)
@@ -256,19 +258,6 @@ func BenchmarkRateLimitedFetch(b *testing.B) {
 		b.Fatalf("Failed to create WikiMedia provider: %v", err)
 	}
 
-	mockStore := newMockStore()
-	metrics, err := observability.NewMetrics()
-	if err != nil {
-		b.Fatalf("Failed to create metrics: %v", err)
-	}
-
-	cache := imageprovider.InitCache("wikimedia", provider, metrics, mockStore)
-	defer func() {
-		if err := cache.Close(); err != nil {
-			b.Errorf("Failed to close cache: %v", err)
-		}
-	}()
-
 	// Test species that are likely to exist in Wikipedia
 	testSpecies := []string{
 		"Turdus merula",
@@ -350,7 +339,7 @@ func BenchmarkCacheRefreshCycle(b *testing.B) {
 		if err := mockStore.SaveImageCache(&datastore.ImageCache{
 			ScientificName: species,
 			ProviderName:   "wikimedia",
-			URL:            fmt.Sprintf("http://example.com/old_%s.jpg", species),
+			URL:            fmt.Sprintf("http://127.0.0.1/old_%s.jpg", species),
 			CachedAt:       staleTime,
 		}); err != nil {
 			b.Fatalf("Failed to save stale cache entry: %v", err)
@@ -368,8 +357,13 @@ func BenchmarkCacheRefreshCycle(b *testing.B) {
 	}()
 	cache.SetImageProvider(mockProvider)
 
-	// Let refresh cycle run
-	time.Sleep(2 * time.Second)
+	// Wait until the refresh cycle has actually started working rather than
+	// sleeping for a duration guessed from refreshDelay. The sweep waits
+	// refreshDelay (2s) before each entry, so the first fetch lands just past
+	// that; poll for it with headroom instead of racing the boundary.
+	require.Eventually(b, func() bool { return mockProvider.getFetchCount() > 0 },
+		10*time.Second, 50*time.Millisecond,
+		"the background refresh sweep should have started fetching stale entries")
 
 	b.ReportAllocs()
 

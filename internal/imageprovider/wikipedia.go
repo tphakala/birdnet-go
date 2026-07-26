@@ -10,14 +10,12 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/httpclient"
@@ -29,13 +27,6 @@ import (
 const (
 	wikiProviderName = "wikimedia"
 	wikipediaAPIURL  = "https://en.wikipedia.org/w/api.php"
-
-	// User-Agent constants following Wikimedia robot policy
-	// https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_User-Agent_Policy
-	// The contact URL is resolved at runtime from the branding package (see
-	// buildUserAgent) so forks identify themselves rather than the upstream repo.
-	userAgentName    = "BirdNETGo"
-	userAgentLibrary = "Go-HTTP-Client"
 
 	// Circuit breaker timeout durations
 	circuitBreakerRateLimitDuration      = 60 * time.Second // Rate limit circuit breaker duration
@@ -59,6 +50,10 @@ const (
 	retryMinDelay       = 2 * time.Second
 	configWaitTimeout   = 10 * time.Second
 	configCheckInterval = 100 * time.Millisecond
+	// lazyInitRetryInterval bounds how often a failed lazy initialization is
+	// retried, so a provider that lost the race with config loading at boot
+	// recovers instead of staying dead for the process lifetime.
+	lazyInitRetryInterval = 1 * time.Minute
 
 	// Response body size limits
 	responseBodyPreviewLimit = 200 // Bytes to show in error messages
@@ -73,15 +68,49 @@ const (
 	// Error detection strings (lowercase for case-insensitive comparison)
 	errorStringUserAgent   = "user-agent"
 	errorStringRobotPolicy = "robot policy"
-	errorStringRate        = "rate"
-	errorStringLimit       = "limit"
-	errorStringThrottle    = "throttl"
 	errorStringBlocked     = "blocked"
 	errorStringBanned      = "banned"
 	errorStringDenied      = "denied"
 	errorStringHTMLDoctype = "<!DOCTYPE"
 	errorStringHTMLTag     = "<html"
+
+	// Rate-limit phrases, matched against a lowercased response body.
+	//
+	// These used to be the bare tokens "rate" and "limit", which also match
+	// ordinary prose in an HTML error page: "corporate", "moderate",
+	// "unlimited". A hard block whose page happened to contain any of those was
+	// classified as a throttle and got the 60s breaker instead of the 5-minute
+	// block breaker, so the app resumed hammering a host that had just refused
+	// it. Match phrases, not fragments of unrelated words.
+	errorStringRateLimit   = "rate limit"        // prose form
+	errorStringRateLimited = "ratelimit"         // MediaWiki API error code "ratelimited"
+	errorStringTooManyReqs = "too many requests" // HTTP 429 prose
+	errorStringThrottle    = "throttl"
 )
+
+// mentionsRateLimit reports whether a lowercased response body names a rate
+// limit. See the errorString* block above for why this is phrase-based.
+func mentionsRateLimit(bodyLower string) bool {
+	return strings.Contains(bodyLower, errorStringRateLimit) ||
+		strings.Contains(bodyLower, errorStringRateLimited) ||
+		strings.Contains(bodyLower, errorStringTooManyReqs) ||
+		strings.Contains(bodyLower, errorStringThrottle)
+}
+
+// classifyForbiddenBody classifies the body of an HTTP 403 from the Wikimedia
+// edge. Both the circuit-breaker path (handleForbiddenError) and the
+// error-reporting path (detectWikipediaErrorType) need this verdict, and they
+// used to derive it independently with two copies of the same substring checks.
+func classifyForbiddenBody(bodyLower string) wikiErrorType {
+	switch {
+	case strings.Contains(bodyLower, errorStringUserAgent) || strings.Contains(bodyLower, errorStringRobotPolicy):
+		return wikiErrorUserAgent
+	case mentionsRateLimit(bodyLower):
+		return wikiErrorRateLimit
+	default:
+		return wikiErrorBlocked
+	}
+}
 
 // wikiMediaProvider implements the ImageProvider interface for Wikipedia.
 type wikiMediaProvider struct {
@@ -91,7 +120,6 @@ type wikiMediaProvider struct {
 	// circuit breaker, response classification) could only be exercised against the
 	// live Wikipedia API, which is why that coverage was deferred.
 	apiURL            string
-	userAgent         string // User-Agent header value (cached for reuse)
 	debug             bool
 	globalLimiter     *rate.Limiter // Global rate limiter for ALL Wikipedia requests (1 req/sec)
 	backgroundLimiter *rate.Limiter // Additional limiter for background operations
@@ -131,18 +159,32 @@ type wikiAPIError struct {
 	Info string `json:"info"`
 }
 
-// wikiQuery models the "query" object of a MediaWiki response. Redirects and
-// Normalized are retained as raw messages because only their presence/count is
-// used, for diagnostic logging.
+// wikiQuery models the "query" object of a MediaWiki response. Normalized is
+// retained as raw messages because only its count is used, for diagnostic
+// logging; Redirects is typed because the redirect target decides whether the
+// answered page is still about the species we asked for.
 type wikiQuery struct {
 	Pages      []wikiPage        `json:"pages"`
-	Redirects  []json.RawMessage `json:"redirects"`
+	Redirects  []wikiRedirect    `json:"redirects"`
 	Normalized []json.RawMessage `json:"normalized"`
+}
+
+// wikiRedirect models one hop of the "redirects" array: the title we asked for
+// and the title the API answered with.
+type wikiRedirect struct {
+	From string `json:"from"`
+	To   string `json:"to"`
 }
 
 // wikiPage models a single page entry from a MediaWiki query response.
 type wikiPage struct {
-	Title     string          `json:"title"`
+	Title string `json:"title"`
+	// Missing is how formatversion=2 reports a title that has no article. It has
+	// to be modelled explicitly: without it the only "no such page" signal the
+	// code could see was a nil query object, which the API also produces for
+	// structured errors on HTTP 200 (ratelimited, maxlag, readonly). Conflating
+	// the two persisted a rate-limit window as a durable __NOT_FOUND__ row.
+	Missing   bool            `json:"missing"`
 	Thumbnail *wikiThumbnail  `json:"thumbnail"`
 	PageImage string          `json:"pageimage"`
 	ImageInfo []wikiImageInfo `json:"imageinfo"`
@@ -272,7 +314,7 @@ func (l *wikiMediaProvider) waitForGlobalRateLimit(ctx context.Context) error {
 
 // validateUserAgent ensures the User-Agent is set.
 func (l *wikiMediaProvider) validateUserAgent() error {
-	if l.userAgent == "" {
+	if appUserAgent() == "" {
 		GetLogger().Error("User-Agent is empty! This will cause Wikipedia to reject the request",
 			logger.String("provider", wikiProviderName))
 		return errors.Newf("User-Agent not set for Wikipedia provider").
@@ -328,13 +370,17 @@ func (l *wikiMediaProvider) createHTTPRequest(ctx context.Context, fullURL strin
 			Build()
 	}
 
-	req.Header.Set("User-Agent", l.userAgent)
+	// Resolved per request, not latched at construction: a provider built
+	// before main.go publishes Version would otherwise send "BirdNETGo/unknown"
+	// for the whole process lifetime, while the image-download path self-heals.
+	userAgent := appUserAgent()
+	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "application/json")
 
 	GetLogger().Debug("Setting User-Agent for Wikipedia API request",
 		logger.String("provider", wikiProviderName),
-		logger.String("user_agent", l.userAgent),
-		logger.Int("user_agent_length", len(l.userAgent)),
+		logger.String("user_agent", userAgent),
+		logger.Int("user_agent_length", len(userAgent)),
 		logger.String("url", fullURL))
 
 	if l.debug {
@@ -416,13 +462,12 @@ func (l *wikiMediaProvider) handleCircuitBreaker(statusCode int, bodyStr string)
 
 // handleForbiddenError classifies and handles HTTP 403 errors.
 func (l *wikiMediaProvider) handleForbiddenError(bodyStr string) {
-	bodyLower := strings.ToLower(bodyStr)
 	truncated := truncateResponseBody(bodyStr, responseBodyPreviewLimit)
 
-	switch {
-	case strings.Contains(bodyLower, errorStringUserAgent) || strings.Contains(bodyLower, errorStringRobotPolicy):
+	switch classifyForbiddenBody(strings.ToLower(bodyStr)) {
+	case wikiErrorUserAgent:
 		l.openCircuit(circuitBreakerUserAgentDuration, fmt.Sprintf("User-Agent policy violation (HTTP 403): %s", truncated))
-	case strings.Contains(bodyLower, errorStringRate) || strings.Contains(bodyLower, errorStringLimit):
+	case wikiErrorRateLimit:
 		l.openCircuit(circuitBreakerRateLimitDuration, fmt.Sprintf("Rate limited (HTTP 403): %s", truncated))
 	default:
 		l.openCircuit(circuitBreakerBlockedDuration, fmt.Sprintf("Access blocked (HTTP 403): %s", truncated))
@@ -486,9 +531,14 @@ func (l *wikiMediaProvider) handleJSONParseError(body []byte, parseErr error) er
 // preventing race conditions during startup where conf.Setting() might return nil
 // or have an empty Version field.
 type LazyWikiMediaProvider struct {
-	once     sync.Once
+	mu       sync.Mutex
 	provider *wikiMediaProvider
-	initErr  error
+	// lastErr and nextRetry replace a sync.Once. The Once latched the first
+	// initialization error for the whole process lifetime, so a config wait that
+	// timed out at boot (10s, plausible on a slow Pi) left the provider
+	// permanently dead, with no retry and no log after the first line.
+	lastErr   error
+	nextRetry time.Time
 }
 
 // NewLazyWikiMediaProvider creates a new lazy-initialized Wikipedia provider.
@@ -499,39 +549,62 @@ func NewLazyWikiMediaProvider() *LazyWikiMediaProvider {
 
 // ensureInitialized creates the actual provider on first use, with validation.
 // It uses sync.Once to ensure thread-safe single initialization.
-func (l *LazyWikiMediaProvider) ensureInitialized() error {
-	l.once.Do(func() {
-		log := GetLogger().With(logger.String("provider", wikiProviderName))
-		// Wait for valid configuration (with timeout)
-		if !l.waitForValidConfig(configWaitTimeout) {
-			l.initErr = errors.Newf("configuration not available after timeout").
-				Component("imageprovider").
-				Category(errors.CategoryConfiguration).
-				Context("provider", wikiProviderName).
-				Context("operation", "lazy_init_timeout").
-				Build()
-			log.Error("LazyWikiMediaProvider: Configuration not available after timeout")
-			return
-		}
+func (l *LazyWikiMediaProvider) ensureInitialized(ctx context.Context) (*wikiMediaProvider, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
-		// Create the actual provider with valid configuration
-		l.provider, l.initErr = NewWikiMediaProvider()
-		if l.initErr != nil {
-			log.Error("LazyWikiMediaProvider: Failed to create provider", logger.Error(l.initErr))
-		} else {
-			log.Info("LazyWikiMediaProvider: Successfully initialized provider")
-		}
-	})
-	return l.initErr
+	if l.provider != nil {
+		return l.provider, nil
+	}
+	if l.lastErr != nil && time.Now().Before(l.nextRetry) {
+		return nil, l.lastErr
+	}
+
+	log := GetLogger().With(logger.String("provider", wikiProviderName))
+
+	// Wait for valid configuration (with timeout)
+	if !l.waitForValidConfig(ctx, configWaitTimeout) {
+		l.failInit(errors.Newf("configuration not available after timeout").
+			Component("imageprovider").
+			Category(errors.CategoryConfiguration).
+			Context("provider", wikiProviderName).
+			Context("operation", "lazy_init_timeout").
+			Build())
+		log.Error("LazyWikiMediaProvider: Configuration not available after timeout",
+			logger.Duration("retry_after", lazyInitRetryInterval))
+		return nil, l.lastErr
+	}
+
+	// Create the actual provider with valid configuration
+	provider, err := NewWikiMediaProvider()
+	if err != nil {
+		l.failInit(err)
+		log.Error("LazyWikiMediaProvider: Failed to create provider",
+			logger.Error(err),
+			logger.Duration("retry_after", lazyInitRetryInterval))
+		return nil, err
+	}
+
+	l.provider = provider
+	l.lastErr = nil
+	log.Info("LazyWikiMediaProvider: Successfully initialized provider")
+	return provider, nil
+}
+
+// failInit records an initialization failure and schedules the next attempt.
+// Callers must hold l.mu.
+func (l *LazyWikiMediaProvider) failInit(err error) {
+	l.lastErr = err
+	l.nextRetry = time.Now().Add(lazyInitRetryInterval)
 }
 
 // waitForValidConfig waits until configuration is available with a valid version.
-func (l *LazyWikiMediaProvider) waitForValidConfig(timeout time.Duration) bool {
+func (l *LazyWikiMediaProvider) waitForValidConfig(ctx context.Context, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	ticker := time.NewTicker(configCheckInterval)
 	defer ticker.Stop()
 
-	for time.Now().Before(deadline) {
+	for {
 		settings := conf.Setting()
 		if settings != nil && settings.Version != "" {
 			GetLogger().Debug("LazyWikiMediaProvider: Valid configuration detected",
@@ -539,25 +612,42 @@ func (l *LazyWikiMediaProvider) waitForValidConfig(timeout time.Duration) bool {
 				logger.String("version", settings.Version))
 			return true
 		}
-		<-ticker.C
+		if !time.Now().Before(deadline) {
+			return false
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-ticker.C:
+		}
 	}
-	return false
 }
 
 // Fetch implements the ImageProvider interface with lazy initialization.
+//
+// A context-free Fetch is treated as a foreground fetch, matching
+// wikiMediaProvider.Fetch: it passes the process-global limiter but not the
+// more conservative background one.
 func (l *LazyWikiMediaProvider) Fetch(scientificName string) (BirdImage, error) {
-	if err := l.ensureInitialized(); err != nil {
-		return BirdImage{}, err
-	}
-	return l.provider.Fetch(scientificName)
+	return l.FetchWithContext(context.Background(), scientificName)
 }
 
 // FetchWithContext implements context-aware fetching with lazy initialization.
 func (l *LazyWikiMediaProvider) FetchWithContext(ctx context.Context, scientificName string) (BirdImage, error) {
-	if err := l.ensureInitialized(); err != nil {
+	// The configuration gate runs before initialization. Initializing first meant
+	// a call that policy forbids still paid the config wait and emitted the full
+	// "Initializing WikiMedia provider" log block, which is very likely what was
+	// reported as Wikimedia activity despite `fallbackpolicy: none`.
+	if allowed, reason := wikiFetchAllowed(); !allowed {
+		logWikiFetchBlocked(scientificName, reason)
+		return BirdImage{}, ErrProviderNotConfigured
+	}
+
+	provider, err := l.ensureInitialized(ctx)
+	if err != nil {
 		return BirdImage{}, err
 	}
-	return l.provider.FetchWithContext(ctx, scientificName)
+	return provider.FetchWithContext(ctx, scientificName)
 }
 
 // ShouldRefreshCache implements ProviderStatusChecker interface.
@@ -565,19 +655,22 @@ func (l *LazyWikiMediaProvider) FetchWithContext(ctx context.Context, scientific
 // without requiring full provider initialization. This allows the provider to be registered
 // for UI discovery while preventing unnecessary cache operations when disabled.
 func (l *LazyWikiMediaProvider) ShouldRefreshCache() bool {
-	settings := conf.Setting()
-	if settings == nil {
-		return false
-	}
-
-	// Check if WikiMedia is configured as primary provider
-	if settings.Realtime.Dashboard.Thumbnails.ImageProvider == wikiProviderName {
+	// This is deliberately narrower than wikiFetchAllowed, which also permits
+	// "auto" and an unset provider because auto may elect WikiMedia. Refreshing
+	// is worth doing only when WikiMedia is actually in use, and under auto it
+	// is elected only if no other provider registers.
+	//
+	// What it must never be is BROADER than the fetch gate, or the hourly sweep
+	// schedules fetches that are all denied. It used to be, in two ways: it
+	// lowercased and trimmed the policy while the fetch side compared verbatim,
+	// so `fallbackpolicy: All` enabled the refresh while every fetch it
+	// scheduled was rejected; and it accepted a provider name ("wikimedia") as a
+	// value of the policy field, which is a category error with the same effect.
+	// Both conditions below imply wikiFetchAllowed, by construction.
+	if strings.EqualFold(strings.TrimSpace(thumbnailSettings().ImageProvider), wikiProviderName) {
 		return true
 	}
-
-	// Check if WikiMedia is configured as fallback provider
-	fallback := strings.ToLower(strings.TrimSpace(settings.Realtime.Dashboard.Thumbnails.FallbackPolicy))
-	return fallback == wikiProviderName || fallback == fallbackPolicyAll
+	return normalizedFallbackPolicy() == fallbackPolicyAll
 }
 
 // truncateResponseBody truncates a response body string to a specified length for logging.
@@ -587,35 +680,6 @@ func truncateResponseBody(body string, maxLength int) string {
 		return body
 	}
 	return body[:maxLength] + "..."
-}
-
-// buildUserAgent constructs a user-agent string that complies with Wikimedia's robot policy.
-// Format: <client name>/<version> (<contact information>) <library/framework name>/<version>
-// Reference: https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_User-Agent_Policy
-func buildUserAgent(appVersion string) string {
-	if appVersion == "" {
-		appVersion = "unknown"
-	}
-
-	goVersion := runtime.Version()
-
-	// Format: BirdNET-Go/1.0.0 (https://github.com/tphakala/birdnet-go) Go-HTTP-Client/go1.21.0
-	return fmt.Sprintf("%s/%s (%s) %s/%s",
-		userAgentName, appVersion, branding.RepoURL(), userAgentLibrary, goVersion)
-}
-
-// logUserAgentValidation logs the constructed user-agent for debugging purposes
-func logUserAgentValidation(appVersion string) {
-	userAgent := buildUserAgent(appVersion)
-	GetLogger().Debug("Wikipedia user-agent validation",
-		logger.String("provider", wikiProviderName),
-		logger.String("user_agent", userAgent),
-		logger.String("complies_with_policy", "https://foundation.wikimedia.org/wiki/Policy:User-Agent_policy"),
-		logger.String("contains_app_name", userAgentName),
-		logger.String("contains_version", appVersion),
-		logger.String("contains_contact", branding.RepoURL()),
-		logger.String("contains_library", userAgentLibrary),
-		logger.String("go_version", runtime.Version()))
 }
 
 // htmlToText extracts the visible text content from an HTML fragment or
@@ -689,13 +753,14 @@ func detectWikipediaErrorType(statusCode int, responseBody []byte, contentType s
 	case http.StatusTooManyRequests:
 		return wikiErrorRateLimit, "Rate limit exceeded (HTTP 429)"
 	case http.StatusForbidden:
-		if strings.Contains(bodyLower, errorStringUserAgent) || strings.Contains(bodyLower, errorStringRobotPolicy) {
+		switch classifyForbiddenBody(bodyLower) {
+		case wikiErrorUserAgent:
 			return wikiErrorUserAgent, "User-Agent policy violation"
-		}
-		if strings.Contains(bodyLower, errorStringRate) || strings.Contains(bodyLower, errorStringLimit) {
+		case wikiErrorRateLimit:
 			return wikiErrorRateLimit, "Rate limit exceeded (403 with rate limit message)"
+		default:
+			return wikiErrorBlocked, "Access blocked (HTTP 403)"
 		}
-		return wikiErrorBlocked, "Access blocked (HTTP 403)"
 	case http.StatusServiceUnavailable:
 		return wikiErrorTemporary, "Service temporarily unavailable (HTTP 503)"
 	}
@@ -706,9 +771,7 @@ func detectWikipediaErrorType(statusCode int, responseBody []byte, contentType s
 		errorMsgLower := strings.ToLower(errorMsg)
 
 		// Check for rate limiting keywords in HTML content
-		if strings.Contains(errorMsgLower, errorStringRate+" "+errorStringLimit) ||
-			strings.Contains(errorMsgLower, "too many requests") ||
-			strings.Contains(errorMsgLower, errorStringThrottle) {
+		if mentionsRateLimit(errorMsgLower) {
 			return wikiErrorRateLimit, "Rate limit detected in HTML response"
 		}
 
@@ -835,7 +898,7 @@ func (l *wikiMediaProvider) classifyParseFailure(reqID, fullURL string, attempt 
 	case wikiErrorUserAgent:
 		// User-agent policy violation - open circuit breaker
 		l.openCircuit(circuitBreakerUserAgentDuration, "User-Agent policy violation")
-		return checkUserAgentPolicyViolation(reqID, failure.statusCode, body, l.userAgent)
+		return checkUserAgentPolicyViolation(reqID, failure.statusCode, body, appUserAgent())
 
 	case wikiErrorTemporary:
 		// Temporary error - continue with retry logic but with longer backoff
@@ -927,20 +990,21 @@ func logAPISuccess(reqID, species, operation string) {
 func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 	log := GetLogger().With(logger.String("provider", wikiProviderName))
 	log.Info("Initializing WikiMedia provider")
-	settings := conf.Setting()
+	debug := thumbnailSettings().Debug
+	appVersion := currentAppVersion()
 
 	// Log debug mode if configured
-	if settings.Realtime.Dashboard.Thumbnails.Debug {
+	if debug {
 		log.Info("Debug mode enabled for WikiMedia provider",
 			logger.Bool("debug", true))
 	}
 
-	// Build and validate user-agent
-	userAgent := buildUserAgent(settings.Version)
-	logUserAgentValidation(settings.Version)
+	// Log the user-agent. It is resolved per request rather than stored here, so
+	// this is a diagnostic snapshot rather than the value that will be sent.
+	logUserAgentValidation(appVersion)
 	log.Info("WikiMedia provider initialization - user-agent constructed",
-		logger.String("user_agent", userAgent),
-		logger.String("app_version", settings.Version))
+		logger.String("user_agent", buildUserAgent(appVersion)),
+		logger.String("app_version", appVersion))
 
 	// Clone DefaultTransport (per golang/go#26013) to inherit proxy support and
 	// dial timeouts, then override pool/timeout settings for Wikipedia API usage.
@@ -969,8 +1033,7 @@ func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 	return &wikiMediaProvider{
 		httpClient:        httpClient,
 		apiURL:            wikipediaAPIURL,
-		userAgent:         userAgent,
-		debug:             settings.Realtime.Dashboard.Thumbnails.Debug,
+		debug:             debug,
 		globalLimiter:     globalLimiter,
 		backgroundLimiter: backgroundLimiter,
 		maxRetries:        defaultMaxRetries,
@@ -1260,7 +1323,7 @@ func logFirstPageContent(page *wikiPage, fullURL string) {
 }
 
 // queryAndGetFirstPageWithLimiter queries Wikipedia with given parameters using the specified rate limiter.
-func (l *wikiMediaProvider) queryAndGetFirstPageWithLimiter(ctx context.Context, reqID string, params map[string]string, limiter *rate.Limiter) (*wikiPage, error) {
+func (l *wikiMediaProvider) queryAndGetFirstPageWithLimiter(ctx context.Context, reqID string, params map[string]string, limiter *rate.Limiter) (page *wikiPage, redirects []wikiRedirect, err error) {
 	log := GetLogger().With(
 		logger.String("provider", wikiProviderName),
 		logger.String("request_id", reqID),
@@ -1272,52 +1335,116 @@ func (l *wikiMediaProvider) queryAndGetFirstPageWithLimiter(ctx context.Context,
 
 	resp, err := l.queryWithRetryAndLimiter(ctx, reqID, params, limiter)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	logRawResponse(resp, fullURL)
 	log.Debug("Parsing pages from API response")
 
-	if resp.Query == nil {
+	// A structured error object means the API refused the request, not that the
+	// species has no page. MediaWiki returns these with HTTP 200 for
+	// ratelimited, maxlag and readonly, so classifying them as "not found" is
+	// what let a Wikipedia throttling window persist as durable __NOT_FOUND__
+	// rows for every species queried during it.
+	if resp.Error != nil {
 		logQueryMissingError(resp, params, fullURL)
-		return nil, imageNotFoundFor(params["titles"], wikiProviderName, "wiki_query_missing")
+		return nil, nil, l.wikiAPIErrorFor(resp.Error, params["titles"], reqID)
+	}
+
+	if resp.Query == nil {
+		// With formatversion=2 an absent page is reported as
+		// pages:[{missing:true}], so a nil query with no error object is a
+		// malformed response rather than a missing species. Report it as such:
+		// a not-found verdict here would be cached as "this species has no
+		// image" for the full negative TTL.
+		logQueryMissingError(resp, params, fullURL)
+		return nil, nil, errors.Newf("Wikipedia response contained neither a query nor an error object").
+			Component("imageprovider").
+			Category(errors.CategoryNetwork).
+			Context("provider", wikiProviderName).
+			Context("request_id", reqID).
+			Context("scientific_name", params["titles"]).
+			Context("operation", "wiki_query_missing").
+			Build()
 	}
 
 	if len(resp.Query.Pages) == 0 {
 		logNoPages(resp, params, fullURL)
-		return nil, imageNotFoundFor(params["titles"], wikiProviderName, "wiki_pages_empty")
+		return nil, nil, imageNotFoundFor(params["titles"], wikiProviderName, "wiki_pages_empty")
 	}
 
-	logFirstPageContent(&resp.Query.Pages[0], fullURL)
+	first := &resp.Query.Pages[0]
+	if first.Missing {
+		log.Debug("Wikipedia reports no such page", logger.String("title", first.Title))
+		return nil, nil, imageNotFoundFor(params["titles"], wikiProviderName, "wiki_page_missing")
+	}
+
+	logFirstPageContent(first, fullURL)
 	logAPISuccess(reqID, params["titles"], "get_first_page")
 
-	return &resp.Query.Pages[0], nil
+	return first, resp.Query.Redirects, nil
 }
 
-// isAllowedToFetch checks if the WikiMedia provider is allowed to make requests
-// based on the current configuration. This prevents unnecessary API calls to Wikipedia
-// when the provider is not configured for use.
-func (l *wikiMediaProvider) isAllowedToFetch() (allowed bool, reason string) {
+// wikiAPIErrorFor converts a MediaWiki structured error object into an error.
+//
+// Only codes meaning "this title can never resolve" are reported as
+// ErrImageNotFound, because that is the verdict the cache persists as a
+// negative entry. Everything else is a provider-side failure that must not be
+// recorded as "this species has no image". A rate-limit code additionally opens
+// the circuit breaker: these arrive with HTTP 200, so the status-code path that
+// normally trips the breaker never sees them.
+func (l *wikiMediaProvider) wikiAPIErrorFor(apiErr *wikiAPIError, title, reqID string) error {
+	code := strings.ToLower(strings.TrimSpace(apiErr.Code))
+
+	switch code {
+	case "invalidtitle", "missingtitle", "nosuchpageid":
+		return imageNotFoundFor(title, wikiProviderName, "wiki_api_"+code)
+	}
+
+	if mentionsRateLimit(code) || mentionsRateLimit(strings.ToLower(apiErr.Info)) {
+		l.openCircuit(circuitBreakerRateLimitDuration,
+			fmt.Sprintf("Rate limited (API error %s): %s", apiErr.Code,
+				truncateResponseBody(apiErr.Info, responseBodyPreviewLimit)))
+	}
+
+	return errors.Newf("Wikipedia API error %s: %s", apiErr.Code,
+		truncateResponseBody(apiErr.Info, responseBodyPreviewLimit)).
+		Component("imageprovider").
+		Category(errors.CategoryNetwork).
+		Context("provider", wikiProviderName).
+		Context("request_id", reqID).
+		Context("scientific_name", title).
+		Context("api_error_code", apiErr.Code).
+		Context("operation", "wiki_api_error").
+		Build()
+}
+
+// wikiFetchAllowed reports whether the WikiMedia provider is allowed to make
+// requests under the current configuration. This prevents unnecessary API calls
+// to Wikipedia when the provider is not configured for use. It is a package
+// function rather than a method so the lazy wrapper can consult it before
+// paying for initialization.
+func wikiFetchAllowed() (allowed bool, reason string) {
 	settings := conf.Setting()
 	if settings == nil {
-		// If settings are not available, allow for backward compatibility
-		return true, ""
+		// Fail closed. Settings are nil only before the config loads or when
+		// loading failed, and permitting outbound Wikipedia traffic in that
+		// window contradicts a configured `fallbackpolicy: none`. The sibling
+		// refresh gate already failed closed on the same condition.
+		return false, "settings unavailable"
 	}
 
 	thumbnails := settings.Realtime.Dashboard.Thumbnails
 
-	// Case 1: WikiMedia is explicitly configured as the provider
-	if thumbnails.ImageProvider == wikiProviderName {
+	// Cases 1 and 2: WikiMedia is the configured provider, or auto mode may
+	// select it (it does when no other provider registers).
+	switch strings.ToLower(strings.TrimSpace(thumbnails.ImageProvider)) {
+	case wikiProviderName, providerAuto, "":
 		return true, ""
 	}
 
-	// Case 2: Auto mode may select WikiMedia
-	if thumbnails.ImageProvider == "auto" || thumbnails.ImageProvider == "" {
-		return true, ""
-	}
-
-	// Case 3: WikiMedia can be used as a fallback
-	if thumbnails.FallbackPolicy == fallbackPolicyAll {
+	// Case 3: WikiMedia can be used as a fallback.
+	if normalizedFallbackPolicy() == fallbackPolicyAll {
 		return true, ""
 	}
 
@@ -1327,19 +1454,22 @@ func (l *wikiMediaProvider) isAllowedToFetch() (allowed bool, reason string) {
 	return false, reason
 }
 
+// logWikiFetchBlocked records a fetch refused by configuration.
+func logWikiFetchBlocked(scientificName, reason string) {
+	GetLogger().Debug("WikiMedia fetch blocked by configuration",
+		logger.String("provider", wikiProviderName),
+		logger.String("scientific_name", scientificName),
+		logger.String("config_reason", reason),
+		logger.String("hint", "WikiMedia is not the configured provider and fallback is disabled"))
+}
+
 // FetchWithContext retrieves the bird image for a given scientific name using a context.
 // All requests pass through the global 1 req/s limiter; background operations also
 // use an additional background-specific limiter for more conservative rate limiting.
 func (l *wikiMediaProvider) FetchWithContext(ctx context.Context, scientificName string) (BirdImage, error) {
 	// Check if we're allowed to make requests to WikiMedia
-	if allowed, reason := l.isAllowedToFetch(); !allowed {
-		GetLogger().Debug("WikiMedia fetch blocked by configuration",
-			logger.String("provider", wikiProviderName),
-			logger.String("scientific_name", scientificName),
-			logger.String("config_reason", reason),
-			logger.String("context", "background_operation"),
-			logger.String("hint", "WikiMedia is not the configured provider and fallback is disabled"))
-
+	if allowed, reason := wikiFetchAllowed(); !allowed {
+		logWikiFetchBlocked(scientificName, reason)
 		return BirdImage{}, ErrProviderNotConfigured
 	}
 
@@ -1365,13 +1495,8 @@ func (l *wikiMediaProvider) FetchWithContext(ctx context.Context, scientificName
 // means neither the retry backoff nor the limiter wait can be cancelled.
 func (l *wikiMediaProvider) Fetch(scientificName string) (BirdImage, error) {
 	// Check if we're allowed to make requests to WikiMedia
-	if allowed, reason := l.isAllowedToFetch(); !allowed {
-		GetLogger().Debug("WikiMedia fetch blocked by configuration",
-			logger.String("provider", wikiProviderName),
-			logger.String("scientific_name", scientificName),
-			logger.String("config_reason", reason),
-			logger.String("hint", "WikiMedia is not the configured provider and fallback is disabled"))
-
+	if allowed, reason := wikiFetchAllowed(); !allowed {
+		logWikiFetchBlocked(scientificName, reason)
 		return BirdImage{}, ErrProviderNotConfigured
 	}
 
@@ -1397,15 +1522,27 @@ func (l *wikiMediaProvider) fetchWithLimiter(ctx context.Context, scientificName
 		logger.String("rate_limit_type", rateLimitType),
 		logger.String("diagnostic_info", "beginning_wikipedia_image_fetch_operation"))
 
-	thumbnailURL, thumbnailSourceFile, err := l.queryThumbnail(ctx, reqID, scientificName, limiter)
-	if errors.Is(err, ErrImageNotFound) {
-		// If thumbnail not found, try taxonomy synonym before giving up
-		if synonym, hasSynonym := GetTaxonomySynonym(scientificName); hasSynonym {
-			log.Debug("Retrying Wikipedia fetch with taxonomy synonym",
-				logger.String("original_name", scientificName),
-				logger.String("synonym", synonym))
-			thumbnailURL, thumbnailSourceFile, err = l.queryThumbnail(ctx, reqID, synonym, limiter)
-		}
+	// A configured taxonomy synonym is the user asserting that the primary name
+	// is the wrong one to ask Wikipedia for, so it goes first. Consulting it
+	// only after a failure was backwards, and meant it could not fix the case it
+	// is added for: a lookup that succeeds under the primary name and returns
+	// the wrong image. The original name is still tried if the synonym misses,
+	// so this costs no extra request in the common case.
+	queryName := scientificName
+	synonym, hasSynonym := GetTaxonomySynonym(scientificName)
+	if hasSynonym {
+		log.Debug("Querying Wikipedia with the configured taxonomy synonym first",
+			logger.String("original_name", scientificName),
+			logger.String("synonym", synonym))
+		queryName = synonym
+	}
+
+	thumbnailURL, thumbnailSourceFile, err := l.queryThumbnail(ctx, reqID, queryName, limiter)
+	if hasSynonym && errors.Is(err, ErrImageNotFound) {
+		log.Debug("Synonym had no usable thumbnail, retrying with the original name",
+			logger.String("original_name", scientificName),
+			logger.String("synonym", synonym))
+		thumbnailURL, thumbnailSourceFile, err = l.queryThumbnail(ctx, reqID, scientificName, limiter)
 	}
 	if err != nil {
 		return BirdImage{}, err
@@ -1414,6 +1551,14 @@ func (l *wikiMediaProvider) fetchWithLimiter(ctx context.Context, scientificName
 		logger.String("thumbnail_url", thumbnailURL),
 		logger.String("source_file", thumbnailSourceFile))
 
+	// Without a pageimage filename there is no file page to ask, so the
+	// attribution query is skipped rather than failed. The thumbnail itself is
+	// usable and is what the user came for.
+	if thumbnailSourceFile == "" {
+		log.Debug("No pageimage filename, using default attribution")
+		return l.buildBirdImage(reqID, scientificName, thumbnailURL, unknownAuthorInfo()), nil
+	}
+
 	authorInfo, err := l.queryAuthorInfo(ctx, reqID, thumbnailSourceFile, limiter)
 	if err != nil {
 		// If it's just a "not found" error, continue with default author info
@@ -1421,12 +1566,7 @@ func (l *wikiMediaProvider) fetchWithLimiter(ctx context.Context, scientificName
 		if errors.Is(err, ErrImageNotFound) {
 			log.Debug("Author info not available, using defaults")
 			// Use default author info rather than failing
-			authorInfo = &wikiMediaAuthor{
-				name:        unknownMetadataValue,
-				URL:         "",
-				licenseName: unknownMetadataValue,
-				licenseURL:  "",
-			}
+			authorInfo = unknownAuthorInfo()
 		} else {
 			// This is a real error (network, API issues), so we should report it.
 			//
@@ -1453,7 +1593,27 @@ func (l *wikiMediaProvider) fetchWithLimiter(ctx context.Context, scientificName
 		logger.String("author", authorInfo.name),
 		logger.String("license", authorInfo.licenseName))
 
-	result := BirdImage{
+	return l.buildBirdImage(reqID, scientificName, thumbnailURL, authorInfo), nil
+}
+
+// unknownAuthorInfo is the attribution used when Wikipedia has no usable
+// metadata for an otherwise usable thumbnail.
+func unknownAuthorInfo() *wikiMediaAuthor {
+	return &wikiMediaAuthor{
+		name:        unknownMetadataValue,
+		URL:         "",
+		licenseName: unknownMetadataValue,
+		licenseURL:  "",
+	}
+}
+
+// buildBirdImage assembles the result and emits the success log shared by the
+// with-attribution and without-attribution paths.
+func (l *wikiMediaProvider) buildBirdImage(reqID, scientificName, thumbnailURL string, authorInfo *wikiMediaAuthor) BirdImage {
+	// Enhanced success logging with complete operation summary
+	logAPISuccess(reqID, scientificName, "complete_fetch_operation")
+
+	return BirdImage{
 		URL:            thumbnailURL,
 		ScientificName: scientificName,
 		AuthorName:     authorInfo.name,
@@ -1462,11 +1622,6 @@ func (l *wikiMediaProvider) fetchWithLimiter(ctx context.Context, scientificName
 		LicenseURL:     authorInfo.licenseURL,
 		SourceProvider: wikiProviderName, // Set the provider name
 	}
-
-	// Enhanced success logging with complete operation summary
-	logAPISuccess(reqID, scientificName, "complete_fetch_operation")
-
-	return result, nil
 }
 
 // queryThumbnail queries Wikipedia for the thumbnail image of the given scientific name.
@@ -1487,10 +1642,13 @@ func (l *wikiMediaProvider) queryThumbnail(ctx context.Context, reqID, scientifi
 		"pilicense":     "free",
 		"titles":        scientificName,
 		"pithumbsize":   "400",
-		"redirects":     "",
+		// Redirect following stays on: most bird articles are titled by common
+		// name, so a scientific name usually only resolves through its redirect.
+		// The redirect target is validated below instead.
+		"redirects": "",
 	}
 
-	page, err := l.queryAndGetFirstPageWithLimiter(ctx, reqID, params, limiter)
+	page, redirects, err := l.queryAndGetFirstPageWithLimiter(ctx, reqID, params, limiter)
 	if err != nil {
 		// Log based on error type
 		if errors.Is(err, ErrImageNotFound) {
@@ -1514,6 +1672,12 @@ func (l *wikiMediaProvider) queryThumbnail(ctx context.Context, reqID, scientifi
 		return "", "", enhancedErr
 	}
 
+	if target, left := redirectLeftSpecies(scientificName, redirects); left {
+		log.Debug("Discarding thumbnail from a redirect to a broader taxon",
+			logger.String("redirect_target", target))
+		return "", "", imageNotFoundFor(scientificName, wikiProviderName, "wiki_redirect_left_species")
+	}
+
 	if page.Thumbnail == nil || page.Thumbnail.Source == "" {
 		log.Debug("No thumbnail URL found in page data")
 		// This is common for pages without images or with non-free images
@@ -1522,19 +1686,107 @@ func (l *wikiMediaProvider) queryThumbnail(ctx context.Context, reqID, scientifi
 	}
 	thumbnailURL = page.Thumbnail.Source
 
-	if page.PageImage == "" {
-		log.Debug("No pageimage filename found in page data")
-		// This is common for pages without proper image metadata
-		// Don't create telemetry noise - treat as "not found"
-		return "", "", imageNotFoundFor(scientificName, wikiProviderName, "wiki_no_pageimage")
-	}
+	// An empty pageimage filename is not a reason to throw the thumbnail away.
+	// It is only the key for the second, attribution query, and the caller
+	// already falls back to "Unknown" attribution when that query fails.
 	fileName = page.PageImage
+	if fileName == "" {
+		log.Debug("No pageimage filename in page data; serving the thumbnail without attribution metadata")
+	}
 
 	log.Debug("Successfully retrieved thumbnail URL and filename",
 		logger.String("url", thumbnailURL),
 		logger.String("filename", fileName))
 
 	return thumbnailURL, fileName, nil
+}
+
+// supraGenericSuffixes are the endings of scientific names above genus rank.
+// A single-word article title carrying one of these is a family, subfamily,
+// superfamily or order article, never a species article.
+//
+// The tribe suffix "-ini" is deliberately absent: it is short enough to end an
+// ordinary word, and tribe-level redirects are rare next to genus and family
+// ones, so including it would risk discarding a valid single-word common-name
+// article for very little gain.
+var supraGenericSuffixes = []string{"idae", "inae", "oidea", "iformes", "aceae"}
+
+// redirectLeftSpecies reports whether the API followed a redirect from the
+// requested species to an article about a broader taxon.
+//
+// Wikipedia redirects a species that has no article of its own up to its genus
+// or family article, and that article's pageimage is routinely a distribution
+// map or a congener. The lookup still succeeds, so the wrong image was written
+// as a positive cache entry and the taxonomy-synonym map, which is consulted
+// only on failure, never got a chance to correct it. That is how a wrong image
+// became permanent.
+//
+// The check costs no extra request: a redirect to a higher rank has a target
+// that is a single word which is either the genus of the queried binomial or
+// carries a supra-generic rank suffix. Multi-word targets are common-name
+// articles and are exactly what redirect following is for, so they pass.
+func redirectLeftSpecies(scientificName string, redirects []wikiRedirect) (target string, left bool) {
+	if len(redirects) == 0 {
+		return "", false
+	}
+
+	target = resolveRedirectTarget(scientificName, redirects)
+	if target == "" || strings.EqualFold(target, scientificName) {
+		return "", false
+	}
+
+	// Multi-word targets are common-name (or binomial) articles.
+	if strings.ContainsAny(target, " _") {
+		return "", false
+	}
+
+	genus, _, isBinomial := strings.Cut(scientificName, " ")
+	if isBinomial && strings.EqualFold(target, genus) {
+		return target, true
+	}
+
+	targetLower := strings.ToLower(target)
+	for _, suffix := range supraGenericSuffixes {
+		if strings.HasSuffix(targetLower, suffix) {
+			return target, true
+		}
+	}
+
+	return "", false
+}
+
+// resolveRedirectTarget walks the redirect chain from the requested title.
+// MediaWiki does not follow double redirects, so the chain is normally one hop;
+// the loop is bounded anyway. If no hop starts at the requested title, the last
+// reported target is used, which covers the case where the API normalized the
+// title before redirecting it.
+func resolveRedirectTarget(scientificName string, redirects []wikiRedirect) string {
+	current := scientificName
+	for range redirects {
+		next := ""
+		for i := range redirects {
+			if titlesEqual(redirects[i].From, current) {
+				next = redirects[i].To
+				break
+			}
+		}
+		if next == "" {
+			break
+		}
+		current = next
+	}
+
+	if titlesEqual(current, scientificName) {
+		return redirects[len(redirects)-1].To
+	}
+	return current
+}
+
+// titlesEqual compares two MediaWiki titles, which treat underscore and space
+// as the same character and are case-insensitive on the first letter only.
+// Case-insensitive comparison throughout is close enough for this purpose.
+func titlesEqual(a, b string) bool {
+	return strings.EqualFold(strings.ReplaceAll(a, "_", " "), strings.ReplaceAll(b, "_", " "))
 }
 
 // queryAuthorInfo queries Wikipedia for the author information of the given thumbnail URL.
@@ -1557,7 +1809,7 @@ func (l *wikiMediaProvider) queryAuthorInfo(ctx context.Context, reqID, thumbnai
 		"redirects":     "",
 	}
 
-	page, err := l.queryAndGetFirstPageWithLimiter(ctx, reqID, params, limiter)
+	page, _, err := l.queryAndGetFirstPageWithLimiter(ctx, reqID, params, limiter)
 	if err != nil {
 		// Log based on error type
 		if errors.Is(err, ErrImageNotFound) {
@@ -1642,18 +1894,8 @@ func (l *wikiMediaProvider) queryAuthorInfo(ctx context.Context, reqID, thumbnai
 // CategoryNetwork throttle as CategoryImageFetch turns a suppressed transient into a
 // per-species Sentry event.
 func causeCategory(err error, fallback errors.ErrorCategory) errors.ErrorCategory {
-	// Check the interface first, mirroring internal/errors.detectCategory: a cause can
-	// carry a category without being an *EnhancedError, and re-tagging one of those to
-	// the fallback is exactly the suppression regression this helper exists to prevent.
-	var categorized errors.CategorizedError
-	if errors.As(err, &categorized) {
-		if category := categorized.ErrorCategory(); category != "" {
-			return category
-		}
-	}
-	var enhanced *errors.EnhancedError
-	if errors.As(err, &enhanced) && enhanced.Category != "" {
-		return enhanced.Category
+	if category := errors.CategoryOf(err); category != "" {
+		return category
 	}
 	return fallback
 }
