@@ -25,6 +25,7 @@
   import type { Detection, ImageAttribution } from '$lib/types/detection.types';
   import { hasReviewPermission, isAuthenticated } from '$lib/utils/auth';
   import { formatLocalDateTime } from '$lib/utils/date';
+  import { formatDate } from '$lib/utils/formatters';
   import { buildAppUrl, getCurrentPathWithQuery } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
@@ -793,6 +794,7 @@
     <ErrorAlert message={speciesHistory.error} />
   {:else if speciesHistory.data}
     {@const history = speciesHistory.data}
+    {@const windowEndLabel = formatDate(history.windowEnd)}
     <section aria-labelledby="history-heading">
       <h3 id="history-heading" class="section-heading">{t('detections.history.title')}</h3>
 
@@ -817,18 +819,13 @@
 
       <div class="history-chart content-panel">
         <p class="history-chart-label">
-          {t('detections.history.dailyWindow', { date: history.windowEnd })}
+          {t('detections.history.dailyWindow', { date: windowEndLabel })}
         </p>
         <div
           role="img"
-          aria-label={t('detections.history.aria.sparkline', { date: history.windowEnd })}
+          aria-label={t('detections.history.aria.sparkline', { date: windowEndLabel })}
         >
-          <Sparkline
-            data={history.dailyCounts}
-            viewWidth={480}
-            viewHeight={56}
-            emptyLabel={t('detections.history.dailyEmpty')}
-          />
+          <Sparkline data={history.dailyCounts} viewWidth={480} viewHeight={56} decorative />
         </div>
       </div>
 
@@ -861,7 +858,13 @@
           <a
             class="history-view-all"
             href={buildAppUrl(
-              `/ui/detections?queryType=search&species=${encodeURIComponent(det.scientificName)}`
+              // queryType=search (not `species`) is deliberate: DetectionsPage only
+              // skips defaulting `date` to today for search, and this link must span
+              // the species' whole history. `search` carries the same species name so
+              // the destination heading has a query to render instead of a raw
+              // placeholder; it narrows nothing, since the species filter is stricter.
+              `/ui/detections?queryType=search&species=${encodeURIComponent(det.scientificName)}` +
+                `&search=${encodeURIComponent(det.scientificName)}`
             )}
           >
             {t('detections.history.viewAll', {
@@ -874,10 +877,13 @@
       {/if}
     </section>
   {:else}
+    <!-- Not loading, no error, no data: the loader's guard rejected this detection
+         (missing scientific name or date), so there is nothing to fetch. Say that
+         plainly rather than reusing the loading copy. -->
     <section class="empty-state-section" aria-labelledby="history-heading">
       <History class="empty-state-icon" />
       <h3 id="history-heading" class="empty-state-heading">{t('detections.history.title')}</h3>
-      <p class="empty-state-text" role="status">{t('detections.history.loading')}</p>
+      <p class="empty-state-text">{t('detections.history.unavailable')}</p>
     </section>
   {/if}
 {/snippet}
@@ -1497,12 +1503,15 @@
     margin-bottom: 1rem;
   }
 
+  /* --text-muted, not base-content at 0.5 opacity: the faded variant measures
+     2.96:1 against the base-200 panel in light theme, below the WCAG AA 4.5:1
+     floor for normal text. Same token the equivalent uppercase micro-labels in
+     SystemInference use. */
   .history-stat dt {
     font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: var(--color-base-content);
-    opacity: 0.5;
+    color: var(--text-muted);
     margin-bottom: 0.25rem;
   }
 
@@ -1516,10 +1525,10 @@
     margin-bottom: 1.5rem;
   }
 
+  /* Same contrast reasoning as .history-stat dt above. */
   .history-chart-label {
     font-size: 0.75rem;
-    color: var(--color-base-content);
-    opacity: 0.5;
+    color: var(--text-muted);
     margin-bottom: 0.5rem;
   }
 
