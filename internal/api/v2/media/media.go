@@ -77,6 +77,12 @@ const (
 
 	// SpectrogramCacheSeconds is the cache duration for spectrograms in seconds
 	SpectrogramCacheSeconds = 2592000 // 30 days
+
+	// ImagePendingRetryAfterSeconds is the Retry-After advertised when a species
+	// image is not cached yet and a background fetch has been scheduled. It is short
+	// because the common case is a fast provider hit; a species queued behind the
+	// provider's rate limiter simply needs more than one retry.
+	ImagePendingRetryAfterSeconds = 5
 )
 
 // isClipNotFoundErr reports whether err indicates the audio clip or its parent
@@ -197,6 +203,10 @@ var (
 
 	// Image errors
 	ErrImageProviderNotAvailable = errors.NewStd("image provider not available")
+
+	// ErrImageNotResolvedYet reports that a species image is being fetched in the
+	// background and is not available yet. It is a transient condition, not a failure.
+	ErrImageNotResolvedYet = errors.NewStd("species image is not resolved yet")
 
 	// Sentinel errors for nilnil cases
 	ErrSpectrogramExists       = errors.NewStd("spectrogram already exists")
@@ -3447,13 +3457,13 @@ func (c *Handler) GetSpeciesImageInfo(ctx echo.Context) error {
 		return c.HandleError(ctx, ErrImageProviderNotAvailable, "Image service unavailable", http.StatusServiceUnavailable)
 	}
 
-	birdImage, err := cache.Get(scientificName)
-	if err != nil {
-		if errors.Is(err, imageprovider.ErrImageNotFound) {
-			ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", NotFoundCacheSeconds))
-			return c.HandleError(ctx, err, "Image not found for species", http.StatusNotFound)
-		}
-		return c.HandleError(ctx, err, "Failed to fetch species image info", http.StatusInternalServerError)
+	birdImage, found, negative := cache.GetCached(scientificName)
+	switch {
+	case negative:
+		return c.respondImageNotFound(ctx)
+	case !found:
+		cache.PrefetchAsync(scientificName)
+		return c.respondImagePendingJSON(ctx, scientificName)
 	}
 
 	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", ImageCacheSeconds))
@@ -3467,10 +3477,64 @@ func (c *Handler) GetSpeciesImageInfo(ctx echo.Context) error {
 	})
 }
 
+// respondImageNotFound answers "this species has no image", cacheable by the browser.
+// A cached 404 is what keeps a species that genuinely has no image from re-requesting
+// on every render, and it is what makes the client-side retry cheap: the retry is
+// served from the browser's own HTTP cache without reaching the network.
+func (c *Handler) respondImageNotFound(ctx echo.Context) error {
+	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", NotFoundCacheSeconds))
+	return c.HandleError(ctx, imageprovider.ErrImageNotFound, "Image not found for species", http.StatusNotFound)
+}
+
+// respondImagePending answers "not yet, try again shortly" for a species whose image
+// is being resolved on a background goroutine.
+//
+// Deliberately not routed through HandleError: that reports every status >= 500 to
+// Sentry, and a cold dashboard requesting thirty uncached thumbnails would emit
+// thirty events for what is ordinary first-load behaviour.
+//
+// no-store is load-bearing. It is the only thing that distinguishes this response
+// from the cacheable 404 above for a client that cannot read a status code from an
+// <img> error event: a retry of a pending image reaches the server, a retry of a
+// missing image does not.
+func (c *Handler) respondImagePending(ctx echo.Context, scientificName string) error {
+	return c.respondImagePendingWithBody(ctx, scientificName, false)
+}
+
+// respondImagePendingJSON is respondImagePending for the JSON metadata endpoint, which
+// returns the project-standard ErrorResponse body so a client parsing every response
+// as JSON gets a document to back off on rather than a parse error.
+func (c *Handler) respondImagePendingJSON(ctx echo.Context, scientificName string) error {
+	return c.respondImagePendingWithBody(ctx, scientificName, true)
+}
+
+func (c *Handler) respondImagePendingWithBody(ctx echo.Context, scientificName string, withJSONBody bool) error {
+	c.LogDebugIfEnabled("Species image not cached yet, background fetch scheduled",
+		logger.String("scientific_name", scientificName))
+	header := ctx.Response().Header()
+	header.Set("Retry-After", strconv.Itoa(ImagePendingRetryAfterSeconds))
+	header.Set("Cache-Control", "no-store")
+	if withJSONBody {
+		return ctx.JSON(http.StatusServiceUnavailable,
+			c.NewErrorResponse(ErrImageNotResolvedYet, "Image is not resolved yet", http.StatusServiceUnavailable))
+	}
+	return ctx.NoContent(http.StatusServiceUnavailable)
+}
+
 // ServeSpeciesImageProxy serves a cached bird image by scientific name.
-// If the image is cached locally, it serves the file with browser cache headers.
-// If not cached, it fetches from the provider, caches, and serves.
-// Falls back to 302 redirect to external URL if local fetch fails.
+//
+// The proxy is a hard boundary: it serves bytes from the local cache or it says
+// "not found" / "not yet", but it never redirects a client to the upstream image
+// host. That keeps every consumer (browser, MQTT subscriber, notification target)
+// pointed at one URL whose availability this process controls.
+//
+// It never contacts an image provider on the request goroutine. BirdImageCache.Get
+// is uncancellable and, for a cold species, bounded only by the provider's retry and
+// rate-limit budget (worst case minutes); running it here is what froze the UI, since
+// ~30 queued thumbnail requests also exhaust the browser's per-host connection
+// budget and starve unrelated API calls and the SSE stream. A cold miss instead
+// schedules a background fetch and returns 503 immediately.
+//
 // Route: GET /media/image/:scientific_name
 // Route: GET /media/bird-image/:scientific_name (alias)
 func (c *Handler) ServeSpeciesImageProxy(ctx echo.Context) error {
@@ -3494,27 +3558,21 @@ func (c *Handler) ServeSpeciesImageProxy(ctx echo.Context) error {
 		return c.HandleError(ctx, ErrImageProviderNotAvailable, "Image service unavailable", http.StatusServiceUnavailable)
 	}
 
-	// Look up metadata to know which provider owns this image
-	birdImage, err := cache.Get(scientificName)
-	if err != nil {
-		if errors.Is(err, imageprovider.ErrImageNotFound) {
-			ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", NotFoundCacheSeconds))
-			return c.HandleError(ctx, err, "Image not found for species", http.StatusNotFound)
-		}
-		return c.HandleError(ctx, err, "Failed to fetch species image", http.StatusInternalServerError)
+	// Cached-only lookup: never contacts a provider, so this cannot block.
+	birdImage, found, negative := cache.GetCached(scientificName)
+	switch {
+	case negative:
+		return c.respondImageNotFound(ctx)
+	case !found:
+		cache.PrefetchAsync(scientificName)
+		return c.respondImagePending(ctx, scientificName)
 	}
 
-	// Negative cache entries have no real image URL
-	if birdImage.IsNegativeEntry() || birdImage.URL == "" {
-		ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", NotFoundCacheSeconds))
-		return c.HandleError(ctx, imageprovider.ErrImageNotFound, "Image not found for species", http.StatusNotFound)
-	}
-
-	// Get the file cache from the BirdImageCache
 	fileCache := cache.GetFileCache()
 	if fileCache == nil {
-		// No file cache configured, redirect to external URL
-		return ctx.Redirect(http.StatusFound, birdImage.URL)
+		// Without a file cache the proxy has no bytes to serve and, as a hard
+		// boundary, will not hand the client an external URL instead.
+		return c.respondImagePending(ctx, scientificName)
 	}
 
 	provider := birdImage.SourceProvider
@@ -3535,29 +3593,21 @@ func (c *Handler) ServeSpeciesImageProxy(ctx echo.Context) error {
 		return c.serveImageFile(ctx, cachedPath, contentType)
 	}
 
-	// File not cached or stale - download it
-	newPath, newCT, dlErr := fileCache.DownloadAndStore(ctx.Request().Context(), provider, scientificName, birdImage.URL)
-	if dlErr != nil {
-		// Graceful degradation: serve stale file if available, otherwise redirect
-		if cachedPath != "" {
-			c.LogDebugIfEnabled("Download failed, serving stale cached image",
-				logger.String("scientific_name", scientificName),
-				logger.String("path", cachedPath),
-				logger.Error(dlErr))
-			return c.serveImageFile(ctx, cachedPath, contentType)
-		}
-		c.LogInfoIfEnabled("File cache download failed, redirecting to external URL",
+	// The bytes are missing or stale. Downloading them here would put the request
+	// back on the network path the rest of this handler exists to avoid, and
+	// DownloadAndStore runs its shared work on the first caller's context, so one
+	// aborted tab would cancel the download for every concurrent waiter. Schedule it
+	// on the cache's own goroutine instead.
+	cache.PrefetchAsync(scientificName)
+
+	if cachedPath != "" {
+		c.LogDebugIfEnabled("Serving stale cached image while refreshing in the background",
 			logger.String("scientific_name", scientificName),
-			logger.String("url", birdImage.URL),
-			logger.Error(dlErr))
-		return ctx.Redirect(http.StatusFound, birdImage.URL)
+			logger.String("path", cachedPath))
+		return c.serveImageFile(ctx, cachedPath, contentType)
 	}
 
-	c.LogDebugIfEnabled("Serving freshly downloaded image",
-		logger.String("scientific_name", scientificName),
-		logger.String("path", newPath),
-		logger.String("content_type", newCT))
-	return c.serveImageFile(ctx, newPath, newCT)
+	return c.respondImagePending(ctx, scientificName)
 }
 
 // serveImageFile serves a cached image file with appropriate cache headers.

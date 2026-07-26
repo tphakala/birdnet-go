@@ -10,10 +10,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/httpclient"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"golang.org/x/sync/singleflight"
@@ -31,6 +33,12 @@ const (
 
 	// defaultFileCacheTTL is the default time-to-live for cached image files.
 	defaultFileCacheTTL = 30 * 24 * time.Hour
+
+	// imageDownloadBlockDuration is how long the byte-download path stops issuing
+	// requests to a provider after it refuses one. Defined AS the MediaWiki API path's
+	// User-Agent breaker rather than as a copy of its value, so a single policy block
+	// backs both paths off for the same length of time and the two cannot drift.
+	imageDownloadBlockDuration = circuitBreakerUserAgentDuration
 )
 
 // knownExtensions lists the file extensions tried when looking up cached images.
@@ -153,6 +161,49 @@ type ImageFileCache struct {
 	// wikiMediaProvider.networkErrorLogged is cleared by resetCircuit: a
 	// never-reset process-global latch would hide a second block entirely.
 	rejectionLogged atomic.Bool
+	// blockedUntil holds a per-provider cooldown deadline (provider -> time.Time)
+	// after the image host refuses a download. Unlike the MediaWiki API path, which
+	// opens a circuit on a policy rejection, the byte-download path had no breaker
+	// at all: a blanket 403 meant one guaranteed-failing request per uncached
+	// species on every page load, forever, which is the traffic profile that earns
+	// a block in the first place.
+	blockedUntil sync.Map
+}
+
+// ErrImageDownloadBlocked is returned instead of issuing a request while the
+// per-provider download cooldown is open.
+var ErrImageDownloadBlocked = errors.Newf("image downloads are cooling down after a host rejection").
+	Component("imageprovider").
+	Category(errors.CategoryNetwork).
+	Build()
+
+// downloadBlockedUntil reports the open cooldown deadline for a provider, if any.
+func (c *ImageFileCache) downloadBlockedUntil(provider string) (deadline time.Time, open bool) {
+	val, ok := c.blockedUntil.Load(provider)
+	if !ok {
+		return time.Time{}, false
+	}
+	deadline, ok = val.(time.Time)
+	if !ok || !time.Now().Before(deadline) {
+		return time.Time{}, false
+	}
+	return deadline, true
+}
+
+// openDownloadCooldown suppresses further downloads for a provider after a refusal.
+// Only statuses that indicate the host is refusing us rather than missing one file
+// arm it: a 404 is about a single image and must not stop the rest.
+func (c *ImageFileCache) openDownloadCooldown(statusCode int, provider string) {
+	switch statusCode {
+	case http.StatusUnauthorized, http.StatusForbidden, http.StatusTooManyRequests:
+	default:
+		return
+	}
+	c.blockedUntil.Store(provider, time.Now().Add(imageDownloadBlockDuration))
+	GetLogger().Warn("Suppressing image downloads after a host refusal",
+		logger.String("provider", provider),
+		logger.Int("status", statusCode),
+		logger.Duration("cooldown", imageDownloadBlockDuration))
 }
 
 // NewImageFileCache creates a new ImageFileCache rooted at basePath.
@@ -388,10 +439,22 @@ type downloadResult struct {
 // DownloadAndStore fetches image bytes from imageURL, stores to disk, deduplicating concurrent requests.
 // The provided context is used for the HTTP request and semaphore acquisition, enabling cancellation.
 // Returns the cached file path and the resolved content type.
+//
+// IMPORTANT: singleflight runs the shared work on the FIRST caller's context, so
+// every waiter inherits that caller's cancellation. Only pass a context that outlives
+// a single consumer: a detached background context, never a request context. If an
+// HTTP handler ever calls this directly again, one browser aborting a thumbnail
+// cancels the download for every other waiter on the same species.
 func (fc *ImageFileCache) DownloadAndStore(ctx context.Context, provider, scientificName, imageURL string) (filePath, contentType string, err error) {
 	key := provider + "/" + normalizeSpeciesName(scientificName)
 
 	result, err, _ := fc.sfGroup.Do(key, func() (any, error) {
+		// A refused host stays refused for the cooldown. Checked before anything
+		// else so a blanket rejection costs neither a request nor a semaphore slot.
+		if deadline, open := fc.downloadBlockedUntil(provider); open {
+			return nil, fmt.Errorf("%w: retry after %s", ErrImageDownloadBlocked, deadline.UTC().Format(time.RFC3339))
+		}
+
 		// Build the User-Agent before taking a semaphore slot. It can reach
 		// conf.Setting(), whose slow path takes a package-global lock and can read from
 		// disk, and doing that while holding one of only five download slots would
@@ -427,6 +490,7 @@ func (fc *ImageFileCache) DownloadAndStore(ctx context.Context, provider, scient
 
 		if resp.StatusCode != http.StatusOK {
 			fc.logPermanentImageRejection(resp.StatusCode, provider, scientificName, imageURL, userAgent)
+			fc.openDownloadCooldown(resp.StatusCode, provider)
 			return nil, fmt.Errorf("non-200 status downloading image: %d", resp.StatusCode)
 		}
 
@@ -446,8 +510,10 @@ func (fc *ImageFileCache) DownloadAndStore(ctx context.Context, provider, scient
 			return nil, storeErr
 		}
 
-		// A success means any earlier rejection is over, so re-arm the escalated log.
+		// A success means any earlier rejection is over, so re-arm the escalated log
+		// and lift the cooldown rather than waiting out its remaining time.
 		fc.rejectionLogged.Store(false)
+		fc.blockedUntil.Delete(provider)
 
 		return &downloadResult{path: path, contentType: ct}, nil
 	})

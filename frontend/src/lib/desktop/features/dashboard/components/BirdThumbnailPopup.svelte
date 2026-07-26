@@ -260,10 +260,14 @@
     imageError = false;
   }
 
-  // Handle image load error - wraps imported handler and updates component state
+  // Handle image load error - wraps imported handler and updates component state.
+  // A pending retry must NOT flip imageError: that branch replaces the <img> with the
+  // "image not available" state, removing the very element the retry targets, so the
+  // popup would permanently claim absence for a species whose image is merely still
+  // being fetched.
   function handleImageError(event: Event) {
-    handleBirdImageError(event);
     imageLoaded = false;
+    if (handleBirdImageError(event)) return;
     imageError = true;
   }
 

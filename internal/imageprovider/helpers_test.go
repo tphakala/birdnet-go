@@ -407,7 +407,7 @@ func TestBuildDebugURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := buildDebugURL(tt.params)
+			got := (&wikiMediaProvider{}).buildDebugURL(tt.params)
 			require.NotEmpty(t, got, "buildDebugURL should not return empty string")
 			tt.check(t, got)
 		})

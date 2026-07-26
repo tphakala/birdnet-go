@@ -49,7 +49,6 @@ const (
 	httpClientIdleConnTimeout = 90 * time.Second
 	httpClientTLSTimeout      = 10 * time.Second
 	httpClientMaxIdleConns    = 10
-	diagnosticRequestTimeout  = 10 * time.Second
 
 	// Rate limiting configuration
 	globalRateLimitPerSecond     = 1 // Requests per second for global rate limiter
@@ -86,8 +85,13 @@ const (
 
 // wikiMediaProvider implements the ImageProvider interface for Wikipedia.
 type wikiMediaProvider struct {
-	httpClient        *http.Client // Standard HTTP client for API requests
-	userAgent         string       // User-Agent header value (cached for reuse)
+	httpClient *http.Client // Standard HTTP client for API requests
+	// apiURL is the MediaWiki endpoint. It exists so tests can point the provider at
+	// an httptest server: without a seam, every HTTP path in this file (retry loop,
+	// circuit breaker, response classification) could only be exercised against the
+	// live Wikipedia API, which is why that coverage was deferred.
+	apiURL            string
+	userAgent         string // User-Agent header value (cached for reuse)
 	debug             bool
 	globalLimiter     *rate.Limiter // Global rate limiter for ALL Wikipedia requests (1 req/sec)
 	backgroundLimiter *rate.Limiter // Additional limiter for background operations
@@ -237,7 +241,7 @@ func (l *wikiMediaProvider) makeAPIRequest(ctx context.Context, params map[strin
 		return nil, err
 	}
 
-	body, statusCode, err := l.executeHTTPRequest(req)
+	body, statusCode, contentType, err := l.executeHTTPRequest(req)
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +250,7 @@ func (l *wikiMediaProvider) makeAPIRequest(ctx context.Context, params map[strin
 		return nil, l.handleHTTPStatusError(statusCode, string(body))
 	}
 
-	return l.parseJSONResponse(body)
+	return l.parseJSONResponse(body, statusCode, contentType)
 }
 
 // waitForGlobalRateLimit waits for the global rate limiter if configured.
@@ -283,7 +287,7 @@ func (l *wikiMediaProvider) validateUserAgent() error {
 
 // buildRequestURL constructs the full API URL with query parameters.
 func (l *wikiMediaProvider) buildRequestURL(params map[string]string) (string, error) {
-	u, err := url.Parse(wikipediaAPIURL)
+	u, err := url.Parse(l.endpoint())
 	if err != nil {
 		return "", errors.New(err).
 			Component("imageprovider").
@@ -299,6 +303,15 @@ func (l *wikiMediaProvider) buildRequestURL(params map[string]string) (string, e
 	}
 	u.RawQuery = q.Encode()
 	return u.String(), nil
+}
+
+// endpoint returns the MediaWiki API URL this provider talks to, defaulting to
+// Wikipedia so a zero-valued provider still behaves as before.
+func (l *wikiMediaProvider) endpoint() string {
+	if l.apiURL == "" {
+		return wikipediaAPIURL
+	}
+	return l.apiURL
 }
 
 // createHTTPRequest creates an HTTP request with proper headers. The context is
@@ -334,10 +347,10 @@ func (l *wikiMediaProvider) createHTTPRequest(ctx context.Context, fullURL strin
 }
 
 // executeHTTPRequest executes the HTTP request and returns the body and status code.
-func (l *wikiMediaProvider) executeHTTPRequest(req *http.Request) (body []byte, statusCode int, err error) {
+func (l *wikiMediaProvider) executeHTTPRequest(req *http.Request) (body []byte, statusCode int, contentType string, err error) {
 	resp, err := l.httpClient.Do(req)
 	if err != nil {
-		return nil, 0, errors.New(err).
+		return nil, 0, "", errors.New(err).
 			Component("imageprovider").
 			Category(errors.CategoryNetwork).
 			Context("provider", wikiProviderName).
@@ -351,9 +364,11 @@ func (l *wikiMediaProvider) executeHTTPRequest(req *http.Request) (body []byte, 
 		}
 	}()
 
+	contentType = resp.Header.Get("Content-Type")
+
 	body, err = io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, resp.StatusCode, errors.New(err).
+		return nil, resp.StatusCode, contentType, errors.New(err).
 			Component("imageprovider").
 			Category(errors.CategoryNetwork).
 			Context("provider", wikiProviderName).
@@ -362,7 +377,7 @@ func (l *wikiMediaProvider) executeHTTPRequest(req *http.Request) (body []byte, 
 			Build()
 	}
 
-	return body, resp.StatusCode, nil
+	return body, resp.StatusCode, contentType, nil
 }
 
 // handleHTTPStatusError processes non-200 HTTP status codes.
@@ -415,14 +430,35 @@ func (l *wikiMediaProvider) handleForbiddenError(bodyStr string) {
 }
 
 // parseJSONResponse parses the response body as JSON into the typed response.
-func (l *wikiMediaProvider) parseJSONResponse(body []byte) (*wikiAPIResponse, error) {
+func (l *wikiMediaProvider) parseJSONResponse(body []byte, statusCode int, contentType string) (*wikiAPIResponse, error) {
 	var resp wikiAPIResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, l.handleJSONParseError(body, err)
+		// Attach the response that failed to parse. The retry loop classifies it
+		// from this copy; re-requesting the same URL to "diagnose" the failure
+		// doubled outbound traffic at exactly the moment Wikipedia was throttling.
+		return nil, &wikiParseFailureError{
+			statusCode:  statusCode,
+			contentType: contentType,
+			body:        body,
+			err:         l.handleJSONParseError(body, err),
+		}
 	}
 	resp.raw = body
 	return &resp, nil
 }
+
+// wikiParseFailureError carries the unparseable response alongside the parse error so the
+// retry loop can classify it (rate limit, block, transient) without issuing a second
+// request for the same URL.
+type wikiParseFailureError struct {
+	statusCode  int
+	contentType string
+	body        []byte
+	err         error
+}
+
+func (e *wikiParseFailureError) Error() string { return e.err.Error() }
+func (e *wikiParseFailureError) Unwrap() error { return e.err }
 
 // handleJSONParseError handles JSON parsing errors with context.
 func (l *wikiMediaProvider) handleJSONParseError(body []byte, parseErr error) error {
@@ -724,89 +760,36 @@ func checkUserAgentPolicyViolation(reqID string, statusCode int, responseBody []
 		Build()
 }
 
-// makeRateLimitedRequest makes a rate-limited HTTP request to the given URL.
-// This ensures all requests, including diagnostic requests, respect the global rate limiter.
-// The context is used for rate limiting, cancellation, and deadlines.
-func (l *wikiMediaProvider) makeRateLimitedRequest(ctx context.Context, requestURL string) (*http.Response, error) {
-	// Apply global rate limiting - ALL requests must respect the 1 req/sec limit
-	if l.globalLimiter != nil {
-		if err := l.globalLimiter.Wait(ctx); err != nil {
-			return nil, errors.New(err).
-				Component("imageprovider").
-				Category(errors.CategoryNetwork).
-				Context("provider", wikiProviderName).
-				Context("operation", "global_rate_limit_wait").
-				Build()
-		}
-		GetLogger().Debug("Global rate limiter wait completed for diagnostic request",
-			logger.String("provider", wikiProviderName))
-	}
-
-	// Create and execute request
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, http.NoBody)
-	if err != nil {
-		return nil, errors.New(err).
-			Component("imageprovider").
-			Category(errors.CategoryNetwork).
-			Context("provider", wikiProviderName).
-			Context("operation", "create_diagnostic_request").
-			Build()
-	}
-	req.Header.Set("User-Agent", l.userAgent)
-
-	httpClient := &http.Client{Timeout: diagnosticRequestTimeout}
-	return httpClient.Do(req)
-}
-
-// handleJSONParsingError handles JSON parsing errors by making a rate-limited diagnostic request
-// Always performs diagnostics to identify rate limiting and other error types
-func (l *wikiMediaProvider) handleJSONParsingError(ctx context.Context, reqID, fullURL string, origErr error, attempt int) error {
+// classifyParseFailure diagnoses a response that could not be parsed as JSON and
+// decides whether it is a permanent condition that must abort the retry loop.
+//
+// It classifies the response the caller already has. The previous implementation
+// re-issued the same GET to the same URL purely for diagnostics, which doubled
+// outbound traffic in precisely the situation the diagnosis was for: Wikipedia
+// throttling or blocking us. A returned non-nil error stops the retries.
+func (l *wikiMediaProvider) classifyParseFailure(reqID, fullURL string, attempt int, failure *wikiParseFailureError) error {
 	log := GetLogger().With(
 		logger.String("provider", wikiProviderName),
 		logger.String("request_id", reqID),
 		logger.Int("attempt", attempt+1),
 		logger.Int("max_attempts", l.maxRetries))
 
-	// Always make a diagnostic request to identify the actual error type
-	// This is important to detect rate limiting and blocking
-	// Use rate-limited request to ensure all requests respect the global limiter
-
-	debugResp, debugErr := l.makeRateLimitedRequest(ctx, fullURL)
-	if debugErr != nil {
-		log.Debug("Unable to diagnose API error",
-			logger.String("diagnostic_error", debugErr.Error()),
-			logger.String("original_error", origErr.Error()))
-		return nil // Continue with normal retry logic
-	}
-
-	defer func() {
-		if closeErr := debugResp.Body.Close(); closeErr != nil {
-			log.Debug("Failed to close debug response body", logger.Error(closeErr))
-		}
-	}()
-
-	body, readErr := io.ReadAll(debugResp.Body)
-	if readErr != nil {
-		log.Debug("Failed to read debug response body", logger.Error(readErr))
-		return nil // Continue with normal retry logic
-	}
-
-	// Detect error type
-	errorType, errorMsg := detectWikipediaErrorType(debugResp.StatusCode, body, debugResp.Header.Get("Content-Type"))
+	body := failure.body
+	errorType, errorMsg := detectWikipediaErrorType(failure.statusCode, body, failure.contentType)
 
 	// Log error details based on severity
 	logFields := []logger.Field{
 		logger.Int("error_type", int(errorType)),
 		logger.String("error_message", errorMsg),
-		logger.Int("status_code", debugResp.StatusCode),
-		logger.String("content_type", debugResp.Header.Get("Content-Type")),
+		logger.Int("status_code", failure.statusCode),
+		logger.String("content_type", failure.contentType),
 		logger.String("requested_url", fullURL),
 	}
 
 	switch {
 	case errorType == wikiErrorRateLimit || errorType == wikiErrorBlocked || errorType == wikiErrorUserAgent:
 		log.Error("Wikipedia API error diagnosed", logFields...)
-	case debugResp.StatusCode != http.StatusOK:
+	case failure.statusCode != http.StatusOK:
 		log.Warn("Wikipedia API error diagnosed", logFields...)
 	default:
 		log.Debug("Wikipedia API error diagnosed", logFields...)
@@ -829,7 +812,7 @@ func (l *wikiMediaProvider) handleJSONParsingError(ctx context.Context, reqID, f
 			Context("provider", wikiProviderName).
 			Context("request_id", reqID).
 			Context("operation", "rate_limit_exceeded").
-			Context("status_code", debugResp.StatusCode).
+			Context("status_code", failure.statusCode).
 			Context("error_message", errorMsg).
 			Context("permanent_failure", true).
 			Context("retry_after", "60s"). // Suggest retry after 60 seconds
@@ -844,7 +827,7 @@ func (l *wikiMediaProvider) handleJSONParsingError(ctx context.Context, reqID, f
 			Context("provider", wikiProviderName).
 			Context("request_id", reqID).
 			Context("operation", "access_blocked").
-			Context("status_code", debugResp.StatusCode).
+			Context("status_code", failure.statusCode).
 			Context("error_message", errorMsg).
 			Context("permanent_failure", true).
 			Build()
@@ -852,7 +835,7 @@ func (l *wikiMediaProvider) handleJSONParsingError(ctx context.Context, reqID, f
 	case wikiErrorUserAgent:
 		// User-agent policy violation - open circuit breaker
 		l.openCircuit(circuitBreakerUserAgentDuration, "User-Agent policy violation")
-		return checkUserAgentPolicyViolation(reqID, debugResp.StatusCode, body, l.userAgent)
+		return checkUserAgentPolicyViolation(reqID, failure.statusCode, body, l.userAgent)
 
 	case wikiErrorTemporary:
 		// Temporary error - continue with retry logic but with longer backoff
@@ -985,6 +968,7 @@ func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 
 	return &wikiMediaProvider{
 		httpClient:        httpClient,
+		apiURL:            wikipediaAPIURL,
 		userAgent:         userAgent,
 		debug:             settings.Realtime.Dashboard.Thumbnails.Debug,
 		globalLimiter:     globalLimiter,
@@ -1047,16 +1031,19 @@ func logSuccessfulAPIResponse(resp *wikiAPIResponse) {
 			logger.Int("response_size", len(resp.raw)))
 }
 
-// handleJSONParsingErrorIfNeeded checks for JSON parsing errors and handles them appropriately.
-func (l *wikiMediaProvider) handleJSONParsingErrorIfNeeded(ctx context.Context, err error, reqID, fullURL string, attempt int) error {
-	if !strings.Contains(err.Error(), "invalid character") || !strings.Contains(err.Error(), "looking for beginning of value") {
+// handleJSONParsingErrorIfNeeded classifies a JSON parse failure and returns a
+// non-nil error when the response indicates a permanent condition that retrying would
+// only make worse.
+//
+// The gate is the failure type rather than substrings of the error message: matching
+// on "invalid character" and "looking for beginning of value" silently stopped
+// applying whenever the wrapping text changed.
+func (l *wikiMediaProvider) handleJSONParsingErrorIfNeeded(err error, reqID, fullURL string, attempt int) error {
+	var failure *wikiParseFailureError
+	if !errors.As(err, &failure) {
 		return nil
 	}
-
-	if policyErr := l.handleJSONParsingError(ctx, reqID, fullURL, err, attempt); policyErr != nil {
-		return policyErr
-	}
-	return nil
+	return l.classifyParseFailure(reqID, fullURL, attempt, failure)
 }
 
 // calculateRetryDelay calculates the delay before the next retry using exponential backoff.
@@ -1142,8 +1129,8 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(ctx context.Context, reqID 
 			return resp, nil
 		}
 
-		fullURL := buildDebugURL(params)
-		if policyErr := l.handleJSONParsingErrorIfNeeded(ctx, err, reqID, fullURL, attempt); policyErr != nil {
+		fullURL := l.buildDebugURL(params)
+		if policyErr := l.handleJSONParsingErrorIfNeeded(err, reqID, fullURL, attempt); policyErr != nil {
 			return nil, policyErr
 		}
 
@@ -1202,12 +1189,12 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(ctx context.Context, reqID 
 }
 
 // buildDebugURL constructs a URL string for debug logging purposes.
-func buildDebugURL(params map[string]string) string {
+func (l *wikiMediaProvider) buildDebugURL(params map[string]string) string {
 	queryParams := make([]string, 0, len(params))
 	for k, v := range params {
 		queryParams = append(queryParams, k+"="+url.QueryEscape(v))
 	}
-	return wikipediaAPIURL + "?" + strings.Join(queryParams, "&")
+	return l.endpoint() + "?" + strings.Join(queryParams, "&")
 }
 
 // logRawResponse logs the raw API response at debug level for troubleshooting.
@@ -1280,7 +1267,7 @@ func (l *wikiMediaProvider) queryAndGetFirstPageWithLimiter(ctx context.Context,
 		logger.String("api_action", params["action"]),
 		logger.String("titles", params["titles"]))
 
-	fullURL := buildDebugURL(params)
+	fullURL := l.buildDebugURL(params)
 	log.Debug("Querying Wikipedia API", logger.String("debug_full_url", fullURL))
 
 	resp, err := l.queryWithRetryAndLimiter(ctx, reqID, params, limiter)
@@ -1370,7 +1357,12 @@ func (l *wikiMediaProvider) FetchWithContext(ctx context.Context, scientificName
 
 // Fetch retrieves the bird image for a given scientific name.
 // It queries for the thumbnail and author information, then constructs a BirdImage.
-// User requests through this method are not rate limited.
+//
+// Every request made through this method still passes the process-global 1 req/s
+// limiter; what it skips is the additional, more conservative background limiter that
+// FetchWithContext applies to sweep operations. Prefer FetchWithContext: this method
+// exists for the context-free ImageProvider interface, and its context.Background()
+// means neither the retry backoff nor the limiter wait can be cancelled.
 func (l *wikiMediaProvider) Fetch(scientificName string) (BirdImage, error) {
 	// Check if we're allowed to make requests to WikiMedia
 	if allowed, reason := l.isAllowedToFetch(); !allowed {
@@ -1436,11 +1428,18 @@ func (l *wikiMediaProvider) fetchWithLimiter(ctx context.Context, scientificName
 				licenseURL:  "",
 			}
 		} else {
-			// This is a real error (network, API issues), so we should report it
+			// This is a real error (network, API issues), so we should report it.
+			//
+			// Wrap the cause instead of replacing it. Building a fresh error here
+			// dropped both the cause's CategoryNetwork tag and the "wikipedia api
+			// circuit breaker open" text that internal/errors/telemetry_integration.go
+			// matches on to suppress rate-limit noise, so a transient throttle was
+			// reported to Sentry once per species. Same rationale as the wrapping at
+			// imageprovider.go enhanceFetchError.
 			log.Error("Failed to fetch author info", logger.Error(err))
-			enhancedErr := errors.Newf("unable to retrieve image attribution for species: %s", scientificName).
+			enhancedErr := errors.Newf("unable to retrieve image attribution for species %s: %w", scientificName, err).
 				Component("imageprovider").
-				Category(errors.CategoryImageFetch).
+				Category(causeCategory(err, errors.CategoryImageFetch)).
 				Context("provider", wikiProviderName).
 				Context("request_id", reqID).
 				Context("scientific_name", scientificName).
@@ -1635,6 +1634,28 @@ func (l *wikiMediaProvider) queryAuthorInfo(ctx context.Context, reqID, thumbnai
 		licenseName: licenseName,
 		licenseURL:  licenseURL,
 	}, nil
+}
+
+// causeCategory returns the error category already carried by err, falling back to
+// fallback for a plain error. Preserving the cause's category matters because
+// telemetry suppression and errors.Is matching both key on it: re-tagging a
+// CategoryNetwork throttle as CategoryImageFetch turns a suppressed transient into a
+// per-species Sentry event.
+func causeCategory(err error, fallback errors.ErrorCategory) errors.ErrorCategory {
+	// Check the interface first, mirroring internal/errors.detectCategory: a cause can
+	// carry a category without being an *EnhancedError, and re-tagging one of those to
+	// the fallback is exactly the suppression regression this helper exists to prevent.
+	var categorized errors.CategorizedError
+	if errors.As(err, &categorized) {
+		if category := categorized.ErrorCategory(); category != "" {
+			return category
+		}
+	}
+	var enhanced *errors.EnhancedError
+	if errors.As(err, &enhanced) && enhanced.Category != "" {
+		return enhanced.Category
+	}
+	return fallback
 }
 
 // parseAuthorFromHTML extracts author name and URL from HTML, with fallbacks.

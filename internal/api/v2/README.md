@@ -178,6 +178,18 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | GET    | `/spectrogram/:id/status`            | `GetSpectrogramStatus`   | ❌   | Get spectrogram generation status  |
 | POST   | `/audio/:id/clip`                    | `ExtractAudioClipByID`   | ✅   | Extract audio clip from time range |
 
+**Pending species image (`503 + Retry-After`).** The image endpoints never contact an
+image provider on the request goroutine: a cold species can take minutes to resolve
+through the provider chain, and thirty queued thumbnail requests also exhaust a
+browser's per-host connection budget, which is what made the whole UI appear frozen. A
+species whose image is not cached yet therefore answers **503** with `Retry-After: 5`
+and `Cache-Control: no-store`, and a background fetch is scheduled; a species that is
+known to have no image answers **404** with a long `max-age`. The two cache directives
+are load-bearing: an `<img>` error event exposes no status code, so the browser's own
+HTTP cache is what lets a client retry cheaply (the 404 is served from cache with no
+network hop, the 503 reaches the server). The proxy is a hard boundary and never
+redirects a client to the upstream image host.
+
 **Pending clip handling (`503 + Retry-After`).** A detection's DB record and SSE
 broadcast are emitted before its audio clip is written, and with Extended Capture the
 clip write is deferred until the capture tail is recorded (up to the capture-buffer
