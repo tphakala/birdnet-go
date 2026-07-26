@@ -134,7 +134,7 @@
       "visitEbirdLink": "Apri eBird.org in una nuova scheda",
       "learnEbirdTaxonomyLink": "Apri Tassonomia eBird in una nuova scheda",
       "resizeHandle": "Trascina per ridimensionare",
-      "imageCredit": "Image credit: {name}"
+      "imageCredit": "Crediti immagine: {name}"
     },
     "labels": {
       "confidence": "Confidenza",
@@ -207,11 +207,11 @@
     "speciesAnalytics": "Analisi specie",
     "detectionDetails": "Dettagli rilevamento",
     "settingsNotAvailable": "Impostazioni non disponibili",
-    "analyticsSummary": "Analytics - Summary",
-    "analyticsActivity": "Analytics - Activity Patterns",
-    "analyticsTrends": "Analytics - Trends",
-    "analyticsBiodiversity": "Analytics - Biodiversity",
-    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsSummary": "Analisi - Riepilogo",
+    "analyticsActivity": "Analisi - Modelli di attività",
+    "analyticsTrends": "Analisi - Tendenze",
+    "analyticsBiodiversity": "Analisi - Biodiversità",
+    "analyticsReview": "Analisi - Revisione e precisione",
     "analyticsNocturnal": "Analisi - Attività notturna",
     "analyticsWeather": "Analisi - Correlazione meteo",
     "analyticsSoundscape": "Analisi - Paesaggio sonoro"
@@ -246,7 +246,7 @@
     "reportBugAriaLabel": "Segnala un bug su GitHub (si apre in una nuova finestra)",
     "askQuestionAriaLabel": "Fai una domanda su GitHub Discussions (si apre in una nuova finestra)",
     "viewOnGithubAriaLabel": "Visualizza BirdNET-Go su GitHub (si apre in una nuova finestra)",
-    "health": "Health",
+    "health": "Salute",
     "sections": {
       "explore": "Esplora",
       "patterns": "Modelli",
@@ -420,8 +420,8 @@
         "reconfiguringDynamicThresholds": "Riconfigurazione delle soglie dinamiche...",
         "webserverRestartRequired": "Impostazioni del server web modificate. Riavvio necessario.",
         "oauthRestartRequired": "Impostazioni del provider di autenticazione modificate. Riavvio necessario.",
-        "databaseRestartRequired": "Database settings changed. Restart required.",
-        "loggingRestartRequired": "Logging settings changed. Restart required.",
+        "databaseRestartRequired": "Impostazioni del database modificate. Riavvio richiesto.",
+        "loggingRestartRequired": "Impostazioni di registrazione modificate. Riavvio richiesto.",
         "reconfiguringSoundLevel": "Aggiornamento del monitoraggio del livello sonoro...",
         "reconfiguringAudioSources": "Riconfigurazione sorgenti audio...",
         "rebuildingExtendedCapture": "Ricostruzione del filtro di cattura estesa...",
@@ -464,17 +464,17 @@
         "errorOccurred": "{error}",
         "disconnected": "{source_name} disconnesso",
         "error": {
-          "authError": "Autenticazione fallita — controlla la chiave API o le credenziali",
-          "rateLimited": "Limite di richieste raggiunto — le richieste verranno rallentate automaticamente",
+          "authError": "Autenticazione fallita - controlla la chiave API o le credenziali",
+          "rateLimited": "Limite di richieste raggiunto - le richieste verranno rallentate automaticamente",
           "gatewayTimeout": "Il servizio potrebbe essere sotto carico elevato",
           "serverError": "Servizio temporaneamente non disponibile",
-          "connectionRefused": "Servizio irraggiungibile — controlla l'indirizzo e che sia in esecuzione",
-          "dnsError": "Impossibile risolvere il nome host — controlla l'indirizzo",
-          "tlsError": "Errore TLS/certificato — controlla le impostazioni di sicurezza",
-          "timeout": "Connessione scaduta — il servizio potrebbe essere lento o irraggiungibile",
-          "connectionInterrupted": "Connessione interrotta — verrà ritentata automaticamente",
-          "diskFull": "Disco pieno — libera spazio",
-          "permissionDenied": "Permesso negato — controlla i permessi del file o del servizio"
+          "connectionRefused": "Servizio irraggiungibile - controlla l'indirizzo e che sia in esecuzione",
+          "dnsError": "Impossibile risolvere il nome host - controlla l'indirizzo",
+          "tlsError": "Errore TLS/certificato - controlla le impostazioni di sicurezza",
+          "timeout": "Connessione scaduta - il servizio potrebbe essere lento o irraggiungibile",
+          "connectionInterrupted": "Connessione interrotta - verrà ritentata automaticamente",
+          "diskFull": "Disco pieno - libera spazio",
+          "permissionDenied": "Permesso negato - controlla i permessi del file o del servizio"
         }
       }
     },
@@ -612,7 +612,7 @@
     "currentlyHearing": {
       "title": "In ascolto",
       "subtitle": "Specie identificate in tempo reale",
-      "empty": "Tutto tranquillo — nessun uccello rilevato al momento"
+      "empty": "Tutto tranquillo - nessun uccello rilevato al momento"
     },
     "rejected": "Rifiutato",
     "newSpeciesHighlights": {
@@ -813,8 +813,8 @@
       "species": "Specie",
       "observation": "Osservazione",
       "aria": {
-        "downloadAudioClip": "Download audio clip for {name} detection",
-        "audioRecordingFor": "Audio recording and spectrogram for {name}",
+        "downloadAudioClip": "Scarica clip audio per il rilevamento {name}",
+        "audioRecordingFor": "Registrazione audio e spettrogramma per {name}",
         "scientificName": "Nome scientifico",
         "classificationBadges": "Badge di classificazione della specie",
         "confidence": "Confidenza del rilevamento {confidence}%",
@@ -956,7 +956,7 @@
       "viewDetails": "Vedi dettagli per {species}",
       "play": "Riproduci",
       "playAudio": "Riproduci audio",
-      "imageFailedToLoad": "Image failed to load"
+      "imageFailedToLoad": "Immagine non caricata"
     },
     "media": {
       "title": "Registrazione e Spettrogramma",
@@ -1169,9 +1169,9 @@
     "sections": {
       "overview": "Panoramica",
       "database": "Database",
-      "inference": "AI Models",
+      "inference": "Modelli IA",
       "terminal": "Terminale",
-      "importExport": "Import / Export"
+      "importExport": "Importa / Esporta"
     },
     "importExport": {
       "available": "Disponibile",
@@ -1391,7 +1391,7 @@
           "engine": "Motore",
           "journal": "Giornale",
           "pageSize": "Dimensione pagina",
-          "cacheHit": "Cache hit",
+          "cacheHit": "Hit in cache",
           "integrity": "Integrità",
           "lastVacuum": "Ultimo VACUUM"
         },
@@ -1522,10 +1522,10 @@
           "targetV2": "Destinazione (V2)",
           "recordsLabel": "Record",
           "sizeLabel": "Dimensione",
-          "prerequisitesNotMet": "Prerequisiti non soddisfatti — risolvi i problemi critici qui sotto",
+          "prerequisitesNotMet": "Prerequisiti non soddisfatti - risolvi i problemi critici qui sotto",
           "validatingTitle": "Validazione dati",
           "validatingBody": "Confronto di {count} record legacy con il database V2...",
-          "dirtyRecordsCatchup": "{count} record non sincronizzati — verrà tentata la riconciliazione",
+          "dirtyRecordsCatchup": "{count} record non sincronizzati - verrà tentata la riconciliazione",
           "cutoverTitle": "Completamento migrazione",
           "cutoverBody": "Completamento della transizione al database V2...",
           "migratingPhase": "Migrazione {phase}",
@@ -1534,7 +1534,7 @@
           "percentComplete": "{percent}% completato",
           "recordsPerSec": "{rate} record/sec",
           "calculating": "Calcolo in corso...",
-          "dirtyWriteFailed": "{count} record non scritti — verranno riconciliati durante la validazione"
+          "dirtyWriteFailed": "{count} record non scritti - verranno riconciliati durante la validazione"
         },
         "details": {
           "title": "Dettagli database",
@@ -1685,70 +1685,70 @@
       }
     },
     "inference": {
-      "title": "AI Models & Inference",
-      "loading": "Loading inference status",
-      "error": "Could not load inference status",
+      "title": "Modelli IA e Inferenza",
+      "loading": "Caricamento stato inferenza",
+      "error": "Impossibile caricare lo stato dell'inferenza",
       "sectionHardware": "Hardware",
-      "sectionBackends": "Inference Backends",
-      "sectionModels": "Models",
+      "sectionBackends": "Motori di inferenza",
+      "sectionModels": "Modelli",
       "noModels": "No models are currently loaded",
-      "architecture": "Architecture",
+      "architecture": "Architettura",
       "cpu": "CPU",
-      "environment": "Environment",
+      "environment": "Ambiente",
       "fp16": "FP16",
-      "fp16Supported": "FP16 supported",
-      "fp16Unsupported": "FP16 not supported",
+      "fp16Supported": "FP16 supportato",
+      "fp16Unsupported": "FP16 non supportato",
       "backendTflite": "TensorFlow Lite",
       "backendOnnx": "ONNX Runtime",
       "backendOpenvino": "OpenVINO",
-      "available": "Available",
-      "notAvailable": "Not available",
-      "active": "Active",
-      "inactive": "Inactive",
-      "initialized": "Initialized",
-      "version": "Version",
-      "devices": "Devices",
-      "board": "Board",
+      "available": "Disponibile",
+      "notAvailable": "Non disponibile",
+      "active": "Attivo",
+      "inactive": "Inattivo",
+      "initialized": "Inizializzato",
+      "version": "Versione",
+      "devices": "Dispositivi",
+      "board": "Scheda",
       "soc": "SoC",
-      "memory": "Memory",
-      "cores": "Cores",
-      "gpu": "Graphics",
-      "gpuReachable": "Reachable",
-      "gpuNotReachable": "Not reachable",
-      "capabilities": "Capabilities",
-      "capabilitiesHelp": "Hardware tags used to match this machine against the available model builds.",
-      "gpuReasonRenderNodeUnavailable": "No GPU device node is visible to the server. In Docker, map /dev/dri into the container; on a native install, check that the graphics driver is loaded.",
-      "gpuReasonRenderNodePermission": "The GPU device node cannot be opened. Either the account BirdNET-Go runs as needs access to the device's group, usually 'render', or the container was given the device with -v instead of --device, which does not grant access to it.",
-      "gpuReasonNoRuntime": "BirdNET-Go only accelerates inference on Intel graphics today, so this card will not be used.",
-      "gpuReasonUnknown": "This GPU cannot be used for inference on this build.",
-      "stock": "Stock",
-      "custom": "Custom",
-      "sampleRate": "Sample rate",
+      "memory": "Memoria",
+      "cores": "Core",
+      "gpu": "Grafica",
+      "gpuReachable": "Raggiungibile",
+      "gpuNotReachable": "Non raggiungibile",
+      "capabilities": "Capacità",
+      "capabilitiesHelp": "Tag hardware utilizzati per associare questa macchina alle build dei modelli disponibili.",
+      "gpuReasonRenderNodeUnavailable": "Nessun nodo del dispositivo GPU è visibile al server. In Docker, mappa /dev/dri nel contenitore; su un'installazione nativa, verifica che il driver grafico sia caricato.",
+      "gpuReasonRenderNodePermission": "Il nodo del dispositivo GPU non può essere aperto. O l'account in cui viene eseguito BirdNET-Go necessita dell'accesso al gruppo del dispositivo, solitamente 'render', oppure il contenitore ha ricevuto il dispositivo con -v anziché --device, il che non garantisce l'accesso a esso.",
+      "gpuReasonNoRuntime": "Attualmente BirdNET-Go accelera l'inferenza solo su grafica Intel, quindi questa scheda non verrà utilizzata.",
+      "gpuReasonUnknown": "Questa GPU non può essere utilizzata per l'inferenza in questa build.",
+      "stock": "Standard",
+      "custom": "Personalizzato",
+      "sampleRate": "Frequenza di campionamento",
       "clipLength": "Lunghezza segmento",
-      "species": "Species",
-      "invocations": "Segments analysed",
-      "avgLatency": "Avg latency",
-      "maxLatency": "Max latency",
+      "species": "Specie",
+      "invocations": "Segmenti analizzati",
+      "avgLatency": "Latenza media",
+      "maxLatency": "Latenza massima",
       "rtf": "RTF",
-      "rtfLabel": "Real-time factor",
-      "approxRam": "Approx. host RAM (RSS)",
-      "approxRamTooltip": "Approximate host RAM (RSS) measured at model load. Excludes GPU VRAM, and may be skewed by shared runtime memory arenas and OS page reclamation.",
-      "latencyChart": "Latency (ms)",
-      "rtfChart": "Real-time factor",
-      "sources": "Audio sources",
-      "noSources": "No sources attached",
-      "primaryFallback": "primary (fallback)",
-      "notMeasured": "n/a",
+      "rtfLabel": "Fattore tempo reale",
+      "approxRam": "RAM host approssimativa (RSS)",
+      "approxRamTooltip": "RAM host approssimativa (RSS) misurata al caricamento del modello. Esclude la VRAM della GPU e potrebbe essere distorta da arene di memoria di runtime condivise e dal recupero di pagine del sistema operativo.",
+      "latencyChart": "Latenza (ms)",
+      "rtfChart": "Fattore tempo reale",
+      "sources": "Sorgenti audio",
+      "noSources": "Nessuna sorgente collegata",
+      "primaryFallback": "principale (fallback)",
+      "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",
       "unitSec": "s",
       "sectionAudio": "Audio",
-      "queueDepth": "Queue depth",
-      "queueDepthChart": "Queue depth",
-      "droppedChunks": "Dropped chunks",
-      "queueCapacity": "Capacity",
-      "lastSeen": "Last seen",
-      "lastSeenNever": "No detections yet",
+      "queueDepth": "Profondità coda",
+      "queueDepthChart": "Profondità coda",
+      "droppedChunks": "Frammenti scartati",
+      "queueCapacity": "Capacità",
+      "lastSeen": "Ultima volta visto",
+      "lastSeenNever": "Nessun rilevamento ancora",
       "deviceHelp": "Il dispositivo di elaborazione su cui questo modello esegue l'inferenza (CPU, GPU o sconosciuto).",
       "paused": "In pausa",
       "pausedScheduleHelp": "Questo modello funziona solo in base a una pianificazione ed è attualmente in pausa, quindi non sta elaborando l'audio.",
@@ -1762,24 +1762,24 @@
       "coDetectedHelp": "Altri modelli che hanno rilevato questa specie entro {seconds}s",
       "outOfRangeHelp": "Fuori dal filtro di area (mostrato per diagnostica, non salvato come rilevamento)",
       "peak": "picco",
-      "activityActive": "Inference active",
+      "activityActive": "Inferenza attiva",
       "activityIdle": "Idle",
       "throughput": "Throughput",
       "throughputUnit": "/s",
       "throughputChart": "Throughput (/s)",
-      "errorRate": "Error rate",
-      "loadFailures": "Load failures",
-      "rtfHelp": "Real-time factor: inference time divided by clip length. Below 1.0 means the model analyses a segment faster than real time (keeping up); above 1.0 means it is falling behind.",
-      "queueDepthHelp": "Audio segments waiting to be analysed. Stays near zero when analysis keeps up; a rising number means it is falling behind.",
-      "queueCapacityHelp": "Maximum number of segments the queue can hold before new audio is dropped.",
-      "droppedChunksHelp": "Audio chunks discarded because the queue was full. Should stay at zero.",
-      "throughputHelp": "Segments analysed per second by this model.",
-      "errorRateHelp": "Share of analysis attempts that failed.",
-      "loadFailuresHelp": "Number of times this model failed to load.",
-      "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
-      "invocationsHelp": "Total audio segments this model has analysed since startup.",
-      "noModelsHint": "No audio source configured yet?",
-      "noModelsHintLink": "Configure audio sources"
+      "errorRate": "Tasso di errore",
+      "loadFailures": "Fallimenti di caricamento",
+      "rtfHelp": "Fattore tempo reale: tempo di inferenza diviso per la lunghezza della clip. Meno di 1.0 significa che il modello analizza un segmento più velocemente del tempo reale (tenendo il passo); più di 1.0 significa che sta rimanendo indietro.",
+      "queueDepthHelp": "Segmenti audio in attesa di essere analizzati. Rimane vicino allo zero quando l'analisi tiene il passo; un numero crescente significa che sta rimanendo indietro.",
+      "queueCapacityHelp": "Numero massimo di segmenti che la coda può contenere prima che venga scartato il nuovo audio.",
+      "droppedChunksHelp": "Frammenti audio scartati perché la coda era piena. Dovrebbe rimanere a zero.",
+      "throughputHelp": "Segmenti analizzati al secondo da questo modello.",
+      "errorRateHelp": "Percentuale di tentativi di analisi falliti.",
+      "loadFailuresHelp": "Numero di volte in cui questo modello non è riuscito a caricare.",
+      "fp16Help": "Virgola mobile a 16 bit. L'hardware che lo supporta può eseguire alcuni modelli più velocemente e con meno memoria.",
+      "invocationsHelp": "Totale dei segmenti audio che questo modello ha analizzato dall'avvio.",
+      "noModelsHint": "Nessuna sorgente audio configurata ancora?",
+      "noModelsHintLink": "Configura sorgenti audio"
     },
     "metrics": {
       "cpu": "CPU",
@@ -1842,7 +1842,7 @@
         "trends": "Tendenze",
         "biodiversity": "Biodiversità",
         "quality": "Revisione e accuratezza",
-        "summary": "Summary",
+        "summary": "Riepilogo",
         "nocturnal": "Attività notturna",
         "weather": "Meteo",
         "soundscape": "Paesaggio sonoro"
@@ -1853,9 +1853,9 @@
       "controls": {
         "source": "Sorgente",
         "sourceAll": "Tutte le sorgenti",
-        "sourceLoading": "Loading audio sources…",
-        "sourceNone": "No audio sources with detections yet.",
-        "sourceNotApplicable": "The charts in this section do not filter by source.",
+        "sourceLoading": "Caricamento sorgenti audio...",
+        "sourceNone": "Ancora nessuna sorgente audio con rilevamenti.",
+        "sourceNotApplicable": "I grafici in questa sezione non filtrano per sorgente.",
         "speciesNotApplicable": "I grafici in questa sezione non filtrano per specie."
       },
       "card": {
@@ -2038,124 +2038,124 @@
           "axisUniqueSpecies": "Specie uniche"
         },
         "accumulation": {
-          "title": "Species Accumulation Curve",
+          "title": "Curva di accumulo delle specie",
           "description": "Cumulative number of distinct species detected within the selected period. The curve climbs as new species appear and flattens toward an asymptote once the common ones have been recorded; a still-rising tail means more species are likely waiting to be found.",
-          "noData": "No species accumulation data available",
-          "noDataHint": "Select a wider date range to watch the species list build up over time",
-          "ariaLabel": "Species accumulation curve: cumulative distinct species detected over the period",
-          "axisDate": "Date",
-          "axisSpecies": "Cumulative species",
-          "totalSpecies": "{species} species",
-          "tooltipCumulative": "Cumulative species",
-          "tooltipNew": "New in period",
-          "summary": "Cumulative species accumulation across {days} days, reaching {species} distinct species by the end of the period."
+          "noData": "Nessun dato di accumulo specie disponibile",
+          "noDataHint": "Seleziona un intervallo di date più ampio per vedere come si compone l'elenco delle specie nel tempo",
+          "ariaLabel": "Curva di accumulo delle specie: specie distinte cumulative rilevate durante il periodo",
+          "axisDate": "Data",
+          "axisSpecies": "Specie cumulative",
+          "totalSpecies": "{species} specie",
+          "tooltipCumulative": "Specie cumulative",
+          "tooltipNew": "Nuova nel periodo",
+          "summary": "Accumulo cumulativo di specie per {days} giorni, raggiungendo {species} specie distinte alla fine del periodo."
         },
         "yearOverYear": {
-          "title": "Year-over-Year Tracker",
-          "description": "Cumulative detections so far this year versus the same calendar dates last year. The shaded band is the running gap between the two; this year's line sitting above last year's means you are ahead of last year's pace.",
-          "noData": "No year-over-year data available",
-          "noDataHint": "Detections from this year and last year build up here as the year progresses",
-          "ariaLabel": "Year-over-year tracker: cumulative detections this year versus the same span last year",
-          "axisDate": "Date",
-          "axisCount": "Cumulative detections",
-          "legendThis": "{year} (this year)",
-          "legendLast": "{year} (last year)",
-          "tooltipDelta": "Difference",
-          "summary": "Year over year: by {monthDay}, {currentYear} has {thisYear} cumulative detections versus {lastYear} for {previousYear} (a difference of {delta})."
+          "title": "Monitoraggio anno su anno",
+          "description": "Rilevamenti cumulativi finora quest'anno rispetto alle stesse date di calendario dell'anno scorso. La fascia sfumata rappresenta il divario in corso tra i due; la linea di quest'anno situata sopra quella dell'anno scorso indica che sei in anticipo rispetto al ritmo dell'anno scorso.",
+          "noData": "Nessun dato disponibile anno su anno",
+          "noDataHint": "I rilevamenti di quest'anno e dell'anno scorso si accumulano qui man mano che l'anno procede",
+          "ariaLabel": "Monitoraggio anno su anno: rilevamenti cumulativi quest'anno rispetto allo stesso periodo dell'anno scorso",
+          "axisDate": "Data",
+          "axisCount": "Rilevamenti cumulativi",
+          "legendThis": "{year} (quest'anno)",
+          "legendLast": "{year} (l'anno scorso)",
+          "tooltipDelta": "Differenza",
+          "summary": "Anno su anno: al {monthDay}, {currentYear} ha {thisYear} rilevamenti cumulativi rispetto a {lastYear} per {previousYear} (una differenza di {delta})."
         },
         "phenology": {
-          "title": "Arrival & Departure Phenology",
-          "description": "First and last detection of each species within the selected period, drawn as residency bars for the most-detected species. Read it top to bottom in arrival order to see who shows up first and who lingers latest across the season.",
-          "noData": "No phenology data available",
-          "noDataHint": "Select a wider date range to see when species arrive and depart",
-          "ariaLabel": "Arrival and departure phenology: residency bars showing each species' first-to-last detection span",
-          "axisDate": "Date",
-          "summary": "Arrival and departure residency spans for {species} species across the selected period.",
-          "tooltipFirst": "First detected",
-          "tooltipLast": "Last detected",
+          "title": "Fenologia di arrivo e partenza",
+          "description": "Primo e ultimo rilevamento di ogni specie entro il periodo selezionato, disegnati come barre di residenza per le specie più rilevate. Leggilo dall'alto verso il basso in ordine di arrivo per vedere chi arriva per primo e chi rimane fino a più tardi nella stagione.",
+          "noData": "Nessun dato fenologico disponibile",
+          "noDataHint": "Seleziona un intervallo di date più ampio per vedere quando le specie arrivano e partono",
+          "ariaLabel": "Fenologia di arrivo e partenza: barre di residenza che mostrano l'arco dal primo all'ultimo rilevamento di ciascuna specie",
+          "axisDate": "Data",
+          "summary": "Tempi di residenza di arrivo e partenza per {species} specie nel periodo selezionato.",
+          "tooltipFirst": "Primo rilevamento",
+          "tooltipLast": "Ultimo rilevamento",
           "tooltipResidency": "Residency",
-          "tooltipCount": "Detections",
-          "residencyDays": "{days} days"
+          "tooltipCount": "Rilevamenti",
+          "residencyDays": "{days} giorni"
         },
         "heatmap": {
-          "title": "Seasonal Activity Heatmap",
+          "title": "Mappa termica attività stagionale",
           "description": "Detection density by date and time of day, revealing migration waves and dawn-chorus drift",
-          "noData": "No activity data available",
+          "noData": "Nessun dato di attività disponibile",
           "noDataHint": "Select a date range to view seasonal activity patterns",
-          "axisDate": "Date",
-          "axisTime": "Time of Day",
-          "tooltipTime": "Time",
-          "tooltipCount": "Detections",
-          "legendLess": "Less",
-          "legendMore": "More ({max})",
-          "ariaLabel": "Seasonal activity heatmap: detection density by date and time of day",
-          "summary": "{total} detections across {days} days. Busiest around {time} on {date}."
+          "axisDate": "Data",
+          "axisTime": "Ora del giorno",
+          "tooltipTime": "Ora",
+          "tooltipCount": "Rilevamenti",
+          "legendLess": "Meno",
+          "legendMore": "Più ({max})",
+          "ariaLabel": "Mappa termica attività stagionale: densità di rilevamento per data e ora del giorno",
+          "summary": "{total} rilevamenti su {days} giorni. Più affollato intorno alle {time} del {date}."
         },
         "ridgeline": {
-          "title": "Who Sings When",
+          "title": "Chi canta quando",
           "description": "Hour-of-day activity for the most-detected species, sorting dawn singers from all-day and nocturnal birds",
-          "noData": "No species activity data available",
+          "noData": "Nessun dato sulle attività delle specie disponibile",
           "noDataHint": "Select a wider date range to compare species activity patterns",
-          "ariaLabel": "Who-sings-when ridgeline: hour-of-day activity distribution per species",
-          "axisTime": "Time of Day",
-          "note": "Showing the top {count} species by detection volume",
+          "ariaLabel": "Grafico chi canta quando: distribuzione dell'attività oraria per specie",
+          "axisTime": "Ora del giorno",
+          "note": "Mostrando le prime {count} specie per volume di rilevamento",
           "tooltipDetections": "Detections",
           "tooltipPeak": "Peak",
-          "summary": "Hour-of-day activity for {count} species. Most active: {species} around {time}."
+          "summary": "Attività oraria per {count} specie. Più attivo: {species} intorno alle {time}."
         },
         "succession": {
-          "title": "Acoustic Succession",
+          "title": "Successione acustica",
           "description": "How the soundscape's top species hand off through the day, shown as stacked bands of hourly detections from pre-dawn through night",
-          "noData": "No acoustic succession data available",
+          "noData": "Nessun dato di successione acustica disponibile",
           "noDataHint": "Select a wider date range to see how species hand off through the day",
           "ariaLabel": "Acoustic succession streamgraph: stacked hour-of-day detections for the top species",
-          "axisTime": "Time of Day",
-          "note": "Combined hourly activity of the top {count} species by detection volume",
-          "tooltipDetections": "Detections",
-          "tooltipPeak": "Peak",
-          "summary": "Hour-of-day succession for {count} species. Most active: {species} around {time}."
+          "axisTime": "Ora del giorno",
+          "note": "Attività oraria combinata delle prime {count} specie per volume di rilevamento",
+          "tooltipDetections": "Rilevamenti",
+          "tooltipPeak": "Picco",
+          "summary": "Successione per ora del giorno per {count} specie. Più attive: {species} intorno alle {time}."
         },
         "dawnOnset": {
-          "title": "Dawn Chorus Onset",
-          "description": "When the morning chorus starts each day relative to civil dawn, isolating the seasonal shift from clock time",
-          "noData": "No dawn chorus data available",
+          "title": "Inizio del coro dell'alba",
+          "description": "Quando il coro mattutino inizia ogni giorno rispetto all'alba civile, isolando lo spostamento stagionale dall'ora del clock",
+          "noData": "Nessun dato disponibile sul coro dell'alba",
           "noDataHint": "Select a wider date range to track how the dawn chorus shifts across the seasons",
-          "ariaLabel": "Dawn chorus onset tracker: daily chorus onset relative to civil dawn",
-          "axisDate": "Date",
-          "axisOnset": "Minutes from civil dawn",
-          "civilDawn": "Civil dawn",
-          "tooltipOnset": "Onset",
-          "tooltipOnsetAfter": "{minutes} min after civil dawn",
-          "tooltipOnsetBefore": "{minutes} min before civil dawn",
-          "tooltipOnsetAt": "At civil dawn",
-          "tooltipCount": "Detections",
-          "summary": "Dawn chorus onset relative to civil dawn across {days} days ({plotted} with a measurable onset)."
+          "ariaLabel": "Tracker dell'inizio del coro dell'alba: inizio del coro quotidiano rispetto all'alba civile",
+          "axisDate": "Data",
+          "axisOnset": "Minuti dall'alba civile",
+          "civilDawn": "Alba civile",
+          "tooltipOnset": "Inizio",
+          "tooltipOnsetAfter": "{minutes} min dopo l'alba civile",
+          "tooltipOnsetBefore": "{minutes} min prima dell'alba civile",
+          "tooltipOnsetAt": "All'alba civile",
+          "tooltipCount": "Rilevamenti",
+          "summary": "Inizio del coro dell'alba rispetto all'alba civile su {days} giorni ({plotted} con un inizio misurabile)."
         },
         "nocturnal": {
-          "title": "Nocturnal Activity Clock",
-          "description": "Detections around the 24-hour clock with the daytime hours shaded, making nighttime activity stand out",
-          "noData": "No activity data available",
-          "noDataHint": "Select a wider date range or a more active period to see the daily activity pattern",
-          "ariaLabel": "Nocturnal activity clock: detections by hour of day with daytime shading",
-          "axisHour": "Hour of day",
-          "tooltipHour": "{start} to {end}",
-          "tooltipCount": "Detections",
-          "summary": "Detection activity by hour of day ({total} detections, most active around {peak}). Daytime hours are shaded.",
-          "legendDay": "Day",
-          "legendTwilight": "Twilight",
-          "legendNight": "Night"
+          "title": "Orologio dell'attività notturna",
+          "description": "Rilevamenti attorno all'orologio di 24 ore con le ore diurne ombreggiate, facendo risaltare l'attività notturna",
+          "noData": "Nessun dato di attività disponibile",
+          "noDataHint": "Seleziona un intervallo di date più ampio o un periodo più attivo per vedere il modello di attività quotidiano",
+          "ariaLabel": "Orologio dell'attività notturna: rilevamenti per ora del giorno con ombreggiatura diurna",
+          "axisHour": "Ora del giorno",
+          "tooltipHour": "{start} a {end}",
+          "tooltipCount": "Rilevamenti",
+          "summary": "Attività di rilevamento per ora del giorno ({total} rilevamenti, più attivi intorno a {peak}). Le ore diurne sono ombreggiate.",
+          "legendDay": "Giorno",
+          "legendTwilight": "Crepuscolo",
+          "legendNight": "Notte"
         },
         "confidence": {
-          "title": "Confidence Distribution",
-          "description": "How confident the model is per species, so you can spot the birds it most often second-guesses",
-          "noData": "No confidence data available",
-          "noDataHint": "Select a wider date range to compare how confident the model is across species",
-          "ariaLabel": "Confidence distribution: per-species histogram of detection confidence scores",
+          "title": "Distribuzione della confidenza",
+          "description": "Quanto il modello è sicuro per specie, in modo da poter individuare gli uccelli su cui ha più dubbi",
+          "noData": "Nessun dato sulla confidenza disponibile",
+          "noDataHint": "Seleziona un intervallo di date più ampio per confrontare la confidenza del modello tra le specie",
+          "ariaLabel": "Distribuzione della confidenza: istogramma dei punteggi di confidenza del rilevamento per specie",
           "axisLabel": "Confidence",
-          "note": "Showing the top {count} species by detection volume",
+          "note": "Mostrando le prime {count} specie per volume di rilevamento",
           "tooltipCount": "Detections",
-          "tooltipPeak": "Peak confidence",
-          "summary": "Detection-confidence distribution for {count} species. {species} clusters around {time} confidence."
+          "tooltipPeak": "Confidenza massima",
+          "summary": "Distribuzione della confidenza di rilevamento per {count} specie. {species} si concentra intorno a una confidenza di {time}."
         },
         "tooltips": {
           "date": "Data",
@@ -2889,7 +2889,7 @@
           "ntfy": "ntfy",
           "email": "Email",
           "generic": "Shoutrrr",
-          "numbered": "{service} #{number}"
+          "numbered": "{service} n.{number}"
         },
         "services": {
           "selectLabel": "Servizio",
@@ -2930,9 +2930,9 @@
             "testConnection": "Testa connessione",
             "connectionOk": {
               "https": "HTTPS funziona",
-              "http": "HTTP funziona — il server non usa HTTPS"
+              "http": "HTTP funziona - il server non usa HTTPS"
             },
-            "connectionFailed": "Impossibile connettersi — controlla hostname e stato del server",
+            "connectionFailed": "Impossibile connettersi - controlla hostname e stato del server",
             "auth": {
               "label": "Autenticazione (opzionale)",
               "username": {
@@ -3693,7 +3693,7 @@
         "typeHelp": "Formato audio per clip salvate. WAV e FLAC sono lossless (migliore qualità, file più grandi). MP3, AAC e Opus sono lossy (file più piccoli, leggera perdita qualità).",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Bitrate compressione audio per formati lossy. Intervallo: {min}-{max} kbps. Valori più alti forniscono migliore qualità ma file più grandi.",
-        "losslessBitrateValue": "N/A - Lossless",
+        "losslessBitrateValue": "N/D - Senza perdita",
         "losslessNote": "Formati lossless preservano qualità audio originale senza artefatti compressione."
       },
       "audioNormalization": {
@@ -3924,8 +3924,8 @@
         "warningText": "Abilitare le funzionalità di accesso pubblico le espone a chiunque possa raggiungere questo server. Abilita solo se ti fidi del tuo ambiente di rete."
       },
       "privateMode": {
-        "label": "Require login for all UI pages (private mode)",
-        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
+        "label": "Richiedi accesso per tutte le pagine dell'interfaccia (modalità privata)",
+        "help": "Se abilitato, la dashboard, i rilevamenti, le analisi, la ricerca, le informazioni e le pagine delle notifiche richiedono l'autenticazione. Le impostazioni e le pagine di sistema sono sempre protette indipendentemente da questa impostazione. L'interruttore Audio dal vivo pubblico qui sotto viene rispettato in modo indipendente (lasciarlo attivo consente comunque la riproduzione non autenticata). L'impostazione predefinita è disattivata in modo che gli ospiti possano sfogliare l'interfaccia di sola lettura."
       },
       "placeholders": {
         "baseUrl": "https://birdnet.esempio.com:5500",
@@ -4442,8 +4442,8 @@
         "templateTitlePlaceholder": "Lascia vuoto per il predefinito",
         "templateMessage": "Modello messaggio",
         "templateMessagePlaceholder": "Lascia vuoto per il predefinito",
-        "noConditionsEvent": "Nessuna condizione — la regola si attiva ad ogni evento",
-        "noConditionsMetric": "Nessuna condizione — la regola si attiva ad ogni aggiornamento di metrica",
+        "noConditionsEvent": "Nessuna condizione - la regola si attiva ad ogni evento",
+        "noConditionsMetric": "Nessuna condizione - la regola si attiva ad ogni aggiornamento di metrica",
         "eventsCount": "eventi",
         "metricsCount": "metriche",
         "durationFor": "per",
@@ -4808,10 +4808,10 @@
       "spectrogramLoaded": "Spettrogramma caricato",
       "spectrogramLoadingAria": "Caricamento spettrogramma",
       "spectrogramAlt": "Spettrogramma audio",
-      "spectrogramForSpecies": "Spectrogram for {species}",
+      "spectrogramForSpecies": "Spettrogramma per {species}",
       "spectrogramGeneratingAria": "Generazione spettrogramma",
       "generating": "Generazione...",
-      "waiting": "Waiting...",
+      "waiting": "In attesa...",
       "queuePosition": "Coda: {position}",
       "loadError": "Caricamento audio fallito"
     },
@@ -4876,14 +4876,14 @@
         "reviewSelection": "Vai all'inizio della selezione",
         "selectionStart": "Maniglia di inizio selezione",
         "selectionEnd": "Maniglia di fine selezione",
-        "lossless": "Lossless",
-        "lossy": "Lossy",
+        "lossless": "Senza perdita",
+        "lossy": "Con perdita",
         "extractClip": "Scarica clip selezionata",
         "clearSelection": "Cancella selezione",
         "extracting": "Estrazione clip in corso...",
         "extractError": "Impossibile estrarre il clip",
         "formatLabel": "Formato",
-        "rangeLabel": "{start}s – {end}s"
+        "rangeLabel": "{start}s - {end}s"
       },
       "processing": {
         "playSelection": "Riproduci selezione",
@@ -4924,9 +4924,9 @@
       "loading": "Caricamento informazioni certificato..."
     },
     "birdThumbnail": {
-      "viewDetections": "View {name} detections",
-      "largeView": "Large view of {name}",
-      "clickToView": "Click to view detections"
+      "viewDetections": "Visualizza rilevamenti di {name}",
+      "largeView": "Vista ingrandita di {name}",
+      "clickToView": "Fai clic per visualizzare i rilevamenti"
     }
   },
   "connectivity": {
@@ -4941,7 +4941,7 @@
   },
   "quietHours": {
     "indicator": {
-      "tooltip": "Ore silenziose attive — {count} sorgente/i in pausa"
+      "tooltip": "Ore silenziose attive - {count} sorgente/i in pausa"
     }
   },
   "errors": {
@@ -4965,7 +4965,7 @@
       "duplicateName": "Esiste già una regola con questo nome",
       "invalidJSON": "JSON non valido",
       "invalidEscalation": "I passaggi di escalation non sono validi",
-      "engineUnavailable": "Alerting engine is unavailable"
+      "engineUnavailable": "Il motore di avviso non è disponibile"
     },
     "detection": {
       "invalidDate": "Formato {paramName} non valido, usare AAAA-MM-GG"
@@ -4979,7 +4979,7 @@
       "createFailed": "Impossibile creare il processo di backup",
       "notFound": "Processo di backup non trovato o scaduto",
       "notReady": "Il backup non è ancora pronto per il download",
-      "fileNotFound": "File di backup non trovato — il processo potrebbe essere scaduto",
+      "fileNotFound": "File di backup non trovato - il processo potrebbe essere scaduto",
       "sqliteOnly": "Backup disponibile solo per database SQLite",
       "dbNotConfigured": "Database non configurato",
       "unsupportedType": "Impossibile eseguire il backup su questo tipo di archivio dati",
@@ -4998,7 +4998,7 @@
       "noLegacyDB": "Nessun database precedente trovato",
       "accessFailed": "Impossibile accedere al database precedente",
       "restartRequired": "L'applicazione deve essere riavviata dopo la migrazione prima che la pulizia sia disponibile",
-      "safetyCheck": "Il file di destinazione sembra essere un database V2 — pulizia non consentita per sicurezza",
+      "safetyCheck": "Il file di destinazione sembra essere un database V2 - pulizia non consentita per sicurezza",
       "noLegacyTables": "Nessuna tabella precedente trovata",
       "restartNeeded": "Pulizia non possibile: l'applicazione deve essere riavviata dopo la migrazione",
       "alreadyRunning": "Pulizia già in corso"
@@ -5070,9 +5070,9 @@
       "waningCrescent": "Luna Calante"
     },
     "birding": {
-      "excellent": "Calma — eccellente per ascoltare i canti degli uccelli",
-      "moderate": "Vento moderato — alcuni canti potrebbero essere difficili da sentire",
-      "poor": "Vento forte — canti degli uccelli difficilmente udibili"
+      "excellent": "Calma - eccellente per ascoltare i canti degli uccelli",
+      "moderate": "Vento moderato - alcuni canti potrebbero essere difficili da sentire",
+      "poor": "Vento forte - canti degli uccelli difficilmente udibili"
     }
   },
   "wizard": {
@@ -5126,7 +5126,7 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Inserisci l'URL del tuo stream audio RTSP",
         "additionalSourcesHint": "Puoi aggiungere altre sorgenti audio successivamente nelle Impostazioni.",
-        "configureLater": "Salta — configura più tardi"
+        "configureLater": "Salta - configura più tardi"
       },
       "detection": {
         "title": "Soglia di rilevamento",
@@ -5178,8 +5178,8 @@
       "title": "Impostazioni di rilevamento",
       "description": "Configura le soglie di confidenza e la lingua per la classificazione delle specie.",
       "confidenceThreshold": {
-        "label": "Confidence Threshold",
-        "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
+        "label": "Soglia di confidenza",
+        "helpText": "Punteggio di confidenza minimo (0.0 - 1.0) richiesto affinché un rilevamento venga registrato."
       },
       "batThreshold": {
         "label": "Soglia di rilevamento pipistrelli",
@@ -5338,11 +5338,11 @@
     "bannerAction": "Riavvia ora",
     "restartFailed": "Impossibile avviare il riavvio",
     "reasons": {
-      "webserver": "Web server / network settings",
-      "oauth": "Authentication provider settings",
-      "database": "Database settings",
-      "logging": "Logging settings",
-      "tlsCertificate": "TLS certificate"
+      "webserver": "Server Web / impostazioni di rete",
+      "oauth": "Impostazioni del provider di autenticazione",
+      "database": "Impostazioni del database",
+      "logging": "Impostazioni di registrazione",
+      "tlsCertificate": "Certificato TLS"
     }
   },
   "help": {
@@ -5408,20 +5408,20 @@
     }
   },
   "health": {
-    "title": "System Health",
-    "running": "Running diagnostics...",
-    "lastRun": "Last run",
+    "title": "Salute del sistema",
+    "running": "Esecuzione diagnostica...",
+    "lastRun": "Ultima esecuzione",
     "refresh": "Aggiorna",
-    "exportText": "Copy Report",
-    "exportJSON": "Download JSON",
-    "copied": "Report copied to clipboard",
-    "duration": "Duration",
+    "exportText": "Copia rapporto",
+    "exportJSON": "Scarica JSON",
+    "copied": "Rapporto copiato negli appunti",
+    "duration": "Durata",
     "summary": {
-      "healthy": "Healthy",
-      "warnings": "Warnings",
-      "critical": "Critical",
-      "skipped": "Skipped",
-      "total": "Total checks"
+      "healthy": "Sano",
+      "warnings": "Avvisi",
+      "critical": "Critico",
+      "skipped": "Ignorato",
+      "total": "Totale controlli"
     },
     "metricFooter": {
       "allPassing": "Tutto OK",
@@ -5433,33 +5433,33 @@
     },
     "diagnostics": "Diagnostica",
     "categories": {
-      "system": "System",
-      "audio": "Audio Pipeline",
-      "analysis": "Analysis",
-      "streams": "Audio Streams",
+      "system": "Sistema",
+      "audio": "Pipeline audio",
+      "analysis": "Analisi",
+      "streams": "Flussi audio",
       "database": "Database",
-      "network": "Network",
-      "config": "Configuration",
-      "logs": "Logs"
+      "network": "Rete",
+      "config": "Configurazione",
+      "logs": "Registri"
     },
     "status": {
-      "healthy": "Healthy",
-      "warning": "Warning",
-      "critical": "Critical",
-      "unknown": "Unknown",
-      "skipped": "Skipped"
+      "healthy": "Sano",
+      "warning": "Avviso",
+      "critical": "Critico",
+      "unknown": "Sconosciuto",
+      "skipped": "Ignorato"
     },
     "errors": {
-      "title": "Recent Errors",
-      "noErrors": "No recent errors",
-      "fetchFailed": "Failed to load diagnostics"
+      "title": "Errori recenti",
+      "noErrors": "Nessun errore recente",
+      "fetchFailed": "Impossibile caricare la diagnostica"
     },
     "export": {
-      "reportTitle": "BirdNET-Go System Health Report",
-      "statusLabel": "Status",
-      "timeLabel": "Time",
-      "durationLabel": "Duration",
-      "checksLabel": "Checks"
+      "reportTitle": "Rapporto sulla salute del sistema BirdNET-Go",
+      "statusLabel": "Stato",
+      "timeLabel": "Ora",
+      "durationLabel": "Durata",
+      "checksLabel": "Controlli"
     },
     "logs": {
       "topErrors": "Errori frequenti",
@@ -5475,7 +5475,7 @@
       "1h": "1h",
       "6h": "6h",
       "24h": "24h",
-      "7d": "7d"
+      "7d": "7g"
     },
     "detail": {
       "lastEvent": "Ultimo evento",

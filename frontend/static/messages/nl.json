@@ -134,7 +134,7 @@
       "visitEbirdLink": "Open eBird.org in een nieuwe tab",
       "learnEbirdTaxonomyLink": "Open eBird Taxonomy in een nieuwe tab",
       "resizeHandle": "Sleep om te vergroten/verkleinen",
-      "imageCredit": "Image credit: {name}"
+      "imageCredit": "Foto door: {name}"
     },
     "labels": {
       "confidence": "Betrouwbaarheid",
@@ -207,11 +207,11 @@
     "speciesAnalytics": "Soortanalyses",
     "detectionDetails": "Detectiedetails",
     "settingsNotAvailable": "Instellingen niet beschikbaar",
-    "analyticsSummary": "Analytics - Summary",
-    "analyticsActivity": "Analytics - Activity Patterns",
-    "analyticsTrends": "Analytics - Trends",
-    "analyticsBiodiversity": "Analytics - Biodiversity",
-    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsSummary": "Analyses - Overzicht",
+    "analyticsActivity": "Analyses - Activiteitspatronen",
+    "analyticsTrends": "Analyses - Trends",
+    "analyticsBiodiversity": "Analyses - Biodiversiteit",
+    "analyticsReview": "Analyses - Beoordeling & Nauwkeurigheid",
     "analyticsNocturnal": "Analyse - Nachtelijke activiteit",
     "analyticsWeather": "Analyse - Weercorrelatie",
     "analyticsSoundscape": "Analyse - Geluidlandschap"
@@ -246,7 +246,7 @@
     "reportBugAriaLabel": "Meld een bug op GitHub (opent in nieuw venster)",
     "askQuestionAriaLabel": "Stel een vraag op GitHub Discussions (opent in nieuw venster)",
     "viewOnGithubAriaLabel": "Bekijk BirdNET-Go op GitHub (opent in nieuw venster)",
-    "health": "Health",
+    "health": "Gezondheid",
     "sections": {
       "explore": "Verkennen",
       "patterns": "Patronen",
@@ -420,8 +420,8 @@
         "reconfiguringDynamicThresholds": "Dynamische drempels worden opnieuw geconfigureerd...",
         "webserverRestartRequired": "Webserverinstellingen gewijzigd. Herstart vereist.",
         "oauthRestartRequired": "Authenticatieproviderinstellingen gewijzigd. Herstart vereist.",
-        "databaseRestartRequired": "Database settings changed. Restart required.",
-        "loggingRestartRequired": "Logging settings changed. Restart required.",
+        "databaseRestartRequired": "Database-instellingen gewijzigd. Herstart vereist.",
+        "loggingRestartRequired": "Logboek-instellingen gewijzigd. Herstart vereist.",
         "reconfiguringSoundLevel": "Geluidsniveaubewaking wordt bijgewerkt...",
         "reconfiguringAudioSources": "Audiobronnen worden opnieuw geconfigureerd...",
         "rebuildingExtendedCapture": "Filter voor uitgebreide opname wordt opnieuw opgebouwd...",
@@ -464,17 +464,17 @@
         "errorOccurred": "{error}",
         "disconnected": "{source_name} verbroken",
         "error": {
-          "authError": "Authenticatie mislukt — controleer je API-sleutel of inloggegevens",
-          "rateLimited": "Snelheidslimiet bereikt — verzoeken worden automatisch vertraagd",
+          "authError": "Authenticatie mislukt - controleer je API-sleutel of inloggegevens",
+          "rateLimited": "Snelheidslimiet bereikt - verzoeken worden automatisch vertraagd",
           "gatewayTimeout": "Service heeft mogelijk een hoge belasting",
           "serverError": "Service is tijdelijk niet beschikbaar",
-          "connectionRefused": "Service onbereikbaar — controleer het adres en of deze draait",
-          "dnsError": "Hostnaam kon niet worden opgelost — controleer het adres",
-          "tlsError": "TLS/certificaatfout — controleer je beveiligingsinstellingen",
-          "timeout": "Verbinding verlopen — de service is mogelijk traag of onbereikbaar",
-          "connectionInterrupted": "Verbinding onderbroken — wordt automatisch opnieuw geprobeerd",
-          "diskFull": "Schijf vol — maak ruimte vrij",
-          "permissionDenied": "Toegang geweigerd — controleer bestands- of servicemachtigingen"
+          "connectionRefused": "Service onbereikbaar - controleer het adres en of deze draait",
+          "dnsError": "Hostnaam kon niet worden opgelost - controleer het adres",
+          "tlsError": "TLS/certificaatfout - controleer je beveiligingsinstellingen",
+          "timeout": "Verbinding verlopen - de service is mogelijk traag of onbereikbaar",
+          "connectionInterrupted": "Verbinding onderbroken - wordt automatisch opnieuw geprobeerd",
+          "diskFull": "Schijf vol - maak ruimte vrij",
+          "permissionDenied": "Toegang geweigerd - controleer bestands- of servicemachtigingen"
         }
       }
     },
@@ -612,7 +612,7 @@
     "currentlyHearing": {
       "title": "Nu te horen",
       "subtitle": "Soorten worden in realtime geïdentificeerd",
-      "empty": "Alles rustig — momenteel geen vogels gedetecteerd"
+      "empty": "Alles rustig - momenteel geen vogels gedetecteerd"
     },
     "rejected": "Afgewezen",
     "newSpeciesHighlights": {
@@ -623,7 +623,7 @@
       "categoryYear": "Nieuw dit jaar",
       "categorySeason": "Nieuw dit seizoen",
       "categorySeasonNamed": "Nieuw dit {season}",
-      "maxConfidenceShort": "Max {confidence}%",
+      "maxConfidenceShort": "Max. {confidence}%",
       "detections": "{count, plural, one {# detectie} other {# detecties}}",
       "lastSeen": "Laatst: {days, plural, =0 {vandaag} one {# dag geleden} other {# dagen geleden}}"
     },
@@ -813,8 +813,8 @@
       "species": "Soort",
       "observation": "Waarneming",
       "aria": {
-        "downloadAudioClip": "Download audio clip for {name} detection",
-        "audioRecordingFor": "Audio recording and spectrogram for {name}",
+        "downloadAudioClip": "Audiofragment downloaden voor {name} detectie",
+        "audioRecordingFor": "Geluidsopname en spectrogram voor {name}",
         "scientificName": "Wetenschappelijke naam",
         "classificationBadges": "Soortclassificatie-badges",
         "confidence": "Betrouwbaarheid herkenning {confidence}%",
@@ -956,7 +956,7 @@
       "viewDetails": "Bekijk details voor {species}",
       "play": "Afspelen",
       "playAudio": "Geluid afspelen",
-      "imageFailedToLoad": "Image failed to load"
+      "imageFailedToLoad": "Afbeelding kon niet worden geladen"
     },
     "media": {
       "title": "Geluid opname & Spectrogram",
@@ -1169,9 +1169,9 @@
     "sections": {
       "overview": "Overzicht",
       "database": "Database",
-      "inference": "AI Models",
+      "inference": "AI-modellen",
       "terminal": "Terminal",
-      "importExport": "Import / Export"
+      "importExport": "Importeren / Exporteren"
     },
     "importExport": {
       "available": "Beschikbaar",
@@ -1522,10 +1522,10 @@
           "targetV2": "Doel (V2)",
           "recordsLabel": "Records",
           "sizeLabel": "Grootte",
-          "prerequisitesNotMet": "Vereisten niet voldaan — los de kritieke problemen hieronder op",
+          "prerequisitesNotMet": "Vereisten niet voldaan - los de kritieke problemen hieronder op",
           "validatingTitle": "Gegevens valideren",
           "validatingBody": "{count} legacy-records vergelijken met V2-database...",
-          "dirtyRecordsCatchup": "{count} gewijzigde records — poging tot synchronisatie",
+          "dirtyRecordsCatchup": "{count} gewijzigde records - poging tot synchronisatie",
           "cutoverTitle": "Overschakeling voltooien",
           "cutoverBody": "Overschakeling naar V2-database voltooien...",
           "migratingPhase": "Migratie van {phase}",
@@ -1534,7 +1534,7 @@
           "percentComplete": "{percent}% voltooid",
           "recordsPerSec": "{rate} records/s",
           "calculating": "Berekenen...",
-          "dirtyWriteFailed": "{count} records konden niet worden geschreven — worden afgestemd tijdens validatie"
+          "dirtyWriteFailed": "{count} records konden niet worden geschreven - worden afgestemd tijdens validatie"
         },
         "details": {
           "title": "Databasedetails",
@@ -1544,14 +1544,14 @@
           "integrity": "Integriteit: {status}"
         },
         "strip": {
-          "legacy": "Legacy",
+          "legacy": "Oud",
           "v2Target": "V2 (doel)",
           "active": "Actief",
           "migration": "Migratie",
           "complete": "Voltooid",
           "recordsMigrated": "{count} records gemigreerd",
           "readyToMigrate": "Klaar voor migratie",
-          "recordsInLegacy": "{count} records in legacy",
+          "recordsInLegacy": "{count} records in oud",
           "comparingRecords": "Recordaantallen vergelijken...",
           "validationFailed": "Validatie mislukt",
           "rate": "Snelheid",
@@ -1685,70 +1685,70 @@
       }
     },
     "inference": {
-      "title": "AI Models & Inference",
-      "loading": "Loading inference status",
-      "error": "Could not load inference status",
+      "title": "AI-modellen & Inferentie",
+      "loading": "Inferentiestatus laden",
+      "error": "Kan inferentiestatus niet laden",
       "sectionHardware": "Hardware",
-      "sectionBackends": "Inference Backends",
-      "sectionModels": "Models",
+      "sectionBackends": "Inferentie Back-ends",
+      "sectionModels": "Modellen",
       "noModels": "No models are currently loaded",
-      "architecture": "Architecture",
+      "architecture": "Architectuur",
       "cpu": "CPU",
-      "environment": "Environment",
+      "environment": "Omgeving",
       "fp16": "FP16",
-      "fp16Supported": "FP16 supported",
-      "fp16Unsupported": "FP16 not supported",
+      "fp16Supported": "FP16 ondersteund",
+      "fp16Unsupported": "FP16 niet ondersteund",
       "backendTflite": "TensorFlow Lite",
       "backendOnnx": "ONNX Runtime",
       "backendOpenvino": "OpenVINO",
-      "available": "Available",
-      "notAvailable": "Not available",
-      "active": "Active",
-      "inactive": "Inactive",
-      "initialized": "Initialized",
-      "version": "Version",
-      "devices": "Devices",
-      "board": "Board",
+      "available": "Beschikbaar",
+      "notAvailable": "Niet beschikbaar",
+      "active": "Actief",
+      "inactive": "Inactief",
+      "initialized": "Geïnitialiseerd",
+      "version": "Versie",
+      "devices": "Apparaten",
+      "board": "Moederbord",
       "soc": "SoC",
-      "memory": "Memory",
-      "cores": "Cores",
-      "gpu": "Graphics",
-      "gpuReachable": "Reachable",
-      "gpuNotReachable": "Not reachable",
-      "capabilities": "Capabilities",
-      "capabilitiesHelp": "Hardware tags used to match this machine against the available model builds.",
-      "gpuReasonRenderNodeUnavailable": "No GPU device node is visible to the server. In Docker, map /dev/dri into the container; on a native install, check that the graphics driver is loaded.",
-      "gpuReasonRenderNodePermission": "The GPU device node cannot be opened. Either the account BirdNET-Go runs as needs access to the device's group, usually 'render', or the container was given the device with -v instead of --device, which does not grant access to it.",
-      "gpuReasonNoRuntime": "BirdNET-Go only accelerates inference on Intel graphics today, so this card will not be used.",
-      "gpuReasonUnknown": "This GPU cannot be used for inference on this build.",
-      "stock": "Stock",
-      "custom": "Custom",
-      "sampleRate": "Sample rate",
+      "memory": "Geheugen",
+      "cores": "Kernen",
+      "gpu": "Videokaart",
+      "gpuReachable": "Bereikbaar",
+      "gpuNotReachable": "Niet bereikbaar",
+      "capabilities": "Mogelijkheden",
+      "capabilitiesHelp": "Hardwaretags die worden gebruikt om deze machine te matchen met de beschikbare model-builds.",
+      "gpuReasonRenderNodeUnavailable": "Er is geen GPU-apparaatknooppunt zichtbaar voor de server.",
+      "gpuReasonRenderNodePermission": "Het GPU-apparaatknooppunt kan niet worden geopend.",
+      "gpuReasonNoRuntime": "BirdNET-Go versnelt momenteel inferentie alleen op Intel graphics, dus deze kaart wordt niet gebruikt.",
+      "gpuReasonUnknown": "Deze GPU kan niet worden gebruikt voor inferentie in deze build.",
+      "stock": "Standaard",
+      "custom": "Aangepast",
+      "sampleRate": "Sample frequentie",
       "clipLength": "Segmentlengte",
-      "species": "Species",
-      "invocations": "Segments analysed",
-      "avgLatency": "Avg latency",
-      "maxLatency": "Max latency",
+      "species": "Soorten",
+      "invocations": "Geanalyseerde segmenten",
+      "avgLatency": "Gem. latentie",
+      "maxLatency": "Max. latentie",
       "rtf": "RTF",
-      "rtfLabel": "Real-time factor",
-      "approxRam": "Approx. host RAM (RSS)",
-      "approxRamTooltip": "Approximate host RAM (RSS) measured at model load. Excludes GPU VRAM, and may be skewed by shared runtime memory arenas and OS page reclamation.",
-      "latencyChart": "Latency (ms)",
-      "rtfChart": "Real-time factor",
-      "sources": "Audio sources",
-      "noSources": "No sources attached",
-      "primaryFallback": "primary (fallback)",
-      "notMeasured": "n/a",
+      "rtfLabel": "Realtime factor",
+      "approxRam": "Geschatte host RAM (RSS)",
+      "approxRamTooltip": "Geschatte host RAM (RSS) gemeten bij laden model.",
+      "latencyChart": "Latentie (ms)",
+      "rtfChart": "Realtime factor",
+      "sources": "Audiobronnen",
+      "noSources": "Geen bronnen verbonden",
+      "primaryFallback": "primair (fallback)",
+      "notMeasured": "n/b",
       "unitMs": "ms",
       "unitKhz": "kHz",
       "unitSec": "s",
       "sectionAudio": "Audio",
-      "queueDepth": "Queue depth",
-      "queueDepthChart": "Queue depth",
-      "droppedChunks": "Dropped chunks",
-      "queueCapacity": "Capacity",
-      "lastSeen": "Last seen",
-      "lastSeenNever": "No detections yet",
+      "queueDepth": "Wachtrijdiepte",
+      "queueDepthChart": "Wachtrijdiepte",
+      "droppedChunks": "Gedropte blokken",
+      "queueCapacity": "Capaciteit",
+      "lastSeen": "Laatst gezien",
+      "lastSeenNever": "Nog geen detecties",
       "deviceHelp": "Het rekensysteem waarop dit model inferentie uitvoert (CPU, GPU of onbekend).",
       "paused": "Gepauzeerd",
       "pausedScheduleHelp": "Dit model draait alleen volgens een schema en is momenteel gepauzeerd, dus het verwerkt geen audio.",
@@ -1762,24 +1762,24 @@
       "coDetectedHelp": "Andere modellen die deze soort binnen {seconds}s detecteerden",
       "outOfRangeHelp": "Buiten het bereikfilter (getoond voor diagnostiek, niet opgeslagen als detectie)",
       "peak": "piek",
-      "activityActive": "Inference active",
+      "activityActive": "Inferentie actief",
       "activityIdle": "Idle",
-      "throughput": "Throughput",
+      "throughput": "Doorvoer",
       "throughputUnit": "/s",
-      "throughputChart": "Throughput (/s)",
-      "errorRate": "Error rate",
-      "loadFailures": "Load failures",
-      "rtfHelp": "Real-time factor: inference time divided by clip length. Below 1.0 means the model analyses a segment faster than real time (keeping up); above 1.0 means it is falling behind.",
-      "queueDepthHelp": "Audio segments waiting to be analysed. Stays near zero when analysis keeps up; a rising number means it is falling behind.",
-      "queueCapacityHelp": "Maximum number of segments the queue can hold before new audio is dropped.",
-      "droppedChunksHelp": "Audio chunks discarded because the queue was full. Should stay at zero.",
-      "throughputHelp": "Segments analysed per second by this model.",
-      "errorRateHelp": "Share of analysis attempts that failed.",
-      "loadFailuresHelp": "Number of times this model failed to load.",
-      "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
-      "invocationsHelp": "Total audio segments this model has analysed since startup.",
-      "noModelsHint": "No audio source configured yet?",
-      "noModelsHintLink": "Configure audio sources"
+      "throughputChart": "Doorvoer (/s)",
+      "errorRate": "Foutmarge",
+      "loadFailures": "Laadfouten",
+      "rtfHelp": "Realtime factor: inferentietijd gedeeld door cliplengte.",
+      "queueDepthHelp": "Audiosegmenten die wachten om geanalyseerd te worden.",
+      "queueCapacityHelp": "Maximaal aantal segmenten in de wachtrij.",
+      "droppedChunksHelp": "Audioblokken weggegooid omdat wachtrij vol is.",
+      "throughputHelp": "Geanalyseerde segmenten per seconde.",
+      "errorRateHelp": "Aandeel mislukte analysepogingen.",
+      "loadFailuresHelp": "Aantal keren dat het model niet kon laden.",
+      "fp16Help": "16-bit floating point.",
+      "invocationsHelp": "Totaal aantal geanalyseerde segmenten.",
+      "noModelsHint": "Nog geen audiobron geconfigureerd?",
+      "noModelsHintLink": "Audiobronnen configureren"
     },
     "metrics": {
       "cpu": "CPU",
@@ -1842,7 +1842,7 @@
         "trends": "Trends",
         "biodiversity": "Biodiversiteit",
         "quality": "Controle en nauwkeurigheid",
-        "summary": "Summary",
+        "summary": "Overzicht",
         "nocturnal": "Nachtelijke activiteit",
         "weather": "Weer",
         "soundscape": "Geluidlandschap"
@@ -1853,9 +1853,9 @@
       "controls": {
         "source": "Bron",
         "sourceAll": "Alle bronnen",
-        "sourceLoading": "Loading audio sources…",
-        "sourceNone": "No audio sources with detections yet.",
-        "sourceNotApplicable": "The charts in this section do not filter by source.",
+        "sourceLoading": "Audiobronnen laden...",
+        "sourceNone": "Nog geen audiobronnen met detecties.",
+        "sourceNotApplicable": "Deze grafieken filteren niet op bron.",
         "speciesNotApplicable": "De grafieken in deze sectie filteren niet op soort."
       },
       "card": {
@@ -2038,124 +2038,124 @@
           "axisUniqueSpecies": "Unieke soorten"
         },
         "accumulation": {
-          "title": "Species Accumulation Curve",
+          "title": "Soortenaccumulatiecurve",
           "description": "Cumulative number of distinct species detected within the selected period. The curve climbs as new species appear and flattens toward an asymptote once the common ones have been recorded; a still-rising tail means more species are likely waiting to be found.",
-          "noData": "No species accumulation data available",
-          "noDataHint": "Select a wider date range to watch the species list build up over time",
-          "ariaLabel": "Species accumulation curve: cumulative distinct species detected over the period",
-          "axisDate": "Date",
-          "axisSpecies": "Cumulative species",
-          "totalSpecies": "{species} species",
-          "tooltipCumulative": "Cumulative species",
-          "tooltipNew": "New in period",
-          "summary": "Cumulative species accumulation across {days} days, reaching {species} distinct species by the end of the period."
+          "noData": "Geen accumulatiedata beschikbaar",
+          "noDataHint": "Kies een groter datumbereik",
+          "ariaLabel": "Soortenaccumulatiecurve: cumulatieve verschillende soorten",
+          "axisDate": "Datum",
+          "axisSpecies": "Cumulatieve soorten",
+          "totalSpecies": "{species} soorten",
+          "tooltipCumulative": "Cumulatieve soorten",
+          "tooltipNew": "Nieuw in periode",
+          "summary": "Cumulatieve soortaccumulatie over {days} dagen, bereikt {species} soorten in totaal."
         },
         "yearOverYear": {
-          "title": "Year-over-Year Tracker",
-          "description": "Cumulative detections so far this year versus the same calendar dates last year. The shaded band is the running gap between the two; this year's line sitting above last year's means you are ahead of last year's pace.",
-          "noData": "No year-over-year data available",
-          "noDataHint": "Detections from this year and last year build up here as the year progresses",
-          "ariaLabel": "Year-over-year tracker: cumulative detections this year versus the same span last year",
-          "axisDate": "Date",
-          "axisCount": "Cumulative detections",
-          "legendThis": "{year} (this year)",
-          "legendLast": "{year} (last year)",
-          "tooltipDelta": "Difference",
-          "summary": "Year over year: by {monthDay}, {currentYear} has {thisYear} cumulative detections versus {lastYear} for {previousYear} (a difference of {delta})."
+          "title": "Jaar-op-jaar Tracker",
+          "description": "Cumulatieve detecties dit jaar vs. vorig jaar.",
+          "noData": "Geen jaar-op-jaar data beschikbaar",
+          "noDataHint": "Detecties van dit jaar en vorig jaar",
+          "ariaLabel": "Jaar-op-jaar Tracker",
+          "axisDate": "Datum",
+          "axisCount": "Cumulatieve detecties",
+          "legendThis": "{year} (dit jaar)",
+          "legendLast": "{year} (vorig jaar)",
+          "tooltipDelta": "Verschil",
+          "summary": "Jaar op jaar: per {monthDay} telt {currentYear} cumulatief {thisYear} detecties vergeleken met {lastYear} voor {previousYear} (een verschil van {delta})."
         },
         "phenology": {
-          "title": "Arrival & Departure Phenology",
-          "description": "First and last detection of each species within the selected period, drawn as residency bars for the most-detected species. Read it top to bottom in arrival order to see who shows up first and who lingers latest across the season.",
-          "noData": "No phenology data available",
-          "noDataHint": "Select a wider date range to see when species arrive and depart",
-          "ariaLabel": "Arrival and departure phenology: residency bars showing each species' first-to-last detection span",
-          "axisDate": "Date",
-          "summary": "Arrival and departure residency spans for {species} species across the selected period.",
-          "tooltipFirst": "First detected",
-          "tooltipLast": "Last detected",
+          "title": "Aankomst- en vertrekfenologie",
+          "description": "Eerste en laatste detectie van elke soort.",
+          "noData": "Geen fenologiedata beschikbaar",
+          "noDataHint": "Kies een groter datumbereik",
+          "ariaLabel": "Aankomst- en vertrekfenologie",
+          "axisDate": "Datum",
+          "summary": "Verblijfsduur voor {species} soorten.",
+          "tooltipFirst": "Eerst gedetecteerd",
+          "tooltipLast": "Laatst gedetecteerd",
           "tooltipResidency": "Residency",
-          "tooltipCount": "Detections",
-          "residencyDays": "{days} days"
+          "tooltipCount": "Detecties",
+          "residencyDays": "{days} dagen"
         },
         "heatmap": {
-          "title": "Seasonal Activity Heatmap",
+          "title": "Seizoensgebonden activiteiten-heatmap",
           "description": "Detection density by date and time of day, revealing migration waves and dawn-chorus drift",
-          "noData": "No activity data available",
+          "noData": "Geen activiteitsdata beschikbaar",
           "noDataHint": "Select a date range to view seasonal activity patterns",
-          "axisDate": "Date",
-          "axisTime": "Time of Day",
-          "tooltipTime": "Time",
-          "tooltipCount": "Detections",
-          "legendLess": "Less",
-          "legendMore": "More ({max})",
-          "ariaLabel": "Seasonal activity heatmap: detection density by date and time of day",
-          "summary": "{total} detections across {days} days. Busiest around {time} on {date}."
+          "axisDate": "Datum",
+          "axisTime": "Tijdstip",
+          "tooltipTime": "Tijd",
+          "tooltipCount": "Detecties",
+          "legendLess": "Minder",
+          "legendMore": "Meer ({max})",
+          "ariaLabel": "Seizoensgebonden activiteiten-heatmap",
+          "summary": "{total} detecties over {days} dagen. Drukst rond {time} op {date}."
         },
         "ridgeline": {
-          "title": "Who Sings When",
+          "title": "Wie zingt wanneer",
           "description": "Hour-of-day activity for the most-detected species, sorting dawn singers from all-day and nocturnal birds",
-          "noData": "No species activity data available",
+          "noData": "Geen activiteitsgegevens van soorten beschikbaar",
           "noDataHint": "Select a wider date range to compare species activity patterns",
-          "ariaLabel": "Who-sings-when ridgeline: hour-of-day activity distribution per species",
-          "axisTime": "Time of Day",
-          "note": "Showing the top {count} species by detection volume",
+          "ariaLabel": "Activiteitsgrafiek: activiteitsverdeling per uur per soort",
+          "axisTime": "Tijdstip",
+          "note": "Toont de {count} meest gedetecteerde soorten",
           "tooltipDetections": "Detections",
           "tooltipPeak": "Peak",
-          "summary": "Hour-of-day activity for {count} species. Most active: {species} around {time}."
+          "summary": "Activiteit per uur voor {count} soorten. Meest actief: {species} rond {time}."
         },
         "succession": {
-          "title": "Acoustic Succession",
+          "title": "Akoestische successie",
           "description": "How the soundscape's top species hand off through the day, shown as stacked bands of hourly detections from pre-dawn through night",
-          "noData": "No acoustic succession data available",
+          "noData": "Geen akoestische successiedata beschikbaar",
           "noDataHint": "Select a wider date range to see how species hand off through the day",
           "ariaLabel": "Acoustic succession streamgraph: stacked hour-of-day detections for the top species",
-          "axisTime": "Time of Day",
-          "note": "Combined hourly activity of the top {count} species by detection volume",
-          "tooltipDetections": "Detections",
-          "tooltipPeak": "Peak",
-          "summary": "Hour-of-day succession for {count} species. Most active: {species} around {time}."
+          "axisTime": "Tijdstip",
+          "note": "Gecombineerde uurlijkse activiteit van de top {count} soorten op basis van detectievolume.",
+          "tooltipDetections": "Detecties",
+          "tooltipPeak": "Piek",
+          "summary": "Uur-van-de-dag opeenvolging voor {count} soorten. Meest actief: {species} rond {time}."
         },
         "dawnOnset": {
-          "title": "Dawn Chorus Onset",
-          "description": "When the morning chorus starts each day relative to civil dawn, isolating the seasonal shift from clock time",
-          "noData": "No dawn chorus data available",
+          "title": "Ochtendkoor begin",
+          "description": "Wanneer het ochtendkoor begint t.o.v. de burgerlijke schemering.",
+          "noData": "Geen ochtendkoordata beschikbaar",
           "noDataHint": "Select a wider date range to track how the dawn chorus shifts across the seasons",
-          "ariaLabel": "Dawn chorus onset tracker: daily chorus onset relative to civil dawn",
-          "axisDate": "Date",
-          "axisOnset": "Minutes from civil dawn",
-          "civilDawn": "Civil dawn",
-          "tooltipOnset": "Onset",
-          "tooltipOnsetAfter": "{minutes} min after civil dawn",
-          "tooltipOnsetBefore": "{minutes} min before civil dawn",
-          "tooltipOnsetAt": "At civil dawn",
-          "tooltipCount": "Detections",
-          "summary": "Dawn chorus onset relative to civil dawn across {days} days ({plotted} with a measurable onset)."
+          "ariaLabel": "Ochtendkoor begin",
+          "axisDate": "Datum",
+          "axisOnset": "Minuten vanaf burgerlijke schemering",
+          "civilDawn": "Burgerlijke schemering",
+          "tooltipOnset": "Begin",
+          "tooltipOnsetAfter": "{minutes} min na burgerlijke schemering",
+          "tooltipOnsetBefore": "{minutes} min voor burgerlijke schemering",
+          "tooltipOnsetAt": "Bij burgerlijke schemering",
+          "tooltipCount": "Detecties",
+          "summary": "Aanvang ochtendkoor relatief t.o.v. burgerlijke schemering over {days} dagen ({plotted} soorten weergegeven)."
         },
         "nocturnal": {
-          "title": "Nocturnal Activity Clock",
-          "description": "Detections around the 24-hour clock with the daytime hours shaded, making nighttime activity stand out",
-          "noData": "No activity data available",
-          "noDataHint": "Select a wider date range or a more active period to see the daily activity pattern",
-          "ariaLabel": "Nocturnal activity clock: detections by hour of day with daytime shading",
-          "axisHour": "Hour of day",
-          "tooltipHour": "{start} to {end}",
-          "tooltipCount": "Detections",
-          "summary": "Detection activity by hour of day ({total} detections, most active around {peak}). Daytime hours are shaded.",
-          "legendDay": "Day",
-          "legendTwilight": "Twilight",
-          "legendNight": "Night"
+          "title": "Nachtelijke activiteitsklok",
+          "description": "Detecties op de 24-uursklok.",
+          "noData": "Geen activiteitsdata beschikbaar",
+          "noDataHint": "Kies een groter datumbereik",
+          "ariaLabel": "Nachtelijke activiteitsklok",
+          "axisHour": "Uur van de dag",
+          "tooltipHour": "{start} tot {end}",
+          "tooltipCount": "Detecties",
+          "summary": "Detectie-activiteit per uur van de dag ({total} detecties, piekmoment om {peak}:00).",
+          "legendDay": "Dag",
+          "legendTwilight": "Schemering",
+          "legendNight": "Nacht"
         },
         "confidence": {
-          "title": "Confidence Distribution",
-          "description": "How confident the model is per species, so you can spot the birds it most often second-guesses",
-          "noData": "No confidence data available",
-          "noDataHint": "Select a wider date range to compare how confident the model is across species",
-          "ariaLabel": "Confidence distribution: per-species histogram of detection confidence scores",
+          "title": "Betrouwbaarheidsverdeling",
+          "description": "Hoe zeker het model per soort is, zodat u de vogels kunt opmerken waaraan het het vaakst twijfelt",
+          "noData": "Geen betrouwbaarheidsgegevens beschikbaar",
+          "noDataHint": "Selecteer een breder datumbereik om te vergelijken hoe zeker het model is voor verschillende soorten",
+          "ariaLabel": "Betrouwbaarheidsverdeling: histogram per soort van detectiebetrouwbaarheid",
           "axisLabel": "Confidence",
-          "note": "Showing the top {count} species by detection volume",
+          "note": "Toont de {count} meest gedetecteerde soorten",
           "tooltipCount": "Detections",
-          "tooltipPeak": "Peak confidence",
-          "summary": "Detection-confidence distribution for {count} species. {species} clusters around {time} confidence."
+          "tooltipPeak": "Hoogste betrouwbaarheid",
+          "summary": "Verdeling van detectiebetrouwbaarheid voor {count} soorten. {species} ligt rond de {time} betrouwbaarheid."
         },
         "tooltips": {
           "date": "Datum",
@@ -2930,9 +2930,9 @@
             "testConnection": "Verbinding testen",
             "connectionOk": {
               "https": "HTTPS werkt",
-              "http": "HTTP werkt — server gebruikt geen HTTPS"
+              "http": "HTTP werkt - server gebruikt geen HTTPS"
             },
-            "connectionFailed": "Kan geen verbinding maken — controleer hostnaam en serverstatus",
+            "connectionFailed": "Kan geen verbinding maken - controleer hostnaam en serverstatus",
             "auth": {
               "label": "Authenticatie (optioneel)",
               "username": {
@@ -3452,7 +3452,7 @@
         "endTime": "Eindtijd",
         "startEvent": "Startgebeurtenis",
         "endEvent": "Eindgebeurtenis",
-        "offsetMinutes": "Offset (min)",
+        "offsetMinutes": "Verschuiving (min)",
         "sunrise": "Zonsopgang",
         "sunset": "Zonsondergang",
         "fixedHint": "Opname wordt dagelijks gepauzeerd tussen start- en eindtijden. Nachtelijke vensters (bijv. 22:00 tot 06:00) worden ondersteund.",
@@ -3693,7 +3693,7 @@
         "typeHelp": "Audio formaat voor opgeslagen clips. WAV en FLAC zijn lossless (beste kwaliteit, grotere bestanden). MP3, AAC, en Opus zijn lossy (kleinere bestanden, lichte kwaliteitsverlies).",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Audio compressie bitrate voor lossy formaten. Bereik: {min}-{max} kbps. Hogere waarden geven betere kwaliteit maar grotere bestanden.",
-        "losslessBitrateValue": "N/A - Lossless",
+        "losslessBitrateValue": "N.v.t. - Verliesvrij",
         "losslessNote": "Lossless formaten behouden originele audio kwaliteit zonder compressie artefacten."
       },
       "audioNormalization": {
@@ -3867,7 +3867,7 @@
           "userIdLabel": "Gebruikers-ID"
         },
         "line": {
-          "title": "LINE Login",
+          "title": "LINE-login",
           "enableLabel": "OAuth2-aanmelding via LINE toestaan",
           "redirectUriTitle": "Omleidings-URI voor LINE Developers Console:",
           "getCredentialsLabel": "Haal uw referenties op uit de LINE Developers Console",
@@ -3878,7 +3878,7 @@
           "userIdLabel": "Gebruikers-ID"
         },
         "kakao": {
-          "title": "Kakao Login",
+          "title": "Kakao-login",
           "enableLabel": "OAuth2-aanmelding via Kakao toestaan",
           "redirectUriTitle": "Omleidings-URI voor Kakao Developers Console:",
           "getCredentialsLabel": "Haal uw referenties op uit de Kakao Developers Console",
@@ -3924,8 +3924,8 @@
         "warningText": "Het inschakelen van openbare toegangsfuncties maakt ze beschikbaar voor iedereen die deze server kan bereiken. Schakel alleen in als je je netwerkomgeving vertrouwt."
       },
       "privateMode": {
-        "label": "Require login for all UI pages (private mode)",
-        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
+        "label": "Inloggen verplicht voor alle UI-pagina's (privémodus)",
+        "help": "Vereist authenticatie voor vrijwel alle pagina's."
       },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
@@ -4282,7 +4282,7 @@
           "september": "September",
           "october": "Oktober",
           "november": "November",
-          "december": "December"
+          "december": "december"
         },
         "units": {
           "days": "dagen",
@@ -4442,8 +4442,8 @@
         "templateTitlePlaceholder": "Laat leeg voor standaard",
         "templateMessage": "Berichtsjabloon",
         "templateMessagePlaceholder": "Laat leeg voor standaard",
-        "noConditionsEvent": "Geen voorwaarden — regel wordt bij elke gebeurtenis geactiveerd",
-        "noConditionsMetric": "Geen voorwaarden — regel wordt bij elke metriekupdate geactiveerd",
+        "noConditionsEvent": "Geen voorwaarden - regel wordt bij elke gebeurtenis geactiveerd",
+        "noConditionsMetric": "Geen voorwaarden - regel wordt bij elke metriekupdate geactiveerd",
         "eventsCount": "gebeurtenissen",
         "metricsCount": "metrieken",
         "durationFor": "gedurende",
@@ -4808,10 +4808,10 @@
       "spectrogramLoaded": "Spectrogram geladen",
       "spectrogramLoadingAria": "Spectrogram laden",
       "spectrogramAlt": "Audiospectogram",
-      "spectrogramForSpecies": "Spectrogram for {species}",
+      "spectrogramForSpecies": "Spectrogram voor {species}",
       "spectrogramGeneratingAria": "Spectrogram genereren",
       "generating": "Genereren...",
-      "waiting": "Waiting...",
+      "waiting": "Wachten...",
       "queuePosition": "Wachtrij: {position}",
       "loadError": "Kan audio niet laden"
     },
@@ -4883,7 +4883,7 @@
         "extracting": "Fragment extraheren...",
         "extractError": "Kan fragment niet extraheren",
         "formatLabel": "Formaat",
-        "rangeLabel": "{start}s – {end}s"
+        "rangeLabel": "{start}s - {end}s"
       },
       "processing": {
         "playSelection": "Selectie afspelen",
@@ -4924,9 +4924,9 @@
       "loading": "Certificaatinformatie laden..."
     },
     "birdThumbnail": {
-      "viewDetections": "View {name} detections",
-      "largeView": "Large view of {name}",
-      "clickToView": "Click to view detections"
+      "viewDetections": "Bekijk {name} detecties",
+      "largeView": "Grote weergave van {name}",
+      "clickToView": "Klik om detecties te bekijken"
     }
   },
   "connectivity": {
@@ -4941,7 +4941,7 @@
   },
   "quietHours": {
     "indicator": {
-      "tooltip": "Stille uren actief — {count} bron(nen) gepauzeerd"
+      "tooltip": "Stille uren actief - {count} bron(nen) gepauzeerd"
     }
   },
   "errors": {
@@ -4965,7 +4965,7 @@
       "duplicateName": "Er bestaat al een regel met deze naam",
       "invalidJSON": "Ongeldige JSON",
       "invalidEscalation": "Escalatiestappen zijn ongeldig",
-      "engineUnavailable": "Alerting engine is unavailable"
+      "engineUnavailable": "Alerting-engine is niet beschikbaar"
     },
     "detection": {
       "invalidDate": "Ongeldig {paramName}-formaat, gebruik JJJJ-MM-DD"
@@ -4979,7 +4979,7 @@
       "createFailed": "Kan back-uptaak niet aanmaken",
       "notFound": "Back-uptaak niet gevonden of verlopen",
       "notReady": "Back-up is nog niet klaar om te downloaden",
-      "fileNotFound": "Back-upbestand niet gevonden — taak is mogelijk verlopen",
+      "fileNotFound": "Back-upbestand niet gevonden - taak is mogelijk verlopen",
       "sqliteOnly": "Back-up alleen beschikbaar voor SQLite-databases",
       "dbNotConfigured": "Database niet geconfigureerd",
       "unsupportedType": "Kan geen back-up maken van dit type gegevensopslag",
@@ -4998,7 +4998,7 @@
       "noLegacyDB": "Geen oude database gevonden",
       "accessFailed": "Kan geen toegang krijgen tot de oude database",
       "restartRequired": "De applicatie moet opnieuw worden gestart na de migratie voordat opschonen beschikbaar is",
-      "safetyCheck": "Het doelbestand lijkt een V2-database te zijn — opschonen niet toegestaan voor de veiligheid",
+      "safetyCheck": "Het doelbestand lijkt een V2-database te zijn - opschonen niet toegestaan voor de veiligheid",
       "noLegacyTables": "Geen oude tabellen gevonden",
       "restartNeeded": "Kan niet opschonen: applicatie moet opnieuw worden gestart na de migratie",
       "alreadyRunning": "Opschonen is al bezig"
@@ -5070,9 +5070,9 @@
       "waningCrescent": "Afnemende Sikkel"
     },
     "birding": {
-      "excellent": "Windstil — uitstekend om vogelgeluiden te horen",
-      "moderate": "Matige wind — sommige vogelgeluiden moeilijker te horen",
-      "poor": "Harde wind — vogelgeluiden nauwelijks hoorbaar"
+      "excellent": "Windstil - uitstekend om vogelgeluiden te horen",
+      "moderate": "Matige wind - sommige vogelgeluiden moeilijker te horen",
+      "poor": "Harde wind - vogelgeluiden nauwelijks hoorbaar"
     }
   },
   "wizard": {
@@ -5126,7 +5126,7 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Voer de URL van je RTSP-audiostream in",
         "additionalSourcesHint": "Je kunt later meer audiobronnen toevoegen in Instellingen.",
-        "configureLater": "Overslaan — later configureren"
+        "configureLater": "Overslaan - later configureren"
       },
       "detection": {
         "title": "Detectiedrempel",
@@ -5338,11 +5338,11 @@
     "bannerAction": "Nu herstarten",
     "restartFailed": "Kan herstart niet starten",
     "reasons": {
-      "webserver": "Web server / network settings",
-      "oauth": "Authentication provider settings",
-      "database": "Database settings",
-      "logging": "Logging settings",
-      "tlsCertificate": "TLS certificate"
+      "webserver": "Webserver / netwerkinstellingen",
+      "oauth": "Instellingen authenticatieprovider",
+      "database": "Database-instellingen",
+      "logging": "Logboek-instellingen",
+      "tlsCertificate": "TLS-certificaat"
     }
   },
   "help": {
@@ -5408,20 +5408,20 @@
     }
   },
   "health": {
-    "title": "System Health",
-    "running": "Running diagnostics...",
-    "lastRun": "Last run",
+    "title": "Systeemstatus",
+    "running": "Diagnostiek uitvoeren...",
+    "lastRun": "Laatste run",
     "refresh": "Vernieuwen",
-    "exportText": "Copy Report",
+    "exportText": "Rapport kopiëren",
     "exportJSON": "Download JSON",
-    "copied": "Report copied to clipboard",
-    "duration": "Duration",
+    "copied": "Rapport naar klembord gekopieerd",
+    "duration": "Duur",
     "summary": {
-      "healthy": "Healthy",
-      "warnings": "Warnings",
-      "critical": "Critical",
-      "skipped": "Skipped",
-      "total": "Total checks"
+      "healthy": "Gezond",
+      "warnings": "Waarschuwingen",
+      "critical": "Kritiek",
+      "skipped": "Overgeslagen",
+      "total": "Totaal aantal controles"
     },
     "metricFooter": {
       "allPassing": "Alles in orde",
@@ -5433,33 +5433,33 @@
     },
     "diagnostics": "Diagnostiek",
     "categories": {
-      "system": "System",
-      "audio": "Audio Pipeline",
-      "analysis": "Analysis",
-      "streams": "Audio Streams",
+      "system": "Systeem",
+      "audio": "Audiopijplijn",
+      "analysis": "Analyse",
+      "streams": "Audiostreams",
       "database": "Database",
-      "network": "Network",
-      "config": "Configuration",
-      "logs": "Logs"
+      "network": "Netwerk",
+      "config": "Configuratie",
+      "logs": "Logboeken"
     },
     "status": {
-      "healthy": "Healthy",
-      "warning": "Warning",
-      "critical": "Critical",
-      "unknown": "Unknown",
-      "skipped": "Skipped"
+      "healthy": "Gezond",
+      "warning": "Waarschuwing",
+      "critical": "Kritiek",
+      "unknown": "Onbekend",
+      "skipped": "Overgeslagen"
     },
     "errors": {
-      "title": "Recent Errors",
-      "noErrors": "No recent errors",
-      "fetchFailed": "Failed to load diagnostics"
+      "title": "Recente fouten",
+      "noErrors": "Geen recente fouten",
+      "fetchFailed": "Kan diagnostiek niet laden"
     },
     "export": {
-      "reportTitle": "BirdNET-Go System Health Report",
+      "reportTitle": "BirdNET-Go Systeemstatus Rapport",
       "statusLabel": "Status",
-      "timeLabel": "Time",
-      "durationLabel": "Duration",
-      "checksLabel": "Checks"
+      "timeLabel": "Tijd",
+      "durationLabel": "Duur",
+      "checksLabel": "Controles"
     },
     "logs": {
       "topErrors": "Meest voorkomende fouten",
@@ -5472,9 +5472,9 @@
       "label": "Evaluatievenster",
       "15m": "15m",
       "30m": "30m",
-      "1h": "1h",
-      "6h": "6h",
-      "24h": "24h",
+      "1h": "1u",
+      "6h": "6u",
+      "24h": "24u",
       "7d": "7d"
     },
     "detail": {

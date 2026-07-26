@@ -134,7 +134,7 @@
       "visitEbirdLink": "eBird.org megnyitása új lapon",
       "learnEbirdTaxonomyLink": "eBird taxonómia megnyitása új lapon",
       "resizeHandle": "Húzza az átméretezéshez",
-      "imageCredit": "Image credit: {name}"
+      "imageCredit": "Kép forrása: {name}"
     },
     "labels": {
       "confidence": "Megbízhatóság",
@@ -207,11 +207,11 @@
     "speciesAnalytics": "Faj elemzés",
     "detectionDetails": "Detektálás részletei",
     "settingsNotAvailable": "Beállítások nem elérhetők",
-    "analyticsSummary": "Analytics - Summary",
-    "analyticsActivity": "Analytics - Activity Patterns",
-    "analyticsTrends": "Analytics - Trends",
-    "analyticsBiodiversity": "Analytics - Biodiversity",
-    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsSummary": "Elemzés - Összegzés",
+    "analyticsActivity": "Elemzés - Aktivitási mintázatok",
+    "analyticsTrends": "Elemzés - Trendek",
+    "analyticsBiodiversity": "Elemzés - Biodiverzitás",
+    "analyticsReview": "Elemzés - Áttekintés és pontosság",
     "analyticsNocturnal": "Elemzés - Éjszakai aktivitás",
     "analyticsWeather": "Elemzés - Időjárás-korreláció",
     "analyticsSoundscape": "Elemzés - Hangkép"
@@ -420,8 +420,8 @@
         "reconfiguringDynamicThresholds": "Dinamikus küszöbértékek újrakonfigurálása...",
         "webserverRestartRequired": "Webszerver beállítások megváltoztak. Újraindítás szükséges.",
         "oauthRestartRequired": "Hitelesítési szolgáltató beállítások megváltoztak. Újraindítás szükséges.",
-        "databaseRestartRequired": "Database settings changed. Restart required.",
-        "loggingRestartRequired": "Logging settings changed. Restart required.",
+        "databaseRestartRequired": "Adatbázis beállítások megváltoztak. Újraindítás szükséges.",
+        "loggingRestartRequired": "Naplózási beállítások megváltoztak. Újraindítás szükséges.",
         "reconfiguringSoundLevel": "Hangszint monitorozás frissítése...",
         "reconfiguringAudioSources": "Hangforrások újrakonfigurálása...",
         "rebuildingExtendedCapture": "Kiterjesztett rögzítési szűrő újraépítése...",
@@ -464,17 +464,17 @@
         "errorOccurred": "{error}",
         "disconnected": "{source_name} leválasztva",
         "error": {
-          "authError": "Hitelesítés sikertelen — ellenőrizze az API kulcsot vagy a hitelesítési adatokat",
-          "rateLimited": "Díjszabás korlátozva — a kérések automatikusan lassulnak",
+          "authError": "Hitelesítés sikertelen - ellenőrizze az API kulcsot vagy a hitelesítési adatokat",
+          "rateLimited": "Díjszabás korlátozva - a kérések automatikusan lassulnak",
           "gatewayTimeout": "A szolgáltatás nagy terhelés alatt lehet",
           "serverError": "A szolgáltatás átmenetileg nem elérhető",
-          "connectionRefused": "A szolgáltatás nem érhető el — ellenőrizze a címet és hogy fut-e",
-          "dnsError": "A hostname feloldása sikertelen — ellenőrizze a címet",
-          "tlsError": "TLS/tanúsítvány hiba — ellenőrizze a biztonsági beállításokat",
-          "timeout": "A kapcsolat időtúllépés — a szolgáltatás lassú vagy nem elérhető",
-          "connectionInterrupted": "A kapcsolat megszakadt — automatikusan újrapróbálkozik",
-          "diskFull": "A lemez megtelt — szabadítson fel helyet",
-          "permissionDenied": "Engedély megtagadva — ellenőrizze a fájl vagy szolgáltatás engedélyeit"
+          "connectionRefused": "A szolgáltatás nem érhető el - ellenőrizze a címet és hogy fut-e",
+          "dnsError": "A hostname feloldása sikertelen - ellenőrizze a címet",
+          "tlsError": "TLS/tanúsítvány hiba - ellenőrizze a biztonsági beállításokat",
+          "timeout": "A kapcsolat időtúllépés - a szolgáltatás lassú vagy nem elérhető",
+          "connectionInterrupted": "A kapcsolat megszakadt - automatikusan újrapróbálkozik",
+          "diskFull": "A lemez megtelt - szabadítson fel helyet",
+          "permissionDenied": "Engedély megtagadva - ellenőrizze a fájl vagy szolgáltatás engedélyeit"
         }
       }
     },
@@ -612,7 +612,7 @@
     "currentlyHearing": {
       "title": "Jelenleg hallható",
       "subtitle": "Valós időben azonosított fajok",
-      "empty": "Csend van — most nincs észlelhető madárhang"
+      "empty": "Csend van - most nincs észlelhető madárhang"
     },
     "rejected": "Elutasítva",
     "newSpeciesHighlights": {
@@ -623,7 +623,7 @@
       "categoryYear": "Idén új",
       "categorySeason": "Ebben az évszakban új",
       "categorySeasonNamed": "Ebben a(z) {season} évszakban új",
-      "maxConfidenceShort": "Max {confidence}%",
+      "maxConfidenceShort": "Max. {confidence}%",
       "detections": "{count, plural, one {# észlelés} other {# észlelés}}",
       "lastSeen": "Utoljára: {days, plural, =0 {ma} one {# napja} other {# napja}}"
     },
@@ -698,7 +698,7 @@
         "showSpecies": "{species} faj megjelenítése",
         "ignoreSpecies": "{species} faj figyelmen kívül hagyása",
         "showSpeciesConfirm": "Biztosan meg szeretné jeleníteni a {species} jövőbeli detektálásait?",
-        "ignoreSpeciesConfirm": "Biztosan figyelmen kívül szeretné hagyni a {species} jövőbeli detektálásait? Ez csak az új detektálásokat érinti — a meglévők az adatbázisban maradnak.",
+        "ignoreSpeciesConfirm": "Biztosan figyelmen kívül szeretné hagyni a {species} jövőbeli detektálásait? Ez csak az új detektálásokat érinti - a meglévők az adatbázisban maradnak.",
         "unlockDetection": "Detektálás zárolásának feloldása",
         "lockDetection": "Detektálás zárolása",
         "unlockDetectionConfirm": "Biztosan fel szeretné oldani a {species} detektálásának zárolását? Ez lehetővé teszi a törlését a rendszeres karbantartás során.",
@@ -813,8 +813,8 @@
       "species": "Faj",
       "observation": "Megfigyelés",
       "aria": {
-        "downloadAudioClip": "Download audio clip for {name} detection",
-        "audioRecordingFor": "Audio recording and spectrogram for {name}",
+        "downloadAudioClip": "Hangklip letöltése: {name} észleléshez",
+        "audioRecordingFor": "Hangfelvétel és spektrogram: {name}",
         "scientificName": "Tudományos név",
         "classificationBadges": "Faj besorolási jelvények",
         "confidence": "Detektálás megbízhatósága {confidence}%",
@@ -956,7 +956,7 @@
       "viewDetails": "{species} részleteinek megtekintése",
       "play": "Lejátszás",
       "playAudio": "Hang lejátszása",
-      "imageFailedToLoad": "Image failed to load"
+      "imageFailedToLoad": "Kép betöltése sikertelen"
     },
     "media": {
       "title": "Felvétel és spektrogram",
@@ -1126,7 +1126,7 @@
       "labels": {
         "free": "Szabad",
         "available": "Elérhető",
-        "buffCache": "Buff/Cache"
+        "buffCache": "Gyorsítótár"
       }
     },
     "progress": {
@@ -1169,7 +1169,7 @@
     "sections": {
       "overview": "Áttekintés",
       "database": "Adatbázis",
-      "inference": "AI Models",
+      "inference": "AI Modellek",
       "terminal": "Terminál",
       "importExport": "Import / Export"
     },
@@ -1433,7 +1433,7 @@
           "chartLabel": "Detektálási arány 24 óra alatt",
           "detectionsTooltip": "{count} detektálás",
           "perHour": "/ó",
-          "min": "min",
+          "min": "perc",
           "avg": "átlag",
           "max": "max",
           "lastBackup": "Utolsó biztonsági mentés",
@@ -1522,10 +1522,10 @@
           "targetV2": "Cél (V2)",
           "recordsLabel": "Rekordok",
           "sizeLabel": "Méret",
-          "prerequisitesNotMet": "Előfeltételek nem teljesültek — hárítsa el az alábbi kritikus problémákat",
+          "prerequisitesNotMet": "Előfeltételek nem teljesültek - hárítsa el az alábbi kritikus problémákat",
           "validatingTitle": "Adatok validálása",
           "validatingBody": "{count} régi rekord összehasonlítása a V2 adatbázissal...",
-          "dirtyRecordsCatchup": "{count} hibás rekord — egyeztetési kísérlet a validálás során",
+          "dirtyRecordsCatchup": "{count} hibás rekord - egyeztetési kísérlet a validálás során",
           "cutoverTitle": "Átállás befejezése",
           "cutoverBody": "V2 adatbázisra való átállás véglegesítése...",
           "migratingPhase": "{phase} migrálása",
@@ -1534,7 +1534,7 @@
           "percentComplete": "{percent}% kész",
           "recordsPerSec": "{rate} rekord/mp",
           "calculating": "Számítás...",
-          "dirtyWriteFailed": "{count} rekord írása sikertelen — egyeztetésre a validálás során"
+          "dirtyWriteFailed": "{count} rekord írása sikertelen - egyeztetésre a validálás során"
         },
         "details": {
           "title": "Adatbázis részletek",
@@ -1569,7 +1569,7 @@
         },
         "notes": {
           "in_progress": "A rendszer normálisan használható a migráció háttérben való futása közben.",
-          "dual_write": "Migráció folyamatban. Az adatai biztonságban vannak — az összes új detektálás mindkét adatbázisba mentésre kerül.",
+          "dual_write": "Migráció folyamatban. Az adatai biztonságban vannak - az összes új detektálás mindkét adatbázisba mentésre kerül.",
           "migrating": "A meglévő detektálások másolása az új adatbázisba.",
           "validating": "Az összes rekord helyes másolásának ellenőrzése. Majdnem kész!",
           "cutover": "Az új adatbázisra való átállás. Ez csak egy pillanatig tart.",
@@ -1591,7 +1591,7 @@
         },
         "confirmCancel": {
           "title": "Migráció megszakítása?",
-          "message": "Ez leállítja a migrációt és visszatér a tétlen állapotba. Később biztonságosan újraindíthatja a migrációt — a rekordok nem fognak duplikálódni.",
+          "message": "Ez leállítja a migrációt és visszatér a tétlen állapotba. Később biztonságosan újraindíthatja a migrációt - a rekordok nem fognak duplikálódni.",
           "confirm": "Igen, megszakítás",
           "dismiss": "Nem, futtatás tovább"
         },
@@ -1685,70 +1685,70 @@
       }
     },
     "inference": {
-      "title": "AI Models & Inference",
-      "loading": "Loading inference status",
-      "error": "Could not load inference status",
-      "sectionHardware": "Hardware",
-      "sectionBackends": "Inference Backends",
-      "sectionModels": "Models",
+      "title": "AI Modellek és Következtetés",
+      "loading": "Következtetési állapot betöltése",
+      "error": "Következtetési állapot betöltése sikertelen",
+      "sectionHardware": "Hardver",
+      "sectionBackends": "Következtetési Hátterek",
+      "sectionModels": "Modellek",
       "noModels": "No models are currently loaded",
-      "architecture": "Architecture",
+      "architecture": "Architektúra",
       "cpu": "CPU",
-      "environment": "Environment",
+      "environment": "Környezet",
       "fp16": "FP16",
-      "fp16Supported": "FP16 supported",
-      "fp16Unsupported": "FP16 not supported",
+      "fp16Supported": "FP16 támogatott",
+      "fp16Unsupported": "FP16 nem támogatott",
       "backendTflite": "TensorFlow Lite",
       "backendOnnx": "ONNX Runtime",
       "backendOpenvino": "OpenVINO",
-      "available": "Available",
-      "notAvailable": "Not available",
-      "active": "Active",
-      "inactive": "Inactive",
-      "initialized": "Initialized",
-      "version": "Version",
-      "devices": "Devices",
-      "board": "Board",
+      "available": "Elérhető",
+      "notAvailable": "Nem elérhető",
+      "active": "Aktív",
+      "inactive": "Inaktív",
+      "initialized": "Inicializálva",
+      "version": "Verzió",
+      "devices": "Eszközök",
+      "board": "Alaplap",
       "soc": "SoC",
-      "memory": "Memory",
-      "cores": "Cores",
-      "gpu": "Graphics",
-      "gpuReachable": "Reachable",
-      "gpuNotReachable": "Not reachable",
-      "capabilities": "Capabilities",
-      "capabilitiesHelp": "Hardware tags used to match this machine against the available model builds.",
-      "gpuReasonRenderNodeUnavailable": "No GPU device node is visible to the server. In Docker, map /dev/dri into the container; on a native install, check that the graphics driver is loaded.",
-      "gpuReasonRenderNodePermission": "The GPU device node cannot be opened. Either the account BirdNET-Go runs as needs access to the device's group, usually 'render', or the container was given the device with -v instead of --device, which does not grant access to it.",
-      "gpuReasonNoRuntime": "BirdNET-Go only accelerates inference on Intel graphics today, so this card will not be used.",
-      "gpuReasonUnknown": "This GPU cannot be used for inference on this build.",
-      "stock": "Stock",
-      "custom": "Custom",
-      "sampleRate": "Sample rate",
+      "memory": "Memória",
+      "cores": "Magok",
+      "gpu": "Grafikus kártya",
+      "gpuReachable": "Elérhető",
+      "gpuNotReachable": "Nem elérhető",
+      "capabilities": "Képességek",
+      "capabilitiesHelp": "Hardver címkék a megfelelő modellek kiválasztásához.",
+      "gpuReasonRenderNodeUnavailable": "A GPU render csomópont nem elérhető a szerver számára.",
+      "gpuReasonRenderNodePermission": "A GPU eszközt nem sikerült megnyitni. Jogosultsági probléma.",
+      "gpuReasonNoRuntime": "A BirdNET-Go jelenleg csak Intel grafikát támogat a gyorsításra, ez a kártya nem lesz használva.",
+      "gpuReasonUnknown": "Ez a GPU nem használható.",
+      "stock": "Alapértelmezett",
+      "custom": "Egyéni",
+      "sampleRate": "Mintavételi frekvencia",
       "clipLength": "Szegmens hossza",
-      "species": "Species",
-      "invocations": "Segments analysed",
-      "avgLatency": "Avg latency",
-      "maxLatency": "Max latency",
-      "rtf": "RTF",
-      "rtfLabel": "Real-time factor",
-      "approxRam": "Approx. host RAM (RSS)",
-      "approxRamTooltip": "Approximate host RAM (RSS) measured at model load. Excludes GPU VRAM, and may be skewed by shared runtime memory arenas and OS page reclamation.",
-      "latencyChart": "Latency (ms)",
-      "rtfChart": "Real-time factor",
-      "sources": "Audio sources",
-      "noSources": "No sources attached",
-      "primaryFallback": "primary (fallback)",
+      "species": "Fajok",
+      "invocations": "Elemzett szegmensek",
+      "avgLatency": "Átlagos késleltetés",
+      "maxLatency": "Maximális késleltetés",
+      "rtf": "RTF (Valós idejű tényező)",
+      "rtfLabel": "Valós idejű tényező",
+      "approxRam": "Kb. RAM (RSS)",
+      "approxRamTooltip": "Hozzávetőleges host RAM (RSS) használat. Nem tartalmazza a VRAM-ot.",
+      "latencyChart": "Késleltetés (ms)",
+      "rtfChart": "Valós idejű tényező",
+      "sources": "Hangforrások",
+      "noSources": "Nincs csatlakoztatott hangforrás",
+      "primaryFallback": "elsődleges (tartalék)",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",
       "unitSec": "s",
-      "sectionAudio": "Audio",
-      "queueDepth": "Queue depth",
-      "queueDepthChart": "Queue depth",
-      "droppedChunks": "Dropped chunks",
-      "queueCapacity": "Capacity",
-      "lastSeen": "Last seen",
-      "lastSeenNever": "No detections yet",
+      "sectionAudio": "Hang",
+      "queueDepth": "Várakozási sor",
+      "queueDepthChart": "Várakozási sor",
+      "droppedChunks": "Eldobott darabok",
+      "queueCapacity": "Kapacitás",
+      "lastSeen": "Utoljára látva",
+      "lastSeenNever": "Még nincs észlelés",
       "deviceHelp": "A számítási eszköz, amelyen ez a modell a következtetést futtatja (CPU, GPU vagy ismeretlen).",
       "paused": "Szüneteltetve",
       "pausedScheduleHelp": "Ez a modell csak ütemezés szerint fut, és jelenleg szünetel, így nem dolgoz fel hangot.",
@@ -1762,24 +1762,24 @@
       "coDetectedHelp": "Más modellek, amelyek {seconds} mp-en belül észlelték ezt a fajt",
       "outOfRangeHelp": "A területszűrőn kívül (diagnosztikához megjelenítve, nem mentve észlelésként)",
       "peak": "csúcs",
-      "activityActive": "Inference active",
+      "activityActive": "Következtetés aktív",
       "activityIdle": "Idle",
-      "throughput": "Throughput",
+      "throughput": "Áteresztőképesség",
       "throughputUnit": "/s",
-      "throughputChart": "Throughput (/s)",
-      "errorRate": "Error rate",
-      "loadFailures": "Load failures",
-      "rtfHelp": "Real-time factor: inference time divided by clip length. Below 1.0 means the model analyses a segment faster than real time (keeping up); above 1.0 means it is falling behind.",
-      "queueDepthHelp": "Audio segments waiting to be analysed. Stays near zero when analysis keeps up; a rising number means it is falling behind.",
-      "queueCapacityHelp": "Maximum number of segments the queue can hold before new audio is dropped.",
-      "droppedChunksHelp": "Audio chunks discarded because the queue was full. Should stay at zero.",
-      "throughputHelp": "Segments analysed per second by this model.",
-      "errorRateHelp": "Share of analysis attempts that failed.",
-      "loadFailuresHelp": "Number of times this model failed to load.",
-      "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
-      "invocationsHelp": "Total audio segments this model has analysed since startup.",
-      "noModelsHint": "No audio source configured yet?",
-      "noModelsHintLink": "Configure audio sources"
+      "throughputChart": "Áteresztőképesség (/s)",
+      "errorRate": "Hibaarány",
+      "loadFailures": "Betöltési hibák",
+      "rtfHelp": "Következtetési idő osztva a klip hosszával. 1.0 alatti érték gyorsabb a valós időnél.",
+      "queueDepthHelp": "Hangszegmensek, amik elemzésre várnak.",
+      "queueCapacityHelp": "Maximum szegmensek száma a sorban.",
+      "droppedChunksHelp": "Sor betelte miatt eldobott hangdarabok. Ideális esetben nulla.",
+      "throughputHelp": "Másodpercenként elemzett szegmensek.",
+      "errorRateHelp": "Sikertelen elemzések aránya.",
+      "loadFailuresHelp": "Modell betöltésének sikertelen próbálkozásai.",
+      "fp16Help": "16-bites lebegőpontos számok. Kisebb memóriát és gyorsabb futást eredményezhet.",
+      "invocationsHelp": "Összes elemzett szegmens indítás óta.",
+      "noModelsHint": "Még nincs beállítva hangforrás?",
+      "noModelsHintLink": "Hangforrások beállítása"
     },
     "metrics": {
       "cpu": "CPU",
@@ -1842,7 +1842,7 @@
         "trends": "Trendek",
         "biodiversity": "Biodiverzitás",
         "quality": "Ellenőrzés és pontosság",
-        "summary": "Summary",
+        "summary": "Összegzés",
         "nocturnal": "Éjszakai aktivitás",
         "weather": "Időjárás",
         "soundscape": "Hangkép"
@@ -1853,9 +1853,9 @@
       "controls": {
         "source": "Forrás",
         "sourceAll": "Minden forrás",
-        "sourceLoading": "Loading audio sources…",
-        "sourceNone": "No audio sources with detections yet.",
-        "sourceNotApplicable": "The charts in this section do not filter by source.",
+        "sourceLoading": "Hangforrások betöltése...",
+        "sourceNone": "Nincs észleléssel rendelkező hangforrás.",
+        "sourceNotApplicable": "Ezek a grafikonok nem szűrhetők forrás alapján.",
         "speciesNotApplicable": "Az ebben a szakaszban lévő diagramok nem szűrnek faj szerint."
       },
       "card": {
@@ -2038,124 +2038,124 @@
           "axisUniqueSpecies": "Egyedi fajok"
         },
         "accumulation": {
-          "title": "Species Accumulation Curve",
+          "title": "Fajok akkumulációs görbéje",
           "description": "Cumulative number of distinct species detected within the selected period. The curve climbs as new species appear and flattens toward an asymptote once the common ones have been recorded; a still-rising tail means more species are likely waiting to be found.",
-          "noData": "No species accumulation data available",
-          "noDataHint": "Select a wider date range to watch the species list build up over time",
-          "ariaLabel": "Species accumulation curve: cumulative distinct species detected over the period",
-          "axisDate": "Date",
-          "axisSpecies": "Cumulative species",
-          "totalSpecies": "{species} species",
-          "tooltipCumulative": "Cumulative species",
-          "tooltipNew": "New in period",
-          "summary": "Cumulative species accumulation across {days} days, reaching {species} distinct species by the end of the period."
+          "noData": "Nincs adat a fajok akkumulációjához",
+          "noDataHint": "Válassz tágabb időszakot a listák felépülésének megtekintéséhez",
+          "ariaLabel": "Fajok akkumulációs görbéje: észlelt fajok halmozott száma",
+          "axisDate": "Dátum",
+          "axisSpecies": "Halmozott fajok száma",
+          "totalSpecies": "{species} faj",
+          "tooltipCumulative": "Halmozott fajok száma",
+          "tooltipNew": "Új ebben az időszakban",
+          "summary": "Halmozott fajok akkumulációja {days} nap alatt, elérve {species} különböző fajt."
         },
         "yearOverYear": {
-          "title": "Year-over-Year Tracker",
-          "description": "Cumulative detections so far this year versus the same calendar dates last year. The shaded band is the running gap between the two; this year's line sitting above last year's means you are ahead of last year's pace.",
-          "noData": "No year-over-year data available",
-          "noDataHint": "Detections from this year and last year build up here as the year progresses",
-          "ariaLabel": "Year-over-year tracker: cumulative detections this year versus the same span last year",
-          "axisDate": "Date",
-          "axisCount": "Cumulative detections",
-          "legendThis": "{year} (this year)",
-          "legendLast": "{year} (last year)",
-          "tooltipDelta": "Difference",
-          "summary": "Year over year: by {monthDay}, {currentYear} has {thisYear} cumulative detections versus {lastYear} for {previousYear} (a difference of {delta})."
+          "title": "Éves összehasonlítás",
+          "description": "Idei év halmozott észlelései a tavalyi azonos naptári napokkal szemben.",
+          "noData": "Nincs éves összehasonlító adat",
+          "noDataHint": "Az idei és a tavalyi észlelések itt halmozódnak fel.",
+          "ariaLabel": "Éves összehasonlítás: halmozott észlelések idén vs. tavaly",
+          "axisDate": "Dátum",
+          "axisCount": "Halmozott észlelések",
+          "legendThis": "{year} (idei év)",
+          "legendLast": "{year} (tavalyi év)",
+          "tooltipDelta": "Különbség",
+          "summary": "Éves összehasonlítás: {monthDay}-ig {currentYear} évben {thisYear} észlelés vs. {lastYear} ({previousYear} év), a különbség {delta}."
         },
         "phenology": {
-          "title": "Arrival & Departure Phenology",
-          "description": "First and last detection of each species within the selected period, drawn as residency bars for the most-detected species. Read it top to bottom in arrival order to see who shows up first and who lingers latest across the season.",
-          "noData": "No phenology data available",
-          "noDataHint": "Select a wider date range to see when species arrive and depart",
-          "ariaLabel": "Arrival and departure phenology: residency bars showing each species' first-to-last detection span",
-          "axisDate": "Date",
-          "summary": "Arrival and departure residency spans for {species} species across the selected period.",
-          "tooltipFirst": "First detected",
-          "tooltipLast": "Last detected",
+          "title": "Érkezési és indulási fenológia",
+          "description": "Az első és utolsó észlelés minden fajnál a kiválasztott időszakban.",
+          "noData": "Nincs fenológiai adat",
+          "noDataHint": "Válassz tágabb időszakot a fajok érkezésének és indulásának megtekintéséhez",
+          "ariaLabel": "Fenológia: oszlopok az egyes fajok első és utolsó észlelése között",
+          "axisDate": "Dátum",
+          "summary": "Érkezési és indulási időszakok {species} faj esetén.",
+          "tooltipFirst": "Első észlelés",
+          "tooltipLast": "Utolsó észlelés",
           "tooltipResidency": "Residency",
-          "tooltipCount": "Detections",
-          "residencyDays": "{days} days"
+          "tooltipCount": "Észlelések",
+          "residencyDays": "{days} nap"
         },
         "heatmap": {
-          "title": "Seasonal Activity Heatmap",
+          "title": "Szezonális aktivitási hőtérkép",
           "description": "Detection density by date and time of day, revealing migration waves and dawn-chorus drift",
-          "noData": "No activity data available",
+          "noData": "Nincs aktivitási adat",
           "noDataHint": "Select a date range to view seasonal activity patterns",
-          "axisDate": "Date",
-          "axisTime": "Time of Day",
-          "tooltipTime": "Time",
-          "tooltipCount": "Detections",
-          "legendLess": "Less",
-          "legendMore": "More ({max})",
-          "ariaLabel": "Seasonal activity heatmap: detection density by date and time of day",
-          "summary": "{total} detections across {days} days. Busiest around {time} on {date}."
+          "axisDate": "Dátum",
+          "axisTime": "Napszak",
+          "tooltipTime": "Idő",
+          "tooltipCount": "Észlelések",
+          "legendLess": "Kevesebb",
+          "legendMore": "Több ({max})",
+          "ariaLabel": "Szezonális hőtérkép: észlelések sűrűsége",
+          "summary": "{total} észlelés {days} nap alatt. A legforgalmasabb {time} környékén, ezen a napon: {date}."
         },
         "ridgeline": {
-          "title": "Who Sings When",
+          "title": "Ki mikor énekel",
           "description": "Hour-of-day activity for the most-detected species, sorting dawn singers from all-day and nocturnal birds",
-          "noData": "No species activity data available",
+          "noData": "Nem állnak rendelkezésre fajaktivitási adatok",
           "noDataHint": "Select a wider date range to compare species activity patterns",
-          "ariaLabel": "Who-sings-when ridgeline: hour-of-day activity distribution per species",
-          "axisTime": "Time of Day",
-          "note": "Showing the top {count} species by detection volume",
+          "ariaLabel": "Ki mikor énekel grafikon: fajonkénti aktivitásmegoszlás a napszak függvényében",
+          "axisTime": "Napszak",
+          "note": "A top {count} faj megjelenítése az észlelések száma alapján",
           "tooltipDetections": "Detections",
           "tooltipPeak": "Peak",
-          "summary": "Hour-of-day activity for {count} species. Most active: {species} around {time}."
+          "summary": "{count} faj aktivitása a napszak függvényében. Legaktívabb: {species} {time} körül."
         },
         "succession": {
-          "title": "Acoustic Succession",
+          "title": "Akusztikus szukcesszió",
           "description": "How the soundscape's top species hand off through the day, shown as stacked bands of hourly detections from pre-dawn through night",
-          "noData": "No acoustic succession data available",
+          "noData": "Nincs szukcessziós adat",
           "noDataHint": "Select a wider date range to see how species hand off through the day",
           "ariaLabel": "Acoustic succession streamgraph: stacked hour-of-day detections for the top species",
-          "axisTime": "Time of Day",
-          "note": "Combined hourly activity of the top {count} species by detection volume",
-          "tooltipDetections": "Detections",
-          "tooltipPeak": "Peak",
-          "summary": "Hour-of-day succession for {count} species. Most active: {species} around {time}."
+          "axisTime": "Napszak",
+          "note": "A top {count} faj kombinált óránkénti aktivitása",
+          "tooltipDetections": "Észlelések",
+          "tooltipPeak": "Csúcs",
+          "summary": "Óránkénti szukcesszió {count} fajnál. Legaktívabb: {species} {time} körül."
         },
         "dawnOnset": {
-          "title": "Dawn Chorus Onset",
-          "description": "When the morning chorus starts each day relative to civil dawn, isolating the seasonal shift from clock time",
-          "noData": "No dawn chorus data available",
+          "title": "Hajnali kórus kezdete",
+          "description": "Amikor a hajnali kórus megkezdődik a polgári szürkülethez képest",
+          "noData": "Nincs adat a hajnali kórusról",
           "noDataHint": "Select a wider date range to track how the dawn chorus shifts across the seasons",
-          "ariaLabel": "Dawn chorus onset tracker: daily chorus onset relative to civil dawn",
-          "axisDate": "Date",
-          "axisOnset": "Minutes from civil dawn",
-          "civilDawn": "Civil dawn",
-          "tooltipOnset": "Onset",
-          "tooltipOnsetAfter": "{minutes} min after civil dawn",
-          "tooltipOnsetBefore": "{minutes} min before civil dawn",
-          "tooltipOnsetAt": "At civil dawn",
-          "tooltipCount": "Detections",
-          "summary": "Dawn chorus onset relative to civil dawn across {days} days ({plotted} with a measurable onset)."
+          "ariaLabel": "Hajnali kórus kezdete a polgári szürkülethez képest",
+          "axisDate": "Dátum",
+          "axisOnset": "Perc a polgári szürkülettől",
+          "civilDawn": "Polgári szürkület",
+          "tooltipOnset": "Kezdete",
+          "tooltipOnsetAfter": "{minutes} perccel szürkület után",
+          "tooltipOnsetBefore": "{minutes} perccel szürkület előtt",
+          "tooltipOnsetAt": "Szürkületkor",
+          "tooltipCount": "Észlelések",
+          "summary": "Hajnali kórus kezdete {days} napon át ({plotted} mérhető kezdettel)."
         },
         "nocturnal": {
-          "title": "Nocturnal Activity Clock",
-          "description": "Detections around the 24-hour clock with the daytime hours shaded, making nighttime activity stand out",
-          "noData": "No activity data available",
-          "noDataHint": "Select a wider date range or a more active period to see the daily activity pattern",
-          "ariaLabel": "Nocturnal activity clock: detections by hour of day with daytime shading",
-          "axisHour": "Hour of day",
-          "tooltipHour": "{start} to {end}",
-          "tooltipCount": "Detections",
-          "summary": "Detection activity by hour of day ({total} detections, most active around {peak}). Daytime hours are shaded.",
-          "legendDay": "Day",
-          "legendTwilight": "Twilight",
-          "legendNight": "Night"
+          "title": "Éjszakai aktivitási óra",
+          "description": "Észlelések 24 órás formátumban, a nappali órák sötétítve.",
+          "noData": "Nincs aktivitási adat",
+          "noDataHint": "Válassz tágabb időszakot az éjszakai mintázatok megtekintéséhez",
+          "ariaLabel": "Éjszakai aktivitási óra: észlelések óránként",
+          "axisHour": "Óra",
+          "tooltipHour": "{start} és {end} között",
+          "tooltipCount": "Észlelések",
+          "summary": "Aktivitás óránként ({total} észlelés, csúcs: {peak}).",
+          "legendDay": "Nappal",
+          "legendTwilight": "Szürkület",
+          "legendNight": "Éjszaka"
         },
         "confidence": {
-          "title": "Confidence Distribution",
-          "description": "How confident the model is per species, so you can spot the birds it most often second-guesses",
-          "noData": "No confidence data available",
-          "noDataHint": "Select a wider date range to compare how confident the model is across species",
-          "ariaLabel": "Confidence distribution: per-species histogram of detection confidence scores",
+          "title": "Megbízhatóság eloszlása",
+          "description": "Mennyire biztos a modell az egyes fajokban, így láthatja, mely madaraknál bizonytalanodik el a leggyakrabban",
+          "noData": "Nem állnak rendelkezésre megbízhatósági adatok",
+          "noDataHint": "Válasszon tágabb dátumtartományt a modell megbízhatóságának összehasonlításához a fajok között",
+          "ariaLabel": "Megbízhatóság eloszlása: észlelési megbízhatósági pontszámok hisztogramja fajonként",
           "axisLabel": "Confidence",
-          "note": "Showing the top {count} species by detection volume",
+          "note": "A top {count} faj megjelenítése az észlelések száma alapján",
           "tooltipCount": "Detections",
-          "tooltipPeak": "Peak confidence",
-          "summary": "Detection-confidence distribution for {count} species. {species} clusters around {time} confidence."
+          "tooltipPeak": "Maximális megbízhatóság",
+          "summary": "Észlelésmegbízhatósági eloszlás {count} fajnál. A(z) {species} {time} megbízhatóság körül csoportosul."
         },
         "tooltips": {
           "date": "Dátum",
@@ -2542,7 +2542,7 @@
                 "helpText": "Szabályozza a kontrasztot - az alacsonyabb értékek jobban kiemelik a gyenge jeleket, a magasabb értékek több részletet mutatnak.",
                 "options": {
                   "highContrast": "Magas kontraszt (80 dB)",
-                  "standard": "Standard (100 dB)",
+                  "standard": "Szabványos (100 dB)",
                   "extended": "Kiterjesztett (120 dB)"
                 },
                 "descriptions": {
@@ -2911,7 +2911,7 @@
               "helpText": "Token a @BotFather-től"
             },
             "chatId": {
-              "label": "Chat ID",
+              "label": "Csevegésazonosító",
               "placeholder": "-1001234567890 vagy @channel",
               "helpText": "Chat ID, csoport ID vagy @username"
             },
@@ -2930,9 +2930,9 @@
             "testConnection": "Kapcsolat tesztelése",
             "connectionOk": {
               "https": "A HTTPS működik",
-              "http": "A HTTP működik — a szerver nem HTTPS-t használ"
+              "http": "A HTTP működik - a szerver nem HTTPS-t használ"
             },
-            "connectionFailed": "Nem sikerült csatlakozni — ellenőrizze a hostnevet és a szerver állapotát",
+            "connectionFailed": "Nem sikerült csatlakozni - ellenőrizze a hostnevet és a szerver állapotát",
             "auth": {
               "label": "Hitelesítés (opcionális)",
               "username": {
@@ -3693,7 +3693,7 @@
         "typeHelp": "Hang formátum a mentett klipekhez. A WAV és FLAC veszteségmentes (legjobb minőség, nagyobb fájlok). Az MP3, AAC és Opus veszteséges (kisebb fájlok, enyhe minőségvesztés).",
         "bitrateLabel": "Bitráta",
         "bitrateHelp": "Hang tömörítési bitráta a veszteséges formátumokhoz. Tartomány: {min}-{max} kbps. A magasabb értékek jobb minőséget, de nagyobb fájlokat eredményeznek.",
-        "losslessBitrateValue": "N/A - Lossless",
+        "losslessBitrateValue": "N/A - Veszteségmentes",
         "losslessNote": "A veszteségmentes formátumok megőrzik az eredeti hangminőséget tömörítési artefaktusok nélkül."
       },
       "audioNormalization": {
@@ -3832,7 +3832,7 @@
         "userIdLabel": "Felhasználói ID (opcionális)",
         "userIdHelpText": "Korlátozza a hozzáférést egy adott felhasználói fiókhoz e-mail vagy ID szerint",
         "allowedUsersEmptyWarning": "Ennek a szolgáltatónak nincsenek engedélyezett felhasználói, ezért minden bejelentkezési kísérlet el lesz utasítva. Adjon hozzá legalább egy e-mail-t vagy felhasználói azonosítót a hozzáférés engedélyezéséhez.",
-        "allowedUsersMissingBadge": "Nincs engedélyezett felhasználó beállítva – a bejelentkezés sikertelen lesz",
+        "allowedUsersMissingBadge": "Nincs engedélyezett felhasználó beállítva - a bejelentkezés sikertelen lesz",
         "google": {
           "title": "Google OAuth",
           "enableLabel": "Google OAuth2 bejelentkezés engedélyezése",
@@ -3925,7 +3925,7 @@
       },
       "privateMode": {
         "label": "Bejelentkezés megkövetelése az összes felhasználói felület oldalhoz (privát mód)",
-        "help": "Ha engedélyezve van, az irányítópult, az észlelések, az elemzés, a keresés, a névjegy és az értesítések oldalak mind hitelesítést igényelnek. A beállítások és a rendszer oldalak ettől függetlenül mindig védve vannak. Az alábbi \"Nyilvános élő hang\" kapcsoló önállóan érvényesül – bekapcsolva hagyva továbbra is engedélyezi a nem hitelesített lejátszást. Az alapértelmezett értéke ki, hogy a vendégek böngészhessék a csak olvasható felületet."
+        "help": "Ha engedélyezve van, az irányítópult, az észlelések, az elemzés, a keresés, a névjegy és az értesítések oldalak mind hitelesítést igényelnek. A beállítások és a rendszer oldalak ettől függetlenül mindig védve vannak. Az alábbi \"Nyilvános élő hang\" kapcsoló önállóan érvényesül - bekapcsolva hagyva továbbra is engedélyezi a nem hitelesített lejátszást. Az alapértelmezett értéke ki, hogy a vendégek böngészhessék a csak olvasható felületet."
       },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
@@ -4282,7 +4282,7 @@
           "september": "Szeptember",
           "october": "Október",
           "november": "November",
-          "december": "December"
+          "december": "december"
         },
         "units": {
           "days": "nap",
@@ -4442,8 +4442,8 @@
         "templateTitlePlaceholder": "Hagyja üresen az alapértelmezettért",
         "templateMessage": "Üzenet sablon",
         "templateMessagePlaceholder": "Hagyja üresen az alapértelmezettért",
-        "noConditionsEvent": "Nincs feltétel — a szabály minden eseménynél aktiválódik",
-        "noConditionsMetric": "Nincs feltétel — a szabály minden metrika frissítésnél aktiválódik",
+        "noConditionsEvent": "Nincs feltétel - a szabály minden eseménynél aktiválódik",
+        "noConditionsMetric": "Nincs feltétel - a szabály minden metrika frissítésnél aktiválódik",
         "eventsCount": "esemény",
         "metricsCount": "metrika",
         "durationFor": "ennyi ideig",
@@ -4808,10 +4808,10 @@
       "spectrogramLoaded": "Spektrogram betöltve",
       "spectrogramLoadingAria": "Spektrogram betöltése",
       "spectrogramAlt": "Hang spektrogram",
-      "spectrogramForSpecies": "Spectrogram for {species}",
+      "spectrogramForSpecies": "Spektrogram ehhez: {species}",
       "spectrogramGeneratingAria": "Spektrogram generálása",
       "generating": "Generálás...",
-      "waiting": "Waiting...",
+      "waiting": "Várakozás...",
       "queuePosition": "Sor: {position}",
       "loadError": "A hang betöltése sikertelen"
     },
@@ -4924,9 +4924,9 @@
       "loading": "Tanúsítvány információ betöltése..."
     },
     "birdThumbnail": {
-      "viewDetections": "View {name} detections",
-      "largeView": "Large view of {name}",
-      "clickToView": "Click to view detections"
+      "viewDetections": "{name} észleléseinek megtekintése",
+      "largeView": "{name} nagy nézete",
+      "clickToView": "Kattints az észlelések megtekintéséhez"
     }
   },
   "connectivity": {
@@ -4941,7 +4941,7 @@
   },
   "quietHours": {
     "indicator": {
-      "tooltip": "Csendes órák aktívak — {count} forrás(ok) szüneteltetve"
+      "tooltip": "Csendes órák aktívak - {count} forrás(ok) szüneteltetve"
     }
   },
   "errors": {
@@ -4965,7 +4965,7 @@
       "duplicateName": "Ezzel a névvel már létezik szabály",
       "invalidJSON": "Érvénytelen JSON",
       "invalidEscalation": "Az eszkalációs lépések érvénytelenek",
-      "engineUnavailable": "Alerting engine is unavailable"
+      "engineUnavailable": "Riasztási motor nem elérhető"
     },
     "detection": {
       "invalidDate": "Érvénytelen {paramName} formátum, használja az ÉÉÉÉ-HH-NN formátumot"
@@ -4979,7 +4979,7 @@
       "createFailed": "A mentési feladat létrehozása sikertelen",
       "notFound": "A mentési feladat nem található vagy lejárt",
       "notReady": "A mentés nem áll készen a letöltésre",
-      "fileNotFound": "A mentési fájl nem található — a feladat lejárhatott",
+      "fileNotFound": "A mentési fájl nem található - a feladat lejárhatott",
       "sqliteOnly": "A mentés csak SQLite adatbázisokhoz érhető el",
       "dbNotConfigured": "Az adatbázis nincs konfigurálva",
       "unsupportedType": "A mentés nem végezhető ezen az adattároló típuson",
@@ -4998,7 +4998,7 @@
       "noLegacyDB": "Nem található örökölt adatbázis",
       "accessFailed": "Nem lehet hozzáférni az örökölt adatbázishoz",
       "restartRequired": "Az alkalmazást újra kell indítani a migráció után, mielőtt a tisztítás elérhető",
-      "safetyCheck": "A célfájl V2 adatbázisnak tűnik — a tisztítás biztonsági okokból nem engedélyezett",
+      "safetyCheck": "A célfájl V2 adatbázisnak tűnik - a tisztítás biztonsági okokból nem engedélyezett",
       "noLegacyTables": "Nem található örökölt tábla",
       "restartNeeded": "A tisztítás nem végezhető: Az alkalmazást újra kell indítani a migráció után",
       "alreadyRunning": "A tisztítás már folyamatban van"
@@ -5070,9 +5070,9 @@
       "waningCrescent": "Fogyó sarló"
     },
     "birding": {
-      "excellent": "Szélcsend — kiváló a madárénekek hallgatásához",
-      "moderate": "Mérsékelt szél — néhány madárének nehezebben hallható",
-      "poor": "Erős szél — a madárénekek valószínűleg nem hallhatók"
+      "excellent": "Szélcsend - kiváló a madárénekek hallgatásához",
+      "moderate": "Mérsékelt szél - néhány madárének nehezebben hallható",
+      "poor": "Erős szél - a madárénekek valószínűleg nem hallhatók"
     }
   },
   "wizard": {
@@ -5126,7 +5126,7 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Adja meg az RTSP audio stream URL-jét",
         "additionalSourcesHint": "Később további hang forrásokat adhat hozzá a Beállításokban.",
-        "configureLater": "Kihagyás — beállítás később"
+        "configureLater": "Kihagyás - beállítás később"
       },
       "detection": {
         "title": "Detektálási küszöbérték",
@@ -5338,11 +5338,11 @@
     "bannerAction": "Újraindítás most",
     "restartFailed": "Az újraindítás kezdeményezése sikertelen",
     "reasons": {
-      "webserver": "Web server / network settings",
-      "oauth": "Authentication provider settings",
-      "database": "Database settings",
-      "logging": "Logging settings",
-      "tlsCertificate": "TLS certificate"
+      "webserver": "Webszerver / hálózati beállítások",
+      "oauth": "Hitelesítésszolgáltató beállításai",
+      "database": "Adatbázis beállítások",
+      "logging": "Naplózási beállítások",
+      "tlsCertificate": "TLS tanúsítvány"
     }
   },
   "help": {
