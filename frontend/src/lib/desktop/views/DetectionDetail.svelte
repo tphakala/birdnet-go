@@ -819,19 +819,24 @@
         <p class="history-chart-label">
           {t('detections.history.dailyWindow', { date: history.windowEnd })}
         </p>
-        <Sparkline
-          data={history.dailyCounts}
-          viewWidth={480}
-          viewHeight={56}
-          emptyLabel={t('detections.history.dailyEmpty')}
-        />
+        <div
+          role="img"
+          aria-label={t('detections.history.aria.sparkline', { date: history.windowEnd })}
+        >
+          <Sparkline
+            data={history.dailyCounts}
+            viewWidth={480}
+            viewHeight={56}
+            emptyLabel={t('detections.history.dailyEmpty')}
+          />
+        </div>
       </div>
 
       <h4 class="section-heading history-recent-heading">
         {t('detections.history.recentTitle')}
       </h4>
       {#if history.recent.length > 0}
-        <ul class="history-recent" aria-label={t('detections.history.aria.recentList')}>
+        <ul class="history-recent" role="list" aria-label={t('detections.history.aria.recentList')}>
           {#each history.recent as entry (entry.id)}
             <li>
               <a
@@ -867,6 +872,12 @@
       {:else}
         <p class="empty-state-text">{t('detections.history.noOthers')}</p>
       {/if}
+    </section>
+  {:else}
+    <section class="empty-state-section" aria-labelledby="history-heading">
+      <History class="empty-state-icon" />
+      <h3 id="history-heading" class="empty-state-heading">{t('detections.history.title')}</h3>
+      <p class="empty-state-text" role="status">{t('detections.history.loading')}</p>
     </section>
   {/if}
 {/snippet}
