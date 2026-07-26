@@ -306,6 +306,9 @@ type BirdImageCache struct {
 	// prefetchQueued counts registered prefetches (queued plus running) so an
 	// unbounded species list cannot spawn an unbounded number of goroutines.
 	prefetchQueued atomic.Int64
+	// refreshQueued does the same for background refreshes of entries that were
+	// served from cache. See maxQueuedRefreshes for why it is a separate budget.
+	refreshQueued atomic.Int64
 	// prefetchSem bounds how many prefetches contact a provider at once. The
 	// providers are themselves rate limited, so a small number is enough to keep
 	// the pipeline busy without piling up connections.
@@ -656,18 +659,41 @@ func (c *BirdImageCache) processStaleEntriesInBatches(staleEntries []string) {
 	}
 }
 
+// maxQueuedRefreshes bounds background refreshes of entries that were served
+// from cache.
+//
+// Refreshes do not pass through the prefetch semaphore, so without a bound a
+// dashboard rendering many stale species spawns one goroutine per species, each
+// parked on the provider's global rate limiter. The bound is separate from
+// maxQueuedPrefetches rather than shared with it so a burst of refreshes cannot
+// starve the prefetches that resolve species nothing is known about, which are
+// what a user is actually waiting on.
+const maxQueuedRefreshes = 64
+
 // scheduleRefresh registers a background refresh for a species already served
 // from cache, deduplicated against any prefetch already in flight. The dedup
-// entry is rolled back if the goroutine could not be started, so a species is
-// never left marked as refreshing when nothing is.
+// entry and the queue slot are both rolled back if the goroutine could not be
+// started, so a species is never left marked as refreshing when nothing is.
+//
+// Declining is safe: the entry was served, and the hourly sweep and the next
+// request both remain able to refresh it.
 func (c *BirdImageCache) scheduleRefresh(scientificName string) {
 	if _, alreadyQueued := c.prefetching.LoadOrStore(scientificName, struct{}{}); alreadyQueued {
 		return
 	}
+	if c.refreshQueued.Add(1) > maxQueuedRefreshes {
+		c.refreshQueued.Add(-1)
+		c.prefetching.Delete(scientificName)
+		return
+	}
 	if !c.tryGo(func() {
-		defer c.prefetching.Delete(scientificName)
+		defer func() {
+			c.refreshQueued.Add(-1)
+			c.prefetching.Delete(scientificName)
+		}()
 		c.refreshEntry(scientificName)
 	}) {
+		c.refreshQueued.Add(-1)
 		c.prefetching.Delete(scientificName)
 	}
 }

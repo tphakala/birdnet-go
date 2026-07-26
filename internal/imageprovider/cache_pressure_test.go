@@ -327,3 +327,29 @@ func TestGetCachedLocal_StaleMemoryEntryIsRefreshed(t *testing.T) {
 		t.Fatal("no refresh was scheduled for the stale memory entry, so nothing can ever re-derive it")
 	}
 }
+
+// TestScheduleRefresh_IsBounded pins the cap on background refreshes.
+//
+// Refreshes do not pass through the prefetch semaphore, so without a bound a
+// dashboard rendering many stale species spawns one goroutine per species, each
+// parked on the provider's global rate limiter.
+func TestScheduleRefresh_IsBounded(t *testing.T) {
+	t.Parallel()
+
+	provider := newBlockingProvider(t)
+	cache := InitCache(wikiProviderName, provider, nil, nil)
+	t.Cleanup(func() { assert.NoError(t, cache.Close()) })
+
+	// Every refresh parks in the provider, so none of them frees its slot.
+	for i := range maxQueuedRefreshes + 25 {
+		cache.scheduleRefresh(fmt.Sprintf("Species %d", i))
+	}
+
+	assert.LessOrEqual(t, cache.refreshQueued.Load(), int64(maxQueuedRefreshes),
+		"registered refreshes must stay within their budget")
+
+	// The budget is separate from the prefetch one, so a burst of refreshes must
+	// not consume the queue that resolves species nothing is known about.
+	assert.True(t, cache.PrefetchAsync("Turdus merula"),
+		"a saturated refresh budget must not starve prefetches")
+}
