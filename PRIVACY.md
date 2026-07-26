@@ -76,6 +76,14 @@ BirdNET-Go follows **Privacy by Design** principles:
 - **OpenWeather**: Requires user API key for enhanced weather data
 - **Data sent**: HTTP requests with coordinates and API key
 
+**Species Guide** (disabled by default):
+
+- **Purpose**: Enrich detected species with taxonomy, localized common names, external links, similar-species information, and optional descriptions
+- **Services**: None by default — taxonomy, common names, and links come from the embedded OpenFauna dataset (fully offline). Wikipedia Action API is contacted only when the "Wikipedia descriptions" option is enabled
+- **Data sent**: Nothing unless Wikipedia descriptions are enabled, in which case HTTP requests contain only the scientific name of detected species and a language code
+- **Requires**: User enables the feature in settings; online descriptions additionally require enabling the Wikipedia option (off by default)
+- **Privacy**: No personal data, coordinates, or audio transmitted - only public taxonomic names
+
 ### Telemetry Data Collection (Opt-In Only)
 
 **IMPORTANT: The following telemetry data is ONLY collected when you explicitly enable it. By default, NO telemetry data is collected.**
