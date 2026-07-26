@@ -1,7 +1,32 @@
 // conf/consts.go hard coded constants
 package conf
 
-import "time"
+import (
+	"time"
+)
+
+// Species guide provider identifiers and internal merge-policy values.
+//
+// These live in the conf package (not guideprovider) to avoid an import cycle:
+// guideprovider imports conf for these constants, so conf cannot import guideprovider.
+// They are provider/merge identities used internally by the guide cache, not
+// user-selectable settings (the only user-facing toggle is EnableWikipedia).
+const (
+	// SpeciesGuideProviderWikipedia identifies the Wikipedia description provider.
+	SpeciesGuideProviderWikipedia = "wikipedia"
+	// SpeciesGuideProviderOpenFauna identifies the offline OpenFauna provider that
+	// supplies taxonomy, localized common names, and external links.
+	SpeciesGuideProviderOpenFauna = "openfauna"
+	// SpeciesGuideFallbackAll / None are the guide cache's internal provider-merge
+	// policy values (merge all registered providers vs. use only the primary).
+	SpeciesGuideFallbackAll  = "all"
+	SpeciesGuideFallbackNone = "none"
+
+	// SpeciesGuideMaxWarmTopN caps the configured startup-warm target. It bounds
+	// the slice preallocation in the warm path so an out-of-range hand-edited
+	// config value cannot force a huge allocation.
+	SpeciesGuideMaxWarmTopN = 1000
+)
 
 const (
 	// Model IDs identify the inference backends available for detection.
