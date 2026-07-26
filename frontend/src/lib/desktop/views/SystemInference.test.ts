@@ -773,6 +773,25 @@ describe('SystemInference', () => {
       expect(container.textContent).not.toContain('system.inference.fp16Unsupported');
     });
 
+    // Placement, not just presence. Every other assertion here passes equally
+    // against the pre-move code, because the row kept its keys and its id when
+    // it changed cards; only these two fail if it moves back.
+    it('places the precision row in the Backends card, not the Hardware card', async () => {
+      installApi(makeSnapshot([makeModel({})], { fp16: true }));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('system.inference.fp16Supported');
+      });
+      const card = precisionLabel(container)?.closest('div.rounded-xl');
+      expect(card?.textContent).toContain('system.inference.sectionBackends');
+      // The Hardware card is the definition list; the row must have left it.
+      expect(container.querySelector('dl')?.textContent).not.toContain(
+        'system.inference.fp16Supported'
+      );
+    });
+
     it('reports FP16 as unsupported when the CPU lacks native half precision', async () => {
       installApi(makeSnapshot([makeModel({})], { fp16: false }));
 

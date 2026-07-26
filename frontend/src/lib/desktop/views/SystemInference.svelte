@@ -655,9 +655,14 @@
               {t('system.inference.gpu')}
             </dt>
             <dd class="min-w-0">
+              <!-- `||` rather than `??` on purpose: vendor is a required string,
+                   so a probe that recovered no vendor yields "" rather than
+                   undefined, and `??` would keep it and label the group with an
+                   empty string. Falling through to the generic term is better
+                   than an unnamed group. -->
               <div
                 role="group"
-                aria-label={accelerator.name ?? accelerator.vendor}
+                aria-label={accelerator.name || accelerator.vendor || t('system.inference.gpu')}
                 class="space-y-1"
               >
                 <div class="flex items-center gap-3 flex-wrap">
@@ -749,8 +754,8 @@
         <!-- Card-scoped, below a divider, rather than a fourth row in the list
              above: FP16 here is hwprofile's Profile.HasNativeF16, a property of
              the CPU every one of these backends executes on, not a backend of
-             its own. It sits here because it is what makes the FP16 badge on a
-             model card below reachable at full speed. -->
+             its own. It sits here because it is what lets a model's
+             quantization badge below read FP16 at full speed. -->
         <div
           class="mt-3 pt-3 border-t border-[var(--border-100)] flex items-center gap-3 flex-wrap"
         >

@@ -11,8 +11,14 @@
 
 /**
  * Environment strings that denote a container runtime, matching the Env*
- * constants the server sends verbatim. Comparison is case-sensitive and
- * prefix-based because the server may append a detail suffix.
+ * constants in internal/sysinfo/environment.go verbatim. This is the frontend
+ * counterpart of sysinfo.IsContainerEnv, which switches over the same five.
+ *
+ * Comparison is case-sensitive because the server sends these constants
+ * unchanged. It is prefix-based purely as defensive tolerance: today neither
+ * endpoint appends anything (system.go returns the sub-type in a separate
+ * `virtualization` field, and the inference endpoint drops it), so an exact
+ * match would behave identically on every value the server can currently send.
  */
 const CONTAINER_ENVIRONMENTS = ['Docker', 'Podman', 'LXC', 'Container', 'systemd-nspawn'];
 

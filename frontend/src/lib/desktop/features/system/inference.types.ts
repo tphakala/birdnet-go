@@ -70,7 +70,16 @@ export interface InferenceHardware {
   /** Effective memory ceiling: host RAM clamped by any cgroup limit. */
   totalRamBytes?: number;
   physicalCores?: number;
-  /** Capability tokens this host matches, in the model manifests' vocabulary. */
+  /**
+   * Capability tokens this host matches, in the model manifests' vocabulary.
+   *
+   * No UI reads this: the row that rendered the tokens was removed, because
+   * every one of them is derived from a fact the card already states. The field
+   * is kept to mirror the server contract, which still sends it, so a raw call
+   * to the endpoint remains a usable diagnostic for which model builds a host
+   * matches. Do not treat it as dead and delete it without dropping the Go
+   * field too (internal/api/v2/system/inference_status.go).
+   */
   capabilities?: string[];
 }
 
