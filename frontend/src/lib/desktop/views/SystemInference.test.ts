@@ -746,6 +746,63 @@ describe('SystemInference', () => {
     expect(container.querySelector('[aria-label="system.inference.activityIdle"]')).toBeNull();
   });
 
+  describe('compute precision (Inference Backends footer)', () => {
+    // The label key must be matched EXACTLY, never as a substring of
+    // textContent: 'system.inference.fp16' is a prefix of the pill's own
+    // 'system.inference.fp16Supported', so a contains-check passes even when
+    // the label is missing entirely and asserts nothing.
+    function precisionLabel(container: HTMLElement): Element | undefined {
+      return [...container.querySelectorAll('span')].find(
+        el => el.textContent.trim() === 'system.inference.fp16'
+      );
+    }
+
+    // The row lives in the Inference Backends card rather than the Hardware
+    // card, because native FP16 is a property of the CPU every backend executes
+    // on. Both branches are asserted: the label renders either way, so only the
+    // pill distinguishes a working readout from one stuck on one variant.
+    it('reports FP16 as supported when the CPU has native half precision', async () => {
+      installApi(makeSnapshot([makeModel({})], { fp16: true }));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('system.inference.fp16Supported');
+      });
+      expect(precisionLabel(container)).toBeDefined();
+      expect(container.textContent).not.toContain('system.inference.fp16Unsupported');
+    });
+
+    it('reports FP16 as unsupported when the CPU lacks native half precision', async () => {
+      installApi(makeSnapshot([makeModel({})], { fp16: false }));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('system.inference.fp16Unsupported');
+      });
+      expect(precisionLabel(container)).toBeDefined();
+      expect(container.textContent).not.toContain('system.inference.fp16Supported');
+    });
+
+    // The label carries aria-describedby pointing at an sr-only span, so the
+    // explanation reaches a screen reader and not only a hovering mouse. The id
+    // and the reference come from one constant; this proves they still resolve.
+    it('links the precision label to its screen-reader description', async () => {
+      installApi(makeSnapshot([makeModel({})], { fp16: true }));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('system.inference.fp16Supported');
+      });
+      const label = precisionLabel(container);
+      const describedBy = label?.getAttribute('aria-describedby');
+      expect(describedBy).toBeTruthy();
+      expect(container.querySelector(`#${describedBy}`)).not.toBeNull();
+    });
+  });
+
   describe('detected hardware panel', () => {
     it('renders board, cores and memory when the probe found them', async () => {
       installApi(

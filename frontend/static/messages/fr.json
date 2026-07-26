@@ -1695,7 +1695,7 @@
       "architecture": "Architecture",
       "cpu": "CPU",
       "environment": "Environnement",
-      "computePrecision": "Précision de calcul",
+      "fp16": "FP16",
       "fp16Supported": "FP16 pris en charge",
       "fp16Unsupported": "FP16 non pris en charge",
       "backendTflite": "TensorFlow Lite",
@@ -1774,7 +1774,7 @@
       "throughputHelp": "Segments analysés par seconde par ce modèle.",
       "errorRateHelp": "Part des tentatives d'analyse qui ont échoué.",
       "loadFailuresHelp": "Nombre de fois où ce modèle n'a pas pu être chargé.",
-      "fp16Help": "Si ce processeur effectue nativement les calculs en virgule flottante 16 bits. Si oui, les modèles conçus pour FP16 sont plus rapides et consomment moins de mémoire ; chaque carte de modèle ci-dessous indique la précision réellement utilisée.",
+      "fp16Help": "Virgule flottante 16 bits. Le matériel qui le prend en charge peut exécuter certains modèles plus rapidement et avec moins de mémoire.",
       "invocationsHelp": "Total des segments audio que ce modèle a analysés depuis le démarrage.",
       "noModelsHint": "Aucune source audio configurée ?",
       "noModelsHintLink": "Configurer les sources audio"

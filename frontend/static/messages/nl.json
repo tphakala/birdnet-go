@@ -1695,7 +1695,7 @@
       "architecture": "Architectuur",
       "cpu": "CPU",
       "environment": "Omgeving",
-      "computePrecision": "Rekenprecisie",
+      "fp16": "FP16",
       "fp16Supported": "FP16 ondersteund",
       "fp16Unsupported": "FP16 niet ondersteund",
       "backendTflite": "TensorFlow Lite",
@@ -1774,7 +1774,7 @@
       "throughputHelp": "Geanalyseerde segmenten per seconde.",
       "errorRateHelp": "Aandeel mislukte analysepogingen.",
       "loadFailuresHelp": "Aantal keren dat het model niet kon laden.",
-      "fp16Help": "Of deze CPU 16-bits drijvendekommaberekeningen native uitvoert. Zo ja, dan draaien modellen die voor FP16 zijn gebouwd sneller en gebruiken ze minder geheugen; elke modelkaart hieronder toont de precisie die daadwerkelijk wordt gebruikt.",
+      "fp16Help": "16-bit floating point.",
       "invocationsHelp": "Totaal aantal geanalyseerde segmenten.",
       "noModelsHint": "Nog geen audiobron geconfigureerd?",
       "noModelsHintLink": "Audiobronnen configureren"

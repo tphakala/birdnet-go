@@ -1695,7 +1695,7 @@
       "architecture": "Architektura",
       "cpu": "CPU",
       "environment": "Prostředí",
-      "computePrecision": "Přesnost výpočtu",
+      "fp16": "FP16",
       "fp16Supported": "FP16 podporováno",
       "fp16Unsupported": "FP16 nepodporováno",
       "backendTflite": "TensorFlow Lite",
@@ -1774,7 +1774,7 @@
       "throughputHelp": "Segmenty analyzované za sekundu.",
       "errorRateHelp": "Podíl pokusů o analýzu, které selhaly.",
       "loadFailuresHelp": "Počet, kolikrát se model nepodařilo načíst.",
-      "fp16Help": "Zda tento procesor počítá 16bitová čísla s plovoucí desetinnou čárkou nativně. Pokud ano, modely sestavené pro FP16 běží rychleji a spotřebují méně paměti; každá karta modelu níže ukazuje přesnost, se kterou skutečně běží.",
+      "fp16Help": "16bitová čísla s plovoucí desetinnou čárkou. Hardware s podporou může být rychlejší a spotřebuje méně paměti.",
       "invocationsHelp": "Celkový počet analyzovaných segmentů od spuštění.",
       "noModelsHint": "Zatím žádný zdroj zvuku?",
       "noModelsHintLink": "Nakonfigurovat zdroje zvuku"

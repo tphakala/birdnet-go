@@ -1695,7 +1695,7 @@
       "architecture": "Arkitektur",
       "cpu": "CPU",
       "environment": "Miljø",
-      "computePrecision": "Beregningspræcision",
+      "fp16": "FP16",
       "fp16Supported": "FP16 understøttet",
       "fp16Unsupported": "FP16 ikke understøttet",
       "backendTflite": "TensorFlow Lite",
@@ -1774,7 +1774,7 @@
       "throughputHelp": "Segmenter analyseret pr. sekund af denne model.",
       "errorRateHelp": "Andel af analyseforsøg, der mislykkedes.",
       "loadFailuresHelp": "Antal gange denne model ikke kunne indlæses.",
-      "fp16Help": "Om denne CPU regner med 16-bit flydende tal nativt. Når den gør, kører modeller bygget til FP16 hurtigere og bruger mindre hukommelse; hvert modelkort nedenfor viser den præcision, det faktisk kører med.",
+      "fp16Help": "16-bit flydende kommatal. Hardware, der understøtter det, kan køre nogle modeller hurtigere og med mindre hukommelse.",
       "invocationsHelp": "Totalt antal lydsegmenter denne model har analyseret siden opstart.",
       "noModelsHint": "Ingen lydkilde konfigureret endnu?",
       "noModelsHintLink": "Konfigurer lydkilder"

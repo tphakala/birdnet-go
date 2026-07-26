@@ -1298,7 +1298,7 @@ export type TranslationKey =
   | 'system.inference.architecture'
   | 'system.inference.cpu'
   | 'system.inference.environment'
-  | 'system.inference.computePrecision'
+  | 'system.inference.fp16'
   | 'system.inference.fp16Supported'
   | 'system.inference.fp16Unsupported'
   | 'system.inference.backendTflite'

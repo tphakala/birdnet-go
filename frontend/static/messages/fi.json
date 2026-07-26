@@ -1695,7 +1695,7 @@
       "architecture": "Arkkitehtuuri",
       "cpu": "CPU",
       "environment": "Ympäristö",
-      "computePrecision": "Laskentatarkkuus",
+      "fp16": "FP16",
       "fp16Supported": "FP16 tuettu",
       "fp16Unsupported": "FP16 ei tuettu",
       "backendTflite": "TensorFlow Lite",
@@ -1774,7 +1774,7 @@
       "throughputHelp": "Analysoituja segmenttejä sekunnissa tällä mallilla.",
       "errorRateHelp": "Osuus epäonnistuneista analyysiyrityksistä.",
       "loadFailuresHelp": "Kertojen määrä, kun tämä malli epäonnistui latautumaan.",
-      "fp16Help": "Suorittaako tämä suoritin 16-bittistä liukulukulaskentaa natiivisti. Jos suorittaa, FP16-mallit toimivat nopeammin ja vievät vähemmän muistia; kunkin mallin kortti alla näyttää, millä tarkkuudella se todella ajetaan.",
+      "fp16Help": "16-bittinen liukuluku. Sitä tukeva laitteisto voi suorittaa jotkin mallit nopeammin ja vähemmällä muistilla.",
       "invocationsHelp": "Tämän mallin analysoimien äänisegmenttien kokonaismäärä käynnistyksen jälkeen.",
       "noModelsHint": "Ei äänilähteitä määritettynä vielä?",
       "noModelsHintLink": "Määritä äänilähteet"

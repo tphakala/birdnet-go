@@ -1695,7 +1695,7 @@
       "architecture": "Arquitectura",
       "cpu": "CPU",
       "environment": "Entorno",
-      "computePrecision": "Precisión de cálculo",
+      "fp16": "FP16",
       "fp16Supported": "FP16 soportado",
       "fp16Unsupported": "FP16 no soportado",
       "backendTflite": "TensorFlow Lite",
@@ -1774,7 +1774,7 @@
       "throughputHelp": "Segmentos analizados por segundo por este modelo.",
       "errorRateHelp": "Porcentaje de intentos de análisis que fallaron.",
       "loadFailuresHelp": "Número de veces que este modelo no se pudo cargar.",
-      "fp16Help": "Si esta CPU realiza cálculos de coma flotante de 16 bits de forma nativa. Cuando lo hace, los modelos creados para FP16 funcionan más rápido y usan menos memoria; cada tarjeta de modelo de abajo muestra la precisión con la que se ejecuta realmente.",
+      "fp16Help": "Coma flotante de 16 bits. El hardware compatible puede ejecutar algunos modelos más rápido y con menos memoria.",
       "invocationsHelp": "Total de segmentos de audio que este modelo ha analizado desde el inicio.",
       "noModelsHint": "¿Aún no hay ninguna fuente de audio configurada?",
       "noModelsHintLink": "Configurar fuentes de audio"

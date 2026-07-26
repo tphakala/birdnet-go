@@ -1695,7 +1695,7 @@
       "architecture": "Arhitektūra",
       "cpu": "CPU",
       "environment": "Vide",
-      "computePrecision": "Aprēķinu precizitāte",
+      "fp16": "FP16",
       "fp16Supported": "FP16 atbalstīts",
       "fp16Unsupported": "FP16 netiek atbalstīts",
       "backendTflite": "TensorFlow Lite",
@@ -1774,7 +1774,7 @@
       "throughputHelp": "Analizētie segmenti sekundē.",
       "errorRateHelp": "Neveiksmīgo analīžu procents.",
       "loadFailuresHelp": "Modeļa ielādes kļūdu skaits.",
-      "fp16Help": "Vai šis procesors veic 16 bitu peldošā komata aprēķinus dabiski. Ja veic, FP16 modeļi darbojas ātrāk un patērē mazāk atmiņas; katra modeļa kartīte zemāk rāda faktiski izmantoto precizitāti.",
+      "fp16Help": "16-bitu peldošais komats. Atbalstīta aparatūra ļauj ātrāku un lētāku darbu.",
       "invocationsHelp": "Kopējais analizēto segmentu skaits.",
       "noModelsHint": "Vēl nav konfigurēti audio avoti?",
       "noModelsHintLink": "Konfigurēt audio avotus"

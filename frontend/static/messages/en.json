@@ -1695,7 +1695,7 @@
       "architecture": "Architecture",
       "cpu": "CPU",
       "environment": "Environment",
-      "computePrecision": "Compute precision",
+      "fp16": "FP16",
       "fp16Supported": "FP16 supported",
       "fp16Unsupported": "FP16 not supported",
       "backendTflite": "TensorFlow Lite",
@@ -1774,7 +1774,7 @@
       "throughputHelp": "Segments analysed per second by this model.",
       "errorRateHelp": "Share of analysis attempts that failed.",
       "loadFailuresHelp": "Number of times this model failed to load.",
-      "fp16Help": "Whether this CPU does 16-bit floating point maths natively. When it does, models built for FP16 run faster and use less memory; each model card below shows the precision it actually runs at.",
+      "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
       "invocationsHelp": "Total audio segments this model has analysed since startup.",
       "noModelsHint": "No audio source configured yet?",
       "noModelsHintLink": "Configure audio sources"

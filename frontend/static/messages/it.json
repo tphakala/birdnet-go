@@ -1695,7 +1695,7 @@
       "architecture": "Architettura",
       "cpu": "CPU",
       "environment": "Ambiente",
-      "computePrecision": "Precisione di calcolo",
+      "fp16": "FP16",
       "fp16Supported": "FP16 supportato",
       "fp16Unsupported": "FP16 non supportato",
       "backendTflite": "TensorFlow Lite",
@@ -1774,7 +1774,7 @@
       "throughputHelp": "Segmenti analizzati al secondo da questo modello.",
       "errorRateHelp": "Percentuale di tentativi di analisi falliti.",
       "loadFailuresHelp": "Numero di volte in cui questo modello non è riuscito a caricare.",
-      "fp16Help": "Se questa CPU esegue nativamente calcoli in virgola mobile a 16 bit. In tal caso i modelli creati per FP16 sono più veloci e usano meno memoria; ogni scheda modello qui sotto mostra la precisione effettivamente usata.",
+      "fp16Help": "Virgola mobile a 16 bit. L'hardware che lo supporta può eseguire alcuni modelli più velocemente e con meno memoria.",
       "invocationsHelp": "Totale dei segmenti audio che questo modello ha analizzato dall'avvio.",
       "noModelsHint": "Nessuna sorgente audio configurata ancora?",
       "noModelsHintLink": "Configura sorgenti audio"

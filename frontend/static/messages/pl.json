@@ -1695,7 +1695,7 @@
       "architecture": "Architektura",
       "cpu": "CPU",
       "environment": "Środowisko",
-      "computePrecision": "Precyzja obliczeń",
+      "fp16": "FP16",
       "fp16Supported": "FP16 obsługiwane",
       "fp16Unsupported": "FP16 nieobsługiwane",
       "backendTflite": "TensorFlow Lite",
@@ -1774,7 +1774,7 @@
       "throughputHelp": "Segmenty przeanalizowane w ciągu sekundy.",
       "errorRateHelp": "Procent błędów w analizie.",
       "loadFailuresHelp": "Ile razy nie udało się załadować tego modelu.",
-      "fp16Help": "Czy ten procesor natywnie wykonuje obliczenia zmiennoprzecinkowe 16-bitowe. Jeśli tak, modele zbudowane dla FP16 działają szybciej i zużywają mniej pamięci; każda karta modelu poniżej pokazuje faktycznie używaną precyzję.",
+      "fp16Help": "Półprecyzyjne wartości zmiennoprzecinkowe (16-bitowe).",
       "invocationsHelp": "Liczba przeanalizowanych segmentów od startu.",
       "noModelsHint": "Nie skonfigurowano jeszcze źródła audio?",
       "noModelsHintLink": "Skonfiguruj źródła audio"

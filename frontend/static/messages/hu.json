@@ -1695,7 +1695,7 @@
       "architecture": "Architektúra",
       "cpu": "CPU",
       "environment": "Környezet",
-      "computePrecision": "Számítási pontosság",
+      "fp16": "FP16",
       "fp16Supported": "FP16 támogatott",
       "fp16Unsupported": "FP16 nem támogatott",
       "backendTflite": "TensorFlow Lite",
@@ -1774,7 +1774,7 @@
       "throughputHelp": "Másodpercenként elemzett szegmensek.",
       "errorRateHelp": "Sikertelen elemzések aránya.",
       "loadFailuresHelp": "Modell betöltésének sikertelen próbálkozásai.",
-      "fp16Help": "Végez-e ez a processzor natívan 16 bites lebegőpontos számításokat. Ha igen, az FP16-ra épített modellek gyorsabbak és kevesebb memóriát használnak; lent minden modellkártya mutatja a ténylegesen használt pontosságot.",
+      "fp16Help": "16-bites lebegőpontos számok. Kisebb memóriát és gyorsabb futást eredményezhet.",
       "invocationsHelp": "Összes elemzett szegmens indítás óta.",
       "noModelsHint": "Még nincs beállítva hangforrás?",
       "noModelsHintLink": "Hangforrások beállítása"

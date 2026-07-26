@@ -1695,7 +1695,7 @@
       "architecture": "Architektur",
       "cpu": "CPU",
       "environment": "Umgebung",
-      "computePrecision": "Rechengenauigkeit",
+      "fp16": "FP16",
       "fp16Supported": "FP16 unterstützt",
       "fp16Unsupported": "FP16 nicht unterstützt",
       "backendTflite": "TensorFlow Lite",
@@ -1774,7 +1774,7 @@
       "throughputHelp": "Analysierte Segmente pro Sekunde.",
       "errorRateHelp": "Anteil der Analyseversuche, die fehlgeschlagen sind.",
       "loadFailuresHelp": "Anzahl der fehlgeschlagenen Ladeversuche.",
-      "fp16Help": "Ob diese CPU 16-Bit-Gleitkommaberechnungen nativ ausführt. Wenn ja, laufen für FP16 gebaute Modelle schneller und brauchen weniger Speicher; jede Modellkarte unten zeigt die tatsächlich verwendete Genauigkeit.",
+      "fp16Help": "16-Bit-Gleitkomma.",
       "invocationsHelp": "Gesamte analysierte Audiosegmente seit dem Start.",
       "noModelsHint": "Noch keine Audioquelle konfiguriert?",
       "noModelsHintLink": "Audioquellen konfigurieren"

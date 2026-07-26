@@ -93,6 +93,12 @@
   // Rows per column in the two-column Last-heard layout (backend retains 2x this).
   const LAST_HEARD_COLUMN_ROWS = 10;
 
+  // Ties the compute-precision label to its sr-only description. Named because
+  // aria-describedby and the target id must agree, and a literal repeated in two
+  // places can drift apart silently: the reference just stops resolving, with no
+  // error anywhere and nothing visible to a sighted reader.
+  const FP16_HELP_ID = 'help-fp16';
+
   interface MetricPoint {
     timestamp: string;
     value: number;
@@ -537,15 +543,24 @@
         <h3 class="text-xs font-semibold uppercase tracking-wider mb-3 text-muted">
           {t('system.inference.sectionHardware')}
         </h3>
-        <!-- Three real columns (icon, label, value) rather than a stack of
-             independent flex rows: the auto label track sizes to the widest
-             label, so every value starts at the same x instead of wherever its
+        <!-- Two real columns (term, definition) rather than a stack of
+             independent flex rows: the auto term track sizes to the widest
+             term, so every value starts at the same x instead of wherever its
              own label happened to end. Absent facts emit no grid children at
-             all, so they leave no gap. -->
-        <dl class="grid grid-cols-[auto_auto_1fr] items-center gap-x-3 gap-y-2.5">
+             all, so they leave no gap.
+
+             Each row's icon lives INSIDE its <dt>, never as a direct child of
+             the <dl>: the only content a <dl> permits is <dt>/<dd> groups or
+             <div> wrappers around them, so a bare <svg> sibling is invalid
+             markup and breaks the term/definition grouping for assistive
+             technology. The <dt> is therefore a flex row of icon + label, which
+             keeps the icons in a visual column without spending a grid track. -->
+        <dl class="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2.5">
           {#if snapshot.hardware.arch}
-            <Binary class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
-            <dt class="text-sm text-muted">{t('system.inference.architecture')}</dt>
+            <dt class="flex items-center gap-3 text-sm text-muted">
+              <Binary class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              {t('system.inference.architecture')}
+            </dt>
             <dd
               class="text-sm font-mono tabular-nums truncate min-w-0"
               title={snapshot.hardware.arch}
@@ -554,8 +569,10 @@
             </dd>
           {/if}
           {#if snapshot.hardware.cpuModel}
-            <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
-            <dt class="text-sm text-muted">{t('system.inference.cpu')}</dt>
+            <dt class="flex items-center gap-3 text-sm text-muted">
+              <Cpu class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              {t('system.inference.cpu')}
+            </dt>
             <dd class="text-sm truncate min-w-0" title={snapshot.hardware.cpuModel}>
               {snapshot.hardware.cpuModel}
             </dd>
@@ -565,8 +582,10 @@
                that exposes only `compatible` yields the SoC alone. Gating on the
                model would silently drop the one fact the probe recovered. -->
           {#if snapshot.hardware.board}
-            <CircuitBoard class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
-            <dt class="text-sm text-muted">{t('system.inference.board')}</dt>
+            <dt class="flex items-center gap-3 text-sm text-muted">
+              <CircuitBoard class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              {t('system.inference.board')}
+            </dt>
             <dd class="flex items-center gap-3 min-w-0">
               {#if snapshot.hardware.board.model}
                 <span class="text-sm truncate min-w-0" title={snapshot.hardware.board.model}
@@ -581,29 +600,35 @@
             </dd>
           {/if}
           {#if snapshot.hardware.physicalCores}
-            <Grid2x2 class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
-            <dt class="text-sm text-muted">{t('system.inference.cores')}</dt>
+            <dt class="flex items-center gap-3 text-sm text-muted">
+              <Grid2x2 class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              {t('system.inference.cores')}
+            </dt>
             <dd class="text-sm font-mono tabular-nums">
               {formatNumber(snapshot.hardware.physicalCores)}
             </dd>
           {/if}
           {#if snapshot.hardware.totalRamBytes}
-            <MemoryStick class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
-            <dt class="text-sm text-muted">{t('system.inference.memory')}</dt>
+            <dt class="flex items-center gap-3 text-sm text-muted">
+              <MemoryStick class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              {t('system.inference.memory')}
+            </dt>
             <dd class="text-sm font-mono tabular-nums">
               {formatBytesCompact(snapshot.hardware.totalRamBytes)}
             </dd>
           {/if}
           {#if snapshot.hardware.environment}
-            <!-- Container vs host, resolved by the same predicate the Overview's
-                 SystemDetailsCard uses, so the two pages never disagree about
-                 what the one environment string means. -->
-            {#if isContainerEnvironment(snapshot.hardware.environment)}
-              <Container class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
-            {:else}
-              <Server class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
-            {/if}
-            <dt class="text-sm text-muted">{t('system.inference.environment')}</dt>
+            <dt class="flex items-center gap-3 text-sm text-muted">
+              <!-- Container vs host, resolved by the same predicate the Overview's
+                   SystemDetailsCard uses, so the two pages never disagree about
+                   what the one environment string means. -->
+              {#if isContainerEnvironment(snapshot.hardware.environment)}
+                <Container class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              {:else}
+                <Server class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              {/if}
+              {t('system.inference.environment')}
+            </dt>
             <dd class="text-sm truncate min-w-0" title={snapshot.hardware.environment}>
               {snapshot.hardware.environment}
             </dd>
@@ -625,8 +650,10 @@
                `group` strips the pairing so the <dt> is announced as a term
                with no definition. -->
           {#each snapshot.hardware.accelerators ?? [] as accelerator}
-            <Microchip class="w-3.5 h-3.5 shrink-0 text-muted self-start" aria-hidden="true" />
-            <dt class="text-sm text-muted self-start">{t('system.inference.gpu')}</dt>
+            <dt class="flex items-center gap-3 text-sm text-muted self-start">
+              <Microchip class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              {t('system.inference.gpu')}
+            </dt>
             <dd class="min-w-0">
               <div
                 role="group"
@@ -730,11 +757,11 @@
           <span
             class="text-sm min-w-32"
             title={t('system.inference.fp16Help')}
-            aria-describedby="help-fp16"
+            aria-describedby={FP16_HELP_ID}
           >
-            {t('system.inference.computePrecision')}
+            {t('system.inference.fp16')}
           </span>
-          <span id="help-fp16" class="sr-only">{t('system.inference.fp16Help')}</span>
+          <span id={FP16_HELP_ID} class="sr-only">{t('system.inference.fp16Help')}</span>
           {#if snapshot.hardware.fp16}
             <StatusPill variant="success" label={t('system.inference.fp16Supported')} size="xs" />
           {:else}

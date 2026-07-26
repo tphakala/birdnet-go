@@ -1695,7 +1695,7 @@
       "architecture": "Arkitektur",
       "cpu": "CPU",
       "environment": "Miljø",
-      "computePrecision": "Beregningspresisjon",
+      "fp16": "FP16",
       "fp16Supported": "FP16 støttes",
       "fp16Unsupported": "FP16 støttes ikke",
       "backendTflite": "TensorFlow Lite",
@@ -1774,7 +1774,7 @@
       "throughputHelp": "Segmenter analysert per sekund av denne modellen.",
       "errorRateHelp": "Andel analyseforsøk som mislyktes.",
       "loadFailuresHelp": "Antall ganger denne modellen ikke kunne lastes inn.",
-      "fp16Help": "Om denne prosessoren regner med 16-bits flyttall nativt. Når den gjør det, kjører modeller bygget for FP16 raskere og bruker mindre minne; hvert modellkort nedenfor viser presisjonen den faktisk kjører med.",
+      "fp16Help": "16-bit flyttall.",
       "invocationsHelp": "Totalt antall lydsegmenter analysert av denne modellen.",
       "noModelsHint": "Ingen lydkilde konfigurert ennå?",
       "noModelsHintLink": "Konfigurer lydkilder"
