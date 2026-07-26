@@ -1126,7 +1126,8 @@ func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams) datas
 	return filters
 }
 
-// getSearchDetections handles search query type logic
+// getSearchDetections returns cached or datastore results for raw text, unioning
+// any resolved scientific-name alternatives through advanced search.
 func (c *Handler) getSearchDetections(search string, scientific []string, numResults, offset int) ([]datastore.Note, int64, error) {
 	// Generate a cache key based on parameters
 	cacheKey := fmt.Sprintf("search:%s:%s:%d:%d", search, strings.Join(scientific, "\x00"), numResults, offset)

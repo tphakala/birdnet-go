@@ -35,7 +35,7 @@ func openSQLiteTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, err, "retrieve *sql.DB from gorm")
 	sqlDB.SetMaxOpenConns(1)
 	t.Cleanup(func() {
-		_ = sqlDB.Close()
+		require.NoError(t, sqlDB.Close(), "close in-memory sqlite")
 	})
 	return db
 }

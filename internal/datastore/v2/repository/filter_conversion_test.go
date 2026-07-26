@@ -438,7 +438,7 @@ func TestConvertAdvancedFilters(t *testing.T) {
 			},
 			SciToCommon: map[string]string{
 				"Tyto alba":    "Barn Owl",
-				"Tyto furcata": "American Barn Owl",
+				"Tyto furcata": "Schleiereule",
 			},
 		}
 		filters := &datastore.AdvancedSearchFilters{

@@ -39,6 +39,8 @@ func TestSanitizeSpeciesScientific(t *testing.T) {
 	})
 }
 
+// TestResolveCommonNameSubstrings verifies normalized substring matching against
+// the active locale's folded common-name map.
 func TestResolveCommonNameSubstrings(t *testing.T) {
 	t.Parallel()
 
@@ -70,6 +72,8 @@ func TestResolveCommonNameSubstrings(t *testing.T) {
 	})
 }
 
+// TestMergeSpeciesScientific verifies deterministic, bounded union of server-
+// and client-resolved scientific names.
 func TestMergeSpeciesScientific(t *testing.T) {
 	t.Parallel()
 

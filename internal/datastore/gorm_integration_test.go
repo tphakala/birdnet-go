@@ -549,10 +549,7 @@ func TestSearchNotesAdvanced_MinID_CursorVisitsAllRecords(t *testing.T) {
 func TestSearchNotesAdvanced_TextAndScientificUnion(t *testing.T) {
 	t.Parallel()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
-		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
-	})
-	require.NoError(t, err)
+	db := openSQLiteTestDB(t)
 	require.NoError(t, db.AutoMigrate(&Note{}, &NoteReview{}, &NoteLock{}, &NoteComment{}))
 
 	ds := &DataStore{DB: db}
