@@ -92,6 +92,9 @@
 
   // Constants
   const TAB_FOCUS_DELAY_MS = 50;
+  const HISTORY_SPARKLINE_WIDTH = 480;
+  const HISTORY_SPARKLINE_HEIGHT = 56;
+  const CONFIDENCE_PERCENT_SCALE = 100;
   type TabType = 'overview' | 'history' | 'notes' | 'review';
 
   interface Props {
@@ -829,7 +832,12 @@
           role="img"
           aria-label={t('detections.history.aria.sparkline', { date: windowEndLabel })}
         >
-          <Sparkline data={history.dailyCounts} viewWidth={480} viewHeight={56} decorative />
+          <Sparkline
+            data={history.dailyCounts}
+            viewWidth={HISTORY_SPARKLINE_WIDTH}
+            viewHeight={HISTORY_SPARKLINE_HEIGHT}
+            decorative
+          />
         </div>
       </div>
 
@@ -851,7 +859,7 @@
                   {formatLocalDateTime(new Date(entry.timestamp), false)}
                 </span>
                 <span class="history-recent-confidence">
-                  {Math.round(entry.confidence * 100)}%
+                  {Math.round(entry.confidence * CONFIDENCE_PERCENT_SCALE)}%
                 </span>
                 <ChevronRight class="history-recent-chevron" aria-hidden="true" />
               </a>
