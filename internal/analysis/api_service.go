@@ -148,7 +148,9 @@ func (s *APIServerService) Start(ctx context.Context) error {
 		if s.settings.Realtime.Dashboard.SpeciesGuide.PreFetchEnabled {
 			s.proc.SetGuidePreFetch(s.guideCache.PreFetch)
 		}
-		warmGuideCacheWithTopSpecies(ctx, s.guideCache, dataStore,
+		// Detached: the ranking query must not sit between here and the HTTP listener
+		// coming up (see startGuideCacheWarm). ctx is cancelled on shutdown.
+		startGuideCacheWarm(ctx, s.guideCache, dataStore,
 			s.settings.Realtime.Dashboard.SpeciesGuide.WarmTopN, GetLogger())
 	}
 

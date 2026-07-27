@@ -82,13 +82,39 @@ func initGuideCacheIfNeeded(settings *conf.Settings, ds datastore.Interface, gpM
 	return cache
 }
 
+// startGuideCacheWarm kicks off warmGuideCacheWithTopSpecies on a background
+// goroutine and returns immediately. Callers on a latency-sensitive path must use
+// this rather than calling the warm directly.
+//
+// The ranking query is the one unbounded piece of guide setup: it asks the datastore
+// for the all-time summary of every species ever detected (a GROUP BY over the whole
+// detection history — the datastore exposes no top-N variant), so on a long-running
+// station it can run for seconds and is capped only by warmRankingQueryTimeout. Run
+// inline it would delay the HTTP listener coming up by up to that timeout at startup,
+// and would stall the single control-monitor goroutine — and every reconfigure signal
+// queued behind it — whenever any species-guide setting is saved.
+//
+// Warming is purely opportunistic (a cold entry is simply fetched on demand), so
+// detaching it costs nothing: nothing downstream waits on the result. The goroutine is
+// deliberately untracked — it holds no resources beyond the query, honors ctx, and
+// self-limits via warmRankingQueryTimeout, while cache.WarmForSpecies is already
+// wait-group-tracked and no-ops on a closed cache. Pass a cancellable ctx where one
+// exists so shutdown aborts the query rather than waiting it out.
+func startGuideCacheWarm(ctx context.Context, cache *guideprovider.GuideCache, ds datastore.Interface, topN int, log logger.Logger) {
+	// Check the no-op conditions up front so a disabled warm costs no goroutine at all.
+	if cache == nil || topN <= 0 {
+		return
+	}
+	go warmGuideCacheWithTopSpecies(ctx, cache, ds, topN, log)
+}
+
 // warmGuideCacheWithTopSpecies warms the guide cache for the top-N most-detected
 // species, so the entries most likely to be viewed are pre-loaded. It is a no-op
 // when warming is disabled (topN <= 0).
 //
-// The ranking query is bounded by warmRankingQueryTimeout and honors ctx, so a slow
-// summary query on a large database cannot hold up startup or outlive a shutdown that
-// begins while it is still running.
+// This blocks on the ranking query; production callers go through startGuideCacheWarm.
+// The query is bounded by warmRankingQueryTimeout and honors ctx, so it cannot outlive
+// a shutdown that begins while it is still running.
 func warmGuideCacheWithTopSpecies(ctx context.Context, cache *guideprovider.GuideCache, ds datastore.Interface, topN int, log logger.Logger) {
 	if cache == nil || topN <= 0 {
 		return

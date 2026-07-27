@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Component } from 'svelte';
+  import { SvelteSet } from 'svelte/reactivity';
   import {
     ChevronDown,
     ChevronRight,
@@ -29,7 +30,8 @@
   ]);
   import {
     parseGuideDescription,
-    GUIDE_SONGS_HEADINGS,
+    extractCanonicalSections,
+    type CanonicalSectionId,
     type SpeciesGuideData,
     type SimilarSpeciesResponse,
     type SimilarSpeciesEntry,
@@ -102,34 +104,48 @@
   let noGuide = $state(false);
   let error = $state<string | null>(null);
 
-  // Description is always shown (not a collapsible section), so it isn't tracked
-  // here — only songs and similar species toggle.
-  let openSections = $state<Record<string, boolean>>({
-    songs: false,
-    similar: true,
-  });
+  // Description (the article lead) is always shown, so it isn't tracked here — only
+  // the canonical body sections and similar species toggle. A SvelteSet keeps the
+  // per-section state keyed without indexing a plain object by a dynamic key,
+  // mirroring SimilarSpeciesPanel's expandedRows. Sections start collapsed.
+  const openBodySections = new SvelteSet<CanonicalSectionId>();
+  let similarOpen = $state(true);
+
+  // Canonical comparison rows in display order. Voice keeps the guide's own
+  // "Songs & Calls" label (already translated in every locale); the rest reuse the
+  // comparison-row labels the similar-species panel uses, so no new i18n keys.
+  const SECTION_ROWS: { id: CanonicalSectionId; labelKey: string }[] = [
+    { id: 'appearance', labelKey: 'analytics.species.similar.sections.appearance' },
+    { id: 'voice', labelKey: 'analytics.species.guide.songsAndCalls' },
+    { id: 'habitat', labelKey: 'analytics.species.similar.sections.habitat' },
+    { id: 'behaviour', labelKey: 'analytics.species.similar.sections.behaviour' },
+  ];
 
   // Whether a long description is expanded past its clamp. Parents key this
   // component on the species, so it remounts (and resets to collapsed) per species.
   let descExpanded = $state(false);
 
-  function classifyHeading(heading: string): 'description' | 'songs' | 'other' {
-    const h = heading.trim().toLowerCase();
-    if (h === '') return 'description';
-    if (GUIDE_SONGS_HEADINGS.some(token => h.includes(token))) return 'songs';
-    return 'other';
-  }
-
   let sections = $derived(guide ? parseGuideDescription(guide.description) : []);
 
-  let descriptionBody = $derived.by(() => {
-    const intro = sections.find(s => classifyHeading(s.heading) === 'description');
-    return intro?.body ?? '';
-  });
+  // The article lead: the segment before the first `## ` header.
+  let descriptionBody = $derived(sections.find(s => s.heading === '')?.body ?? '');
 
-  let songsBody = $derived.by(() => {
-    const songs = sections.find(s => classifyHeading(s.heading) === 'songs');
-    return songs?.body ?? '';
+  // The remaining prose, grouped into the canonical comparison categories.
+  //
+  // Without this the panel rendered only the lead and a Songs section, and every other
+  // `## ` section the backend produced — Description, Distribution and habitat,
+  // Behaviour, and the sub-sections convertWikiSections deliberately promotes to top
+  // level — was parsed, shipped over the wire, and then silently dropped.
+  //
+  // extractCanonicalSections falls back to the lead for `appearance` when the article
+  // has no description-like section, so that case is filtered out here rather than
+  // repeating the lead under a second heading.
+  let canonicalRows = $derived.by(() => {
+    if (!guide) return [];
+    const canonical = extractCanonicalSections(guide.description);
+    return SECTION_ROWS.map(row => ({ ...row, body: canonical[row.id].trim() })).filter(
+      row => row.body !== '' && row.body !== descriptionBody.trim()
+    );
   });
 
   // Enrichments (expectedness, season, external links) are shown only when the
@@ -181,9 +197,9 @@
     loading = false;
   }
 
-  function toggle(id: string): void {
-    // eslint-disable-next-line security/detect-object-injection -- id is a fixed internal section key (description/songs/similar), not external input
-    openSections[id] = !openSections[id];
+  function toggleBodySection(id: CanonicalSectionId): void {
+    if (openBodySections.has(id)) openBodySections.delete(id);
+    else openBodySections.add(id);
   }
 
   onMount(load);
@@ -245,18 +261,18 @@
             <button
               type="button"
               class="flex w-full cursor-pointer items-center justify-between py-2 text-left font-medium"
-              aria-expanded={openSections.similar}
+              aria-expanded={similarOpen}
               aria-controls={`${uid}-similar`}
-              onclick={() => toggle('similar')}
+              onclick={() => (similarOpen = !similarOpen)}
             >
               <span>{t('analytics.species.similar.title')}</span>
-              {#if openSections.similar}
+              {#if similarOpen}
                 <ChevronDown class="h-4 w-4" />
               {:else}
                 <ChevronRight class="h-4 w-4" />
               {/if}
             </button>
-            {#if openSections.similar}
+            {#if similarOpen}
               <div id={`${uid}-similar`} class="pb-3">
                 <SimilarSpeciesPanel mainName={commonName || scientificName} {similar} />
               </div>
@@ -323,30 +339,35 @@
           </div>
         {/if}
 
-        <!-- Songs & Calls -->
-        {#if songsBody}
+        <!-- Canonical body sections (appearance / songs & calls / habitat / behaviour).
+             Collapsed by default because each can run long; the lead above stays open. -->
+        {#each canonicalRows as row (row.id)}
+          {@const open = openBodySections.has(row.id)}
           <div class="border-b border-base-300">
             <button
               type="button"
               class="flex w-full cursor-pointer items-center justify-between py-2 text-left font-medium"
-              aria-expanded={openSections.songs}
-              aria-controls={`${uid}-songs`}
-              onclick={() => toggle('songs')}
+              aria-expanded={open}
+              aria-controls={`${uid}-section-${row.id}`}
+              onclick={() => toggleBodySection(row.id)}
             >
-              <span>{t('analytics.species.guide.songsAndCalls')}</span>
-              {#if openSections.songs}
+              <span>{t(row.labelKey)}</span>
+              {#if open}
                 <ChevronDown class="h-4 w-4" />
               {:else}
                 <ChevronRight class="h-4 w-4" />
               {/if}
             </button>
-            {#if openSections.songs}
-              <div id={`${uid}-songs`} class="pb-3 text-base leading-relaxed whitespace-pre-line">
-                {songsBody}
+            {#if open}
+              <div
+                id={`${uid}-section-${row.id}`}
+                class="pb-3 text-base leading-relaxed whitespace-pre-line"
+              >
+                {row.body}
               </div>
             {/if}
           </div>
-        {/if}
+        {/each}
 
         <!-- Similar species (gated by the showSimilarSpecies setting, with the
          guide response's server-computed features flag as the authority) -->
@@ -355,18 +376,18 @@
             <button
               type="button"
               class="flex w-full cursor-pointer items-center justify-between py-2 text-left font-medium"
-              aria-expanded={openSections.similar}
+              aria-expanded={similarOpen}
               aria-controls={`${uid}-similar`}
-              onclick={() => toggle('similar')}
+              onclick={() => (similarOpen = !similarOpen)}
             >
               <span>{t('analytics.species.similar.title')}</span>
-              {#if openSections.similar}
+              {#if similarOpen}
                 <ChevronDown class="h-4 w-4" />
               {:else}
                 <ChevronRight class="h-4 w-4" />
               {/if}
             </button>
-            {#if openSections.similar}
+            {#if similarOpen}
               <div id={`${uid}-similar`} class="pb-3">
                 <SimilarSpeciesPanel mainName={commonName || scientificName} {similar} />
               </div>

@@ -1042,6 +1042,38 @@ func guideProviderSetChanged(tracked, live *bool, newEnableWikipedia bool) bool 
 	return prior != nil && *prior != newEnableWikipedia
 }
 
+// nextGuideWikipediaApplied returns the EnableWikipedia value to remember as the set
+// that produced the currently-persisted guide rows, given the previously tracked value,
+// the outgoing cache's live value (nil = no live cache), the newly-selected setting, and
+// whether a new cache was actually built.
+//
+//   - A cache was built: it now owns the rows, so remember the setting it was built with.
+//   - No cache was built (the feature was disabled) but one was live: cfg says nothing
+//     about the rows that survive in the DB — they were produced by the OUTGOING cache's
+//     provider set — so adopt that instead of leaving the tracked value untouched.
+//   - Neither: nothing observable, keep whatever was tracked.
+//
+// The middle case is what makes a change detectable across a disable. Leaving the tracked
+// value untouched there only works if it was already populated, and it is nil for the
+// whole first disable of a process: the startup cache is built directly by
+// initGuideCacheIfNeeded (see api_service.go), which never records one. Without it,
+// "enabled+wikipedia -> disabled -> enabled+no wikipedia" leaves both tracked and live nil
+// at the re-enable, guideProviderSetChanged reports no change, InvalidateAll is skipped,
+// and Start() reloads the Wikipedia-authored rows — serving Wikipedia prose for a full
+// PositiveTTL after the user switched it off.
+func nextGuideWikipediaApplied(tracked, live *bool, newEnableWikipedia, cacheBuilt bool) *bool {
+	switch {
+	case cacheBuilt:
+		applied := newEnableWikipedia
+		return &applied
+	case live != nil:
+		adopted := *live
+		return &adopted
+	default:
+		return tracked
+	}
+}
+
 // handleReconfigureSpeciesGuide rebuilds the species guide cache from current
 // settings and swaps it onto the API controller (which closes the previous
 // cache), then re-wires the processor's pre-fetch callback. This makes the
@@ -1098,13 +1130,9 @@ func (cm *ControlMonitor) handleReconfigureSpeciesGuide() {
 	cm.apiController.SetGuideCache(newCache)
 
 	// Record the set now backing the cache so a later reconfigure can detect a change
-	// even if the feature is disabled (cache becomes nil) in between. Only update when
-	// a cache was built: a disable leaves the DB rows — and thus the set that produced
-	// them — unchanged, so the previously recorded value must persist.
-	if newCache != nil {
-		applied := cfg.EnableWikipedia
-		cm.guideWikipediaApplied = &applied
-	}
+	// even if the feature is disabled (cache becomes nil) in between.
+	cm.guideWikipediaApplied = nextGuideWikipediaApplied(
+		cm.guideWikipediaApplied, liveWikipedia, cfg.EnableWikipedia, newCache != nil)
 
 	// Re-wire the processor's pre-fetch callback to the new cache (or clear it).
 	if cm.proc != nil {
@@ -1115,9 +1143,12 @@ func (cm *ControlMonitor) handleReconfigureSpeciesGuide() {
 		}
 	}
 
-	if newCache != nil {
-		warmGuideCacheWithTopSpecies(context.Background(), newCache, cm.apiController.DS, cfg.WarmTopN, GetLogger())
-	}
+	// Detached: the ranking query would otherwise stall this goroutine — and every
+	// reconfigure signal queued behind it — for up to warmRankingQueryTimeout on every
+	// species-guide save, including cosmetic Show* toggles (see startGuideCacheWarm).
+	// ControlMonitor holds no cancellable context, so the warm is bounded only by its
+	// own query timeout.
+	startGuideCacheWarm(context.Background(), newCache, cm.apiController.DS, cfg.WarmTopN, GetLogger())
 
 	emitHotReload("species_guide_config")
 	cm.notifySuccess("Species guide reconfigured")

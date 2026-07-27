@@ -644,20 +644,20 @@ func TestNormalizeLocale_Validation(t *testing.T) {
 	}{
 		{"en", "en"},
 		{"de", "de"},
-		{" PT-BR ", "pt-br"},             // trimmed + lowercased
-		{"zh-hans", "zh-hans"},           // 4-letter subtag allowed
+		{" PT-BR ", "pt-br"},                         // trimmed + lowercased
+		{"zh-hans", "zh-hans"},                       // 4-letter subtag allowed
 		{wpEditionBeTarask, wpEditionBeTarask},       // 6-letter subtag (real Wikipedia subdomain)
 		{wpEditionZhClassical, wpEditionZhClassical}, // 9-letter subtag (real Wikipedia subdomain)
 		{wpEditionZhMinNan, wpEditionZhMinNan},       // two subtags (real Wikipedia subdomain)
-		{"", "en"},                       // empty -> default
-		{"english", "en"},                // too long, no subtag -> default
-		{"ab-cd-ef-gh", "en"},            // more than two subtags -> default
-		{"en-superlongsubtag", "en"},     // subtag exceeds 10 chars -> default
-		{"en_US", "en"},                  // underscore not allowed -> default
-		{"../etc", "en"},                 // path traversal attempt -> default
-		{"@evil.com", "en"},              // host-injection attempt -> default
-		{"en.wikipedia", "en"},           // dotted -> default
-		{"a", "en"},                      // too short -> default
+		{"", "en"},                                   // empty -> default
+		{"english", "en"},                            // too long, no subtag -> default
+		{"ab-cd-ef-gh", "en"},                        // more than two subtags -> default
+		{"en-superlongsubtag", "en"},                 // subtag exceeds 10 chars -> default
+		{"en_US", "en"},                              // underscore not allowed -> default
+		{"../etc", "en"},                             // path traversal attempt -> default
+		{"@evil.com", "en"},                          // host-injection attempt -> default
+		{"en.wikipedia", "en"},                       // dotted -> default
+		{"a", "en"},                                  // too short -> default
 	}
 	for _, tt := range tests {
 		assert.Equalf(t, tt.want, normalizeLocale(tt.in), "normalizeLocale(%q)", tt.in)

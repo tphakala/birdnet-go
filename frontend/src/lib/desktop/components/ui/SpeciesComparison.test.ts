@@ -341,4 +341,93 @@ describe('SpeciesComparison', () => {
     toggle.click();
     expect(await screen.findByText('An introduction.', {}, { timeout: 5000 })).toBeInTheDocument();
   });
+
+  // Regression: the panel used to render only the article lead and a Songs section,
+  // classifying every other "## " section as 'other' and dropping it — so Description,
+  // Distribution and habitat and Behaviour were fetched, stored and shipped, then never
+  // shown. Each canonical category must now get its own collapsible row.
+  it('renders every canonical section, not just the lead and voice', async () => {
+    const description = [
+      'An introduction.',
+      '## Description',
+      'Glossy black plumage and a yellow eye-ring.',
+      '## Distribution and habitat',
+      'Woodland and gardens across Europe.',
+      '## Behaviour',
+      'Forages on the ground for earthworms.',
+      '## Voice',
+      'The male sings a fluted warble.',
+    ].join('\n');
+
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.includes('/similar'))
+        return Promise.resolve({
+          scientific_name: 'Turdus merula',
+          genus: 'Turdus',
+          similar: [],
+        } as never);
+      return Promise.resolve(makeGuide({ description }) as never);
+    });
+
+    render(SpeciesComparison, {
+      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird' },
+    });
+
+    // The lead still renders as the always-visible description.
+    expect(await screen.findByText('An introduction.', {}, { timeout: 5000 })).toBeInTheDocument();
+
+    // All four canonical rows are offered. `t` is mocked to echo the key, so the
+    // rendered label is the i18n key itself.
+    const rowLabels = [
+      'analytics.species.similar.sections.appearance',
+      'analytics.species.guide.songsAndCalls',
+      'analytics.species.similar.sections.habitat',
+      'analytics.species.similar.sections.behaviour',
+    ];
+    for (const label of rowLabels) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
+
+    // Rows start collapsed, and expanding one reveals prose that was previously
+    // dropped entirely.
+    expect(screen.queryByText('Woodland and gardens across Europe.')).toBeNull();
+    screen.getByText('analytics.species.similar.sections.habitat').click();
+    expect(
+      await screen.findByText('Woodland and gardens across Europe.', {}, { timeout: 5000 })
+    ).toBeInTheDocument();
+
+    // Behaviour prose is likewise reachable rather than discarded.
+    screen.getByText('analytics.species.similar.sections.behaviour').click();
+    expect(
+      await screen.findByText('Forages on the ground for earthworms.', {}, { timeout: 5000 })
+    ).toBeInTheDocument();
+  });
+
+  it('does not repeat the lead as an appearance row when the article has no such section', async () => {
+    // extractCanonicalSections falls back to the lead for `appearance` when no
+    // description-like section exists; that fallback must not surface as a second
+    // collapsible row duplicating the text already shown above.
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.includes('/similar'))
+        return Promise.resolve({
+          scientific_name: 'Turdus merula',
+          genus: 'Turdus',
+          similar: [],
+        } as never);
+      return Promise.resolve(
+        makeGuide({ description: 'An introduction.\n\n## Voice\nThe male sings.' }) as never
+      );
+    });
+
+    render(SpeciesComparison, {
+      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird' },
+    });
+
+    expect(await screen.findByText('An introduction.', {}, { timeout: 5000 })).toBeInTheDocument();
+    // Voice is a real section and renders; appearance is only the lead echo and must not.
+    expect(screen.getByText('analytics.species.guide.songsAndCalls')).toBeInTheDocument();
+    expect(screen.queryByText('analytics.species.similar.sections.appearance')).toBeNull();
+    // The lead appears exactly once.
+    expect(screen.getAllByText('An introduction.')).toHaveLength(1);
+  });
 });
