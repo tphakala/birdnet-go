@@ -99,23 +99,22 @@ describe('SpeciesCardMobile', () => {
   // was tested for; the click affordance it gained was not covered anywhere.
   describe('card variant (desktop analytics grid)', () => {
     it('renders as a button so the card is keyboard reachable', () => {
-      const { container } = render(SpeciesCardMobile, {
+      const { getByRole } = render(SpeciesCardMobile, {
         props: { species: mockSpecies, variant: 'card', onClick: vi.fn() },
       });
 
-      const button = container.querySelector('button');
-      expect(button).not.toBeNull();
+      // getByRole throws when absent, so it both asserts and narrows to a non-null
+      // element — no conditional guard, and no type assertion.
+      expect(getByRole('button')).toBeInTheDocument();
     });
 
     it('invokes onClick with the species when activated', async () => {
       const onClick = vi.fn();
-      const { container } = render(SpeciesCardMobile, {
+      const { getByRole } = render(SpeciesCardMobile, {
         props: { species: mockSpecies, variant: 'card', onClick },
       });
 
-      const button = container.querySelector('button');
-      expect(button).not.toBeNull();
-      if (button) await fireEvent.click(button);
+      await fireEvent.click(getByRole('button'));
 
       expect(onClick).toHaveBeenCalledTimes(1);
       expect(onClick).toHaveBeenCalledWith(mockSpecies);
@@ -123,14 +122,13 @@ describe('SpeciesCardMobile', () => {
 
     it('stays inert when no onClick handler is supplied', async () => {
       // The grid always passes a handler, but the prop is optional; clicking without
-      // one must not throw.
-      const { container } = render(SpeciesCardMobile, {
+      // one must not throw. fireEvent rejects on a listener error, so an unhandled
+      // click surfaces as a failed assertion here.
+      const { getByRole } = render(SpeciesCardMobile, {
         props: { species: mockSpecies, variant: 'card' },
       });
 
-      const button = container.querySelector('button');
-      expect(button).not.toBeNull();
-      if (button) await expect(fireEvent.click(button)).resolves.not.toThrow();
+      await expect(fireEvent.click(getByRole('button'))).resolves.not.toThrow();
     });
 
     it('shows the species name and detection stats', () => {
