@@ -159,5 +159,56 @@ class MigrationStateFixTest(unittest.TestCase):
         self.assertEqual(state, "idle")
 
 
+class HourlyWeatherSchemaTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+
+    def test_hourly_weathers_precipitation_columns_pass_contamination_check(self):
+        path = os.path.join(self._tmp.name, "birdnet.db")
+        conn = sqlite3.connect(path)
+        try:
+            conn.execute("""
+                CREATE TABLE hourly_weathers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    daily_events_id INTEGER NOT NULL DEFAULT 0,
+                    time DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00',
+                    temperature REAL NOT NULL DEFAULT 0,
+                    feels_like REAL NOT NULL DEFAULT 0,
+                    temp_min REAL NOT NULL DEFAULT 0,
+                    temp_max REAL NOT NULL DEFAULT 0,
+                    pressure INTEGER NOT NULL DEFAULT 0,
+                    humidity INTEGER NOT NULL DEFAULT 0,
+                    visibility INTEGER NOT NULL DEFAULT 0,
+                    wind_speed REAL NOT NULL DEFAULT 0,
+                    wind_deg INTEGER NOT NULL DEFAULT 0,
+                    wind_gust REAL NOT NULL DEFAULT 0,
+                    clouds INTEGER NOT NULL DEFAULT 0,
+                    precipitation REAL NOT NULL DEFAULT 0,
+                    precipitation_type TEXT NOT NULL DEFAULT '',
+                    weather_main TEXT NOT NULL DEFAULT '',
+                    weather_desc TEXT NOT NULL DEFAULT '',
+                    weather_icon TEXT NOT NULL DEFAULT '',
+                    created_at DATETIME
+                )
+            """)
+            conn.commit()
+        finally:
+            conn.close()
+
+        doctor = db_doctor.DatabaseDoctor(path)
+        report = db_doctor.DiagnosticReport(db_path=path)
+        ro = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        try:
+            report.tables_present = doctor._get_tables(ro)
+            report.schema_version = "v2"
+            check = doctor._check_schema_contamination(ro, report)
+        finally:
+            ro.close()
+
+        self.assertEqual(check.status, "pass")
+
+
 if __name__ == "__main__":
     unittest.main()
+
