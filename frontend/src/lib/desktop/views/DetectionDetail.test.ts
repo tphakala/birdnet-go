@@ -37,6 +37,11 @@ function makeDetection(overrides: Partial<Detection>): Detection {
 const FRESH_SCIENTIFIC = 'Fresh-sci-B';
 const STALE_SCIENTIFIC = 'Stale-sci-A';
 
+// Distinctive lifetime total for the first detection's history, so the assertion
+// that it disappears cannot pass by coincidence against other rendered numbers.
+const HISTORY_STALE_TOTAL = 777;
+const HISTORY_NEXT_COMMON = 'Next-common-B';
+
 /** Minimal fetch Response stub carrying a JSON body. */
 function jsonResponse(body: unknown): Response {
   return {
@@ -204,5 +209,58 @@ describe('DetectionDetail history tab', () => {
     // Window is the 30 days ending on the detection's own date, not on today.
     expect(dailyUrl).toContain('start_date=2026-06-27');
     expect(dailyUrl).toContain('end_date=2026-07-26');
+  });
+
+  // Regression: the detail view is reused across detections — App.svelte renders
+  // <DetectionDetail {detectionId} /> with no keyed block — so navigating A -> B
+  // must not leave A's species history on screen when B cannot load one. B here
+  // has a valid date but no scientific name, which the loader's guard rejects
+  // before any request is made, so nothing overwrites the previous state. What
+  // clears it is the detection effect's teardown calling speciesHistory.reset().
+  it('drops the previous species history when navigating to a detection without a species', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/v2/detections/hist-a')) {
+        return Promise.resolve(
+          jsonResponse(
+            makeDetection({ id: 42, scientificName: 'Spinus tristis', date: '2026-07-26' })
+          )
+        );
+      }
+      if (url.includes('/api/v2/detections/hist-b')) {
+        return Promise.resolve(
+          jsonResponse(
+            makeDetection({
+              id: 43,
+              scientificName: '',
+              commonName: HISTORY_NEXT_COMMON,
+              date: '2026-07-26',
+            })
+          )
+        );
+      }
+      if (url.includes('/api/v2/search')) {
+        return Promise.resolve(jsonResponse({ results: [], total: HISTORY_STALE_TOTAL }));
+      }
+      return Promise.resolve(jsonResponse({ data: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container, getByRole, rerender } = detailTest.render({ detectionId: 'hist-a' });
+    await waitFor(() => getByRole('tab', { name: /history/i }));
+    await fireEvent.click(getByRole('tab', { name: /history/i }));
+
+    // First detection's history is on screen.
+    await waitFor(() => {
+      expect(container.textContent).toContain(String(HISTORY_STALE_TOTAL));
+    });
+
+    // Navigate to a detection with no species. The history tab stays selected.
+    await rerender({ detectionId: 'hist-b' });
+    await waitFor(() => {
+      expect(container.textContent).toContain(HISTORY_NEXT_COMMON);
+    });
+
+    expect(container.textContent).not.toContain(String(HISTORY_STALE_TOTAL));
   });
 });
