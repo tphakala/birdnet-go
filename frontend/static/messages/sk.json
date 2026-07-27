@@ -4662,6 +4662,7 @@
       "speciesGuide": {
         "title": "Sprievodca druhmi",
         "description": "Obohaťte detekcie o taxonómiu, bežné názvy, externé odkazy a podobné druhy — offline cez OpenFauna; popisy z Wikipédie sú voliteľný online doplnok.",
+        "disabledReason": "Enable the species guide first",
         "enabled": {
           "label": "Povoliť sprievodcu druhmi",
           "helpText": "Zobraziť kontextové informácie sprievodcu v podrobnostiach detekcie a v okne druhu."

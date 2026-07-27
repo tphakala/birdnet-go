@@ -4662,6 +4662,7 @@
       "speciesGuide": {
         "title": "Sugu ceļvedis",
         "description": "Papildiniet noteikšanas ar taksonomiju, vispārpieņemtiem nosaukumiem, ārējām saitēm un līdzīgām sugām — bezsaistē, izmantojot OpenFauna; Wikipedia apraksti ir neobligāts tiešsaistes papildinājums.",
+        "disabledReason": "Enable the species guide first",
         "enabled": {
           "label": "Iespējot sugu ceļvedi",
           "helpText": "Rādīt ceļveža konteksta informāciju noteikšanas detaļās un sugas logā."

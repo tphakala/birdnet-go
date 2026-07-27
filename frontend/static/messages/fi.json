@@ -4662,6 +4662,7 @@
       "speciesGuide": {
         "title": "Lajiopas",
         "description": "Rikasta havaintoja taksonomialla, yleisnimillä, ulkoisilla linkeillä ja samankaltaisilla lajeilla — offline-tilassa OpenFaunan kautta; Wikipedia-kuvaukset ovat valinnainen verkkolisä.",
+        "disabledReason": "Enable the species guide first",
         "enabled": {
           "label": "Ota lajiopas käyttöön",
           "helpText": "Näytä oppaan kontekstitiedot havaintojen tiedoissa ja lajin ikkunassa."

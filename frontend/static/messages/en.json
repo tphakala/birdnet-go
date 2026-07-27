@@ -4662,6 +4662,7 @@
       "speciesGuide": {
         "title": "Species Guide",
         "description": "Enrich detections with taxonomy, common names, external links, and similar species — offline via OpenFauna; Wikipedia descriptions are an optional online add-on.",
+        "disabledReason": "Enable the species guide first",
         "enabled": {
           "label": "Enable species guide",
           "helpText": "Show contextual guide information on detection details and the species modal."

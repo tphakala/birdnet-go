@@ -25,7 +25,7 @@ function makeGuide(overrides: Partial<SpeciesGuideData> = {}): SpeciesGuideData 
     common_name: 'Common Raven',
     description: 'A large, heavy-billed corvid.\n\n## Voice\nA deep croaking gronk.',
     quality: 'full',
-    features: { notes: true, enrichments: true, similar_species: true },
+    features: { notes: true, enrichments: true, similar_species: true, taxonomy: true },
     source: { provider: 'wikipedia', url: '', license: '', license_url: '' },
     partial: false,
     cached_at: '2026-01-01T00:00:00Z',

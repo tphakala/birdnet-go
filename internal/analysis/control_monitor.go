@@ -1109,15 +1109,30 @@ func (cm *ControlMonitor) handleReconfigureSpeciesGuide() {
 	})
 	providerSetChanged := guideProviderSetChanged(cm.guideWikipediaApplied, liveWikipedia, cfg.EnableWikipedia)
 
+	// Retire the outgoing cache BEFORE wiping the shared table. InvalidateAll issues a
+	// DeleteAll against guide_caches, but the old cache is still installed and running:
+	// its refresh loop and any in-flight singleflight or pre-fetch can call saveGuide at
+	// any moment. One completing between the DeleteAll and the swap below would re-insert
+	// a row written under the OLD provider set — surviving the invalidation and then
+	// being served by the new cache, which is exactly what invalidating was meant to
+	// prevent. Swapping in nil closes the old cache synchronously (Close cancels its
+	// context and waits on its wait group), so no writer remains.
+	//
+	// Only done when the set actually changed: it briefly leaves the guide endpoints
+	// answering 503, which is the right trade during a provider change but pointless
+	// churn otherwise.
+	if providerSetChanged {
+		cm.apiController.SetGuideCache(nil)
+	}
+
 	newCache := initGuideCacheIfNeeded(settings, cm.apiController.DS, cm.metrics.GuideProvider)
 
-	// When the provider set changed, drop guides cached under the old set BEFORE
-	// activating the cache. initGuideCacheIfNeeded's Start() pre-loads existing DB
-	// rows (written under the old providers) into the new cache's memory tier, so
-	// invalidating after SetGuideCache would leave a window where a request hitting
-	// the freshly-activated cache is served a stale entry. Clearing first means the
-	// cache only ever goes live empty (the new providers re-populate it; the warm
-	// step below refreshes the hottest species).
+	// Drop guides cached under the old set BEFORE activating the new cache.
+	// initGuideCacheIfNeeded's Start() pre-loads existing DB rows (written under the old
+	// providers) into the new cache's memory tier, so invalidating after SetGuideCache
+	// would leave a window where a request hitting the freshly-activated cache is served
+	// a stale entry. Clearing first means the cache only ever goes live empty (the new
+	// providers re-populate it; the warm step below refreshes the hottest species).
 	if newCache != nil && providerSetChanged {
 		if err := newCache.InvalidateAll(context.Background()); err != nil {
 			GetLogger().Warn("Failed to invalidate species guide cache after provider change",

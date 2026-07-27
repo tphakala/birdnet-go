@@ -32,10 +32,7 @@
   import SpeciesComparison from '$lib/desktop/components/ui/SpeciesComparison.svelte';
   import SpeciesNotes from '$lib/desktop/components/ui/SpeciesNotes.svelte';
   import { dashboardSettings } from '$lib/stores/settings';
-  import {
-    resolveSpeciesGuideConfig,
-    type SpeciesGuideUIConfig,
-  } from '$lib/utils/speciesGuideConfig';
+  import { createSpeciesGuideConfig } from '$lib/utils/speciesGuideConfig.svelte';
   import {
     Download,
     Camera,
@@ -112,20 +109,10 @@
   // is populated only by the auth-protected full-settings load.
   // resolveSpeciesGuideConfig prefers the store value (live for authenticated users)
   // and falls back to one cached fetch of the public dashboard-settings endpoint.
-  let guideConfig = $state<SpeciesGuideUIConfig | null>(null);
-  $effect(() => {
-    const fromStore = $dashboardSettings?.speciesGuide;
-    let stale = false;
-    void resolveSpeciesGuideConfig(fromStore).then(cfg => {
-      if (!stale) guideConfig = cfg;
-    });
-    return () => {
-      stale = true;
-    };
-  });
-  let guideEnabled = $derived(guideConfig?.enabled ?? false);
-  let showSimilarSpecies = $derived(guideConfig?.showSimilarSpecies ?? true);
-  let showNotes = $derived(guideConfig?.showNotes ?? true);
+  const guideConfig = createSpeciesGuideConfig(() => $dashboardSettings?.speciesGuide);
+  let guideEnabled = $derived(guideConfig.enabled);
+  let showSimilarSpecies = $derived(guideConfig.showSimilarSpecies);
+  let showNotes = $derived(guideConfig.showNotes);
 
   // Dynamic review component loading
   let ReviewCard: ReviewCardComponent | null = $state(null);

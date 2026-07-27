@@ -7,10 +7,7 @@
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
   import { isAuthenticated } from '$lib/utils/auth';
   import { dashboardSettings } from '$lib/stores/settings';
-  import {
-    resolveSpeciesGuideConfig,
-    type SpeciesGuideUIConfig,
-  } from '$lib/utils/speciesGuideConfig';
+  import { createSpeciesGuideConfig } from '$lib/utils/speciesGuideConfig.svelte';
   import SpeciesComparison from '$lib/desktop/components/ui/SpeciesComparison.svelte';
   import SpeciesNotes from '$lib/desktop/components/ui/SpeciesNotes.svelte';
   import { api } from '$lib/utils/api';
@@ -58,21 +55,11 @@
   // settings store is populated only by the auth-protected full-settings load.
   // resolveSpeciesGuideConfig prefers the store value and falls back to one cached
   // fetch of the public endpoint.
-  let guideConfig = $state<SpeciesGuideUIConfig | null>(null);
-  $effect(() => {
-    const fromStore = $dashboardSettings?.speciesGuide;
-    let stale = false;
-    void resolveSpeciesGuideConfig(fromStore).then(cfg => {
-      if (!stale) guideConfig = cfg;
-    });
-    return () => {
-      stale = true;
-    };
-  });
-  let guideEnabled = $derived(guideConfig?.enabled ?? false);
-  let showSimilarSpecies = $derived(guideConfig?.showSimilarSpecies ?? true);
-  let showNotes = $derived(guideConfig?.showNotes ?? true);
-  let showTaxonomy = $derived(guideConfig?.showTaxonomy ?? true);
+  const guideConfig = createSpeciesGuideConfig(() => $dashboardSettings?.speciesGuide);
+  let guideEnabled = $derived(guideConfig.enabled);
+  let showSimilarSpecies = $derived(guideConfig.showSimilarSpecies);
+  let showNotes = $derived(guideConfig.showNotes);
+  let showTaxonomy = $derived(guideConfig.showTaxonomy);
 
   // Taxonomy (offline OpenFauna, public endpoint). Fetched only when the section
   // will render; a `stale` guard prevents a previous species' taxonomy flashing

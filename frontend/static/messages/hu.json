@@ -4662,6 +4662,7 @@
       "speciesGuide": {
         "title": "Fajútmutató",
         "description": "Gazdagítsa az észleléseket rendszertannal, köznevekkel, külső hivatkozásokkal és hasonló fajokkal — offline az OpenFauna révén; a Wikipédia-leírások opcionális online kiegészítők.",
+        "disabledReason": "Enable the species guide first",
         "enabled": {
           "label": "Fajútmutató engedélyezése",
           "helpText": "Kontextusfüggő útmutató-információk megjelenítése az észlelési adatoknál és a faj ablakában."

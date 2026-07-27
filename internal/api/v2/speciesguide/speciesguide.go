@@ -168,11 +168,22 @@ func New(core *apicore.Core) *Handler {
 
 // --- Response shapes (authoritative; mirrored by frontend types in species.ts) ---
 
-// GuideFeatureFlags reports which guide sections the configuration enables.
+// GuideFeatureFlags reports which guide sections the configuration enables, so the
+// client gates on a server-authoritative value rather than only on its own (possibly
+// stale) settings copy.
+//
+// Taxonomy is reported for that consistency but, unlike the others, is NOT additionally
+// enforced by a server-side gate. Its data comes from GET /species/taxonomy, which is a
+// public endpoint in the species domain with a non-guide consumer (the detection detail
+// view renders the same lineage with the guide disabled), so gating it on a species-guide
+// flag would break that caller. The enforcement argument is also weak here: the response
+// is served from the embedded offline dataset, so a hidden section costs no upstream
+// fetch — the thing the other flags exist to prevent.
 type GuideFeatureFlags struct {
 	Notes          bool `json:"notes"`
 	Enrichments    bool `json:"enrichments"`
 	SimilarSpecies bool `json:"similar_species"`
+	Taxonomy       bool `json:"taxonomy"`
 }
 
 // GuideSource describes the data source and license of a guide.
@@ -422,6 +433,10 @@ func (c *Handler) handleScientificNameError(ctx echo.Context, err error) error {
 // subFeature selects the sub-feature flag; pass nil for endpoints gated only by the
 // top-level Enabled switch.
 //
+// ShowTaxonomy is the one deliberate exception, because this domain serves no taxonomy
+// endpoint: that data comes from the species domain's public GET /species/taxonomy,
+// which has a non-guide consumer and costs no upstream fetch. See GuideFeatureFlags.
+//
 // The GATE IS THE SETTINGS POINTER, not the error: HandleError writes the response and
 // returns nil, so a caller branching on the error would sail past a denied request and
 // dereference nil settings. Callers must therefore write:
@@ -538,6 +553,7 @@ func (c *Handler) GetSpeciesGuide(ctx echo.Context) error {
 			Notes:          cfg.ShowNotes,
 			Enrichments:    cfg.ShowEnrichments,
 			SimilarSpecies: cfg.ShowSimilarSpecies,
+			Taxonomy:       cfg.ShowTaxonomy,
 		},
 		Source: GuideSource{
 			Provider:   guide.SourceProvider,

@@ -165,7 +165,16 @@ func resolveLinks(links map[string]LinkEntry, lang string, reg map[string]Source
 		var linkURL string
 		switch {
 		case entry.URL != "":
+			// An explicit override is used as-is, but still has to be a usable URL: a
+			// hand-edited or mis-generated override carrying a {lang}/{id} token would
+			// otherwise render a literal "{...}" in the href, which is exactly the
+			// silently-dead link the id branch below drops. Same guard, same reason.
 			linkURL = entry.URL
+			if hasUnresolvedPlaceholder(linkURL) {
+				GetLogger().Warn("openfauna source url override has unresolved placeholder; dropping link",
+					logger.String("source", id), logger.String("url_override", linkURL))
+				continue
+			}
 		case entry.ID != "":
 			// entry.ID is substituted verbatim (not URL-escaped): registry ids are
 			// stable tokens from the trusted vendored dataset (Wikidata QIDs, numeric

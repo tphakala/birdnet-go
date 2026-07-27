@@ -239,6 +239,14 @@
     showTaxonomy: settings.dashboard.speciesGuide?.showTaxonomy ?? true,
   });
 
+  // Why the species-guide sub-controls are disabled, or undefined when they are usable.
+  // Surfaced as both a tooltip and a visible note below: a disabled control with only an
+  // opacity change tells the user nothing, and tells a screen-reader user nothing at all
+  // — the ambiguous-disabled-state failure the frontend guidelines call out.
+  let speciesGuideDisabledReason = $derived(
+    speciesGuide.enabled ? undefined : t('settings.userInterface.speciesGuide.disabledReason')
+  );
+
   // --- Update handlers ---
   function updateDashboardSetting(key: string, value: string | number | boolean) {
     settingsActions.updateSection('realtime', {
@@ -461,12 +469,21 @@
           onchange={value => updateSpeciesGuideSetting('enabled', value)}
         />
 
+        {#if speciesGuideDisabledReason}
+          <!-- Visible (not tooltip-only) so the reason reaches touch devices and screen
+               readers; the per-control tooltips below repeat it on hover. -->
+          <p id="species-guide-disabled-help" role="status" class="text-sm opacity-70">
+            {speciesGuideDisabledReason}
+          </p>
+        {/if}
+
         <div class="space-y-4" class:opacity-50={!speciesGuide.enabled}>
           <Checkbox
             checked={speciesGuide.enableWikipedia}
             label={t('settings.userInterface.speciesGuide.enableWikipedia.label')}
             helpText={t('settings.userInterface.speciesGuide.enableWikipedia.helpText')}
             disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
+            tooltip={speciesGuideDisabledReason}
             onchange={value => updateSpeciesGuideSetting('enableWikipedia', value)}
           />
         </div>
@@ -477,6 +494,7 @@
             label={t('settings.userInterface.speciesGuide.enableSupplementaryLinks.label')}
             helpText={t('settings.userInterface.speciesGuide.enableSupplementaryLinks.helpText')}
             disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
+            tooltip={speciesGuideDisabledReason}
             onchange={value => updateSpeciesGuideSetting('enableSupplementaryLinks', value)}
           />
         </div>
@@ -487,12 +505,16 @@
             label={t('settings.userInterface.speciesGuide.preFetchEnabled.label')}
             helpText={t('settings.userInterface.speciesGuide.preFetchEnabled.helpText')}
             disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
+            tooltip={speciesGuideDisabledReason}
             onchange={value => updateSpeciesGuideSetting('preFetchEnabled', value)}
           />
 
+          <!-- InlineSlider has no tooltip prop, so the reason rides its help text
+               instead; the visible note above covers it either way. -->
           <InlineSlider
             label={t('settings.userInterface.speciesGuide.warmTopN.label')}
-            helpText={t('settings.userInterface.speciesGuide.warmTopN.helpText')}
+            helpText={speciesGuideDisabledReason ??
+              t('settings.userInterface.speciesGuide.warmTopN.helpText')}
             value={speciesGuide.warmTopN}
             onUpdate={value => updateSpeciesGuideSetting('warmTopN', value)}
             min={0}
@@ -512,6 +534,7 @@
             label={t('settings.userInterface.speciesGuide.showNotes.label')}
             helpText={t('settings.userInterface.speciesGuide.showNotes.helpText')}
             disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
+            tooltip={speciesGuideDisabledReason}
             onchange={value => updateSpeciesGuideSetting('showNotes', value)}
           />
 
@@ -520,6 +543,7 @@
             label={t('settings.userInterface.speciesGuide.showEnrichments.label')}
             helpText={t('settings.userInterface.speciesGuide.showEnrichments.helpText')}
             disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
+            tooltip={speciesGuideDisabledReason}
             onchange={value => updateSpeciesGuideSetting('showEnrichments', value)}
           />
 
@@ -528,6 +552,7 @@
             label={t('settings.userInterface.speciesGuide.showSimilarSpecies.label')}
             helpText={t('settings.userInterface.speciesGuide.showSimilarSpecies.helpText')}
             disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
+            tooltip={speciesGuideDisabledReason}
             onchange={value => updateSpeciesGuideSetting('showSimilarSpecies', value)}
           />
 
@@ -536,6 +561,7 @@
             label={t('settings.userInterface.speciesGuide.showTaxonomy.label')}
             helpText={t('settings.userInterface.speciesGuide.showTaxonomy.helpText')}
             disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
+            tooltip={speciesGuideDisabledReason}
             onchange={value => updateSpeciesGuideSetting('showTaxonomy', value)}
           />
         </div>

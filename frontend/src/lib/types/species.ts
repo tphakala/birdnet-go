@@ -86,6 +86,12 @@ export interface GuideFeatureFlags {
   notes: boolean;
   enrichments: boolean;
   similar_species: boolean;
+  /**
+   * Reported for consistency with the other flags, but not additionally enforced
+   * server-side: taxonomy comes from the public /species/taxonomy endpoint, which is
+   * shared with the detection detail view. See the Go GuideFeatureFlags doc.
+   */
+  taxonomy: boolean;
 }
 
 export interface SpeciesGuideData {

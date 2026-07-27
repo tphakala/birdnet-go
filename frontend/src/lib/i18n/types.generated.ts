@@ -3414,6 +3414,7 @@ export type TranslationKey =
   | 'settings.userInterface.audioPlayback.defaultGainUnit'
   | 'settings.userInterface.speciesGuide.title'
   | 'settings.userInterface.speciesGuide.description'
+  | 'settings.userInterface.speciesGuide.disabledReason'
   | 'settings.userInterface.speciesGuide.enabled.label'
   | 'settings.userInterface.speciesGuide.enabled.helpText'
   | 'settings.userInterface.speciesGuide.enableWikipedia.label'

@@ -92,4 +92,56 @@ describe('SpeciesCardMobile', () => {
       expect(rebound).toHaveAttribute('src', '/api/v2/media/image/Corvus%20brachyrhynchos');
     });
   }
+
+  // The desktop analytics grid switched from the non-interactive SpeciesCard to this
+  // component's `card` variant, which is a <button> that opens the species detail
+  // modal. The thumbnail behaviour above already covered what the retired component
+  // was tested for; the click affordance it gained was not covered anywhere.
+  describe('card variant (desktop analytics grid)', () => {
+    it('renders as a button so the card is keyboard reachable', () => {
+      const { container } = render(SpeciesCardMobile, {
+        props: { species: mockSpecies, variant: 'card', onClick: vi.fn() },
+      });
+
+      const button = container.querySelector('button');
+      expect(button).not.toBeNull();
+    });
+
+    it('invokes onClick with the species when activated', async () => {
+      const onClick = vi.fn();
+      const { container } = render(SpeciesCardMobile, {
+        props: { species: mockSpecies, variant: 'card', onClick },
+      });
+
+      const button = container.querySelector('button');
+      expect(button).not.toBeNull();
+      if (button) await fireEvent.click(button);
+
+      expect(onClick).toHaveBeenCalledTimes(1);
+      expect(onClick).toHaveBeenCalledWith(mockSpecies);
+    });
+
+    it('stays inert when no onClick handler is supplied', async () => {
+      // The grid always passes a handler, but the prop is optional; clicking without
+      // one must not throw.
+      const { container } = render(SpeciesCardMobile, {
+        props: { species: mockSpecies, variant: 'card' },
+      });
+
+      const button = container.querySelector('button');
+      expect(button).not.toBeNull();
+      if (button) await expect(fireEvent.click(button)).resolves.not.toThrow();
+    });
+
+    it('shows the species name and detection stats', () => {
+      const { getByText } = render(SpeciesCardMobile, {
+        props: { species: mockSpecies, variant: 'card', onClick: vi.fn() },
+      });
+
+      expect(getByText('House Sparrow')).toBeInTheDocument();
+      expect(getByText('Passer domesticus')).toBeInTheDocument();
+      expect(getByText('42')).toBeInTheDocument();
+      expect(getByText('85.0%')).toBeInTheDocument();
+    });
+  });
 });

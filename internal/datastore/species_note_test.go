@@ -143,7 +143,7 @@ func TestParseSpeciesNoteID(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := parseSpeciesNoteID(tt.input)
+			got, err := ParseSpeciesNoteID(tt.input)
 			if tt.wantErr {
 				require.Error(t, err)
 				return
@@ -160,7 +160,7 @@ func TestParseSpeciesNoteID(t *testing.T) {
 	t.Run("above uint32 does not wrap", func(t *testing.T) {
 		t.Parallel()
 		want := uint64(math.MaxUint32) + 1
-		got, err := parseSpeciesNoteID(strconv.FormatUint(want, 10))
+		got, err := ParseSpeciesNoteID(strconv.FormatUint(want, 10))
 		if math.MaxUint < math.MaxUint64 { // 32-bit platform
 			require.Error(t, err)
 			return

@@ -1953,7 +1953,7 @@ func (ds *Datastore) SaveSpeciesNote(ctx context.Context, note *datastore.Specie
 
 // UpdateSpeciesNote updates a note's entry, or returns ErrSpeciesNoteNotFound.
 func (ds *Datastore) UpdateSpeciesNote(ctx context.Context, noteID, entry string) error {
-	id, err := parseSpeciesNoteID(noteID)
+	id, err := datastore.ParseSpeciesNoteID(noteID)
 	if err != nil {
 		return err
 	}
@@ -1986,7 +1986,7 @@ func (ds *Datastore) UpdateSpeciesNote(ctx context.Context, noteID, entry string
 
 // DeleteSpeciesNote removes a note by ID, or returns ErrSpeciesNoteNotFound.
 func (ds *Datastore) DeleteSpeciesNote(ctx context.Context, noteID string) error {
-	id, err := parseSpeciesNoteID(noteID)
+	id, err := datastore.ParseSpeciesNoteID(noteID)
 	if err != nil {
 		return err
 	}
@@ -2005,19 +2005,9 @@ func (ds *Datastore) DeleteSpeciesNote(ctx context.Context, noteID string) error
 	}, ds.getMetrics())
 }
 
-// parseSpeciesNoteID parses a string note ID into a uint, rejecting invalid input.
-// The range guard matters on 32-bit builds (e.g. 32-bit Raspberry Pi OS), where uint
-// is 32-bit: without it a value above math.MaxUint32 would silently wrap and address
-// the wrong row. The check is a no-op on 64-bit, where math.MaxUint == math.MaxUint64.
-func parseSpeciesNoteID(noteID string) (uint, error) {
-	id, err := strconv.ParseUint(strings.TrimSpace(noteID), 10, 64)
-	if err != nil || id == 0 || id > uint64(math.MaxUint) {
-		return 0, errors.Newf("invalid note ID").
-			Component("datastore").Category(errors.CategoryValidation).
-			Context("operation", "parse_species_note_id").Build()
-	}
-	return uint(id), nil
-}
+// Note-ID parsing is shared with the legacy store via datastore.ParseSpeciesNoteID
+// rather than duplicated here: both stores back the same API surface, so they must
+// agree on which note IDs are accepted (including the 32-bit range guard).
 
 // ============================================================
 // Weather Methods

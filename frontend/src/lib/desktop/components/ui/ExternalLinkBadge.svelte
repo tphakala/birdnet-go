@@ -13,15 +13,21 @@
   // Icon hints come from the OpenFauna sources registry / supplementary registry /
   // eBird. Unknown hints fall back to the generic external-link glyph so any future
   // source still renders.
-  const ICON_BY_HINT: Record<string, Component> = {
-    wikipedia: BookOpen,
-    inaturalist: Leaf,
-    gbif: Globe,
-    ebird: Bird,
-    'xeno-canto': AudioLines,
-  };
+  //
+  // A Map, not a plain object: the hint is server-supplied data, and indexing an object
+  // literal walks Object.prototype, so a hint of "constructor"/"toString"/"valueOf"
+  // would resolve to a truthy non-component, defeat the `??` fallback, and throw when
+  // rendered — taking the whole guide panel down instead of degrading to the generic
+  // glyph. Matches seasonHighlight's SEASON_ICON and the modal's TAXONOMY_INDENT.
+  const ICON_BY_HINT = new Map<string, Component>([
+    ['wikipedia', BookOpen],
+    ['inaturalist', Leaf],
+    ['gbif', Globe],
+    ['ebird', Bird],
+    ['xeno-canto', AudioLines],
+  ]);
 
-  let Icon = $derived(ICON_BY_HINT[link.icon ?? ''] ?? ExternalLink);
+  let Icon = $derived(ICON_BY_HINT.get(link.icon ?? '') ?? ExternalLink);
 
   // Defense in depth: link URLs come from the server-side sources registry, but a
   // javascript:/data: URL must never reach href (matches BirdThumbnailPopup's

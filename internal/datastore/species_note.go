@@ -142,7 +142,7 @@ func (ds *DataStore) SaveSpeciesNote(ctx context.Context, note *SpeciesNote) err
 
 // UpdateSpeciesNote updates an existing note's entry, or returns ErrSpeciesNoteNotFound.
 func (ds *DataStore) UpdateSpeciesNote(ctx context.Context, noteID, entry string) error {
-	id, err := parseSpeciesNoteID(noteID)
+	id, err := ParseSpeciesNoteID(noteID)
 	if err != nil {
 		return err
 	}
@@ -172,7 +172,7 @@ func (ds *DataStore) UpdateSpeciesNote(ctx context.Context, noteID, entry string
 
 // DeleteSpeciesNote removes a note by ID, or returns ErrSpeciesNoteNotFound.
 func (ds *DataStore) DeleteSpeciesNote(ctx context.Context, noteID string) error {
-	id, err := parseSpeciesNoteID(noteID)
+	id, err := ParseSpeciesNoteID(noteID)
 	if err != nil {
 		return err
 	}
@@ -190,11 +190,15 @@ func (ds *DataStore) DeleteSpeciesNote(ctx context.Context, noteID string) error
 	}, ds.getMetrics())
 }
 
-// parseSpeciesNoteID parses a string note ID into a uint, rejecting invalid input.
+// ParseSpeciesNoteID parses a string note ID into a uint, rejecting invalid input.
 // The range guard matters on 32-bit builds (e.g. 32-bit Raspberry Pi OS), where uint
 // is 32-bit: without it a value above math.MaxUint32 would silently wrap and address
 // the wrong row. The check is a no-op on 64-bit, where math.MaxUint == math.MaxUint64.
-func parseSpeciesNoteID(noteID string) (uint, error) {
+//
+// Exported so the v2-only store shares it (alongside NormalizeSpeciesNoteEntry and
+// SpeciesNotesMaxResults) rather than keeping a second copy: both back the same API
+// surface, so the two must agree on which note IDs are accepted.
+func ParseSpeciesNoteID(noteID string) (uint, error) {
 	id, err := strconv.ParseUint(strings.TrimSpace(noteID), 10, 64)
 	if err != nil || id == 0 || id > uint64(math.MaxUint) {
 		return 0, validationError("invalid note ID", "note_id", noteID)

@@ -25,7 +25,7 @@ function makeGuide(overrides: Partial<SpeciesGuideData> = {}): SpeciesGuideData 
     common_name: 'Common Blackbird',
     description: 'An introduction.\n\n## Voice\nThe male sings.',
     quality: 'full',
-    features: { notes: true, enrichments: true, similar_species: true },
+    features: { notes: true, enrichments: true, similar_species: true, taxonomy: true },
     source: { provider: 'wikipedia', url: '', license: '', license_url: '' },
     partial: false,
     cached_at: '2026-01-01T00:00:00Z',
@@ -181,7 +181,7 @@ describe('SpeciesComparison', () => {
       if (url.includes('/guide'))
         return Promise.resolve(
           makeGuide({
-            features: { notes: true, enrichments: false, similar_species: true },
+            features: { notes: true, enrichments: false, similar_species: true, taxonomy: true },
             expectedness: 'expected',
             current_season: 'summer',
           }) as never
@@ -278,7 +278,7 @@ describe('SpeciesComparison', () => {
       if (url.includes('/guide'))
         return Promise.resolve(
           makeGuide({
-            features: { notes: true, enrichments: true, similar_species: false },
+            features: { notes: true, enrichments: true, similar_species: false, taxonomy: true },
           }) as never
         );
       return Promise.resolve({ scientific_name: 'x', genus: '', similar: [] } as never);
@@ -299,7 +299,7 @@ describe('SpeciesComparison', () => {
       if (url.includes('/guide'))
         return Promise.resolve(
           makeGuide({
-            features: { notes: true, enrichments: true, similar_species: false },
+            features: { notes: true, enrichments: true, similar_species: false, taxonomy: true },
           }) as never
         );
       return Promise.resolve({ scientific_name: 'x', genus: '', similar: [] } as never);
