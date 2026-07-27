@@ -1129,3 +1129,42 @@ func TestGuideCache_PreFetch_UsesWarmLocale(t *testing.T) {
 		t.Fatal("pre-fetch did not occur")
 	}
 }
+
+// TestGuideCache_SaveGuide_SkipsWriteOnCancelledContext pins the guard that keeps a
+// retired cache from re-polluting the shared table after a reconfigure.
+//
+// singleflight spawns goroutines the wait group does not track, so Close can return
+// while one sits between fetchFromProviders (whose provider read lock Close does wait
+// on) and the DB write. Every fetchAndStore runs on c.ctx, which Close cancels first,
+// so the write must be skipped — otherwise the straggler re-inserts a row under the
+// retired provider set after handleReconfigureSpeciesGuide invalidated the table, and
+// the freshly built cache serves it.
+//
+// fakeStore deliberately ignores the context, so this asserts the CACHE enforces the
+// guard rather than the database driver doing it incidentally.
+func TestGuideCache_SaveGuide_SkipsWriteOnCancelledContext(t *testing.T) {
+	t.Parallel()
+
+	store := newFakeStore()
+	c := newTestCache(t, store, &fakeProvider{
+		name:   OpenFaunaProviderName,
+		result: &SpeciesGuide{Description: "desc", CachedAt: time.Now()},
+	})
+
+	guide := &SpeciesGuide{ScientificName: "Turdus merula", Description: "desc", CachedAt: time.Now()}
+
+	// A live context persists normally: proves the test exercises a real write path.
+	c.saveGuide(t.Context(), "Turdus merula", "en", guide)
+	_, err := store.Get(t.Context(), "Turdus merula", "en", c.resolveProviderName())
+	require.NoError(t, err, "a live context must still persist the guide")
+
+	// A cancelled context must not write. Use a distinct species so a skipped write is
+	// unambiguous rather than masked by the row above.
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	c.saveGuide(cancelled, "Turdus pilaris", "en", guide)
+
+	_, err = store.Get(t.Context(), "Turdus pilaris", "en", c.resolveProviderName())
+	require.ErrorIs(t, err, ErrCacheEntryNotFound,
+		"a cancelled cache context must not persist a guide")
+}

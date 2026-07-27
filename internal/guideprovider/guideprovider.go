@@ -727,6 +727,24 @@ func (c *GuideCache) saveGuide(ctx context.Context, name, locale string, g *Spec
 	if c == nil || c.store == nil || g == nil {
 		return
 	}
+	// Never persist once this cache's context is done.
+	//
+	// Every fetchAndStore runs on c.ctx, which Close cancels before it returns, so this
+	// is the explicit form of an invariant a reconfigure depends on: singleflight
+	// spawns its own goroutines, which the wait group does NOT track, so Close can
+	// return while a straggler sits between fetchFromProviders (whose providersMu read
+	// lock Close does wait on) and this write. Without the guard that straggler could
+	// re-insert a row under the retired provider set after handleReconfigureSpeciesGuide
+	// has invalidated the table, and the new cache would then serve it.
+	//
+	// database/sql would also refuse a cancelled context, but leaning on that makes
+	// correctness a property of driver behaviour and would break silently if a caller's
+	// context were ever threaded through here instead of the cache's own.
+	if ctx.Err() != nil {
+		GetLogger().Debug("Skipping guide save on a cancelled cache context",
+			logger.String("species", name), logger.String("locale", locale))
+		return
+	}
 	entry := guideToEntry(name, locale, c.resolveProviderName(), g)
 	if err := c.store.Save(ctx, entry); err != nil {
 		c.metrics.RecordDBError("write", "save")
