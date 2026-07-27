@@ -70,6 +70,8 @@ interface AppConfigResponse {
   customColors?: { primary: string; accent: string };
   logoStyle?: string;
   liveSpectrogram?: boolean;
+  /** Whether audio clip export is enabled; drives showing per-detection spectrogram/audio in the UI */
+  audioExportEnabled?: boolean;
   layout?: {
     elements: {
       id?: string;
@@ -132,6 +134,8 @@ interface AppState {
   previousVersion: string | null;
   /** Whether live spectrogram is enabled */
   liveSpectrogram: boolean;
+  /** Whether audio clip export is enabled; when false, per-detection spectrogram/audio UI is hidden */
+  audioExportEnabled: boolean;
   /** Dataset version for the per-locale species-name dictionary. Empty string when unknown. */
   speciesDictVersion: string;
   /** Dashboard layout from public config (available before auth) */
@@ -181,6 +185,7 @@ const DEFAULT_STATE: AppState = {
   newVersion: false,
   previousVersion: null,
   liveSpectrogram: false,
+  audioExportEnabled: true,
   speciesDictVersion: '',
   layout: null,
   projectLinks: DEFAULT_PROJECT_LINKS,
@@ -311,6 +316,7 @@ export async function initApp(): Promise<boolean> {
       appState.newVersion = config.newVersion ?? false;
       appState.previousVersion = config.previousVersion ?? null;
       appState.liveSpectrogram = config.liveSpectrogram ?? false;
+      appState.audioExportEnabled = config.audioExportEnabled ?? true;
       appState.speciesDictVersion = config.speciesDictVersion ?? '';
       appState.layout = config.layout ?? null;
       appState.projectLinks = config.projectLinks ?? DEFAULT_PROJECT_LINKS;

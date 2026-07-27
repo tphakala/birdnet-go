@@ -251,6 +251,7 @@ func runStreamingIntegrationTest[T any](
 	// Stream results to client until done
 	for result := range resultChan {
 		writeMu.Lock()
+		apicore.SetStreamWriteDeadline(ctx)
 		if err := encoder.Encode(result); err != nil {
 			apicore.GetLogger().Error("Error encoding test result",
 				logger.String("integration", integrationName),
@@ -469,8 +470,7 @@ func (c *Handler) TestMQTTConnection(ctx echo.Context) error {
 	}
 
 	// Prepare for testing
-	ctx.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	ctx.Response().WriteHeader(http.StatusOK)
+	setStreamingHeaders(ctx, echo.MIMEApplicationJSON)
 
 	// Channel for test results
 	resultChan := make(chan mqtt.TestResult)
@@ -526,8 +526,7 @@ func (c *Handler) TestBirdWeatherConnection(ctx echo.Context) error {
 	}
 
 	// Prepare for testing
-	ctx.Response().Header().Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	ctx.Response().WriteHeader(http.StatusOK)
+	setStreamingHeaders(ctx, echo.MIMEApplicationJSON)
 
 	// Channel for test results
 	resultChan := make(chan birdweather.TestResult)
@@ -599,10 +598,7 @@ func (c *Handler) TestWeatherConnection(ctx echo.Context) error {
 	}
 
 	// Set up streaming response
-	ctx.Response().Header().Set("Content-Type", "application/x-ndjson")
-	ctx.Response().Header().Set("Cache-Control", "no-cache")
-	ctx.Response().Header().Set("Connection", "keep-alive")
-	ctx.Response().WriteHeader(http.StatusOK)
+	setStreamingHeaders(ctx, mimeNDJSON)
 
 	// Clone current settings and override only Weather fields from the request
 	testSettings := conf.CloneSettings(current)
@@ -623,6 +619,7 @@ func (c *Handler) TestWeatherConnection(ctx echo.Context) error {
 
 	// Helper function to send stage results
 	sendStage := func(stage WeatherTestStage) error {
+		apicore.SetStreamWriteDeadline(ctx)
 		if err := encoder.Encode(stage); err != nil {
 			return err
 		}
@@ -869,10 +866,28 @@ func formatClientError(prefix string, err error, settings *conf.Settings) string
 	return prefix + ". Check configuration and try again."
 }
 
+// mimeNDJSON is the content type for newline-delimited JSON streaming responses.
+const mimeNDJSON = "application/x-ndjson"
+
+// setStreamingHeaders configures the response for a streamed JSON/NDJSON body and
+// commits the 200 status. It disables proxy buffering (X-Accel-Buffering: no) via
+// the shared apicore helper so nginx and compatible reverse proxies deliver each
+// streamed result immediately instead of withholding them until the handler
+// returns.
+func setStreamingHeaders(ctx echo.Context, contentType string) {
+	h := ctx.Response().Header()
+	h.Set(echo.HeaderContentType, contentType)
+	h.Set(echo.HeaderCacheControl, "no-cache")
+	h.Set(echo.HeaderConnection, "keep-alive")
+	apicore.DisableProxyBuffering(ctx)
+	ctx.Response().WriteHeader(http.StatusOK)
+}
+
 // writeJSONResponse writes a JSON response to the client
 // NOTE: For most cases, consider using Echo's built-in ctx.JSON(httpStatus, data) instead
 // This function is primarily useful for streaming or special encoding scenarios
 func (c *Handler) writeJSONResponse(ctx echo.Context, data any) error {
+	apicore.SetStreamWriteDeadline(ctx)
 	encoder := json.NewEncoder(ctx.Response())
 	return encoder.Encode(data)
 }
@@ -907,10 +922,7 @@ func (c *Handler) TestEBirdConnection(ctx echo.Context) error {
 		})
 	}
 
-	ctx.Response().Header().Set("Content-Type", "application/x-ndjson")
-	ctx.Response().Header().Set("Cache-Control", "no-cache")
-	ctx.Response().Header().Set("Connection", "keep-alive")
-	ctx.Response().WriteHeader(http.StatusOK)
+	setStreamingHeaders(ctx, mimeNDJSON)
 
 	testCtx, cancel := context.WithTimeout(ctx.Request().Context(), integrationMediumTimeout*time.Second)
 	defer cancel()
@@ -918,6 +930,7 @@ func (c *Handler) TestEBirdConnection(ctx echo.Context) error {
 	encoder := json.NewEncoder(ctx.Response())
 
 	sendStage := func(stage WeatherTestStage) error {
+		apicore.SetStreamWriteDeadline(ctx)
 		if err := encoder.Encode(stage); err != nil {
 			return err
 		}

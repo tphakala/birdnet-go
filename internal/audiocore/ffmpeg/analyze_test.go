@@ -134,11 +134,35 @@ func TestBuildAnalysisArgs_TimeoutFlag(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			args := buildAnalysisArgs(tt.url, tt.ffmpegMajor)
+			args := buildAnalysisArgs(tt.url, tt.ffmpegMajor, true)
 
 			assert.Equal(t, tt.wantTransport, slices.Contains(args, "-rtsp_transport"), "rtsp_transport presence mismatch")
 			assert.Contains(t, args, tt.wantFlag, "expected timeout flag missing")
 			assert.NotContains(t, args, tt.forbiddenFlag, "forbidden timeout flag present")
+			// Only audio tracks should be SETUP during the RTSP handshake (issue #3798);
+			// non-RTSP sources must not carry the flag.
+			if tt.wantTransport {
+				allowedIdx := slices.Index(args, "-allowed_media_types")
+				require.NotEqual(t, -1, allowedIdx, "expected -allowed_media_types flag for RTSP")
+				require.Less(t, allowedIdx+1, len(args), "-allowed_media_types must have a value")
+				assert.Equal(t, "audio", args[allowedIdx+1])
+			} else {
+				assert.NotContains(t, args, "-allowed_media_types")
+			}
 		})
 	}
+}
+
+func TestBuildAnalysisArgs_AudioOnlyFallback(t *testing.T) {
+	t.Parallel()
+
+	// audioOnly=false is the full-stream fallback for cameras that cannot SETUP
+	// the audio track alone (issue #3902): keep the RTSP transport but drop the
+	// -allowed_media_types restriction. -vn still extracts audio only after decode.
+	args := buildAnalysisArgs("rtsp://cam.example.com/live", 7, false)
+
+	assert.Contains(t, args, "-rtsp_transport")
+	assert.Contains(t, args, "tcp")
+	assert.NotContains(t, args, "-allowed_media_types")
+	assert.Contains(t, args, "-vn")
 }

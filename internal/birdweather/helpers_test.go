@@ -3,6 +3,7 @@ package birdweather
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"net/http"
 	"os"
@@ -15,6 +16,58 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
+
+const (
+	flacMagic                  = "fLaC"
+	flacMagicLen               = 4
+	flacMetadataBlockHeaderLen = 4
+	flacStreamInfoPayloadLen   = 34
+	flacStreamInfoMinLen       = flacMagicLen + flacMetadataBlockHeaderLen + flacStreamInfoPayloadLen
+	flacMetadataBlockTypeMask  = 0x7f
+	flacStreamInfoBlockType    = 0
+	flacMetadataLengthOffset   = 5
+	flacStreamInfoFieldsStart  = 18
+	flacStreamInfoFieldsEnd    = 26
+	flacSampleRateShift        = 44
+	flacSampleRateMask         = 0xfffff
+	flacTotalSamplesBitCount   = 36
+	// The STREAMINFO body starts right after the "fLaC" marker and the 4-byte
+	// metadata block header; its first two 16-bit big-endian fields are the minimum
+	// and maximum block size (in samples).
+	flacMinBlockSizeOffset = flacMagicLen + flacMetadataBlockHeaderLen // body byte 0 (file byte 8)
+	flacMaxBlockSizeOffset = flacMinBlockSizeOffset + 2                // body byte 2 (file byte 10)
+)
+
+func flacStreamInfo(t *testing.T, data []byte) (sampleRate, totalSamples uint64) {
+	t.Helper()
+	require.GreaterOrEqual(t, len(data), flacStreamInfoMinLen, "FLAC data too short for STREAMINFO")
+	require.Equal(t, flacMagic, string(data[:flacMagicLen]), "FLAC signature not found")
+	require.Equal(t, byte(flacStreamInfoBlockType), data[flacMagicLen]&flacMetadataBlockTypeMask, "first FLAC metadata block must be STREAMINFO")
+
+	payloadLen := int(data[flacMetadataLengthOffset])<<16 |
+		int(data[flacMetadataLengthOffset+1])<<8 |
+		int(data[flacMetadataLengthOffset+2])
+	require.Equal(t, flacStreamInfoPayloadLen, payloadLen, "unexpected STREAMINFO length")
+
+	fields := binary.BigEndian.Uint64(data[flacStreamInfoFieldsStart:flacStreamInfoFieldsEnd])
+	sampleRate = (fields >> flacSampleRateShift) & flacSampleRateMask
+	totalSamples = fields & ((1 << flacTotalSamplesBitCount) - 1)
+	return sampleRate, totalSamples
+}
+
+// flacBlockSizes returns the STREAMINFO minimum and maximum block sizes (in
+// samples). Both must be non-zero and spec-legal (RFC 9639 requires 16..65535); a
+// zero max_blocksize makes strict decoders (browser Web Audio, Apple CoreAudio)
+// reject the stream, which is the BirdWeather soundscape failure in GitHub #3965.
+func flacBlockSizes(t *testing.T, data []byte) (minBlock, maxBlock uint16) {
+	t.Helper()
+	require.GreaterOrEqual(t, len(data), flacStreamInfoMinLen, "FLAC data too short for STREAMINFO")
+	require.Equal(t, flacMagic, string(data[:flacMagicLen]), "FLAC signature not found")
+	require.Equal(t, byte(flacStreamInfoBlockType), data[flacMagicLen]&flacMetadataBlockTypeMask, "first FLAC metadata block must be STREAMINFO")
+	minBlock = binary.BigEndian.Uint16(data[flacMinBlockSizeOffset:])
+	maxBlock = binary.BigEndian.Uint16(data[flacMaxBlockSizeOffset:])
+	return minBlock, maxBlock
+}
 
 // TestParseSoundscapeResponse tests the JSON response parsing helper
 func TestParseSoundscapeResponse(t *testing.T) {
@@ -274,82 +327,6 @@ func TestCheckAuthenticationStatus(t *testing.T) {
 			}
 
 			assert.NoError(t, err)
-		})
-	}
-}
-
-// TestParseDouble tests the safe float parsing helper
-func TestParseDouble(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name         string
-		input        string
-		defaultValue float64
-		expected     float64
-	}{
-		{
-			name:         "valid positive float",
-			input:        "3.14159",
-			defaultValue: 0.0,
-			expected:     3.14159,
-		},
-		{
-			name:         "valid negative float",
-			input:        "-23.5",
-			defaultValue: 0.0,
-			expected:     -23.5,
-		},
-		{
-			name:         "valid integer",
-			input:        "42",
-			defaultValue: 0.0,
-			expected:     42.0,
-		},
-		{
-			name:         "whitespace trimmed",
-			input:        "  -70.0  ",
-			defaultValue: -100.0,
-			expected:     -70.0,
-		},
-		{
-			name:         "empty string returns default",
-			input:        "",
-			defaultValue: -70.0,
-			expected:     -70.0,
-		},
-		{
-			name:         "invalid string returns default",
-			input:        "not-a-number",
-			defaultValue: -70.0,
-			expected:     -70.0,
-		},
-		{
-			name:         "unparseable special value returns default",
-			input:        "NaN-invalid",
-			defaultValue: -70.0,
-			expected:     -70.0,
-		},
-		{
-			name:         "zero",
-			input:        "0",
-			defaultValue: -1.0,
-			expected:     0.0,
-		},
-		{
-			name:         "scientific notation",
-			input:        "1.5e-3",
-			defaultValue: 0.0,
-			expected:     0.0015,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			result := parseDouble(tt.input, tt.defaultValue)
-			assert.InDelta(t, tt.expected, result, 0.000001)
 		})
 	}
 }

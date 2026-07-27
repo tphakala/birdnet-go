@@ -18,7 +18,6 @@
     ChevronDown,
     Eye,
     FrownIcon,
-    Music,
     Search,
     SquarePen,
     Volume2,
@@ -908,10 +907,12 @@
                           )}
                           alt={displayName || t('search.detailsPanel.unknownSpecies')}
                           class="w-full h-full object-cover"
+                          onload={e => {
+                            (e.currentTarget as HTMLImageElement).classList.remove('p-2');
+                          }}
                           onerror={e => {
-                            const target = e.currentTarget as HTMLImageElement;
-                            target.src = buildAppUrl('/ui/assets/bird-placeholder.svg');
-                            target.classList.add('p-2');
+                            (e.currentTarget as HTMLImageElement).classList.add('p-2');
+                            handleBirdImageError(e);
                           }}
                           loading="lazy"
                           decoding="async"
@@ -1035,20 +1036,6 @@
                       {/if}
                       <button
                         class="btn btn-xs btn-square"
-                        onclick={e => {
-                          e.preventDefault();
-                          // TODO: Implement audio playback function
-                        }}
-                        disabled={!result.hasAudio}
-                        aria-label={t('search.detailsPanel.playAudio', {
-                          species: displayName || t('search.detailsPanel.unknownSpecies'),
-                        })}
-                        aria-pressed="false"
-                      >
-                        <Music class="size-4" />
-                      </button>
-                      <button
-                        class="btn btn-xs btn-square"
                         onclick={() => navigation.navigate(`/ui/detections/${result.id}`)}
                         aria-label={t('search.detailsPanel.viewDetails', {
                           species: displayName || t('search.detailsPanel.unknownSpecies'),
@@ -1129,10 +1116,12 @@
                                 )}
                                 alt={displayName || t('search.detailsPanel.unknownSpecies')}
                                 class="w-full h-full object-cover"
+                                onload={e => {
+                                  (e.currentTarget as HTMLImageElement).classList.remove('p-2');
+                                }}
                                 onerror={e => {
-                                  const target = e.currentTarget as HTMLImageElement;
-                                  target.src = buildAppUrl('/ui/assets/bird-placeholder.svg');
-                                  target.classList.add('p-2');
+                                  (e.currentTarget as HTMLImageElement).classList.add('p-2');
+                                  handleBirdImageError(e);
                                 }}
                                 loading="lazy"
                                 decoding="async"
@@ -1141,23 +1130,25 @@
                             </div>
                           </div>
 
-                          <!-- Audio Player -->
-                          <div class="bg-[var(--color-base-200)] rounded-box p-4">
-                            <h3 class="text-lg font-semibold mb-2">
-                              {t('search.detailsPanel.audioPlayer')}
-                            </h3>
-                            <AudioPlayer
-                              audioUrl={buildAppUrl(`/api/v2/audio/${result.id}`)}
-                              detectionId={result.id}
-                              width={400}
-                              height={200}
-                              showDownload={true}
-                              showSpectrogram={true}
-                              enableClipExtraction={clipExtractionEnabled}
-                              clipLabel={`${result.commonName}_${result.timestamp.replace(/[: ]/g, '-')}`}
-                              modelType={result.modelType}
-                            />
-                          </div>
+                          <!-- Audio Player (shown only when this detection has a clip) -->
+                          {#if result.hasAudio}
+                            <div class="bg-[var(--color-base-200)] rounded-box p-4">
+                              <h3 class="text-lg font-semibold mb-2">
+                                {t('search.detailsPanel.audioPlayer')}
+                              </h3>
+                              <AudioPlayer
+                                audioUrl={buildAppUrl(`/api/v2/audio/${result.id}`)}
+                                detectionId={result.id}
+                                width={400}
+                                height={200}
+                                showDownload={true}
+                                showSpectrogram={true}
+                                enableClipExtraction={clipExtractionEnabled}
+                                clipLabel={`${result.commonName}_${result.timestamp.replace(/[: ]/g, '-')}`}
+                                modelType={result.modelType}
+                              />
+                            </div>
+                          {/if}
                         </div>
                       </div>
                     </td>
@@ -1303,17 +1294,18 @@
                         {/if}
                       </div>
                     {/if}
-                    <button
-                      class="btn btn-primary btn-sm"
-                      onclick={() => openMobilePlayer(result)}
-                      disabled={!result.hasAudio}
-                      aria-label={t('search.detailsPanel.playAudio', {
-                        species: displayName || t('search.detailsPanel.unknownSpecies'),
-                      })}
-                    >
-                      <Volume2 class="size-4" />
-                      {t('common.actions.play')}
-                    </button>
+                    {#if result.hasAudio}
+                      <button
+                        class="btn btn-primary btn-sm"
+                        onclick={() => openMobilePlayer(result)}
+                        aria-label={t('search.detailsPanel.playAudio', {
+                          species: displayName || t('search.detailsPanel.unknownSpecies'),
+                        })}
+                      >
+                        <Volume2 class="size-4" />
+                        {t('common.actions.play')}
+                      </button>
+                    {/if}
                     <button
                       class="btn btn-outline btn-sm"
                       onclick={() => navigation.navigate(`/ui/detections/${result.id}`)}

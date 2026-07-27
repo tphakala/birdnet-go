@@ -112,6 +112,21 @@ func MeasureInt16(pcm []int16, sampleRate, channels int) (Measurement, error) {
 	return result(m), nil
 }
 
+// MeasureInt16Bytes measures interleaved little-endian 16-bit PCM supplied as raw
+// bytes. It is equivalent to reinterpreting the bytes as []int16 and calling
+// MeasureInt16, but decodes inline via Meter.AddInt16Bytes so no intermediate
+// slice is allocated. A trailing odd byte (never produced by real int16 PCM) is
+// ignored; the source bytes are not modified.
+func MeasureInt16Bytes(pcm []byte, sampleRate, channels int) (Measurement, error) {
+	if err := validateDims(sampleRate, channels, len(pcm)/2); err != nil {
+		return Measurement{}, err
+	}
+	m := acquireMeter(sampleRate, channels)
+	defer releaseMeter(m)
+	m.AddInt16Bytes(pcm)
+	return result(m), nil
+}
+
 // NormalizeFloat32 normalizes interleaved float32 PCM in place and returns the
 // outcome. Silent input is left untouched (GainDB = 0).
 func NormalizeFloat32(pcm []float32, opts Options) (Result, error) {
@@ -184,6 +199,68 @@ func PlanGain(meas Measurement, opts Options) Result {
 	res.GainDB = gain
 	res.OutputLUFS = meas.IntegratedLUFS + gain
 	return res
+}
+
+// DefaultMaxGainDB bounds the loudness gain the BirdWeather soundscape upload
+// applies: 30 dB, the same clamp the BirdWeather FFmpeg FLAC path used, so a
+// soundscape's loudness is corrected no more aggressively under one encoder
+// than the other. It stops a near-silent clip from being over-amplified into
+// loud static, and a hot clip from being driven toward digital silence.
+//
+// The detection-clip export path deliberately does NOT use this: it bounds gain
+// with its own nativeExportMaxGainDB (internal/analysis/processor), derived from
+// the widest lift a valid loudness target can ask for. (Distinct again from
+// ffmpeg.MaxGainDB, which is a loudnorm-offset validation range, not a clamp.)
+const DefaultMaxGainDB = 30.0
+
+// ClampGainDB constrains a planned gain (dB) to [-maxAbsDB, +maxAbsDB] and reports
+// whether the clamp took effect. Callers pass PlanGain's GainDB and their own
+// ceiling (usually DefaultMaxGainDB); the returned bool lets one caller log the
+// limiting while another applies it silently. maxAbsDB is treated as a magnitude;
+// callers pass a non-negative value.
+func ClampGainDB(gainDB, maxAbsDB float64) (clamped float64, limited bool) {
+	// Treat maxAbsDB as a magnitude so a stray negative ceiling still yields a
+	// sane symmetric range rather than clamping everything to a negative bound.
+	absLimit := math.Abs(maxAbsDB)
+	switch {
+	case gainDB > absLimit:
+		return absLimit, true
+	case gainDB < -absLimit:
+		return -absLimit, true
+	default:
+		return gainDB, false
+	}
+}
+
+// PlanClampedGainInt16Bytes runs the measure -> plan -> clamp sequence the
+// BirdWeather native FLAC upload uses: it measures the integrated loudness and true peak of
+// interleaved little-endian int16 PCM bytes (via MeasureInt16Bytes, which decodes
+// inline without mutating pcm), plans the single gain that brings the clip to
+// opts.TargetLUFS without its true peak exceeding opts.TruePeakDBTP (via PlanGain),
+// then clamps that gain to [-maxAbsGainDB, +maxAbsGainDB] (via ClampGainDB).
+//
+// It returns the clamped gain to apply, the pass-one measurement, the pre-clamp
+// planning Result (whose GainDB and PeakLimited callers use for logging), and
+// whether the clamp took effect. Silent or sub-400 ms input yields gainDB == 0,
+// leaving quiet clips unchanged rather than boosting the noise floor. On a
+// measurement error every value is its zero and err is the raw MeasureInt16Bytes
+// error, so callers can wrap it with their own component and context.
+//
+// Only the sample rate and channel count are validated (by MeasureInt16Bytes).
+// Like PlanGain, opts.TargetLUFS and opts.TruePeakDBTP are NOT range-checked
+// here, so callers must pass a target in (-70, 0) and a ceiling <= 0; a
+// non-finite or out-of-range target otherwise flows through as a NaN or garbage
+// gain. The sole current caller, the BirdWeather upload path, passes fixed
+// constants. (The detection export path plans its gain step by step instead, so
+// it can apply a gate fallback for clips R128 cannot measure.)
+func PlanClampedGainInt16Bytes(pcm []byte, opts Options, maxAbsGainDB float64) (gainDB float64, meas Measurement, res Result, limited bool, err error) {
+	meas, err = MeasureInt16Bytes(pcm, opts.SampleRate, opts.Channels)
+	if err != nil {
+		return 0, Measurement{}, Result{}, false, err
+	}
+	res = PlanGain(meas, opts)
+	gainDB, limited = ClampGainDB(res.GainDB, maxAbsGainDB)
+	return gainDB, meas, res, limited, nil
 }
 
 func validateDims(sampleRate, channels, n int) error {

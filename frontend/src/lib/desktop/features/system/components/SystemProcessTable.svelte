@@ -162,6 +162,10 @@
       </thead>
       <tbody>
         {#each sortedProcesses as proc (proc.pid)}
+          {@const cpuPct = Number.isFinite(proc.cpu) ? Math.max(0, Math.min(proc.cpu, 100)) : 0}
+          <!-- cpuPct clamps finite values to 0-100% (matching the backend
+               normalization) and guards non-finite values so a missing/NaN cpu
+               renders 0.0% instead of NaN%. -->
           <tr
             class="border-b last:border-b-0 border-[var(--border-100)]/50 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
           >
@@ -193,10 +197,10 @@
                 <div class="w-12 h-1.5 rounded-full overflow-hidden bg-[var(--surface-300)]">
                   <div
                     class="h-full rounded-full bg-primary transition-[width] duration-600 ease-out"
-                    style:width="{Math.min(proc.cpu, 100)}%"
+                    style:width="{cpuPct}%"
                   ></div>
                 </div>
-                <span class="font-mono tabular-nums text-xs">{proc.cpu.toFixed(1)}%</span>
+                <span class="font-mono tabular-nums text-xs">{cpuPct.toFixed(1)}%</span>
               </div>
             </td>
             <td class="py-2 px-3">

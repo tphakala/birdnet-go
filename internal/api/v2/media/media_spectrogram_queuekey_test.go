@@ -18,6 +18,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -27,6 +28,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 )
@@ -176,4 +178,61 @@ func TestDeleteFailedStatusIfUnchangedPreservesRetryEntry(t *testing.T) {
 	deleteFailedStatusIfUnchanged(key, captured2)
 	_, ok = spectrogramQueue.Load(key)
 	assert.False(t, ok, "an unchanged failed entry must be deleted after its retention TTL")
+}
+
+func TestGenerateSpectrogramByID_PanicUpdatesQueueStatus(t *testing.T) {
+	withRestoredGlobalSettings(t)
+	tmp := t.TempDir()
+	sfs, err := securefs.New(tmp)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sfs.Close() })
+
+	settings := apitest.NewValidTestSettings()
+	mockDS := mocks.NewMockInterface(t)
+
+	// Mock DS to return a valid clip path so we get past validateNoteIDAndGetClipPath
+	mockDS.On("GetNoteClipPath", "42").Return("test_panic.wav", nil)
+	mockDS.On("GetNoteModelType", "42").Return("bird", nil)
+	// The worker looks up capture times when the clip is missing (it is, in this empty
+	// tmp dir), so require the Get call: a zero-time note makes the pending-export window
+	// not-ok and the goroutine proceeds to the nil-context panic this test exercises.
+	// Mandatory (no .Maybe()) so the test fails if noteCaptureTimes stops looking up.
+	mockDS.On("Get", "42").Return(datastore.Note{}, nil)
+
+	controllerCore := &apicore.Core{SFS: sfs, DS: mockDS}
+	// By setting a nil context, the goroutine will panic when calling context.WithTimeout(nil, ...)
+	//nolint:staticcheck // We intentionally pass nil to trigger a panic in context.WithTimeout
+	controllerCore.SetTestContext(nil, nil)
+	controller := &Handler{Core: controllerCore}
+	controller.Settings.Store(settings)
+	conftest.SetTestSettings(settings)
+
+	// Setup request
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/?size=lg&raw=true", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetParamNames("id")
+	ctx.SetParamValues("42")
+
+	// We can just clear the queue to make it easy to find the generated key
+	spectrogramQueue.Clear()
+
+	// Call GenerateSpectrogramByID. It should not panic synchronously, but the goroutine will.
+	err = controller.GenerateSpectrogramByID(ctx)
+	require.NoError(t, err) // the initial HTTP request is accepted (202 Accepted)
+
+	// Wait for the async goroutine to panic and the recover block to run
+	// The queue should eventually contain exactly one entry in the failed state
+	require.Eventually(t, func() bool {
+		success := false
+		spectrogramQueue.Range(func(key, value any) bool {
+			status, ok := value.(*SpectrogramQueueStatus)
+			if ok && status.GetStatus() == spectrogramStatusFailed {
+				success = true
+			}
+			return true
+		})
+		return success
+	}, 1*time.Second, 10*time.Millisecond, "Queue status should transition to failed after panic")
 }

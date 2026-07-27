@@ -56,7 +56,6 @@ Performance Optimizations:
     LogIn,
     ChevronsLeft,
     ChevronsRight,
-    LineChart,
     Bird,
     Monitor,
     Database,
@@ -76,10 +75,17 @@ Performance Optimizations:
     ExternalLink,
     Activity,
     ArrowDownToLine,
+    TrendingUp,
+    Leaf,
+    Moon,
   } from '@lucide/svelte';
   import { t } from '$lib/i18n';
+  import type { Component } from 'svelte';
   import CollapsibleNavSection from './CollapsibleNavSection.svelte';
   import type { NavItem } from './CollapsibleNavSection.svelte';
+  import NavSectionHeader from './NavSectionHeader.svelte';
+  import NavFlatItem from './NavFlatItem.svelte';
+  import { analyticsControls } from '$lib/desktop/features/analytics/registry/analyticsControls.svelte';
   import { appState, hasLiveAudioAccess } from '$lib/stores/appState.svelte';
   import { resetDateToToday } from '$lib/utils/datePersistence';
   import { getCurrentPathWithQuery } from '$lib/utils/urlHelpers';
@@ -123,7 +129,6 @@ Performance Optimizations:
   // Snapshot of the URL (path + query) the user was on when they opened the login
   // modal, so a login from a filtered view returns them to that exact view (#3306).
   let loginRedirectUrl = $state('/ui/');
-  let analyticsExpanded = $state(false);
   let settingsExpanded = $state(false);
   let systemExpanded = $state(false);
   let helpExpanded = $state(false);
@@ -137,7 +142,7 @@ Performance Optimizations:
   let tooltipVisible = $state(false);
 
   // Show tooltip with calculated position
-  function showTooltip(event: MouseEvent, text: string) {
+  function showTooltip(event: MouseEvent | FocusEvent, text: string) {
     const target = event.currentTarget as HTMLElement;
     const rect = target.getBoundingClientRect();
     tooltipPosition = {
@@ -165,11 +170,17 @@ Performance Optimizations:
   let actualRoute = $derived(currentRoute);
 
   // PERFORMANCE OPTIMIZATION: Cache route calculations with $derived.by
-  let routeCache = $derived.by(() => ({
+  // Typed as Record<string, boolean> so dynamic lookups (routeCache[item.routeKey])
+  // in the section render loop type-check.
+  let routeCache: Record<string, boolean> = $derived.by(() => ({
     dashboard: actualRoute === '/ui/dashboard' || actualRoute === '/ui/',
     liveStream: actualRoute.startsWith('/ui/live-stream'),
     analytics: actualRoute.startsWith('/ui/analytics'),
-    analyticsExact: actualRoute === '/ui/analytics',
+    analyticsSummary: actualRoute === '/ui/analytics/summary',
+    analyticsActivity: actualRoute === '/ui/analytics/activity',
+    analyticsTrends: actualRoute === '/ui/analytics/trends',
+    analyticsBiodiversity: actualRoute === '/ui/analytics/biodiversity',
+    analyticsNocturnal: actualRoute === '/ui/analytics/nocturnal',
     analyticsSpecies: actualRoute === '/ui/analytics/species',
     search: actualRoute.startsWith('/ui/search'),
     about: actualRoute.startsWith('/ui/about'),
@@ -196,13 +207,16 @@ Performance Optimizations:
     settingsUserInterface: actualRoute === '/ui/settings/userinterface',
   }));
 
+  // Help section is "active" for both the Help routes and the About page (About
+  // now lives under Help). /ui/about does not startWith /ui/help, so combine them.
+  let helpSection = $derived(routeCache.help || routeCache.about);
+
   // Auto-expand sections when route matches (only when not collapsed)
   $effect(() => {
     if (!isCollapsed) {
-      if (routeCache.analytics) analyticsExpanded = true;
       if (routeCache.settings) settingsExpanded = true;
       if (routeCache.system) systemExpanded = true;
-      if (routeCache.help) helpExpanded = true;
+      if (helpSection) helpExpanded = true;
     }
   });
 
@@ -218,7 +232,11 @@ Performance Optimizations:
   let navigationUrls = $derived({
     dashboard: onNavigate ? '/' : '/ui/dashboard',
     liveStream: onNavigate ? '/live-stream' : '/ui/live-stream',
-    analytics: onNavigate ? '/analytics' : '/ui/analytics',
+    analyticsSummary: onNavigate ? '/analytics/summary' : '/ui/analytics/summary',
+    analyticsActivity: onNavigate ? '/analytics/activity' : '/ui/analytics/activity',
+    analyticsTrends: onNavigate ? '/analytics/trends' : '/ui/analytics/trends',
+    analyticsBiodiversity: onNavigate ? '/analytics/biodiversity' : '/ui/analytics/biodiversity',
+    analyticsNocturnal: onNavigate ? '/analytics/nocturnal' : '/ui/analytics/nocturnal',
     analyticsSpecies: onNavigate ? '/analytics/species' : '/ui/analytics/species',
     search: onNavigate ? '/search' : '/ui/search',
     about: onNavigate ? '/about' : '/ui/about',
@@ -242,21 +260,91 @@ Performance Optimizations:
     settingsUserInterface: onNavigate ? '/settings/userinterface' : '/ui/settings/userinterface',
   });
 
-  // Nav item definitions for collapsible sections
-  let analyticsItems: NavItem[] = $derived([
-    {
-      icon: LineChart,
-      label: t('analytics.title'),
-      url: navigationUrls.analytics,
-      routeKey: 'analyticsExact',
-    },
-    {
-      icon: Bird,
-      label: t('analytics.species.title'),
-      url: navigationUrls.analyticsSpecies,
-      routeKey: 'analyticsSpecies',
-    },
-  ]);
+  // Flat task-grouped analytics sections (replaces the single Analytics collapsible
+  // plus the old top-level Search/About buttons). Derived so labels and the
+  // query-string-bearing analytics URLs stay reactive.
+  interface NavFlatItemDef {
+    icon: Component;
+    label: string;
+    url: string;
+    routeKey: string;
+  }
+  interface NavSection {
+    id: string;
+    headerLabel: string;
+    items: NavFlatItemDef[];
+  }
+
+  // Append the active analytics filter query to analytics item URLs, mirroring the
+  // prefixing convention analyticsControls.writeUrl uses. queryString has no leading
+  // '?' and is '' when all params are default, so default URLs stay clean.
+  // queryString is captured once per recompute to avoid repeated reads per item.
+  let navSections: NavSection[] = $derived.by(() => {
+    const qs = analyticsControls.queryString;
+    const withQuery = (base: string) => base + (qs ? `?${qs}` : '');
+    return [
+      {
+        id: 'explore',
+        headerLabel: t('navigation.sections.explore'),
+        items: [
+          {
+            icon: BarChart3,
+            label: t('analytics.hub.tabs.summary'),
+            url: withQuery(navigationUrls.analyticsSummary),
+            routeKey: 'analyticsSummary',
+          },
+          {
+            icon: Bird,
+            label: t('analytics.species.title'),
+            url: withQuery(navigationUrls.analyticsSpecies),
+            routeKey: 'analyticsSpecies',
+          },
+          {
+            icon: Search,
+            label: t('navigation.search'),
+            url: navigationUrls.search,
+            routeKey: 'search',
+          },
+        ],
+      },
+      {
+        id: 'patterns',
+        headerLabel: t('navigation.sections.patterns'),
+        items: [
+          {
+            icon: Activity,
+            label: t('analytics.hub.tabs.patterns'),
+            url: withQuery(navigationUrls.analyticsActivity),
+            routeKey: 'analyticsActivity',
+          },
+          {
+            icon: TrendingUp,
+            label: t('analytics.hub.tabs.trends'),
+            url: withQuery(navigationUrls.analyticsTrends),
+            routeKey: 'analyticsTrends',
+          },
+          {
+            icon: Moon,
+            label: t('analytics.hub.tabs.nocturnal'),
+            url: withQuery(navigationUrls.analyticsNocturnal),
+            routeKey: 'analyticsNocturnal',
+          },
+          {
+            icon: Leaf,
+            label: t('analytics.hub.tabs.biodiversity'),
+            url: withQuery(navigationUrls.analyticsBiodiversity),
+            routeKey: 'analyticsBiodiversity',
+          },
+        ],
+      },
+      // NOTE: The "Environment" (Weather, Soundscape) and "Data Quality" (Review)
+      // sections are intentionally omitted for now: those pages are not finished
+      // enough to ship. Their routes and pages still exist and stay reachable by
+      // direct URL. To restore, re-add each section object here plus its
+      // routeCache / navigationUrls entries and the CloudSun / AudioLines /
+      // BadgeCheck icon imports, once they are release-ready.
+    ];
+  });
 
   let systemItems: NavItem[] = $derived([
     {
@@ -303,6 +391,12 @@ Performance Optimizations:
       label: t('navigation.helpAndSupport'),
       url: navigationUrls.help,
       routeKey: 'helpExact',
+    },
+    {
+      icon: Info,
+      label: t('navigation.about'),
+      url: navigationUrls.about,
+      routeKey: 'about',
     },
     {
       icon: Bug,
@@ -434,22 +528,11 @@ Performance Optimizations:
   $effect(() => {
     if ($sidebar) {
       // Sidebar is now collapsed - close expanded sections
-      analyticsExpanded = false;
       settingsExpanded = false;
       systemExpanded = false;
       helpExpanded = false;
     }
   });
-
-  // Shared styles for menu items - inspired by modern sidebar designs
-  const menuItemBase =
-    'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 w-full text-left';
-  const menuItemDefault =
-    'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover';
-  const menuItemActive = 'menu-item-active';
-
-  // Collapsed menu item styles
-  let menuItemCollapsed = $derived(isCollapsed ? 'justify-center px-0' : '');
 </script>
 
 <svelte:window onclick={handleClickOutside} />
@@ -517,111 +600,59 @@ Performance Optimizations:
     </div>
 
     <!-- Navigation Menu -->
-    <div class={cn('flex-1 overflow-y-auto py-4', isCollapsed ? 'px-2' : 'px-3')}>
-      <div class="flex flex-col gap-1" role="navigation">
+    <div class={cn('sidebar-scroll flex-1 overflow-y-auto py-4', isCollapsed ? 'px-2' : 'px-3')}>
+      <div class="flex flex-col gap-1">
         <!-- Dashboard -->
-        <div class="relative">
-          <button
-            onclick={() => navigate(navigationUrls.dashboard)}
-            onmouseenter={e => isCollapsed && showTooltip(e, t('navigation.dashboard'))}
-            onmouseleave={hideTooltip}
-            aria-label={t('navigation.dashboard')}
-            class={cn(
-              menuItemBase,
-              menuItemCollapsed,
-              routeCache.dashboard ? menuItemActive : menuItemDefault
-            )}
-            aria-current={routeCache.dashboard ? 'page' : undefined}
-          >
-            <LayoutDashboard class="size-5 shrink-0" />
-            {#if !isCollapsed}
-              <span>{t('navigation.dashboard')}</span>
-            {/if}
-          </button>
-        </div>
-
-        <!-- Live Stream -->
-        {#if hasLiveAudioAccess()}
-          <div class="relative">
-            <button
-              onclick={() => navigate(navigationUrls.liveStream)}
-              onmouseenter={e => isCollapsed && showTooltip(e, t('spectrogram.page.title'))}
-              onmouseleave={hideTooltip}
-              aria-label={t('spectrogram.page.title')}
-              class={cn(
-                menuItemBase,
-                menuItemCollapsed,
-                routeCache.liveStream ? menuItemActive : menuItemDefault
-              )}
-              aria-current={routeCache.liveStream ? 'page' : undefined}
-              role="menuitem"
-            >
-              <Radio class="size-5 shrink-0" />
-              {#if !isCollapsed}
-                <span>{t('spectrogram.page.title')}</span>
-              {/if}
-            </button>
-          </div>
-        {/if}
-
-        <!-- Analytics (Collapsible) -->
-        <CollapsibleNavSection
-          icon={BarChart3}
-          label={t('navigation.analytics')}
-          ariaLabel={t('navigation.analyticsSubmenu')}
-          items={analyticsItems}
+        <NavFlatItem
+          icon={LayoutDashboard}
+          label={t('navigation.dashboard')}
+          url={navigationUrls.dashboard}
+          active={routeCache.dashboard}
           {isCollapsed}
-          expanded={analyticsExpanded}
-          routeActive={routeCache.analytics}
-          {routeCache}
-          onToggleExpanded={() => (analyticsExpanded = !analyticsExpanded)}
           onNavigate={navigate}
           {showTooltip}
           {hideTooltip}
-          {activeFlyout}
-          sectionId="analytics"
-          onToggleFlyout={toggleFlyout}
         />
 
-        <!-- Search -->
-        <div class="relative">
-          <button
-            onclick={() => navigate(navigationUrls.search)}
-            onmouseenter={e => isCollapsed && showTooltip(e, t('navigation.search'))}
-            onmouseleave={hideTooltip}
-            class={cn(
-              menuItemBase,
-              menuItemCollapsed,
-              routeCache.search ? menuItemActive : menuItemDefault
-            )}
-            role="menuitem"
-          >
-            <Search class="size-5 shrink-0" />
-            {#if !isCollapsed}
-              <span>{t('navigation.search')}</span>
-            {/if}
-          </button>
-        </div>
+        <!-- Live Audio -->
+        {#if hasLiveAudioAccess()}
+          <NavFlatItem
+            icon={Radio}
+            label={t('navigation.liveAudio')}
+            url={navigationUrls.liveStream}
+            active={routeCache.liveStream}
+            {isCollapsed}
+            onNavigate={navigate}
+            {showTooltip}
+            {hideTooltip}
+          />
+        {/if}
 
-        <!-- About -->
-        <div class="relative">
-          <button
-            onclick={() => navigate(navigationUrls.about)}
-            onmouseenter={e => isCollapsed && showTooltip(e, t('navigation.about'))}
-            onmouseleave={hideTooltip}
-            class={cn(
-              menuItemBase,
-              menuItemCollapsed,
-              routeCache.about ? menuItemActive : menuItemDefault
-            )}
-            role="menuitem"
-          >
-            <Info class="size-5 shrink-0" />
-            {#if !isCollapsed}
-              <span>{t('navigation.about')}</span>
-            {/if}
-          </button>
-        </div>
+        <!-- Flat task-grouped analytics sections (Explore / Patterns).
+             Rendered above the auth gate so analytics + Search stay publicly visible. The same
+             markup serves collapsed (header self-hides via sr-only; items render icon-only with
+             tooltips) and expanded modes - no flyout (collapsed flat-icon mode). -->
+        {#each navSections as section (section.id)}
+          <div role="group" aria-labelledby={`nav-section-${section.id}`}>
+            <NavSectionHeader
+              id={`nav-section-${section.id}`}
+              label={section.headerLabel}
+              {isCollapsed}
+            />
+            {#each section.items as item (item.routeKey)}
+              <NavFlatItem
+                icon={item.icon}
+                label={item.label}
+                url={item.url}
+                active={routeCache[item.routeKey]}
+                {isCollapsed}
+                onNavigate={navigate}
+                {showTooltip}
+                {hideTooltip}
+              />
+            {/each}
+          </div>
+        {/each}
 
         {#if !securityEnabled || accessAllowed}
           <!-- Divider -->
@@ -654,7 +685,7 @@ Performance Optimizations:
             items={helpItems}
             {isCollapsed}
             expanded={helpExpanded}
-            routeActive={routeCache.help}
+            routeActive={helpSection}
             {routeCache}
             onToggleExpanded={() => (helpExpanded = !helpExpanded)}
             onNavigate={navigate}
@@ -787,5 +818,32 @@ Performance Optimizations:
     border-top: 5px solid transparent;
     border-bottom: 5px solid transparent;
     border-right: 5px solid var(--color-base-300);
+  }
+
+  /* Thin, theme-aware scrollbar for the nav list, replacing the wide default OS
+     bar. Mirrors the terminal viewport treatment: a 6px transparent track with a
+     rounded thumb tinted from --color-base-content, so it stays subtle and works
+     in every color scheme. :global is required because the class is applied via a
+     dynamic class expression (matches how the codebase styles other scrollbars). */
+  :global(.sidebar-scroll) {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--color-base-content) 25%, transparent) transparent;
+  }
+
+  :global(.sidebar-scroll::-webkit-scrollbar) {
+    width: 6px;
+  }
+
+  :global(.sidebar-scroll::-webkit-scrollbar-track) {
+    background: transparent;
+  }
+
+  :global(.sidebar-scroll::-webkit-scrollbar-thumb) {
+    background-color: color-mix(in srgb, var(--color-base-content) 25%, transparent);
+    border-radius: 9999px;
+  }
+
+  :global(.sidebar-scroll::-webkit-scrollbar-thumb:hover) {
+    background-color: color-mix(in srgb, var(--color-base-content) 40%, transparent);
   }
 </style>

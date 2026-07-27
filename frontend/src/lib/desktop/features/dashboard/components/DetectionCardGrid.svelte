@@ -40,6 +40,9 @@
 
   const logger = loggers.ui;
 
+  // Each DetectionCard renders its compact (media-free) form on its own when its
+  // detection has no clip, so no card-level audio flag is threaded through here.
+
   interface Props {
     data: Detection[];
     loading?: boolean;

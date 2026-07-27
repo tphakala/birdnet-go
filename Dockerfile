@@ -1,5 +1,23 @@
 ARG TENSORFLOW_VERSION=2.17.1
 ARG ONNXRUNTIME_VERSION=1.25.1
+# OpenVINO toolkit pin for the runtime libraries bundled into the images. Keep the
+# release/build in sync with the Taskfile OPENVINO_RELEASE / OPENVINO_BUILD values;
+# the SHA256s are per-arch (arm64 matches the Taskfile OPENVINO_SHA256 header pin).
+ARG OPENVINO_RELEASE=2026.2
+ARG OPENVINO_BUILD=2026.2.0.21903.52ddc073857
+ARG OPENVINO_SHA256_AMD64=86896e9347cd160370d16f80fa2c49c2b7a51ec33b55cea6493c7dc7c4c61c55
+ARG OPENVINO_SHA256_ARM64=8ce45467967e22fddb83a6b72a8bd1f9bfa6f43351e1ca2eaf5251064fe17767
+# Intel NEO (compute-runtime) and IGC (intel-graphics-compiler) pin for
+# amd64 iGPU inference. Only used on linux/amd64; arm64 has no Intel GPU plugin.
+ARG NEO_VERSION=26.22.38646.4
+ARG IGC_VERSION=2.36.3+21719
+ARG IGC_TAG=v2.36.3
+ARG GMMLIB_VERSION=22.10.0
+ARG NEO_SHA256_IGC_CORE=9e0975ac75015b431ebb2da81a802b9fd1e28a3c270313a97569cd1e6a6c6048
+ARG NEO_SHA256_IGC_OPENCL=350a52331e784bb7fb9ed42e993b5c44b7e6562fc74d2cf3102b29b6a576fa85
+ARG NEO_SHA256_OPENCL_ICD=6fdac2e8a2aacf844ebfd90521bf7102b3ebb44f69c1bced1a9785a7ce96a3c2
+ARG NEO_SHA256_IGDGMM=6031a63d6e8a12ce61c14efc15f2c8e727061286e3820b8594e6d00615e04d54
+ARG NEO_SHA256_ZE_GPU=8bef9f24e03f826f93c076081bda13c6ac3afbd9e42b9fb8f298fab652330e2f
 
 FROM --platform=$BUILDPLATFORM golang:1.26-trixie AS buildenv
 
@@ -90,23 +108,79 @@ RUN ONNX_ARCH=$(case "${TARGETPLATFORM}" in \
     cp /tmp/onnxruntime/lib/libonnxruntime*.so* /home/dev-user/lib/ && \
     rm -rf /tmp/onnxruntime /tmp/onnxruntime.tgz
 
-# Build assets and compile BirdNET-Go (non-embedded, TFLite + ONNX)
-# OPENVINO=false keeps the published images ONNX-only: the noembed_linux_* targets
-# default OpenVINO on, so the standard image must opt out explicitly.
+# OpenVINO runtime provisioning for the target platform. One toolkit download
+# serves two purposes: (1) the arch-independent C API headers are staged into the
+# Taskfile OpenVINO header cache (.cache/openvino) with a matching .build-id stamp,
+# so the check-openvino task treats them as up-to-date and does not re-download
+# during the build; (2) the arch-specific runtime .so set is staged into
+# /home/dev-user/lib/openvino for the final image. Only the libraries the backend
+# needs are kept (core, C API, ONNX + IR frontends, the arch CPU plugin, the amd64
+# iGPU plugin, and TBB); the unused frontends and plugins are dropped to save size.
+# The SHA256 is verified per arch before extraction (a moved or tampered upstream
+# archive can still return HTTP 200).
+ARG OPENVINO_RELEASE
+ARG OPENVINO_BUILD
+ARG OPENVINO_SHA256_AMD64
+ARG OPENVINO_SHA256_ARM64
+RUN set -eu; \
+    case "${TARGETPLATFORM}" in \
+        "linux/amd64") OV_SUFFIX=x86_64; OV_LIBDIR=intel64; OV_SHA256="${OPENVINO_SHA256_AMD64}"; OV_CPU_PLUGIN=libopenvino_intel_cpu_plugin.so; OV_GPU_PLUGIN=libopenvino_intel_gpu_plugin.so ;; \
+        "linux/arm64") OV_SUFFIX=arm64;  OV_LIBDIR=aarch64; OV_SHA256="${OPENVINO_SHA256_ARM64}"; OV_CPU_PLUGIN=libopenvino_arm_cpu_plugin.so;   OV_GPU_PLUGIN="" ;; \
+        *) echo "Error: unsupported platform ${TARGETPLATFORM}" >&2; exit 1 ;; \
+    esac; \
+    OV_BASE="openvino_toolkit_ubuntu22_${OPENVINO_BUILD}_${OV_SUFFIX}"; \
+    OV_URL="https://storage.openvinotoolkit.org/repositories/openvino/packages/${OPENVINO_RELEASE}/linux/${OV_BASE}.tgz"; \
+    echo "Downloading OpenVINO ${OPENVINO_BUILD} (${OV_SUFFIX})"; \
+    curl -fsSL "${OV_URL}" -o /tmp/openvino.tgz; \
+    echo "${OV_SHA256}  /tmp/openvino.tgz" | sha256sum -c -; \
+    mkdir -p /tmp/ov; \
+    tar -xzf /tmp/openvino.tgz -C /tmp/ov --strip-components=1 \
+        "${OV_BASE}/runtime/include" \
+        "${OV_BASE}/runtime/lib/${OV_LIBDIR}" \
+        "${OV_BASE}/runtime/3rdparty/tbb/lib"; \
+    mkdir -p .cache/openvino; \
+    rm -rf .cache/openvino/include; \
+    cp -a /tmp/ov/runtime/include .cache/openvino/include; \
+    test -f .cache/openvino/include/openvino/c/openvino.h; \
+    printf '%s\n' "${OPENVINO_BUILD}" > .cache/openvino/.build-id; \
+    mkdir -p /home/dev-user/lib/openvino; \
+    OV_SRC="/tmp/ov/runtime/lib/${OV_LIBDIR}"; \
+    cp -a "${OV_SRC}"/libopenvino.so* /home/dev-user/lib/openvino/; \
+    cp -a "${OV_SRC}"/libopenvino_c.so* /home/dev-user/lib/openvino/; \
+    cp -a "${OV_SRC}"/libopenvino_onnx_frontend.so* /home/dev-user/lib/openvino/; \
+    cp -a "${OV_SRC}"/libopenvino_ir_frontend.so* /home/dev-user/lib/openvino/; \
+    cp -a "${OV_SRC}/${OV_CPU_PLUGIN}"* /home/dev-user/lib/openvino/; \
+    if [ -n "${OV_GPU_PLUGIN}" ]; then cp -a "${OV_SRC}/${OV_GPU_PLUGIN}"* /home/dev-user/lib/openvino/; fi; \
+    find /tmp/ov/runtime/3rdparty/tbb/lib -name '*.so*' -exec cp -a {} /home/dev-user/lib/openvino/ \; ; \
+    test -e /home/dev-user/lib/openvino/libtbb.so.12; \
+    rm -rf /tmp/openvino.tgz /tmp/ov; \
+    echo "Staged OpenVINO runtime libraries: $(ls /home/dev-user/lib/openvino | wc -l) entries"
+
+# Build assets and compile BirdNET-Go (non-embedded, TFLite/ONNX + native OpenVINO).
+# The noembed_linux_* targets default OPENVINO=true, and the runtime libraries
+# staged above ship in the final image so the backend can dlopen libopenvino_c.
+# The backend self-gates (non-A76 arm64, or amd64 without Intel GPU drivers) and
+# falls back to ONNX Runtime, so enabling it here is safe for every deployment.
+# OPENVINO_BUILD is passed through to the task so the check-openvino header-cache
+# guard compares against the SAME build id this stage staged into .cache/openvino
+# above. That makes the guard a guaranteed no-op (no re-download) and keeps the
+# compiled-against headers and the shipped runtime .so set on one version even if
+# the Taskfile default and this Dockerfile ARG ever drift.
 # Note: frontend-build (including Tailwind) is handled as a dependency of noembed_* tasks
 RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
     --mount=type=cache,target=/home/dev-user/.cache/go-build,uid=10001,gid=10001 \
     task check-tensorflow && \
     TARGET=$(echo ${TARGETPLATFORM} | tr '/' '_') && \
     echo "Building non-embedded version with BUILD_VERSION=${BUILD_VERSION}" && \
-    BUILD_VERSION="${BUILD_VERSION}" SENTRY_DSN="${SENTRY_DSN}" PROJECT_NAME="${PROJECT_NAME}" PROJECT_REPO_URL="${PROJECT_REPO_URL}" PROJECT_COMMUNITY_URL="${PROJECT_COMMUNITY_URL}" DOCKER_LIB_DIR=/home/dev-user/lib task noembed_${TARGET} OPENVINO=false
+    BUILD_VERSION="${BUILD_VERSION}" SENTRY_DSN="${SENTRY_DSN}" PROJECT_NAME="${PROJECT_NAME}" PROJECT_REPO_URL="${PROJECT_REPO_URL}" PROJECT_COMMUNITY_URL="${PROJECT_COMMUNITY_URL}" DOCKER_LIB_DIR=/home/dev-user/lib task noembed_${TARGET} OPENVINO_BUILD="${OPENVINO_BUILD}"
 
 # Create final image using a multi-platform base image
 FROM --platform=$TARGETPLATFORM debian:trixie-slim
 
-# Copy model files to /models. arm64 ships ONNX-only (issue #1103); other arches
-# ship the TFLite models. Stage all candidates in one cacheable layer, then keep
-# only the set for the target architecture.
+# Copy stock model files to /models. arm64 ships ONNX-only stock models (the
+# reduced-memory INT8-ARM default); other arches ship the TFLite models. Stage all
+# candidates in one cacheable layer, then keep only the set for the target
+# architecture. Custom models are supplied by the user at runtime, not shipped here.
 RUN mkdir -p /models /tmp/allmodels
 COPY --from=build /home/dev-user/src/BirdNET-Go/internal/classifier/data/*.tflite /tmp/allmodels/
 COPY --from=build /home/dev-user/src/BirdNET-Go/internal/classifier/data/*.onnx /tmp/allmodels/
@@ -120,7 +194,8 @@ RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
     chmod a+x /models && \
     rm -rf /tmp/allmodels
 
-# Install ALSA library and SOX for audio processing, and other system utilities for debugging
+# Install ALSA library and SOX for audio processing, tini (a tiny init run as
+# PID 1, see the ENTRYPOINT note below), and other system utilities for debugging
 RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
     adduser \
     ca-certificates \
@@ -143,21 +218,73 @@ RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
     lsof \
     bash-completion \
     gosu \
+    tini \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy ONNX Runtime libraries (used by all arches; arm64 relies on them exclusively).
-COPY --from=build /home/dev-user/lib/libonnxruntime*.so* /usr/lib/
+# --chown=root:root because COPY --from preserves the build-stage owner (dev-user,
+# UID 10001); system libraries must be root-owned so a runtime process cannot
+# overwrite them if it happens to share that UID.
+COPY --chown=root:root --from=build /home/dev-user/lib/libonnxruntime*.so* /usr/lib/
 
-# TensorFlow Lite C library: installed for non-arm64 only. arm64 is ONNX-only
-# (issue #1103) and the binary does not link libtensorflowlite_c. Stage it, then
-# install per arch.
-ARG TARGETPLATFORM
+# TensorFlow Lite C library: installed for all arches. The stock default classifier
+# is ONNX on arm64 (reduced memory) and TFLite on amd64, but every arch links
+# libtensorflowlite_c so a user-supplied custom `.tflite` model path loads in any
+# container. No TFLite interpreter is created unless a .tflite model is actually
+# loaded, so the arm64 memory win for the ONNX default is preserved.
+# Stage then cp (not a direct COPY) so cp dereferences the build-stage soname
+# symlinks into regular files under /usr/lib; cp runs as root here, so the installed
+# libraries are root-owned. Fail the build loudly if the library is missing.
 COPY --from=build /home/dev-user/lib/libtensorflowlite_c.so* /tmp/tflite-lib/
-RUN if [ "$TARGETPLATFORM" != "linux/arm64" ]; then \
-        cp /tmp/tflite-lib/libtensorflowlite_c.so* /usr/lib/; \
-    fi && \
+RUN cp /tmp/tflite-lib/libtensorflowlite_c.so* /usr/lib/ && \
+    test -e /usr/lib/libtensorflowlite_c.so && \
     rm -rf /tmp/tflite-lib && \
     ldconfig
+
+# Install Intel NEO compute runtime for amd64 iGPU inference.
+# NEO provides the OpenCL ICD that lets OpenVINO talk to the Intel iGPU when
+# /dev/dri is passed through from the host. OpenVINO libs for both arches are
+# installed via the COPY step below; this step only adds the OpenCL driver
+# stack required exclusively on amd64 Intel hardware.
+ARG NEO_VERSION
+ARG IGC_VERSION
+ARG IGC_TAG
+ARG GMMLIB_VERSION
+ARG NEO_SHA256_IGC_CORE
+ARG NEO_SHA256_IGC_OPENCL
+ARG NEO_SHA256_OPENCL_ICD
+ARG NEO_SHA256_IGDGMM
+ARG NEO_SHA256_ZE_GPU
+RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
+    apt-get update -q && apt-get install -q -y --no-install-recommends \
+        ocl-icd-libopencl1 libdrm2 libdrm-intel1 && \
+    mkdir -p /tmp/neo && cd /tmp/neo && \
+    wget -q \
+        "https://github.com/intel/intel-graphics-compiler/releases/download/${IGC_TAG}/intel-igc-core-2_${IGC_VERSION}_amd64.deb" \
+        "https://github.com/intel/intel-graphics-compiler/releases/download/${IGC_TAG}/intel-igc-opencl-2_${IGC_VERSION}_amd64.deb" \
+        "https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/intel-opencl-icd_${NEO_VERSION}-0_amd64.deb" \
+        "https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/libigdgmm12_${GMMLIB_VERSION}_amd64.deb" \
+        "https://github.com/intel/compute-runtime/releases/download/${NEO_VERSION}/libze-intel-gpu1_${NEO_VERSION}-0_amd64.deb" && \
+    printf '%s\n' \
+        "${NEO_SHA256_IGC_CORE}  intel-igc-core-2_${IGC_VERSION}_amd64.deb" \
+        "${NEO_SHA256_IGC_OPENCL}  intel-igc-opencl-2_${IGC_VERSION}_amd64.deb" \
+        "${NEO_SHA256_OPENCL_ICD}  intel-opencl-icd_${NEO_VERSION}-0_amd64.deb" \
+        "${NEO_SHA256_IGDGMM}  libigdgmm12_${GMMLIB_VERSION}_amd64.deb" \
+        "${NEO_SHA256_ZE_GPU}  libze-intel-gpu1_${NEO_VERSION}-0_amd64.deb" \
+        | sha256sum -c - && \
+    dpkg -i *.deb && \
+    rm -rf /tmp/neo /var/lib/apt/lists/*; \
+    fi
+
+# OpenVINO runtime libraries (both arches). The openvino-tagged binary dlopens
+# libopenvino_c at runtime and self-gates: a non-A76 arm64 CPU, or an amd64 host
+# without Intel GPU drivers, falls back to ONNX Runtime cleanly. The staging dir
+# holds the arch-appropriate set (see the build stage), with symlinks preserved so
+# the bare-soname dlopen resolves; ldconfig then refreshes the loader cache.
+# --chown=root:root because COPY --from preserves the build-stage owner (dev-user,
+# UID 10001); system libraries must be root-owned (see the ONNX Runtime copy above).
+COPY --chown=root:root --from=build /home/dev-user/lib/openvino/ /usr/lib/
+RUN ldconfig
 
 # Include reset_auth tool from build stage
 COPY --from=build /home/dev-user/src/BirdNET-Go/reset_auth.sh /usr/bin/
@@ -189,7 +316,7 @@ COPY --from=build /home/dev-user/src/BirdNET-Go/bin /usr/bin/
 
 # Add container labels for metadata and compatibility information
 LABEL org.opencontainers.image.title="BirdNET-Go"
-LABEL org.opencontainers.image.description="Real-time bird sound identification using BirdNET with ONNX Runtime support"
+LABEL org.opencontainers.image.description="Real-time bird sound identification using BirdNET with ONNX Runtime and OpenVINO support"
 LABEL org.opencontainers.image.source="https://github.com/tphakala/birdnet-go"
 LABEL org.opencontainers.image.documentation="https://github.com/tphakala/birdnet-go/blob/main/README.md"
 LABEL org.opencontainers.image.url="https://github.com/tphakala/birdnet-go"
@@ -220,6 +347,18 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
     CMD curl -fs --connect-timeout 2 --max-time 3 http://localhost:8080/health | jq -e '.status == "healthy"' >/dev/null || curl -fsk --connect-timeout 2 --max-time 3 https://localhost:8443/health | jq -e '.status == "healthy"' >/dev/null || curl -fsk --connect-timeout 2 --max-time 3 https://localhost:443/health | jq -e '.status == "healthy"' >/dev/null || exit 1
 
 # Container startup execution chain:
+# 0. tini - A tiny init run as PID 1. This is defense-in-depth, not a bug fix:
+#    the bash wrapper below already forwards signals and (via its SIGCHLD
+#    handling) reaps processes reparented to PID 1, and birdnet-go Wait()s the
+#    ffmpeg/sox children it spawns. tini makes correct PID 1 behaviour (orphan
+#    reaping + signal handling) intrinsic to the image instead of relying on the
+#    shell's semantics, so it stays correct across future entrypoint changes and
+#    matches Docker's own --init default. Baked into the image so every deploy
+#    path (docker/podman run, compose, quadlet, k8s) is covered without needing
+#    --init / init: true, which on Podman would require catatonit on the host.
+#    `-s` enables subreaper mode so it still reaps its subtree if a user also
+#    passes --init (tini as PID 2).
+#
 # 1. entrypoint.sh - Sets up user permissions, timezone, device access, and performs
 #    pre-flight checks (disk space, config writability). Handles both rootful and
 #    rootless container modes. Exits early with clear error messages if checks fail.
@@ -241,5 +380,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
 #   - Clean signal handling for orchestration (Docker, Kubernetes)
 #   - Early failure detection before wasting resources
 #   - Actionable error messages for troubleshooting
-ENTRYPOINT ["/usr/bin/entrypoint.sh", "/usr/bin/startup-wrapper.sh"]
+ENTRYPOINT ["/usr/bin/tini", "-s", "--", "/usr/bin/entrypoint.sh", "/usr/bin/startup-wrapper.sh"]
 CMD ["birdnet-go", "realtime"]

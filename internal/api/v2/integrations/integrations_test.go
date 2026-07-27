@@ -851,3 +851,36 @@ func TestTestEBirdConnection_RestoresRedactedAPIKey(t *testing.T) {
 			"eBird test must use the real saved key, not the redacted placeholder")
 	})
 }
+
+// TestSetStreamingHeaders verifies the shared streaming-response header helper
+// sets the content type, no-cache/keep-alive, and X-Accel-Buffering: no so the
+// integration connection-test streams are not buffered behind a reverse proxy.
+func TestSetStreamingHeaders(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		contentType string
+	}{
+		{"ndjson stream", mimeNDJSON},
+		{"json stream", echo.MIMEApplicationJSON},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/mqtt/test", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+
+			setStreamingHeaders(c, tt.contentType)
+
+			assert.Equal(t, tt.contentType, rec.Header().Get(echo.HeaderContentType))
+			assert.Equal(t, "no-cache", rec.Header().Get(echo.HeaderCacheControl))
+			assert.Equal(t, "keep-alive", rec.Header().Get(echo.HeaderConnection))
+			assert.Equal(t, "no", rec.Header().Get("X-Accel-Buffering"),
+				"streaming responses must set X-Accel-Buffering: no so reverse proxies do not buffer them")
+			assert.Equal(t, http.StatusOK, rec.Code)
+		})
+	}
+}

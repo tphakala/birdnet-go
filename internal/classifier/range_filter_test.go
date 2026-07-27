@@ -346,3 +346,46 @@ func TestBuildRangeFilter_UnmappedSpeciesInIsSpeciesIncluded(t *testing.T) {
 	assert.True(t, updated.IsSpeciesIncluded("Ficedula hypoleuca_Pied Flycatcher"),
 		"unmapped species should be included when PassUnmappedSpecies is true")
 }
+
+// TestGetWeekForFilter_MonthEndClamp verifies the derived BirdNET week stays in
+// [1, 48] for every calendar day, clamping the 5th partial week at the end of a
+// 29-31 day month to week 4. Regression guard for the Dec 29-31 -> week 49 bug
+// (mirrors the fix in internal/api/v2/range.calculateWeek and the canonical
+// onnx.CalculateWeek).
+func TestGetWeekForFilter_MonthEndClamp(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		dateStr string
+		want    float32
+	}{
+		{"Jan 1", "2023-01-01", 1},
+		{"Jan 28", "2023-01-28", 4},
+		{"Jan 29 clamps to week 4", "2023-01-29", 4},
+		{"Jan 31 clamps to week 4", "2023-01-31", 4},
+		{"Feb 28", "2023-02-28", 8},
+		{"Feb 29 leap clamps to week 8", "2024-02-29", 8},
+		{"Dec 28", "2023-12-28", 48},
+		{"Dec 29 would be 49 without clamp", "2023-12-29", 48},
+		{"Dec 30 would be 49 without clamp", "2023-12-30", 48},
+		{"Dec 31 would be 49 without clamp", "2023-12-31", 48},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			date, err := time.Parse(time.DateOnly, tc.dateStr)
+			require.NoError(t, err)
+			assert.InDelta(t, tc.want, getWeekForFilter(date), 0.0001)
+		})
+	}
+
+	// Invariant: the derived week must stay within [1, 48] for every day of a
+	// full leap year, covering every month-end partial week (including Feb 29).
+	for date := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC); date.Year() == 2024; date = date.AddDate(0, 0, 1) {
+		week := getWeekForFilter(date)
+		assert.GreaterOrEqual(t, week, float32(1), "week below 1 for %s", date.Format(time.DateOnly))
+		assert.LessOrEqual(t, week, float32(48), "week above 48 for %s", date.Format(time.DateOnly))
+	}
+}

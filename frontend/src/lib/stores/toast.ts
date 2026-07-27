@@ -2,12 +2,7 @@ import { writable, derived } from 'svelte/store';
 
 export type ToastType = 'info' | 'success' | 'warning' | 'error';
 export type ToastPosition =
-  | 'top-left'
-  | 'top-center'
-  | 'top-right'
-  | 'bottom-left'
-  | 'bottom-center'
-  | 'bottom-right';
+  'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
 
 export interface ToastMessage {
   id: string;

@@ -4,6 +4,7 @@ package containers
 
 import (
 	"fmt"
+	"slices"
 	"sync"
 	"testing"
 )
@@ -54,8 +55,7 @@ func (cm *CleanupManager) Cleanup() []error {
 	var errors []error
 
 	// Execute cleanups in reverse order without holding the lock
-	for i := len(cleanupsCopy) - 1; i >= 0; i-- {
-		cleanup := cleanupsCopy[i]
+	for _, cleanup := range slices.Backward(cleanupsCopy) {
 		if err := cleanup.fn(); err != nil {
 			errors = append(errors, fmt.Errorf("%s cleanup failed: %w", cleanup.name, err))
 		}

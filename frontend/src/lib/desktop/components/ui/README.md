@@ -216,15 +216,7 @@ Comprehensive input component supporting multiple input types.
 ```typescript
 interface Props {
   type?:
-    | 'text'
-    | 'email'
-    | 'password'
-    | 'number'
-    | 'date'
-    | 'datetime-local'
-    | 'time'
-    | 'url'
-    | 'tel';
+    'text' | 'email' | 'password' | 'number' | 'date' | 'datetime-local' | 'time' | 'url' | 'tel';
   value?: string | number;
   id?: string;
   name?: string;
@@ -532,7 +524,7 @@ interface Props {
 Utility functions for image handling.
 
 ```typescript
-export function handleBirdImageError(e: Event): void;
+export function handleBirdImageError(e: Event): boolean;
 ```
 
 **Usage:**
@@ -549,6 +541,13 @@ export function handleBirdImageError(e: Event): void;
 
 - Bird-specific error handling
 - Automatic placeholder fallback
+- Bounded retry of the original URL, because the media proxy answers "not resolved
+  yet" for a species whose image is still being fetched in the background. Each retry
+  loads the URL into a detached probe image first and only swaps the visible `src` on
+  success, so the placeholder does not flicker for a species that has no image at all.
+- Returns `true` while a retry is pending. A caller that blacklists failed URLs, or
+  that replaces the `<img>` with an error state, must honour this: removing the element
+  cancels the retry it just scheduled.
 
 ---
 

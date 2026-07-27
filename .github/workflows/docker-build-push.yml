@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       tag-strategy:
-        description: "Tagging strategy: nightly or release"
+        description: "Tagging strategy: nightly, release, or dev"
         required: true
         type: string
       version:
@@ -36,6 +36,11 @@ on:
         required: false
         type: boolean
         default: true
+      validate-podman:
+        description: "Run the Podman pull/run compatibility job after the build"
+        required: false
+        type: boolean
+        default: true
       keep-images-count:
         description: "Number of images to keep during cleanup"
         required: false
@@ -63,10 +68,10 @@ jobs:
       version: ${{ inputs.version }}
       ghcr-success: ${{ steps.push-status.outputs.ghcr-success }}
       dockerhub-success: ${{ steps.push-status.outputs.dockerhub-success }}
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: ${{ fromJson(inputs.platforms) }}
+      # The build date this run tagged with, so validate-podman pulls the exact
+      # dated tag the build published instead of recomputing it (which could
+      # differ across a UTC-midnight crossing between the two jobs).
+      build-date: ${{ steps.tags.outputs.date }}
 
     steps:
       - name: Checkout code
@@ -75,7 +80,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
       - name: Generate repository names
         id: repo-names
@@ -121,77 +126,138 @@ jobs:
 
       - name: Generate tags
         id: tags
+        env:
+          # Inputs via env, not inline ${{ }}, so a crafted version cannot inject
+          # shell (inputs.version flows from github.ref_name on release builds).
+          VERSION: ${{ inputs.version }}
+          STRATEGY: ${{ inputs.tag-strategy }}
+          WANT_LATEST: ${{ inputs.create-latest-tag }}
+          PUSH_GHCR: ${{ inputs.push-to-ghcr }}
+          PUSH_DH: ${{ inputs.push-to-dockerhub }}
+          DH_LOGIN: ${{ steps.dockerhub-login.outcome }}
         run: |
-          PLATFORM_SUFFIX=""
-          if [ "${{ matrix.platform }}" = "linux/amd64" ]; then
-            PLATFORM_SUFFIX="amd64"
-          elif [ "${{ matrix.platform }}" = "linux/arm64" ]; then
-            PLATFORM_SUFFIX="arm64"
+          # Final multi-arch tags only, split by registry. The single multi-
+          # platform build-push below publishes the GHCR manifest lists directly;
+          # Docker Hub is mirrored from GHCR afterwards (see the mirror step), so
+          # a Docker Hub blip cannot fail the GHCR publish. No per-arch
+          # (-amd64/-arm64) intermediates and no manifest-assembly job (buildx
+          # emits the manifest list natively).
+          #
+          # Invariant: GHCR is both the build target and the Docker Hub mirror
+          # source, so push-to-ghcr must be true whenever Docker Hub is enabled.
+          # All callers (release-build.yml, docker-build.yml) set push-to-ghcr
+          # true.
+          DATE=$(date +'%Y%m%d')
+
+          acc=""
+          emit() { acc="${acc}${1}"$'\n'; }
+
+          # Accumulate the tag set for one registry repo into "acc". The podman-*
+          # aliases are the same manifest list, published under discovery-
+          # friendly names.
+          gen() {
+            local repo="$1"
+            if [ "$STRATEGY" = "nightly" ]; then
+              emit "${repo}:nightly-${DATE}"
+              emit "${repo}:nightly"
+              emit "${repo}:podman-nightly-${DATE}"
+              emit "${repo}:podman-nightly"
+            elif [ "$STRATEGY" = "release" ]; then
+              emit "${repo}:${VERSION}"
+              emit "${repo}:podman-${VERSION}"
+              # Also publish the version without the leading "v" (e.g. 1.2.3)
+              # for users who pin the unprefixed tag.
+              local no_v="${VERSION#v}"
+              if [ "$no_v" != "$VERSION" ]; then
+                emit "${repo}:${no_v}"
+                emit "${repo}:podman-${no_v}"
+              fi
+              # Date-based release (YYYYMMDD): also move the :nightly alias so
+              # the install.sh userbase that pins :nightly keeps receiving each
+              # dated release. Gated to date tags so a stable vX.Y.Z release does
+              # not move :nightly.
+              if printf '%s' "$VERSION" | grep -qE '^[0-9]{8}$'; then
+                emit "${repo}:nightly"
+                emit "${repo}:podman-nightly"
+              fi
+            elif [ "$STRATEGY" = "dev" ]; then
+              # Dev images built on every push to main: a floating :dev alias and
+              # the immutable commit SHA (passed in as version), plus podman
+              # discovery aliases.
+              emit "${repo}:dev"
+              emit "${repo}:${VERSION}"
+              emit "${repo}:podman-dev"
+              emit "${repo}:podman-${VERSION}"
+            fi
+            if [ "$WANT_LATEST" = "true" ]; then
+              emit "${repo}:latest"
+              emit "${repo}:podman-latest"
+            fi
+          }
+
+          ghcr_tags=""
+          if [ "$PUSH_GHCR" = "true" ]; then
+            acc=""; gen "${GHCR_REPO}"; ghcr_tags="$acc"
+          fi
+          # Only mirror to Docker Hub when its (continue-on-error) login actually
+          # succeeded, so a Docker Hub outage never blocks the GHCR publish.
+          dockerhub_tags=""
+          if [ "$PUSH_DH" = "true" ] && [ "$DH_LOGIN" = "success" ]; then
+            acc=""; gen "${DOCKERHUB_REPO}"; dockerhub_tags="$acc"
           fi
 
-          TAGS=""
+          # Stable GHCR ref used as the mirror source: a manifest list that all
+          # the other GHCR tags for this run also point at.
+          # Use an immutable per-run ref (dated tag / version / commit SHA), not
+          # a floating alias, so nothing can re-point it between build and use.
+          case "$STRATEGY" in
+            nightly) source_ref="${GHCR_REPO}:nightly-${DATE}" ;;
+            *)       source_ref="${GHCR_REPO}:${VERSION}" ;;
+          esac
 
-          # Generate tags based on strategy
-          if [ "${{ inputs.tag-strategy }}" = "nightly" ]; then
-            DATE=$(date +'%Y%m%d')
-            
-            if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
-              # Standard nightly tags
-              TAGS="${TAGS}${GHCR_REPO}:nightly-${PLATFORM_SUFFIX}-${DATE},"
-              TAGS="${TAGS}${GHCR_REPO}:nightly-${PLATFORM_SUFFIX},"
-              # Podman-compatible tags (same image, different labels for discovery)
-              TAGS="${TAGS}${GHCR_REPO}:podman-nightly-${PLATFORM_SUFFIX}-${DATE},"
-              TAGS="${TAGS}${GHCR_REPO}:podman-nightly-${PLATFORM_SUFFIX},"
-            fi
-            
-            if [ "${{ inputs.push-to-dockerhub }}" = "true" ] && [ "${{ steps.dockerhub-login.outcome }}" = "success" ]; then
-              # Standard nightly tags
-              TAGS="${TAGS}${DOCKERHUB_REPO}:nightly-${PLATFORM_SUFFIX}-${DATE},"
-              TAGS="${TAGS}${DOCKERHUB_REPO}:nightly-${PLATFORM_SUFFIX},"
-              # Podman-compatible tags
-              TAGS="${TAGS}${DOCKERHUB_REPO}:podman-nightly-${PLATFORM_SUFFIX}-${DATE},"
-              TAGS="${TAGS}${DOCKERHUB_REPO}:podman-nightly-${PLATFORM_SUFFIX},"
-            fi
-            
-          elif [ "${{ inputs.tag-strategy }}" = "release" ]; then
-            
-            if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
-              # Standard release tags
-              TAGS="${TAGS}${GHCR_REPO}:${{ inputs.version }}-${PLATFORM_SUFFIX},"
-              TAGS="${TAGS}${GHCR_REPO}:${PLATFORM_SUFFIX},"
-              # Podman-compatible tags
-              TAGS="${TAGS}${GHCR_REPO}:podman-${{ inputs.version }}-${PLATFORM_SUFFIX},"
-              TAGS="${TAGS}${GHCR_REPO}:podman-${PLATFORM_SUFFIX},"
-            fi
-            
-            if [ "${{ inputs.push-to-dockerhub }}" = "true" ] && [ "${{ steps.dockerhub-login.outcome }}" = "success" ]; then
-              # Standard release tags
-              TAGS="${TAGS}${DOCKERHUB_REPO}:${{ inputs.version }}-${PLATFORM_SUFFIX},"
-              TAGS="${TAGS}${DOCKERHUB_REPO}:${PLATFORM_SUFFIX},"
-              # Podman-compatible tags
-              TAGS="${TAGS}${DOCKERHUB_REPO}:podman-${{ inputs.version }}-${PLATFORM_SUFFIX},"
-              TAGS="${TAGS}${DOCKERHUB_REPO}:podman-${PLATFORM_SUFFIX},"
-            fi
-          fi
-
-          # Remove trailing comma
-          TAGS=$(echo "$TAGS" | sed 's/,$//')
-
-          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
-          echo "Generated tags: $TAGS"
+          {
+            echo "ghcr-tags<<__GHCR_EOF__"
+            printf '%s' "$ghcr_tags"
+            echo "__GHCR_EOF__"
+            echo "dockerhub-tags<<__DH_EOF__"
+            printf '%s' "$dockerhub_tags"
+            echo "__DH_EOF__"
+            echo "source-ref=${source_ref}"
+            echo "date=${DATE}"
+            # RFC3339 build timestamp for the org.opencontainers.image.created label.
+            echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          } >> "$GITHUB_OUTPUT"
+          echo "GHCR tags:"
+          printf '%s' "$ghcr_tags"
+          echo "Docker Hub tags (mirrored from ${source_ref}):"
+          printf '%s' "$dockerhub_tags"
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         id: build-push
         with:
           context: .
           push: true
-          platforms: ${{ matrix.platform }}
+          # Single multi-arch build: buildx builds every platform and publishes
+          # one manifest list per GHCR tag, replacing the old per-arch matrix +
+          # `docker manifest create/push` assembly. Docker Hub is mirrored from
+          # GHCR in the next step, not pushed here, so a Docker Hub push flake
+          # cannot fail this (GHCR-authoritative) build.
+          platforms: ${{ join(fromJson(inputs.platforms), ',') }}
           build-args: |
             BUILD_VERSION=${{ inputs.version }}
             SENTRY_DSN=${{ secrets.SENTRY_DSN }}
             BUILDKIT_INLINE_CACHE=1
-          tags: ${{ steps.tags.outputs.tags }}
+          tags: ${{ steps.tags.outputs.ghcr-tags }}
+          # OCI image labels. Set on the GHCR build; the Docker Hub mirror copies
+          # the image config, so the Docker Hub tags inherit these automatically.
+          labels: |
+            org.opencontainers.image.title=birdnet-go
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.url=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ inputs.version }}
+            org.opencontainers.image.created=${{ steps.tags.outputs.created }}
           cache-from: |
             type=gha
             type=registry,ref=ghcr.io/${{ steps.repo-names.outputs.ghcr-repo }}:buildcache
@@ -200,243 +266,68 @@ jobs:
             type=registry,ref=ghcr.io/${{ steps.repo-names.outputs.ghcr-repo }}:buildcache,mode=max
           provenance: false
 
+      - name: Mirror image to Docker Hub
+        id: dockerhub-mirror
+        # Copy the GHCR manifest list to the Docker Hub tags with imagetools
+        # (no rebuild, cross-registry blob copy) instead of pushing Docker Hub
+        # in the build itself. continue-on-error keeps a transient Docker Hub
+        # failure non-fatal; GHCR has already published, and the retry loop
+        # restores the resilience the removed create-manifests job used to give.
+        if: ${{ inputs.push-to-ghcr && inputs.push-to-dockerhub && steps.dockerhub-login.outcome == 'success' && steps.build-push.outcome == 'success' }}
+        continue-on-error: true
+        env:
+          DOCKERHUB_TAGS: ${{ steps.tags.outputs.dockerhub-tags }}
+          SOURCE_REF: ${{ steps.tags.outputs.source-ref }}
+        run: |
+          set -euo pipefail
+          # One -t target per Docker Hub tag; imagetools create copies the
+          # multi-arch manifest list from the GHCR source to every target at once.
+          targets=()
+          count=0
+          while IFS= read -r t; do
+            if [ -n "$t" ]; then
+              targets+=( -t "$t" )
+              count=$((count + 1))
+            fi
+          done <<< "$DOCKERHUB_TAGS"
+          if [ "$count" -eq 0 ]; then
+            echo "No Docker Hub tags to mirror"
+            exit 0
+          fi
+          echo "Mirroring ${count} Docker Hub tag(s) from ${SOURCE_REF}"
+          for attempt in 1 2 3; do
+            if docker buildx imagetools create "${targets[@]}" "$SOURCE_REF"; then
+              echo "Docker Hub mirror succeeded"
+              exit 0
+            fi
+            echo "Docker Hub mirror attempt ${attempt}/3 failed, retrying in 15s..."
+            sleep 15
+          done
+          echo "Docker Hub mirror failed after 3 attempts"
+          exit 1
+
       - name: Check push status
         id: push-status
+        env:
+          PUSH_DH: ${{ inputs.push-to-dockerhub }}
+          MIRROR_OUTCOME: ${{ steps.dockerhub-mirror.outcome }}
         run: |
-          # Default to success for outputs
-          echo "ghcr-success=true" >> $GITHUB_OUTPUT
-          echo "dockerhub-success=true" >> $GITHUB_OUTPUT
-
-          # Check if build failed
-          if [ "${{ steps.build-push.outcome }}" != "success" ]; then
-            echo "⚠️ Docker build/push had issues, but continuing workflow"
-            
-            # Try to determine which registry failed by checking login status
-            if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
-              echo "ghcr-success=false" >> $GITHUB_OUTPUT
-            fi
-            
-            if [ "${{ inputs.push-to-dockerhub }}" = "true" ] && [ "${{ steps.dockerhub-login.outcome }}" != "success" ]; then
-              echo "dockerhub-success=false" >> $GITHUB_OUTPUT
-            fi
-          fi
-
-  create-manifests:
-    needs: build
-    runs-on: ubuntu-24.04
-    if: always() && needs.build.result != 'cancelled'
-
-    steps:
-      - name: Generate repository names
-        id: repo-names
-        run: |
-          echo "GHCR_REPO=ghcr.io/${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
-          REPO_NAME=$(echo "${GITHUB_REPOSITORY}" | cut -d'/' -f2)
-          echo "DOCKERHUB_REPO=tphakala/${REPO_NAME}" >> ${GITHUB_ENV}
-
-      - name: Login to GitHub Container Registry
-        if: inputs.push-to-ghcr
-        run: |
-          for attempt in 1 2 3; do
-            if echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin; then
-              echo "GHCR login succeeded"
-              exit 0
-            fi
-            echo "GHCR login attempt $attempt/3 failed, retrying in 15s..."
-            sleep 15
-          done
-          echo "GHCR login failed after 3 attempts"
-          exit 1
-
-      - name: Login to Docker Hub
-        if: inputs.push-to-dockerhub
-        continue-on-error: true
-        id: dockerhub-login
-        run: |
-          for attempt in 1 2 3; do
-            if echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u tphakala --password-stdin; then
-              echo "Docker Hub login succeeded"
-              exit 0
-            fi
-            echo "Docker Hub login attempt $attempt/3 failed, retrying in 15s..."
-            sleep 15
-          done
-          echo "Docker Hub login failed after 3 attempts"
-          exit 1
-
-      - name: Create and push manifests
-        run: |
-          set +e  # Don't exit on error - we want to try both registries
-
-          retry() {
-            local max=3 delay=15 attempt=1
-            while [ $attempt -le $max ]; do
-              if "$@"; then return 0; fi
-              echo "  Attempt $attempt/$max failed, retrying in ${delay}s..."
-              sleep $delay
-              attempt=$((attempt + 1))
-            done
-            return 1
-          }
-
-          if [ "${{ inputs.tag-strategy }}" = "nightly" ]; then
-            DATE=$(date +'%Y%m%d')
-
-            # GHCR Manifests
-            if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
-              echo "Creating GHCR nightly manifests..."
-
-              # Create dated manifest
-              retry docker manifest create ${GHCR_REPO}:nightly-${DATE} \
-                ${GHCR_REPO}:nightly-amd64-${DATE} \
-                ${GHCR_REPO}:nightly-arm64-${DATE} || echo "Failed to create GHCR dated manifest"
-              retry docker manifest push ${GHCR_REPO}:nightly-${DATE} || echo "Failed to push GHCR dated manifest"
-
-              # Create main nightly manifest
-              retry docker manifest create ${GHCR_REPO}:nightly \
-                ${GHCR_REPO}:nightly-amd64-${DATE} \
-                ${GHCR_REPO}:nightly-arm64-${DATE} || echo "Failed to create GHCR nightly manifest"
-              retry docker manifest push ${GHCR_REPO}:nightly || echo "Failed to push GHCR nightly manifest"
-
-              # Create Podman-compatible dated manifest
-              retry docker manifest create ${GHCR_REPO}:podman-nightly-${DATE} \
-                ${GHCR_REPO}:podman-nightly-amd64-${DATE} \
-                ${GHCR_REPO}:podman-nightly-arm64-${DATE} || echo "Failed to create GHCR Podman dated manifest"
-              retry docker manifest push ${GHCR_REPO}:podman-nightly-${DATE} || echo "Failed to push GHCR Podman dated manifest"
-
-              # Create main Podman nightly manifest
-              retry docker manifest create ${GHCR_REPO}:podman-nightly \
-                ${GHCR_REPO}:podman-nightly-amd64-${DATE} \
-                ${GHCR_REPO}:podman-nightly-arm64-${DATE} || echo "Failed to create GHCR Podman nightly manifest"
-              retry docker manifest push ${GHCR_REPO}:podman-nightly || echo "Failed to push GHCR Podman nightly manifest"
-
-              # Create latest manifest if requested
-              if [ "${{ inputs.create-latest-tag }}" = "true" ]; then
-                retry docker manifest create ${GHCR_REPO}:latest \
-                  ${GHCR_REPO}:nightly-amd64-${DATE} \
-                  ${GHCR_REPO}:nightly-arm64-${DATE} || echo "Failed to create GHCR latest manifest"
-                retry docker manifest push ${GHCR_REPO}:latest || echo "Failed to push GHCR latest manifest"
-
-                # Create Podman latest manifest
-                retry docker manifest create ${GHCR_REPO}:podman-latest \
-                  ${GHCR_REPO}:podman-nightly-amd64-${DATE} \
-                  ${GHCR_REPO}:podman-nightly-arm64-${DATE} || echo "Failed to create GHCR Podman latest manifest"
-                retry docker manifest push ${GHCR_REPO}:podman-latest || echo "Failed to push GHCR Podman latest manifest"
-              fi
-            fi
-
-            # Docker Hub Manifests
-            if [ "${{ inputs.push-to-dockerhub }}" = "true" ] && [ "${{ steps.dockerhub-login.outcome }}" = "success" ]; then
-              echo "Creating Docker Hub nightly manifests..."
-
-              # Create dated manifest
-              retry docker manifest create ${DOCKERHUB_REPO}:nightly-${DATE} \
-                ${DOCKERHUB_REPO}:nightly-amd64-${DATE} \
-                ${DOCKERHUB_REPO}:nightly-arm64-${DATE} || echo "Failed to create Docker Hub dated manifest"
-              retry docker manifest push ${DOCKERHUB_REPO}:nightly-${DATE} || echo "Failed to push Docker Hub dated manifest"
-
-              # Create main nightly manifest
-              retry docker manifest create ${DOCKERHUB_REPO}:nightly \
-                ${DOCKERHUB_REPO}:nightly-amd64-${DATE} \
-                ${DOCKERHUB_REPO}:nightly-arm64-${DATE} || echo "Failed to create Docker Hub nightly manifest"
-              retry docker manifest push ${DOCKERHUB_REPO}:nightly || echo "Failed to push Docker Hub nightly manifest"
-
-              # Create Podman-compatible dated manifest
-              retry docker manifest create ${DOCKERHUB_REPO}:podman-nightly-${DATE} \
-                ${DOCKERHUB_REPO}:podman-nightly-amd64-${DATE} \
-                ${DOCKERHUB_REPO}:podman-nightly-arm64-${DATE} || echo "Failed to create Docker Hub Podman dated manifest"
-              retry docker manifest push ${DOCKERHUB_REPO}:podman-nightly-${DATE} || echo "Failed to push Docker Hub Podman dated manifest"
-
-              # Create main Podman nightly manifest
-              retry docker manifest create ${DOCKERHUB_REPO}:podman-nightly \
-                ${DOCKERHUB_REPO}:podman-nightly-amd64-${DATE} \
-                ${DOCKERHUB_REPO}:podman-nightly-arm64-${DATE} || echo "Failed to create Docker Hub Podman nightly manifest"
-              retry docker manifest push ${DOCKERHUB_REPO}:podman-nightly || echo "Failed to push Docker Hub Podman nightly manifest"
-
-              # Create latest manifest if requested
-              if [ "${{ inputs.create-latest-tag }}" = "true" ]; then
-                retry docker manifest create ${DOCKERHUB_REPO}:latest \
-                  ${DOCKERHUB_REPO}:nightly-amd64-${DATE} \
-                  ${DOCKERHUB_REPO}:nightly-arm64-${DATE} || echo "Failed to create Docker Hub latest manifest"
-                retry docker manifest push ${DOCKERHUB_REPO}:latest || echo "Failed to push Docker Hub latest manifest"
-
-                # Create Podman latest manifest
-                retry docker manifest create ${DOCKERHUB_REPO}:podman-latest \
-                  ${DOCKERHUB_REPO}:podman-nightly-amd64-${DATE} \
-                  ${DOCKERHUB_REPO}:podman-nightly-arm64-${DATE} || echo "Failed to create Docker Hub Podman latest manifest"
-                retry docker manifest push ${DOCKERHUB_REPO}:podman-latest || echo "Failed to push Docker Hub Podman latest manifest"
-              fi
-            fi
-
-          elif [ "${{ inputs.tag-strategy }}" = "release" ]; then
-
-            # GHCR Manifests
-            if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
-              echo "Creating GHCR release manifests..."
-
-              # Create versioned manifest
-              retry docker manifest create ${GHCR_REPO}:${{ inputs.version }} \
-                ${GHCR_REPO}:${{ inputs.version }}-amd64 \
-                ${GHCR_REPO}:${{ inputs.version }}-arm64 || echo "Failed to create GHCR versioned manifest"
-              retry docker manifest push ${GHCR_REPO}:${{ inputs.version }} || echo "Failed to push GHCR versioned manifest"
-
-              # Create Podman-compatible versioned manifest
-              retry docker manifest create ${GHCR_REPO}:podman-${{ inputs.version }} \
-                ${GHCR_REPO}:podman-${{ inputs.version }}-amd64 \
-                ${GHCR_REPO}:podman-${{ inputs.version }}-arm64 || echo "Failed to create GHCR Podman versioned manifest"
-              retry docker manifest push ${GHCR_REPO}:podman-${{ inputs.version }} || echo "Failed to push GHCR Podman versioned manifest"
-
-              # Create latest manifest if requested
-              if [ "${{ inputs.create-latest-tag }}" = "true" ]; then
-                retry docker manifest create ${GHCR_REPO}:latest \
-                  ${GHCR_REPO}:amd64 \
-                  ${GHCR_REPO}:arm64 || echo "Failed to create GHCR latest manifest"
-                retry docker manifest push ${GHCR_REPO}:latest || echo "Failed to push GHCR latest manifest"
-
-                # Create Podman latest manifest
-                retry docker manifest create ${GHCR_REPO}:podman-latest \
-                  ${GHCR_REPO}:podman-amd64 \
-                  ${GHCR_REPO}:podman-arm64 || echo "Failed to create GHCR Podman latest manifest"
-                retry docker manifest push ${GHCR_REPO}:podman-latest || echo "Failed to push GHCR Podman latest manifest"
-              fi
-            fi
-
-            # Docker Hub Manifests
-            if [ "${{ inputs.push-to-dockerhub }}" = "true" ] && [ "${{ steps.dockerhub-login.outcome }}" = "success" ]; then
-              echo "Creating Docker Hub release manifests..."
-
-              # Create versioned manifest
-              retry docker manifest create ${DOCKERHUB_REPO}:${{ inputs.version }} \
-                ${DOCKERHUB_REPO}:${{ inputs.version }}-amd64 \
-                ${DOCKERHUB_REPO}:${{ inputs.version }}-arm64 || echo "Failed to create Docker Hub versioned manifest"
-              retry docker manifest push ${DOCKERHUB_REPO}:${{ inputs.version }} || echo "Failed to push Docker Hub versioned manifest"
-
-              # Create Podman-compatible versioned manifest
-              retry docker manifest create ${DOCKERHUB_REPO}:podman-${{ inputs.version }} \
-                ${DOCKERHUB_REPO}:podman-${{ inputs.version }}-amd64 \
-                ${DOCKERHUB_REPO}:podman-${{ inputs.version }}-arm64 || echo "Failed to create Docker Hub Podman versioned manifest"
-              retry docker manifest push ${DOCKERHUB_REPO}:podman-${{ inputs.version }} || echo "Failed to push Docker Hub Podman versioned manifest"
-
-              # Create latest manifest if requested
-              if [ "${{ inputs.create-latest-tag }}" = "true" ]; then
-                retry docker manifest create ${DOCKERHUB_REPO}:latest \
-                  ${DOCKERHUB_REPO}:amd64 \
-                  ${DOCKERHUB_REPO}:arm64 || echo "Failed to create Docker Hub latest manifest"
-                retry docker manifest push ${DOCKERHUB_REPO}:latest || echo "Failed to push Docker Hub latest manifest"
-
-                # Create Podman latest manifest
-                retry docker manifest create ${DOCKERHUB_REPO}:podman-latest \
-                  ${DOCKERHUB_REPO}:podman-amd64 \
-                  ${DOCKERHUB_REPO}:podman-arm64 || echo "Failed to create Docker Hub Podman latest manifest"
-                retry docker manifest push ${DOCKERHUB_REPO}:podman-latest || echo "Failed to push Docker Hub Podman latest manifest"
-              fi
-            fi
+          # GHCR is published by the build-push step (fatal on failure, so we
+          # only reach here on GHCR success). Docker Hub is published by the
+          # (continue-on-error) mirror step; report its real outcome so a Docker
+          # Hub failure is visible in the outputs without failing the job.
+          echo "ghcr-success=true" >> "$GITHUB_OUTPUT"
+          if [ "$PUSH_DH" != "true" ] || [ "$MIRROR_OUTCOME" = "success" ]; then
+            echo "dockerhub-success=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Docker Hub mirror did not succeed (outcome=${MIRROR_OUTCOME}); GHCR publish is unaffected"
+            echo "dockerhub-success=false" >> "$GITHUB_OUTPUT"
           fi
 
   validate-podman:
-    needs: [build, create-manifests]
+    needs: build
     runs-on: ubuntu-24.04
-    if: always() && needs.build.result != 'cancelled'
+    if: always() && needs.build.result != 'cancelled' && inputs.validate-podman
 
     steps:
       - name: Generate repository names
@@ -453,7 +344,7 @@ jobs:
       - name: Install Podman
         id: apt-podman
         continue-on-error: true
-        uses: awalsh128/cache-apt-pkgs-action@5513791f75b039e2a79653b1a92238d3fb8d99b4 # v1.6.2
+        uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1.6.3
         with:
           packages: podman
           version: 1.0
@@ -469,24 +360,55 @@ jobs:
           podman --version
 
       - name: Test Podman compatibility
+        env:
+          # Inputs via env, not inline ${{ }}, so a crafted value cannot inject
+          # shell (inputs.version flows from github.ref_name on release builds).
+          STRATEGY: ${{ inputs.tag-strategy }}
+          PUSH_GHCR: ${{ inputs.push-to-ghcr }}
+          PUSH_DH: ${{ inputs.push-to-dockerhub }}
+          VERSION: ${{ inputs.version }}
+          BUILD_DATE: ${{ needs.build.outputs.build-date }}
         run: |
           set +e  # Don't exit on error - we want to test both registries
 
+          # Validate the exact image this run built: for nightly use the dated
+          # tag (nightly-<DATE>), not the floating :nightly, so a failed build
+          # cannot false-pass by pulling a previous day's :nightly image. Reuse
+          # the build job's date rather than recomputing it here, so a run that
+          # crosses UTC midnight between the build and this job cannot try to
+          # pull a nightly-<DATE> tag the build never published.
+          DATE="${BUILD_DATE}"
+          if [ -z "$DATE" ]; then
+            echo "::warning::build-date output was empty; falling back to current date"
+            DATE=$(date +'%Y%m%d')
+          fi
+
           # Determine which image to test based on strategy and availability
-          if [ "${{ inputs.tag-strategy }}" = "nightly" ]; then
-            if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
-              TEST_IMAGE="${GHCR_REPO}:nightly"
-            elif [ "${{ inputs.push-to-dockerhub }}" = "true" ]; then
-              TEST_IMAGE="${DOCKERHUB_REPO}:nightly"
+          if [ "$STRATEGY" = "nightly" ]; then
+            if [ "$PUSH_GHCR" = "true" ]; then
+              TEST_IMAGE="${GHCR_REPO}:nightly-${DATE}"
+            elif [ "$PUSH_DH" = "true" ]; then
+              TEST_IMAGE="${DOCKERHUB_REPO}:nightly-${DATE}"
             else
               echo "No image to test - both registries disabled"
               exit 0
             fi
-          elif [ "${{ inputs.tag-strategy }}" = "release" ]; then
-            if [ "${{ inputs.push-to-ghcr }}" = "true" ]; then
-              TEST_IMAGE="${GHCR_REPO}:${{ inputs.version }}"
-            elif [ "${{ inputs.push-to-dockerhub }}" = "true" ]; then
-              TEST_IMAGE="${DOCKERHUB_REPO}:${{ inputs.version }}"
+          elif [ "$STRATEGY" = "release" ]; then
+            if [ "$PUSH_GHCR" = "true" ]; then
+              TEST_IMAGE="${GHCR_REPO}:${VERSION}"
+            elif [ "$PUSH_DH" = "true" ]; then
+              TEST_IMAGE="${DOCKERHUB_REPO}:${VERSION}"
+            else
+              echo "No image to test - both registries disabled"
+              exit 0
+            fi
+          elif [ "$STRATEGY" = "dev" ]; then
+            # Test the immutable commit-SHA tag, not the floating :dev, so a
+            # concurrent push cannot make this pull a different image.
+            if [ "$PUSH_GHCR" = "true" ]; then
+              TEST_IMAGE="${GHCR_REPO}:${VERSION}"
+            elif [ "$PUSH_DH" = "true" ]; then
+              TEST_IMAGE="${DOCKERHUB_REPO}:${VERSION}"
             else
               echo "No image to test - both registries disabled"
               exit 0
@@ -547,7 +469,7 @@ jobs:
           fi
 
   cleanup:
-    needs: [build, create-manifests, validate-podman]
+    needs: [build, validate-podman]
     runs-on: ubuntu-24.04
     if: always() && inputs.cleanup-old-images && needs.build.result != 'cancelled'
 

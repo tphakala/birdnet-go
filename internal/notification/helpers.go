@@ -213,7 +213,7 @@ func scrubContextMap(ctx map[string]any) map[string]any {
 		case "url", "endpoint", "uri", "rtsp_url", "stream_url":
 			// Scrub URLs
 			scrubbed[k] = privacy.AnonymizeURL(fmt.Sprint(v))
-		case "error", keyMessage, "description", "reason":
+		case "error", keyMessage, "description", "reason": //nolint:goconst // redaction key name, not the SeverityError severity value
 			// Scrub error messages
 			scrubbed[k] = privacy.ScrubMessage(fmt.Sprint(v))
 		case "ip", "client_ip", "remote_addr", "source_ip":

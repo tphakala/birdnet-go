@@ -97,9 +97,12 @@ type SSESoundLevelData struct {
 	EventType string `json:"eventType"`
 }
 
-// safeBaseName returns the filename component of a path, or empty string if the path is empty.
+// SafeBaseName returns the filename component of a path, or empty string if the path is empty.
 // Unlike filepath.Base("") which returns ".", this returns "" for empty inputs.
-func safeBaseName(path string) string {
+// It defines the clip-name privacy contract shared by the SSE feed and the REST
+// detection responses: only the basename is exposed, never the on-disk directory
+// layout, and an empty clip name stays empty (a truthful "no clip" signal).
+func SafeBaseName(path string) string {
 	if path == "" {
 		return ""
 	}
@@ -120,7 +123,7 @@ func NewSSEDetectionData(note *datastore.Note, birdImage *imageprovider.BirdImag
 		Confidence:     note.Confidence,
 		Latitude:       note.Latitude,
 		Longitude:      note.Longitude,
-		ClipName:       safeBaseName(note.ClipName),
+		ClipName:       SafeBaseName(note.ClipName),
 		Verified:       note.Verified,
 		Locked:         note.Locked,
 		Unlikely:       note.Unlikely,
@@ -144,17 +147,22 @@ func NewSSEDetectionData(note *datastore.Note, birdImage *imageprovider.BirdImag
 		}
 	}
 
-	// Map bird image with proper camelCase tags
+	// The image URL always points at the media proxy, never at the upstream host.
+	// The proxy is the only URL whose availability this process controls, and it is
+	// the same URL every REST producer emits, so a species cannot render on one
+	// surface and fail on another. It is set unconditionally: the attribution
+	// metadata below may be absent while the image itself is still being resolved in
+	// the background, and an empty URL would make the client give up permanently.
+	det.BirdImage = SSEBirdImage{
+		URL:            imageprovider.ProxyImageURL(note.ScientificName),
+		ScientificName: note.ScientificName,
+	}
 	if birdImage != nil {
-		det.BirdImage = SSEBirdImage{
-			URL:            birdImage.URL,
-			ScientificName: birdImage.ScientificName,
-			LicenseName:    birdImage.LicenseName,
-			LicenseURL:     birdImage.LicenseURL,
-			AuthorName:     birdImage.AuthorName,
-			AuthorURL:      birdImage.AuthorURL,
-			SourceProvider: birdImage.SourceProvider,
-		}
+		det.BirdImage.LicenseName = birdImage.LicenseName
+		det.BirdImage.LicenseURL = birdImage.LicenseURL
+		det.BirdImage.AuthorName = birdImage.AuthorName
+		det.BirdImage.AuthorURL = birdImage.AuthorURL
+		det.BirdImage.SourceProvider = birdImage.SourceProvider
 	}
 
 	return det
@@ -256,22 +264,26 @@ func (m *SSEManager) BroadcastDetection(detection *SSEDetectionData) {
 	var blockedClients []string
 
 	for clientID, client := range m.clients {
-		select {
-		case client.Channel <- *detection:
-			// Successfully sent to client - reset health counter atomically
-			client.consecutiveDrops.Store(0)
+		if client.StreamType == StreamTypeDetections || client.StreamType == StreamTypeAll {
+			if client.Channel != nil {
+				select {
+				case client.Channel <- *detection:
+					// Successfully sent to client - reset health counter atomically
+					client.consecutiveDrops.Store(0)
 
-		default:
-			// Channel full - drop this update, increment counter atomically
-			drops := client.consecutiveDrops.Add(1)
+				default:
+					// Channel full - drop this update, increment counter atomically
+					drops := client.consecutiveDrops.Add(1)
 
-			// Only log when reaching disconnect threshold to avoid log spam
-			if drops >= maxConsecutiveDrops {
-				GetLogger().Info("SSE client disconnected after consecutive drops",
-					logger.String("client_id", clientID),
-					logger.Int("consecutive_drops", int(drops)),
-				)
-				blockedClients = append(blockedClients, clientID)
+					// Only log when reaching disconnect threshold to avoid log spam
+					if drops >= maxConsecutiveDrops {
+						GetLogger().Info("SSE client disconnected after consecutive drops",
+							logger.String("client_id", clientID),
+							logger.Int("consecutive_drops", int(drops)),
+						)
+						blockedClients = append(blockedClients, clientID)
+					}
+				}
 			}
 		}
 	}

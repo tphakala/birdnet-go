@@ -2,7 +2,6 @@ package apicore
 
 import (
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -37,24 +36,11 @@ func RoutePattern(ctx echo.Context) string {
 }
 
 // scrubQueryForLog redacts credential-bearing values from a raw URL query string
-// before it is logged. It percent-decodes the query first because privacy's token
-// scrubber pattern does not span percent-escapes, so an encoded token value (for
-// example token=ab%2Bcd1234) would otherwise slip through unredacted; on a decode
-// error it falls back to scrubbing the raw string. url.PathUnescape is used rather
-// than url.QueryUnescape because the latter turns a literal '+' into a space, which
-// would split a base64 token value (token=ab+cd...) and leak its tail past the
-// scrubber; PathUnescape still decodes %2B to '+' but preserves a literal '+', so
-// the whole token value stays a single matchable run. privacy.ScrubMessage also
-// redacts URLs, emails, UUIDs, IPs, coordinates, and file paths.
+// before it is logged. It delegates to privacy.ScrubQueryString, which percent-decodes
+// the query before scrubbing (the token scrubber pattern does not span percent-escapes)
+// so an encoded token value does not slip through unredacted.
 func scrubQueryForLog(rawQuery string) string {
-	if rawQuery == "" {
-		return ""
-	}
-	decoded, err := url.PathUnescape(rawQuery)
-	if err != nil {
-		decoded = rawQuery
-	}
-	return privacy.ScrubMessage(decoded)
+	return privacy.ScrubQueryString(rawQuery)
 }
 
 // Echo context keys set by TunnelDetectionMiddleware and read by

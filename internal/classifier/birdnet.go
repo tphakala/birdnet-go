@@ -181,10 +181,11 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 		bn.ModelInfo = defaultClassifierModelInfo(runtime.GOARCH, findModelPathInStandardPaths)
 	}
 
-	// On ONNX-only builds (notflite, the arm64 image), transparently remap a
-	// resolved v2.4 TFLite model (from version:"2.4" or the default) to the INT8
-	// ONNX entry so existing arm64 configs keep starting without a TFLite backend.
-	bn.ModelInfo = remapV24ForONNXOnly(&bn.ModelInfo, tfliteBackendAvailable, findModelPathInStandardPaths)
+	// On arm64 (container images ship the INT8-ARM ONNX model), transparently remap
+	// a resolved v2.4 TFLite model (from version:"2.4" or the default) to the INT8
+	// ONNX entry so arm64 keeps the reduced-memory ONNX default; the TFLite backend
+	// stays available for custom `.tflite` model paths (CustomPath, left untouched).
+	bn.ModelInfo = remapV24ToONNXOnARM64(&bn.ModelInfo, runtime.GOARCH, tfliteBackendAvailable, findModelPathInStandardPaths)
 
 	// Seed the runtime triplet from the resolved static metadata so a model that
 	// somehow loads without an initialize*Model path still reports a sane value.
@@ -203,8 +204,36 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 			Build()
 	}
 
+	// Normalize and validate the locale before anything reads it. An unsupported
+	// locale is reported as an error but NormalizeLocale still returns
+	// conf.DefaultFallbackLocale, so the fallback is informational and the returned
+	// value is always usable. Treating it as fatal would stop every command from
+	// starting on a config whose locale merely needs normalizing, which is neither
+	// what config validation (conf.ValidateBirdNETSettings) nor label loading does
+	// with the same condition.
+	// Pass the configured value as written: NormalizeLocale lowercases internally
+	// and keeps the original for its error, so lowercasing first would report a
+	// locale the user never typed.
+	requestedLocale := settings.BirdNET.Locale
+	normalizedLocale, err := conf.NormalizeLocale(requestedLocale)
+	if err != nil {
+		GetLogger().Warn("Locale not supported, using fallback",
+			logger.Error(err),
+			logger.String("requested_locale", requestedLocale),
+			logger.String("fallback_locale", normalizedLocale))
+	}
+	settings.BirdNET.Locale = normalizedLocale
+
+	// Check if the locale is supported by the model
+	if !IsLocaleSupported(&bn.ModelInfo, normalizedLocale) {
+		bn.Debug("Warning: Locale '%s' is not officially supported by model '%s'. Using default locale '%s'.",
+			normalizedLocale, bn.ModelInfo.ID, bn.ModelInfo.DefaultLocale)
+		settings.BirdNET.Locale = bn.ModelInfo.DefaultLocale
+	}
+
 	// Load labels before model initialization; ONNX models require labels
-	// at construction time for output dimension validation.
+	// at construction time for output dimension validation. The locale is
+	// normalized above so the label file matches the locale reported in settings.
 	if err := bn.loadLabels(); err != nil {
 		return nil, errors.New(err).
 			Component("birdnet").
@@ -241,21 +270,6 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 			logger.Error(err),
 			logger.String("range_filter_model", settings.BirdNET.RangeFilter.Model),
 			logger.String("model_path", settings.BirdNET.RangeFilter.ModelPath))
-	}
-
-	// Normalize and validate locale setting.
-	inputLocale := strings.ToLower(settings.BirdNET.Locale)
-	normalizedLocale, err := conf.NormalizeLocale(inputLocale)
-	if err != nil {
-		return nil, err
-	}
-	settings.BirdNET.Locale = normalizedLocale
-
-	// Check if the locale is supported by the model
-	if !IsLocaleSupported(&bn.ModelInfo, normalizedLocale) {
-		bn.Debug("Warning: Locale '%s' is not officially supported by model '%s'. Using default locale '%s'.",
-			normalizedLocale, bn.ModelInfo.ID, bn.ModelInfo.DefaultLocale)
-		settings.BirdNET.Locale = bn.ModelInfo.DefaultLocale
 	}
 
 	// Validate model and labels, which will also allocate the results buffer
@@ -530,8 +544,10 @@ func (bn *BirdNET) initializeMetaModel(settings *conf.Settings) error {
 
 	// Auto-select v3 geomodel for compatible classifiers when files exist on disk.
 	// Only applies locally for routing; does NOT publish settings to avoid
-	// inconsistency if the backend fails to initialize.
-	if rf.Model == "" && bn.modelsDir != "" && shouldAutoSelectV3Geomodel(bn.ModelInfo.ID, bn.modelsDir) {
+	// inconsistency if the backend fails to initialize. Skipped when an explicit
+	// rangefilter.modelpath is set, so a user-provided range-filter path is never
+	// overridden by the stock geomodel (mirrors the arm64 default gate below).
+	if shouldAutoSelectV3GeomodelForConfig(rf.Model, rf.ModelPath, bn.ModelInfo.ID, bn.modelsDir) {
 		localSettings := conf.CloneSettings(settings)
 		applyAutoSelectedGeomodelPaths(localSettings, bn.modelsDir)
 		settings = localSettings
@@ -542,21 +558,22 @@ func (bn *BirdNET) initializeMetaModel(settings *conf.Settings) error {
 	}
 
 	// On arm64 (container images ship the ONNX range filter instead of the TFLite
-	// MData models), prefer the ONNX MData range filter when no range filter is
-	// configured and the v3 geomodel was not auto-selected above. Gated to the
-	// BirdNET v2.4 family: the MData V2 model outputs the v2.4 species set, and the
-	// strict ONNX path (no labels file) requires the model output dimension to
-	// equal the classifier label count, so it only fits a v2.4-family classifier.
-	// Routed locally only; settings are not published.
-	if rf.Model == "" && rf.ModelPath == "" && isBirdNETV24Family(bn.ModelInfo.ID) {
-		if path, ok := defaultRangeFilterONNXPath(runtime.GOARCH, findModelPathInStandardPaths); ok {
-			localSettings := conf.CloneSettings(settings)
-			localSettings.BirdNET.RangeFilter.ModelPath = path
-			settings = localSettings
-			rf = settings.BirdNET.RangeFilter
-			log.Info("Selected ONNX range filter (arm64 default)",
-				logger.String("model_path", path))
-		}
+	// MData models), prefer the ONNX MData range filter when the range filter is left
+	// on auto-select ("" or the "latest" default), no explicit model path is set, and
+	// the v3 geomodel was not auto-selected above. Gated to the BirdNET v2.4 family:
+	// the MData V2 model outputs the v2.4 species set, and the strict ONNX path (no
+	// labels file) requires the model output dimension to equal the classifier label
+	// count, so it only fits a v2.4-family classifier. Without this, the "latest"
+	// default dead-ends at the TFLite backend, which has no model file on ONNX-only
+	// arm64 images, leaving the instance unfiltered (#3932). Routed locally only;
+	// settings are not published.
+	if path, ok := shouldSelectDefaultONNXRangeFilter(rf.Model, rf.ModelPath, bn.ModelInfo.ID, runtime.GOARCH, findModelPathInStandardPaths); ok {
+		localSettings := conf.CloneSettings(settings)
+		localSettings.BirdNET.RangeFilter.ModelPath = path
+		settings = localSettings
+		rf = settings.BirdNET.RangeFilter
+		log.Info("Selected ONNX range filter (arm64 default)",
+			logger.String("model_path", path))
 	}
 
 	switch resolveRangeFilterBackend(&rf) {
@@ -641,13 +658,25 @@ func (bn *BirdNET) initializeTFLiteMetaModel(settings *conf.Settings) error {
 func (bn *BirdNET) loadLabels() error {
 	bn.Settings.BirdNET.Labels = []string{} // Reset labels.
 
-	// Use embedded labels if no external label path is set
+	// Use embedded labels if no external label path is set, otherwise use external labels.
+	var err error
 	if bn.Settings.BirdNET.LabelPath == "" {
-		return bn.loadEmbeddedLabels()
+		err = bn.loadEmbeddedLabels()
+	} else {
+		err = bn.loadExternalLabels()
+	}
+	if err != nil {
+		return err
 	}
 
-	// Otherwise use external labels
-	return bn.loadExternalLabels()
+	// Refresh the cached ModelInfo.NumSpecies to the actually-loaded label count.
+	// ModelInfo is seeded from the registry template, whose NumSpecies is the stock
+	// catalog figure (e.g. 6523 for BirdNET v2.4) and can differ from the real label
+	// file (6522) or a custom/sliced label file. loadLabels is the single place the
+	// label set changes, so refreshing here keeps o.ModelInfo / PrimaryModelInfo()
+	// reporting the live count. bn.NumSpecies() already reads len(labels) directly.
+	bn.ModelInfo.NumSpecies = len(bn.Settings.BirdNET.Labels)
+	return nil
 }
 
 // loadEmbeddedLabels loads labels from the embedded label files
@@ -812,6 +841,67 @@ func (bn *BirdNET) clearSpeciesCache() {
 	bn.speciesCacheMu.Unlock()
 }
 
+// rawSpeciesKey reduces a species label to its scientific name, lowercased but NOT
+// resolved through the alias map. It is the exact-match counterpart to
+// canonicalSpeciesKey; see lookupOccurrence for why both are needed.
+func rawSpeciesKey(label string) string {
+	return strings.ToLower(detection.ExtractScientificName(label))
+}
+
+// lookupOccurrence resolves a species label against an occurrence score map built by
+// getCachedSpeciesScores, preferring an exact scientific-name match over a taxonomic
+// alias.
+//
+// The two-step order is load-bearing. OpenFauna's alias map merges some pairs that the
+// classifier ships as separate species: BirdNET v2.4 carries both Dicrurus adsimilis
+// and Dicrurus divaricatus, and both Mirafra javanica and Mirafra cantillans, while
+// OpenFauna maps the second of each pair onto the first. Keying the cache on the
+// canonical name alone would collapse those two distinct species onto one entry and
+// report one bird's occurrence probability for the other. Trying the exact name first
+// keeps each species' own score, and falling back to the canonical name still lets a
+// caller naming a species by a legacy synonym find the geomodel's entry for it.
+func lookupOccurrence(scores map[string]float64, label string) (float64, bool) {
+	if score, ok := scores[rawSpeciesKey(label)]; ok {
+		return score, true
+	}
+	score, ok := scores[canonicalSpeciesKey(label)]
+	return score, ok
+}
+
+// clampOccurrence constrains an occurrence probability to [0.0, 1.0]. A NaN score is
+// returned unchanged, matching the comparison chain this replaced.
+func clampOccurrence(score float64) float64 {
+	switch {
+	case score < 0.0:
+		return 0.0
+	case score > 1.0:
+		return 1.0
+	default:
+		return score
+	}
+}
+
+// buildOccurrenceIndex indexes species scores for lookupOccurrence: every species under
+// its exact scientific name, plus a canonical-name entry wherever that does not shadow
+// an exact one. The cached and uncached paths both build the index through this helper
+// so they cannot disagree about which species a name refers to.
+func buildOccurrenceIndex(speciesScores []SpeciesScore) map[string]float64 {
+	scores := make(map[string]float64, len(speciesScores))
+	for _, s := range speciesScores {
+		if key := rawSpeciesKey(s.Label); key != "" {
+			scores[key] = s.Score
+		}
+	}
+	for _, s := range speciesScores {
+		if key := canonicalSpeciesKey(s.Label); key != "" {
+			if _, exact := scores[key]; !exact {
+				scores[key] = s.Score
+			}
+		}
+	}
+	return scores
+}
+
 // getCachedSpeciesScores returns species occurrence scores with caching to avoid repeated calls within same day
 func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]float64, error) {
 	settings := bn.currentSettings()
@@ -839,10 +929,7 @@ func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]floa
 	if err != nil {
 		return nil, err
 	}
-	scores := make(map[string]float64, len(speciesScores))
-	for _, s := range speciesScores {
-		scores[strings.ToLower(detection.ExtractScientificName(s.Label))] = s.Score
-	}
+	scores := buildOccurrenceIndex(speciesScores)
 
 	// WRITE PATH: double-check, evict old entries, and publish new results
 	bn.speciesCacheMu.Lock()
@@ -1273,12 +1360,12 @@ func (bn *BirdNET) reloadModelInternal() error {
 				Build()
 		}
 		newInfo.CustomPath = bn.Settings.BirdNET.ModelPath
-		// Mirror NewBirdNET (the remap at construction): on ONNX-only builds (notflite,
-		// arm64) a v2.4 TFLite model resolved from version:"2.4" is remapped to the INT8
-		// ONNX entry. Without this, a no-op reload re-resolves to the TFLite entry, and the
-		// identity check below misreads it as a model change requiring an orchestrator
-		// restart, so in-place hot-reloads fail and roll back.
-		newInfo = remapV24ForONNXOnly(&newInfo, tfliteBackendAvailable, findModelPathInStandardPaths)
+		// Mirror NewBirdNET (the remap at construction): on arm64 a v2.4 TFLite model
+		// resolved from version:"2.4" is remapped to the INT8 ONNX entry. Without this, a
+		// no-op reload re-resolves to the TFLite entry, and the identity check below
+		// misreads it as a model change requiring an orchestrator restart, so in-place
+		// hot-reloads fail and roll back.
+		newInfo = remapV24ToONNXOnARM64(&newInfo, runtime.GOARCH, tfliteBackendAvailable, findModelPathInStandardPaths)
 		if newInfo.ID != bn.ModelInfo.ID || newInfo.CustomPath != bn.ModelInfo.CustomPath {
 			rollback()
 			return errors.Newf("model identity changed from %s to %s: requires orchestrator restart", bn.ModelInfo.ID, newInfo.ID).
@@ -1446,39 +1533,26 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 	// Try to get cached scores first
 	cachedScores, err := bn.getCachedSpeciesScores(detectionTime)
 	if err == nil && len(cachedScores) > 0 {
-		if occurrence, found := cachedScores[strings.ToLower(detection.ExtractScientificName(species))]; found {
-			// Clamp the score to [0.0, 1.0] range
-			if occurrence < 0.0 {
-				return 0.0
-			}
-			if occurrence > 1.0 {
-				return 1.0
-			}
-			return occurrence
+		if occurrence, found := lookupOccurrence(cachedScores, species); found {
+			return clampOccurrence(occurrence)
 		}
 	}
 
-	// Fallback to calculating probable species if cache miss
-	day := detectionTime.Truncate(24 * time.Hour)
+	// Fallback to calculating probable species if cache miss. Anchor to the
+	// local calendar day (matching getCachedSpeciesScores, which keys on the
+	// local DateOnly of detectionTime) rather than UTC-truncating, so the
+	// fallback computes the same geomodel week as the cache path.
+	day := conf.LocalNoon(detectionTime)
 	speciesScores, err := bn.GetProbableSpecies(day, 0.0)
 	if err != nil {
 		bn.Debug("Error getting probable species for occurrence: %v", err)
 		return 0.0
 	}
 
-	// Look for the species in the scores
-	targetSci := detection.ExtractScientificName(species)
-	for _, score := range speciesScores {
-		if strings.EqualFold(detection.ExtractScientificName(score.Label), targetSci) {
-			// Clamp the score to [0.0, 1.0] range
-			if score.Score < 0.0 {
-				return 0.0
-			}
-			if score.Score > 1.0 {
-				return 1.0
-			}
-			return score.Score
-		}
+	// Resolve through the same index the cache uses, so a cache miss cannot answer
+	// differently from a cache hit for the same species.
+	if occurrence, found := lookupOccurrence(buildOccurrenceIndex(speciesScores), species); found {
+		return clampOccurrence(occurrence)
 	}
 
 	// Species not found in range filter results
@@ -1758,6 +1832,18 @@ func shouldAutoSelectV3Geomodel(modelID, modelsDir string) bool {
 		return false
 	}
 	return true
+}
+
+// shouldAutoSelectV3GeomodelForConfig reports whether initializeMetaModel should
+// auto-select the stock v3 geomodel for this range-filter config. It requires the
+// model to be auto-select ("" or the "latest" default), no explicit range-filter
+// modelpath (an explicit user path is never overridden), a known models dir, and a
+// compatible classifier with the stock geomodel files present on disk. The
+// modelpath guard mirrors shouldSelectDefaultONNXRangeFilter so both auto-select
+// gates honor an explicit path consistently.
+func shouldAutoSelectV3GeomodelForConfig(model, modelPath, classifierID, modelsDir string) bool {
+	return isAutoSelectRangeFilterModel(model) && modelPath == "" && modelsDir != "" &&
+		shouldAutoSelectV3Geomodel(classifierID, modelsDir)
 }
 
 // applyAutoSelectedGeomodelPaths configures the range filter settings to

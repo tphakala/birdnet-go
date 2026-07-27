@@ -45,7 +45,11 @@
     EqualizerFilterType,
     QuietHoursConfig,
   } from '$lib/stores/settings';
-  import { defaultQuietHoursConfig } from '$lib/stores/settings';
+  import {
+    defaultQuietHoursConfig,
+    AUDIO_GAIN_MIN_DB,
+    AUDIO_GAIN_MAX_DB,
+  } from '$lib/stores/settings';
 
   // Local EqualizerSettings type matching AudioEqualizerSettings component's interface
   // where filter.id is optional (assigned on save)
@@ -465,8 +469,8 @@
               label={t('settings.audio.soundCards.gainLabel')}
               value={newGain}
               onUpdate={value => (newGain = value)}
-              min={-40}
-              max={40}
+              min={AUDIO_GAIN_MIN_DB}
+              max={AUDIO_GAIN_MAX_DB}
               step={1}
               unit=" dB"
               {disabled}

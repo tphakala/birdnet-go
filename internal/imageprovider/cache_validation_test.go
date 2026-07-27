@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -31,6 +32,9 @@ func setupTestCache(t *testing.T) (*mockProviderWithAPICounter, *imageprovider.B
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
 	require.NoError(t, err, "Failed to create cache")
 	cache.SetImageProvider(mockProvider)
+	t.Cleanup(func() {
+		assert.NoError(t, cache.Close(), "Failed to close cache")
+	})
 
 	return mockProvider, cache
 }
@@ -52,6 +56,9 @@ func setupTestCacheWithSharedStore(t *testing.T) (*mockProviderWithAPICounter, *
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
 	require.NoError(t, err, "Failed to create cache")
 	cache.SetImageProvider(mockProvider)
+	t.Cleanup(func() {
+		assert.NoError(t, cache.Close(), "Failed to close cache")
+	})
 
 	return mockProvider, cache, mockStore, metrics
 }
@@ -115,6 +122,9 @@ func TestCacheEffectiveness(t *testing.T) {
 		cache2, err := imageprovider.CreateDefaultCache(metrics, mockStore)
 		require.NoError(t, err, "Failed to create second cache")
 		cache2.SetImageProvider(mockProvider)
+		t.Cleanup(func() {
+			assert.NoError(t, cache2.Close(), "Failed to close second cache")
+		})
 
 		_, err = cache2.Get(species)
 		require.NoError(t, err, "Failed to get image from new cache")
@@ -138,6 +148,9 @@ func TestNegativeCaching(t *testing.T) {
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
 	require.NoError(t, err, "Failed to create cache")
 	cache.SetImageProvider(mockProvider)
+	t.Cleanup(func() {
+		assert.NoError(t, cache.Close(), "Failed to close cache")
+	})
 
 	// Test repeated requests for non-existent species
 	t.Run("RepeatedNotFoundRequests", func(t *testing.T) {
@@ -160,18 +173,26 @@ func TestNegativeCaching(t *testing.T) {
 	})
 }
 
-// TestBackgroundRefreshIsolation ensures background refresh doesn't affect user requests
+// TestBackgroundRefreshIsolation ensures background refresh doesn't affect user requests.
+//
+// This test was permanently skipped for two independent reasons: an unconditional
+// t.Skip, and a mock that read the background-operation context key as an untyped
+// string, so getBackgroundFetchCount() was always zero. Both are fixed.
 func TestBackgroundRefreshIsolation(t *testing.T) {
-	t.Skip("TODO: Fix test - background refresh tracking mechanism needs refactoring")
-	if testing.Short() {
-		t.Skip("Skipping background refresh test in short mode")
-	}
 	t.Parallel()
+
+	// providerFetchDelay must be comfortably larger than the latency budget below so
+	// "returned without waiting for the provider" is a real discrimination and not a
+	// timing coincidence on a loaded CI runner.
+	const (
+		providerFetchDelay = 400 * time.Millisecond
+		userLatencyBudget  = 150 * time.Millisecond
+	)
 
 	mockProvider := &mockProviderWithContextTracking{
 		mockProviderWithAPICounter: mockProviderWithAPICounter{
 			mockImageProvider: mockImageProvider{
-				fetchDelay: 50 * time.Millisecond, // Simulate slower API
+				fetchDelay: providerFetchDelay, // Simulate slow API
 			},
 		},
 	}
@@ -186,7 +207,7 @@ func TestBackgroundRefreshIsolation(t *testing.T) {
 	err = mockStore.SaveImageCache(&datastore.ImageCache{
 		ScientificName: species,
 		ProviderName:   "wikimedia",
-		URL:            "http://example.com/old.jpg",
+		URL:            "http://127.0.0.1/old.jpg",
 		CachedAt:       staleTime,
 	})
 	require.NoError(t, err, "Failed to save stale cache entry")
@@ -194,34 +215,34 @@ func TestBackgroundRefreshIsolation(t *testing.T) {
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
 	require.NoError(t, err, "Failed to create cache")
 	cache.SetImageProvider(mockProvider)
+	t.Cleanup(func() {
+		assert.NoError(t, cache.Close(), "Failed to close cache")
+	})
 
-	// Wait for background refresh to potentially start
-	time.Sleep(100 * time.Millisecond)
-
-	// User request should return immediately with stale data
+	// User request must return stale data without blocking on the in-flight refresh.
 	start := time.Now()
 	img, err := cache.Get(species)
 	duration := time.Since(start)
 
 	require.NoError(t, err, "Failed to get image")
+	assert.Less(t, duration, userLatencyBudget,
+		"user request blocked on the background provider fetch (%s delay)", providerFetchDelay)
+	assert.Equal(t, "http://127.0.0.1/old.jpg", img.URL, "Expected stale URL")
 
-	// Should return quickly (not wait for background refresh)
-	assert.LessOrEqual(t, duration, 10*time.Millisecond, "User request took too long, expected < 10ms")
-
-	// Should have returned stale data
-	assert.Equal(t, "http://example.com/old.jpg", img.URL, "Expected stale URL")
-
-	// Wait for background refresh to complete
-	time.Sleep(200 * time.Millisecond)
-
-	// Check that background refresh happened
-	assert.Positive(t, mockProvider.getBackgroundFetchCount(), "Expected background refresh to occur")
+	// Background refresh must actually run. Poll rather than sleep a fixed interval.
+	assert.Eventually(t, func() bool {
+		return mockProvider.getBackgroundFetchCount() > 0
+	}, backgroundFetchWaitTimeout, 20*time.Millisecond, "Expected background refresh to occur")
 
 	t.Logf("User fetches: %d, Background fetches: %d",
 		mockProvider.getUserFetchCount(), mockProvider.getBackgroundFetchCount())
 }
 
-// TestCacheMetrics validates that metrics accurately reflect cache behavior
+// TestCacheMetrics validates that metrics accurately reflect cache behavior.
+//
+// The previous version was explicitly labelled pseudocode and asserted nothing about
+// metrics at all; it only logged counts. Prometheus counters are read directly here
+// via testutil.ToFloat64.
 func TestCacheMetrics(t *testing.T) {
 	t.Parallel()
 	mockProvider := &mockProviderWithAPICounter{
@@ -235,26 +256,39 @@ func TestCacheMetrics(t *testing.T) {
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
 	require.NoError(t, err, "Failed to create cache")
 	cache.SetImageProvider(mockProvider)
+	t.Cleanup(func() {
+		assert.NoError(t, cache.Close(), "Failed to close cache")
+	})
 
-	// Track metrics before and after operations
-	// Note: This is pseudocode - actual metric tracking would need proper instrumentation
 	species := []string{"Species_A", "Species_B", "Species_C"}
 
-	// First fetch each species
+	hitsBefore := testutil.ToFloat64(metrics.ImageProvider.CacheHits)
+	missesBefore := testutil.ToFloat64(metrics.ImageProvider.CacheMisses)
+
+	// First fetch of each species: all misses, each reaching the provider.
 	for _, s := range species {
 		_, err := cache.Get(s)
 		require.NoError(t, err, "Failed to get %s", s)
 	}
 
-	// Fetch again (should be cache hits)
+	missesAfterFirstPass := testutil.ToFloat64(metrics.ImageProvider.CacheMisses)
+	assert.InDelta(t, float64(len(species)), missesAfterFirstPass-missesBefore, 0.001,
+		"expected one cache miss per species on first fetch")
+	assert.Equal(t, int64(len(species)), mockProvider.getAPICallCount(),
+		"expected one provider call per species on first fetch")
+
+	// Second fetch of each species: all served from the in-memory cache.
 	for _, s := range species {
 		_, err := cache.Get(s)
 		require.NoError(t, err, "Failed to get %s", s)
 	}
 
-	// Log the results
-	t.Logf("Total API calls: %d (expected 3)", mockProvider.getAPICallCount())
-	t.Logf("Total requests: 6 (3 misses + 3 hits)")
+	assert.InDelta(t, float64(len(species)), testutil.ToFloat64(metrics.ImageProvider.CacheHits)-hitsBefore, 0.001,
+		"expected one cache hit per species on second fetch")
+	assert.InDelta(t, missesAfterFirstPass, testutil.ToFloat64(metrics.ImageProvider.CacheMisses), 0.001,
+		"second fetch must not record additional cache misses")
+	assert.Equal(t, int64(len(species)), mockProvider.getAPICallCount(),
+		"second fetch must not reach the provider")
 }
 
 // mockProviderWithAPICounter tracks API calls
@@ -304,12 +338,8 @@ type mockProviderWithContextTracking struct {
 
 func (m *mockProviderWithContextTracking) FetchWithContext(ctx context.Context, scientificName string) (imageprovider.BirdImage, error) {
 	// Track whether this is a background fetch
-	if ctx != nil {
-		if bg, ok := ctx.Value("background").(bool); ok && bg {
-			atomic.AddInt64(&m.backgroundFetches, 1)
-		} else {
-			atomic.AddInt64(&m.userFetches, 1)
-		}
+	if imageprovider.IsBackgroundContext(ctx) {
+		atomic.AddInt64(&m.backgroundFetches, 1)
 	} else {
 		atomic.AddInt64(&m.userFetches, 1)
 	}

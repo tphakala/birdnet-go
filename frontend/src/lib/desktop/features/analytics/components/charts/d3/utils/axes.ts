@@ -149,6 +149,29 @@ export function createHourAxisFormatter(use24Hour = true): (d: number) => string
   };
 }
 
+// Default spacing between hour-of-day ticks. Three hours keeps ~8 labels across a full-width chart
+// without crowding the forced final-hour tick.
+const HOUR_TICK_STEP = 3;
+
+/**
+ * Tick values for a 0..lastHour hour-of-day axis, always including the final hour.
+ *
+ * d3's own ticks stop at the last "nice" multiple (22:00 for a 0..23 axis), leaving the final hour
+ * unlabeled at the plot edge. Forcing `lastHour` puts a correctly positioned label there. A regular
+ * tick no more than half a step from the final hour is dropped so the two labels cannot collide
+ * (with a 2-hour step that removes 22:00, which would otherwise sit right on top of 23:00).
+ */
+export function hourAxisTickValues(lastHour = 23, step = HOUR_TICK_STEP): number[] {
+  const ticks: number[] = [];
+  for (let hour = 0; hour < lastHour; hour += step) {
+    if (lastHour - hour > step / 2) {
+      ticks.push(hour);
+    }
+  }
+  ticks.push(lastHour);
+  return ticks;
+}
+
 // Constants for date-range bucketing.
 const MS_PER_DAY = 86400000;
 const WEEK_THRESHOLD = 7;
@@ -223,6 +246,34 @@ export function createDateAxisFormatter(
       return (d: Date) => `${month.format(d)} ${padDay(d)}`;
     }
   }
+}
+
+/**
+ * Tick values for a time axis that always include the domain endpoints.
+ *
+ * d3's "nice" time ticks land on calendar boundaries, and any boundary outside
+ * the domain is dropped — so the most recent day (the domain max) is often left
+ * unlabeled at the right edge, and a boundary that falls just inside the edge
+ * renders a label that clips against the plot's narrow side margin. This returns
+ * d3's nice ticks with the exact domain start/end appended, dropping any nice
+ * tick within `minEdgeGapPx` of an endpoint so the forced boundary labels don't
+ * overlap their neighbour.
+ */
+export function boundaryDateTicks(
+  scale: ScaleTime<number, number>,
+  tickCount: number,
+  minEdgeGapPx = 48
+): Date[] {
+  const [start, end] = scale.domain();
+  if (start.getTime() === end.getTime()) return [start];
+
+  const xStart = scale(start);
+  const xEnd = scale(end);
+  const inner = scale.ticks(tickCount).filter(t => {
+    const x = scale(t);
+    return x - xStart >= minEdgeGapPx && xEnd - x >= minEdgeGapPx;
+  });
+  return [start, ...inner, end];
 }
 
 /**

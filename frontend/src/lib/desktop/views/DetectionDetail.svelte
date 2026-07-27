@@ -173,6 +173,7 @@
       speciesController?.abort();
       taxonomyController?.abort();
       attributionController?.abort();
+      cancelAttributionRetry();
     };
   });
 
@@ -258,11 +259,34 @@
     }
   }
 
+  /**
+   * Delays before re-requesting attribution that answered "not resolved yet".
+   * Deliberately shorter and fewer than the thumbnail's own schedule: attribution is
+   * supporting detail, and the image itself is what the user is waiting on.
+   */
+  const ATTRIBUTION_RETRY_DELAYS_MS = [5000, 15000, 40000];
+
+  /**
+   * Pending 503 retry. Tracked separately from attributionController because the
+   * controller is released as soon as its request settles: without this the scheduled
+   * retry would still fire after the view was unmounted or navigated to a different
+   * detection, since aborting the (already-nulled) controller could no longer reach it.
+   */
+  let attributionRetryTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+
+  function cancelAttributionRetry() {
+    if (attributionRetryTimer !== undefined) {
+      globalThis.clearTimeout(attributionRetryTimer);
+      attributionRetryTimer = undefined;
+    }
+  }
+
   // Fetch image attribution metadata
-  async function fetchImageAttribution() {
+  async function fetchImageAttribution(attempt = 0) {
     if (!detection?.scientificName?.trim()) return;
 
     attributionController?.abort();
+    cancelAttributionRetry();
     const controller = new AbortController();
     attributionController = controller;
     const { signal } = controller;
@@ -277,6 +301,22 @@
         const data = await response.json();
         if (signal.aborted) return;
         imageAttribution = data as ImageAttribution;
+        return;
+      }
+      // 503 means the image is still being resolved in the background, not that it
+      // has no attribution. Without a retry the CC-BY/CC-BY-SA photo that the
+      // thumbnail's own retry recovers seconds later would be displayed with no
+      // author or licence credit, which is a licensing problem and not merely a
+      // cosmetic one.
+      if (response.status === 503 && attempt < ATTRIBUTION_RETRY_DELAYS_MS.length) {
+        const delay = ATTRIBUTION_RETRY_DELAYS_MS.at(attempt) ?? 0;
+        attributionRetryTimer = globalThis.setTimeout(() => {
+          attributionRetryTimer = undefined;
+          if (!signal.aborted) void fetchImageAttribution(attempt + 1);
+        }, delay);
+        // Return before the finally block releases the controller, so this request's
+        // signal stays reachable and an abort can still cancel the pending retry.
+        return;
       }
     } catch (error) {
       if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) return;
@@ -848,42 +888,44 @@
     <!-- Hero Section -->
     {@render heroSection(detection)}
 
-    <!-- Media Section -->
-    <section class="surface-card" aria-labelledby="media-heading">
-      <div class="p-5 md:p-6">
-        <h2 id="media-heading" class="section-heading !mb-0">
-          {t('detections.media.title')}
-        </h2>
-        {#if clipExtractionEnabled}
-          <p class="text-sm text-[var(--color-base-content)]/60 mt-0.5 mb-4">
-            {t('detections.media.clipHint')}
-          </p>
-        {:else}
-          <div class="mb-3"></div>
-        {/if}
-        <div
-          role="region"
-          aria-label={t('detections.detail.aria.audioRecordingFor', {
-            name: localizeSpeciesName(detection.scientificName, detection.commonName),
-          })}
-        >
-          <div class="detail-audio-container">
-            <AudioPlayer
-              audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
-              detectionId={detection.id.toString()}
-              showSpectrogram={true}
-              spectrogramSize="lg"
-              spectrogramRaw={false}
-              responsive={true}
-              className="w-full"
-              enableClipExtraction={clipExtractionEnabled}
-              clipLabel={`${detection.commonName}_${detection.date}_${detection.time.replace(/:/g, '-')}`}
-              modelType={detection.modelType}
-            />
+    <!-- Media Section (shown only when this detection has a clip) -->
+    {#if detection.clipName}
+      <section class="surface-card" aria-labelledby="media-heading">
+        <div class="p-5 md:p-6">
+          <h2 id="media-heading" class="section-heading !mb-0">
+            {t('detections.media.title')}
+          </h2>
+          {#if clipExtractionEnabled}
+            <p class="text-sm text-[var(--color-base-content)]/60 mt-0.5 mb-4">
+              {t('detections.media.clipHint')}
+            </p>
+          {:else}
+            <div class="mb-3"></div>
+          {/if}
+          <div
+            role="region"
+            aria-label={t('detections.detail.aria.audioRecordingFor', {
+              name: localizeSpeciesName(detection.scientificName, detection.commonName),
+            })}
+          >
+            <div class="detail-audio-container">
+              <AudioPlayer
+                audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
+                detectionId={detection.id.toString()}
+                showSpectrogram={true}
+                spectrogramSize="lg"
+                spectrogramRaw={false}
+                responsive={true}
+                className="w-full"
+                enableClipExtraction={clipExtractionEnabled}
+                clipLabel={`${detection.commonName}_${detection.date}_${detection.time.replace(/:/g, '-')}`}
+                modelType={detection.modelType}
+              />
+            </div>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
+    {/if}
 
     <!-- Tabbed Content -->
     <section class="surface-card" aria-labelledby="tabs-heading">

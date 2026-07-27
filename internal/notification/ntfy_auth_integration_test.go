@@ -19,12 +19,12 @@ import (
 // and registers cleanup.
 func setupNtfyAuthContainer(t *testing.T, username, password string) *containers.NtfyContainer {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 	cfg := containers.DefaultNtfyConfig()
 	cfg.EnableAuth = true
 	c, err := containers.NewNtfyContainer(ctx, &cfg)
 	require.NoError(t, err, "failed to start auth-enabled ntfy container")
-	t.Cleanup(func() { _ = c.Terminate(context.Background()) })
+	t.Cleanup(func() { _ = c.Terminate(context.Background()) }) //nolint:gocritic // t.Context() is already cancelled when Cleanup runs; Terminate needs a live context
 	require.NoError(t, c.AddUser(ctx, username, password), "failed to add user")
 	return c
 }
@@ -48,7 +48,7 @@ func TestNtfyShoutrrrDelivery_BasicAuth(t *testing.T) {
 		testPass = "testpass"
 	)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("valid_credentials", func(t *testing.T) {
 		container := setupNtfyAuthContainer(t, testUser, testPass)

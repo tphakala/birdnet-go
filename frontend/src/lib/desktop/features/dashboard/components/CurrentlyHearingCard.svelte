@@ -18,6 +18,7 @@ Props:
   import { t } from '$lib/i18n';
   import type { PendingDetection } from '$lib/types/pending.types';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import { settingsStore } from '$lib/stores/settings';
 
@@ -180,10 +181,16 @@ Props:
         >
           <!-- Thumbnail -->
           {#if detection.thumbnail}
+            <!-- The thumbnail URL is now emitted unconditionally, so this <img> is
+                 always rendered and a species with no cached image would otherwise
+                 show the browser's broken-image icon where the initials badge used to
+                 be. handleBirdImageError substitutes the shared silhouette and retries
+                 while a background fetch is still in flight. -->
             <img
               src={buildAppUrl(detection.thumbnail)}
               alt={displayName}
               class="h-8 aspect-[4/3] rounded-md object-cover"
+              onerror={handleBirdImageError}
             />
           {:else}
             <div

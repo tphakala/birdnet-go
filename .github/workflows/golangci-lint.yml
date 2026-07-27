@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: 'go.mod'
           cache: true
@@ -33,17 +33,28 @@ jobs:
 
       - name: golangci-lint
         id: golangci-lint
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
           # Require: The version of golangci-lint to use.
           # When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
           # When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
-          version: v2.10.1
+          version: v2.12.2
           # Show only new issues by default
           only-new-issues: false
-          # Additional args for better output (v2.5.0+ syntax)
-          # Use noembed,skipfrontend tags to skip model and frontend embedding requirement
-          args: --build-tags=noembed,skipfrontend --output.checkstyle.path=golangci-lint-report.xml
+          # Additional args for better output (v2.5.0+ syntax). noembed,skipfrontend skip
+          # the model/frontend go:embed requirement; integration,pebble_e2e additionally
+          # lint the integration-tagged test files and the AutoTLS Pebble ACME e2e helpers
+          # (which the default tag set never compiles, so they had accumulated lint debt).
+          # normcompare covers the loudness comparison harness in
+          # internal/audiocore/normbench, which is never run in CI (it needs an ffmpeg
+          # binary and a recording corpus) but must still COMPILE there: it mirrors
+          # production normalization internals, so it silently rots whenever those
+          # change. Linting only compiles, so the missing ffmpeg is irrelevant here.
+          # No non-test file is gated on !integration, so this stays a strict superset of
+          # the plain noembed,skipfrontend view and reports into the same summary below.
+          # goaac_simd matches BASE_BUILD_TAGS in Taskfile.yml (and `task lint`), so
+          # this lane and a local pre-push lint compile the same configuration.
+          args: --build-tags=integration,pebble_e2e,noembed,skipfrontend,normcompare,goaac_simd --output.checkstyle.path=golangci-lint-report.xml
 
       - name: Generate lint summary
         if: always()

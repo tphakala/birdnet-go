@@ -510,8 +510,8 @@ func (d *pushDispatcher) retryLoop(ctx context.Context, notif *Notification, ep 
 			d.logCircuitBreakerOpen(ep.name, notif.ID)
 			events.Emit(context.Background(), "notification", "delivery_attempt", "Notification blocked by circuit breaker", map[string]any{
 				"provider": ep.name,
-				"success":  false,
-				"error":    "circuit_breaker_open",
+				"success":  false,                  //nolint:goconst // result-status map key, not the ToastTypeSuccess toast constant
+				"error":    "circuit_breaker_open", //nolint:goconst // result-status map key, not the SeverityError severity value
 				"attempts": attempts,
 			})
 			return

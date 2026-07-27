@@ -105,7 +105,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_buffer_allocations_total",
 			Help: "Total number of buffer allocations",
 		},
-		[]string{"buffer_type", "source", "status"}, // buffer_type: analysis, capture; status: success, error
+		[]string{"buffer_type", labelSource, "status"}, // buffer_type: analysis, capture; status: success, error
 	)
 
 	m.bufferAllocationDuration = prometheus.NewHistogramVec(
@@ -114,7 +114,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Help:    "Time taken for buffer allocations",
 			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount10), // 1ms to ~1s
 		},
-		[]string{"buffer_type", "source"},
+		[]string{"buffer_type", labelSource},
 	)
 
 	m.bufferAllocationErrors = prometheus.NewCounterVec(
@@ -122,7 +122,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_buffer_allocation_errors_total",
 			Help: "Total number of buffer allocation errors",
 		},
-		[]string{"buffer_type", "source", "error_type"},
+		[]string{"buffer_type", labelSource, "error_type"},
 	)
 
 	m.bufferAllocationAttempts = prometheus.NewCounterVec(
@@ -130,7 +130,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_buffer_allocation_attempts_total",
 			Help: "Total number of buffer allocation attempts including successful and blocked",
 		},
-		[]string{"buffer_type", "source", "result"}, // result: first_allocation, repeated_blocked, error
+		[]string{"buffer_type", labelSource, "result"}, // result: first_allocation, repeated_blocked, error
 	)
 
 	m.bufferAllocationSizes = prometheus.NewHistogramVec(
@@ -139,7 +139,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Help:    "Size of buffer allocations in bytes",
 			Buckets: prometheus.ExponentialBuckets(BucketStart1KB, BucketFactor2, BucketCount20), // 1KB to ~1GB
 		},
-		[]string{"buffer_type", "source"},
+		[]string{"buffer_type", labelSource},
 	)
 
 	// Buffer capacity metrics
@@ -148,7 +148,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_buffer_capacity_bytes",
 			Help: "Buffer capacity in bytes",
 		},
-		[]string{"buffer_type", "source"},
+		[]string{"buffer_type", labelSource},
 	)
 
 	m.bufferUtilizationGauge = prometheus.NewGaugeVec(
@@ -156,7 +156,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_buffer_utilization_ratio",
 			Help: "Buffer utilization ratio (0.0 to 1.0)",
 		},
-		[]string{"buffer_type", "source"},
+		[]string{"buffer_type", labelSource},
 	)
 
 	m.bufferSizeGauge = prometheus.NewGaugeVec(
@@ -164,7 +164,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_buffer_size_bytes",
 			Help: "Current buffer size in bytes",
 		},
-		[]string{"buffer_type", "source"},
+		[]string{"buffer_type", labelSource},
 	)
 
 	// Buffer write metrics
@@ -173,7 +173,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_buffer_writes_total",
 			Help: "Total number of buffer write operations",
 		},
-		[]string{"buffer_type", "source", "status"}, // status: success, error, partial
+		[]string{"buffer_type", labelSource, "status"}, // status: success, error, partial
 	)
 
 	m.bufferWriteDuration = prometheus.NewHistogramVec(
@@ -182,7 +182,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Help:    "Time taken for buffer write operations",
 			Buckets: prometheus.ExponentialBuckets(BucketStart100us, BucketFactor2, BucketCount12), // 0.1ms to ~400ms
 		},
-		[]string{"buffer_type", "source"},
+		[]string{"buffer_type", labelSource},
 	)
 
 	m.bufferWriteErrors = prometheus.NewCounterVec(
@@ -190,7 +190,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_buffer_write_errors_total",
 			Help: "Total number of buffer write errors",
 		},
-		[]string{"buffer_type", "source", "error_type"}, // error_type: full, timeout, invalid_data
+		[]string{"buffer_type", labelSource, "error_type"}, // error_type: full, timeout, invalid_data
 	)
 
 	m.bufferWriteRetries = prometheus.NewCounterVec(
@@ -198,7 +198,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_buffer_write_retries_total",
 			Help: "Total number of buffer write retries",
 		},
-		[]string{"buffer_type", "source", "retry_reason"},
+		[]string{"buffer_type", labelSource, "retry_reason"},
 	)
 
 	m.bufferWriteBytesTotal = prometheus.NewCounterVec(
@@ -206,7 +206,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_buffer_write_bytes_total",
 			Help: "Total bytes written to buffers",
 		},
-		[]string{"buffer_type", "source"},
+		[]string{"buffer_type", labelSource},
 	)
 
 	// Buffer read metrics
@@ -215,7 +215,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_buffer_reads_total",
 			Help: "Total number of buffer read operations",
 		},
-		[]string{"buffer_type", "source", "status"}, // status: success, error, insufficient_data
+		[]string{"buffer_type", labelSource, "status"}, // status: success, error, insufficient_data
 	)
 
 	m.bufferReadDuration = prometheus.NewHistogramVec(
@@ -224,7 +224,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Help:    "Time taken for buffer read operations",
 			Buckets: prometheus.ExponentialBuckets(BucketStart100us, BucketFactor2, BucketCount12), // 0.1ms to ~400ms
 		},
-		[]string{"buffer_type", "source"},
+		[]string{"buffer_type", labelSource},
 	)
 
 	m.bufferReadErrors = prometheus.NewCounterVec(
@@ -232,7 +232,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_buffer_read_errors_total",
 			Help: "Total number of buffer read errors",
 		},
-		[]string{"buffer_type", "source", "error_type"},
+		[]string{"buffer_type", labelSource, "error_type"},
 	)
 
 	m.bufferReadBytesTotal = prometheus.NewCounterVec(
@@ -240,7 +240,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_buffer_read_bytes_total",
 			Help: "Total bytes read from buffers",
 		},
-		[]string{"buffer_type", "source"},
+		[]string{"buffer_type", labelSource},
 	)
 
 	// Buffer state metrics
@@ -249,7 +249,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_buffer_overflows_total",
 			Help: "Total number of buffer overflows",
 		},
-		[]string{"buffer_type", "source"},
+		[]string{"buffer_type", labelSource},
 	)
 
 	m.bufferUnderrunsTotal = prometheus.NewCounterVec(
@@ -257,7 +257,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_buffer_underruns_total",
 			Help: "Total number of buffer underruns",
 		},
-		[]string{"buffer_type", "source"},
+		[]string{"buffer_type", labelSource},
 	)
 
 	m.bufferWraparoundsTotal = prometheus.NewCounterVec(
@@ -265,7 +265,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_buffer_wraparounds_total",
 			Help: "Total number of buffer wraparounds",
 		},
-		[]string{"buffer_type", "source"},
+		[]string{"buffer_type", labelSource},
 	)
 
 	// Analysis buffer specific metrics
@@ -275,7 +275,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Help:    "Time taken for analysis buffer processing",
 			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount15), // 1ms to ~32s
 		},
-		[]string{"source"},
+		[]string{labelSource},
 	)
 
 	m.analysisBufferPollTotal = prometheus.NewCounterVec(
@@ -283,7 +283,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_analysis_buffer_polls_total",
 			Help: "Total number of analysis buffer polls",
 		},
-		[]string{"source", "result"}, // result: data_available, insufficient_data, error
+		[]string{labelSource, "result"}, // result: data_available, insufficient_data, error
 	)
 
 	m.analysisBufferDataDropsTotal = prometheus.NewCounterVec(
@@ -291,7 +291,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_analysis_buffer_data_drops_total",
 			Help: "Total number of analysis buffer data drops",
 		},
-		[]string{"source", "reason"}, // reason: full_buffer, write_failure, retry_exhausted
+		[]string{labelSource, "reason"}, // reason: full_buffer, write_failure, retry_exhausted
 	)
 
 	// Capture buffer specific metrics
@@ -300,7 +300,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_capture_buffer_segment_reads_total",
 			Help: "Total number of capture buffer segment reads",
 		},
-		[]string{"source", "status"}, // status: success, error, timeout
+		[]string{labelSource, "status"}, // status: success, error, timeout
 	)
 
 	m.captureBufferSegmentReadDuration = prometheus.NewHistogramVec(
@@ -309,7 +309,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Help:    "Time taken for capture buffer segment reads",
 			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount12), // 1ms to ~4s
 		},
-		[]string{"source"},
+		[]string{labelSource},
 	)
 
 	m.captureBufferTimestampErrorsTotal = prometheus.NewCounterVec(
@@ -317,7 +317,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_capture_buffer_timestamp_errors_total",
 			Help: "Total number of capture buffer timestamp errors",
 		},
-		[]string{"source", "error_type"}, // error_type: outside_timeframe, invalid_duration
+		[]string{labelSource, "error_type"}, // error_type: outside_timeframe, invalid_duration
 	)
 
 	// Audio quality metrics
@@ -326,7 +326,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_audio_data_validation_errors_total",
 			Help: "Total number of audio data validation errors",
 		},
-		[]string{"source", "validation_type"}, // validation_type: alignment, size, range
+		[]string{labelSource, "validation_type"}, // validation_type: alignment, size, range
 	)
 
 	m.audioSilenceDetections = prometheus.NewCounterVec(
@@ -334,7 +334,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_audio_silence_detections_total",
 			Help: "Total number of audio silence detections",
 		},
-		[]string{"source"},
+		[]string{labelSource},
 	)
 
 	m.audioDataCorruptionTotal = prometheus.NewCounterVec(
@@ -342,7 +342,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_audio_data_corruption_total",
 			Help: "Total number of audio data corruption detections",
 		},
-		[]string{"source", "corruption_type"},
+		[]string{labelSource, "corruption_type"},
 	)
 
 	// File operation metrics
@@ -393,7 +393,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_birdnet_processing_overruns_total",
 			Help: "Total number of BirdNET processing buffer overruns (inference exceeded effective buffer duration)",
 		},
-		[]string{"source"},
+		[]string{labelSource},
 	)
 
 	m.birdnetProcessingOverrunDuration = prometheus.NewHistogramVec(
@@ -402,7 +402,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Help:    "Elapsed processing time when a buffer overrun occurred",
 			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount15), // 1ms to ~32s
 		},
-		[]string{"source"},
+		[]string{labelSource},
 	)
 
 	m.birdnetProcessingOverrunRatio = prometheus.NewHistogramVec(
@@ -411,7 +411,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Help:    "Ratio of elapsed processing time to effective buffer duration (>1.0 means overrun)",
 			Buckets: BirdNETOverrunRatioBuckets,
 		},
-		[]string{"source"},
+		[]string{labelSource},
 	)
 
 	// Audio processing metrics
@@ -420,7 +420,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_audio_processing_total",
 			Help: "Total number of audio processing operations",
 		},
-		[]string{"operation", "source", "status"}, // operation: process_data, apply_filters; status: success, error
+		[]string{"operation", labelSource, "status"}, // operation: process_data, apply_filters; status: success, error
 	)
 
 	m.audioProcessingDuration = prometheus.NewHistogramVec(
@@ -429,7 +429,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Help:    "Time taken for audio processing operations",
 			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount15), // 1ms to ~32s
 		},
-		[]string{"operation", "source"},
+		[]string{"operation", labelSource},
 	)
 
 	m.audioProcessingErrors = prometheus.NewCounterVec(
@@ -437,7 +437,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_audio_processing_errors_total",
 			Help: "Total number of audio processing errors",
 		},
-		[]string{"operation", "source", "error_type"},
+		[]string{"operation", labelSource, "error_type"},
 	)
 
 	m.audioConversionsTotal = prometheus.NewCounterVec(
@@ -454,7 +454,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Help:    "Time taken for audio format conversions",
 			Buckets: prometheus.ExponentialBuckets(BucketStart100us, BucketFactor2, BucketCount12), // 0.1ms to ~400ms
 		},
-		[]string{"source", "conversion_type"},
+		[]string{labelSource, "conversion_type"},
 	)
 
 	m.audioConversionErrors = prometheus.NewCounterVec(
@@ -471,7 +471,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Help:    "Time taken for BirdNET inference operations",
 			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount15), // 1ms to ~32s
 		},
-		[]string{"source"},
+		[]string{labelSource},
 	)
 
 	m.audioDataSizeTotal = prometheus.NewCounterVec(
@@ -479,7 +479,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_audio_data_size_bytes_total",
 			Help: "Total bytes of audio data processed",
 		},
-		[]string{"source"},
+		[]string{labelSource},
 	)
 
 	m.audioSampleCountTotal = prometheus.NewCounterVec(
@@ -487,7 +487,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_audio_sample_count_total",
 			Help: "Total number of audio samples processed",
 		},
-		[]string{"source"},
+		[]string{labelSource},
 	)
 
 	m.birdnetResultsTotal = prometheus.NewCounterVec(
@@ -495,7 +495,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_birdnet_results_total",
 			Help: "Total number of BirdNET detection results",
 		},
-		[]string{"source"},
+		[]string{labelSource},
 	)
 
 	m.audioQueueOperations = prometheus.NewCounterVec(
@@ -503,7 +503,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 			Name: "myaudio_audio_queue_operations_total",
 			Help: "Total number of audio queue operations",
 		},
-		[]string{"source", "operation", "status"}, // operation: enqueue, dequeue
+		[]string{labelSource, "operation", "status"}, // operation: enqueue, dequeue
 	)
 
 	// Initialize collectors slice with all metrics

@@ -4,6 +4,7 @@
   import { t } from '$lib/i18n';
   import { formatDate } from '$lib/utils/formatters';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
 
   interface SpeciesData {
     common_name: string;
@@ -92,6 +93,7 @@
             src={displaySpecies.thumbnail_url}
             alt={displayName}
             class="w-full h-full object-cover"
+            onerror={handleBirdImageError}
           />
         </div>
       {/if}

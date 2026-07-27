@@ -45,12 +45,7 @@ export interface SpectrogramLoaderConfig {
 
 /** Status values returned by the backend */
 type SpectrogramStatus =
-  | 'exists'
-  | 'generated'
-  | 'not_started'
-  | 'queued'
-  | 'generating'
-  | 'failed';
+  'exists' | 'generated' | 'not_started' | 'queued' | 'generating' | 'failed';
 
 const DEFAULT_CONFIG: Required<SpectrogramLoaderConfig> = {
   size: 'md',

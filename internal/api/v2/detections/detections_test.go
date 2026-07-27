@@ -688,6 +688,113 @@ func TestGetDetection(t *testing.T) {
 	}
 }
 
+// TestGetDetection_ClipNameSerialized is a HANDLER-level guard for the REST
+// detection response contract: the JSON payload MUST carry a clipName field,
+// basename-stripped to match the SSE privacy contract, and MUST omit it when the
+// detection has no clip. The frontend gates per-detection audio playback on this
+// field; if the endpoint stops serializing it, every export-enabled user silently
+// loses media. Asserting on the raw JSON (not just an unmarshaled struct) makes
+// the test fail if the struct field or its json tag is ever removed.
+func TestGetDetection_ClipNameSerialized(t *testing.T) {
+	e, mockDS, controller := setupTestEnvironment(t)
+
+	const clipPath = "2025/03/corvus_brachyrhynchos_95p_20250307T081500Z.wav"
+	const clipBase = "corvus_brachyrhynchos_95p_20250307T081500Z.wav"
+
+	baseNote := datastore.Note{
+		ID:             7,
+		Date:           "2025-03-07",
+		Time:           "08:15:00",
+		Source:         testRealtimeSource(),
+		SpeciesCode:    "AMCRO",
+		ScientificName: "Corvus brachyrhynchos",
+		CommonName:     "American Crow",
+		Confidence:     0.95,
+		BeginTime:      time.Now().Add(-time.Hour),
+		EndTime:        time.Now(),
+	}
+
+	t.Run("clip present is serialized as basename", func(t *testing.T) {
+		note := baseNote
+		note.ClipName = clipPath
+		mockDS.ExpectedCalls = nil
+		mockDS.On("Get", "7").Return(note, nil)
+		mockDS.On("GetHourlyWeather", "2025-03-07").Return([]datastore.HourlyWeather{}, nil)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/7", http.NoBody)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetParamNames("id")
+		c.SetParamValues("7")
+
+		require.NoError(t, controller.GetDetection(c))
+		require.Equal(t, http.StatusOK, rec.Code)
+
+		// Raw JSON must contain the field so removing it from the struct fails here.
+		var payload map[string]any
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+		clip, ok := payload["clipName"]
+		require.True(t, ok, "response JSON must include clipName")
+		assert.Equal(t, clipBase, clip, "clipName must be basename-stripped (SSE privacy contract)")
+		assert.NotContains(t, rec.Body.String(), "2025/03",
+			"clipName must not leak the on-disk directory layout")
+	})
+
+	t.Run("empty clip is omitted", func(t *testing.T) {
+		note := baseNote
+		note.ClipName = ""
+		mockDS.ExpectedCalls = nil
+		mockDS.On("Get", "7").Return(note, nil)
+		mockDS.On("GetHourlyWeather", "2025-03-07").Return([]datastore.HourlyWeather{}, nil)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/7", http.NoBody)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetParamNames("id")
+		c.SetParamValues("7")
+
+		require.NoError(t, controller.GetDetection(c))
+		require.Equal(t, http.StatusOK, rec.Code)
+		var payload map[string]any
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+		_, ok := payload["clipName"]
+		assert.False(t, ok, "clipName must be omitted when the detection has no clip")
+	})
+}
+
+// TestGetRecentDetections_ClipNameSerialized covers the list converter path so
+// the per-detection clipName signal is present in list responses too.
+func TestGetRecentDetections_ClipNameSerialized(t *testing.T) {
+	e, mockDS, controller := setupTestEnvironment(t)
+
+	notes := []datastore.Note{
+		{
+			ID:             1,
+			Date:           "2025-03-07",
+			Time:           "08:15:00",
+			Source:         testRealtimeSource(),
+			ScientificName: "Corvus brachyrhynchos",
+			CommonName:     "American Crow",
+			Confidence:     0.95,
+			ClipName:       "2025/03/corvus_brachyrhynchos_95p_20250307T081500Z.wav",
+		},
+	}
+	mockDS.On("GetLastDetections", 10).Return(notes, nil).Once()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/recent", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, controller.GetRecentDetections(c))
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var payload []map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+	require.Len(t, payload, 1)
+	assert.Equal(t, "corvus_brachyrhynchos_95p_20250307T081500Z.wav", payload[0]["clipName"],
+		"list responses must carry the basename-stripped clipName")
+}
+
 // TestGetDetectionCommentFormat verifies that detection comments are returned
 // with full object format (id, entry, createdAt, updatedAt) as expected by the frontend.
 // This test was added to fix issue #1728 where comments displayed as "NaN-NaN-NaN NaN:NaN:NaN"
@@ -1221,6 +1328,8 @@ func TestReviewDetection(t *testing.T) {
 		{
 			name:        "Locked detection",
 			detectionID: "4",
+			// No lock_detection field: with LockDetection as a *bool this stays nil,
+			// so a verify-only request cannot unlock a locked detection (409 stands).
 			requestBody: `{"verified": "correct"}`,
 			mockSetup: func(m *mock.Mock) {
 				m.On("Get", "4").Return(datastore.Note{ID: 4, Locked: true}, nil)
@@ -1303,8 +1412,11 @@ func TestReviewDetectionFalsePositiveLocalizedResolution(t *testing.T) {
 	mockDS.ExpectedCalls = nil
 	setupValidReviewMock(&mockDS.Mock, "7", 7, false)
 
+	// Payload uses the snake_case "ignore_species" key that the frontend actually
+	// sends (see ReviewCard.svelte / ReviewModal.svelte); a camelCase key would not
+	// bind to DetectionRequest.IgnoreSpecies and would silently skip the exclusion.
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/7/review",
-		strings.NewReader(`{"verified": "false_positive", "ignoreSpecies": "mopsilepakko"}`))
+		strings.NewReader(`{"verified": "false_positive", "ignore_species": "mopsilepakko"}`))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
@@ -1320,6 +1432,83 @@ func TestReviewDetectionFalsePositiveLocalizedResolution(t *testing.T) {
 	assert.NotContains(t, controller.Settings.Load().Realtime.Species.Exclude, "mopsilepakko")
 
 	mockDS.AssertExpectations(t)
+}
+
+// TestReviewDetectionLockState verifies that a locked detection is frozen against changes
+// unless the request is explicitly unlocking it.
+func TestReviewDetectionLockState(t *testing.T) {
+	e, mockDS, controller := setupTestEnvironment(t)
+
+	t.Run("Unlock a locked detection should succeed", func(t *testing.T) {
+		mockDS.ExpectedCalls = nil
+
+		note := datastore.Note{ID: 10, Locked: true}
+		mockDS.On("Get", "10").Return(note, nil)
+
+		// checkDetectionNotLocked is bypassed when unlocking, so we process the review.
+		mockDS.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
+		mockDS.On("UnlockNote", "10").Return(nil)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/10/review",
+			strings.NewReader(`{"verified":"false_positive","lock_detection":false}`))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetParamNames("id")
+		c.SetParamValues("10")
+
+		err := controller.ReviewDetection(c)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		mockDS.AssertExpectations(t)
+	})
+
+	t.Run("Locking an already locked detection should return 409", func(t *testing.T) {
+		mockDS.ExpectedCalls = nil
+
+		note := datastore.Note{ID: 11, Locked: true}
+		mockDS.On("Get", "11").Return(note, nil)
+		// No IsNoteLocked check is needed since in-memory check fails first.
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/11/review",
+			strings.NewReader(`{"verified":"false_positive","lock_detection":true}`))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetParamNames("id")
+		c.SetParamValues("11")
+
+		err := controller.ReviewDetection(c)
+		require.NoError(t, err) // Handled error logic within controller
+		assert.Equal(t, http.StatusConflict, rec.Code)
+
+		mockDS.AssertExpectations(t)
+	})
+
+	t.Run("Verify-only without lock_detection on a locked detection stays 409", func(t *testing.T) {
+		mockDS.ExpectedCalls = nil
+
+		note := datastore.Note{ID: 12, Locked: true}
+		mockDS.On("Get", "12").Return(note, nil)
+
+		// lock_detection is omitted, so LockDetection binds to nil. That is NOT an
+		// unlock, so the freeze guard applies and the detection is left untouched.
+		// A plain bool would read the omitted field as false and silently unlock it.
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/12/review",
+			strings.NewReader(`{"verified":"false_positive"}`))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetParamNames("id")
+		c.SetParamValues("12")
+
+		err := controller.ReviewDetection(c)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusConflict, rec.Code)
+
+		mockDS.AssertExpectations(t)
+	})
 }
 
 // TestLockDetection tests the LockDetection endpoint

@@ -22,6 +22,9 @@
 
   let { detections, onRefresh }: Props = $props();
 
+  // Each DetectionCard gates its own spectrogram/audio on detection.clipName, so
+  // no card-level audio flag is threaded through here.
+
   // Exclusion state is the shared, server-hydrated excludedSpecies store
   // (hydrated by the parent DetectionsList).
   const actions = useDetectionActions({

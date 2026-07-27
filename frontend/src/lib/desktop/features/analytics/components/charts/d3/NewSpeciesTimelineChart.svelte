@@ -18,6 +18,7 @@
   } from './utils/axes';
   import { ChartTooltip } from './utils/interactions';
   import { generateSpeciesColors, type ChartRenderContext } from './utils/theme';
+  import { fitTextNode } from './utils/labels';
 
   export interface NewSpeciesDatum {
     commonName: string;
@@ -54,21 +55,22 @@
   // (scientific name) so a species keeps a stable row/color across locales; only
   // the axis tick label and the tooltip use `displayName`.
   const localizedData = $derived(
-    data.map(
-      (d): LocalizedNewSpeciesDatum => ({
-        ...d,
-        // Logical OR (not ??) so an empty-string scientific name also falls back to
-        // the common name; an empty key would collapse distinct rows onto one band.
-        key: d.scientificName || d.commonName,
-        displayName: localizeSpeciesName(d.scientificName, d.commonName),
-      })
-    )
+    data.map((d): LocalizedNewSpeciesDatum => ({
+      ...d,
+      // Logical OR (not ??) so an empty-string scientific name also falls back to
+      // the common name; an empty key would collapse distinct rows onto one band.
+      key: d.scientificName || d.commonName,
+      displayName: localizeSpeciesName(d.scientificName, d.commonName),
+    }))
   );
 
   // Styling constants
   const MAX_X_TICKS = 8;
   const TICK_SPACING_PX = 80;
   const X_AXIS_LABEL_OFFSET = 35;
+  // D3's default axisLeft tick gap (tickSizeInner 6 + tickPadding 3): where an end-anchored tick
+  // label's right edge sits, so MARGIN.left minus this is the room a species name actually has.
+  const AXIS_TICK_GAP = 9;
   const BAND_PADDING = 0.3;
   const MARKER_OPACITY = 0.85;
   const MARKER_HOVER_OPACITY = 1;
@@ -155,6 +157,19 @@
 
     styleAxis(xAxisGroup, theme.axis);
     styleAxis(yAxisGroup, theme.axis);
+
+    // Species names are end-anchored at the tick gap and grow left into the margin, so a name wider
+    // than the margin is clipped by the viewport. Fit each to the margin by measured width. Must run
+    // after styleAxis, which applies the font the measurement depends on.
+    yAxisGroup.selectAll<globalThis.SVGTextElement, AxisDomain>('.tick text').each(function (d) {
+      fitTextNode(this, keyToDisplay.get(String(d)) ?? String(d), MARGIN.left - AXIS_TICK_GAP);
+    });
+    // Full name on the tick group (not the <text>, whose textContent must stay the visible label) so
+    // an ellipsized name is still recoverable via hover, touch long-press, and assistive tech.
+    yAxisGroup
+      .selectAll<globalThis.SVGGElement, AxisDomain>('.tick')
+      .append('title')
+      .text(d => keyToDisplay.get(String(d)) ?? String(d));
 
     if (dateAxisLabel) {
       addAxisLabel(

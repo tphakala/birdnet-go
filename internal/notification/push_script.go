@@ -101,7 +101,7 @@ func (s *ScriptProvider) Send(ctx context.Context, n *Notification) error {
 			"type":      string(n.Type),
 			"priority":  string(n.Priority),
 			"title":     n.Title,
-			"message":   n.Message,
+			"message":   n.Message, //nolint:goconst // script data map key, not the function-local keyMessage
 			"component": n.Component,
 			"timestamp": n.Timestamp.UTC().Format(time.RFC3339),
 			"metadata":  n.Metadata,

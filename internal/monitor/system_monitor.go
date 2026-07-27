@@ -258,7 +258,20 @@ func (m *SystemMonitor) checkDiskPath(path string) {
 // publishDiskMetric collects and publishes disk usage for a single path or mount point
 func (m *SystemMonitor) publishDiskMetric(path string) {
 	if _, err := os.Stat(path); err != nil {
-		m.log.Error("Disk path does not exist or is not accessible",
+		// A missing path is an expected, benign state rather than a fault: the
+		// audio clip export directory is never created while export is disabled
+		// (which is now the default for "clip export off" mode), and in Docker a
+		// bind-mounted volume such as /clips may be legitimately unmounted. Log
+		// those at Debug and skip. Only genuine access failures (permissions, I/O)
+		// remain at Error so real problems still surface.
+		if os.IsNotExist(err) {
+			m.log.Debug("Skipping disk metric for non-existent path",
+				logger.String("path", path),
+				logger.Error(err),
+			)
+			return
+		}
+		m.log.Error("Disk path is not accessible",
 			logger.String("path", path),
 			logger.Error(err),
 		)

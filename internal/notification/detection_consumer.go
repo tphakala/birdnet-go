@@ -194,7 +194,7 @@ func (c *DetectionNotificationConsumer) renderTemplateField(field string, event 
 	switch field {
 	case "title":
 		templateStr = settings.Notification.Templates.NewSpecies.Title
-	case "message":
+	case "message": //nolint:goconst // template field name, not the function-local keyMessage
 		templateStr = settings.Notification.Templates.NewSpecies.Message
 	}
 

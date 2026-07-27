@@ -5,6 +5,7 @@ import SystemInference from './SystemInference.svelte';
 import type {
   InferenceStatusResponse,
   InferenceModel,
+  InferenceHardware,
 } from '$lib/desktop/features/system/inference.types';
 
 // The component talks to the JSON API and opens an SSE stream. The API is mocked
@@ -85,9 +86,20 @@ function makeModel(overrides: Partial<InferenceModel> = {}): InferenceModel {
 }
 
 /** Build a minimal valid snapshot, overridable per test. */
-function makeSnapshot(models: InferenceModel[]): InferenceStatusResponse {
+function makeSnapshot(
+  models: InferenceModel[],
+  hardware: Partial<InferenceHardware> = {}
+): InferenceStatusResponse {
   return {
-    hardware: { arch: 'amd64', cpuModel: 'Test CPU', environment: 'docker', fp16: true },
+    hardware: {
+      arch: 'amd64',
+      cpuModel: 'Test CPU',
+      // Capitalised to match sysinfo.GetEnvironment's EnvDocker verbatim; the
+      // container/host icon choice is a case-sensitive prefix match on it.
+      environment: 'Docker',
+      fp16: true,
+      ...hardware,
+    },
     backends: {
       tflite: { available: true },
       onnx: { available: true, initialized: true, version: '1.18' },
@@ -732,5 +744,238 @@ describe('SystemInference', () => {
     // Neither active nor idle indicators render while paused.
     expect(container.querySelector('[aria-label="system.inference.activityActive"]')).toBeNull();
     expect(container.querySelector('[aria-label="system.inference.activityIdle"]')).toBeNull();
+  });
+
+  describe('compute precision (Inference Backends footer)', () => {
+    // The contract this suite pins, in one place: the mocked t() returns the key
+    // itself, so these are the strings that actually reach the DOM.
+    const LABEL_KEY = 'system.inference.fp16';
+    const SUPPORTED_KEY = 'system.inference.fp16Supported';
+    const UNSUPPORTED_KEY = 'system.inference.fp16Unsupported';
+    const BACKENDS_HEADING_KEY = 'system.inference.sectionBackends';
+    const CARD_SELECTOR = 'div.rounded-xl';
+
+    // The label key must be matched EXACTLY, never as a substring of
+    // textContent: LABEL_KEY is a prefix of SUPPORTED_KEY, so a contains-check
+    // passes even when the label is missing entirely and asserts nothing.
+    function precisionLabel(container: HTMLElement): Element | undefined {
+      return [...container.querySelectorAll('span')].find(
+        el => el.textContent.trim() === LABEL_KEY
+      );
+    }
+
+    // The row lives in the Inference Backends card rather than the Hardware
+    // card, because native FP16 is a property of the CPU every backend executes
+    // on. Both branches are asserted: the label renders either way, so only the
+    // pill distinguishes a working readout from one stuck on one variant.
+    it('reports FP16 as supported when the CPU has native half precision', async () => {
+      installApi(makeSnapshot([makeModel({})], { fp16: true }));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain(SUPPORTED_KEY);
+      });
+      expect(precisionLabel(container)).toBeDefined();
+      expect(container.textContent).not.toContain(UNSUPPORTED_KEY);
+    });
+
+    // Placement, not just presence. Every other assertion here passes equally
+    // against the pre-move code, because the row kept its keys and its id when
+    // it changed cards; only these two fail if it moves back.
+    it('places the precision row in the Backends card, not the Hardware card', async () => {
+      installApi(makeSnapshot([makeModel({})], { fp16: true }));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain(SUPPORTED_KEY);
+      });
+      const card = precisionLabel(container)?.closest(CARD_SELECTOR);
+      expect(card?.textContent).toContain(BACKENDS_HEADING_KEY);
+      // The Hardware card is the definition list; the row must have left it.
+      expect(container.querySelector('dl')?.textContent).not.toContain(SUPPORTED_KEY);
+    });
+
+    it('reports FP16 as unsupported when the CPU lacks native half precision', async () => {
+      installApi(makeSnapshot([makeModel({})], { fp16: false }));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain(UNSUPPORTED_KEY);
+      });
+      expect(precisionLabel(container)).toBeDefined();
+      expect(container.textContent).not.toContain(SUPPORTED_KEY);
+    });
+
+    // The label carries aria-describedby pointing at an sr-only span, so the
+    // explanation reaches a screen reader and not only a hovering mouse. The id
+    // and the reference come from one constant; this proves they still resolve.
+    it('links the precision label to its screen-reader description', async () => {
+      installApi(makeSnapshot([makeModel({})], { fp16: true }));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain(SUPPORTED_KEY);
+      });
+      const label = precisionLabel(container);
+      const describedBy = label?.getAttribute('aria-describedby');
+      expect(describedBy).toBeTruthy();
+      expect(container.querySelector(`#${describedBy}`)).not.toBeNull();
+    });
+  });
+
+  describe('detected hardware panel', () => {
+    it('renders board, cores and memory when the probe found them', async () => {
+      installApi(
+        makeSnapshot([makeModel({})], {
+          board: {
+            kind: 'raspberry-pi',
+            model: 'Raspberry Pi 5 Model B Rev 1.0',
+            soc: 'bcm2712',
+            tier: 'pi5',
+          },
+          physicalCores: 4,
+          totalRamBytes: 4 * 1024 * 1024 * 1024,
+        })
+      );
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('Raspberry Pi 5 Model B Rev 1.0');
+      });
+      expect(container.textContent).toContain('bcm2712');
+      expect(container.textContent).toContain('system.inference.cores');
+      expect(container.textContent).toContain('system.inference.memory');
+      expect(container.textContent).toContain('4.0 GB');
+    });
+
+    it('still shows the board when the device tree gave only an SoC', async () => {
+      // The server sends a board when it resolved a model OR an SoC. Gating the
+      // row on the model would discard the one fact the probe recovered.
+      installApi(
+        makeSnapshot([makeModel({})], {
+          board: { kind: 'generic', soc: 'rk3588' },
+        })
+      );
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('rk3588');
+      });
+      expect(container.textContent).toContain('system.inference.board');
+    });
+
+    it('omits the board row on a host with no device tree', async () => {
+      installApi(makeSnapshot([makeModel({})]));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('system.inference.sectionHardware');
+      });
+      expect(container.textContent).not.toContain('system.inference.board');
+      expect(container.textContent).not.toContain('system.inference.memory');
+    });
+
+    it('renders two identical GPUs without crashing', async () => {
+      // Two cards of the same model produce byte-identical names, because the
+      // name carries no PCI slot. A keyed {#each} on the name would throw
+      // each_key_duplicate here and blank the entire page, in production too.
+      const card = {
+        kind: 'dgpu',
+        vendor: 'nvidia',
+        name: 'NVIDIA Graphics [10de:2504]',
+        accessible: true,
+        reasons: ['no-runtime' as const],
+      };
+      installApi(makeSnapshot([makeModel({})], { accelerators: [card, { ...card }] }));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.querySelectorAll('[role="group"]')).toHaveLength(2);
+      });
+      expect(container.textContent).toContain('system.inference.gpuReasonNoRuntime');
+    });
+
+    it('lists every blocker for a GPU the server cannot reach', async () => {
+      installApi(
+        makeSnapshot([makeModel({})], {
+          accelerators: [
+            {
+              kind: 'dgpu',
+              vendor: 'amd',
+              name: 'AMD Graphics [1002:73ff]',
+              accessible: false,
+              reasons: ['no-runtime', 'render-node-unavailable'],
+            },
+          ],
+        })
+      );
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('AMD Graphics [1002:73ff]');
+      });
+      expect(container.textContent).toContain('system.inference.gpuNotReachable');
+      expect(container.textContent).toContain('system.inference.gpuReasonNoRuntime');
+      expect(container.textContent).toContain('system.inference.gpuReasonRenderNodeUnavailable');
+    });
+
+    it('shows a reachable GPU as reachable and still lists a vendor blocker', async () => {
+      // Reachable and unusable are independent: an AMD card can be perfectly
+      // reachable while no build ships a runtime for it.
+      installApi(
+        makeSnapshot([makeModel({})], {
+          accelerators: [
+            {
+              kind: 'igpu',
+              vendor: 'intel',
+              name: 'Intel Graphics [8086:9a49]',
+              accessible: true,
+            },
+          ],
+        })
+      );
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('Intel Graphics [8086:9a49]');
+      });
+      expect(container.textContent).toContain('system.inference.gpuReachable');
+      expect(container.textContent).not.toContain('system.inference.gpuReason');
+    });
+
+    it('falls back to a generic label for an unrecognised reason code', async () => {
+      // A newer server can emit a reason this bundle has no translation for;
+      // the panel must still say the GPU is unusable rather than render blank.
+      installApi(
+        makeSnapshot([makeModel({})], {
+          accelerators: [
+            {
+              kind: 'dgpu',
+              vendor: 'amd',
+              name: 'AMD Graphics [1002:73ff]',
+              accessible: false,
+              reasons: ['brand-new-code' as unknown as 'no-runtime'],
+            },
+          ],
+        })
+      );
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('AMD Graphics [1002:73ff]');
+      });
+      expect(container.textContent).toContain('system.inference.gpuReasonUnknown');
+    });
   });
 });

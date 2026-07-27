@@ -75,6 +75,11 @@ export interface BirdNetSettings {
   longitude: number;
   locationConfigured: boolean; // true when location has been explicitly configured
   rangeFilter: RangeFilterSettings;
+  // Host used for model downloads, e.g. https://hf-mirror.com where
+  // huggingface.co is unreachable. When empty the backend falls back to the
+  // HF_ENDPOINT environment variable first and only then to https://huggingface.co,
+  // so an empty value here does not necessarily mean the default host is in use.
+  huggingFaceEndpoint?: string;
 }
 
 export interface DynamicThresholdSettings {
@@ -172,6 +177,12 @@ export interface SoundLevelSettings {
   interval: number;
 }
 
+// Audio gain bounds in dB, shared by the sound card, stream, and export gain
+// controls. Mirrors the backend MinAudioGain/MaxAudioGain validation range so
+// the frontend clamp and sliders stay in sync if the range ever changes.
+export const AUDIO_GAIN_MIN_DB = -40;
+export const AUDIO_GAIN_MAX_DB = 40;
+
 // Stream type constants
 export const StreamTypes = {
   RTSP: 'rtsp',
@@ -184,6 +195,8 @@ export const StreamTypes = {
 export type StreamType = (typeof StreamTypes)[keyof typeof StreamTypes];
 
 export type ChannelMode = 'downmix' | 'left' | 'right';
+
+export type MediaMode = 'auto' | 'audio-only' | 'full-stream';
 
 // QuietHoursConfig represents quiet hours configuration for a stream or sound card
 export interface QuietHoursConfig {
@@ -217,9 +230,11 @@ export interface StreamConfig {
   type: StreamType; // Stream type: rtsp, http, hls, rtmp, udp
   transport?: 'tcp' | 'udp'; // Transport protocol (for RTSP/RTMP only)
   channelMode?: ChannelMode; // Channel selection mode: downmix, left, or right
+  mediaMode?: MediaMode; // RTSP media request: auto, audio-only, or full-stream (empty = full-stream)
   models?: string[]; // Model IDs for this stream (e.g., ["birdnet", "perch_v2"])
   equalizer?: EqualizerSettings; // Per-stream EQ (undefined = use global)
   quietHours?: QuietHoursConfig; // Quiet hours configuration
+  gain?: number; // Input gain in dB (0 = no adjustment)
 }
 
 // ChannelEnergy represents the energy level of a single audio channel
@@ -869,6 +884,7 @@ function createEmptySettings(): SettingsFormData {
         speciesCount: null,
         species: [],
       },
+      huggingFaceEndpoint: '',
     },
     bat: {
       enabled: false,
@@ -1352,7 +1368,7 @@ export const settingsActions = {
       // session. Read newLocale from coercedFormData (the value we actually
       // persisted) and compare to originalData (the snapshot loaded from
       // the backend). This avoids clobbering a locale chosen via the sidebar
-      // LanguageSelector — which updates localStorage but not the backend —
+      // LanguageSelector (which updates localStorage but not the backend)
       // with whatever stale value the backend still holds, and matches the
       // coercedFormData-based comparison used by the TLS check below.
       const newLocale = coercedFormData.realtime?.dashboard?.locale;

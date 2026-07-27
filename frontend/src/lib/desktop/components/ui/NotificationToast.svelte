@@ -8,12 +8,7 @@
 
   type ToastType = 'info' | 'success' | 'warning' | 'error';
   type ToastPosition =
-    | 'top-left'
-    | 'top-center'
-    | 'top-right'
-    | 'bottom-left'
-    | 'bottom-center'
-    | 'bottom-right';
+    'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
 
   interface ToastAction {
     label: string;

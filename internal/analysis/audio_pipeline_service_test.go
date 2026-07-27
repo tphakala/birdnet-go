@@ -1,6 +1,8 @@
 package analysis
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -171,4 +173,48 @@ func TestBuildLivenessConfig_PartialOverride(t *testing.T) {
 	assert.Equal(t, defaults.RetryBackoff, cfg.RetryBackoff, "unset field should use default")
 	assert.Equal(t, defaults.CooldownAfterRecov, cfg.CooldownAfterRecov, "unset field should use default")
 	assert.Equal(t, defaults.EscalationTimeout, cfg.EscalationTimeout, "unset field should use default")
+}
+
+// TestClassifyExportDir covers the clip cleanup guard's directory classification:
+// a usable directory runs cleanup, a missing directory is the benign export-off
+// default (Debug/skip), and a stat error or a non-directory path is unexpected
+// (Warn/skip).
+func TestClassifyExportDir(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+
+	realDir := filepath.Join(base, "clips")
+	require.NoError(t, os.Mkdir(realDir, 0o755))
+
+	regularFile := filepath.Join(base, "clips.txt")
+	require.NoError(t, os.WriteFile(regularFile, []byte("not a dir"), 0o600))
+
+	missing := filepath.Join(base, "does-not-exist")
+
+	tests := []struct {
+		name         string
+		path         string
+		wantState    exportDirState
+		wantErrIsNil bool
+	}{
+		{name: "existing directory is usable", path: realDir, wantState: exportDirUsable, wantErrIsNil: true},
+		{name: "missing directory is benign", path: missing, wantState: exportDirMissing, wantErrIsNil: false},
+		{name: "regular file is bad without error", path: regularFile, wantState: exportDirBad, wantErrIsNil: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			state, err := classifyExportDir(tt.path)
+			assert.Equal(t, tt.wantState, state)
+			if tt.wantErrIsNil {
+				assert.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				assert.True(t, os.IsNotExist(err), "missing path should report a not-exist error")
+			}
+		})
+	}
 }

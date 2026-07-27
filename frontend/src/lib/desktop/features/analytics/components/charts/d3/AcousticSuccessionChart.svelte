@@ -8,7 +8,8 @@
   There is no y-axis (the wiggle baseline is meaningless). Bands are identified by an inline label at
   their thickest hour (when it fits) plus a hover tooltip; the scientific name is the stable D3 stack
   key and the localized common name is the label (re-localized here so it tracks the visitor locale,
-  matching the sibling charts). Species color comes from theme.ts generateSpeciesColors.
+  matching the sibling charts). Species color comes from utils/speciesColor.ts getSpeciesColor, a
+  shared page-scoped map so a species keeps the same color across the sibling charts.
 -->
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
@@ -29,9 +30,16 @@
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import BaseChart from './BaseChart.svelte';
   import { createLinearScale } from './utils/scales';
-  import { createAxis, styleAxis, addAxisLabel, createHourAxisFormatter } from './utils/axes';
+  import {
+    createAxis,
+    styleAxis,
+    addAxisLabel,
+    createHourAxisFormatter,
+    hourAxisTickValues,
+  } from './utils/axes';
   import { ChartTooltip } from './utils/interactions';
-  import { generateSpeciesColors, type ChartTheme } from './utils/theme';
+  import type { ChartTheme } from './utils/theme';
+  import { getSpeciesColor, registerChart } from './utils/speciesColor';
   import { SUCCESSION_HOURS, readableTextColor, type SuccessionSeries } from './utils/succession';
   // peakIndex is the shared argmax for per-species distribution charts (same helper the ridgeline
   // uses); reused here rather than duplicated.
@@ -119,16 +127,16 @@
   // Persistent legend: a real-DOM swatch + localized name per band. A streamgraph has no species
   // y-axis, and the hover tooltip plus the thick-band inline labels do not identify a band on touch
   // or by keyboard (this UI is tablet/desktop), so a thin band would otherwise be an unlabeled color.
-  // Colors come from the same generateSpeciesColors call and rows order the bands use, so a swatch
-  // matches its band exactly. Depends on the BaseChart theme, so it is empty until the chart mounts.
+  // Colors come from the same shared getSpeciesColor map the bands use (keyed on scientific name), so
+  // a swatch matches its band exactly. Depends on the BaseChart theme, so it is empty until the chart
+  // mounts.
   const legendItems = $derived.by(() => {
     const theme = chartContext?.theme;
     if (!theme || rows.length === 0) return [];
-    const colors = generateSpeciesColors(rows.length, theme);
-    return rows.map((r, i) => ({
+    return rows.map(r => ({
       scientificName: r.scientificName,
       label: r.label,
-      color: colors.at(i) ?? theme.primary,
+      color: getSpeciesColor(r.scientificName, theme),
     }));
   });
 
@@ -162,8 +170,7 @@
     if (innerWidth <= 0 || innerHeight <= 0 || rows.length === 0) return;
 
     const names = rows.map(r => r.scientificName);
-    const colors = generateSpeciesColors(rows.length, theme);
-    const colorByName = new Map(names.map((n, i) => [n, colors.at(i) ?? theme.primary]));
+    const colorByName = new Map(names.map(n => [n, getSpeciesColor(n, theme)]));
     const rowByName = new Map(rows.map(r => [r.scientificName, r]));
 
     // d3.stack over the 24 hour indices; value(hourIdx, name) reads the species' count at that hour
@@ -191,7 +198,13 @@
     }
     if (!Number.isFinite(yMin) || !Number.isFinite(yMax) || yMax - yMin < MIN_Y_SPAN) return;
 
-    const xScale = createLinearScale({ domain: [0, SUCCESSION_HOURS - 1], range: [0, innerWidth] });
+    // nice: false - the hour domain is exact; rounding it outward would leave the final hour short
+    // of the right edge and open a gap the bands never reach.
+    const xScale = createLinearScale({
+      domain: [0, SUCCESSION_HOURS - 1],
+      range: [0, innerWidth],
+      nice: false,
+    });
     const yScale = scaleLinear().domain([yMin, yMax]).range([innerHeight, 0]);
 
     // X axis: sampled hour ticks along the bottom. No y-axis (the wiggle baseline is meaningless).
@@ -200,9 +213,7 @@
       orientation: 'bottom',
       tickFormat: (d: AxisDomain) => hourFmt(Number(d)),
     });
-    xAxis.tickValues(
-      Array.from({ length: Math.ceil(SUCCESSION_HOURS / X_TICK_STEP) }, (_, i) => i * X_TICK_STEP)
-    );
+    xAxis.tickValues(hourAxisTickValues(SUCCESSION_HOURS - 1, X_TICK_STEP));
     const xAxisGroup = chartGroup
       .append('g')
       .attr('class', 'x-axis')
@@ -309,6 +320,10 @@
       tooltip = new ChartTooltip(chartContainer);
     }
   });
+
+  // Reference-count this chart so the shared species→color map clears when the
+  // last patterns chart unmounts (fresh colors per page view; no session growth).
+  onMount(() => registerChart());
 
   onDestroy(() => {
     tooltip?.destroy();

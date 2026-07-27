@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	audioBuffer "github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
@@ -117,6 +118,34 @@ func TestSaveAudioActionExecute_PropagatesBufferReadError(t *testing.T) {
 	assert.NotErrorIs(t, err, errAudioExportDeferred)
 }
 
+// TestSaveAudioActionExecute_SkipsEmptyClipName guards the hot-reload race where
+// a detection is created while export is disabled (empty ClipName) and export is
+// then enabled before the action runs. Without the guard, filepath.Join(Path, "")
+// collapses to the export directory and encoding would target the directory path.
+func TestSaveAudioActionExecute_SkipsEmptyClipName(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	settings := conftest.NewTestSettings().
+		WithAudioExport(tmpDir, "wav", "192k").
+		Build()
+
+	// pcmData is populated so, absent the empty-ClipName guard, Execute would
+	// proceed to encode; the guard must stop it first and return no error.
+	action := &SaveAudioAction{
+		Settings: settings,
+		ClipName: "",
+		pcmData:  []byte{0, 1, 2, 3},
+	}
+
+	require.NoError(t, action.Execute(t.Context(), nil))
+
+	// No file (and no stray directory-as-file) must be written to the export dir.
+	entries, err := os.ReadDir(tmpDir)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "no audio file should be written when ClipName is empty")
+}
+
 func TestGetJobQueueRetryConfig_SaveAudioDeferred(t *testing.T) {
 	t.Parallel()
 
@@ -200,5 +229,10 @@ func TestErrAudioExportDeferred_IsSentinel(t *testing.T) {
 	t.Parallel()
 
 	wrapped := fmt.Errorf("deferred execute: %w", errAudioExportDeferred)
-	assert.ErrorIs(t, wrapped, errAudioExportDeferred)
+	require.ErrorIs(t, wrapped, errAudioExportDeferred)
+
+	// errAudioExportDeferred itself wraps jobqueue.ErrJobDeferred so the retry logger
+	// classifies the reschedule as expected backpressure (Debug), not a failure (Warn).
+	// If a refactor drops the wrap, deferrals would flood the warning stream again.
+	require.ErrorIs(t, errAudioExportDeferred, jobqueue.ErrJobDeferred)
 }

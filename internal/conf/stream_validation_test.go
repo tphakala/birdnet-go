@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -512,8 +513,20 @@ func TestApplyStreamDefaults(t *testing.T) {
 	}
 }
 
-func TestStreamConfig_ChannelModeValidation(t *testing.T) {
-	t.Parallel()
+// streamModeCase is one enum-mode validation case: the raw value to set and
+// whether StreamConfig.Validate must reject it.
+type streamModeCase struct {
+	name    string
+	value   string
+	wantErr bool
+}
+
+// runStreamModeValidation applies each case's value to a base RTSP StreamConfig
+// via apply, runs Validate, and asserts errSubstr appears in any rejection. The
+// channel-mode and media-mode validation tests share this scaffolding since they
+// are otherwise identical over different enum fields.
+func runStreamModeValidation(t *testing.T, apply func(*StreamConfig, string), errSubstr string, cases []streamModeCase) {
+	t.Helper()
 
 	base := func() StreamConfig {
 		return StreamConfig{
@@ -524,28 +537,105 @@ func TestStreamConfig_ChannelModeValidation(t *testing.T) {
 		}
 	}
 
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s := base()
+			apply(&s, tt.value)
+			err := s.Validate()
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), errSubstr)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestStreamConfig_ChannelModeValidation(t *testing.T) {
+	t.Parallel()
+	runStreamModeValidation(t,
+		func(s *StreamConfig, v string) { s.ChannelMode = ChannelMode(v) },
+		"invalid channel mode",
+		[]streamModeCase{
+			{"empty defaults to downmix", "", false},
+			{"explicit downmix", string(ChannelModeDownmix), false},
+			{"left channel", string(ChannelModeLeft), false},
+			{"right channel", string(ChannelModeRight), false},
+			{"invalid mode rejected", "stereo", true},
+			{"invalid mode center", "center", true},
+		})
+}
+
+func TestStreamConfig_MediaModeValidation(t *testing.T) {
+	t.Parallel()
+	runStreamModeValidation(t,
+		func(s *StreamConfig, v string) { s.MediaMode = MediaMode(v) },
+		"invalid media mode",
+		[]streamModeCase{
+			{"empty defaults to full-stream", "", false},
+			{"explicit auto", string(MediaModeAuto), false},
+			{"explicit audio-only", string(MediaModeAudioOnly), false},
+			{"explicit full-stream", string(MediaModeFullStream), false},
+			{"invalid mode rejected", "video-only", true},
+			{"invalid mode garbage", "both", true},
+		})
+}
+
+// TestMediaMode_Canonical verifies an unset media mode resolves to the default
+// (full-stream) while explicit values are returned unchanged.
+func TestMediaMode_Canonical(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, MediaModeFullStream, MediaMode("").Canonical(), "empty must canonicalize to full-stream")
+	assert.Equal(t, DefaultMediaMode, MediaMode("").Canonical(), "empty must equal DefaultMediaMode")
+	assert.Equal(t, MediaModeAuto, MediaModeAuto.Canonical())
+	assert.Equal(t, MediaModeAudioOnly, MediaModeAudioOnly.Canonical())
+	assert.Equal(t, MediaModeFullStream, MediaModeFullStream.Canonical())
+}
+
+// TestStreamConfig_Validate_GainRange mirrors TestAudioSourceConfig_Validate_GainRange:
+// StreamConfig.Validate must reject NaN, +/-Inf, and out-of-range gain so a
+// hand-edited config.yaml or a non-UI API client cannot push an out-of-range
+// gain past the frontend clamp. Only Gain varies; every other field is valid.
+func TestStreamConfig_Validate_GainRange(t *testing.T) {
+	t.Parallel()
+
+	base := func() StreamConfig {
+		return StreamConfig{
+			Name: "Gain Cam",
+			URL:  "rtsp://cam.local/stream",
+			Type: StreamTypeRTSP,
+		}
+	}
+
 	tests := []struct {
-		name        string
-		channelMode ChannelMode
-		wantErr     bool
+		name    string
+		gain    float64
+		wantErr bool
 	}{
-		{"empty defaults to downmix", "", false},
-		{"explicit downmix", ChannelModeDownmix, false},
-		{"left channel", ChannelModeLeft, false},
-		{"right channel", ChannelModeRight, false},
-		{"invalid mode rejected", ChannelMode("stereo"), true},
-		{"invalid mode center", ChannelMode("center"), true},
+		{"zero gain", 0, false},
+		{"max gain", MaxAudioGain, false},
+		{"min gain", MinAudioGain, false},
+		{"normal positive gain", 6.5, false},
+		{"NaN gain", math.NaN(), true},
+		{"positive Inf gain", math.Inf(1), true},
+		{"negative Inf gain", math.Inf(-1), true},
+		{"above max", MaxAudioGain + 1, true},
+		{"below min", MinAudioGain - 1, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			s := base()
-			s.ChannelMode = tt.channelMode
+			s.Gain = tt.gain
 			err := s.Validate()
 			if tt.wantErr {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), "invalid channel mode")
+				assert.Contains(t, err.Error(), "gain")
+				assert.Contains(t, err.Error(), "out of range")
 			} else {
 				assert.NoError(t, err)
 			}

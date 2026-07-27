@@ -121,6 +121,10 @@ type AudioSource struct {
 	// Values: "downmix" (default), "left", "right".
 	ChannelMode string `json:"channelMode,omitempty"`
 
+	// MediaMode controls which RTSP media is requested from the camera.
+	// Values: "auto", "audio-only", "full-stream" (empty = full-stream).
+	MediaMode string `json:"mediaMode,omitempty"`
+
 	// Gain is the configured input gain in dB. 0 means no adjustment.
 	Gain float64 `json:"gain"`
 
@@ -189,6 +193,19 @@ func StreamTypeToSourceType(streamType string) SourceType {
 	}
 }
 
+// StreamSourceType reports the SourceType for a connection string and whether
+// it is a network stream type (RTSP/RTSPS, RTMP/RTMPS, UDP/RTP, HLS, HTTP/HTTPS).
+// ok is false for local audio cards, files, and unknown connection strings.
+func StreamSourceType(conn string) (SourceType, bool) {
+	st := detectSourceType(conn)
+	switch st {
+	case SourceTypeRTSP, SourceTypeHTTP, SourceTypeHLS, SourceTypeRTMP, SourceTypeUDP:
+		return st, true
+	default:
+		return st, false
+	}
+}
+
 // SourceConfig carries the parameters required to register a new audio source.
 type SourceConfig struct {
 	// ID is the unique identifier for the source.
@@ -223,6 +240,10 @@ type SourceConfig struct {
 	// ChannelMode controls how multi-channel audio is handled.
 	// Values: "downmix" (default), "left", "right".
 	ChannelMode string
+
+	// MediaMode controls which RTSP media is requested from the camera.
+	// Values: "auto", "audio-only", "full-stream" (empty = full-stream).
+	MediaMode string
 
 	// Gain is the input gain adjustment in dB. 0 means no adjustment.
 	// Positive values amplify, negative values attenuate.

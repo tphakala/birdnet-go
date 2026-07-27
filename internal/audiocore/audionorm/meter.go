@@ -1,6 +1,7 @@
 package audionorm
 
 import (
+	"encoding/binary"
 	"math"
 
 	simdf32 "github.com/tphakala/simd/f32"
@@ -212,6 +213,41 @@ func (m *Meter) AddInt16(interleaved []int16) {
 			dst := m.tpChunkStart(c, n)
 			for i := range n {
 				dst[i] = float32(interleaved[(pos+i)*m.channels+c]) * scale
+			}
+			m.tpChunkEnd(c, n)
+		}
+	}
+}
+
+// AddInt16Bytes feeds interleaved little-endian 16-bit PCM held as raw bytes,
+// decoding each sample inline with the same 1/32768 convention as AddInt16. It
+// lets a caller whose PCM is a []byte (the FLAC export paths) measure loudness
+// without first allocating an intermediate []int16. Samples are signed, so each
+// byte pair is read as a uint16 and bit-cast to int16 (a Uint16-only read would
+// turn negative samples into large positives and corrupt the measurement). A
+// trailing odd byte (never produced by real int16 PCM) is ignored; b is not
+// modified.
+func (m *Meter) AddInt16Bytes(b []byte) {
+	const scale = float32(1.0 / 32768.0)
+	frames := (len(b) / 2) / m.channels
+	if frames == 0 {
+		return
+	}
+	for i := range frames {
+		base := i * m.channels
+		for c := range m.channels {
+			v := int16(binary.LittleEndian.Uint16(b[(base+c)*2:])) //nolint:gosec // G115: intentional uint16->int16 bit reinterpretation for signed PCM
+			m.kweight(c, float32(v)*scale)
+		}
+		m.advanceFrame()
+	}
+	for c := range m.channels {
+		for pos := 0; pos < frames; pos += tpChunk {
+			n := min(tpChunk, frames-pos)
+			dst := m.tpChunkStart(c, n)
+			for i := range n {
+				v := int16(binary.LittleEndian.Uint16(b[((pos+i)*m.channels+c)*2:])) //nolint:gosec // G115: intentional uint16->int16 bit reinterpretation for signed PCM
+				dst[i] = float32(v) * scale
 			}
 			m.tpChunkEnd(c, n)
 		}

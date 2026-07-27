@@ -56,14 +56,15 @@ if [ -n "$CONTAINER" ]; then
         echo -e "${YELLOW}⚠️  Web interface not accessible at http://localhost:${PORT}${NC}"
     fi
     
-    # Check debug mode
+    # Check profiling
     echo ""
-    if docker exec birdnet-go grep -q "^debug: true" /config/config.yaml 2>/dev/null; then
-        echo -e "${GREEN}✅ Debug mode is enabled${NC}"
-        echo "   Debug endpoints available at: http://localhost:${PORT}/debug/pprof/"
+    if docker exec birdnet-go grep -A3 '^diagnostics:' /config/config.yaml 2>/dev/null | grep -q "enabled: true"; then
+        echo -e "${GREEN}✅ Profiling is enabled${NC}"
+        echo "   Profiling endpoints available at: http://localhost:${PORT}/debug/pprof/"
+        echo "   If no authentication is configured, append ?token=<diagnostics.profiling.token>"
     else
-        echo -e "${YELLOW}ℹ️  Debug mode is disabled${NC}"
-        echo "   To enable: Set 'debug: true' in config.yaml and restart"
+        echo -e "${YELLOW}ℹ️  Profiling is disabled${NC}"
+        echo "   To enable: Set 'diagnostics.profiling.enabled: true' in config.yaml and restart"
     fi
     
     # Check audio device

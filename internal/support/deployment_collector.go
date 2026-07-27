@@ -6,36 +6,63 @@ import (
 	"os"
 	"strings"
 
+	"github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
-	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
 const (
-	systemdServicePath     = "/etc/systemd/system/birdnet-go.service"
-	maxServiceFileSize     = 64 * 1024 // 64KB limit for service files
-	maxDataDirEntries      = 500
-	mountInfoPath          = "/proc/1/mountinfo"
-	mountInfoMinFields     = 10
-	mountInfoDestIdx       = 4
-	mountInfoSeparatorSkip = 3
+	systemdServicePath = "/etc/systemd/system/birdnet-go.service"
+	maxServiceFileSize = 64 * 1024 // 64KB limit for service files
 )
 
-// systemMountPrefixes are mount destinations to skip (not useful for diagnostics).
-var systemMountPrefixes = []string{"/proc", "/sys", "/dev", "/run", "/tmp", "/etc/resolv", "/etc/hostname", "/etc/hosts"}
+// standardDirNames are well-known BirdNET-Go directory names that are never
+// anonymized in dump listings: they carry diagnostic signal and no PII.
+var standardDirNames = map[string]struct{}{
+	"clips": {}, "models": {}, "logs": {}, "hls": {}, "diagnostics": {},
+}
+
+// anonymizeListing converts raw entries to dump entries, anonymizing only
+// user-specific directory names (files keep raw names, matching the
+// pre-existing behavior; standard dir names are preserved).
+func anonymizeListing(entries []diagnostics.DirEntryInfo, anonymizePII bool) []DataDirectoryFile {
+	if entries == nil {
+		return nil
+	}
+	files := make([]DataDirectoryFile, 0, len(entries))
+	for _, e := range entries {
+		name := e.Name
+		if anonymizePII && e.IsDir {
+			if _, standard := standardDirNames[name]; !standard {
+				name = privacy.AnonymizePath(name)
+			}
+		}
+		files = append(files, DataDirectoryFile{
+			Name:     name,
+			Size:     e.Size,
+			Modified: e.Modified,
+			IsDir:    e.IsDir,
+		})
+	}
+	return files
+}
 
 // collectDeploymentInfo gathers deployment context for the support dump.
-func (c *Collector) collectDeploymentInfo(ctx context.Context, anonymizePII bool) *DeploymentInfo {
+// Raw facts come from internal/diagnostics; anonymization is applied here,
+// at ship time only.
+func (c *Collector) collectDeploymentInfo(_ context.Context, anonymizePII bool) *DeploymentInfo {
 	info := &DeploymentInfo{}
 
-	cwd, err := os.Getwd()
+	raw := diagnostics.CollectRawDeployment(c.dataPath, c.configPath)
+	info.CollectionErrors = append(info.CollectionErrors, raw.CollectionErrors...)
+
 	switch {
-	case err != nil:
-		info.CollectionErrors = append(info.CollectionErrors, "working directory: "+err.Error())
+	case raw.WorkingDirectory == "":
+		// error already recorded by the gatherer
 	case anonymizePII:
-		info.WorkingDirectory = privacy.AnonymizePath(cwd)
+		info.WorkingDirectory = privacy.AnonymizePath(raw.WorkingDirectory)
 	default:
-		info.WorkingDirectory = cwd
+		info.WorkingDirectory = raw.WorkingDirectory
 	}
 
 	if content, err := c.collectSystemdServiceFile(systemdServicePath); err != nil {
@@ -44,15 +71,23 @@ func (c *Collector) collectDeploymentInfo(ctx context.Context, anonymizePII bool
 		info.SystemdServiceFile = content
 	}
 
-	if files, err := c.collectDataDirectoryListing(anonymizePII); err != nil {
-		info.CollectionErrors = append(info.CollectionErrors, "data directory: "+err.Error())
-	} else {
-		info.DataDirectoryFiles = files
-	}
+	info.DataDirectoryFiles = anonymizeListing(raw.DataDirFiles, anonymizePII)
+	info.ConfigDirectoryFiles = anonymizeListing(raw.ConfigDirFiles, anonymizePII)
 
-	if mounts, err := c.collectDockerMounts(ctx, anonymizePII); err != nil {
-		info.CollectionErrors = append(info.CollectionErrors, "docker mounts: "+err.Error())
-	} else {
+	if len(raw.Mounts) > 0 {
+		mounts := make([]DockerMount, 0, len(raw.Mounts))
+		for _, m := range raw.Mounts {
+			source := m.Source
+			if anonymizePII {
+				source = privacy.AnonymizePath(source)
+			}
+			mounts = append(mounts, DockerMount{
+				Source:      source,
+				Destination: m.Destination,
+				Type:        m.FSType,
+				Options:     m.Options,
+			})
+		}
 		info.DockerMounts = mounts
 	}
 
@@ -129,121 +164,4 @@ func (c *Collector) scrubEnvironmentLine(line string) string {
 		}
 	}
 	return line
-}
-
-// collectDataDirectoryListing lists files in the data directory with metadata.
-func (c *Collector) collectDataDirectoryListing(anonymizePII bool) ([]DataDirectoryFile, error) {
-	entries, err := os.ReadDir(c.dataPath)
-	if err != nil {
-		return nil, err
-	}
-
-	allocSize := len(entries)
-	if allocSize > maxDataDirEntries {
-		allocSize = maxDataDirEntries
-	}
-	files := make([]DataDirectoryFile, 0, allocSize)
-	for i, e := range entries {
-		if i >= maxDataDirEntries {
-			getLogger().Warn("data directory listing truncated",
-				logger.Int("limit", maxDataDirEntries),
-				logger.Int("total", len(entries)),
-			)
-			break
-		}
-		info, err := e.Info()
-		if err != nil {
-			continue
-		}
-		name := e.Name()
-		if anonymizePII && e.IsDir() {
-			name = privacy.AnonymizePath(name)
-		}
-		files = append(files, DataDirectoryFile{
-			Name:     name,
-			Size:     info.Size(),
-			Modified: info.ModTime(),
-			IsDir:    e.IsDir(),
-		})
-	}
-	return files, nil
-}
-
-// collectDockerMounts reads container mount info from /proc/1/mountinfo.
-func (c *Collector) collectDockerMounts(_ context.Context, anonymizePII bool) ([]DockerMount, error) {
-	if !sysinfo.IsContainer() {
-		return nil, nil
-	}
-
-	data, err := os.ReadFile(mountInfoPath) //nolint:gosec // Constant path
-	if err != nil {
-		return nil, err
-	}
-
-	return parseMountInfo(string(data), anonymizePII), nil
-}
-
-// parseMountInfo parses /proc/1/mountinfo format and extracts bind mounts.
-// Format: id parent major:minor root mount-point mount-options ... - fs-type mount-source super-options
-func parseMountInfo(content string, anonymizePII bool) []DockerMount {
-	if content == "" {
-		return nil
-	}
-
-	var mounts []DockerMount
-	for line := range strings.SplitSeq(content, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
-		fields := strings.Fields(line)
-		if len(fields) < mountInfoMinFields {
-			continue
-		}
-
-		source := fields[3]
-		destination := fields[mountInfoDestIdx]
-		options := fields[5]
-
-		// Find the separator "-" to get fs type
-		sepIdx := -1
-		for i, f := range fields {
-			if f == "-" {
-				sepIdx = i
-				break
-			}
-		}
-		if sepIdx == -1 || sepIdx+mountInfoSeparatorSkip > len(fields) {
-			continue
-		}
-		fsType := fields[sepIdx+1]
-
-		// Skip system mounts and root
-		if destination == "/" {
-			continue
-		}
-		skip := false
-		for _, prefix := range systemMountPrefixes {
-			if strings.HasPrefix(destination, prefix) {
-				skip = true
-				break
-			}
-		}
-		if skip {
-			continue
-		}
-
-		if anonymizePII {
-			source = privacy.AnonymizePath(source)
-		}
-
-		mounts = append(mounts, DockerMount{
-			Source:      source,
-			Destination: destination,
-			Type:        fsType,
-			Options:     options,
-		})
-	}
-	return mounts
 }

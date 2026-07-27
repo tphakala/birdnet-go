@@ -309,10 +309,12 @@ func (c *Handler) StreamAudioLevel(ctx echo.Context) error {
 	// Override request context with timeout
 	ctx.SetRequest(ctx.Request().WithContext(timeoutCtx))
 
-	// Set SSE headers (CORS is handled by middleware at the v2 group level)
-	ctx.Response().Header().Set("Content-Type", "text/event-stream; charset=utf-8")
-	ctx.Response().Header().Set("Cache-Control", "no-cache")
-	ctx.Response().Header().Set("Connection", "keep-alive")
+	// Set the shared SSE headers (content-type, no-cache, keep-alive, and
+	// X-Accel-Buffering: no so nginx and compatible reverse proxies stream events
+	// immediately instead of buffering them). Using the shared helper keeps this
+	// endpoint's streaming headers in sync with every other SSE endpoint; CORS is
+	// still applied by the middleware at the v2 group level.
+	apicore.SetSSEHeaders(ctx)
 	ctx.Response().WriteHeader(http.StatusOK)
 
 	// Check authentication status for data anonymization
@@ -654,10 +656,9 @@ func (c *Handler) extractRemoteAddr(ctx echo.Context) string {
 // resetAudioLevelWriteDeadline resets the write deadline for the SSE connection.
 // This prevents the server's WriteTimeout from terminating long-lived SSE connections.
 func (c *Handler) resetAudioLevelWriteDeadline(ctx echo.Context, operation string) {
-	if conn, ok := ctx.Response().Writer.(apicore.WriteDeadlineSetter); ok {
-		if err := conn.SetWriteDeadline(time.Now().Add(audioLevelWriteDeadline)); err != nil {
-			c.LogDebugIfEnabled("Failed to set write deadline for "+operation, logger.Error(err))
-		}
+	rc := http.NewResponseController(ctx.Response().Writer)
+	if err := rc.SetWriteDeadline(time.Now().Add(audioLevelWriteDeadline)); err != nil {
+		c.LogDebugIfEnabled("Failed to set write deadline for "+operation, logger.Error(err))
 	}
 }
 

@@ -24,6 +24,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/profiling"
 	"github.com/tphakala/birdnet-go/internal/restart"
 	"github.com/tphakala/birdnet-go/internal/support"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
@@ -253,6 +254,11 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to update settings", http.StatusInternalServerError)
 	}
 	if len(skippedFields) > 0 {
+		// Debug, not Warn as on the PATCH path, and deliberately so: this walk
+		// appends every blocked and every yaml:"-" field it passes regardless of
+		// what the request contained, so the list is long on every request and
+		// says nothing about client intent. PATCH reports only fields it actually
+		// had to revert, which is worth a Warn.
 		c.LogAPIRequest(ctx, logger.LogLevelDebug, "Skipped protected fields during settings update", logger.Any("skipped_fields", skippedFields))
 	}
 
@@ -289,6 +295,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	// (controllerSettings) return the freshly published value. Both stores are
 	// lock-free; settingsMutex here only serialises this read-modify-write
 	// against other update handlers, not against readers.
+	c.ensureProfilingTokenForSave(updated)
 	if publishGlobal {
 		conf.StoreSettings(updated)
 	}
@@ -316,6 +323,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 			// Rollback in-memory; disk write never happened successfully.
 			conf.StoreSettings(current)
 			c.Settings.Store(current)
+			c.restoreProfilingRates(current)
 			c.LogAPIRequest(ctx, logger.LogLevelError, "Failed to save settings to disk, rolling back", logger.Error(err))
 			return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 		}
@@ -571,7 +579,34 @@ func handlePrimitiveField(
 // publishAndSaveSettings publishes updated settings and persists to disk.
 // Must be called while c.settingsMutex is held. On save failure, the atomic
 // Settings snapshot is rolled back to current.
+// ensureProfilingTokenForSave mints the profiling token into a settings
+// snapshot that is about to be published and persisted, so enabling pprof at
+// runtime on an instance with no authentication provider yields a usable
+// credential rather than an endpoint that refuses every request until restart.
+//
+// It is called at each of the three publish points rather than from one shared
+// save helper because the settings-write paths each inline their own
+// publish-then-persist sequence. Hooking only one of them is exactly how the
+// first attempt at this shipped a dead feature: publishAndSaveSettings is used
+// by the TLS, integrations and detections writers, none of which can carry a
+// diagnostics change, so the two handlers that CAN (PUT /settings and
+// PATCH /settings/:section) never minted anything.
+//
+// Non-fatal by design. The pprof routes fail closed without a token, and a
+// diagnostics credential must not cost the user the rest of their settings
+// change. EnsureProfilingToken is a no-op unless profiling is enabled, the
+// token is empty, and no auth provider is configured, so the normal save path
+// pays a boolean check and nothing else.
+func (c *Controller) ensureProfilingTokenForSave(updated *conf.Settings) {
+	if _, err := conf.EnsureProfilingToken(updated); err != nil {
+		apicore.GetLogger().Warn(
+			"Failed to generate profiling token; the profiling endpoints will refuse requests",
+			logger.Error(err))
+	}
+}
+
 func (c *Controller) publishAndSaveSettings(current, updated *conf.Settings) error {
+	c.ensureProfilingTokenForSave(updated)
 	if c.isGlobalOwner {
 		conf.StoreSettings(updated)
 	}
@@ -664,11 +699,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to parse request body", http.StatusBadRequest)
 	}
 
-	var skippedFields []string
-	if err := updateSettingsSectionWithTracking(updated, section, requestBody, &skippedFields); err != nil {
-		if len(skippedFields) > 0 {
-			c.Debug("Protected fields that were skipped in update of section %s: %s", section, strings.Join(skippedFields, ", "))
-		}
+	if err := updateSettingsSection(updated, section, requestBody); err != nil {
 		return c.HandleError(ctx, err, fmt.Sprintf("Failed to update %s settings", section), http.StatusBadRequest)
 	}
 
@@ -678,6 +709,30 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	if err := restoreRedactedSecrets(current, updated); err != nil {
 		c.LogAPIRequest(ctx, logger.LogLevelWarn, "Redacted sentinel validation failed", logger.Error(err))
 		return c.HandleError(ctx, err, "Cannot save: some secret fields contain the redacted placeholder because their identifying key was changed while the secret was hidden. Re-enter the secret values.", http.StatusBadRequest)
+	}
+
+	// Enforce the blocked-field map. The section merge above writes whatever the
+	// request contained, so this is the only thing standing between a client and
+	// a field the map marks never-updatable-via-API (Security.SessionSecret,
+	// Diagnostics.Profiling.Token, the audio tool paths, ...). It runs after
+	// restoreRedactedSecrets so that a normal GET-modify-PATCH round trip, which
+	// sends the redacted placeholder back for SessionSecret, is not reported as
+	// an attempt to change it; TestPatchReportsBlockedFieldsItRejected pins that
+	// ordering. The exception is Security.BasicAuth.ClientID/ClientSecret, which
+	// sanitizeSettingsForAPI BLANKS rather than redacts, so restoreRedactedSecrets
+	// does not cover them and such a round trip does report them. That is honest
+	// (the request really did carry a different value) and it is also what stops
+	// the round trip from wiping both credentials, as it did before this check
+	// existed.
+	skippedFields := restoreBlockedFields(current, updated)
+	if len(skippedFields) > 0 {
+		// Same field key as the PUT path and as the response JSON, so one query
+		// finds a rejection on either verb. The two are still distinguishable:
+		// this one is Warn and fires only on a real rejection, PUT's is Debug and
+		// lists every blocked and runtime-only field on every request.
+		c.LogAPIRequest(ctx, logger.LogLevelWarn, "Rejected update to blocked settings fields",
+			logger.String("section", section),
+			logger.Any("skipped_fields", skippedFields))
 	}
 
 	// Ensure LocationConfigured is set when birdnet coordinates are present.
@@ -710,6 +765,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	// republish the controller's own atomic snapshot. See the matching comment
 	// in UpdateSettings for why Debug reads via conf.GetSettings() (the global)
 	// rather than the per-controller snapshot.
+	c.ensureProfilingTokenForSave(updated)
 	if publishGlobal {
 		conf.StoreSettings(updated)
 	}
@@ -731,6 +787,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		if err := conf.SaveSettings(); err != nil {
 			conf.StoreSettings(current)
 			c.Settings.Store(current)
+			c.restoreProfilingRates(current)
 			return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 		}
 		c.LogAPIRequest(ctx, logger.LogLevelInfo, "Section settings saved successfully",
@@ -766,8 +823,10 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	})
 }
 
-// updateSettingsSectionWithTracking updates a specific section of the settings and tracks skipped fields
-func updateSettingsSectionWithTracking(settings *conf.Settings, section string, data json.RawMessage, skippedFields *[]string) error {
+// updateSettingsSection validates and merges a request body into one section of
+// settings. It does not enforce the blocked-field map; UpdateSectionSettings
+// calls restoreBlockedFields after this returns. See handleGenericSection.
+func updateSettingsSection(settings *conf.Settings, section string, data json.RawMessage) error {
 	section = strings.ToLower(section)
 
 	var tempValue any
@@ -790,7 +849,7 @@ func updateSettingsSectionWithTracking(settings *conf.Settings, section string, 
 	}
 
 	// Use the generic handler with merging for ALL sections
-	return handleGenericSection(sectionValue, data, section, skippedFields)
+	return handleGenericSection(sectionValue, data, section)
 }
 
 // mergeJSONIntoStruct merges JSON data into an existing struct, preserving fields not
@@ -1016,6 +1075,13 @@ func getSettingsSectionValue(settings *conf.Settings, section string) (any, erro
 		return &settings.Realtime.Telemetry, nil
 	case "sentry":
 		return &settings.Sentry, nil
+	case "diagnostics":
+		// The generated profiling token in this section is never client-settable:
+		// UpdateSectionSettings reverts it via restoreBlockedFields after the
+		// merge. This case was withheld until that enforcement existed, because
+		// without it an unauthenticated client on a no-auth instance could set a
+		// token it chose and read pprof profiles with it.
+		return &settings.Diagnostics, nil
 	case "notification":
 		return &settings.Notification, nil
 	case "logging":
@@ -1040,7 +1106,7 @@ func getSettingsSectionValue(settings *conf.Settings, section string) (any, erro
 }
 
 // handleGenericSection handles updates to any settings section using merging
-func handleGenericSection(sectionPtr any, data json.RawMessage, sectionName string, skippedFields *[]string) error {
+func handleGenericSection(sectionPtr any, data json.RawMessage, sectionName string) error {
 	// Normalize species config keys in the incoming data BEFORE merging
 	// This ensures case-insensitive key matching during the deep merge
 	normalizedData, err := normalizeSpeciesConfigKeysInJSON(data, sectionName)
@@ -1053,33 +1119,20 @@ func handleGenericSection(sectionPtr any, data json.RawMessage, sectionName stri
 		return fmt.Errorf("failed to merge settings for section %s: %w", sectionName, err)
 	}
 
-	// Apply field-level permissions if needed
-	// Note: getBlockedFieldMap uses capitalized section names (e.g., "BirdNET", "Realtime")
-	// We need to map our lowercase section names to the expected capitalized format
-	capitalizedSectionName := ""
-	switch sectionName {
-	case SettingsSectionBirdnet:
-		capitalizedSectionName = "BirdNET"
-	case SettingsSectionRealtime:
-		capitalizedSectionName = "Realtime"
-	case SettingsSectionWebserver:
-		capitalizedSectionName = "WebServer"
-	default:
-		// For other sections, capitalize first letter
-		if sectionName != "" {
-			capitalizedSectionName = strings.ToUpper(sectionName[:1]) + sectionName[1:]
-		}
-	}
-
-	blockedFieldsMap := getBlockedFieldMap()
-	if blockedFields, exists := blockedFieldsMap[capitalizedSectionName]; exists {
-		if _, ok := blockedFields.(map[string]any); ok {
-			// For now, just note that we have blocked fields
-			// The actual blocking happens in updateAllowedFieldsRecursivelyWithTracking
-			*skippedFields = append(*skippedFields, fmt.Sprintf("Section %s has field-level restrictions", sectionName))
-		}
-	}
-
+	// Blocked fields are NOT enforced here. This function only merges; the merge
+	// deliberately writes every key the request carried, and UpdateSectionSettings
+	// then calls restoreBlockedFields to revert the blocked ones against the
+	// pre-update snapshot. Enforcing here is not possible anyway: a section name
+	// does not always map to a top-level key of getBlockedFieldMap (PATCH
+	// /settings/audio targets Realtime.Audio), so a per-section lookup would
+	// silently miss exactly the nested section that carries blocked leaves: the
+	// audio tool paths live under the map's "Realtime" key, which a lookup keyed
+	// on the section name "audio" would never find.
+	//
+	// A note claiming "the actual blocking happens in
+	// updateAllowedFieldsRecursivelyWithTracking" used to live here. That function
+	// is only reachable from PUT, so it read as enforcement while nothing on this
+	// path enforced anything. Do not reintroduce enforcement here.
 	return nil
 }
 
@@ -1748,6 +1801,9 @@ func sanitizeSettingsForAPI(s *conf.Settings) *conf.Settings {
 	sanitized.Security.BasicAuth.ClientID = ""
 	sanitized.Security.BasicAuth.ClientSecret = ""
 
+	// --- Diagnostics section ---
+	sanitized.Diagnostics.Profiling.Token = redact(s.Diagnostics.Profiling.Token)
+
 	// Legacy OAuth providers
 	sanitized.Security.GoogleAuth.ClientSecret = redact(s.Security.GoogleAuth.ClientSecret)
 	sanitized.Security.GithubAuth.ClientSecret = redact(s.Security.GithubAuth.ClientSecret)
@@ -1862,6 +1918,9 @@ func restoreRedactedSecrets(current, incoming *conf.Settings) error {
 	restore(&current.Security.GithubAuth.ClientSecret, &incoming.Security.GithubAuth.ClientSecret)
 	restore(&current.Security.MicrosoftAuth.ClientSecret, &incoming.Security.MicrosoftAuth.ClientSecret)
 
+	// Diagnostics
+	restore(&current.Diagnostics.Profiling.Token, &incoming.Diagnostics.Profiling.Token)
+
 	// Array-based OAuth providers — match by Provider name to handle reordering
 	for i := range incoming.Security.OAuthProviders {
 		if incoming.Security.OAuthProviders[i].ClientSecret != redactedValue {
@@ -1973,6 +2032,7 @@ func validateNoRedactedSentinels(s *conf.Settings) error {
 	check(s.Security.GoogleAuth.ClientSecret, "security.googleAuth.clientSecret")
 	check(s.Security.GithubAuth.ClientSecret, "security.githubAuth.clientSecret")
 	check(s.Security.MicrosoftAuth.ClientSecret, "security.microsoftAuth.clientSecret")
+	check(s.Diagnostics.Profiling.Token, "diagnostics.profiling.token")
 	check(s.Realtime.MQTT.Password, "realtime.mqtt.password")
 	check(s.Output.MySQL.Password, "output.mysql.password")
 	check(s.Realtime.Weather.OpenWeather.APIKey, "realtime.weather.openWeather.apiKey")
@@ -2040,6 +2100,7 @@ func clearRedactedSentinels(s *conf.Settings) {
 	clearField(&s.Security.GoogleAuth.ClientSecret)
 	clearField(&s.Security.GithubAuth.ClientSecret)
 	clearField(&s.Security.MicrosoftAuth.ClientSecret)
+	clearField(&s.Diagnostics.Profiling.Token)
 	clearField(&s.Realtime.MQTT.Password)
 	clearField(&s.Output.MySQL.Password)
 	clearField(&s.Realtime.Weather.OpenWeather.APIKey)
@@ -2085,12 +2146,22 @@ func redact(s string) string {
 }
 
 // getBlockedFieldMap returns a map of fields that are BLOCKED from being updated
-// Using BLACKLIST approach - all fields are allowed by default except:
-// 1. Fields marked with yaml:"-" tag (automatically skipped)
-// 2. Fields explicitly listed here for security reasons
+// THROUGH THE SETTINGS API. It governs the two request-driven write paths only;
+// server-side writers (the range filter rebuild, the model manager) set these
+// fields directly and are not subject to it.
 //
-// IMPORTANT: Only add fields here if they pose a security risk
-// Most runtime-only fields should use yaml:"-" tag instead
+// Using BLACKLIST approach - all fields are allowed by default except the fields
+// listed here.
+//
+// IMPORTANT: Only add fields here if they pose a security risk.
+//
+// A yaml:"-" tag is NOT an equivalent protection, and the two write paths differ
+// on it: PUT additionally skips every yaml:"-" field, while PATCH enforces this
+// map alone (a yaml:"-" field with a live json tag is merged like any other, and
+// PATCH relies on whatever re-derives it downstream). Any runtime-only field
+// that must not be client-settable on BOTH paths belongs in this map, whatever
+// its yaml tag. TestPatchYamlDashFieldsAreEitherBlockedOrRederived pins the
+// current set so a new one cannot slip in unnoticed.
 func getBlockedFieldMap() map[string]any {
 	return map[string]any{
 		// Block these top-level runtime fields
@@ -2124,12 +2195,262 @@ func getBlockedFieldMap() map[string]any {
 			},
 		},
 
+		// Diagnostics section - block the generated credential, same class as
+		// Security.SessionSecret above. Enabled stays writable; the token is
+		// minted server-side when the config is loaded, so letting a client
+		// pin it to a chosen value would only weaken it. This matters most in
+		// the configuration the token exists for: with no auth provider the
+		// settings API has no auth either, so an unblocked field would let any
+		// LAN client set a token it knows and then read profiles.
+		"Diagnostics": map[string]any{
+			"Profiling": map[string]any{
+				"Token": true, // Generated internally, never updated via API
+			},
+		},
+
 		// Realtime section - block runtime fields
 		"Realtime": map[string]any{
 			"Audio": getAudioBlockedFields(),
 		},
 
 		// All other fields are allowed by default
+	}
+}
+
+// restoreBlockedFields reverts every field getBlockedFieldMap marks as
+// never-updatable-via-API back to its value in current. It reverts them all, and
+// returns only the subset whose value had actually changed (sorted, so the
+// response is stable across map iteration order), so an empty result means the
+// client changed nothing blocked rather than that nothing was written.
+//
+// This is what ENFORCES the map on the PATCH path. PATCH merges the incoming
+// JSON straight into the section struct (handleGenericSection ->
+// mergeJSONIntoStruct), so by the time control reaches here a blocked field can
+// already hold a client-supplied value; restoring from the pre-update snapshot
+// is what undoes that. It is deliberately a sibling of restoreRedactedSecrets,
+// which sits on this same path and also restores from the snapshot after a
+// merge.
+//
+// PUT does not call this. It enforces the same map field by field BEFORE
+// anything is written: updateAllowedFieldsRecursivelyWithTracking walks into
+// handleFieldPermission, which returns early ("return nil // Skip this field")
+// for a blocked leaf, so the value from the request is never assigned.
+// TestPutCannotChangeBlockedFields pins that arm against four of the 19 leaves.
+// Of the rest, 9 are yaml:"-" and are skipped by an earlier arm of the same walk
+// before the blocked map is consulted at all, so they are covered twice on that
+// path. That leaves 6 resting on the blocked arm alone with no test of their own
+// on the PUT path: the two audio tool paths, Security.SessionDuration, and the
+// three Security.BasicAuth lifetime and client-id fields.
+//
+// The two paths report differently, and only PATCH matches the description
+// above: PUT appends every blocked path it walks past whether or not the request
+// changed it, plus every yaml:"-" field as "<path> (runtime-only)", so its list
+// is never empty and is not a rejection report.
+func restoreBlockedFields(current, updated *conf.Settings) []string {
+	// Non-nil so the response carries [] rather than null when nothing was
+	// rejected, matching what the endpoint documentation promises.
+	restored := []string{}
+	restoreBlockedFieldsRecursively(
+		reflect.ValueOf(current).Elem(),
+		reflect.ValueOf(updated).Elem(),
+		getBlockedFieldMap(),
+		&restored,
+		"",
+	)
+	slices.Sort(restored)
+	return restored
+}
+
+// restoreBlockedFieldsRecursively walks the blocked map rather than the struct,
+// so its cost is the size of the map and not the size of conf.Settings.
+func restoreBlockedFieldsRecursively(
+	currentValue, updatedValue reflect.Value,
+	blockedFields map[string]any,
+	restored *[]string,
+	prefix string,
+) {
+	if currentValue.Kind() != reflect.Struct || updatedValue.Kind() != reflect.Struct {
+		return
+	}
+
+	for fieldName, rule := range blockedFields {
+		currentField := currentValue.FieldByName(fieldName)
+		updatedField := updatedValue.FieldByName(fieldName)
+		// A map entry naming a field that no longer exists (renamed or removed)
+		// must not panic a live request. TestBlockedFieldMapNamesRealFields is
+		// what turns such an entry into a test failure instead.
+		if !currentField.IsValid() || !updatedField.IsValid() || !currentField.CanInterface() {
+			continue
+		}
+
+		fieldPath := fieldName
+		if prefix != "" {
+			fieldPath = prefix + "." + fieldName
+		}
+
+		switch rule := rule.(type) {
+		case bool:
+			if rule {
+				restoreBlockedLeaf(currentField, updatedField, fieldPath, restored)
+			}
+		case map[string]any:
+			restoreBlockedSubtree(currentField, updatedField, rule, fieldPath, restored)
+		}
+	}
+}
+
+// restoreBlockedLeaf reverts one blocked leaf and records the path when the
+// value actually differed.
+//
+// The restore is UNCONDITIONAL; only the reporting consults blockedValuesEqual.
+// That split is deliberate: enforcement must not depend on a comparison being
+// right. An earlier revision restored only when the values compared unequal, so
+// every gap in blockedValuesEqual was a bypass, and it had one: time.Time.Equal
+// ignores Location, so a client could resend BirdNET.RangeFilter.LastUpdated as
+// the same instant in a different offset, have it compare "unchanged", and shift
+// the calendar day conf.LocalNoon derives from it. Writing current's value back
+// every time makes a comparison bug cost an inaccurate skippedFields list rather
+// than a leaked write.
+func restoreBlockedLeaf(currentField, updatedField reflect.Value, fieldPath string, restored *[]string) {
+	if !updatedField.CanSet() {
+		return
+	}
+	if !blockedValuesEqual(currentField, updatedField) {
+		*restored = append(*restored, fieldPath)
+	}
+	updatedField.Set(defensiveCopy(currentField))
+}
+
+// blockedValuesEqual reports whether a blocked leaf came through the merge
+// unchanged. It decides only whether the path is REPORTED in skippedFields (and
+// logged); restoreBlockedLeaf reverts the value either way.
+//
+// Two kinds need more than reflect.DeepEqual, both because the PATCH merge
+// round-trips the section through JSON and JSON cannot carry everything a Go
+// value holds:
+//
+//   - time.Time is compared by instant, with Equal. DeepEqual sees the monotonic
+//     clock reading that time.Now() attaches, and the Location, neither of which
+//     survives the round trip intact. Comparing the Location is specifically
+//     wrong: at UTC offset 0 the value marshals as "...Z" and parses back to
+//     time.UTC, which is a different *Location from the time.Local that
+//     time.Now() attached even when the local zone IS UTC, so a Location-
+//     sensitive comparison reports a phantom rejection on every request touching
+//     the section. That fires wherever the local zone sits at offset 0: a bare
+//     container or TZ=UTC, Reykjavik and Abidjan year round, London, Dublin and
+//     Lisbon every winter. BirdNET.RangeFilter.LastUpdated is the live case
+//     (conf.UpdateIncludedSpecies sets it from time.Now()).
+//
+//     Comparing by instant costs no enforcement: a client resending the same
+//     instant in a different offset still has the whole value, Location
+//     included, overwritten from the snapshot, because restoreBlockedLeaf
+//     restores unconditionally. It is only left out of skippedFields, which is
+//     correct, since the instant it asked for is the instant it already had.
+//     The one thing it does cost is a log line: a client deliberately probing
+//     with a shifted offset no longer trips the blocked-field warning, because
+//     that fires on the reported list. The write is still prevented.
+//
+//   - A nil slice and an empty non-nil slice are the same JSON (`[]`, or absent
+//     under omitempty) but differ under DeepEqual. BirdNET.RangeFilter.Species is
+//     the live case: a range filter admitting zero species leaves a non-nil empty
+//     slice (conf.UpdateIncludedSpecies allocates with make), which the merge
+//     turns back into nil. A nil-vs-empty MAP is the same asymmetry and is NOT
+//     covered here, because no blocked leaf is a map today; add an arm before
+//     adding one (conf.RangeFilterSettings.IncludedScientificNames is the
+//     candidate, kept out of reach today only by json:"-").
+func blockedValuesEqual(currentField, updatedField reflect.Value) bool {
+	if cur, ok := reflect.TypeAssert[time.Time](currentField); ok {
+		if upd, isTime := reflect.TypeAssert[time.Time](updatedField); isTime {
+			return cur.Equal(upd)
+		}
+	}
+	if currentField.Kind() == reflect.Slice && updatedField.Kind() == reflect.Slice &&
+		currentField.Len() == 0 && updatedField.Len() == 0 {
+		return true
+	}
+	return reflect.DeepEqual(currentField.Interface(), updatedField.Interface())
+}
+
+// defensiveCopy returns a value safe to store in the snapshot that is about to
+// be published. A slice or map at the TOP level of a blocked leaf is copied
+// rather than shared: conf.CloneSettings deliberately gives the clone its own
+// backing storage, and restoring a blocked field must not quietly re-alias it to
+// the outgoing snapshot. The copy is shallow, matching the slices.Clone /
+// maps.Clone that CloneSettings uses.
+//
+// Scope worth knowing before adding a leaf: a struct-typed leaf falls through to
+// the default arm and is copied by assignment, so any slice or map INSIDE it
+// stays shared with the outgoing snapshot. That is safe for the only such leaf
+// today (Input, three scalars) and would need revisiting for a struct leaf
+// holding reference types.
+func defensiveCopy(v reflect.Value) reflect.Value {
+	switch v.Kind() {
+	case reflect.Slice:
+		if v.IsNil() {
+			return v
+		}
+		dst := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		reflect.Copy(dst, v)
+		return dst
+	case reflect.Map:
+		if v.IsNil() {
+			return v
+		}
+		dst := reflect.MakeMapWithSize(v.Type(), v.Len())
+		for iter := v.MapRange(); iter.Next(); {
+			dst.SetMapIndex(iter.Key(), iter.Value())
+		}
+		return dst
+	default:
+		return v
+	}
+}
+
+// restoreBlockedSubtree descends into a struct that carries blocked leaves.
+//
+// No blocked path crosses a pointer today: every node the walk descends through
+// is a value struct. The pointer arms exist so that turning any one of them into
+// a pointer later cannot silently disable enforcement for everything underneath
+// it. They are unreachable through restoreBlockedFields, so
+// TestRestoreBlockedFieldsHandlesPointerSubtrees drives them directly.
+func restoreBlockedSubtree(
+	currentField, updatedField reflect.Value,
+	blockedFields map[string]any,
+	fieldPath string,
+	restored *[]string,
+) {
+	if currentField.Kind() != reflect.Pointer {
+		restoreBlockedFieldsRecursively(currentField, updatedField, blockedFields, restored, fieldPath)
+		return
+	}
+
+	switch {
+	case !updatedField.IsNil():
+		// A nil current means every blocked leaf under it is the zero value, and
+		// zeroing them in updated is the correct restore. Read from a throwaway
+		// zero struct so current is never allocated into.
+		source := currentField
+		if source.IsNil() {
+			source = reflect.New(currentField.Type().Elem())
+		}
+		restoreBlockedFieldsRecursively(source.Elem(), updatedField.Elem(), blockedFields, restored, fieldPath)
+
+	case !currentField.IsNil() && updatedField.CanSet():
+		// The client nulled a whole struct holding blocked leaves. Rebuild just
+		// those leaves, and publish the rebuild only when it carries something, so
+		// a no-op restore cannot turn a nil pointer into a non-nil one.
+		//
+		// The predicate is whether the rebuild came out non-zero, NOT whether
+		// anything was reported. Those differ now that restoreBlockedLeaf restores
+		// unconditionally and reports only on difference: a blocked leaf that
+		// compares equal is still restored, and gating the write on the report
+		// count would let a client delete a struct holding blocked fields by
+		// nulling it whenever every leaf under it happened to compare equal.
+		rebuilt := reflect.New(updatedField.Type().Elem())
+		restoreBlockedFieldsRecursively(currentField.Elem(), rebuilt.Elem(), blockedFields, restored, fieldPath)
+		if !rebuilt.Elem().IsZero() {
+			updatedField.Set(rebuilt)
+		}
 	}
 }
 
@@ -2151,30 +2472,39 @@ const (
 	reasonWebserverRestart = "restart.reasons.webserver"
 	reasonDatabaseRestart  = "restart.reasons.database"
 	reasonLoggingRestart   = "restart.reasons.logging"
+	reasonOAuthRestart     = "restart.reasons.oauth"
 )
 
-// settingsChangeChecks defines all settings change detectors in order of execution.
-// Each check has a detection function, action to trigger, and toast notification.
+// settingsChangeChecks defines the settings change detectors that dispatch an
+// action or a toast, in order of execution. Each check has a detection
+// function, action to trigger, and toast notification.
+//
+// It is not quite every detector: profilingRatesChanged is applied directly by
+// handleSettingsChanges instead, because the runtime setters it drives are
+// atomic stores that cannot fail and so need neither the controlChan queue nor
+// a toast. Anyone adding a diagnostics setting will look here first, hence this
+// pointer; the reasoning is at that call site.
 var settingsChangeChecks = []settingsChangeCheck{
-	{"BirdNET", "reload_birdnet", birdnetSettingsChanged, "Reloading BirdNET model with new settings...", notification.MsgSettingsReloadingBirdnet, "info", toastDurationLong},
-	{"Range filter", "rebuild_range_filter", rangeFilterSettingsChanged, "Rebuilding species range filter...", notification.MsgSettingsRebuildingRangeFilter, "info", toastDurationMedium},
-	{"Species interval", "update_detection_intervals", intervalSettingsChanged, "Updating detection intervals...", notification.MsgSettingsUpdatingIntervals, "info", toastDurationShort},
-	{"Base threshold", "recalculate_dynamic_thresholds", baseThresholdChanged, "Recalculating dynamic thresholds...", notification.MsgSettingsRecalculatingThresholds, "info", toastDurationShort},
-	{"Dynamic thresholds", "reconfigure_dynamic_thresholds", dynamicThresholdEnabledChanged, "Reconfiguring dynamic thresholds...", notification.MsgSettingsReconfiguringDynamicThresholds, "info", toastDurationMedium},
-	{"MQTT", "reconfigure_mqtt", mqttSettingsChanged, "Reconfiguring MQTT connection...", notification.MsgSettingsReconfiguringMqtt, "info", toastDurationMedium},
-	{"BirdWeather", "reconfigure_birdweather", birdWeatherSettingsChanged, "Reconfiguring BirdWeather integration...", notification.MsgSettingsReconfiguringBirdweather, "info", toastDurationMedium},
-	{"Streams", "reconfigure_rtsp_sources", streamsSettingsChanged, "Reconfiguring audio streams...", notification.MsgSettingsReconfiguringStreams, "info", toastDurationMedium},
-	{"Telemetry", "reconfigure_telemetry", telemetrySettingsChanged, "Reconfiguring telemetry settings...", notification.MsgSettingsReconfiguringTelemetry, "info", toastDurationShort},
-	{"Species tracking", "reconfigure_species_tracking", speciesTrackingSettingsChanged, "Reconfiguring species tracking...", notification.MsgSettingsReconfiguringSpeciesTracking, "info", toastDurationShort},
-	{"Push notifications", "reconfigure_push_notifications", pushNotificationSettingsChanged, "Reconfiguring push notification providers...", notification.MsgSettingsReconfiguringPushNotifications, "info", toastDurationMedium},
-	{"Quiet hours", schedule.SignalReconfigureQuietHours, quietHoursSettingsChanged, "Updating quiet hours schedule...", "", "info", toastDurationShort},
-	{"Web server", "", webserverSettingsChanged, "Web server settings changed. Restart required to apply.", notification.MsgSettingsWebserverRestart, "warning", toastDurationExtended},
-	{"Database", "", outputSettingsChanged, "Database settings changed. Restart required to apply.", notification.MsgSettingsDatabaseRestart, "warning", toastDurationExtended},
-	{"Logging", "", loggingSettingsChanged, "Logging settings changed. Restart required to apply.", notification.MsgSettingsLoggingRestart, "warning", toastDurationExtended},
-	{"Log deduplication", "reconfigure_log_deduplication", logDeduplicationSettingsChanged, "Reconfiguring log deduplication...", "", "info", toastDurationShort},
-	{"RTSP health", "reconfigure_rtsp_health", rtspHealthSettingsChanged, "Reconfiguring RTSP health monitoring...", "", "info", toastDurationShort},
-	{"Monitoring", "reconfigure_monitoring", monitoringSettingsChanged, "Reconfiguring system monitoring...", "", "info", toastDurationShort},
-	{"Live stream", "reconfigure_livestream", liveStreamSettingsChanged, "Reconfiguring live stream settings...", "", "info", toastDurationShort},
+	{"BirdNET", "reload_birdnet", birdnetSettingsChanged, "Reloading BirdNET model with new settings...", notification.MsgSettingsReloadingBirdnet, ToastTypeInfo, toastDurationLong},
+	{"Range filter", "rebuild_range_filter", rangeFilterSettingsChanged, "Rebuilding species range filter...", notification.MsgSettingsRebuildingRangeFilter, ToastTypeInfo, toastDurationMedium},
+	{"Species interval", "update_detection_intervals", intervalSettingsChanged, "Updating detection intervals...", notification.MsgSettingsUpdatingIntervals, ToastTypeInfo, toastDurationShort},
+	{"Base threshold", "recalculate_dynamic_thresholds", baseThresholdChanged, "Recalculating dynamic thresholds...", notification.MsgSettingsRecalculatingThresholds, ToastTypeInfo, toastDurationShort},
+	{"Dynamic thresholds", "reconfigure_dynamic_thresholds", dynamicThresholdEnabledChanged, "Reconfiguring dynamic thresholds...", notification.MsgSettingsReconfiguringDynamicThresholds, ToastTypeInfo, toastDurationMedium},
+	{"MQTT", "reconfigure_mqtt", mqttSettingsChanged, "Reconfiguring MQTT connection...", notification.MsgSettingsReconfiguringMqtt, ToastTypeInfo, toastDurationMedium},
+	{"BirdWeather", "reconfigure_birdweather", birdWeatherSettingsChanged, "Reconfiguring BirdWeather integration...", notification.MsgSettingsReconfiguringBirdweather, ToastTypeInfo, toastDurationMedium},
+	{"Streams", "reconfigure_rtsp_sources", streamsSettingsChanged, "Reconfiguring audio streams...", notification.MsgSettingsReconfiguringStreams, ToastTypeInfo, toastDurationMedium},
+	{"Telemetry", "reconfigure_telemetry", telemetrySettingsChanged, "Reconfiguring telemetry settings...", notification.MsgSettingsReconfiguringTelemetry, ToastTypeInfo, toastDurationShort},
+	{"Species tracking", "reconfigure_species_tracking", speciesTrackingSettingsChanged, "Reconfiguring species tracking...", notification.MsgSettingsReconfiguringSpeciesTracking, ToastTypeInfo, toastDurationShort},
+	{"Push notifications", "reconfigure_push_notifications", pushNotificationSettingsChanged, "Reconfiguring push notification providers...", notification.MsgSettingsReconfiguringPushNotifications, ToastTypeInfo, toastDurationMedium},
+	{"Quiet hours", schedule.SignalReconfigureQuietHours, quietHoursSettingsChanged, "Updating quiet hours schedule...", "", ToastTypeInfo, toastDurationShort},
+	{"Web server", "", webserverSettingsChanged, "Web server settings changed. Restart required to apply.", notification.MsgSettingsWebserverRestart, ToastTypeWarning, toastDurationExtended},
+	{"OAuth providers", "", oauthProvidersChanged, "Authentication provider settings changed. Restart required to apply.", notification.MsgSettingsOauthRestart, ToastTypeWarning, toastDurationExtended},
+	{"Database", "", outputSettingsChanged, "Database settings changed. Restart required to apply.", notification.MsgSettingsDatabaseRestart, ToastTypeWarning, toastDurationExtended},
+	{"Logging", "", loggingSettingsChanged, "Logging settings changed. Restart required to apply.", notification.MsgSettingsLoggingRestart, ToastTypeWarning, toastDurationExtended},
+	{"Log deduplication", "reconfigure_log_deduplication", logDeduplicationSettingsChanged, "Reconfiguring log deduplication...", "", ToastTypeInfo, toastDurationShort},
+	{"RTSP health", "reconfigure_rtsp_health", rtspHealthSettingsChanged, "Reconfiguring RTSP health monitoring...", "", ToastTypeInfo, toastDurationShort},
+	{"Monitoring", "reconfigure_monitoring", monitoringSettingsChanged, "Reconfiguring system monitoring...", "", ToastTypeInfo, toastDurationShort},
+	{"Live stream", "reconfigure_livestream", liveStreamSettingsChanged, "Reconfiguring live stream settings...", "", ToastTypeInfo, toastDurationShort},
 }
 
 // restartRequiringChecks maps a settingsChangeChecks entry (by name) to the i18n
@@ -2184,9 +2514,10 @@ var settingsChangeChecks = []settingsChangeCheck{
 // above; settings_restart_test.go cross-validates these keys against the table
 // names and against the hot-reload registry's `restart` category.
 var restartRequiringChecks = map[string]string{
-	"Web server": reasonWebserverRestart,
-	"Database":   reasonDatabaseRestart,
-	"Logging":    reasonLoggingRestart,
+	"Web server":      reasonWebserverRestart,
+	"OAuth providers": reasonOAuthRestart,
+	"Database":        reasonDatabaseRestart,
+	"Logging":         reasonLoggingRestart,
 }
 
 // handleSettingsChanges checks if important settings have changed and triggers appropriate actions
@@ -2227,6 +2558,34 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 	// possible error/rollback would leave a stuck banner.
 	for _, reason := range restartReasons {
 		restart.MarkRestartRequired(reason)
+	}
+
+	// Apply the runtime block and mutex sampling rates.
+	//
+	// Deliberately NOT a settingsChangeChecks entry routed through controlChan
+	// like the reconfigure_* actions above. The property that separates these
+	// from those is not "process-global" (reconfigure_push_notifications and
+	// reconfigure_log_deduplication are process-global too): it is that both
+	// runtime setters are single atomic stores that cannot fail and cost
+	// microseconds. There is nothing to serialize, nothing that can report an
+	// error, and no success worth a toast, so the queue that sendReconfigActions
+	// maintains, with its delay between sends, buys nothing here.
+	//
+	// Placed after the fallible audio reconfiguration for the same reason the
+	// restart marks are: a change that is about to be rolled back should not
+	// have left the process sampling.
+	//
+	// Both handlers that can carry a diagnostics change route through
+	// handleSettingsChanges, and neither routes through publishAndSaveSettings,
+	// whose callers are the TLS, MQTT-TLS and detections writers. That is what
+	// makes this the one seam covering this section rather than something to be
+	// remembered at each write path; getting it backwards is how the token mint
+	// first shipped dead, see ensureProfilingTokenForSave. handleSettingsChanges
+	// does have those three writers as callers too, which is harmless: each
+	// clones the current snapshot and touches only its own section, so the gate
+	// below is false on those paths.
+	if profilingRatesChanged(oldSettings, currentSettings) {
+		profiling.ApplyRates(&currentSettings.Diagnostics.Profiling)
 	}
 
 	// Trigger reconfigurations asynchronously.
@@ -2412,7 +2771,8 @@ func streamsSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 		return true
 	}
 
-	// Check for changes in individual streams (name, URL, type, transport, channel mode, or models)
+	// Check for changes in individual streams (name, URL, type, transport, channel
+	// mode, media mode, or models)
 	for i := range oldRTSP.Streams {
 		if i >= len(newRTSP.Streams) {
 			return true
@@ -2425,6 +2785,7 @@ func streamsSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 			oldStream.Type != newStream.Type ||
 			oldStream.Transport != newStream.Transport ||
 			oldStream.ChannelMode.Canonical() != newStream.ChannelMode.Canonical() ||
+			oldStream.MediaMode.Canonical() != newStream.MediaMode.Canonical() ||
 			!slices.Equal(oldStream.Models, newStream.Models) {
 			return true
 		}
@@ -2498,6 +2859,46 @@ func birdWeatherSettingsChanged(oldSettings, currentSettings *conf.Settings) boo
 // pushNotificationSettingsChanged checks if push notification settings have changed.
 func pushNotificationSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	return !reflect.DeepEqual(oldSettings.Notification.Push, currentSettings.Notification.Push)
+}
+
+// restoreProfilingRates puts the runtime sampling rates back to what the
+// restored snapshot says, after a failed save has rolled the settings back.
+//
+// Without this the divergence is permanent, not merely temporary, which is what
+// separates it from the other side effects handleSettingsChanges triggers. The
+// reconfigure_* actions re-read the live snapshot when the control monitor
+// processes them (conf.Setting()), so a rollback makes them converge on the
+// persisted config by themselves. ApplyRates reads the snapshot at call time
+// and is never invoked again on its own, and the change gate then seals it: the
+// rolled-back config and the next save both say 0, the comparison finds no
+// change, and the process keeps sampling forever at a rate nothing records.
+// That is exactly the cost this feature exists to remove, made invisible.
+//
+// Cheap and idempotent, so it runs unconditionally rather than re-deriving
+// whether this particular save touched the rates.
+func (c *Controller) restoreProfilingRates(current *conf.Settings) {
+	if current == nil {
+		return
+	}
+	profiling.ApplyRates(&current.Diagnostics.Profiling)
+}
+
+// profilingRatesChanged reports whether either runtime sampling rate differs
+// between the two snapshots.
+//
+// Only the rates. diagnostics.profiling.enabled and .token need no action at
+// all: the pprof routes are registered unconditionally and their middleware
+// reads the live snapshot per request, so those two are observed on the next
+// request without anything being applied here.
+func profilingRatesChanged(oldSettings, currentSettings *conf.Settings) bool {
+	oldProfiling := &oldSettings.Diagnostics.Profiling
+	newProfiling := &currentSettings.Diagnostics.Profiling
+	// Resolved rather than raw, so two values that mean the same thing to the
+	// runtime do not count as a change. Editing -1 to -5 leaves both profilers
+	// off either way, and firing on it would re-log the applied rates for a
+	// save that altered nothing.
+	return oldProfiling.ResolvedBlockRate() != newProfiling.ResolvedBlockRate() ||
+		oldProfiling.ResolvedMutexFraction() != newProfiling.ResolvedMutexFraction()
 }
 
 // telemetrySettingsChanged checks if telemetry/observability settings have changed
@@ -2582,17 +2983,62 @@ func webserverSettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 		return true
 	}
 
-	// Check security/TLS settings that affect the server
+	// Check security/TLS settings that affect the server. BaseURL is included
+	// because it feeds the HTTP->HTTPS redirect authority (api.Config.RedirectAuthority)
+	// and the session-cookie Secure decision (SessionCookiesSecure), both captured
+	// once at server start; it also seeds OAuth callback URLs at startup. Its only
+	// live consumer is notification link generation, so prompting restart matches the
+	// existing Host handling (Host is also read live by notifications yet restart-gated).
 	oldSec := oldSettings.Security
 	newSec := currentSettings.Security
 
 	if oldSec.Host != newSec.Host ||
+		oldSec.BaseURL != newSec.BaseURL ||
 		oldSec.TLSMode != newSec.TLSMode ||
 		oldSec.AutoTLS != newSec.AutoTLS || //nolint:staticcheck // Intentional: backward-compatible migration
 		oldSec.RedirectToHTTPS != newSec.RedirectToHTTPS {
 		return true
 	}
 
+	return false
+}
+
+// oauthProvidersChanged reports whether OAuth provider REGISTRATION config changed.
+// Provider registration (the goth providers built from client id/secret and the
+// callback URL derived from the base URL) binds once at startup via
+// security.InitializeGoth and does not hot-reload, so a change needs a restart to
+// take effect. Comparison is keyed by provider ID so reordering the list alone is
+// not treated as a change. UserID is intentionally excluded: the per-provider
+// allowlist is read live by the auth check (via currentSettings), so allowlist
+// edits already hot-reload without a restart.
+func oauthProvidersChanged(oldSettings, currentSettings *conf.Settings) bool {
+	oldProviders := oldSettings.Security.OAuthProviders
+	newProviders := currentSettings.Security.OAuthProviders
+	if len(oldProviders) != len(newProviders) {
+		return true
+	}
+	// Keyed by provider ID; duplicate IDs (a malformed config) collapse last-wins,
+	// which is acceptable and fail-safe: a missed change only delays a not-yet-active
+	// provider from registering until the next restart, never grants access.
+	newByID := make(map[string]*conf.OAuthProviderConfig, len(newProviders))
+	for i := range newProviders {
+		newByID[newProviders[i].Provider] = &newProviders[i]
+	}
+	for i := range oldProviders {
+		oldProvider := &oldProviders[i]
+		newProvider, ok := newByID[oldProvider.Provider]
+		if !ok {
+			return true
+		}
+		if oldProvider.Enabled != newProvider.Enabled ||
+			oldProvider.ClientID != newProvider.ClientID ||
+			oldProvider.ClientSecret != newProvider.ClientSecret ||
+			oldProvider.RedirectURI != newProvider.RedirectURI ||
+			oldProvider.IssuerURL != newProvider.IssuerURL ||
+			!slices.Equal(oldProvider.Scopes, newProvider.Scopes) {
+			return true
+		}
+	}
 	return false
 }
 

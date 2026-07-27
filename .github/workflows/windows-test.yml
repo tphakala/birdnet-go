@@ -22,6 +22,9 @@ on:
       - '.github/workflows/windows-test.yml'
       - '.github/actions/**'
   pull_request:
+    # Include labeled/unlabeled so adding or removing the `full-ci` label
+    # re-evaluates the job gate immediately instead of waiting for the next push.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
     paths:
       - '**/*.go'
       - 'go.mod'
@@ -40,6 +43,14 @@ concurrency:
 jobs:
   unit-tests-windows:
     name: unit-tests (windows-amd64)
+    # Demoted off the per-commit PR critical path: this native run is slow (~25m)
+    # and already advisory (continue-on-error). It still runs on every push to
+    # main and on workflow_dispatch; on a PR it runs only when the `full-ci`
+    # label is present. A skipped job reports as success, so adding it as a
+    # required check later will not deadlock label-less PRs.
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'full-ci')
     runs-on: windows-latest
     # Non-blocking until the native Windows CGO/DLL path is proven stable.
     continue-on-error: true
@@ -48,7 +59,7 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: 'go.mod'
           cache: true
@@ -157,7 +168,12 @@ jobs:
           # ~2000 tests) intermittently exceeded the old 600s per-package ceiling
           # under runner load (cumulative race-instrumented work, not a deadlock).
           # 900s adds headroom and stays under the 25m step cap below.
-          go test -tags noembed,skipfrontend -race -json -v -short -timeout 900s ./... > gotest.log 2>&1
+          # goaac_simd matches BASE_BUILD_TAGS in Taskfile.yml, so the AAC tests
+          # compile the same kernel set the shipped windows/amd64 binary does.
+          # Which kernel actually executes still depends on the runner's CPU
+          # features (AVX2 for the trellis, AVX/SSE2 for AbsPow34), not on the tag.
+          # This job is advisory: continue-on-error, and on a PR it needs full-ci.
+          go test -tags noembed,skipfrontend,goaac_simd -race -json -v -short -timeout 900s ./... > gotest.log 2>&1
           TEST_EXIT_CODE=$?
           grep '"Action":"fail"' gotest.log | jq -r 'select(.Test) | "FAIL  \(.Package)  \(.Test)"' | sort -u || true
 

@@ -452,3 +452,54 @@ func TestSourceRegistry_TypeDetection(t *testing.T) {
 		})
 	}
 }
+
+// TestSourceRegistry_SyncReconfiguredParams verifies the reconfigure write-back:
+// the mode fields are always overwritten and the probed source-shape fields are
+// only overwritten when the new value is non-zero. Without this write-back a
+// mode-only edit would re-trigger reconfigure on every later cycle and
+// quiet-hours resume would rebuild the stream from a stale entry.
+func TestSourceRegistry_SyncReconfiguredParams(t *testing.T) {
+	t.Parallel()
+	r := newTestRegistry(t)
+
+	src, err := r.Register(&SourceConfig{
+		ConnectionString: "rtsp://sync.example.com/stream",
+		ChannelMode:      "downmix",
+		MediaMode:        "auto",
+		SourceSampleRate: 48000,
+		SourceChannels:   2,
+	})
+	require.NoError(t, err)
+
+	// New mode plus non-zero shape overwrites all four fields.
+	ok := r.SyncReconfiguredParams(src.ID, "left", "full-stream", 44100, 1)
+	require.True(t, ok)
+
+	got, ok := r.Get(src.ID)
+	require.True(t, ok)
+	assert.Equal(t, "left", got.ChannelMode, "channel mode must be written back")
+	assert.Equal(t, "full-stream", got.MediaMode, "media mode must be written back")
+	assert.Equal(t, 44100, got.SourceSampleRate, "non-zero source sample rate must be written back")
+	assert.Equal(t, 1, got.SourceChannels, "non-zero source channels must be written back")
+
+	// Zero-valued shape must NOT clobber the known values (mirrors the
+	// "desired != 0" guard in sourceNeedsReconfigure); modes are always written.
+	ok = r.SyncReconfiguredParams(src.ID, "right", "audio-only", 0, 0)
+	require.True(t, ok)
+
+	got, ok = r.Get(src.ID)
+	require.True(t, ok)
+	assert.Equal(t, "right", got.ChannelMode)
+	assert.Equal(t, "audio-only", got.MediaMode)
+	assert.Equal(t, 44100, got.SourceSampleRate, "zero source sample rate must not clobber the known value")
+	assert.Equal(t, 1, got.SourceChannels, "zero source channels must not clobber the known value")
+}
+
+// TestSourceRegistry_SyncReconfiguredParams_NotFound verifies the write-back
+// reports false for an unknown source ID.
+func TestSourceRegistry_SyncReconfiguredParams_NotFound(t *testing.T) {
+	t.Parallel()
+	r := newTestRegistry(t)
+
+	assert.False(t, r.SyncReconfiguredParams("nonexistent-id", "left", "full-stream", 48000, 1))
+}

@@ -21,6 +21,7 @@
     getSpeciesDictVersion,
   } from './lib/stores/appState.svelte';
   import { navigation } from './lib/stores/navigation.svelte';
+  import { resolveAnalyticsRedirect } from './lib/desktop/features/analytics/registry/analyticsRouting';
   import { settingsActions } from './lib/stores/settings.js';
   import { activateWatchdog } from './lib/stores/connectionState.svelte';
   import WizardDialog from './lib/desktop/features/wizard/WizardDialog.svelte';
@@ -41,7 +42,14 @@
   }
 
   // Dynamic imports for heavy pages - properly typed component references
-  let Analytics = $state<Component | null>(null);
+  let SummaryPage = $state<Component | null>(null);
+  let ActivityPage = $state<Component | null>(null);
+  let TrendsPage = $state<Component | null>(null);
+  let BiodiversityPage = $state<Component | null>(null);
+  let NocturnalPage = $state<Component | null>(null);
+  let WeatherPage = $state<Component | null>(null);
+  let SoundscapePage = $state<Component | null>(null);
+  let ReviewPage = $state<Component | null>(null);
   let Species = $state<Component | null>(null);
   let Search = $state<Component | null>(null);
   let About = $state<Component | null>(null);
@@ -130,10 +138,52 @@
       component: 'species',
     },
     {
-      route: 'analytics',
-      page: 'analytics',
-      titleKey: 'navigation.analytics',
-      component: 'analytics',
+      route: 'analytics-summary',
+      page: 'analytics/summary',
+      titleKey: 'pageTitle.analyticsSummary',
+      component: 'analytics-summary',
+    },
+    {
+      route: 'analytics-activity',
+      page: 'analytics/activity',
+      titleKey: 'pageTitle.analyticsActivity',
+      component: 'analytics-activity',
+    },
+    {
+      route: 'analytics-trends',
+      page: 'analytics/trends',
+      titleKey: 'pageTitle.analyticsTrends',
+      component: 'analytics-trends',
+    },
+    {
+      route: 'analytics-biodiversity',
+      page: 'analytics/biodiversity',
+      titleKey: 'pageTitle.analyticsBiodiversity',
+      component: 'analytics-biodiversity',
+    },
+    {
+      route: 'analytics-nocturnal',
+      page: 'analytics/nocturnal',
+      titleKey: 'pageTitle.analyticsNocturnal',
+      component: 'analytics-nocturnal',
+    },
+    {
+      route: 'analytics-weather',
+      page: 'analytics/weather',
+      titleKey: 'pageTitle.analyticsWeather',
+      component: 'analytics-weather',
+    },
+    {
+      route: 'analytics-soundscape',
+      page: 'analytics/soundscape',
+      titleKey: 'pageTitle.analyticsSoundscape',
+      component: 'analytics-soundscape',
+    },
+    {
+      route: 'analytics-review',
+      page: 'analytics/review',
+      titleKey: 'pageTitle.analyticsReview',
+      component: 'analytics-review',
     },
     { route: 'search', page: 'search', titleKey: 'navigation.search', component: 'search' },
     {
@@ -201,10 +251,58 @@
             LiveStream = module.default;
           }
           break;
-        case 'analytics':
-          if (!Analytics) {
-            const module = await import('./lib/desktop/features/analytics/pages/Analytics.svelte');
-            Analytics = module.default;
+        case 'analytics-summary':
+          if (!SummaryPage) {
+            const module =
+              await import('./lib/desktop/features/analytics/pages/SummaryPage.svelte');
+            SummaryPage = module.default;
+          }
+          break;
+        case 'analytics-activity':
+          if (!ActivityPage) {
+            const module =
+              await import('./lib/desktop/features/analytics/pages/ActivityPage.svelte');
+            ActivityPage = module.default;
+          }
+          break;
+        case 'analytics-trends':
+          if (!TrendsPage) {
+            const module = await import('./lib/desktop/features/analytics/pages/TrendsPage.svelte');
+            TrendsPage = module.default;
+          }
+          break;
+        case 'analytics-biodiversity':
+          if (!BiodiversityPage) {
+            const module =
+              await import('./lib/desktop/features/analytics/pages/BiodiversityPage.svelte');
+            BiodiversityPage = module.default;
+          }
+          break;
+        case 'analytics-nocturnal':
+          if (!NocturnalPage) {
+            const module =
+              await import('./lib/desktop/features/analytics/pages/NocturnalPage.svelte');
+            NocturnalPage = module.default;
+          }
+          break;
+        case 'analytics-weather':
+          if (!WeatherPage) {
+            const module =
+              await import('./lib/desktop/features/analytics/pages/WeatherPage.svelte');
+            WeatherPage = module.default;
+          }
+          break;
+        case 'analytics-soundscape':
+          if (!SoundscapePage) {
+            const module =
+              await import('./lib/desktop/features/analytics/pages/SoundscapePage.svelte');
+            SoundscapePage = module.default;
+          }
+          break;
+        case 'analytics-review':
+          if (!ReviewPage) {
+            const module = await import('./lib/desktop/features/analytics/pages/ReviewPage.svelte');
+            ReviewPage = module.default;
           }
           break;
         case 'species':
@@ -345,8 +443,21 @@
     [uiPath('dashboard')]: findRouteConfig('dashboard'),
     [uiPath('live-stream')]: findRouteConfig('live-stream'),
     [uiPath('notifications')]: findRouteConfig('notifications'),
+    // Fallbacks if handleRouting's redirect does not fire (e.g. an aggressive
+    // sub_filter proxy rewrite that corrupts the literal path before handleRouting
+    // runs, or SSR). The normal flow never reaches these entries directly: the bare
+    // hub redirects to summary and the retired /advanced path redirects to activity.
+    [uiPath('analytics')]: findRouteConfig('analytics-summary'),
+    [uiPath('analytics', 'advanced')]: findRouteConfig('analytics-activity'),
     [uiPath('analytics', 'species')]: findRouteConfig('species'),
-    [uiPath('analytics')]: findRouteConfig('analytics'),
+    [uiPath('analytics', 'summary')]: findRouteConfig('analytics-summary'),
+    [uiPath('analytics', 'activity')]: findRouteConfig('analytics-activity'),
+    [uiPath('analytics', 'trends')]: findRouteConfig('analytics-trends'),
+    [uiPath('analytics', 'biodiversity')]: findRouteConfig('analytics-biodiversity'),
+    [uiPath('analytics', 'nocturnal')]: findRouteConfig('analytics-nocturnal'),
+    [uiPath('analytics', 'weather')]: findRouteConfig('analytics-weather'),
+    [uiPath('analytics', 'soundscape')]: findRouteConfig('analytics-soundscape'),
+    [uiPath('analytics', 'review')]: findRouteConfig('analytics-review'),
     [uiPath('search')]: findRouteConfig('search'),
     [uiPath('detections')]: findRouteConfig('detections'),
     [uiPath('about')]: findRouteConfig('about'),
@@ -393,19 +504,15 @@
   }
 
   function handleRouting(path: string): void {
-    // Retired route: the Advanced Analytics page folded into the unified
-    // Analytics hub (PR0b). Redirect old deep links to the hub, defaulting to
-    // the Activity Patterns tab (the first charts tab; the former Advanced
-    // Analytics charts now live across Patterns/Trends/Biodiversity) and
-    // preserving any existing query params (range/species/source/tab/...). Uses
-    // replace so the dead URL does not linger in history.
-    const retiredAdvancedPath = uiPath('analytics', 'advanced');
-    if (path === retiredAdvancedPath || path === `${retiredAdvancedPath}/`) {
-      const search = typeof window !== 'undefined' ? window.location.search : '';
-      const sp = new URLSearchParams(search);
-      if (!sp.has('tab')) sp.set('tab', 'patterns');
-      const qs = sp.toString();
-      navigation.redirect(uiPath('analytics') + (qs ? `?${qs}` : ''));
+    // Analytics routes: redirect the bare hub, the retired /advanced path, and
+    // legacy ?tab= deep links onto the per-view routes (single hop), preserving
+    // other query params. resolveAnalyticsRedirect returns null when canonical.
+    const analyticsRedirect = resolveAnalyticsRedirect(
+      path,
+      typeof window !== 'undefined' ? window.location.search : ''
+    );
+    if (analyticsRedirect) {
+      navigation.redirect(analyticsRedirect);
       return;
     }
 
@@ -670,8 +777,22 @@
       {@render renderRoute(LiveStream)}
     {:else if currentRoute === 'notifications'}
       {@render renderRoute(Notifications)}
-    {:else if currentRoute === 'analytics'}
-      {@render renderRoute(Analytics)}
+    {:else if currentRoute === 'analytics-summary'}
+      {@render renderRoute(SummaryPage)}
+    {:else if currentRoute === 'analytics-activity'}
+      {@render renderRoute(ActivityPage)}
+    {:else if currentRoute === 'analytics-trends'}
+      {@render renderRoute(TrendsPage)}
+    {:else if currentRoute === 'analytics-biodiversity'}
+      {@render renderRoute(BiodiversityPage)}
+    {:else if currentRoute === 'analytics-nocturnal'}
+      {@render renderRoute(NocturnalPage)}
+    {:else if currentRoute === 'analytics-weather'}
+      {@render renderRoute(WeatherPage)}
+    {:else if currentRoute === 'analytics-soundscape'}
+      {@render renderRoute(SoundscapePage)}
+    {:else if currentRoute === 'analytics-review'}
+      {@render renderRoute(ReviewPage)}
     {:else if currentRoute === 'species'}
       {@render renderRoute(Species)}
     {:else if currentRoute === 'search'}

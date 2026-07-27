@@ -37,14 +37,7 @@
 
   type TrendDirection = 'up' | 'down' | 'neutral';
   type CardVariant =
-    | 'default'
-    | 'primary'
-    | 'secondary'
-    | 'accent'
-    | 'info'
-    | 'success'
-    | 'warning'
-    | 'error';
+    'default' | 'primary' | 'secondary' | 'accent' | 'info' | 'success' | 'warning' | 'error';
 
   interface TrendData {
     direction: TrendDirection;

@@ -397,7 +397,7 @@ func (c *Handler) findHourlyWeatherByHourString(hourlyWeatherList []datastore.Ho
 	}
 
 	for i := range hourlyWeatherList {
-		if hourlyWeatherList[i].Time.Hour() == requestedHour {
+		if hourlyWeatherList[i].Time.In(time.Local).Hour() == requestedHour {
 			return c.buildHourlyWeatherResponse(&hourlyWeatherList[i])
 		}
 	}

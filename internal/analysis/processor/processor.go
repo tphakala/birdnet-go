@@ -53,45 +53,45 @@ const MinJobQueueGracePeriod = 500 * time.Millisecond
 
 // Processor represents the main processing unit for audio analysis.
 type Processor struct {
-	Settings             *conf.Settings
-	Ds                   datastore.Interface           // Legacy - to be removed after migration
-	Repo                 datastore.DetectionRepository // New - preferred for detection operations
-	Bn                   *classifier.Orchestrator
-	log                  logger.Logger // Logger inherited from analysis package with "processor" child module
-	BwClient             *birdweather.BwClient
-	bwClientMutex        sync.RWMutex // Mutex to protect BwClient access
-	MqttClient           mqtt.Client
-	mqttMutex            sync.RWMutex // Mutex to protect MQTT client access
-	mqttNotReadyWarnOnce sync.Once    // Ensures the "client not ready" warning logs at most once per process to avoid flood
-	BirdImageCache       *imageprovider.BirdImageCache
-	EventTracker         *EventTracker
-	eventTrackerMu       sync.RWMutex            // Mutex to protect EventTracker access
-	NewSpeciesTracker    *species.SpeciesTracker // Tracks new species detections
-	speciesTrackerMu     sync.RWMutex            // Mutex to protect NewSpeciesTracker access
-	lastSyncAttempt      time.Time               // Last time sync was attempted
-	syncMutex            sync.Mutex              // Mutex to protect sync operations
-	syncInProgress       atomic.Bool             // Flag to prevent overlapping syncs
-	LastDogDetection     map[string]time.Time    // keep track of dog barks per audio source
-	LastHumanDetection   map[string]time.Time    // keep track of human vocal per audio source
-	Metrics              *observability.Metrics
-	DynamicThresholds    map[string]*DynamicThreshold
-	thresholdsMutex      sync.RWMutex        // Mutex to protect access to DynamicThresholds
-	pendingResets        map[string]struct{} // Species names pending reset, protected by thresholdsMutex
-	pendingResetAll      bool                // True if a full reset is pending, protected by thresholdsMutex
-	pendingDetections    map[string]PendingDetection
-	pendingMutex         sync.RWMutex // RWMutex to protect access to pendingDetections (RLock for snapshots)
-	dogDetectionMutex    sync.Mutex
-	detectionMutex       sync.RWMutex // Mutex to protect LastDogDetection and LastHumanDetection maps
-	controlChan          chan string
-	JobQueue             *jobqueue.JobQueue // Queue for managing job retries
-	workerCancel         context.CancelFunc // Function to cancel worker goroutines
-	thresholdsCtx        context.Context    // Context for threshold persistence/cleanup goroutines
-	thresholdsCancel     context.CancelFunc // Function to cancel threshold persistence/cleanup goroutines
-	flusherCtx           context.Context    // Context for pending detections flusher goroutine
-	flusherCancel        context.CancelFunc // Function to cancel flusher goroutine
-	preRenderer          PreRendererSubmit  // Spectrogram pre-renderer for background generation
-	preRendererOnce      sync.Once          // Ensures pre-renderer is initialized only once
-	startOnce            sync.Once          // Ensures Start() is called only once
+	Settings               *conf.Settings
+	Ds                     datastore.Interface           // Legacy - to be removed after migration
+	Repo                   datastore.DetectionRepository // New - preferred for detection operations
+	Bn                     *classifier.Orchestrator
+	log                    logger.Logger // Logger inherited from analysis package with "processor" child module
+	BwClient               *birdweather.BwClient
+	bwClientMutex          sync.RWMutex // Mutex to protect BwClient access
+	MqttClient             mqtt.Client
+	mqttMutex              sync.RWMutex // Mutex to protect MQTT client access
+	mqttNotReadyWarnLogged onceByKey    // Emits the "client not ready" warning at most once per topic to avoid flood
+	BirdImageCache         *imageprovider.BirdImageCache
+	EventTracker           *EventTracker
+	eventTrackerMu         sync.RWMutex            // Mutex to protect EventTracker access
+	NewSpeciesTracker      *species.SpeciesTracker // Tracks new species detections
+	speciesTrackerMu       sync.RWMutex            // Mutex to protect NewSpeciesTracker access
+	lastSyncAttempt        time.Time               // Last time sync was attempted
+	syncMutex              sync.Mutex              // Mutex to protect sync operations
+	syncInProgress         atomic.Bool             // Flag to prevent overlapping syncs
+	LastDogDetection       map[string]time.Time    // keep track of dog barks per audio source
+	LastHumanDetection     map[string]time.Time    // keep track of human vocal per audio source
+	Metrics                *observability.Metrics
+	DynamicThresholds      map[string]*DynamicThreshold
+	thresholdsMutex        sync.RWMutex        // Mutex to protect access to DynamicThresholds
+	pendingResets          map[string]struct{} // Species names pending reset, protected by thresholdsMutex
+	pendingResetAll        bool                // True if a full reset is pending, protected by thresholdsMutex
+	pendingDetections      map[string]PendingDetection
+	pendingMutex           sync.RWMutex // RWMutex to protect access to pendingDetections (RLock for snapshots)
+	dogDetectionMutex      sync.Mutex
+	detectionMutex         sync.RWMutex // Mutex to protect LastDogDetection and LastHumanDetection maps
+	controlChan            chan string
+	JobQueue               *jobqueue.JobQueue // Queue for managing job retries
+	workerCancel           context.CancelFunc // Function to cancel worker goroutines
+	thresholdsCtx          context.Context    // Context for threshold persistence/cleanup goroutines
+	thresholdsCancel       context.CancelFunc // Function to cancel threshold persistence/cleanup goroutines
+	flusherCtx             context.Context    // Context for pending detections flusher goroutine
+	flusherCancel          context.CancelFunc // Function to cancel flusher goroutine
+	preRenderer            PreRendererSubmit  // Spectrogram pre-renderer for background generation
+	preRendererOnce        sync.Once          // Ensures pre-renderer is initialized only once
+	startOnce              sync.Once          // Ensures Start() is called only once
 	// SSE related fields
 	SSEBroadcaster      func(note *datastore.Note, birdImage *imageprovider.BirdImage) error // Function to broadcast detection via SSE
 	sseBroadcasterMutex sync.RWMutex                                                         // Mutex to protect SSE broadcaster access
@@ -1097,17 +1097,12 @@ func isSpeciesExcluded(commonName, scientificName string, excludeList []string) 
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
 func (p *Processor) createDetection(settings *conf.Settings, item classifier.Results, result datastore.Results, scientificName, commonName, speciesCode, rawScientificName string) Detections {
-	// Create file name for audio clip
-	clipName := p.generateClipName(settings, scientificName, result.Confidence)
-
-	// Bat models at high sample rates need WAV when the configured format
-	// (MP3/Opus/AAC) cannot carry rates above 48kHz. Override the extension
-	// now so the database stores the same filename the export will write.
-	mInfo := classifier.DetectionModelInfoForID(item.ModelID)
-	sourceRate := p.resolveAudioSource(item.Source).SampleRate
-	if needsBatFormatFallback(mInfo.Name, mInfo.Version, sourceRate, settings.Realtime.Audio.Export.Type) {
-		clipName = replaceExtension(clipName, ".wav")
-	}
+	// Create file name for audio clip. When audio export is disabled the clip
+	// name is left empty so it stays a truthful per-detection signal: no file
+	// is or will be written, so nothing must reference one. The media API and
+	// the UI gate on a non-empty ClipName, and no SaveAudioAction is scheduled
+	// when export is off, so there is no async-export race to preserve here.
+	clipName := p.resolveClipName(settings, &item, scientificName, result.Confidence)
 
 	// Get capture length and pre-capture length for detection end time calculation
 	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
@@ -1365,6 +1360,38 @@ func (p *Processor) getBaseConfidenceThreshold(settings *conf.Settings, commonNa
 	return float32(settings.BirdNET.Threshold)
 }
 
+// resolveClipName returns the clip filename to persist for a detection, or an
+// empty string when audio export is disabled. Keeping ClipName empty while
+// export is off makes it a truthful per-detection signal (no clip exists or is
+// being encoded), which the media endpoint and the frontend rely on to gate
+// audio playback per detection under runtime toggling of the export setting.
+func (p *Processor) resolveClipName(settings *conf.Settings, item *classifier.Results, scientificName string, confidence float32) string {
+	if !settings.Realtime.Audio.Export.Enabled {
+		return ""
+	}
+
+	clipName := p.generateClipName(settings, scientificName, confidence)
+	return p.applyBatFormatFallback(settings, clipName, item.ModelID, item.Source)
+}
+
+// applyBatFormatFallback overrides a clip name's extension to .wav when a bat model
+// at a high source sample rate is exported to a format (MP3/Opus/AAC) that cannot
+// carry rates above 48kHz, so the stored ClipName matches the file the exporter
+// actually writes. It is shared by the createDetection and extended-capture paths
+// so both persist the same fallback extension. An empty clip name is returned
+// unchanged.
+func (p *Processor) applyBatFormatFallback(settings *conf.Settings, clipName, modelID string, source datastore.AudioSource) string {
+	if clipName == "" {
+		return clipName
+	}
+	mInfo := classifier.DetectionModelInfoForID(modelID)
+	sourceRate := p.resolveAudioSource(source).SampleRate
+	if needsBatFormatFallback(mInfo.Name, mInfo.Version, sourceRate, settings.Realtime.Audio.Export.Type) {
+		return replaceExtension(clipName, ".wav")
+	}
+	return clipName
+}
+
 // generateClipName generates a clip name for the given scientific name and confidence.
 func (p *Processor) generateClipName(settings *conf.Settings, scientificName string, confidence float32) string {
 	return p.buildClipPath(settings, scientificName, confidence, 0, time.Now())
@@ -1377,18 +1404,25 @@ func (p *Processor) generateClipNameWithDuration(settings *conf.Settings, scient
 	return p.buildClipPath(settings, scientificName, confidence, durationSeconds, detectionTime)
 }
 
-// buildClipPathFallbackOnce guards the one-shot WARN log emitted when
-// buildClipPath falls back to a wav extension because Export.Type produced
-// an empty GetFileExtension result. Post fix this branch should be
-// unreachable - the WARN exists purely as a defense-in-depth signal that a
-// previously unknown code path is writing extension-less clip paths to the
-// DB (see GitHub #2810, #2814).
+// buildClipPathFallbackFired records that the fallback branch below has been
+// taken at least once, for the test helper. It is set outside the log guard on
+// purpose; see the comment at the assignment. The guard itself is
+// clipPathExtFallbackLogged (actions_database.go), keyed on the offending
+// Export.Type.
 //
-//nolint:gochecknoglobals // one-shot WARN guard for defense-in-depth fallback
-var (
-	buildClipPathFallbackOnce  sync.Once
-	buildClipPathFallbackFired atomic.Bool
-)
+// buildClipPath falls back to a wav extension when Export.Type produces an
+// empty GetFileExtension result. Post fix this branch should be unreachable -
+// the WARN exists purely as a defense-in-depth signal that a previously unknown
+// code path is writing extension-less clip paths to the DB (see GitHub #2810,
+// #2814).
+//
+// Keyed rather than once-per-process because Export.Type is hot-reloadable and
+// is the very value the WARN reports. A bare sync.Once let the first bad value
+// silence every later, different one, so an operator who fixed one typo and
+// introduced another would get silence instead of the second warning.
+//
+//nolint:gochecknoglobals // paired with the log-flood guard, see above
+var buildClipPathFallbackFired atomic.Bool
 
 // buildClipPath constructs a clip file path with optional duration suffix.
 // When durationSeconds is 0, the duration suffix is omitted.
@@ -1404,8 +1438,13 @@ func (p *Processor) buildClipPath(settings *conf.Settings, scientificName string
 	// only Type would otherwise leak into the filename as a ". " suffix.
 	fileType := convert.GetFileExtension(strings.TrimSpace(rawExportType))
 	if fileType == "" {
-		buildClipPathFallbackOnce.Do(func() {
-			buildClipPathFallbackFired.Store(true)
+		// Stored outside the guard: onceByKey marks the key BEFORE running emit,
+		// so a concurrent second caller returns while the first is still inside
+		// the closure, and a flag set in there would read as false for a branch
+		// that had already been taken. Set here it means exactly what its reader
+		// wants to know, "the fallback ran", and cannot race the guard.
+		buildClipPathFallbackFired.Store(true)
+		clipPathExtFallbackLogged.do(rawExportType, func() {
 			GetLogger().Warn("audio export type produced empty file extension, falling back to wav",
 				logger.String("export_type", rawExportType),
 				logger.String("component", "processor"),
@@ -2172,34 +2211,28 @@ func retryConfigFromSettings(rs conf.RetrySettings) jobqueue.RetryConfig {
 func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *DetectionContext) *SaveAudioAction {
 	settings := p.currentSettings()
 
-	captureLength := settings.Realtime.Audio.Export.Length
-	if !det.Result.EndTime.IsZero() && !det.Result.BeginTime.IsZero() {
-		preCapture := settings.Realtime.Audio.Export.PreCapture
-		derivedLength := int(det.Result.EndTime.Sub(det.Result.BeginTime).Seconds()) + preCapture
-		if derivedLength > captureLength {
-			captureLength = derivedLength
-			GetLogger().Info("Using derived capture duration from detection time span",
-				logger.String("detection_id", det.CorrelationID),
-				logger.String("species", det.Result.Species.CommonName),
-				logger.Int("duration_seconds", captureLength),
-				logger.Int("configured_length", settings.Realtime.Audio.Export.Length),
-				logger.String("operation", "extended_capture_audio_export"))
-		}
+	// Derive the capture length and readiness time from the shared conf helper so this
+	// scheduler and the media API (which decides whether a not-yet-written clip is still
+	// legitimately pending) never compute the window differently. The two log lines are
+	// preserved verbatim, driven off the returned Derived/Capped flags.
+	win, _ := settings.DetectionCaptureWindow(det.Result.BeginTime, det.Result.EndTime)
+	if win.Derived {
+		GetLogger().Info("Using derived capture duration from detection time span",
+			logger.String("detection_id", det.CorrelationID),
+			logger.String("species", det.Result.Species.CommonName),
+			logger.Int("duration_seconds", win.RequestedLength),
+			logger.Int("configured_length", settings.Realtime.Audio.Export.Length),
+			logger.String("operation", "extended_capture_audio_export"))
 	}
-
-	// Cap at capture buffer size to prevent reading beyond buffer bounds.
-	bufferCap := conf.DefaultCaptureBufferSeconds
-	if settings.Realtime.ExtendedCapture.Enabled && settings.Realtime.ExtendedCapture.CaptureBufferSeconds > 0 {
-		bufferCap = settings.Realtime.ExtendedCapture.CaptureBufferSeconds
-	}
-	if captureLength > bufferCap {
+	if win.Capped {
+		// Cap at capture buffer size to prevent reading beyond buffer bounds.
 		GetLogger().Warn("Capping capture length at buffer size",
 			logger.String("detection_id", det.CorrelationID),
-			logger.Int("requested_seconds", captureLength),
-			logger.Int("buffer_seconds", bufferCap),
+			logger.Int("requested_seconds", win.RequestedLength),
+			logger.Int("buffer_seconds", win.BufferCap),
 			logger.String("operation", "capture_buffer_cap"))
-		captureLength = bufferCap
 	}
+	captureLength := win.Length
 
 	// Extended Capture may request a segment whose tail has not yet been
 	// written to the ring buffer (e.g. BeginTime was a few seconds ago but
@@ -2209,23 +2242,33 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 	// mechanism picks it up once the buffer has caught up to captureEndTime.
 	// Only take this path when BufferMgr is available; if it is nil the
 	// eager read below will produce a proper error log and no-op action.
-	captureEndTime := det.Result.BeginTime.Add(time.Duration(captureLength) * time.Second)
-	if p.BufferMgr != nil && captureEndTime.After(time.Now()) {
+	// Every branch below returns the same action differing only in how the PCM
+	// is obtained, so the shared fields are built once. Restating them per branch
+	// means every newly added field has to be repeated in all three, and a field
+	// missed on one branch is invisible until that branch is exercised.
+	base := func() *SaveAudioAction {
 		return &SaveAudioAction{
 			Settings:         settings,
 			ClipName:         det.Result.ClipName,
-			bufferMgr:        p.BufferMgr,
-			sourceID:         det.Result.AudioSource.ID,
-			beginTime:        det.Result.BeginTime,
-			duration:         captureLength,
-			readyAt:          captureEndTime,
 			sourceSampleRate: det.Result.AudioSource.SampleRate,
 			modelName:        det.Result.Model.Name,
+			species:          strings.ToLower(det.Result.Species.CommonName),
 			NoteID:           det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
 			PreRenderer:      p.preRenderer,
 			DetectionCtx:     detectionCtx,
 			CorrelationID:    det.CorrelationID,
 		}
+	}
+
+	captureEndTime := win.ReadyAt
+	if p.BufferMgr != nil && captureEndTime.After(time.Now()) {
+		a := base()
+		a.bufferMgr = p.BufferMgr
+		a.sourceID = det.Result.AudioSource.ID
+		a.beginTime = det.Result.BeginTime
+		a.duration = captureLength
+		a.readyAt = captureEndTime
+		return a
 	}
 
 	// Read PCM data from the capture buffer NOW, while the data is still in the
@@ -2242,29 +2285,12 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 			logger.Int("duration_seconds", captureLength),
 			logger.String("operation", "capture_buffer_read_for_export"))
 		// Return an action with nil pcmData; Execute() will be a no-op
-		return &SaveAudioAction{
-			Settings:         settings,
-			ClipName:         det.Result.ClipName,
-			sourceSampleRate: det.Result.AudioSource.SampleRate,
-			modelName:        det.Result.Model.Name,
-			NoteID:           det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
-			PreRenderer:      p.preRenderer,
-			DetectionCtx:     detectionCtx,
-			CorrelationID:    det.CorrelationID,
-		}
+		return base()
 	}
 
-	return &SaveAudioAction{
-		Settings:         settings,
-		ClipName:         det.Result.ClipName,
-		pcmData:          pcmData,
-		sourceSampleRate: det.Result.AudioSource.SampleRate,
-		modelName:        det.Result.Model.Name,
-		NoteID:           det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
-		PreRenderer:      p.preRenderer,
-		DetectionCtx:     detectionCtx,
-		CorrelationID:    det.CorrelationID,
-	}
+	a := base()
+	a.pcmData = pcmData
+	return a
 }
 
 // readCaptureSegment reads PCM data from the audiocore capture buffer.

@@ -14,7 +14,7 @@
     "edit": "Upraviť",
     "enabled": "Povolené",
     "search": "Hľadať",
-    "filter": "Filter",
+    "filter": "Filtrovať",
     "sort": "Zoradiť",
     "settings": "Nastavenia",
     "close": "Zavrieť",
@@ -134,7 +134,7 @@
       "visitEbirdLink": "Otvoriť eBird.org v novej karte",
       "learnEbirdTaxonomyLink": "Otvoriť taxonómiu eBird v novej karte",
       "resizeHandle": "Potiahnutím zmeníte veľkosť",
-      "imageCredit": "Image credit: {name}"
+      "imageCredit": "Autor obrázka: {name}"
     },
     "labels": {
       "confidence": "Istota",
@@ -206,10 +206,19 @@
     "componentError": "Chyba načítania komponentu",
     "speciesAnalytics": "Analytika druhov",
     "detectionDetails": "Podrobnosti detekcie",
-    "settingsNotAvailable": "Nastavenia nie sú k dispozícii"
+    "settingsNotAvailable": "Nastavenia nie sú k dispozícii",
+    "analyticsSummary": "Analytika - Zhrnutie",
+    "analyticsActivity": "Analytika - Vzorce aktivity",
+    "analyticsTrends": "Analytika - Trendy",
+    "analyticsBiodiversity": "Analytika - Biodiverzita",
+    "analyticsReview": "Analytika - Kontrola a presnosť",
+    "analyticsNocturnal": "Analytika - Nočná aktivita",
+    "analyticsWeather": "Analytika - Korelácia s počasím",
+    "analyticsSoundscape": "Analytika - Zvuková krajina"
   },
   "navigation": {
     "dashboard": "Prehľad",
+    "liveAudio": "Živý zvuk",
     "settingsMenu": "Ponuka nastavení",
     "theme": "Téma",
     "github": "GitHub",
@@ -237,7 +246,13 @@
     "reportBugAriaLabel": "Nahlásiť chybu na GitHube (otvorí sa v novom okne)",
     "askQuestionAriaLabel": "Položiť otázku na GitHub Discussions (otvorí sa v novom okne)",
     "viewOnGithubAriaLabel": "Zobraziť BirdNET-Go na GitHube (otvorí sa v novom okne)",
-    "health": "Health"
+    "health": "Zdravie",
+    "sections": {
+      "explore": "Preskúmať",
+      "patterns": "Vzory",
+      "environment": "Prostredie",
+      "dataQuality": "Kvalita dát"
+    }
   },
   "about": {
     "title": "BirdNET-Go",
@@ -404,8 +419,9 @@
         "recalculatingThresholds": "Prepočítavanie dynamických prahov pre novú základnú hodnotu",
         "reconfiguringDynamicThresholds": "Prekonfigurovanie dynamických prahov...",
         "webserverRestartRequired": "Nastavenia webového servera zmenené. Vyžaduje sa reštart.",
-        "databaseRestartRequired": "Database settings changed. Restart required.",
-        "loggingRestartRequired": "Logging settings changed. Restart required.",
+        "oauthRestartRequired": "Nastavenia poskytovateľa autentifikácie zmenené. Vyžaduje sa reštart.",
+        "databaseRestartRequired": "Nastavenia databázy boli zmenené. Vyžaduje sa reštart.",
+        "loggingRestartRequired": "Nastavenia protokolovania boli zmenené. Vyžaduje sa reštart.",
         "reconfiguringSoundLevel": "Aktualizácia monitorovania úrovne zvuku...",
         "reconfiguringAudioSources": "Prekonfigurovanie zvukových zdrojov...",
         "rebuildingExtendedCapture": "Prestavba filtra rozšíreného nahrávania...",
@@ -448,17 +464,17 @@
         "errorOccurred": "{error}",
         "disconnected": "{source_name} odpojený",
         "error": {
-          "authError": "Overenie zlyhalo — skontrolujte API kľúč alebo prihlasovacie údaje",
-          "rateLimited": "Dosiahnutý limit požiadaviek — požiadavky sa automaticky spomalia",
+          "authError": "Overenie zlyhalo - skontrolujte API kľúč alebo prihlasovacie údaje",
+          "rateLimited": "Dosiahnutý limit požiadaviek - požiadavky sa automaticky spomalia",
           "gatewayTimeout": "Služba môže byť preťažená",
           "serverError": "Služba je dočasne nedostupná",
-          "connectionRefused": "Služba nedostupná — skontrolujte adresu a či je spustená",
-          "dnsError": "Nepodarilo sa rozpoznať názov hostiteľa — skontrolujte adresu",
-          "tlsError": "Chyba TLS/certifikátu — skontrolujte nastavenia zabezpečenia",
-          "timeout": "Časový limit pripojenia vypršal — služba môže byť pomalá alebo nedostupná",
-          "connectionInterrupted": "Pripojenie bolo prerušené — automaticky sa pokúsi znova",
-          "diskFull": "Disk je plný — uvoľnite miesto",
-          "permissionDenied": "Prístup zamietnutý — skontrolujte oprávnenia súboru alebo služby"
+          "connectionRefused": "Služba nedostupná - skontrolujte adresu a či je spustená",
+          "dnsError": "Nepodarilo sa rozpoznať názov hostiteľa - skontrolujte adresu",
+          "tlsError": "Chyba TLS/certifikátu - skontrolujte nastavenia zabezpečenia",
+          "timeout": "Časový limit pripojenia vypršal - služba môže byť pomalá alebo nedostupná",
+          "connectionInterrupted": "Pripojenie bolo prerušené - automaticky sa pokúsi znova",
+          "diskFull": "Disk je plný - uvoľnite miesto",
+          "permissionDenied": "Prístup zamietnutý - skontrolujte oprávnenia súboru alebo služby"
         }
       }
     },
@@ -596,7 +612,7 @@
     "currentlyHearing": {
       "title": "Práve počuť",
       "subtitle": "Druhy identifikované v reálnom čase",
-      "empty": "Všetko ticho — momentálne žiadne vtáky nezistené"
+      "empty": "Všetko ticho - momentálne žiadne vtáky nezistené"
     },
     "rejected": "Zamietnuté",
     "newSpeciesHighlights": {
@@ -777,7 +793,7 @@
     "elements": {
       "banner": "Banner panela",
       "dailySummary": "Denný prehľad",
-      "newSpeciesHighlights": "Nové druhy – prehľad",
+      "newSpeciesHighlights": "Nové druhy - prehľad",
       "currentlyHearing": "Práve počuté",
       "detectionsGrid": "Nedávne detekcie",
       "liveSpectrogram": "Živý spektrogram",
@@ -797,8 +813,8 @@
       "species": "Druh",
       "observation": "Pozorovanie",
       "aria": {
-        "downloadAudioClip": "Download audio clip for {name} detection",
-        "audioRecordingFor": "Audio recording and spectrogram for {name}",
+        "downloadAudioClip": "Stiahnuť zvukový záznam pre detekciu {name}",
+        "audioRecordingFor": "Zvukový záznam a spektrogram pre {name}",
         "scientificName": "Vedecký názov",
         "classificationBadges": "Odznaky klasifikácie druhu",
         "confidence": "Istota detekcie {confidence}%",
@@ -940,7 +956,7 @@
       "viewDetails": "Zobraziť podrobnosti pre {species}",
       "play": "Prehrať",
       "playAudio": "Prehrať zvuk",
-      "imageFailedToLoad": "Image failed to load"
+      "imageFailedToLoad": "Obrázok sa nepodarilo načítať"
     },
     "media": {
       "title": "Nahrávka a spektrogram",
@@ -1110,7 +1126,7 @@
       "labels": {
         "free": "Voľná",
         "available": "Dostupná",
-        "buffCache": "Buff/Cache"
+        "buffCache": "Vyrovnávacia pamäť"
       }
     },
     "progress": {
@@ -1153,151 +1169,166 @@
     "sections": {
       "overview": "Prehľad",
       "database": "Databáza",
-      "inference": "AI Models",
+      "inference": "Modely AI",
       "terminal": "Terminál",
       "importExport": "Import / Export"
     },
     "importExport": {
-      "available": "Available",
-      "comingSoon": "Coming soon",
-      "loading": "Loading...",
-      "runInBackground": "Close (import continues in background)",
-      "runInBackgroundTitle": "Dismiss this dialog. The import keeps running in the background.",
-      "stepAnnouncement": "Step {current} of {total}: {name}",
+      "available": "Dostupné",
+      "experimental": "Experimentálne",
+      "comingSoon": "Už čoskoro",
+      "loading": "Načítava sa...",
+      "runInBackground": "Zavrieť (import pokračuje na pozadí)",
+      "runInBackgroundTitle": "Zavrieť toto dialógové okno. Import pokračuje na pozadí.",
+      "stepAnnouncement": "Krok {current} z {total}: {name}",
       "steps": {
-        "source": "Source",
-        "mode": "Mode",
-        "confirm": "Confirm",
-        "progress": "Progress",
-        "done": "Done"
+        "source": "Zdroj",
+        "mode": "Režim",
+        "confirm": "Potvrdiť",
+        "progress": "Priebeh",
+        "done": "Hotovo"
       },
       "import": {
         "sectionTitle": "Import"
       },
       "export": {
         "sectionTitle": "Export",
-        "cardTitle": "Export detections",
-        "cardDescription": "Export your detection data to CSV, JSON, or other formats.",
-        "startButton": "Export",
-        "disabledReason": "Export is not yet available. Check back in a future release."
+        "cardTitle": "Exportovať detekcie",
+        "cardDescription": "Exportujte svoje údaje detekcií do formátu CSV, JSON alebo iných formátov."
       },
       "birdnetPi": {
         "cardTitle": "BirdNET-Pi",
-        "cardDescription": "Import detection history from a BirdNET-Pi SQLite database (birds.db).",
-        "startButton": "Import from BirdNET-Pi",
-        "wizardTitle": "Import from BirdNET-Pi"
+        "cardDescription": "Importujte históriu detekcií z databázy SQLite BirdNET-Pi (birds.db).",
+        "startButton": "Importovať z BirdNET-Pi",
+        "wizardTitle": "Importovať z BirdNET-Pi",
+        "experimentalNotice": "Import z BirdNET-Pi je experimentálny a stále môže mať problémy.",
+        "reportBug": "Nahlásiť chybu na GitHube"
+      },
+      "birdsDbUpload": {
+        "cardTitle": "Nahranie birds.db",
+        "cardDescription": "Nahrajte súbor databázy BirdNET-Pi priamo z prehliadača."
+      },
+      "activity": {
+        "sectionTitle": "Aktivita importu",
+        "empty": {
+          "title": "Žiadna aktivita importu",
+          "description": "Keď import beží, jeho priebeh sa zobrazí tu."
+        },
+        "openWizard": "Otvoriť sprievodcu importom"
       },
       "wizard": {
-        "stepsLabel": "Import wizard steps"
+        "stepsLabel": "Kroky sprievodcu importom"
       },
       "sourceAccess": {
-        "pathLabel": "Path to birds.db (relative to mount root)",
-        "pathHelpText": "Enter the path relative to the external media mount root, e.g. birdnet-pi/birds.db",
-        "pathRequiredReason": "Enter the path to birds.db to continue",
-        "mountDescription": "Your BirdNET-Pi database should be on the external media mount.",
-        "mountRoot": "Mount root",
-        "nativeTitle": "External media mount required",
-        "nativeDescription": "BirdNET-Pi import requires an external media mount, which is only available when BirdNET-Go runs in a container. Native (non-containerized) installs cannot use this import feature.",
-        "nativeHowTo": "To import from BirdNET-Pi, run BirdNET-Go in a container with the BirdNET-Pi data directory mounted as the external media volume.",
-        "missingTitle": "External media mount not found",
-        "missingDescription": "BirdNET-Go is running in a container but the external media mount is not accessible. Follow the steps below to set it up.",
-        "setupStepsLabel": "Setup steps",
-        "recheckButton": "Re-check",
-        "recheckHint": "After completing the setup steps, click Re-check to continue."
+        "pathLabel": "Cesta k birds.db (relatívna ku koreňu pripojenia)",
+        "pathHelpText": "Zadajte cestu relatívnu ku koreňu pripojenia externého média, napr. birdnet-pi/birds.db",
+        "pathRequiredReason": "Pokračujte zadaním cesty k birds.db",
+        "mountDescription": "Vaša databáza BirdNET-Pi by mala byť na pripojení externého média.",
+        "mountRoot": "Koreň pripojenia",
+        "nativeTitle": "Vyžaduje sa pripojenie externého média",
+        "nativeDescription": "Import z BirdNET-Pi vyžaduje pripojenie externého média, ktoré je k dispozícii iba vtedy, keď BirdNET-Go beží v kontajneri. Natívne (nekontajnerizované) inštalácie túto funkciu importu nemôžu používať.",
+        "nativeHowTo": "Ak chcete importovať z BirdNET-Pi, spustite BirdNET-Go v kontajneri s dátovým adresárom BirdNET-Pi pripojeným ako zväzok externého média.",
+        "missingTitle": "Pripojenie externého média sa nenašlo",
+        "missingDescription": "BirdNET-Go beží v kontajneri, ale pripojenie externého média nie je dostupné. Nastavte ho podľa krokov nižšie.",
+        "setupStepsLabel": "Kroky nastavenia",
+        "recheckButton": "Skontrolovať znova",
+        "recheckHint": "Po dokončení krokov nastavenia pokračujte kliknutím na Skontrolovať znova."
       },
       "source": {
-        "title": "Where is your BirdNET-Pi data?",
-        "candidatesIntro": "We found these BirdNET-Pi databases:",
-        "selectButton": "Select",
-        "useThisButton": "Use this",
-        "detectionsSummary": "{count} detections, up to {date}",
-        "kindLocal": "On this device",
-        "kindRemovable": "Removable drive",
-        "kindNetwork": "Network location",
-        "unreadableTitle": "Found, but BirdNET-Go can't read it",
-        "unreadableOwner": "This data belongs to another user ({owner}).",
-        "manualEntryLink": "Don't see it? Enter the location manually",
-        "manualEntryLabel": "BirdNET-Pi database location",
-        "manualValidating": "Checking...",
-        "manualValid": "Found {count} detections.",
-        "manualNotFound": "We couldn't find a file there.",
-        "manualUnreadable": "Found it, but BirdNET-Go can't read it yet.",
-        "manualInvalid": "That file isn't a BirdNET-Pi database.",
-        "zeroTitle": "We couldn't find it automatically",
-        "zeroDescription": "Connect the drive that holds your BirdNET-Pi data, then check again.",
-        "checkAgainButton": "Check again",
-        "showCommandsLabel": "Show commands",
-        "containerUnreadableHint": "BirdNET-Go (running as UID {uid}) can't read this file. Fix the permissions on the host so that UID {uid} can read it, then check again.",
+        "title": "Kde sú vaše údaje BirdNET-Pi?",
+        "candidatesIntro": "Našli sme tieto databázy BirdNET-Pi:",
+        "selectButton": "Vybrať",
+        "useThisButton": "Použiť túto",
+        "detectionsSummary": "{count} detekcií, do {date}",
+        "kindLocal": "V tomto zariadení",
+        "kindRemovable": "Vymeniteľný disk",
+        "kindNetwork": "Sieťové umiestnenie",
+        "unreadableTitle": "Nájdené, ale BirdNET-Go to nedokáže prečítať",
+        "unreadableOwner": "Tieto údaje patria inému používateľovi ({owner}).",
+        "manualEntryLink": "Nevidíte to? Zadajte umiestnenie ručne",
+        "manualEntryLabel": "Umiestnenie databázy BirdNET-Pi",
+        "manualValidating": "Kontroluje sa...",
+        "manualValid": "Nájdených {count} detekcií.",
+        "manualNotFound": "Na tomto mieste sme nenašli žiadny súbor.",
+        "manualUnreadable": "Nájdené, ale BirdNET-Go to zatiaľ nedokáže prečítať.",
+        "manualInvalid": "Tento súbor nie je databáza BirdNET-Pi.",
+        "zeroTitle": "Nepodarilo sa nám to nájsť automaticky",
+        "zeroDescription": "Pripojte disk s údajmi BirdNET-Pi a skontrolujte znova.",
+        "checkAgainButton": "Skontrolovať znova",
+        "showCommandsLabel": "Zobraziť príkazy",
+        "containerUnreadableHint": "BirdNET-Go (beží ako UID {uid}) nedokáže tento súbor prečítať. Upravte oprávnenia na hostiteľovi tak, aby ho UID {uid} mohol čítať, a potom skontrolujte znova.",
         "elevation": {
-          "copying": "Copying your data...",
-          "passwordTitle": "BirdNET-Go needs permission to read this data",
-          "passwordDescription": "Enter the administrator password for this device to let BirdNET-Go copy the data.",
-          "passwordLabel": "Administrator password",
-          "passwordRequiredReason": "Enter the administrator password to continue",
-          "httpWarning": "This page is not using HTTPS. The administrator password will be sent over your local network unencrypted. Only continue on a network you trust.",
-          "submitButton": "Copy and continue",
-          "fallbackTitle": "Run this command to grant access",
-          "fallbackDescription": "BirdNET-Go can't elevate automatically. Run the command below, then click Check again.",
-          "disabledNote": "In-app elevation is turned off. Use the command below to grant access.",
-          "failed": "That didn't work. Check the password and try again, or use the command below."
+          "copying": "Kopírujú sa vaše údaje...",
+          "passwordTitle": "BirdNET-Go potrebuje oprávnenie na čítanie týchto údajov",
+          "passwordDescription": "Zadajte heslo správcu tohto zariadenia, aby BirdNET-Go mohol údaje skopírovať.",
+          "passwordLabel": "Heslo správcu",
+          "passwordRequiredReason": "Pokračujte zadaním hesla správcu",
+          "httpWarning": "Táto stránka nepoužíva HTTPS. Heslo správcu bude odoslané cez vašu miestnu sieť nešifrovane. Pokračujte iba v sieti, ktorej dôverujete.",
+          "submitButton": "Skopírovať a pokračovať",
+          "fallbackTitle": "Spustite tento príkaz na udelenie prístupu",
+          "fallbackDescription": "BirdNET-Go nedokáže oprávnenia zvýšiť automaticky. Spustite príkaz nižšie a potom kliknite na Skontrolovať znova.",
+          "disabledNote": "Zvýšenie oprávnení v aplikácii je vypnuté. Na udelenie prístupu použite príkaz nižšie.",
+          "failed": "Nefungovalo to. Skontrolujte heslo a skúste to znova, alebo použite príkaz nižšie."
         }
       },
       "mode": {
-        "label": "What do you want to import?",
+        "label": "Čo chcete importovať?",
         "dbOnly": {
-          "label": "Database only",
-          "description": "Import detection records from birds.db. Audio clips are not imported."
+          "label": "Iba databáza",
+          "description": "Importujte záznamy detekcií z birds.db. Zvukové klipy sa neimportujú."
         },
         "dbAudio": {
-          "label": "Database + audio clips",
-          "description": "Import detection records and associated audio recordings.",
-          "badge": "Not available",
-          "disabledReason": "Audio clip import is not yet available. Only database-only import is supported."
+          "label": "Databáza + zvukové klipy",
+          "description": "Importujte záznamy detekcií a súvisiace zvukové nahrávky.",
+          "badge": "Nie je k dispozícii",
+          "disabledReason": "Import zvukových klipov zatiaľ nie je k dispozícii. Podporovaný je iba import databázy."
         }
       },
       "confirm": {
-        "description": "Review your import settings before starting. Imported detections are tagged with the source birdnet-pi and duplicates are skipped automatically.",
-        "source": "Source path",
-        "mode": "Import mode",
-        "tagging": "Source tag",
-        "taggingValue": "birdnet-pi (auto-applied)",
-        "deduplicationNote": "Duplicate detections (same species, time, and date already in the database) are skipped automatically. Exact counts will be shown live during the import.",
-        "startButton": "Start import"
+        "description": "Pred spustením skontrolujte nastavenia importu. Importované detekcie sú označené zdrojom birdnet-pi a duplicity sú automaticky preskočené.",
+        "source": "Zdrojová cesta",
+        "mode": "Režim importu",
+        "tagging": "Značka zdroja",
+        "taggingValue": "birdnet-pi (použité automaticky)",
+        "deduplicationNote": "Duplicitné detekcie (rovnaký druh, čas a dátum už v databáze) sú automaticky preskočené. Presné počty sa počas importu zobrazia naživo.",
+        "startButton": "Spustiť import"
       },
       "progress": {
-        "label": "Import progress",
-        "runningLabel": "Import running",
-        "progressLabel": "{percent}% complete",
-        "cancelButton": "Cancel",
-        "cancellingLabel": "Cancelling...",
-        "cancelledMessage": "Import was cancelled.",
-        "processed": "Processed",
-        "inserted": "Inserted",
-        "skipped": "Skipped",
-        "errors": "Errors",
+        "label": "Priebeh importu",
+        "runningLabel": "Import prebieha",
+        "progressLabel": "{percent} % dokončené",
+        "cancelButton": "Zrušiť",
+        "cancellingLabel": "Ruší sa...",
+        "cancelledMessage": "Import bol zrušený.",
+        "processed": "Spracované",
+        "inserted": "Vložené",
+        "skipped": "Preskočené",
+        "errors": "Chyby",
         "phase": {
-          "validate": "Validating",
-          "dedup": "Deduplicating",
-          "import": "Importing"
+          "validate": "Overuje sa",
+          "dedup": "Odstraňujú sa duplicity",
+          "import": "Importuje sa"
         }
       },
       "done": {
-        "successTitle": "Import complete",
-        "successDescription": "Your BirdNET-Pi detections have been imported successfully.",
-        "cancelledTitle": "Import cancelled",
-        "cancelledDescription": "The import was cancelled before completing.",
-        "errorTitle": "Import failed",
-        "viewDetectionsLink": "View imported detections",
-        "partialInserted": "{count} detections were imported before cancellation.",
-        "importAnother": "Import another"
+        "successTitle": "Import dokončený",
+        "successDescription": "Vaše detekcie BirdNET-Pi boli úspešne importované.",
+        "cancelledTitle": "Import zrušený",
+        "cancelledDescription": "Import bol zrušený pred dokončením.",
+        "errorTitle": "Import zlyhal",
+        "interruptedTitle": "Import prerušený",
+        "interruptedDescription": "Spojenie so serverom sa počas importu prerušilo, takže jeho konečný výsledok nie je známy. Skontrolujte svoje detekcie a v prípade potreby spustite import znova.",
+        "viewDetectionsLink": "Zobraziť importované detekcie",
+        "partialInserted": "Pred zrušením bolo importovaných {count} detekcií.",
+        "importAnother": "Importovať ďalší"
       },
       "errors": {
-        "loadFailed": "Failed to load import status. Please try again.",
-        "mediaLoadFailed": "Failed to check external media. Please try again.",
-        "alreadyRunning": "An import is already in progress. Please wait for it to complete.",
-        "startFailed": "Failed to start import. Please try again.",
-        "cancelFailed": "Failed to cancel import.",
-        "importFailed": "Import failed. Please check your configuration and try again."
+        "loadFailed": "Nepodarilo sa načítať stav importu. Skúste to znova.",
+        "mediaLoadFailed": "Nepodarilo sa skontrolovať externé médiá. Skúste to znova.",
+        "alreadyRunning": "Import už prebieha. Počkajte na jeho dokončenie.",
+        "startFailed": "Nepodarilo sa spustiť import. Skúste to znova.",
+        "cancelFailed": "Nepodarilo sa zrušiť import.",
+        "importFailed": "Import zlyhal. Skontrolujte konfiguráciu a skúste to znova."
       }
     },
     "database": {
@@ -1491,10 +1522,10 @@
           "targetV2": "Cieľ (V2)",
           "recordsLabel": "Záznamy",
           "sizeLabel": "Veľkosť",
-          "prerequisitesNotMet": "Predpoklady nesplnené — vyriešte kritické problémy nižšie",
+          "prerequisitesNotMet": "Predpoklady nesplnené - vyriešte kritické problémy nižšie",
           "validatingTitle": "Validácia dát",
           "validatingBody": "Porovnávanie {count} starých záznamov s databázou V2...",
-          "dirtyRecordsCatchup": "{count} nesynchronizovaných záznamov — bude sa pokúšať o dodatočnú rekonciliáciu",
+          "dirtyRecordsCatchup": "{count} nesynchronizovaných záznamov - bude sa pokúšať o dodatočnú rekonciliáciu",
           "cutoverTitle": "Dokončovanie prechodu",
           "cutoverBody": "Dokončovanie prechodu na databázu V2...",
           "migratingPhase": "Migrácia {phase}",
@@ -1503,7 +1534,7 @@
           "percentComplete": "{percent}% dokončené",
           "recordsPerSec": "{rate} záznamov/s",
           "calculating": "Výpočet...",
-          "dirtyWriteFailed": "{count} záznamov sa nepodarilo zapísať — budú zosúladené počas validácie"
+          "dirtyWriteFailed": "{count} záznamov sa nepodarilo zapísať - budú zosúladené počas validácie"
         },
         "details": {
           "title": "Podrobnosti databázy",
@@ -1513,7 +1544,7 @@
           "integrity": "Integrita: {status}"
         },
         "strip": {
-          "legacy": "Legacy",
+          "legacy": "Staršia verzia",
           "v2Target": "V2 (Cieľ)",
           "active": "Aktívny",
           "migration": "Migrácia",
@@ -1654,57 +1685,68 @@
       }
     },
     "inference": {
-      "title": "AI Models & Inference",
-      "loading": "Loading inference status",
-      "error": "Could not load inference status",
-      "sectionHardware": "Hardware",
-      "sectionBackends": "Inference Backends",
-      "sectionModels": "Models",
+      "title": "Modely AI a inferencia",
+      "loading": "Načítanie stavu inferencie",
+      "error": "Nepodarilo sa načítať stav inferencie",
+      "sectionHardware": "Hardvér",
+      "sectionBackends": "Backendy pre inferenciu",
+      "sectionModels": "Modely",
       "noModels": "No models are currently loaded",
-      "architecture": "Architecture",
+      "architecture": "Architektúra",
       "cpu": "CPU",
-      "environment": "Environment",
+      "environment": "Prostredie",
       "fp16": "FP16",
-      "fp16Supported": "FP16 supported",
-      "fp16Unsupported": "FP16 not supported",
+      "fp16Supported": "FP16 podporované",
+      "fp16Unsupported": "FP16 nepodporované",
       "backendTflite": "TensorFlow Lite",
       "backendOnnx": "ONNX Runtime",
       "backendOpenvino": "OpenVINO",
-      "available": "Available",
-      "notAvailable": "Not available",
-      "active": "Active",
-      "inactive": "Inactive",
-      "initialized": "Initialized",
-      "version": "Version",
-      "devices": "Devices",
-      "stock": "Stock",
-      "custom": "Custom",
-      "sampleRate": "Sample rate",
+      "available": "Dostupné",
+      "notAvailable": "Nedostupné",
+      "active": "Aktívne",
+      "inactive": "Neaktívne",
+      "initialized": "Inicializované",
+      "version": "Verzia",
+      "devices": "Zariadenia",
+      "board": "Doska",
+      "soc": "SoC",
+      "memory": "Pamäť",
+      "cores": "Jadrá",
+      "gpu": "Grafická karta",
+      "gpuReachable": "Dostupná",
+      "gpuNotReachable": "Nedostupná",
+      "gpuReasonRenderNodeUnavailable": "Server nevidí uzol grafického zariadenia. V Dockeri namapujte /dev/dri do kontajnera; pri natívnej inštalácii skontrolujte ovládač.",
+      "gpuReasonRenderNodePermission": "Uzol zariadenia GPU nie je možné otvoriť. Užívateľ BirdNET-Go potrebuje prístup k skupine zariadenia, zvyčajne 'render'.",
+      "gpuReasonNoRuntime": "BirdNET-Go aktuálne urýchľuje inferenciu len na grafike Intel, takže táto karta sa nevyužije.",
+      "gpuReasonUnknown": "Túto GPU nie je možné použiť pre inferenciu.",
+      "stock": "Predvolené",
+      "custom": "Vlastné",
+      "sampleRate": "Vzorkovacia frekvencia",
       "clipLength": "Dĺžka segmentu",
-      "species": "Species",
-      "invocations": "Segments analysed",
-      "avgLatency": "Avg latency",
-      "maxLatency": "Max latency",
-      "rtf": "RTF",
-      "rtfLabel": "Real-time factor",
-      "approxRam": "Approx. host RAM (RSS)",
-      "approxRamTooltip": "Approximate host RAM (RSS) measured at model load. Excludes GPU VRAM, and may be skewed by shared runtime memory arenas and OS page reclamation.",
-      "latencyChart": "Latency (ms)",
-      "rtfChart": "Real-time factor",
-      "sources": "Audio sources",
-      "noSources": "No sources attached",
-      "primaryFallback": "primary (fallback)",
+      "species": "Druhy",
+      "invocations": "Analyzované segmenty",
+      "avgLatency": "Priemerná latencia",
+      "maxLatency": "Maximálna latencia",
+      "rtf": "Faktor reálneho času (RTF)",
+      "rtfLabel": "Faktor reálneho času",
+      "approxRam": "Pribl. RAM (RSS)",
+      "approxRamTooltip": "Približná pamäť hostiteľa (RSS) nameraná pri načítavaní modelu. Nezahŕňa VRAM.",
+      "latencyChart": "Latencia (ms)",
+      "rtfChart": "Faktor reálneho času",
+      "sources": "Zdroje zvuku",
+      "noSources": "Žiadne pripojené zdroje",
+      "primaryFallback": "primárny (záložný)",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",
       "unitSec": "s",
-      "sectionAudio": "Audio",
-      "queueDepth": "Queue depth",
-      "queueDepthChart": "Queue depth",
-      "droppedChunks": "Dropped chunks",
-      "queueCapacity": "Capacity",
-      "lastSeen": "Last seen",
-      "lastSeenNever": "No detections yet",
+      "sectionAudio": "Zvuk",
+      "queueDepth": "Dĺžka fronty",
+      "queueDepthChart": "Dĺžka fronty",
+      "droppedChunks": "Zahodené úseky",
+      "queueCapacity": "Kapacita",
+      "lastSeen": "Naposledy videné",
+      "lastSeenNever": "Zatiaľ žiadne detekcie",
       "deviceHelp": "Výpočtové zariadenie, na ktorom tento model spúšťa inferenciu (CPU, GPU alebo neznáme).",
       "paused": "Pozastavené",
       "pausedScheduleHelp": "Tento model beží iba podľa plánu a momentálne je pozastavený, takže nespracováva zvuk.",
@@ -1718,24 +1760,24 @@
       "coDetectedHelp": "Iné modely, ktoré tento druh zachytili do {seconds}s",
       "outOfRangeHelp": "Mimo oblastného filtra (zobrazené na diagnostiku, neuložené ako detekcia)",
       "peak": "špička",
-      "activityActive": "Inference active",
-      "activityIdle": "Idle",
-      "throughput": "Throughput",
+      "activityActive": "Inferencia aktívna",
+      "activityIdle": "Nečinný",
+      "throughput": "Priepustnosť",
       "throughputUnit": "/s",
-      "throughputChart": "Throughput (/s)",
-      "errorRate": "Error rate",
-      "loadFailures": "Load failures",
-      "rtfHelp": "Real-time factor: inference time divided by clip length. Below 1.0 means the model analyses a segment faster than real time (keeping up); above 1.0 means it is falling behind.",
-      "queueDepthHelp": "Audio segments waiting to be analysed. Stays near zero when analysis keeps up; a rising number means it is falling behind.",
-      "queueCapacityHelp": "Maximum number of segments the queue can hold before new audio is dropped.",
-      "droppedChunksHelp": "Audio chunks discarded because the queue was full. Should stay at zero.",
-      "throughputHelp": "Segments analysed per second by this model.",
-      "errorRateHelp": "Share of analysis attempts that failed.",
-      "loadFailuresHelp": "Number of times this model failed to load.",
-      "fp16Help": "16-bit floating point. Hardware that supports it can run some models faster and with less memory.",
-      "invocationsHelp": "Total audio segments this model has analysed since startup.",
-      "noModelsHint": "No audio source configured yet?",
-      "noModelsHintLink": "Configure audio sources"
+      "throughputChart": "Priepustnosť (/s)",
+      "errorRate": "Miera chýb",
+      "loadFailures": "Zlyhania načítania",
+      "rtfHelp": "Čas inferencie delený dĺžkou klipu. Pod 1.0 znamená, že model analyzuje rýchlejšie ako v reálnom čase; nad 1.0 znamená, že nestíha.",
+      "queueDepthHelp": "Zvukové segmenty čakajúce na analýzu. Rastúce číslo znamená, že model nestíha.",
+      "queueCapacityHelp": "Maximálny počet segmentov, ktoré môže fronta pojať.",
+      "droppedChunksHelp": "Zvukové úseky zahodené kvôli plnej fronte.",
+      "throughputHelp": "Segmenty analyzované za sekundu.",
+      "errorRateHelp": "Podiel pokusov o analýzu, ktoré zlyhali.",
+      "loadFailuresHelp": "Počet, koľkokrát sa model nepodarilo načítať.",
+      "fp16Help": "16-bitové čísla s pohyblivou rádovou čiarkou. Hardvér s podporou môže byť rýchlejší a spotrebuje menej pamäte.",
+      "invocationsHelp": "Celkový počet analyzovaných segmentov od spustenia.",
+      "noModelsHint": "Zatiaľ žiadny zdroj zvuku?",
+      "noModelsHintLink": "Nakonfigurovať zdroje zvuku"
     },
     "metrics": {
       "cpu": "CPU",
@@ -1794,11 +1836,14 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Prehľad",
         "patterns": "Vzorce aktivity",
         "trends": "Trendy",
         "biodiversity": "Biodiverzita",
-        "quality": "Kontrola a presnosť"
+        "quality": "Kontrola a presnosť",
+        "summary": "Zhrnutie",
+        "nocturnal": "Nočná aktivita",
+        "weather": "Počasie",
+        "soundscape": "Zvuková krajina"
       },
       "aria": {
         "tabs": "Sekcie analýzy"
@@ -1806,9 +1851,9 @@
       "controls": {
         "source": "Zdroj",
         "sourceAll": "Všetky zdroje",
-        "sourceLoading": "Loading audio sources…",
-        "sourceNone": "No audio sources with detections yet.",
-        "sourceNotApplicable": "The charts in this section do not filter by source.",
+        "sourceLoading": "Načítavanie zdrojov zvuku...",
+        "sourceNone": "Žiadne zdroje zvuku s detekciami.",
+        "sourceNotApplicable": "Grafy v tejto sekcii sa nedajú filtrovať podľa zdroja.",
         "speciesNotApplicable": "Grafy v tejto sekcii nefiltrujú podľa druhu."
       },
       "card": {
@@ -1818,13 +1863,25 @@
         "notEnoughDataHint": "Tento graf potrebuje aspoň {min} dátových bodov. Pokračujte v nahrávaní a vráťte sa čoskoro.",
         "export": "Exportovať",
         "exportComingSoon": "Export do CSV čoskoro príde."
-      },
-      "comingSoon": {
-        "description": "Táto sekcia sa pripravuje a príde v niektorej z budúcich aktualizácií."
       }
     },
-    "title": "Prehľad",
     "loadingError": "Nepodarilo sa načítať niektoré analytické dáta. Skúste to neskôr.",
+    "comingSoon": {
+      "badge": "Čoskoro k dispozícii",
+      "plannedTitle": "Plánované funkcie",
+      "weather": {
+        "description": "Aktivita vtákov sledovaná oproti miestnym poveternostným podmienkam. Toto zobrazenie bude korelovať detekcie s teplotou, vetrom a zrážkami.",
+        "feature1": "Korelovať detekcie s teplotou, vetrom a zrážkami",
+        "feature2": "Zistiť, ako atmosferické fronty ovplyvňujú aktivitu druhov",
+        "feature3": "Porovnať sezónnu aktivitu s historickými meteorologickými údajmi"
+      },
+      "soundscape": {
+        "description": "Pohľad na celkový akustický charakter vášho prostredia pomocou akustických indexov na zhrnutie rozmanitosti zvukovej krajiny v čase.",
+        "feature1": "Akustické indexy zhŕňajúce zložitosť zvukovej krajiny",
+        "feature2": "Sledovanie biodiverzity prostredníctvom okolitého zvuku v priebehu času",
+        "feature3": "Odhalenie úsvitových a súmračných zborov v akustickom zázname"
+      }
+    },
     "stats": {
       "totalDetections": "Celkovo detekcií",
       "uniqueSpecies": "Unikátne druhy",
@@ -1955,11 +2012,11 @@
       "charts": {
         "timeOfDay": {
           "title": "Vzorce detekcií podľa dennej doby",
-          "description": "Zobrazuje priemerný počet detekcií počas dňa pre vybrané druhy",
+          "description": "Priemerný počet detekcií za deň v každú hodinu, naprieč vybraným rozsahom dátumov a druhmi",
           "noData": "Nie sú k dispozícii žiadne dáta o dennej dobe",
           "noDataHint": "Vyberte druhy a rozsah dátumov na zobrazenie vzorcov",
           "axisTime": "Čas dňa",
-          "axisCount": "Počet zistení"
+          "axisCount": "Priem. detekcie / deň"
         },
         "dailyTrend": {
           "title": "Trendy detekcií druhov",
@@ -1979,124 +2036,124 @@
           "axisUniqueSpecies": "Jedinečné druhy"
         },
         "accumulation": {
-          "title": "Species Accumulation Curve",
+          "title": "Krivka akumulácie druhov",
           "description": "Cumulative number of distinct species detected within the selected period. The curve climbs as new species appear and flattens toward an asymptote once the common ones have been recorded; a still-rising tail means more species are likely waiting to be found.",
-          "noData": "No species accumulation data available",
-          "noDataHint": "Select a wider date range to watch the species list build up over time",
-          "ariaLabel": "Species accumulation curve: cumulative distinct species detected over the period",
-          "axisDate": "Date",
-          "axisSpecies": "Cumulative species",
-          "totalSpecies": "{species} species",
-          "tooltipCumulative": "Cumulative species",
-          "tooltipNew": "New in period",
-          "summary": "Cumulative species accumulation across {days} days, reaching {species} distinct species by the end of the period."
+          "noData": "Žiadne dáta o akumulácii druhov",
+          "noDataHint": "Zvoľte dlhšie obdobie pre zobrazenie prírastku druhov.",
+          "ariaLabel": "Krivka akumulácie druhov: celkový počet zistených druhov",
+          "axisDate": "Dátum",
+          "axisSpecies": "Kumulatívne druhy",
+          "totalSpecies": "{species} druhov",
+          "tooltipCumulative": "Kumulatívne druhy",
+          "tooltipNew": "Nový v období",
+          "summary": "Kumulatívny počet za {days} dní dosiahol {species} druhov."
         },
         "yearOverYear": {
-          "title": "Year-over-Year Tracker",
-          "description": "Cumulative detections so far this year versus the same calendar dates last year. The shaded band is the running gap between the two; this year's line sitting above last year's means you are ahead of last year's pace.",
-          "noData": "No year-over-year data available",
-          "noDataHint": "Detections from this year and last year build up here as the year progresses",
-          "ariaLabel": "Year-over-year tracker: cumulative detections this year versus the same span last year",
-          "axisDate": "Date",
-          "axisCount": "Cumulative detections",
-          "legendThis": "{year} (this year)",
-          "legendLast": "{year} (last year)",
-          "tooltipDelta": "Difference",
-          "summary": "Year over year: by {monthDay}, {currentYear} has {thisYear} cumulative detections versus {lastYear} for {previousYear} (a difference of {delta})."
+          "title": "Medziročné porovnanie",
+          "description": "Kumulatívne detekcie v tomto roku voči rovnakému obdobiu vlani. Tieňovaný pruh je rozdiel; čiara nad lanskou značí väčšiu aktivitu.",
+          "noData": "Žiadne dáta pre medziročné porovnanie",
+          "noDataHint": "Detekcie z tohto a lanského roka sa tu postupne zobrazia.",
+          "ariaLabel": "Medziročné porovnanie: kumulatívne detekcie tento rok verzus vlani",
+          "axisDate": "Dátum",
+          "axisCount": "Kumulatívne detekcie",
+          "legendThis": "{year} (tento rok)",
+          "legendLast": "{year} (minulý rok)",
+          "tooltipDelta": "Rozdiel",
+          "summary": "Medziročne: k {monthDay} má rok {currentYear} celkom {thisYear} kumulatívnych detekcií oproti {lastYear} v roku {previousYear} (rozdiel {delta})."
         },
         "phenology": {
-          "title": "Arrival & Departure Phenology",
-          "description": "First and last detection of each species within the selected period, drawn as residency bars for the most-detected species. Read it top to bottom in arrival order to see who shows up first and who lingers latest across the season.",
-          "noData": "No phenology data available",
-          "noDataHint": "Select a wider date range to see when species arrive and depart",
-          "ariaLabel": "Arrival and departure phenology: residency bars showing each species' first-to-last detection span",
-          "axisDate": "Date",
-          "summary": "Arrival and departure residency spans for {species} species across the selected period.",
-          "tooltipFirst": "First detected",
-          "tooltipLast": "Last detected",
-          "tooltipResidency": "Residency",
-          "tooltipCount": "Detections",
-          "residencyDays": "{days} days"
+          "title": "Fenológia príletov a odletov",
+          "description": "Prvá a posledná detekcia každého druhu ako stĺpce pri najčastejších druhoch.",
+          "noData": "Žiadne fenologické dáta",
+          "noDataHint": "Zvoľte dlhšie obdobie pre sledovanie, kedy druhy prilietajú a odlietajú",
+          "ariaLabel": "Fenológia príletov a odletov: interval od prvej do poslednej detekcie",
+          "axisDate": "Dátum",
+          "summary": "Rozpätie príletov a odletov pre {species} druhov za vybrané obdobie.",
+          "tooltipFirst": "Prvá detekcia",
+          "tooltipLast": "Posledná detekcia",
+          "tooltipResidency": "Výskyt",
+          "tooltipCount": "Detekcie",
+          "residencyDays": "{days} dní"
         },
         "heatmap": {
-          "title": "Seasonal Activity Heatmap",
+          "title": "Sezónna teplotná mapa aktivity",
           "description": "Detection density by date and time of day, revealing migration waves and dawn-chorus drift",
-          "noData": "No activity data available",
+          "noData": "Žiadne dáta o aktivite",
           "noDataHint": "Select a date range to view seasonal activity patterns",
-          "axisDate": "Date",
-          "axisTime": "Time of Day",
-          "tooltipTime": "Time",
-          "tooltipCount": "Detections",
-          "legendLess": "Less",
-          "legendMore": "More ({max})",
-          "ariaLabel": "Seasonal activity heatmap: detection density by date and time of day",
-          "summary": "{total} detections across {days} days. Busiest around {time} on {date}."
+          "axisDate": "Dátum",
+          "axisTime": "Denná doba",
+          "tooltipTime": "Čas",
+          "tooltipCount": "Detekcie",
+          "legendLess": "Menej",
+          "legendMore": "Viac ({max})",
+          "ariaLabel": "Sezónna teplotná mapa aktivity: hustota detekcií podľa dátumu a dennej doby",
+          "summary": "{total} detekcií počas {days} dní. Najrušnejšie okolo {time} dňa {date}."
         },
         "ridgeline": {
-          "title": "Who Sings When",
+          "title": "Kto kedy spieva",
           "description": "Hour-of-day activity for the most-detected species, sorting dawn singers from all-day and nocturnal birds",
-          "noData": "No species activity data available",
+          "noData": "Nie sú k dispozícii žiadne údaje o aktivite druhov",
           "noDataHint": "Select a wider date range to compare species activity patterns",
-          "ariaLabel": "Who-sings-when ridgeline: hour-of-day activity distribution per species",
-          "axisTime": "Time of Day",
-          "note": "Showing the top {count} species by detection volume",
-          "tooltipDetections": "Detections",
-          "tooltipPeak": "Peak",
-          "summary": "Hour-of-day activity for {count} species. Most active: {species} around {time}."
+          "ariaLabel": "Graf kto kedy spieva: rozloženie aktivity druhov podľa dennej doby",
+          "axisTime": "Denná doba",
+          "note": "Zobrazenie top {count} druhov podľa objemu detekcií",
+          "tooltipDetections": "Detekcie",
+          "tooltipPeak": "Vrchol",
+          "summary": "Aktivita v závislosti od dennej doby pre {count} druhov. Najaktívnejšie: {species} okolo {time}."
         },
         "succession": {
-          "title": "Acoustic Succession",
+          "title": "Akustická postupnosť",
           "description": "How the soundscape's top species hand off through the day, shown as stacked bands of hourly detections from pre-dawn through night",
-          "noData": "No acoustic succession data available",
+          "noData": "Žiadne dáta o postupnosti",
           "noDataHint": "Select a wider date range to see how species hand off through the day",
           "ariaLabel": "Acoustic succession streamgraph: stacked hour-of-day detections for the top species",
-          "axisTime": "Time of Day",
-          "note": "Combined hourly activity of the top {count} species by detection volume",
-          "tooltipDetections": "Detections",
-          "tooltipPeak": "Peak",
-          "summary": "Hour-of-day succession for {count} species. Most active: {species} around {time}."
+          "axisTime": "Denná doba",
+          "note": "Kombinovaná hodinová aktivita horných {count} druhov",
+          "tooltipDetections": "Detekcie",
+          "tooltipPeak": "Vrchol",
+          "summary": "Hodinová postupnosť {count} druhov. Najaktívnejšie: {species} okolo {time}."
         },
         "dawnOnset": {
-          "title": "Dawn Chorus Onset",
-          "description": "When the morning chorus starts each day relative to civil dawn, isolating the seasonal shift from clock time",
-          "noData": "No dawn chorus data available",
+          "title": "Nástup ranného zboru",
+          "description": "Kedy začína ranný zbor relatívne voči občianskemu svitaniu.",
+          "noData": "Žiadne dáta o rannom zbore",
           "noDataHint": "Select a wider date range to track how the dawn chorus shifts across the seasons",
-          "ariaLabel": "Dawn chorus onset tracker: daily chorus onset relative to civil dawn",
-          "axisDate": "Date",
-          "axisOnset": "Minutes from civil dawn",
-          "civilDawn": "Civil dawn",
-          "tooltipOnset": "Onset",
-          "tooltipOnsetAfter": "{minutes} min after civil dawn",
-          "tooltipOnsetBefore": "{minutes} min before civil dawn",
-          "tooltipOnsetAt": "At civil dawn",
-          "tooltipCount": "Detections",
-          "summary": "Dawn chorus onset relative to civil dawn across {days} days ({plotted} with a measurable onset)."
+          "ariaLabel": "Nástup ranného zboru relatívne voči občianskemu svitaniu",
+          "axisDate": "Dátum",
+          "axisOnset": "Minút od občianskeho svitania",
+          "civilDawn": "Občianske svitanie",
+          "tooltipOnset": "Nástup",
+          "tooltipOnsetAfter": "{minutes} min po svitaní",
+          "tooltipOnsetBefore": "{minutes} min pred svitaním",
+          "tooltipOnsetAt": "Pri svitaní",
+          "tooltipCount": "Detekcie",
+          "summary": "Nástup ranného zboru voči svitaniu naprieč {days} dňami ({plotted} s merateľným nástupom)."
         },
         "nocturnal": {
-          "title": "Nocturnal Activity Clock",
-          "description": "Detections around the 24-hour clock with the daytime hours shaded, making nighttime activity stand out",
-          "noData": "No activity data available",
-          "noDataHint": "Select a wider date range or a more active period to see the daily activity pattern",
-          "ariaLabel": "Nocturnal activity clock: detections by hour of day with daytime shading",
-          "axisHour": "Hour of day",
-          "tooltipHour": "{start} to {end}",
-          "tooltipCount": "Detections",
-          "summary": "Detection activity by hour of day ({total} detections, most active around {peak}). Daytime hours are shaded.",
-          "legendDay": "Day",
-          "legendTwilight": "Twilight",
-          "legendNight": "Night"
+          "title": "Hodiny nočnej aktivity",
+          "description": "Detekcie v 24-hodinovom cykle s tieňovanými dennými hodinami.",
+          "noData": "Žiadne dáta o aktivite",
+          "noDataHint": "Zvoľte dlhšie alebo aktívnejšie obdobie.",
+          "ariaLabel": "Hodiny nočnej aktivity: detekcie podľa hodiny dňa s tieňovaným dňom",
+          "axisHour": "Hodina dňa",
+          "tooltipHour": "{start} až {end}",
+          "tooltipCount": "Detekcie",
+          "summary": "Aktivita detekcií podľa hodiny ({total} detekcií, vrchol okolo {peak}). Deň je tieňovaný.",
+          "legendDay": "Deň",
+          "legendTwilight": "Súmrak",
+          "legendNight": "Noc"
         },
         "confidence": {
-          "title": "Confidence Distribution",
-          "description": "How confident the model is per species, so you can spot the birds it most often second-guesses",
-          "noData": "No confidence data available",
-          "noDataHint": "Select a wider date range to compare how confident the model is across species",
-          "ariaLabel": "Confidence distribution: per-species histogram of detection confidence scores",
-          "axisLabel": "Confidence",
-          "note": "Showing the top {count} species by detection volume",
-          "tooltipCount": "Detections",
-          "tooltipPeak": "Peak confidence",
-          "summary": "Detection-confidence distribution for {count} species. {species} clusters around {time} confidence."
+          "title": "Rozloženie spoľahlivosti",
+          "description": "Aký spoľahlivý je model pre každý druh, takže môžete zistiť, o ktorých vtákoch model najčastejšie pochybuje",
+          "noData": "Nie sú k dispozícii žiadne údaje o spoľahlivosti",
+          "noDataHint": "Vyberte širšie časové obdobie pre porovnanie spoľahlivosti modelu naprieč druhmi",
+          "ariaLabel": "Rozloženie spoľahlivosti: histogram skóre spoľahlivosti detekcií pre každý druh",
+          "axisLabel": "Spoľahlivosť",
+          "note": "Zobrazenie top {count} druhov podľa objemu detekcií",
+          "tooltipCount": "Detekcie",
+          "tooltipPeak": "Maximálna spoľahlivosť",
+          "summary": "Rozloženie spoľahlivosti detekcií pre {count} druhov. {species} sa zhlukuje okolo spoľahlivosti {time}."
         },
         "tooltips": {
           "date": "Dátum",
@@ -2330,7 +2387,7 @@
               "helpText": "Hostiteľ databázy MySQL (IP alebo hostname)"
             },
             "port": {
-              "label": "MySQL Port",
+              "label": "Port MySQL",
               "helpText": "Port databázy MySQL (predvolené 3306/TCP)"
             },
             "username": {
@@ -2662,7 +2719,7 @@
         "resetButton": "Resetovať",
         "saveButton": "Uložiť šablóny",
         "saveButtonUnsaved": "Uložiť šablóny *",
-        "testButton": "Test",
+        "testButton": "Testovať",
         "savingButton": "Ukladá sa...",
         "sendingButton": "Odosiela sa...",
         "resetConfirm": "Resetovať šablóny na predvolené hodnoty? Týmto sa zahodia vaše aktuálne zmeny a obnovia sa pôvodné hodnoty šablón.",
@@ -2805,7 +2862,7 @@
           "saveButton": "Uložiť poskytovateľa",
           "savingButton": "Ukladá sa...",
           "cancelButton": "Zrušiť",
-          "testButton": "Test",
+          "testButton": "Testovať",
           "testingButton": "Testuje sa..."
         },
         "test": {
@@ -2871,9 +2928,9 @@
             "testConnection": "Otestovať pripojenie",
             "connectionOk": {
               "https": "HTTPS funguje",
-              "http": "HTTP funguje — server nepoužíva HTTPS"
+              "http": "HTTP funguje - server nepoužíva HTTPS"
             },
-            "connectionFailed": "Nedá sa pripojiť — skontrolujte názov hostiteľa a stav servera",
+            "connectionFailed": "Nedá sa pripojiť - skontrolujte názov hostiteľa a stav servera",
             "auth": {
               "label": "Autentifikácia (voliteľné)",
               "username": {
@@ -2882,7 +2939,7 @@
               },
               "password": {
                 "label": "Heslo / Prístupový token",
-                "placeholder": "tk_AgQdq7mVBoFD37zQVN29RioLJNGht"
+                "placeholder": "heslo"
               }
             },
             "topic": {
@@ -2912,7 +2969,7 @@
           "pushover": {
             "name": "Pushover",
             "apiToken": {
-              "label": "API Token",
+              "label": "API token",
               "placeholder": "az...",
               "helpText": "API token aplikácie"
             },
@@ -2926,7 +2983,7 @@
           "slack": {
             "name": "Slack",
             "webhookUrl": {
-              "label": "Slack Webhook URL",
+              "label": "Webhook URL pre Slack",
               "placeholder": "https://hooks.slack.com/services/...",
               "helpText": "Vložte svoju plnú Slack webhook URL"
             },
@@ -2960,18 +3017,18 @@
             "auth": {
               "label": "Autentifikácia",
               "none": "Žiadna",
-              "bearer": "Bearer Token",
+              "bearer": "Bearer token",
               "basic": "Základné overenie",
               "helpText": "Voliteľná autentifikácia pre koncový bod webhooku"
             },
             "bearerToken": {
-              "label": "Bearer Token",
+              "label": "Bearer token",
               "placeholder": "vas-api-token",
               "helpText": "Token odoslaný v hlavičke Authorization: Bearer"
             },
             "basicUser": {
               "label": "Meno používateľa",
-              "placeholder": "username"
+              "placeholder": "pouzivatel"
             },
             "basicPass": {
               "label": "Heslo",
@@ -3225,8 +3282,8 @@
           "label": "Jednotka zobrazenia teploty",
           "helpText": "Vyberte, ako sa budú teploty zobrazovať v celej aplikácii.",
           "options": {
-            "celsius": "Celsius (°C)",
-            "fahrenheit": "Fahrenheit (°F)"
+            "celsius": "Stupne Celzia (°C)",
+            "fahrenheit": "Stupne Fahrenheita (°F)"
           }
         }
       },
@@ -3418,6 +3475,13 @@
         "typeLabel": "Typ streamu",
         "typeHelp": "Protokol streamu - automaticky zistený z URL",
         "transportLabel": "Protokol",
+        "mediaModeLabel": "Režim média",
+        "mediaModeHelp": "Úplný stream požaduje zvuk aj video (video sa po dekódovaní zahodí) a funguje s väčšinou kamier. Auto najprv skúsi iba zvuk a prepne sa na úplný stream, ak kamera nedokáže poskytnúť samotný zvuk. Iba zvuk nikdy neobsadí video slot kamery, ale zlyhá, ak kamera nedokáže poskytnúť zvukovú stopu samostatne.",
+        "mediaMode": {
+          "auto": "Auto",
+          "audioOnly": "Iba zvuk",
+          "fullStream": "Úplný stream"
+        },
         "summary": "{count} nakonfigurovaných streamov",
         "healthy": "zdravý",
         "unhealthy": "nezdravý",
@@ -3590,8 +3654,6 @@
         "normalizationDisabled": "Normalizácia zvuku je vypnutá",
         "targetLUFSLabel": "Cieľová hlasitosť (LUFS)",
         "targetLUFSHelp": "Cieľová integrovaná hlasitosť v LUFS (Loudness Units relative to Full Scale). -23 LUFS je vysielací štandard EBU R128. Rozsah: -40 až -10 LUFS.",
-        "loudnessRangeLabel": "Rozsah hlasitosti (LU)",
-        "loudnessRangeHelp": "Maximálna variácia hlasitosti v rámci klipu (0-20 LU). Nižšie hodnoty vytvárajú konzistentnejšiu hlasitosť, ale môžu znížiť dynamiku.",
         "truePeakLabel": "Limit True Peak (dBTP)",
         "truePeakHelp": "Maximálna úroveň True Peak na zabránenie digitálnemu orezaniu (clippingu) (-10 až 0 dBTP). -2 dBTP poskytuje bezpečnú rezervu pre väčšinu systémov prehrávania.",
         "normalizationNote": "Štandard EBU R128",
@@ -3629,6 +3691,7 @@
         "typeHelp": "Formát zvuku pre uložené klipy. WAV a FLAC sú bezstratové (najlepšia kvalita, väčšie súbory). MP3, AAC a Opus sú stratové (menšie súbory, mierna strata kvality).",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Bitrate kompresie zvuku pre stratové formáty. Rozsah: {min}-{max} kbps. Vyššie hodnoty poskytujú lepšiu kvalitu, ale väčšie súbory.",
+        "losslessBitrateValue": "N/A - Bez straty kvality",
         "losslessNote": "Bezstratové formáty zachovávajú pôvodnú kvalitu zvuku bez artefaktov kompresie."
       },
       "audioNormalization": {
@@ -3640,8 +3703,6 @@
         "requiresRecording": "Pre použitie normalizácie zvuku povoľte nahrávanie klipov na karte Nahrávanie.",
         "targetLUFSLabel": "Cieľová hlasitosť (LUFS)",
         "targetLUFSHelp": "Cieľová integrovaná hlasitosť v LUFS (Loudness Units relative to Full Scale). -23 LUFS je vysielací štandard EBU R128. Rozsah: -40 až -10 LUFS.",
-        "loudnessRangeLabel": "Rozsah hlasitosti (LU)",
-        "loudnessRangeHelp": "Maximálna variácia hlasitosti v rámci klipu (0-20 LU). Nižšie hodnoty vytvárajú konzistentnejšiu hlasitosť, ale môžu znížiť dynamiku.",
         "truePeakLabel": "Limit True Peak (dBTP)",
         "truePeakHelp": "Maximálna úroveň True Peak na zabránenie digitálnemu orezaniu (clippingu) (-10 až 0 dBTP). -2 dBTP poskytuje bezpečnú rezervu pre väčšinu systémov prehrávania.",
         "noteTitle": "Štandard EBU R128",
@@ -3861,8 +3922,8 @@
         "warningText": "Povolenie funkcií verejného prístupu ich sprístupní komukoľvek, kto sa môže pripojiť k tomuto serveru. Povoľte iba ak dôverujete svojmu sieťovému prostrediu."
       },
       "privateMode": {
-        "label": "Require login for all UI pages (private mode)",
-        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
+        "label": "Vyžadovať prihlásenie pre všetky stránky používateľského rozhrania (súkromný režim)",
+        "help": "Keď je povolené, stránky prístrojového panelu, detekcií, analytiky, vyhľadávania a upozornení vyžadujú overenie."
       },
       "placeholders": {
         "baseUrl": "https://birdnet.priklad.sk:5500",
@@ -4033,7 +4094,7 @@
         },
         "badges": {
           "threshold": "Prah: {value}",
-          "interval": "Interval: {value}s",
+          "interval": "Interval: {value} s",
           "customAction": "Vlastná akcia",
           "executeDefaults": "+Predvolené"
         },
@@ -4115,7 +4176,7 @@
           "tooltip": "Použite tlačidlá nižšie alebo zadajte priamo (oddelené čiarkou)",
           "availableTitle": "Dostupné parametre",
           "buttons": {
-            "commonName": "CommonName",
+            "commonName": "Bežný názov",
             "scientificName": "VedeckýNázov",
             "confidence": "Spoľahlivosť",
             "time": "Čas",
@@ -4219,7 +4280,7 @@
           "september": "September",
           "october": "Október",
           "november": "November",
-          "december": "December"
+          "december": "december"
         },
         "units": {
           "days": "dni",
@@ -4379,8 +4440,8 @@
         "templateTitlePlaceholder": "Ponechajte prázdne pre predvolené",
         "templateMessage": "Šablóna správy",
         "templateMessagePlaceholder": "Ponechajte prázdne pre predvolené",
-        "noConditionsEvent": "Žiadne podmienky — pravidlo sa spustí pri každej udalosti",
-        "noConditionsMetric": "Žiadne podmienky — pravidlo sa spustí pri každej aktualizácii metriky",
+        "noConditionsEvent": "Žiadne podmienky - pravidlo sa spustí pri každej udalosti",
+        "noConditionsMetric": "Žiadne podmienky - pravidlo sa spustí pri každej aktualizácii metriky",
         "eventsCount": "udalostí",
         "metricsCount": "metrík",
         "durationFor": "počas",
@@ -4745,10 +4806,10 @@
       "spectrogramLoaded": "Spektrogram bol načítaný",
       "spectrogramLoadingAria": "Načítava sa spektrogram",
       "spectrogramAlt": "Zvukový spektrogram",
-      "spectrogramForSpecies": "Spectrogram for {species}",
+      "spectrogramForSpecies": "Spektrogram pre druh {species}",
       "spectrogramGeneratingAria": "Generuje sa spektrogram",
       "generating": "Generuje sa...",
-      "waiting": "Waiting...",
+      "waiting": "Čakanie...",
       "queuePosition": "Poradie: {position}",
       "loadError": "Nepodarilo sa načítať zvuk"
     },
@@ -4861,9 +4922,9 @@
       "loading": "Načítavanie informácií o certifikáte..."
     },
     "birdThumbnail": {
-      "viewDetections": "View {name} detections",
-      "largeView": "Large view of {name}",
-      "clickToView": "Click to view detections"
+      "viewDetections": "Zobraziť detekcie druhu {name}",
+      "largeView": "Veľké zobrazenie druhu {name}",
+      "clickToView": "Kliknite pre zobrazenie detekcií"
     }
   },
   "connectivity": {
@@ -4878,7 +4939,7 @@
   },
   "quietHours": {
     "indicator": {
-      "tooltip": "Tiché hodiny aktívne — {count} zdroj(e) pozastavený(é)"
+      "tooltip": "Tiché hodiny aktívne - {count} zdroj(e) pozastavený(é)"
     }
   },
   "errors": {
@@ -4902,7 +4963,7 @@
       "duplicateName": "Pravidlo s týmto názvom už existuje",
       "invalidJSON": "Neplatný JSON",
       "invalidEscalation": "Eskalačné kroky sú neplatné",
-      "engineUnavailable": "Alerting engine is unavailable"
+      "engineUnavailable": "Správca výstrah nie je dostupný"
     },
     "detection": {
       "invalidDate": "Neplatný formát {paramName}, použite RRRR-MM-DD"
@@ -4916,7 +4977,7 @@
       "createFailed": "Nepodarilo sa vytvoriť úlohu zálohovania",
       "notFound": "Úloha zálohovania sa nenašla alebo vypršala",
       "notReady": "Záloha ešte nie je pripravená na stiahnutie",
-      "fileNotFound": "Súbor zálohy sa nenašiel — úloha mohla vypršať",
+      "fileNotFound": "Súbor zálohy sa nenašiel - úloha mohla vypršať",
       "sqliteOnly": "Zálohovanie je dostupné iba pre databázy SQLite",
       "dbNotConfigured": "Databáza nie je nakonfigurovaná",
       "unsupportedType": "Pre tento typ úložiska nie je možné vytvoriť zálohu",
@@ -4935,7 +4996,7 @@
       "noLegacyDB": "Stará databáza sa nenašla",
       "accessFailed": "Nie je možné pristúpiť k starej databáze",
       "restartRequired": "Aplikácia musí byť po migrácii reštartovaná, aby bolo čistenie dostupné",
-      "safetyCheck": "Cieľový súbor sa javí ako databáza V2 — čistenie nie je z bezpečnostných dôvodov povolené",
+      "safetyCheck": "Cieľový súbor sa javí ako databáza V2 - čistenie nie je z bezpečnostných dôvodov povolené",
       "noLegacyTables": "Nenašli sa žiadne staré tabuľky",
       "restartNeeded": "Čistenie nie je možné: aplikácia musí byť po migrácii reštartovaná",
       "alreadyRunning": "Čistenie už prebieha"
@@ -5007,9 +5068,9 @@
       "waningCrescent": "Ubúd. kosáčik"
     },
     "birding": {
-      "excellent": "Bezvetrie — vynikajúce podmienky na počúvanie vtákov",
-      "moderate": "Mierny vietor — niektoré hlasy vtákov môžu byť ťažšie počuteľné",
-      "poor": "Silný vietor — hlasy vtákov takmer nepočuteľné"
+      "excellent": "Bezvetrie - vynikajúce podmienky na počúvanie vtákov",
+      "moderate": "Mierny vietor - niektoré hlasy vtákov môžu byť ťažšie počuteľné",
+      "poor": "Silný vietor - hlasy vtákov takmer nepočuteľné"
     }
   },
   "wizard": {
@@ -5055,7 +5116,7 @@
         "title": "Zdroj zvuku",
         "sourceTypeLabel": "Typ zdroja",
         "soundcard": "Mikrofón / Zvuková karta",
-        "rtspStream": "RTSP Stream",
+        "rtspStream": "RTSP stream",
         "deviceLabel": "Zvukové zariadenie",
         "deviceLoading": "Načítavanie zvukových zariadení...",
         "noDevicesFound": "Neboli detegované žiadne zvukové zariadenia. Skúste namiesto toho nakonfigurovať RTSP stream.",
@@ -5063,7 +5124,7 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Zadajte URL vášho RTSP audio streamu",
         "additionalSourcesHint": "Ďalšie zdroje zvuku môžete pridať neskôr v Nastaveniach.",
-        "configureLater": "Preskočiť — nastaviť neskôr"
+        "configureLater": "Preskočiť - nastaviť neskôr"
       },
       "detection": {
         "title": "Prah detekcie",
@@ -5115,8 +5176,8 @@
       "title": "Nastavenia detekcie",
       "description": "Nastavte prahové hodnoty spoľahlivosti a jazyk klasifikácie druhov.",
       "confidenceThreshold": {
-        "label": "Confidence Threshold",
-        "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
+        "label": "Prah spoľahlivosti",
+        "helpText": "Minimálne skóre spoľahlivosti (0.0 - 1.0) potrebné pre zaznamenanie detekcie."
       },
       "batThreshold": {
         "label": "Prah detekcie netopierov",
@@ -5173,6 +5234,16 @@
     "advanced": {
       "title": "Pokročilé",
       "description": "Konfigurácia spracovania a vlastných modelov."
+    },
+    "downloadSource": {
+      "title": "Zdroj sťahovania",
+      "description": "Miesto, odkiaľ sa sťahujú súbory modelov.",
+      "note": "Ponechajte toto pole prázdne, ak huggingface.co nie je vo vašej sieti zablokované ani pomalé. Premenná prostredia HF_ENDPOINT sa použije, ak je toto pole prázdne, a huggingface.co, ak nie je nastavená ani jedna z možností. Hodnota, ktorá nie je platnou adresou http alebo https, sa ignoruje a namiesto nej sa použije predvolená hodnota.",
+      "endpoint": {
+        "label": "Koncový bod HuggingFace",
+        "helpText": "Zrkadlový server na sťahovanie modelov, napríklad https://hf-mirror.com. Vzťahuje sa na nasledujúce sťahovanie; nie je potrebný reštart.",
+        "validationMessage": "Zadajte úplnú adresu začínajúcu na http:// alebo https://, alebo ponechajte pole prázdne."
+      }
     },
     "gallery": {
       "title": "Galéria modelov",
@@ -5265,10 +5336,11 @@
     "bannerAction": "Reštartovať teraz",
     "restartFailed": "Nepodarilo sa spustiť reštart",
     "reasons": {
-      "webserver": "Web server / network settings",
-      "database": "Database settings",
-      "logging": "Logging settings",
-      "tlsCertificate": "TLS certificate"
+      "webserver": "Webový server / siete",
+      "oauth": "Nastavenia poskytovateľa overovania",
+      "database": "Nastavenia databázy",
+      "logging": "Nastavenia protokolovania",
+      "tlsCertificate": "Certifikát TLS"
     }
   },
   "help": {
@@ -5334,20 +5406,20 @@
     }
   },
   "health": {
-    "title": "System Health",
-    "running": "Running diagnostics...",
-    "lastRun": "Last run",
+    "title": "Stav systému",
+    "running": "Spustenie diagnostiky...",
+    "lastRun": "Posledné spustenie",
     "refresh": "Obnoviť",
-    "exportText": "Copy Report",
-    "exportJSON": "Download JSON",
-    "copied": "Report copied to clipboard",
-    "duration": "Duration",
+    "exportText": "Kopírovať správu",
+    "exportJSON": "Stiahnuť JSON",
+    "copied": "Správa bola skopírovaná",
+    "duration": "Trvanie",
     "summary": {
-      "healthy": "Healthy",
-      "warnings": "Warnings",
-      "critical": "Critical",
-      "skipped": "Skipped",
-      "total": "Total checks"
+      "healthy": "V poriadku",
+      "warnings": "Varovania",
+      "critical": "Kritické",
+      "skipped": "Preskočené",
+      "total": "Celkovo kontrol"
     },
     "metricFooter": {
       "allPassing": "Všetko v poriadku",
@@ -5359,33 +5431,33 @@
     },
     "diagnostics": "Diagnostika",
     "categories": {
-      "system": "System",
-      "audio": "Audio Pipeline",
-      "analysis": "Analysis",
-      "streams": "Audio Streams",
-      "database": "Database",
-      "network": "Network",
-      "config": "Configuration",
-      "logs": "Logs"
+      "system": "Systém",
+      "audio": "Spracovanie zvuku",
+      "analysis": "Analýza",
+      "streams": "Zvukové streamy",
+      "database": "Databáza",
+      "network": "Sieť",
+      "config": "Konfigurácia",
+      "logs": "Protokoly"
     },
     "status": {
-      "healthy": "Healthy",
-      "warning": "Warning",
-      "critical": "Critical",
-      "unknown": "Unknown",
-      "skipped": "Skipped"
+      "healthy": "V poriadku",
+      "warning": "Varovanie",
+      "critical": "Kritické",
+      "unknown": "Neznáme",
+      "skipped": "Preskočené"
     },
     "errors": {
-      "title": "Recent Errors",
-      "noErrors": "No recent errors",
-      "fetchFailed": "Failed to load diagnostics"
+      "title": "Nedávne chyby",
+      "noErrors": "Žiadne nedávne chyby",
+      "fetchFailed": "Nepodarilo sa načítať diagnostiku"
     },
     "export": {
-      "reportTitle": "BirdNET-Go System Health Report",
-      "statusLabel": "Status",
-      "timeLabel": "Time",
-      "durationLabel": "Duration",
-      "checksLabel": "Checks"
+      "reportTitle": "Správa o stave systému BirdNET-Go",
+      "statusLabel": "Stav",
+      "timeLabel": "Čas",
+      "durationLabel": "Trvanie",
+      "checksLabel": "Kontroly"
     },
     "logs": {
       "topErrors": "Najčastejšie chyby",

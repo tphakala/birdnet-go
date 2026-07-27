@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	diagpkg "github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"gopkg.in/yaml.v3"
 )
@@ -24,17 +25,9 @@ var updateGoldenFiles = flag.Bool("update", false, "update golden files")
 
 // Test constants
 const (
-	// File sizes for testing
-	testLogSizeLimit  = 5000
-	testLogSizeSmall  = 1000
-	testLogSizeMedium = 4000
-	testLogSizeLarge  = 4500
-	testLogSizeTiny   = 0
-
 	// Test durations
 	testDuration24Hours = 24 * time.Hour
 	testDuration1Hour   = 1 * time.Hour
-	testDuration48Hours = 48 * time.Hour
 	testDuration1Minute = 1 * time.Minute
 
 	// Test sizes in bytes
@@ -42,11 +35,10 @@ const (
 	testSize1KB  = 1024
 )
 
-// TestLogFileCollector_isLogFile tests the log file detection
-func TestLogFileCollector_isLogFile(t *testing.T) {
+// TestHasLogSuffix tests the log-file suffix detection that selects which files
+// are collected into the support dump.
+func TestHasLogSuffix(t *testing.T) {
 	t.Parallel()
-
-	lfc := &logFileCollector{}
 
 	tests := []struct {
 		name     string
@@ -77,61 +69,7 @@ func TestLogFileCollector_isLogFile(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, tt.want, lfc.isLogFile(tt.filename), "isLogFile(%q)", tt.filename)
-		})
-	}
-}
-
-// TestLogFileCollector_isFileWithinTimeRange tests time range checking
-func TestLogFileCollector_isFileWithinTimeRange(t *testing.T) {
-	now := time.Now()
-	lfc := &logFileCollector{
-		cutoffTime: now.Add(-testDuration24Hours), // 24 hours ago
-	}
-
-	tests := []struct {
-		name    string
-		modTime time.Time
-		want    bool
-	}{
-		{"recent file", now.Add(-testDuration1Hour), true},
-		{"file at cutoff", now.Add(-testDuration24Hours), true},
-		{"old file", now.Add(-testDuration48Hours), false},
-		{"future file", now.Add(testDuration1Hour), true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create a mock FileInfo
-			info := &mockFileInfo{modTime: tt.modTime}
-			assert.Equal(t, tt.want, lfc.isFileWithinTimeRange(info), "isFileWithinTimeRange()")
-		})
-	}
-}
-
-// TestLogFileCollector_canAddFile tests size limit checking
-func TestLogFileCollector_canAddFile(t *testing.T) {
-	tests := []struct {
-		name      string
-		totalSize int64
-		maxSize   int64
-		fileSize  int64
-		want      bool
-	}{
-		{"within limit", testLogSizeSmall, testLogSizeLimit, testLogSizeSmall, true},
-		{"exactly at limit", testLogSizeMedium, testLogSizeLimit, testLogSizeSmall, true},
-		{"exceeds limit", testLogSizeLarge, testLogSizeLimit, testLogSizeSmall, false},
-		{"zero file size", testLogSizeSmall, testLogSizeLimit, testLogSizeTiny, true},
-		{"already at max", testLogSizeLimit, testLogSizeLimit, testLogSizeSmall, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			lfc := &logFileCollector{
-				totalSize: tt.totalSize,
-				maxSize:   tt.maxSize,
-			}
-			assert.Equal(t, tt.want, lfc.canAddFile(tt.fileSize), "canAddFile(%d)", tt.fileSize)
+			assert.Equal(t, tt.want, hasLogSuffix(tt.filename), "hasLogSuffix(%q)", tt.filename)
 		})
 	}
 }
@@ -565,22 +503,6 @@ func compareConfigs(a, b map[string]any) bool {
 	return true
 }
 
-// mockFileInfo implements os.FileInfo for testing
-type mockFileInfo struct {
-	name    string
-	size    int64
-	mode    os.FileMode
-	modTime time.Time
-	isDir   bool
-}
-
-func (m *mockFileInfo) Name() string       { return m.name }
-func (m *mockFileInfo) Size() int64        { return m.size }
-func (m *mockFileInfo) Mode() os.FileMode  { return m.mode }
-func (m *mockFileInfo) ModTime() time.Time { return m.modTime }
-func (m *mockFileInfo) IsDir() bool        { return m.isDir }
-func (m *mockFileInfo) Sys() any           { return nil }
-
 // TestIsDefaultValue tests default value detection for redaction skipping
 func TestIsDefaultValue(t *testing.T) {
 	t.Parallel()
@@ -993,12 +915,12 @@ func TestCollector_collectLogFilesWithDiagnostics(t *testing.T) {
 	tests := []struct {
 		name     string
 		duration time.Duration
-		validate func(t *testing.T, logs []LogEntry, diag *LogSourceDiagnostics)
+		validate func(t *testing.T, acc *logScanAccum, diag *LogSourceDiagnostics)
 	}{
 		{
 			name:     "successful log collection",
 			duration: testDuration24Hours,
-			validate: func(t *testing.T, logs []LogEntry, diag *LogSourceDiagnostics) {
+			validate: func(t *testing.T, acc *logScanAccum, diag *LogSourceDiagnostics) {
 				t.Helper()
 				// Check that paths were searched
 				assert.NotEmpty(t, diag.PathsSearched)
@@ -1014,12 +936,13 @@ func TestCollector_collectLogFilesWithDiagnostics(t *testing.T) {
 		{
 			name:     "old logs filtered by duration",
 			duration: testDuration1Minute, // Very short duration to filter out test log
-			validate: func(t *testing.T, logs []LogEntry, diag *LogSourceDiagnostics) {
+			validate: func(t *testing.T, acc *logScanAccum, diag *LogSourceDiagnostics) {
 				t.Helper()
 				// Paths should still be searched
 				assert.NotEmpty(t, diag.PathsSearched)
-				// But logs might be filtered out
-				// logs might be empty after filtering
+				// The 2024-dated fixture is older than the 1-minute window, so
+				// every entry is filtered out and the counted total is zero.
+				assert.Zero(t, acc.entries)
 			},
 		},
 	}
@@ -1030,9 +953,11 @@ func TestCollector_collectLogFilesWithDiagnostics(t *testing.T) {
 				Details: make(map[string]any),
 			}
 
-			logs, _, _ := c.collectLogFilesWithDiagnostics(tt.duration, testSize10MB, false, diagnostics)
+			var acc logScanAccum
+			err := c.collectLogFilesWithDiagnostics(t.Context(), tt.duration, testSize10MB, &acc, diagnostics)
+			require.NoError(t, err)
 
-			tt.validate(t, logs, diagnostics)
+			tt.validate(t, &acc, diagnostics)
 		})
 	}
 }
@@ -1989,4 +1914,60 @@ func TestComprehensivePrivacyScrubbing_Integration(t *testing.T) {
 	t.Run("url_structural_redaction", func(t *testing.T) {
 		assertURLStructuralRedaction(t, got)
 	})
+}
+
+func TestCreateArchiveIncludesJournal(t *testing.T) {
+	t.Parallel()
+	// Fully hermetic: the collector locates the journal via
+	// diagnostics.JournalPathIn(c.configPath), so a journal written into
+	// the test's temp config dir is picked up with no environment coupling.
+	configDir := t.TempDir()
+	jp := diagpkg.JournalPathIn(configDir)
+	require.NoError(t, os.MkdirAll(filepath.Dir(jp), 0o750))
+	journalLine := `{"schema_version":1,"type":"boot","timestamp":"2026-07-18T10:00:00Z","cwd":"/home/someuser/birdnet"}` + "\n"
+	require.NoError(t, os.WriteFile(jp, []byte(journalLine), 0o600))
+
+	c := NewCollector(configDir, t.TempDir(), "sys-id", "20260716")
+	opts := CollectorOptions{IncludeDeploymentInfo: true, AnonymizePII: true}
+	dump, err := c.Collect(t.Context(), opts)
+	require.NoError(t, err)
+	archive, err := c.CreateArchive(t.Context(), dump, opts)
+	require.NoError(t, err)
+
+	zr, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	require.NoError(t, err)
+	var journalEntry *zip.File
+	for _, f := range zr.File {
+		if f.Name == "diagnostics/journal.jsonl" {
+			journalEntry = f
+		}
+	}
+	require.NotNil(t, journalEntry, "journal must ship in the archive")
+
+	// The journal goes through the same line-by-line anonymization
+	// pipeline as log files: the user path must not survive verbatim.
+	rc, err := journalEntry.Open()
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, rc.Close()) })
+	shipped, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	assert.Contains(t, string(shipped), `"type":"boot"`)
+	assert.NotContains(t, string(shipped), "/home/someuser/birdnet",
+		"journal lines are scrubbed on the way out")
+}
+
+func TestCreateArchiveSkipsMissingJournal(t *testing.T) {
+	t.Parallel()
+	c := NewCollector(t.TempDir(), t.TempDir(), "sys-id", "20260716")
+	opts := CollectorOptions{IncludeDeploymentInfo: true, AnonymizePII: true}
+	dump, err := c.Collect(t.Context(), opts)
+	require.NoError(t, err)
+	archive, err := c.CreateArchive(t.Context(), dump, opts)
+	require.NoError(t, err, "absent journal must not fail archive creation")
+
+	zr, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	require.NoError(t, err)
+	for _, f := range zr.File {
+		assert.NotEqual(t, "diagnostics/journal.jsonl", f.Name)
+	}
 }

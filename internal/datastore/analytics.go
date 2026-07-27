@@ -542,7 +542,7 @@ func (ds *DataStore) GetActivityHeatmap(_ context.Context, _, _, _ string) (Acti
 // v2only feature; the legacy datastore is deprecated and being removed, so it returns an empty
 // (non-nil) slice rather than implementing the aggregation. See internal/datastore/v2only for the
 // real method.
-func (ds *DataStore) GetHourlyDistributionBySpecies(_ context.Context, _, _ string, _ int) ([]SpeciesHourlyDistribution, error) {
+func (ds *DataStore) GetHourlyDistributionBySpecies(_ context.Context, _, _ string, _ []string, _ int) ([]SpeciesHourlyDistribution, error) {
 	return []SpeciesHourlyDistribution{}, nil
 }
 
@@ -595,7 +595,7 @@ func (ds *DataStore) GetSpeciesPhenology(_ context.Context, _, _ string, _ int) 
 // v2only feature; the legacy datastore is deprecated and being removed, so it returns an empty
 // (non-nil) slice rather than implementing the aggregation. See internal/datastore/v2only for the
 // real method.
-func (ds *DataStore) GetAcousticSuccession(_ context.Context, _, _ string, _ int) ([]SpeciesHourlyCounts, error) {
+func (ds *DataStore) GetAcousticSuccession(_ context.Context, _, _ string, _ []string, _ int) ([]SpeciesHourlyCounts, error) {
 	return []SpeciesHourlyCounts{}, nil
 }
 

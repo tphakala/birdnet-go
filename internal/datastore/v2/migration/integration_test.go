@@ -8,7 +8,6 @@
 package migration_test
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -151,7 +150,7 @@ func TestMigration_EndToEnd_HappyPath(t *testing.T) {
 	assert.Equal(t, int64(100), v2Count, "should have 100 detections in V2")
 
 	// Verify sample detection field integrity
-	c := context.Background()
+	c := t.Context()
 	detections, err := ctx.DetectionRepo.GetRecent(c, 10)
 	require.NoError(t, err, "failed to get recent detections")
 	assert.Len(t, detections, 10, "should get 10 recent detections")
@@ -216,7 +215,7 @@ func TestMigration_PauseResume(t *testing.T) {
 	ctx.TransitionToDualWrite(t)
 
 	// Run auxiliary migration
-	c := context.Background()
+	c := t.Context()
 	_, err = ctx.AuxiliaryMigrator.MigrateAll(c)
 	require.NoError(t, err, "auxiliary migration failed")
 
@@ -291,7 +290,7 @@ func TestMigration_CrashRecovery(t *testing.T) {
 	ctx.TransitionToDualWrite(t)
 
 	// Run auxiliary migration
-	c := context.Background()
+	c := t.Context()
 	_, err = ctx.AuxiliaryMigrator.MigrateAll(c)
 	require.NoError(t, err, "auxiliary migration failed")
 
@@ -366,7 +365,7 @@ func TestMigration_WeatherOnly_BugReproduction(t *testing.T) {
 	assert.Equal(t, int64(0), v2Count, "should have 0 detections in V2")
 
 	// Verify weather was migrated by checking the repository
-	c := context.Background()
+	c := t.Context()
 	allDailyEvents, err := ctx.WeatherRepo.GetAllDailyEvents(c)
 	require.NoError(t, err, "failed to get daily events")
 	assert.GreaterOrEqual(t, len(allDailyEvents), 3, "should have at least 3 days of weather")
@@ -392,7 +391,7 @@ func TestMigration_RaceConditions(t *testing.T) {
 	ctx.TransitionToDualWrite(t)
 
 	// Run auxiliary migration
-	c := context.Background()
+	c := t.Context()
 	_, err = ctx.AuxiliaryMigrator.MigrateAll(c)
 	require.NoError(t, err, "auxiliary migration failed")
 
@@ -459,7 +458,7 @@ func TestMigration_AllOptionalFieldsNull(t *testing.T) {
 	ctx.WaitForCompletion(t, 30*time.Second)
 
 	// Verify migration
-	c := context.Background()
+	c := t.Context()
 	detections, err := ctx.DetectionRepo.GetRecent(c, 1)
 	require.NoError(t, err, "failed to get detection")
 	require.Len(t, detections, 1, "should have 1 detection")
@@ -508,7 +507,7 @@ func TestMigration_UnicodeSpeciesNames(t *testing.T) {
 	assert.Equal(t, int64(3), v2Count, "should have 3 detections in V2")
 
 	// Verify species names preserved by checking labels
-	c := context.Background()
+	c := t.Context()
 	detections, _, err := ctx.DetectionRepo.Search(c, &repository.SearchFilters{})
 	require.NoError(t, err, "failed to search detections")
 	require.Len(t, detections, 3, "should find 3 detections")
@@ -539,13 +538,13 @@ func TestMigration_ExtremeValues(t *testing.T) {
 			Build(),
 		testutil.NewDetectionBuilder().
 			WithID(3).
-			WithDate(oldTime.Format("2006-01-02")).
-			WithTime(oldTime.Format("15:04:05")).
+			WithDate(oldTime.Format(time.DateOnly)).
+			WithTime(oldTime.Format(time.TimeOnly)).
 			Build(),
 		testutil.NewDetectionBuilder().
 			WithID(4).
-			WithDate(futureTime.Format("2006-01-02")).
-			WithTime(futureTime.Format("15:04:05")).
+			WithDate(futureTime.Format(time.DateOnly)).
+			WithTime(futureTime.Format(time.TimeOnly)).
 			Build(),
 	}
 
@@ -561,7 +560,7 @@ func TestMigration_ExtremeValues(t *testing.T) {
 	assert.Equal(t, int64(4), v2Count, "should have 4 detections in V2")
 
 	// Verify extreme values preserved
-	c := context.Background()
+	c := t.Context()
 	detections, _, err := ctx.DetectionRepo.Search(c, &repository.SearchFilters{})
 	require.NoError(t, err, "failed to search detections")
 	require.Len(t, detections, 4, "should find 4 detections")
@@ -619,7 +618,7 @@ func TestMigration_RelatedData_ReviewsMigrated(t *testing.T) {
 	assert.Equal(t, int64(10), v2Count, "should have 10 detections in V2")
 
 	// Verify reviews migrated (fetch detections with relations)
-	c := context.Background()
+	c := t.Context()
 	reviewedCount := 0
 	for i := range 5 {
 		det, err := ctx.DetectionRepo.GetWithRelations(c, uint(i+1)) //nolint:gosec // G115: test data uses small values
@@ -791,7 +790,7 @@ func TestMigration_TimezoneHandling(t *testing.T) {
 	ctx.WaitForCompletion(t, 30*time.Second)
 
 	// Verify migration
-	c := context.Background()
+	c := t.Context()
 	detections, err := ctx.DetectionRepo.GetRecent(c, 1)
 	require.NoError(t, err, "failed to get detection")
 	require.Len(t, detections, 1, "should have 1 detection")
@@ -837,14 +836,14 @@ func TestMigration_AuxiliaryDataMigratedThroughWorker(t *testing.T) {
 
 	dailyEvent := testutil.NewDailyEventsBuilder().
 		WithID(1).
-		WithDate(time.Now().Format("2006-01-02")).
+		WithDate(time.Now().Format(time.DateOnly)).
 		Build()
 	err = ctx.Seeder.SeedDailyEvents([]datastore.DailyEvents{dailyEvent})
 	require.NoError(t, err, "failed to seed daily event")
 
 	// Run migration WITHOUT calling AuxiliaryMigrator directly
 	// This tests that auxiliary migration happens through the worker
-	c := context.Background()
+	c := t.Context()
 	ctx.InitMigrationState(t, len(notes))
 	ctx.TransitionToDualWrite(t)
 

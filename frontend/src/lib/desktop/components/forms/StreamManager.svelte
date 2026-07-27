@@ -28,6 +28,7 @@
   import { quietHoursStore } from '$lib/stores/quietHours.svelte';
   import { getAvailableModels, DEFAULT_MODEL_ID, fetchModels } from '$lib/stores/models.svelte';
   import StreamCard, { type StreamStatus } from './StreamCard.svelte';
+  import InlineSlider from './InlineSlider.svelte';
   import ModelCheckboxList from './ModelCheckboxList.svelte';
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import EmptyState from '$lib/desktop/features/settings/components/EmptyState.svelte';
@@ -41,7 +42,11 @@
     ChannelMode,
   } from '$lib/stores/settings';
   import type { ChannelAnalysis } from '$lib/stores/settings';
-  import { defaultQuietHoursConfig } from '$lib/stores/settings';
+  import {
+    defaultQuietHoursConfig,
+    AUDIO_GAIN_MIN_DB,
+    AUDIO_GAIN_MAX_DB,
+  } from '$lib/stores/settings';
   import StreamTestButton from './StreamTestButton.svelte';
   import StreamChannelControls from './StreamChannelControls.svelte';
   import { streamTypeOptions, transportOptions, analyzeStreamChannels } from './streamOptions';
@@ -130,6 +135,7 @@
   let newUrl = $state('');
   let newTransport = $state<'tcp' | 'udp'>('tcp');
   let newStreamType = $state<StreamType>('rtsp');
+  let newGain = $state(0);
   let newModels = $state<string[]>([DEFAULT_MODEL_ID]);
   let newQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
   let newChannelMode = $state<ChannelMode>('downmix');
@@ -393,6 +399,7 @@
     newTransport = 'tcp';
     newStreamType = 'rtsp';
     newChannelMode = 'downmix';
+    newGain = 0;
     newModels = [DEFAULT_MODEL_ID];
     newQuietHours = { ...defaultQuietHoursConfig };
     newTestResult = null;
@@ -453,6 +460,7 @@
       models: newModels,
       channelMode: newChannelMode,
       ...(showTransportInAdd ? { transport: newTransport } : {}),
+      gain: newGain,
       quietHours: newQuietHours,
     } as StreamConfig;
 
@@ -740,6 +748,18 @@
               {disabled}
               onChange={mode => (newChannelMode = mode)}
               onAnalyze={url => analyzeChannels(url)}
+            />
+
+            <!-- Gain -->
+            <InlineSlider
+              label={t('settings.audio.soundCards.gainLabel')}
+              value={newGain}
+              onUpdate={value => (newGain = value)}
+              min={AUDIO_GAIN_MIN_DB}
+              max={AUDIO_GAIN_MAX_DB}
+              step={1}
+              unit=" dB"
+              {disabled}
             />
 
             <!-- Model Selection -->

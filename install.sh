@@ -28,6 +28,45 @@ SILENT_MODE="false"
 # Force root mode - allow running as root despite warnings (set via --force-root flag)
 FORCE_ROOT="false"
 
+# Cross-host migration (set via --migrate / --migrate-from flags)
+MIGRATE_MODE="false"
+MIGRATE_DEST=""
+MIGRATE_SSH_SOCKET=""
+MIGRATE_SSH_DIR=""
+MIGRATE_REMOTE_HOME=""
+MIGRATE_REMOTE_APP=""
+MIGRATE_TMP_UNIT=""
+MIGRATE_BACKUP=""
+MIGRATE_STOPPED_REMOTE="0"
+
+# Why a migration stopped. Every abort path records one of these so the single
+# telemetry event at the call site can name the failing step instead of reporting
+# a bare "migration failed". See migrate_fail.
+MIGRATE_FAIL_STEP=""      # fixed-vocabulary slug, e.g. ssh_connect
+MIGRATE_FAIL_KIND=""      # error (something broke) | cancelled (user said no)
+MIGRATE_FAIL_DETAIL=""    # short extra detail; never a host, user, or path
+# How the destination was supplied, and which transfer path ran. Reported as
+# telemetry; both are enums, never the destination itself.
+MIGRATE_DEST_SOURCE="unset"  # unset | flag | prompt
+MIGRATE_TRANSFER_METHOD="none"  # none | rsync | tar
+MIGRATE_REMOTE_APP_DEFAULT="unknown"  # yes | no | unknown: default path or user-supplied
+# Report-only records of things that HAPPENED. migrate_rollback undoes the live
+# state (it clears MIGRATE_BACKUP and restarts the source), and it runs BEFORE
+# the failure is reported, so the reporter cannot infer either fact from the live
+# variables: it would say "no backup" on every rollback path, including the one
+# where the restore failed and the user's data is still sitting at the .bak path.
+MIGRATE_BACKUP_TAKEN="no"
+MIGRATE_STOPPED_REMOTE_EVER="no"
+# Why the last check_remote_stopped probe said "not confirmed stopped". The probe
+# fails CLOSED, so "could not tell" and "definitely running" take the same branch;
+# behaviour must not change, but the telemetry must not claim the service was
+# running when the truth is that we never got an answer.
+MIGRATE_REMOTE_STATE="unknown"  # stopped | running | unknown
+# Sizes captured by check_remote_disk while the SSH connection is still up, so
+# the diagnostics collector can report them without a second round trip.
+MIGRATE_REMOTE_SIZE_KB=""
+MIGRATE_HOME_AVAIL_KB=""
+
 # Flag to track if Docker image was changed during update/rollback
 IMAGE_CHANGED="false"
 
@@ -57,6 +96,13 @@ cleanup_temp_files() {
     rm -f /tmp/version_history_*.tmp 2>/dev/null
     rm -f "$LOG_DIR/.last_backup_time" 2>/dev/null
     rm -f "$VERSION_HISTORY_FILE.lock" 2>/dev/null
+    # Migration teardown: close the shared ssh master and drop the temp unit file.
+    if [ -n "$MIGRATE_SSH_SOCKET" ] && [ -n "$MIGRATE_DEST" ]; then
+        ssh -o ControlPath="$MIGRATE_SSH_SOCKET" -O exit "$MIGRATE_DEST" 2>/dev/null || true
+    fi
+    [ -n "$MIGRATE_SSH_DIR" ] && rm -rf "$MIGRATE_SSH_DIR" 2>/dev/null
+    [ -n "$MIGRATE_TMP_UNIT" ] && rm -f "$MIGRATE_TMP_UNIT" 2>/dev/null
+    return 0
 }
 trap cleanup_temp_files EXIT INT TERM
 
@@ -1610,7 +1656,7 @@ EOF
         fi
 
         if [ "$groups_added" = true ]; then
-            print_message "Please log out and log back in for group changes to take effect, and rerun install.sh to continue with install" "$YELLOW"
+            print_message "Please log out and log back in for group changes to take effect, and rerun install.sh to continue with install.$(migrate_rerun_hint)" "$YELLOW"
             exit 0
         fi
     }
@@ -1646,7 +1692,7 @@ EOF
             exit 1
         fi
         log_message "INFO" "Docker installation completed, user needs to log out and back in for group changes"
-        print_message "⚠️ Docker installed successfully. To make group member changes take effect, please log out and log back in and rerun install.sh to continue with install" "$YELLOW"
+        print_message "⚠️ Docker installed successfully. To make group member changes take effect, please log out and log back in and rerun install.sh to continue with install.$(migrate_rerun_hint)" "$YELLOW"
         # exit install script
         exit 0
     else
@@ -1775,6 +1821,593 @@ rewrite_migrated_config_paths() {
         sed -i -e "s|${esc_old}|${esc_new}|g" -- "$config"
     done
     log_message "INFO" "Rewrote migrated config paths from ${old_home}/* to ${new_home}/* in $config"
+}
+
+# ---------------------------------------------------------------------------
+# Cross-host migration: pull an existing install from another host over SSH.
+# ---------------------------------------------------------------------------
+
+# Record why a migration stopped, then return 1 so abort paths read as
+# `migrate_fail <slug>; return 1`. Slugs come from a fixed vocabulary and are
+# never built from user input: Sentry groups on them, and the destination and
+# remote paths are user data that must not leave the machine.
+#
+# Only terminal aborts call this. A helper whose `return 1` is a normal branch
+# (check_remote_stopped probing whether the source is live) must not, or it would
+# record a failure the caller goes on to handle.
+migrate_fail() {
+    MIGRATE_FAIL_STEP="$1"
+    MIGRATE_FAIL_KIND="${2:-error}"
+    MIGRATE_FAIL_DETAIL="${3:-}"
+    return 1
+}
+
+# Validate a user-supplied ssh destination (alias or user@host). Rejects empty
+# input and anything with whitespace or shell-unsafe characters so it is safe to
+# splice into ssh/rsync command lines. Echoes the validated destination.
+parse_ssh_dest() {
+    local dest="$1"
+    [ -n "$dest" ] || return 1
+    case "$dest" in
+        -*) return 1 ;;                       # never let a dest be read as an ssh/rsync flag
+        *[!A-Za-z0-9._@-]*) return 1 ;;
+    esac
+    printf '%s' "$dest"
+}
+
+# Reject a remote path that could break out of the single quotes we splice it into
+# when building remote ssh commands (a literal single quote is the only character
+# that breaks a single-quoted string).
+remote_path_safe() {
+    case "$1" in
+        "" ) return 1 ;;
+        *\'* ) return 1 ;;
+    esac
+    return 0
+}
+
+# When a group-change re-login is required mid-migration, tell the user the exact
+# flag to re-run with so the resumed run stays in migration mode.
+migrate_rerun_hint() {
+    [ "$MIGRATE_MODE" = "true" ] || return 0
+    if [ -n "$MIGRATE_DEST" ]; then
+        printf ' Re-run with: ./install.sh --migrate-from %s' "$MIGRATE_DEST"
+    else
+        printf ' Re-run with: ./install.sh --migrate'
+    fi
+}
+
+# The default remote app path for a given remote home. Pure; unit-tested.
+remote_default_app_path() {
+    printf '%s/birdnet-go-app' "$1"
+}
+
+# Run a command on the migration source over the shared ssh connection.
+migrate_ssh() {
+    ssh -o ControlPath="$MIGRATE_SSH_SOCKET" "$MIGRATE_DEST" "$@"
+}
+
+# Open one ControlMaster connection so the user authenticates once. Silent mode
+# must never block on a prompt.
+open_ssh_master() {
+    # A real temp DIR (not mktemp -u, which only reserves a name and races) holds
+    # the control socket and is removed wholesale by the cleanup trap.
+    MIGRATE_SSH_DIR="$(mktemp -d "${TMPDIR:-/tmp}/bng-mig-ssh.XXXXXX")" || {
+        print_message "❌ Could not create a temporary directory" "$RED"
+        migrate_fail tmpdir_failed; return 1; }
+    MIGRATE_SSH_SOCKET="$MIGRATE_SSH_DIR/s"
+    # rsync's -e value is word-split and does not honor quotes, so a socket path
+    # containing whitespace would break the transfer; reject it up front.
+    case "$MIGRATE_SSH_SOCKET" in
+        *[[:space:]]*)
+            print_message "❌ Temp path contains spaces; set TMPDIR to a space-free path" "$RED"
+            migrate_fail tmpdir_spaces; return 1 ;;
+    esac
+    local opts=(-o ControlMaster=auto -o ControlPersist=300 -o ControlPath="$MIGRATE_SSH_SOCKET")
+    if [ "$SILENT_MODE" = "true" ]; then
+        opts+=(-o BatchMode=yes -o StrictHostKeyChecking=accept-new)
+    fi
+    # Capture ssh's status via `|| rc=$?`: inside `if ! ssh ...` the `!` has
+    # already flipped $? to 0, so the real exit code would be lost.
+    local rc=0
+    ssh "${opts[@]}" "$MIGRATE_DEST" true || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        print_message "❌ Could not connect to $MIGRATE_DEST over SSH" "$RED"
+        migrate_fail ssh_connect error "ssh_exit=$rc"; return 1
+    fi
+}
+
+# Refuse a remote whose shell prints anything on a non-interactive login.
+#
+# rsync and tar both stream their payload over that same shell, so ANY stray byte
+# corrupts the transfer (rsync says "protocol version mismatch -- is your shell
+# clean?"; tar says "This does not look like a tar archive"). No amount of
+# filtering fixes a binary stream, so such a host simply cannot be migrated until
+# its .bashrc is quiet.
+#
+# This runs before the destructive steps on purpose. Without it the readers'
+# tail -n 1 guards let a noisy host get FURTHER: past the pre-flight checks, past
+# moving the user's existing data aside, past stopping the source service, and
+# only then fail the transfer and lean on best-effort rollback. Failing here
+# costs the user nothing.
+check_remote_shell_clean() {
+    local probe rc noise
+    # Two facts have to survive the round trip, and each needs its own trick.
+    # The X sentinel keeps newline-only output visible: command substitution
+    # strips trailing newlines, so a .bashrc printing a blank line would look
+    # exactly like silence, and a lone newline corrupts the transfer as
+    # thoroughly as a banner. The trailing status is carried in the output
+    # because the substitution's own status belongs to printf, not to ssh, so a
+    # dropped connection would otherwise also read as silence and be reported
+    # later as some unrelated step failing.
+    # Only stdout is probed: stderr does not ride the payload stream, so
+    # treating a stderr banner as noise would refuse hosts that migrate fine.
+    probe="$(migrate_ssh 'exit 0' 2>/dev/null; printf 'X%s' "$?")"
+    rc="${probe##*X}"
+    noise="${probe%X*}"
+    if [ "$rc" != "0" ]; then
+        print_message "❌ Lost the SSH connection to $MIGRATE_DEST while checking it." "$RED"
+        migrate_fail remote_probe_failed error "ssh_exit=$rc"; return 1
+    fi
+    [ -z "$noise" ] && return 0
+    print_message "❌ The shell on $MIGRATE_DEST prints text on login (a banner, fortune, or echo)." "$RED"
+    print_message "   That output corrupts the file transfer, so migration cannot proceed." "$YELLOW"
+    print_message "   Fix: make ~/.bashrc on the old host print nothing for non-interactive" "$YELLOW"
+    print_message "   sessions, then re-run.$(migrate_rerun_hint)" "$YELLOW"
+    migrate_fail remote_shell_noisy; return 1
+}
+
+# Resolve the old host's home and app dir; verify a real install is present.
+resolve_remote_app() {
+    # Single quotes are intentional: $HOME must expand on the REMOTE host, not here.
+    # tail -n 1 drops any login banner a remote .bashrc echoed ahead of the value,
+    # which would otherwise be spliced into the path and hidden behind a
+    # misleading "no install found". check_remote_shell_clean already rejects such
+    # a host outright; this is defence in depth for noise it cannot provoke (a
+    # .bashrc that only prints for some commands), and mirrors the same guard on
+    # the reader in check_remote_stopped.
+    # shellcheck disable=SC2016
+    MIGRATE_REMOTE_HOME="$(migrate_ssh 'printf %s "$HOME"' | tail -n 1)"
+    if [ -z "$MIGRATE_REMOTE_HOME" ] || ! remote_path_safe "$MIGRATE_REMOTE_HOME"; then
+        print_message "❌ Could not determine a usable remote home directory" "$RED"
+        migrate_fail remote_home_unresolved; return 1
+    fi
+    local candidate
+    candidate="$(remote_default_app_path "$MIGRATE_REMOTE_HOME")"
+    if migrate_ssh "test -f '$candidate/config/config.yaml'"; then
+        MIGRATE_REMOTE_APP="$candidate"
+        MIGRATE_REMOTE_APP_DEFAULT="yes"
+        return 0
+    fi
+    if [ "$SILENT_MODE" = "true" ]; then
+        print_message "❌ No install found at $candidate on the remote host" "$RED"
+        print_message "   If it lives under /root, run the root->user migration on the OLD host first." "$YELLOW"
+        migrate_fail remote_app_not_found; return 1
+    fi
+    print_message "❓ No install at $candidate. Enter the remote birdnet-go-app path: " "$YELLOW" "nonewline"
+    local p; read -r p
+    if [ -n "$p" ] && ! remote_path_safe "$p"; then
+        print_message "❌ Path contains an unsupported character (single quote)" "$RED"
+        migrate_fail remote_path_unsafe; return 1
+    fi
+    if [ -n "$p" ] && migrate_ssh "test -f '$p/config/config.yaml'"; then
+        MIGRATE_REMOTE_APP="$p"
+        MIGRATE_REMOTE_APP_DEFAULT="no"
+        return 0
+    fi
+    print_message "❌ No valid install at that path (need config/config.yaml readable by $MIGRATE_DEST)" "$RED"
+    migrate_fail remote_app_invalid; return 1
+}
+
+# 0 = confirmed stopped, 1 = running or NOT confirmed stopped. Fails CLOSED: a
+# dropped SSH, missing systemctl, MOTD/shell noise, or any state other than a
+# definitive not-running one is treated as "maybe running" so a live database is
+# never copied. A remote without systemctl defaults to inactive (then the docker
+# check decides); tail -n 1 drops login banners; grep -Fx matches only the exact
+# container name so shell noise cannot look like a running container.
+check_remote_stopped() {
+    # MIGRATE_REMOTE_STATE records WHY, for telemetry only; every "not confirmed
+    # stopped" outcome still returns 1 and the caller still treats them alike.
+    # Without it the reported slug claims the service was running even when the
+    # truth is that the probe never got an answer (dropped ssh, or systemctl
+    # present with no bus, as in a container or chroot) -- the same conflation of
+    # distinct causes this file's migration telemetry exists to eliminate.
+    local state
+    if ! state="$(migrate_ssh 'if command -v systemctl >/dev/null 2>&1; then systemctl is-active birdnet-go.service 2>/dev/null || true; else echo inactive; fi')"; then
+        MIGRATE_REMOTE_STATE="unknown"; return 1
+    fi
+    state="$(printf '%s' "$state" | tail -n 1 | tr -d '[:space:]')"
+    case "$state" in
+        inactive|failed|unknown) ;;   # systemd definitively not running; verify container
+        active) MIGRATE_REMOTE_STATE="running"; return 1 ;;
+        *) MIGRATE_REMOTE_STATE="unknown"; return 1 ;;  # empty/unrecognized -> no answer
+    esac
+    local ctr raw
+    # No `|| true` here, unlike the systemctl probe above: `docker ps` exits
+    # non-zero only when it could not answer (daemon down, user not in the docker
+    # group), and swallowing that would turn "could not check" into empty output
+    # and then into "confirmed stopped" -- a fail-OPEN hole in a fail-closed
+    # probe, ending in a live database being copied. Docker being absent still
+    # exits 0 via the enclosing `if`, which is correct: no docker, no container.
+    # (The systemctl probe genuinely needs its `|| true`: `is-active` exits
+    # non-zero to *answer* "inactive", which is not a failure.)
+    if ! raw="$(migrate_ssh 'if command -v docker >/dev/null 2>&1; then docker ps --filter name=birdnet-go --format "{{.Names}}" 2>/dev/null; fi')"; then
+        MIGRATE_REMOTE_STATE="unknown"; return 1
+    fi
+    ctr="$(printf '%s' "$raw" | grep -Fx 'birdnet-go' | tr -d '[:space:]')"
+    if [ -n "$ctr" ]; then
+        MIGRATE_REMOTE_STATE="running"; return 1
+    fi
+    MIGRATE_REMOTE_STATE="stopped"
+    return 0
+}
+
+# Ensure the new host has room for the remote dataset (+10% margin). Fails CLOSED:
+# if the remote or local size cannot be parsed, abort (or take an explicit
+# interactive override) rather than silently skip the check before a large copy.
+check_remote_disk() {
+    local remote_kb avail_kb
+    # tail -n 1 runs LOCALLY, on ssh's output. A remote login banner is written by
+    # the remote shell before the pipeline runs, so it never passes through a
+    # remote tail; only a local one drops it. Without this the result is
+    # multi-line and fails the numeric test below as if the size were unreadable.
+    remote_kb="$(migrate_ssh "du -sk '$MIGRATE_REMOTE_APP' 2>/dev/null | cut -f1" | tail -n 1)"
+    avail_kb="$(df -Pk "$HOME" | awk 'NR==2 {print $4}')"
+    # Kept for telemetry: sizes are read while the SSH connection is still up.
+    MIGRATE_REMOTE_SIZE_KB="$remote_kb"
+    MIGRATE_HOME_AVAIL_KB="$avail_kb"
+    if [[ "$remote_kb" =~ ^[0-9]+$ ]] && [[ "$avail_kb" =~ ^[0-9]+$ ]] && [ "$remote_kb" -gt 0 ]; then
+        local need_kb=$(( remote_kb + remote_kb / 10 ))
+        if [ "$avail_kb" -lt "$need_kb" ]; then
+            print_message "❌ Not enough disk space: need ~$(( need_kb / 1024 )) MB, have $(( avail_kb / 1024 )) MB" "$RED"
+            migrate_fail disk_insufficient error "need_kb=$need_kb,avail_kb=$avail_kb"; return 1
+        fi
+        return 0
+    fi
+    print_message "⚠️  Could not verify free disk space for the transfer." "$YELLOW"
+    if [ "$SILENT_MODE" = "true" ]; then
+        print_message "❌ Aborting (silent mode); re-run interactively to override" "$RED"
+        migrate_fail disk_unverified_silent; return 1
+    fi
+    print_message "❓ Continue without the disk-space check? (y/n): " "$YELLOW" "nonewline"
+    local a; read -r a
+    [[ "$a" =~ ^[Yy]$ ]] || { print_message "Migration cancelled." "$NC"
+        migrate_fail disk_unverified_declined cancelled; return 1; }
+    return 0
+}
+
+# Adopt an already-transferred birdnet-go-app: rewrite host paths, preserve the
+# old service settings, verify the DB, and flag migration complete.
+adopt_migrated_installation() {
+    local dest="$HOME/birdnet-go-app"
+    log_message "INFO" "Adopting migrated installation at $dest (source $MIGRATE_DEST)"
+    rewrite_migrated_config_paths "$dest/config/config.yaml" "$MIGRATE_REMOTE_HOME" "$HOME"
+
+    MIGRATE_TMP_UNIT="$(mktemp "${TMPDIR:-/tmp}/bng-mig-unit.XXXXXX")" || MIGRATE_TMP_UNIT=""
+    if [ -n "$MIGRATE_TMP_UNIT" ] && migrate_ssh 'cat /etc/systemd/system/birdnet-go.service 2>/dev/null || cat /lib/systemd/system/birdnet-go.service 2>/dev/null' > "$MIGRATE_TMP_UNIT" && [ -s "$MIGRATE_TMP_UNIT" ]; then
+        load_existing_service_config "$MIGRATE_TMP_UNIT"
+        print_message "📍 Preserved old settings (web port: ${WEB_PORT:-default}, timezone: ${CONFIGURED_TZ:-unset})" "$GREEN"
+    else
+        print_message "⚠️  Could not read the old systemd unit; using default port/TLS/timezone" "$YELLOW"
+    fi
+
+    local db="$dest/data/birdnet.db"
+    if [ -f "$db" ]; then
+        if ! command_exists sqlite3; then
+            print_message "❌ sqlite3 is unavailable; cannot verify database integrity" "$RED"
+            migrate_fail sqlite3_missing; return 1
+        fi
+        local res
+        res="$(sqlite3 "$db" 'PRAGMA integrity_check;' 2>/dev/null)"
+        if [ "$res" = "ok" ]; then
+            print_message "✅ Database integrity verified" "$GREEN"
+        else
+            print_message "❌ Database integrity check failed: ${res:-unreadable}" "$RED"
+            if [ "$SILENT_MODE" = "true" ]; then
+                migrate_fail db_integrity_failed; return 1
+            fi
+            print_message "   Your data on $MIGRATE_DEST is untouched. Adopt anyway? (y/n): " "$YELLOW" "nonewline"
+            local a; read -r a
+            [[ "$a" =~ ^[Yy]$ ]] || { migrate_fail db_integrity_declined cancelled; return 1; }
+        fi
+    fi
+
+    if grep -qiE '^[[:space:]]*type:[[:space:]]*mysql' "$dest/config/config.yaml" 2>/dev/null; then
+        print_message "⚠️  Config references a MySQL database; only config and clips migrated, not the external DB." "$YELLOW"
+    fi
+
+    load_telemetry_config
+    MIGRATION_DONE="true"
+    return 0
+}
+
+# Restore pre-migration state after a failure: drop the partial target, move any
+# backed-up data back into place, and restart the source service if THIS run
+# stopped it. Best effort; each step is guarded and reports what it did so the
+# user is never left thinking data was lost.
+migrate_rollback() {
+    local dest_dir="$HOME/birdnet-go-app"
+    rm -rf "$dest_dir" 2>/dev/null
+    if [ -n "$MIGRATE_BACKUP" ] && [ -d "$MIGRATE_BACKUP" ]; then
+        if mv "$MIGRATE_BACKUP" "$dest_dir" 2>/dev/null; then
+            print_message "↩️  Restored your previous data to $dest_dir" "$YELLOW"
+        else
+            print_message "⚠️  Could not auto-restore; your previous data is safe at $MIGRATE_BACKUP" "$YELLOW"
+        fi
+        MIGRATE_BACKUP=""
+    fi
+    if [ "$MIGRATE_STOPPED_REMOTE" = "1" ] && [ -n "$MIGRATE_SSH_SOCKET" ]; then
+        if ssh -t -o ControlPath="$MIGRATE_SSH_SOCKET" "$MIGRATE_DEST" 'sudo systemctl start birdnet-go.service' 2>/dev/null; then
+            print_message "↩️  Restarted BirdNET-Go on $MIGRATE_DEST" "$YELLOW"
+        else
+            print_message "⚠️  Could not restart BirdNET-Go on $MIGRATE_DEST; start it there manually" "$YELLOW"
+        fi
+        MIGRATE_STOPPED_REMOTE="0"
+    fi
+}
+
+# Escape a value for embedding in a JSON string literal. Truncate first, then
+# fold newlines and drop control characters, then escape backslashes BEFORE
+# quotes (the reverse order would double the backslashes we add). Truncating
+# before escaping keeps the cut from splitting an escape sequence in half.
+# Without this, one stray quote makes the payload invalid JSON and
+# validate_diagnostic_json discards EVERY diagnostic for the event.
+#
+# ${1:0:N} rather than `head -c N`, for one fewer process and a better cut:
+# parameter expansion counts CHARACTERS under a UTF-8 locale, so it cannot leave
+# half a character behind. That is not a guarantee, and the script does not force
+# a locale: under LC_ALL=C it counts bytes and can split one, exactly as head -c
+# did. Never worse, better where the locale is UTF-8, and moot today since every
+# value reaching here (exit codes, fixed slugs, `ssh -V`) is ASCII.
+json_escape() {
+    printf '%s' "${1:0:MAX_ERROR_LENGTH}" \
+        | LC_ALL=C tr '\n\r\t' '   ' \
+        | LC_ALL=C tr -d '[:cntrl:]' \
+        | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
+}
+
+# Structured diagnostics for a migration that stopped. Deliberately carries no
+# hostname, username, or filesystem path: MIGRATE_DEST is a user@host and the
+# app paths embed the account name, so only enums, booleans, exit codes, and
+# sizes are reported. Anything added here must stay non-identifying.
+collect_migration_diagnostics() {
+    local remote_size="unknown" home_avail="unknown"
+    # "unparseable" is a signal, not a shrug: it means the remote size came back
+    # non-numeric, which is the difference between "the disk really is full" and
+    # "we could not tell".
+    if [ -n "$MIGRATE_REMOTE_SIZE_KB" ]; then
+        if [[ "$MIGRATE_REMOTE_SIZE_KB" =~ ^[0-9]+$ ]]; then
+            remote_size="$MIGRATE_REMOTE_SIZE_KB"
+        else
+            remote_size="unparseable"
+        fi
+    fi
+    if [ -n "$MIGRATE_HOME_AVAIL_KB" ]; then
+        if [[ "$MIGRATE_HOME_AVAIL_KB" =~ ^[0-9]+$ ]]; then
+            home_avail="$MIGRATE_HOME_AVAIL_KB"
+        else
+            home_avail="unparseable"
+        fi
+    fi
+
+    local ssh_version rsync_local sqlite3_local
+    ssh_version="$(ssh -V 2>&1 | head -1)"
+    command_exists rsync && rsync_local="yes" || rsync_local="no"
+    command_exists sqlite3 && sqlite3_local="yes" || sqlite3_local="no"
+
+    # backup_taken and stopped_remote_this_run read the report-only records, NOT
+    # MIGRATE_BACKUP / MIGRATE_STOPPED_REMOTE: migrate_rollback clears both before
+    # the failure is reported, so the live values would say "no" every time.
+    cat <<EOF
+{
+    "fail_step": "$(json_escape "${MIGRATE_FAIL_STEP:-unknown}")",
+    "fail_kind": "$(json_escape "${MIGRATE_FAIL_KIND:-error}")",
+    "detail": "$(json_escape "$MIGRATE_FAIL_DETAIL")",
+    "silent_mode": "$SILENT_MODE",
+    "dest_source": "$MIGRATE_DEST_SOURCE",
+    "remote_app_resolved": "$([ -n "$MIGRATE_REMOTE_APP" ] && echo yes || echo no)",
+    "remote_app_is_default_path": "$MIGRATE_REMOTE_APP_DEFAULT",
+    "remote_state": "$MIGRATE_REMOTE_STATE",
+    "transfer_method": "$MIGRATE_TRANSFER_METHOD",
+    "rsync_local": "$rsync_local",
+    "sqlite3_local": "$sqlite3_local",
+    "ssh_version": "$(json_escape "$ssh_version")",
+    "backup_taken": "$MIGRATE_BACKUP_TAKEN",
+    "stopped_remote_this_run": "$MIGRATE_STOPPED_REMOTE_EVER",
+    "remote_size_kb": "$remote_size",
+    "home_avail_kb": "$home_avail"
+}
+EOF
+}
+
+# Report a stopped migration exactly once, naming the step that stopped it.
+# A user declining a prompt is not a fault, so it is reported at info level:
+# grouping deliberate cancellations with real failures inflates the error rate
+# and buries the actionable events. Same convention as the AVX2 prompt.
+# The step is part of the message so Sentry, which has no stack trace to group
+# a shell script by, splits this into one issue per failing step.
+migrate_report_failure() {
+    local step="${MIGRATE_FAIL_STEP:-unknown}"
+    local diag
+    diag="$(collect_migration_diagnostics)"
+    if [ "$MIGRATE_FAIL_KIND" = "cancelled" ]; then
+        send_telemetry_event "info" "Cross-host migration cancelled: $step" "info" \
+            "step=remote_migrate,result=cancelled,reason=$step" "$diag"
+    else
+        send_telemetry_event "error" "Cross-host migration failed: $step" "error" \
+            "step=remote_migrate,result=failure,error=$step" "$diag"
+    fi
+}
+
+# Pull an install from another host over SSH and adopt it. Returns nonzero on any
+# failure (caller aborts the install); on success sets MIGRATION_DONE=true.
+migrate_from_remote_host() {
+    local dest_dir="$HOME/birdnet-go-app"
+    print_message "\n🔄 Migrating BirdNET-Go from another host over SSH" "$GREEN"
+    log_message "INFO" "Starting cross-host migration (dest=$MIGRATE_DEST)"
+
+    # Resolve the ssh destination (prompt when not supplied on the command line).
+    if [ -z "$MIGRATE_DEST" ]; then
+        if [ "$SILENT_MODE" = "true" ]; then
+            print_message "❌ --migrate needs --migrate-from <ssh-dest> in silent mode" "$RED"
+            migrate_fail no_dest_silent; return 1
+        fi
+        print_message "❓ Old host (user@host or ssh alias): " "$YELLOW" "nonewline"
+        read -r MIGRATE_DEST
+        MIGRATE_DEST_SOURCE="prompt"
+    else
+        MIGRATE_DEST_SOURCE="flag"
+    fi
+    if ! MIGRATE_DEST="$(parse_ssh_dest "$MIGRATE_DEST")"; then
+        print_message "❌ Invalid ssh destination" "$RED"
+        migrate_fail bad_dest; return 1
+    fi
+
+    # Migration-only tools, installed here so a normal install/update never pulls
+    # packages it does not use.
+    local mig_pkgs=() _p
+    for _p in rsync sqlite3; do
+        command_exists "$_p" || mig_pkgs+=("$_p")
+    done
+    if [ ${#mig_pkgs[@]} -gt 0 ]; then
+        print_message "🔧 Installing migration tools: ${mig_pkgs[*]}" "$YELLOW"
+        if ! sudo apt install -q -y "${mig_pkgs[@]}"; then
+            print_message "❌ Failed to install migration tools (${mig_pkgs[*]})" "$RED"
+            migrate_fail tools_install_failed error "pkgs=${mig_pkgs[*]}"; return 1
+        fi
+    fi
+    command_exists rsync || { print_message "❌ rsync is required for migration" "$RED"
+        migrate_fail rsync_missing; return 1; }
+
+    # Connect and locate the source BEFORE touching any local state, so a mistyped
+    # host or a missing remote install never displaces the user's existing data.
+    open_ssh_master || return 1
+    check_remote_shell_clean || return 1
+    resolve_remote_app || return 1
+
+    # Verify capacity and settle the local target BEFORE stopping the source, so
+    # aborting on a disk or overwrite decision never leaves the old host offline.
+    check_remote_disk || return 1
+
+    # Overwrite guard: never merge into pre-existing data. setup_logging already
+    # created data/logs here, so that alone must NOT count; trigger only on a real
+    # payload (config, database, or clips). Move it aside (never delete).
+    if [ -f "$dest_dir/config/config.yaml" ] || [ -f "$dest_dir/data/birdnet.db" ] || \
+       { [ -d "$dest_dir/data/clips" ] && [ -n "$(ls -A "$dest_dir/data/clips" 2>/dev/null)" ]; }; then
+        if [ "$SILENT_MODE" = "true" ]; then
+            print_message "❌ $dest_dir already contains data; refusing to overwrite in silent mode" "$RED"
+            migrate_fail dest_occupied_silent; return 1
+        fi
+        print_message "⚠️  $dest_dir already contains data on this machine." "$YELLOW"
+        print_message "❓ Move it aside to a backup and continue? (y/n): " "$YELLOW" "nonewline"
+        local ans; read -r ans
+        [[ "$ans" =~ ^[Yy]$ ]] || { print_message "Migration cancelled; nothing changed." "$NC"
+            migrate_fail dest_occupied_declined cancelled; return 1; }
+        MIGRATE_BACKUP="${dest_dir}.bak.$(date +%Y%m%d%H%M%S).$$"
+        if ! mv "$dest_dir" "$MIGRATE_BACKUP"; then
+            print_message "❌ Backup move failed" "$RED"; MIGRATE_BACKUP=""
+            migrate_fail backup_move_failed; return 1
+        fi
+        MIGRATE_BACKUP_TAKEN="yes"
+        print_message "📦 Existing data moved to $MIGRATE_BACKUP (nothing deleted)" "$GREEN"
+    fi
+
+    # Require the source service to be stopped so we never copy a live database.
+    # From here on, failures route through migrate_rollback, which restores the
+    # backed-up local data and restarts the source if this run stopped it.
+    if ! check_remote_stopped; then
+        print_message "⚠️  BirdNET-Go appears to be running on $MIGRATE_DEST. Copying a live database can corrupt it." "$YELLOW"
+        if [ "$SILENT_MODE" = "true" ]; then
+            print_message "❌ Stop birdnet-go on the old host, then re-run" "$RED"; migrate_rollback
+            # Split the slug on what we actually know: "running" and "could not
+            # tell" need different answers from the reader, and merging them into
+            # one issue is what makes a report unactionable.
+            if [ "$MIGRATE_REMOTE_STATE" = "running" ]; then
+                migrate_fail remote_running_silent
+            else
+                migrate_fail remote_state_unknown_silent
+            fi
+            return 1
+        fi
+        print_message "❓ Stop it now over SSH (sudo)? (y/n): " "$YELLOW" "nonewline"
+        local s; read -r s
+        if [[ "$s" =~ ^[Yy]$ ]]; then
+            # Arm the rollback restart BEFORE the stop, not after confirming it.
+            # If the stop lands but the verification round trip then drops, a flag
+            # set only on the confirmed path stays "0" and rollback walks away
+            # leaving the user's source service down. Starting a service that was
+            # never stopped is a no-op, so arming early only ever costs nothing.
+            MIGRATE_STOPPED_REMOTE="1"
+            ssh -t -o ControlPath="$MIGRATE_SSH_SOCKET" "$MIGRATE_DEST" 'sudo systemctl stop birdnet-go.service' || true
+            # Trust the observed state, not ssh's exit code: ssh -t can report
+            # failure even when the remote command stopped the service.
+            if check_remote_stopped; then
+                MIGRATE_STOPPED_REMOTE_EVER="yes"
+            else
+                # Disarm only when the probe CONFIRMED it is still running: we
+                # stopped nothing, so an `ssh -t sudo systemctl start` would buy
+                # nothing and can sit on a sudo prompt. Stay armed when the probe
+                # could not tell, because then the stop may well have landed.
+                [ "$MIGRATE_REMOTE_STATE" = "running" ] && MIGRATE_STOPPED_REMOTE="0"
+                print_message "❌ Still running; stop it manually and re-run" "$RED"; migrate_rollback
+                migrate_fail remote_still_running error "state=$MIGRATE_REMOTE_STATE"; return 1
+            fi
+        else
+            print_message "❌ Stop birdnet-go on the old host, then re-run" "$RED"; migrate_rollback
+            migrate_fail remote_stop_declined cancelled; return 1
+        fi
+    fi
+
+    # Transfer straight into the destination; rsync runs as the local user so
+    # ownership is already correct. Any incomplete transfer is fatal and rolls back.
+    print_message "📥 Transferring $MIGRATE_REMOTE_APP from $MIGRATE_DEST ..." "$YELLOW"
+    if migrate_ssh 'command -v rsync >/dev/null 2>&1'; then
+        MIGRATE_TRANSFER_METHOD="rsync"
+        # `|| rc=$?` keeps rsync's real exit code; inside `if ! rsync ...` the `!`
+        # would have already flipped $? to 0. The code names the failure (e.g. 11
+        # = file I/O, 12 = protocol, 23 = partial transfer), so it is worth having.
+        local rc=0
+        rsync -aH --partial --info=progress2 --exclude 'config/hls/' \
+                -e "ssh -o ControlPath=$MIGRATE_SSH_SOCKET" \
+                "$MIGRATE_DEST:$MIGRATE_REMOTE_APP/" "$dest_dir/" || rc=$?
+        if [ "$rc" -ne 0 ]; then
+            print_message "❌ rsync failed (incomplete transfer); rolling back" "$RED"
+            migrate_rollback
+            migrate_fail rsync_failed error "rsync_exit=$rc"; return 1
+        fi
+    else
+        print_message "ℹ️  rsync not on the remote; using tar over SSH" "$YELLOW"
+        MIGRATE_TRANSFER_METHOD="tar"
+        mkdir -p "$dest_dir"
+        # Archive the resolved app dir's CONTENTS so a custom remote path still
+        # lands in $dest_dir. PIPESTATUS makes the REMOTE tar's exit status
+        # authoritative (no pipefail), so a truncated remote stream is not masked
+        # by the local tar exiting 0 on EOF.
+        migrate_ssh "tar -C '$MIGRATE_REMOTE_APP' --exclude=./config/hls -cf - ." | tar -C "$dest_dir" -xf -
+        local pstat=("${PIPESTATUS[@]}")
+        if [ "${pstat[0]}" -ne 0 ] || [ "${pstat[1]}" -ne 0 ]; then
+            print_message "❌ tar transfer failed; rolling back" "$RED"
+            migrate_rollback
+            migrate_fail tar_failed error "remote_tar=${pstat[0]},local_tar=${pstat[1]}"; return 1
+        fi
+    fi
+
+    if [ ! -f "$dest_dir/config/config.yaml" ]; then
+        print_message "❌ Transfer left no config.yaml; rolling back" "$RED"
+        migrate_rollback
+        migrate_fail no_config_after_transfer; return 1
+    fi
+
+    # adopt_migrated_installation records its own, more specific slug.
+    if ! adopt_migrated_installation; then
+        print_message "❌ Adopt step failed; rolling back" "$RED"; migrate_rollback
+        [ -n "$MIGRATE_FAIL_STEP" ] || migrate_fail adopt_failed
+        return 1
+    fi
+    print_message "✅ Migration data adopted; continuing with provisioning" "$GREEN"
+    log_message "INFO" "Cross-host migration transfer and adopt complete"
+    send_telemetry_event "info" "Cross-host migration completed" "info" "step=remote_migrate,result=success"
+    return 0
 }
 
 # Function to migrate a root installation to the current user's home directory
@@ -1947,6 +2580,9 @@ migrate_installation() {
 
 # Function to check for existing BirdNET-Go installation under a different user
 check_existing_installation_owner() {
+    # Cross-host migrate mode owns install placement via the remote pull; skip the
+    # local cross-user detection so it cannot preempt or collide with migration.
+    [ "$MIGRATE_MODE" = "true" ] && return 0
     local found_other_install=false
     local other_user=""
     local other_path=""
@@ -2003,7 +2639,10 @@ check_existing_installation_owner() {
 
         if [ -n "$service_file" ]; then
             local service_config_path
-            service_config_path=$(sed -n 's/.*-v \([^ ]*\):\/config.*/\1/p' "$service_file" 2>/dev/null | head -1)
+            # Read via _read_unit_file so a root-only-readable unit (mode 600) is still
+            # parsed (sudo fallback), consistent with load_existing_service_config; a silent
+            # read failure here would blank the cross-user detection path (GitHub #3950).
+            service_config_path=$(_read_unit_file "$service_file" | sed -n 's/.*-v \([^ ]*\):\/config.*/\1/p' | head -1)
 
             if [ -n "$service_config_path" ]; then
                 _check_install_home "${service_config_path%/birdnet-go-app/config}"
@@ -3028,7 +3667,7 @@ validate_audio_device() {
         print_message "⚠️ User $USER is not in the audio group" "$YELLOW"
         if sudo usermod -aG audio "$USER"; then
             print_message "✅ Added user $USER to audio group" "$GREEN"
-            print_message "⚠️ Please log out and log back in for group changes to take effect" "$YELLOW"
+            print_message "⚠️ Please log out and log back in for group changes to take effect.$(migrate_rerun_hint)" "$YELLOW"
             exit 0
         else
             print_message "❌ Failed to add user to audio group" "$RED"
@@ -3510,54 +4149,98 @@ get_ip_location() {
     return 1
 }
 
+# Validate a candidate IANA zone name against the zoneinfo database. Rejects an empty
+# value, path traversal ("..", which would let the existence check escape the zoneinfo
+# tree) and any name with no matching zoneinfo file (e.g. timedatectl's "n/a" on an
+# unconfigured host, or an absolute path left by a non-standard /etc/localtime symlink).
+# On success echoes the zone and returns 0; otherwise echoes nothing and returns 1.
+# $2 overrides the zoneinfo directory (test seam).
+_valid_iana_tz() {
+    local tz="$1"
+    local zoneinfo_dir="${2:-/usr/share/zoneinfo}"
+    [ -n "$tz" ] || return 1
+    case "$tz" in
+        *..*) return 1 ;;
+    esac
+    [ -f "$zoneinfo_dir/$tz" ] || return 1
+    printf '%s' "$tz"
+}
+
 # Resolve the host timezone using a single, validated detection chain.
 # Shared by configure_timezone() and generate_systemd_service_content() so the two
 # cannot drift apart (Forgejo #877). Tries, in order: an optional preferred candidate
-# (e.g. a previously configured zone), /etc/timezone, timedatectl, and the
-# /etc/localtime symlink. The result is validated against the zoneinfo database and
-# rejected if it contains path traversal. Echoes a valid IANA zone name, or an empty
-# string if none could be resolved (callers decide the UTC fallback so they can warn).
+# (e.g. a previously configured zone), timedatectl, the /etc/localtime symlink, and
+# finally /etc/timezone. Each source is validated against the zoneinfo database
+# independently and skipped on failure, so a stale or invalid earlier source no longer
+# defeats a valid later one. Echoes a valid IANA zone name, or an empty string if none
+# could be resolved (callers decide the UTC fallback so they can warn).
+#
+# timedatectl is preferred over /etc/timezone (GitHub #3950): /etc/timezone is a
+# Debian-ism updated only by tzdata tooling and can go stale (e.g. `timedatectl
+# set-timezone` on some setups only rewrites /etc/localtime), whereas timedatectl and
+# /etc/localtime reflect the zone the kernel and Go's time.Local actually use. On systemd
+# hosts without /etc/timezone (Debian 13, #3351) detection still succeeds at timedatectl
+# or /etc/localtime; /etc/timezone stays in the chain only as a last resort for
+# pre-systemd hosts with no working timedatectl.
 resolve_host_timezone() {
     local candidate="${1:-}"
-    local tz="$candidate"
+    # Test seams: default to the real system paths.
+    local tz_etc="${BNG_TZ_ETC_TIMEZONE:-/etc/timezone}"
+    local localtime_link="${BNG_TZ_LOCALTIME:-/etc/localtime}"
+    local zoneinfo_dir="${BNG_TZ_ZONEINFO_DIR:-/usr/share/zoneinfo}"
+    zoneinfo_dir="${zoneinfo_dir%/}"   # tolerate a trailing slash so the symlink prefix-strip matches
+    local tz
 
-    if [ -z "$tz" ] && [ -f /etc/timezone ]; then
-        tz=$(cat /etc/timezone 2>/dev/null | tr -d '\n' | tr -d ' ')
+    # 1. Explicit prior configuration (preservation above all else).
+    if [ -n "$candidate" ] && tz=$(_valid_iana_tz "$candidate" "$zoneinfo_dir"); then
+        printf '%s' "$tz"; return 0
     fi
 
-    if [ -z "$tz" ] && command_exists timedatectl; then
-        tz=$(timedatectl show --property=Timezone --value 2>/dev/null | tr -d '\n' | tr -d ' ')
+    # 2. timedatectl: systemd's authoritative view of the host zone.
+    if command_exists timedatectl; then
+        local td
+        td=$(timedatectl show --property=Timezone --value 2>/dev/null | tr -d '[:space:]')
+        if tz=$(_valid_iana_tz "$td" "$zoneinfo_dir"); then
+            printf '%s' "$tz"; return 0
+        fi
     fi
 
-    if [ -z "$tz" ] && [ -L /etc/localtime ]; then
+    # 3. /etc/localtime symlink into the zoneinfo tree (the file Go's time.Local reads).
+    if [ -L "$localtime_link" ]; then
         local tz_path
-        tz_path=$(readlink -f /etc/localtime)
-        tz=${tz_path#/usr/share/zoneinfo/}
+        tz_path=$(readlink -f "$localtime_link" 2>/dev/null)
+        if tz=$(_valid_iana_tz "${tz_path#"$zoneinfo_dir"/}" "$zoneinfo_dir"); then
+            printf '%s' "$tz"; return 0
+        fi
     fi
 
-    # Validate against the zoneinfo database before trusting it. timedatectl can report
-    # "n/a" on unconfigured images and a non-standard /etc/localtime symlink can leave an
-    # absolute path; neither is a valid zone identifier. A value containing ".." would let
-    # the existence check escape /usr/share/zoneinfo, so reject those outright.
-    if [ -n "$tz" ] && { [[ "$tz" == *..* ]] || [ ! -f "/usr/share/zoneinfo/$tz" ]; }; then
-        tz=""
+    # 4. /etc/timezone: Debian-ism, last resort (can be stale, see header).
+    if [ -f "$tz_etc" ]; then
+        local ft
+        ft=$(tr -d '[:space:]' < "$tz_etc" 2>/dev/null)
+        if tz=$(_valid_iana_tz "$ft" "$zoneinfo_dir"); then
+            printf '%s' "$tz"; return 0
+        fi
     fi
 
-    printf '%s' "$tz"
+    printf ''
 }
 
 # Function to configure timezone
 configure_timezone() {
-    # Silent mode: use system timezone
+    # Silent mode: preserve any zone already chosen this run (e.g. one restored from an
+    # existing unit during an update/migration), otherwise detect the host zone via the
+    # shared resolver so silent installs use the same validated, timedatectl-first chain as
+    # interactive ones. The old inline chain preferred a stale /etc/timezone, skipped
+    # zoneinfo validation, and unconditionally clobbered a restored zone (GitHub #3950).
     if [ "$SILENT_MODE" = "true" ]; then
-        if [ -f /etc/timezone ]; then
-            CONFIGURED_TZ=$(cat /etc/timezone 2>/dev/null | tr -d '\n')
-        elif command -v timedatectl &>/dev/null; then
-            CONFIGURED_TZ=$(timedatectl show --property=Timezone --value 2>/dev/null)
-        else
+        CONFIGURED_TZ=$(resolve_host_timezone "$CONFIGURED_TZ")
+        if [ -z "$CONFIGURED_TZ" ]; then
             CONFIGURED_TZ="UTC"
+            print_message "🔇 Silent mode: could not detect timezone, defaulting to UTC" "$YELLOW"
+        else
+            print_message "🔇 Silent mode: timezone set to $CONFIGURED_TZ" "$YELLOW"
         fi
-        print_message "🔇 Silent mode: timezone set to $CONFIGURED_TZ" "$YELLOW"
         return
     fi
 
@@ -4480,6 +5163,8 @@ generate_systemd_service_content() {
     TZ=$(resolve_host_timezone "$CONFIGURED_TZ")
     if [ -z "$TZ" ]; then
         TZ="UTC"
+        # stdout is the unit file here, so warn to the log only, never via print_message.
+        log_message "WARN" "Could not resolve host timezone; systemd unit will use TZ=UTC"
     fi
 
     # Determine host UID/GID even when executed with sudo
@@ -4490,6 +5175,17 @@ generate_systemd_service_content() {
     local audio_env_line=""
     if check_directory_exists "/dev/snd/"; then
         audio_env_line="--device /dev/snd"
+    fi
+
+    # Intel iGPU passthrough for OpenVINO GPU offload. Mapped only when an Intel
+    # render node is present: the amd64 image bundles the Intel OpenCL/Level-Zero
+    # userspace and the entrypoint grants the render group at runtime. Hardcoding
+    # /dev/dri on a host without it would make docker run fail, so gate on
+    # detection (mirrors the /dev/snd handling above). Re-detected on every
+    # regenerate, so adding or removing an Intel GPU later just needs a re-run.
+    local gpu_env_line=""
+    if has_intel_gpu; then
+        gpu_env_line="--device /dev/dri"
     fi
 
     # Check for /sys/class/thermal, used for Raspberry Pi temperature reporting in system dashboard
@@ -4510,10 +5206,15 @@ generate_systemd_service_content() {
     # because load_existing_service_config() restores these flags from the current unit.
     # Any restored host bind address is reapplied so a localhost-only mapping survives a
     # regenerate (default is no address: published on all interfaces).
+    #
+    # AutoTLS maps host 80/443 to the container's non-privileged listeners: the app
+    # binds the ACME HTTP-01 + HTTP->HTTPS redirect listener on 8080 and HTTPS on 8443
+    # (see internal/api/server.go), so the container never binds privileged ports and
+    # needs no NET_BIND_SERVICE. This mirrors the docker/podman AutoTLS compose files.
     local tls_ports_line=""
     if [ "$BIND_TLS_PORTS" = "true" ]; then
-        tls_ports_line="-p ${TLS_BIND_ADDR:+${TLS_BIND_ADDR}:}80:80 \\
-    -p ${TLS_BIND_ADDR:+${TLS_BIND_ADDR}:}443:443"
+        tls_ports_line="-p ${TLS_BIND_ADDR:+${TLS_BIND_ADDR}:}80:8080 \\
+    -p ${TLS_BIND_ADDR:+${TLS_BIND_ADDR}:}443:8443"
     fi
     local metrics_port_line=""
     if [ "$BIND_METRICS_PORT" = "true" ]; then
@@ -4565,6 +5266,7 @@ ${tls_ports_line:+    ${tls_ports_line} \\
     --env BIRDNET_UID=${HOST_UID} \\
     --env BIRDNET_GID=${HOST_GID} \\
 ${audio_env_line:+    ${audio_env_line} \\
+}${gpu_env_line:+    ${gpu_env_line} \\
 }    -v ${CONFIG_DIR}:/config \\
     -v ${DATA_DIR}:/data \\
 ${thermal_volume_line:+    ${thermal_volume_line} \\
@@ -4594,9 +5296,38 @@ _extract_bind_addr() {
 # systemd unit so updates and reconfiguration preserve the user's prior choices instead of
 # resetting to fresh-install defaults. This is the backward-compatibility guarantee: an
 # unchanged update regenerates a byte-identical unit (check_systemd_service then reports no
-# change). It must be called before check_systemd_service / add_systemd_config on the
+# change). The one deliberate exception is a legacy AutoTLS unit that still maps the dead
+# 443:443 / 80:80 ports: it is detected as AutoTLS-enabled and regenerated with the corrected
+# 443:8443 / 80:8080 mapping, so that single update is intentionally not byte-identical.
+# It must be called before check_systemd_service / add_systemd_config on the
 # update and reconfigure paths. Sets globals WEB_PORT, BIND_TLS_PORTS, BIND_METRICS_PORT,
 # and CONFIGURED_TZ.
+
+# Read a systemd unit file, falling back to sudo when the file exists but is not readable
+# by the invoking user (root-owned mode 600 units, GitHub #3950 - a silent read failure
+# there left CONFIGURED_TZ empty and reset the container TZ to UTC on update). Echoes the
+# file content, or nothing if it cannot be read. `sudo -n` (non-interactive) is tried first
+# so unattended/cron updates never hang on a password prompt; an interactive `sudo` is used
+# only when a TTY is attached.
+_read_unit_file() {
+    local f="$1"
+    [ -f "$f" ] || return 0
+    if [ -r "$f" ]; then
+        cat "$f" 2>/dev/null
+        return 0
+    fi
+    if command_exists sudo; then
+        if sudo -n cat "$f" 2>/dev/null; then
+            return 0
+        fi
+        # Interactive sudo only outside silent mode and with a TTY, so an unattended
+        # or --silent run never blocks on a password prompt (GitHub #3950 review).
+        if [ "${SILENT_MODE:-false}" != "true" ] && [ -t 0 ]; then
+            sudo cat "$f" 2>/dev/null
+        fi
+    fi
+}
+
 # shellcheck disable=SC2120  # optional $1 (unit path) is intentional, used by tests
 load_existing_service_config() {
     # Optional explicit unit path (used by tests); defaults to the installed locations.
@@ -4610,13 +5341,19 @@ load_existing_service_config() {
     fi
     [ -z "$service_file" ] && return 0
 
+    # Read the unit once (with a sudo fallback for a root-only-readable unit, GitHub #3950)
+    # and parse the captured content below, so a unit the invoking user cannot read no
+    # longer silently loses the web port / TLS / metrics bindings and timezone.
+    local unit_content
+    unit_content=$(_read_unit_file "$service_file")
+
     # Web interface mapping: the one whose container side is 8080 (-p <host>:8080). The host
     # side may carry an optional bind address (e.g. 127.0.0.1:9000:8080 when a user manually
     # bound to localhost behind a same-host reverse proxy). Preserve the bind address as well
     # as the port so an update does not silently re-expose a localhost-only binding to all
     # interfaces. Each -p is on its own continuation line, so a per-line match is sufficient.
     local web_map
-    web_map=$(grep -oE '\-p (\[[0-9a-fA-F:]+\]:|[0-9.]+:)?[0-9]+:8080' "$service_file" 2>/dev/null | head -1)
+    web_map=$(grep -oE '\-p (\[[0-9a-fA-F:]+\]:|[0-9.]+:)?[0-9]+:8080' <<<"$unit_content" | head -1)
     if [ -n "$web_map" ]; then
         # Strip the leading "-p " and trailing ":8080", leaving "<addr>:<port>" or "<port>".
         local host_spec
@@ -4644,13 +5381,23 @@ load_existing_service_config() {
     # NOTE: this is binding preservation, not feature detection, so an unchanged update keeps
     # exactly what the user already ran.
     local tls_map
-    tls_map=$(grep -oE '\-p (\[[0-9a-fA-F:]+\]:|[0-9.]+:)?443:443' "$service_file" 2>/dev/null | head -1)
+    # Match the current 443:8443 mapping or the legacy 443:443 form. Pre-fix units
+    # published dead 443:443 / 80:80 mappings (the container binds 8080/8443); treat
+    # them as AutoTLS-enabled so a regenerate produces the corrected 443:8443 mapping
+    # instead of silently dropping AutoTLS. The trailing \b avoids a false match
+    # inside e.g. 443:4433.
+    tls_map=$(grep -oE '\-p (\[[0-9a-fA-F:]+\]:|[0-9.]+:)?443:(8443|443)\b' <<<"$unit_content" | head -1)
     if [ -n "$tls_map" ]; then
         BIND_TLS_PORTS="true"
-        TLS_BIND_ADDR=$(_extract_bind_addr "$tls_map" "443:443")
+        # Strip whichever container-port suffix matched to recover any bind address.
+        local tls_portpair="443:8443"
+        case "$tls_map" in
+            *443:443) tls_portpair="443:443" ;;
+        esac
+        TLS_BIND_ADDR=$(_extract_bind_addr "$tls_map" "$tls_portpair")
     fi
     local metrics_map
-    metrics_map=$(grep -oE '\-p (\[[0-9a-fA-F:]+\]:|[0-9.]+:)?8090:8090' "$service_file" 2>/dev/null | head -1)
+    metrics_map=$(grep -oE '\-p (\[[0-9a-fA-F:]+\]:|[0-9.]+:)?8090:8090' <<<"$unit_content" | head -1)
     if [ -n "$metrics_map" ]; then
         BIND_METRICS_PORT="true"
         METRICS_BIND_ADDR=$(_extract_bind_addr "$metrics_map" "8090:8090")
@@ -4659,7 +5406,13 @@ load_existing_service_config() {
     # Timezone, only if not already chosen this run.
     if [ -z "$CONFIGURED_TZ" ]; then
         local existing_tz
-        existing_tz=$(sed -n 's/.*--env TZ="\([^"]*\)".*/\1/p' "$service_file" 2>/dev/null | head -1)
+        existing_tz=$(sed -n 's/.*--env TZ="\([^"]*\)".*/\1/p' <<<"$unit_content" | head -1)
+        # If the unit could not be read or carried no TZ, fall back to the still-running
+        # container's env: the update path calls this before stopping the service, so the
+        # --rm container is up and its TZ reflects the zone actually in use (GitHub #3950).
+        if [ -z "$existing_tz" ]; then
+            existing_tz=$(safe_docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' birdnet-go | sed -n 's/^TZ=//p' | head -1)
+        fi
         if [ -n "$existing_tz" ]; then
             CONFIGURED_TZ="$existing_tz"
             log_message "INFO" "Restored timezone from existing service: $CONFIGURED_TZ"
@@ -4997,7 +5750,7 @@ EOF
     # (an actual parse error) is treated as a problem; benign advisory warnings are logged.
     if command_exists systemd-analyze; then
         local verify_out verify_rc
-        verify_out=$(systemd-analyze verify /etc/systemd/system/birdnet-go.service 2>&1)
+        verify_out=$(sudo systemd-analyze verify /etc/systemd/system/birdnet-go.service 2>&1)
         verify_rc=$?
         # In minimal chroots/containers systemd-analyze cannot reach the system bus and exits
         # non-zero with a bus-connection error even for a valid unit; do not warn on that.
@@ -5155,6 +5908,11 @@ handle_container_update() {
     load_existing_service_config
     if [ -n "$CONFIGURED_TZ" ]; then
         print_message "📍 Using existing timezone configuration: $CONFIGURED_TZ" "$GREEN"
+    elif [ -f "/etc/systemd/system/birdnet-go.service" ] || [ -f "/lib/systemd/system/birdnet-go.service" ]; then
+        # An existing unit is present but no timezone could be recovered from it (e.g. a
+        # root-only-readable unit this run could not read). The regenerated unit will fall
+        # back to host detection; warn so a silent TZ reset to UTC is visible (GitHub #3950).
+        print_message "⚠️  Could not read the timezone from the existing unit; the regenerated unit will use host timezone detection. If detection is wrong (e.g. a stale /etc/timezone), re-run the update with sudo or set the zone from the reconfigure menu." "$YELLOW"
     fi
 
     local service_needs_update
@@ -5768,6 +6526,23 @@ verify_post_start() {
     fi
 }
 
+# Detect an Intel GPU render node (PCI vendor 0x8086) for OpenVINO iGPU offload.
+# Only Intel iGPUs are accelerated by the OpenVINO GPU plugin bundled in the amd64
+# container image; other render nodes (AMD, NVIDIA, Pi VideoCore) gain nothing, so
+# they are not mapped into the container. Used to decide whether to pass /dev/dri.
+has_intel_gpu() {
+    local vendor id
+    for vendor in /sys/class/drm/renderD*/device/vendor; do
+        [ -r "$vendor" ] || continue
+        # Read the single-line sysfs vendor file with the bash builtin rather than
+        # spawning grep per node. The kernel writes lowercase; match both cases.
+        if read -r id < "$vendor" 2>/dev/null && [[ "$id" == *0x8086* || "$id" == *0X8086* ]]; then
+            return 0  # True - Intel render node present
+        fi
+    done
+    return 1  # False - no Intel render node
+}
+
 # Function to check if system is a Raspberry Pi
 is_raspberry_pi() {
     if [ -f /proc/device-tree/model ]; then
@@ -5923,6 +6698,8 @@ show_usage() {
     echo "                          Default: nightly"
     echo "                          Examples: latest, v1.2.3, nightly, sha256:abc123..."
     echo "  --silent                Non-interactive install using environment variables"
+    echo "  --migrate               Migrate an existing install from another host over SSH"
+    echo "  --migrate-from <host>   Migrate source (user@host or ssh alias); add --silent to avoid prompts"
     echo "  --force-root            Allow running as root (not recommended)"
     echo "  -h, --help              Show this help message"
     echo ""
@@ -5967,6 +6744,22 @@ parse_arguments() {
             --silent)
                 SILENT_MODE="true"
                 shift
+                ;;
+            --migrate)
+                MIGRATE_MODE="true"
+                shift
+                ;;
+            --migrate-from)
+                if [ -n "$2" ] && [[ $2 != -* ]]; then
+                    MIGRATE_MODE="true"
+                    MIGRATE_DEST="$2"
+                    shift 2
+                else
+                    echo "❌ Error: --migrate-from requires an ssh destination (user@host or ssh alias)" >&2
+                    echo ""
+                    show_usage
+                    exit 1
+                fi
                 ;;
             --force-root)
                 FORCE_ROOT="true"
@@ -6169,7 +6962,7 @@ reconfigure_menu() {
     # unit is usually world-readable); if it cannot be copied, rollback restores config only.
     local service_backup="${CONFIG_FILE}.service.reconfigure.bak"
     local has_service_backup="false"
-    if [ -f "/etc/systemd/system/birdnet-go.service" ] && cp "/etc/systemd/system/birdnet-go.service" "$service_backup" 2>/dev/null; then
+    if [ -f "/etc/systemd/system/birdnet-go.service" ] && _read_unit_file "/etc/systemd/system/birdnet-go.service" > "$service_backup" 2>/dev/null && [ -s "$service_backup" ]; then
         has_service_backup="true"
     fi
     stop_birdnet_service
@@ -6749,7 +7542,7 @@ handle_menu_selection() {
 }
 
 # Silent mode skips the menu and forces fresh install
-if [ "$SILENT_MODE" = "true" ] && { [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; }; then
+if [ "$SILENT_MODE" = "true" ] && [ "$MIGRATE_MODE" != "true" ] && { [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; }; then
     print_message "🔇 Silent mode: performing update on existing installation" "$YELLOW"
     if [ "$INSTALLATION_TYPE" = "full" ] || [ "$INSTALLATION_TYPE" = "docker" ]; then
         check_network
@@ -6767,7 +7560,7 @@ if [ "$SILENT_MODE" = "true" ] && { [ "$INSTALLATION_TYPE" != "none" ] || [ "$PR
 fi
 
 # Menu loop for existing installations (skipped in silent mode and after migration)
-if [ "$SILENT_MODE" != "true" ] && [ "$MIGRATION_DONE" != "true" ] && { [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; }; then
+if [ "$SILENT_MODE" != "true" ] && [ "$MIGRATE_MODE" != "true" ] && [ "$MIGRATION_DONE" != "true" ] && { [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; }; then
     while true; do
         # Display menu based on installation type
         print_message ""  # Add spacing
@@ -6873,6 +7666,16 @@ fi
 
 # Pull Docker image
 pull_docker_image
+
+# Cross-host migration: pull and adopt an existing install before the normal
+# fresh-install directory/config steps run.
+if [ "$MIGRATE_MODE" = "true" ]; then
+    if ! migrate_from_remote_host; then
+        print_message "❌ Migration failed. See messages above." "$RED"
+        migrate_report_failure
+        exit 1
+    fi
+fi
 
 # Check if directories can be created
 check_directory "$CONFIG_DIR"

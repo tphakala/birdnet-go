@@ -98,9 +98,9 @@ func parseVerificationStatus(status string) (verificationStatus, error) {
 		return verificationStatus{IsSet: false}, nil
 	}
 	switch status {
-	case "correct":
+	case VerificationStatusCorrect:
 		return verificationStatus{IsSet: true, Verified: true}, nil
-	case "false_positive":
+	case VerificationStatusFalsePositive:
 		return verificationStatus{IsSet: true, Verified: false}, nil
 	default:
 		return verificationStatus{}, fmt.Errorf("invalid verification status: %s", status)
@@ -153,6 +153,7 @@ type DetectionResponse struct {
 	ScientificName     string            `json:"scientificName"`
 	CommonName         string            `json:"commonName"`
 	Confidence         float64           `json:"confidence"`
+	ClipName           string            `json:"clipName,omitempty"`  // Audio clip filename (basename only, no path); empty when no clip exists
 	ModelType          string            `json:"modelType,omitempty"` // AI model type (e.g. "bird", "bat"); drives the spectrogram frequency range
 	Verified           string            `json:"verified"`
 	Locked             bool              `json:"locked"`
@@ -193,13 +194,16 @@ type WeatherInfo struct {
 	MoonIllumination float64 `json:"moonIllumination,omitempty"`
 }
 
-// DetectionRequest represents the query parameters for listing detections
+// DetectionRequest is the JSON request body for the review and lock endpoints.
+// LockDetection is a pointer so the review handler can tell "field omitted" (nil,
+// leave the lock untouched) apart from an explicit false (unlock): a plain bool
+// would make an omitted field read as false and silently unlock a locked detection.
 type DetectionRequest struct {
 	Comment       string `json:"comment,omitempty"`
 	Verified      string `json:"verified,omitempty"`
-	IgnoreSpecies string `json:"ignoreSpecies,omitempty"`
+	IgnoreSpecies string `json:"ignore_species,omitempty"`
 	Locked        bool   `json:"locked,omitempty"`
-	LockDetection bool   `json:"lock_detection,omitempty"`
+	LockDetection *bool  `json:"lock_detection,omitempty"`
 }
 
 // PaginatedResponse represents a paginated API response
@@ -689,8 +693,13 @@ func (c *Handler) noteToDetectionResponse(note *datastore.Note, includeWeather b
 		ScientificName: note.ScientificName,
 		CommonName:     note.CommonName,
 		Confidence:     note.Confidence,
-		Locked:         note.Locked,
-		Unlikely:       note.Unlikely,
+		// ClipName is the per-detection signal the frontend gates audio playback
+		// on. It is basename-stripped to match the SSE privacy contract
+		// (apicore.SafeBaseName): only the filename is exposed, never the on-disk
+		// directory layout, and an empty clip name stays empty (no clip exists).
+		ClipName: apicore.SafeBaseName(note.ClipName),
+		Locked:   note.Locked,
+		Unlikely: note.Unlikely,
 	}
 
 	// populate source info if available
@@ -1427,8 +1436,14 @@ func (c *Handler) ReviewDetection(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)
 	}
 
-	// Check lock status (both in-memory and database for race condition)
-	if c.checkDetectionNotLocked(ctx, idStr, note.Locked) {
+	// A locked detection is frozen against changes, EXCEPT an explicit unlock: when
+	// the request unlocks it (currently locked, lock_detection explicitly false),
+	// allow it through so the unlock (and any changes made alongside it) are applied.
+	// This mirrors LockDetection, which only enforces the lock guard when locking.
+	// lock_detection is a *bool: a nil (omitted) value is NOT an unlock, so a
+	// verify-only request that omits the field cannot silently unlock the detection.
+	unlocking := note.Locked && req.LockDetection != nil && !*req.LockDetection
+	if !unlocking && c.checkDetectionNotLocked(ctx, idStr, note.Locked) {
 		return nil // Response already handled by checkDetectionNotLocked
 	}
 
@@ -1459,21 +1474,23 @@ func (c *Handler) ReviewDetection(ctx echo.Context) error {
 		}
 	}
 
-	// Handle lock/unlock request separately
-	if req.LockDetection != note.Locked {
+	// Handle lock/unlock request separately. A nil LockDetection means the field was
+	// omitted from the request, so the lock state is left untouched.
+	if req.LockDetection != nil && *req.LockDetection != note.Locked {
+		newLocked := *req.LockDetection
 		c.LogInfoIfEnabled("Updating lock status",
 			logger.String("detection_id", idStr),
 			logger.Bool("current_locked", note.Locked),
-			logger.Bool("new_locked", req.LockDetection),
+			logger.Bool("new_locked", newLocked),
 			logger.String("ip", ctx.RealIP()),
 		)
 
-		err = c.AddLock(note.ID, req.LockDetection)
+		err = c.AddLock(note.ID, newLocked)
 		if err != nil {
 			// Log the lock operation failure
 			c.LogErrorIfEnabled("Failed to update lock status",
 				logger.String("detection_id", idStr),
-				logger.Bool("attempted_lock_state", req.LockDetection),
+				logger.Bool("attempted_lock_state", newLocked),
 				logger.Error(err),
 				logger.String("ip", ctx.RealIP()),
 			)
@@ -1654,7 +1671,7 @@ func (c *Handler) canonicalizeExcludeList(exclude []string) []string {
 
 // addToIgnoredSpecies handles the logic for adding species to the ignore list
 func (c *Handler) addToIgnoredSpecies(verified, ignoreSpecies string) error {
-	if verified == "false_positive" && ignoreSpecies != "" {
+	if verified == VerificationStatusFalsePositive && ignoreSpecies != "" {
 		return c.addSpeciesToIgnoredList(c.resolveExcludeName(ignoreSpecies))
 	}
 	return nil
@@ -1764,8 +1781,8 @@ func (c *Handler) AddComment(noteID uint, commentText string) error {
 func (c *Handler) AddReview(noteID uint, verified bool) error {
 	// Convert bool to string value
 	verifiedStr := map[bool]string{
-		true:  "correct",
-		false: "false_positive",
+		true:  VerificationStatusCorrect,
+		false: VerificationStatusFalsePositive,
 	}[verified]
 
 	review := &datastore.NoteReview{

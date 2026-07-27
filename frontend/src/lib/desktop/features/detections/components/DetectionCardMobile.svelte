@@ -58,7 +58,7 @@
   let audioPlaybackSpeed = $state(DEFAULT_PLAYBACK_SPEED);
 
   $effect(() => {
-    if (isVisible) {
+    if (detection.clipName && isVisible) {
       loader.start(detection.id);
     } else {
       loader.stop();
@@ -110,43 +110,49 @@
   class={cn('detection-card group relative rounded-xl', isMenuOpen && 'z-[60]')}
 >
   <!-- Inner container with overflow-hidden for spectrogram clipping -->
-  <div class="detection-card-inner">
-    <!-- Spectrogram Background -->
-    <div class="spectrogram-container">
-      {#if loader.showSpinner}
-        <div class="spectrogram-loading">
-          <span class="loading loading-spinner loading-md text-[var(--color-base-content)]/50"
-          ></span>
-          {#if loader.isQueued}
-            <span class="text-xs text-[var(--color-base-content)]/40 mt-1"
-              >{t('components.audio.waiting')}</span
-            >
-          {:else if loader.isGenerating}
-            <span class="text-xs text-[var(--color-base-content)]/40 mt-1"
-              >{t('components.audio.generating')}</span
-            >
-          {/if}
-        </div>
-      {/if}
+  <!-- Compact (shorter) layout when there is no spectrogram to display -->
+  <div class="detection-card-inner" class:compact={!detection.clipName}>
+    <!-- Spectrogram Background (hidden when this detection has no clip) -->
+    {#if detection.clipName}
+      <div class="spectrogram-container">
+        {#if loader.showSpinner}
+          <div class="spectrogram-loading">
+            <span class="loading loading-spinner loading-md text-[var(--color-base-content)]/50"
+            ></span>
+            {#if loader.isQueued}
+              <span class="text-xs text-[var(--color-base-content)]/40 mt-1"
+                >{t('components.audio.waiting')}</span
+              >
+            {:else if loader.isGenerating}
+              <span class="text-xs text-[var(--color-base-content)]/40 mt-1"
+                >{t('components.audio.generating')}</span
+              >
+            {/if}
+          </div>
+        {/if}
 
-      {#if loader.error}
-        <div class="spectrogram-error">
-          <span class="text-sm text-[var(--color-base-content)]/50"
-            >{t('components.audio.spectrogramUnavailable')}</span
-          >
-        </div>
-      {:else if loader.spectrogramUrl}
-        <img
-          src={loader.spectrogramUrl}
-          alt={t('components.audio.spectrogramForSpecies', { species: detection.commonName })}
-          class="spectrogram-image"
-          class:opacity-0={loader.state === 'loading'}
-          decoding="async"
-          onload={() => loader.handleImageLoad()}
-          onerror={() => loader.handleImageError()}
-        />
-      {/if}
-    </div>
+        {#if loader.error}
+          <div class="spectrogram-error">
+            <span class="text-sm text-[var(--color-base-content)]/50"
+              >{t('components.audio.spectrogramUnavailable')}</span
+            >
+          </div>
+        {:else if loader.spectrogramUrl}
+          <img
+            src={loader.spectrogramUrl}
+            alt={t('components.audio.spectrogramForSpecies', { species: detection.commonName })}
+            class="spectrogram-image"
+            class:opacity-0={loader.state === 'loading'}
+            decoding="async"
+            onload={() => loader.handleImageLoad()}
+            onerror={() => loader.handleImageError()}
+          />
+        {/if}
+      </div>
+    {:else}
+      <!-- Neutral background placeholder keeps the card's shape/aspect ratio -->
+      <div class="spectrogram-container spectrogram-placeholder"></div>
+    {/if}
 
     <!-- Top-Left Badges: Confidence + Weather -->
     <div class="absolute top-3 left-3 flex items-center gap-2 z-10">
@@ -166,13 +172,15 @@
       <SourceBadge {detection} variant="overlay" />
     </div>
 
-    <!-- Center Play Button -->
-    <PlayOverlay
-      detectionId={detection.id}
-      gainValue={audioGainValue}
-      filterFreq={audioFilterFreq}
-      playbackSpeed={audioPlaybackSpeed}
-    />
+    <!-- Center Play Button (hidden when this detection has no clip) -->
+    {#if detection.clipName}
+      <PlayOverlay
+        detectionId={detection.id}
+        gainValue={audioGainValue}
+        filterFreq={audioFilterFreq}
+        playbackSpeed={audioPlaybackSpeed}
+      />
+    {/if}
 
     <!-- Bottom Species Info Bar: tappable for all auth levels to view details -->
     <button
@@ -197,7 +205,7 @@
       {onToggleSpecies}
       {onToggleLock}
       {onDelete}
-      onDownload={() => downloadDetectionAudio(detection)}
+      onDownload={detection.clipName ? () => downloadDetectionAudio(detection) : undefined}
       onMenuOpen={handleMenuOpen}
       onMenuClose={handleMenuClose}
     />
@@ -214,6 +222,11 @@
     height: 15rem;
     border-radius: 0.75rem;
     overflow: hidden;
+  }
+
+  /* Without a spectrogram, collapse to fit the badges + species-info bar only. */
+  .detection-card-inner.compact {
+    height: 7rem;
   }
 
   .spectrogram-container {
@@ -235,7 +248,8 @@
   }
 
   .spectrogram-loading,
-  .spectrogram-error {
+  .spectrogram-error,
+  .spectrogram-placeholder {
     position: absolute;
     inset: 0;
     display: flex;
@@ -250,7 +264,8 @@
   }
 
   :global([data-theme='dark']) .spectrogram-loading,
-  :global([data-theme='dark']) .spectrogram-error {
+  :global([data-theme='dark']) .spectrogram-error,
+  :global([data-theme='dark']) .spectrogram-placeholder {
     background: linear-gradient(135deg, rgb(30 41 59 / 0.9) 0%, rgb(15 23 42 / 0.95) 100%);
   }
 </style>

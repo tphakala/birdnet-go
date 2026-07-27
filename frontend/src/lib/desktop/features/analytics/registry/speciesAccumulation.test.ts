@@ -18,7 +18,6 @@ const chartDef = def;
 
 function makeParams(): AnalyticsParams {
   return {
-    tab: 'biodiversity',
     range: 'month',
     start: '2026-03-01',
     end: '2026-03-31',

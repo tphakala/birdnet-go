@@ -12,6 +12,13 @@ import (
 func TestValidateSecuritySettings_OAuth(t *testing.T) {
 	t.Parallel()
 
+	// The blunt security-oauth-host rule is gone: it rejected a provider carrying a
+	// perfectly good absolute redirectUri just because security.host was unset, and
+	// it only ever looked at the deprecated blocks. What replaced it is
+	// validateOAuthRedirects, which is narrower (only a missing usable redirect is
+	// fatal) and wider (every provider kind, via the migrated array). The cases below
+	// all supply an absolute redirectUri, so none of them is rejected here; see
+	// TestValidateOAuthRedirects_ScopedToLockOutShape for the boundary.
 	tests := []struct {
 		name     string
 		security Security
@@ -19,7 +26,7 @@ func TestValidateSecuritySettings_OAuth(t *testing.T) {
 		errType  string
 	}{
 		{
-			name: "Google OAuth enabled without host - should fail",
+			name: "Google OAuth enabled without host - not rejected here",
 			security: Security{
 				Host: "",
 				GoogleAuth: SocialProvider{
@@ -29,11 +36,10 @@ func TestValidateSecuritySettings_OAuth(t *testing.T) {
 					RedirectURI:  "https://example.com/callback",
 				},
 			},
-			wantErr: true,
-			errType: "security-oauth-host",
+			wantErr: false,
 		},
 		{
-			name: "GitHub OAuth enabled without host - should fail",
+			name: "GitHub OAuth enabled without host - not rejected here",
 			security: Security{
 				Host: "",
 				GithubAuth: SocialProvider{
@@ -43,11 +49,10 @@ func TestValidateSecuritySettings_OAuth(t *testing.T) {
 					RedirectURI:  "https://example.com/callback",
 				},
 			},
-			wantErr: true,
-			errType: "security-oauth-host",
+			wantErr: false,
 		},
 		{
-			name: "Both OAuth providers enabled without host - should fail",
+			name: "Both OAuth providers enabled without host - not rejected here",
 			security: Security{
 				Host: "",
 				GoogleAuth: SocialProvider{
@@ -63,8 +68,7 @@ func TestValidateSecuritySettings_OAuth(t *testing.T) {
 					RedirectURI:  "https://example.com/github/callback",
 				},
 			},
-			wantErr: true,
-			errType: "security-oauth-host",
+			wantErr: false,
 		},
 		{
 			name: "Google OAuth enabled with valid host - should pass",

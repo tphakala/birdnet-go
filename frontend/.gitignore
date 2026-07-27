@@ -37,5 +37,7 @@ vite.config.*.ts
 .env.test.local
 .env.production.local
 
-# Vitest browser mode screenshots
+# Vitest browser mode screenshots and attachments (generated on test failures)
 src/test/__screenshots__/
+src/test/browser/__screenshots__/
+.vitest-attachments/

@@ -1,6 +1,7 @@
 package ffmpeg
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -142,10 +143,15 @@ func TestBuildProbeArgs(t *testing.T) {
 	t.Run("RTSP URL includes tcp transport", func(t *testing.T) {
 		t.Parallel()
 
-		args := buildProbeArgs("rtsp://192.168.1.10:554/stream1")
+		args := buildProbeArgs("rtsp://192.168.1.10:554/stream1", true)
 
 		assert.Contains(t, args, "-rtsp_transport")
 		assert.Contains(t, args, "tcp")
+		// Only audio tracks should be SETUP during the RTSP handshake (issue #3798).
+		allowedIdx := slices.Index(args, "-allowed_media_types")
+		require.NotEqual(t, -1, allowedIdx, "expected -allowed_media_types flag for RTSP")
+		require.Less(t, allowedIdx+1, len(args), "-allowed_media_types must have a value")
+		assert.Equal(t, "audio", args[allowedIdx+1])
 		assert.Equal(t, "rtsp://192.168.1.10:554/stream1", args[len(args)-1])
 		assert.Contains(t, args, "-v")
 		assert.Contains(t, args, "quiet")
@@ -156,10 +162,15 @@ func TestBuildProbeArgs(t *testing.T) {
 	t.Run("RTSPS URL includes tcp transport", func(t *testing.T) {
 		t.Parallel()
 
-		args := buildProbeArgs("rtsps://camera.example.com/live")
+		args := buildProbeArgs("rtsps://camera.example.com/live", true)
 
 		assert.Contains(t, args, "-rtsp_transport")
 		assert.Contains(t, args, "tcp")
+		// Only audio tracks should be SETUP during the RTSPS handshake (issue #3798).
+		allowedIdx := slices.Index(args, "-allowed_media_types")
+		require.NotEqual(t, -1, allowedIdx, "expected -allowed_media_types flag for RTSPS")
+		require.Less(t, allowedIdx+1, len(args), "-allowed_media_types must have a value")
+		assert.Equal(t, "audio", args[allowedIdx+1])
 		assert.Equal(t, "rtsps://camera.example.com/live", args[len(args)-1])
 		assert.Contains(t, args, "-v")
 		assert.Contains(t, args, "quiet")
@@ -170,13 +181,28 @@ func TestBuildProbeArgs(t *testing.T) {
 	t.Run("HTTP URL does not include rtsp transport", func(t *testing.T) {
 		t.Parallel()
 
-		args := buildProbeArgs("http://example.com/stream.m3u8")
+		args := buildProbeArgs("http://example.com/stream.m3u8", true)
 
 		assert.NotContains(t, args, "-rtsp_transport")
+		assert.NotContains(t, args, "-allowed_media_types")
 		assert.Equal(t, "http://example.com/stream.m3u8", args[len(args)-1])
 		assert.Contains(t, args, "-v")
 		assert.Contains(t, args, "quiet")
 		assert.Contains(t, args, "-print_format")
 		assert.Contains(t, args, "json")
+	})
+
+	t.Run("RTSP fallback drops audio-only restriction", func(t *testing.T) {
+		t.Parallel()
+
+		// audioOnly=false is the full-stream fallback for cameras that cannot
+		// SETUP the audio track alone (issue #3902); transport stays, but the
+		// -allowed_media_types restriction is dropped so the handshake succeeds.
+		args := buildProbeArgs("rtsp://192.168.1.10:554/stream1", false)
+
+		assert.Contains(t, args, "-rtsp_transport")
+		assert.Contains(t, args, "tcp")
+		assert.NotContains(t, args, "-allowed_media_types")
+		assert.Equal(t, "rtsp://192.168.1.10:554/stream1", args[len(args)-1])
 	})
 }

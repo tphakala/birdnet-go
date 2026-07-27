@@ -206,10 +206,19 @@
     "componentError": "Component Load Error",
     "speciesAnalytics": "Species Analytics",
     "detectionDetails": "Detection Details",
-    "settingsNotAvailable": "Settings Not Available"
+    "settingsNotAvailable": "Settings Not Available",
+    "analyticsSummary": "Analytics - Summary",
+    "analyticsActivity": "Analytics - Activity Patterns",
+    "analyticsTrends": "Analytics - Trends",
+    "analyticsBiodiversity": "Analytics - Biodiversity",
+    "analyticsReview": "Analytics - Review & Accuracy",
+    "analyticsNocturnal": "Analytics - Nocturnal Activity",
+    "analyticsWeather": "Analytics - Weather Correlation",
+    "analyticsSoundscape": "Analytics - Soundscape"
   },
   "navigation": {
     "dashboard": "Dashboard",
+    "liveAudio": "Live Audio",
     "settingsMenu": "Settings menu",
     "theme": "Theme",
     "github": "GitHub",
@@ -237,7 +246,13 @@
     "reportBugAriaLabel": "Report a bug on GitHub (opens in new window)",
     "askQuestionAriaLabel": "Ask a question on GitHub Discussions (opens in new window)",
     "viewOnGithubAriaLabel": "View BirdNET-Go on GitHub (opens in new window)",
-    "health": "Health"
+    "health": "Health",
+    "sections": {
+      "explore": "Explore",
+      "patterns": "Patterns",
+      "environment": "Environment",
+      "dataQuality": "Data Quality"
+    }
   },
   "about": {
     "title": "BirdNET-Go",
@@ -404,6 +419,7 @@
         "recalculatingThresholds": "Recalculating dynamic thresholds for new base value",
         "reconfiguringDynamicThresholds": "Reconfiguring dynamic thresholds...",
         "webserverRestartRequired": "Web server settings changed. Restart required.",
+        "oauthRestartRequired": "Authentication provider settings changed. Restart required.",
         "databaseRestartRequired": "Database settings changed. Restart required.",
         "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Updating sound level monitoring...",
@@ -448,17 +464,17 @@
         "errorOccurred": "{error}",
         "disconnected": "{source_name} disconnected",
         "error": {
-          "authError": "Authentication failed — check your API key or credentials",
-          "rateLimited": "Rate limited — requests will slow down automatically",
+          "authError": "Authentication failed - check your API key or credentials",
+          "rateLimited": "Rate limited - requests will slow down automatically",
           "gatewayTimeout": "Service may be experiencing high load",
           "serverError": "Service is temporarily unavailable",
-          "connectionRefused": "Service is unreachable — check the address and that it's running",
-          "dnsError": "Could not resolve hostname — check the address",
-          "tlsError": "TLS/certificate error — check your security settings",
-          "timeout": "Connection timed out — the service may be slow or unreachable",
-          "connectionInterrupted": "Connection was interrupted — will retry automatically",
-          "diskFull": "Disk is full — free some space",
-          "permissionDenied": "Permission denied — check file or service permissions"
+          "connectionRefused": "Service is unreachable - check the address and that it's running",
+          "dnsError": "Could not resolve hostname - check the address",
+          "tlsError": "TLS/certificate error - check your security settings",
+          "timeout": "Connection timed out - the service may be slow or unreachable",
+          "connectionInterrupted": "Connection was interrupted - will retry automatically",
+          "diskFull": "Disk is full - free some space",
+          "permissionDenied": "Permission denied - check file or service permissions"
         }
       }
     },
@@ -596,7 +612,7 @@
     "currentlyHearing": {
       "title": "Currently Hearing",
       "subtitle": "Real-time species being identified",
-      "empty": "All quiet — no birds detected right now"
+      "empty": "All quiet - no birds detected right now"
     },
     "rejected": "Rejected",
     "newSpeciesHighlights": {
@@ -1159,6 +1175,7 @@
     },
     "importExport": {
       "available": "Available",
+      "experimental": "Experimental",
       "comingSoon": "Coming soon",
       "loading": "Loading...",
       "runInBackground": "Close (import continues in background)",
@@ -1177,15 +1194,27 @@
       "export": {
         "sectionTitle": "Export",
         "cardTitle": "Export detections",
-        "cardDescription": "Export your detection data to CSV, JSON, or other formats.",
-        "startButton": "Export",
-        "disabledReason": "Export is not yet available. Check back in a future release."
+        "cardDescription": "Export your detection data to CSV, JSON, or other formats."
       },
       "birdnetPi": {
         "cardTitle": "BirdNET-Pi",
         "cardDescription": "Import detection history from a BirdNET-Pi SQLite database (birds.db).",
         "startButton": "Import from BirdNET-Pi",
-        "wizardTitle": "Import from BirdNET-Pi"
+        "wizardTitle": "Import from BirdNET-Pi",
+        "experimentalNotice": "BirdNET-Pi import is experimental and may still have issues.",
+        "reportBug": "Report a bug on GitHub"
+      },
+      "birdsDbUpload": {
+        "cardTitle": "birds.db upload",
+        "cardDescription": "Upload a BirdNET-Pi database file directly from your browser."
+      },
+      "activity": {
+        "sectionTitle": "Import activity",
+        "empty": {
+          "title": "No import activity",
+          "description": "When an import is running, its progress shows up here."
+        },
+        "openWizard": "Open import wizard"
       },
       "wizard": {
         "stepsLabel": "Import wizard steps"
@@ -1252,7 +1281,7 @@
           "label": "Database + audio clips",
           "description": "Import detection records and associated audio recordings.",
           "badge": "Not available",
-          "disabledReason": "Audio clip import is not yet available. Only database-only import is supported."
+          "disabledReason": "Audio clip import is not yet available. Only database import is supported."
         }
       },
       "confirm": {
@@ -1287,6 +1316,8 @@
         "cancelledTitle": "Import cancelled",
         "cancelledDescription": "The import was cancelled before completing.",
         "errorTitle": "Import failed",
+        "interruptedTitle": "Import interrupted",
+        "interruptedDescription": "The connection to the server was lost while the import was running, so its final result is unknown. Check your detections and start the import again if needed.",
         "viewDetectionsLink": "View imported detections",
         "partialInserted": "{count} detections were imported before cancellation.",
         "importAnother": "Import another"
@@ -1491,10 +1522,10 @@
           "targetV2": "Target (V2)",
           "recordsLabel": "Records",
           "sizeLabel": "Size",
-          "prerequisitesNotMet": "Prerequisites not met — resolve critical issues below",
+          "prerequisitesNotMet": "Prerequisites not met - resolve critical issues below",
           "validatingTitle": "Validating Data",
           "validatingBody": "Comparing {count} legacy records against V2 database...",
-          "dirtyRecordsCatchup": "{count} dirty records — will attempt catch-up reconciliation",
+          "dirtyRecordsCatchup": "{count} dirty records - will attempt catch-up reconciliation",
           "cutoverTitle": "Completing Cutover",
           "cutoverBody": "Finalizing transition to V2 database...",
           "migratingPhase": "Migrating {phase}",
@@ -1503,7 +1534,7 @@
           "percentComplete": "{percent}% complete",
           "recordsPerSec": "{rate} records/sec",
           "calculating": "Calculating...",
-          "dirtyWriteFailed": "{count} records failed to write — will be reconciled during validation"
+          "dirtyWriteFailed": "{count} records failed to write - will be reconciled during validation"
         },
         "details": {
           "title": "Database Details",
@@ -1677,6 +1708,17 @@
       "initialized": "Initialized",
       "version": "Version",
       "devices": "Devices",
+      "board": "Board",
+      "soc": "SoC",
+      "memory": "Memory",
+      "cores": "Cores",
+      "gpu": "Graphics",
+      "gpuReachable": "Reachable",
+      "gpuNotReachable": "Not reachable",
+      "gpuReasonRenderNodeUnavailable": "No GPU device node is visible to the server. In Docker, map /dev/dri into the container; on a native install, check that the graphics driver is loaded.",
+      "gpuReasonRenderNodePermission": "The GPU device node cannot be opened. Either the account BirdNET-Go runs as needs access to the device's group, usually 'render', or the container was given the device with -v instead of --device, which does not grant access to it.",
+      "gpuReasonNoRuntime": "BirdNET-Go only accelerates inference on Intel graphics today, so this card will not be used.",
+      "gpuReasonUnknown": "This GPU cannot be used for inference on this build.",
       "stock": "Stock",
       "custom": "Custom",
       "sampleRate": "Sample rate",
@@ -1794,11 +1836,14 @@
   "analytics": {
     "hub": {
       "tabs": {
-        "overview": "Overview",
         "patterns": "Activity Patterns",
         "trends": "Trends",
         "biodiversity": "Biodiversity",
-        "quality": "Review & Accuracy"
+        "quality": "Review & Accuracy",
+        "summary": "Summary",
+        "nocturnal": "Nocturnal Activity",
+        "weather": "Weather",
+        "soundscape": "Soundscape"
       },
       "aria": {
         "tabs": "Analytics sections"
@@ -1818,13 +1863,25 @@
         "notEnoughDataHint": "This chart needs at least {min} data points. Keep recording and check back soon.",
         "export": "Export",
         "exportComingSoon": "CSV export is coming soon."
-      },
-      "comingSoon": {
-        "description": "This section is under construction and will arrive in an upcoming update."
       }
     },
-    "title": "Overview",
     "loadingError": "Failed to load some analytics data. Please try again later.",
+    "comingSoon": {
+      "badge": "Coming soon",
+      "plannedTitle": "Planned capabilities",
+      "weather": {
+        "description": "Bird activity tracked against local weather conditions. This view will correlate your detections with temperature, wind, and rainfall.",
+        "feature1": "Correlate detections with temperature, wind, and precipitation",
+        "feature2": "See how weather fronts shift species activity",
+        "feature3": "Compare seasonal activity against historical weather"
+      },
+      "soundscape": {
+        "description": "A look at the overall acoustic character of your environment, using acoustic indices to summarize soundscape diversity over time.",
+        "feature1": "Acoustic indices that summarize soundscape complexity",
+        "feature2": "Track biodiversity through ambient sound over time",
+        "feature3": "Spot dawn and dusk choruses in the acoustic record"
+      }
+    },
     "stats": {
       "totalDetections": "Total Detections",
       "uniqueSpecies": "Unique Species",
@@ -1955,11 +2012,11 @@
       "charts": {
         "timeOfDay": {
           "title": "Detection Patterns by Time of Day",
-          "description": "Shows average detection counts throughout the day for selected species",
+          "description": "Average detections per day at each hour, across your selected date range and species",
           "noData": "No time-of-day data available",
           "noDataHint": "Select species and a date range to view patterns",
           "axisTime": "Time of Day",
-          "axisCount": "Detection Count"
+          "axisCount": "Avg Detections / Day"
         },
         "dailyTrend": {
           "title": "Species Detection Trends",
@@ -2020,9 +2077,9 @@
         },
         "heatmap": {
           "title": "Seasonal Activity Heatmap",
-          "description": "Detection density by date and time of day, revealing migration waves and dawn-chorus drift",
+          "description": "Detection density by date and time of day for your selected species, revealing migration waves and dawn-chorus drift",
           "noData": "No activity data available",
-          "noDataHint": "Select a date range to view seasonal activity patterns",
+          "noDataHint": "Select species and a date range to view seasonal activity patterns",
           "axisDate": "Date",
           "axisTime": "Time of Day",
           "tooltipTime": "Time",
@@ -2034,9 +2091,9 @@
         },
         "ridgeline": {
           "title": "Who Sings When",
-          "description": "Hour-of-day activity for the most-detected species, sorting dawn singers from all-day and nocturnal birds",
+          "description": "Hour-of-day activity for your selected species, sorting dawn singers from all-day and nocturnal birds",
           "noData": "No species activity data available",
-          "noDataHint": "Select a wider date range to compare species activity patterns",
+          "noDataHint": "Select species and a date range to compare their activity patterns",
           "ariaLabel": "Who-sings-when ridgeline: hour-of-day activity distribution per species",
           "axisTime": "Time of Day",
           "note": "Showing the top {count} species by detection volume",
@@ -2046,10 +2103,10 @@
         },
         "succession": {
           "title": "Acoustic Succession",
-          "description": "How the soundscape's top species hand off through the day, shown as stacked bands of hourly detections from pre-dawn through night",
+          "description": "How your selected species hand off through the day, shown as stacked bands of hourly detections from pre-dawn through night",
           "noData": "No acoustic succession data available",
-          "noDataHint": "Select a wider date range to see how species hand off through the day",
-          "ariaLabel": "Acoustic succession streamgraph: stacked hour-of-day detections for the top species",
+          "noDataHint": "Select species and a date range to see how they hand off through the day",
+          "ariaLabel": "Acoustic succession streamgraph: stacked hour-of-day detections for the selected species",
           "axisTime": "Time of Day",
           "note": "Combined hourly activity of the top {count} species by detection volume",
           "tooltipDetections": "Detections",
@@ -2060,7 +2117,7 @@
           "title": "Dawn Chorus Onset",
           "description": "When the morning chorus starts each day relative to civil dawn, isolating the seasonal shift from clock time",
           "noData": "No dawn chorus data available",
-          "noDataHint": "Select a wider date range to track how the dawn chorus shifts across the seasons",
+          "noDataHint": "Select species and a date range to track how the dawn chorus shifts across the seasons",
           "ariaLabel": "Dawn chorus onset tracker: daily chorus onset relative to civil dawn",
           "axisDate": "Date",
           "axisOnset": "Minutes from civil dawn",
@@ -2871,9 +2928,9 @@
             "testConnection": "Test Connection",
             "connectionOk": {
               "https": "HTTPS works",
-              "http": "HTTP works — server is not using HTTPS"
+              "http": "HTTP works - server is not using HTTPS"
             },
-            "connectionFailed": "Could not connect — check hostname and server status",
+            "connectionFailed": "Could not connect - check hostname and server status",
             "auth": {
               "label": "Authentication (optional)",
               "username": {
@@ -3418,6 +3475,13 @@
         "typeLabel": "Stream Type",
         "typeHelp": "Stream protocol - auto-detected from URL",
         "transportLabel": "Protocol",
+        "mediaModeLabel": "Media Mode",
+        "mediaModeHelp": "Full stream requests audio and video (video is discarded after decode) and works with the widest range of cameras. Auto tries audio-only first and falls back to the full stream if the camera cannot deliver audio alone. Audio-only never opens a camera video slot but fails if the camera cannot deliver the audio track by itself.",
+        "mediaMode": {
+          "auto": "Auto",
+          "audioOnly": "Audio only",
+          "fullStream": "Full stream"
+        },
         "summary": "{count} stream(s) configured",
         "healthy": "healthy",
         "unhealthy": "unhealthy",
@@ -3590,8 +3654,6 @@
         "normalizationDisabled": "Audio normalization is disabled",
         "targetLUFSLabel": "Target Loudness (LUFS)",
         "targetLUFSHelp": "Integrated loudness target in LUFS (Loudness Units relative to Full Scale). -23 LUFS is the EBU R128 broadcast standard. Range: -40 to -10 LUFS.",
-        "loudnessRangeLabel": "Loudness Range (LU)",
-        "loudnessRangeHelp": "Maximum variation in loudness within the clip (0-20 LU). Lower values create more consistent volume but may reduce dynamics.",
         "truePeakLabel": "True Peak Limit (dBTP)",
         "truePeakHelp": "Maximum true peak level to prevent digital clipping (-10 to 0 dBTP). -2 dBTP provides safe headroom for most playback systems.",
         "normalizationNote": "EBU R128 Standard",
@@ -3629,6 +3691,7 @@
         "typeHelp": "Audio format for saved clips. WAV and FLAC are lossless (best quality, larger files). MP3, AAC, and Opus are lossy (smaller files, slight quality loss).",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Audio compression bitrate for lossy formats. Range: {min}-{max} kbps. Higher values provide better quality but larger files.",
+        "losslessBitrateValue": "N/A - Lossless",
         "losslessNote": "Lossless formats preserve original audio quality without compression artifacts."
       },
       "audioNormalization": {
@@ -3640,8 +3703,6 @@
         "requiresRecording": "Enable clip recording in the Recording tab to use audio normalization.",
         "targetLUFSLabel": "Target Loudness (LUFS)",
         "targetLUFSHelp": "Integrated loudness target in LUFS (Loudness Units relative to Full Scale). -23 LUFS is the EBU R128 broadcast standard. Range: -40 to -10 LUFS.",
-        "loudnessRangeLabel": "Loudness Range (LU)",
-        "loudnessRangeHelp": "Maximum variation in loudness within the clip (0-20 LU). Lower values create more consistent volume but may reduce dynamics.",
         "truePeakLabel": "True Peak Limit (dBTP)",
         "truePeakHelp": "Maximum true peak level to prevent digital clipping (-10 to 0 dBTP). -2 dBTP provides safe headroom for most playback systems.",
         "noteTitle": "EBU R128 Standard",
@@ -3862,7 +3923,7 @@
       },
       "privateMode": {
         "label": "Require login for all UI pages (private mode)",
-        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently — leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
+        "help": "When enabled, the dashboard, detections, analytics, search, about, and notifications pages all require authentication. Settings and system pages are always protected regardless of this setting. The Public Live Audio toggle below is honoured independently - leaving it on still allows unauthenticated playback. Default is off so guests can browse the read-only UI."
       },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
@@ -4379,8 +4440,8 @@
         "templateTitlePlaceholder": "Leave empty for default",
         "templateMessage": "Message Template",
         "templateMessagePlaceholder": "Leave empty for default",
-        "noConditionsEvent": "No conditions — rule fires on every event",
-        "noConditionsMetric": "No conditions — rule fires on every metric update",
+        "noConditionsEvent": "No conditions - rule fires on every event",
+        "noConditionsMetric": "No conditions - rule fires on every metric update",
         "eventsCount": "events",
         "metricsCount": "metrics",
         "durationFor": "for",
@@ -4820,7 +4881,7 @@
         "extracting": "Extracting clip...",
         "extractError": "Failed to extract clip",
         "formatLabel": "Format",
-        "rangeLabel": "{start}s – {end}s"
+        "rangeLabel": "{start}s - {end}s"
       },
       "processing": {
         "playSelection": "Play selection",
@@ -4878,7 +4939,7 @@
   },
   "quietHours": {
     "indicator": {
-      "tooltip": "Quiet hours active — {count} source(s) paused"
+      "tooltip": "Quiet hours active - {count} source(s) paused"
     }
   },
   "errors": {
@@ -4916,7 +4977,7 @@
       "createFailed": "Failed to create backup job",
       "notFound": "Backup job not found or expired",
       "notReady": "Backup not ready for download",
-      "fileNotFound": "Backup file not found — job may have expired",
+      "fileNotFound": "Backup file not found - job may have expired",
       "sqliteOnly": "Backup only available for SQLite databases",
       "dbNotConfigured": "Database not configured",
       "unsupportedType": "Cannot perform backup on this datastore type",
@@ -4935,7 +4996,7 @@
       "noLegacyDB": "No legacy database found",
       "accessFailed": "Cannot access legacy database",
       "restartRequired": "Application must be restarted after migration before cleanup is available",
-      "safetyCheck": "Target file appears to be a V2 database — cleanup not allowed for safety",
+      "safetyCheck": "Target file appears to be a V2 database - cleanup not allowed for safety",
       "noLegacyTables": "No legacy tables found",
       "restartNeeded": "Cannot cleanup: Application must be restarted after migration",
       "alreadyRunning": "Cleanup already in progress"
@@ -5007,9 +5068,9 @@
       "waningCrescent": "Waning Crescent"
     },
     "birding": {
-      "excellent": "Calm — excellent for hearing bird calls",
-      "moderate": "Moderate wind — some bird calls may be harder to hear",
-      "poor": "High wind — bird calls unlikely to be heard"
+      "excellent": "Calm - excellent for hearing bird calls",
+      "moderate": "Moderate wind - some bird calls may be harder to hear",
+      "poor": "High wind - bird calls unlikely to be heard"
     }
   },
   "wizard": {
@@ -5063,7 +5124,7 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Enter the URL of your RTSP audio stream",
         "additionalSourcesHint": "You can add more audio sources later in Settings.",
-        "configureLater": "Skip — configure later"
+        "configureLater": "Skip - configure later"
       },
       "detection": {
         "title": "Detection Threshold",
@@ -5174,6 +5235,16 @@
       "title": "Advanced",
       "description": "Processing and custom model configuration."
     },
+    "downloadSource": {
+      "title": "Download Source",
+      "description": "Where model files are downloaded from.",
+      "note": "Leave this empty unless huggingface.co is blocked or slow on your network. The HF_ENDPOINT environment variable is used when this field is empty, and huggingface.co when neither is set. A value that is not a valid http or https address is ignored and the default is used instead.",
+      "endpoint": {
+        "label": "HuggingFace endpoint",
+        "helpText": "Mirror to download models from, for example https://hf-mirror.com. Applies to the next download; no restart needed.",
+        "validationMessage": "Enter a full address starting with http:// or https://, or leave the field empty."
+      }
+    },
     "gallery": {
       "title": "Model Gallery",
       "description": "Manage classifier models for bird and bat detection.",
@@ -5266,6 +5337,7 @@
     "restartFailed": "Failed to initiate restart",
     "reasons": {
       "webserver": "Web server / network settings",
+      "oauth": "Authentication provider settings",
       "database": "Database settings",
       "logging": "Logging settings",
       "tlsCertificate": "TLS certificate"

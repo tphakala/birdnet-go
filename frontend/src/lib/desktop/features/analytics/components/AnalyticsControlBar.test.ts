@@ -33,16 +33,17 @@ const species: Species[] = [
 
 function makeParams(overrides: Partial<AnalyticsParams> = {}): AnalyticsParams {
   return {
-    ...parseAnalyticsParams('', { defaultTab: 'patterns', now: NOW }),
+    ...parseAnalyticsParams('', { now: NOW }),
     ...overrides,
   };
 }
 
 describe('AnalyticsControlBar', () => {
-  it('disables the source filter with a reason when no chart on the tab uses source', () => {
+  it('hides the source filter when no chart on the tab uses source and no source is selected', () => {
     const onParamsChange = vi.fn();
     render(AnalyticsControlBar, {
-      // sourceApplicable defaults to false: the control is disabled with the not-applicable reason.
+      // sourceApplicable defaults to false and no source is set: the control is hidden entirely
+      // (no chart consumes the source dimension yet, so a permanently-disabled control is dropped).
       props: {
         params: makeParams(),
         availableSpecies: species,
@@ -51,9 +52,31 @@ describe('AnalyticsControlBar', () => {
       },
     });
 
+    expect(screen.queryByText('analytics.hub.controls.source')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('analytics.hub.controls.sourceNotApplicable')
+    ).not.toBeInTheDocument();
+  });
+
+  it('still shows the source filter (enabled, so it is clearable) when a stale source is set even though no chart uses source', () => {
+    const onParamsChange = vi.fn();
+    render(AnalyticsControlBar, {
+      // sourceApplicable defaults to false, but a stale source arrived via a URL/bookmark. The
+      // control must render so the value is never stuck, and stay enabled so it can be cleared.
+      props: {
+        params: makeParams({ source: '7' }),
+        availableSpecies: species,
+        availableSources: [],
+        onParamsChange,
+      },
+    });
+
     expect(screen.getByText('analytics.hub.controls.source')).toBeInTheDocument();
-    // The reason is surfaced as visible help text (wired to the control via aria-describedby).
-    expect(screen.getByText('analytics.hub.controls.sourceNotApplicable')).toBeInTheDocument();
+    // Enabled: no disabled-reason help text is present, so "All sources" can be selected to clear it.
+    expect(
+      screen.queryByText('analytics.hub.controls.sourceNotApplicable')
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('analytics.hub.controls.sourceNone')).not.toBeInTheDocument();
   });
 
   it('disables the source filter with a distinct reason when applicable but no sources exist', () => {
@@ -207,7 +230,7 @@ describe('AnalyticsControlBar', () => {
     expect(document.querySelector('#analyticsSpeciesPanel')).not.toBeInTheDocument();
   });
 
-  it('disables the species toggle (collapsed, aria-expanded false) when species filtering does not apply', () => {
+  it('hides the species toggle entirely when species filtering does not apply', () => {
     const onParamsChange = vi.fn();
     render(AnalyticsControlBar, {
       props: {
@@ -218,10 +241,25 @@ describe('AnalyticsControlBar', () => {
       },
     });
 
-    const toggle = document.getElementById('analyticsSpeciesToggle') as HTMLButtonElement;
-    expect(toggle).toBeDisabled();
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(toggle).not.toHaveAttribute('aria-controls');
+    // A permanently-disabled toggle with a stale selection count is confusing, so the control is
+    // dropped entirely; the "not applicable" note (asserted above) is the only explanation shown.
+    expect(document.querySelector('#analyticsSpeciesToggle')).not.toBeInTheDocument();
     expect(document.querySelector('#analyticsSpeciesPanel')).not.toBeInTheDocument();
+  });
+
+  it('shows the species toggle when species filtering applies', () => {
+    const onParamsChange = vi.fn();
+    render(AnalyticsControlBar, {
+      props: {
+        params: makeParams(),
+        availableSpecies: species,
+        speciesApplicable: true,
+        onParamsChange,
+      },
+    });
+
+    const toggle = document.getElementById('analyticsSpeciesToggle');
+    expect(toggle).toBeInTheDocument();
+    expect(toggle).not.toBeDisabled();
   });
 });

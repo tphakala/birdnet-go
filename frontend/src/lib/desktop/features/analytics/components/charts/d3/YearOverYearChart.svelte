@@ -47,10 +47,18 @@
   let { data, width = 800, height = 400, ariaLabel }: Props = $props();
 
   // Layout / behavior constants.
-  const MARGIN = { top: 24, right: 18, bottom: 48, left: 60 };
+  // MARGIN.left and Y_AXIS_LABEL_OFFSET are sized together so the rotated "axisCount" title
+  // clears wide y-axis tick numbers (cumulative counts render as plain integers, no thousands
+  // separator, up to 6 digits for a very active station's yearly total: ~45px at the 12px axis
+  // font). D3's default axisLeft tick gap (tickSizeInner 6 + tickPadding 3) adds 9px, and the
+  // rotated title itself is ~13px "thick" (ascent + descent); a few px of buffer on each side
+  // gives 9 + 45 + 4 + 13 + 4 = 75, rounded up to 78 for margin.left, with an offset (64) that
+  // keeps the title's pivot centered in that clearance. See BarChart.svelte's analogous
+  // VERTICAL_VALUE_AXIS_LABEL_OFFSET for the same derivation against comma-formatted counts.
+  const MARGIN = { top: 24, right: 18, bottom: 48, left: 78 };
   const MAX_X_TICKS = 8;
   const X_AXIS_LABEL_OFFSET = 38;
-  const Y_AXIS_LABEL_OFFSET = 46;
+  const Y_AXIS_LABEL_OFFSET = 64;
   const BAND_OPACITY = 0.15;
   const DOT_RADIUS = 3;
   const FOCUS_RADIUS = 4;

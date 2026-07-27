@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -27,6 +26,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/restart"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 	"golang.org/x/text/cases"
@@ -458,9 +458,16 @@ func (c *Handler) GetResourceInfo(ctx echo.Context) error {
 	// Get CPU usage from cache instead of blocking
 	cpuPercent := apicore.GetCachedCPUUsage()
 
-	// Get process information (current process)
-	proc, err := process.NewProcess(int32(os.Getpid())) // #nosec G115 -- PID conversion safe, PIDs are within int32 range
+	// Get process information for the current process. Reuse the cached
+	// *process.Process (see the selfProc field) and sample CPU via Percent(0) so
+	// the value reflects usage since the previous request — interval usage —
+	// rather than the lifetime average a freshly created instance's CPUPercent()
+	// returns and which grows steadily more dampened as the process ages. The
+	// instance access is serialized because Percent(0) mutates its stored sample.
+	c.selfProcMu.Lock()
+	proc, err := c.selfProcessLocked()
 	if err != nil {
+		c.selfProcMu.Unlock()
 		c.LogErrorIfEnabled("Failed to get process information",
 			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
@@ -468,29 +475,35 @@ func (c *Handler) GetResourceInfo(ctx echo.Context) error {
 		)
 		return c.HandleError(ctx, err, "Failed to get process information", http.StatusInternalServerError)
 	}
+	procMem, memErr := proc.MemoryInfo()
+	// Percent(0) returns the CPU used since the previous call; the first call
+	// after startup primes the sample and returns 0.
+	procCPU, cpuErr := proc.Percent(0)
+	c.selfProcMu.Unlock()
 
-	procMem, err := proc.MemoryInfo()
-	if err != nil {
-		c.Debug("Failed to get process memory info: %v", err)
+	if memErr != nil {
+		c.Debug("Failed to get process memory info: %v", memErr)
 		c.LogWarnIfEnabled("Failed to get process memory info",
-			logger.Error(err),
+			logger.Error(memErr),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
 		// Continue with nil procMem, handled below
 	}
 
-	procCPU, err := proc.CPUPercent()
-	if err != nil {
-		c.Debug("Failed to get process CPU info: %v", err)
+	if cpuErr != nil {
+		c.Debug("Failed to get process CPU info: %v", cpuErr)
 		c.LogWarnIfEnabled("Failed to get process CPU info",
-			logger.Error(err),
+			logger.Error(cpuErr),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
 		// Will use 0 as default value
 		procCPU = 0
 	}
+	// Normalize to a share of total system capacity (0-100%) so it matches the
+	// system CPU gauge and cannot exceed 100% on multi-core hosts.
+	procCPU = normalizeProcessCPU(procCPU)
 
 	// Convert process memory to MB for readability
 	var procMemMB float64
@@ -531,6 +544,88 @@ func (c *Handler) GetResourceInfo(ctx echo.Context) error {
 	)
 
 	return ctx.JSON(http.StatusOK, resourceInfo)
+}
+
+// normalizeProcessCPU converts a gopsutil per-process CPU percentage (reported
+// relative to a single core, so potentially >100% for a multi-threaded process)
+// into the process's share of total system capacity in the range
+// [0, maxPercentage]. Dividing by the logical core count matches the semantics of
+// the system CPU gauge; the clamp is a defensive guard against transient sampling
+// overshoot so the value never exceeds 100%.
+func normalizeProcessCPU(cpuPercent float64) float64 {
+	if numCPU := runtime.NumCPU(); numCPU > 0 {
+		cpuPercent /= float64(numCPU)
+	}
+	switch {
+	case cpuPercent > maxPercentage:
+		return maxPercentage
+	case cpuPercent < 0:
+		return 0
+	default:
+		return cpuPercent
+	}
+}
+
+// processCPUPercent returns p's CPU usage since the previous request, in gopsutil's
+// per-single-core units (so still normalizeProcessCPU's input).
+//
+// It samples through a retained per-PID instance (see the procSamples field) rather
+// than the caller's freshly listed p, because Percent(0) measures against the sample
+// the instance itself stored last time. createTimeMillis identifies the process
+// behind the PID; a mismatch means the PID was recycled and the retained history
+// belongs to a dead process, so the entry is replaced.
+//
+// The first sample for a PID has nothing to diff against and returns 0. That costs
+// one poll per process per server run — the cache lives as long as the handler — not
+// one per page load.
+func (c *Handler) processCPUPercent(p *process.Process, createTimeMillis int64) (float64, error) {
+	c.procSamplesMu.Lock()
+	defer c.procSamplesMu.Unlock()
+
+	if c.procSamples == nil {
+		c.procSamples = make(map[int32]*procSample)
+	}
+
+	if sample, ok := c.procSamples[p.Pid]; ok && sample.createTime == createTimeMillis {
+		return sample.proc.Percent(0)
+	}
+
+	c.procSamples[p.Pid] = &procSample{proc: p, createTime: createTimeMillis}
+	return p.Percent(0)
+}
+
+// pruneProcSamples drops retained samplers whose PID is no longer running, keeping
+// procSamples bounded by the live process count on a long-lived host. live is the
+// full process list, not the filtered table, so a process the table hides is not
+// evicted and re-primed on every request.
+func (c *Handler) pruneProcSamples(live []*process.Process) {
+	liveSet := make(map[int32]struct{}, len(live))
+	for _, p := range live {
+		liveSet[p.Pid] = struct{}{}
+	}
+
+	c.procSamplesMu.Lock()
+	defer c.procSamplesMu.Unlock()
+	for pid := range c.procSamples {
+		if _, ok := liveSet[pid]; !ok {
+			delete(c.procSamples, pid)
+		}
+	}
+}
+
+// selfProcessLocked returns the cached *process.Process for the current PID,
+// creating it on first use. Reusing a single instance is what lets Percent(0)
+// report interval CPU usage (see the selfProc field). Callers must hold
+// c.selfProcMu.
+func (c *Handler) selfProcessLocked() (*process.Process, error) {
+	if c.selfProc == nil {
+		p, err := process.NewProcess(int32(os.Getpid())) // #nosec G115 -- PID conversion safe, PIDs are within int32 range
+		if err != nil {
+			return nil, err
+		}
+		c.selfProc = p
+	}
+	return c.selfProc, nil
 }
 
 // GetDiskInfo handles GET /api/v2/system/disks
@@ -710,12 +805,40 @@ func (c *Handler) getSingleProcessInfo(p *process.Process) (ProcessInfo, error) 
 		status = valueUnknown
 	}
 
-	cpuPercent, err := p.CPUPercent()
+	// Read the create time before CPU: it doubles as the identity check that keeps a
+	// retained CPU sampler from being diffed against a recycled PID's history.
+	createTimeMillis, createErr := p.CreateTime()
+	var uptimeSeconds int64
+	if createErr != nil {
+		// Log error but default to 0
+		c.LogWarnIfEnabled("Failed to get process create time", logger.Any("pid", p.Pid), logger.String("name", name), logger.Error(createErr))
+		uptimeSeconds = 0
+	} else {
+		// Calculate uptime relative to now
+		uptimeSeconds = max(time.Now().Unix()-(createTimeMillis/millisecondsPerSecond),
+			// Sanity check for clock skew
+			0)
+	}
+
+	var cpuPercent float64
+	if createErr != nil {
+		// Without a create time a recycled PID is indistinguishable from the original, so
+		// the retained sampler cannot be trusted; fall back to the lifetime average.
+		cpuPercent, err = p.CPUPercent()
+	} else {
+		cpuPercent, err = c.processCPUPercent(p, createTimeMillis)
+	}
 	if err != nil {
 		// Log error but default to 0
 		c.LogWarnIfEnabled("Failed to get process CPU percent", logger.Any("pid", p.Pid), logger.String("name", name), logger.Error(err))
 		cpuPercent = 0.0
 	}
+	// gopsutil reports per-process CPU relative to a single core, so a process
+	// spread across multiple cores can exceed 100% (e.g. 200% for two full cores).
+	// Normalize by the logical core count so the value is the process's share of
+	// total system capacity (0-100%), consistent with the system CPU gauge and
+	// never exceeding 100%.
+	cpuPercent = normalizeProcessCPU(cpuPercent)
 
 	memInfo, err := p.MemoryInfo()
 	var memRSS uint64
@@ -725,19 +848,6 @@ func (c *Handler) getSingleProcessInfo(p *process.Process) (ProcessInfo, error) 
 		memRSS = 0
 	} else {
 		memRSS = memInfo.RSS // Resident Set Size
-	}
-
-	createTimeMillis, err := p.CreateTime()
-	var uptimeSeconds int64
-	if err != nil {
-		// Log error but default to 0
-		c.LogWarnIfEnabled("Failed to get process create time", logger.Any("pid", p.Pid), logger.String("name", name), logger.Error(err))
-		uptimeSeconds = 0
-	} else {
-		// Calculate uptime relative to now
-		uptimeSeconds = max(time.Now().Unix()-(createTimeMillis/millisecondsPerSecond),
-			// Sanity check for clock skew
-			0)
 	}
 
 	return ProcessInfo{
@@ -788,6 +898,8 @@ func (c *Handler) GetProcessInfo(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to list processes", http.StatusInternalServerError)
 	}
 
+	c.pruneProcSamples(procs)
+
 	processInfos := c.collectProcessInfos(procs, showAll)
 
 	c.LogInfoIfEnabled("Process information retrieved successfully", logger.Int("count", len(processInfos)), logger.Bool("filter_applied", !showAll), logger.String("path", path), logger.String("ip", ip))
@@ -827,78 +939,18 @@ func (c *Handler) isRelevantProcess(p *process.Process, currentPID int32) bool {
 	return p.Pid == currentPID || parentPID == currentPID
 }
 
-// checkThermalZone attempts to read and validate the temperature from a specific thermal zone.
-// It returns the Celsius temperature, details about the sensor/error, whether it was valid, and any critical error.
-func (c *Handler) checkThermalZone(zonePath string, targetTypes map[string]bool) (celsius float64, details string, isValid bool, err error) {
-	zoneName := filepath.Base(zonePath)
-	typePath := filepath.Join(zonePath, "type")
-
-	//nolint:gosec // G304: typePath is from filepath.Glob on /sys/class/thermal/, not user input
-	typeData, err := os.ReadFile(typePath)
-	if err != nil {
-		// Not a critical error for the overall request, just skip this zone.
-		c.LogDebugIfEnabled("Failed to read type file for zone", logger.String("zone", zoneName), logger.String("type_path", typePath), logger.Error(err))
-		return 0, fmt.Sprintf("Failed to read type for %s", zoneName), false, nil
-	}
-
-	sensorType := strings.ToLower(strings.TrimSpace(string(typeData)))
-
-	if _, isTarget := targetTypes[sensorType]; !isTarget {
-		// Not a target sensor type, skip silently.
-		return 0, "", false, nil
-	}
-
-	// It's a target type, now try to read and validate the temperature.
-	tempFilePath := filepath.Join(zonePath, "temp")
-	//nolint:gosec // G304: tempFilePath is from filepath.Glob on /sys/class/thermal/, not user input
-	tempData, err := os.ReadFile(tempFilePath)
-	if err != nil {
-		details = fmt.Sprintf("Error reading temp from %s (type: %s)", zoneName, sensorType)
-		c.LogWarnIfEnabled(details, logger.String("temp_path", tempFilePath), logger.Error(err))
-		return 0, details, false, nil // Error reading temp, but might find another valid zone.
-	}
-
-	tempStr := strings.TrimSpace(string(tempData))
-	tempMillCelsius, err := strconv.Atoi(tempStr)
-	if err != nil {
-		details = fmt.Sprintf("Error parsing temp from %s (type: %s, value: '%s')", zoneName, sensorType, tempStr)
-		c.LogWarnIfEnabled(details, logger.Error(err))
-		return 0, details, false, nil // Error parsing temp.
-	}
-
-	celsius = float64(tempMillCelsius) / float64(millisecondsPerSecond)
-
-	// Validate temperature range (0 to 100 °C inclusive)
-	if celsius < 0.0 || celsius > 100.0 {
-		details = fmt.Sprintf("Invalid temp from %s (type: %s, value: %.1f°C, expected 0-100°C)", zoneName, sensorType, celsius)
-		c.LogWarnIfEnabled("Temperature reading out of valid range", logger.String("details", details))
-		return 0, details, false, nil // Temp out of range.
-	}
-
-	// Valid temperature found
-	details = fmt.Sprintf("Source: %s, Type: %s", zoneName, sensorType)
-	return celsius, details, true, nil
-}
-
-// GetSystemCPUTemperature handles GET /api/v2/system/temperature/cpu
-// It attempts to read the CPU temperature by scanning /sys/class/thermal/thermal_zone*
-// for specific types like 'cpu-thermal' or 'x86_pkg_temp'.
-// It validates the temperature to be within a reasonable range (0-100°C).
-// thermalBasePath is the base directory for thermal zones on Linux
-const thermalBasePath = "/sys/class/thermal/"
+// thermalBasePath is the base directory for thermal zones on Linux. It aliases
+// observability.DefaultThermalBasePath so the path has a single source of truth
+// shared with the metrics collector and the temperature health check.
+const thermalBasePath = observability.DefaultThermalBasePath
 
 // defaultNoSensorMessage is the default message when no suitable CPU temperature sensor is found
 const defaultNoSensorMessage = "No suitable CPU temperature sensor found or temperature out of valid range."
 
-// cpuThermalTypes contains sensor types for CPU temperature
-var cpuThermalTypes = map[string]bool{
-	"cpu-thermal":     true, // Common on Raspberry Pi
-	"x86_pkg_temp":    true, // Common on Intel x86 systems (like NUC)
-	"soc_thermal":     true, // Common on some ARM SoCs
-	"cpu_thermal":     true, // Alternative name
-	"thermal-fan-est": true, // Seen on some systems
-}
-
+// GetSystemCPUTemperature handles GET /api/v2/system/temperature/cpu. It reads
+// the CPU temperature via observability.ReadCPUTemperature, which scans
+// /sys/class/thermal/thermal_zone* for CPU sensor types (e.g. 'cpu-thermal',
+// 'x86_pkg_temp') and validates the reading against the shared valid range.
 func (c *Handler) GetSystemCPUTemperature(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.LogInfoIfEnabled("Getting system CPU temperature", logger.String("path", path), logger.String("ip", ip))
@@ -917,19 +969,16 @@ func (c *Handler) GetSystemCPUTemperature(ctx echo.Context) error {
 		return ctx.JSON(http.StatusOK, response)
 	}
 
-	// Get thermal zones
-	zones, err := c.getThermalZones(ctx, ip, path)
-	if err != nil {
-		return err
+	celsius, details, err := observability.ReadCPUTemperature(thermalBasePath)
+	if err == nil {
+		response.Celsius = celsius
+		response.IsAvailable = true
+		response.SensorDetails = details
+		response.Message = "CPU temperature retrieved successfully."
+		c.LogInfoIfEnabled("CPU temperature retrieved successfully", logger.Float64("temperature_celsius", response.Celsius), logger.String("sensor_details", response.SensorDetails), logger.String("request_path", path), logger.String("ip", ip))
+	} else {
+		c.setTemperatureNotFoundResponse(&response, details, ip, path)
 	}
-	if len(zones) == 0 {
-		response.Message = "No thermal zones found. This feature is typically available on Linux systems."
-		c.LogInfoIfEnabled("No thermal zones found via Glob.", logger.String("pattern", filepath.Join(thermalBasePath, "thermal_zone*")), logger.String("os", runtime.GOOS), logger.String("request_path", path), logger.String("ip", ip))
-		return ctx.JSON(http.StatusOK, response)
-	}
-
-	// Find valid thermal zone
-	c.findValidThermalZone(zones, &response, ip, path)
 
 	return ctx.JSON(http.StatusOK, response)
 }
@@ -951,45 +1000,6 @@ func (c *Handler) checkThermalDirectoryAccess(response *SystemTemperature, ip, p
 
 	c.LogErrorIfEnabled("Failed to stat thermal base path", logger.String("path", thermalBasePath), logger.Error(err), logger.String("request_path", path), logger.String("ip", ip))
 	return false, fmt.Errorf("failed to access thermal information: %w", err)
-}
-
-// getThermalZones retrieves available thermal zone paths
-func (c *Handler) getThermalZones(ctx echo.Context, ip, path string) ([]string, error) {
-	zones, err := filepath.Glob(filepath.Join(thermalBasePath, "thermal_zone*"))
-	if err != nil {
-		c.LogErrorIfEnabled("Failed to glob for thermal zones", logger.String("base_path", thermalBasePath), logger.Error(err), logger.String("request_path", path), logger.String("ip", ip))
-		return nil, c.HandleError(ctx, err, "Error scanning for thermal zones", http.StatusInternalServerError)
-	}
-	return zones, nil
-}
-
-// findValidThermalZone searches for a valid CPU thermal zone and updates response
-func (c *Handler) findValidThermalZone(zones []string, response *SystemTemperature, ip, path string) {
-	var lastAttemptDetails string
-
-	for _, zonePath := range zones {
-		celsius, details, isValid, err := c.checkThermalZone(zonePath, cpuThermalTypes)
-		if err != nil {
-			c.LogErrorIfEnabled("Unexpected error checking thermal zone", logger.String("zone", zonePath), logger.Error(err))
-			continue
-		}
-
-		if isValid {
-			response.Celsius = celsius
-			response.IsAvailable = true
-			response.SensorDetails = details
-			response.Message = "CPU temperature retrieved successfully."
-			c.LogInfoIfEnabled("CPU temperature retrieved successfully", logger.Float64("temperature_celsius", response.Celsius), logger.String("sensor_details", response.SensorDetails), logger.String("request_path", path), logger.String("ip", ip))
-			return
-		}
-
-		if details != "" {
-			lastAttemptDetails = details
-		}
-	}
-
-	// No valid sensor found
-	c.setTemperatureNotFoundResponse(response, lastAttemptDetails, ip, path)
 }
 
 // setTemperatureNotFoundResponse sets appropriate message when no valid sensor found

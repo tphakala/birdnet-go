@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"gorm.io/gorm"
 )
@@ -57,7 +58,7 @@ func (m *MockDatastore) GetAllNotes() ([]datastore.Note, error) {
 func (m *MockDatastore) GetTopBirdsData(context.Context, string, float64, int) ([]datastore.Note, error) {
 	return make([]datastore.Note, 0), nil
 }
-func (m *MockDatastore) GetBatchHourlyOccurrences(context.Context, string, []string, float64) (map[string][24]int, error) {
+func (m *MockDatastore) GetBatchHourlyOccurrences(context.Context, string, string, []string, float64) (map[string][24]int, error) {
 	return make(map[string][24]int), nil
 }
 func (m *MockDatastore) SpeciesDetections(string, string, string, int, bool, int, int) ([]datastore.Note, error) {
@@ -133,8 +134,11 @@ func (m *MockDatastore) SaveImageCache(*datastore.ImageCache) error { return nil
 func (m *MockDatastore) GetAllImageCaches(string) ([]datastore.ImageCache, error) {
 	return make([]datastore.ImageCache, 0), nil
 }
-func (m *MockDatastore) GetLockedNotesClipPaths() ([]string, error)               { return make([]string, 0), nil }
-func (m *MockDatastore) ClearNoteClipPathsByNames(_ []string) (int64, error)      { return 0, nil }
+func (m *MockDatastore) GetLockedNotesClipPaths() ([]string, error)          { return make([]string, 0), nil }
+func (m *MockDatastore) ClearNoteClipPathsByNames(_ []string) (int64, error) { return 0, nil }
+func (m *MockDatastore) GetNoteClipReferences(_ uint, _ int) ([]diskmanager.ClipReference, error) {
+	return nil, nil
+}
 func (m *MockDatastore) CountHourlyDetections(string, string, int) (int64, error) { return 0, nil }
 func (m *MockDatastore) GetSpeciesSummaryData(context.Context, string, string) ([]datastore.SpeciesSummaryData, error) {
 	return make([]datastore.SpeciesSummaryData, 0), nil
@@ -163,7 +167,7 @@ func (m *MockDatastore) GetSpeciesDiversityData(context.Context, string, string)
 func (m *MockDatastore) GetActivityHeatmap(context.Context, string, string, string) (datastore.ActivityHeatmapData, error) {
 	return datastore.ActivityHeatmapData{}, nil
 }
-func (m *MockDatastore) GetHourlyDistributionBySpecies(context.Context, string, string, int) ([]datastore.SpeciesHourlyDistribution, error) {
+func (m *MockDatastore) GetHourlyDistributionBySpecies(context.Context, string, string, []string, int) ([]datastore.SpeciesHourlyDistribution, error) {
 	return []datastore.SpeciesHourlyDistribution{}, nil
 }
 func (m *MockDatastore) GetDailyActivityOnset(context.Context, string, string, string) ([]datastore.DailyActivityOnset, error) {
@@ -185,7 +189,7 @@ func (m *MockDatastore) GetYearOverYear(_ context.Context, _ string) (datastore.
 func (m *MockDatastore) GetSpeciesPhenology(context.Context, string, string, int) ([]datastore.SpeciesPhenologyPoint, error) {
 	return []datastore.SpeciesPhenologyPoint{}, nil
 }
-func (m *MockDatastore) GetAcousticSuccession(context.Context, string, string, int) ([]datastore.SpeciesHourlyCounts, error) {
+func (m *MockDatastore) GetAcousticSuccession(context.Context, string, string, []string, int) ([]datastore.SpeciesHourlyCounts, error) {
 	return []datastore.SpeciesHourlyCounts{}, nil
 }
 func (m *MockDatastore) SearchDetections(*datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {

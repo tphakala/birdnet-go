@@ -45,6 +45,10 @@ func newTestConfig() StreamConfig {
 		FFmpegPath: "/usr/bin/ffmpeg",
 		Transport:  "tcp",
 		LogLevel:   "error",
+		// Auto mode exercises the historical audio-only-first request plus the
+		// reactive fallback. The default (empty) is now full-stream, so tests that
+		// assert audio-only behavior set auto explicitly here.
+		MediaMode: "auto",
 	}
 }
 
@@ -1453,7 +1457,10 @@ func TestProcessAudio_ResponsiveToRestart(t *testing.T) {
 func TestProcessAudio_DataFlowsThroughReaderGoroutine(t *testing.T) {
 	t.Parallel()
 
-	testData := []byte("audio-payload-12345")
+	// An even byte count: readStdout emits whole PCM frames only and holds a
+	// trailing partial frame back for the next read, so an odd payload would
+	// arrive one byte short here. See TestReadStdout_EmitsWholeFrames.
+	testData := []byte("audio-payload-123456")
 	var received []byte
 
 	cfg := newTestConfig()
@@ -1804,7 +1811,10 @@ func TestStream_ReadStdout_AttachesRefWhenPooled(t *testing.T) {
 	cfg := newTestConfig()
 	stream := NewStream(&cfg, nil, nil, nil, bufMgr)
 
-	reader := io.NopCloser(bytes.NewReader([]byte{1, 2, 3}))
+	// A whole number of PCM frames: readStdout holds a trailing partial frame
+	// back for the next read, so an odd payload would arrive short here for
+	// reasons unrelated to what this test is about. See TestReadStdout_EmitsWholeFrames.
+	reader := io.NopCloser(bytes.NewReader([]byte{1, 2, 3, 4}))
 	readCh := make(chan readResult, 1)
 	readerDone := make(chan struct{})
 	t.Cleanup(func() { close(readerDone) })
@@ -1815,7 +1825,7 @@ func TestStream_ReadStdout_AttachesRefWhenPooled(t *testing.T) {
 	case result := <-readCh:
 		require.NoError(t, result.err)
 		require.NotNil(t, result.ref, "pooled readStdout must attach a FrameRef to every readResult")
-		assert.Equal(t, []byte{1, 2, 3}, result.data)
+		assert.Equal(t, []byte{1, 2, 3, 4}, result.data)
 		result.ref.Release()
 	case <-time.After(time.Second):
 		t.Fatal("readStdout did not produce a readResult within 1s")
@@ -1831,7 +1841,8 @@ func TestStream_ReadStdout_NilRefWhenNoBufMgr(t *testing.T) {
 	cfg := newTestConfig()
 	stream := NewStream(&cfg, nil, nil, nil, nil)
 
-	reader := io.NopCloser(bytes.NewReader([]byte{1, 2, 3}))
+	// Whole PCM frames, for the same reason as the pooled test above.
+	reader := io.NopCloser(bytes.NewReader([]byte{1, 2, 3, 4}))
 	readCh := make(chan readResult, 1)
 	readerDone := make(chan struct{})
 	t.Cleanup(func() { close(readerDone) })
@@ -1842,8 +1853,72 @@ func TestStream_ReadStdout_NilRefWhenNoBufMgr(t *testing.T) {
 	case result := <-readCh:
 		require.NoError(t, result.err)
 		assert.Nil(t, result.ref, "non-pooled readStdout must dispatch nil ref")
-		assert.Equal(t, []byte{1, 2, 3}, result.data)
+		assert.Equal(t, []byte{1, 2, 3, 4}, result.data)
 	case <-time.After(time.Second):
 		t.Fatal("readStdout did not produce a readResult within 1s")
+	}
+}
+
+func TestStream_HandleReadError(t *testing.T) {
+	t.Parallel()
+
+	// Start one second past the quick-exit window so handleReadError takes the
+	// EOF branch rather than handleQuickExitError. Derive it from the constant
+	// so the test keeps exercising the intended path if processQuickExitTime
+	// ever changes.
+	startTime := time.Now().Add(-(processQuickExitTime + time.Second))
+
+	tests := []struct {
+		name         string
+		totalBytes   int64
+		cancelCtx    bool
+		wantErr      bool
+		wantContains string
+	}{
+		{
+			name:         "EOF with no data and live context returns error",
+			totalBytes:   0,
+			cancelCtx:    false,
+			wantErr:      true,
+			wantContains: "stream ended without producing data",
+		},
+		{
+			name:       "EOF after data returns nil",
+			totalBytes: 100,
+			cancelCtx:  false,
+			wantErr:    false,
+		},
+		{
+			name:       "EOF with no data but canceled context returns nil",
+			totalBytes: 0,
+			cancelCtx:  true,
+			wantErr:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := newTestConfig()
+			stream := NewStream(&cfg, nil, nil, nil, nil)
+			ctx, cancel := context.WithCancelCause(t.Context())
+			stream.ctx = ctx
+			stream.cancel = cancel
+			t.Cleanup(func() { cancel(nil) })
+
+			stream.totalBytesReceived = tt.totalBytes
+			if tt.cancelCtx {
+				cancel(nil)
+			}
+
+			err := stream.handleReadError(io.EOF, startTime)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantContains)
+			} else {
+				require.NoError(t, err)
+			}
+		})
 	}
 }

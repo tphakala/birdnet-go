@@ -275,7 +275,29 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	p.quietHoursScheduler.Start()
 
 	// Start audio liveness watchdog for detecting silent capture deaths.
-	notifSvc := notification.GetService()
+	// Coalesce transient silence/recovery notifications so a source that
+	// repeatedly drops and self-recovers (e.g. a flaky RTSP camera) does not spam
+	// one high-priority notification per cycle. Critical escalated/failed states
+	// bypass coalescing. This affects only notifications; source restart and
+	// recovery are unchanged.
+	livenessNotif := newLivenessNotifier(func(priority notification.Priority, title, body string) {
+		// Resolve the notification service at send time rather than capturing it
+		// once at Start, matching the error-hook pattern, so notifications are not
+		// permanently dropped if the service initializes after the pipeline starts.
+		notifSvc := notification.GetService()
+		if notifSvc == nil {
+			return
+		}
+		if _, err := notifSvc.CreateWithComponent(
+			notification.TypeSystem, priority,
+			title, body, livenessComponent,
+		); err != nil {
+			audiocore.GetLogger().Warn("failed to send liveness notification",
+				logger.Error(err),
+				logger.String("operation", "liveness_notify"),
+				logger.String("title", title))
+		}
+	})
 	watchdogCallbacks := audiocore.LivenessCallbacks{
 		RestartSource: p.RestartSource,
 		Escalate: func(_ string) {
@@ -285,23 +307,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 			}
 		},
 		Notify: func(sourceID string, state audiocore.LivenessState, msg string) {
-			if notifSvc == nil {
-				return
-			}
-			priority := notification.PriorityHigh
-			title := "Audio source " + msg
-			body := "Source " + sourceID + ": " + msg
-			if state == audiocore.StateFailed || state == audiocore.StateEscalated {
-				priority = notification.PriorityCritical
-			}
-			if _, err := notifSvc.CreateWithComponent(
-				notification.TypeSystem, priority,
-				title, body, "audiocore.liveness",
-			); err != nil {
-				audiocore.GetLogger().Warn("failed to send liveness notification",
-					logger.Error(err),
-					logger.String("operation", "liveness_notify"))
-			}
+			livenessNotif.notify(sourceID, state, msg)
 		},
 		IsQuietHours: func(sourceID string) bool {
 			if p.quietHoursScheduler == nil {
@@ -352,6 +358,14 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 			clipCleanupMonitor(p.done, dataStore)
 		})
 	}
+
+	// Start clip reconcile monitor. Runs unconditionally (regardless of retention
+	// policy and regardless of whether audio export is enabled) because orphaned
+	// clip_name references persist across runtime toggling of export, and clearing
+	// them keeps clip_name a truthful per-detection signal for the media API and UI.
+	p.wg.Go(func() {
+		clipReconcileMonitor(p.done, dataStore)
+	})
 
 	// Start weather polling.
 	if settings.Realtime.Weather.Provider != policyNone {
@@ -1037,11 +1051,18 @@ func sourceNeedsReconfigure(running *audiocore.AudioSource, desired *audiocore.S
 	// needlessly restart the stream.
 	channelModeChanged := conf.ChannelMode(running.ChannelMode).Canonical() !=
 		conf.ChannelMode(desired.ChannelMode).Canonical()
+	// Compare canonical media modes so an unset value and an explicit default
+	// (which build identical FFmpeg args) are not treated as a change. Without
+	// this, a mediaMode-only edit would persist to disk but never restart the
+	// running FFmpeg, silently breaking hot-reload.
+	mediaModeChanged := conf.MediaMode(running.MediaMode).Canonical() !=
+		conf.MediaMode(desired.MediaMode).Canonical()
 	return running.SampleRate != desired.SampleRate ||
 		sourceSampleRateChanged ||
 		running.BitDepth != desired.BitDepth ||
 		running.Channels != desired.Channels ||
 		channelModeChanged ||
+		mediaModeChanged ||
 		sourceChannelsChanged
 }
 
@@ -1371,26 +1392,60 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 				Channels:         1,
 				SourceChannels:   probe.channels,
 				ChannelMode:      string(stream.ChannelMode),
+				MediaMode:        string(stream.MediaMode),
+				Gain:             stream.Gain,
 			},
 			modelIDs: stream.Models,
 		})
 	}
 
-	// Local audio cards (multi-source).
+	// Collect the connection strings of ALL configured rtsp.streams (enabled AND
+	// disabled), so a stream URL misconfigured under audio.sources does not
+	// overwrite the rtsp.streams config: reconfigureChangedSources dedups the
+	// desired configs by connection string, and the audio.sources copy is
+	// appended later, so without this guard it would win. The rtsp.streams entry
+	// must win. Disabled streams are included so a duplicate under audio.sources
+	// is suppressed rather than silently re-enabling a stream the user turned off.
+	streamConns := make(map[string]struct{}, len(settings.Realtime.RTSP.Streams))
+	for i := range settings.Realtime.RTSP.Streams {
+		streamConns[strings.TrimSpace(settings.Realtime.RTSP.Streams[i].URL)] = struct{}{}
+	}
+
+	// Local audio cards and any stream URLs misconfigured under audio.sources.
 	for i := range settings.Realtime.Audio.Sources {
 		src := &settings.Realtime.Audio.Sources[i]
-		if src.Device == "" {
+		// Trim once so type detection, the dedup key, and the registered
+		// connection string all see the same value: audiocore.StreamSourceType
+		// matches scheme prefixes without trimming, so incidental whitespace
+		// would otherwise misclassify a stream URL as an ALSA device.
+		device := strings.TrimSpace(src.Device)
+		if device == "" {
 			continue
 		}
 		sampleRate := conf.SampleRate
 		if src.SampleRate > 0 {
 			sampleRate = src.SampleRate
 		}
+
+		// Default to an ALSA audio card; promote to a stream type only when the
+		// device is actually a network stream URL. This keeps a misplaced
+		// stream URL from being opened as an ALSA device (which fails and
+		// breaks live audio) even before the config migration relocates it.
+		sourceType := audiocore.SourceTypeAudioCard
+		if streamType, isStream := audiocore.StreamSourceType(device); isStream {
+			if _, dup := streamConns[device]; dup {
+				// Already produced from rtsp.streams; skip the duplicate so the
+				// proper rtsp.streams config wins the connection-keyed dedup.
+				continue
+			}
+			sourceType = streamType
+		}
+
 		result = append(result, sourceConfigWithModels{
 			config: &audiocore.SourceConfig{
 				DisplayName:      src.Name,
-				Type:             audiocore.SourceTypeAudioCard,
-				ConnectionString: src.Device,
+				Type:             sourceType,
+				ConnectionString: device,
 				SampleRate:       sampleRate,
 				BitDepth:         conf.BitDepth,
 				Channels:         1,
@@ -1601,6 +1656,41 @@ func (p *AudioPipelineService) startWeatherPolling(metrics *observability.Metric
 	})
 }
 
+// exportDirState classifies the clip export directory for a cleanup pass.
+type exportDirState int
+
+const (
+	// exportDirUsable means the path exists and is a directory: run cleanup.
+	exportDirUsable exportDirState = iota
+	// exportDirMissing means the path does not exist. This is the benign default
+	// when audio export is disabled (the directory is created lazily on the first
+	// clip save) or when a Docker clips volume is unmounted.
+	exportDirMissing
+	// exportDirBad means the path could not be stat-ed (permissions, I/O) or exists
+	// but is not a directory: an unexpected condition worth surfacing.
+	exportDirBad
+)
+
+// classifyExportDir reports whether the clip export directory at path is usable
+// for a cleanup pass. It mirrors the guard used by ReconcileClipOrphansPass
+// (missing or non-directory paths are skipped) so the two cleanup tasks agree on
+// what counts as a valid export directory. The returned error is the underlying
+// os.Stat error when one occurred (nil for a path that exists but is not a
+// directory), so the caller can include it in a diagnostic log.
+func classifyExportDir(path string) (exportDirState, error) {
+	info, err := os.Stat(path)
+	switch {
+	case err != nil && os.IsNotExist(err):
+		return exportDirMissing, err
+	case err != nil:
+		return exportDirBad, err
+	case !info.IsDir():
+		return exportDirBad, nil
+	default:
+		return exportDirUsable, nil
+	}
+}
+
 // clipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
 func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 	log := GetLogger()
@@ -1640,6 +1730,39 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 				log.Debug("skipping clip cleanup: export path not configured",
 					logger.String("operation", "clip_cleanup_skip"))
 				continue
+			}
+
+			// Skip the pass when the export directory is not a usable directory.
+			// When audio export is disabled the directory is never created (it is
+			// made lazily on the first clip save), and in Docker the clips volume
+			// may be unmounted. Without this guard the usage-based path below calls
+			// GetDiskUsage against a missing directory and warns on every interval.
+			// The check runs each iteration so re-enabling export (which recreates
+			// the directory) resumes cleanup without a restart. The DB reconcile
+			// crawler is a separate task that must run regardless of export state.
+			switch state, statErr := classifyExportDir(exportCfg.Path); state {
+			case exportDirMissing:
+				// Benign default state when export is off: log at Debug and skip.
+				log.Debug("skipping clip cleanup: export directory does not exist",
+					logger.String("path", exportCfg.Path),
+					logger.Error(statErr),
+					logger.String("operation", "clip_cleanup_skip"))
+				continue
+			case exportDirBad:
+				// Genuine access failure or a non-directory path: log at Warn so a
+				// real misconfiguration still surfaces. statErr is nil when the path
+				// exists but is not a directory.
+				fields := []logger.Field{
+					logger.String("path", exportCfg.Path),
+					logger.String("operation", "clip_cleanup_skip"),
+				}
+				if statErr != nil {
+					fields = append(fields, logger.Error(statErr))
+				}
+				log.Warn("skipping clip cleanup: export path is not a usable directory", fields...)
+				continue
+			case exportDirUsable:
+				// Fall through to run the cleanup pass.
 			}
 
 			log.Info("starting clip cleanup task",

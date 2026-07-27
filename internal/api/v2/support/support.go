@@ -192,16 +192,20 @@ func (c *Handler) GenerateSupportDump(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "Settings not available", http.StatusInternalServerError)
 	}
 
-	// Get config directory path
-	configPath, err := conf.GetDefaultConfigPaths()
-	if err != nil || len(configPath) == 0 {
-		configPath = []string{"."}
+	// Get config directory path. Must match the diagnostics journal writer,
+	// which resolves via conf.ResolveConfigDir() and honors the --config flag;
+	// using GetDefaultConfigPaths()[0] here would look in the wrong directory
+	// on a non-default --config install and silently drop the journal (and
+	// mis-point the config/data directory listings) in the support dump.
+	configDir, err := conf.ResolveConfigDir()
+	if err != nil || configDir == "" {
+		configDir = "."
 	}
 
 	// Create collector with proper paths
 	collector := supportpkg.NewCollector(
-		configPath[0], // Use first config path
-		".",           // Data directory (current directory)
+		configDir, // config directory (same resolver as the journal writer)
+		".",       // Data directory (current directory)
 		settings.SystemID,
 		settings.Version,
 	)

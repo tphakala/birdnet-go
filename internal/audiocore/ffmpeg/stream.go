@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/alerting"
@@ -23,6 +24,13 @@ import (
 const (
 	// Buffer size for reading FFmpeg stdout.
 	ffmpegBufferSize = 32768
+
+	// bitsPerByte converts a configured bit depth to a PCM sample size in bytes.
+	bitsPerByte = 8
+
+	// defaultPCMSampleBytes is the sample size for the s16le output format that
+	// buildOutputArgs falls back to for any bit depth other than 16, 24 or 32.
+	defaultPCMSampleBytes = 2
 
 	// Health check intervals and timeouts.
 	healthCheckInterval  = 5 * time.Second
@@ -55,6 +63,13 @@ const (
 	circuitBreakerImmediateThreshold = 3
 	circuitBreakerRapidThreshold     = 5
 	circuitBreakerQuickThreshold     = 8
+
+	// audioOnlyFallbackThreshold is the number of RTSP process failures with no
+	// audio ever received that trigger the audio-only fallback:
+	// the stream stops requesting -allowed_media_types audio and asks for the
+	// full stream instead (issue #3902). Kept below circuitBreakerImmediateThreshold
+	// so the fallback engages before the circuit breaker locks the source out.
+	audioOnlyFallbackThreshold = 2
 
 	// Circuit breaker runtime thresholds.
 	circuitBreakerImmediateRuntime = 1 * time.Second
@@ -223,6 +238,11 @@ type StreamConfig struct {
 	// ChannelMode controls how multi-channel audio is handled.
 	// Values: "downmix" (default), "left", "right".
 	ChannelMode string
+
+	// MediaMode controls which RTSP media is requested from the camera.
+	// Values: "auto", "audio-only", "full-stream" (empty = full-stream). Only
+	// applied for RTSP sources.
+	MediaMode string
 
 	// FFmpegPath is the absolute path to the FFmpeg binary.
 	FFmpegPath string
@@ -507,6 +527,24 @@ type Stream struct {
 	circuitOpenTime     time.Time
 	circuitMu           sync.Mutex
 
+	// RTSP audio-only fallback state. BirdNET-Go requests audio-only via
+	// -allowed_media_types audio to avoid opening a camera video slot (#3798),
+	// but some cameras cannot SETUP the audio track alone and never deliver audio
+	// (#3902). audioOnlyFallback latches true after audioOnlyFailures reaches
+	// audioOnlyFallbackThreshold failures with no audio ever received, at which
+	// point the stream requests the full stream (video dropped via -vn).
+	// receivedAudio guards against engaging the fallback on a source that has
+	// already proven audio-only works, so a later transient failure never trips it.
+	audioOnlyFallback atomic.Bool
+	receivedAudio     atomic.Bool
+	audioOnlyFailures atomic.Int32
+
+	// partialFrameCarries counts reads that ended part-way through a PCM frame,
+	// forcing readStdout to hold the remainder for the next read. Diagnostic
+	// only: a partial read is normal pipe behaviour and self correcting, but the
+	// rate shows whether realignment is engaging and how often.
+	partialFrameCarries atomic.Int64
+
 	// Dropped data tracking.
 	lastDropLogTime time.Time
 	dropLogMu       sync.Mutex
@@ -738,15 +776,23 @@ func (s *Stream) Run(parentCtx context.Context) {
 
 			runtime := time.Since(processStartTime)
 
+			fallbackEngaged := false
 			if err != nil && !errors.Is(err, context.Canceled) {
 				s.recordFailure(runtime)
+				// Latch to the full-stream request if repeated RTSP failures with
+				// no audio point at an audio-only handshake the camera cannot
+				// honor (issue #3902). When it engages, skip this iteration's
+				// backoff below so the full-stream attempt starts immediately.
+				fallbackEngaged = s.maybeEngageAudioOnlyFallback()
 				errorMsg := err.Error()
 				sanitizedError := privacy.SanitizeFFmpegError(errorMsg)
 				isSilenceTimeout := strings.Contains(errorMsg, "silence timeout")
 
 				// Publish stream event for alerting rules.
-				// EOF returns nil from handleReadError and never reaches here,
-				// so only silence timeouts are classified as disconnections.
+				// A normal EOF (audio already seen) or a canceled context returns
+				// nil from handleReadError and never reaches here; a data-less EOF
+				// timeout surfaces as a generic stream error. Only silence timeouts
+				// are classified as disconnections.
 				eventName := alerting.EventStreamError
 				if isSilenceTimeout {
 					eventName = alerting.EventStreamDisconnected
@@ -798,8 +844,11 @@ func (s *Stream) Run(parentCtx context.Context) {
 				s.onReset(s.config.SourceID)
 			}
 
+			// Skip the backoff on the iteration that engaged the audio-only
+			// fallback so the first full-stream attempt starts immediately
+			// (issue #3902); a later full-stream failure backs off normally.
 			currentState := s.GetProcessState()
-			if currentState != StateCircuitOpen {
+			if currentState != StateCircuitOpen && !fallbackEngaged {
 				s.handleRestartBackoff()
 			}
 		}
@@ -880,6 +929,7 @@ func (s *Stream) startProcess() error {
 		logger.String("url", s.config.safeURL()),
 		logger.Int("pid", s.cmd.Process.Pid),
 		logger.String("transport", s.config.Transport),
+		logger.String("media_mode", effectiveMediaMode(&s.config)),
 		logger.Int("target_sample_rate", s.config.SampleRate),
 		logger.Int("source_sample_rate", s.config.SourceSampleRate),
 		logger.Bool("ffmpeg_resampling", s.config.needsOutputResampling()),
@@ -891,10 +941,13 @@ func (s *Stream) startProcess() error {
 }
 
 // buildFFmpegInputArgs constructs the FFmpeg input arguments for this stream.
-// It delegates the actual argument construction to the shared buildInputArgs so
-// the runtime path stays in lockstep with the unit-tested BuildFFmpegArgs. The
-// only Stream-specific behavior is surfacing an invalid user-supplied timeout as
-// a warning log (buildInputArgs silently falls back to the default).
+// It delegates argument construction to the shared buildInputArgs so the runtime
+// path builds the same argument structure as the unit-tested BuildFFmpegArgs.
+// Both derive the audio-only decision from the same resolveAudioOnly helper, so
+// they agree under every media mode; they differ only in that this path also
+// consults the live reactive fallback latch (auto mode) and surfaces an invalid
+// user-supplied timeout as a warning log (buildInputArgs silently falls back to
+// the default).
 func (s *Stream) buildFFmpegInputArgs(ffmpegParameters []string) []string {
 	if hasUserTimeout, userTimeoutValue := detectUserTimeout(ffmpegParameters); hasUserTimeout {
 		if err := validateTimeout(userTimeoutValue); err != nil {
@@ -906,7 +959,12 @@ func (s *Stream) buildFFmpegInputArgs(ffmpegParameters []string) []string {
 				logger.String("operation", "validate_timeout"))
 		}
 	}
-	return buildInputArgs(&s.config, ffmpegParameters)
+	// The media mode decides whether to request audio-only. In auto mode the
+	// reactive fallback (audioOnlyFallback) drops the restriction once the camera
+	// proves it cannot SETUP the audio track alone (issue #3902); audio-only and
+	// full-stream are deterministic and ignore the latch.
+	audioOnly := resolveAudioOnly(&s.config, s.audioOnlyFallback.Load())
+	return buildInputArgs(&s.config, ffmpegParameters, audioOnly)
 }
 
 // readResult carries the outcome of a single stdout.Read call from the
@@ -1056,6 +1114,37 @@ func (s *Stream) processAudio() error {
 	}
 }
 
+// pcmFrameBytes returns the size in bytes of one interleaved PCM frame (one
+// sample for each channel) in the raw stream FFmpeg writes to stdout.
+//
+// The sample size follows pcmSampleBytes, the byte-size twin of the format
+// switch GetFFmpegFormat owns. The channel count follows
+// effectiveOutputChannels, which accounts for the left and right channel modes
+// where appendChannelArgs tells FFmpeg to fold a multi-channel source down to
+// mono. Aligning on the whole interleaved frame keeps each sample intact across
+// a read boundary, and for true multi-channel output keeps the channel order
+// stable as well, so a read landing between the left and right sample of a
+// stereo pair does not swap the two channels for the rest of the stream.
+//
+// The result is always at least 1 and never larger than ffmpegBufferSize, so
+// callers can use it as a modulus and size their carry from it.
+func pcmFrameBytes(cfg *StreamConfig) int {
+	sampleBytes := pcmSampleBytes(cfg.BitDepth)
+	channels := max(effectiveOutputChannels(cfg), 1)
+	// Bound the multiplicand, not the product, so the multiplication cannot
+	// overflow on a 32-bit build. A wrapped product would turn the modulus
+	// callers apply into a divide by zero, or a negative make size, and
+	// readStdout runs in a goroutine with no recover. The bound itself matters
+	// too: a frame larger than the read buffer could never be completed, the
+	// carry would fill the buffer, and every subsequent read would be handed a
+	// zero-length slice, spinning hot without ever emitting a byte. No real
+	// configuration reaches either case; byte alignment fails open.
+	if channels > ffmpegBufferSize/sampleBytes {
+		return 1
+	}
+	return sampleBytes * channels
+}
+
 // readStdout is the body of the dedicated reader goroutine launched by
 // processAudio. When a buffer manager is wired it borrows a full-sized slice
 // from the size-specific BytePool and attaches a FrameRef whose release
@@ -1064,10 +1153,23 @@ func (s *Stream) processAudio() error {
 // cleanupProcess), on a read error, or when readerDone is closed (main loop
 // exited, preventing a goroutine leak).
 //
-// The release closure captures the FULL-capacity slice, not the n-byte
-// sub-slice sent downstream, so the pool always sees a correctly sized buffer
-// on Put.
+// The release closure captures the FULL-capacity slice, not the out[:total]
+// sub-slice of whole frames sent downstream, so the pool always sees a
+// correctly sized buffer on Put.
 func (s *Stream) readStdout(stdout io.ReadCloser, readCh chan<- readResult, readerDone <-chan struct{}) {
+	// A pipe read boundary is not a PCM frame boundary: stdout.Read returns
+	// whatever bytes happen to be available, so a read routinely ends part-way
+	// through a sample. Every downstream consumer reinterprets these bytes as
+	// samples, and a partial one cannot be handled locally by any of them:
+	// dropping the odd byte shifts every following byte by one, so each
+	// subsequent sample decodes with its halves swapped and the audio becomes
+	// broadband noise, while the resampler rejects the frame outright. So the
+	// remainder is held here and prepended to the next read, and only whole
+	// frames go downstream. carry and carryLen are local to this goroutine.
+	frameBytes := pcmFrameBytes(&s.config)
+	carry := make([]byte, frameBytes)
+	carryLen := 0
+
 	for {
 		var (
 			out []byte
@@ -1087,13 +1189,31 @@ func (s *Stream) readStdout(stdout io.ReadCloser, readCh chan<- readResult, read
 			out = make([]byte, ffmpegBufferSize)
 		}
 
-		n, err := stdout.Read(out)
-		if n > 0 {
-			// Shrink the slice to the actual read size; the underlying
-			// capacity is preserved and returned to the pool via the ref
-			// closure (which captures the full-length slice).
+		// Read behind the carry so the joined bytes are already contiguous:
+		// no second buffer and no copy of the payload itself.
+		copy(out, carry[:carryLen])
+		n, err := stdout.Read(out[carryLen:])
+		total := carryLen + n
+		carryLen = 0
+		if rem := total % frameBytes; rem != 0 {
+			if n > 0 {
+				// Count only reads that actually delivered bytes. A read
+				// returning nothing re-observes the remainder that the previous
+				// read already carried, so counting it again would double-count
+				// a single orphan at end of stream.
+				s.partialFrameCarries.Add(1)
+			}
+			// Copy before re-slicing: out is recycled on the next iteration.
+			carryLen = copy(carry, out[total-rem:total])
+			total -= rem
+		}
+
+		if total > 0 {
+			// Shrink the slice to the whole frames actually available; the
+			// underlying capacity is preserved and returned to the pool via
+			// the ref closure (which captures the full-length slice).
 			select {
-			case readCh <- readResult{data: out[:n], ref: ref}:
+			case readCh <- readResult{data: out[:total], ref: ref}:
 			case <-readerDone:
 				// Main loop exited before we could hand off: release the
 				// producer's own reference so the pool slice is not leaked.
@@ -1101,7 +1221,9 @@ func (s *Stream) readStdout(stdout io.ReadCloser, readCh chan<- readResult, read
 				return
 			}
 		} else {
-			// No bytes read: return the buffer to the pool immediately.
+			// Nothing whole to hand downstream, either because the read was
+			// empty or because it only advanced part of a frame. Return the
+			// buffer to the pool immediately; the bytes live on in carry.
 			ref.Release()
 		}
 		if err != nil {
@@ -1122,6 +1244,25 @@ func (s *Stream) handleReadError(readErr error, startTime time.Time) error {
 	}
 
 	if errors.Is(readErr, io.EOF) || errors.Is(readErr, context.Canceled) {
+		// A data-less EOF while the context is still live means FFmpeg exited
+		// without ever delivering audio (e.g. an RTSP connection timeout past the
+		// quick-exit window). Surface it as an error so Run records the failure
+		// and can engage the audio-only fallback (issues #3902/#3936); a normal
+		// EOF (audio already seen) or a canceled context stays a clean stop.
+		if errors.Is(readErr, io.EOF) && s.ctx.Err() == nil {
+			s.bytesReceivedMu.RLock()
+			totalBytes := s.totalBytesReceived
+			s.bytesReceivedMu.RUnlock()
+			if totalBytes == 0 {
+				return errors.Newf("error reading from FFmpeg: stream ended without producing data").
+					Category(errors.CategoryRTSP).
+					Component("ffmpeg-stream").
+					Context("operation", "process_audio").
+					Context("url", s.config.safeURL()).
+					Context("runtime_seconds", time.Since(startTime).Seconds()).
+					Build()
+			}
+		}
 		return nil
 	}
 
@@ -1153,6 +1294,15 @@ func (s *Stream) dispatchAudioData(data []byte, ref *audiocore.FrameRef) {
 
 	s.updateLastDataTime()
 
+	// Record that audio has flowed at least once. This confirms the current
+	// RTSP media-type request works for this camera, so the audio-only fallback
+	// never engages on a later transient failure (issue #3902). This is a
+	// set-once latch: the Load guard keeps the steady state a barrier-free read
+	// rather than a locked store on every audio chunk.
+	if !s.receivedAudio.Load() {
+		s.receivedAudio.Store(true)
+	}
+
 	n := len(data)
 	s.bytesReceivedMu.Lock()
 	s.totalBytesReceived += int64(n)
@@ -1163,7 +1313,11 @@ func (s *Stream) dispatchAudioData(data []byte, ref *audiocore.FrameRef) {
 
 	s.conditionalFailureReset(totalReceived)
 
-	// Invoke onFrame callback with a fully populated AudioFrame.
+	// Invoke onFrame callback with a fully populated AudioFrame. The channel
+	// count is the one FFmpeg was actually told to emit, not the configured one:
+	// the left and right channel modes fold a multi-channel source to mono, so
+	// reporting cfg.Channels would describe the payload wrongly. This is the
+	// same derivation readStdout frames on.
 	if s.onFrame != nil {
 		s.onFrame(audiocore.AudioFrame{
 			SourceID:   s.config.SourceID,
@@ -1171,7 +1325,7 @@ func (s *Stream) dispatchAudioData(data []byte, ref *audiocore.FrameRef) {
 			Data:       data,
 			SampleRate: s.config.SampleRate,
 			BitDepth:   s.config.BitDepth,
-			Channels:   s.config.Channels,
+			Channels:   effectiveOutputChannels(&s.config),
 			Timestamp:  time.Now(),
 			Ref:        ref,
 		})
@@ -1744,6 +1898,7 @@ func (s *Stream) logStreamHealth() {
 			logger.Bool("is_healthy", health.IsHealthy),
 			logger.Bool("is_receiving_data", health.IsReceivingData),
 			logger.Int64("total_bytes_received", totalBytes),
+			logger.Int64("partial_frame_carries", s.partialFrameCarries.Load()),
 			logger.Float64("bytes_per_second", dataRate),
 			logger.Float64("last_data_ago_seconds", secondsSinceOrZero(health.LastDataReceived)),
 			logger.String("component", "ffmpeg-stream"),
@@ -1754,6 +1909,7 @@ func (s *Stream) logStreamHealth() {
 			logger.Bool("is_healthy", health.IsHealthy),
 			logger.Bool("is_receiving_data", health.IsReceivingData),
 			logger.Int64("total_bytes_received", totalBytes),
+			logger.Int64("partial_frame_carries", s.partialFrameCarries.Load()),
 			logger.Float64("last_data_ago_seconds", secondsSinceOrZero(health.LastDataReceived)),
 			logger.String("component", "ffmpeg-stream"),
 			logger.String("operation", "health_check"))
@@ -1883,6 +2039,68 @@ func (s *Stream) resetFailures() {
 			logger.String("operation", "reset_failures"))
 		s.consecutiveFailures = 0
 	}
+}
+
+// maybeEngageAudioOnlyFallback latches the stream into full-stream mode when an
+// RTSP source repeatedly fails without ever delivering audio while audio-only
+// was requested. Some cameras cannot SETUP the audio track in isolation, so the
+// -allowed_media_types audio restriction (issue #3798) causes the handshake to
+// fail and no audio to arrive (issue #3902). Dropping the restriction restores
+// the pre-#3798 full-stream request; video is still discarded after decode via
+// -vn. This is a one-way latch per Stream instance: reconfiguring the source
+// creates a fresh Stream that retries audio-only.
+//
+// It uses its own failure counter rather than restartCount/consecutiveFailures
+// because a silence-timeout failure (connect succeeds, no audio flows) resets
+// those counters in Run, which would otherwise let a broken audio-only handshake
+// retry forever without ever falling back.
+//
+// Returns true on the call that engages the fallback, so Run can skip that
+// iteration's restart backoff and attempt the full stream immediately.
+func (s *Stream) maybeEngageAudioOnlyFallback() bool {
+	// Only RTSP carries the audio-only restriction; only act while it is still
+	// requested and the camera has never delivered audio under it.
+	if s.config.sourceType() != audiocore.SourceTypeRTSP {
+		return false
+	}
+	// The reactive fallback only applies in auto mode. A stream forced to
+	// audio-only must fail visibly instead of silently opening a video slot, and
+	// full-stream never requested audio-only in the first place.
+	if !mediaModeAllowsFallback(&s.config) {
+		return false
+	}
+	if s.audioOnlyFallback.Load() || s.receivedAudio.Load() {
+		return false
+	}
+
+	if s.audioOnlyFailures.Add(1) < audioOnlyFallbackThreshold {
+		return false
+	}
+
+	s.audioOnlyFallback.Store(true)
+
+	// Clear failure and circuit state accumulated during the audio-only attempts
+	// so a later full-stream failure backs off from a clean slate instead of the
+	// (now-resolved) audio-only failures' inflated count. The caller additionally
+	// skips this iteration's restart backoff (see Run) so the first full-stream
+	// attempt starts immediately rather than after a base backoff.
+	s.restartCountMu.Lock()
+	s.restartCount = 0
+	s.restartCountMu.Unlock()
+
+	s.circuitMu.Lock()
+	s.consecutiveFailures = 0
+	s.circuitOpenTime = time.Time{}
+	s.circuitMu.Unlock()
+
+	getStreamLogger().Warn("RTSP audio-only request failed repeatedly; falling back to full stream (audio decoded, video ignored)",
+		logger.String("url", s.config.safeURL()),
+		logger.String("source_id", s.config.SourceID),
+		logger.Int("failures", int(s.audioOnlyFailures.Load())),
+		logger.String("component", "ffmpeg-stream"),
+		logger.String("operation", "audio_only_fallback"))
+
+	return true
 }
 
 // conditionalFailureReset resets failures only after the process has proven

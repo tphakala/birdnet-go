@@ -404,7 +404,7 @@ func (c *Handler) StartBackupJob(ctx echo.Context) error {
 	// to resume polling (see DatabaseStatsCard.svelte).
 	if existingJob, exists := backupJobManager.GetActiveJobByType(dbType); exists {
 		return ctx.JSON(http.StatusConflict, map[string]any{
-			"error":           "Backup already in progress",
+			"error":           "Backup already in progress", //nolint:goconst // JSON response field key, not the importEventError SSE-event constant
 			"existing_job_id": existingJob.ID,
 			"status":          existingJob.Status,
 		})
