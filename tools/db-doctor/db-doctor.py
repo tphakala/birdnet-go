@@ -26,8 +26,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-SCRIPT_VERSION = "1.2.0"
-SCHEMA_VERSION = "v2-2026-05-21"
+SCRIPT_VERSION = "1.2.1"
+SCHEMA_VERSION = "v2-2026-06-14"
 
 # ---------------------------------------------------------------------------
 # Constants
