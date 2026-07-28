@@ -67,3 +67,6 @@ __pycache__/
 # Release-notes drafts are transient working files (deleted after each release);
 # they must never be committed. See the drafting-release-changelog skill.
 RELEASE_NOTES_DRAFT.md
+# gstack local tooling state (auth token, PID/port, browse audit log).
+# Never commit: .gstack/terminal-internal-token is a credential.
+.gstack/
