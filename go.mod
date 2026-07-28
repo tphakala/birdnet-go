@@ -41,7 +41,7 @@ require (
 	github.com/tphakala/go-opus v0.1.2
 	github.com/tphakala/go-tflite v0.2.2-0.20260514101223-29408e53fff7
 	github.com/tphakala/simd v1.6.0
-	github.com/yalue/onnxruntime_go v1.31.0
+	github.com/yalue/onnxruntime_go v1.30.1
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.54.0
 	golang.org/x/net v0.57.0
