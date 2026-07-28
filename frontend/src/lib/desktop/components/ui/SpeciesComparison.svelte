@@ -191,9 +191,7 @@
           })
       : Promise.resolve(emptySimilar);
     try {
-      const fetched = await api.get<SpeciesGuideData>(
-        `/api/v2/species/${enc}/guide?locale=${loc}`
-      );
+      const fetched = await api.get<SpeciesGuideData>(`/api/v2/species/${enc}/guide?locale=${loc}`);
       if (token !== loadToken) return; // superseded by a newer species
       guide = fetched;
     } catch (e) {
