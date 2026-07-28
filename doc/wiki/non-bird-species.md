@@ -44,7 +44,6 @@ BirdNET can detect several non-bird species, including mammals, amphibians, and 
 | *Lithobates sylvaticus* | Wood Frog | Amphibia | Anura | Ranidae |
 | *Scaphiopus couchii* | Couch's Spadefoot | Amphibia | Anura | Scaphiopodidae |
 | *Spea bombifrons* | Plains Spadefoot | Amphibia | Anura | Scaphiopodidae |
-| *Siren* | Siren | Amphibia | Caudata | Sirenidae |
 | *Apis mellifera* | Honey Bee | Insecta | Hymenoptera | Apidae |
 | *Gryllus assimilis* | Gryllus assimilis | Insecta | Orthoptera | Gryllidae |
 | *Gryllus fultoni* | Southern Wood Cricket | Insecta | Orthoptera | Gryllidae |
