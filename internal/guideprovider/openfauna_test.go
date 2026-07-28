@@ -73,3 +73,33 @@ func TestOpenFaunaProvider_MetaOnlyStillResolves(t *testing.T) {
 	assert.Equal(t, "Corvidae", g.Family)
 	assert.Empty(t, g.CommonName)
 }
+
+// TestOpenFaunaProvider_CommonNameOnlyStillResolves is the mirror of the case above,
+// and pins that an EMPTY Family is the intended representation of "this species has
+// no taxonomy row" rather than a defect.
+//
+// openfauna.Meta is a struct value, so reading Family off the zero value is safe and
+// yields "". That is deliberate and load-bearing: SpeciesGuide.Family has no
+// "unknown" sentinel, and mergeGuides fills an empty primary field from the
+// secondary, so returning "" is exactly what lets Wikipedia supply the family in the
+// merged guide. Returning ErrGuideNotFound here instead would discard a perfectly
+// good localized common name for every species the dataset translates but does not
+// carry taxonomy for.
+func TestOpenFaunaProvider_CommonNameOnlyStillResolves(t *testing.T) {
+	t.Parallel()
+	p := &OpenFaunaGuideProvider{lookup: &fakeOpenFauna{
+		commonName: "Mustarastas",
+		hasCommon:  true,
+	}}
+
+	g, err := p.Fetch(t.Context(), "Turdus merula", FetchOptions{Locale: "fi"})
+	require.NoError(t, err, "a translated species must resolve even with no taxonomy row")
+	assert.Equal(t, "Mustarastas", g.CommonName)
+	assert.Equal(t, "Turdus", g.Genus, "genus is derived from the binomial, not from metadata")
+	assert.Empty(t, g.Family, "an absent family is represented as empty, so a merge can fill it")
+
+	// The whole point of the empty field: a secondary provider fills it.
+	merged := mergeGuides(g, &SpeciesGuide{Family: "Turdidae"})
+	assert.Equal(t, "Turdidae", merged.Family)
+	assert.Equal(t, "Mustarastas", merged.CommonName, "the primary's own data still wins")
+}
