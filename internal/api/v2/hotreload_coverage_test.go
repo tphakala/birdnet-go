@@ -141,12 +141,33 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 		action:     "reconfigure_species_guide",
 	},
 
-	// SpeciesGuide rebuilds its provider cache live via the
-	// reconfigure_species_guide control signal (field-level entry covers the subtree).
-	"Realtime.Dashboard.SpeciesGuide": {
+	// SpeciesGuide splits by whether a setting affects the CACHE or only the
+	// response shape. Only the former emits reconfigure_species_guide; declaring the
+	// whole subtree as actionable would over-claim, because speciesGuideSettingsChanged
+	// deliberately does not signal for the Show* flags.
+	"Realtime.Dashboard.SpeciesGuide.Enabled": {
 		categories: []hotReloadCategory{hotReloadFresh},
 		action:     "reconfigure_species_guide",
 	},
+	"Realtime.Dashboard.SpeciesGuide.EnableWikipedia": {
+		categories: []hotReloadCategory{hotReloadFresh},
+		action:     "reconfigure_species_guide",
+	},
+	"Realtime.Dashboard.SpeciesGuide.WarmTopN": {
+		categories: []hotReloadCategory{hotReloadFresh},
+		action:     "reconfigure_species_guide",
+	},
+	"Realtime.Dashboard.SpeciesGuide.PreFetchEnabled": {
+		categories: []hotReloadCategory{hotReloadFresh},
+		action:     "reconfigure_species_guide",
+	},
+	// Read per request by requireGuideFeature, so they take effect immediately with
+	// no control signal and no cache rebuild. No action is the correct declaration.
+	"Realtime.Dashboard.SpeciesGuide.ShowNotes":                {categories: []hotReloadCategory{hotReloadFresh}},
+	"Realtime.Dashboard.SpeciesGuide.ShowEnrichments":          {categories: []hotReloadCategory{hotReloadFresh}},
+	"Realtime.Dashboard.SpeciesGuide.ShowSimilarSpecies":       {categories: []hotReloadCategory{hotReloadFresh}},
+	"Realtime.Dashboard.SpeciesGuide.ShowTaxonomy":             {categories: []hotReloadCategory{hotReloadFresh}},
+	"Realtime.Dashboard.SpeciesGuide.EnableSupplementaryLinks": {categories: []hotReloadCategory{hotReloadFresh}},
 
 	// -- DynamicThreshold --
 	"Realtime.DynamicThreshold.Enabled": {

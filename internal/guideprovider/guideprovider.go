@@ -76,6 +76,20 @@ const (
 	// dataset scans; an individual lookup early-exits on its match, averaging half a
 	// scan. Break-even is around two species, so this sits comfortably past it.
 	minPrimeBatchSize = 4
+	// providerSetKeyPrefix namespaces the provider-set cache key so it can never
+	// collide with a value written by an older build.
+	//
+	// This is load-bearing, not cosmetic. Before this scheme the provider column
+	// held resolveProviderName() — providers[0].name — and OpenFauna is always
+	// registered first (see guide_cache_init.go), so EVERY row an older build wrote
+	// reads "openfauna", whatever actually produced the prose. An upgraded install
+	// running OpenFauna-only would derive the identical unprefixed key, match those
+	// legacy rows, and keep serving Wikipedia prose — credited to OpenFauna, under a
+	// CC BY-SA licence URL — for a full PositiveTTL. That is precisely the bug
+	// keying on the provider set exists to prevent, surviving in exactly the upgrade
+	// case that matters. The prefix makes legacy rows unmatchable, so they age out
+	// on DBRetention instead of being served.
+	providerSetKeyPrefix = "set:"
 )
 
 // localePattern restricts locale codes to BCP-47-ish forms (e.g. "en", "pt-br",
@@ -230,6 +244,12 @@ type GuideCache struct {
 	store     GuideStore
 	metrics   GuideCacheMetrics
 	providers []registeredProvider
+	// providerSetKey is derived from providers, which are fixed during setup, so it
+	// is computed once on first use rather than rebuilt (alloc + sort + join) on
+	// every DB read and every save. Latched on first call, which is always after
+	// registration — RegisterProvider is documented as setup-only.
+	providerSetKeyOnce sync.Once
+	providerSetKeyVal  string
 
 	warmTopN int
 	// warmLocale is the dashboard locale that cache warming (startup WarmForSpecies +
@@ -301,7 +321,7 @@ func (noopMetrics) UpdateCachePopulationRatio(_ float64) {}
 // RegisterProvider adds a provider. The first registered provider is the primary
 // (used as the DB composite-key provider and the merge base).
 //
-// Configuration methods (RegisterProvider, SetFallbackPolicy, SetWarmTopN) are
+// Configuration methods (RegisterProvider, SetWarmTopN, SetWarmLocale) are
 // NOT concurrency-safe and must all be called during setup, before Start() and
 // before any Get(); they mutate state that concurrent reads do not lock.
 func (c *GuideCache) RegisterProvider(name string, provider GuideProvider) {
@@ -466,6 +486,15 @@ func (c *GuideCache) resolveProviderName() string {
 // The set is fixed during setup and never mutated afterwards (see RegisterProvider),
 // so this reads without a lock, mirroring resolveProviderName.
 func (c *GuideCache) providerSetKey() string {
+	c.providerSetKeyOnce.Do(func() {
+		c.providerSetKeyVal = providerSetKeyPrefix + c.computeProviderSetKey()
+	})
+	return c.providerSetKeyVal
+}
+
+// computeProviderSetKey builds the unprefixed set identifier. Split out so the
+// memoization above stays readable and so tests can exercise the derivation.
+func (c *GuideCache) computeProviderSetKey() string {
 	if len(c.providers) == 0 {
 		return WikipediaProviderName
 	}
@@ -557,9 +586,14 @@ func (c *GuideCache) Get(ctx context.Context, scientificName string, opts FetchO
 	// constructed without a store. Production wiring always supplies one.
 	if c.store != nil {
 		entry, err := c.store.Get(ctx, name, locale, c.providerSetKey())
+		// Convert once: the switch guard and the body need the same value, and
+		// entryToGuide allocates a fresh SpeciesGuide each call.
+		var g *SpeciesGuide
+		if entry != nil {
+			g = entryToGuide(entry)
+		}
 		switch {
-		case err == nil && entry != nil && !c.isStaleNegative(entryToGuide(entry)):
-			g := entryToGuide(entry)
+		case err == nil && g != nil && !c.isStaleNegative(g):
 			c.storeMemory(key, g)
 			c.metrics.RecordCacheHit(tierDB, entryQuality(g))
 			if c.isCacheEntryStale(g) {
@@ -733,9 +767,12 @@ func (c *GuideCache) saveGuide(ctx context.Context, name, locale string, g *Spec
 	// is the explicit form of an invariant a reconfigure depends on: singleflight
 	// spawns its own goroutines, which the wait group does NOT track, so Close can
 	// return while a straggler sits between fetchFromProviders (whose providersMu read
-	// lock Close does wait on) and this write. Without the guard that straggler could
-	// re-insert a row under the retired provider set after handleReconfigureSpeciesGuide
-	// has invalidated the table, and the new cache would then serve it.
+	// lock Close does wait on) and this write. The row it would insert is keyed by the
+	// retired provider set, so the incoming cache will not read it — but it is still a
+	// write issued on behalf of a cache the process has already torn down, landing
+	// after Close returned, and it costs a DB round-trip plus a row that lingers until
+	// retention. The guard makes "a closed cache performs no further writes" explicit
+	// rather than incidental.
 	//
 	// database/sql would also refuse a cancelled context, but leaning on that makes
 	// correctness a property of driver behaviour and would break silently if a caller's

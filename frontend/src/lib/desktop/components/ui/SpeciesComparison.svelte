@@ -100,6 +100,9 @@
   let similar = $state<SimilarSpeciesEntry[]>([]);
   let loading = $state(true);
   let unavailable = $state(false);
+  // Scoped to the similar-species rail only: the guide can be perfectly healthy
+  // while the rail is degraded, because they are independent endpoints.
+  let similarUnavailable = $state(false);
   let noGuide = $state(false);
   // Whether the similar-species list was actually requested for the current
   // species. Distinguishes "we asked and there are none" from "we never asked".
@@ -170,6 +173,7 @@
     loading = true;
     error = null;
     unavailable = false;
+    similarUnavailable = false;
     noGuide = false;
     similarRequested = showSimilarSpecies;
     const enc = encodeURIComponent(scientificName);
@@ -218,7 +222,13 @@
     similar = similarResult?.similar ?? [];
     // The backend reports a degraded rail explicitly, so an unavailable cache is
     // distinguishable from "these species genuinely have no guides".
-    if (similarResult?.guide_unavailable) unavailable = true;
+    //
+    // This is deliberately NOT the guide-level `unavailable` flag. That one means
+    // "the guide itself could not be served" and its template branch precedes the
+    // `guide` branch, so setting it here would replace an already-rendered, healthy
+    // guide with the unavailable banner the moment the similar rail came back
+    // degraded — the guide request having succeeded seconds earlier.
+    similarUnavailable = similarResult?.guide_unavailable ?? false;
   }
 
   function toggleBodySection(id: CanonicalSectionId): void {
@@ -227,12 +237,16 @@
   }
 
   // Re-load whenever the species (or the similar-species gate) changes, not just at
-  // mount. Loading only in onMount meant a parent that reused the instance for a
-  // different species kept showing the previous one's guide, links and comparison
-  // rows under the new header, with no loading state to signal the mismatch — the
-  // props contract could not enforce the {#key} wrapper every caller had to
-  // remember. load() reads the current values, and its token guard drops any
-  // response that a newer request has superseded.
+  // mount, so the component is correct for a caller that reuses the instance.
+  //
+  // Both current callers still wrap this component in {#key scientificName}, which
+  // remounts it and would make this effect fire only once — that is deliberate
+  // belt-and-braces, not an oversight: the remount also clears per-species UI state
+  // this function does not own (which body sections are expanded, whether the
+  // similar rail is open). The effect exists so correctness does not DEPEND on every
+  // caller remembering the wrapper, which the props contract cannot enforce.
+  // load() reads the current values, and its token guard drops any response that a
+  // newer request has superseded.
   $effect(() => {
     void scientificName;
     void showSimilarSpecies;
@@ -262,7 +276,13 @@
   is what keeps aria-controls unambiguous.
 -->
 {#snippet similarSection(requireEntries: boolean)}
-  {#if similarSectionOn && similarRequested && (!requireEntries || similar.length > 0)}
+  {#if similarSectionOn && similarRequested && similarUnavailable}
+    <!-- The rail is degraded rather than empty. Say so where the rail would have
+         been, so an empty list is not silently passed off as "no similar species". -->
+    <div role="status" class="p-4 text-sm text-base-content/70">
+      {t('analytics.species.guide.unavailable')}
+    </div>
+  {:else if similarSectionOn && similarRequested && (!requireEntries || similar.length > 0)}
     <div>
       <button
         type="button"

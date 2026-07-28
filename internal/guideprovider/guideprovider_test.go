@@ -21,9 +21,8 @@ import (
 
 // fakeStore is an in-memory GuideStore for tests.
 type fakeStore struct {
-	mu           sync.Mutex
-	entries      map[string]*GuideCacheEntry
-	deleteAllErr error // when set, DeleteAll fails without clearing entries
+	mu      sync.Mutex
+	entries map[string]*GuideCacheEntry
 }
 
 func newFakeStore() *fakeStore {
@@ -86,16 +85,6 @@ func (s *fakeStore) Delete(_ context.Context, name, locale, provider string) err
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.entries, fakeKey(name, locale, provider))
-	return nil
-}
-
-func (s *fakeStore) DeleteAll(_ context.Context) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.deleteAllErr != nil {
-		return s.deleteAllErr
-	}
-	clear(s.entries)
 	return nil
 }
 
@@ -279,20 +268,21 @@ func TestGuideCache_PlainProviderErrorNotNegativeCached(t *testing.T) {
 func TestGuideCache_StaleWhileRevalidate(t *testing.T) {
 	t.Parallel()
 	store := newFakeStore()
-	// Seed a stale positive entry directly in the store.
-	require.NoError(t, store.Save(t.Context(), &GuideCacheEntry{
-		ScientificName: "Turdus merula",
-		Locale:         "en",
-		Provider:       WikipediaProviderName,
-		CommonName:     "Old Name",
-		Description:    "old",
-		CachedAt:       time.Now().Add(-PositiveTTL - time.Hour),
-	}))
 	prov := &fakeProvider{
 		name:   WikipediaProviderName,
 		result: &SpeciesGuide{CommonName: "Fresh Name", Description: "fresh"},
 	}
 	c := newTestCache(t, store, prov)
+	// Seed a stale positive entry directly in the store, under the key the cache
+	// actually reads. Writing the bare provider name here would silently miss.
+	require.NoError(t, store.Save(t.Context(), &GuideCacheEntry{
+		ScientificName: "Turdus merula",
+		Locale:         "en",
+		Provider:       c.providerSetKey(),
+		CommonName:     "Old Name",
+		Description:    "old",
+		CachedAt:       time.Now().Add(-PositiveTTL - time.Hour),
+	}))
 
 	// Stale DB hit returns immediately with the old data...
 	g, err := c.Get(t.Context(), "Turdus merula", FetchOptions{})
@@ -301,7 +291,7 @@ func TestGuideCache_StaleWhileRevalidate(t *testing.T) {
 
 	// ...and triggers a background refresh that eventually updates the store.
 	require.Eventually(t, func() bool {
-		e, gErr := store.Get(t.Context(), "Turdus merula", "en", WikipediaProviderName)
+		e, gErr := store.Get(t.Context(), "Turdus merula", "en", c.providerSetKey())
 		return gErr == nil && e.CommonName == "Fresh Name"
 	}, 3*time.Second, 20*time.Millisecond)
 }
@@ -497,8 +487,6 @@ func TestGuideCache_HasProvider(t *testing.T) {
 	assert.False(t, (*GuideCache)(nil).HasProvider(OpenFaunaProviderName), "nil cache is safe")
 }
 
-
-
 func TestIsCacheEntryStale(t *testing.T) {
 	t.Parallel()
 	c := &GuideCache{}
@@ -661,8 +649,6 @@ func TestStoreMemory_CapEvictsRatherThanFreezing(t *testing.T) {
 	assert.Equal(t, "updated", got.CommonName)
 	assert.Equal(t, maxMemoryEntries, c.memLen(), "updating a key must not change the entry count")
 }
-
-
 
 // TestRefreshStaleEntries_EvictsExpiredNegatives verifies the refresh sweep drops
 // expired negative entries from memory (freeing slots) while keeping fresh ones.
@@ -868,9 +854,6 @@ func TestOpenFaunaProvider_EmbeddedLookup(t *testing.T) {
 	assert.True(t, errors.Is(err, ErrGuideNotFound))
 }
 
-
-
-
 // localeSpyProvider records the FetchOptions.Locale of each Fetch so tests can assert
 // which locale the warm/pre-fetch paths request.
 type localeSpyProvider struct {
@@ -961,7 +944,7 @@ func TestGuideCache_SaveGuide_SkipsWriteOnCancelledContext(t *testing.T) {
 
 	// A live context persists normally: proves the test exercises a real write path.
 	c.saveGuide(t.Context(), "Turdus merula", "en", guide)
-	_, err := store.Get(t.Context(), "Turdus merula", "en", c.resolveProviderName())
+	_, err := store.Get(t.Context(), "Turdus merula", "en", c.providerSetKey())
 	require.NoError(t, err, "a live context must still persist the guide")
 
 	// A cancelled context must not write. Use a distinct species so a skipped write is
@@ -970,7 +953,7 @@ func TestGuideCache_SaveGuide_SkipsWriteOnCancelledContext(t *testing.T) {
 	cancel()
 	c.saveGuide(cancelled, "Turdus pilaris", "en", guide)
 
-	_, err = store.Get(t.Context(), "Turdus pilaris", "en", c.resolveProviderName())
+	_, err = store.Get(t.Context(), "Turdus pilaris", "en", c.providerSetKey())
 	require.ErrorIs(t, err, ErrCacheEntryNotFound,
 		"a cancelled cache context must not persist a guide")
 }
@@ -1053,4 +1036,80 @@ func TestGuideCache_StaleNegativeIsTreatedAsMiss(t *testing.T) {
 	assert.False(t, g.IsNegativeEntry(), "an expired negative must not be served as a 404")
 	assert.Equal(t, "Common Blackbird", g.CommonName)
 	assert.Equal(t, 1, prov.callCount(), "an expired negative must trigger a re-fetch")
+}
+
+// TestProviderSetKey_CannotCollideWithLegacyRows pins the upgrade case.
+//
+// Before rows were keyed by provider set, the provider column held
+// resolveProviderName() — providers[0].name — and OpenFauna is always registered
+// first, so every row an older build wrote reads "openfauna" no matter which
+// provider supplied the prose. Deriving an unprefixed key would make an
+// OpenFauna-only cache match those legacy rows exactly, and it would go on serving
+// Wikipedia prose for a full PositiveTTL after the user disabled Wikipedia — the
+// bug provider-set keying exists to prevent, surviving the one scenario (upgrade)
+// where it matters most.
+func TestProviderSetKey_CannotCollideWithLegacyRows(t *testing.T) {
+	t.Parallel()
+
+	c := NewGuideCache(newFakeStore(), noopMetrics{})
+	t.Cleanup(c.Close)
+	c.RegisterProvider(OpenFaunaProviderName, &fakeProvider{name: OpenFaunaProviderName})
+
+	key := c.providerSetKey()
+	assert.NotEqual(t, OpenFaunaProviderName, key,
+		"an OpenFauna-only set must NOT derive the bare legacy value, or every row an older build wrote is still a hit")
+	assert.Equal(t, providerSetKeyPrefix+OpenFaunaProviderName, key)
+
+	// A legacy row, written by an older build under the bare provider name.
+	store := newFakeStore()
+	require.NoError(t, store.Save(t.Context(), &GuideCacheEntry{
+		ScientificName: "Turdus merula",
+		Locale:         defaultLocale,
+		Provider:       OpenFaunaProviderName, // legacy semantics
+		Description:    "Wikipedia prose from before the upgrade.",
+		CachedAt:       time.Now(),
+	}))
+
+	prov := &fakeProvider{
+		name:   OpenFaunaProviderName,
+		result: &SpeciesGuide{CommonName: "Common Blackbird"},
+	}
+	upgraded := newTestCache(t, store, prov)
+	upgraded.Start()
+	assert.Zero(t, upgraded.memLen(), "a legacy row must not seed the memory tier after upgrade")
+
+	g, err := upgraded.Get(t.Context(), "Turdus merula", FetchOptions{})
+	require.NoError(t, err)
+	assert.Empty(t, g.Description, "legacy Wikipedia prose must not survive the upgrade")
+	assert.Equal(t, 1, prov.callCount(), "the guide must be re-fetched under the new key")
+}
+
+// TestProviderSetKey_MemoizedAndOrderIndependent pins that the key is stable
+// regardless of registration order (so it cannot orphan rows spuriously) and is
+// derived once rather than rebuilt on every DB read and save.
+func TestProviderSetKey_MemoizedAndOrderIndependent(t *testing.T) {
+	t.Parallel()
+
+	forward := NewGuideCache(newFakeStore(), noopMetrics{})
+	t.Cleanup(forward.Close)
+	forward.RegisterProvider(OpenFaunaProviderName, &fakeProvider{name: OpenFaunaProviderName})
+	forward.RegisterProvider(WikipediaProviderName, &fakeProvider{name: WikipediaProviderName})
+
+	reverse := NewGuideCache(newFakeStore(), noopMetrics{})
+	t.Cleanup(reverse.Close)
+	reverse.RegisterProvider(WikipediaProviderName, &fakeProvider{name: WikipediaProviderName})
+	reverse.RegisterProvider(OpenFaunaProviderName, &fakeProvider{name: OpenFaunaProviderName})
+
+	assert.Equal(t, forward.providerSetKey(), reverse.providerSetKey(),
+		"registration order must not change the key, or a reorder would orphan every row")
+
+	// Latched on first use: the key is derived once, not rebuilt per DB read and
+	// save. Registering another provider afterwards would change the DERIVED value,
+	// so an unchanged key proves the memo held rather than merely being deterministic.
+	latched := forward.providerSetKey()
+	forward.RegisterProvider("late-provider", &fakeProvider{name: "late-provider"})
+	assert.Equal(t, latched, forward.providerSetKey(),
+		"providerSetKey must latch on first use rather than recompute")
+	assert.NotEqual(t, latched, providerSetKeyPrefix+forward.computeProviderSetKey(),
+		"guard the test itself: the late registration must actually change the derived value")
 }

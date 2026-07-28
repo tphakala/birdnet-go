@@ -302,6 +302,12 @@ Per-section `show*` gating is **not** uniform, so do not assume a flag stops an 
 
 `/guide` itself is gated **only** by `enabled`. The `features` block in its response reports every flag's current value so the client can gate its own sections against a server-authoritative copy rather than its own possibly-stale settings.
 
+Status and shape notes, since none of these are inferable from the table:
+
+- `/guide` answers **503** (not 502) when no cache or provider can serve it, so a client can distinguish "temporarily unavailable, retry" from an upstream fault.
+- `/guide` returns **200 with `external_links`** for a species that has offline links but no prose. **404** is reserved for a species with nothing to offer at all. Previously a prose-less species 404'd and its links were discarded, while `/similar` returned links for that same species — the two endpoints disagreed about the same bird.
+- `/similar` returns **200 with `guide_unavailable: true`** when the guide cache could not be consulted, so a degraded rail is distinguishable from "these species genuinely have no guides". Clients should surface that state rather than rendering an empty list.
+
 | Method | Route                               | Handler             | Auth | Description                                                                                                          |
 | ------ | ----------------------------------- | ------------------- | ---- | -------------------------------------------------------------------------------------------------------------------- |
 | GET    | `/species/:scientific_name/guide`   | `GetSpeciesGuide`   | ❌   | Offline species guide: taxonomy, localized common name, external links; optional Wikipedia description. Rate-limited. |

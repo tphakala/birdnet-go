@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -44,9 +45,15 @@ type GuideCacheEntry struct {
 	ScientificName string `gorm:"uniqueIndex:idx_guide_cache_key;not null;size:200"`
 	Locale         string `gorm:"uniqueIndex:idx_guide_cache_key;not null;size:20"`
 	Provider       string `gorm:"uniqueIndex:idx_guide_cache_key;not null;size:100"`
-	// SourceProvider is the single provider credited to the user for this guide
-	// (attribution alongside SourceURL/License). Distinct from Provider, which is
-	// the whole set that produced the row and is part of the key.
+	// SourceProvider is the cache's canonical/primary provider label, carried for
+	// display. Distinct from Provider, which is the whole set that produced the row
+	// and is part of the key — without this field the API would surface the
+	// composite key ("set:openfauna+wikipedia") to users as a provider name.
+	//
+	// It is NOT necessarily the origin of the prose: fetchFromProviders stamps the
+	// primary provider regardless of which one supplied the description. The prose's
+	// true attribution travels on SourceURL/License/LicenseURL, which mergeGuides
+	// carries from whichever provider produced it.
 	SourceProvider string `gorm:"size:100"`
 	CommonName     string
 	Description    string `gorm:"type:text"`
@@ -145,8 +152,9 @@ func entryToGuide(e *GuideCacheEntry) *SpeciesGuide {
 		Genus:          e.Genus,
 		Family:         e.Family,
 		// Fall back to the key when a row predates the SourceProvider column, so an
-		// upgraded install still shows an attribution rather than a blank one.
-		SourceProvider: cmp.Or(e.SourceProvider, e.Provider),
+		// upgraded install shows an attribution rather than a blank one. The prefix is
+		// trimmed so a composite key can never surface to a user as a provider name.
+		SourceProvider: cmp.Or(e.SourceProvider, strings.TrimPrefix(e.Provider, providerSetKeyPrefix)),
 		SourceURL:      e.SourceURL,
 		License:        e.License,
 		LicenseURL:     e.LicenseURL,
@@ -315,9 +323,9 @@ func (s *GORMGuideStore) GetRecent(ctx context.Context, limit int, providerSet s
 }
 
 // Delete removes the entry for the composite key. Not part of the GuideStore
-// interface: the cache invalidates wholesale via DeleteAll and otherwise lets
-// entries age out on their TTL. Retained as store-level API for single-entry
-// eviction.
+// interface: the cache lets entries age out on their TTL, and a provider change
+// self-invalidates via the provider-set key rather than deleting anything.
+// Retained as store-level API for single-entry eviction.
 func (s *GORMGuideStore) Delete(ctx context.Context, scientificName, locale, provider string) error {
 	err := s.db.WithContext(ctx).
 		Where("scientific_name = ? AND locale = ? AND provider = ?", scientificName, locale, provider).
