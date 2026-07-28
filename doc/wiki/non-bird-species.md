@@ -1,6 +1,8 @@
 # Non-Bird Species in BirdNET v2.4
 
-BirdNET can detect several non-bird species, including mammals, amphibians, and insects. Below is the full list of non-bird species supported in the BirdNET v2.4 model.
+BirdNET can detect several non-bird species, including mammals, amphibians, and insects, as well as some common environmental sounds. Below is the full list of non-bird labels supported in the BirdNET v2.4 model.
+
+## Biological Species
 
 | Scientific Name | Common Name | Class | Order | Family |
 | --- | --- | --- | --- | --- |
@@ -92,3 +94,19 @@ BirdNET can detect several non-bird species, including mammals, amphibians, and 
 | *Sciurus carolinensis* | Eastern Gray Squirrel | Mammalia | Rodentia | Sciuridae |
 | *Tamias striatus* | Eastern Chipmunk | Mammalia | Rodentia | Sciuridae |
 | *Tamiasciurus hudsonicus* | Red Squirrel | Mammalia | Rodentia | Sciuridae |
+
+## Environmental & Artificial Sounds
+
+The model also includes several soundscape classes to help detect common background noise and human activities:
+
+- Dog
+- Engine
+- Environmental
+- Fireworks
+- Gun
+- Human non-vocal
+- Human vocal
+- Human whistle
+- Noise
+- Power tools
+- Siren
