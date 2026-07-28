@@ -60,6 +60,7 @@ Welcome to the BirdNET-Go documentation. This index will help you navigate throu
 ## Reference
 
 - [Configuration Reference](configuration-reference.md) - Complete reference of every `config.yaml` setting with types and descriptions (auto-generated from source)
+- [Non-Bird Species List](non-bird-species.md) - Complete list of non-bird species detected by BirdNET
 - [Command Line Interface](guide.md#command-line-interface) - Available commands and options
 - [Detection Pipeline Flow](guide.md#birdnet-detection-pipeline) - How settings interact and affect detection results
 - [Range Filter Commands](guide.md#inspection-and-debugging) - CLI commands for inspecting range filter results
