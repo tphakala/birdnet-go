@@ -60,8 +60,13 @@ var (
 // project ("nowiki" / no.wikipedia.org), so those sources map nb/nn -> no; every
 // other source keeps the standard base subtag.
 var birdnetGoSourceLangMaps = map[string]map[string]string{
-	"wikipedia": {"nb": "no", "nn": "no"},
+	SourceIDWikipedia: {"nb": "no", "nn": "no"},
 }
+
+// SourceIDWikipedia is the registry key for Wikipedia. Exported so the guide
+// provider names the same source when it resolves a language via SourceLang,
+// rather than repeating the literal.
+const SourceIDWikipedia = "wikipedia"
 
 // applySourceLangMaps merges birdnetGoSourceLangMaps onto a parsed registry so the
 // override is applied uniformly regardless of which registry (upstream or
@@ -83,6 +88,29 @@ func applySourceLangMaps(reg map[string]Source) {
 		src.LangMap = merged
 		reg[id] = src
 	}
+}
+
+// SourceLang returns the {lang} token to use for one registry source, applying that
+// source's lang_map (see Source.LangMap and birdnetGoSourceLangMaps). An unknown
+// source, or a language the source does not remap, yields lang unchanged.
+//
+// This is the ONE place the "Wikipedia's Norwegian lives on the no project" fact is
+// answered. The guide provider consults it when building the API host to fetch prose
+// from, and the link resolvers consult the same registry when building the badge URL,
+// so the article a user reads and the link they click can no longer disagree — the
+// two used to carry independent copies of the nb/nn -> no table.
+//
+// It reads the shared registry without cloning it, so it is safe on the request path.
+func SourceLang(sourceID, lang string) string {
+	if src, ok := sourcesReadOnly()[sourceID]; ok {
+		if mapped := src.langFor(lang); mapped != lang {
+			return mapped
+		}
+	}
+	if src, ok := supplementarySources()[sourceID]; ok {
+		return src.langFor(lang)
+	}
+	return lang
 }
 
 // Sources returns the embedded OpenFauna sources registry, parsed once. A parse

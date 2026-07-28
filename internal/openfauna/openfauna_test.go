@@ -2,6 +2,7 @@ package openfauna
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -549,4 +550,107 @@ func TestStoreMetaCache_CountMatchesEntriesUnderConcurrency(t *testing.T) {
 	metaCache.Range(func(_, _ any) bool { actual++; return true })
 	assert.Equal(t, int64(actual), metaCacheCount.Load(),
 		"metaCacheCount must equal the live entry count (no over/undercount)")
+}
+
+// TestDecodeMetadataRows_AllNamelessIsAnError pins that a structurally unusable
+// dataset fails loudly.
+//
+// A single skipped record is tolerated so one bad line cannot wipe out every
+// species. But when NOTHING in the stream carries a scientific name the schema has
+// moved — a renamed or re-nested key, or an array instead of NDJSON — and the old
+// behaviour was to return a valid, EMPTY index with no error and no log, silently
+// stripping taxonomy and every external link from the whole application. The
+// manifest gate does not catch it, because a key rename need not bump the major.
+func TestDecodeMetadataRows_AllNamelessIsAnError(t *testing.T) {
+	t.Parallel()
+
+	// Well-formed JSON, but the name lives under a key this decoder does not know.
+	input := strings.Join([]string{
+		`{"name":"Turdus merula","taxonomy":{"class":"Aves"}}`,
+		`{"name":"Parus major","taxonomy":{"class":"Aves"}}`,
+	}, "\n")
+
+	var got []string
+	err := decodeMetadataRows(strings.NewReader(input), func(sci string, _ Meta) error {
+		got = append(got, sci)
+		return nil
+	})
+	require.Error(t, err, "a stream where no record carries a scientific name must be an error")
+	assert.Contains(t, err.Error(), "schema")
+	assert.Empty(t, got)
+}
+
+// TestDecodeMetadataRows_PartiallyUsableStreamSucceeds is the other half of the
+// contract: dropping some records must stay tolerated.
+func TestDecodeMetadataRows_PartiallyUsableStreamSucceeds(t *testing.T) {
+	t.Parallel()
+
+	input := strings.Join([]string{
+		`{"scientific_name":"Turdus merula","taxonomy":{"class":"Aves"}}`,
+		`{"name":"Parus major"}`, // nameless: skipped
+		`not json at all`,        // malformed: skipped
+	}, "\n")
+
+	var got []string
+	err := decodeMetadataRows(strings.NewReader(input), func(sci string, _ Meta) error {
+		got = append(got, sci)
+		return nil
+	})
+	require.NoError(t, err, "a stream with at least one usable record must still succeed")
+	assert.Equal(t, []string{"Turdus merula"}, got)
+}
+
+// TestExternalLinks_EmbeddedDataResolvesToExpectedHosts is the end-to-end guard the
+// suite was missing: it resolves a real species' embedded link ids through the real
+// embedded sources registry and asserts each URL points at that source's own host.
+//
+// Every other test either checks embedded ids without resolving them, or resolves
+// hand-written registries. That left the pairing untested, so swapping two entries
+// in data/sources.json — or the ids under those keys in metadata.jsonl — would ship
+// green while sending users who click "Wikipedia" to iNaturalist.
+func TestExternalLinks_EmbeddedDataResolvesToExpectedHosts(t *testing.T) {
+	t.Parallel()
+
+	const species = "Turdus merula"
+
+	meta, ok := LookupMeta(species)
+	require.True(t, ok, "the embedded dataset must carry metadata for a common species")
+	require.NotEmpty(t, meta.Links, "the embedded metadata must carry link ids")
+
+	links := ExternalLinks(species, "en", false)
+	require.NotEmpty(t, links, "the embedded dataset must resolve links for a common species")
+
+	// Every resolved URL must be parseable and absolute. A template that lost its
+	// scheme renders a relative href that silently navigates within the dashboard.
+	byName := make(map[string]string, len(links))
+	for _, l := range links {
+		parsed, err := url.Parse(l.URL)
+		require.NoErrorf(t, err, "%s produced an unparseable URL: %q", l.Name, l.URL)
+		assert.Truef(t, parsed.IsAbs(), "%s must produce an absolute URL, got %q", l.Name, l.URL)
+		assert.NotEmptyf(t, parsed.Host, "%s must produce a URL with a host, got %q", l.Name, l.URL)
+		byName[l.Name] = l.URL
+	}
+
+	// The anti-swap guard: each source's resolved URL must carry the id that the
+	// metadata lists under THAT source's key. Swapping two entries in
+	// data/sources.json, or the ids under those keys in metadata.jsonl, otherwise
+	// ships green while sending users who click one source to another's page.
+	reg := Sources()
+	var checked int
+	for sourceID, entry := range meta.Links {
+		src, known := reg[sourceID]
+		if !known || entry.ID == "" || entry.URL != "" {
+			// Unknown to the registry, id-less, or carrying a verbatim override:
+			// none of those resolve the id into the template, so there is no
+			// pairing to check here.
+			continue
+		}
+		resolved, present := byName[src.Name]
+		require.Truef(t, present, "source %q (%s) resolved no link", sourceID, src.Name)
+		assert.Containsf(t, resolved, entry.ID,
+			"the %q link must embed that source's own id %q, got %q",
+			sourceID, entry.ID, resolved)
+		checked++
+	}
+	require.Positive(t, checked, "expected at least one id-resolved source in the embedded links")
 }

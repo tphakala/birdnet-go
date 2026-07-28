@@ -166,37 +166,48 @@ func streamMetadata(fn metaRowFunc) error {
 	return decodeMetadataRows(zr, fn)
 }
 
-// decodeMetadataRows reads newline-delimited JSON metadata from src and calls fn
-// for each record. Split out so the decoding can be tested with synthetic data.
-func decodeMetadataRows(src io.Reader, fn metaRowFunc) error {
-	// Read line by line with a bufio.Reader rather than bufio.Scanner: ReadBytes
-	// grows to fit an arbitrarily long record (no fixed token cap) and lets us skip
-	// a single malformed line instead of aborting the whole stream. Losing one bad
-	// record must not wipe out every species' taxonomy and links.
-	br := bufio.NewReader(src)
+// maxMalformedMetadataLogs caps how many individual malformed-record failures are
+// logged per scan. A structurally wrong dataset makes EVERY line fail, and this
+// function runs at startup and on request-path lookups, so an uncapped per-record
+// Error log turns one problem into a ~15k-event log and telemetry storm. Past the
+// cap the failures are still counted and reported once, in the summary.
+const maxMalformedMetadataLogs = 10
+
+// metaNameFunc receives one metadata record's scientific name together with the raw
+// line it came from, so a caller that only needs to FIND a record pays for decoding
+// the rest of exactly one.
+type metaNameFunc func(scientific string, line []byte) error
+
+// metadataNameRecord decodes only the key field. Unmarshalling into it skips the
+// nested taxonomy object and, crucially, never allocates the per-record links map.
+type metadataNameRecord struct {
+	ScientificName string `json:"scientific_name"`
+}
+
+// streamMetadataNames walks the embedded metadata decoding only each record's
+// scientific name. The line passed to fn is only valid for the duration of the
+// call; a caller that keeps it must copy it.
+func streamMetadataNames(fn metaNameFunc) error {
+	zr, err := gzip.NewReader(bytes.NewReader(metadataGz))
+	if err != nil {
+		return errors.New(err).
+			Component(loggerModule).
+			Category(errors.CategoryFileParsing).
+			Context("operation", "open_metadata_gzip").
+			Build()
+	}
+	defer func() { _ = zr.Close() }()
+
+	br := bufio.NewReader(zr)
 	for {
 		raw, readErr := br.ReadBytes('\n')
-		// Process whatever was read before handling readErr, so a final line without
-		// a trailing newline is not dropped.
 		if line := bytes.TrimSpace(raw); len(line) > 0 {
-			var rec metadataRecord
-			switch err := json.Unmarshal(line, &rec); {
-			case err != nil:
-				// The schema unit test guards the vendored data, so a parse failure
-				// here means a corrupt or unexpected record at runtime: skip it and
-				// keep going so the rest of the dataset still resolves.
-				GetLogger().Error("skipping malformed openfauna metadata record", logger.Error(err))
-			case rec.ScientificName == "":
-				// No name to key on; skip silently (mirrors the empty-name contract).
-			default:
-				m := Meta{
-					Class:        rec.Taxonomy.Class,
-					Order:        rec.Taxonomy.Order,
-					Family:       rec.Taxonomy.Family,
-					FamilyCommon: rec.Taxonomy.FamilyCommon,
-					Links:        rec.Links,
-				}
-				if cbErr := fn(rec.ScientificName, m); cbErr != nil {
+			var rec metadataNameRecord
+			// A malformed line is skipped here without logging: this path is a
+			// lookup, and decodeMetadataRows already reports dataset-level problems
+			// (with a cap) on the paths that read the whole stream.
+			if err := json.Unmarshal(line, &rec); err == nil && rec.ScientificName != "" {
+				if cbErr := fn(rec.ScientificName, line); cbErr != nil {
 					return cbErr
 				}
 			}
@@ -212,6 +223,96 @@ func decodeMetadataRows(src io.Reader, fn metaRowFunc) error {
 				Build()
 		}
 	}
+}
+
+// decodeMetadataRows reads newline-delimited JSON metadata from src and calls fn
+// for each record. Split out so the decoding can be tested with synthetic data.
+//
+// A single unusable record is skipped so one bad line cannot wipe out every
+// species' taxonomy and links. A dataset in which NOTHING is usable is a different
+// class of problem and is returned as an error: that means the schema moved (a
+// renamed or re-nested scientific_name key, an array instead of NDJSON), and
+// silently yielding an empty index would strip taxonomy and every external link
+// from the whole application with no diagnostic at all. The manifest's schema gate
+// does not catch it, because a key rename need not bump the major version.
+func decodeMetadataRows(src io.Reader, fn metaRowFunc) error {
+	// Read line by line with a bufio.Reader rather than bufio.Scanner: ReadBytes
+	// grows to fit an arbitrarily long record (no fixed token cap) and lets us skip
+	// a single malformed line instead of aborting the whole stream.
+	br := bufio.NewReader(src)
+	var (
+		lines     int // non-empty lines seen
+		usable    int // records that yielded a scientific name
+		malformed int // lines that failed to parse
+		nameless  int // lines that parsed but carried no scientific name
+	)
+	for {
+		raw, readErr := br.ReadBytes('\n')
+		// Process whatever was read before handling readErr, so a final line without
+		// a trailing newline is not dropped.
+		if line := bytes.TrimSpace(raw); len(line) > 0 {
+			lines++
+			var rec metadataRecord
+			switch err := json.Unmarshal(line, &rec); {
+			case err != nil:
+				malformed++
+				if malformed <= maxMalformedMetadataLogs {
+					GetLogger().Error("skipping malformed openfauna metadata record",
+						logger.Error(err))
+				}
+			case rec.ScientificName == "":
+				nameless++
+			default:
+				usable++
+				m := Meta{
+					Class:        rec.Taxonomy.Class,
+					Order:        rec.Taxonomy.Order,
+					Family:       rec.Taxonomy.Family,
+					FamilyCommon: rec.Taxonomy.FamilyCommon,
+					Links:        rec.Links,
+				}
+				if cbErr := fn(rec.ScientificName, m); cbErr != nil {
+					// A callback sentinel (errStop) is control flow, not a data
+					// problem: return it untouched and skip the usability check,
+					// which has not seen the whole stream.
+					return cbErr
+				}
+			}
+		}
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				return metadataUsabilityError(lines, usable, malformed, nameless)
+			}
+			return errors.New(readErr).
+				Component(loggerModule).
+				Category(errors.CategoryFileParsing).
+				Context("operation", "scan_metadata_jsonl").
+				Build()
+		}
+	}
+}
+
+// metadataUsabilityError reports a structurally unusable metadata stream, and logs a
+// one-line summary when records were dropped but the dataset is still usable.
+func metadataUsabilityError(lines, usable, malformed, nameless int) error {
+	if lines > 0 && usable == 0 {
+		return errors.Newf(
+			"openfauna: metadata unusable — %d records read, none carried a scientific name (%d malformed, %d nameless); the dataset schema has probably changed",
+			lines, malformed, nameless).
+			Component(loggerModule).
+			Category(errors.CategoryFileParsing).
+			Context("operation", "decode_metadata").
+			Build()
+	}
+	if malformed > 0 || nameless > 0 {
+		GetLogger().Warn("openfauna metadata decoded with skipped records",
+			logger.Int("usable", usable),
+			logger.Int("malformed", malformed),
+			logger.Int("nameless", nameless),
+			logger.Int("logged_malformed", min(malformed, maxMalformedMetadataLogs)),
+		)
+	}
+	return nil
 }
 
 // normalizeName canonicalizes a scientific name for case-insensitive matching.
@@ -556,6 +657,18 @@ func lookupCommonNamesEffective(scientificNames []string, eff string) map[string
 
 	inLocale := make(map[string]string)  // normalized sci -> common (active locale)
 	inEnglish := make(map[string]string) // normalized sci -> common (English fallback)
+	// Halt the scan once every requested name holds an active-locale hit. That is the
+	// best answer any later row could supply (English is consulted only as a fallback
+	// for names the active locale did not resolve), so continuing is pure waste.
+	//
+	// This matters most for the single-name callers the guide cache uses on its
+	// miss, warm, and refresh paths: without the early exit each one inflates and
+	// parses the entire ~20 MB / 460k-row translations blob to extract one string,
+	// so a default 50-species warm decompressed well over a gigabyte. Lookup above
+	// already used errStop for exactly this; this path did not.
+	//
+	// A name with no translation in the active locale never satisfies the condition,
+	// so the scan correctly runs to completion to pick up its English fallback.
 	if err := streamTranslations(func(sci, loc, common string) error {
 		norm := normalizeName(sci)
 		if _, want := inputs[norm]; !want {
@@ -568,6 +681,9 @@ func lookupCommonNamesEffective(scientificNames []string, eff string) map[string
 		case loc == eff:
 			if _, exists := inLocale[norm]; !exists {
 				inLocale[norm] = common
+				if len(inLocale) == len(inputs) {
+					return errStop
+				}
 			}
 		case eff != localeFallback && loc == localeFallback:
 			if _, exists := inEnglish[norm]; !exists {
@@ -575,7 +691,7 @@ func lookupCommonNamesEffective(scientificNames []string, eff string) map[string
 			}
 		}
 		return nil
-	}); err != nil {
+	}); err != nil && !errors.Is(err, errStop) {
 		GetLogger().Error("openfauna forward common-name batch lookup failed",
 			logger.String("locale", eff),
 			logger.Int("requested", len(inputs)),
@@ -603,6 +719,20 @@ func lookupCommonNamesEffective(scientificNames []string, eff string) map[string
 		logger.Int("resolved", len(out)),
 	)
 	return out
+}
+
+// clone returns a copy safe to hand to a caller. Copying a Meta by value does NOT
+// copy its Links map, so returning the memoized value directly published one shared,
+// mutable map to every concurrent caller: a caller adding or deleting a key — the
+// natural reading of a by-value return — would race the ranges ExternalLinks performs
+// on the request path and trigger an unrecoverable "concurrent map read and map
+// write" fatal error. Sources() already clones for exactly this reason.
+func (m Meta) clone() Meta {
+	if m.Links == nil {
+		return m
+	}
+	m.Links = maps.Clone(m.Links)
+	return m
 }
 
 // metaCacheMaxEntries bounds the LookupMeta memo. The embedded metadata covers
@@ -663,17 +793,31 @@ func LookupMeta(scientific string) (Meta, bool) {
 	target := normalizeName(scientific)
 	if v, ok := metaCache.Load(target); ok {
 		if e, ok := v.(metaCacheEntry); ok {
-			return e.meta, e.found
+			return e.meta.clone(), e.found
 		}
 	}
 	var found Meta
 	var ok bool
-	if err := streamMetadata(func(sci string, m Meta) error {
-		if normalizeName(sci) == target {
-			found, ok = m, true
-			return errStop
+	// Decode the name first and the rest only on a match. A full decode of every
+	// record allocates a Links map per species (~15k of them) just to discard all
+	// but one; naming-first skips that entirely for non-matching lines.
+	if err := streamMetadataNames(func(sci string, line []byte) error {
+		if normalizeName(sci) != target {
+			return nil
 		}
-		return nil
+		var rec metadataRecord
+		if err := json.Unmarshal(line, &rec); err != nil {
+			return err
+		}
+		found = Meta{
+			Class:        rec.Taxonomy.Class,
+			Order:        rec.Taxonomy.Order,
+			Family:       rec.Taxonomy.Family,
+			FamilyCommon: rec.Taxonomy.FamilyCommon,
+			Links:        rec.Links,
+		}
+		ok = true
+		return errStop
 	}); err != nil && !errors.Is(err, errStop) {
 		GetLogger().Error("openfauna metadata lookup failed",
 			logger.String("scientific", target),
@@ -753,6 +897,71 @@ func LookupCommonName(scientificName, bngLocale string) (string, bool) {
 	name, found := names[scientificName]
 	storeCommonNameCache(key, commonNameCacheEntry{name: name, found: found})
 	return name, found
+}
+
+// PrimeCaches resolves a batch of scientific names in one pass over each embedded
+// dataset and populates the LookupCommonName and LookupMeta memos with the results,
+// so subsequent single-name lookups for those species are served from memory.
+//
+// It exists for the startup warm and any other caller that already knows its whole
+// working set. Resolving N species one at a time costs N passes: LookupCommonName
+// and LookupMeta each decompress and scan an embedded blob on a memo miss, and the
+// translations blob alone inflates to ~20 MB. Priming 50 species — the default warm
+// target — therefore drops from roughly a hundred scans to two, which on the
+// Raspberry-Pi-class hardware this project targets is the difference between tens of
+// seconds of contended CPU at startup and a fraction of one.
+//
+// Absent species are memoized as absent, so a name the dataset does not carry is not
+// re-scanned later either. Safe to call concurrently; the memos are append-only.
+func PrimeCaches(scientificNames []string, bngLocale string) {
+	if len(scientificNames) == 0 {
+		return
+	}
+	eff := mapLocale(bngLocale)
+
+	// One pass over the translations blob for every requested name.
+	resolved := lookupCommonNamesEffective(scientificNames, eff)
+	for _, raw := range scientificNames {
+		norm := normalizeName(raw)
+		if norm == "" {
+			continue
+		}
+		name, found := resolved[raw]
+		storeCommonNameCache(eff+"\x00"+norm, commonNameCacheEntry{name: name, found: found})
+	}
+
+	// One pass over the metadata blob for every requested name still unmemoized.
+	want := make(map[string]struct{}, len(scientificNames))
+	for _, raw := range scientificNames {
+		norm := normalizeName(raw)
+		if norm == "" {
+			continue
+		}
+		if _, cached := metaCache.Load(norm); cached {
+			continue
+		}
+		want[norm] = struct{}{}
+	}
+	if len(want) == 0 {
+		return
+	}
+	found := make(map[string]Meta, len(want))
+	if err := streamMetadata(func(sci string, m Meta) error {
+		norm := normalizeName(sci)
+		if _, ok := want[norm]; ok {
+			found[norm] = m
+		}
+		return nil
+	}); err != nil {
+		// Leave the memo untouched so a transient scan failure is not cached as
+		// "absent"; the per-name path will retry.
+		GetLogger().Warn("openfauna cache priming failed", logger.Error(err))
+		return
+	}
+	for norm := range want {
+		m, ok := found[norm]
+		storeMetaCache(norm, &metaCacheEntry{meta: m, found: ok})
+	}
 }
 
 // Locales returns the sorted list of locale codes available in the dataset
