@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -63,11 +62,16 @@ func (s *fakeStore) GetAll(_ context.Context) ([]GuideCacheEntry, error) {
 	return out, nil
 }
 
-func (s *fakeStore) GetRecent(_ context.Context, limit int) ([]GuideCacheEntry, error) {
+func (s *fakeStore) GetRecent(_ context.Context, limit int, providerSet string) ([]GuideCacheEntry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make([]GuideCacheEntry, 0, len(s.entries))
 	for _, e := range s.entries {
+		// Mirror the GORM store's provider-set filter: rows written by a different
+		// provider set must not seed this cache's memory tier.
+		if providerSet != "" && e.Provider != providerSet {
+			continue
+		}
 		out = append(out, *e)
 	}
 	// Most-recently-cached first, mirroring the GORM store's ordering.
@@ -411,7 +415,6 @@ func TestGuideCache_FallbackMergesProviders(t *testing.T) {
 	t.Parallel()
 	store := newFakeStore()
 	c := NewGuideCache(store, noopMetrics{})
-	c.SetFallbackPolicy(conf.SpeciesGuideFallbackAll)
 	// Production ordering: OpenFauna is the primary (offline taxonomy + common name);
 	// Wikipedia is the secondary that fills the description and its attribution.
 	c.RegisterProvider(OpenFaunaProviderName, &fakeProvider{
@@ -444,7 +447,6 @@ func TestGuideCache_SecondaryNotFoundDoesNotMarkPartial(t *testing.T) {
 	t.Parallel()
 	store := newFakeStore()
 	c := NewGuideCache(store, noopMetrics{})
-	c.SetFallbackPolicy(conf.SpeciesGuideFallbackAll)
 	// OpenFauna (primary) resolves the species offline.
 	c.RegisterProvider(OpenFaunaProviderName, &fakeProvider{
 		name:   OpenFaunaProviderName,
@@ -467,7 +469,6 @@ func TestGuideCache_TransientSecondaryMarksPartial(t *testing.T) {
 	t.Parallel()
 	store := newFakeStore()
 	c := NewGuideCache(store, noopMetrics{})
-	c.SetFallbackPolicy(conf.SpeciesGuideFallbackAll)
 	// OpenFauna (primary) resolves the species offline.
 	c.RegisterProvider(OpenFaunaProviderName, &fakeProvider{
 		name:   OpenFaunaProviderName,
@@ -496,57 +497,7 @@ func TestGuideCache_HasProvider(t *testing.T) {
 	assert.False(t, (*GuideCache)(nil).HasProvider(OpenFaunaProviderName), "nil cache is safe")
 }
 
-func TestGuideCache_InvalidateAll(t *testing.T) {
-	t.Parallel()
-	store := newFakeStore()
-	c := NewGuideCache(store, noopMetrics{})
-	c.RegisterProvider(OpenFaunaProviderName, &fakeProvider{
-		name:   OpenFaunaProviderName,
-		result: &SpeciesGuide{CommonName: "Blackbird", Genus: "Turdus"},
-	})
-	t.Cleanup(c.Close)
 
-	// A fetch populates both the DB and memory tiers.
-	_, err := c.Get(t.Context(), "Turdus merula", FetchOptions{})
-	require.NoError(t, err)
-	require.Positive(t, store.count(), "fetch should persist an entry")
-
-	require.NoError(t, c.InvalidateAll(t.Context()))
-
-	assert.Zero(t, store.count(), "DB tier cleared")
-	memEntries := 0
-	c.memory.Range(func(_, _ any) bool { memEntries++; return true })
-	assert.Zero(t, memEntries, "memory tier cleared")
-	assert.Zero(t, c.memCount.Load(), "memory count reset")
-}
-
-// TestGuideCache_InvalidateAll_DBFailureKeepsMemory verifies the persistent tier is
-// cleared first: when DeleteAll fails, the memory tier is left intact so the two
-// tiers stay consistent (both populated) instead of leaving memory empty while stale
-// rows survive in the DB to reload on the next restart.
-func TestGuideCache_InvalidateAll_DBFailureKeepsMemory(t *testing.T) {
-	t.Parallel()
-	store := newFakeStore()
-	store.deleteAllErr = errors.NewStd("db unavailable")
-	c := NewGuideCache(store, noopMetrics{})
-	c.RegisterProvider(OpenFaunaProviderName, &fakeProvider{
-		name:   OpenFaunaProviderName,
-		result: &SpeciesGuide{CommonName: "Blackbird", Genus: "Turdus"},
-	})
-	t.Cleanup(c.Close)
-
-	_, err := c.Get(t.Context(), "Turdus merula", FetchOptions{})
-	require.NoError(t, err)
-	require.Positive(t, store.count(), "fetch should persist an entry")
-
-	err = c.InvalidateAll(t.Context())
-	require.Error(t, err, "DB failure surfaces to the caller")
-
-	memEntries := 0
-	c.memory.Range(func(_, _ any) bool { memEntries++; return true })
-	assert.Positive(t, memEntries, "memory tier preserved when DB delete fails")
-	assert.Positive(t, c.memCount.Load(), "memory count unchanged when DB delete fails")
-}
 
 func TestIsCacheEntryStale(t *testing.T) {
 	t.Parallel()
@@ -644,27 +595,46 @@ func TestNormalizeLocale_Validation(t *testing.T) {
 	}{
 		{"en", "en"},
 		{"de", "de"},
-		{" PT-BR ", "pt-br"},                         // trimmed + lowercased
-		{"zh-hans", "zh-hans"},                       // 4-letter subtag allowed
+		// A regional subtag survives ONLY when it can change the answer: a real
+		// hyphenated Wikipedia edition, or a locale the embedded dataset carries
+		// (which supplies regional common names).
+		{" EN-UK ", "en-uk"},                         // trimmed + lowercased; en_uk is a dataset locale
+		{"en_US", "en-us"},                           // underscore spelling canonicalized to the same key
 		{wpEditionBeTarask, wpEditionBeTarask},       // 6-letter subtag (real Wikipedia subdomain)
 		{wpEditionZhClassical, wpEditionZhClassical}, // 9-letter subtag (real Wikipedia subdomain)
 		{wpEditionZhMinNan, wpEditionZhMinNan},       // two subtags (real Wikipedia subdomain)
-		{"", "en"},                                   // empty -> default
-		{"english", "en"},                            // too long, no subtag -> default
-		{"ab-cd-ef-gh", "en"},                        // more than two subtags -> default
-		{"en-superlongsubtag", "en"},                 // subtag exceeds 10 chars -> default
-		{"en_US", "en"},                              // underscore not allowed -> default
-		{"../etc", "en"},                             // path traversal attempt -> default
-		{"@evil.com", "en"},                          // host-injection attempt -> default
-		{"en.wikipedia", "en"},                       // dotted -> default
-		{"a", "en"},                                  // too short -> default
+		// Regional subtags with no dedicated Wikipedia edition and no dataset locale
+		// collapse to their base language. Both providers already resolved them that
+		// way, so keeping them distinct only minted duplicate keys holding identical
+		// content — unbounded, since any well-formed subtag was accepted.
+		{" PT-BR ", "pt"},            // no pt_br in the dataset, no pt-br.wikipedia.org
+		{"zh-hans", "zh"},            // script subtag: not an edition, not a dataset locale
+		{"en-superlongsubtag", "en"}, // subtag exceeds 10 chars -> default
+		{"", "en"},                   // empty -> default
+		{"english", "en"},            // too long, no subtag -> default
+		{"ab-cd-ef-gh", "en"},        // more than two subtags -> default
+		{"../etc", "en"},             // path traversal attempt -> default
+		{"@evil.com", "en"},          // host-injection attempt -> default
+		{"en.wikipedia", "en"},       // dotted -> default
+		{"a", "en"},                  // too short -> default
 	}
 	for _, tt := range tests {
 		assert.Equalf(t, tt.want, normalizeLocale(tt.in), "normalizeLocale(%q)", tt.in)
 	}
 }
 
-func TestStoreMemory_Caps(t *testing.T) {
+func (c *GuideCache) memLen() int {
+	c.memMu.RLock()
+	defer c.memMu.RUnlock()
+	return len(c.memory)
+}
+
+// TestStoreMemory_CapEvictsRatherThanFreezing pins the fix for a cache that could
+// wedge permanently. The tier used to REFUSE every new key at the cap, and positive
+// entries are refreshed in place and never removed — so once full it never admitted
+// another species for the life of the process, turning every subsequent lookup into
+// a guaranteed miss with no way to recover.
+func TestStoreMemory_CapEvictsRatherThanFreezing(t *testing.T) {
 	t.Parallel()
 	c := NewGuideCache(newFakeStore(), noopMetrics{})
 	t.Cleanup(c.Close)
@@ -673,98 +643,26 @@ func TestStoreMemory_Caps(t *testing.T) {
 	for i := range maxMemoryEntries + 500 {
 		c.storeMemory(cacheKey("species", strconvI(i)), &SpeciesGuide{CommonName: "x"})
 	}
-	count := 0
-	c.memory.Range(func(_, _ any) bool {
-		count++
-		return true
-	})
-	assert.Equal(t, maxMemoryEntries, count, "memory tier must fill exactly to the cap")
-	// The counter must exactly track the map size (no overshoot / drift).
-	assert.Equal(t, int64(count), c.memCount.Load(), "memCount must equal the actual entry count")
+	assert.Equal(t, maxMemoryEntries, c.memLen(), "memory tier must stay bounded at the cap")
 
-	// Updating an existing key must not change the count or be rejected.
-	c.storeMemory(cacheKey("species", strconvI(0)), &SpeciesGuide{CommonName: "updated"})
-	v, ok := c.memory.Load(cacheKey("species", strconvI(0)))
-	assert.True(t, ok)
-	g, _ := v.(*SpeciesGuide)
-	assert.Equal(t, "updated", g.CommonName)
-	assert.Equal(t, int64(maxMemoryEntries), c.memCount.Load(), "updating a key must not change the count")
+	// The tier is full. A brand-new key must still be admitted (evicting a victim),
+	// not silently dropped.
+	newKey := cacheKey("Turdus merula", defaultLocale)
+	c.storeMemory(newKey, &SpeciesGuide{CommonName: "Common Blackbird"})
+	got, ok := c.lookupMemory(newKey)
+	require.True(t, ok, "a full tier must still admit a new species by evicting one")
+	assert.Equal(t, "Common Blackbird", got.CommonName)
+	assert.Equal(t, maxMemoryEntries, c.memLen(), "eviction must hold the tier at the cap")
+
+	// Updating an existing key replaces in place and must not evict anything.
+	c.storeMemory(newKey, &SpeciesGuide{CommonName: "updated"})
+	got, ok = c.lookupMemory(newKey)
+	require.True(t, ok)
+	assert.Equal(t, "updated", got.CommonName)
+	assert.Equal(t, maxMemoryEntries, c.memLen(), "updating a key must not change the entry count")
 }
 
-// TestStoreMemory_ExactCountUnderConcurrency drives concurrent distinct-key
-// writes past the cap and asserts the lock-free reserve-then-rollback keeps the
-// entry count exactly at the cap (no overshoot) and memCount in sync. Run under
-// -race to catch a regression in the atomic reservation.
-func TestStoreMemory_ExactCountUnderConcurrency(t *testing.T) {
-	t.Parallel()
-	c := NewGuideCache(newFakeStore(), noopMetrics{})
-	t.Cleanup(c.Close)
 
-	const writers = 16
-	const perWriter = 1000 // 16k distinct keys >> maxMemoryEntries (5000)
-	var wg sync.WaitGroup
-	for w := range writers {
-		wg.Go(func() {
-			for i := range perWriter {
-				key := cacheKey("species", strconvI(w*perWriter+i))
-				c.storeMemory(key, &SpeciesGuide{CommonName: "x"})
-			}
-		})
-	}
-	wg.Wait()
-
-	count := 0
-	c.memory.Range(func(_, _ any) bool {
-		count++
-		return true
-	})
-	assert.Equal(t, maxMemoryEntries, count, "concurrent writes must not overshoot the cap")
-	assert.Equal(t, int64(count), c.memCount.Load(), "memCount must stay exact under concurrency")
-}
-
-// TestStoreMemory_CountStaysExactWhenStoresRaceDeletes drives repeated
-// storeMemory writes against a shared key set while a competing goroutine deletes
-// those keys (mirroring InvalidateAll / negative-entry eviction). The old
-// Load-then-Store fast path could re-insert a concurrently deleted key without
-// incrementing memCount, drifting the count below the true entry total; Swap
-// closes that window. Run under -race; assert memCount matches the live map.
-func TestStoreMemory_CountStaysExactWhenStoresRaceDeletes(t *testing.T) {
-	t.Parallel()
-	c := NewGuideCache(newFakeStore(), noopMetrics{})
-	t.Cleanup(c.Close)
-
-	const keys = 64
-	const rounds = 4000
-	keyAt := func(i int) string { return cacheKey("racer", strconvI(i)) }
-
-	var wg sync.WaitGroup
-	// Writer: repeatedly (re)stores each key.
-	wg.Go(func() {
-		for r := range rounds {
-			c.storeMemory(keyAt(r%keys), &SpeciesGuide{CommonName: "x"})
-		}
-	})
-	// Deleter: repeatedly removes keys under memWriteMu, exactly as the real
-	// eviction/invalidation paths do (LoadAndDelete + memCount.Add(-1)).
-	wg.Go(func() {
-		for r := range rounds {
-			c.memWriteMu.Lock()
-			if _, loaded := c.memory.LoadAndDelete(keyAt(r % keys)); loaded {
-				c.memCount.Add(-1)
-			}
-			c.memWriteMu.Unlock()
-		}
-	})
-	wg.Wait()
-
-	count := 0
-	c.memory.Range(func(_, _ any) bool {
-		count++
-		return true
-	})
-	assert.Equal(t, int64(count), c.memCount.Load(),
-		"memCount must equal the live entry count after stores raced deletes")
-}
 
 // TestRefreshStaleEntries_EvictsExpiredNegatives verifies the refresh sweep drops
 // expired negative entries from memory (freeing slots) while keeping fresh ones.
@@ -784,15 +682,15 @@ func TestRefreshStaleEntries_EvictsExpiredNegatives(t *testing.T) {
 		CommonName:     "Common Blackbird",
 		CachedAt:       time.Now(),
 	})
-	require.Equal(t, int64(2), c.memCount.Load())
+	require.Equal(t, 2, c.memLen())
 
 	c.refreshStaleEntries()
 
-	_, negStillThere := c.memory.Load(cacheKey("Gone species", defaultLocale))
+	_, negStillThere := c.lookupMemory(cacheKey("Gone species", defaultLocale))
 	assert.False(t, negStillThere, "expired negative entry must be evicted")
-	_, posStillThere := c.memory.Load(cacheKey("Turdus merula", defaultLocale))
+	_, posStillThere := c.lookupMemory(cacheKey("Turdus merula", defaultLocale))
 	assert.True(t, posStillThere, "fresh positive entry must be retained")
-	assert.Equal(t, int64(1), c.memCount.Load(), "counter must reflect the eviction")
+	assert.Equal(t, 1, c.memLen(), "entry count must reflect the eviction")
 }
 
 func strconvI(i int) string {
@@ -861,9 +759,8 @@ func TestGuideCache_WarmForSpeciesGuards(t *testing.T) {
 func TestGuideCache_SetupMethodGuards(t *testing.T) {
 	t.Parallel()
 	var nilCache *GuideCache
-	nilCache.SetWarmTopN(5)           // nil receiver: no-op
-	nilCache.SetWarmLocale("de")      // nil receiver: no-op
-	nilCache.SetFallbackPolicy("all") // nil receiver: no-op
+	nilCache.SetWarmTopN(5)      // nil receiver: no-op
+	nilCache.SetWarmLocale("de") // nil receiver: no-op
 	nilCache.RegisterProvider("x", &fakeProvider{name: "x"})
 	nilCache.PreFetch(t.Context(), "x")    // nil receiver: no-op
 	nilCache.WarmForSpecies([]string{"x"}) // nil receiver: no-op
@@ -871,7 +768,6 @@ func TestGuideCache_SetupMethodGuards(t *testing.T) {
 	c := newTestCache(t, newFakeStore(), nil)
 	c.RegisterProvider("", &fakeProvider{name: "x"}) // empty name: skipped
 	c.RegisterProvider("x", nil)                     // nil provider: skipped
-	c.SetFallbackPolicy("")                          // empty policy: no-op
 	assert.False(t, c.HasProvider("x"), "no provider should have been registered")
 }
 
@@ -972,98 +868,8 @@ func TestOpenFaunaProvider_EmbeddedLookup(t *testing.T) {
 	assert.True(t, errors.Is(err, ErrGuideNotFound))
 }
 
-// TestStoreMemoryGen_DropsPreInvalidationWrite verifies the generation guard:
-// a write derived from a read captured before InvalidateAll bumped the generation
-// is undone, while a write under the current generation is kept.
-func TestStoreMemoryGen_DropsPreInvalidationWrite(t *testing.T) {
-	t.Parallel()
-	c := newTestCache(t, newFakeStore(), nil)
 
-	staleGen := c.invalidateGen.Load()
-	c.invalidateGen.Add(1) // an InvalidateAll ran after staleGen was captured
-	c.storeMemoryGen(cacheKey("Stale", "en"), &SpeciesGuide{CommonName: "x"}, staleGen)
-	_, ok := c.memory.Load(cacheKey("Stale", "en"))
-	assert.False(t, ok, "a pre-invalidation write must be dropped")
 
-	c.storeMemoryGen(cacheKey("Fresh", "en"), &SpeciesGuide{CommonName: "y"}, c.invalidateGen.Load())
-	_, ok = c.memory.Load(cacheKey("Fresh", "en"))
-	assert.True(t, ok, "a current-generation write is kept")
-}
-
-// TestStoreMemoryGen_RacesStoreMemoryStaysExact reproduces the race Sentry flagged:
-// storeMemoryGen (the Tier-2 rehydrate, not behind singleflight) and storeMemory
-// (Tier-3) writing the same keys concurrently, with a competing deleter. The
-// memWriteMu serialization must keep memCount an exact count of live entries (the
-// old lock-free CompareAndDelete rollback could strand an uncounted entry here).
-// Run under -race.
-func TestStoreMemoryGen_RacesStoreMemoryStaysExact(t *testing.T) {
-	t.Parallel()
-	c := newTestCache(t, newFakeStore(), nil)
-
-	const keys = 64
-	const rounds = 3000
-	gen := c.invalidateGen.Load()
-	keyAt := func(i int) string { return cacheKey("gen", strconvI(i)) }
-
-	var wg sync.WaitGroup
-	wg.Go(func() {
-		for r := range rounds {
-			c.storeMemory(keyAt(r%keys), &SpeciesGuide{CommonName: "a"})
-		}
-	})
-	wg.Go(func() {
-		for r := range rounds {
-			c.storeMemoryGen(keyAt(r%keys), &SpeciesGuide{CommonName: "b"}, gen)
-		}
-	})
-	wg.Go(func() {
-		for r := range rounds {
-			c.memWriteMu.Lock()
-			if _, loaded := c.memory.LoadAndDelete(keyAt(r % keys)); loaded {
-				c.memCount.Add(-1)
-			}
-			c.memWriteMu.Unlock()
-		}
-	})
-	wg.Wait()
-
-	count := 0
-	c.memory.Range(func(_, _ any) bool { count++; return true })
-	assert.Equal(t, int64(count), c.memCount.Load(), "memCount must equal the live entry count")
-	assert.LessOrEqual(t, c.memCount.Load(), int64(maxMemoryEntries), "cap must hold")
-}
-
-// TestStoreMemoryGen_ExistingKeyStaleGenStaysExact proves the rollback keeps
-// memCount exact when storeMemoryGen updates a PRE-EXISTING (already-counted) key
-// and the generation check then fails: the entry is removed and the count
-// decremented once, so memCount still equals the live count. Guards against a
-// "decrement only if this call inserted" change, which would OVERcount here by
-// deleting a counted entry without decrementing.
-func TestStoreMemoryGen_ExistingKeyStaleGenStaysExact(t *testing.T) {
-	t.Parallel()
-	c := newTestCache(t, newFakeStore(), nil)
-	key := cacheKey("Existing", "en")
-
-	// A pre-existing, counted entry stored under the current generation.
-	c.storeMemoryGen(key, &SpeciesGuide{CommonName: "old"}, c.invalidateGen.Load())
-	require.Equal(t, int64(1), c.memCount.Load())
-	_, ok := c.memory.Load(key)
-	require.True(t, ok)
-
-	// Update the SAME key with a value derived from a pre-invalidation read.
-	staleGen := c.invalidateGen.Load()
-	c.invalidateGen.Add(1) // InvalidateAll ran after staleGen was captured
-	c.storeMemoryGen(key, &SpeciesGuide{CommonName: "new"}, staleGen)
-
-	// The stale update is rolled back: entry gone, count back to zero — exact.
-	_, ok = c.memory.Load(key)
-	assert.False(t, ok, "stale-gen update of an existing key must be rolled back")
-	assert.Equal(t, int64(0), c.memCount.Load(), "no over/undercount")
-
-	count := 0
-	c.memory.Range(func(_, _ any) bool { count++; return true })
-	assert.Equal(t, int64(count), c.memCount.Load(), "memCount must equal the live entry count")
-}
 
 // localeSpyProvider records the FetchOptions.Locale of each Fetch so tests can assert
 // which locale the warm/pre-fetch paths request.
@@ -1167,4 +973,84 @@ func TestGuideCache_SaveGuide_SkipsWriteOnCancelledContext(t *testing.T) {
 	_, err = store.Get(t.Context(), "Turdus pilaris", "en", c.resolveProviderName())
 	require.ErrorIs(t, err, ErrCacheEntryNotFound,
 		"a cancelled cache context must not persist a guide")
+}
+
+// TestGuideCache_ProviderSetIsolatesCachedRows pins the fix for stale prose
+// surviving a provider change across a restart.
+//
+// Rows are keyed by the provider set that produced them. A cache running with only
+// OpenFauna must not see rows a Wikipedia-enabled cache wrote, so switching
+// Wikipedia off in config.yaml and restarting stops serving its prose immediately —
+// rather than continuing to serve it (with its CC BY-SA attribution) for a full
+// PositiveTTL because the startup path ran no invalidation.
+func TestGuideCache_ProviderSetIsolatesCachedRows(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+
+	// A cache with Wikipedia enabled caches a guide with prose.
+	withWiki := NewGuideCache(store, noopMetrics{})
+	withWiki.RegisterProvider(OpenFaunaProviderName, &fakeProvider{
+		name:   OpenFaunaProviderName,
+		result: &SpeciesGuide{CommonName: "Common Blackbird"},
+	})
+	withWiki.RegisterProvider(WikipediaProviderName, &fakeProvider{
+		name:   WikipediaProviderName,
+		result: &SpeciesGuide{Description: "Long Wikipedia prose about the blackbird."},
+	})
+	t.Cleanup(withWiki.Close)
+
+	g, err := withWiki.Get(t.Context(), "Turdus merula", FetchOptions{})
+	require.NoError(t, err)
+	require.Contains(t, g.Description, "Wikipedia prose")
+	require.Equal(t, 1, store.count(), "the guide is persisted")
+
+	// Restart with Wikipedia disabled: a fresh cache, same store, OpenFauna only.
+	offlineProv := &fakeProvider{
+		name:   OpenFaunaProviderName,
+		result: &SpeciesGuide{CommonName: "Common Blackbird"},
+	}
+	withoutWiki := NewGuideCache(store, noopMetrics{})
+	withoutWiki.RegisterProvider(OpenFaunaProviderName, offlineProv)
+	t.Cleanup(withoutWiki.Close)
+
+	// The startup pre-load must not adopt the other set's row...
+	withoutWiki.Start()
+	assert.Zero(t, withoutWiki.memLen(), "rows from another provider set must not seed memory")
+
+	// ...and a lookup must re-fetch rather than serve the retired set's prose.
+	g2, err := withoutWiki.Get(t.Context(), "Turdus merula", FetchOptions{})
+	require.NoError(t, err)
+	assert.Empty(t, g2.Description, "Wikipedia prose must not survive disabling Wikipedia")
+	assert.Equal(t, 1, offlineProv.callCount(), "the guide must be re-fetched under the new set")
+
+	// Both rows coexist, keyed by their own set, and age out on normal retention.
+	assert.Equal(t, 2, store.count())
+}
+
+// TestGuideCache_StaleNegativeIsTreatedAsMiss pins that an EXPIRED not-found marker
+// is re-fetched rather than served. Stale-while-revalidate is right for a stale
+// positive but wrong for a negative: the API maps a negative to HTTP 404, so serving
+// an expired one reports "no guide" for a species whose article now exists.
+func TestGuideCache_StaleNegativeIsTreatedAsMiss(t *testing.T) {
+	t.Parallel()
+	store := newFakeStore()
+	prov := &fakeProvider{
+		name:   WikipediaProviderName,
+		result: &SpeciesGuide{CommonName: "Common Blackbird", Description: "It exists now."},
+	}
+	c := newTestCache(t, store, prov)
+
+	// Seed an expired negative marker directly into the memory tier.
+	c.storeMemory(cacheKey("Turdus merula", defaultLocale), &SpeciesGuide{
+		ScientificName: "Turdus merula",
+		Negative:       true,
+		CachedAt:       time.Now().Add(-NegativeTTL - time.Hour),
+	})
+
+	g, err := c.Get(t.Context(), "Turdus merula", FetchOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, g)
+	assert.False(t, g.IsNegativeEntry(), "an expired negative must not be served as a 404")
+	assert.Equal(t, "Common Blackbird", g.CommonName)
+	assert.Equal(t, 1, prov.callCount(), "an expired negative must trigger a re-fetch")
 }

@@ -22,7 +22,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
-	"github.com/tphakala/birdnet-go/internal/guideprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/notification"
@@ -93,14 +92,6 @@ type ControlMonitor struct {
 	// Quiet hours scheduler for stream/soundcard lifecycle management
 	quietHoursScheduler *schedule.QuietHoursScheduler
 
-	// guideWikipediaApplied records EnableWikipedia for the provider set that
-	// produced the currently-persisted species-guide cache rows. It lets a
-	// reconfigure detect a provider-set change even across an intervening disable,
-	// when no live cache exists to compare against (the DB rows survive a disable).
-	// nil = unknown (no cache built via reconfigure yet this process). Accessed only
-	// from handleReconfigureSpeciesGuide on the single control-monitor goroutine, so
-	// it needs no lock.
-	guideWikipediaApplied *bool
 }
 
 // NewControlMonitor creates a new ControlMonitor instance.
@@ -1026,54 +1017,6 @@ func (cm *ControlMonitor) handleReconfigureDynamicThresholds() {
 	emitHotReload("dynamic_thresholds_config")
 }
 
-// guideProviderSetChanged decides whether the species-guide provider set is changing
-// from the set that produced the currently-cached guides to the one selected by
-// newEnableWikipedia. tracked is the value last applied this process (nil = unknown);
-// live is read from the live outgoing cache (nil = no live cache, e.g. the feature
-// was disabled in between). The live value, when present, is authoritative — it also
-// reflects a cache built at startup before anything was tracked; otherwise the tracked
-// value is used so a change is still detected across an intervening disable. When the
-// prior set is unknown (both nil), no change is reported (nothing to invalidate).
-func guideProviderSetChanged(tracked, live *bool, newEnableWikipedia bool) bool {
-	prior := tracked
-	if live != nil {
-		prior = live
-	}
-	return prior != nil && *prior != newEnableWikipedia
-}
-
-// nextGuideWikipediaApplied returns the EnableWikipedia value to remember as the set
-// that produced the currently-persisted guide rows, given the previously tracked value,
-// the outgoing cache's live value (nil = no live cache), the newly-selected setting, and
-// whether a new cache was actually built.
-//
-//   - A cache was built: it now owns the rows, so remember the setting it was built with.
-//   - No cache was built (the feature was disabled) but one was live: cfg says nothing
-//     about the rows that survive in the DB — they were produced by the OUTGOING cache's
-//     provider set — so adopt that instead of leaving the tracked value untouched.
-//   - Neither: nothing observable, keep whatever was tracked.
-//
-// The middle case is what makes a change detectable across a disable. Leaving the tracked
-// value untouched there only works if it was already populated, and it is nil for the
-// whole first disable of a process: the startup cache is built directly by
-// initGuideCacheIfNeeded (see api_service.go), which never records one. Without it,
-// "enabled+wikipedia -> disabled -> enabled+no wikipedia" leaves both tracked and live nil
-// at the re-enable, guideProviderSetChanged reports no change, InvalidateAll is skipped,
-// and Start() reloads the Wikipedia-authored rows — serving Wikipedia prose for a full
-// PositiveTTL after the user switched it off.
-func nextGuideWikipediaApplied(tracked, live *bool, newEnableWikipedia, cacheBuilt bool) *bool {
-	switch {
-	case cacheBuilt:
-		applied := newEnableWikipedia
-		return &applied
-	case live != nil:
-		adopted := *live
-		return &adopted
-	default:
-		return tracked
-	}
-}
-
 // handleReconfigureSpeciesGuide rebuilds the species guide cache from current
 // settings and swaps it onto the API controller (which closes the previous
 // cache), then re-wires the processor's pre-fetch callback. This makes the
@@ -1091,63 +1034,23 @@ func (cm *ControlMonitor) handleReconfigureSpeciesGuide() {
 	settings := conf.Setting()
 	cfg := settings.Realtime.Dashboard.SpeciesGuide
 
-	// Detect whether the registered provider set is about to change. The only
-	// content-affecting toggle is EnableWikipedia (the description provider); when it
-	// flips, guides cached under the old provider set must be invalidated so they are
-	// re-fetched under the new one — otherwise already-cached guides would keep their
-	// old content until their TTL expires, contradicting hot-reload.
+	// No invalidation step, and nothing to track about which providers produced the
+	// persisted rows. Cache rows are keyed by the provider set that wrote them (see
+	// GuideCache.providerSetKey), so a change of set is self-invalidating: the new
+	// cache simply does not match the old rows, and they age out on normal retention.
 	//
-	// Read the live outgoing cache's set (nil when the feature was disabled in
-	// between, so no live cache exists). guideProviderSetChanged then prefers it,
-	// falling back to the last applied value so a change is still detected across an
-	// intervening disable.
-	var liveWikipedia *bool
-	_ = cm.apiController.WithGuideCache(func(gc *guideprovider.GuideCache) error {
-		has := gc.HasProvider(guideprovider.WikipediaProviderName)
-		liveWikipedia = &has
-		return nil
-	})
-	providerSetChanged := guideProviderSetChanged(cm.guideWikipediaApplied, liveWikipedia, cfg.EnableWikipedia)
-
-	// Retire the outgoing cache BEFORE wiping the shared table. InvalidateAll issues a
-	// DeleteAll against guide_caches, but the old cache is still installed and running:
-	// its refresh loop and any in-flight singleflight or pre-fetch can call saveGuide at
-	// any moment. One completing between the DeleteAll and the swap below would re-insert
-	// a row written under the OLD provider set — surviving the invalidation and then
-	// being served by the new cache, which is exactly what invalidating was meant to
-	// prevent. Swapping in nil closes the old cache synchronously (Close cancels its
-	// context and waits on its wait group), so no writer remains.
-	//
-	// Only done when the set actually changed: it briefly leaves the guide endpoints
-	// answering 503, which is the right trade during a provider change but pointless
-	// churn otherwise.
-	if providerSetChanged {
-		cm.apiController.SetGuideCache(nil)
-	}
-
+	// This replaces a chain that existed only to reconstruct that fact — a tracked
+	// *bool of "was Wikipedia applied", a heuristic to adopt it across a disable, a
+	// table-wide DeleteAll, and a retire-the-outgoing-cache-first ordering to stop a
+	// straggling writer re-inserting under the retired set. That chain also left the
+	// startup path uncovered, so a restart with Wikipedia switched off kept serving
+	// its prose for a full PositiveTTL; keying the rows fixes startup and reconfigure
+	// with the same mechanism.
 	newCache := initGuideCacheIfNeeded(settings, cm.apiController.DS, cm.metrics.GuideProvider)
-
-	// Drop guides cached under the old set BEFORE activating the new cache.
-	// initGuideCacheIfNeeded's Start() pre-loads existing DB rows (written under the old
-	// providers) into the new cache's memory tier, so invalidating after SetGuideCache
-	// would leave a window where a request hitting the freshly-activated cache is served
-	// a stale entry. Clearing first means the cache only ever goes live empty (the new
-	// providers re-populate it; the warm step below refreshes the hottest species).
-	if newCache != nil && providerSetChanged {
-		if err := newCache.InvalidateAll(context.Background()); err != nil {
-			GetLogger().Warn("Failed to invalidate species guide cache after provider change",
-				logger.Error(err))
-		}
-	}
 
 	// Swap in the new cache (nil when disabled). SetGuideCache closes the old
 	// cache outside its lock so concurrent readers are never blocked.
 	cm.apiController.SetGuideCache(newCache)
-
-	// Record the set now backing the cache so a later reconfigure can detect a change
-	// even if the feature is disabled (cache becomes nil) in between.
-	cm.guideWikipediaApplied = nextGuideWikipediaApplied(
-		cm.guideWikipediaApplied, liveWikipedia, cfg.EnableWikipedia, newCache != nil)
 
 	// Re-wire the processor's pre-fetch callback to the new cache (or clear it).
 	if cm.proc != nil {

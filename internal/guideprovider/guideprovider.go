@@ -17,6 +17,7 @@ package guideprovider
 import (
 	"context"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -28,6 +29,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/openfauna"
 )
 
 // Provider name constants, exported for wiring. They mirror the conf package
@@ -69,6 +71,11 @@ const (
 	// when the user actually opens its guide. Mirrors the API layer's bound on the
 	// similar-species fan-out.
 	maxConcurrentPreFetches = 4
+	// minPrimeBatchSize is the warm-set size at which batch-priming the embedded
+	// dataset memos beats resolving each species on its own. Priming is two full
+	// dataset scans; an individual lookup early-exits on its match, averaging half a
+	// scan. Break-even is around two species, so this sits comfortably past it.
+	minPrimeBatchSize = 4
 )
 
 // localePattern restricts locale codes to BCP-47-ish forms (e.g. "en", "pt-br",
@@ -169,18 +176,15 @@ type GuideProvider interface {
 // GuideStore is the persistence backend for the DB cache tier. The composite
 // key is (scientificName, locale, provider).
 type GuideStore interface {
-	Get(ctx context.Context, scientificName, locale, provider string) (*GuideCacheEntry, error)
+	Get(ctx context.Context, scientificName, locale, providerSet string) (*GuideCacheEntry, error)
 	Save(ctx context.Context, entry *GuideCacheEntry) error
-	// GetRecent returns up to limit entries, most-recently-cached first. The warm
-	// load uses it to bound the startup result set: rows are capped only by
-	// time-based retention, so a flood of short-lived negative entries could
-	// otherwise materialize a very large slice at boot.
-	GetRecent(ctx context.Context, limit int) ([]GuideCacheEntry, error)
-	// DeleteAll removes every cached entry. It is used to invalidate the whole
-	// cache when the registered provider set changes (e.g. the user toggles
-	// Wikipedia descriptions), so guides produced under the old set are re-fetched
-	// rather than served stale until their TTL expires.
-	DeleteAll(ctx context.Context) error
+	// GetRecent returns up to limit entries produced by providerSet, most-recently-
+	// cached first. The warm load uses it to bound the startup result set: rows are
+	// capped only by time-based retention, so a flood of short-lived negative entries
+	// could otherwise materialize a very large slice at boot. The providerSet filter
+	// keeps rows written under a retired set out of the memory tier, whose key has no
+	// provider component and so cannot distinguish them.
+	GetRecent(ctx context.Context, limit int, providerSet string) ([]GuideCacheEntry, error)
 }
 
 // GuideCacheMetrics is the metrics sink, implemented by observability/metrics.
@@ -199,29 +203,35 @@ type registeredProvider struct {
 	provider GuideProvider
 }
 
+// memEntry is one memory-tier slot: the cached guide plus the recency stamp the
+// sampled-LRU eviction orders by. tick is atomic so a reader can refresh it while
+// holding only the read lock.
+type memEntry struct {
+	guide *SpeciesGuide
+	tick  atomic.Int64
+}
+
 // GuideCache orchestrates the two-tier cache and provider fallback.
 type GuideCache struct {
-	memory sync.Map // key "scientificName|locale" -> *SpeciesGuide
-	// memWriteMu serializes structural writes to the memory tier — every operation
-	// that inserts/removes a key AND adjusts memCount (storeMemory, storeMemoryGen,
-	// InvalidateAll's sweep, the stale-refresh eviction). It does NOT guard reads:
-	// Get's memory.Load stays lock-free (sync.Map is safe for concurrent reads
-	// during writes), so the hot path is unaffected. Serializing writers is what
-	// keeps memCount an exact count of live entries — a purely lock-free scheme
-	// cannot, because a concurrent writer can replace a just-inserted key between
-	// the insert and its cap-rollback, stranding an uncounted entry.
-	memWriteMu sync.Mutex
-	memCount   atomic.Int64 // count of memory entries (hard cap guard; written under memWriteMu)
-	// invalidateGen is bumped by InvalidateAll. A Tier-2 DB rehydrate captures it
-	// before reading and drops its write if it changed, so a pre-invalidation row
-	// read cannot re-seed memory after InvalidateAll's sweep has passed.
-	invalidateGen atomic.Int64
-	store         GuideStore
-	metrics       GuideCacheMetrics
-	providers     []registeredProvider
+	// memory is the in-process tier, keyed "scientificName|locale".
+	//
+	// A plain map under an RWMutex, not a sync.Map: the cap needs an exact live-entry
+	// count and the ability to pick a victim, and len(map) gives the first for free
+	// while ranging gives the second. The previous sync.Map needed a separate atomic
+	// counter plus a writer mutex to keep that counter exact, and four call sites had
+	// to pair every insert and delete with the right delta by hand — a drift above the
+	// cap would have silently stopped the cache admitting anything, with no error, no
+	// metric and no log.
+	memMu  sync.RWMutex
+	memory map[string]*memEntry
+	// memTick is a monotonic counter stamped onto every entry on write and on read,
+	// ordering entries by recency of use so the cap can EVICT rather than refuse.
+	memTick   atomic.Int64
+	store     GuideStore
+	metrics   GuideCacheMetrics
+	providers []registeredProvider
 
-	fallbackPolicy string // conf.SpeciesGuideFallback{All,None}
-	warmTopN       int
+	warmTopN int
 	// warmLocale is the dashboard locale that cache warming (startup WarmForSpecies +
 	// per-detection PreFetch) targets, so warmed entries key to the same locale the UI
 	// requests. Set once via SetWarmLocale before Start() and treated as immutable for
@@ -267,12 +277,12 @@ func NewGuideCache(store GuideStore, metrics GuideCacheMetrics) *GuideCache {
 		metrics = noopMetrics{}
 	}
 	return &GuideCache{
-		store:          store,
-		metrics:        metrics,
-		fallbackPolicy: conf.SpeciesGuideFallbackAll,
-		preFetchSem:    make(chan struct{}, maxConcurrentPreFetches),
-		ctx:            ctx,
-		cancel:         cancel,
+		store:       store,
+		metrics:     metrics,
+		memory:      make(map[string]*memEntry),
+		preFetchSem: make(chan struct{}, maxConcurrentPreFetches),
+		ctx:         ctx,
+		cancel:      cancel,
 	}
 }
 
@@ -301,15 +311,6 @@ func (c *GuideCache) RegisterProvider(name string, provider GuideProvider) {
 	c.providers = append(c.providers, registeredProvider{name: name, provider: provider})
 }
 
-// SetFallbackPolicy sets the provider fallback policy (all|none).
-// Call before Start(); see RegisterProvider for the concurrency contract.
-func (c *GuideCache) SetFallbackPolicy(policy string) {
-	if c == nil || policy == "" {
-		return
-	}
-	c.fallbackPolicy = policy
-}
-
 // SetWarmTopN records the configured warm target used for the population ratio.
 // Call before Start(); see RegisterProvider for the concurrency contract.
 func (c *GuideCache) SetWarmTopN(n int) {
@@ -330,61 +331,70 @@ func (c *GuideCache) SetWarmLocale(locale string) {
 	c.warmLocale = locale
 }
 
-// storeMemory writes an entry to the memory tier with a hard size cap. Existing
-// keys are always updated; new keys are only added while under maxMemoryEntries,
-// so a flood of distinct keys cannot grow memory without bound (those entries
-// still live in the DB tier).
-func (c *GuideCache) storeMemory(key string, g *SpeciesGuide) {
-	c.memWriteMu.Lock()
-	defer c.memWriteMu.Unlock()
-	c.storeMemoryLocked(key, g)
+// lookupMemory returns a cached guide and marks it recently used. The recency
+// stamp is an atomic store under the read lock, so concurrent readers still do not
+// serialize on each other.
+func (c *GuideCache) lookupMemory(key string) (*SpeciesGuide, bool) {
+	c.memMu.RLock()
+	defer c.memMu.RUnlock()
+	e, ok := c.memory[key]
+	if !ok {
+		return nil, false
+	}
+	e.tick.Store(c.memTick.Add(1))
+	return e.guide, true
 }
 
-// storeMemoryLocked performs the insert-or-update; the caller MUST hold memWriteMu.
-// Because writers are serialized, the Load/Store/count sequence is atomic against
-// every other structural writer, so memCount stays an exact count of live entries
-// (no lost updates, no stranded uncounted entries). An update-in-place leaves the
-// count unchanged; a new key is admitted only while under the cap (overflow stays
-// in the DB tier).
-func (c *GuideCache) storeMemoryLocked(key string, g *SpeciesGuide) {
-	if _, loaded := c.memory.Load(key); loaded {
-		c.memory.Store(key, g) // update in place: the slot is already counted
+// storeMemory writes an entry to the memory tier, evicting the least-recently-used
+// entry of a small random sample when the tier is full.
+//
+// Eviction is what makes the cap survivable. Previously a full tier simply REFUSED
+// every new key: positive entries are refreshed in place and never removed, so once
+// 5000 slots filled the tier froze permanently — every subsequent species became a
+// guaranteed Tier-1 miss paying a DB round-trip forever, with no way for a hot
+// species to displace a cold one and no recovery short of a restart.
+//
+// Sampled (rather than exact) LRU keeps the write path O(1): Go randomizes map
+// iteration start, so evicting the oldest of a handful of entries approximates true
+// LRU closely enough for a cache whose working set is far below the cap in normal
+// use, without maintaining an intrusive list.
+func (c *GuideCache) storeMemory(key string, g *SpeciesGuide) {
+	c.memMu.Lock()
+	defer c.memMu.Unlock()
+	if e, ok := c.memory[key]; ok {
+		e.guide = g
+		e.tick.Store(c.memTick.Add(1))
 		return
 	}
-	if c.memCount.Load() >= maxMemoryEntries {
-		return // at cap: do not admit a new key
+	if len(c.memory) >= maxMemoryEntries {
+		c.evictLRULocked()
 	}
-	c.memory.Store(key, g)
-	c.memCount.Add(1)
+	e := &memEntry{guide: g}
+	e.tick.Store(c.memTick.Add(1))
+	c.memory[key] = e
 }
 
-// storeMemoryGen writes like storeMemory but undoes the write if InvalidateAll ran
-// since gen was captured (i.e. the value derives from a pre-invalidation read). The
-// store-then-verify ordering closes the window in both directions: if the sweep
-// already passed this key, the post-store generation check sees the bump and removes
-// the entry; if the sweep runs after our store, it removes the entry itself. Used by
-// the Tier-2 DB rehydrate in Get, the only path that can resurrect stale content
-// (Tier-3 fetches run under the current provider set, so their writes are fresh).
-//
-// The whole insert-then-verify runs under memWriteMu so the generation check and the
-// possible rollback are atomic with the insert — no concurrent writer can replace
-// the value between them and desync the count.
-//
-// The rollback's memCount.Add(-1) is guarded by LoadAndDelete's loaded, so it
-// decrements ONLY when it actually removes an entry. storeMemoryLocked is the sole
-// inserter and increments once per new key, so the invariant "every live entry is
-// counted exactly once" holds; removing an entry therefore always warrants one
-// decrement, whether this call newly inserted it or updated a pre-existing (already
-// counted) key. Making the decrement conditional on "did THIS call insert" would be
-// wrong: deleting a pre-existing entry without decrementing would OVERcount.
-func (c *GuideCache) storeMemoryGen(key string, g *SpeciesGuide, gen int64) {
-	c.memWriteMu.Lock()
-	defer c.memWriteMu.Unlock()
-	c.storeMemoryLocked(key, g)
-	if c.invalidateGen.Load() != gen {
-		if _, loaded := c.memory.LoadAndDelete(key); loaded {
-			c.memCount.Add(-1)
+// evictLRULocked removes the least-recently-used entry among a bounded random
+// sample. Caller must hold memMu for writing.
+func (c *GuideCache) evictLRULocked() {
+	const sampleSize = 8
+	var (
+		victim string
+		oldest int64
+		seen   int
+	)
+	for k, e := range c.memory {
+		t := e.tick.Load()
+		if seen == 0 || t < oldest {
+			oldest, victim = t, k
 		}
+		seen++
+		if seen >= sampleSize {
+			break
+		}
+	}
+	if victim != "" {
+		delete(c.memory, victim)
 	}
 }
 
@@ -395,9 +405,14 @@ func (c *GuideCache) Start() {
 		return
 	}
 	c.startOnce.Do(func() {
-		c.loadFromDB()
-		c.wg.Add(1)
-		go c.startCacheRefresh()
+		// The DB pre-load is detached, for the same reason the top-N warm is: it reads
+		// up to maxMemoryEntries rows, each carrying a description of up to
+		// maxDescriptionLength bytes, and nothing waits on the result — a key it has
+		// not loaded yet is simply a miss that falls through to the DB tier. Run
+		// inline it delayed the HTTP listener at startup, and stalled the single
+		// control-monitor goroutine on every cache rebuild.
+		c.goIfOpen(c.loadFromDB)
+		c.wg.Go(c.startCacheRefresh)
 	})
 }
 
@@ -429,12 +444,38 @@ func (c *GuideCache) Close() {
 	})
 }
 
-// resolveProviderName returns the primary provider name (used for DB keys).
+// resolveProviderName returns the primary provider name, used as the user-facing
+// attribution label on a guide.
 func (c *GuideCache) resolveProviderName() string {
 	if len(c.providers) == 0 {
 		return WikipediaProviderName
 	}
 	return c.providers[0].name
+}
+
+// providerSetKey returns a canonical identifier for the WHOLE registered provider
+// set, used as the DB row's key component.
+//
+// This is what makes a provider change self-invalidating: a guide fetched with
+// Wikipedia enabled is stored under "openfauna+wikipedia" and one fetched without it
+// under "openfauna", so turning Wikipedia off simply stops matching the old rows and
+// they age out on retention. Keying on the primary provider alone made both look
+// identical, which is why disabling Wikipedia used to keep serving its prose (and its
+// CC BY-SA attribution) for a full PositiveTTL after a restart.
+//
+// The set is fixed during setup and never mutated afterwards (see RegisterProvider),
+// so this reads without a lock, mirroring resolveProviderName.
+func (c *GuideCache) providerSetKey() string {
+	if len(c.providers) == 0 {
+		return WikipediaProviderName
+	}
+	names := make([]string, 0, len(c.providers))
+	for i := range c.providers {
+		names = append(names, c.providers[i].name)
+	}
+	// Sorted so registration order cannot change the key and needlessly orphan rows.
+	slices.Sort(names)
+	return strings.Join(names, "+")
 }
 
 // HasProvider reports whether a provider with the given registration name is
@@ -453,46 +494,6 @@ func (c *GuideCache) HasProvider(name string) bool {
 	return false
 }
 
-// InvalidateAll clears every cached guide from both the memory and DB tiers. It is
-// used on reconfiguration when the registered provider set changes, so guides
-// produced under the previous providers are re-fetched under the new set instead of
-// being served stale until their TTL expires. Background warming (when configured)
-// re-populates the hottest species immediately afterward.
-func (c *GuideCache) InvalidateAll(ctx context.Context) error {
-	if c == nil {
-		return nil
-	}
-	// Bump the generation up front, before clearing either tier. A concurrent Get
-	// may have read a pre-invalidation row from the DB tier and be about to write it
-	// into memory after the sweep below passes that key; the rehydrate path captures
-	// this generation before its read and drops such a write, so the "full"
-	// invalidate cannot leave a stale entry behind once it returns.
-	c.invalidateGen.Add(1)
-	// Clear the persistent tier first. If it fails we leave the memory tier intact
-	// and return the error, so the two tiers stay consistent (both populated) rather
-	// than ending up memory-empty while stale rows survive in the DB to reload on the
-	// next restart. The caller logs the failure; the stale content then simply ages
-	// out on its normal TTL, the same outcome as if invalidation had not run.
-	if c.store != nil {
-		if err := c.store.DeleteAll(ctx); err != nil {
-			return err
-		}
-	}
-	// Persistent tier is clear (or absent): drop the memory tier, keeping memCount
-	// accurate by decrementing per removal. Under memWriteMu so the sweep can't
-	// race a concurrent storeMemory into an inexact count.
-	c.memWriteMu.Lock()
-	c.memory.Range(func(k, _ any) bool {
-		if _, loaded := c.memory.LoadAndDelete(k); loaded {
-			c.memCount.Add(-1)
-		}
-		return true
-	})
-	c.memWriteMu.Unlock()
-	c.updateCachePopulationRatio()
-	return nil
-}
-
 // loadFromDB populates the memory tier from all persisted entries.
 func (c *GuideCache) loadFromDB() {
 	if c.store == nil {
@@ -502,7 +503,7 @@ func (c *GuideCache) loadFromDB() {
 	// discards anything beyond maxMemoryEntries anyway, so reading more is wasted
 	// work, and an unbounded read could materialize a large transient slice when
 	// many short-lived negative rows have accrued since the last retention cleanup.
-	entries, err := c.store.GetRecent(c.ctx, maxMemoryEntries)
+	entries, err := c.store.GetRecent(c.ctx, maxMemoryEntries, c.providerSetKey())
 	if err != nil {
 		c.metrics.RecordDBError("read", "get_recent")
 		GetLogger().Warn("Failed to load guide cache from DB", logger.Error(err))
@@ -530,21 +531,23 @@ func (c *GuideCache) Get(ctx context.Context, scientificName string, opts FetchO
 			Category(errors.CategoryValidation).
 			Build()
 	}
+	// The normalized locale is threaded onward as a plain string; fetchFromProviders
+	// rebuilds FetchOptions from it. Assigning it back onto the by-value opts copy
+	// here was a dead store, and a trap: adding a second field to FetchOptions and
+	// passing opts through would look right while silently discarding this
+	// normalization.
 	locale := normalizeLocale(opts.Locale)
-	opts.Locale = locale
 	key := cacheKey(name, locale)
 
-	// Tier 1: memory. Fresh entries are returned immediately; a stale entry is
-	// served stale-while-revalidate (returned now, refreshed in the background)
-	// so a stale memory hit doesn't incur a redundant DB round-trip on every call.
-	if v, ok := c.memory.Load(key); ok {
-		if g, ok := v.(*SpeciesGuide); ok {
-			c.metrics.RecordCacheHit(tierMemory, entryQuality(g))
-			if c.isCacheEntryStale(g) {
-				c.triggerAsyncRefresh(name, locale)
-			}
-			return g, nil
+	// Tier 1: memory. Fresh entries are returned immediately; a stale POSITIVE entry
+	// is served stale-while-revalidate (returned now, refreshed in the background) so
+	// a stale memory hit doesn't incur a redundant DB round-trip on every call.
+	if g, ok := c.lookupMemory(key); ok && !c.isStaleNegative(g) {
+		c.metrics.RecordCacheHit(tierMemory, entryQuality(g))
+		if c.isCacheEntryStale(g) {
+			c.triggerAsyncRefresh(name, locale)
 		}
+		return g, nil
 	}
 	c.metrics.RecordCacheMiss(tierMemory)
 
@@ -553,16 +556,11 @@ func (c *GuideCache) Get(ctx context.Context, scientificName string, opts FetchO
 	// loadFromDB and saveGuide) prevents a nil dereference if a cache is ever
 	// constructed without a store. Production wiring always supplies one.
 	if c.store != nil {
-		providerName := c.resolveProviderName()
-		// Capture the invalidation generation before the read so a row fetched just
-		// before a concurrent InvalidateAll is not rehydrated into memory after its
-		// sweep (see storeMemoryGen).
-		gen := c.invalidateGen.Load()
-		entry, err := c.store.Get(ctx, name, locale, providerName)
+		entry, err := c.store.Get(ctx, name, locale, c.providerSetKey())
 		switch {
-		case err == nil && entry != nil:
+		case err == nil && entry != nil && !c.isStaleNegative(entryToGuide(entry)):
 			g := entryToGuide(entry)
-			c.storeMemoryGen(key, g, gen)
+			c.storeMemory(key, g)
 			c.metrics.RecordCacheHit(tierDB, entryQuality(g))
 			if c.isCacheEntryStale(g) {
 				c.triggerAsyncRefresh(name, locale)
@@ -643,10 +641,12 @@ func (c *GuideCache) fetchFromProviders(ctx context.Context, name, locale string
 	var transient error
 	failedCount := 0 // providers that failed for a non-definitive reason
 
+	// Every registered provider runs and the results merge. There is no "primary
+	// only" mode: SetFallbackPolicy had no production caller, so the branch that
+	// sliced the set down to providers[:1] was unreachable, as was the
+	// conf.SpeciesGuideFallbackNone constant that selected it. Registering fewer
+	// providers is how a caller narrows the set.
 	providers := c.providers
-	if c.fallbackPolicy != conf.SpeciesGuideFallbackAll {
-		providers = c.providers[:1] // primary only
-	}
 
 	for i := range providers {
 		rp := providers[i]
@@ -695,7 +695,7 @@ func (c *GuideCache) fetchFromProviders(ctx context.Context, name, locale string
 		// error), not when a secondary provider simply had no entry — otherwise
 		// a complete Wikipedia guide would be flagged partial (and classified
 		// "intro_only") whenever eBird lacks the species.
-		if c.fallbackPolicy == conf.SpeciesGuideFallbackAll && failedCount > 0 {
+		if failedCount > 0 {
 			merged.Partial = true
 		}
 		merged.CachedAt = time.Now()
@@ -745,7 +745,7 @@ func (c *GuideCache) saveGuide(ctx context.Context, name, locale string, g *Spec
 			logger.String("species", name), logger.String("locale", locale))
 		return
 	}
-	entry := guideToEntry(name, locale, c.resolveProviderName(), g)
+	entry := guideToEntry(name, locale, c.providerSetKey(), g)
 	if err := c.store.Save(ctx, entry); err != nil {
 		c.metrics.RecordDBError("write", "save")
 		GetLogger().Debug("Failed to save guide to DB",
@@ -756,6 +756,20 @@ func (c *GuideCache) saveGuide(ctx context.Context, name, locale string, g *Spec
 	// a full memory-map scan on every cache write (O(n) per save, O(n^2) during
 	// warm-up and under pre-fetch load). It is recomputed at startup, after warm
 	// completes, and once per refresh cycle (refreshStaleEntries) instead.
+}
+
+// isStaleNegative reports whether g is an EXPIRED not-found marker, which must be
+// treated as a cache miss rather than served.
+//
+// Stale-while-revalidate is right for a stale positive — slightly old prose is far
+// better than a blocking upstream fetch — but wrong for a negative. Serving an
+// expired "not found" hands the caller a known-expired WRONG answer: the API layer
+// maps it to HTTP 404, so a species whose article has since been created is reported
+// as having no guide, and only a later request (after the background refresh landed)
+// sees the truth. Falling through to the next tier costs one fetch and returns the
+// right answer now.
+func (c *GuideCache) isStaleNegative(g *SpeciesGuide) bool {
+	return g.IsNegativeEntry() && c.isCacheEntryStale(g)
 }
 
 // isCacheEntryStale reports whether a guide needs refreshing. Negative entries
@@ -872,6 +886,19 @@ func (c *GuideCache) WarmForSpecies(speciesNames []string) {
 		return
 	}
 	c.goIfOpen(func() {
+		// Resolve the whole warm set against the embedded dataset in one pass per
+		// blob before fetching species-by-species. Each per-name lookup would
+		// otherwise decompress and scan the ~20 MB translations blob on its memo
+		// miss, so a default 50-species warm paid dozens of full scans.
+		//
+		// Only worth it past a handful of species: priming is two FULL scans, while
+		// a single-name lookup stops as soon as it finds its record and so costs
+		// about half a scan on average. Below the threshold priming would be the
+		// slower option, which matters because a small warm set is exactly the case
+		// where the warm is expected to finish promptly.
+		if len(names) >= minPrimeBatchSize {
+			openfauna.PrimeCaches(names, c.warmLocale)
+		}
 		for _, n := range names {
 			if c.shouldQuit() {
 				return
@@ -886,7 +913,6 @@ func (c *GuideCache) WarmForSpecies(speciesNames []string) {
 
 // startCacheRefresh runs the periodic stale-entry refresh loop until Close.
 func (c *GuideCache) startCacheRefresh() {
-	defer c.wg.Done()
 	ticker := time.NewTicker(refreshInterval)
 	defer ticker.Stop()
 	for {
@@ -909,44 +935,37 @@ func (c *GuideCache) refreshStaleEntries() {
 	type staleKey struct{ name, locale string }
 	var stale []staleKey
 	var evict []string
-	c.memory.Range(func(k, v any) bool {
-		g, ok := v.(*SpeciesGuide)
-		if !ok || !c.isCacheEntryStale(g) {
-			return true
+	// Snapshot under the read lock, then act without holding it: the refresh loop
+	// below makes network calls and must not block readers.
+	c.memMu.RLock()
+	for key, e := range c.memory {
+		g := e.guide
+		if !c.isCacheEntryStale(g) {
+			continue
 		}
-		key := k.(string)
 		if g.IsNegativeEntry() {
 			evict = append(evict, key)
-			return true
+			continue
 		}
 		name, locale := splitCacheKey(key)
 		stale = append(stale, staleKey{name: name, locale: locale})
-		return true
-	})
+	}
+	c.memMu.RUnlock()
 	if len(evict) > 0 {
-		// Under memWriteMu so eviction can't race a concurrent storeMemory into an
-		// inexact count.
-		c.memWriteMu.Lock()
+		c.memMu.Lock()
 		for _, key := range evict {
-			// Re-check under the lock before deleting: a concurrent fetchAndStore may
-			// have replaced this stale negative with a fresh positive between the
-			// lock-free Range scan above and here. Only evict when the CURRENT value is
-			// still a stale negative, so we never drop a freshly-stored positive by
-			// acting on a stale snapshot. (storeMemoryLocked also holds memWriteMu, so
-			// this Load/LoadAndDelete pair cannot race a structural write.)
-			cur, ok := c.memory.Load(key)
-			if !ok {
+			// Re-check under the write lock before deleting: a concurrent fetchAndStore
+			// may have replaced this stale negative with a fresh positive between the
+			// snapshot above and here. Only evict when the CURRENT value is still a
+			// stale negative, so a freshly-stored positive is never dropped on the
+			// strength of an old snapshot.
+			e, ok := c.memory[key]
+			if !ok || !e.guide.IsNegativeEntry() || !c.isCacheEntryStale(e.guide) {
 				continue
 			}
-			g, isGuide := cur.(*SpeciesGuide)
-			if !isGuide || !g.IsNegativeEntry() || !c.isCacheEntryStale(g) {
-				continue
-			}
-			if _, loaded := c.memory.LoadAndDelete(key); loaded {
-				c.memCount.Add(-1)
-			}
+			delete(c.memory, key)
 		}
-		c.memWriteMu.Unlock()
+		c.memMu.Unlock()
 	}
 	for _, s := range stale {
 		if c.shouldQuit() {
@@ -987,12 +1006,13 @@ func (c *GuideCache) updateCachePopulationRatio() {
 		return
 	}
 	count := 0
-	c.memory.Range(func(_, v any) bool {
-		if g, ok := v.(*SpeciesGuide); ok && !g.IsNegativeEntry() {
+	c.memMu.RLock()
+	for _, e := range c.memory {
+		if !e.guide.IsNegativeEntry() {
 			count++
 		}
-		return true
-	})
+	}
+	c.memMu.RUnlock()
 	ratio := float64(count) / float64(c.warmTopN)
 	if ratio > 1 {
 		ratio = 1
@@ -1029,15 +1049,81 @@ func normalizeScientificName(name string) string {
 	return strings.TrimSpace(name)
 }
 
-// normalizeLocale returns a validated, lowercased locale, defaulting to English
-// for empty or non-conforming input. Validation bounds the cache key space and
-// prevents arbitrary input from selecting a Wikipedia subdomain.
-func normalizeLocale(locale string) string {
+// BaseLanguage extracts the lowercase base-language subtag from a UI locale
+// ("pt-br"/"pt_PT" -> "pt", "zh-cn" -> "zh"), validating it as a 2-3 letter code and
+// falling back to defaultLocale ("en") for anything else.
+//
+// Exported because three call sites need exactly this and each used to carry its own
+// character-for-character copy (guideprovider's wikipediaSubdomain, the API layer's
+// baseLanguage, and the link resolver). It lives in this leaf package for the same
+// reason ClassifyQuality does: both consumers need it and the API domain packages may
+// not import each other.
+func BaseLanguage(locale string) string {
 	l := strings.ToLower(strings.TrimSpace(locale))
-	if l == "" || !localePattern.MatchString(l) {
+	// Split on either separator and keep the primary subtag.
+	if i := strings.IndexAny(l, "-_"); i >= 0 {
+		l = l[:i]
+	}
+	if len(l) < 2 || len(l) > 3 {
 		return defaultLocale
 	}
+	for _, r := range l {
+		if r < 'a' || r > 'z' {
+			return defaultLocale
+		}
+	}
 	return l
+}
+
+// openFaunaLocaleSet is the embedded dataset's locale codes as a set, built once.
+// normalizeLocale consults it per request, so a linear scan of the slice Locales()
+// returns would be needless work on the hot path.
+var openFaunaLocaleSet = sync.OnceValue(func() map[string]struct{} {
+	available := openfauna.Locales()
+	set := make(map[string]struct{}, len(available))
+	for _, l := range available {
+		set[l] = struct{}{}
+	}
+	return set
+})
+
+// normalizeLocale canonicalizes a locale to the one that actually changes the
+// result, and is the cache key's second component.
+//
+// Shape validation alone is not enough to bound the key space. localePattern admits
+// an enormous number of well-formed regional subtags, and every distinct one used to
+// become a distinct memory key AND a distinct DB row — while wikipediaSubdomain
+// collapsed all of them to the same base subtag, so the rows held identical content.
+// A client varying the locale could therefore mint unbounded near-duplicate rows
+// (retained for DBRetention, and Cleanup only prunes by age) and fill the bounded
+// memory tier with copies of one guide.
+//
+// So a regional subtag is preserved only when it can genuinely change the answer:
+// when it names a real hyphenated Wikipedia edition (zh-classical, be-tarask), or a
+// locale the embedded dataset actually carries (which supplies regional common
+// names). Every other regional subtag collapses to its base language, making the key
+// space finite and each key's content distinct.
+func normalizeLocale(locale string) string {
+	l := strings.ToLower(strings.TrimSpace(locale))
+	if l == "" {
+		return defaultLocale
+	}
+	// Accept either separator, then reject anything not locale-shaped: this is also
+	// what stops arbitrary input from reaching a Wikipedia host.
+	l = strings.ReplaceAll(l, "_", "-")
+	if !localePattern.MatchString(l) {
+		return defaultLocale
+	}
+	if strings.IndexByte(l, '-') < 0 {
+		return BaseLanguage(l) // already a bare subtag; validate its length/charset
+	}
+	if _, ok := wikipediaHyphenatedSubdomains[l]; ok {
+		return l
+	}
+	if _, ok := openFaunaLocaleSet()[strings.ReplaceAll(l, "-", "_")]; ok {
+		return l
+	}
+	return BaseLanguage(l)
 }
 
 // entryQuality classifies a guide for metrics labeling. It shares its thresholds and

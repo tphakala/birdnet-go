@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -121,9 +122,16 @@ const (
 	guideSummaryMaxLength = 280
 )
 
+// componentSpeciesGuide is the telemetry component for this domain. It must stay in
+// sync with the RegisterComponent call in internal/errors: an unregistered component
+// is tagged incorrectly, and because lookupComponent matches the registered "api"
+// pattern against this package's path, the explicitly-tagged errors and the ones
+// that fall through to inference used to land in two different Sentry buckets.
+const componentSpeciesGuide = "api-species-guide"
+
 // errGuideCacheUnavailable is returned by the accessor when no cache is wired.
 var errGuideCacheUnavailable = errors.Newf("species guide cache unavailable").
-	Component("api-species-guide").
+	Component(componentSpeciesGuide).
 	Category(errors.CategorySystem).
 	Build()
 
@@ -140,6 +148,9 @@ type Handler struct {
 	// nil when the feature is disabled.
 	guideCache   *guideprovider.GuideCache
 	guideCacheMu sync.RWMutex
+	// guideShutdown latches once Shutdown has run, so a reconfigure that lost the
+	// race with teardown cannot install a fresh cache nothing will ever close.
+	guideShutdown bool
 
 	// guideRarity* memoize the daily probable-species score map (normalized
 	// scientific name -> score) for the guide expectedness badge, so a burst of
@@ -238,6 +249,12 @@ type SimilarSpeciesResponse struct {
 	ScientificName string                `json:"scientific_name"`
 	Genus          string                `json:"genus"`
 	Similar        []SimilarSpeciesEntry `json:"similar"`
+	// GuideUnavailable reports that the guide cache could not be consulted, so the
+	// entries carry no common names or summaries. It distinguishes a degraded
+	// response from one where the species genuinely have no guides — without it the
+	// endpoint answered a plain 200 for both, while /guide answered 503 for the
+	// same state, and the UI had no way to tell the two apart.
+	GuideUnavailable bool `json:"guide_unavailable,omitempty"`
 }
 
 // SpeciesNoteData is the response body for a single note.
@@ -270,8 +287,22 @@ func (c *Handler) WithGuideCache(fn func(*guideprovider.GuideCache) error) error
 
 // SetGuideCache atomically swaps in a new guide cache and closes the previous one
 // OUTSIDE the lock so it never blocks concurrent WithGuideCache readers.
+//
+// After Shutdown it installs nothing and closes the incoming cache instead. A
+// reconfigure signal can still be sitting on the control-monitor channel when
+// teardown begins; without this the monitor would drain it afterwards, build a
+// fresh cache (spawning a refresh loop and a detached warm on a non-cancellable
+// context) and install it into a handler nobody will shut down again, leaving those
+// goroutines running past process teardown.
 func (c *Handler) SetGuideCache(gc *guideprovider.GuideCache) {
 	c.guideCacheMu.Lock()
+	if c.guideShutdown {
+		c.guideCacheMu.Unlock()
+		if gc != nil {
+			gc.Close()
+		}
+		return
+	}
 	old := c.guideCache
 	c.guideCache = gc
 	c.guideCacheMu.Unlock()
@@ -282,11 +313,13 @@ func (c *Handler) SetGuideCache(gc *guideprovider.GuideCache) {
 
 // Shutdown closes and nils the guide cache (the handler is its canonical owner).
 // Snapshot under the lock, then close outside it. Called by the facade during
-// controller teardown.
+// controller teardown. It is one-way: see SetGuideCache for why a later swap must
+// not resurrect a cache.
 func (c *Handler) Shutdown() {
 	c.guideCacheMu.Lock()
 	gc := c.guideCache
 	c.guideCache = nil
+	c.guideShutdown = true
 	c.guideCacheMu.Unlock()
 	if gc != nil {
 		gc.Close()
@@ -369,7 +402,7 @@ func parseScientificNameParam(ctx echo.Context) (string, error) {
 	if name == "" {
 		return "", errors.Newf("scientific_name parameter is required").
 			Category(errors.CategoryValidation).
-			Component("api-species-guide").
+			Component(componentSpeciesGuide).
 			Build()
 	}
 	// Reject input that is not name-shaped before it reaches the providers and the
@@ -381,13 +414,13 @@ func parseScientificNameParam(ctx echo.Context) (string, error) {
 	if len(name) > scientificNameMaxLength {
 		return "", errors.Newf("scientific_name exceeds %d characters", scientificNameMaxLength).
 			Category(errors.CategoryValidation).
-			Component("api-species-guide").
+			Component(componentSpeciesGuide).
 			Build()
 	}
 	if !isPlausibleScientificName(name) {
 		return "", errors.Newf("scientific_name contains invalid characters").
 			Category(errors.CategoryValidation).
-			Component("api-species-guide").
+			Component(componentSpeciesGuide).
 			Build()
 	}
 	return name, nil
@@ -454,7 +487,7 @@ func (c *Handler) requireGuideFeature(ctx echo.Context, subFeature func(*conf.Sp
 	if !cfg.Enabled || (subFeature != nil && !subFeature(&cfg)) {
 		return nil, c.HandleError(ctx, errors.Newf("species guide is disabled").
 			Category(errors.CategoryConfiguration).
-			Component("api-species-guide").
+			Component(componentSpeciesGuide).
 			Build(), "Species guide is not enabled", http.StatusNotFound)
 	}
 	return settings, nil
@@ -468,7 +501,7 @@ func parseNoteIDParam(ctx echo.Context) (string, error) {
 	id := strings.TrimSpace(ctx.Param("id"))
 	if id == "" {
 		return "", errors.Newf("note id is required").
-			Category(errors.CategoryValidation).Component("api-species-guide").Build()
+			Category(errors.CategoryValidation).Component(componentSpeciesGuide).Build()
 	}
 	return id, nil
 }
@@ -529,7 +562,12 @@ func (c *Handler) GetSpeciesGuide(ctx echo.Context) error {
 			return c.HandleError(ctx, err, "Request canceled by client", apicore.StatusClientClosedRequest)
 		case errors.Is(err, context.DeadlineExceeded):
 			return c.HandleError(ctx, err, "Species guide request timed out", http.StatusRequestTimeout)
-		case errors.Is(err, errGuideCacheUnavailable):
+		case errors.Is(err, errGuideCacheUnavailable), errors.Is(err, guideprovider.ErrCacheUnavailable):
+			// Both sentinels mean the same thing to a client: no cache is currently
+			// able to answer. The provider-side one (no registered providers) used to
+			// fall through to the default 502, which the frontend renders as a red
+			// error box with a raw server message instead of its softer "guide
+			// unavailable" notice — the 503 branch is what selects that.
 			return c.HandleError(ctx, err, "Species guide is temporarily unavailable", http.StatusServiceUnavailable)
 		case errors.Is(err, guideprovider.ErrGuideNotFound):
 			return c.HandleError(ctx, err, "No guide found for species", http.StatusNotFound)
@@ -538,10 +576,42 @@ func (c *Handler) GetSpeciesGuide(ctx echo.Context) error {
 		}
 	}
 	if guide == nil || guide.IsNegativeEntry() {
-		return c.HandleError(ctx, errors.Newf("no guide content").
-			Category(errors.CategoryNotFound).
-			Component("api-species-guide").
-			Build(), "No guide found for species", http.StatusNotFound)
+		// No prose — but external links are computed offline from the embedded
+		// dataset and need no provider, so a species with no article can still be
+		// given somewhere to go. The similar-species endpoint already attaches links
+		// in exactly this case ("REGARDLESS of why there is no prose"), so 404ing
+		// here made the same species answer differently depending on which panel
+		// rendered it, and the panel the user opened deliberately was the one that
+		// showed nothing.
+		//
+		// Still a 404 when there is genuinely nothing to offer, so "this species has
+		// no guide" remains distinguishable from "here are some resources".
+		var links []GuideExternalLink
+		if cfg.ShowEnrichments {
+			links = externalLinksForGuide(
+				name,
+				c.ebirdSpeciesCode(name),
+				locale,
+				cfg.EnableSupplementaryLinks,
+			)
+		}
+		if len(links) == 0 {
+			return c.HandleError(ctx, errors.Newf("no guide content").
+				Category(errors.CategoryNotFound).
+				Component(componentSpeciesGuide).
+				Build(), "No guide found for species", http.StatusNotFound)
+		}
+		return ctx.JSON(http.StatusOK, SpeciesGuideData{
+			ScientificName: name,
+			Quality:        guideQualityStub,
+			Features: GuideFeatureFlags{
+				Notes:          cfg.ShowNotes,
+				Enrichments:    cfg.ShowEnrichments,
+				SimilarSpecies: cfg.ShowSimilarSpecies,
+				Taxonomy:       cfg.ShowTaxonomy,
+			},
+			ExternalLinks: links,
+		})
 	}
 
 	data := SpeciesGuideData{
@@ -611,7 +681,7 @@ func (c *Handler) GetSimilarSpecies(ctx echo.Context) error {
 	if c.TaxonomyDB == nil {
 		return c.HandleError(ctx, errors.Newf("taxonomy database not available").
 			Category(errors.CategorySystem).
-			Component("api-species-guide").
+			Component(componentSpeciesGuide).
 			Build(), "Taxonomy database not available", http.StatusServiceUnavailable)
 	}
 
@@ -622,12 +692,13 @@ func (c *Handler) GetSimilarSpecies(ctx echo.Context) error {
 	// enrichments are enabled, mirroring the main guide modal.
 	withLinks := settings.Realtime.Dashboard.SpeciesGuide.ShowEnrichments
 	supplementary := settings.Realtime.Dashboard.SpeciesGuide.EnableSupplementaryLinks
-	entries := c.resolveSimilarSpecies(ctx.Request().Context(), candidates, locale, withLinks, supplementary)
+	entries, cacheUnavailable := c.resolveSimilarSpecies(ctx.Request().Context(), candidates, locale, withLinks, supplementary)
 
 	return ctx.JSON(http.StatusOK, SimilarSpeciesResponse{
-		ScientificName: name,
-		Genus:          genus,
-		Similar:        entries,
+		ScientificName:   name,
+		Genus:            genus,
+		Similar:          entries,
+		GuideUnavailable: cacheUnavailable,
 	})
 }
 
@@ -642,9 +713,14 @@ type similarCandidate struct {
 func (c *Handler) similarSpeciesCandidates(focal string) (genus string, candidates []similarCandidate) {
 	genusName, meta, err := c.TaxonomyDB.GetGenusByScientificName(focal)
 	if err != nil || genusName == "" {
-		// Fall back to the first token of the scientific name. meta stays nil,
-		// so the same-family branch below is skipped (it has no family to use).
+		// Fall back to the first token of the scientific name, and DISCARD meta:
+		// the lookup that produced it failed, so its family is not trustworthy.
+		// Only genusName was being reassigned here, so a partially-resolved entry
+		// could leave meta non-nil and drive the same-family branch below off a
+		// family the lookup had already reported as unreliable — filling the
+		// comparison panel with unrelated species.
 		genusName, _, _ = strings.Cut(focal, " ")
+		meta = nil
 	}
 
 	seen := map[string]struct{}{strings.ToLower(focal): {}}
@@ -677,14 +753,24 @@ func (c *Handler) similarSpeciesCandidates(focal string) (genus string, candidat
 
 // resolveSimilarSpecies fetches each candidate's guide in parallel and builds the
 // response entries, preserving candidate order.
-func (c *Handler) resolveSimilarSpecies(ctx context.Context, candidates []similarCandidate, locale string, withLinks, supplementary bool) []SimilarSpeciesEntry {
+//
+// The second return value reports that the guide cache was unavailable for at least
+// one candidate. Discarding that used to make an unavailable cache indistinguishable
+// from "these species genuinely have no guide": the endpoint answered 200 with every
+// common_name blank while /guide answered 503 for the identical state, so the UI
+// rendered an "unavailable" guide panel beside a populated-looking rail of bare
+// scientific names with no hint the data was degraded.
+func (c *Handler) resolveSimilarSpecies(ctx context.Context, candidates []similarCandidate, locale string, withLinks, supplementary bool) (entries []SimilarSpeciesEntry, cacheUnavailable bool) {
 	// Bound the whole fan-out so a cold cache (live external fetches) cannot
 	// block the request indefinitely; unresolved candidates fall back to
 	// links-only (or name-only when enrichments are off) below.
 	resolveCtx, cancel := context.WithTimeout(ctx, similarSpeciesResolveTimeout)
 	defer cancel()
 
-	entries := make([]SimilarSpeciesEntry, len(candidates))
+	entries = make([]SimilarSpeciesEntry, len(candidates))
+	// Set when any candidate found no usable cache, so the caller can tell the
+	// client the rail is degraded rather than genuinely empty.
+	var unavailable atomic.Bool
 	// Per-request semaphore bounding concurrent live guide fetches (see
 	// maxConcurrentSimilarFetches). Acquired around gc.Get and released after.
 	sem := make(chan struct{}, maxConcurrentSimilarFetches)
@@ -696,7 +782,7 @@ func (c *Handler) resolveSimilarSpecies(ctx context.Context, candidates []simila
 				ScientificName: cand.scientificName,
 				Relationship:   cand.relationship,
 			}
-			_ = c.WithGuideCache(func(gc *guideprovider.GuideCache) error {
+			if cacheErr := c.WithGuideCache(func(gc *guideprovider.GuideCache) error {
 				// Wait for a fetch slot, but never past the resolve deadline; a candidate
 				// that can't get a slot in time falls back to links-only below.
 				select {
@@ -715,7 +801,9 @@ func (c *Handler) resolveSimilarSpecies(ctx context.Context, candidates []simila
 					entry.HasGuide = true
 				}
 				return nil
-			})
+			}); errors.Is(cacheErr, errGuideCacheUnavailable) {
+				unavailable.Store(true)
+			}
 			// Prose-less entries carry external resource links (when enrichments
 			// are on) REGARDLESS of why there is no prose: an OpenFauna stub, a
 			// negative cache entry, an unavailable cache, or a resolve timeout.
@@ -734,7 +822,7 @@ func (c *Handler) resolveSimilarSpecies(ctx context.Context, candidates []simila
 		})
 	}
 	wg.Wait()
-	return entries
+	return entries, unavailable.Load()
 }
 
 // GetSpeciesNotes returns all notes for a species (authenticated; notes are
@@ -1161,20 +1249,13 @@ func externalLinksForGuide(scientificName, ebirdCode, locale string, includeSupp
 // to feed the link resolver (which applies any per-source language remapping, e.g.
 // Wikipedia's nb/nn -> no, itself).
 func baseLanguage(locale string) string {
-	l := strings.ToLower(strings.TrimSpace(locale))
-	// Split on either separator and keep the primary subtag.
-	if i := strings.IndexAny(l, "-_"); i >= 0 {
-		l = l[:i]
-	}
-	if len(l) < 2 || len(l) > 3 {
-		return defaultWikiLang
-	}
-	for _, r := range l {
-		if r < 'a' || r > 'z' {
-			return defaultWikiLang
-		}
-	}
-	return l
+	// Delegates to the leaf package's single implementation. This used to be a
+	// character-for-character copy of the tail of guideprovider.wikipediaSubdomain,
+	// so widening what counts as a valid subtag in one (as the locale pattern was
+	// widened for zh-classical and friends) silently left the other collapsing those
+	// locales to English — the guide description and its external links could then
+	// disagree about the language.
+	return guideprovider.BaseLanguage(locale)
 }
 
 // summarizeDescription returns a short, single-paragraph summary of a description.

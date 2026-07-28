@@ -2943,9 +2943,20 @@ func seasonalTrackingChanged(old, current conf.SeasonalTrackingSettings) bool {
 	return false
 }
 
-// speciesTrackingSettingsChanged checks if species tracking settings have changed
-// speciesGuideSettingsChanged reports whether any species guide setting changed,
-// so the settings handler can emit the reconfigure_species_guide hot-reload signal.
+// speciesGuideSettingsChanged reports whether a species guide setting changed in a
+// way that requires REBUILDING the guide cache, so the settings handler can emit the
+// reconfigure_species_guide hot-reload signal.
+//
+// Only settings that affect the cache itself qualify. The Show* flags and
+// EnableSupplementaryLinks are response-shaping only: requireGuideFeature re-reads
+// them from the settings snapshot on every request, which is the per-request check
+// the project's hot-reload rule asks for, so they already take effect immediately.
+// Signalling on them anyway cost a full teardown and rebuild — a fresh AutoMigrate,
+// a DB pre-load, a discarded HTTP connection pool and a re-run of the top-N ranking
+// query over the whole detection history — on the control-monitor goroutine that
+// every other reconfigure signal queues behind, every time someone toggled a
+// checkbox. It also briefly ran two live caches against the same table, because the
+// outgoing one is only retired once the replacement has been built and swapped in.
 func speciesGuideSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	o := oldSettings.Realtime.Dashboard.SpeciesGuide
 	n := currentSettings.Realtime.Dashboard.SpeciesGuide
@@ -2958,11 +2969,6 @@ func speciesGuideSettingsChanged(oldSettings, currentSettings *conf.Settings) bo
 	if !n.Enabled {
 		return false
 	}
-	// EnableSupplementaryLinks and the Show* flags are read per-request by the
-	// handlers and don't affect cached guide content, so a rebuild is not strictly
-	// required for them. They are included anyway so every guide setting emits the
-	// same reconfigure signal (and its confirmation toast) — a settings toggle is a
-	// rare manual action, and the uniform UX signal is worth the redundant rebuild.
 	// The dashboard locale is not a speciesguide field, but the cache captures it at
 	// construction (SetWarmLocale) and treats it as immutable for its lifetime, so a
 	// locale change only reaches warming and pre-fetch by way of a rebuild. Without
@@ -2973,15 +2979,14 @@ func speciesGuideSettingsChanged(oldSettings, currentSettings *conf.Settings) bo
 		return true
 	}
 
+	// EnableWikipedia changes the registered provider set (and therefore the cache
+	// key); WarmTopN and PreFetchEnabled are captured by the cache at construction.
 	return o.EnableWikipedia != n.EnableWikipedia ||
-		o.EnableSupplementaryLinks != n.EnableSupplementaryLinks ||
 		o.WarmTopN != n.WarmTopN ||
-		o.PreFetchEnabled != n.PreFetchEnabled ||
-		o.ShowNotes != n.ShowNotes ||
-		o.ShowEnrichments != n.ShowEnrichments ||
-		o.ShowSimilarSpecies != n.ShowSimilarSpecies ||
-		o.ShowTaxonomy != n.ShowTaxonomy
+		o.PreFetchEnabled != n.PreFetchEnabled
 }
+
+// speciesTrackingSettingsChanged checks if species tracking settings have changed
 
 func speciesTrackingSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	oldTracking := oldSettings.Realtime.SpeciesTracking

@@ -52,7 +52,12 @@ func initGuideCacheIfNeeded(settings *conf.Settings, ds datastore.Interface, gpM
 		return nil
 	}
 
-	cache := guideprovider.NewGuideCache(store, gpMetrics)
+	// Pass the metrics sink as a nil INTERFACE when there is no implementation, not
+	// as a typed nil pointer. NewGuideCache substitutes a no-op sink on nil, but a
+	// (*GuideProviderMetrics)(nil) stored in the interface compares non-nil, so that
+	// guard could never fire and the first cache access would dereference a nil
+	// CounterVec inside the request handler.
+	cache := guideprovider.NewGuideCache(store, guideCacheMetrics(gpMetrics))
 	cache.SetWarmTopN(cfg.WarmTopN)
 	// Warm/pre-fetch in the dashboard locale so warming targets the same cache key the
 	// UI requests; otherwise non-English instances warm "en" and pay a wasted fetch per
@@ -80,6 +85,16 @@ func initGuideCacheIfNeeded(settings *conf.Settings, ds datastore.Interface, gpM
 	log.Info("Species guide cache initialized",
 		logger.Bool("wikipedia_descriptions", cfg.EnableWikipedia))
 	return cache
+}
+
+// guideCacheMetrics adapts a possibly-nil *GuideProviderMetrics to the cache's
+// metrics interface without creating a typed-nil interface value. Returning the
+// untyped nil lets NewGuideCache's nil check actually engage its no-op sink.
+func guideCacheMetrics(m *metrics.GuideProviderMetrics) guideprovider.GuideCacheMetrics {
+	if m == nil {
+		return nil
+	}
+	return m
 }
 
 // startGuideCacheWarm kicks off warmGuideCacheWithTopSpecies on a background

@@ -289,7 +289,18 @@ The two verbs report differently under the same `skippedFields` response key, so
 
 ### Species Guide (`speciesguide/speciesguide.go`)
 
-Every endpoint in this domain is gated by `realtime.dashboard.speciesguide.enabled` (404 when disabled). Guide and similar are additionally gated by their own `show*` flags and are rate-limited. All notes endpoints — reads included — require authentication, since notes are user-authored and may contain sensitive content.
+Every endpoint in this domain is gated by `realtime.dashboard.speciesguide.enabled` (404 when disabled). Guide and similar are rate-limited. All notes endpoints — reads included — require authentication, since notes are user-authored and may contain sensitive content.
+
+Per-section `show*` gating is **not** uniform, so do not assume a flag stops an endpoint serving:
+
+| Flag | Effect |
+| ---- | ------ |
+| `showSimilarSpecies` | Gates `/similar` entirely (404 when off). |
+| `showNotes` | Gates the notes endpoints entirely (404 when off). |
+| `showEnrichments` | Shapes the `/guide` response only — omits `current_season` and `external_links`. The endpoint still returns 200 with the description, quality, source and features. |
+| `showTaxonomy` | Shapes the response only; the endpoint still serves. |
+
+`/guide` itself is gated **only** by `enabled`. The `features` block in its response reports every flag's current value so the client can gate its own sections against a server-authoritative copy rather than its own possibly-stale settings.
 
 | Method | Route                               | Handler             | Auth | Description                                                                                                          |
 | ------ | ----------------------------------- | ------------------- | ---- | -------------------------------------------------------------------------------------------------------------------- |

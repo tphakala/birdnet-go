@@ -3,6 +3,7 @@ package guideprovider
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -13,8 +14,11 @@ import (
 
 	"golang.org/x/time/rate"
 
+	"github.com/tphakala/birdnet-go/internal/branding"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/openfauna"
 )
 
 const (
@@ -22,11 +26,11 @@ const (
 	wikipediaLicense    = "CC BY-SA 4.0"
 	wikipediaLicenseURL = "https://creativecommons.org/licenses/by-sa/4.0/"
 
-	// wikipediaUserAgent identifies the client to the Wikimedia API. Wikimedia's
-	// UA-policy enforcement (phab T400119) rejects bare "App/1.0 (url)" agents
-	// with HTTP 403, so we use the standard polite-bot "Mozilla/5.0 (compatible;
-	// ...)" form that includes the app name and a contact URL.
-	wikipediaUserAgent = "Mozilla/5.0 (compatible; BirdNET-Go/1.0; +https://github.com/tphakala/birdnet-go)"
+	// wikipediaUserAgentName is the app token in the User-Agent. Wikimedia's
+	// UA-policy enforcement (phab T400119) rejects bare "App/1.0 (url)" agents with
+	// HTTP 403, so wikipediaUserAgent() wraps it in the standard polite-bot
+	// "Mozilla/5.0 (compatible; ...)" form with a contact URL.
+	wikipediaUserAgentName = "BirdNET-Go"
 
 	// wikipediaTimeout bounds a single Wikipedia HTTP request.
 	wikipediaTimeout = 15 * time.Second
@@ -168,7 +172,7 @@ func (p *WikipediaGuideProvider) Fetch(ctx context.Context, scientificName strin
 			Build()
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", wikipediaUserAgent)
+	req.Header.Set("User-Agent", wikipediaUserAgent())
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -279,15 +283,6 @@ func (p *WikipediaGuideProvider) buildURL(locale, title string) string {
 	return "https://" + url.PathEscape(wikipediaSubdomain(locale)) + ".wikipedia.org/w/api.php?" + q.Encode()
 }
 
-// wikipediaLangOverrides maps a base-language subtag to the Wikipedia subdomain
-// when the two differ: Norwegian Bokmål ("nb") and Nynorsk ("nn") articles live on
-// no.wikipedia.org. Kept local (mirrors the same table in the api/v2/speciesguide
-// layer) so guideprovider stays a leaf package with no import back into the API.
-var wikipediaLangOverrides = map[string]string{
-	"nb": "no",
-	"nn": "no",
-}
-
 // Non-standard Wikipedia language editions whose project subdomain itself contains a
 // hyphen (e.g. zh-classical.wikipedia.org). Declared as constants so the lookup table
 // below and its in-package tests share one source of truth for each subdomain string.
@@ -326,6 +321,26 @@ var wikipediaHyphenatedSubdomains = map[string]struct{}{
 	wpEditionZhYue:       {},
 }
 
+// wikipediaUserAgent builds the User-Agent sent to the Wikimedia API.
+//
+// Both the version and the contact URL are resolved at call time rather than baked
+// into a literal. The literal this replaced pinned the version at "1.0", so no
+// install ever reported its real build, and hardcoded upstream's repository URL, so
+// a fork rebranded through internal/branding still advertised tphakala's contact
+// address — which is exactly what branding.RepoURL() exists to prevent, and what
+// Wikimedia's policy relies on to reach the right operator.
+//
+// Resolved per call (not latched at construction) so a provider built before
+// main.go publishes Version starts reporting the real one as soon as it is known.
+func wikipediaUserAgent() string {
+	version := "unknown"
+	if settings := conf.Setting(); settings != nil && settings.Version != "" {
+		version = settings.Version
+	}
+	return fmt.Sprintf("Mozilla/5.0 (compatible; %s/%s; +%s)",
+		wikipediaUserAgentName, version, branding.RepoURL())
+}
+
 // wikipediaSubdomain converts a UI locale to its Wikipedia language subdomain. It
 // drops any regional subtag ("pt-br"/"pt_PT" -> "pt", "zh-cn" -> "zh") and applies
 // the nb/nn -> no override, but PRESERVES the non-standard hyphenated subdomains that
@@ -341,22 +356,13 @@ func wikipediaSubdomain(locale string) string {
 	if _, ok := wikipediaHyphenatedSubdomains[l]; ok {
 		return l
 	}
-	// Otherwise keep only the primary subtag.
-	if i := strings.IndexByte(l, '-'); i >= 0 {
-		l = l[:i]
-	}
-	if len(l) < 2 || len(l) > 3 {
-		return defaultLocale
-	}
-	for _, r := range l {
-		if r < 'a' || r > 'z' {
-			return defaultLocale
-		}
-	}
-	if sub, ok := wikipediaLangOverrides[l]; ok {
-		return sub
-	}
-	return l
+	// Otherwise reduce to the validated primary subtag, then apply the registry's
+	// per-source language remap. Both steps are shared rather than restated here:
+	// BaseLanguage is the one extractor (the API layer used to carry an identical
+	// copy), and the nb/nn -> no fact lives once in the sources registry, so the
+	// host we fetch prose from and the host the external-link badge points at
+	// cannot drift apart.
+	return openfauna.SourceLang(openfauna.SourceIDWikipedia, BaseLanguage(l))
 }
 
 // convertWikiSections rewrites MediaWiki section headers in a plain-text extract

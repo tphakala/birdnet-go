@@ -61,7 +61,7 @@ func (emptyGuideStore) Save(_ context.Context, _ *guideprovider.GuideCacheEntry)
 func (emptyGuideStore) GetAll(_ context.Context) ([]guideprovider.GuideCacheEntry, error) {
 	return nil, nil
 }
-func (emptyGuideStore) GetRecent(_ context.Context, _ int) ([]guideprovider.GuideCacheEntry, error) {
+func (emptyGuideStore) GetRecent(_ context.Context, _ int, _ string) ([]guideprovider.GuideCacheEntry, error) {
 	return nil, nil
 }
 func (emptyGuideStore) Delete(_ context.Context, _, _, _ string) error { return nil }
@@ -288,7 +288,7 @@ func TestResolveSimilarSpecies_StubWithoutDescriptionGetsLocalizedLinks(t *testi
 		CommonName:  commonCarrionCrow,
 		Description: "",
 	}))
-	entries := c.resolveSimilarSpecies(
+	entries, _ := c.resolveSimilarSpecies(
 		t.Context(),
 		[]similarCandidate{{scientificName: sciCarrionCrow, relationship: relationshipSameGenus}},
 		"de", true, false, // locale=de, enrichments on, supplementary off
@@ -314,7 +314,7 @@ func TestResolveSimilarSpecies_StubWithEnrichmentsOffHasNoLinks(t *testing.T) {
 		CommonName:  commonCarrionCrow,
 		Description: "",
 	}))
-	entries := c.resolveSimilarSpecies(
+	entries, _ := c.resolveSimilarSpecies(
 		t.Context(),
 		[]similarCandidate{{scientificName: sciCarrionCrow, relationship: relationshipSameGenus}},
 		defaultWikiLang, false, false, // enrichments off, supplementary off
@@ -331,7 +331,7 @@ func TestResolveSimilarSpecies_StubWithEnrichmentsOffHasNoLinks(t *testing.T) {
 func TestResolveSimilarSpecies_UnresolvedCandidateStillGetsLinks(t *testing.T) {
 	c := guideTestHandler(t, guideEnabledSettings())
 	c.SetGuideCache(newStubGuideCache(t, nil)) // provider yields ErrGuideNotFound
-	entries := c.resolveSimilarSpecies(
+	entries, _ := c.resolveSimilarSpecies(
 		t.Context(),
 		[]similarCandidate{{scientificName: sciCarrionCrow, relationship: relationshipSameGenus}},
 		defaultWikiLang, true, false, // enrichments on, supplementary off
@@ -344,7 +344,7 @@ func TestResolveSimilarSpecies_UnresolvedCandidateStillGetsLinks(t *testing.T) {
 // Same invariant when no guide cache is wired at all (transient unavailability).
 func TestResolveSimilarSpecies_CacheUnavailableStillGetsLinks(t *testing.T) {
 	c := guideTestHandler(t, guideEnabledSettings()) // no cache wired
-	entries := c.resolveSimilarSpecies(
+	entries, _ := c.resolveSimilarSpecies(
 		t.Context(),
 		[]similarCandidate{{scientificName: sciCarrionCrow, relationship: relationshipSameGenus}},
 		defaultWikiLang, true, false,
@@ -359,7 +359,7 @@ func TestResolveSimilarSpecies_WithDescriptionIsMarkedHasGuideAndNoLinks(t *test
 		CommonName:  commonCarrionCrow,
 		Description: "The carrion crow is a passerine bird of the family Corvidae.",
 	}))
-	entries := c.resolveSimilarSpecies(
+	entries, _ := c.resolveSimilarSpecies(
 		t.Context(),
 		[]similarCandidate{{scientificName: sciCarrionCrow, relationship: relationshipSameGenus}},
 		defaultWikiLang, true, false, // enrichments on, supplementary off

@@ -399,6 +399,7 @@ func init() {
 	RegisterComponent("datastore", "datastore")
 	RegisterComponent("imageprovider", "imageprovider")
 	RegisterComponent("guideprovider", "guideprovider")
+	RegisterComponent("speciesguide", "api-species-guide")
 	RegisterComponent("diskmanager", "diskmanager")
 	RegisterComponent("ebird", "ebird")
 	RegisterComponent("mqtt", "mqtt")

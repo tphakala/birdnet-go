@@ -1,6 +1,7 @@
 package guideprovider
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"time"
@@ -9,18 +10,44 @@ import (
 	"gorm.io/gorm/clause"
 	gormlogger "gorm.io/gorm/logger"
 
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
 // GuideCacheEntry is the GORM row for the DB cache tier. The composite unique
-// key is (scientific_name, locale, provider).
+// key is (scientific_name, locale, provider), where `provider` is the canonical
+// PROVIDER SET that produced the row (see GuideCache.providerSetKey), not the
+// single provider credited for the prose — that is SourceProvider.
+//
+// Keying on the set is what makes a provider change self-invalidating. A row
+// written with Wikipedia enabled is stored under a different key than one written
+// without it, so disabling Wikipedia simply stops finding those rows; they age out
+// on normal retention. The alternative — stamping only the primary provider — made
+// every row look identical regardless of what produced it, which is why the cache
+// previously needed a whole apparatus (an invalidation generation, a store-then-
+// verify memory write, a table-wide DeleteAll, and a tri-state "was Wikipedia
+// applied" tracker in the control monitor) to reconstruct that fact, and still
+// served Wikipedia prose for a full PositiveTTL after a restart with it switched
+// off, because the startup path never ran the invalidation.
+//
+// The three key columns carry explicit size tags. The MySQL driver is opened
+// without DefaultStringSize (internal/datastore/mysql.go), so an unsized string
+// maps to longtext, and MySQL refuses a unique index over TEXT columns without a
+// key length — AutoMigrate would fail and disable the guide cache on every MySQL
+// deployment while working fine on SQLite. Sizes match the convention used by
+// every other composite-unique string column in the schema (internal/datastore/
+// model.go). Combined key length stays well inside InnoDB's 3072-byte limit.
 type GuideCacheEntry struct {
 	ID             uint   `gorm:"primaryKey"`
-	ScientificName string `gorm:"uniqueIndex:idx_guide_cache_key;not null"`
-	Locale         string `gorm:"uniqueIndex:idx_guide_cache_key;not null"`
-	Provider       string `gorm:"uniqueIndex:idx_guide_cache_key;not null"`
+	ScientificName string `gorm:"uniqueIndex:idx_guide_cache_key;not null;size:200"`
+	Locale         string `gorm:"uniqueIndex:idx_guide_cache_key;not null;size:20"`
+	Provider       string `gorm:"uniqueIndex:idx_guide_cache_key;not null;size:100"`
+	// SourceProvider is the single provider credited to the user for this guide
+	// (attribution alongside SourceURL/License). Distinct from Provider, which is
+	// the whole set that produced the row and is part of the key.
+	SourceProvider string `gorm:"size:100"`
 	CommonName     string
 	Description    string `gorm:"type:text"`
 	Genus          string
@@ -49,9 +76,24 @@ func (e *transientError) Error() string { return e.err.Error() }
 func (e *transientError) Unwrap() error { return e.err }
 
 // NewTransientError marks err as transient (retryable).
+//
+// It also categorizes the wrapped error as a network failure when it is not
+// already categorized. Without that, a DNS or connection-reset failure reached the
+// telemetry pipeline uncategorized, so errors.IsTransientNetworkError did not
+// recognize it and the existing Sentry suppression for expected external-service
+// failures never fired — every transient upstream blip was reported as a novel
+// error. The local transientError wrapper still drives the cache's own
+// "do not persist a negative entry" decision; this makes the two classifications
+// agree instead of running in parallel.
 func NewTransientError(err error) error {
 	if err == nil {
 		return nil
+	}
+	if !errors.IsCategory(err, errors.CategoryNetwork) && !errors.IsCategory(err, errors.CategoryTimeout) {
+		err = errors.New(err).
+			Component("guideprovider").
+			Category(errors.CategoryNetwork).
+			Build()
 	}
 	return &transientError{err: err}
 }
@@ -102,7 +144,9 @@ func entryToGuide(e *GuideCacheEntry) *SpeciesGuide {
 		Description:    e.Description,
 		Genus:          e.Genus,
 		Family:         e.Family,
-		SourceProvider: e.Provider,
+		// Fall back to the key when a row predates the SourceProvider column, so an
+		// upgraded install still shows an attribution rather than a blank one.
+		SourceProvider: cmp.Or(e.SourceProvider, e.Provider),
 		SourceURL:      e.SourceURL,
 		License:        e.License,
 		LicenseURL:     e.LicenseURL,
@@ -113,12 +157,15 @@ func entryToGuide(e *GuideCacheEntry) *SpeciesGuide {
 	}
 }
 
-// guideToEntry maps the domain model to a DB row keyed by (name, locale, provider).
-func guideToEntry(name, locale, provider string, g *SpeciesGuide) *GuideCacheEntry {
+// guideToEntry maps the domain model to a DB row keyed by (name, locale,
+// providerSet). providerSet identifies the registered provider set that produced
+// the guide; g.SourceProvider is carried separately as display attribution.
+func guideToEntry(name, locale, providerSet string, g *SpeciesGuide) *GuideCacheEntry {
 	return &GuideCacheEntry{
 		ScientificName: name,
 		Locale:         locale,
-		Provider:       provider,
+		Provider:       providerSet,
+		SourceProvider: g.SourceProvider,
 		CommonName:     g.CommonName,
 		Description:    g.Description,
 		Genus:          g.Genus,
@@ -201,12 +248,20 @@ func (s *GORMGuideStore) Save(ctx context.Context, entry *GuideCacheEntry) error
 		)
 		entry.CachedAt = time.Now()
 	}
-	err := s.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns: []clause.Column{
-			{Name: "scientific_name"}, {Name: "locale"}, {Name: "provider"},
-		},
-		UpdateAll: true,
-	}).Create(entry).Error
+	// Retry on a transient lock/deadlock like every other writer to this database.
+	// The guide cache shares the SQLite file with detection ingest, so an upsert
+	// landing during a write burst gets SQLITE_BUSY; without the retry it fails
+	// outright and the guide is dropped, forcing a re-fetch (an expensive
+	// full-dataset scan) on every later request for that species. datastore's own
+	// SaveImageCache and this branch's SaveSpeciesNote both wrap the same way.
+	err := datastore.RetryOnLock(ctx, "save_guide_cache", func() error {
+		return s.db.WithContext(ctx).Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "scientific_name"}, {Name: "locale"}, {Name: "provider"},
+			},
+			UpdateAll: true,
+		}).Create(entry).Error
+	}, nil)
 	if err != nil {
 		s.recordDBError("write", "save")
 		return s.wrapDBError(err, "save")
@@ -235,10 +290,19 @@ func (s *GORMGuideStore) GetAll(ctx context.Context) ([]GuideCacheEntry, error) 
 // short-lived negative entries could otherwise load far more rows than the
 // in-memory tier can hold. A non-positive limit returns all rows (matching
 // GetAll); the warm path always passes a positive cap.
-func (s *GORMGuideStore) GetRecent(ctx context.Context, limit int) ([]GuideCacheEntry, error) {
+func (s *GORMGuideStore) GetRecent(ctx context.Context, limit int, providerSet string) ([]GuideCacheEntry, error) {
 	// Secondary key id DESC gives a deterministic cutoff among rows sharing a cached_at
 	// (e.g. a bulk warm insert), so which entries survive the LIMIT is stable.
 	q := s.db.WithContext(ctx).Order("cached_at DESC").Order("id DESC")
+	// Only rows produced by the CURRENT provider set may seed the memory tier. The
+	// memory key is (name, locale) with no provider component, so without this filter
+	// startup happily loaded rows written under a retired set and served them as
+	// Tier-1 hits that the provider-keyed Tier-2 read would never have returned —
+	// for a full PositiveTTL, and preferring the oldest row when several sets had
+	// cached the same species.
+	if providerSet != "" {
+		q = q.Where("provider = ?", providerSet)
+	}
 	if limit > 0 {
 		q = q.Limit(limit)
 	}
@@ -266,8 +330,12 @@ func (s *GORMGuideStore) Delete(ctx context.Context, scientificName, locale, pro
 }
 
 // DeleteAll removes every cached entry. GORM refuses a global delete without a
-// WHERE clause unless AllowGlobalUpdate is set, so the session enables it. Used to
-// invalidate the whole cache when the registered provider set changes.
+// WHERE clause unless AllowGlobalUpdate is set, so the session enables it.
+//
+// No longer part of the GuideStore interface and not called by the cache: rows are
+// keyed by the provider set that produced them, so a provider change invalidates
+// itself and the retired rows age out on normal retention. Retained as store-level
+// API for administrative and test use.
 func (s *GORMGuideStore) DeleteAll(ctx context.Context) error {
 	err := s.db.WithContext(ctx).
 		Session(&gorm.Session{AllowGlobalUpdate: true}).

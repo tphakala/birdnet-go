@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -101,9 +102,13 @@ func TestWikipediaProvider_UserAgent(t *testing.T) {
 	p := newWikipediaTestProvider(t, srv)
 	_, err := p.Fetch(t.Context(), "Turdus merula", FetchOptions{Locale: "en"})
 	require.NoError(t, err)
-	assert.Equal(t, wikipediaUserAgent, gotUA)
+	assert.Equal(t, wikipediaUserAgent(), gotUA)
 	assert.True(t, strings.HasPrefix(gotUA, "Mozilla/5.0 (compatible;"),
 		"Wikimedia rejects non-browser-shaped User-Agents with 403")
+	assert.Contains(t, gotUA, wikipediaUserAgentName)
+	// The contact URL must come from branding, not a hardcoded upstream literal, so
+	// a rebranded fork advertises its own operator rather than tphakala's.
+	assert.Contains(t, gotUA, branding.RepoURL())
 }
 
 func TestWikipediaProvider_NotFound(t *testing.T) {

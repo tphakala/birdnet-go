@@ -1,6 +1,8 @@
 package guideprovider
 
 import (
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +15,38 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
+
+// Regression: the species guide was silently disabled on every MySQL deployment.
+//
+// The three columns of idx_guide_cache_key were declared without a size, and the
+// MySQL driver is opened without DefaultStringSize (internal/datastore/mysql.go),
+// so GORM mapped them to longtext. MySQL refuses a unique index over TEXT columns
+// without a key length, AutoMigrate failed, NewGORMGuideStoreWithMetrics returned
+// an error, and initGuideCacheIfNeeded logged "guide cache disabled" and returned
+// nil — while SQLite, which ignores the size, worked fine and hid it in CI.
+//
+// A real reproduction needs a MySQL instance, so assert the schema contract that
+// prevents it instead: every column in the composite unique index must declare a
+// size, matching the convention every other such column in internal/datastore uses.
+func TestGuideCacheEntry_UniqueIndexColumnsDeclareSize(t *testing.T) {
+	t.Parallel()
+
+	entryType := reflect.TypeOf(GuideCacheEntry{})
+	var checked int
+	for field := range entryType.Fields() {
+		tag := field.Tag.Get("gorm")
+		if !strings.Contains(tag, "uniqueIndex:idx_guide_cache_key") {
+			continue
+		}
+		checked++
+		assert.Contains(t, tag, "size:",
+			"%s is part of idx_guide_cache_key and must declare an explicit size, "+
+				"or MySQL maps it to longtext and AutoMigrate fails on the unique index",
+			field.Name)
+	}
+	require.Equal(t, 3, checked,
+		"expected the composite unique index to cover exactly scientific_name, locale and provider")
+}
 
 func newTestStore(t *testing.T) *GORMGuideStore {
 	t.Helper()
@@ -171,16 +205,38 @@ func TestGORMGuideStore_GetRecent(t *testing.T) {
 		}))
 	}
 
-	recent, err := store.GetRecent(ctx, 2)
+	recent, err := store.GetRecent(ctx, 2, WikipediaProviderName)
 	require.NoError(t, err)
 	require.Len(t, recent, 2, "limit must bound the result set")
 	assert.Equal(t, "newest", recent[0].ScientificName, "ordered most-recently-cached first")
 	assert.Equal(t, "middle", recent[1].ScientificName)
 
 	// A non-positive limit returns everything (matches GetAll).
-	all, err := store.GetRecent(ctx, 0)
+	all, err := store.GetRecent(ctx, 0, WikipediaProviderName)
 	require.NoError(t, err)
 	assert.Len(t, all, 3)
+
+	// Rows written by a different provider set are invisible to this one. The
+	// memory key has no provider component, so without this filter a startup load
+	// would seed the tier with a retired set's guides and serve them as Tier-1
+	// hits the provider-keyed Tier-2 read would never have returned.
+	require.NoError(t, store.Save(ctx, &GuideCacheEntry{
+		ScientificName: "other-set", Locale: "en", Provider: "openfauna+wikipedia",
+		CachedAt: now.Add(time.Hour),
+	}))
+	mine, err := store.GetRecent(ctx, 0, WikipediaProviderName)
+	require.NoError(t, err)
+	assert.Len(t, mine, 3, "a row from another provider set must not be returned")
+
+	theirs, err := store.GetRecent(ctx, 0, "openfauna+wikipedia")
+	require.NoError(t, err)
+	require.Len(t, theirs, 1)
+	assert.Equal(t, "other-set", theirs[0].ScientificName)
+
+	// An empty provider set is an explicit "no filter" for administrative reads.
+	every, err := store.GetRecent(ctx, 0, "")
+	require.NoError(t, err)
+	assert.Len(t, every, 4)
 }
 
 func TestGORMGuideStore_DeleteAll(t *testing.T) {
@@ -270,7 +326,7 @@ func TestGORMGuideStore_DBErrorsAreWrappedAndCounted(t *testing.T) {
 	require.Error(t, store.Save(ctx, &GuideCacheEntry{ScientificName: "x", Locale: "en", Provider: WikipediaProviderName}))
 	_, err = store.GetAll(ctx)
 	require.Error(t, err)
-	_, err = store.GetRecent(ctx, 5)
+	_, err = store.GetRecent(ctx, 5, WikipediaProviderName)
 	require.Error(t, err)
 	require.Error(t, store.Delete(ctx, "x", "en", WikipediaProviderName))
 	require.Error(t, store.DeleteAll(ctx))

@@ -129,6 +129,18 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	// -- Dashboard (display only, read per-request by frontend) --
 	"Realtime.Dashboard": {categories: []hotReloadCategory{hotReloadDisplay}},
 
+	// The dashboard locale is display-only for the frontend, but the guide cache
+	// captures it at construction (SetWarmLocale) and treats it as immutable, so a
+	// locale change reaches warming and pre-fetch only via a rebuild. Declared here
+	// so the coverage test can actually catch that trigger being dropped —
+	// previously only the SpeciesGuide subtree carried the action, and the locale
+	// comparison in speciesGuideSettingsChanged could have been refactored away with
+	// nothing failing.
+	"Realtime.Dashboard.Locale": {
+		categories: []hotReloadCategory{hotReloadDisplay, hotReloadFresh},
+		action:     "reconfigure_species_guide",
+	},
+
 	// SpeciesGuide rebuilds its provider cache live via the
 	// reconfigure_species_guide control signal (field-level entry covers the subtree).
 	"Realtime.Dashboard.SpeciesGuide": {
