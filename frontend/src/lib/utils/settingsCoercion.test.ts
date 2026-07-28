@@ -167,12 +167,29 @@ describe('settingsCoercion realtime rtsp streams', () => {
 });
 
 describe('settingsCoercion species guide show flags', () => {
-  it('defaults an absent showTaxonomy flag to true (backend *bool semantics)', () => {
+  // An absent FIELD must stay absent, for the same reason an absent section does
+  // (see the comment below): coerceSettings runs over formData on the way OUT, so
+  // materializing a flag the caller never supplied turns a partial update into a
+  // full overwrite. A PATCH carrying only `enabled` used to rewrite showNotes back
+  // to true for a user who had deliberately turned it off, and reset warmTopN to 50.
+  //
+  // Consumers apply the backend's *bool "unset means on" semantics themselves when
+  // reading (toSpeciesGuideUIConfig), so nothing depends on them being filled here.
+  it('leaves an absent showTaxonomy flag absent rather than synthesizing a default', () => {
     const result = coerceSettings('realtime', {
       dashboard: { speciesGuide: { enabled: true } },
     }) as { dashboard: { speciesGuide: Record<string, unknown> } };
 
-    expect(result.dashboard.speciesGuide.showTaxonomy).toBe(true);
+    expect(result.dashboard.speciesGuide).not.toHaveProperty('showTaxonomy');
+    expect(result.dashboard.speciesGuide.enabled).toBe(true);
+  });
+
+  it('does not resurrect other flags when only one field is supplied', () => {
+    const result = coerceSettings('realtime', {
+      dashboard: { speciesGuide: { enableWikipedia: true } },
+    }) as { dashboard: { speciesGuide: Record<string, unknown> } };
+
+    expect(result.dashboard.speciesGuide).toEqual({ enableWikipedia: true });
   });
 
   it('preserves an explicit showTaxonomy opt-out', () => {

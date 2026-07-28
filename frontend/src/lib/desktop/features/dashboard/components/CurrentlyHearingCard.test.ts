@@ -104,6 +104,12 @@ describe('CurrentlyHearingCard guide click affordance', () => {
         },
       },
     });
+    // Simulate a completed authenticated settings load. Gating reads
+    // $speciesGuideStoreSettings, which is null until dataLoaded so that a guest
+    // (whose load never runs) falls through to the public endpoint instead of
+    // being pinned to the seeded enabled:false defaults. updateSection alone does
+    // not set it — in a real session loadSettings() does, before any edit.
+    settingsStore.update(state => ({ ...state, dataLoaded: true }));
   }
 
   beforeEach(() => {

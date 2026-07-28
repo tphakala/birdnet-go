@@ -129,6 +129,12 @@ export interface SimilarSpeciesResponse {
   scientific_name: string;
   genus: string;
   similar: SimilarSpeciesEntry[];
+  /**
+   * The guide cache could not be consulted, so entries carry no common names or
+   * summaries. Distinguishes a degraded rail from one where the species genuinely
+   * have no guides — the endpoint returns 200 either way.
+   */
+  guide_unavailable?: boolean;
 }
 export interface SpeciesNoteData {
   id: number;

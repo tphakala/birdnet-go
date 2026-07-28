@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import type { Component } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import {
@@ -102,6 +101,9 @@
   let loading = $state(true);
   let unavailable = $state(false);
   let noGuide = $state(false);
+  // Whether the similar-species list was actually requested for the current
+  // species. Distinguishes "we asked and there are none" from "we never asked".
+  let similarRequested = $state(false);
   let error = $state<string | null>(null);
 
   // Description (the article lead) is always shown, so it isn't tracked here — only
@@ -157,11 +159,19 @@
   // authoritative once the guide resolved; the prop covers the guide-404 case.
   let similarSectionOn = $derived(guide?.features?.similar_species ?? showSimilarSpecies);
 
+  // Identifies the in-flight load. A late response for a species the user has
+  // already navigated away from must not overwrite the current one, and the
+  // component must re-fetch when its prop changes rather than relying on every
+  // caller remembering to wrap it in {#key}.
+  let loadToken = 0;
+
   async function load(): Promise<void> {
+    const token = ++loadToken;
     loading = true;
     error = null;
     unavailable = false;
     noGuide = false;
+    similarRequested = showSimilarSpecies;
     const enc = encodeURIComponent(scientificName);
     const loc = encodeURIComponent(getLocale());
     // The two endpoints are independent on the backend; fetch them independently
@@ -181,8 +191,13 @@
           })
       : Promise.resolve(emptySimilar);
     try {
-      guide = await api.get<SpeciesGuideData>(`/api/v2/species/${enc}/guide?locale=${loc}`);
+      const fetched = await api.get<SpeciesGuideData>(
+        `/api/v2/species/${enc}/guide?locale=${loc}`
+      );
+      if (token !== loadToken) return; // superseded by a newer species
+      guide = fetched;
     } catch (e) {
+      if (token !== loadToken) return;
       if (e instanceof ApiError && e.status === HTTP_SERVICE_UNAVAILABLE) {
         unavailable = true;
       } else if (e instanceof ApiError && e.status === HTTP_NOT_FOUND) {
@@ -192,9 +207,20 @@
         error = e instanceof Error ? e.message : String(e);
       }
       logger.error('Failed to load species guide', e, { component: 'SpeciesComparison' });
+    } finally {
+      // In a finally so an unexpected throw below cannot strand the spinner. The
+      // similar-species await used to sit outside any guard, so a null body (a 204
+      // or a zero-length response, which api.get surfaces as null) threw on the
+      // property access and left `loading` true for the life of the component.
+      if (token === loadToken) loading = false;
     }
-    similar = (await similarPromise).similar ?? [];
-    loading = false;
+
+    const similarResult = await similarPromise;
+    if (token !== loadToken) return;
+    similar = similarResult?.similar ?? [];
+    // The backend reports a degraded rail explicitly, so an unavailable cache is
+    // distinguishable from "these species genuinely have no guides".
+    if (similarResult?.guide_unavailable) unavailable = true;
   }
 
   function toggleBodySection(id: CanonicalSectionId): void {
@@ -202,8 +228,66 @@
     else openBodySections.add(id);
   }
 
-  onMount(load);
+  // Re-load whenever the species (or the similar-species gate) changes, not just at
+  // mount. Loading only in onMount meant a parent that reused the instance for a
+  // different species kept showing the previous one's guide, links and comparison
+  // rows under the new header, with no loading state to signal the mismatch — the
+  // props contract could not enforce the {#key} wrapper every caller had to
+  // remember. load() reads the current values, and its token guard drops any
+  // response that a newer request has superseded.
+  $effect(() => {
+    void scientificName;
+    void showSimilarSpecies;
+    void load();
+  });
 </script>
+
+<!--
+  The similar-species disclosure, rendered from both the guide-present and the
+  guide-404 branches, which previously carried byte-identical copies of it.
+
+  `requireEntries` preserves the one deliberate difference between those copies:
+  the guide-404 branch shows the section only when there is something in it (an
+  empty section beside "no guide for this species" is just noise), while the
+  guide-present branch shows it regardless so SimilarSpeciesPanel can render its
+  own "no similar species" empty state.
+
+  Both are additionally gated on `similarRequested`. Without it, a client whose
+  showSimilarSpecies prop said "off" (so the fetch was skipped) while the server's
+  features flag said "on" rendered the section over a list that was never
+  requested — and the panel then told the user there were no similar species,
+  which is a wrong answer rather than an empty one.
+
+  A snippet, not the shared CollapsibleSection: that component derives its content
+  id by slugifying its title, which collides when two instances of this panel are
+  on one page (DetectionDetail plus an open modal). The instance-scoped `uid` here
+  is what keeps aria-controls unambiguous.
+-->
+{#snippet similarSection(requireEntries: boolean)}
+  {#if similarSectionOn && similarRequested && (!requireEntries || similar.length > 0)}
+    <div>
+      <button
+        type="button"
+        class="flex w-full cursor-pointer items-center justify-between py-2 text-left font-medium"
+        aria-expanded={similarOpen}
+        aria-controls={`${uid}-similar`}
+        onclick={() => (similarOpen = !similarOpen)}
+      >
+        <span>{t('analytics.species.similar.title')}</span>
+        {#if similarOpen}
+          <ChevronDown class="h-4 w-4" />
+        {:else}
+          <ChevronRight class="h-4 w-4" />
+        {/if}
+      </button>
+      {#if similarOpen}
+        <div id={`${uid}-similar`} class="pb-3">
+          <SimilarSpeciesPanel mainName={commonName || scientificName} {similar} />
+        </div>
+      {/if}
+    </div>
+  {/if}
+{/snippet}
 
 <section
   class={`species-comparison ${className}`}
@@ -256,29 +340,7 @@
         <div role="status" class="p-4 text-sm text-base-content/70">
           {t('analytics.species.guide.noGuide')}
         </div>
-        {#if similarSectionOn && similar.length > 0}
-          <div>
-            <button
-              type="button"
-              class="flex w-full cursor-pointer items-center justify-between py-2 text-left font-medium"
-              aria-expanded={similarOpen}
-              aria-controls={`${uid}-similar`}
-              onclick={() => (similarOpen = !similarOpen)}
-            >
-              <span>{t('analytics.species.similar.title')}</span>
-              {#if similarOpen}
-                <ChevronDown class="h-4 w-4" />
-              {:else}
-                <ChevronRight class="h-4 w-4" />
-              {/if}
-            </button>
-            {#if similarOpen}
-              <div id={`${uid}-similar`} class="pb-3">
-                <SimilarSpeciesPanel mainName={commonName || scientificName} {similar} />
-              </div>
-            {/if}
-          </div>
-        {/if}
+        {@render similarSection(true)}
       {:else if guide}
         <!-- Enrichments: expectedness + season badges and external resource links -->
         {#if enrichmentsOn && (guide.expectedness || season || externalLinks.length > 0)}
@@ -369,31 +431,7 @@
           </div>
         {/each}
 
-        <!-- Similar species (gated by the showSimilarSpecies setting, with the
-         guide response's server-computed features flag as the authority) -->
-        {#if similarSectionOn}
-          <div>
-            <button
-              type="button"
-              class="flex w-full cursor-pointer items-center justify-between py-2 text-left font-medium"
-              aria-expanded={similarOpen}
-              aria-controls={`${uid}-similar`}
-              onclick={() => (similarOpen = !similarOpen)}
-            >
-              <span>{t('analytics.species.similar.title')}</span>
-              {#if similarOpen}
-                <ChevronDown class="h-4 w-4" />
-              {:else}
-                <ChevronRight class="h-4 w-4" />
-              {/if}
-            </button>
-            {#if similarOpen}
-              <div id={`${uid}-similar`} class="pb-3">
-                <SimilarSpeciesPanel mainName={commonName || scientificName} {similar} />
-              </div>
-            {/if}
-          </div>
-        {/if}
+        {@render similarSection(false)}
       {:else}
         <p class="text-sm text-base-content/70 p-4">{t('analytics.species.guide.noSimilar')}</p>
       {/if}

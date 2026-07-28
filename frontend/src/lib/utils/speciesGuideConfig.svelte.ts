@@ -28,10 +28,14 @@ export interface SpeciesGuideConfigState {
  * createSpeciesGuideConfig wires the guide config into a component's lifecycle.
  * Call during component initialisation (it registers an `$effect`).
  *
- * @param getFromStore reads `$dashboardSettings?.speciesGuide` in the caller's reactive
+ * @param getFromStore reads `$speciesGuideStoreSettings` in the caller's reactive
  *   scope; when the authenticated settings load has populated it, it wins (and reflects
- *   live edits on the settings page). When absent (guest, or settings not yet loaded),
+ *   live edits on the settings page). When null (guest, or settings not yet loaded),
  *   the public dashboard-settings endpoint is used instead.
+ *
+ *   Must be `$speciesGuideStoreSettings` and not `$dashboardSettings?.speciesGuide` —
+ *   the latter is a seeded, always-truthy object, so it would suppress the public
+ *   fallback and gate guests off permanently.
  */
 export function createSpeciesGuideConfig(
   getFromStore: () => Partial<SpeciesGuideSettings> | null | undefined

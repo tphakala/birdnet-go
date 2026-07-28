@@ -101,6 +101,12 @@ function enableGuide(): void {
       },
     },
   });
+  // Simulate a completed authenticated settings load. Gating reads
+  // $speciesGuideStoreSettings, which stays null until dataLoaded so that a guest
+  // (whose settings load never runs) falls through to the public dashboard
+  // endpoint rather than being pinned to the seeded enabled:false defaults.
+  // updateSection alone does not set it — in a real session loadSettings() does.
+  settingsStore.update(state => ({ ...state, dataLoaded: true }));
 }
 
 describe('DetectionDetail species guide panel', () => {

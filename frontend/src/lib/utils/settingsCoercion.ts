@@ -793,27 +793,48 @@ export function coerceNotificationSettings(
  * Main coercion function for all settings
  */
 /**
- * coerceSpeciesGuideSettings normalizes the species guide config. The show*
- * flags default to true to match the backend's *bool "unset means on" semantics.
+ * coerceSpeciesGuideSettings normalizes the species guide config.
+ *
+ * It coerces only the keys actually PRESENT on the input. Synthesizing the absent
+ * ones from defaults looks harmless — the defaults match the backend's *bool "unset
+ * means on" semantics — but this function also runs on the way OUT, over whatever
+ * object a caller is about to PATCH. Filling in the gaps there turns a partial
+ * update into a full overwrite: a request carrying only `enabled` silently rewrote
+ * `showNotes` back to true for a user who had turned it off, and reset `warmTopN`
+ * to 50. Absent means "leave alone"; the backend applies its own defaults on load.
  */
 function coerceSpeciesGuideSettings(value: unknown): UnknownSettings {
   const sg: Record<string, unknown> =
     value != null && typeof value === 'object' && !Array.isArray(value)
       ? (value as Record<string, unknown>)
       : {};
+
+  const out: UnknownSettings = {};
+  const has = (key: string): boolean => Object.prototype.hasOwnProperty.call(sg, key);
+
   // Taxonomy/common names/links come from the offline OpenFauna dataset; the only
   // toggle is enableWikipedia (online descriptions), which defaults to off.
-  return {
-    enabled: coerceBoolean(sg.enabled, false),
-    enableWikipedia: coerceBoolean(sg.enableWikipedia, false),
-    enableSupplementaryLinks: coerceBoolean(sg.enableSupplementaryLinks, false),
-    warmTopN: coerceNumber(sg.warmTopN, 0, 1000, 50), // max mirrors backend SpeciesGuideMaxWarmTopN
-    preFetchEnabled: coerceBoolean(sg.preFetchEnabled, true),
-    showNotes: coerceBoolean(sg.showNotes, true),
-    showEnrichments: coerceBoolean(sg.showEnrichments, true),
-    showSimilarSpecies: coerceBoolean(sg.showSimilarSpecies, true),
-    showTaxonomy: coerceBoolean(sg.showTaxonomy, true),
-  };
+  const booleans: Array<[string, boolean]> = [
+    ['enabled', false],
+    ['enableWikipedia', false],
+    ['enableSupplementaryLinks', false],
+    ['preFetchEnabled', true],
+    ['showNotes', true],
+    ['showEnrichments', true],
+    ['showSimilarSpecies', true],
+    ['showTaxonomy', true],
+  ];
+  for (const [key, fallback] of booleans) {
+    if (has(key)) {
+      // eslint-disable-next-line security/detect-object-injection -- key comes from the literal list above
+      out[key] = coerceBoolean(sg[key], fallback);
+    }
+  }
+  if (has('warmTopN')) {
+    // Bounds mirror the backend's SpeciesGuideMaxWarmTopN.
+    out.warmTopN = coerceNumber(sg.warmTopN, 0, 1000, 50);
+  }
+  return out;
 }
 
 /** coerceDashboardSettings passes dashboard through, coercing known sub-sections. */

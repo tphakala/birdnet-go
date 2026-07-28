@@ -6,7 +6,7 @@
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
   import { isAuthenticated } from '$lib/utils/auth';
-  import { dashboardSettings } from '$lib/stores/settings';
+  import { speciesGuideStoreSettings } from '$lib/stores/settings';
   import { createSpeciesGuideConfig } from '$lib/utils/speciesGuideConfig.svelte';
   import SpeciesComparison from '$lib/desktop/components/ui/SpeciesComparison.svelte';
   import SpeciesNotes from '$lib/desktop/components/ui/SpeciesNotes.svelte';
@@ -55,7 +55,7 @@
   // settings store is populated only by the auth-protected full-settings load.
   // resolveSpeciesGuideConfig prefers the store value and falls back to one cached
   // fetch of the public endpoint.
-  const guideConfig = createSpeciesGuideConfig(() => $dashboardSettings?.speciesGuide);
+  const guideConfig = createSpeciesGuideConfig(() => $speciesGuideStoreSettings);
   let guideEnabled = $derived(guideConfig.enabled);
   let showSimilarSpecies = $derived(guideConfig.showSimilarSpecies);
   let showNotes = $derived(guideConfig.showNotes);

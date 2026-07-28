@@ -1193,6 +1193,27 @@ export const dashboardSettings = derived(
   $store => $store.formData.realtime?.dashboard
 );
 
+/**
+ * The species guide settings, or null until the authenticated settings load has
+ * actually populated them.
+ *
+ * Consumers must NOT read `$dashboardSettings?.speciesGuide` directly to decide
+ * whether the store knows anything: `createEmptySettings()` seeds a fully-formed
+ * speciesGuide object (enabled:false), so that expression is a truthy object from
+ * the very first render, for guests and authenticated users alike. Gating on it
+ * makes the public-endpoint fallback in resolveSpeciesGuideConfig unreachable, and
+ * an unauthenticated visitor — whose settings load never runs — is pinned at
+ * enabled:false forever even though the guide endpoints are deliberately public.
+ *
+ * Keying on dataLoaded distinguishes "the store has real settings" from "the store
+ * is still at its seeded defaults", which is the actual question. It also stays
+ * correct if a public-settings load path is later added to the store: that path
+ * sets dataLoaded, and this derived starts serving guests without further change.
+ */
+export const speciesGuideStoreSettings = derived(settingsStore, $store =>
+  $store.dataLoaded ? ($store.formData.realtime?.dashboard?.speciesGuide ?? null) : null
+);
+
 export const dashboardLayout = derived(
   settingsStore,
   $store => $store.formData.realtime?.dashboard?.layout

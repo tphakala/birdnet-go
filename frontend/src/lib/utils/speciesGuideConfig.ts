@@ -66,10 +66,14 @@ function nowMs(): number {
 /**
  * Resolve the guide UI config for a component that may render for guests.
  *
- * @param fromStore the current `$dashboardSettings?.speciesGuide` value; when
- *   the authenticated settings load has populated it, it wins (and reflects
- *   live edits on the settings page). When absent (guest, or settings not yet
- *   loaded), the public dashboard-settings endpoint is fetched once and cached.
+ * @param fromStore the current `$speciesGuideStoreSettings` value; when the
+ *   authenticated settings load has populated it, it wins (and reflects live edits
+ *   on the settings page). When null (guest, or settings not yet loaded), the
+ *   public dashboard-settings endpoint is fetched once and cached.
+ *
+ *   Pass `$speciesGuideStoreSettings`, NOT `$dashboardSettings?.speciesGuide`: the
+ *   latter is a truthy seeded object from the first render, which would make the
+ *   fallback below unreachable and leave guests permanently gated off.
  */
 export function resolveSpeciesGuideConfig(
   fromStore: Partial<SpeciesGuideSettings> | null | undefined

@@ -4,7 +4,14 @@ vi.mock('$lib/utils/api', () => ({
   api: { get: vi.fn() },
 }));
 
+import { get } from 'svelte/store';
 import { api } from '$lib/utils/api';
+import {
+  dashboardSettings,
+  settingsActions,
+  settingsStore,
+  speciesGuideStoreSettings,
+} from '$lib/stores/settings';
 import {
   resolveSpeciesGuideConfig,
   resetSpeciesGuideConfigCacheForTests,
@@ -39,6 +46,51 @@ describe('toSpeciesGuideUIConfig', () => {
       showSimilarSpecies: false,
       showTaxonomy: false,
     });
+  });
+});
+
+/**
+ * Regression: guests saw no species guide at all.
+ *
+ * createEmptySettings() seeds a fully-formed speciesGuide object, so
+ * `$dashboardSettings?.speciesGuide` is truthy from the first render for everyone.
+ * Gating on that made resolveSpeciesGuideConfig's public-endpoint fallback
+ * unreachable, and an unauthenticated visitor — whose settings load never runs —
+ * stayed pinned at the seeded enabled:false forever, even though the guide
+ * endpoints are deliberately public.
+ *
+ * speciesGuideStoreSettings is the store-level guard: null until dataLoaded, so
+ * "seeded defaults" is distinguishable from "real settings".
+ */
+describe('speciesGuideStoreSettings (guest gating guard)', () => {
+  beforeEach(() => {
+    settingsActions.resetAllSettings();
+    // resetAllSettings restores formData but leaves dataLoaded alone, so clear it
+    // explicitly to model a session that has never completed a settings load.
+    settingsStore.update(state => ({ ...state, dataLoaded: false }));
+  });
+
+  it('is null on a fresh store even though the seeded speciesGuide object exists', () => {
+    // The seeded object is present and truthy — the exact shape that made the old
+    // `if (fromStore)` check short-circuit.
+    expect(get(dashboardSettings)?.speciesGuide).toBeTruthy();
+    // ...but the store has not loaded anything, so gating must not trust it.
+    expect(get(speciesGuideStoreSettings)).toBeNull();
+  });
+
+  it('exposes the settings once an authenticated load has completed', () => {
+    settingsStore.update(state => ({ ...state, dataLoaded: true }));
+    expect(get(speciesGuideStoreSettings)).toBeTruthy();
+  });
+
+  it('null store settings resolve via the public endpoint, not the seeded defaults', async () => {
+    resetSpeciesGuideConfigCacheForTests();
+    vi.mocked(api.get).mockResolvedValue({ speciesGuide: { enabled: true } });
+
+    await expect(resolveSpeciesGuideConfig(get(speciesGuideStoreSettings))).resolves.toMatchObject({
+      enabled: true,
+    });
+    expect(api.get).toHaveBeenCalledWith('/api/v2/settings/dashboard');
   });
 });
 

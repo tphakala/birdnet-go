@@ -20,7 +20,7 @@ Props:
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
-  import { settingsStore, dashboardSettings } from '$lib/stores/settings';
+  import { settingsStore, speciesGuideStoreSettings } from '$lib/stores/settings';
   import { createSpeciesGuideConfig } from '$lib/utils/speciesGuideConfig.svelte';
   import SpeciesDetailModal from '$lib/desktop/features/analytics/components/modals/SpeciesDetailModal.svelte';
 
@@ -40,7 +40,7 @@ Props:
   // guests unable to open the guide on a public instance. resolveSpeciesGuideConfig
   // prefers the store value and falls back to one cached fetch of the public
   // GET /settings/dashboard endpoint — matching SpeciesDetailModal / DetectionDetail.
-  const guideConfig = createSpeciesGuideConfig(() => $dashboardSettings?.speciesGuide);
+  const guideConfig = createSpeciesGuideConfig(() => $speciesGuideStoreSettings);
   let guideEnabled = $derived(guideConfig.enabled);
 
   // Minimal species shape the guide modal needs. A live ping has no aggregate
