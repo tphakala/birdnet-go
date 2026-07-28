@@ -39,7 +39,7 @@ Source: MIT
 
 ### github.com/buger/jsonparser
 
-License: https://github.com/buger/jsonparser/blob/v1.2.0/LICENSE
+License: https://github.com/buger/jsonparser/blob/v1.3.1/LICENSE
 Source: MIT
 
 ### github.com/cespare/xxhash/v2
@@ -144,7 +144,7 @@ Source: BSD-3-Clause
 
 ### github.com/googleapis/enterprise-certificate-proxy/client
 
-License: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.18/LICENSE
+License: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.19/LICENSE
 Source: Apache-2.0
 
 ### github.com/googleapis/gax-go/v2
@@ -229,7 +229,7 @@ Source: MIT
 
 ### github.com/mattn/go-isatty
 
-License: https://github.com/mattn/go-isatty/blob/v0.0.23/LICENSE
+License: https://github.com/mattn/go-isatty/blob/v0.0.24/LICENSE
 Source: MIT
 
 ### github.com/mattn/go-sqlite3
@@ -284,7 +284,7 @@ Source: BSD-3-Clause
 
 ### github.com/prometheus/client_golang/prometheus
 
-License: https://github.com/prometheus/client_golang/blob/v1.24.0/LICENSE
+License: https://github.com/prometheus/client_golang/blob/v1.24.1/LICENSE
 Source: Apache-2.0
 
 ### github.com/prometheus/client_model/go
@@ -294,7 +294,7 @@ Source: Apache-2.0
 
 ### github.com/prometheus/common
 
-License: https://github.com/prometheus/common/blob/v0.70.0/LICENSE
+License: https://github.com/prometheus/common/blob/v0.70.1/LICENSE
 Source: Apache-2.0
 
 ### github.com/prometheus/procfs
@@ -379,7 +379,7 @@ Source: MIT
 
 ### github.com/tidwall/rtree
 
-License: https://github.com/tidwall/rtree/blob/v1.10.0/LICENSE
+License: https://github.com/tidwall/rtree/blob/v1.11.0/LICENSE
 Source: MIT
 
 ### github.com/tklauser/go-sysconf
@@ -504,7 +504,7 @@ Source: Apache-2.0
 
 ### go.yaml.in/yaml/v3
 
-License: https://github.com/yaml/go-yaml/blob/v3.0.4/LICENSE
+License: https://github.com/yaml/go-yaml/blob/v3.0.5/LICENSE
 Source: MIT
 
 ### go.yaml.in/yaml/v4
@@ -554,12 +554,12 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.289.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.290.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/e75dac1f907d/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/6c54dddc4772/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
