@@ -26,8 +26,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-SCRIPT_VERSION = "1.2.0"
-SCHEMA_VERSION = "v2-2026-05-21"
+SCRIPT_VERSION = "1.2.1"
+SCHEMA_VERSION = "v2-2026-06-14"
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -125,8 +125,9 @@ V2_EXPECTED_COLUMNS: dict[str, list[str]] = {
     "hourly_weathers": [
         "id", "daily_events_id", "time", "temperature", "feels_like",
         "temp_min", "temp_max", "pressure", "humidity", "visibility",
-        "wind_speed", "wind_deg", "wind_gust", "clouds", "weather_main",
-        "weather_desc", "weather_icon", "created_at",
+        "wind_speed", "wind_deg", "wind_gust", "clouds", "precipitation",
+        "precipitation_type", "weather_main", "weather_desc", "weather_icon",
+        "created_at",
     ],
     "app_metadata": ["key", "value"],
 }
@@ -533,6 +534,8 @@ V2_COLUMN_DEFS: dict[str, dict[str, str]] = {
         "wind_deg": "INTEGER NOT NULL DEFAULT 0",
         "wind_gust": "REAL NOT NULL DEFAULT 0",
         "clouds": "INTEGER NOT NULL DEFAULT 0",
+        "precipitation": "REAL NOT NULL DEFAULT 0",
+        "precipitation_type": "TEXT NOT NULL DEFAULT ''",
         "weather_main": "TEXT NOT NULL DEFAULT ''",
         "weather_desc": "TEXT NOT NULL DEFAULT ''",
         "weather_icon": "TEXT NOT NULL DEFAULT ''",
