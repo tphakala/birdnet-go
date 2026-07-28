@@ -565,10 +565,8 @@ func TestDecodeMetadataRows_AllNamelessIsAnError(t *testing.T) {
 	t.Parallel()
 
 	// Well-formed JSON, but the name lives under a key this decoder does not know.
-	input := strings.Join([]string{
-		`{"name":"Turdus merula","taxonomy":{"class":"Aves"}}`,
-		`{"name":"Parus major","taxonomy":{"class":"Aves"}}`,
-	}, "\n")
+	input := `{"name":"Turdus merula","taxonomy":{"class":"Aves"}}
+{"name":"Parus major","taxonomy":{"class":"Aves"}}`
 
 	var got []string
 	err := decodeMetadataRows(strings.NewReader(input), func(sci string, _ Meta) error {

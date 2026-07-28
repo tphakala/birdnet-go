@@ -966,7 +966,7 @@ func TestGuideCache_SaveGuide_SkipsWriteOnCancelledContext(t *testing.T) {
 
 	// A cancelled context must not write. Use a distinct species so a skipped write is
 	// unambiguous rather than masked by the row above.
-	cancelled, cancel := context.WithCancel(context.Background())
+	cancelled, cancel := context.WithCancel(t.Context())
 	cancel()
 	c.saveGuide(cancelled, "Turdus pilaris", "en", guide)
 
