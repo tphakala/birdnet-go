@@ -71,11 +71,6 @@ const (
 	// when the user actually opens its guide. Mirrors the API layer's bound on the
 	// similar-species fan-out.
 	maxConcurrentPreFetches = 4
-	// minPrimeBatchSize is the warm-set size at which batch-priming the embedded
-	// dataset memos beats resolving each species on its own. Priming is two full
-	// dataset scans; an individual lookup early-exits on its match, averaging half a
-	// scan. Break-even is around two species, so this sits comfortably past it.
-	minPrimeBatchSize = 4
 	// providerSetKeyPrefix namespaces the provider-set cache key so it can never
 	// collide with a value written by an older build.
 	//
@@ -928,14 +923,11 @@ func (c *GuideCache) WarmForSpecies(speciesNames []string) {
 		// otherwise decompress and scan the ~20 MB translations blob on its memo
 		// miss, so a default 50-species warm paid dozens of full scans.
 		//
-		// Only worth it past a handful of species: priming is two FULL scans, while
-		// a single-name lookup stops as soon as it finds its record and so costs
-		// about half a scan on average. Below the threshold priming would be the
-		// slower option, which matters because a small warm set is exactly the case
-		// where the warm is expected to finish promptly.
-		if len(names) >= minPrimeBatchSize {
-			openfauna.PrimeCaches(names, c.warmLocale)
-		}
+		// Unconditional: PrimeCaches drops already-memoized names and skips a pass
+		// with nothing left to resolve, and each of its scans early-exits once the
+		// batch is complete — so even a one-species warm costs no more than the
+		// single-name path it replaces.
+		openfauna.PrimeCaches(names, c.warmLocale)
 		for _, n := range names {
 			if c.shouldQuit() {
 				return

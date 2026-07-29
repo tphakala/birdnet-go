@@ -761,6 +761,24 @@ func (c *Handler) similarSpeciesCandidates(focal string) (genus string, candidat
 // rendered an "unavailable" guide panel beside a populated-looking rail of bare
 // scientific names with no hint the data was degraded.
 func (c *Handler) resolveSimilarSpecies(ctx context.Context, candidates []similarCandidate, locale string, withLinks, supplementary bool) (entries []SimilarSpeciesEntry, cacheUnavailable bool) {
+	// Resolve every candidate against the embedded datasets in ONE pass per blob
+	// before fanning out. Each candidate's gc.Get otherwise drives its own
+	// openfauna.LookupCommonName + LookupMeta, and a memo miss there decompresses
+	// and scans an embedded blob — up to maxSimilarSpecies scans of the ~20 MB
+	// translations data per request, on the Pi-class hardware this targets, inside
+	// similarSpeciesResolveTimeout.
+	//
+	// No batch-size guard is needed: PrimeCaches excludes names it has already
+	// memoized and skips a pass whose work set is empty, so the common warm-cache
+	// request pays map lookups only. Priming before the deadline starts (rather than
+	// inside it) keeps the whole timeout available to the fetches it is meant to
+	// bound; the scans themselves are CPU-bound and cannot be cancelled anyway.
+	primeNames := make([]string, 0, len(candidates))
+	for i := range candidates {
+		primeNames = append(primeNames, candidates[i].scientificName)
+	}
+	openfauna.PrimeCaches(primeNames, locale)
+
 	// Bound the whole fan-out so a cold cache (live external fetches) cannot
 	// block the request indefinitely; unresolved candidates fall back to
 	// links-only (or name-only when enrichments are off) below.

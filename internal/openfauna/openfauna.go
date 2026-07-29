@@ -913,6 +913,12 @@ func LookupCommonName(scientificName, bngLocale string) (string, bool) {
 // Raspberry-Pi-class hardware this project targets is the difference between tens of
 // seconds of contended CPU at startup and a fraction of one.
 //
+// Names already memoized are excluded from both passes, and a pass whose work set
+// comes out empty does not scan at all — so a fully-primed batch costs one map
+// lookup per name and nothing else. That is what makes this safe to call
+// unconditionally on a request path (see the similar-species fan-out), where the
+// same species are asked for over and over.
+//
 // Absent species are memoized as absent, so a name the dataset does not carry is not
 // re-scanned later either. Safe to call concurrently; the memos are append-only.
 func PrimeCaches(scientificNames []string, bngLocale string) {
@@ -920,19 +926,37 @@ func PrimeCaches(scientificNames []string, bngLocale string) {
 		return
 	}
 	eff := mapLocale(bngLocale)
+	primeCommonNames(scientificNames, eff)
+	primeMeta(scientificNames)
+}
 
-	// One pass over the translations blob for every requested name.
-	resolved := lookupCommonNamesEffective(scientificNames, eff)
+// unprimedCommonNames returns the members of scientificNames whose common name is
+// not already memoized for eff, in input order and without blanks or duplicates.
+// The ORIGINAL input strings are returned, not their normalized forms, because
+// lookupCommonNamesEffective keys its result map by what it was given.
+func unprimedCommonNames(scientificNames []string, eff string) []string {
+	out := make([]string, 0, len(scientificNames))
+	seen := make(map[string]struct{}, len(scientificNames))
 	for _, raw := range scientificNames {
 		norm := normalizeName(raw)
 		if norm == "" {
 			continue
 		}
-		name, found := resolved[raw]
-		storeCommonNameCache(eff+"\x00"+norm, commonNameCacheEntry{name: name, found: found})
+		if _, dup := seen[norm]; dup {
+			continue
+		}
+		seen[norm] = struct{}{}
+		if _, cached := commonNameCache.Load(eff + "\x00" + norm); cached {
+			continue
+		}
+		out = append(out, raw)
 	}
+	return out
+}
 
-	// One pass over the metadata blob for every requested name still unmemoized.
+// unprimedMetaNames returns the normalized names from scientificNames whose metadata
+// is not already memoized, dropping blanks.
+func unprimedMetaNames(scientificNames []string) map[string]struct{} {
 	want := make(map[string]struct{}, len(scientificNames))
 	for _, raw := range scientificNames {
 		norm := normalizeName(raw)
@@ -944,17 +968,66 @@ func PrimeCaches(scientificNames []string, bngLocale string) {
 		}
 		want[norm] = struct{}{}
 	}
+	return want
+}
+
+// primeCommonNames memoizes the common name of every not-yet-memoized name in one
+// pass over the translations blob.
+func primeCommonNames(scientificNames []string, eff string) {
+	todo := unprimedCommonNames(scientificNames, eff)
+	if len(todo) == 0 {
+		return
+	}
+	// Scanning for the whole batch is never worse than scanning per name: the scan
+	// stops as soon as the LAST outstanding name resolves, where N separate lookups
+	// each pay their own prefix of the same blob.
+	resolved := lookupCommonNamesEffective(todo, eff)
+	for _, raw := range todo {
+		name, found := resolved[raw]
+		// normalizeName is non-empty here by construction (blanks were dropped above).
+		storeCommonNameCache(eff+"\x00"+normalizeName(raw), commonNameCacheEntry{name: name, found: found})
+	}
+}
+
+// primeMeta memoizes the metadata of every not-yet-memoized name in one pass over
+// the metadata blob.
+func primeMeta(scientificNames []string) {
+	want := unprimedMetaNames(scientificNames)
 	if len(want) == 0 {
 		return
 	}
+	// This path substitutes for LookupMeta, so it owes the same schema gate
+	// (sync.Once-guarded; logs at most once per run).
+	warnOnSchemaMismatch()
 	found := make(map[string]Meta, len(want))
-	if err := streamMetadata(func(sci string, m Meta) error {
+	// Decode names first and the full record only on a match, exactly as LookupMeta
+	// does: a full decode of every record allocates a Links map per species (~15k of
+	// them) to keep a handful. With the early exit below, priming a batch is then
+	// bounded by what the single-name path would have paid for its slowest member.
+	if err := streamMetadataNames(func(sci string, line []byte) error {
 		norm := normalizeName(sci)
-		if _, ok := want[norm]; ok {
-			found[norm] = m
+		if _, ok := want[norm]; !ok {
+			return nil
+		}
+		if _, dup := found[norm]; dup {
+			return nil
+		}
+		var rec metadataRecord
+		if err := json.Unmarshal(line, &rec); err != nil {
+			return err
+		}
+		found[norm] = Meta{
+			Class:        rec.Taxonomy.Class,
+			Order:        rec.Taxonomy.Order,
+			Family:       rec.Taxonomy.Family,
+			FamilyCommon: rec.Taxonomy.FamilyCommon,
+			Links:        rec.Links,
+		}
+		if len(found) == len(want) {
+			return errStop
 		}
 		return nil
-	}); err != nil {
+	}); err != nil && !errors.Is(err, errStop) {
 		// Leave the memo untouched so a transient scan failure is not cached as
 		// "absent"; the per-name path will retry.
 		GetLogger().Warn("openfauna cache priming failed", logger.Error(err))
