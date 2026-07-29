@@ -988,10 +988,7 @@ func (c *client) onConnectionLost(client mqtt.Client, err error) {
 	// Mark as disconnected to suppress publish errors until reconnected.
 	// This prevents flooding Sentry with ~1000+ publish errors when the broker is unreachable.
 	c.mu.Lock()
-	c.disconnected = true
-	c.publishSuppressed = false
-	c.suppressedPublishCount = 0
-	c.disconnectedSince = time.Now()
+	c.markDisconnectedLocked()
 	c.mu.Unlock()
 
 	// Publish MQTT disconnected alert event
@@ -1013,6 +1010,56 @@ func (c *client) onConnectionLost(client mqtt.Client, err error) {
 		return
 	default:
 		// Proceed with reconnect
+		c.startReconnectTimer()
+	}
+}
+
+// markDisconnectedLocked records the start of an outage and resets publish
+// suppression, so the first publish of the outage logs a warning before the rest
+// go silent.
+// CALLER MUST HOLD c.mu LOCK
+func (c *client) markDisconnectedLocked() {
+	c.disconnected = true
+	c.publishSuppressed = false
+	c.suppressedPublishCount = 0
+	c.disconnectedSince = time.Now()
+}
+
+// StartReconnectLoop arms the reconnect timer after a failed initial connection
+// attempt, so the client recovers once the broker becomes reachable.
+//
+// onConnectionLost is the only other trigger for reconnection, and paho invokes
+// it solely for connections that were established at least once. A client whose
+// first Connect failed therefore has nothing driving it, and stays dead until
+// the process restarts — the broker being unreachable for a few seconds while
+// the network comes up at boot is enough to lose MQTT for the whole run.
+//
+// Marking the client disconnected routes publishes through
+// suppressPublishWhileDisconnected, so callers get the same graceful
+// degradation as a mid-session outage (one warning, then silence) rather than
+// an error per publish.
+//
+// Safe to call when already connected, and after Disconnect: the former is a
+// no-op because onConnect has already cleared the disconnected flag, and the
+// latter finds reconnectStop closed and returns without arming a timer.
+func (c *client) StartReconnectLoop() {
+	c.mu.Lock()
+	// Guarded: onConnectionLost may already have recorded this outage, and
+	// overwriting its start time would understate the outage in logs.
+	if !c.disconnected {
+		c.markDisconnectedLocked()
+	}
+	// Read under the lock: Disconnect closes this channel and
+	// reinitializeReconnectStopLocked replaces it, both while holding c.mu.
+	stop := c.reconnectStop
+	c.mu.Unlock()
+
+	select {
+	case <-stop:
+		GetLogger().Debug("Reconnect mechanism stopped, not arming reconnect loop",
+			logger.String("broker", c.config.Broker),
+			logger.String("client_id", c.config.ClientID))
+	default:
 		c.startReconnectTimer()
 	}
 }

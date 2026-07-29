@@ -2596,9 +2596,11 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 	// Disconnect BirdWeather client
 	p.DisconnectBwClient()
 
-	// Disconnect MQTT client if connected
+	// Disconnect MQTT client. Not gated on IsConnected(): a client whose initial
+	// connect failed is retained with its reconnect loop armed, and Disconnect is
+	// what cancels that loop. Disconnect already handles the not-connected case.
 	mqttClient := p.GetMQTTClient()
-	if mqttClient != nil && mqttClient.IsConnected() {
+	if mqttClient != nil {
 		mqttClient.Disconnect()
 	}
 

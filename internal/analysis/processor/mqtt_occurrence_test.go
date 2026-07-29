@@ -59,6 +59,10 @@ func (m *MockMqttClientWithCapture) RegisterOnConnectHandler(_ mqtt.OnConnectHan
 	// Not needed for test
 }
 
+func (m *MockMqttClientWithCapture) StartReconnectLoop() {
+	// Not needed for test
+}
+
 func TestMqttAction_IncludesOccurrence(t *testing.T) {
 	now := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC)
 

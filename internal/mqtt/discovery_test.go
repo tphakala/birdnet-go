@@ -85,6 +85,7 @@ func (m *mockPublisher) Publish(_ context.Context, _, _ string) error          {
 func (m *mockPublisher) SetControlChannel(_ chan string)                       {}
 func (m *mockPublisher) TestConnection(_ context.Context, _ chan<- TestResult) {}
 func (m *mockPublisher) RegisterOnConnectHandler(_ OnConnectHandler)           {}
+func (m *mockPublisher) StartReconnectLoop()                                   {}
 
 func (m *mockPublisher) PublishWithRetain(_ context.Context, topic, data string, _ bool) error {
 	if m.publishError != nil {

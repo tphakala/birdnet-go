@@ -33,6 +33,11 @@ const (
 	signalReconfigureRTSPHealth       = "reconfigure_rtsp_health"
 	signalReconfigureMonitoring       = "reconfigure_monitoring"
 	signalReconfigureLivestream       = "reconfigure_livestream"
+
+	// mqttReconfigureConnectTimeout bounds the initial connect attempt made when
+	// MQTT settings are saved. Exceeding it is not fatal: the client keeps
+	// retrying in the background via its reconnect loop.
+	mqttReconfigureConnectTimeout = 30 * time.Second
 )
 
 // ControlMonitor handles control signals for realtime analysis mode
@@ -509,20 +514,27 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 		// so the OnConnect handler fires on the initial connection
 		cm.proc.RegisterHomeAssistantDiscovery(newClient, settings)
 
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		if err := newClient.Connect(ctx); err != nil {
-			cancel()
-			GetLogger().Error("Failed to connect to MQTT broker", logger.Error(err))
-			cm.notifyError("Failed to connect to MQTT broker", err)
-			return
-		}
+		ctx, cancel := context.WithTimeout(context.Background(), mqttReconfigureConnectTimeout)
+		connectErr := newClient.Connect(ctx)
 		cancel()
+
+		// A failed connect does not invalidate the new configuration: retain the
+		// client and let its reconnect loop keep trying, so saving settings while
+		// the broker happens to be down does not leave MQTT dead until restart.
+		if connectErr != nil {
+			GetLogger().Warn("Failed to connect to MQTT broker, retrying in background",
+				logger.Error(connectErr))
+			newClient.StartReconnectLoop()
+		}
 
 		// Safely set the new client
 		cm.proc.SetMQTTClient(newClient)
 
-		GetLogger().Info("MQTT connection configured successfully")
-		cm.notifySuccess("MQTT connection configured successfully")
+		if connectErr != nil {
+			cm.notifySuccess("MQTT reconfigured, broker unreachable: retrying in background")
+		} else {
+			cm.notifySuccess("MQTT connection configured successfully")
+		}
 	} else {
 		GetLogger().Info("MQTT connection disabled")
 		cm.notifySuccess("MQTT connection disabled")
