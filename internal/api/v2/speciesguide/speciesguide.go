@@ -1168,44 +1168,54 @@ func scoreToExpectedness(score float64) string {
 	}
 }
 
-// computeCurrentSeason returns a hemisphere-aware season token for the given
-// latitude and time. Near the equator it returns wet/dry-season tokens.
-func computeCurrentSeason(latitude float64, now time.Time) string {
-	month := now.Month()
-
-	// Equatorial band: bimodal wet/dry seasons.
-	const equatorialBand = 10.0
-	if latitude <= equatorialBand && latitude >= -equatorialBand {
-		switch month {
-		case time.March, time.April, time.May:
-			return seasonWet1
-		case time.June, time.July, time.August:
-			return seasonDry1
-		case time.September, time.October, time.November:
-			return seasonWet2
-		default: // Dec, Jan, Feb
-			return seasonDry2
-		}
-	}
-
-	northern := latitude >= 0
-	switch month {
-	case time.March, time.April, time.May:
-		return seasonForHemisphere(northern, seasonSpring, seasonAutumn)
-	case time.June, time.July, time.August:
-		return seasonForHemisphere(northern, seasonSummer, seasonWinter)
-	case time.September, time.October, time.November:
-		return seasonForHemisphere(northern, seasonAutumn, seasonSpring)
-	default: // Dec, Jan, Feb
-		return seasonForHemisphere(northern, seasonWinter, seasonSummer)
-	}
+// seasonTokenByConfName maps the season names conf.GetDefaultSeasons returns onto
+// this package's season tokens. The two vocabularies agree everywhere except one
+// name — conf says "fall", the API and the frontend's i18n keys say "autumn" — so
+// the mapping is explicit rather than a pass-through that would emit a token no
+// locale can translate. TestSeasonTokenByConfName_CoversEveryDefaultSeason pins
+// that it stays exhaustive if conf's names ever change.
+var seasonTokenByConfName = map[string]string{
+	"spring": seasonSpring,
+	"summer": seasonSummer,
+	"fall":   seasonAutumn,
+	"winter": seasonWinter,
+	"wet1":   seasonWet1,
+	"dry1":   seasonDry1,
+	"wet2":   seasonWet2,
+	"dry2":   seasonDry2,
 }
 
-func seasonForHemisphere(northern bool, northSeason, southSeason string) string {
-	if northern {
-		return northSeason
+// computeCurrentSeason returns a hemisphere-aware season token for the given
+// latitude and time. Near the equator it returns wet/dry-season tokens.
+//
+// The season table comes from conf.GetDefaultSeasons, which is what the species
+// tracker uses (internal/analysis/species/season.go). This used to bucket by whole
+// months — Mar/Apr/May = spring — while the tracker used the solstice/equinox dates
+// conf defines (Mar 20, Jun 21, Sep 22, Dec 21), so the guide badge and the tracker
+// disagreed for roughly three weeks each quarter. Reading one table is what stops
+// them drifting again. The hemisphere and equatorial-band classification arrives the
+// same way (GetDefaultSeasons calls conf.DetectHemisphere), replacing a second copy
+// of the ±10° band that lived here.
+func computeCurrentSeason(latitude float64, now time.Time) string {
+	var token string
+	var start time.Time
+	for name, season := range conf.GetDefaultSeasons(latitude) {
+		tok, known := seasonTokenByConfName[name]
+		if !known {
+			continue
+		}
+		// The most recent start on or before now. A season whose date this year is
+		// still ahead of us last began a year ago — that is what makes December's
+		// winter the answer in January, without a special case for the wrap.
+		began := time.Date(now.Year(), time.Month(season.StartMonth), season.StartDay, 0, 0, 0, 0, now.Location())
+		if began.After(now) {
+			began = began.AddDate(-1, 0, 0)
+		}
+		if token == "" || began.After(start) {
+			token, start = tok, began
+		}
 	}
-	return southSeason
+	return token
 }
 
 // ebirdSpeciesCode resolves the eBird species code for a scientific name from

@@ -346,6 +346,80 @@ func TestComputeCurrentSeason_AllBranches(t *testing.T) {
 	}
 }
 
+// TestComputeCurrentSeason_MatchesTrackerBoundaries pins the dates where the old
+// whole-month bucketing disagreed with the rest of the app. conf.GetDefaultSeasons
+// starts the northern seasons on the solstices and equinoxes, so the first ~3 weeks
+// of March, June, September and December still belong to the PREVIOUS season — the
+// span in which the guide badge and the species tracker used to contradict each
+// other. Southern is the same table shifted six months.
+func TestComputeCurrentSeason_MatchesTrackerBoundaries(t *testing.T) {
+	t.Parallel()
+	const northLat, southLat = 52.0, -33.0
+	cases := []struct {
+		name string
+		lat  float64
+		day  time.Time
+		want string
+		// oldBucketing is what whole-month bucketing answered, kept so the rows that
+		// encode the actual fix are distinguishable from the ones that merely confirm
+		// the boundary (where the two schemes agree).
+		oldBucketing string
+	}{
+		{"north Mar 10 is still winter", northLat, time.Date(2026, time.March, 10, 0, 0, 0, 0, time.UTC), seasonWinter, seasonSpring},
+		{"north Mar 20 turns spring", northLat, time.Date(2026, time.March, 20, 0, 0, 0, 0, time.UTC), seasonSpring, seasonSpring},
+		{"north Jun 10 is still spring", northLat, time.Date(2026, time.June, 10, 0, 0, 0, 0, time.UTC), seasonSpring, seasonSummer},
+		{"north Sep 21 is still summer", northLat, time.Date(2026, time.September, 21, 0, 0, 0, 0, time.UTC), seasonSummer, seasonAutumn},
+		{"north Sep 22 turns autumn", northLat, time.Date(2026, time.September, 22, 0, 0, 0, 0, time.UTC), seasonAutumn, seasonAutumn},
+		{"north Dec 10 is still autumn", northLat, time.Date(2026, time.December, 10, 0, 0, 0, 0, time.UTC), seasonAutumn, seasonWinter},
+		{"south Mar 10 is still summer", southLat, time.Date(2026, time.March, 10, 0, 0, 0, 0, time.UTC), seasonSummer, seasonAutumn},
+		{"south Dec 10 is still spring", southLat, time.Date(2026, time.December, 10, 0, 0, 0, 0, time.UTC), seasonSpring, seasonSummer},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equalf(t, tc.want, computeCurrentSeason(tc.lat, tc.day),
+				"whole-month bucketing used to answer %q here", tc.oldBucketing)
+		})
+	}
+}
+
+// TestComputeCurrentSeason_UsesConfSeasonTable is the anti-drift check: for every
+// latitude band, the token this endpoint reports must be the one whose conf start
+// date is the most recent on or before the given instant. If conf's dates move,
+// this fails here rather than silently disagreeing with the species tracker.
+func TestComputeCurrentSeason_UsesConfSeasonTable(t *testing.T) {
+	t.Parallel()
+	for _, lat := range []float64{52.0, -33.0, 2.0} {
+		seasons := conf.GetDefaultSeasons(lat)
+		require.NotEmpty(t, seasons)
+		// Sample the day before and the day of each season start: the boundary is
+		// where a month-bucketing regression would show up.
+		for name, s := range seasons {
+			start := time.Date(2026, time.Month(s.StartMonth), s.StartDay, 0, 0, 0, 0, time.UTC)
+			assert.Equalf(t, seasonTokenByConfName[name], computeCurrentSeason(lat, start),
+				"lat=%v: %s must begin on its conf start date %s", lat, name, start.Format(time.DateOnly))
+			assert.NotEqualf(t, seasonTokenByConfName[name], computeCurrentSeason(lat, start.AddDate(0, 0, -1)),
+				"lat=%v: %s must not have begun the day before its conf start date", lat, name)
+		}
+	}
+}
+
+// TestSeasonTokenByConfName_CoversEveryDefaultSeason keeps the name mapping
+// exhaustive. conf owns the season names; an upstream rename (or a new season)
+// would otherwise be skipped silently, leaving computeCurrentSeason to pick the
+// most recent of the names it still recognizes — a wrong but entirely plausible
+// answer.
+func TestSeasonTokenByConfName_CoversEveryDefaultSeason(t *testing.T) {
+	t.Parallel()
+	for _, lat := range []float64{52.0, -33.0, 2.0} {
+		for name := range conf.GetDefaultSeasons(lat) {
+			token, ok := seasonTokenByConfName[name]
+			assert.Truef(t, ok, "conf season %q (lat=%v) has no API token", name, lat)
+			assert.NotEmptyf(t, token, "conf season %q maps to an empty token", name)
+		}
+	}
+}
+
 // TestExpectednessAndEbirdCode_NoProcessor covers the nil-Processor guards: with
 // no loaded classifier, expectedness and the eBird code resolve to empty (the
 // success paths need a loaded geomodel, out of unit-test scope).
