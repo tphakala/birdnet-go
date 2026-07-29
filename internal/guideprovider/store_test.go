@@ -335,34 +335,17 @@ func TestGORMGuideStore_DBErrorsAreWrappedAndCounted(t *testing.T) {
 	// (store.metrics != nil), exercising both the record and wrap paths.
 }
 
-func TestEncodeDecodeSimilarSpecies(t *testing.T) {
-	t.Parallel()
-	in := []SimilarSpecies{
-		{ScientificName: "Turdus pilaris", CommonName: "Fieldfare", Relationship: "same_genus"},
-		{ScientificName: "Turdus iliacus", CommonName: "Redwing", Relationship: "same_genus"},
-	}
-	encoded := encodeSimilarSpecies(in)
-	assert.NotEmpty(t, encoded)
-	out := decodeSimilarSpecies(encoded)
-	assert.Equal(t, in, out)
-
-	assert.Empty(t, encodeSimilarSpecies(nil))
-	assert.Nil(t, decodeSimilarSpecies(""))
-	assert.Nil(t, decodeSimilarSpecies("not json"))
-}
-
 func TestEntryGuideRoundTrip(t *testing.T) {
 	t.Parallel()
 	g := &SpeciesGuide{
-		CommonName:     "Common Blackbird",
-		Description:    "## Description\nA bird.",
-		Genus:          "Turdus",
-		Family:         "Turdidae",
-		SourceURL:      "https://en.wikipedia.org/wiki/Common_blackbird",
-		License:        "CC BY-SA 4.0",
-		SimilarSpecies: []SimilarSpecies{{ScientificName: "Turdus pilaris", Relationship: "same_genus"}},
-		CachedAt:       time.Now().Truncate(time.Second),
-		Partial:        true,
+		CommonName:  "Common Blackbird",
+		Description: "## Description\nA bird.",
+		Genus:       "Turdus",
+		Family:      "Turdidae",
+		SourceURL:   "https://en.wikipedia.org/wiki/Common_blackbird",
+		License:     "CC BY-SA 4.0",
+		CachedAt:    time.Now().Truncate(time.Second),
+		Partial:     true,
 	}
 	entry := guideToEntry("Turdus merula", "en", WikipediaProviderName, g)
 	back := entryToGuide(entry)
@@ -372,6 +355,5 @@ func TestEntryGuideRoundTrip(t *testing.T) {
 	assert.Equal(t, g.Description, back.Description)
 	assert.Equal(t, g.Genus, back.Genus)
 	assert.Equal(t, WikipediaProviderName, back.SourceProvider)
-	assert.Equal(t, g.SimilarSpecies, back.SimilarSpecies)
 	assert.True(t, back.Partial)
 }

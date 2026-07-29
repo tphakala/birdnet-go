@@ -1990,7 +1990,6 @@
       },
       "guide": {
         "title": "Guide",
-        "similar": "Lignende arter",
         "noSimilar": "Ingen lignende arter fundet",
         "loading": "Indlæser guide…",
         "unavailable": "Artsguiden er midlertidigt utilgængelig. Prøv igen senere.",
@@ -2031,13 +2030,9 @@
       },
       "similar": {
         "title": "Lignende arter",
-        "compare": "Sammenlign",
-        "loading": "Indlæser lignende arter…",
         "empty": "Ingen lignende arter fundet.",
-        "similar": "Lignende",
         "versus": "vs {species}",
         "selectPrompt": "Vælg en art for at sammenligne med {species}.",
-        "noGuideAvailable": "Ingen guide tilgængelig",
         "linksOnly": "Kun links",
         "exploreResources": "Ingen sammenligningsdetaljer. Udforsk ressourcer:",
         "cardLoading": "Indlæser sammenligning…",

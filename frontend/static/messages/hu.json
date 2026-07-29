@@ -1990,7 +1990,6 @@
       },
       "guide": {
         "title": "Útmutató",
-        "similar": "Hasonló fajok",
         "noSimilar": "Nem találhatók hasonló fajok",
         "loading": "Útmutató betöltése…",
         "unavailable": "A fajútmutató átmenetileg nem érhető el. Kérjük, próbálja újra később.",
@@ -2031,13 +2030,9 @@
       },
       "similar": {
         "title": "Hasonló fajok",
-        "compare": "Összehasonlítás",
-        "loading": "Hasonló fajok betöltése…",
         "empty": "Nem találhatók hasonló fajok.",
-        "similar": "Hasonló",
         "versus": "vs {species}",
         "selectPrompt": "Válasszon egy fajt a(z) {species} összehasonlításához.",
-        "noGuideAvailable": "Nincs elérhető útmutató",
         "linksOnly": "Csak hivatkozások",
         "exploreResources": "Nincs összehasonlítási részlet. Források felfedezése:",
         "cardLoading": "Összehasonlítás betöltése…",

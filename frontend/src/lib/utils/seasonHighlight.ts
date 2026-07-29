@@ -3,20 +3,11 @@
  * the species guide season badge. The backend (computeCurrentSeason) emits
  * hemisphere-aware tokens: spring/summer/autumn/winter, plus wet1/dry1/wet2/dry2
  * for the equatorial band. This module is pure and self-contained.
+ *
+ * The hemisphere/equatorial-band classification deliberately lives only on the
+ * backend, which is the authority: the token arrives already resolved, so a copy
+ * of that logic here could only ever drift out of agreement with it.
  */
-
-export type Hemisphere = 'northern' | 'southern' | 'equatorial';
-
-/** Latitude band (degrees) treated as equatorial (bimodal wet/dry seasons). */
-const EQUATORIAL_BAND = 10;
-
-/** hemisphereForLatitude classifies a latitude into a hemisphere band. */
-export function hemisphereForLatitude(latitude: number): Hemisphere {
-  if (latitude <= EQUATORIAL_BAND && latitude >= -EQUATORIAL_BAND) {
-    return 'equatorial';
-  }
-  return latitude >= 0 ? 'northern' : 'southern';
-}
 
 /**
  * Stable lucide icon identifier per season token. The badge renders the matching
@@ -39,14 +30,10 @@ const SEASON_ICON = new Map<string, SeasonIcon>([
 ]);
 
 export interface SeasonHighlight {
-  /** Normalized season token. */
-  token: string;
   /** i18n key for the localized season label. */
   i18nKey: string;
   /** Lucide icon identifier, or null when the token is unknown. */
   icon: SeasonIcon | null;
-  /** Whether this is an equatorial wet/dry season token. */
-  isEquatorial: boolean;
 }
 
 /**
@@ -60,9 +47,7 @@ export function getSeasonHighlight(
   const token = currentSeason.trim().toLowerCase();
   if (!token) return null;
   return {
-    token,
     i18nKey: `analytics.species.guide.season.${token}`,
     icon: SEASON_ICON.get(token) ?? null,
-    isEquatorial: token.startsWith('wet') || token.startsWith('dry'),
   };
 }

@@ -1990,7 +1990,6 @@
       },
       "guide": {
         "title": "Guide",
-        "similar": "Liknande arter",
         "noSimilar": "Inga liknande arter hittades",
         "loading": "Laddar guide…",
         "unavailable": "Artguiden är tillfälligt otillgänglig. Försök igen senare.",
@@ -2031,13 +2030,9 @@
       },
       "similar": {
         "title": "Liknande arter",
-        "compare": "Jämför",
-        "loading": "Laddar liknande arter…",
         "empty": "Inga liknande arter hittades.",
-        "similar": "Liknande",
         "versus": "vs {species}",
         "selectPrompt": "Välj en art att jämföra med {species}.",
-        "noGuideAvailable": "Ingen guide tillgänglig",
         "linksOnly": "Endast länkar",
         "exploreResources": "Inga jämförelsedetaljer. Utforska resurser:",
         "cardLoading": "Laddar jämförelse…",

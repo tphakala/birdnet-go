@@ -144,28 +144,24 @@ func GetLogger() logger.Logger {
 	return logger.Global().Module("guideprovider")
 }
 
-// SimilarSpecies is a single related species reference within a guide.
-type SimilarSpecies struct {
-	ScientificName string `json:"scientific_name"`
-	CommonName     string `json:"common_name"`
-	Relationship   string `json:"relationship"` // same_genus | same_family | similar
-}
-
 // SpeciesGuide is the domain model returned to callers.
+//
+// It carries no similar-species list: the comparison panel is built by the API
+// layer from the taxonomy database (see speciesguide.GetSimilarSpecies), not by a
+// provider, so a field here would be dead weight on every cached row.
 type SpeciesGuide struct {
-	ScientificName string           `json:"scientific_name"`
-	CommonName     string           `json:"common_name"`
-	Description    string           `json:"description"` // may contain "## Section" markdown
-	Genus          string           `json:"genus"`
-	Family         string           `json:"family"`
-	SourceProvider string           `json:"source_provider"`
-	SourceURL      string           `json:"source_url"`
-	License        string           `json:"license"`
-	LicenseURL     string           `json:"license_url"`
-	SimilarSpecies []SimilarSpecies `json:"similar_species,omitempty"`
-	CachedAt       time.Time        `json:"cached_at"`
-	Partial        bool             `json:"partial"`  // some providers failed; data may be incomplete
-	Negative       bool             `json:"negative"` // provider found nothing
+	ScientificName string    `json:"scientific_name"`
+	CommonName     string    `json:"common_name"`
+	Description    string    `json:"description"` // may contain "## Section" markdown
+	Genus          string    `json:"genus"`
+	Family         string    `json:"family"`
+	SourceProvider string    `json:"source_provider"`
+	SourceURL      string    `json:"source_url"`
+	License        string    `json:"license"`
+	LicenseURL     string    `json:"license_url"`
+	CachedAt       time.Time `json:"cached_at"`
+	Partial        bool      `json:"partial"`  // some providers failed; data may be incomplete
+	Negative       bool      `json:"negative"` // provider found nothing
 }
 
 // IsNegativeEntry reports whether this guide is a negative (not-found) marker.
@@ -1231,9 +1227,6 @@ func mergeGuides(primary, secondary *SpeciesGuide) *SpeciesGuide {
 	}
 	if primary.LicenseURL == "" {
 		primary.LicenseURL = secondary.LicenseURL
-	}
-	if len(primary.SimilarSpecies) == 0 {
-		primary.SimilarSpecies = secondary.SimilarSpecies
 	}
 	return primary
 }

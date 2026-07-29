@@ -1990,7 +1990,6 @@
       },
       "guide": {
         "title": "Gids",
-        "similar": "Vergelijkbare soorten",
         "noSimilar": "Geen vergelijkbare soorten gevonden",
         "loading": "Gids laden…",
         "unavailable": "De soortengids is tijdelijk niet beschikbaar. Probeer het later opnieuw.",
@@ -2031,13 +2030,9 @@
       },
       "similar": {
         "title": "Vergelijkbare soorten",
-        "compare": "Vergelijken",
-        "loading": "Vergelijkbare soorten laden…",
         "empty": "Geen vergelijkbare soorten gevonden.",
-        "similar": "Vergelijkbaar",
         "versus": "vs {species}",
         "selectPrompt": "Selecteer een soort om te vergelijken met {species}.",
-        "noGuideAvailable": "Geen gids beschikbaar",
         "linksOnly": "Alleen links",
         "exploreResources": "Geen vergelijkingsdetails. Bronnen verkennen:",
         "cardLoading": "Vergelijking laden…",

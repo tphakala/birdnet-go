@@ -1990,7 +1990,6 @@
       },
       "guide": {
         "title": "Sprievodca",
-        "similar": "Podobné druhy",
         "noSimilar": "Nenašli sa žiadne podobné druhy",
         "loading": "Načítava sa sprievodca…",
         "unavailable": "Sprievodca druhmi je dočasne nedostupný. Skúste to znova neskôr.",
@@ -2031,13 +2030,9 @@
       },
       "similar": {
         "title": "Podobné druhy",
-        "compare": "Porovnať",
-        "loading": "Načítavajú sa podobné druhy…",
         "empty": "Nenašli sa žiadne podobné druhy.",
-        "similar": "Podobné",
         "versus": "vs {species}",
         "selectPrompt": "Vyberte druh na porovnanie s {species}.",
-        "noGuideAvailable": "Sprievodca nie je k dispozícii",
         "linksOnly": "Iba odkazy",
         "exploreResources": "Žiadne podrobnosti porovnania. Preskúmať zdroje:",
         "cardLoading": "Načítava sa porovnanie…",

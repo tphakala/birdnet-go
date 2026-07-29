@@ -1990,7 +1990,6 @@
       },
       "guide": {
         "title": "Guide",
-        "similar": "Espèces similaires",
         "noSimilar": "Aucune espèce similaire trouvée",
         "loading": "Chargement du guide…",
         "unavailable": "Le guide des espèces est temporairement indisponible. Veuillez réessayer plus tard.",
@@ -2031,13 +2030,9 @@
       },
       "similar": {
         "title": "Espèces similaires",
-        "compare": "Comparer",
-        "loading": "Chargement des espèces similaires…",
         "empty": "Aucune espèce similaire trouvée.",
-        "similar": "Similaire",
         "versus": "vs {species}",
         "selectPrompt": "Sélectionnez une espèce à comparer avec {species}.",
-        "noGuideAvailable": "Aucun guide disponible",
         "linksOnly": "Liens uniquement",
         "exploreResources": "Aucun détail de comparaison. Explorer les ressources :",
         "cardLoading": "Chargement de la comparaison…",

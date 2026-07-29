@@ -1546,7 +1546,6 @@ export type TranslationKey =
   | 'analytics.species.card.confidence'
   | 'analytics.species.card.first'
   | 'analytics.species.guide.title'
-  | 'analytics.species.guide.similar'
   | 'analytics.species.guide.noSimilar'
   | 'analytics.species.guide.loading'
   | 'analytics.species.guide.unavailable'
@@ -1579,13 +1578,9 @@ export type TranslationKey =
   | 'analytics.species.notes.tooLong' // params: max
   | 'analytics.species.notes.truncated' // params: max
   | 'analytics.species.similar.title'
-  | 'analytics.species.similar.compare'
-  | 'analytics.species.similar.loading'
   | 'analytics.species.similar.empty'
-  | 'analytics.species.similar.similar'
   | 'analytics.species.similar.versus' // params: species
   | 'analytics.species.similar.selectPrompt' // params: species
-  | 'analytics.species.similar.noGuideAvailable'
   | 'analytics.species.similar.linksOnly'
   | 'analytics.species.similar.exploreResources'
   | 'analytics.species.similar.cardLoading'

@@ -1990,7 +1990,6 @@
       },
       "guide": {
         "title": "Opas",
-        "similar": "Samankaltaiset lajit",
         "noSimilar": "Samankaltaisia lajeja ei löytynyt",
         "loading": "Ladataan opasta…",
         "unavailable": "Lajiopas on tilapäisesti pois käytöstä. Yritä myöhemmin uudelleen.",
@@ -2031,13 +2030,9 @@
       },
       "similar": {
         "title": "Samankaltaiset lajit",
-        "compare": "Vertaa",
-        "loading": "Ladataan samankaltaisia lajeja…",
         "empty": "Samankaltaisia lajeja ei löytynyt.",
-        "similar": "Samankaltainen",
         "versus": "vs {species}",
         "selectPrompt": "Valitse laji vertailtavaksi lajin {species} kanssa.",
-        "noGuideAvailable": "Opasta ei saatavilla",
         "linksOnly": "Vain linkit",
         "exploreResources": "Ei vertailutietoja. Tutustu lähteisiin:",
         "cardLoading": "Ladataan vertailua…",

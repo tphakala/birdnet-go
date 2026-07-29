@@ -1990,7 +1990,6 @@
       },
       "guide": {
         "title": "Przewodnik",
-        "similar": "Podobne gatunki",
         "noSimilar": "Nie znaleziono podobnych gatunków",
         "loading": "Ładowanie przewodnika…",
         "unavailable": "Przewodnik po gatunkach jest tymczasowo niedostępny. Spróbuj ponownie później.",
@@ -2031,13 +2030,9 @@
       },
       "similar": {
         "title": "Podobne gatunki",
-        "compare": "Porównaj",
-        "loading": "Ładowanie podobnych gatunków…",
         "empty": "Nie znaleziono podobnych gatunków.",
-        "similar": "Podobny",
         "versus": "vs {species}",
         "selectPrompt": "Wybierz gatunek do porównania z {species}.",
-        "noGuideAvailable": "Przewodnik niedostępny",
         "linksOnly": "Tylko linki",
         "exploreResources": "Brak szczegółów porównania. Przeglądaj zasoby:",
         "cardLoading": "Ładowanie porównania…",

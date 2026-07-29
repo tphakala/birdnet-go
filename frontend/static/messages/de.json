@@ -1990,7 +1990,6 @@
       },
       "guide": {
         "title": "Steckbrief",
-        "similar": "Ähnliche Arten",
         "noSimilar": "Keine ähnlichen Arten gefunden",
         "loading": "Steckbrief wird geladen…",
         "unavailable": "Der Steckbrief ist vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut.",
@@ -2031,13 +2030,9 @@
       },
       "similar": {
         "title": "Ähnliche Arten",
-        "compare": "Vergleichen",
-        "loading": "Ähnliche Arten werden geladen…",
         "empty": "Keine ähnlichen Arten gefunden.",
-        "similar": "Ähnlich",
         "versus": "vs. {species}",
         "selectPrompt": "Wählen Sie eine Art zum Vergleich mit {species}.",
-        "noGuideAvailable": "Kein Steckbrief verfügbar",
         "linksOnly": "Nur Links",
         "exploreResources": "Keine Vergleichsdetails. Ressourcen erkunden:",
         "cardLoading": "Vergleich wird geladen…",

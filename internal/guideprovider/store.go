@@ -3,7 +3,6 @@ package guideprovider
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"strings"
 	"time"
 
@@ -62,8 +61,7 @@ type GuideCacheEntry struct {
 	SourceURL      string
 	License        string
 	LicenseURL     string
-	SimilarSpecies string `gorm:"type:text"` // JSON-encoded []SimilarSpecies
-	Negative       bool   `gorm:"index:idx_guide_cache_negative_cached,priority:1"`
+	Negative       bool `gorm:"index:idx_guide_cache_negative_cached,priority:1"`
 	Partial        bool
 	// Standalone cached_at index serves GetRecent's ORDER BY and the full-retention
 	// sweep; the composite (negative, cached_at) keeps the negative-entry cleanup
@@ -111,38 +109,6 @@ func IsTransient(err error) bool {
 	return errors.As(err, &te)
 }
 
-// encodeSimilarSpecies serializes the similar-species list for DB storage.
-func encodeSimilarSpecies(list []SimilarSpecies) string {
-	if len(list) == 0 {
-		return ""
-	}
-	b, err := json.Marshal(list)
-	if err != nil {
-		// Marshaling a []SimilarSpecies effectively never fails, but if it did, "" is
-		// indistinguishable from "no similar species". Log so a genuinely corrupt encode
-		// is visible rather than silently persisted as an empty list.
-		GetLogger().Warn("failed to encode similar-species list; storing empty",
-			logger.Int("count", len(list)), logger.Error(err))
-		return ""
-	}
-	return string(b)
-}
-
-// decodeSimilarSpecies deserializes a DB-stored similar-species list.
-func decodeSimilarSpecies(encoded string) []SimilarSpecies {
-	if encoded == "" {
-		return nil
-	}
-	var list []SimilarSpecies
-	if err := json.Unmarshal([]byte(encoded), &list); err != nil {
-		// A corrupt-but-present list decodes to nil; log so the silent drop is visible.
-		GetLogger().Warn("failed to decode stored similar-species list; dropping",
-			logger.Error(err))
-		return nil
-	}
-	return list
-}
-
 // entryToGuide maps a DB row to the domain model.
 func entryToGuide(e *GuideCacheEntry) *SpeciesGuide {
 	return &SpeciesGuide{
@@ -158,7 +124,6 @@ func entryToGuide(e *GuideCacheEntry) *SpeciesGuide {
 		SourceURL:      e.SourceURL,
 		License:        e.License,
 		LicenseURL:     e.LicenseURL,
-		SimilarSpecies: decodeSimilarSpecies(e.SimilarSpecies),
 		CachedAt:       e.CachedAt,
 		Partial:        e.Partial,
 		Negative:       e.Negative,
@@ -181,7 +146,6 @@ func guideToEntry(name, locale, providerSet string, g *SpeciesGuide) *GuideCache
 		SourceURL:      g.SourceURL,
 		License:        g.License,
 		LicenseURL:     g.LicenseURL,
-		SimilarSpecies: encodeSimilarSpecies(g.SimilarSpecies),
 		Negative:       g.Negative,
 		Partial:        g.Partial,
 		CachedAt:       g.CachedAt,
