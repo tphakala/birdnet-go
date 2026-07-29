@@ -7,10 +7,20 @@ import (
 	"testing"
 	"time"
 
+	paho "github.com/eclipse/paho.mqtt.golang"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
+
+// stubPahoClient reports a fixed connection state. Only IsConnected is
+// exercised; the rest of paho.Client exists to satisfy the interface.
+type stubPahoClient struct {
+	paho.Client
+	connected bool
+}
+
+func (s *stubPahoClient) IsConnected() bool { return s.connected }
 
 // newReconnectLoopTestClient builds a client whose reconnect delay is long
 // enough that the armed timer never fires during the test, so assertions
@@ -102,6 +112,31 @@ func TestStartReconnectLoopAfterDisconnectDoesNotArm(t *testing.T) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	assert.Nil(t, c.reconnectTimer, "Should not arm a timer once the reconnect mechanism is stopped")
+}
+
+// TestStartReconnectLoopOnConnectedClientIsNoOp verifies a live connection is
+// left entirely alone. Connect can report failure for a connection that came up
+// late (buildNotConnectedError), and marking a healthy client disconnected would
+// silently suppress its publishes until the next reconnect.
+func TestStartReconnectLoopOnConnectedClientIsNoOp(t *testing.T) {
+	t.Parallel()
+
+	c := newReconnectLoopTestClient(t)
+
+	// A real paho client backed by a live broker is unnecessary here: the guard
+	// reads internalClient.IsConnected(), so a stub that reports connected is
+	// enough to exercise it.
+	c.mu.Lock()
+	c.internalClient = &stubPahoClient{connected: true}
+	c.mu.Unlock()
+
+	c.StartReconnectLoop()
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	assert.False(t, c.disconnected, "Should not mark a connected client disconnected")
+	assert.Nil(t, c.reconnectTimer, "Should not arm a reconnect timer for a healthy connection")
+	assert.True(t, c.disconnectedSince.IsZero(), "Should not record an outage that is not happening")
 }
 
 // TestStartReconnectLoopPreservesExistingOutageState verifies the call is

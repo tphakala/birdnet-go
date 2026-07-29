@@ -1039,34 +1039,46 @@ func (c *client) markDisconnectedLocked() {
 // degradation as a mid-session outage (one warning, then silence) rather than
 // an error per publish.
 //
-// Safe to call when already connected, and after Disconnect: the former is a
-// no-op because onConnect has already cleared the disconnected flag, and the
-// latter finds reconnectStop closed and returns without arming a timer.
+// Safe to call when already connected, and after Disconnect: the former returns
+// without touching connection state, and the latter finds reconnectStop closed
+// in startReconnectTimer and arms nothing.
 func (c *client) StartReconnectLoop() {
 	c.mu.Lock()
+	// A live connection needs nothing. Connect can report failure for a
+	// connection that came up late (see buildNotConnectedError), so this is
+	// reachable, and marking a healthy client down would suppress its publishes.
+	if c.internalClient != nil && c.internalClient.IsConnected() {
+		c.mu.Unlock()
+		GetLogger().Debug("Client already connected, not arming reconnect loop",
+			logger.String("broker", c.config.Broker),
+			logger.String("client_id", c.config.ClientID))
+		return
+	}
 	// Guarded: onConnectionLost may already have recorded this outage, and
 	// overwriting its start time would understate the outage in logs.
 	if !c.disconnected {
 		c.markDisconnectedLocked()
 	}
-	// Read under the lock: Disconnect closes this channel and
-	// reinitializeReconnectStopLocked replaces it, both while holding c.mu.
-	stop := c.reconnectStop
 	c.mu.Unlock()
 
-	select {
-	case <-stop:
-		GetLogger().Debug("Reconnect mechanism stopped, not arming reconnect loop",
-			logger.String("broker", c.config.Broker),
-			logger.String("client_id", c.config.ClientID))
-	default:
-		c.startReconnectTimer()
-	}
+	c.startReconnectTimer()
 }
 
 func (c *client) startReconnectTimer() {
 	c.mu.Lock() // Lock to safely modify reconnectTimer
 	defer c.mu.Unlock()
+
+	// Checked under the same lock Disconnect uses to close reconnectStop, so a
+	// concurrent shutdown cannot land between the check and the assignment below
+	// and leave behind a timer it has already given up the chance to stop.
+	select {
+	case <-c.reconnectStop:
+		GetLogger().Debug("Reconnect mechanism stopped, not arming reconnect timer",
+			logger.String("broker", c.config.Broker),
+			logger.String("client_id", c.config.ClientID))
+		return
+	default:
+	}
 
 	// Ensure we don't start multiple timers if called rapidly
 	if c.reconnectTimer != nil {

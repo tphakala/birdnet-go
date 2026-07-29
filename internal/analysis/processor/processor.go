@@ -2584,6 +2584,17 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 			logger.String("operation", "job_queue_shutdown"))
 	}
 
+	// Disconnect MQTT before the expired-context bail-out below. Not gated on
+	// IsConnected(): a client whose initial connect failed is retained with its
+	// reconnect loop armed, and Disconnect is what cancels that loop, so skipping
+	// it would leave the timer running past shutdown. Disconnect already handles
+	// the not-connected case, and for a client that never connected it does no
+	// blocking work at all — otherwise it is bounded by ShutdownDisconnectTimeout.
+	mqttClient := p.GetMQTTClient()
+	if mqttClient != nil {
+		mqttClient.Disconnect()
+	}
+
 	// Skip remaining cleanup if context is already expired — these are
 	// nice-to-have disconnects, not critical for data integrity.
 	// Context expiration is expected, not an error condition for the caller.
@@ -2595,14 +2606,6 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 
 	// Disconnect BirdWeather client
 	p.DisconnectBwClient()
-
-	// Disconnect MQTT client. Not gated on IsConnected(): a client whose initial
-	// connect failed is retained with its reconnect loop armed, and Disconnect is
-	// what cancels that loop. Disconnect already handles the not-connected case.
-	mqttClient := p.GetMQTTClient()
-	if mqttClient != nil {
-		mqttClient.Disconnect()
-	}
 
 	// Close the species tracker to release resources
 	p.speciesTrackerMu.RLock()

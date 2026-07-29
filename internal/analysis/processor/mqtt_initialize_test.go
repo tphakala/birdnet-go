@@ -4,6 +4,7 @@
 package processor
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -90,4 +91,24 @@ func TestShutdownDisconnectsUnconnectedClient(t *testing.T) {
 
 	assert.Greater(t, mockClient.DisconnectCalls(), disconnectsBeforeShutdown,
 		"Shutdown should disconnect the client even when it is not connected")
+}
+
+// TestShutdownDisconnectsClientWhenContextExpired verifies MQTT cleanup runs
+// ahead of the expired-context bail-out. Cancelling the reconnect loop is not a
+// "nice-to-have disconnect" that can be skipped when shutdown runs out of time:
+// skipping it leaves the retry timer running past shutdown.
+func TestShutdownDisconnectsClientWhenContextExpired(t *testing.T) {
+	p, _ := newMQTTInitTestProcessor(t, unreachableBroker)
+
+	mockClient := NewMockMQTTClient()
+	mockClient.Disconnect() // never-connected client, as after a failed initial connect
+	disconnectsBeforeShutdown := mockClient.DisconnectCalls()
+	p.SetMQTTClient(mockClient)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel() // exhaust the shutdown budget before ShutdownWithContext runs
+	require.NoError(t, p.ShutdownWithContext(ctx))
+
+	assert.Greater(t, mockClient.DisconnectCalls(), disconnectsBeforeShutdown,
+		"Shutdown should cancel the reconnect loop even when the context is expired")
 }
