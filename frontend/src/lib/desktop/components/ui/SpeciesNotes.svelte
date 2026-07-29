@@ -147,6 +147,10 @@
   async function deleteNote(id: number): Promise<void> {
     const currentName = scientificName.trim();
     confirmingDeleteId = null;
+    // Guarded like addNote/saveEdit: without this a double-click issues two
+    // DELETEs, and the second fails with a spurious "delete failed" toast.
+    if (saving) return;
+    saving = true;
     try {
       await api.delete(`/api/v2/species/notes/${id}`);
       if (currentName !== scientificName.trim()) return;
@@ -154,6 +158,8 @@
     } catch (e) {
       toastActions.error(t('analytics.species.notes.deleteFailed'));
       logger.error('Failed to delete species note', e, { component: 'SpeciesNotes' });
+    } finally {
+      saving = false;
     }
   }
 

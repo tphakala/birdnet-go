@@ -635,6 +635,10 @@ func (c *Controller) SetSourceRestarter(fn control.SourceRestarterFunc) {
 // (internal/analysis control monitor) calls this on *Controller, so the method
 // stays on the facade as a one-line delegator.
 func (c *Controller) WithGuideCache(fn func(*guideprovider.GuideCache) error) error {
+	// Nil-guarded for manually constructed test controllers, matching Shutdown.
+	if c.speciesGuide == nil {
+		return guideprovider.ErrCacheUnavailable
+	}
 	return c.speciesGuide.WithGuideCache(fn)
 }
 
@@ -642,6 +646,15 @@ func (c *Controller) WithGuideCache(fn func(*guideprovider.GuideCache) error) er
 // previous one. It delegates to the species guide domain handler; the hot-reload
 // path (internal/analysis control monitor) calls this on *Controller.
 func (c *Controller) SetGuideCache(gc *guideprovider.GuideCache) {
+	// Nil-guarded for manually constructed test controllers, matching Shutdown.
+	// With no handler to own the incoming cache, close it rather than leak its
+	// refresh loop — the same choice the handler makes after Shutdown.
+	if c.speciesGuide == nil {
+		if gc != nil {
+			gc.Close()
+		}
+		return
+	}
 	c.speciesGuide.SetGuideCache(gc)
 }
 

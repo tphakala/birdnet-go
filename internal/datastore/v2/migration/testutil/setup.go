@@ -294,6 +294,7 @@ func (ctx *TestContext) createAuxiliaryMigrator(t *testing.T) {
 		ImageCacheRepo:     ctx.ImageCacheRepo,
 		ThresholdRepo:      ctx.ThresholdRepo,
 		NotificationRepo:   ctx.NotificationRepo,
+		V2DB:               ctx.V2Manager.DB(),
 		Logger:             ctx.Logger,
 		DefaultModelID:     ctx.DefaultModelID,
 		SpeciesLabelTypeID: ctx.SpeciesLabelTypeID,
@@ -615,6 +616,10 @@ type testLegacyInterface struct {
 func newTestLegacyInterface(db *gorm.DB) *testLegacyInterface {
 	return &testLegacyInterface{db: db}
 }
+
+// GormDB implements datastore.GormDBProvider so the auxiliary migrator can read
+// species_notes directly, matching the real legacy *DataStore.
+func (s *testLegacyInterface) GormDB() *gorm.DB { return s.db }
 
 // GetAllImageCaches implements datastore.Interface.
 func (s *testLegacyInterface) GetAllImageCaches(provider string) ([]datastore.ImageCache, error) {

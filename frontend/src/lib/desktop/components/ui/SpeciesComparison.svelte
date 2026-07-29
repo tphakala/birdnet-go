@@ -166,10 +166,10 @@
   // already navigated away from must not overwrite the current one, and the
   // component must re-fetch when its prop changes rather than relying on every
   // caller remembering to wrap it in {#key}.
-  let loadToken = 0;
+  let loadSeq = 0;
 
   async function load(): Promise<void> {
-    const token = ++loadToken;
+    const seq = ++loadSeq;
     loading = true;
     error = null;
     unavailable = false;
@@ -196,10 +196,10 @@
       : Promise.resolve(emptySimilar);
     try {
       const fetched = await api.get<SpeciesGuideData>(`/api/v2/species/${enc}/guide?locale=${loc}`);
-      if (token !== loadToken) return; // superseded by a newer species
+      if (seq !== loadSeq) return; // superseded by a newer species
       guide = fetched;
     } catch (e) {
-      if (token !== loadToken) return;
+      if (seq !== loadSeq) return;
       if (e instanceof ApiError && e.status === HTTP_SERVICE_UNAVAILABLE) {
         unavailable = true;
       } else if (e instanceof ApiError && e.status === HTTP_NOT_FOUND) {
@@ -214,11 +214,11 @@
       // similar-species await used to sit outside any guard, so a null body (a 204
       // or a zero-length response, which api.get surfaces as null) threw on the
       // property access and left `loading` true for the life of the component.
-      if (token === loadToken) loading = false;
+      if (seq === loadSeq) loading = false;
     }
 
     const similarResult = await similarPromise;
-    if (token !== loadToken) return;
+    if (seq !== loadSeq) return;
     similar = similarResult?.similar ?? [];
     // The backend reports a degraded rail explicitly, so an unavailable cache is
     // distinguishable from "these species genuinely have no guides".
@@ -245,7 +245,7 @@
   // this function does not own (which body sections are expanded, whether the
   // similar rail is open). The effect exists so correctness does not DEPEND on every
   // caller remembering the wrapper, which the props contract cannot enforce.
-  // load() reads the current values, and its token guard drops any response that a
+  // load() reads the current values, and its sequence guard drops any response that a
   // newer request has superseded.
   $effect(() => {
     void scientificName;

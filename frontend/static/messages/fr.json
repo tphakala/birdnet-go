@@ -4662,7 +4662,7 @@
       "speciesGuide": {
         "title": "Guide des espèces",
         "description": "Enrichissez les détections avec la taxonomie, les noms communs, des liens externes et des espèces similaires — hors ligne via OpenFauna ; les descriptions Wikipedia sont un complément en ligne facultatif.",
-        "disabledReason": "Enable the species guide first",
+        "disabledReason": "Activez d'abord le guide des espèces",
         "enabled": {
           "label": "Activer le guide des espèces",
           "helpText": "Afficher les informations contextuelles du guide dans les détails de détection et la fenêtre de l’espèce."

@@ -4662,7 +4662,7 @@
       "speciesGuide": {
         "title": "Artsguide",
         "description": "Berik deteksjoner med taksonomi, vanlige navn, eksterne lenker og lignende arter — offline via OpenFauna; Wikipedia-beskrivelser er et valgfritt nettbasert tillegg.",
-        "disabledReason": "Enable the species guide first",
+        "disabledReason": "Aktiver artsguiden først",
         "enabled": {
           "label": "Aktiver artsguide",
           "helpText": "Vis kontekstuell guideinformasjon i deteksjonsdetaljer og artsvinduet."

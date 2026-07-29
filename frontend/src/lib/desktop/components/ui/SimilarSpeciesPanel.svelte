@@ -83,6 +83,10 @@
       guides.set(name, extractCanonicalSections(g.description));
       status.set(name, 'ready');
     } catch (e) {
+      // Same staleness guard as the success path: a late failure for a pruned
+      // species must not re-insert it into `status`, which would both grow the
+      // map unboundedly and pin a stale 'notfound' that blocks any later retry.
+      if (!similar.some(e2 => e2.scientific_name === name)) return;
       if (e instanceof ApiError && e.status === HTTP_NOT_FOUND) {
         status.set(name, 'notfound');
       } else {

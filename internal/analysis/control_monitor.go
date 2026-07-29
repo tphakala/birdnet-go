@@ -91,7 +91,6 @@ type ControlMonitor struct {
 
 	// Quiet hours scheduler for stream/soundcard lifecycle management
 	quietHoursScheduler *schedule.QuietHoursScheduler
-
 }
 
 // NewControlMonitor creates a new ControlMonitor instance.

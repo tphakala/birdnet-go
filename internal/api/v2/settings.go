@@ -2987,7 +2987,6 @@ func speciesGuideSettingsChanged(oldSettings, currentSettings *conf.Settings) bo
 }
 
 // speciesTrackingSettingsChanged checks if species tracking settings have changed
-
 func speciesTrackingSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	oldTracking := oldSettings.Realtime.SpeciesTracking
 	newTracking := currentSettings.Realtime.SpeciesTracking

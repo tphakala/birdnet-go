@@ -203,7 +203,7 @@ type Dashboard struct {
 // Wikipedia link for species the offline dataset does not cover); it defaults
 // off and needs no network access at render time.
 //
-// The three Show* sub-section toggles default ON via viper defaults (see
+// The four Show* sub-section toggles default ON via viper defaults (see
 // setDefaultConfig), so an unset config shows every section when the guide is
 // enabled; a user opts a section out by setting its flag false.
 type SpeciesGuideConfig struct {

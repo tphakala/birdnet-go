@@ -4662,7 +4662,7 @@
       "speciesGuide": {
         "title": "Guia de espécies",
         "description": "Enriqueça as deteções com taxonomia, nomes comuns, ligações externas e espécies semelhantes — offline através do OpenFauna; as descrições da Wikipédia são um complemento online opcional.",
-        "disabledReason": "Enable the species guide first",
+        "disabledReason": "Ative primeiro o guia de espécies",
         "enabled": {
           "label": "Ativar guia de espécies",
           "helpText": "Mostrar informações contextuais do guia nos detalhes de deteção e na janela da espécie."

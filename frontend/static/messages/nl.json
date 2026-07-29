@@ -4662,7 +4662,7 @@
       "speciesGuide": {
         "title": "Soortengids",
         "description": "Verrijk detecties met taxonomie, gangbare namen, externe links en vergelijkbare soorten — offline via OpenFauna; Wikipedia-beschrijvingen zijn een optionele online aanvulling.",
-        "disabledReason": "Enable the species guide first",
+        "disabledReason": "Schakel eerst de soortengids in",
         "enabled": {
           "label": "Soortengids inschakelen",
           "helpText": "Contextuele gidsinformatie tonen bij detectiedetails en in het soortvenster."

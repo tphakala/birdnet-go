@@ -437,7 +437,7 @@ func (ix *Index) Meta(scientific string) (Meta, bool) {
 		return Meta{}, false
 	}
 	v, ok := ix.meta[normalizeName(scientific)]
-	return v, ok
+	return v.clone(), ok
 }
 
 // Locale returns the locale this Index was built for, or "" for a nil Index.
@@ -831,7 +831,9 @@ func LookupMeta(scientific string) (Meta, bool) {
 		logger.String("scientific", target),
 		logger.Bool("found", ok),
 	)
-	return found, ok
+	// found.Links is now the memoized map, so it needs the same clone the
+	// memo-hit path applies above.
+	return found.clone(), ok
 }
 
 // commonNameCacheMaxEntries bounds the LookupCommonName memo. It sits above the

@@ -50,8 +50,9 @@ All keys live under `realtime.dashboard.speciesguide`:
 | `shownotes`                | bool | `true`  | Show the per-species notes section.                                                                                                                                                                       |
 | `showenrichments`          | bool | `true`  | Show enrichment badges (expectedness, current season, external links).                                                                                                                                    |
 | `showsimilarspecies`       | bool | `true`  | Show the similar-species comparison panel.                                                                                                                                                                |
+| `showtaxonomy`             | bool | `true`  | Show the taxonomy lineage section (genus/family).                                                                                                                                                         |
 
-> The three `show*` flags default to **on** when omitted. Set them to `false`
+> The four `show*` flags default to **on** when omitted. Set them to `false`
 > only to hide a section you don't want.
 
 ### Example — full configuration
@@ -68,6 +69,7 @@ realtime:
       shownotes: true
       showenrichments: true
       showsimilarspecies: true
+      showtaxonomy: true
 ```
 
 ## Enabling Wikipedia descriptions (optional)
@@ -144,7 +146,7 @@ grow without bound.
 | Guide section never appears              | `enabled` is still `false`.                                                                                         |
 | No description text, only taxonomy/links | `enablewikipedia` is `false` (offline mode), or the species has no Wikipedia article in your dashboard language.    |
 | Taxonomy (genus/family) missing          | The species is not present in the embedded OpenFauna dataset.                                                       |
-| Notes can be read but not added/edited   | Note writes require authentication — sign in (or enable auth) first.                                                |
+| Notes section is missing or empty        | All note operations — reading included — require authentication; sign in first.                                     |
 | "Too many requests" on the guide panel   | The guide endpoints are rate-limited; wait a moment. Behind a reverse proxy, configure trusted-proxy/IP extraction. |
 
 ## Privacy summary
