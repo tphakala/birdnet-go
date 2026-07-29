@@ -5127,6 +5127,9 @@
       "invalidHost": "Parametro host non valido",
       "rateLimit": "Troppi tentativi di connessione al flusso di notifiche, attendere prima di riprovare"
     },
+    "speciesGuide": {
+      "rateLimit": "Troppe richieste alla guida delle specie. Attendere prima di riprovare."
+    },
     "streams": {
       "test": {
         "invalidBody": "Corpo della richiesta non valido",

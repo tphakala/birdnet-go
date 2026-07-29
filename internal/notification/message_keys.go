@@ -155,6 +155,9 @@ const (
 	MsgErrNotifInvalidHost        = "errors.notification.invalidHost"
 	MsgErrNotifRateLimit          = "errors.notification.rateLimit"
 
+	// Species guide errors
+	MsgErrSpeciesGuideRateLimit = "errors.speciesGuide.rateLimit"
+
 	// Debug errors
 	MsgErrDebugNotEnabled = "errors.debug.notEnabled"
 

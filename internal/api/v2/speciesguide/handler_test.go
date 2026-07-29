@@ -28,6 +28,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/guideprovider"
+	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 // Shared literals (kept as constants to satisfy goconst and avoid drift).
@@ -629,6 +630,39 @@ func TestSpeciesGuideRoutes_NotesAreAuthGated(t *testing.T) {
 			assert.Equalf(t, http.StatusUnauthorized, rec.Code, "%s %s must be auth-gated", g.method, g.target)
 		})
 	}
+}
+
+// --- rate limiting ---
+
+// TestSpeciesGuideRoutes_RateLimitUsesErrorResponse pins that the limiter's 429
+// goes through the project error handler. An ad-hoc ctx.JSON would still return
+// 429, but with a bare {"error": ...} body: no correlation ID for support dumps,
+// no telemetry, and an untranslatable English string.
+func TestSpeciesGuideRoutes_RateLimitUsesErrorResponse(t *testing.T) {
+	t.Parallel()
+	e := echo.New()
+	core := &apicore.Core{Echo: e}
+	core.Settings.Store(&conf.Settings{}) // guide disabled: allowed requests 404 before any work
+	c := New(core)
+	c.RegisterRoutes(e.Group("/api/v2"))
+
+	// Exhaust the burst from a single client. The limiter refills at
+	// guideRateLimitPerMinute/60 per second, far slower than this loop.
+	var rec *httptest.ResponseRecorder
+	for range guideRateLimitBurst + 1 {
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/species/Turdus%20merula/guide", http.NoBody)
+		req.RemoteAddr = "192.0.2.10:54321"
+		rec = httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+	}
+	require.Equal(t, http.StatusTooManyRequests, rec.Code, "burst+1 requests must trip the limiter")
+
+	var resp apicore.ErrorResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, http.StatusTooManyRequests, resp.Code)
+	assert.Equal(t, notification.MsgErrSpeciesGuideRateLimit, resp.ErrorKey,
+		"the message must reach the user as a translatable key")
+	assert.NotEmpty(t, resp.CorrelationID, "429s must be traceable in a support dump")
 }
 
 // --- GetSimilarSpecies with a real taxonomy (covers similarSpeciesCandidates) ---

@@ -5127,6 +5127,9 @@
       "invalidHost": "Nederīgs resursdatora parametrs",
       "rateLimit": "Pārāk daudz paziņojumu straumes pieslēgšanās mēģinājumu, lūdzu, uzgaidiet pirms atkārtota mēģinājuma"
     },
+    "speciesGuide": {
+      "rateLimit": "Pārāk daudz pieprasījumu sugu ceļvedim. Lūdzu, uzgaidiet pirms atkārtota mēģinājuma."
+    },
     "streams": {
       "test": {
         "invalidBody": "Nederīgs pieprasījuma saturs",

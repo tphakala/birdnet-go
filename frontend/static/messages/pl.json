@@ -5127,6 +5127,9 @@
       "invalidHost": "Nieprawidłowy parametr hosta",
       "rateLimit": "Zbyt wiele prób połączenia ze strumieniem powiadomień, poczekaj chwilę przed ponowną próbą"
     },
+    "speciesGuide": {
+      "rateLimit": "Zbyt wiele żądań do przewodnika po gatunkach. Poczekaj chwilę przed ponowną próbą."
+    },
     "streams": {
       "test": {
         "invalidBody": "Nieprawidłowa treść żądania",

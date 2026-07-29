@@ -5127,6 +5127,9 @@
       "invalidHost": "Invalid host parameter",
       "rateLimit": "Too many notification stream connection attempts, please wait before trying again"
     },
+    "speciesGuide": {
+      "rateLimit": "Too many species guide requests. Please wait before trying again."
+    },
     "streams": {
       "test": {
         "invalidBody": "Invalid request body",

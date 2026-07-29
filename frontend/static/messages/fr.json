@@ -5127,6 +5127,9 @@
       "invalidHost": "Paramètre host invalide",
       "rateLimit": "Trop de tentatives de connexion au flux de notifications, veuillez patienter avant de réessayer"
     },
+    "speciesGuide": {
+      "rateLimit": "Trop de requêtes vers le guide des espèces. Veuillez patienter avant de réessayer."
+    },
     "streams": {
       "test": {
         "invalidBody": "Corps de requête invalide",

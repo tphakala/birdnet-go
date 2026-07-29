@@ -5127,6 +5127,9 @@
       "invalidHost": "Ungültiger Host-Parameter",
       "rateLimit": "Zu viele Verbindungsversuche zum Benachrichtigungsstream, bitte warten Sie einen Moment"
     },
+    "speciesGuide": {
+      "rateLimit": "Zu viele Anfragen an den Artensteckbrief. Bitte warten Sie einen Moment, bevor Sie es erneut versuchen."
+    },
     "streams": {
       "test": {
         "invalidBody": "Ungültiger Anfragekörper",

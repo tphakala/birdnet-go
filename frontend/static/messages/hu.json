@@ -5127,6 +5127,9 @@
       "invalidHost": "Érvénytelen host paraméter",
       "rateLimit": "Túl sok értesítési stream csatlakozási kísérlet, kérjük, várjon, mielőtt újra próbálkozik"
     },
+    "speciesGuide": {
+      "rateLimit": "Túl sok kérés a fajútmutatóhoz. Kérjük, várjon, mielőtt újra próbálkozik."
+    },
     "streams": {
       "test": {
         "invalidBody": "Érvénytelen kéréstörzs",

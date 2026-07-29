@@ -1,6 +1,7 @@
 package v2only
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"testing"
@@ -22,6 +23,22 @@ import (
 
 // Compile-time guarantee that the guide cache can obtain a GORM handle.
 var _ datastore.GormDBProvider = (*Datastore)(nil)
+
+// speciesNoteStore is the full species-note surface, mirroring the guard in
+// internal/datastore. Both stores delegate to datastore.SpeciesNoteOps; this
+// fails to compile if this store drifts from that shared surface.
+type speciesNoteStore interface {
+	GetSpeciesNotes(ctx context.Context, scientificName string) ([]datastore.SpeciesNote, error)
+	GetSpeciesNoteByID(ctx context.Context, id uint) (*datastore.SpeciesNote, error)
+	SaveSpeciesNote(ctx context.Context, note *datastore.SpeciesNote) error
+	UpdateSpeciesNote(ctx context.Context, noteID, entry string) error
+	DeleteSpeciesNote(ctx context.Context, noteID string) error
+}
+
+var (
+	_ speciesNoteStore = datastore.SpeciesNoteOps{}
+	_ speciesNoteStore = (*Datastore)(nil)
+)
 
 func TestV2OnlyDatastore_GormDBExposed(t *testing.T) {
 	t.Parallel()

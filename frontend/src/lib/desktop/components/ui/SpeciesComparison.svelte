@@ -29,7 +29,7 @@
   ]);
   import {
     parseGuideDescription,
-    extractCanonicalSections,
+    extractCanonicalSectionsFrom,
     type CanonicalSectionId,
     type SpeciesGuideData,
     type SimilarSpeciesResponse,
@@ -142,12 +142,14 @@
   // Behaviour, and the sub-sections convertWikiSections deliberately promotes to top
   // level — was parsed, shipped over the wire, and then silently dropped.
   //
-  // extractCanonicalSections falls back to the lead for `appearance` when the article
-  // has no description-like section, so that case is filtered out here rather than
-  // repeating the lead under a second heading.
+  // extractCanonicalSectionsFrom falls back to the lead for `appearance` when the
+  // article has no description-like section, so that case is filtered out here rather
+  // than repeating the lead under a second heading. It takes the already-parsed
+  // `sections` rather than re-parsing the raw description, which descriptions running
+  // to ~10 KB made the more expensive half of this render.
   let canonicalRows = $derived.by(() => {
     if (!guide) return [];
-    const canonical = extractCanonicalSections(guide.description);
+    const canonical = extractCanonicalSectionsFrom(sections);
     return SECTION_ROWS.map(row => ({ ...row, body: canonical[row.id].trim() })).filter(
       row => row.body !== '' && row.body !== descriptionBody.trim()
     );

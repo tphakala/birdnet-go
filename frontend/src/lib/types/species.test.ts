@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   extractCanonicalSections,
+  extractCanonicalSectionsFrom,
   parseGuideDescription,
   classifyCanonicalHeading,
 } from './species';
@@ -95,6 +96,39 @@ describe('extractCanonicalSections', () => {
     const sections = extractCanonicalSections(description);
     expect(sections.voice).toBe('');
     expect(sections.appearance).toContain('A loud pink-pink call.');
+  });
+});
+
+describe('extractCanonicalSectionsFrom', () => {
+  it('matches extractCanonicalSections for the same description', () => {
+    // SpeciesComparison parses once and calls this overload for the canonical rows,
+    // so the two entry points must not drift.
+    const descriptions = [
+      'Lead only, no headers.',
+      'A large corvid.\n\n## Voice\nA deep croaking gronk.',
+      [
+        'Lead.',
+        '',
+        '## Description',
+        'Grey crown.',
+        '',
+        '## Identification',
+        'Wing bars.',
+        '',
+        '## Distribution and habitat',
+        'Woodland.',
+        '',
+        '## Behaviour',
+        'Flocks.',
+      ].join('\n'),
+      '', // an empty description must not throw on either path
+    ];
+
+    for (const description of descriptions) {
+      expect(extractCanonicalSectionsFrom(parseGuideDescription(description))).toEqual(
+        extractCanonicalSections(description)
+      );
+    }
   });
 });
 

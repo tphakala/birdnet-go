@@ -3741,6 +3741,7 @@ export type TranslationKey =
   | 'errors.notification.hostRequired'
   | 'errors.notification.invalidHost'
   | 'errors.notification.rateLimit'
+  | 'errors.speciesGuide.rateLimit'
   | 'errors.streams.test.invalidBody'
   | 'errors.streams.test.urlRequired'
   | 'errors.streams.test.invalidUrl'

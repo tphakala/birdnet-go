@@ -5127,6 +5127,9 @@
       "invalidHost": "Ugyldig host-parameter",
       "rateLimit": "For mange forsøg på at oprette notifikationsstrøm, vent venligst før du prøver igen"
     },
+    "speciesGuide": {
+      "rateLimit": "For mange forespørgsler til artsguiden. Vent venligst før du prøver igen."
+    },
     "streams": {
       "test": {
         "invalidBody": "Ugyldig forespørgselstekst",

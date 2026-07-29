@@ -5127,6 +5127,9 @@
       "invalidHost": "Neplatný parametr hostitele",
       "rateLimit": "Příliš mnoho pokusů o připojení k proudu oznámení, počkejte prosím chvíli a zkuste to znovu"
     },
+    "speciesGuide": {
+      "rateLimit": "Příliš mnoho požadavků na průvodce druhy. Počkejte prosím a zkuste to znovu."
+    },
     "streams": {
       "test": {
         "invalidBody": "Neplatné tělo požadavku",

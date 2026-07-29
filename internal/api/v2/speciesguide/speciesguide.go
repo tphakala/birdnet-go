@@ -27,6 +27,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/guideprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/openfauna"
 )
 
@@ -374,17 +375,30 @@ func (c *Handler) newGuideRateLimiter() echo.MiddlewareFunc {
 		// limiter is a fairness layer; outbound provider calls are independently
 		// capped by each provider's own rate limiter and by singleflight dedup.
 		IdentifierExtractor: middleware.DefaultRateLimiterConfig.IdentifierExtractor,
-		ErrorHandler: func(ctx echo.Context, _ error) error {
-			return ctx.JSON(http.StatusTooManyRequests, map[string]string{
-				"error": "Rate limit exceeded for species guide requests",
-			})
+		// Both paths go through HandleErrorWithKey rather than a bare ctx.JSON so the
+		// response carries the standard ErrorResponse shape and correlation ID, the
+		// failure reaches telemetry, and the message is a translatable key instead of
+		// raw English. The cause is passed through rather than discarded so it lands
+		// in that telemetry.
+		ErrorHandler: func(ctx echo.Context, err error) error {
+			return c.rateLimited(ctx, err)
 		},
-		DenyHandler: func(ctx echo.Context, _ string, _ error) error {
-			return ctx.JSON(http.StatusTooManyRequests, map[string]string{
-				"error": "Too many species guide requests, please wait before trying again",
-			})
+		DenyHandler: func(ctx echo.Context, identifier string, err error) error {
+			c.LogWarnIfEnabled("species guide request denied by rate limit",
+				logger.String("identifier", identifier),
+				logger.String("path", ctx.Request().URL.Path))
+			return c.rateLimited(ctx, err)
 		},
 	})
+}
+
+// rateLimited writes the 429 for both rate-limiter paths. err is the limiter's
+// own cause (nil on the deny path with some Echo versions), which HandleError
+// tolerates.
+func (c *Handler) rateLimited(ctx echo.Context, err error) error {
+	return c.HandleErrorWithKey(ctx, err,
+		"Too many species guide requests, please wait before trying again",
+		http.StatusTooManyRequests, notification.MsgErrSpeciesGuideRateLimit, nil)
 }
 
 // parseScientificNameParam extracts and validates the :scientific_name path param.

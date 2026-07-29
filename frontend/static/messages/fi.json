@@ -5127,6 +5127,9 @@
       "invalidHost": "Virheellinen host-parametri",
       "rateLimit": "Liian monta yhteysyritystä ilmoitusstriimiin, odota hetki ennen uutta yritystä"
     },
+    "speciesGuide": {
+      "rateLimit": "Liian monta pyyntöä lajioppaaseen. Odota hetki ennen kuin yrität uudelleen."
+    },
     "streams": {
       "test": {
         "invalidBody": "Virheellinen pyyntörunko",

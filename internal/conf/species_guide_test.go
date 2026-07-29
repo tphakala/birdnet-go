@@ -31,6 +31,65 @@ func TestSpeciesGuideConfig_ShowDefaults(t *testing.T) {
 		"an explicit false opt-out must be respected")
 }
 
+// TestSpeciesGuideConfig_FeatureDefaults verifies the non-Show* defaults through
+// viper, which is where they actually come from. Asserting them off a zero-value
+// SpeciesGuideConfig would only re-state Go's zero values and would keep passing
+// if a default in defaults.go were flipped.
+func TestSpeciesGuideConfig_FeatureDefaults(t *testing.T) {
+	t.Cleanup(viper.Reset)
+	viper.Reset()
+	setDefaultConfig()
+
+	// viper.GetBool returns false for an unregistered key too, so each
+	// default-false key is first asserted to actually be registered — otherwise
+	// deleting a SetDefault line would leave this test green.
+	boolDefaults := map[string]bool{
+		"realtime.dashboard.speciesguide.enabled":                  false, // the guide is opt-in
+		"realtime.dashboard.speciesguide.enablewikipedia":          false, // online descriptions are opt-in; the guide works offline
+		"realtime.dashboard.speciesguide.enablesupplementarylinks": false,
+		"realtime.dashboard.speciesguide.prefetchenabled":          true,
+	}
+	for key, want := range boolDefaults {
+		require.True(t, viper.IsSet(key), "no default registered for %s", key)
+		assert.Equal(t, want, viper.GetBool(key), "default for %s", key)
+	}
+
+	require.True(t, viper.IsSet("realtime.dashboard.speciesguide.warmtopn"))
+	assert.Equal(t, 50, viper.GetInt("realtime.dashboard.speciesguide.warmtopn"),
+		"warm top-N default")
+
+	// An explicitly stored value must win over the default (opt-in is respected).
+	viper.Set("realtime.dashboard.speciesguide.enablesupplementarylinks", true)
+	assert.True(t, viper.GetBool("realtime.dashboard.speciesguide.enablesupplementarylinks"),
+		"an explicit opt-in must be respected")
+}
+
+// TestDefaultSpeciesGuideConfig_MatchesViperDefaults pins every viper key to the
+// corresponding field of DefaultSpeciesGuideConfig. setDefaultConfig registers
+// the keys from that struct, so this catches a key wired to the wrong field —
+// the one mistake the shared source of truth cannot prevent by itself.
+func TestDefaultSpeciesGuideConfig_MatchesViperDefaults(t *testing.T) {
+	t.Cleanup(viper.Reset)
+	viper.Reset()
+	setDefaultConfig()
+
+	want := DefaultSpeciesGuideConfig()
+	const prefix = "realtime.dashboard.speciesguide."
+	assert.Equal(t, want.Enabled, viper.GetBool(prefix+"enabled"))
+	assert.Equal(t, want.EnableWikipedia, viper.GetBool(prefix+"enablewikipedia"))
+	assert.Equal(t, want.EnableSupplementaryLinks, viper.GetBool(prefix+"enablesupplementarylinks"))
+	assert.Equal(t, want.PreFetchEnabled, viper.GetBool(prefix+"prefetchenabled"))
+	assert.Equal(t, want.WarmTopN, viper.GetInt(prefix+"warmtopn"))
+	assert.Equal(t, want.ShowNotes, viper.GetBool(prefix+"shownotes"))
+	assert.Equal(t, want.ShowEnrichments, viper.GetBool(prefix+"showenrichments"))
+	assert.Equal(t, want.ShowSimilarSpecies, viper.GetBool(prefix+"showsimilarspecies"))
+	assert.Equal(t, want.ShowTaxonomy, viper.GetBool(prefix+"showtaxonomy"))
+
+	// The default warm target must be within the clamp, or a fresh install would
+	// have its own default rewritten by validateSpeciesGuideSettings.
+	assert.LessOrEqual(t, want.WarmTopN, SpeciesGuideMaxWarmTopN)
+}
+
 func TestValidateSpeciesGuideSettings_WarmTopNClamp(t *testing.T) {
 	t.Parallel()
 

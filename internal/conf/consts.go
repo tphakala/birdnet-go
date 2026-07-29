@@ -26,6 +26,10 @@ const (
 	// the slice preallocation in the warm path so an out-of-range hand-edited
 	// config value cannot force a huge allocation.
 	SpeciesGuideMaxWarmTopN = 1000
+
+	// SpeciesGuideDefaultWarmTopN is how many top species a fresh install warms
+	// on startup. See DefaultSpeciesGuideConfig.
+	SpeciesGuideDefaultWarmTopN = 50
 )
 
 const (

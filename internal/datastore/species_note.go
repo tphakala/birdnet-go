@@ -81,14 +81,32 @@ func normalizeSpeciesName(scientificName string) string {
 	return strings.TrimSpace(scientificName)
 }
 
+// SpeciesNoteOps is the single implementation of the species-note storage
+// operations. Both the legacy DataStore and the v2-only store bind it to their
+// own GORM handle and metrics recorder and delegate to it, so the two cannot
+// drift on ordering, result limit, validation, lock-retry behaviour or error
+// context — the same reason ParseSpeciesNoteID, NormalizeSpeciesNoteEntry and
+// SpeciesNotesMaxResults are shared rather than copied.
+type SpeciesNoteOps struct {
+	db      *gorm.DB
+	metrics *Metrics
+}
+
+// NewSpeciesNoteOps binds the species-note operations to a GORM handle and the
+// calling store's metrics recorder. A nil recorder is accepted; RetryOnLock
+// treats it as "metrics disabled".
+func NewSpeciesNoteOps(db *gorm.DB, metrics *Metrics) SpeciesNoteOps {
+	return SpeciesNoteOps{db: db, metrics: metrics}
+}
+
 // GetSpeciesNotes returns all notes for a species, newest first.
-func (ds *DataStore) GetSpeciesNotes(ctx context.Context, scientificName string) ([]SpeciesNote, error) {
+func (o SpeciesNoteOps) GetSpeciesNotes(ctx context.Context, scientificName string) ([]SpeciesNote, error) {
 	name := normalizeSpeciesName(scientificName)
 	if name == "" {
 		return nil, validationError("scientific name cannot be empty", "scientific_name", scientificName)
 	}
 	var notes []SpeciesNote
-	if err := ds.DB.WithContext(ctx).
+	if err := o.db.WithContext(ctx).
 		Where("scientific_name = ?", name).
 		Order("created_at DESC, id DESC").
 		Limit(SpeciesNotesMaxResults).
@@ -100,9 +118,9 @@ func (ds *DataStore) GetSpeciesNotes(ctx context.Context, scientificName string)
 }
 
 // GetSpeciesNoteByID returns a single note by ID, or ErrSpeciesNoteNotFound.
-func (ds *DataStore) GetSpeciesNoteByID(ctx context.Context, id uint) (*SpeciesNote, error) {
+func (o SpeciesNoteOps) GetSpeciesNoteByID(ctx context.Context, id uint) (*SpeciesNote, error) {
 	var note SpeciesNote
-	if err := ds.DB.WithContext(ctx).First(&note, id).Error; err != nil {
+	if err := o.db.WithContext(ctx).First(&note, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrSpeciesNoteNotFound
 		}
@@ -114,7 +132,7 @@ func (ds *DataStore) GetSpeciesNoteByID(ctx context.Context, id uint) (*SpeciesN
 
 // SaveSpeciesNote persists a new note. The entry is normalized and the
 // scientific name trimmed before write.
-func (ds *DataStore) SaveSpeciesNote(ctx context.Context, note *SpeciesNote) error {
+func (o SpeciesNoteOps) SaveSpeciesNote(ctx context.Context, note *SpeciesNote) error {
 	if note == nil {
 		return validationError("note cannot be nil", "note", nil)
 	}
@@ -132,16 +150,16 @@ func (ds *DataStore) SaveSpeciesNote(ctx context.Context, note *SpeciesNote) err
 	note.Entry = entry
 
 	return RetryOnLock(ctx, "save_species_note", func() error {
-		if err := ds.DB.WithContext(ctx).Create(note).Error; err != nil {
+		if err := o.db.WithContext(ctx).Create(note).Error; err != nil {
 			return dbError(err, "save_species_note", errors.PriorityMedium,
 				"scientific_name", note.ScientificName, "table", "species_notes")
 		}
 		return nil
-	}, ds.getMetrics())
+	}, o.metrics)
 }
 
 // UpdateSpeciesNote updates an existing note's entry, or returns ErrSpeciesNoteNotFound.
-func (ds *DataStore) UpdateSpeciesNote(ctx context.Context, noteID, entry string) error {
+func (o SpeciesNoteOps) UpdateSpeciesNote(ctx context.Context, noteID, entry string) error {
 	id, err := ParseSpeciesNoteID(noteID)
 	if err != nil {
 		return err
@@ -155,7 +173,7 @@ func (ds *DataStore) UpdateSpeciesNote(ctx context.Context, noteID, entry string
 	}
 
 	return RetryOnLock(ctx, "update_species_note", func() error {
-		result := ds.DB.WithContext(ctx).
+		result := o.db.WithContext(ctx).
 			Model(&SpeciesNote{}).
 			Where("id = ?", id).
 			Update("entry", normalized)
@@ -167,18 +185,18 @@ func (ds *DataStore) UpdateSpeciesNote(ctx context.Context, noteID, entry string
 			return ErrSpeciesNoteNotFound
 		}
 		return nil
-	}, ds.getMetrics())
+	}, o.metrics)
 }
 
 // DeleteSpeciesNote removes a note by ID, or returns ErrSpeciesNoteNotFound.
-func (ds *DataStore) DeleteSpeciesNote(ctx context.Context, noteID string) error {
+func (o SpeciesNoteOps) DeleteSpeciesNote(ctx context.Context, noteID string) error {
 	id, err := ParseSpeciesNoteID(noteID)
 	if err != nil {
 		return err
 	}
 
 	return RetryOnLock(ctx, "delete_species_note", func() error {
-		result := ds.DB.WithContext(ctx).Delete(&SpeciesNote{}, id)
+		result := o.db.WithContext(ctx).Delete(&SpeciesNote{}, id)
 		if result.Error != nil {
 			return dbError(result.Error, "delete_species_note", errors.PriorityMedium,
 				"note_id", noteID, "table", "species_notes")
@@ -187,7 +205,38 @@ func (ds *DataStore) DeleteSpeciesNote(ctx context.Context, noteID string) error
 			return ErrSpeciesNoteNotFound
 		}
 		return nil
-	}, ds.getMetrics())
+	}, o.metrics)
+}
+
+// speciesNotes binds the shared species-note operations to this store.
+func (ds *DataStore) speciesNotes() SpeciesNoteOps {
+	return NewSpeciesNoteOps(ds.DB, ds.getMetrics())
+}
+
+// GetSpeciesNotes returns all notes for a species, newest first.
+func (ds *DataStore) GetSpeciesNotes(ctx context.Context, scientificName string) ([]SpeciesNote, error) {
+	return ds.speciesNotes().GetSpeciesNotes(ctx, scientificName)
+}
+
+// GetSpeciesNoteByID returns a single note by ID, or ErrSpeciesNoteNotFound.
+func (ds *DataStore) GetSpeciesNoteByID(ctx context.Context, id uint) (*SpeciesNote, error) {
+	return ds.speciesNotes().GetSpeciesNoteByID(ctx, id)
+}
+
+// SaveSpeciesNote persists a new note. The entry is normalized and the
+// scientific name trimmed before write.
+func (ds *DataStore) SaveSpeciesNote(ctx context.Context, note *SpeciesNote) error {
+	return ds.speciesNotes().SaveSpeciesNote(ctx, note)
+}
+
+// UpdateSpeciesNote updates an existing note's entry, or returns ErrSpeciesNoteNotFound.
+func (ds *DataStore) UpdateSpeciesNote(ctx context.Context, noteID, entry string) error {
+	return ds.speciesNotes().UpdateSpeciesNote(ctx, noteID, entry)
+}
+
+// DeleteSpeciesNote removes a note by ID, or returns ErrSpeciesNoteNotFound.
+func (ds *DataStore) DeleteSpeciesNote(ctx context.Context, noteID string) error {
+	return ds.speciesNotes().DeleteSpeciesNote(ctx, noteID)
 }
 
 // ParseSpeciesNoteID parses a string note ID into a uint, rejecting invalid input.

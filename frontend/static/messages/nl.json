@@ -5127,6 +5127,9 @@
       "invalidHost": "Ongeldige hostparameter",
       "rateLimit": "Te veel verbindingspogingen met de meldingsstream, wacht even voor u het opnieuw probeert"
     },
+    "speciesGuide": {
+      "rateLimit": "Te veel aanvragen voor de soortengids. Wacht even voordat u het opnieuw probeert."
+    },
     "streams": {
       "test": {
         "invalidBody": "Ongeldige aanvraagtekst",

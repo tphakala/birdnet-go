@@ -386,9 +386,19 @@ export function classifyCanonicalHeading(heading: string): CanonicalSectionId | 
  * guide that has any prose.
  */
 export function extractCanonicalSections(description: string): CanonicalSections {
+  return extractCanonicalSectionsFrom(parseGuideDescription(description));
+}
+
+/**
+ * As {@link extractCanonicalSections}, but over sections a caller has already
+ * parsed. Descriptions run to ~10 KB, so a component that needs both the parsed
+ * sections (for the lead) and the canonical rows parses once and calls this
+ * rather than paying for a second split per render.
+ */
+export function extractCanonicalSectionsFrom(sections: GuideSection[]): CanonicalSections {
   const out: CanonicalSections = { appearance: '', voice: '', habitat: '', behaviour: '' };
   let lead = '';
-  for (const section of parseGuideDescription(description)) {
+  for (const section of sections) {
     if (section.heading === '') {
       if (!lead) lead = section.body;
       continue;

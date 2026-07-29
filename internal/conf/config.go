@@ -218,6 +218,29 @@ type SpeciesGuideConfig struct {
 	ShowTaxonomy             bool `yaml:"showtaxonomy" json:"showTaxonomy"`                             // default true
 }
 
+// DefaultSpeciesGuideConfig returns the species guide configuration of a fresh
+// install. It is the single source of truth for these defaults: setDefaultConfig
+// registers the viper defaults from it, and test helpers that build settings
+// without going through viper (conftest.SettingsBuilder) seed from it, so a
+// test-built config cannot silently differ from production.
+func DefaultSpeciesGuideConfig() SpeciesGuideConfig {
+	return SpeciesGuideConfig{
+		// The guide is opt-in; online Wikipedia descriptions and computed
+		// supplementary links are separate opt-ins on top of it, so the guide
+		// works fully offline out of the box.
+		Enabled:                  false,
+		EnableWikipedia:          false,
+		EnableSupplementaryLinks: false,
+		WarmTopN:                 SpeciesGuideDefaultWarmTopN,
+		PreFetchEnabled:          true,
+		// Once the guide is enabled, every sub-section shows unless opted out.
+		ShowNotes:          true,
+		ShowEnrichments:    true,
+		ShowSimilarSpecies: true,
+		ShowTaxonomy:       true,
+	}
+}
+
 // DashboardLayout defines the ordered list of elements displayed on the dashboard.
 // Element order is determined by array index position.
 type DashboardLayout struct {

@@ -5127,6 +5127,9 @@
       "invalidHost": "Ugyldig vert-parameter",
       "rateLimit": "For mange forsøk på å koble til varselstrøm, vent litt før du prøver igjen"
     },
+    "speciesGuide": {
+      "rateLimit": "For mange forespørsler til artsguiden. Vent litt før du prøver igjen."
+    },
     "streams": {
       "test": {
         "invalidBody": "Ugyldig forespørselskropp",

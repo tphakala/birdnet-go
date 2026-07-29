@@ -5127,6 +5127,9 @@
       "invalidHost": "Ogiltig värdparameter",
       "rateLimit": "För många anslutningsförsök till aviseringsströmmen, vänta innan du försöker igen"
     },
+    "speciesGuide": {
+      "rateLimit": "För många förfrågningar till artguiden. Vänta innan du försöker igen."
+    },
     "streams": {
       "test": {
         "invalidBody": "Ogiltig begärandekropp",
