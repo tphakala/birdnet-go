@@ -3,6 +3,7 @@ package guideprovider
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -12,42 +13,27 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/useragent"
 )
 
-// newWikipediaTestProvider points the provider at a test server by overriding
-// its HTTP client transport to rewrite the host.
+// newWikipediaTestProvider points the provider at a test server. The redirect
+// uses the shared client's before-request hook rather than a custom transport,
+// so the request travels the same path production does (timeout handling,
+// User-Agent injection, hooks) with only the host swapped.
 func newWikipediaTestProvider(t *testing.T, srv *httptest.Server) *WikipediaGuideProvider {
 	t.Helper()
 	p := NewWikipediaGuideProviderWithMetrics(noopMetrics{})
-	p.client = srv.Client()
-	p.client.Transport = rewriteTransport{base: srv.URL, rt: srv.Client().Transport}
+	t.Cleanup(func() { require.NoError(t, p.Close()) })
+
+	target, err := url.Parse(srv.URL)
+	require.NoError(t, err)
+	// Preserves the original path and query; replaces scheme+host.
+	p.client.SetBeforeRequestHook(func(req *http.Request) {
+		req.URL.Scheme = target.Scheme
+		req.URL.Host = target.Host
+		req.Host = ""
+	})
 	return p
-}
-
-// rewriteTransport redirects all requests to the test server's base URL while
-// preserving the original path and query.
-type rewriteTransport struct {
-	base string
-	rt   http.RoundTripper
-}
-
-func (t rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	base := req.URL
-	// Replace scheme+host with the test server's.
-	newURL := t.base + base.Path
-	if base.RawQuery != "" {
-		newURL += "?" + base.RawQuery
-	}
-	r2, err := http.NewRequestWithContext(req.Context(), req.Method, newURL, req.Body)
-	if err != nil {
-		return nil, err
-	}
-	r2.Header = req.Header
-	rt := t.rt
-	if rt == nil {
-		rt = http.DefaultTransport
-	}
-	return rt.RoundTrip(r2)
 }
 
 const sampleWikiResponse = `{
@@ -105,7 +91,7 @@ func TestWikipediaProvider_UserAgent(t *testing.T) {
 	assert.Equal(t, wikipediaUserAgent(), gotUA)
 	assert.True(t, strings.HasPrefix(gotUA, "Mozilla/5.0 (compatible;"),
 		"Wikimedia rejects non-browser-shaped User-Agents with 403")
-	assert.Contains(t, gotUA, wikipediaUserAgentName)
+	assert.Contains(t, gotUA, useragent.PoliteBotName)
 	// The contact URL must come from branding, not a hardcoded upstream literal, so
 	// a rebranded fork advertises its own operator rather than tphakala's.
 	assert.Contains(t, gotUA, branding.RepoURL())
@@ -257,9 +243,9 @@ func TestWikipediaSubdomain(t *testing.T) {
 // not an invalid pt-br.wikipedia.org that fails DNS on every request.
 func TestWikipediaBuildURL_RegionalLocaleUsesBaseSubdomain(t *testing.T) {
 	t.Parallel()
-	url := (&WikipediaGuideProvider{}).buildURL("pt-br", "Turdus merula")
-	assert.Contains(t, url, "https://pt.wikipedia.org/w/api.php?")
-	assert.NotContains(t, url, "pt-br.wikipedia.org")
+	endpoint := (&WikipediaGuideProvider{}).buildURL("pt-br", "Turdus merula")
+	assert.Contains(t, endpoint, "https://pt.wikipedia.org/w/api.php?")
+	assert.NotContains(t, endpoint, "pt-br.wikipedia.org")
 }
 
 func TestWikipediaProvider_Name(t *testing.T) {

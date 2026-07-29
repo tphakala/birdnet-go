@@ -447,8 +447,17 @@ func (c *GuideCache) Close() {
 		// provider when its resources are released.
 		c.providersMu.Lock()
 		for i := range c.providers {
-			if closer, ok := c.providers[i].provider.(interface{ Close() error }); ok {
-				_ = closer.Close()
+			closer, ok := c.providers[i].provider.(interface{ Close() error })
+			if !ok {
+				continue
+			}
+			// Logged rather than discarded: a provider that cannot release its
+			// resources leaks them for the process lifetime, and shutdown is the
+			// last moment anything can report it.
+			if err := closer.Close(); err != nil {
+				GetLogger().Warn("guide provider failed to close",
+					logger.String("provider", c.providers[i].name),
+					logger.String("error", err.Error()))
 			}
 		}
 		c.providersMu.Unlock()

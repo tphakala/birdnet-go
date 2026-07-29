@@ -3,7 +3,6 @@ package guideprovider
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -14,23 +13,17 @@ import (
 
 	"golang.org/x/time/rate"
 
-	"github.com/tphakala/birdnet-go/internal/branding"
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/httpclient"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/openfauna"
+	"github.com/tphakala/birdnet-go/internal/useragent"
 )
 
 const (
 	// wikipediaLicense and wikipediaLicenseURL describe the license of article text.
 	wikipediaLicense    = "CC BY-SA 4.0"
 	wikipediaLicenseURL = "https://creativecommons.org/licenses/by-sa/4.0/"
-
-	// wikipediaUserAgentName is the app token in the User-Agent. Wikimedia's
-	// UA-policy enforcement (phab T400119) rejects bare "App/1.0 (url)" agents with
-	// HTTP 403, so wikipediaUserAgent() wraps it in the standard polite-bot
-	// "Mozilla/5.0 (compatible; ...)" form with a contact URL.
-	wikipediaUserAgentName = "BirdNET-Go"
 
 	// wikipediaTimeout bounds a single Wikipedia HTTP request.
 	wikipediaTimeout = 15 * time.Second
@@ -87,7 +80,7 @@ var subSectionHeadingRegex = regexp.MustCompile(`^={3,}\s*(.+?)\s*={3,}$`)
 
 // WikipediaGuideProvider fetches guide data from the Wikipedia REST/action API.
 type WikipediaGuideProvider struct {
-	client  *http.Client
+	client  *httpclient.Client
 	limiter *rate.Limiter
 
 	// refusalMu guards refusedUntil, which suppresses requests for
@@ -117,14 +110,30 @@ func (p *WikipediaGuideProvider) noteRefusal() {
 // metrics sink is recorded by the cache around Fetch, so it is accepted for
 // signature compatibility but not retained here.
 func NewWikipediaGuideProviderWithMetrics(_ GuideCacheMetrics) *WikipediaGuideProvider {
+	// The shared client rather than a bare &http.Client: it owns a tuned,
+	// pooled transport and the per-request timeout/UA plumbing, and it is what
+	// the rest of the project's outbound HTTP goes through. The User-Agent is
+	// still set per request (httpclient only fills one in when absent) so the
+	// header self-heals when the version is published after startup.
 	return &WikipediaGuideProvider{
-		client:  &http.Client{Timeout: wikipediaTimeout},
+		client: httpclient.New(&httpclient.Config{
+			DefaultTimeout: wikipediaTimeout,
+			UserAgent:      wikipediaUserAgent(),
+		}),
 		limiter: rate.NewLimiter(rate.Limit(wikipediaRateLimit), wikipediaRateBurst),
 	}
 }
 
 // Name returns the provider's registration name.
 func (p *WikipediaGuideProvider) Name() string { return WikipediaProviderName }
+
+// Close releases the provider's pooled connections. GuideCache.Close probes each
+// registered provider for io.Closer; without this the Wikipedia provider's idle
+// connections outlived the cache that owned it.
+func (p *WikipediaGuideProvider) Close() error {
+	p.client.Close()
+	return nil
+}
 
 // wikiQueryResponse models the action=query TextExtracts response shape.
 type wikiQueryResponse struct {
@@ -174,7 +183,7 @@ func (p *WikipediaGuideProvider) Fetch(ctx context.Context, scientificName strin
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", wikipediaUserAgent())
 
-	resp, err := p.client.Do(req)
+	resp, err := p.client.Do(ctx, req)
 	if err != nil {
 		// Network-level failures are transient.
 		return nil, NewTransientError(err)
@@ -321,7 +330,9 @@ var wikipediaHyphenatedSubdomains = map[string]struct{}{
 	wpEditionZhYue:       {},
 }
 
-// wikipediaUserAgent builds the User-Agent sent to the Wikimedia API.
+// wikipediaUserAgent is the User-Agent sent to the Wikimedia API: the polite-bot
+// form, because UA-policy enforcement (phab T400119) answers 403 to a bare
+// "App/1.0 (url)" agent.
 //
 // Both the version and the contact URL are resolved at call time rather than baked
 // into a literal. The literal this replaced pinned the version at "1.0", so no
@@ -330,16 +341,12 @@ var wikipediaHyphenatedSubdomains = map[string]struct{}{
 // address — which is exactly what branding.RepoURL() exists to prevent, and what
 // Wikimedia's policy relies on to reach the right operator.
 //
-// Resolved per call (not latched at construction) so a provider built before
-// main.go publishes Version starts reporting the real one as soon as it is known.
-func wikipediaUserAgent() string {
-	version := "unknown"
-	if settings := conf.Setting(); settings != nil && settings.Version != "" {
-		version = settings.Version
-	}
-	return fmt.Sprintf("Mozilla/5.0 (compatible; %s/%s; +%s)",
-		wikipediaUserAgentName, version, branding.RepoURL())
-}
+// internal/useragent owns the construction (shared with internal/imageprovider,
+// the other Wikimedia client) and memoizes the result once the running version is
+// published, so this no longer re-assembles the string on every request. It stays
+// unlatched until then, so a provider built before main.go publishes Version
+// starts reporting the real one as soon as it is known.
+var wikipediaUserAgent = useragent.PoliteBot
 
 // wikipediaSubdomain converts a UI locale to its Wikipedia language subdomain. It
 // drops any regional subtag ("pt-br"/"pt_PT" -> "pt", "zh-cn" -> "zh") and applies

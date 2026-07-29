@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -131,6 +132,55 @@ func newTestCache(t *testing.T, store GuideStore, provider GuideProvider) *Guide
 	}
 	t.Cleanup(c.Close)
 	return c
+}
+
+// closableProvider is a fakeProvider that records whether Close was called and
+// can report a failure from it.
+type closableProvider struct {
+	fakeProvider
+	closeErr error
+	closed   atomic.Int32
+}
+
+func (p *closableProvider) Close() error {
+	p.closed.Add(1)
+	return p.closeErr
+}
+
+// TestGuideCache_CloseReleasesProviders pins the provider-teardown contract.
+// GuideCache.Close probes each registered provider for an optional Close, which
+// went untested while no provider implemented one — the Wikipedia provider now
+// does (it owns a pooled HTTP client), so a regression here silently leaks its
+// connections on every hot-reload rebuild.
+func TestGuideCache_CloseReleasesProviders(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		closeErr error
+	}{
+		{name: "clean close"},
+		{name: "failing close is survivable", closeErr: errors.NewStd("boom")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			prov := &closableProvider{
+				fakeProvider: fakeProvider{name: WikipediaProviderName, result: &SpeciesGuide{CommonName: "x"}},
+				closeErr:     tc.closeErr,
+			}
+			c := NewGuideCache(newFakeStore(), noopMetrics{})
+			c.RegisterProvider(prov.Name(), prov)
+			c.Start()
+
+			c.Close()
+			assert.Equal(t, int32(1), prov.closed.Load(), "the provider must be closed exactly once")
+
+			// Close is documented as safe to call repeatedly, and must not close
+			// the provider a second time.
+			c.Close()
+			assert.Equal(t, int32(1), prov.closed.Load(), "repeat Close must not re-close providers")
+		})
+	}
 }
 
 // TestGuideCache_CloseRacesBackgroundSpawns exercises the spawn-vs-Close path:
