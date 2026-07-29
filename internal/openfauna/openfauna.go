@@ -782,18 +782,54 @@ func storeMetaCache(key string, e *metaCacheEntry) {
 	}
 }
 
+// Taxonomy is the links-free subset of Meta: the scalar taxonomy fields only.
+// Being all strings it needs no defensive copy, which is the point — see
+// LookupTaxonomy.
+type Taxonomy struct {
+	Class        string
+	Order        string
+	Family       string
+	FamilyCommon string
+}
+
+// LookupTaxonomy returns only the scalar taxonomy fields for one scientific name,
+// sharing LookupMeta's memo and dataset scan. Prefer it over LookupMeta wherever
+// the caller never reads Links: LookupMeta must clone the memoized Links map on
+// every call (including memo hits) to keep the shared entry immutable, and that
+// allocation is pure waste for a caller that only wants Family.
+func LookupTaxonomy(scientific string) (Taxonomy, bool) {
+	m, ok := lookupMetaShared(scientific)
+	return Taxonomy{
+		Class:        m.Class,
+		Order:        m.Order,
+		Family:       m.Family,
+		FamilyCommon: m.FamilyCommon,
+	}, ok
+}
+
 // LookupMeta returns taxonomy/link metadata for one scientific name. The first
 // lookup for a name scans the embedded dataset; the immutable result is then
 // memoized so repeat lookups are O(1). The dataset-scan cost (see Lookup) is paid
 // only on the first, uncached lookup of each name.
 func LookupMeta(scientific string) (Meta, bool) {
+	m, ok := lookupMetaShared(scientific)
+	// m.Links is the memoized map, shared with the cache and every other caller,
+	// so hand out a clone.
+	return m.clone(), ok
+}
+
+// lookupMetaShared is the shared body of LookupMeta and LookupTaxonomy. It returns
+// the memoized Meta AS STORED: the Links map is the shared one, so callers must
+// clone it before returning it outside this package or reading it after any
+// mutation. Only LookupMeta exposes Links, and it clones.
+func lookupMetaShared(scientific string) (Meta, bool) {
 	// The guide metadata path can be reached without BuildIndex, so run the
 	// schema gate here too (sync.Once-guarded; logs at most once per run).
 	warnOnSchemaMismatch()
 	target := normalizeName(scientific)
 	if v, ok := metaCache.Load(target); ok {
 		if e, ok := v.(metaCacheEntry); ok {
-			return e.meta.clone(), e.found
+			return e.meta, e.found
 		}
 	}
 	var found Meta
@@ -831,9 +867,7 @@ func LookupMeta(scientific string) (Meta, bool) {
 		logger.String("scientific", target),
 		logger.Bool("found", ok),
 	)
-	// found.Links is now the memoized map, so it needs the same clone the
-	// memo-hit path applies above.
-	return found.clone(), ok
+	return found, ok
 }
 
 // commonNameCacheMaxEntries bounds the LookupCommonName memo. It sits above the
@@ -1039,10 +1073,13 @@ func primeMeta(scientificNames []string) {
 	}
 }
 
-// Locales returns the sorted list of locale codes available in the dataset
-// (e.g. "en", "fi", "de", "en_uk", "zh_cn"). The codes use underscores and may
-// include regional variants; consumers map their own locale codes onto these.
-func Locales() []string {
+// localesShared parses the embedded locale list exactly once and returns the shared
+// slice. Callers must treat it as read-only. The embedded blob is immutable, so the
+// per-call split + TrimSpace this replaces was pure repetition — and it was on the
+// request path: mapLocale consults it on every LookupCommonName, including memo
+// hits, which the species guide made a per-species-per-request call rather than the
+// Rebuild-only one the original comment assumed.
+var localesShared = sync.OnceValue(func() []string {
 	lines := strings.Split(string(localesList), "\n")
 	out := make([]string, 0, len(lines))
 	for _, line := range lines {
@@ -1051,4 +1088,14 @@ func Locales() []string {
 		}
 	}
 	return out
+})
+
+// Locales returns the sorted list of locale codes available in the dataset
+// (e.g. "en", "fi", "de", "en_uk", "zh_cn"). The codes use underscores and may
+// include regional variants; consumers map their own locale codes onto these.
+//
+// The returned slice is a copy, so callers may sort or filter it in place; in-package
+// request-path callers use localesShared instead.
+func Locales() []string {
+	return slices.Clone(localesShared())
 }

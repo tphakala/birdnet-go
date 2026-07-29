@@ -1993,6 +1993,7 @@
         "noSimilar": "Līdzīgas sugas nav atrastas",
         "loading": "Notiek ceļveža ielāde…",
         "unavailable": "Sugu ceļvedis īslaicīgi nav pieejams. Lūdzu, mēģiniet vēlāk.",
+        "loadFailed": "Neizdevās ielādēt sugas ceļvedi. Lūdzu, mēģiniet vēlreiz.",
         "noGuide": "Šai sugai ceļvedis nav pieejams.",
         "expectedness": {
           "expected": "Šeit sagaidāms",
@@ -2024,6 +2025,7 @@
         "deleteConfirm": "Dzēst šo piezīmi?",
         "deleteFailed": "Neizdevās izdzēst piezīmi.",
         "saveFailed": "Neizdevās saglabāt piezīmi.",
+        "loadFailed": "Neizdevās ielādēt piezīmes.",
         "saveDisabledReason": "Ievadiet piezīmes tekstu, lai iespējotu saglabāšanu.",
         "tooLong": "Piezīme ir pārāk gara (ne vairāk kā {max} rakstzīmes).",
         "truncated": "Tiek rādītas {max} jaunākās piezīmes; vecākās piezīmes ir paslēptas."

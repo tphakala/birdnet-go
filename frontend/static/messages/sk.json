@@ -1993,6 +1993,7 @@
         "noSimilar": "Nenašli sa žiadne podobné druhy",
         "loading": "Načítava sa sprievodca…",
         "unavailable": "Sprievodca druhmi je dočasne nedostupný. Skúste to znova neskôr.",
+        "loadFailed": "Sprievodcu druhom sa nepodarilo načítať. Skúste to znova.",
         "noGuide": "Pre tento druh nie je k dispozícii sprievodca.",
         "expectedness": {
           "expected": "Tu očakávaný",
@@ -2024,6 +2025,7 @@
         "deleteConfirm": "Odstrániť túto poznámku?",
         "deleteFailed": "Poznámku sa nepodarilo odstrániť.",
         "saveFailed": "Poznámku sa nepodarilo uložiť.",
+        "loadFailed": "Poznámky sa nepodarilo načítať.",
         "saveDisabledReason": "Zadajte text poznámky na povolenie uloženia.",
         "tooLong": "Poznámka je príliš dlhá (maximálne {max} znakov).",
         "truncated": "Zobrazuje sa {max} najnovších poznámok; staršie poznámky sú skryté."

@@ -15,8 +15,13 @@ import {
 import {
   resolveSpeciesGuideConfig,
   resetSpeciesGuideConfigCacheForTests,
+  sameSpeciesGuideUIConfig,
   toSpeciesGuideUIConfig,
 } from './speciesGuideConfig';
+
+// Mirrors PUBLIC_CONFIG_TTL_MS in speciesGuideConfig.ts (not exported: it is an
+// implementation detail everywhere except this test).
+const PUBLIC_CONFIG_TTL_MS = 60_000;
 
 describe('toSpeciesGuideUIConfig', () => {
   it('applies backend *bool semantics: absent show flags default to true', () => {
@@ -46,6 +51,30 @@ describe('toSpeciesGuideUIConfig', () => {
       showSimilarSpecies: false,
       showTaxonomy: false,
     });
+  });
+});
+
+// resolveSpeciesGuideConfig allocates a new object per call, so the reactive wrapper
+// compares by value before writing its $state. If this ever became identity-based,
+// every unrelated settings emission would invalidate the whole guide-gating graph.
+describe('sameSpeciesGuideUIConfig', () => {
+  const base = toSpeciesGuideUIConfig({ enabled: true, enableWikipedia: false });
+
+  it('treats structurally equal but distinct objects as the same', () => {
+    expect(sameSpeciesGuideUIConfig(base, { ...base })).toBe(true);
+  });
+
+  it('detects a change in any single gate', () => {
+    expect(sameSpeciesGuideUIConfig(base, { ...base, enabled: false })).toBe(false);
+    expect(sameSpeciesGuideUIConfig(base, { ...base, showNotes: false })).toBe(false);
+    expect(sameSpeciesGuideUIConfig(base, { ...base, showSimilarSpecies: false })).toBe(false);
+    expect(sameSpeciesGuideUIConfig(base, { ...base, showTaxonomy: false })).toBe(false);
+  });
+
+  it('handles the unresolved (null) state on either side', () => {
+    expect(sameSpeciesGuideUIConfig(null, base)).toBe(false);
+    expect(sameSpeciesGuideUIConfig(base, null)).toBe(false);
+    expect(sameSpeciesGuideUIConfig(null, null)).toBe(true);
   });
 });
 
@@ -133,6 +162,35 @@ describe('resolveSpeciesGuideConfig', () => {
     expect(b).toEqual(a);
     expect(api.get).toHaveBeenCalledTimes(1);
     expect(api.get).toHaveBeenCalledWith('/api/v2/settings/dashboard');
+  });
+
+  // The cache TTL had no test at all, only a comment on a nowMs() wrapper claiming it
+  // "keeps the TTL testable". Fake timers cover it directly, so the wrapper is gone and
+  // the behaviour it was meant to justify is finally pinned: a guest tab must notice a
+  // guide that was switched off, without a full reload.
+  it('re-fetches the public config once the TTL has elapsed', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+      vi.mocked(api.get).mockResolvedValue({ speciesGuide: { enabled: true } } as never);
+
+      await expect(resolveSpeciesGuideConfig(null)).resolves.toMatchObject({ enabled: true });
+      expect(api.get).toHaveBeenCalledTimes(1);
+
+      // Still inside the window: served from cache.
+      vi.advanceTimersByTime(PUBLIC_CONFIG_TTL_MS - 1);
+      await resolveSpeciesGuideConfig(null);
+      expect(api.get).toHaveBeenCalledTimes(1);
+
+      // Past the window: the endpoint is consulted again, and a since-disabled guide
+      // is picked up instead of being served stale until a reload.
+      vi.advanceTimersByTime(2);
+      vi.mocked(api.get).mockResolvedValue({ speciesGuide: { enabled: false } } as never);
+      await expect(resolveSpeciesGuideConfig(null)).resolves.toMatchObject({ enabled: false });
+      expect(api.get).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('fails closed (guide hidden) when the public fetch errors, and allows a retry', async () => {

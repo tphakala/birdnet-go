@@ -295,14 +295,18 @@ func (c *Handler) WithGuideCache(fn func(*guideprovider.GuideCache) error) error
 // fresh cache (spawning a refresh loop and a detached warm on a non-cancellable
 // context) and install it into a handler nobody will shut down again, leaving those
 // goroutines running past process teardown.
-func (c *Handler) SetGuideCache(gc *guideprovider.GuideCache) {
+//
+// It reports whether gc was installed. A false return means the incoming cache was
+// refused and closed, so callers must not go on to wire callbacks into it (see the
+// hot-reload handler in internal/analysis).
+func (c *Handler) SetGuideCache(gc *guideprovider.GuideCache) bool {
 	c.guideCacheMu.Lock()
 	if c.guideShutdown {
 		c.guideCacheMu.Unlock()
 		if gc != nil {
 			gc.Close()
 		}
-		return
+		return false
 	}
 	old := c.guideCache
 	c.guideCache = gc
@@ -310,6 +314,7 @@ func (c *Handler) SetGuideCache(gc *guideprovider.GuideCache) {
 	if old != nil && old != gc {
 		old.Close()
 	}
+	return true
 }
 
 // Shutdown closes and nils the guide cache (the handler is its canonical owner).
@@ -671,7 +676,7 @@ func (c *Handler) GetSpeciesGuide(ctx echo.Context) error {
 		// name is the value guaranteed to match the geomodel label set. A
 		// provider-normalized guide.ScientificName could fall outside that vocabulary
 		// and silently miss.
-		if exp := c.guideExpectedness(name); exp != "" {
+		if exp := c.guideExpectedness(name, settings); exp != "" {
 			data.Expectedness = exp
 		}
 	}
@@ -1006,12 +1011,12 @@ const guideRarityTTL = 60 * time.Second
 // when the rarity model is unavailable or has no coverage for the species. It
 // uses a short-lived cache of the probable-species scores so a rate-limited
 // burst of guide requests doesn't re-run the geomodel prediction per call.
-func (c *Handler) guideExpectedness(scientificName string) string {
+func (c *Handler) guideExpectedness(scientificName string, settings *conf.Settings) string {
 	proc := c.Processor
 	if proc == nil || proc.Bn == nil {
 		return ""
 	}
-	scores := c.probableSpeciesScores(proc.Bn)
+	scores := c.probableSpeciesScores(proc.Bn, guideRarityLocationKey(settings))
 	if scores == nil {
 		return ""
 	}
@@ -1030,11 +1035,15 @@ func (c *Handler) guideExpectedness(scientificName string) string {
 	return ""
 }
 
-// guideRarityLocationKey returns a stable key for the configured observer
-// location. The memoized probable-species map is invalidated when this changes so
-// a location update is reflected immediately rather than after the TTL window.
-func (c *Handler) guideRarityLocationKey() string {
-	settings := c.CurrentSettings()
+// guideRarityLocationKey returns a stable key for an observer location. The
+// memoized probable-species map is invalidated when this changes so a location
+// update is reflected immediately rather than after the TTL window.
+//
+// It takes the caller's settings snapshot rather than re-reading CurrentSettings():
+// the handler already holds one two frames up, and a second read could key the memo
+// to a location the rest of the response was not built from if a hot-reload lands
+// between the two.
+func guideRarityLocationKey(settings *conf.Settings) string {
 	if settings == nil {
 		return ""
 	}
@@ -1050,12 +1059,11 @@ type probableSpeciesPredictor interface {
 }
 
 // probableSpeciesScores returns a cached map of normalized scientific name ->
-// geomodel occurrence score, rebuilding it when the TTL expires or the configured
-// location changes. Returns nil when the prediction is unavailable (caller omits
+// geomodel occurrence score, rebuilding it when the TTL expires or locKey (the
+// caller's location key, from guideRarityLocationKey) differs from the one the
+// memo was built for. Returns nil when the prediction is unavailable (caller omits
 // expectedness).
-func (c *Handler) probableSpeciesScores(bn probableSpeciesPredictor) map[string]float64 {
-	locKey := c.guideRarityLocationKey()
-
+func (c *Handler) probableSpeciesScores(bn probableSpeciesPredictor, locKey string) map[string]float64 {
 	// Fast path: while the memoized map is fresh AND was computed for the current
 	// location, a concurrent burst of guide requests shares it under a read lock
 	// without serializing on the rebuild.

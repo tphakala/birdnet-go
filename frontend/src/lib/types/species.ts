@@ -355,10 +355,9 @@ export interface CanonicalSections {
   behaviour: string;
 }
 
-function matchesHeading(heading: string, vocab: string[]): boolean {
-  const h = heading.trim().toLowerCase();
-  if (h === '') return false;
-  return vocab.some(token => h.includes(token));
+/** Whether an ALREADY-normalized heading contains any token of a vocabulary. */
+function matchesHeading(normalized: string, vocab: string[]): boolean {
+  return vocab.some(token => normalized.includes(token));
 }
 
 /**
@@ -368,10 +367,14 @@ function matchesHeading(heading: string, vocab: string[]): boolean {
  * section exists.
  */
 export function classifyCanonicalHeading(heading: string): CanonicalSectionId | null {
-  if (matchesHeading(heading, GUIDE_APPEARANCE_HEADINGS)) return 'appearance';
-  if (matchesHeading(heading, GUIDE_SONGS_HEADINGS)) return 'voice';
-  if (matchesHeading(heading, GUIDE_HABITAT_HEADINGS)) return 'habitat';
-  if (matchesHeading(heading, GUIDE_BEHAVIOUR_HEADINGS)) return 'behaviour';
+  // Normalize once. The four vocabulary passes below each used to re-trim and
+  // re-lowercase the heading; the Go twin (guideprovider/sections.go) lowercases once.
+  const h = heading.trim().toLowerCase();
+  if (h === '') return null;
+  if (matchesHeading(h, GUIDE_APPEARANCE_HEADINGS)) return 'appearance';
+  if (matchesHeading(h, GUIDE_SONGS_HEADINGS)) return 'voice';
+  if (matchesHeading(h, GUIDE_HABITAT_HEADINGS)) return 'habitat';
+  if (matchesHeading(h, GUIDE_BEHAVIOUR_HEADINGS)) return 'behaviour';
   return null;
 }
 
@@ -421,27 +424,28 @@ export function extractCanonicalSectionsFrom(sections: GuideSection[]): Canonica
  */
 export function parseGuideDescription(description: string): GuideSection[] {
   const sections: GuideSection[] = [];
+  // Hoisted: this was recomputed (a full trimStart of a description running to
+  // ~10 KB) up to three times per part.
+  const startsWithHeader = description.trimStart().startsWith('## ');
   const parts = description.split(/^## /m);
   for (const part of parts) {
     const trimmed = part.trim();
     if (!trimmed) continue;
+    // The first segment is the article lead unless the description opens with a
+    // header, in which case every segment is a real section. The lead has no
+    // heading line to split off, so it is the whole segment either way.
+    if (sections.length === 0 && !startsWithHeader) {
+      sections.push({ heading: '', body: trimmed });
+      continue;
+    }
     const newlineIdx = trimmed.indexOf('\n');
     if (newlineIdx === -1) {
-      if (sections.length === 0 && !description.trimStart().startsWith('## ')) {
-        sections.push({ heading: '', body: trimmed });
-      } else {
-        sections.push({ heading: trimmed, body: '' });
-      }
+      sections.push({ heading: trimmed, body: '' });
     } else {
-      const heading =
-        sections.length === 0 && !description.trimStart().startsWith('## ')
-          ? ''
-          : trimmed.slice(0, newlineIdx).trim();
-      const body =
-        sections.length === 0 && !description.trimStart().startsWith('## ')
-          ? trimmed
-          : trimmed.slice(newlineIdx + 1).trim();
-      sections.push({ heading, body });
+      sections.push({
+        heading: trimmed.slice(0, newlineIdx).trim(),
+        body: trimmed.slice(newlineIdx + 1).trim(),
+      });
     }
   }
   return sections;

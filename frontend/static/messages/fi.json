@@ -1993,6 +1993,7 @@
         "noSimilar": "Samankaltaisia lajeja ei löytynyt",
         "loading": "Ladataan opasta…",
         "unavailable": "Lajiopas on tilapäisesti pois käytöstä. Yritä myöhemmin uudelleen.",
+        "loadFailed": "Lajioppaan lataaminen epäonnistui. Yritä uudelleen.",
         "noGuide": "Tälle lajille ei ole opasta saatavilla.",
         "expectedness": {
           "expected": "Odotettavissa täällä",
@@ -2024,6 +2025,7 @@
         "deleteConfirm": "Poistetaanko tämä muistiinpano?",
         "deleteFailed": "Muistiinpanon poistaminen epäonnistui.",
         "saveFailed": "Muistiinpanon tallentaminen epäonnistui.",
+        "loadFailed": "Muistiinpanojen lataaminen epäonnistui.",
         "saveDisabledReason": "Kirjoita muistiinpanon teksti ottaaksesi tallennuksen käyttöön.",
         "tooLong": "Muistiinpano on liian pitkä (enintään {max} merkkiä).",
         "truncated": "Näytetään {max} uusinta muistiinpanoa; vanhemmat muistiinpanot on piilotettu."

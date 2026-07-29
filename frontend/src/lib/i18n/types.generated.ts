@@ -1549,6 +1549,7 @@ export type TranslationKey =
   | 'analytics.species.guide.noSimilar'
   | 'analytics.species.guide.loading'
   | 'analytics.species.guide.unavailable'
+  | 'analytics.species.guide.loadFailed'
   | 'analytics.species.guide.noGuide'
   | 'analytics.species.guide.expectedness.expected'
   | 'analytics.species.guide.expectedness.uncommon'
@@ -1574,6 +1575,7 @@ export type TranslationKey =
   | 'analytics.species.notes.deleteConfirm'
   | 'analytics.species.notes.deleteFailed'
   | 'analytics.species.notes.saveFailed'
+  | 'analytics.species.notes.loadFailed'
   | 'analytics.species.notes.saveDisabledReason'
   | 'analytics.species.notes.tooLong' // params: max
   | 'analytics.species.notes.truncated' // params: max

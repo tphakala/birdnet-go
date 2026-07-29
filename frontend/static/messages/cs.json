@@ -1993,6 +1993,7 @@
         "noSimilar": "Nebyly nalezeny žádné podobné druhy",
         "loading": "Načítání průvodce…",
         "unavailable": "Průvodce druhem je dočasně nedostupný. Zkuste to prosím později.",
+        "loadFailed": "Průvodce druhem se nepodařilo načíst. Zkuste to prosím znovu.",
         "noGuide": "Pro tento druh není k dispozici průvodce.",
         "expectedness": {
           "expected": "Zde očekávaný",
@@ -2024,6 +2025,7 @@
         "deleteConfirm": "Smazat tuto poznámku?",
         "deleteFailed": "Poznámku se nepodařilo smazat.",
         "saveFailed": "Poznámku se nepodařilo uložit.",
+        "loadFailed": "Poznámky se nepodařilo načíst.",
         "saveDisabledReason": "Zadejte text poznámky pro povolení uložení.",
         "tooLong": "Poznámka je příliš dlouhá (maximálně {max} znaků).",
         "truncated": "Zobrazuje se {max} nejnovějších poznámek; starší poznámky jsou skryté."

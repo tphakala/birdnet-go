@@ -1993,6 +1993,7 @@
         "noSimilar": "Nie znaleziono podobnych gatunków",
         "loading": "Ładowanie przewodnika…",
         "unavailable": "Przewodnik po gatunkach jest tymczasowo niedostępny. Spróbuj ponownie później.",
+        "loadFailed": "Nie udało się wczytać przewodnika po gatunku. Spróbuj ponownie.",
         "noGuide": "Przewodnik niedostępny dla tego gatunku.",
         "expectedness": {
           "expected": "Oczekiwany tutaj",
@@ -2024,6 +2025,7 @@
         "deleteConfirm": "Usunąć tę notatkę?",
         "deleteFailed": "Nie udało się usunąć notatki.",
         "saveFailed": "Nie udało się zapisać notatki.",
+        "loadFailed": "Nie udało się wczytać notatek.",
         "saveDisabledReason": "Wprowadź treść notatki, aby włączyć zapisywanie.",
         "tooLong": "Notatka jest za długa (maksymalnie {max} znaków).",
         "truncated": "Wyświetlanych jest {max} najnowszych notatek; starsze notatki są ukryte."

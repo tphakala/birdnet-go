@@ -91,6 +91,14 @@ type ControlMonitor struct {
 
 	// Quiet hours scheduler for stream/soundcard lifecycle management
 	quietHoursScheduler *schedule.QuietHoursScheduler
+
+	// monitorCtx is cancelled when the monitor goroutine exits (i.e. when quitChan
+	// closes), giving the handlers a cancellable context tied to this monitor's
+	// lifetime. Detached work started from a handler — the species guide cache warm
+	// is the only one today — must use it rather than context.Background(), so a
+	// shutdown aborts an in-flight ranking query instead of waiting out its timeout.
+	monitorCtx    context.Context
+	monitorCancel context.CancelFunc
 }
 
 // NewControlMonitor creates a new ControlMonitor instance.
@@ -127,6 +135,7 @@ func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, re
 		reconfigureSoundLevelFn: reconfigureSoundLevelFn,
 		reconfigureMonitoringFn: reconfigureMonitoringFn,
 	}
+	cm.monitorCtx, cm.monitorCancel = context.WithCancel(context.Background())
 
 	// Share the orchestrator's authoritative OpenFauna name resolver with the
 	// display surfaces, then re-localize the cached name maps now that the resolver
@@ -299,6 +308,10 @@ func (cm *ControlMonitor) initializeTelemetryIfEnabled() {
 
 // monitor listens for control signals and handles them
 func (cm *ControlMonitor) monitor() {
+	// Cancelling here is what ties monitorCtx to quitChan: this loop is the only
+	// thing that returns on quitChan, and it also unwinds on a panic, so detached
+	// handler work cannot outlive the monitor by either exit.
+	defer cm.monitorCancel()
 	for {
 		select {
 		case signal := <-cm.controlChan:
@@ -340,7 +353,7 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleRecalculateDynamicThresholds()
 	case "reconfigure_dynamic_thresholds":
 		cm.handleReconfigureDynamicThresholds()
-	case "reconfigure_species_guide":
+	case apiv2.SignalReconfigureSpeciesGuide:
 		cm.handleReconfigureSpeciesGuide()
 	case schedule.SignalReconfigureQuietHours:
 		cm.handleReconfigureQuietHours()
@@ -1049,7 +1062,15 @@ func (cm *ControlMonitor) handleReconfigureSpeciesGuide() {
 
 	// Swap in the new cache (nil when disabled). SetGuideCache closes the old
 	// cache outside its lock so concurrent readers are never blocked.
-	cm.apiController.SetGuideCache(newCache)
+	//
+	// It refuses the swap after the handler has shut down, closing newCache instead
+	// of installing it. Everything below wires into newCache, so a refusal has to
+	// stop here: otherwise the processor would be left holding a PreFetch callback
+	// into a closed cache indefinitely (a no-op, but a permanently dead one).
+	if !cm.apiController.SetGuideCache(newCache) {
+		GetLogger().Info("Species guide cache swap declined; controller is shutting down")
+		return
+	}
 
 	// Re-wire the processor's pre-fetch callback to the new cache (or clear it).
 	if cm.proc != nil {
@@ -1063,9 +1084,9 @@ func (cm *ControlMonitor) handleReconfigureSpeciesGuide() {
 	// Detached: the ranking query would otherwise stall this goroutine — and every
 	// reconfigure signal queued behind it — for up to warmRankingQueryTimeout on every
 	// species-guide save, including cosmetic Show* toggles (see startGuideCacheWarm).
-	// ControlMonitor holds no cancellable context, so the warm is bounded only by its
-	// own query timeout.
-	startGuideCacheWarm(context.Background(), newCache, cm.apiController.DS, cfg.WarmTopN, GetLogger())
+	// monitorCtx is cancelled when the monitor goroutine exits, so a shutdown that
+	// lands mid-warm aborts the query rather than waiting out its timeout.
+	startGuideCacheWarm(cm.monitorCtx, newCache, cm.apiController.DS, cfg.WarmTopN, GetLogger())
 
 	emitHotReload("species_guide_config")
 	cm.notifySuccess("Species guide reconfigured")

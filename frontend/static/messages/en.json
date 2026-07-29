@@ -1993,6 +1993,7 @@
         "noSimilar": "No similar species found",
         "loading": "Loading guide…",
         "unavailable": "Species guide is temporarily unavailable. Please try again later.",
+        "loadFailed": "Couldn’t load the species guide. Please try again.",
         "noGuide": "No guide available for this species.",
         "expectedness": {
           "expected": "Expected here",
@@ -2024,6 +2025,7 @@
         "deleteConfirm": "Delete this note?",
         "deleteFailed": "Failed to delete note.",
         "saveFailed": "Failed to save note.",
+        "loadFailed": "Failed to load notes.",
         "saveDisabledReason": "Enter note text to enable Save.",
         "tooLong": "Note is too long (maximum {max} bytes).",
         "truncated": "Showing the {max} most recent notes; older notes are hidden."

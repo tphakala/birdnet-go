@@ -44,6 +44,7 @@ import { getLogger } from '$lib/utils/logger';
 import { safeGet, safeSpread } from '$lib/utils/security';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { coerceSettings } from '$lib/utils/settingsCoercion';
+import { SPECIES_GUIDE_DEFAULT_WARM_TOP_N } from '$lib/utils/speciesGuideLimits';
 import { weatherDefaults } from '$lib/utils/weatherDefaults';
 import { derived, get, writable } from 'svelte/store';
 import { toastActions } from './toast.js';
@@ -1052,7 +1053,7 @@ function createEmptySettings(): SettingsFormData {
           enabled: false,
           enableWikipedia: false,
           enableSupplementaryLinks: false,
-          warmTopN: 50,
+          warmTopN: SPECIES_GUIDE_DEFAULT_WARM_TOP_N,
           preFetchEnabled: true,
           showNotes: true,
           showEnrichments: true,

@@ -6,6 +6,11 @@
  */
 
 import { CANDIDATE_SAMPLE_RATES } from '$lib/utils/audio/sampleRate';
+import {
+  SPECIES_GUIDE_DEFAULT_WARM_TOP_N,
+  SPECIES_GUIDE_MAX_WARM_TOP_N,
+  SPECIES_GUIDE_MIN_WARM_TOP_N,
+} from '$lib/utils/speciesGuideLimits';
 import type {
   BirdNetSettings,
   AudioSettings,
@@ -831,8 +836,12 @@ function coerceSpeciesGuideSettings(value: unknown): UnknownSettings {
     }
   }
   if (has('warmTopN')) {
-    // Bounds mirror the backend's SpeciesGuideMaxWarmTopN.
-    out.warmTopN = coerceNumber(sg.warmTopN, 0, 1000, 50);
+    out.warmTopN = coerceNumber(
+      sg.warmTopN,
+      SPECIES_GUIDE_MIN_WARM_TOP_N,
+      SPECIES_GUIDE_MAX_WARM_TOP_N,
+      SPECIES_GUIDE_DEFAULT_WARM_TOP_N
+    );
   }
   return out;
 }

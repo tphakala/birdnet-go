@@ -1993,6 +1993,7 @@
         "noSimilar": "Ingen lignende arter funnet",
         "loading": "Laster guide…",
         "unavailable": "Artsguiden er midlertidig utilgjengelig. Prøv igjen senere.",
+        "loadFailed": "Kunne ikke laste artsguiden. Prøv igjen.",
         "noGuide": "Ingen guide tilgjengelig for denne arten.",
         "expectedness": {
           "expected": "Forventet her",
@@ -2024,6 +2025,7 @@
         "deleteConfirm": "Slette dette notatet?",
         "deleteFailed": "Kunne ikke slette notatet.",
         "saveFailed": "Kunne ikke lagre notatet.",
+        "loadFailed": "Kunne ikke laste notatene.",
         "saveDisabledReason": "Skriv inn notattekst for å aktivere Lagre.",
         "tooLong": "Notatet er for langt (maks {max} tegn).",
         "truncated": "Viser de {max} nyeste notatene; eldre notater er skjult."

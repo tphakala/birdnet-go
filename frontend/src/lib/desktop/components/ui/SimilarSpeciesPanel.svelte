@@ -29,6 +29,12 @@
 
   let { mainName, similar, className = '' }: Props = $props();
 
+  // Instance-scoped id prefix, for the same reason SpeciesComparison (this
+  // component's only parent) carries one: DetectionDetail and an open species
+  // modal put two panels on the page at once, and a shared `similar-row-<id>`
+  // would make every aria-controls resolve to whichever copy mounted first.
+  const uid = $props.id();
+
   // Canonical rows shown in the diff card, in display order.
   const SECTION_ROWS: { id: CanonicalSectionId; labelKey: string }[] = [
     { id: 'appearance', labelKey: 'analytics.species.similar.sections.appearance' },
@@ -158,12 +164,14 @@
 
 <div class={`similar-species-panel ${className}`} data-testid="similar-species-panel">
   {#if similar.length === 0}
-    <p class="text-sm text-base-content/70">{t('analytics.species.similar.empty')}</p>
+    <p class="text-sm text-[var(--color-base-content)]/70">
+      {t('analytics.species.similar.empty')}
+    </p>
   {:else}
     <div class="grid grid-cols-[minmax(7rem,9rem)_1fr] gap-3">
       <!-- Picker rail -->
       <ul
-        class="flex flex-col gap-1 border-r border-base-300 pr-2"
+        class="flex flex-col gap-1 border-r border-[var(--color-base-300)] pr-2"
         aria-label={t('analytics.species.similar.title')}
       >
         {#each similar as entry (entry.scientific_name)}
@@ -173,8 +181,8 @@
               type="button"
               class="w-full rounded-md px-2 py-1.5 text-left text-sm transition-colors
                 {entry.scientific_name === selected
-                ? 'bg-primary/10 text-primary font-medium'
-                : 'hover:bg-base-200'}"
+                ? 'bg-[var(--color-primary)]/10 text-[var(--color-primary)] font-medium'
+                : 'hover:bg-[var(--color-base-200)]'}"
               title={entry.has_guide
                 ? name
                 : `${name} · ${t('analytics.species.similar.linksOnly')}`}
@@ -186,7 +194,7 @@
                 {#if !entry.has_guide}
                   <!-- Subtle cue: this species offers resource links, not a comparison. -->
                   <ExternalLink
-                    class="h-3 w-3 shrink-0 text-base-content/40"
+                    class="h-3 w-3 shrink-0 text-[var(--color-base-content)]/40"
                     aria-label={t('analytics.species.similar.linksOnly')}
                   />
                 {/if}
@@ -199,7 +207,7 @@
       <!-- Diff card -->
       <div class="min-w-0">
         {#if !selectedEntry}
-          <p class="text-sm text-base-content/70">
+          <p class="text-sm text-[var(--color-base-content)]/70">
             {t('analytics.species.similar.selectPrompt', { species: mainName })}
           </p>
         {:else}
@@ -207,7 +215,7 @@
             <p class="font-medium leading-tight">
               {selectedEntry.common_name || selectedEntry.scientific_name}
             </p>
-            <p class="text-xs text-base-content/60">
+            <p class="text-xs text-[var(--color-base-content)]/60">
               {t('analytics.species.similar.versus', { species: mainName })}
             </p>
           </div>
@@ -215,7 +223,7 @@
           {#if !selectedEntry.has_guide}
             <!-- No comparison prose: offer resource links so the selection is useful. -->
             {#if (selectedEntry.external_links ?? []).length > 0}
-              <p class="text-sm text-base-content/70 mb-2">
+              <p class="text-sm text-[var(--color-base-content)]/70 mb-2">
                 {t('analytics.species.similar.exploreResources')}
               </p>
               <div class="flex flex-wrap gap-2">
@@ -224,7 +232,7 @@
                 {/each}
               </div>
             {:else}
-              <p class="text-sm text-base-content/70">
+              <p class="text-sm text-[var(--color-base-content)]/70">
                 {t('analytics.species.similar.cardNoGuide')}
               </p>
             {/if}
@@ -232,22 +240,24 @@
             <div
               role="status"
               aria-live="polite"
-              class="flex items-center gap-2 text-sm text-base-content/70"
+              class="flex items-center gap-2 text-sm text-[var(--color-base-content)]/70"
             >
               <span
-                class="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full"
+                class="animate-spin h-4 w-4 border-2 border-[var(--color-primary)] border-t-transparent rounded-full"
                 aria-hidden="true"
               ></span>
               <span>{t('analytics.species.similar.cardLoading')}</span>
             </div>
           {:else if selectedStatus === 'notfound'}
-            <p class="text-sm text-base-content/70">{t('analytics.species.similar.cardNoGuide')}</p>
+            <p class="text-sm text-[var(--color-base-content)]/70">
+              {t('analytics.species.similar.cardNoGuide')}
+            </p>
           {:else if selectedStatus === 'error'}
-            <p role="alert" class="text-sm text-error">
+            <p role="alert" class="text-sm text-[var(--color-error)]">
               {t('analytics.species.similar.cardError')}
             </p>
           {:else if visibleRows.length === 0}
-            <p class="text-sm text-base-content/70">
+            <p class="text-sm text-[var(--color-base-content)]/70">
               {t('analytics.species.similar.cardNoSections')}
             </p>
           {:else}
@@ -257,11 +267,11 @@
                 {@const clampable = text.length > CLAMP_CHAR_THRESHOLD}
                 {@const expanded = expandedRows.has(row.id)}
                 <div>
-                  <dt class="text-xs uppercase tracking-wide text-base-content/50">
+                  <dt class="text-xs uppercase tracking-wide text-[var(--color-base-content)]/50">
                     {t(row.labelKey)}
                   </dt>
                   <dd
-                    id={`similar-row-${row.id}`}
+                    id={`${uid}-row-${row.id}`}
                     class="mt-0.5 text-sm whitespace-pre-line"
                     class:line-clamp-4={clampable && !expanded}
                   >
@@ -270,9 +280,9 @@
                   {#if clampable}
                     <button
                       type="button"
-                      class="mt-0.5 text-xs font-medium text-primary hover:underline"
+                      class="mt-0.5 text-xs font-medium text-[var(--color-primary)] hover:underline"
                       aria-expanded={expanded}
-                      aria-controls={`similar-row-${row.id}`}
+                      aria-controls={`${uid}-row-${row.id}`}
                       onclick={() => toggleRow(row.id)}
                     >
                       {expanded ? t('common.ui.showLess') : t('common.ui.showMore')}

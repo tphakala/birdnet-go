@@ -114,7 +114,7 @@ func TestProbableSpeciesScores_MemoizesUnderConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			results[idx] = c.probableSpeciesScores(pred)
+			results[idx] = c.probableSpeciesScores(pred, guideRarityLocationKey(c.CurrentSettings()))
 		}(i)
 	}
 	wg.Wait()
@@ -140,8 +140,8 @@ func TestProbableSpeciesScores_InvalidatesOnLocationChange(t *testing.T) {
 	c.Settings.Store(s)
 	pred := &fakePredictor{scores: []classifier.SpeciesScore{{Label: "X", Score: 0.5}}}
 
-	c.probableSpeciesScores(pred)
-	c.probableSpeciesScores(pred)
+	c.probableSpeciesScores(pred, guideRarityLocationKey(c.CurrentSettings()))
+	c.probableSpeciesScores(pred, guideRarityLocationKey(c.CurrentSettings()))
 	assert.Equal(t, 1, pred.callCount(), "same location within TTL must be memoized")
 
 	// Change location: the memo must invalidate and re-predict despite a live TTL.
@@ -150,7 +150,7 @@ func TestProbableSpeciesScores_InvalidatesOnLocationChange(t *testing.T) {
 	s2.BirdNET.Longitude = 20.0
 	conftest.SetTestSettings(s2)
 
-	c.probableSpeciesScores(pred)
+	c.probableSpeciesScores(pred, guideRarityLocationKey(c.CurrentSettings()))
 	assert.Equal(t, 2, pred.callCount(), "location change must invalidate the memo")
 }
 
@@ -426,7 +426,7 @@ func TestSeasonTokenByConfName_CoversEveryDefaultSeason(t *testing.T) {
 func TestExpectednessAndEbirdCode_NoProcessor(t *testing.T) {
 	t.Parallel()
 	c := New(&apicore.Core{}) // Processor is nil
-	assert.Empty(t, c.guideExpectedness(sciEurasianBlackbird))
+	assert.Empty(t, c.guideExpectedness(sciEurasianBlackbird, &conf.Settings{}))
 	assert.Empty(t, c.ebirdSpeciesCode(sciEurasianBlackbird))
 }
 

@@ -645,7 +645,10 @@ func (c *Controller) WithGuideCache(fn func(*guideprovider.GuideCache) error) er
 // SetGuideCache atomically swaps in a new species guide cache, closing the
 // previous one. It delegates to the species guide domain handler; the hot-reload
 // path (internal/analysis control monitor) calls this on *Controller.
-func (c *Controller) SetGuideCache(gc *guideprovider.GuideCache) {
+//
+// It reports whether gc was installed; false means it was refused and closed, and
+// the caller must not wire anything into it.
+func (c *Controller) SetGuideCache(gc *guideprovider.GuideCache) bool {
 	// Nil-guarded for manually constructed test controllers, matching Shutdown.
 	// With no handler to own the incoming cache, close it rather than leak its
 	// refresh loop — the same choice the handler makes after Shutdown.
@@ -653,9 +656,9 @@ func (c *Controller) SetGuideCache(gc *guideprovider.GuideCache) {
 		if gc != nil {
 			gc.Close()
 		}
-		return
+		return false
 	}
-	c.speciesGuide.SetGuideCache(gc)
+	return c.speciesGuide.SetGuideCache(gc)
 }
 
 // initRoutes registers all API endpoints

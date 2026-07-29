@@ -77,6 +77,20 @@ func NormalizeSpeciesNoteEntry(entry string) (string, error) {
 
 // normalizeSpeciesName normalizes a scientific name for consistent lookups so
 // notes match regardless of surrounding whitespace.
+//
+// It deliberately does NOT canonicalize through openfauna.CanonicalName, unlike the
+// content-resolution paths (openfauna/links.go, guideprovider/openfauna.go,
+// api/v2/species). That is the intended line, not an oversight: content resolution
+// canonicalizes, STORAGE KEYS do not. This key mirrors the detections key, and the
+// guide cache key does the same. Reads and writes here are symmetric, so there is no
+// read/write drift to fix.
+//
+// Canonicalizing it now would orphan every note already written under a legacy name,
+// and — because the dataset tracks eBird/Clements annual reissues — would create a
+// recurring re-migration obligation on every dataset bump. The underlying split-rows
+// problem predates this and lives upstream (ingestion was canonicalized without
+// backfilling history); the fix for it is a one-shot backfill of the detection table,
+// not a change here.
 func normalizeSpeciesName(scientificName string) string {
 	return strings.TrimSpace(scientificName)
 }

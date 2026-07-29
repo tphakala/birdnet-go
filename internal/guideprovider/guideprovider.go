@@ -856,9 +856,16 @@ func (c *GuideCache) triggerAsyncRefresh(name, locale string) {
 		if c.shouldQuit() {
 			return
 		}
-		_, _, _ = c.sf.Do(key, func() (any, error) {
+		if _, err, _ := c.sf.Do(key, func() (any, error) {
 			return c.fetchAndStore(c.ctx, name, locale)
-		})
+		}); err != nil {
+			// Debug, not Warn: the caller already served a stale-but-usable entry, so
+			// this is a missed opportunity rather than a user-visible failure.
+			GetLogger().Debug("Species guide async refresh failed",
+				logger.String("species", name),
+				logger.String("locale", locale),
+				logger.Error(err))
+		}
 	})
 }
 
@@ -899,7 +906,13 @@ func (c *GuideCache) PreFetch(ctx context.Context, scientificName string) {
 		}
 		// Warm the dashboard locale (not the default), so the pre-fetched entry keys to
 		// the locale the UI actually requests.
-		_, _ = c.Get(fetchCtx, name, FetchOptions{Locale: c.warmLocale})
+		if _, err := c.Get(fetchCtx, name, FetchOptions{Locale: c.warmLocale}); err != nil {
+			// Debug: a failed pre-fetch costs nothing but a cold entry on the next
+			// request, and detection bursts would make anything louder unusable.
+			GetLogger().Debug("Species guide pre-fetch failed",
+				logger.String("species", name),
+				logger.Error(err))
+		}
 	})
 	if !started {
 		// The cache closed between the check above and the spawn; the goroutine's
@@ -933,13 +946,32 @@ func (c *GuideCache) WarmForSpecies(speciesNames []string) {
 		// batch is complete — so even a one-species warm costs no more than the
 		// single-name path it replaces.
 		openfauna.PrimeCaches(names, c.warmLocale)
+		failed := 0
+		var firstErr error
 		for _, n := range names {
 			if c.shouldQuit() {
 				return
 			}
 			// Warm the dashboard locale (not the default) so the warmed entries key to
 			// the locale the UI will request.
-			_, _ = c.Get(c.ctx, n, FetchOptions{Locale: c.warmLocale})
+			if _, err := c.Get(c.ctx, n, FetchOptions{Locale: c.warmLocale}); err != nil {
+				failed++
+				if firstErr == nil {
+					firstErr = err
+				}
+			}
+		}
+		// One summary line, not one per species: without it a warm that fails from
+		// end to end (no network, provider unavailable) leaves nothing behind but
+		// per-provider Debug lines. A definitive not-found is not a failure here —
+		// fetchAndStore turns those into cached negative entries and returns nil.
+		if failed > 0 {
+			GetLogger().Warn("Species guide cache warm finished with failures",
+				logger.Int("failed", failed),
+				logger.Int("total", len(names)),
+				logger.Error(firstErr))
+		} else {
+			GetLogger().Debug("Species guide cache warm complete", logger.Int("total", len(names)))
 		}
 		c.updateCachePopulationRatio()
 	})
@@ -1010,9 +1042,16 @@ func (c *GuideCache) refreshStaleEntries() {
 		// periodic refresh that coincides with a user-triggered fetch for the same
 		// species collapses to one provider call instead of a redundant external hit.
 		key := cacheKey(s.name, s.locale)
-		_, _, _ = c.sf.Do(key, func() (any, error) {
+		if _, err, _ := c.sf.Do(key, func() (any, error) {
 			return c.fetchAndStore(c.ctx, s.name, s.locale)
-		})
+		}); err != nil {
+			// Debug: the stale entry stays served and the next cycle retries, so a
+			// failure here is not actionable on its own.
+			GetLogger().Debug("Species guide periodic refresh failed",
+				logger.String("species", s.name),
+				logger.String("locale", s.locale),
+				logger.Error(err))
+		}
 	}
 
 	// Opportunistic retention cleanup of long-expired DB rows.

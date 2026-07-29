@@ -39,7 +39,10 @@
 
   let notes = $state<SpeciesNoteData[]>([]);
   let loading = $state(true);
-  let error = $state<string | null>(null);
+  // Boolean, not the error text: the raw message is server/network prose in
+  // whatever language the backend or the browser produced it, and this component
+  // translates everything else. The detail goes to the logger instead.
+  let loadFailed = $state(false);
 
   let draft = $state('');
   let saving = $state(false);
@@ -48,15 +51,33 @@
   let editDraft = $state('');
   let confirmingDeleteId = $state<number | null>(null);
 
-  let draftTooLong = $derived(utf8ByteLength(draft.trim()) > NOTE_MAX_BYTES);
-  let canSave = $derived(draft.trim().length > 0 && !draftTooLong && !saving);
+  // The add form and the per-note edit form apply the same two gates to different
+  // state, so the rules live here once rather than as two parallel $derived pairs
+  // that can drift.
+  function isTooLong(value: string): boolean {
+    return utf8ByteLength(value.trim()) > NOTE_MAX_BYTES;
+  }
+  function canSubmit(value: string, tooLong: boolean): boolean {
+    return value.trim().length > 0 && !tooLong && !saving;
+  }
+  // The reason a Save button is disabled, as required by the project's
+  // no-ambiguous-disabled-states rule. Shared by both forms' title attribute and
+  // the saveHelp snippet so the tooltip and the visible text cannot disagree.
+  function saveBlockedReason(tooLong: boolean): string {
+    return tooLong
+      ? t('analytics.species.notes.tooLong', { max: NOTE_MAX_BYTES })
+      : t('analytics.species.notes.saveDisabledReason');
+  }
 
-  let editTooLong = $derived(utf8ByteLength(editDraft.trim()) > NOTE_MAX_BYTES);
-  let canSaveEdit = $derived(editDraft.trim().length > 0 && !editTooLong && !saving);
+  let draftTooLong = $derived(isTooLong(draft));
+  let canSave = $derived(canSubmit(draft, draftTooLong));
+
+  let editTooLong = $derived(isTooLong(editDraft));
+  let canSaveEdit = $derived(canSubmit(editDraft, editTooLong));
 
   async function load(name: string): Promise<void> {
     loading = true;
-    error = null;
+    loadFailed = false;
     try {
       const res =
         (await api.get<SpeciesNoteData[]>(`/api/v2/species/${encodeURIComponent(name)}/notes`)) ??
@@ -69,7 +90,7 @@
       }
     } catch (e) {
       if (name === scientificName.trim()) {
-        error = e instanceof Error ? e.message : String(e);
+        loadFailed = true;
       }
       logger.error('Failed to load species notes', e, { component: 'SpeciesNotes' });
     } finally {
@@ -178,12 +199,27 @@
     if (!name || !$isAuthenticated) {
       notes = [];
       loading = false;
-      error = null;
+      loadFailed = false;
       return;
     }
     void load(name);
   });
 </script>
+
+<!--
+  The disabled-Save explanation, rendered identically under the add form and under
+  every open edit form (which previously carried byte-identical copies).
+
+  Show the "too long" reason visibly — tooltips are invisible on touch devices —
+  while the empty-draft reason stays screen-reader-only, since an empty textarea
+  already makes it self-evident. `helpId` is the caller's instance-scoped id, which
+  is what its button points `aria-describedby` at.
+-->
+{#snippet saveHelp(helpId: string, tooLong: boolean)}
+  <p id={helpId} class={tooLong ? 'text-xs text-[var(--color-error)] mt-1' : 'sr-only'}>
+    {saveBlockedReason(tooLong)}
+  </p>
+{/snippet}
 
 <section class={`species-notes ${className}`} aria-label={t('analytics.species.notes.title')}>
   <h3 class="text-base font-semibold mb-2">{t('analytics.species.notes.title')}</h3>
@@ -203,11 +239,7 @@
           type="button"
           class="btn btn-primary btn-sm"
           disabled={!canSave}
-          title={!canSave
-            ? draftTooLong
-              ? t('analytics.species.notes.tooLong', { max: NOTE_MAX_BYTES })
-              : t('analytics.species.notes.saveDisabledReason')
-            : undefined}
+          title={!canSave ? saveBlockedReason(draftTooLong) : undefined}
           aria-describedby={!canSave ? `${uid}-save-help` : undefined}
           onclick={addNote}
         >
@@ -216,37 +248,35 @@
         </button>
       </div>
       {#if !canSave}
-        <!-- Show the "too long" reason visibly (tooltips are invisible on touch
-             devices); the empty-draft reason stays screen-reader-only since the
-             empty textarea already makes it self-evident. -->
-        <p id={`${uid}-save-help`} class={draftTooLong ? 'text-xs text-error mt-1' : 'sr-only'}>
-          {draftTooLong
-            ? t('analytics.species.notes.tooLong', { max: NOTE_MAX_BYTES })
-            : t('analytics.species.notes.saveDisabledReason')}
-        </p>
+        {@render saveHelp(`${uid}-save-help`, draftTooLong)}
       {/if}
     </div>
   {/if}
 
   {#if loading}
-    <div role="status" aria-live="polite" class="text-sm text-base-content/70 py-2">
+    <div role="status" aria-live="polite" class="text-sm text-[var(--color-base-content)]/70 py-2">
       {t('common.loading')}
     </div>
-  {:else if error}
-    <div role="alert" class="p-3 rounded-lg bg-error/10 text-error text-sm">{error}</div>
+  {:else if loadFailed}
+    <div
+      role="alert"
+      class="p-3 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] text-sm"
+    >
+      {t('analytics.species.notes.loadFailed')}
+    </div>
   {:else if notes.length === 0}
-    <p class="text-sm text-base-content/70">{t('analytics.species.notes.empty')}</p>
+    <p class="text-sm text-[var(--color-base-content)]/70">{t('analytics.species.notes.empty')}</p>
   {:else}
     {#if notes.length >= NOTES_MAX_RESULTS}
       <!-- A full page means the server cap was hit: older notes are not shown
            (an exactly-at-cap total shows this too — harmless). -->
-      <p role="status" class="text-xs text-base-content/70 mb-2">
+      <p role="status" class="text-xs text-[var(--color-base-content)]/70 mb-2">
         {t('analytics.species.notes.truncated', { max: NOTES_MAX_RESULTS })}
       </p>
     {/if}
     <ul class="space-y-2">
       {#each notes as note (note.id)}
-        <li class="rounded-md border border-base-300 p-2">
+        <li class="rounded-md border border-[var(--color-base-300)] p-2">
           {#if editingId === note.id}
             <label for={`${uid}-edit-${note.id}`} class="sr-only">
               {t('analytics.species.notes.editLabel')}
@@ -270,11 +300,7 @@
                 type="button"
                 class="btn btn-primary btn-sm"
                 disabled={!canSaveEdit}
-                title={!canSaveEdit
-                  ? editTooLong
-                    ? t('analytics.species.notes.tooLong', { max: NOTE_MAX_BYTES })
-                    : t('analytics.species.notes.saveDisabledReason')
-                  : undefined}
+                title={!canSaveEdit ? saveBlockedReason(editTooLong) : undefined}
                 aria-describedby={!canSaveEdit ? `${uid}-edit-save-help` : undefined}
                 onclick={() => saveEdit(note.id)}
               >
@@ -283,23 +309,18 @@
               </button>
             </div>
             {#if !canSaveEdit}
-              <p
-                id={`${uid}-edit-save-help`}
-                class={editTooLong ? 'text-xs text-error mt-1' : 'sr-only'}
-              >
-                {editTooLong
-                  ? t('analytics.species.notes.tooLong', { max: NOTE_MAX_BYTES })
-                  : t('analytics.species.notes.saveDisabledReason')}
-              </p>
+              {@render saveHelp(`${uid}-edit-save-help`, editTooLong)}
             {/if}
           {:else}
             <p class="text-sm whitespace-pre-line">{note.entry}</p>
             <div class="mt-1 flex items-center justify-between gap-2">
-              <span class="text-xs text-base-content/50">{formatDate(note.updated_at)}</span>
+              <span class="text-xs text-[var(--color-base-content)]/50"
+                >{formatDate(note.updated_at)}</span
+              >
               {#if $isAuthenticated}
                 {#if confirmingDeleteId === note.id}
                   <div class="flex items-center gap-2">
-                    <span class="text-xs text-base-content/70">
+                    <span class="text-xs text-[var(--color-base-content)]/70">
                       {t('analytics.species.notes.deleteConfirm')}
                     </span>
                     <button
@@ -329,7 +350,7 @@
                     </button>
                     <button
                       type="button"
-                      class="btn btn-ghost btn-xs text-error"
+                      class="btn btn-ghost btn-xs text-[var(--color-error)]"
                       aria-label={t('analytics.species.notes.deleteConfirm')}
                       onclick={() => (confirmingDeleteId = note.id)}
                     >

@@ -1993,6 +1993,7 @@
         "noSimilar": "Nem találhatók hasonló fajok",
         "loading": "Útmutató betöltése…",
         "unavailable": "A fajútmutató átmenetileg nem érhető el. Kérjük, próbálja újra később.",
+        "loadFailed": "A fajútmutató betöltése nem sikerült. Kérjük, próbálja újra.",
         "noGuide": "Ehhez a fajhoz nincs elérhető útmutató.",
         "expectedness": {
           "expected": "Itt várható",
@@ -2024,6 +2025,7 @@
         "deleteConfirm": "Törli ezt a jegyzetet?",
         "deleteFailed": "A jegyzet törlése nem sikerült.",
         "saveFailed": "A jegyzet mentése nem sikerült.",
+        "loadFailed": "A jegyzetek betöltése nem sikerült.",
         "saveDisabledReason": "Adjon meg jegyzetszöveget a Mentés engedélyezéséhez.",
         "tooLong": "A jegyzet túl hosszú (legfeljebb {max} karakter).",
         "truncated": "A {max} legújabb jegyzet látható; a régebbi jegyzetek rejtve vannak."

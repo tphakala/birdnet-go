@@ -1993,6 +1993,7 @@
         "noSimilar": "Keine ähnlichen Arten gefunden",
         "loading": "Steckbrief wird geladen…",
         "unavailable": "Der Steckbrief ist vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut.",
+        "loadFailed": "Der Steckbrief konnte nicht geladen werden. Bitte erneut versuchen.",
         "noGuide": "Für diese Art ist kein Steckbrief verfügbar.",
         "expectedness": {
           "expected": "Hier zu erwarten",
@@ -2024,6 +2025,7 @@
         "deleteConfirm": "Diese Notiz löschen?",
         "deleteFailed": "Notiz konnte nicht gelöscht werden.",
         "saveFailed": "Notiz konnte nicht gespeichert werden.",
+        "loadFailed": "Notizen konnten nicht geladen werden.",
         "saveDisabledReason": "Geben Sie einen Notiztext ein, um Speichern zu aktivieren.",
         "tooLong": "Notiz ist zu lang (maximal {max} Zeichen).",
         "truncated": "Es werden die {max} neuesten Notizen angezeigt; ältere Notizen sind ausgeblendet."

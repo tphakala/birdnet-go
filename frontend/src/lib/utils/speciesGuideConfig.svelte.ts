@@ -12,7 +12,11 @@
  * feature; invoking the getter inside the effect keeps the subscription tracked by the
  * calling component.
  */
-import { resolveSpeciesGuideConfig, type SpeciesGuideUIConfig } from './speciesGuideConfig';
+import {
+  resolveSpeciesGuideConfig,
+  sameSpeciesGuideUIConfig,
+  type SpeciesGuideUIConfig,
+} from './speciesGuideConfig';
 import type { SpeciesGuideSettings } from '$lib/stores/settings';
 
 /** Reactive view of the guide gating flags, with defaults applied while unresolved. */
@@ -48,7 +52,12 @@ export function createSpeciesGuideConfig(
     void resolveSpeciesGuideConfig(fromStore).then(resolved => {
       // Drop a late resolution once the inputs have moved on, so a slow public fetch
       // cannot overwrite a newer store-derived value.
-      if (!stale) config = resolved;
+      if (stale) return;
+      // Assign only on a real change. resolveSpeciesGuideConfig allocates a fresh
+      // object every call, so an unrelated settings emission would otherwise rewrite
+      // this $state with an equal-but-not-identical value and invalidate every
+      // downstream derived for nothing.
+      if (!sameSpeciesGuideUIConfig(config, resolved)) config = resolved;
     });
     return () => {
       stale = true;

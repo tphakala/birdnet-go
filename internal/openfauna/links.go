@@ -1,10 +1,11 @@
 package openfauna
 
 import (
+	"cmp"
 	"encoding/json"
 	"maps"
 	"net/url"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
@@ -185,6 +186,11 @@ func hasUnresolvedPlaceholder(u string) bool {
 // are skipped. Result is sorted by Source.Order, then Name for stability.
 func resolveLinks(links map[string]LinkEntry, lang string, reg map[string]Source) []Link {
 	out := make([]Link, 0, len(links))
+	// One map reused across the loop. substituteTemplate only reads it and never
+	// retains it, so allocating a fresh two-key map per link was pure garbage on a
+	// path that runs once per species per request. Every iteration that reaches the
+	// substitution writes both keys, so no stale value can leak between links.
+	vars := make(map[string]string, 2)
 	for id, entry := range links {
 		src, ok := reg[id]
 		if !ok {
@@ -209,7 +215,9 @@ func resolveLinks(links map[string]LinkEntry, lang string, reg map[string]Source
 			// taxon ids). A source whose id would need escaping (e.g. a Wikipedia title
 			// with spaces) ships a url override instead, handled by the case above.
 			// {lang} is the per-source mapped language (see Source.langFor).
-			linkURL = substituteTemplate(src.URL, map[string]string{phID: entry.ID, phLang: src.langFor(lang)})
+			vars[phID] = entry.ID
+			vars[phLang] = src.langFor(lang)
+			linkURL = substituteTemplate(src.URL, vars)
 			if hasUnresolvedPlaceholder(linkURL) {
 				// Template referenced a placeholder this resolver does not supply; a dead
 				// link would result. Drop and log rather than render it.
@@ -228,11 +236,11 @@ func resolveLinks(links map[string]LinkEntry, lang string, reg map[string]Source
 
 // sortLinks orders links by Order then Name (deterministic for equal orders).
 func sortLinks(links []Link) {
-	sort.SliceStable(links, func(i, j int) bool {
-		if links[i].Order != links[j].Order {
-			return links[i].Order < links[j].Order
+	slices.SortStableFunc(links, func(a, b Link) int {
+		if c := cmp.Compare(a.Order, b.Order); c != 0 {
+			return c
 		}
-		return links[i].Name < links[j].Name
+		return strings.Compare(a.Name, b.Name)
 	})
 }
 
@@ -269,14 +277,17 @@ func resolveComputedLinks(scientificName, lang string, reg map[string]Source) []
 	sci := url.QueryEscape(scientificName)
 	sciUnderscored := url.PathEscape(strings.ReplaceAll(scientificName, " ", "_"))
 	out := make([]Link, 0, len(reg))
+	// {sci}/{sci_underscored} are per-species, so hoist them out of the loop and let
+	// each iteration overwrite only {lang}; the map is read-only to
+	// substituteTemplate, which is what makes reusing it safe.
+	vars := map[string]string{
+		phSci:            sci,
+		phSciUnderscored: sciUnderscored,
+	}
 	for _, src := range reg {
 		// {lang} is mapped per source (see Source.langFor) so a Wikipedia gap-fill
 		// gets the "no" project for nb/nn while other sources keep the base subtag.
-		vars := map[string]string{
-			phSci:            sci,
-			phSciUnderscored: sciUnderscored,
-			phLang:           src.langFor(lang),
-		}
+		vars[phLang] = src.langFor(lang)
 		linkURL := substituteTemplate(src.URL, vars)
 		if hasUnresolvedPlaceholder(linkURL) {
 			// A supplementary template referenced a key not supplied here (e.g. {id});
@@ -312,7 +323,10 @@ func ExternalLinks(scientificName, lang string, includeSupplementary bool) []Lin
 	// CanonicalName is identity for non-aliased names, so this is safe unconditionally.
 	scientificName = CanonicalName(scientificName)
 	var tier1 []Link
-	if meta, ok := LookupMeta(scientificName); ok && len(meta.Links) > 0 {
+	// lookupMetaShared, not LookupMeta: resolveLinks only reads the Links map, and
+	// the memoized entry is immutable once stored, so the defensive clone LookupMeta
+	// owes external callers is pure allocation on this per-species request path.
+	if meta, ok := lookupMetaShared(scientificName); ok && len(meta.Links) > 0 {
 		tier1 = resolveLinks(meta.Links, lang, sourcesReadOnly())
 	}
 	if !includeSupplementary {

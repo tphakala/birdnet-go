@@ -149,6 +149,43 @@ func TestLookupMeta_MemoizedResultsAreConsistent(t *testing.T) {
 	assert.False(t, missB, "an absent name stays absent on the memoized lookup")
 }
 
+// TestLookupTaxonomy_MatchesLookupMetaScalars pins that the links-free accessor is a
+// pure projection of LookupMeta — same found-ness, same scalar fields, for a present
+// and an absent name alike. It is the only thing standing between the two entry
+// points and a silent drift if one of them ever grows its own lookup path.
+func TestLookupTaxonomy_MatchesLookupMetaScalars(t *testing.T) {
+	t.Parallel()
+
+	for _, sci := range []string{"Turdus merula", "Definitely notaspecies"} {
+		meta, metaOK := LookupMeta(sci)
+		tax, taxOK := LookupTaxonomy(sci)
+		assert.Equal(t, metaOK, taxOK, "found-ness must agree for %q", sci)
+		assert.Equal(t, Taxonomy{
+			Class:        meta.Class,
+			Order:        meta.Order,
+			Family:       meta.Family,
+			FamilyCommon: meta.FamilyCommon,
+		}, tax, "scalar fields must agree for %q", sci)
+	}
+}
+
+// TestLookupMeta_LinksNotSharedAcrossCallers pins the clone that LookupTaxonomy exists
+// to avoid paying: LookupMeta hands out its own Links map, so one caller writing to it
+// cannot corrupt the process-wide memo that every other caller reads.
+func TestLookupMeta_LinksNotSharedAcrossCallers(t *testing.T) {
+	t.Parallel()
+
+	const sci = "Turdus merula"
+	first, ok := LookupMeta(sci)
+	require.True(t, ok)
+	require.NotEmpty(t, first.Links, "the fixture species must carry links for this test to mean anything")
+	first.Links["poisoned"] = LinkEntry{ID: "should not escape"}
+
+	second, ok := LookupMeta(sci)
+	require.True(t, ok)
+	assert.NotContains(t, second.Links, "poisoned", "each caller must get its own Links map")
+}
+
 func TestLocales_Embedded(t *testing.T) {
 	t.Parallel()
 

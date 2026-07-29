@@ -219,6 +219,10 @@ Props:
              server-provided common name, then the scientific name. Keeps the
              "currently hearing" card consistent with the rest of the dashboard. -->
         {@const displayName = localizeSpeciesName(detection.scientificName, detection.species)}
+        <!-- The explicit role below looks redundant against the `button` this
+             resolves to at runtime, but it is not removable: `this` is dynamic, so
+             the compiler cannot prove the element is a button and raises
+             a11y_no_static_element_interactions without it. -->
         <svelte:element
           this={guideEnabled ? 'button' : 'div'}
           type={guideEnabled ? 'button' : undefined}
@@ -299,10 +303,17 @@ Props:
 </section>
 
 <!-- Species guide for a currently-heard bird. Live pings have no aggregate
-     stats, so the stats grid is hidden (showStats={false}). -->
-<SpeciesDetailModal
-  species={guideSpecies}
-  isOpen={guideModalOpen}
-  showStats={false}
-  onClose={closeGuide}
-/>
+     stats, so the stats grid is hidden (showStats={false}).
+
+     Mounted only when the guide is enabled: with the feature off, openGuide is
+     never wired to anything, so the modal can never open — but an unconditional
+     mount still runs its own guide-config resolution and taxonomy effects on every
+     dashboard, for a dialog nothing can reach. -->
+{#if guideEnabled}
+  <SpeciesDetailModal
+    species={guideSpecies}
+    isOpen={guideModalOpen}
+    showStats={false}
+    onClose={closeGuide}
+  />
+{/if}

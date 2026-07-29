@@ -1993,6 +1993,7 @@
         "noSimilar": "Inga liknande arter hittades",
         "loading": "Laddar guide…",
         "unavailable": "Artguiden är tillfälligt otillgänglig. Försök igen senare.",
+        "loadFailed": "Det gick inte att läsa in artguiden. Försök igen.",
         "noGuide": "Ingen guide tillgänglig för denna art.",
         "expectedness": {
           "expected": "Förväntad här",
@@ -2024,6 +2025,7 @@
         "deleteConfirm": "Ta bort denna anteckning?",
         "deleteFailed": "Det gick inte att ta bort anteckningen.",
         "saveFailed": "Det gick inte att spara anteckningen.",
+        "loadFailed": "Det gick inte att läsa in anteckningarna.",
         "saveDisabledReason": "Ange anteckningstext för att aktivera Spara.",
         "tooLong": "Anteckningen är för lång (högst {max} tecken).",
         "truncated": "Visar de {max} senaste anteckningarna; äldre anteckningar är dolda."

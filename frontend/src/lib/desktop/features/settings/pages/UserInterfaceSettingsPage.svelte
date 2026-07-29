@@ -39,6 +39,11 @@
   import { Palette, Globe, Image, Volume2, BookOpen } from '@lucide/svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
+  import {
+    SPECIES_GUIDE_DEFAULT_WARM_TOP_N,
+    SPECIES_GUIDE_MAX_WARM_TOP_N,
+    SPECIES_GUIDE_MIN_WARM_TOP_N,
+  } from '$lib/utils/speciesGuideLimits';
 
   let activeTab = $state('appearance');
   let store = $derived($settingsStore);
@@ -232,7 +237,7 @@
     enableWikipedia: settings.dashboard.speciesGuide?.enableWikipedia ?? false,
     enableSupplementaryLinks: settings.dashboard.speciesGuide?.enableSupplementaryLinks ?? false,
     preFetchEnabled: settings.dashboard.speciesGuide?.preFetchEnabled ?? true,
-    warmTopN: settings.dashboard.speciesGuide?.warmTopN ?? 50,
+    warmTopN: settings.dashboard.speciesGuide?.warmTopN ?? SPECIES_GUIDE_DEFAULT_WARM_TOP_N,
     showNotes: settings.dashboard.speciesGuide?.showNotes ?? true,
     showEnrichments: settings.dashboard.speciesGuide?.showEnrichments ?? true,
     showSimilarSpecies: settings.dashboard.speciesGuide?.showSimilarSpecies ?? true,
@@ -245,6 +250,12 @@
   // — the ambiguous-disabled-state failure the frontend guidelines call out.
   let speciesGuideDisabledReason = $derived(
     speciesGuide.enabled ? undefined : t('settings.userInterface.speciesGuide.disabledReason')
+  );
+
+  // Every species-guide sub-control shares this gate. Stated once so a future
+  // control cannot be added with a subtly different condition.
+  let speciesGuideSubControlsDisabled = $derived(
+    store.isLoading || store.isSaving || !speciesGuide.enabled
   );
 
   // --- Update handlers ---
@@ -471,99 +482,104 @@
 
         {#if speciesGuideDisabledReason}
           <!-- Visible (not tooltip-only) so the reason reaches touch devices and screen
-               readers; the per-control tooltips below repeat it on hover. -->
-          <p id="species-guide-disabled-help" role="status" class="text-sm opacity-70">
+               readers; the per-control tooltips below repeat it on hover. role="status"
+               is what announces it, not an aria-describedby link: Checkbox and
+               InlineSlider each generate and own their describedby target, so a
+               page-level id here would have nothing pointing at it. -->
+          <p role="status" class="text-sm opacity-70">
             {speciesGuideDisabledReason}
           </p>
         {/if}
 
-        <div class="space-y-4" class:opacity-50={!speciesGuide.enabled}>
+        <!-- One dimming wrapper for all the sub-controls, which share a single
+             enable gate. It used to be four copies of the same class:opacity-50,
+             three of them wrapping a lone Checkbox. The outer space-y-6 reproduces
+             the gaps those wrappers used to get from the section container. -->
+        <div class="space-y-6" class:opacity-50={!speciesGuide.enabled}>
           <Checkbox
             checked={speciesGuide.enableWikipedia}
             label={t('settings.userInterface.speciesGuide.enableWikipedia.label')}
             helpText={t('settings.userInterface.speciesGuide.enableWikipedia.helpText')}
-            disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
+            disabled={speciesGuideSubControlsDisabled}
             tooltip={speciesGuideDisabledReason}
             onchange={value => updateSpeciesGuideSetting('enableWikipedia', value)}
           />
-        </div>
 
-        <div class="space-y-4" class:opacity-50={!speciesGuide.enabled}>
           <Checkbox
             checked={speciesGuide.enableSupplementaryLinks}
             label={t('settings.userInterface.speciesGuide.enableSupplementaryLinks.label')}
             helpText={t('settings.userInterface.speciesGuide.enableSupplementaryLinks.helpText')}
-            disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
+            disabled={speciesGuideSubControlsDisabled}
             tooltip={speciesGuideDisabledReason}
             onchange={value => updateSpeciesGuideSetting('enableSupplementaryLinks', value)}
           />
-        </div>
 
-        <div class="space-y-4" class:opacity-50={!speciesGuide.enabled}>
-          <Checkbox
-            checked={speciesGuide.preFetchEnabled}
-            label={t('settings.userInterface.speciesGuide.preFetchEnabled.label')}
-            helpText={t('settings.userInterface.speciesGuide.preFetchEnabled.helpText')}
-            disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
-            tooltip={speciesGuideDisabledReason}
-            onchange={value => updateSpeciesGuideSetting('preFetchEnabled', value)}
-          />
+          <div class="space-y-4">
+            <Checkbox
+              checked={speciesGuide.preFetchEnabled}
+              label={t('settings.userInterface.speciesGuide.preFetchEnabled.label')}
+              helpText={t('settings.userInterface.speciesGuide.preFetchEnabled.helpText')}
+              disabled={speciesGuideSubControlsDisabled}
+              tooltip={speciesGuideDisabledReason}
+              onchange={value => updateSpeciesGuideSetting('preFetchEnabled', value)}
+            />
 
-          <!-- InlineSlider has no tooltip prop, so the reason rides its help text
-               instead; the visible note above covers it either way. -->
-          <InlineSlider
-            label={t('settings.userInterface.speciesGuide.warmTopN.label')}
-            helpText={speciesGuideDisabledReason ??
-              t('settings.userInterface.speciesGuide.warmTopN.helpText')}
-            value={speciesGuide.warmTopN}
-            onUpdate={value => updateSpeciesGuideSetting('warmTopN', value)}
-            min={0}
-            max={1000}
-            step={10}
-            disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
-          />
-        </div>
+            <!-- InlineSlider has no tooltip prop, so the reason rides its help text
+                 instead; the visible note above covers it either way. -->
+            <InlineSlider
+              label={t('settings.userInterface.speciesGuide.warmTopN.label')}
+              helpText={speciesGuideDisabledReason ??
+                t('settings.userInterface.speciesGuide.warmTopN.helpText')}
+              value={speciesGuide.warmTopN}
+              onUpdate={value => updateSpeciesGuideSetting('warmTopN', value)}
+              min={SPECIES_GUIDE_MIN_WARM_TOP_N}
+              max={SPECIES_GUIDE_MAX_WARM_TOP_N}
+              step={10}
+              disabled={speciesGuideSubControlsDisabled}
+            />
+          </div>
 
-        <div class="space-y-4" class:opacity-50={!speciesGuide.enabled}>
-          <h4 class="text-sm font-medium text-[var(--color-base-content)]/70">
-            {t('settings.userInterface.speciesGuide.sections.title')}
-          </h4>
+          <div class="space-y-4">
+            <h4 class="text-sm font-medium text-[var(--color-base-content)]/70">
+              {t('settings.userInterface.speciesGuide.sections.title')}
+            </h4>
 
-          <Checkbox
-            checked={speciesGuide.showNotes}
-            label={t('settings.userInterface.speciesGuide.showNotes.label')}
-            helpText={t('settings.userInterface.speciesGuide.showNotes.helpText')}
-            disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
-            tooltip={speciesGuideDisabledReason}
-            onchange={value => updateSpeciesGuideSetting('showNotes', value)}
-          />
+            <Checkbox
+              checked={speciesGuide.showNotes}
+              label={t('settings.userInterface.speciesGuide.showNotes.label')}
+              helpText={t('settings.userInterface.speciesGuide.showNotes.helpText')}
+              disabled={speciesGuideSubControlsDisabled}
+              tooltip={speciesGuideDisabledReason}
+              onchange={value => updateSpeciesGuideSetting('showNotes', value)}
+            />
 
-          <Checkbox
-            checked={speciesGuide.showEnrichments}
-            label={t('settings.userInterface.speciesGuide.showEnrichments.label')}
-            helpText={t('settings.userInterface.speciesGuide.showEnrichments.helpText')}
-            disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
-            tooltip={speciesGuideDisabledReason}
-            onchange={value => updateSpeciesGuideSetting('showEnrichments', value)}
-          />
+            <Checkbox
+              checked={speciesGuide.showEnrichments}
+              label={t('settings.userInterface.speciesGuide.showEnrichments.label')}
+              helpText={t('settings.userInterface.speciesGuide.showEnrichments.helpText')}
+              disabled={speciesGuideSubControlsDisabled}
+              tooltip={speciesGuideDisabledReason}
+              onchange={value => updateSpeciesGuideSetting('showEnrichments', value)}
+            />
 
-          <Checkbox
-            checked={speciesGuide.showSimilarSpecies}
-            label={t('settings.userInterface.speciesGuide.showSimilarSpecies.label')}
-            helpText={t('settings.userInterface.speciesGuide.showSimilarSpecies.helpText')}
-            disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
-            tooltip={speciesGuideDisabledReason}
-            onchange={value => updateSpeciesGuideSetting('showSimilarSpecies', value)}
-          />
+            <Checkbox
+              checked={speciesGuide.showSimilarSpecies}
+              label={t('settings.userInterface.speciesGuide.showSimilarSpecies.label')}
+              helpText={t('settings.userInterface.speciesGuide.showSimilarSpecies.helpText')}
+              disabled={speciesGuideSubControlsDisabled}
+              tooltip={speciesGuideDisabledReason}
+              onchange={value => updateSpeciesGuideSetting('showSimilarSpecies', value)}
+            />
 
-          <Checkbox
-            checked={speciesGuide.showTaxonomy}
-            label={t('settings.userInterface.speciesGuide.showTaxonomy.label')}
-            helpText={t('settings.userInterface.speciesGuide.showTaxonomy.helpText')}
-            disabled={store.isLoading || store.isSaving || !speciesGuide.enabled}
-            tooltip={speciesGuideDisabledReason}
-            onchange={value => updateSpeciesGuideSetting('showTaxonomy', value)}
-          />
+            <Checkbox
+              checked={speciesGuide.showTaxonomy}
+              label={t('settings.userInterface.speciesGuide.showTaxonomy.label')}
+              helpText={t('settings.userInterface.speciesGuide.showTaxonomy.helpText')}
+              disabled={speciesGuideSubControlsDisabled}
+              tooltip={speciesGuideDisabledReason}
+              onchange={value => updateSpeciesGuideSetting('showTaxonomy', value)}
+            />
+          </div>
         </div>
       </div>
     </SettingsSection>

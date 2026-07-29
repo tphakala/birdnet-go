@@ -107,7 +107,10 @@
   // Whether the similar-species list was actually requested for the current
   // species. Distinguishes "we asked and there are none" from "we never asked".
   let similarRequested = $state(false);
-  let error = $state<string | null>(null);
+  // Boolean, not the error text: the raw message is server/network prose in
+  // whatever language produced it, and every other string in this panel goes
+  // through t(). The detail goes to the logger instead.
+  let loadFailed = $state(false);
 
   // Description (the article lead) is always shown, so it isn't tracked here — only
   // the canonical body sections and similar species toggle. A SvelteSet keeps the
@@ -173,7 +176,7 @@
   async function load(): Promise<void> {
     const seq = ++loadSeq;
     loading = true;
-    error = null;
+    loadFailed = false;
     unavailable = false;
     similarUnavailable = false;
     noGuide = false;
@@ -208,7 +211,7 @@
         // Expected when no guide exists for this species: show a soft empty state.
         noGuide = true;
       } else {
-        error = e instanceof Error ? e.message : String(e);
+        loadFailed = true;
       }
       logger.error('Failed to load species guide', e, { component: 'SpeciesComparison' });
     } finally {
@@ -281,7 +284,7 @@
   {#if similarSectionOn && similarRequested && similarUnavailable}
     <!-- The rail is degraded rather than empty. Say so where the rail would have
          been, so an empty list is not silently passed off as "no similar species". -->
-    <div role="status" class="p-4 text-sm text-base-content/70">
+    <div role="status" class="p-4 text-sm text-[var(--color-base-content)]/70">
       {t('analytics.species.guide.unavailable')}
     </div>
   {:else if similarSectionOn && similarRequested && (!requireEntries || similar.length > 0)}
@@ -339,25 +342,33 @@
         <div
           role="status"
           aria-live="polite"
-          class="flex items-center gap-2 text-base-content/70 p-4"
+          class="flex items-center gap-2 text-[var(--color-base-content)]/70 p-4"
         >
           <span
-            class="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full"
+            class="animate-spin h-5 w-5 border-2 border-[var(--color-primary)] border-t-transparent rounded-full"
             aria-hidden="true"
           ></span>
           <span>{t('analytics.species.guide.loading')}</span>
         </div>
       {:else if unavailable}
-        <div role="alert" class="p-4 rounded-lg bg-warning/10 text-warning-content">
+        <div
+          role="alert"
+          class="p-4 rounded-lg bg-[var(--color-warning)]/10 text-[var(--color-warning-content)]"
+        >
           {t('analytics.species.guide.unavailable')}
         </div>
-      {:else if error}
-        <div role="alert" class="p-4 rounded-lg bg-error/10 text-error">{error}</div>
+      {:else if loadFailed}
+        <div
+          role="alert"
+          class="p-4 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)]"
+        >
+          {t('analytics.species.guide.loadFailed')}
+        </div>
       {:else if noGuide}
         <!-- No guide content for this species, but the similar-species list is an
          independent endpoint: render it when it returned entries so a guide 404
          doesn't discard useful data. -->
-        <div role="status" class="p-4 text-sm text-base-content/70">
+        <div role="status" class="p-4 text-sm text-[var(--color-base-content)]/70">
           {t('analytics.species.guide.noGuide')}
         </div>
         {@render similarSection(true)}
@@ -369,7 +380,9 @@
               <!-- Filled tints instead of thin outlines: expectedness and season are
                    the guide's most glanceable facts, so they get prominence rather
                    than being the quietest thing in the panel. -->
-              <span class="badge badge-sm border-0 bg-primary/10 text-primary font-medium">
+              <span
+                class="badge badge-sm border-0 bg-[var(--color-primary)]/10 text-[var(--color-primary)] font-medium"
+              >
                 {t(`analytics.species.guide.expectedness.${guide.expectedness}`)}
               </span>
             {/if}
@@ -379,7 +392,7 @@
                    meant for a solid amber fill) so the label stays legible on the
                    pale amber tint in light mode; it flips to light in dark mode. -->
               <span
-                class="badge badge-sm border-0 gap-1 bg-warning/15 text-[var(--color-base-content)] font-medium"
+                class="badge badge-sm border-0 gap-1 bg-[var(--color-warning)]/15 text-[var(--color-base-content)] font-medium"
               >
                 {#if SeasonIcon}<SeasonIcon class="h-3 w-3" aria-hidden="true" />{/if}
                 {t(season.i18nKey)}
@@ -399,7 +412,7 @@
              remain collapsible because they can run long. -->
         {#if descriptionBody}
           {@const descClampable = descriptionBody.length > DESC_CLAMP_CHARS}
-          <div class="border-b border-base-300 pb-3">
+          <div class="border-b border-[var(--color-base-300)] pb-3">
             <h3 class="py-2 text-sm font-medium">{t('analytics.species.guide.description')}</h3>
             <div
               id={`${uid}-description`}
@@ -410,7 +423,7 @@
             {#if descClampable}
               <button
                 type="button"
-                class="mt-1 text-xs font-medium text-primary hover:underline"
+                class="mt-1 text-xs font-medium text-[var(--color-primary)] hover:underline"
                 aria-expanded={descExpanded}
                 aria-controls={`${uid}-description`}
                 onclick={() => (descExpanded = !descExpanded)}
@@ -425,7 +438,7 @@
              Collapsed by default because each can run long; the lead above stays open. -->
         {#each canonicalRows as row (row.id)}
           {@const open = openBodySections.has(row.id)}
-          <div class="border-b border-base-300">
+          <div class="border-b border-[var(--color-base-300)]">
             <button
               type="button"
               class="flex w-full cursor-pointer items-center justify-between py-2 text-left font-medium"
@@ -453,7 +466,9 @@
 
         {@render similarSection(false)}
       {:else}
-        <p class="text-sm text-base-content/70 p-4">{t('analytics.species.guide.noSimilar')}</p>
+        <p class="text-sm text-[var(--color-base-content)]/70 p-4">
+          {t('analytics.species.guide.noSimilar')}
+        </p>
       {/if}
     </div>
   {/if}

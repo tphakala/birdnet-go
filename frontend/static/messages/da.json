@@ -1993,6 +1993,7 @@
         "noSimilar": "Ingen lignende arter fundet",
         "loading": "Indlæser guide…",
         "unavailable": "Artsguiden er midlertidigt utilgængelig. Prøv igen senere.",
+        "loadFailed": "Kunne ikke indlæse artsguiden. Prøv igen.",
         "noGuide": "Ingen guide tilgængelig for denne art.",
         "expectedness": {
           "expected": "Forventet her",
@@ -2024,6 +2025,7 @@
         "deleteConfirm": "Slet denne note?",
         "deleteFailed": "Kunne ikke slette noten.",
         "saveFailed": "Kunne ikke gemme noten.",
+        "loadFailed": "Kunne ikke indlæse noterne.",
         "saveDisabledReason": "Indtast notetekst for at aktivere Gem.",
         "tooLong": "Noten er for lang (maksimalt {max} tegn).",
         "truncated": "Viser de {max} nyeste noter; ældre noter er skjult."

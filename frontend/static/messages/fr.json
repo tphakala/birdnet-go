@@ -1993,6 +1993,7 @@
         "noSimilar": "Aucune espèce similaire trouvée",
         "loading": "Chargement du guide…",
         "unavailable": "Le guide des espèces est temporairement indisponible. Veuillez réessayer plus tard.",
+        "loadFailed": "Échec du chargement du guide de l’espèce. Veuillez réessayer.",
         "noGuide": "Aucun guide disponible pour cette espèce.",
         "expectedness": {
           "expected": "Attendu ici",
@@ -2024,6 +2025,7 @@
         "deleteConfirm": "Supprimer cette note ?",
         "deleteFailed": "Échec de la suppression de la note.",
         "saveFailed": "Échec de l’enregistrement de la note.",
+        "loadFailed": "Échec du chargement des notes.",
         "saveDisabledReason": "Saisissez le texte de la note pour activer l’enregistrement.",
         "tooLong": "La note est trop longue (maximum {max} caractères).",
         "truncated": "Affichage des {max} notes les plus récentes ; les notes plus anciennes sont masquées."

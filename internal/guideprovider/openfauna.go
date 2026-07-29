@@ -11,8 +11,10 @@ import (
 // needs. Declaring it as an interface keeps the provider unit-testable with
 // synthetic data instead of depending on specific rows in the embedded snapshot.
 type openFaunaLookup interface {
-	// Meta returns taxonomy/link metadata for a scientific name, if present.
-	Meta(scientificName string) (openfauna.Meta, bool)
+	// Taxonomy returns the scalar taxonomy fields for a scientific name, if present.
+	// Deliberately not the full Meta: the provider reads only Family, and LookupMeta
+	// clones its Links map on every call to protect the shared memo.
+	Taxonomy(scientificName string) (openfauna.Taxonomy, bool)
 	// CommonName returns the localized common name for a scientific name in the
 	// locale mapped from bngLocale (with the dataset's English fallback), if any.
 	CommonName(scientificName, bngLocale string) (string, bool)
@@ -20,9 +22,10 @@ type openFaunaLookup interface {
 
 // embeddedOpenFauna is the production openFaunaLookup, backed by the package-level
 // helpers over the vendored, embedded dataset. Both calls memoize their result
-// (LookupMeta via metaCache, LookupCommonName via commonNameCache), so a first
-// lookup of a name pays the dataset scan and repeats are O(1); it is used on the
-// cache-miss path (the same place eBird made a network call).
+// (LookupTaxonomy shares LookupMeta's metaCache, LookupCommonName uses
+// commonNameCache), so a first lookup of a name pays the dataset scan and repeats
+// are O(1); it is used on the cache-miss path (the same place eBird made a network
+// call).
 type embeddedOpenFauna struct{}
 
 // Both lookups canonicalize the scientific name first (CanonicalName is identity for
@@ -30,8 +33,8 @@ type embeddedOpenFauna struct{}
 // historic detection recorded before ingestion canonicalization existed — still
 // resolves its OpenFauna taxonomy and localized common name from the canonical-keyed
 // dataset instead of silently missing.
-func (embeddedOpenFauna) Meta(scientificName string) (openfauna.Meta, bool) {
-	return openfauna.LookupMeta(openfauna.CanonicalName(scientificName))
+func (embeddedOpenFauna) Taxonomy(scientificName string) (openfauna.Taxonomy, bool) {
+	return openfauna.LookupTaxonomy(openfauna.CanonicalName(scientificName))
 }
 
 func (embeddedOpenFauna) CommonName(scientificName, bngLocale string) (string, bool) {
@@ -63,9 +66,9 @@ func (p *OpenFaunaGuideProvider) Name() string { return OpenFaunaProviderName }
 // absent from the dataset (no metadata and no common name) yields ErrGuideNotFound so
 // it never downgrades an otherwise-complete primary (Wikipedia) guide.
 func (p *OpenFaunaGuideProvider) Fetch(_ context.Context, scientificName string, opts FetchOptions) (*SpeciesGuide, error) {
-	meta, hasMeta := p.lookup.Meta(scientificName)
+	taxonomy, hasTaxonomy := p.lookup.Taxonomy(scientificName)
 	commonName, hasCommon := p.lookup.CommonName(scientificName, opts.Locale)
-	if !hasMeta && !hasCommon {
+	if !hasTaxonomy && !hasCommon {
 		return nil, ErrGuideNotFound
 	}
 
@@ -77,7 +80,7 @@ func (p *OpenFaunaGuideProvider) Fetch(_ context.Context, scientificName string,
 		ScientificName: scientificName,
 		CommonName:     commonName,
 		Genus:          genus,
-		Family:         meta.Family,
+		Family:         taxonomy.Family,
 		SourceProvider: OpenFaunaProviderName,
 	}, nil
 }

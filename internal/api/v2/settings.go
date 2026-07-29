@@ -2484,6 +2484,14 @@ const (
 // atomic stores that cannot fail and so need neither the controlChan queue nor
 // a toast. Anyone adding a diagnostics setting will look here first, hence this
 // pointer; the reasoning is at that call site.
+// SignalReconfigureSpeciesGuide is the control-channel signal that rebuilds and
+// swaps the species guide cache. It is emitted here and consumed by the analysis
+// control monitor, which imports this package; sharing the constant is what stops
+// a typo in either half from silently disabling species-guide hot-reload. This
+// mirrors schedule.SignalReconfigureQuietHours below, where the emitting package
+// likewise owns the name.
+const SignalReconfigureSpeciesGuide = "reconfigure_species_guide"
+
 var settingsChangeChecks = []settingsChangeCheck{
 	{"BirdNET", "reload_birdnet", birdnetSettingsChanged, "Reloading BirdNET model with new settings...", notification.MsgSettingsReloadingBirdnet, ToastTypeInfo, toastDurationLong},
 	{"Range filter", "rebuild_range_filter", rangeFilterSettingsChanged, "Rebuilding species range filter...", notification.MsgSettingsRebuildingRangeFilter, ToastTypeInfo, toastDurationMedium},
@@ -2495,7 +2503,7 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"Streams", "reconfigure_rtsp_sources", streamsSettingsChanged, "Reconfiguring audio streams...", notification.MsgSettingsReconfiguringStreams, ToastTypeInfo, toastDurationMedium},
 	{"Telemetry", "reconfigure_telemetry", telemetrySettingsChanged, "Reconfiguring telemetry settings...", notification.MsgSettingsReconfiguringTelemetry, ToastTypeInfo, toastDurationShort},
 	{"Species tracking", "reconfigure_species_tracking", speciesTrackingSettingsChanged, "Reconfiguring species tracking...", notification.MsgSettingsReconfiguringSpeciesTracking, ToastTypeInfo, toastDurationShort},
-	{"Species guide", "reconfigure_species_guide", speciesGuideSettingsChanged, "Reconfiguring species guide...", notification.MsgSettingsReconfiguringSpeciesGuide, ToastTypeInfo, toastDurationShort},
+	{"Species guide", SignalReconfigureSpeciesGuide, speciesGuideSettingsChanged, "Reconfiguring species guide...", notification.MsgSettingsReconfiguringSpeciesGuide, ToastTypeInfo, toastDurationShort},
 	{"Push notifications", "reconfigure_push_notifications", pushNotificationSettingsChanged, "Reconfiguring push notification providers...", notification.MsgSettingsReconfiguringPushNotifications, ToastTypeInfo, toastDurationMedium},
 	{"Quiet hours", schedule.SignalReconfigureQuietHours, quietHoursSettingsChanged, "Updating quiet hours schedule...", "", ToastTypeInfo, toastDurationShort},
 	{"Web server", "", webserverSettingsChanged, "Web server settings changed. Restart required to apply.", notification.MsgSettingsWebserverRestart, ToastTypeWarning, toastDurationExtended},

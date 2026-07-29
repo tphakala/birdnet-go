@@ -704,6 +704,24 @@ func TestHandler_ShutdownReleasesCache(t *testing.T) {
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 }
 
+// TestHandler_SetGuideCacheReportsRefusalAfterShutdown pins the bool the hot-reload
+// handler branches on: a post-Shutdown swap is refused (and the incoming cache
+// closed), so the control monitor must not go on to wire a PreFetch callback into it.
+func TestHandler_SetGuideCacheReportsRefusalAfterShutdown(t *testing.T) {
+	c := guideTestHandler(t, guideEnabledSettings())
+	assert.True(t, c.SetGuideCache(newStubGuideCache(t, &guideprovider.SpeciesGuide{CommonName: "old", Description: "x"})),
+		"a swap before Shutdown installs")
+
+	c.Shutdown()
+	refused := newStubGuideCache(t, &guideprovider.SpeciesGuide{CommonName: commonBlackbird, Description: "x"})
+	assert.False(t, c.SetGuideCache(refused), "a swap after Shutdown is refused")
+
+	// Refused means closed, not leaked: the endpoint still reports no cache.
+	ctx, rec := guideCtx(t, sciEurasianBlackbird)
+	require.NoError(t, c.GetSpeciesGuide(ctx))
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+}
+
 func TestHandler_SetGuideCacheSwapsAndClosesOld(t *testing.T) {
 	c := guideTestHandler(t, guideEnabledSettings())
 	c.SetGuideCache(newStubGuideCache(t, &guideprovider.SpeciesGuide{CommonName: "old", Description: "x"}))

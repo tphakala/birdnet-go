@@ -13,13 +13,15 @@ import (
 // fakeOpenFauna is a synthetic openFaunaLookup so the provider can be tested without
 // depending on specific rows in the embedded dataset.
 type fakeOpenFauna struct {
-	meta       openfauna.Meta
-	hasMeta    bool
-	commonName string
-	hasCommon  bool
+	taxonomy    openfauna.Taxonomy
+	hasTaxonomy bool
+	commonName  string
+	hasCommon   bool
 }
 
-func (f *fakeOpenFauna) Meta(string) (openfauna.Meta, bool) { return f.meta, f.hasMeta }
+func (f *fakeOpenFauna) Taxonomy(string) (openfauna.Taxonomy, bool) {
+	return f.taxonomy, f.hasTaxonomy
+}
 
 func (f *fakeOpenFauna) CommonName(string, string) (string, bool) {
 	return f.commonName, f.hasCommon
@@ -34,10 +36,10 @@ func TestOpenFaunaProvider_Name(t *testing.T) {
 func TestOpenFaunaProvider_FetchEnrichment(t *testing.T) {
 	t.Parallel()
 	p := &OpenFaunaGuideProvider{lookup: &fakeOpenFauna{
-		meta:       openfauna.Meta{Family: "Turdidae", Order: "Passeriformes"},
-		hasMeta:    true,
-		commonName: "Mustarastas",
-		hasCommon:  true,
+		taxonomy:    openfauna.Taxonomy{Family: "Turdidae", Order: "Passeriformes"},
+		hasTaxonomy: true,
+		commonName:  "Mustarastas",
+		hasCommon:   true,
 	}}
 
 	g, err := p.Fetch(t.Context(), "Turdus merula", FetchOptions{Locale: "fi"})
@@ -58,13 +60,13 @@ func TestOpenFaunaProvider_NotFoundMapsToGuideNotFound(t *testing.T) {
 	assert.True(t, errors.Is(err, ErrGuideNotFound))
 }
 
-func TestOpenFaunaProvider_MetaOnlyStillResolves(t *testing.T) {
+func TestOpenFaunaProvider_TaxonomyOnlyStillResolves(t *testing.T) {
 	t.Parallel()
 	// Family present but no localized common name: still a usable enrichment, not a
 	// not-found (so it does not suppress a valid species).
 	p := &OpenFaunaGuideProvider{lookup: &fakeOpenFauna{
-		meta:    openfauna.Meta{Family: "Corvidae"},
-		hasMeta: true,
+		taxonomy:    openfauna.Taxonomy{Family: "Corvidae"},
+		hasTaxonomy: true,
 	}}
 
 	g, err := p.Fetch(t.Context(), "Corvus corax", FetchOptions{})
@@ -78,7 +80,7 @@ func TestOpenFaunaProvider_MetaOnlyStillResolves(t *testing.T) {
 // and pins that an EMPTY Family is the intended representation of "this species has
 // no taxonomy row" rather than a defect.
 //
-// openfauna.Meta is a struct value, so reading Family off the zero value is safe and
+// openfauna.Taxonomy is a struct value, so reading Family off the zero value is safe and
 // yields "". That is deliberate and load-bearing: SpeciesGuide.Family has no
 // "unknown" sentinel, and mergeGuides fills an empty primary field from the
 // secondary, so returning "" is exactly what lets Wikipedia supply the family in the

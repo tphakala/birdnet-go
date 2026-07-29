@@ -1993,6 +1993,7 @@
         "noSimilar": "Nessuna specie simile trovata",
         "loading": "Caricamento della guida…",
         "unavailable": "La guida delle specie è temporaneamente non disponibile. Riprova più tardi.",
+        "loadFailed": "Impossibile caricare la guida della specie. Riprova.",
         "noGuide": "Nessuna guida disponibile per questa specie.",
         "expectedness": {
           "expected": "Atteso qui",
@@ -2024,6 +2025,7 @@
         "deleteConfirm": "Eliminare questa nota?",
         "deleteFailed": "Impossibile eliminare la nota.",
         "saveFailed": "Impossibile salvare la nota.",
+        "loadFailed": "Impossibile caricare le note.",
         "saveDisabledReason": "Inserisci il testo della nota per abilitare il salvataggio.",
         "tooLong": "La nota è troppo lunga (massimo {max} caratteri).",
         "truncated": "Sono mostrate le {max} note più recenti; le note più vecchie sono nascoste."

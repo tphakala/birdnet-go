@@ -58,9 +58,24 @@ const PUBLIC_CONFIG_TTL_MS = 60_000;
 let publicFetch: Promise<SpeciesGuideUIConfig> | null = null;
 let publicFetchedAt = 0;
 
-/** now() indirection keeps the TTL testable without faking the global clock. */
-function nowMs(): number {
-  return Date.now();
+/**
+ * Whether two resolved configs carry the same gates.
+ *
+ * resolveSpeciesGuideConfig returns a freshly-allocated object on every call, so
+ * consumers holding it in reactive state need value equality, not identity, to tell
+ * a real settings change from a re-emission of the same settings.
+ */
+export function sameSpeciesGuideUIConfig(
+  a: SpeciesGuideUIConfig | null | undefined,
+  b: SpeciesGuideUIConfig | null | undefined
+): boolean {
+  if (!a || !b) return a === b;
+  return (
+    a.enabled === b.enabled &&
+    a.showNotes === b.showNotes &&
+    a.showSimilarSpecies === b.showSimilarSpecies &&
+    a.showTaxonomy === b.showTaxonomy
+  );
 }
 
 /**
@@ -79,10 +94,10 @@ export function resolveSpeciesGuideConfig(
   fromStore: Partial<SpeciesGuideSettings> | null | undefined
 ): Promise<SpeciesGuideUIConfig> {
   if (fromStore) return Promise.resolve(toSpeciesGuideUIConfig(fromStore));
-  if (publicFetch && nowMs() - publicFetchedAt < PUBLIC_CONFIG_TTL_MS) {
+  if (publicFetch && Date.now() - publicFetchedAt < PUBLIC_CONFIG_TTL_MS) {
     return publicFetch;
   }
-  publicFetchedAt = nowMs();
+  publicFetchedAt = Date.now();
   publicFetch = api
     .get<{ speciesGuide?: Partial<SpeciesGuideSettings> }>('/api/v2/settings/dashboard')
     .then(dash => toSpeciesGuideUIConfig(dash.speciesGuide))
