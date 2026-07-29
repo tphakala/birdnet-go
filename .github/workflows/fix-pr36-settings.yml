@@ -1,0 +1,69 @@
+name: Repair PR 36 settings logic
+
+on:
+  push:
+    branches:
+      - claude/busy-cannon-o8uzso
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: claude/busy-cannon-o8uzso
+          fetch-depth: 0
+
+      - name: Remove duplicate blocked-field handling
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("internal/api/v2/settings.go")
+          text = path.read_text()
+
+          start_marker = "\n\t// Realtime.Species.Confirmed is analytics-only and managed exclusively via"
+          end_marker = "\n\t// Blocked fields are NOT enforced here."
+          start = text.find(start_marker)
+          end = text.find(end_marker, start)
+          if start < 0 or end < 0:
+              raise SystemExit("expected PR #36 settings block not found")
+
+          replacement = """
+	// Use mergeJSONIntoStruct to preserve fields not included in the update.
+	// UpdateSectionSettings restores blocked fields against the pre-update
+	// snapshot after this function returns, including Species.Confirmed.
+	if err := mergeJSONIntoStruct(normalizedData, sectionPtr); err != nil {
+		return fmt.Errorf("failed to merge settings for section %s: %w", sectionName, err)
+	}
+"""
+          text = text[:start] + "\n" + replacement.rstrip("\n") + text[end:]
+
+          function_start = text.index("func handleGenericSection(")
+          function_end = text.index("\n}\n\n// sectionValidator", function_start)
+          function_body = text[function_start:function_end]
+          if "skippedFields" in function_body:
+              raise SystemExit("handleGenericSection still references skippedFields")
+          if function_body.count("mergeJSONIntoStruct") != 1:
+              raise SystemExit("unexpected mergeJSONIntoStruct count")
+
+          path.write_text(text)
+
+      - name: Format and verify
+        run: |
+          gofmt -w internal/api/v2/settings.go
+          git diff --check
+          ! sed -n '/func handleGenericSection/,/^}/p' internal/api/v2/settings.go | grep -q skippedFields
+
+      - name: Commit repaired branch and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/fix-pr36-settings.yml
+          git add internal/api/v2/settings.go
+          git commit -m "fix(api): rely on PATCH blocked-field restoration"
+          git push origin HEAD:claude/busy-cannon-o8uzso
