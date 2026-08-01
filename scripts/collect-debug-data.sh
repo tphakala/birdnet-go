@@ -338,10 +338,15 @@ collect_profile() {
     # truncated transfer reports 200 with an incomplete body (curl exit 18), and
     # trusting the status alone would keep a half-written .pprof that
     # go tool pprof rejects later, which is the outcome the rm below exists to
-    # prevent. No --max-time here: a CPU profile legitimately takes
-    # PROFILE_DURATION seconds.
+    # prevent.
+    #
+    # --connect-timeout but NOT --max-time. The two bound different phases: a
+    # CPU profile legitimately runs for PROFILE_DURATION seconds, so a total cap
+    # would truncate it, but nothing about that makes the CONNECT phase
+    # unbounded-by-design. Without it a black-holed host stalls every profile
+    # fetch for curl's 300-second default.
     local status rc=0
-    status=$(curl -s -o "${output_file}" -w '%{http_code}' \
+    status=$(curl -s --connect-timeout "${PROBE_CONNECT_TIMEOUT}" -o "${output_file}" -w '%{http_code}' \
         "${BASE_URL}/debug/pprof/${profile_type}${url_params}$(auth_query "${separator}")" 2>/dev/null) || rc=$?
     if [ "${rc}" -eq 0 ] && [ "${status:-000}" = "200" ]; then
         print_status "✓ Collected ${profile_type} profile → ${output_file}"
