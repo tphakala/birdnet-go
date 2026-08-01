@@ -37,10 +37,12 @@ This document provides a comprehensive overview of BirdNET-Go's architecture, te
     - [API v2 (Active)](#api-v2-active)
   - [Security Architecture](#security-architecture)
     - [Authentication](#authentication)
+    - [Authentication Flow](#authentication-flow)
     - [Authorization](#authorization)
-    - [Content Security Policy](#content-security-policy)
-    - [Input Validation](#input-validation)
+    - [Security Features](#security-features)
+    - [Configuration](#configuration)
     - [Privacy by Design](#privacy-by-design)
+    - [API v2 Authentication Architecture](#api-v2-authentication-architecture)
   - [Performance Considerations](#performance-considerations)
     - [Memory Management](#memory-management)
     - [Concurrency](#concurrency)
@@ -51,10 +53,6 @@ This document provides a comprehensive overview of BirdNET-Go's architecture, te
     - [Pre-Commit Hooks](#pre-commit-hooks)
     - [Debugging](#debugging)
     - [Documentation](#documentation)
-  - [Future Architecture Considerations](#future-architecture-considerations)
-    - [Planned Improvements](#planned-improvements)
-    - [Scalability](#scalability)
-  - [Conclusion](#conclusion)
 
 ---
 
