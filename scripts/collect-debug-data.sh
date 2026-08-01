@@ -293,7 +293,12 @@ check_debug_mode() {
             done
             print_error "  The token is missing or wrong. Export the generated one:"
             if [ -n "${config_path}" ]; then
-                print_error "  export BIRDNET_PROFILING_TOKEN=\"\$(awk '${PROFILING_TOKEN_AWK}' ${config_path})\""
+                # config_path is quoted in the EMITTED text, not just here: it is
+                # interpolated from ${HOME}, and a home directory containing a
+                # space would otherwise reach awk as several filenames when the
+                # user pastes the command. Quoting restarts inside $( ), so the
+                # inner quotes are valid despite the surrounding ones.
+                print_error "  export BIRDNET_PROFILING_TOKEN=\"\$(awk '${PROFILING_TOKEN_AWK}' \"${config_path}\")\""
             else
                 print_error "  No config.yaml found in ~/.config/birdnet-go or /etc/birdnet-go."
                 print_error "  Locate yours, then run the awk recipe in doc/PROFILING.md against it."
