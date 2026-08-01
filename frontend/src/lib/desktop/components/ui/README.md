@@ -527,8 +527,7 @@ Renders a single external resource link (Wikipedia, iNaturalist, GBIF, eBird, Xe
 
 **Props:**
 
-- `link: GuideExternalLink` - `{ name, url, icon? }` (from the species guide / similar-species API response)
-- `className?: string`
+- `link: ExternalLinkData` - `{ name, url, icon? }` (from the species guide / similar-species API response)
 
 **Example:**
 
@@ -540,7 +539,7 @@ Renders a single external resource link (Wikipedia, iNaturalist, GBIF, eBird, Xe
 
 ### SimilarSpeciesPanel
 
-Selectable similar-species comparison. Renders a picker rail of the focal species' similar species; selecting one fetches that species' guide (`/api/v2/species/:scientific_name/guide`) and shows its canonical sections (Appearance, Voice, Habitat & range) under a "vs {focal}" header, so the user can tell the two apart attribute by attribute. Rendered inside `SpeciesComparison`'s "Similar species" section.
+Selectable similar-species comparison. Renders a picker rail of the focal species' similar species; selecting one fetches that species' guide (`/api/v2/species/:scientific_name/guide`) and shows its canonical sections (Appearance, Voice, Habitat & range, Behaviour) under a "vs {focal}" header, so the user can tell the two apart attribute by attribute. Rendered inside `SpeciesComparison`'s "Similar species" section.
 
 **Props:**
 
@@ -570,7 +569,7 @@ interface Props {
 
 ### SpeciesComparison
 
-Collapsible panel comparing a focal species against same-genus / same-family / similar species, sourced from the species guide cache (Wikipedia/eBird). Fetches the focal guide and the similar-species list, mapping localized Wikipedia headings to canonical section IDs. The "Similar species" section delegates to `SimilarSpeciesPanel` for the selectable diff card. Used in detection details and the species detail modal.
+Collapsible species guide panel: description, enrichments (season / external links), and a comparison against same-genus / same-family similar species. Content comes from the guide cache — taxonomy, common names and links offline from the embedded OpenFauna dataset, prose only when Wikipedia descriptions are enabled. Localized Wikipedia headings are mapped to canonical section IDs. The "Similar species" section delegates to `SimilarSpeciesPanel` for the selectable diff card. Used in detection details, the species detail modal, and the dashboard "Currently Hearing" card.
 
 **Props:**
 
@@ -578,8 +577,13 @@ Collapsible panel comparing a focal species against same-genus / same-family / s
 interface Props {
   scientificName: string;
   commonName: string;
-  onclose: () => void;
+  /** Panel header. Defaults to the species name; parents already showing it pass a generic label. */
+  heading?: string;
+  /** Client-side similar-species gate; the server's `features.similar_species` takes over once the guide response arrives. */
+  showSimilarSpecies?: boolean;
   className?: string;
+  /** Bindable. Collapses in place (header stays visible). Defaults to expanded. */
+  collapsed?: boolean;
   [key: string]: unknown;
 }
 ```
@@ -587,26 +591,23 @@ interface Props {
 **Features:**
 
 - Fetches focal guide (`/api/v2/species/:scientific_name/guide`) and similar species (`/api/v2/species/:scientific_name/similar`)
-- Collapsible Description, Songs & Calls, and Similar species sections
-- Best-effort localized heading mapping (en/de/fr/es/pl/fi/sv Wikipedia section names) to canonical section IDs; other locales fall back to the raw heading
+- Collapsible Description plus the canonical Appearance / Songs & Calls / Habitat & range / Behaviour rows, and a Similar species section
+- Localized heading mapping covers all 16 shipped locales (`cs da de en es fi fr hu it lv nb nl pl pt sk sv`) via the shared vocabularies in `types/species.ts`; unmatched headings degrade to the raw heading
+- Renders a degraded-rail notice when `/similar` reports `guide_unavailable`, so an empty list is never passed off as "no similar species"
 - Instance-scoped ARIA ids via `$props.id()` so multiple instances on one page do not collide
 - Loading and empty states
 
 **Example:**
 
 ```svelte
-<SpeciesComparison
-  scientificName="Turdus merula"
-  commonName="Common Blackbird"
-  onclose={() => (showComparison = false)}
-/>
+<SpeciesComparison scientificName="Turdus merula" commonName="Common Blackbird" bind:collapsed />
 ```
 
 ---
 
 ### SpeciesNotes
 
-Per-species user notes with full CRUD (auth-gated writes). Lists notes newest-first and supports add/edit/delete with optimistic updates and a client-side length guard mirroring the server limit.
+Per-species user notes with full CRUD, auth-gated end to end. Lists notes newest-first and supports add/edit/delete with optimistic updates and a client-side length guard mirroring the server limit.
 
 **Props:**
 
@@ -620,7 +621,7 @@ interface Props {
 
 **Features:**
 
-- Read public; create / edit / delete require authentication (`isAuthenticated`)
+- **Every** operation requires authentication (`isAuthenticated`), reads included — notes are user-authored and may hold sensitive detail, so the server applies auth middleware to `GET /notes` as well. The fetch is reactive on `$isAuthenticated`, so logging in refetches.
 - Client-side max-length guard (10,000 chars) mirroring `datastore.SpeciesNoteMaxLength`
 - Inline edit with optimistic entry update; server `updated_at` refreshes on reload
 - Delete confirmation, toast-based error surfacing, i18n strings under `analytics.species.notes.*`

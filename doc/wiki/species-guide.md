@@ -30,8 +30,9 @@ realtime:
 
 That is the only required setting. With just this, guides are built **offline**
 from the embedded OpenFauna dataset (taxonomy, localized common names, and
-external links such as Wikipedia and iNaturalist), cached locally, and shown on
-the species detail and detection detail views. Links resolve to your dashboard
+external links such as Wikipedia, iNaturalist and GBIF), cached locally, and
+shown on the detection detail view, the species detail modal in Analytics, and
+the dashboard's "Currently Hearing" card. Links resolve to your dashboard
 language.
 
 Settings take effect immediately — **no restart is required** (hot-reload).
@@ -46,7 +47,7 @@ All keys live under `realtime.dashboard.speciesguide`:
 | `enablewikipedia`          | bool | `false` | Also fetch article **descriptions** from Wikipedia (online). Off by default; everything else stays offline.                                                                                               |
 | `enablesupplementarylinks` | bool | `false` | Add **supplementary links** — Xeno-canto recordings plus a computed Wikipedia link for species missing from the offline dataset. Off by default; computed at render time with **no** background fetching. |
 | `prefetchenabled`          | bool | `true`  | Pre-fetch a guide in the background the first time a new species is detected.                                                                                                                             |
-| `warmtopn`                 | int  | `50`    | On startup, warm the cache for your top-N most-detected species (`0` disables warming).                                                                                                                   |
+| `warmtopn`                 | int  | `50`    | On startup, warm the cache for your top-N most-detected species (`0` disables warming; values above `1000` are clamped).                                                                                  |
 | `shownotes`                | bool | `true`  | Show the per-species notes section.                                                                                                                                                                       |
 | `showenrichments`          | bool | `true`  | Show enrichment badges (expectedness, current season, external links).                                                                                                                                    |
 | `showsimilarspecies`       | bool | `true`  | Show the similar-species comparison panel.                                                                                                                                                                |
@@ -126,13 +127,22 @@ to use notes on an exposed instance.
 
 - **OpenFauna** (embedded, offline) — taxonomy, localized common names, and the
   external reference links (Wikipedia, iNaturalist, GBIF). Compiled from the GBIF
-  backbone taxonomy, Wikipedia, and the iNaturalist Open Data taxonomy.
+  backbone taxonomy, Wikipedia, and the iNaturalist Open Data taxonomy. The
+  Wikipedia link is addressed by Wikidata entity, so clicking it goes through
+  `wikidata.org` to reach the article in your dashboard language.
+- **eBird** (link only) — added whenever BirdNET-Go can resolve the species'
+  eBird code from the loaded model taxonomy. It is built at runtime rather than
+  read from OpenFauna, because eBird/Clements data cannot be redistributed there.
 - **Wikipedia** (online, only when `enablewikipedia` is on) — article
   descriptions, licensed **CC BY-SA 4.0**; the guide displays the source link
   and license alongside each description.
 - **Xeno-canto** and a computed **Wikipedia** gap-fill link (only when
   `enablesupplementarylinks` is on) — outbound links resolved at render time; no
   data is fetched in the background.
+
+All of the above except the Wikipedia _description_ are plain outbound links:
+they are contacted by your browser only when you click them, never by
+BirdNET-Go in the background, and are opened with `rel="noopener noreferrer"`.
 
 Guides are cached in your local database so repeat views and similar-species
 lookups don't re-contact Wikipedia. The cache ages out automatically
