@@ -9,8 +9,10 @@ CONTAINER_NAME="${BIRDNET_CONTAINER:-birdnet-go}"
 BIRDNET_PORT="${BIRDNET_PORT:-8080}"
 OUTPUT_DIR="debug-data-docker-$(date +%Y%m%d-%H%M%S)"
 PROFILE_DURATION="${PROFILE_DURATION:-30}"
-# Seconds to wait for a TCP connection when probing whether the server is up.
+# Seconds to wait for a TCP connection when probing whether the server is up,
+# and an overall ceiling for the same probe. Both are needed: see http_status.
 PROBE_CONNECT_TIMEOUT="${PROBE_CONNECT_TIMEOUT:-15}"
+PROBE_MAX_TIME="${PROBE_MAX_TIME:-120}"
 # Docker image name from install.sh
 BIRDNET_GO_IMAGE="ghcr.io/tphakala/birdnet-go:nightly"
 
@@ -184,14 +186,25 @@ get_container_url() {
 # reporting that as 000 would send the reader to "check the host and port" for a
 # server that replied.
 #
-# --connect-timeout is what makes the "timeout" in the first line true: without
-# it a black-holed host (SYN dropped by a firewall) hangs for curl's 300-second
-# default. Deliberately NOT --max-time, which bounds the whole transfer: a loaded
-# Raspberry Pi slow to first byte is exactly the instance this collector exists to
-# diagnose, and a total cap would report it as 000, "no HTTP response at all".
+# The two timeouts compose and both are needed; they are not alternatives.
+# --connect-timeout bounds a black-holed host (SYN dropped by a firewall), which
+# otherwise hangs for curl's 300-second default. --max-time bounds a server that
+# ACCEPTS the connection and then never answers, which --connect-timeout does not
+# cover at all: a deadlocked handler, a SIGSTOPped process, a proxy with a hung
+# upstream. Measured against an accept-then-stall listener, --connect-timeout
+# alone never returns. That pathology is one this collector exists to diagnose,
+# so hanging on it is the worst possible response.
+#
+# --max-time is deliberately generous. These two probes fetch cheap endpoints,
+# so 120s is far beyond any healthy response, and keeping it large is what stops
+# a loaded Raspberry Pi slow to first byte from being misreported as 000, "no
+# HTTP response at all". Neither probe fetches a profile; collect_profile does,
+# and it sets no total cap because a CPU profile legitimately runs for
+# PROFILE_DURATION seconds.
 http_status() {
     local status
-    status=$(curl -s --connect-timeout "${PROBE_CONNECT_TIMEOUT}" -o /dev/null -w '%{http_code}' "$1" 2>/dev/null) || true
+    status=$(curl -s --connect-timeout "${PROBE_CONNECT_TIMEOUT}" --max-time "${PROBE_MAX_TIME}" \
+        -o /dev/null -w '%{http_code}' "$1" 2>/dev/null) || true
     printf '%s' "${status:-000}"
 }
 
@@ -493,10 +506,11 @@ if ! command -v go &> /dev/null; then
 fi
 
 # Analyze heap memory
-# Guarded like the CPU and mutex steps below. The collector deletes a profile it
-# could not fetch, rather than leaving a truncated one, so absence is the normal
-# way a failed profile shows up here; unguarded, a missing heap.pprof aborts this
-# whole script at step 1 under `set -euo pipefail` and skips every later step.
+# Every step below tolerates both a missing and an unreadable profile. The
+# collector deletes a profile whose fetch returned an error, so absence is the
+# common case, but a kill mid-transfer still leaves a truncated file because that
+# cleanup only runs after curl returns. Either one aborts this whole script at
+# the step that hits it, under `set -euo pipefail`, skipping every later step.
 echo "1. Analyzing heap memory usage..."
 if [ -f "heap.pprof" ]; then
     echo "   Top memory consumers:"

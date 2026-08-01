@@ -196,14 +196,16 @@ read -rs -p 'password: ' PASS; echo
 turn the echo off yourself instead:
 
 ```sh
-saved=$(stty -g 2>/dev/null); restore() { stty "$saved" 2>/dev/null || stty echo; }
-trap 'restore' INT; stty -echo
-printf 'password: '; read -r PASS; restore; trap - INT; echo
+saved=$(stty -g 2>/dev/null); _pw_restore() { stty "$saved" 2>/dev/null || stty echo; }
+trap '_pw_restore' INT; stty -echo
+printf 'password: '; read -r PASS; _pw_restore; trap - INT; unset -f _pw_restore; echo
 ```
 
-The `trap` matters: bash restores the terminal itself when `read -rs` is
-interrupted, and a bare `stty -echo; read; stty echo` does not, so Ctrl-C at the
-prompt would leave your terminal with echo off.
+The saved settings and the `trap` both matter: bash restores the terminal itself
+when `read -rs` is interrupted, and a bare `stty -echo; read; stty echo` does
+not, so Ctrl-C at the prompt would leave your terminal with echo off. Under
+`dash` this aborts the read cleanly; under an interactive `bash` the trap runs
+but `read` restarts, so type Ctrl-D rather than Ctrl-C if you want out.
 
 The `|| stty echo` fallback matters just as much. Not every `stty` accepts its
 own `stty -g` output back: uutils coreutils, which Ubuntu 25.10 ships as the

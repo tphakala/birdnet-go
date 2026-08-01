@@ -149,13 +149,15 @@ not find the server the same way. The native script builds its base URL from
 container's port is published and only falls back to the container IP, so it has
 no use for a host name.
 
-| Variable                  | `collect-debug-data.sh` | `collect-debug-data-docker.sh` | Default        |
-| ------------------------- | ----------------------- | ------------------------------ | -------------- |
-| `BIRDNET_HOST`            | yes                     | no                             | `localhost`    |
-| `BIRDNET_PORT`            | yes                     | yes (container-side port)      | `8080`         |
-| `BIRDNET_CONTAINER`       | no                      | yes                            | `birdnet-go`   |
-| `BIRDNET_PROFILING_TOKEN` | yes                     | yes                            | empty          |
-| `PROFILE_DURATION`        | yes                     | yes                            | `30` (seconds) |
+| Variable                  | `collect-debug-data.sh` | `collect-debug-data-docker.sh` | Default         |
+| ------------------------- | ----------------------- | ------------------------------ | --------------- |
+| `BIRDNET_HOST`            | yes                     | no                             | `localhost`     |
+| `BIRDNET_PORT`            | yes                     | yes (container-side port)      | `8080`          |
+| `BIRDNET_CONTAINER`       | no                      | yes                            | `birdnet-go`    |
+| `BIRDNET_PROFILING_TOKEN` | yes                     | yes                            | empty           |
+| `PROFILE_DURATION`        | yes                     | yes                            | `30` (seconds)  |
+| `PROBE_CONNECT_TIMEOUT`   | yes                     | yes                            | `15` (seconds)  |
+| `PROBE_MAX_TIME`          | yes                     | yes                            | `120` (seconds) |
 
 ```bash
 # Specify custom host/port (native script)
