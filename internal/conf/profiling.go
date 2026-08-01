@@ -70,12 +70,12 @@ const (
 // The upper clamp is load-bearing: see maxBlockProfileRate.
 func (p *ProfilingConfig) ResolvedBlockRate() int {
 	switch {
-	case p == nil, p.BlockRateNanos <= 0:
+	case p == nil, p.BlockRate <= 0:
 		return 0
-	case p.BlockRateNanos > maxBlockProfileRate:
+	case p.BlockRate > maxBlockProfileRate:
 		return maxBlockProfileRate
 	default:
-		return p.BlockRateNanos
+		return p.BlockRate
 	}
 }
 

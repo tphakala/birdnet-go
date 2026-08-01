@@ -307,9 +307,11 @@ Set up a cron job for periodic collection:
 
 ## Troubleshooting Collection
 
-Both collectors print the HTTP status code they got, so the number the steps
-below key off is in the script's own output; you do not have to reproduce the
-request by hand to find it.
+When a profiling request fails, both collectors print the HTTP status code they
+got, so the number the steps below key off is in the script's own output and you
+do not have to reproduce the request by hand. The initial connectivity check is
+the exception: it only reports whether any response arrived at all, because at
+that point any status means the server is up.
 
 ### For Native Installation
 
@@ -337,11 +339,11 @@ If collection fails:
 1. Verify container is running: `docker ps | grep birdnet`
 2. Check profiling is enabled in the container:
    ```bash
-   docker exec <container-name> awk 'NR==1{sub(/^\357\273\277/,"")} /^[^[:space:]#]/{d=($0~/^diagnostics:/);p=0;next} d&&/^[[:space:]]*profiling:/{p=1;next} d&&p&&/^[[:space:]]*enabled:/{print;exit}' /config/config.yaml
+   docker exec <container-name> awk 'NR==1{sub(/^\357\273\277/,"")} /^[^[:space:]#]/{d=($0~/^diagnostics:/);p=0;next} d&&p&&/[^[:space:]]/{i=match($0,/[^[:space:]]/);if(i<=pi&&substr($0,i,1)!="#")p=0} d&&!p&&/^[[:space:]]*profiling:/{p=1;pi=match($0,/[^[:space:]]/);next} d&&p&&/^[[:space:]]*enabled:/{print;exit}' /config/config.yaml
    ```
 3. Read the profiling token, if the instance has no authentication provider:
    ```bash
-   docker exec <container-name> awk 'NR==1{sub(/^\357\273\277/,"")} /^[^[:space:]#]/{d=($0~/^diagnostics:/);p=0;next} d&&/^[[:space:]]*profiling:/{p=1;next} d&&p&&/^[[:space:]]*token:/{sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*/,"");gsub(/[[:space:]]|["\047]|\r/,"");print;exit}' /config/config.yaml
+   docker exec <container-name> awk 'NR==1{sub(/^\357\273\277/,"")} /^[^[:space:]#]/{d=($0~/^diagnostics:/);p=0;next} d&&p&&/[^[:space:]]/{i=match($0,/[^[:space:]]/);if(i<=pi&&substr($0,i,1)!="#")p=0} d&&!p&&/^[[:space:]]*profiling:/{p=1;pi=match($0,/[^[:space:]]/);next} d&&p&&/^[[:space:]]*token:/{sub(/\r$/,"");sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*$/,"");sub(/[[:space:]]+$/,"");if($0~/^".*"$/||$0~/^\047.*\047$/)$0=substr($0,2,length($0)-2);print;exit}' /config/config.yaml
    ```
 4. Verify port mapping: `docker port <container-name>`
 5. Check container logs: `docker logs <container-name>`

@@ -97,16 +97,21 @@ check_go_installation() {
 }
 
 # Function to print colored output
+# The message is printed with %s, never %b, so backslashes in it are emitted
+# literally. Only the colour codes are interpreted. This matters because one
+# caller prints an awk program for the user to copy: `echo -e` decodes \0nnn,
+# which turned the program's \047 into a bare ' that closed its own quoting and
+# made the printed command unpasteable.
 print_status() {
-    echo -e "${GREEN}[$(date +'%H:%M:%S')]${NC} $1"
+    printf '%b[%s]%b %s\n' "${GREEN}" "$(date +'%H:%M:%S')" "${NC}" "$1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}[$(date +'%H:%M:%S')] WARNING:${NC} $1"
+    printf '%b[%s] WARNING:%b %s\n' "${YELLOW}" "$(date +'%H:%M:%S')" "${NC}" "$1"
 }
 
 print_error() {
-    echo -e "${RED}[$(date +'%H:%M:%S')] ERROR:${NC} $1"
+    printf '%b[%s] ERROR:%b %s\n' "${RED}" "$(date +'%H:%M:%S')" "${NC}" "$1"
 }
 
 # http_status prints the HTTP status code of a GET, or 000 when no response
@@ -118,9 +123,19 @@ print_error() {
 # auth provider is configured instead, and 410 means the caller is talking to
 # the old telemetry listener. See the troubleshooting section of
 # doc/PROFILING.md, which tells users to triage on exactly these codes.
+#
+# The suppression is `|| true`, NOT `|| status=""`. %{http_code} already prints
+# 000 for every case where no response arrived, so it is the three-valued answer
+# on its own; discarding curl's stdout on a non-zero exit only destroys a real
+# code. curl exits 18 for a partial transfer the server answered 200 to, and
+# reporting that as 000 would send the reader to "check the host and port" for a
+# server that replied.
+#
+# --max-time is what makes the "timeout" in the first line true: without it a
+# black-holed host hangs on curl's 300-second default connect timeout.
 http_status() {
     local status
-    status=$(curl -s -o /dev/null -w '%{http_code}' "$1" 2>/dev/null) || status=""
+    status=$(curl -s --max-time 15 -o /dev/null -w '%{http_code}' "$1" 2>/dev/null) || true
     printf '%s' "${status:-000}"
 }
 
@@ -147,9 +162,16 @@ check_connectivity() {
 PROFILING_TOKEN="${BIRDNET_PROFILING_TOKEN:-}"
 
 # PROFILING_TOKEN_AWK extracts diagnostics.profiling.token from a config file.
-# Four copies of this program exist and must stay identical: here,
-# scripts/collect-debug-data-docker.sh, doc/PROFILING.md and
-# doc/DEBUG-COLLECTION.md.
+#
+# SIX copies of this program exist and must stay byte-identical. Counting
+# occurrences, not files, because doc/PROFILING.md alone carries three:
+#   scripts/collect-debug-data.sh          1
+#   scripts/collect-debug-data-docker.sh   1
+#   doc/PROFILING.md                       3  (plain read, docker exec, export)
+#   doc/DEBUG-COLLECTION.md                1
+# doc/DEBUG-COLLECTION.md carries a SEVENTH near-copy that shares this whole
+# prologue and swaps the final rule to print `enabled:`; it must track any
+# change to the section-scoping rules below.
 #
 # Every clause earns its place, so do not simplify it back to a grep:
 #   - the BOM strip lets '^diagnostics:' match a hand-edited config that was
@@ -158,13 +180,26 @@ PROFILING_TOKEN="${BIRDNET_PROFILING_TOKEN:-}"
 #   - the section is bounded at the next top-level key, because other sections
 #     have token: keys of their own and an unbounded search prints a
 #     notification provider's secret instead;
-#   - it is scoped to the profiling: subsection rather than to diagnostics: as
-#     a whole, so a sibling subsection added ahead of profiling cannot win;
-#   - the quote strip covers single quotes as well as double, via \047 rather
-#     than a literal ' so the printed command survives being pasted into a
-#     single-quoted shell string.
-# Verified against gawk, mawk, busybox awk and nawk.
-PROFILING_TOKEN_AWK='NR==1{sub(/^\357\273\277/,"")} /^[^[:space:]#]/{d=($0~/^diagnostics:/);p=0;next} d&&/^[[:space:]]*profiling:/{p=1;next} d&&p&&/^[[:space:]]*token:/{sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*/,"");gsub(/[[:space:]]|["\047]|\r/,"");print;exit}'
+#   - it is scoped to the profiling: subsection and LEAVES that subsection at
+#     the next key indented no deeper than profiling: itself. Bounding only at
+#     the next top-level key is not enough: a sibling subsection of diagnostics
+#     placed AFTER profiling: is still indented, so it never closed the section
+#     and its token: won instead. That is a real secret-disclosure path, since
+#     the shipped template's notifications section carries a token;
+#   - it trims only the ENDS of the value, and strips one surrounding pair of
+#     quotes of either kind. An earlier version gsub'd all whitespace, which
+#     silently mangled a hand-set token containing a space, contradicting
+#     urlencode below, which is explicitly built to carry one;
+#   - the quote strip uses \047 rather than a literal ' so the printed command
+#     survives being pasted into a single-quoted shell string. That only holds
+#     because print_error uses printf %s; echo -e would decode \047 back into a
+#     bare quote and break the very thing this avoids.
+# Verified against gawk, mawk, busybox awk and nawk over twelve config shapes.
+#
+# Known limitation, deliberately not coded around: a '#' inside a quoted token
+# is treated as the start of a trailing comment. Generated tokens are base64url
+# so this is unreachable for them, and handling it properly needs a real parser.
+PROFILING_TOKEN_AWK='NR==1{sub(/^\357\273\277/,"")} /^[^[:space:]#]/{d=($0~/^diagnostics:/);p=0;next} d&&p&&/[^[:space:]]/{i=match($0,/[^[:space:]]/);if(i<=pi&&substr($0,i,1)!="#")p=0} d&&!p&&/^[[:space:]]*profiling:/{p=1;pi=match($0,/[^[:space:]]/);next} d&&p&&/^[[:space:]]*token:/{sub(/\r$/,"");sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*$/,"");sub(/[[:space:]]+$/,"");if($0~/^".*"$/||$0~/^\047.*\047$/)$0=substr($0,2,length($0)-2);print;exit}'
 
 # urlencode percent-encodes a string for safe use in a URL query value.
 # The generated token is base64url and needs no encoding, but a hand-configured
@@ -214,8 +249,16 @@ check_debug_mode() {
             print_error "  enable profiling; it only controls logging verbosity."
             ;;
         403)
+            # Name the file explicitly. A bare `config.yaml` is what the docs
+            # used to print, and it is never in the working directory for a
+            # native install: conf.GetDefaultConfigPaths looks under
+            # ~/.config/birdnet-go and /etc/birdnet-go, while the collector is
+            # run from a repo checkout. The command then printed nothing and the
+            # troubleshooting text read that as "no token has been minted".
+            local config_path="${HOME}/.config/birdnet-go/config.yaml"
+            [ -f "${config_path}" ] || config_path="/etc/birdnet-go/config.yaml"
             print_error "  The token is missing or wrong. Export the generated one:"
-            print_error "  export BIRDNET_PROFILING_TOKEN=\"\$(awk '${PROFILING_TOKEN_AWK}' config.yaml)\""
+            print_error "  export BIRDNET_PROFILING_TOKEN=\"\$(awk '${PROFILING_TOKEN_AWK}' ${config_path})\""
             ;;
         401 | 302)
             print_error "  An authentication provider is configured, so the token is never"
@@ -247,16 +290,26 @@ collect_profile() {
     fi
 
     print_status "Collecting ${profile_type} profile..."
-    local status
+    # Unlike http_status, this needs BOTH the status and the exit code. A
+    # truncated transfer reports 200 with an incomplete body (curl exit 18), and
+    # trusting the status alone would keep a half-written .pprof that
+    # go tool pprof rejects later, which is the outcome the rm below exists to
+    # prevent. No --max-time here: a CPU profile legitimately takes
+    # PROFILE_DURATION seconds.
+    local status rc=0
     status=$(curl -s -o "${output_file}" -w '%{http_code}' \
-        "${BASE_URL}/debug/pprof/${profile_type}${url_params}$(auth_query "${separator}")" 2>/dev/null) || status=""
-    if [ "${status:-000}" = "200" ]; then
+        "${BASE_URL}/debug/pprof/${profile_type}${url_params}$(auth_query "${separator}")" 2>/dev/null) || rc=$?
+    if [ "${rc}" -eq 0 ] && [ "${status:-000}" = "200" ]; then
         print_status "✓ Collected ${profile_type} profile → ${output_file}"
     else
-        # The body of a failed request is an error page, not a profile, and a
-        # file that go tool pprof rejects later is worse than no file at all.
+        # The body of a failed request is an error page or a partial profile,
+        # and a file that go tool pprof rejects later is worse than no file.
         rm -f "${output_file}"
-        print_warning "Failed to collect ${profile_type} profile (HTTP ${status:-000})"
+        if [ "${status:-000}" = "200" ]; then
+            print_warning "Failed to collect ${profile_type} profile (server answered 200 but the transfer did not complete; curl exit ${rc})"
+        else
+            print_warning "Failed to collect ${profile_type} profile (HTTP ${status:-000})"
+        fi
     fi
 }
 
@@ -372,15 +425,27 @@ if ! command -v go &> /dev/null; then
 fi
 
 # Analyze heap memory
+# Guarded like the CPU and mutex steps below. The collector deletes a profile it
+# could not fetch, rather than leaving a truncated one, so absence is the normal
+# way a failed profile shows up here; unguarded, a missing heap.pprof aborts this
+# whole script at step 1 under `set -euo pipefail` and skips every later step.
 echo "1. Analyzing heap memory usage..."
-echo "   Top memory consumers:"
-go tool pprof -top -unit=mb heap.pprof | head -20
+if [ -f "heap.pprof" ]; then
+    echo "   Top memory consumers:"
+    go tool pprof -top -unit=mb heap.pprof | head -20
+else
+    echo "   heap.pprof was not collected, skipping"
+fi
 echo ""
 
 # Analyze goroutines
 echo "2. Analyzing goroutines..."
-echo "   Goroutine count by function:"
-go tool pprof -text goroutine.pprof | head -20
+if [ -f "goroutine.pprof" ]; then
+    echo "   Goroutine count by function:"
+    go tool pprof -text goroutine.pprof | head -20
+else
+    echo "   goroutine.pprof was not collected, skipping"
+fi
 echo ""
 
 # Analyze CPU profile if it exists

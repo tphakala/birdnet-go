@@ -35,14 +35,13 @@ func newProfilingTestController(t *testing.T) *Controller {
 // The mint now runs at each settings publish point, so a runtime enable
 // produces a usable credential in the same save.
 func TestEnsureProfilingTokenForSave_MintsOnRuntimeEnable(t *testing.T) {
-	c := newProfilingTestController(t)
 
 	updated := &conf.Settings{}
 	updated.Diagnostics.Profiling.Enabled = true
 	require.Empty(t, updated.Diagnostics.Profiling.Token,
 		"setup must start from the enabled-but-tokenless state")
 
-	c.ensureProfilingTokenForSave(updated)
+	ensureProfilingTokenForSave(updated)
 
 	assert.NotEmpty(t, updated.Diagnostics.Profiling.Token,
 		"enabling profiling at runtime must mint a token, not defer it to a restart")
@@ -71,12 +70,11 @@ func TestEnsureProfilingTokenForSave_NoOpCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := newProfilingTestController(t)
 
 			updated := &conf.Settings{}
 			tt.mutate(updated)
 
-			c.ensureProfilingTokenForSave(updated)
+			ensureProfilingTokenForSave(updated)
 
 			assert.Empty(t, updated.Diagnostics.Profiling.Token,
 				"no token should be minted for this configuration")
@@ -146,13 +144,11 @@ func TestPatchDiagnosticsCannotSetProfilingToken(t *testing.T) {
 func TestEnsureProfilingTokenForSave_KeepsExistingToken(t *testing.T) {
 	const existing = "an-already-issued-profiling-token"
 
-	c := newProfilingTestController(t)
-
 	updated := &conf.Settings{}
 	updated.Diagnostics.Profiling.Enabled = true
 	updated.Diagnostics.Profiling.Token = existing
 
-	c.ensureProfilingTokenForSave(updated)
+	ensureProfilingTokenForSave(updated)
 
 	assert.Equal(t, existing, updated.Diagnostics.Profiling.Token,
 		"an existing token must survive unrelated settings saves")
@@ -188,7 +184,7 @@ func TestProfilingRatesHotReload(t *testing.T) {
 
 	off := &conf.Settings{}
 	on := &conf.Settings{}
-	on.Diagnostics.Profiling.BlockRateNanos = conf.RecommendedBlockProfileRate
+	on.Diagnostics.Profiling.BlockRate = conf.RecommendedBlockProfileRate
 	on.Diagnostics.Profiling.MutexFraction = conf.RecommendedMutexProfileFraction
 
 	require.NoError(t, c.handleSettingsChanges(off, on))
@@ -246,34 +242,34 @@ func TestProfilingRatesChangedScope(t *testing.T) {
 		{
 			name: "equal non-zero rates are not a change",
 			base: func(s *conf.Settings) {
-				s.Diagnostics.Profiling.BlockRateNanos = conf.RecommendedBlockProfileRate
+				s.Diagnostics.Profiling.BlockRate = conf.RecommendedBlockProfileRate
 				s.Diagnostics.Profiling.MutexFraction = conf.RecommendedMutexProfileFraction
 			},
 			mutate: func(s *conf.Settings) {
-				s.Diagnostics.Profiling.BlockRateNanos = conf.RecommendedBlockProfileRate
+				s.Diagnostics.Profiling.BlockRate = conf.RecommendedBlockProfileRate
 				s.Diagnostics.Profiling.MutexFraction = conf.RecommendedMutexProfileFraction
 			},
 		},
 		{
 			name: "turning a rate off is a change",
 			base: func(s *conf.Settings) {
-				s.Diagnostics.Profiling.BlockRateNanos = conf.RecommendedBlockProfileRate
+				s.Diagnostics.Profiling.BlockRate = conf.RecommendedBlockProfileRate
 			},
-			mutate:  func(s *conf.Settings) { s.Diagnostics.Profiling.BlockRateNanos = 0 },
+			mutate:  func(s *conf.Settings) { s.Diagnostics.Profiling.BlockRate = 0 },
 			changed: true,
 		},
 		{
 			name: "two negatives both meaning off are not a change",
 			base: func(s *conf.Settings) {
-				s.Diagnostics.Profiling.BlockRateNanos = -1
+				s.Diagnostics.Profiling.BlockRate = -1
 			},
 			mutate: func(s *conf.Settings) {
-				s.Diagnostics.Profiling.BlockRateNanos = -5
+				s.Diagnostics.Profiling.BlockRate = -5
 			},
 		},
 		{
 			name:    "block rate",
-			mutate:  func(s *conf.Settings) { s.Diagnostics.Profiling.BlockRateNanos = conf.RecommendedBlockProfileRate },
+			mutate:  func(s *conf.Settings) { s.Diagnostics.Profiling.BlockRate = conf.RecommendedBlockProfileRate },
 			changed: true,
 		},
 		{

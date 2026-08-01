@@ -121,21 +121,24 @@ deserves, and every clause is there for a reason. It stops at the end of the
 `diagnostics` section, because other sections have `token:` keys of their own and
 a search that just runs forward from `diagnostics:` will happily print a
 notification provider's secret instead. Within that section it is scoped to
-`profiling:`, so a sibling subsection added later cannot win. It strips a UTF-8
-byte order mark, which a hand-edited config may carry and which otherwise stops
-`^diagnostics:` matching at all, sending you to step 5 of Troubleshooting with
-the wrong diagnosis. And it strips single as well as double quotes. It is
-verified against gawk, mawk, busybox awk and nawk:
+`profiling:`, and leaves that subsection at the next key indented no deeper than
+`profiling:` itself, so a sibling subsection cannot win whether it is added
+before or after. It strips a UTF-8 byte order mark, which a hand-edited config
+may carry and which otherwise stops `^diagnostics:` matching at all, sending you
+to step 5 of Troubleshooting with the wrong diagnosis. It trims only the ends of
+the value, so a hand-set token containing a space survives, and it strips one
+surrounding pair of quotes of either kind. It is verified against gawk, mawk,
+busybox awk and nawk over twelve config shapes:
 
 ```bash
-awk 'NR==1{sub(/^\357\273\277/,"")} /^[^[:space:]#]/{d=($0~/^diagnostics:/);p=0;next} d&&/^[[:space:]]*profiling:/{p=1;next} d&&p&&/^[[:space:]]*token:/{sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*/,"");gsub(/[[:space:]]|["\047]|\r/,"");print;exit}' config.yaml
+awk 'NR==1{sub(/^\357\273\277/,"")} /^[^[:space:]#]/{d=($0~/^diagnostics:/);p=0;next} d&&p&&/[^[:space:]]/{i=match($0,/[^[:space:]]/);if(i<=pi&&substr($0,i,1)!="#")p=0} d&&!p&&/^[[:space:]]*profiling:/{p=1;pi=match($0,/[^[:space:]]/);next} d&&p&&/^[[:space:]]*token:/{sub(/\r$/,"");sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*$/,"");sub(/[[:space:]]+$/,"");if($0~/^".*"$/||$0~/^\047.*\047$/)$0=substr($0,2,length($0)-2);print;exit}' config.yaml
 ```
 
 For a container installation the config lives inside the config volume, so read
 it through the container:
 
 ```bash
-docker exec birdnet-go awk 'NR==1{sub(/^\357\273\277/,"")} /^[^[:space:]#]/{d=($0~/^diagnostics:/);p=0;next} d&&/^[[:space:]]*profiling:/{p=1;next} d&&p&&/^[[:space:]]*token:/{sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*/,"");gsub(/[[:space:]]|["\047]|\r/,"");print;exit}' /config/config.yaml
+docker exec birdnet-go awk 'NR==1{sub(/^\357\273\277/,"")} /^[^[:space:]#]/{d=($0~/^diagnostics:/);p=0;next} d&&p&&/[^[:space:]]/{i=match($0,/[^[:space:]]/);if(i<=pi&&substr($0,i,1)!="#")p=0} d&&!p&&/^[[:space:]]*profiling:/{p=1;pi=match($0,/[^[:space:]]/);next} d&&p&&/^[[:space:]]*token:/{sub(/\r$/,"");sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*$/,"");sub(/[[:space:]]+$/,"");if($0~/^".*"$/||$0~/^\047.*\047$/)$0=substr($0,2,length($0)-2);print;exit}' /config/config.yaml
 ```
 
 The host-side copy of that file is under the directory bind-mounted at `/config`
@@ -153,7 +156,7 @@ Every example below assumes the token is in a shell variable. This is the same
 name the collection scripts in `scripts/` read, so exporting it once serves both:
 
 ```bash
-export BIRDNET_PROFILING_TOKEN="$(awk 'NR==1{sub(/^\357\273\277/,"")} /^[^[:space:]#]/{d=($0~/^diagnostics:/);p=0;next} d&&/^[[:space:]]*profiling:/{p=1;next} d&&p&&/^[[:space:]]*token:/{sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*/,"");gsub(/[[:space:]]|["\047]|\r/,"");print;exit}' config.yaml)"
+export BIRDNET_PROFILING_TOKEN="$(awk 'NR==1{sub(/^\357\273\277/,"")} /^[^[:space:]#]/{d=($0~/^diagnostics:/);p=0;next} d&&p&&/[^[:space:]]/{i=match($0,/[^[:space:]]/);if(i<=pi&&substr($0,i,1)!="#")p=0} d&&!p&&/^[[:space:]]*profiling:/{p=1;pi=match($0,/[^[:space:]]/);next} d&&p&&/^[[:space:]]*token:/{sub(/\r$/,"");sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*$/,"");sub(/[[:space:]]+$/,"");if($0~/^".*"$/||$0~/^\047.*\047$/)$0=substr($0,2,length($0)-2);print;exit}' config.yaml)"
 ```
 
 `go tool pprof` has no flag for custom headers, but it does preserve query
@@ -188,13 +191,19 @@ Run this line on its own first, so the password is not left in your shell histor
 read -rs -p 'password: ' PASS; echo
 ```
 
-`read -rs` is a bash builtin option. Everything else in this recipe is POSIX, so
-if you are on `dash` or another `sh` you will get `read: Illegal option -s`; turn
-the echo off yourself instead:
+`read -rs` is a bash builtin option, and `dash` rejects both `-r`'s companion
+`-s` and `-p`. If you are on another `sh` you will get `read: Illegal option -s`;
+turn the echo off yourself instead:
 
 ```sh
-stty -echo; printf 'password: '; read -r PASS; stty echo; echo
+saved=$(stty -g); trap 'stty "$saved"' INT; stty -echo
+printf 'password: '; read -r PASS; stty "$saved"; trap - INT; echo
 ```
+
+The saved settings and the `trap` matter: bash restores the terminal itself when
+`read -rs` is interrupted, and a bare `stty -echo; read; stty echo` does not, so
+Ctrl-C at the prompt would leave your terminal with echo off. If that happens,
+`stty sane` recovers it.
 
 Then the rest:
 
@@ -520,7 +529,7 @@ async-signal-safe: that is a deadlock risk in a long-running appliance, accepted
 in exchange for diagnostics. Its traceback implementation carries a Linux-only
 build constraint, so macOS and Windows fail to link and it would need a build tag
 regardless. The native frames it would reveal are overwhelmingly inside TFLite,
-the legacy backend being phased out in favour of ONNX and OpenVINO. And `perf`
+the legacy backend being phased out in favor of ONNX and OpenVINO. And `perf`
 already covers the rare case where native stacks are genuinely needed.
 
 ## Why There Is No Special Profiling Build
