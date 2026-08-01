@@ -196,13 +196,20 @@ read -rs -p 'password: ' PASS; echo
 turn the echo off yourself instead:
 
 ```sh
-saved=$(stty -g); trap 'stty "$saved"' INT; stty -echo
-printf 'password: '; read -r PASS; stty "$saved"; trap - INT; echo
+saved=$(stty -g 2>/dev/null); restore() { stty "$saved" 2>/dev/null || stty echo; }
+trap 'restore' INT; stty -echo
+printf 'password: '; read -r PASS; restore; trap - INT; echo
 ```
 
-The saved settings and the `trap` matter: bash restores the terminal itself when
-`read -rs` is interrupted, and a bare `stty -echo; read; stty echo` does not, so
-Ctrl-C at the prompt would leave your terminal with echo off. If that happens,
+The `trap` matters: bash restores the terminal itself when `read -rs` is
+interrupted, and a bare `stty -echo; read; stty echo` does not, so Ctrl-C at the
+prompt would leave your terminal with echo off.
+
+The `|| stty echo` fallback matters just as much. Not every `stty` accepts its
+own `stty -g` output back: uutils coreutils, which Ubuntu 25.10 ships as the
+default `stty`, rejects it with `stty: invalid argument`. Without the fallback
+the restore fails on the ordinary success path, which is worse than the problem
+the `trap` solves. If you ever do end up with a terminal that is not echoing,
 `stty sane` recovers it.
 
 Then the rest:

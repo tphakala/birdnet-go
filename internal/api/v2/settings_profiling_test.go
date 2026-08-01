@@ -35,7 +35,6 @@ func newProfilingTestController(t *testing.T) *Controller {
 // The mint now runs at each settings publish point, so a runtime enable
 // produces a usable credential in the same save.
 func TestEnsureProfilingTokenForSave_MintsOnRuntimeEnable(t *testing.T) {
-
 	updated := &conf.Settings{}
 	updated.Diagnostics.Profiling.Enabled = true
 	require.Empty(t, updated.Diagnostics.Profiling.Token,
@@ -70,7 +69,6 @@ func TestEnsureProfilingTokenForSave_NoOpCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			updated := &conf.Settings{}
 			tt.mutate(updated)
 

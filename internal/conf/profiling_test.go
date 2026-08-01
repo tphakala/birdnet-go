@@ -380,8 +380,13 @@ func TestRecommendedRatesMatchShippedConfig(t *testing.T) {
 		"config.yaml must recommend the same mutex fraction as RecommendedMutexProfileFraction; update doc/PROFILING.md too")
 }
 
-// TestViperDecodesProfilingSection pins the decoder contract that actually
-// governs config.yaml, which is NOT the yaml tag.
+// TestViperDecodesProfilingSection pins the field-name matching contract that
+// actually governs config.yaml, which is NOT the yaml tag.
+//
+// It exercises that contract on a local viper without conf.Load's DurationDecodeHook,
+// because the hook plays no part in how a key is matched to a field. It is
+// therefore a targeted guard on the naming invariant, not an end-to-end test of
+// the loader.
 //
 // conf.Load calls viper.Unmarshal, and viper passes no TagName, so mapstructure
 // defaults to looking for `mapstructure` tags. ProfilingConfig has none, so

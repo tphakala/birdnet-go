@@ -9,6 +9,8 @@ CONTAINER_NAME="${BIRDNET_CONTAINER:-birdnet-go}"
 BIRDNET_PORT="${BIRDNET_PORT:-8080}"
 OUTPUT_DIR="debug-data-docker-$(date +%Y%m%d-%H%M%S)"
 PROFILE_DURATION="${PROFILE_DURATION:-30}"
+# Seconds to wait for a TCP connection when probing whether the server is up.
+PROBE_CONNECT_TIMEOUT="${PROBE_CONNECT_TIMEOUT:-15}"
 # Docker image name from install.sh
 BIRDNET_GO_IMAGE="ghcr.io/tphakala/birdnet-go:nightly"
 
@@ -182,11 +184,14 @@ get_container_url() {
 # reporting that as 000 would send the reader to "check the host and port" for a
 # server that replied.
 #
-# --max-time is what makes the "timeout" in the first line true: without it a
-# black-holed host hangs on curl's 300-second default connect timeout.
+# --connect-timeout is what makes the "timeout" in the first line true: without
+# it a black-holed host (SYN dropped by a firewall) hangs for curl's 300-second
+# default. Deliberately NOT --max-time, which bounds the whole transfer: a loaded
+# Raspberry Pi slow to first byte is exactly the instance this collector exists to
+# diagnose, and a total cap would report it as 000, "no HTTP response at all".
 http_status() {
     local status
-    status=$(curl -s --max-time 15 -o /dev/null -w '%{http_code}' "$1" 2>/dev/null) || true
+    status=$(curl -s --connect-timeout "${PROBE_CONNECT_TIMEOUT}" -o /dev/null -w '%{http_code}' "$1" 2>/dev/null) || true
     printf '%s' "${status:-000}"
 }
 
@@ -235,8 +240,12 @@ PROFILING_TOKEN="${BIRDNET_PROFILING_TOKEN:-}"
 #     the next key indented no deeper than profiling: itself. Bounding only at
 #     the next top-level key is not enough: a sibling subsection of diagnostics
 #     placed AFTER profiling: is still indented, so it never closed the section
-#     and its token: won instead. That is a real secret-disclosure path, since
-#     the shipped template's notifications section carries a token;
+#     and its token: won instead. Latent today rather than live, and the
+#     distinction is worth stating: DiagnosticsConfig has only Profiling, and
+#     notification: is a TOP-level key that the top-level bound already handled.
+#     It becomes a disclosure path the moment a diagnostics subsection carrying
+#     a secret is added, which is not a change anyone would think to re-audit
+#     this awk for;
 #   - it trims only the ENDS of the value, and strips one surrounding pair of
 #     quotes of either kind. An earlier version gsub'd all whitespace, which
 #     silently mangled a hand-set token containing a space, contradicting
@@ -491,7 +500,7 @@ fi
 echo "1. Analyzing heap memory usage..."
 if [ -f "heap.pprof" ]; then
     echo "   Top memory consumers:"
-    go tool pprof -top -unit=mb heap.pprof | head -20
+    go tool pprof -top -unit=mb heap.pprof | head -20 || echo "   heap.pprof could not be analyzed"
 else
     echo "   heap.pprof was not collected, skipping"
 fi
@@ -501,7 +510,7 @@ echo ""
 echo "2. Analyzing goroutines..."
 if [ -f "goroutine.pprof" ]; then
     echo "   Goroutine count by function:"
-    go tool pprof -text goroutine.pprof | head -20
+    go tool pprof -text goroutine.pprof | head -20 || echo "   goroutine.pprof could not be analyzed"
 else
     echo "   goroutine.pprof was not collected, skipping"
 fi
@@ -511,7 +520,7 @@ echo ""
 if [ -f "cpu.pprof" ]; then
     echo "3. Analyzing CPU usage..."
     echo "   Top CPU consumers:"
-    go tool pprof -top cpu.pprof | head -20
+    go tool pprof -top cpu.pprof | head -20 || echo "   cpu.pprof could not be analyzed"
     echo ""
 fi
 
