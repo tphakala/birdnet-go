@@ -295,7 +295,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	// (controllerSettings) return the freshly published value. Both stores are
 	// lock-free; settingsMutex here only serialises this read-modify-write
 	// against other update handlers, not against readers.
-	c.ensureProfilingTokenForSave(updated)
+	ensureProfilingTokenForSave(updated)
 	if publishGlobal {
 		conf.StoreSettings(updated)
 	}
@@ -323,7 +323,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 			// Rollback in-memory; disk write never happened successfully.
 			conf.StoreSettings(current)
 			c.Settings.Store(current)
-			c.restoreProfilingRates(current)
+			restoreProfilingRates(current)
 			c.LogAPIRequest(ctx, logger.LogLevelError, "Failed to save settings to disk, rolling back", logger.Error(err))
 			return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 		}
@@ -597,7 +597,7 @@ func handlePrimitiveField(
 // change. EnsureProfilingToken is a no-op unless profiling is enabled, the
 // token is empty, and no auth provider is configured, so the normal save path
 // pays a boolean check and nothing else.
-func (c *Controller) ensureProfilingTokenForSave(updated *conf.Settings) {
+func ensureProfilingTokenForSave(updated *conf.Settings) {
 	if _, err := conf.EnsureProfilingToken(updated); err != nil {
 		apicore.GetLogger().Warn(
 			"Failed to generate profiling token; the profiling endpoints will refuse requests",
@@ -606,7 +606,7 @@ func (c *Controller) ensureProfilingTokenForSave(updated *conf.Settings) {
 }
 
 func (c *Controller) publishAndSaveSettings(current, updated *conf.Settings) error {
-	c.ensureProfilingTokenForSave(updated)
+	ensureProfilingTokenForSave(updated)
 	if c.isGlobalOwner {
 		conf.StoreSettings(updated)
 	}
@@ -765,7 +765,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	// republish the controller's own atomic snapshot. See the matching comment
 	// in UpdateSettings for why Debug reads via conf.GetSettings() (the global)
 	// rather than the per-controller snapshot.
-	c.ensureProfilingTokenForSave(updated)
+	ensureProfilingTokenForSave(updated)
 	if publishGlobal {
 		conf.StoreSettings(updated)
 	}
@@ -787,7 +787,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		if err := conf.SaveSettings(); err != nil {
 			conf.StoreSettings(current)
 			c.Settings.Store(current)
-			c.restoreProfilingRates(current)
+			restoreProfilingRates(current)
 			return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 		}
 		c.LogAPIRequest(ctx, logger.LogLevelInfo, "Section settings saved successfully",
@@ -2885,7 +2885,7 @@ func pushNotificationSettingsChanged(oldSettings, currentSettings *conf.Settings
 //
 // Cheap and idempotent, so it runs unconditionally rather than re-deriving
 // whether this particular save touched the rates.
-func (c *Controller) restoreProfilingRates(current *conf.Settings) {
+func restoreProfilingRates(current *conf.Settings) {
 	if current == nil {
 		return
 	}

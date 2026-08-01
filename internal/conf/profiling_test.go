@@ -1,7 +1,11 @@
 package conf
 
 import (
+	"encoding/json"
 	"math"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -341,12 +345,18 @@ func TestSamplingDefaultsAreNotRateOne(t *testing.T) {
 //
 // It reads config.yaml rather than restating the constants, which is what makes
 // it a drift guard rather than a second copy of the same literal: editing
-// either the constant or the template alone fails it. The other published
-// copies divide as follows. The struct field comments feed config.schema.json
-// and doc/wiki/configuration-reference.md, and cmd/gen-schema's TestSchemaUpToDate
-// regenerates and byte-compares both, so those cannot drift from the comments.
-// doc/PROFILING.md is hand-maintained with no mechanical guard, which is why the
-// failure message names it.
+// either the constant or the template alone fails it.
+//
+// Every published copy now has a guard; see the enumeration on
+// TestRecommendedRatesMatchProfilingDoc for which one covers which. In
+// particular TestSchemaUpToDate is NOT one of them for the struct comments: it
+// generates the schema from those comments and compares against the committed
+// file, so the comment is on both sides. That copy is covered by
+// TestRecommendedRatesMatchSchemaDescription.
+//
+// The failure messages below still name doc/PROFILING.md, which is now belt and
+// braces rather than the only warning: a change to the constant trips this test,
+// the doc test and the schema test together.
 func TestRecommendedRatesMatchShippedConfig(t *testing.T) {
 	t.Parallel()
 
@@ -368,6 +378,177 @@ func TestRecommendedRatesMatchShippedConfig(t *testing.T) {
 		strings.HasSuffix(shippedLineFor(t, template, "mutexfraction:"),
 			"Try "+strconv.Itoa(RecommendedMutexProfileFraction)),
 		"config.yaml must recommend the same mutex fraction as RecommendedMutexProfileFraction; update doc/PROFILING.md too")
+}
+
+// TestViperDecodesProfilingSection pins the field-name matching contract that
+// actually governs config.yaml, which is NOT the yaml tag.
+//
+// It exercises that contract on a local viper without conf.Load's DurationDecodeHook,
+// because the hook plays no part in how a key is matched to a field. It is
+// therefore a targeted guard on the naming invariant, not an end-to-end test of
+// the loader.
+//
+// conf.Load calls viper.Unmarshal, and viper passes no TagName, so mapstructure
+// defaults to looking for `mapstructure` tags. ProfilingConfig has none, so
+// matching falls back to the Go FIELD NAME compared case-insensitively against
+// the lowercased config key. That makes `strings.ToLower(FieldName) == yamlKey`
+// a load-bearing invariant of this struct, held today only by coincidence of
+// naming, and invisible to anyone reading the tags.
+//
+// Renaming BlockRate to BlockRateNanos, keeping both tags byte-identical, was
+// tried and reverted: it silently decoded to 0 for every user with a configured
+// blockrate, while SaveSettings (yaml tags) and the settings API (json tags)
+// both kept working, so the value round-tripped correctly and only went missing
+// across a restart. Nothing in the suite caught it, because every other test
+// assigns these fields programmatically and never drives viper.
+//
+// The rate must be NON-ZERO here. Zero is what a failed match produces, so a
+// zero fixture would pass just as happily against a field viper cannot find.
+func TestViperDecodesProfilingSection(t *testing.T) {
+	// viper.Reset is global state, so this cannot run in parallel.
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	const configYAML = `
+diagnostics:
+  profiling:
+    enabled: true
+    token: decoder-probe
+    blockrate: 10000
+    mutexfraction: 100
+`
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	require.NoError(t, v.ReadConfig(strings.NewReader(configYAML)))
+
+	var settings Settings
+	require.NoError(t, v.Unmarshal(&settings))
+
+	got := settings.Diagnostics.Profiling
+	assert.True(t, got.Enabled, "enabled must decode")
+	assert.Equal(t, "decoder-probe", got.Token, "token must decode")
+	assert.Equal(t, 10000, got.BlockRate,
+		"blockrate must decode; if this is 0 the Go field name no longer matches the config key, and viper cannot find it")
+	assert.Equal(t, 100, got.MutexFraction,
+		"mutexfraction must decode; same field-name contract as blockrate")
+}
+
+// profilingDocPath is doc/PROFILING.md relative to this package's directory,
+// which is the working directory `go test` uses.
+const profilingDocPath = "../../doc/PROFILING.md"
+
+// TestRecommendedRatesMatchProfilingDoc guards the doc/PROFILING.md copies of
+// the two recommended rates.
+//
+// The numbers are published in SIX places, not four, and the enumeration is
+// worth stating because the obvious count misses the one that mattered:
+//
+//  1. internal/conf/profiling.go     the constants themselves, the source
+//  2. internal/conf/config.go        the ProfilingConfig field comments
+//  3. internal/conf/config.yaml      guarded by TestRecommendedRatesMatchShippedConfig
+//  4. config.schema.json            ) generated FROM 2, byte-compared by
+//  5. doc/wiki/configuration-reference.md ) cmd/gen-schema's TestSchemaUpToDate
+//  6. doc/PROFILING.md               guarded here, twice per number
+//
+// TestSchemaUpToDate does NOT pin 2: it regenerates 4 and 5 from that comment
+// and compares against the committed files, so the comment sits on both sides of
+// the equality and can say anything. Verified by editing the comment to 20000
+// and watching every test stay green while the wiki reference told users 20000.
+// TestRecommendedRatesMatchSchemaDescription below closes that, by asserting on
+// the generated artifact, which pins the comment transitively.
+//
+// This test matches on the key rather than the bare number, and asserts on every
+// occurrence rather than the first, so neither a stale copy left behind nor a
+// value that merely shares a prefix with the right one survives. Requiring at
+// least one match is what makes deleting the line fail too.
+//
+// Scope, stated because the doc comment is otherwise easy to over-trust: it sees
+// the two example syntaxes the doc actually uses, a YAML key at the start of a
+// line and a JSON key. A number written into prose, a markdown table, or a list
+// item is invisible to it.
+func TestRecommendedRatesMatchProfilingDoc(t *testing.T) {
+	t.Parallel()
+
+	doc, err := os.ReadFile(profilingDocPath)
+	require.NoError(t, err, "doc/PROFILING.md must be readable from the package directory")
+	text := string(doc)
+
+	tests := []struct {
+		name    string
+		pattern *regexp.Regexp
+		want    int
+	}{
+		{"yaml blockrate", regexp.MustCompile(`(?m)^[ \t]*blockrate:[ \t]*(\d+)`), RecommendedBlockProfileRate},
+		{"json blockRate", regexp.MustCompile(`"blockRate"[ \t]*:[ \t]*(\d+)`), RecommendedBlockProfileRate},
+		{"yaml mutexfraction", regexp.MustCompile(`(?m)^[ \t]*mutexfraction:[ \t]*(\d+)`), RecommendedMutexProfileFraction},
+		{"json mutexFraction", regexp.MustCompile(`"mutexFraction"[ \t]*:[ \t]*(\d+)`), RecommendedMutexProfileFraction},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			matches := tt.pattern.FindAllStringSubmatch(text, -1)
+			require.NotEmpty(t, matches,
+				"doc/PROFILING.md must still quote %s; the drift guard is useless if the example is gone", tt.name)
+
+			for _, m := range matches {
+				got, err := strconv.Atoi(m[1])
+				require.NoError(t, err)
+				assert.Equal(t, tt.want, got,
+					"doc/PROFILING.md quotes %s as %d; update the doc to match the constant", tt.name, got)
+			}
+		})
+	}
+}
+
+// TestRecommendedRatesMatchSchemaDescription closes the copy in the
+// ProfilingConfig field comments, which was the one genuinely unguarded
+// publication of these numbers.
+//
+// It asserts on config.schema.json rather than on the Go comment because the
+// schema is generated verbatim from that comment and byte-compared by
+// TestSchemaUpToDate. Pinning the generated artifact therefore pins the comment,
+// and it does so through the file users and API clients actually read. Editing
+// the comment alone now fails here; editing it and regenerating fails here too.
+func TestRecommendedRatesMatchSchemaDescription(t *testing.T) {
+	t.Parallel()
+
+	schema, err := os.ReadFile(filepath.Join("..", "..", "config.schema.json"))
+	require.NoError(t, err, "config.schema.json must be readable from the package directory")
+
+	var doc struct {
+		Defs map[string]struct {
+			Properties map[string]struct {
+				Description string `json:"description"`
+			} `json:"properties"`
+		} `json:"$defs"`
+	}
+	require.NoError(t, json.Unmarshal(schema, &doc))
+
+	profiling := doc.Defs["ProfilingConfig"].Properties
+	require.NotEmpty(t, profiling, "the schema must still define ProfilingConfig")
+
+	for _, tt := range []struct {
+		key  string
+		want int
+	}{
+		{"blockrate", RecommendedBlockProfileRate},
+		{"mutexfraction", RecommendedMutexProfileFraction},
+	} {
+		t.Run(tt.key, func(t *testing.T) {
+			t.Parallel()
+
+			description := profiling[tt.key].Description
+			require.NotEmpty(t, description, "the schema must still describe %s", tt.key)
+			// Anchored on the trailing period so a shorter number that is a
+			// prefix of the right one ("1000" inside "10000") cannot satisfy it.
+			assert.Contains(t, description,
+				"Recommended starting point: "+strconv.Itoa(tt.want)+".",
+				"the %s description in config.schema.json must recommend the constant's value; it is generated from the ProfilingConfig field comment in config.go, so fix the comment and re-run 'task generate-schema'", tt.key)
+		})
+	}
 }
 
 // shippedLineFor returns the single line of the embedded template that declares

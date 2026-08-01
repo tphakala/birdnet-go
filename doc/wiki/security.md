@@ -83,6 +83,8 @@ See the following links for more information on Cloudflare Access:
 
 When enabled, BirdNET-Go will allow access to the application without any authentication if the client's IP address is within the specified subnet. Home routers typically use `192.168.1.0/24`, `192.168.0.0/24` or `172.16.0.0/24`.
 
+The bypass reaches further than the web UI. If you have an authentication provider configured and also turn profiling on (`diagnostics.profiling.enabled`), every host on that subnet reaches `/debug/pprof/` with no credential, and no profiling token stands in the way, because a token is only generated when no authentication provider is configured. Unlike the settings pages, which redact their secrets on read, `/debug/pprof/cmdline` returns the process command line verbatim and `/debug/pprof/goroutine?debug=2` returns live goroutine stacks. (With no auth provider configured, the token is the gate, and a subnet host still needs it.) Keep the subnet narrow, and switch profiling back off when you are done with it; see the [profiling guide](../PROFILING.md#security-note) for the full picture.
+
 ## Authentication Recovery
 
 If you end up locking yourself out, authentication can be turned off with the following command:

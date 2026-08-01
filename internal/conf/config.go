@@ -1799,15 +1799,28 @@ type BackupConfig struct {
 //
 // The two rate comments below are lifted verbatim into the generated config
 // schema and the wiki's configuration reference, so they spell the recommended
-// numbers out rather than naming the constants that hold them. Those two copies
-// cannot drift: TestSchemaUpToDate regenerates and byte-compares them. The
-// copies in config.yaml and doc/PROFILING.md are hand-maintained, and
-// TestRecommendedRatesMatchShippedConfig covers the config.yaml one.
+// numbers out rather than naming the constants that hold them.
+//
+// TestSchemaUpToDate does NOT protect the numbers here, which is the trap: it
+// regenerates those two artifacts FROM these comments and byte-compares, so this
+// comment sits on both sides of the equality and could say anything. Editing
+// 10000 to 20000 here and regenerating ships a wiki page recommending 20000 with
+// every test green. TestRecommendedRatesMatchSchemaDescription is what actually
+// pins these, by asserting the generated description carries the constant's
+// value. config.yaml is covered by TestRecommendedRatesMatchShippedConfig and
+// doc/PROFILING.md by TestRecommendedRatesMatchProfilingDoc.
+//
+// Do NOT rename these fields. The loader is viper.Unmarshal, which uses
+// mapstructure; there are no mapstructure tags here, so matching falls back to
+// the Go field name compared case-insensitively against the config key. The yaml
+// tag does not save you. Renaming BlockRate to BlockRateNanos was tried and
+// silently stopped loading blockrate from every existing config.yaml.
+// TestViperDecodesProfilingSection pins this.
 type ProfilingConfig struct {
 	Enabled bool   `yaml:"enabled" json:"enabled"` // true to serve /debug/pprof/* on the web server
 	Token   string `yaml:"token" json:"token"`     // secret required when no auth provider is configured; generated automatically
 
-	BlockRate     int `yaml:"blockrate" json:"blockRate"`         // nanoseconds of blocked time per sample; 0 disables. Independent of enabled: sampling costs CPU continuously whether or not a profile is ever fetched, so 0 is the only free setting and a very coarse rate still pays most of the cost. Recommended starting point: 10000. Hot-reloadable via the settings API.
+	BlockRate     int `yaml:"blockrate" json:"blockRate"`         // nanoseconds of blocked time per sample; 0 disables. Independent of enabled: sampling costs CPU continuously whether or not a profile is ever fetched, so 0 is the only free setting and a very coarse rate still pays most of the cost. Recommended starting point: 10000. Values above 1e15 nanoseconds, about 11 days per sample, are clamped to that ceiling; no useful configuration reaches it. Hot-reloadable via the settings API.
 	MutexFraction int `yaml:"mutexfraction" json:"mutexFraction"` // reports one sampled event per this many contention events; 0 disables. Independent of enabled: sampling costs CPU continuously whether or not a profile is ever fetched. Recommended starting point: 100. Hot-reloadable via the settings API.
 }
 
