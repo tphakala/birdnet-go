@@ -6,9 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-
-
-
 // TestHandleReconfigureSpeciesGuide_MissingDepsIsSafe verifies the guard: with no
 // API controller or metrics wired, the reconfigure handler logs and returns
 // without panicking (rather than dereferencing a nil controller). The full swap
