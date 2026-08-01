@@ -4688,8 +4688,8 @@
           "helpText": "Fajonkénti felhasználói jegyzetek engedélyezése."
         },
         "showEnrichments": {
-          "label": "Bővítések megjelenítése",
-          "helpText": "Minőség-, várhatóság- és évszakjelvények megjelenítése."
+          "label": "Bővítések és hivatkozások megjelenítése",
+          "helpText": "Minőség-, várhatóság- és évszakjelvények, valamint a külső hivatkozások (Wikipédia, iNaturalist, GBIF, eBird) megjelenítése. Kikapcsolva mindezek elrejtésre kerülnek, a hivatkozásokkal együtt."
         },
         "showSimilarSpecies": {
           "label": "Hasonló fajok megjelenítése",

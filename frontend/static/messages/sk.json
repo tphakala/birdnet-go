@@ -4688,8 +4688,8 @@
           "helpText": "Povoliť používateľské poznámky pre jednotlivé druhy."
         },
         "showEnrichments": {
-          "label": "Zobraziť obohatenia",
-          "helpText": "Zobraziť odznaky kvality, očakávanosti a ročného obdobia."
+          "label": "Zobraziť obohatenia a odkazy",
+          "helpText": "Zobraziť odznaky kvality, očakávanosti a ročného obdobia a externé referenčné odkazy (Wikipédia, iNaturalist, GBIF, eBird). Vypnutím skryjete všetko z uvedeného vrátane odkazov."
         },
         "showSimilarSpecies": {
           "label": "Zobraziť podobné druhy",

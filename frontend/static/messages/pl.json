@@ -4688,8 +4688,8 @@
           "helpText": "Zezwalaj na notatki użytkownika dla poszczególnych gatunków."
         },
         "showEnrichments": {
-          "label": "Pokaż wzbogacenia",
-          "helpText": "Pokaż odznaki jakości, przewidywalności i pory roku."
+          "label": "Pokaż wzbogacenia i linki",
+          "helpText": "Pokaż odznaki jakości, przewidywalności i pory roku oraz zewnętrzne linki źródłowe (Wikipedia, iNaturalist, GBIF, eBird). Wyłącz, aby ukryć je wszystkie, łącznie z linkami."
         },
         "showSimilarSpecies": {
           "label": "Pokaż podobne gatunki",

@@ -4688,8 +4688,8 @@
           "helpText": "Tillåt användaranteckningar per art."
         },
         "showEnrichments": {
-          "label": "Visa berikningar",
-          "helpText": "Visa märken för kvalitet, förväntbarhet och årstid."
+          "label": "Visa berikningar och länkar",
+          "helpText": "Visa märken för kvalitet, förväntbarhet och årstid samt de externa referenslänkarna (Wikipedia, iNaturalist, GBIF, eBird). Stäng av för att dölja allt detta, inklusive länkarna."
         },
         "showSimilarSpecies": {
           "label": "Visa liknande arter",

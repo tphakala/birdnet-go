@@ -4688,8 +4688,8 @@
           "helpText": "Allow per-species user notes."
         },
         "showEnrichments": {
-          "label": "Show enrichments",
-          "helpText": "Show quality, expectedness, and season badges."
+          "label": "Show enrichments and links",
+          "helpText": "Show quality, expectedness and season badges, plus the external reference links (Wikipedia, iNaturalist, GBIF, eBird). Turn this off to hide all of them, including the links."
         },
         "showSimilarSpecies": {
           "label": "Show similar species",

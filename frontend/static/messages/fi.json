@@ -4688,8 +4688,8 @@
           "helpText": "Salli lajikohtaiset käyttäjän muistiinpanot."
         },
         "showEnrichments": {
-          "label": "Näytä rikastukset",
-          "helpText": "Näytä laatu-, odotettavuus- ja vuodenaikamerkit."
+          "label": "Näytä rikastukset ja linkit",
+          "helpText": "Näytä laatu-, odotettavuus- ja vuodenaikamerkit sekä ulkoiset lähdelinkit (Wikipedia, iNaturalist, GBIF, eBird). Poista käytöstä piilottaaksesi ne kaikki, myös linkit."
         },
         "showSimilarSpecies": {
           "label": "Näytä samankaltaiset lajit",

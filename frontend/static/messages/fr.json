@@ -4688,8 +4688,8 @@
           "helpText": "Autoriser les notes utilisateur par espèce."
         },
         "showEnrichments": {
-          "label": "Afficher les enrichissements",
-          "helpText": "Afficher les badges de qualité, de prévisibilité et de saison."
+          "label": "Afficher les enrichissements et les liens",
+          "helpText": "Afficher les badges de qualité, de prévisibilité et de saison, ainsi que les liens de référence externes (Wikipedia, iNaturalist, GBIF, eBird). Désactivez pour tout masquer, y compris les liens."
         },
         "showSimilarSpecies": {
           "label": "Afficher les espèces similaires",

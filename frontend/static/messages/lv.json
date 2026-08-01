@@ -4688,8 +4688,8 @@
           "helpText": "Atļaut lietotāja piezīmes katrai sugai."
         },
         "showEnrichments": {
-          "label": "Rādīt papildinājumus",
-          "helpText": "Rādīt kvalitātes, sagaidāmības un sezonas nozīmītes."
+          "label": "Rādīt papildinājumus un saites",
+          "helpText": "Rādīt kvalitātes, sagaidāmības un sezonas nozīmītes, kā arī ārējās atsauces saites (Wikipedia, iNaturalist, GBIF, eBird). Izslēdziet, lai paslēptu tās visas, tostarp saites."
         },
         "showSimilarSpecies": {
           "label": "Rādīt līdzīgas sugas",

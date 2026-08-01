@@ -4688,8 +4688,8 @@
           "helpText": "Tillad brugernoter pr. art."
         },
         "showEnrichments": {
-          "label": "Vis berigelser",
-          "helpText": "Vis mærker for kvalitet, forventelighed og årstid."
+          "label": "Vis berigelser og links",
+          "helpText": "Vis mærker for kvalitet, forventelighed og årstid samt de eksterne referencelinks (Wikipedia, iNaturalist, GBIF, eBird). Slå fra for at skjule det hele, inklusive links."
         },
         "showSimilarSpecies": {
           "label": "Vis lignende arter",

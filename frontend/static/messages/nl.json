@@ -4688,8 +4688,8 @@
           "helpText": "Gebruikersnotities per soort toestaan."
         },
         "showEnrichments": {
-          "label": "Verrijkingen tonen",
-          "helpText": "Badges voor kwaliteit, verwachtbaarheid en seizoen tonen."
+          "label": "Verrijkingen en links tonen",
+          "helpText": "Badges voor kwaliteit, verwachtbaarheid en seizoen tonen, plus de externe referentielinks (Wikipedia, iNaturalist, GBIF, eBird). Zet dit uit om ze allemaal te verbergen, inclusief de links."
         },
         "showSimilarSpecies": {
           "label": "Vergelijkbare soorten tonen",

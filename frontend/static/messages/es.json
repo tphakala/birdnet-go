@@ -4688,8 +4688,8 @@
           "helpText": "Permitir notas de usuario por especie."
         },
         "showEnrichments": {
-          "label": "Mostrar enriquecimientos",
-          "helpText": "Mostrar insignias de calidad, previsibilidad y estación."
+          "label": "Mostrar enriquecimientos y enlaces",
+          "helpText": "Mostrar insignias de calidad, previsibilidad y estación, además de los enlaces de referencia externos (Wikipedia, iNaturalist, GBIF, eBird). Desactívalo para ocultar todo ello, incluidos los enlaces."
         },
         "showSimilarSpecies": {
           "label": "Mostrar especies similares",

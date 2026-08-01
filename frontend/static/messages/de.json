@@ -4688,8 +4688,8 @@
           "helpText": "Benutzernotizen pro Art zulassen."
         },
         "showEnrichments": {
-          "label": "Anreicherungen anzeigen",
-          "helpText": "Abzeichen für Qualität, Erwartbarkeit und Jahreszeit anzeigen."
+          "label": "Anreicherungen und Links anzeigen",
+          "helpText": "Abzeichen für Qualität, Erwartbarkeit und Jahreszeit sowie die externen Referenzlinks (Wikipedia, iNaturalist, GBIF, eBird) anzeigen. Ausschalten blendet alles davon aus, einschließlich der Links."
         },
         "showSimilarSpecies": {
           "label": "Ähnliche Arten anzeigen",
