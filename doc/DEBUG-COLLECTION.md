@@ -143,9 +143,26 @@ docker run --rm -v $PWD:/data -w /data -p 8081:8081 golang:1.24 \
 
 ### Custom Collection Options
 
+The two collectors do not read the same environment variables, because they do
+not find the server the same way. The native script builds its base URL from
+`BIRDNET_HOST` and `BIRDNET_PORT`; the Docker one asks `docker port` where the
+container's port is published and only falls back to the container IP, so it has
+no use for a host name.
+
+| Variable                  | `collect-debug-data.sh` | `collect-debug-data-docker.sh` | Default        |
+| ------------------------- | ----------------------- | ------------------------------ | -------------- |
+| `BIRDNET_HOST`            | yes                     | no                             | `localhost`    |
+| `BIRDNET_PORT`            | yes                     | yes (container-side port)      | `8080`         |
+| `BIRDNET_CONTAINER`       | no                      | yes                            | `birdnet-go`   |
+| `BIRDNET_PROFILING_TOKEN` | yes                     | yes                            | empty          |
+| `PROFILE_DURATION`        | yes                     | yes                            | `30` (seconds) |
+
 ```bash
-# Specify custom host/port
+# Specify custom host/port (native script)
 BIRDNET_HOST=192.168.1.100 BIRDNET_PORT=8443 ./scripts/collect-debug-data.sh
+
+# Name a different container (Docker script)
+BIRDNET_CONTAINER=birdnet-go-test ./scripts/collect-debug-data-docker.sh
 
 # Longer CPU profile (60 seconds)
 PROFILE_DURATION=60 ./scripts/collect-debug-data.sh
@@ -290,6 +307,10 @@ Set up a cron job for periodic collection:
 
 ## Troubleshooting Collection
 
+Both collectors print the HTTP status code they got, so the number the steps
+below key off is in the script's own output; you do not have to reproduce the
+request by hand to find it.
+
 ### For Native Installation
 
 If collection fails:
@@ -316,11 +337,11 @@ If collection fails:
 1. Verify container is running: `docker ps | grep birdnet`
 2. Check profiling is enabled in the container:
    ```bash
-   docker exec <container-name> awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*enabled:/{print;exit}' /config/config.yaml
+   docker exec <container-name> awk 'NR==1{sub(/^\357\273\277/,"")} /^[^[:space:]#]/{d=($0~/^diagnostics:/);p=0;next} d&&/^[[:space:]]*profiling:/{p=1;next} d&&p&&/^[[:space:]]*enabled:/{print;exit}' /config/config.yaml
    ```
 3. Read the profiling token, if the instance has no authentication provider:
    ```bash
-   docker exec <container-name> awk '/^diagnostics:/{f=1;next} /^[^[:space:]#]/{f=0} f&&/^[[:space:]]*token:/{sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*/,"");gsub(/[[:space:]]|"|\r/,"");print;exit}' /config/config.yaml
+   docker exec <container-name> awk 'NR==1{sub(/^\357\273\277/,"")} /^[^[:space:]#]/{d=($0~/^diagnostics:/);p=0;next} d&&/^[[:space:]]*profiling:/{p=1;next} d&&p&&/^[[:space:]]*token:/{sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*/,"");gsub(/[[:space:]]|["\047]|\r/,"");print;exit}' /config/config.yaml
    ```
 4. Verify port mapping: `docker port <container-name>`
 5. Check container logs: `docker logs <container-name>`

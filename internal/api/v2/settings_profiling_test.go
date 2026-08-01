@@ -188,7 +188,7 @@ func TestProfilingRatesHotReload(t *testing.T) {
 
 	off := &conf.Settings{}
 	on := &conf.Settings{}
-	on.Diagnostics.Profiling.BlockRate = conf.RecommendedBlockProfileRate
+	on.Diagnostics.Profiling.BlockRateNanos = conf.RecommendedBlockProfileRate
 	on.Diagnostics.Profiling.MutexFraction = conf.RecommendedMutexProfileFraction
 
 	require.NoError(t, c.handleSettingsChanges(off, on))
@@ -246,34 +246,34 @@ func TestProfilingRatesChangedScope(t *testing.T) {
 		{
 			name: "equal non-zero rates are not a change",
 			base: func(s *conf.Settings) {
-				s.Diagnostics.Profiling.BlockRate = conf.RecommendedBlockProfileRate
+				s.Diagnostics.Profiling.BlockRateNanos = conf.RecommendedBlockProfileRate
 				s.Diagnostics.Profiling.MutexFraction = conf.RecommendedMutexProfileFraction
 			},
 			mutate: func(s *conf.Settings) {
-				s.Diagnostics.Profiling.BlockRate = conf.RecommendedBlockProfileRate
+				s.Diagnostics.Profiling.BlockRateNanos = conf.RecommendedBlockProfileRate
 				s.Diagnostics.Profiling.MutexFraction = conf.RecommendedMutexProfileFraction
 			},
 		},
 		{
 			name: "turning a rate off is a change",
 			base: func(s *conf.Settings) {
-				s.Diagnostics.Profiling.BlockRate = conf.RecommendedBlockProfileRate
+				s.Diagnostics.Profiling.BlockRateNanos = conf.RecommendedBlockProfileRate
 			},
-			mutate:  func(s *conf.Settings) { s.Diagnostics.Profiling.BlockRate = 0 },
+			mutate:  func(s *conf.Settings) { s.Diagnostics.Profiling.BlockRateNanos = 0 },
 			changed: true,
 		},
 		{
 			name: "two negatives both meaning off are not a change",
 			base: func(s *conf.Settings) {
-				s.Diagnostics.Profiling.BlockRate = -1
+				s.Diagnostics.Profiling.BlockRateNanos = -1
 			},
 			mutate: func(s *conf.Settings) {
-				s.Diagnostics.Profiling.BlockRate = -5
+				s.Diagnostics.Profiling.BlockRateNanos = -5
 			},
 		},
 		{
 			name:    "block rate",
-			mutate:  func(s *conf.Settings) { s.Diagnostics.Profiling.BlockRate = conf.RecommendedBlockProfileRate },
+			mutate:  func(s *conf.Settings) { s.Diagnostics.Profiling.BlockRateNanos = conf.RecommendedBlockProfileRate },
 			changed: true,
 		},
 		{
@@ -337,7 +337,7 @@ func TestRestoreProfilingRatesUndoesAFailedSave(t *testing.T) {
 		"setup: the rate must be applied before the rollback is exercised")
 
 	// Now the disk write fails and the handler republishes the old snapshot.
-	c.restoreProfilingRates(current)
+	restoreProfilingRates(current)
 
 	assert.Zero(t, runtime.SetMutexProfileFraction(-1),
 		"a rolled-back save must leave the runtime matching the config that survived, not the one that failed to persist")

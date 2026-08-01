@@ -2,6 +2,8 @@ package conf
 
 import (
 	"math"
+	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -213,7 +215,7 @@ func TestConfigTemplateShipsProfilingDisabled(t *testing.T) {
 		"profiling must ship disabled")
 	assert.Empty(t, settings.Diagnostics.Profiling.Token,
 		"the shipped template must not carry a profiling token")
-	assert.Zero(t, settings.Diagnostics.Profiling.BlockRate,
+	assert.Zero(t, settings.Diagnostics.Profiling.BlockRateNanos,
 		"block profiling must ship off; sampling costs CPU whether or not a profile is ever fetched")
 	assert.Zero(t, settings.Diagnostics.Profiling.MutexFraction,
 		"mutex profiling must ship off for the same reason")
@@ -296,8 +298,8 @@ func TestResolvedRates(t *testing.T) {
 			t.Parallel()
 
 			profiling := &ProfilingConfig{
-				BlockRate:     tt.blockRate,
-				MutexFraction: tt.mutexFraction,
+				BlockRateNanos: tt.blockRate,
+				MutexFraction:  tt.mutexFraction,
 			}
 
 			assert.Equal(t, tt.wantBlockRate, profiling.ResolvedBlockRate())
@@ -368,6 +370,60 @@ func TestRecommendedRatesMatchShippedConfig(t *testing.T) {
 		strings.HasSuffix(shippedLineFor(t, template, "mutexfraction:"),
 			"Try "+strconv.Itoa(RecommendedMutexProfileFraction)),
 		"config.yaml must recommend the same mutex fraction as RecommendedMutexProfileFraction; update doc/PROFILING.md too")
+}
+
+// profilingDocPath is doc/PROFILING.md relative to this package's directory,
+// which is the working directory `go test` uses.
+const profilingDocPath = "../../doc/PROFILING.md"
+
+// TestRecommendedRatesMatchProfilingDoc closes the last unguarded copy of the
+// two recommended rates.
+//
+// The numbers are published in four places. config.yaml is covered by
+// TestRecommendedRatesMatchShippedConfig; config.schema.json and
+// doc/wiki/configuration-reference.md are generated from the struct comments and
+// byte-compared by TestSchemaUpToDate. doc/PROFILING.md was hand-maintained with
+// nothing checking it, and the rewrite that landed with the docs work quotes
+// each number twice rather than once, so the exposure grew rather than shrank.
+//
+// It matches on the key rather than the bare number, and asserts on every
+// occurrence rather than the first, so neither a stale copy left behind nor a
+// value that merely shares a prefix with the right one survives. Requiring at
+// least one match is what makes deleting the line fail too.
+func TestRecommendedRatesMatchProfilingDoc(t *testing.T) {
+	t.Parallel()
+
+	doc, err := os.ReadFile(profilingDocPath)
+	require.NoError(t, err, "doc/PROFILING.md must be readable from the package directory")
+	text := string(doc)
+
+	tests := []struct {
+		name    string
+		pattern *regexp.Regexp
+		want    int
+	}{
+		{"yaml blockrate", regexp.MustCompile(`(?m)^[ \t]*blockrate:[ \t]*(\d+)`), RecommendedBlockProfileRate},
+		{"json blockRate", regexp.MustCompile(`"blockRate"[ \t]*:[ \t]*(\d+)`), RecommendedBlockProfileRate},
+		{"yaml mutexfraction", regexp.MustCompile(`(?m)^[ \t]*mutexfraction:[ \t]*(\d+)`), RecommendedMutexProfileFraction},
+		{"json mutexFraction", regexp.MustCompile(`"mutexFraction"[ \t]*:[ \t]*(\d+)`), RecommendedMutexProfileFraction},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			matches := tt.pattern.FindAllStringSubmatch(text, -1)
+			require.NotEmpty(t, matches,
+				"doc/PROFILING.md must still quote %s; the drift guard is useless if the example is gone", tt.name)
+
+			for _, m := range matches {
+				got, err := strconv.Atoi(m[1])
+				require.NoError(t, err)
+				assert.Equal(t, tt.want, got,
+					"doc/PROFILING.md quotes %s as %d; update the doc to match the constant", tt.name, got)
+			}
+		})
+	}
 }
 
 // shippedLineFor returns the single line of the embedded template that declares

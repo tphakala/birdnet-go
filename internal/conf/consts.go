@@ -82,3 +82,9 @@ const (
 
 // DefaultSessionDuration is the default session duration (7 days).
 const DefaultSessionDuration = 168 * time.Hour
+
+// The two runtime profiling sampling rates are NOT here, and not named Default*,
+// because they are not what an unset key resolves to: unset means off. They live
+// in profiling.go as RecommendedBlockProfileRate and
+// RecommendedMutexProfileFraction. This pointer exists because consts.go is
+// where a reader looks first.

@@ -160,10 +160,28 @@ get_container_url() {
     fi
 }
 
+# http_status prints the HTTP status code of a GET, or 000 when no response
+# arrived at all (connection refused, DNS failure, timeout).
+#
+# Deliberately not `curl -f`, which collapses every 4xx and 5xx into exit code
+# 22 and one indistinguishable message. The status code is the whole diagnosis
+# here: 404 means profiling is off, 403 means the token is wrong, 401 means an
+# auth provider is configured instead, and 410 means the caller is talking to
+# the old telemetry listener. See the troubleshooting section of
+# doc/PROFILING.md, which tells users to triage on exactly these codes.
+http_status() {
+    local status
+    status=$(curl -s -o /dev/null -w '%{http_code}' "$1" 2>/dev/null) || status=""
+    printf '%s' "${status:-000}"
+}
+
 # Function to check if BirdNET-Go is accessible
 check_connectivity() {
     print_status "Checking connectivity to BirdNET-Go..."
-    if ! curl -s -f "${BASE_URL}" > /dev/null 2>&1; then
+    # Any HTTP response proves the server is there. An instance with
+    # authentication enabled answers the root path with 302 or 401, which is a
+    # working server rather than a connectivity failure.
+    if [ "$(http_status "${BASE_URL}")" = "000" ]; then
         print_error "Cannot connect to BirdNET-Go at ${BASE_URL}"
         print_error "Please ensure BirdNET-Go is running in the container"
         exit 1
@@ -178,6 +196,25 @@ check_connectivity() {
 # Note: these collectors support unauthenticated and token-gated instances only;
 # they cannot log in to an instance protected by basic auth or OAuth.
 PROFILING_TOKEN="${BIRDNET_PROFILING_TOKEN:-}"
+
+# PROFILING_TOKEN_AWK extracts diagnostics.profiling.token from a config file.
+# Four copies of this program exist and must stay identical: here,
+# scripts/collect-debug-data.sh, doc/PROFILING.md and doc/DEBUG-COLLECTION.md.
+#
+# Every clause earns its place, so do not simplify it back to a grep:
+#   - the BOM strip lets '^diagnostics:' match a hand-edited config that was
+#     saved with one; without it the section is never entered and the command
+#     prints nothing, which the docs then misdiagnose as "no token minted";
+#   - the section is bounded at the next top-level key, because other sections
+#     have token: keys of their own and an unbounded search prints a
+#     notification provider's secret instead;
+#   - it is scoped to the profiling: subsection rather than to diagnostics: as
+#     a whole, so a sibling subsection added ahead of profiling cannot win;
+#   - the quote strip covers single quotes as well as double, via \047 rather
+#     than a literal ' so the printed command survives being pasted into a
+#     single-quoted shell string.
+# Verified against gawk, mawk, busybox awk and nawk.
+PROFILING_TOKEN_AWK='NR==1{sub(/^\357\273\277/,"")} /^[^[:space:]#]/{d=($0~/^diagnostics:/);p=0;next} d&&/^[[:space:]]*profiling:/{p=1;next} d&&p&&/^[[:space:]]*token:/{sub(/^[[:space:]]*token:[[:space:]]*/,"");sub(/[[:space:]]+#.*/,"");gsub(/[[:space:]]|["\047]|\r/,"");print;exit}'
 
 # urlencode percent-encodes a string for safe use in a URL query value.
 # The generated token is base64url and needs no encoding, but a hand-configured
@@ -212,16 +249,42 @@ auth_query() {
 # Function to check that the profiling endpoints are reachable
 check_debug_mode() {
     print_status "Checking if profiling is enabled..."
-    if ! curl -s -f "${BASE_URL}/debug/pprof/$(auth_query)" > /dev/null 2>&1; then
-        print_error "Profiling endpoints are not accessible"
-        print_error "Set 'diagnostics.profiling.enabled: true' in your config.yaml and restart the container:"
-        print_warning "  1. Update config.yaml with 'diagnostics.profiling.enabled: true'"
-        print_warning "  2. docker restart ${CONTAINER_NAME}"
-        print_warning "  3. If no authentication provider is configured, export the generated token:"
-        print_warning "     export BIRDNET_PROFILING_TOKEN=\"<diagnostics.profiling.token from config.yaml>\""
-        exit 1
+    local status
+    status=$(http_status "${BASE_URL}/debug/pprof/$(auth_query)")
+    if [ "${status}" = "200" ]; then
+        print_status "✓ Profiling is enabled"
+        return 0
     fi
-    print_status "✓ Profiling is enabled"
+
+    print_error "Profiling endpoints are not accessible (HTTP ${status})"
+    case "${status}" in
+        404)
+            print_error "  Profiling is disabled. Note that 'debug: true' does not enable it;"
+            print_error "  it only controls logging verbosity."
+            print_warning "  1. Set 'diagnostics.profiling.enabled: true' in config.yaml"
+            print_warning "  2. docker restart ${CONTAINER_NAME}"
+            ;;
+        403)
+            print_error "  The token is missing or wrong. Export the generated one:"
+            print_error "  export BIRDNET_PROFILING_TOKEN=\"\$(docker exec ${CONTAINER_NAME} awk '${PROFILING_TOKEN_AWK}' /config/config.yaml)\""
+            ;;
+        401 | 302)
+            print_error "  An authentication provider is configured, so the token is never"
+            print_error "  consulted and a session is required instead. This collector cannot"
+            print_error "  log in; see the login-then-fetch recipe in doc/PROFILING.md."
+            ;;
+        410)
+            print_error "  This is the telemetry listener (default port 8090). The endpoints"
+            print_error "  moved to the web server port (default 8080); set BIRDNET_PORT to it."
+            ;;
+        000)
+            print_error "  No HTTP response at all. Check that the container port is reachable."
+            ;;
+        *)
+            print_error "  Unexpected status. See the troubleshooting section of doc/PROFILING.md."
+            ;;
+    esac
+    exit 1
 }
 
 # Function to collect a profile
@@ -235,10 +298,16 @@ collect_profile() {
     fi
 
     print_status "Collecting ${profile_type} profile..."
-    if curl -s -f -o "${output_file}" "${BASE_URL}/debug/pprof/${profile_type}${url_params}$(auth_query "${separator}")"; then
+    local status
+    status=$(curl -s -o "${output_file}" -w '%{http_code}' \
+        "${BASE_URL}/debug/pprof/${profile_type}${url_params}$(auth_query "${separator}")" 2>/dev/null) || status=""
+    if [ "${status:-000}" = "200" ]; then
         print_status "✓ Collected ${profile_type} profile → ${output_file}"
     else
-        print_warning "Failed to collect ${profile_type} profile"
+        # The body of a failed request is an error page, not a profile, and a
+        # file that go tool pprof rejects later is worse than no file at all.
+        rm -f "${output_file}"
+        print_warning "Failed to collect ${profile_type} profile (HTTP ${status:-000})"
     fi
 }
 

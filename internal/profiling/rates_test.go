@@ -41,8 +41,8 @@ func resetRatesAfterTest(t *testing.T) {
 // profilingConfig builds a config section carrying only the two rates.
 func profilingConfig(blockRate, mutexFraction int) *conf.ProfilingConfig {
 	return &conf.ProfilingConfig{
-		BlockRate:     blockRate,
-		MutexFraction: mutexFraction,
+		BlockRateNanos: blockRate,
+		MutexFraction:  mutexFraction,
 	}
 }
 

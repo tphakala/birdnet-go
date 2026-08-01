@@ -323,7 +323,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 			// Rollback in-memory; disk write never happened successfully.
 			conf.StoreSettings(current)
 			c.Settings.Store(current)
-			c.restoreProfilingRates(current)
+			restoreProfilingRates(current)
 			c.LogAPIRequest(ctx, logger.LogLevelError, "Failed to save settings to disk, rolling back", logger.Error(err))
 			return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 		}
@@ -787,7 +787,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		if err := conf.SaveSettings(); err != nil {
 			conf.StoreSettings(current)
 			c.Settings.Store(current)
-			c.restoreProfilingRates(current)
+			restoreProfilingRates(current)
 			return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 		}
 		c.LogAPIRequest(ctx, logger.LogLevelInfo, "Section settings saved successfully",
@@ -2876,7 +2876,7 @@ func pushNotificationSettingsChanged(oldSettings, currentSettings *conf.Settings
 //
 // Cheap and idempotent, so it runs unconditionally rather than re-deriving
 // whether this particular save touched the rates.
-func (c *Controller) restoreProfilingRates(current *conf.Settings) {
+func restoreProfilingRates(current *conf.Settings) {
 	if current == nil {
 		return
 	}
