@@ -73,13 +73,14 @@ var EmbeddedCatalog = []CatalogEntry{
 	// Wildlife models (multi-taxa classifiers)
 	// BirdNET v3.0 acoustic classifier (developer preview). Global GPU-native model
 	// (EfficientNetV2-S backbone, 11,560 species, 32kHz/5s), paired with the v3.0
-	// geomodel range filter. Kept Hidden until GA: the HuggingFace repo is private
-	// during preview and the file checksums/sizes are finalized in a follow-up (as
-	// was done for Perch v2), so the gallery Install path is not wired yet. The
-	// backend loader is fully functional, so v3.0 can be enabled via config
-	// (models.enabled + birdnetv3 model/label paths) for evaluation. The empty
-	// SHA256 on this hidden entry is intentional: it avoids a false checksum
-	// mismatch and, being Hidden, the entry is never installed from the gallery.
+	// geomodel range filter. The HuggingFace repo is public and the file
+	// checksums/sizes below are pinned from it, so this entry's download path is
+	// integrity-checked like every other entry. Kept Hidden until GA and until the
+	// gallery can offer the hardware and regional variant selection a model this
+	// heavy needs (the global fp32 file is 557 MB). Hidden entries are rejected by
+	// the install API (internal/api/v2/models.InstallModel), so this is catalog
+	// metadata only. The backend loader is fully functional, so v3.0 can still be
+	// enabled via config (models.enabled + birdnetv3 model/label paths) for evaluation.
 	{
 		ID:              "birdnet-v3.0",
 		Name:            "BirdNET v3.0",
@@ -98,8 +99,8 @@ var EmbeddedCatalog = []CatalogEntry{
 		UpstreamURL:     "https://github.com/birdnet-team/BirdNET-Analyzer",
 		HuggingFaceRepo: "tphakala/BirdNET-v3.0-Models",
 		Files: slices.Concat([]CatalogFile{
-			{RemotePath: "full/birdnet_v3.0_fp32.onnx", LocalName: "birdnet_v3.0_fp32.onnx", Role: RoleModel, SHA256: "", SizeBytes: 0},
-			{RemotePath: "full/birdnet_v3.0_labels.txt", LocalName: "birdnet_v3.0_labels.txt", Role: RoleLabels, SHA256: "", SizeBytes: 0},
+			{RemotePath: "full/birdnet-v3.0-preview3.1-fp32-b1.onnx", LocalName: "birdnet_v3.0_fp32.onnx", Role: RoleModel, SHA256: "05535c3ef6ce3f9e523706dd3e144cb6db96bc202e9047f4973961256acbf997", SizeBytes: 557212256},
+			{RemotePath: "full/birdnet-v3.0-preview3.1-labels-b1.txt", LocalName: "birdnet_v3.0_labels.txt", Role: RoleLabels, SHA256: "4f4ef82f1704c66cf4da9f59757c12baa34ff98863fa2627e33c302fc92997aa", SizeBytes: 461605},
 		}, geomodelFiles(), taxonomyFiles()),
 	},
 	{
