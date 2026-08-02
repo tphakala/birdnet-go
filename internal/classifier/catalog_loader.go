@@ -179,8 +179,9 @@ func seedCatalog(log logger.Logger, path, embeddedChecksum string) error {
 }
 
 // validateCatalog checks that a loaded catalog is well-formed: it has at least
-// one entry, every entry has a unique non-empty id, and every file declares the
-// fields needed to download it (remote_path, local_name, role).
+// one entry, every entry has a unique non-empty id, every entry declares files
+// (directly or through variants), and every file declares the fields needed to
+// download it (remote_path, local_name, role).
 func validateCatalog(entries []CatalogEntry) error {
 	if len(entries) == 0 {
 		return errors.Newf("model catalog has no entries").
@@ -204,29 +205,96 @@ func validateCatalog(entries []CatalogEntry) error {
 				Build()
 		}
 		seen[entry.ID] = struct{}{}
-		if len(entry.Files) == 0 {
-			return errors.Newf("catalog entry %q declares no files", entry.ID).
+		if err := validateCatalogEntryFiles(entry); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateCatalogEntryFiles validates the files an entry declares, directly or
+// through variants. A variant entry stores its files under Variants, and its
+// top-level Files is empty on disk and resolved at load time, so an entry is
+// valid when it declares files in EITHER place. Every variant must have a unique
+// non-empty id and at least one file.
+func validateCatalogEntryFiles(entry *CatalogEntry) error {
+	if len(entry.Files) == 0 && len(entry.Variants) == 0 {
+		return errors.Newf("catalog entry %q declares no files or variants", entry.ID).
+			Component("classifier.catalog_loader").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+	// Files and Variants are mutually exclusive: a variant entry stores its files
+	// under Variants (with an empty top-level Files, resolved at load time), so an
+	// entry carrying both would have its top-level Files silently discarded by
+	// resolveVariantDefaults. Reject it rather than lose data quietly.
+	if len(entry.Files) > 0 && len(entry.Variants) > 0 {
+		return errors.Newf("catalog entry %q declares both top-level files and variants; use one or the other (variant files live under variants[])", entry.ID).
+			Component("classifier.catalog_loader").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+	if err := validateCatalogFiles(entry.ID, "", entry.Files); err != nil {
+		return err
+	}
+	seenVariants := make(map[string]struct{}, len(entry.Variants))
+	for i := range entry.Variants {
+		v := &entry.Variants[i]
+		if v.ID == "" {
+			return errors.Newf("catalog entry %q variant %d has an empty id", entry.ID, i).
 				Component("classifier.catalog_loader").
 				Category(errors.CategoryValidation).
 				Build()
 		}
-		for j := range entry.Files {
-			f := &entry.Files[j]
-			if f.RemotePath == "" || f.LocalName == "" || f.Role == "" {
-				return errors.Newf("catalog entry %q file %d is missing remote_path, local_name, or role", entry.ID, j).
-					Component("classifier.catalog_loader").
-					Category(errors.CategoryValidation).
-					Build()
-			}
+		if _, dup := seenVariants[v.ID]; dup {
+			return errors.Newf("catalog entry %q has duplicate variant id %q", entry.ID, v.ID).
+				Component("classifier.catalog_loader").
+				Category(errors.CategoryValidation).
+				Build()
 		}
+		seenVariants[v.ID] = struct{}{}
+		if len(v.Files) == 0 {
+			return errors.Newf("catalog entry %q variant %q declares no files", entry.ID, v.ID).
+				Component("classifier.catalog_loader").
+				Category(errors.CategoryValidation).
+				Build()
+		}
+		if err := validateCatalogFiles(entry.ID, v.ID, v.Files); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateCatalogFiles checks that every file declares remote_path, local_name,
+// and role. variantID is empty for an entry's top-level files and names the
+// variant otherwise, so the error points at the offending file precisely.
+func validateCatalogFiles(entryID, variantID string, files []CatalogFile) error {
+	for j := range files {
+		f := &files[j]
+		if f.RemotePath != "" && f.LocalName != "" && f.Role != "" {
+			continue
+		}
+		if variantID == "" {
+			return errors.Newf("catalog entry %q file %d is missing remote_path, local_name, or role", entryID, j).
+				Component("classifier.catalog_loader").
+				Category(errors.CategoryValidation).
+				Build()
+		}
+		return errors.Newf("catalog entry %q variant %q file %d is missing remote_path, local_name, or role", entryID, variantID, j).
+			Component("classifier.catalog_loader").
+			Category(errors.CategoryValidation).
+			Build()
 	}
 	return nil
 }
 
 // catalogChecksum returns the hex-encoded SHA-256 of the compact JSON encoding
 // of entries. The compact encoding is deterministic (fixed struct field order,
-// ordered slices, no maps), so a pristine file round-trips to the same checksum
-// it was written with, and a changed embedded catalog produces a different one.
+// ordered slices, and Go's json.Marshal sorts map keys, e.g. the
+// CatalogVariant.Backends map), so a pristine file round-trips to the same
+// checksum it was written with, and a changed embedded catalog produces a
+// different one.
 //
 // The checksum is coupled to the Go struct layout and JSON tags, not just the
 // semantic content. Reordering CatalogEntry/CatalogFile fields or renaming a tag
