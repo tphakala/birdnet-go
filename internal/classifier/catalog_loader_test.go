@@ -226,6 +226,11 @@ func TestValidateCatalog_Variants(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "variant without a model-role file",
+			entry:   CatalogEntry{ID: "v", Variants: []CatalogVariant{{ID: "fp32", Files: []CatalogFile{{RemotePath: "l.txt", LocalName: "l.txt", Role: RoleLabels}}}}},
+			wantErr: true,
+		},
+		{
 			name: "both top-level files and variants",
 			entry: CatalogEntry{
 				ID:       "both",

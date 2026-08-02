@@ -262,6 +262,17 @@ func validateCatalogEntryFiles(entry *CatalogEntry) error {
 		if err := validateCatalogFiles(entry.ID, v.ID, v.Files); err != nil {
 			return err
 		}
+		// Every hardware variant must carry a model-role file. ScanInstalled
+		// detects a variant install by that file's presence on disk, so a
+		// model-less variant would be silently undetectable; rejecting it here
+		// keeps the "variant entries always carry a model role" invariant that the
+		// scan relies on (a shared-only entry must stay flat, not declare variants).
+		if modelFile, _ := modelAndLabelsFiles(v.Files); modelFile == "" {
+			return errors.Newf("catalog entry %q variant %q has no model-role file; every hardware variant must carry a model file", entry.ID, v.ID).
+				Component("classifier.catalog_loader").
+				Category(errors.CategoryValidation).
+				Build()
+		}
 	}
 	return nil
 }

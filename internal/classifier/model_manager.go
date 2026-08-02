@@ -154,9 +154,9 @@ func (mm *ModelManager) ScanInstalled() {
 
 		// Variant entries: detect which hardware variant is present on disk
 		// (the default variant's filename alone would miss a non-default install).
-		// Invariant: every variant carries a model-role file and shared-only
-		// entries (geomodels) never declare variants, so a variant entry never
-		// needs the shared-only fall-through below.
+		// validateCatalogEntryFiles guarantees every variant carries a model-role
+		// file, so a variant entry is never shared-only and never needs the
+		// shared-only fall-through below.
 		if len(entry.Variants) > 0 {
 			if im, ok := scanVariantEntry(entry, subdir); ok {
 				mm.installed[entry.ID] = im

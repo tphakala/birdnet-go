@@ -219,7 +219,7 @@ func TestModelManager_Install_RecordsDefaultVariantID(t *testing.T) {
 			http.NotFound(w, r)
 		}
 	}))
-	defer srv.Close()
+	t.Cleanup(srv.Close)
 
 	// A resolved variant entry: Files carries the default variant's files (as
 	// resolveVariantDefaults would produce) and Variants names that default.
