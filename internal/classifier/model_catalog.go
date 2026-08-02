@@ -568,13 +568,22 @@ func resolveVariantDefaults(entries []CatalogEntry) []CatalogEntry {
 	return out
 }
 
+// resolvedEmbeddedCatalog caches the variant-resolved EmbeddedCatalog for the
+// pre-LoadCatalog fallback below, so that fallback does not re-clone the catalog
+// on every read once an embedded entry carries variants. The embedded catalog is
+// immutable, so resolving it once is safe; when no entry has variants the value
+// is EmbeddedCatalog itself (resolveVariantDefaults returns its input by identity).
+var resolvedEmbeddedCatalog = sync.OnceValue(func() []CatalogEntry {
+	return resolveVariantDefaults(EmbeddedCatalog)
+})
+
 // currentCatalogLocked returns the active runtime catalog, falling back to the
 // built-in EmbeddedCatalog when no catalog has been loaded. In both cases each
 // variant entry's Files is resolved to its default variant's files. Callers must
 // hold catalogMu (read or write).
 func currentCatalogLocked() []CatalogEntry {
 	if activeCatalog == nil {
-		return resolveVariantDefaults(EmbeddedCatalog)
+		return resolvedEmbeddedCatalog()
 	}
 	return activeCatalog
 }
