@@ -1,6 +1,8 @@
 package classifier
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -28,6 +30,35 @@ func TestEmbeddedCatalog_ValidRegistryIDs(t *testing.T) {
 		assert.NotEmpty(t, entry.RegistryID, "catalog entry %q must have a RegistryID", entry.ID)
 		_, exists := ModelRegistry[entry.RegistryID]
 		assert.True(t, exists, "catalog entry %q references unknown RegistryID %q", entry.ID, entry.RegistryID)
+	}
+}
+
+// TestEmbeddedCatalog_AllFilesHaveChecksums verifies every downloadable file in the
+// catalog carries a real SHA-256 and a non-zero size. An empty SHA-256 makes
+// verifySHA256 a no-op, so the file would be downloaded and loaded with no integrity
+// check at all; a zero size makes the download progress bar meaningless. The invariant
+// must hold for every entry, including Hidden ones, because Hidden is a UI and install
+// gate, not an integrity guarantee: a Hidden entry can still be reached by config or a
+// future un-hide, and every file the gallery can fetch must be verifiable.
+func TestEmbeddedCatalog_AllFilesHaveChecksums(t *testing.T) {
+	t.Parallel()
+
+	for _, entry := range EmbeddedCatalog {
+		for _, f := range entry.Files {
+			// Validate the checksum decodes to a 32-byte digest, not just that
+			// it is 64 characters: a 64-char non-hex string would never match a
+			// real digest and so would fail closed at download time, but it has
+			// no business being in the catalog. hex.DecodeString("") returns no
+			// error, so the length check below is what rejects an empty checksum.
+			raw, err := hex.DecodeString(f.SHA256)
+			if assert.NoErrorf(t, err,
+				"catalog entry %q file %q must carry a hex SHA-256", entry.ID, f.RemotePath) {
+				assert.Lenf(t, raw, sha256.Size,
+					"catalog entry %q file %q SHA-256 must decode to 32 bytes", entry.ID, f.RemotePath)
+			}
+			assert.Positivef(t, f.SizeBytes,
+				"catalog entry %q file %q must carry a positive SizeBytes", entry.ID, f.RemotePath)
+		}
 	}
 }
 
