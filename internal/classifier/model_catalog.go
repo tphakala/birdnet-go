@@ -152,10 +152,45 @@ var EmbeddedCatalog = []CatalogEntry{
 		RequiresONNX:    true,
 		UpstreamURL:     "https://github.com/birdnet-team/BirdNET-Analyzer",
 		HuggingFaceRepo: "tphakala/BirdNET-v3.0-Models",
-		Files: slices.Concat([]CatalogFile{
-			{RemotePath: "full/birdnet-v3.0-preview3.1-fp32-b1.onnx", LocalName: "birdnet_v3.0_fp32.onnx", Role: RoleModel, SHA256: "05535c3ef6ce3f9e523706dd3e144cb6db96bc202e9047f4973961256acbf997", SizeBytes: 557212256},
-			{RemotePath: "full/birdnet-v3.0-preview3.1-labels-b1.txt", LocalName: "birdnet_v3.0_labels.txt", Role: RoleLabels, SHA256: "4f4ef82f1704c66cf4da9f59757c12baa34ff98863fa2627e33c302fc92997aa", SizeBytes: 461605},
-		}, geomodelFiles(), taxonomyFiles()),
+		// Global GPU-native model published under full/. fp32 is the default
+		// (byte-identical to the previously flat entry); fp16 is the OpenVINO-GPU /
+		// CUDA / TensorRT build. Regional tiles under regional/ are deferred to a
+		// later generator pass. Each variant's Files is self-contained (model +
+		// labels + geomodel + taxonomy) because resolveVariantDefaults sets
+		// entry.Files = variant.Files without merging anything.
+		Variants: []CatalogVariant{
+			{
+				ID:           "fp32",
+				Precision:    "fp32",
+				SpeciesCount: 11560,
+				Default:      true,
+				Backends: map[string]BackendSupport{
+					"onnxruntime-cpu": {Supported: true, Recommended: true},
+					"openvino-cpu":    {Supported: true, Recommended: true},
+					"openvino-gpu":    {Supported: true},
+					"cuda":            {Supported: true, Recommended: true},
+					"tensorrt":        {Supported: true, Recommended: true},
+				},
+				Files: slices.Concat([]CatalogFile{
+					{RemotePath: "full/birdnet-v3.0-preview3.1-fp32-b1.onnx", LocalName: "birdnet_v3.0_fp32.onnx", Role: RoleModel, SHA256: "05535c3ef6ce3f9e523706dd3e144cb6db96bc202e9047f4973961256acbf997", SizeBytes: 557212256},
+				}, birdnetV30LabelsFile(), geomodelFiles(), taxonomyFiles()),
+			},
+			{
+				ID:           "fp16",
+				Precision:    "fp16",
+				SpeciesCount: 11560,
+				Backends: map[string]BackendSupport{
+					"openvino-gpu":    {Supported: true, Recommended: true},
+					"cuda":            {Supported: true, Recommended: true},
+					"tensorrt":        {Supported: true, Recommended: true},
+					"onnxruntime-cpu": {Supported: true},
+					"openvino-cpu":    {Supported: true},
+				},
+				Files: slices.Concat([]CatalogFile{
+					{RemotePath: "full/birdnet-v3.0-preview3.1-fp16-b1.onnx", LocalName: "birdnet_v3.0_fp16.onnx", Role: RoleModel, SHA256: "18fc932b9ac7478720ac8ca9077694b6ea62fb00675aa488e77b15e722244e67", SizeBytes: 278787557},
+				}, birdnetV30LabelsFile(), geomodelFiles(), taxonomyFiles()),
+			},
+		},
 	},
 	{
 		ID:              "perch-v2",
@@ -172,11 +207,57 @@ var EmbeddedCatalog = []CatalogEntry{
 		RegistryID:      RegistryIDPerchV2,
 		RequiresONNX:    true,
 		UpstreamURL:     "https://www.kaggle.com/models/google/bird-vocalization-classifier/tensorFlow2/perch_v2",
-		HuggingFaceRepo: "tphakala/Perch-v2",
-		Files: slices.Concat([]CatalogFile{
-			{RemotePath: "perch_v2.onnx", LocalName: "perch_v2.onnx", Role: RoleModel, SHA256: "bf0c8467a924cb074663970ca4a0ab1e143602121930209657d0dff5d5cefa1f", SizeBytes: 409148616},
-			{RemotePath: "labels.txt", LocalName: "perch_v2_labels.txt", Role: RoleLabels, SHA256: "e4d5c0397d8fb08bf90c6b13a34810af53504faad927e472fcc567793c9de057", SizeBytes: 312716},
-		}, geomodelFiles(), taxonomyFiles()),
+		HuggingFaceRepo: "tphakala/Perch-v2-Models",
+		// Global builds under full/. fp32 (with in-graph DFT) is the default and is
+		// byte-identical to the previously flat entry, so existing installs stay
+		// detected with no re-download (ScanInstalled keys on LocalName, not repo or
+		// RemotePath). no-dft-fp32 is the OpenVINO/GPU build; int8-arm is the low-RAM
+		// ARM build. Regional tiles under regional/ are deferred to a later generator
+		// pass. Each variant's Files is self-contained (model + labels + geomodel +
+		// taxonomy) because resolveVariantDefaults does not merge companions.
+		Variants: []CatalogVariant{
+			{
+				ID:           "fp32",
+				Precision:    "fp32",
+				SpeciesCount: 14795,
+				Default:      true,
+				Backends: map[string]BackendSupport{
+					"onnxruntime-cpu": {Supported: true, Recommended: true},
+					"cuda":            {Supported: true, Recommended: true},
+					"tensorrt":        {Supported: true},
+				},
+				Files: slices.Concat([]CatalogFile{
+					{RemotePath: "full/perch_v2_fp32.onnx", LocalName: "perch_v2.onnx", Role: RoleModel, SHA256: "bf0c8467a924cb074663970ca4a0ab1e143602121930209657d0dff5d5cefa1f", SizeBytes: 409148616},
+				}, perchV2LabelsFile(), geomodelFiles(), taxonomyFiles()),
+			},
+			{
+				ID:           "no-dft-fp32",
+				Precision:    "fp32",
+				SpeciesCount: 14795,
+				Backends: map[string]BackendSupport{
+					"openvino-cpu":    {Supported: true, Recommended: true},
+					"openvino-gpu":    {Supported: true, Recommended: true},
+					"cuda":            {Supported: true, Recommended: true},
+					"onnxruntime-cpu": {Supported: true},
+					"tensorrt":        {Supported: true},
+				},
+				Files: slices.Concat([]CatalogFile{
+					{RemotePath: "full/perch_v2_no_dft_fp32.onnx", LocalName: "perch_v2_no_dft.onnx", Role: RoleModel, SHA256: "4dcf71c18a147198545944bb5149697e89e3ad2e16637fa8f0edf6d13035a017", SizeBytes: 413350933},
+				}, perchV2LabelsFile(), geomodelFiles(), taxonomyFiles()),
+			},
+			{
+				ID:           "int8-arm",
+				Precision:    "int8",
+				SpeciesCount: 14795,
+				Requirements: VariantRequirements{Arch: []string{"aarch64"}},
+				Backends: map[string]BackendSupport{
+					"onnxruntime-cpu": {Supported: true, Recommended: true},
+				},
+				Files: slices.Concat([]CatalogFile{
+					{RemotePath: "full/perch_v2_int8_arm.onnx", LocalName: "perch_v2_int8_arm.onnx", Role: RoleModel, SHA256: "ff32ca8c57954a86e6023a915d018dc7573cfc5567dd7314899d1c947cc6d5c5", SizeBytes: 130856164},
+				}, perchV2LabelsFile(), geomodelFiles(), taxonomyFiles()),
+			},
+		},
 	},
 	{
 		ID:              "bsg-finland",
@@ -203,30 +284,31 @@ var EmbeddedCatalog = []CatalogEntry{
 		},
 	},
 
-	// BirdNET v2.4 DFT-truncated variants: opt-in, faster drop-in files for the
-	// primary classifier. DFT-bin truncation drops the mel-DFT bins the filterbank
-	// discards, so the output is bit-exact (single classification head, unchanged
-	// labels) while CPU/OpenVINO inference is about 1.4-2x faster. The files are
-	// published under NEW HuggingFace filenames, so existing installs are untouched.
+	// BirdNET v2.4 DFT-truncated variants: opt-in, faster drop-in ONNX builds for the
+	// primary classifier, represented as one Hidden entry with hardware variants.
+	// DFT-bin truncation drops the mel-DFT bins the filterbank discards, so the output
+	// is bit-exact (single classification head, unchanged labels) while CPU/OpenVINO
+	// inference is about 1.4-2x faster. The files are published under NEW HuggingFace
+	// filenames, so existing installs are untouched.
 	//
-	// These entries are Hidden on purpose. The primary BirdNET v2.4 classifier is
-	// resolved at startup from config and the standard model paths (see NewBirdNET),
-	// NOT from the gallery, and nothing in the install path wires an installed file
-	// into BirdNET.ModelPath or hot-swaps the primary model. A visible "Install"
-	// button would therefore download a file that nothing activates. So these entries
-	// only record the authoritative checksums, sizes, and repo paths as a catalog
-	// foundation; a future primary-variant selector (tracked separately) will make
-	// them selectable. RegistryID is the permanent BirdNET v2.4 ID because these ARE
-	// that model in an alternate file: being Hidden they are never hot-loaded (there
-	// is no secondary loader for the primary), and Uninstall refuses them via the
-	// permanent-model guard. Labels are the embedded v2.4 set (data/labels/V2.4), so
-	// no labels file is downloaded. If a power user points birdnet.modelpath at a
+	// The entry is Hidden on purpose. The primary BirdNET v2.4 classifier is resolved
+	// at startup from config and the standard model paths (see NewBirdNET), NOT from
+	// the gallery, and nothing in the install path wires an installed file into
+	// BirdNET.ModelPath or hot-swaps the primary model. A visible "Install" button
+	// would therefore download a file that nothing activates. So this entry only
+	// records the authoritative checksums, sizes, and repo paths as a catalog
+	// foundation; a future primary-variant selector (tracked separately) will make the
+	// variants selectable. RegistryID is the permanent BirdNET v2.4 ID because these
+	// variants ARE that model in alternate files: being Hidden they are never
+	// hot-loaded (there is no secondary loader for the primary), and Uninstall
+	// refuses the entry via the permanent-model guard. Labels are the embedded v2.4 set (data/labels/V2.4),
+	// so no labels file is downloaded. If a power user points birdnet.modelpath at a
 	// manually fetched file, the primary loader uses it as-is (remapV24ToONNXOnARM64
 	// honors an explicit CustomPath).
 	{
-		ID:              "birdnet-v2.4-fp32-dfttrunc",
-		Name:            "BirdNET v2.4 (DFT-truncated, FP32)",
-		Description:     "Drop-in BirdNET v2.4 classifier with DFT-bin truncation: bit-exact output, about 1.4-2x faster CPU and OpenVINO inference. FP32 ONNX for OpenVINO (A76/Pi5, amd64 CPU and Intel iGPU).",
+		ID:              "birdnet-v2.4",
+		Name:            "BirdNET v2.4 (DFT-truncated)",
+		Description:     "Drop-in BirdNET v2.4 classifier with DFT-bin truncation: bit-exact output, about 1.4-2x faster CPU and OpenVINO inference. FP32 for OpenVINO/CPU (A76/Pi5, amd64, Intel iGPU); INT8 for low-RAM ARM via ONNX Runtime (Pi4/Pi3).",
 		Author:          "Cornell Lab of Ornithology & Chemnitz University of Technology",
 		License:         "CC-BY-NC-SA-4.0",
 		CommercialUse:   false,
@@ -239,28 +321,36 @@ var EmbeddedCatalog = []CatalogEntry{
 		RequiresONNX:    true,
 		UpstreamURL:     "https://github.com/birdnet-team/BirdNET-Analyzer",
 		HuggingFaceRepo: "tphakala/BirdNET-v2.4",
-		Files: []CatalogFile{
-			{RemotePath: "BirdNET_v2.4_fp32_dfttrunc.onnx", LocalName: "BirdNET_v2.4_fp32_dfttrunc.onnx", Role: RoleModel, SHA256: "3b72e88b3ad0c310a41adabccf8cf75b1a05daeeb40884ebd38038c91d0e423d", SizeBytes: 54068648},
-		},
-	},
-	{
-		ID:              "birdnet-v2.4-int8-arm-dfttrunc",
-		Name:            "BirdNET v2.4 (DFT-truncated, INT8 ARM)",
-		Description:     "Drop-in BirdNET v2.4 classifier with DFT-bin truncation: bit-exact output, about 1.4-2x faster inference. INT8 ONNX for low-RAM ARM via ONNX Runtime (Pi4/Pi3, no native f16).",
-		Author:          "Cornell Lab of Ornithology & Chemnitz University of Technology",
-		License:         "CC-BY-NC-SA-4.0",
-		CommercialUse:   false,
-		Category:        CategoryBird,
-		Region:          "",
-		SpeciesCount:    0, // determined at runtime from the embedded v2.4 labels (no labels file is downloaded)
-		Version:         "2.4",
-		RegistryID:      permanentRegistryID,
-		Hidden:          true,
-		RequiresONNX:    true,
-		UpstreamURL:     "https://github.com/birdnet-team/BirdNET-Analyzer",
-		HuggingFaceRepo: "tphakala/BirdNET-v2.4",
-		Files: []CatalogFile{
-			{RemotePath: "BirdNET_v2.4_int8_arm_dfttrunc.onnx", LocalName: "BirdNET_v2.4_int8_arm_dfttrunc.onnx", Role: RoleModel, SHA256: "7550498ba996064feca12005ff4133eb1d35741c4061376e7a987d8227518893", SizeBytes: 38727042},
+		// No labels/companions: v2.4 uses the embedded label set. Variant Files are
+		// the model file only.
+		Variants: []CatalogVariant{
+			{
+				ID:        "fp32-dfttrunc",
+				Precision: "fp32",
+				Default:   true,
+				Backends: map[string]BackendSupport{
+					"onnxruntime-cpu": {Supported: true, Recommended: true},
+					"openvino-cpu":    {Supported: true, Recommended: true},
+					"openvino-gpu":    {Supported: true},
+					"cuda":            {Supported: true, Recommended: true},
+					"tensorrt":        {Supported: true},
+				},
+				Files: []CatalogFile{
+					{RemotePath: "BirdNET_v2.4_fp32_dfttrunc.onnx", LocalName: "BirdNET_v2.4_fp32_dfttrunc.onnx", Role: RoleModel, SHA256: "3b72e88b3ad0c310a41adabccf8cf75b1a05daeeb40884ebd38038c91d0e423d", SizeBytes: 54068648},
+				},
+			},
+			{
+				ID:           "int8-arm-dfttrunc",
+				Precision:    "int8",
+				Requirements: VariantRequirements{Arch: []string{"aarch64"}},
+				Backends: map[string]BackendSupport{
+					"onnxruntime-cpu": {Supported: true, Recommended: true},
+					"openvino-cpu":    {Supported: true},
+				},
+				Files: []CatalogFile{
+					{RemotePath: "BirdNET_v2.4_int8_arm_dfttrunc.onnx", LocalName: "BirdNET_v2.4_int8_arm_dfttrunc.onnx", Role: RoleModel, SHA256: "7550498ba996064feca12005ff4133eb1d35741c4061376e7a987d8227518893", SizeBytes: 38727042},
+				},
+			},
 		},
 	},
 
@@ -353,6 +443,23 @@ func taxonomyFiles() []CatalogFile {
 			SizeBytes:       taxonomySizeBytes,
 			HuggingFaceRepo: taxonomyHuggingFaceRepo,
 		},
+	}
+}
+
+// perchV2LabelsFile returns the shared global Perch v2 labels file. Every Perch v2
+// variant shares one label set, so each variant's Files includes it (variant Files
+// must be self-contained because resolveVariantDefaults does not merge companions).
+func perchV2LabelsFile() []CatalogFile {
+	return []CatalogFile{
+		{RemotePath: "full/perch_v2_labels.txt", LocalName: "perch_v2_labels.txt", Role: RoleLabels, SHA256: "e4d5c0397d8fb08bf90c6b13a34810af53504faad927e472fcc567793c9de057", SizeBytes: 312716},
+	}
+}
+
+// birdnetV30LabelsFile returns the shared global BirdNET v3.0 labels file. Every
+// BirdNET v3.0 variant shares one label set, so each variant's Files includes it.
+func birdnetV30LabelsFile() []CatalogFile {
+	return []CatalogFile{
+		{RemotePath: "full/birdnet-v3.0-preview3.1-labels-b1.txt", LocalName: "birdnet_v3.0_labels.txt", Role: RoleLabels, SHA256: "4f4ef82f1704c66cf4da9f59757c12baa34ff98863fa2627e33c302fc92997aa", SizeBytes: 461605},
 	}
 }
 

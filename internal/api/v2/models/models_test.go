@@ -34,15 +34,16 @@ func TestModelsRouteRegistration(t *testing.T) {
 }
 
 // TestInstallModel_RejectsHiddenEntries verifies that hidden, foundation-only
-// catalog entries (the DFT-truncated BirdNET v2.4 variants) cannot be installed
-// or reinstalled by ID. They carry the permanent registry ID, which Uninstall
-// refuses, so allowing an install-by-ID would leave an unremovable, unused model.
+// catalog entries (the collapsed BirdNET v2.4 DFT-truncated entry) cannot be
+// installed or reinstalled by ID. It carries the permanent registry ID, which
+// Uninstall refuses, so allowing an install-by-ID would leave an unremovable,
+// unused model.
 func TestInstallModel_RejectsHiddenEntries(t *testing.T) {
 	core := apitest.NewCore(t)
 	h := New(core)
 	e := echo.New()
 
-	hiddenIDs := []string{"birdnet-v2.4-fp32-dfttrunc", "birdnet-v2.4-int8-arm-dfttrunc"}
+	hiddenIDs := []string{"birdnet-v2.4"}
 	for _, id := range hiddenIDs {
 		t.Run(id, func(t *testing.T) {
 			// Install must be rejected with 404 before touching the model manager.
