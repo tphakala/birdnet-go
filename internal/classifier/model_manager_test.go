@@ -71,6 +71,184 @@ func TestModelManager_ScanInstalled(t *testing.T) {
 	assert.Equal(t, entry.Version, installed[0].Version)
 }
 
+// variantByID returns the variant with the given id from entry, failing the
+// test if it is absent.
+func variantByID(t *testing.T, entry *CatalogEntry, id string) *CatalogVariant {
+	t.Helper()
+	for i := range entry.Variants {
+		if entry.Variants[i].ID == id {
+			return &entry.Variants[i]
+		}
+	}
+	t.Fatalf("variant %q not found in entry %s", id, entry.ID)
+	return nil
+}
+
+// modelRoleLocalName returns the LocalName of the RoleModel file in files.
+func modelRoleLocalName(t *testing.T, files []CatalogFile) string {
+	t.Helper()
+	for _, f := range files {
+		if f.Role == RoleModel {
+			return f.LocalName
+		}
+	}
+	t.Fatalf("no model-role file found in %d files", len(files))
+	return ""
+}
+
+// installedByID returns the InstalledModel recorded for catalogID, failing the
+// test if it is not present in the installed list.
+func installedByID(t *testing.T, mm *ModelManager, catalogID string) InstalledModel {
+	t.Helper()
+	for _, im := range mm.ListInstalled() {
+		if im.CatalogID == catalogID {
+			return im
+		}
+	}
+	t.Fatalf("model %s not found in installed list", catalogID)
+	return InstalledModel{}
+}
+
+// writeVariantModelFile writes a placeholder model file for the given variant of
+// a catalog entry into its on-disk subdirectory, mimicking an install of that
+// specific variant. It returns the full path to the written model file.
+func writeVariantModelFile(t *testing.T, modelsDir string, entry *CatalogEntry, variantID string) string {
+	t.Helper()
+	v := variantByID(t, entry, variantID)
+	modelName := modelRoleLocalName(t, v.Files)
+	subdir := filepath.Join(modelsDir, entry.ID)
+	require.NoError(t, os.MkdirAll(subdir, 0o755))
+	modelPath := filepath.Join(subdir, modelName)
+	require.NoError(t, os.WriteFile(modelPath, []byte("fake-onnx-data"), 0o644))
+	return modelPath
+}
+
+func TestModelManager_ScanInstalled_DetectsDefaultVariant(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok, "expected perch-v2 catalog entry to exist")
+	require.NotEmpty(t, entry.Variants, "perch-v2 must be a variant entry")
+
+	modelsDir := t.TempDir()
+	modelPath := writeVariantModelFile(t, modelsDir, &entry, "fp32")
+
+	mm := NewModelManager(modelsDir, nil, nil)
+	mm.ScanInstalled()
+
+	require.True(t, mm.IsInstalled(entry.ID), "default variant install should be detected")
+	got := installedByID(t, mm, entry.ID)
+	assert.Equal(t, "fp32", got.VariantID, "default variant id should be recorded")
+	assert.Equal(t, modelPath, got.ModelPath, "model path should point at the default variant file")
+}
+
+func TestModelManager_ScanInstalled_DetectsNonDefaultVariant(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok, "expected perch-v2 catalog entry to exist")
+
+	// Only the non-default int8-arm variant's model file exists on disk. The
+	// default variant's filename is absent, so a default-only scan would miss it.
+	modelsDir := t.TempDir()
+	modelPath := writeVariantModelFile(t, modelsDir, &entry, "int8-arm")
+
+	mm := NewModelManager(modelsDir, nil, nil)
+	mm.ScanInstalled()
+
+	require.True(t, mm.IsInstalled(entry.ID), "non-default variant install should be detected")
+	got := installedByID(t, mm, entry.ID)
+	assert.Equal(t, "int8-arm", got.VariantID, "installed variant id should be the on-disk variant")
+	assert.Equal(t, modelPath, got.ModelPath, "model path should point at the installed variant file")
+}
+
+func TestModelManager_ScanInstalled_ZeroVariantEntryHasEmptyVariantID(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("battybirdnet-eu")
+	require.True(t, ok, "expected battybirdnet-eu catalog entry to exist")
+	require.Empty(t, entry.Variants, "battybirdnet-eu is expected to be a flat, zero-variant entry")
+
+	modelFileName := modelRoleLocalName(t, entry.Files)
+	modelsDir := t.TempDir()
+	subdir := filepath.Join(modelsDir, entry.ID)
+	require.NoError(t, os.MkdirAll(subdir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(subdir, modelFileName), []byte("fake-onnx-data"), 0o644))
+
+	mm := NewModelManager(modelsDir, nil, nil)
+	mm.ScanInstalled()
+
+	require.True(t, mm.IsInstalled(entry.ID))
+	got := installedByID(t, mm, entry.ID)
+	assert.Empty(t, got.VariantID, "flat entries must record an empty variant id")
+}
+
+func TestModelManager_ScanInstalled_VariantEntryNoFileNotInstalled(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok, "expected perch-v2 catalog entry to exist")
+	require.NotEmpty(t, entry.Variants, "perch-v2 must be a variant entry")
+
+	// The entry's subdirectory exists but carries no variant model file, so no
+	// variant is present on disk and the entry must not be reported installed.
+	modelsDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(modelsDir, entry.ID), 0o755))
+
+	mm := NewModelManager(modelsDir, nil, nil)
+	mm.ScanInstalled()
+
+	assert.False(t, mm.IsInstalled(entry.ID), "a variant entry with no model file on disk must not be installed")
+}
+
+func TestModelManager_Install_RecordsDefaultVariantID(t *testing.T) {
+	t.Parallel()
+
+	modelContent := []byte("fake-onnx-model-binary-data")
+	labelsContent := []byte("species_a\nspecies_b\n")
+	modelChecksum := sha256Hex(modelContent)
+	labelsChecksum := sha256Hex(labelsContent)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case testPathModelsONNX:
+			_, _ = w.Write(modelContent)
+		case testPathModelsLabels:
+			_, _ = w.Write(labelsContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	// A resolved variant entry: Files carries the default variant's files (as
+	// resolveVariantDefaults would produce) and Variants names that default.
+	files := []CatalogFile{
+		{RemotePath: "models/test.onnx", LocalName: "test.onnx", Role: RoleModel, SHA256: modelChecksum, SizeBytes: int64(len(modelContent))},
+		{RemotePath: "models/labels.txt", LocalName: "labels.txt", Role: RoleLabels, SHA256: labelsChecksum, SizeBytes: int64(len(labelsContent))},
+	}
+	entry := CatalogEntry{
+		ID:              "test-variant-install",
+		Name:            "Test Variant Model",
+		Version:         "1.0",
+		HuggingFaceRepo: "test/repo",
+		// Non-default variant first so this proves the install records the DEFAULT
+		// variant (via Default: true), not merely the first one in the slice.
+		Variants: []CatalogVariant{
+			{ID: "int8-arm", Files: files},
+			{ID: "fp32", Default: true, Files: files},
+		},
+		Files: files,
+	}
+
+	mm := NewModelManager(t.TempDir(), nil, nil)
+	require.NoError(t, mm.Install(t.Context(), &entry, srv.URL, nil))
+
+	require.True(t, mm.IsInstalled(entry.ID))
+	got := installedByID(t, mm, entry.ID)
+	assert.Equal(t, "fp32", got.VariantID, "install must record the default variant id, matching what ScanInstalled derives")
+}
+
 func TestModelManager_IsInstalled(t *testing.T) {
 	t.Parallel()
 

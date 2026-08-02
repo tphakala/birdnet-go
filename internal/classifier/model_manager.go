@@ -63,7 +63,13 @@ type ModelManager struct {
 
 // InstalledModel represents a model that has been downloaded and is available.
 type InstalledModel struct {
-	CatalogID   string    `json:"catalogId"`
+	CatalogID string `json:"catalogId"`
+	// VariantID is the id of the installed hardware variant (e.g. "fp32",
+	// "int8-arm"). Empty means a flat, pre-variant entry with a single implicit
+	// variant. It is recorded at install time (from the default variant) and
+	// re-derived from disk on every ScanInstalled; it is never persisted, so no
+	// on-disk migration is needed for existing installs.
+	VariantID   string    `json:"variantId,omitempty"`
 	ModelPath   string    `json:"modelPath"`
 	LabelsPath  string    `json:"labelsPath"`
 	InstalledAt time.Time `json:"installedAt"`
@@ -146,16 +152,23 @@ func (mm *ModelManager) ScanInstalled() {
 		entry := &catalog[i]
 		subdir := filepath.Join(mm.modelsDir, entry.ID)
 
-		modelFile := ""
-		labelsFile := ""
-		for _, f := range entry.Files {
-			if f.Role == RoleModel {
-				modelFile = f.LocalName
+		// Variant entries: detect which hardware variant is present on disk
+		// (the default variant's filename alone would miss a non-default install).
+		// Invariant: every variant carries a model-role file and shared-only
+		// entries (geomodels) never declare variants, so a variant entry never
+		// needs the shared-only fall-through below.
+		if len(entry.Variants) > 0 {
+			if im, ok := scanVariantEntry(entry, subdir); ok {
+				mm.installed[entry.ID] = im
+				log.Debug("Found installed model variant",
+					logger.String("catalog_id", entry.ID),
+					logger.String("variant_id", im.VariantID),
+					logger.String("path", im.ModelPath))
 			}
-			if f.Role == RoleLabels {
-				labelsFile = f.LocalName
-			}
+			continue
 		}
+
+		modelFile, labelsFile := modelAndLabelsFiles(entry.Files)
 
 		// Shared-only entries (e.g. geomodels): all files live in models/shared/.
 		// Detect these by checking that every file is a shared role and all exist.
@@ -250,6 +263,72 @@ func (mm *ModelManager) ScanInstalled() {
 		// where a new binary adds geomodel support to existing models.
 		mm.ensureGeomodelConfig(log, installedIDs)
 	}
+}
+
+// modelAndLabelsFiles extracts the model and labels file LocalNames from a list
+// of catalog files. Either return value is empty when the corresponding role is
+// absent (e.g. shared-only entries have no model role).
+func modelAndLabelsFiles(files []CatalogFile) (modelFile, labelsFile string) {
+	for _, f := range files {
+		switch f.Role {
+		case RoleModel:
+			modelFile = f.LocalName
+		case RoleLabels:
+			labelsFile = f.LocalName
+		}
+	}
+	return modelFile, labelsFile
+}
+
+// scanVariantEntry determines which variant of a variant-carrying catalog entry
+// is installed on disk under subdir. It checks the default variant first so an
+// ambiguous on-disk state (e.g. both files present after a crashed replace)
+// resolves to the default, matching pre-variant behaviour; it then falls back to
+// the remaining variants in catalog order. ok is false when no variant's model
+// file is present on disk.
+func scanVariantEntry(entry *CatalogEntry, subdir string) (InstalledModel, bool) {
+	def := defaultVariant(entry)
+	if def != nil {
+		if im, ok := installedFromVariant(entry, def, subdir); ok {
+			return im, true
+		}
+	}
+	for i := range entry.Variants {
+		v := &entry.Variants[i]
+		if def != nil && v.ID == def.ID {
+			continue
+		}
+		if im, ok := installedFromVariant(entry, v, subdir); ok {
+			return im, true
+		}
+	}
+	return InstalledModel{}, false
+}
+
+// installedFromVariant builds the InstalledModel for a specific variant if its
+// model file exists on disk under subdir. ok is false when the variant carries
+// no model role or its model file is absent.
+func installedFromVariant(entry *CatalogEntry, v *CatalogVariant, subdir string) (InstalledModel, bool) {
+	modelFile, labelsFile := modelAndLabelsFiles(v.Files)
+	if modelFile == "" {
+		return InstalledModel{}, false
+	}
+	modelPath := filepath.Join(subdir, modelFile)
+	if _, err := os.Stat(modelPath); err != nil {
+		return InstalledModel{}, false
+	}
+	labelsPath := ""
+	if labelsFile != "" {
+		labelsPath = filepath.Join(subdir, labelsFile)
+	}
+	return InstalledModel{
+		CatalogID:   entry.ID,
+		VariantID:   v.ID,
+		ModelPath:   modelPath,
+		LabelsPath:  labelsPath,
+		InstalledAt: fileModTime(modelPath),
+		Version:     entry.Version,
+	}, true
 }
 
 // geomodelOrphanAction is the decision the orphan self-heal makes for a
@@ -1036,10 +1115,21 @@ func (mm *ModelManager) downloadModelFiles(ctx context.Context, entry *CatalogEn
 	// For shared-only entries (e.g. geomodels), derive paths from shared files.
 	modelPath, labelsPath = resolveSharedPaths(entry, modelPath, labelsPath, fileDestPath)
 
+	// The install path downloads the resolved default variant's files, so record
+	// that variant's id (empty for a flat entry). This keeps the install record in
+	// sync with what ScanInstalled later derives from disk. When variant selection
+	// lands (the primary-variant selector), this must record the SELECTED variant's
+	// id, not the default.
+	variantID := ""
+	if v := defaultVariant(entry); v != nil {
+		variantID = v.ID
+	}
+
 	// Record as installed.
 	mm.mu.Lock()
 	mm.installed[entry.ID] = InstalledModel{
 		CatalogID:   entry.ID,
+		VariantID:   variantID,
 		ModelPath:   modelPath,
 		LabelsPath:  labelsPath,
 		InstalledAt: time.Now(),
