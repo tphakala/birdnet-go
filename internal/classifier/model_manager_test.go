@@ -242,11 +242,202 @@ func TestModelManager_Install_RecordsDefaultVariantID(t *testing.T) {
 	}
 
 	mm := NewModelManager(t.TempDir(), nil, nil)
-	require.NoError(t, mm.Install(t.Context(), &entry, srv.URL, nil))
+	require.NoError(t, mm.Install(t.Context(), &entry, "", srv.URL, nil))
 
 	require.True(t, mm.IsInstalled(entry.ID))
 	got := installedByID(t, mm, entry.ID)
 	assert.Equal(t, "fp32", got.VariantID, "install must record the default variant id, matching what ScanInstalled derives")
+}
+
+func TestModelManager_UninstallNonDefaultVariant(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok)
+
+	// Synthetic non-default install: only the int8-arm variant's model file on disk.
+	modelsDir := t.TempDir()
+	modelPath := writeVariantModelFile(t, modelsDir, &entry, "int8-arm")
+
+	mm := NewModelManager(modelsDir, nil, nil)
+	mm.ScanInstalled()
+	require.True(t, mm.IsInstalled(entry.ID))
+	require.Equal(t, "int8-arm", installedByID(t, mm, entry.ID).VariantID)
+
+	require.NoError(t, mm.Uninstall(entry.ID))
+	assert.False(t, mm.IsInstalled(entry.ID))
+	_, err := os.Stat(modelPath)
+	assert.True(t, os.IsNotExist(err), "the installed non-default variant's model file must be deleted")
+}
+
+// twoVariantServerEntry builds a synthetic two-variant catalog entry (default
+// "fp32" and non-default "int8-arm" with DISTINCT model LocalNames) plus an
+// httptest server that serves each variant's files, so a test can tell which
+// variant was actually downloaded. Returns the entry, a fresh modelsDir, and the
+// server base URL.
+func twoVariantServerEntry(t *testing.T) (entry CatalogEntry, modelsDir, srvURL string) {
+	t.Helper()
+	fp32Data, int8Data, labels := []byte("fp32-model"), []byte("int8-model"), []byte("a\nb\n")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/fp32.onnx":
+			_, _ = w.Write(fp32Data)
+		case "/int8.onnx":
+			_, _ = w.Write(int8Data)
+		case "/labels.txt":
+			_, _ = w.Write(labels)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	fp32Files := []CatalogFile{
+		{RemotePath: "fp32.onnx", LocalName: "model.onnx", Role: RoleModel, SHA256: sha256Hex(fp32Data), SizeBytes: int64(len(fp32Data))},
+		{RemotePath: "labels.txt", LocalName: "labels.txt", Role: RoleLabels, SHA256: sha256Hex(labels), SizeBytes: int64(len(labels))},
+	}
+	int8Files := []CatalogFile{
+		{RemotePath: "int8.onnx", LocalName: "model_int8.onnx", Role: RoleModel, SHA256: sha256Hex(int8Data), SizeBytes: int64(len(int8Data))},
+		{RemotePath: "labels.txt", LocalName: "labels.txt", Role: RoleLabels, SHA256: sha256Hex(labels), SizeBytes: int64(len(labels))},
+	}
+	entry = CatalogEntry{
+		ID:              "test-variant-writepath",
+		Name:            "T",
+		Version:         "1.0",
+		HuggingFaceRepo: "t/r",
+		Variants: []CatalogVariant{
+			{ID: "fp32", Default: true, Files: fp32Files},
+			{ID: "int8-arm", Files: int8Files},
+		},
+		Files: fp32Files,
+	}
+	return entry, t.TempDir(), srv.URL
+}
+
+func TestModelManager_InstallSelectsNonDefaultVariant(t *testing.T) {
+	t.Parallel()
+
+	entry, modelsDir, srvURL := twoVariantServerEntry(t)
+	mm := NewModelManager(modelsDir, nil, nil)
+
+	require.NoError(t, mm.Install(t.Context(), &entry, "int8-arm", srvURL, nil))
+
+	got := installedByID(t, mm, entry.ID)
+	assert.Equal(t, "int8-arm", got.VariantID, "the selected variant id must be recorded")
+	// The selected variant's model file is on disk; the default's is not.
+	_, err := os.Stat(filepath.Join(modelsDir, entry.ID, "model_int8.onnx"))
+	require.NoError(t, err, "the selected (int8-arm) variant file must be downloaded")
+	_, err = os.Stat(filepath.Join(modelsDir, entry.ID, "model.onnx"))
+	assert.True(t, os.IsNotExist(err), "the default (fp32) variant file must NOT be downloaded")
+}
+
+func TestModelManager_InstallUnknownVariantErrors(t *testing.T) {
+	t.Parallel()
+
+	entry, modelsDir, srvURL := twoVariantServerEntry(t)
+	mm := NewModelManager(modelsDir, nil, nil)
+
+	err := mm.Install(t.Context(), &entry, "does-not-exist", srvURL, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown variant")
+	assert.False(t, mm.IsInstalled(entry.ID), "a rejected variant must not be recorded as installed")
+	assert.Nil(t, mm.GetDownloadState(entry.ID), "a rejected variant must not leave a lingering download state")
+}
+
+func TestModelManager_ReinstallRepairsInstalledVariant(t *testing.T) {
+	t.Parallel()
+
+	entry, modelsDir, srvURL := twoVariantServerEntry(t)
+	mm := NewModelManager(modelsDir, nil, nil)
+	require.NoError(t, mm.Install(t.Context(), &entry, "int8-arm", srvURL, nil))
+
+	int8Path := filepath.Join(modelsDir, entry.ID, "model_int8.onnx")
+	require.NoError(t, os.Remove(int8Path))
+
+	require.NoError(t, mm.Reinstall(t.Context(), &entry, srvURL, nil))
+
+	_, err := os.Stat(int8Path)
+	require.NoError(t, err, "reinstall must re-fetch the INSTALLED variant's file")
+	_, err = os.Stat(filepath.Join(modelsDir, entry.ID, "model.onnx"))
+	assert.True(t, os.IsNotExist(err), "reinstall must not fetch the default variant instead")
+}
+
+func TestModelManager_ReinstallStaleVariantValidatesBeforeUnload(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok)
+	require.NotEmpty(t, entry.RegistryID)
+
+	// Load the model as the primary: UnloadModel refuses the primary, so if the
+	// stale-variant check ran AFTER the unload step the error would be "model
+	// still in use". Getting the pre-unload "no longer in the catalog" error, with
+	// the model still loaded, proves the check runs BEFORE the unload, so a running
+	// model is never stranded.
+	primaryBN := &BirdNET{ModelInfo: ModelInfo{ID: entry.RegistryID}}
+	orch := &Orchestrator{
+		ModelInfo: primaryBN.ModelInfo,
+		models:    map[string]*modelEntry{entry.RegistryID: {instance: primaryBN}},
+		primary:   primaryBN,
+	}
+	mm := NewModelManager(t.TempDir(), orch, nil)
+	// Simulate an install whose variant was later dropped from the catalog.
+	mm.installed[entry.ID] = InstalledModel{CatalogID: entry.ID, VariantID: "gone"}
+
+	entryCopy := entry
+	err := mm.Reinstall(t.Context(), &entryCopy, "http://unused.invalid", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no longer in the catalog", "must fail the pre-unload variant check, not the post-unload 'model still in use' path")
+	assert.True(t, mm.IsInstalled(entry.ID), "a stale-variant reinstall must leave the install in place")
+	assert.True(t, orch.IsModelLoaded(entry.RegistryID), "the running model must remain loaded (never unloaded)")
+}
+
+func TestModelManager_UninstallStaleVariantDeletesRecordedFile(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok)
+
+	modelsDir := t.TempDir()
+	subdir := filepath.Join(modelsDir, entry.ID)
+	require.NoError(t, os.MkdirAll(subdir, 0o755))
+	// A model file whose variant id is no longer in the catalog.
+	stalePath := filepath.Join(subdir, "perch_v2_gone.onnx")
+	require.NoError(t, os.WriteFile(stalePath, []byte("data"), 0o644))
+
+	mm := NewModelManager(modelsDir, nil, nil)
+	// Simulate an install whose variant was later dropped from the catalog.
+	mm.installed[entry.ID] = InstalledModel{CatalogID: entry.ID, VariantID: "gone", ModelPath: stalePath}
+
+	require.NoError(t, mm.Uninstall(entry.ID))
+	assert.False(t, mm.IsInstalled(entry.ID))
+	_, err := os.Stat(stalePath)
+	assert.True(t, os.IsNotExist(err), "a stale variant's recorded on-disk model file must be deleted, not orphaned")
+}
+
+func TestModelManager_DownloadModelFilesRejectsUnknownVariant(t *testing.T) {
+	t.Parallel()
+
+	files := []CatalogFile{{RemotePath: "m.onnx", LocalName: "m.onnx", Role: RoleModel, SHA256: "x", SizeBytes: 1}}
+	entry := CatalogEntry{
+		ID:       "test-backstop",
+		Variants: []CatalogVariant{{ID: "fp32", Default: true, Files: files}},
+		Files:    files,
+	}
+	modelsDir := t.TempDir()
+	mm := NewModelManager(modelsDir, nil, nil)
+	// Callers register the download before calling downloadModelFiles; mimic that
+	// so the backstop's markFailed has a state to update.
+	mm.downloading[entry.ID] = &DownloadState{CatalogID: entry.ID, Status: StatusDownloading}
+
+	err := mm.downloadModelFiles(t.Context(), &entry, "bogus", "", nil, true)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown variant")
+
+	state := mm.GetDownloadState(entry.ID)
+	require.NotNil(t, state)
+	assert.Equal(t, StatusFailed, state.Status, "the backstop must mark the download failed")
+	_, statErr := os.Stat(filepath.Join(modelsDir, entry.ID))
+	assert.True(t, os.IsNotExist(statErr), "no subdirectory should be created for a rejected variant")
 }
 
 func TestModelManager_IsInstalled(t *testing.T) {
@@ -526,7 +717,7 @@ func TestModelManager_Install(t *testing.T) {
 	mm := NewModelManager(modelsDir, nil, nil)
 
 	progress := make(chan DownloadState, 100)
-	err := mm.Install(t.Context(), &entry, srv.URL, progress)
+	err := mm.Install(t.Context(), &entry, "", srv.URL, progress)
 	require.NoError(t, err)
 
 	// Verify installed.
@@ -570,7 +761,7 @@ func TestModelManager_Install_AlreadyInstalled(t *testing.T) {
 		Name: "Already Installed",
 	}
 
-	err := mm.Install(t.Context(), &entry, "", nil)
+	err := mm.Install(t.Context(), &entry, "", "", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already installed")
 }
@@ -612,7 +803,7 @@ func TestModelManager_Install_SharedEmbeddings(t *testing.T) {
 	modelsDir := t.TempDir()
 	mm := NewModelManager(modelsDir, nil, nil)
 
-	err := mm.Install(t.Context(), &entry, srv.URL, nil)
+	err := mm.Install(t.Context(), &entry, "", srv.URL, nil)
 	require.NoError(t, err)
 
 	// Embeddings should be in shared/, not in the model subdirectory.
@@ -649,7 +840,7 @@ func TestModelManager_Install_ConcurrentDownloadRejected(t *testing.T) {
 		Name: "Concurrent Test",
 	}
 
-	err := mm.Install(t.Context(), &entry, "", nil)
+	err := mm.Install(t.Context(), &entry, "", "", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already being downloaded")
 }
@@ -939,7 +1130,7 @@ func TestModelManager_Install_SharedGeomodel(t *testing.T) {
 	modelsDir := t.TempDir()
 	mm := NewModelManager(modelsDir, nil, nil)
 
-	err := mm.Install(t.Context(), &entry, srv.URL, nil)
+	err := mm.Install(t.Context(), &entry, "", srv.URL, nil)
 	require.NoError(t, err)
 
 	// Geomodel files should be in shared/, not in the model subdirectory.
@@ -999,7 +1190,7 @@ func TestModelManager_Install_GeomodelSkipsExisting(t *testing.T) {
 	}
 
 	mm := NewModelManager(modelsDir, nil, nil)
-	err := mm.Install(t.Context(), &entry, srv.URL, nil)
+	err := mm.Install(t.Context(), &entry, "", srv.URL, nil)
 	require.NoError(t, err)
 
 	// The server returns 404 for geomodel.onnx, so if Install tried to
@@ -1196,7 +1387,7 @@ func TestModelManager_Install_GeomodelConfigWiring(t *testing.T) {
 	conf.StoreSettings(settings)
 	mm := NewModelManager(modelsDir, nil, settings)
 
-	err := mm.Install(t.Context(), &entry, srv.URL, nil)
+	err := mm.Install(t.Context(), &entry, "", srv.URL, nil)
 	require.NoError(t, err)
 
 	// Verify range filter config was set.
@@ -1254,7 +1445,7 @@ func TestModelManager_Uninstall_GeomodelConfigClearing(t *testing.T) {
 	mm := NewModelManager(modelsDir, nil, settings)
 
 	// Install to set config.
-	err := mm.Install(t.Context(), &entry, srv.URL, nil)
+	err := mm.Install(t.Context(), &entry, "", srv.URL, nil)
 	require.NoError(t, err)
 
 	current := conf.GetSettings()
@@ -1423,7 +1614,7 @@ func TestModelManager_Install_RedownloadsCorruptSharedFile(t *testing.T) {
 	}
 
 	mm := NewModelManager(modelsDir, nil, nil)
-	err := mm.Install(t.Context(), &entry, srv.URL, nil)
+	err := mm.Install(t.Context(), &entry, "", srv.URL, nil)
 	require.NoError(t, err)
 
 	// Verify the corrupt file was replaced with correct content.
@@ -1479,7 +1670,7 @@ func TestModelManager_Install_GeomodelVersionWiring(t *testing.T) {
 	conf.StoreSettings(settings)
 	mm := NewModelManager(modelsDir, nil, settings)
 
-	err := mm.Install(t.Context(), &entry, srv.URL, nil)
+	err := mm.Install(t.Context(), &entry, "", srv.URL, nil)
 	require.NoError(t, err)
 
 	current := conf.GetSettings()
@@ -1698,7 +1889,7 @@ func TestModelManager_Install_UsesConfiguredEndpoint(t *testing.T) {
 
 	// baseURL is empty so the download path builds URLs from the endpoint and
 	// the repo, which is what a real install does.
-	require.NoError(t, mm.Install(t.Context(), &entry, "", nil))
+	require.NoError(t, mm.Install(t.Context(), &entry, "", "", nil))
 
 	assert.True(t, mm.IsInstalled("test-mirror-install"))
 
@@ -1749,7 +1940,7 @@ func TestModelManager_Reinstall(t *testing.T) {
 	mm := NewModelManager(modelsDir, nil, nil)
 
 	// Install first.
-	err := mm.Install(t.Context(), &entry, srv.URL, nil)
+	err := mm.Install(t.Context(), &entry, "", srv.URL, nil)
 	require.NoError(t, err)
 	require.True(t, mm.IsInstalled("test-reinstall-model"))
 
@@ -1832,7 +2023,7 @@ func TestModelManager_Reinstall_SkipsValidFiles(t *testing.T) {
 	mm := NewModelManager(modelsDir, nil, nil)
 
 	// Install first.
-	err := mm.Install(t.Context(), &entry, srv.URL, nil)
+	err := mm.Install(t.Context(), &entry, "", srv.URL, nil)
 	require.NoError(t, err)
 	require.True(t, mm.IsInstalled("test-reinstall-skip"))
 

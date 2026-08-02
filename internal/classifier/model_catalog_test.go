@@ -9,6 +9,57 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestVariantFilesByID(t *testing.T) {
+	t.Parallel()
+
+	modelFile := CatalogFile{RemotePath: "m.onnx", LocalName: "m.onnx", Role: RoleModel}
+	int8File := CatalogFile{RemotePath: "m_int8.onnx", LocalName: "m_int8.onnx", Role: RoleModel}
+	flatEntry := CatalogEntry{ID: "flat", Files: []CatalogFile{modelFile}}
+	variantEntry := CatalogEntry{ID: "v", Variants: []CatalogVariant{
+		{ID: "fp32", Default: true, Files: []CatalogFile{modelFile}},
+		{ID: "int8-arm", Files: []CatalogFile{int8File}},
+	}}
+
+	t.Run("empty variant id returns entry Files", func(t *testing.T) {
+		t.Parallel()
+		files, ok := variantFilesByID(&flatEntry, "")
+		require.True(t, ok)
+		assert.Equal(t, flatEntry.Files, files)
+	})
+
+	t.Run("empty variant id on a variant entry returns top-level Files", func(t *testing.T) {
+		t.Parallel()
+		// On a resolved entry, top-level Files is the default variant's files.
+		files, ok := variantFilesByID(&variantEntry, "")
+		require.True(t, ok)
+		assert.Equal(t, variantEntry.Files, files)
+	})
+
+	t.Run("selects the named non-default variant", func(t *testing.T) {
+		t.Parallel()
+		files, ok := variantFilesByID(&variantEntry, "int8-arm")
+		require.True(t, ok)
+		require.Len(t, files, 1)
+		assert.Equal(t, "m_int8.onnx", files[0].LocalName)
+	})
+
+	t.Run("unknown variant id reports not found", func(t *testing.T) {
+		t.Parallel()
+		files, ok := variantFilesByID(&variantEntry, "does-not-exist")
+		assert.False(t, ok)
+		assert.Nil(t, files)
+	})
+
+	t.Run("non-empty variant id on a flat entry reports not found", func(t *testing.T) {
+		t.Parallel()
+		// A flat entry has no variants, so any non-empty selection is unknown and
+		// must be rejected rather than silently resolving to the flat Files.
+		files, ok := variantFilesByID(&flatEntry, "int8-arm")
+		assert.False(t, ok)
+		assert.Nil(t, files)
+	})
+}
+
 func TestEmbeddedCatalog_UniqueIDs(t *testing.T) {
 	t.Parallel()
 
