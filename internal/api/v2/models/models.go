@@ -241,7 +241,7 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 				)
 			}
 		}()
-		if err := c.ModelManager.Install(c.Context(), &entry, "", progressChan); err != nil {
+		if err := c.ModelManager.Install(c.Context(), &entry, "", "", progressChan); err != nil {
 			c.LogErrorIfEnabled("Model install failed",
 				logger.String("catalog_id", catalogID),
 				logger.Error(err),

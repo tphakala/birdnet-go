@@ -647,6 +647,24 @@ func defaultVariant(entry *CatalogEntry) *CatalogVariant {
 	return &entry.Variants[0]
 }
 
+// variantFilesByID returns the file list for the given variant of an entry. An
+// empty variantID yields the entry's resolved (default) Files, preserving the
+// pre-variant behaviour. A non-empty variantID selects the matching variant's
+// files; if it matches no variant (including any non-empty id on an entry with no
+// variants), it reports ok=false so callers can reject a stale or unknown
+// selection rather than operate on the wrong files.
+func variantFilesByID(entry *CatalogEntry, variantID string) (files []CatalogFile, ok bool) {
+	if variantID == "" {
+		return entry.Files, true
+	}
+	for i := range entry.Variants {
+		if entry.Variants[i].ID == variantID {
+			return entry.Variants[i].Files, true
+		}
+	}
+	return nil, false
+}
+
 // resolveVariantDefaults returns entries with each variant entry's Files
 // populated from its default variant, so every Files consumer sees the effective
 // default variant's files. Single-variant entries (no Variants) are returned
