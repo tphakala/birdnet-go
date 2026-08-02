@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -42,6 +43,12 @@ const (
 // downloading map so SSE pollers can observe the failure before cleanup.
 const failedStateRetention = 30 * time.Second
 
+// diskSpaceMarginBytes is the free-space headroom required beyond a download's
+// total size before an install proceeds. It absorbs filesystem overhead and
+// leaves a little slack on small SD cards, which matter here: variants run from
+// 38 MB (int8-arm v2.4) to 557 MB (global v3.0 fp32) against Pi storage.
+const diskSpaceMarginBytes int64 = 64 << 20 // 64 MiB
+
 // ModelManager handles the lifecycle of downloadable models.
 type ModelManager struct {
 	modelsDir    string
@@ -51,6 +58,12 @@ type ModelManager struct {
 	settingsMu   sync.Mutex // serializes clone-mutate-publish cycles on settings
 	installed    map[string]InstalledModel
 	downloading  map[string]*DownloadState
+
+	// freeSpaceFn reports the bytes available on the filesystem holding a given
+	// path. It is a field so tests can force the insufficient-space branch of the
+	// install preflight without exhausting a real disk. NewModelManager wires it
+	// to diskmanager.GetAvailableSpace.
+	freeSpaceFn func(string) (uint64, error)
 
 	// topologyChangedCb, when set, is invoked after a successful model load or
 	// unload so observers (e.g. the metrics SSE stream) can signal that the
@@ -102,6 +115,7 @@ func NewModelManager(modelsDir string, orchestrator *Orchestrator, settings *con
 		settings:     settings,
 		installed:    make(map[string]InstalledModel),
 		downloading:  make(map[string]*DownloadState),
+		freeSpaceFn:  diskmanager.GetAvailableSpace,
 	}
 }
 
@@ -148,6 +162,11 @@ func (mm *ModelManager) ScanInstalled() {
 
 	// Phase 1: scan the filesystem under mm.mu.
 	mm.mu.Lock()
+	// Reconcile against disk: Phase 1 fully repopulates mm.installed by statting
+	// each entry's files, so clearing first drops any model whose files were
+	// removed out-of-band since the last scan. The clear and the repopulation both
+	// run under mm.mu, so a concurrent reader (RLock) never observes the empty map.
+	clear(mm.installed)
 	for i := range catalog {
 		entry := &catalog[i]
 		subdir := filepath.Join(mm.modelsDir, entry.ID)
@@ -1005,6 +1024,36 @@ func (mm *ModelManager) Reinstall(ctx context.Context, entry *CatalogEntry, base
 	return nil
 }
 
+// preflightDiskSpace reports an error when the filesystem holding the models
+// directory cannot fit totalDownloadBytes plus a safety margin, so a large
+// download fails fast instead of part-way through. It is a no-op when there is
+// nothing to download. A free-space probe error fails open (returns nil): an
+// inability to measure free space must not block an otherwise-valid install.
+func (mm *ModelManager) preflightDiskSpace(entry *CatalogEntry, filesToDownload int, totalDownloadBytes int64) error {
+	if filesToDownload == 0 || mm.freeSpaceFn == nil {
+		return nil
+	}
+	free, err := mm.freeSpaceFn(mm.modelsDir)
+	if err != nil {
+		GetLogger().Debug("Free-space check failed; proceeding with install",
+			logger.String("catalog_id", entry.ID),
+			logger.Error(err))
+		return nil
+	}
+	needed := totalDownloadBytes + diskSpaceMarginBytes
+	if free >= uint64(needed) {
+		return nil
+	}
+	return errors.Newf("insufficient disk space to install %s: need %d bytes (incl. %d margin), have %d",
+		entry.ID, needed, diskSpaceMarginBytes, free).
+		Component("classifier.model_manager").
+		Category(errors.CategoryDiskUsage).
+		Context("catalog_id", entry.ID).
+		Context("needed_bytes", needed).
+		Context("free_bytes", free).
+		Build()
+}
+
 // downloadModelFiles handles the actual file download, validation, recording,
 // config application, and hot-load for a catalog entry. variantID selects which
 // variant's files to download (empty = the entry's default variant); an unknown
@@ -1086,6 +1135,15 @@ func (mm *ModelManager) downloadModelFiles(ctx context.Context, entry *CatalogEn
 			totalAllBytes += f.SizeBytes
 			filesToDownload++
 		}
+	}
+
+	// Disk-space preflight: fail fast if the filesystem cannot hold the files we
+	// are about to download (variants run up to 557 MB), rather than filling it
+	// part-way through and leaving partial files behind. Nothing has been written
+	// yet, so no cleanup is needed on the reject path.
+	if err := mm.preflightDiskSpace(entry, filesToDownload, totalAllBytes); err != nil {
+		mm.markFailed(entry.ID, err, progress)
+		return err
 	}
 
 	// Resolve the HuggingFace host once per install so every file in the same
