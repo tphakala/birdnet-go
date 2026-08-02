@@ -259,6 +259,23 @@ func TestModelManager_Install_RejectsInsufficientDiskSpace(t *testing.T) {
 	assert.Contains(t, st.Error, "disk space", "the retained failure must carry the disk-space reason")
 }
 
+func TestModelManager_Install_SkipsPreflightWhenSizeUnknown(t *testing.T) {
+	t.Parallel()
+
+	entry, modelsDir, srvURL := flatServerEntry(t)
+	// A catalog that does not declare sizes (size_bytes == 0) gives the preflight
+	// nothing to check, so it must fail open and let the install proceed rather
+	// than reject on the bare margin. (Files still download and verify by SHA.)
+	for i := range entry.Files {
+		entry.Files[i].SizeBytes = 0
+	}
+	mm := NewModelManager(modelsDir, nil, nil)
+	mm.freeSpaceFn = func(string) (uint64, error) { return 1, nil } // effectively no free space
+
+	require.NoError(t, mm.Install(t.Context(), &entry, "", srvURL, nil))
+	assert.True(t, mm.IsInstalled(entry.ID), "an unknown-size install must not be blocked by the preflight")
+}
+
 func TestModelManager_Install_DiskSpaceBoundary(t *testing.T) {
 	t.Parallel()
 

@@ -1027,10 +1027,15 @@ func (mm *ModelManager) Reinstall(ctx context.Context, entry *CatalogEntry, base
 // preflightDiskSpace reports an error when the filesystem holding the models
 // directory cannot fit totalDownloadBytes plus a safety margin, so a large
 // download fails fast instead of part-way through. It is a no-op when there is
-// nothing to download. A free-space probe error fails open (returns nil): an
-// inability to measure free space must not block an otherwise-valid install.
+// nothing to download or the total is not positive (a catalog that does not
+// declare usable size_bytes, so there is nothing to check). A free-space probe
+// error fails open (returns nil): an inability to measure free space must not
+// block an otherwise-valid install.
 func (mm *ModelManager) preflightDiskSpace(entry *CatalogEntry, filesToDownload int, totalDownloadBytes int64) error {
-	if filesToDownload == 0 || mm.freeSpaceFn == nil {
+	// A non-positive total means the sizes are unknown (or a hand-edited catalog
+	// carries a bad value); skip rather than cast a negative total to a huge
+	// uint64 below and reject spuriously.
+	if filesToDownload == 0 || totalDownloadBytes <= 0 || mm.freeSpaceFn == nil {
 		return nil
 	}
 	free, err := mm.freeSpaceFn(mm.modelsDir)
@@ -1139,8 +1144,9 @@ func (mm *ModelManager) downloadModelFiles(ctx context.Context, entry *CatalogEn
 
 	// Disk-space preflight: fail fast if the filesystem cannot hold the files we
 	// are about to download (variants run up to 557 MB), rather than filling it
-	// part-way through and leaving partial files behind. Nothing has been written
-	// yet, so no cleanup is needed on the reject path.
+	// part-way through and leaving partial files behind. No model files have been
+	// downloaded yet (the subdirectory may already exist), so no cleanup is needed
+	// on the reject path.
 	if err := mm.preflightDiskSpace(entry, filesToDownload, totalAllBytes); err != nil {
 		mm.markFailed(entry.ID, err, progress)
 		return err
