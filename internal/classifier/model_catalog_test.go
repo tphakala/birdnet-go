@@ -33,33 +33,118 @@ func TestEmbeddedCatalog_ValidRegistryIDs(t *testing.T) {
 	}
 }
 
+// assertFilesHaveChecksums asserts every file carries a valid 32-byte hex SHA-256
+// and a positive size. It validates that the checksum DECODES to a 32-byte digest,
+// not just that it is 64 characters: a 64-char non-hex string would never match a
+// real digest and so would fail closed at download time, but it has no business in
+// the catalog. hex.DecodeString("") returns no error, so the length check is what
+// rejects an empty checksum. label names the entry (and variant) for failures.
+func assertFilesHaveChecksums(t *testing.T, label string, files []CatalogFile) {
+	t.Helper()
+	for _, f := range files {
+		raw, err := hex.DecodeString(f.SHA256)
+		if assert.NoErrorf(t, err,
+			"catalog %q file %q must carry a hex SHA-256", label, f.RemotePath) {
+			assert.Lenf(t, raw, sha256.Size,
+				"catalog %q file %q SHA-256 must decode to 32 bytes", label, f.RemotePath)
+		}
+		assert.Positivef(t, f.SizeBytes,
+			"catalog %q file %q must carry a positive SizeBytes", label, f.RemotePath)
+	}
+}
+
 // TestEmbeddedCatalog_AllFilesHaveChecksums verifies every downloadable file in the
 // catalog carries a real SHA-256 and a non-zero size. An empty SHA-256 makes
 // verifySHA256 a no-op, so the file would be downloaded and loaded with no integrity
 // check at all; a zero size makes the download progress bar meaningless. The invariant
 // must hold for every entry, including Hidden ones, because Hidden is a UI and install
 // gate, not an integrity guarantee: a Hidden entry can still be reached by config or a
-// future un-hide, and every file the gallery can fetch must be verifiable.
+// future un-hide, and every file the gallery can fetch must be verifiable. Variant
+// entries carry files under Variants (their top-level Files is empty and resolved at
+// load time), so both are checked.
 func TestEmbeddedCatalog_AllFilesHaveChecksums(t *testing.T) {
 	t.Parallel()
 
 	for _, entry := range EmbeddedCatalog {
-		for _, f := range entry.Files {
-			// Validate the checksum decodes to a 32-byte digest, not just that
-			// it is 64 characters: a 64-char non-hex string would never match a
-			// real digest and so would fail closed at download time, but it has
-			// no business being in the catalog. hex.DecodeString("") returns no
-			// error, so the length check below is what rejects an empty checksum.
-			raw, err := hex.DecodeString(f.SHA256)
-			if assert.NoErrorf(t, err,
-				"catalog entry %q file %q must carry a hex SHA-256", entry.ID, f.RemotePath) {
-				assert.Lenf(t, raw, sha256.Size,
-					"catalog entry %q file %q SHA-256 must decode to 32 bytes", entry.ID, f.RemotePath)
-			}
-			assert.Positivef(t, f.SizeBytes,
-				"catalog entry %q file %q must carry a positive SizeBytes", entry.ID, f.RemotePath)
+		assertFilesHaveChecksums(t, entry.ID, entry.Files)
+		for _, v := range entry.Variants {
+			assertFilesHaveChecksums(t, entry.ID+"/"+v.ID, v.Files)
 		}
 	}
+}
+
+func TestResolveVariantDefaults(t *testing.T) {
+	// setActiveCatalog mutates a package global, so this test runs serially.
+	fp32 := CatalogFile{RemotePath: "m_fp32.onnx", LocalName: "m_fp32.onnx", Role: RoleModel, SHA256: "a", SizeBytes: 10}
+	int8File := CatalogFile{RemotePath: "m_int8.onnx", LocalName: "m_int8.onnx", Role: RoleModel, SHA256: "b", SizeBytes: 5}
+
+	t.Run("resolves the default variant into Files and preserves Variants", func(t *testing.T) {
+		resetActiveCatalog(t)
+		setActiveCatalog([]CatalogEntry{{
+			ID: "multi", Name: "Multi", Category: CategoryBird, Version: "1",
+			Variants: []CatalogVariant{
+				{ID: "int8-arm", Files: []CatalogFile{int8File}},
+				{ID: "fp32", Default: true, Files: []CatalogFile{fp32}},
+			},
+		}})
+		got, ok := GetCatalogEntry("multi")
+		require.True(t, ok)
+		require.Len(t, got.Files, 1)
+		assert.Equal(t, "m_fp32.onnx", got.Files[0].LocalName, "Files must resolve to the default variant")
+		assert.Len(t, got.Variants, 2, "Variants must be preserved for the gallery and install path")
+	})
+
+	t.Run("falls back to the first variant when none is marked default", func(t *testing.T) {
+		resetActiveCatalog(t)
+		setActiveCatalog([]CatalogEntry{{
+			ID: "nodefault", Name: "NoDefault", Category: CategoryBird, Version: "1",
+			Variants: []CatalogVariant{
+				{ID: "int8-arm", Files: []CatalogFile{int8File}},
+				{ID: "fp32", Files: []CatalogFile{fp32}},
+			},
+		}})
+		got, ok := GetCatalogEntry("nodefault")
+		require.True(t, ok)
+		require.Len(t, got.Files, 1)
+		assert.Equal(t, "m_int8.onnx", got.Files[0].LocalName, "Files must resolve to the first variant")
+	})
+
+	t.Run("picks the first Default-flagged variant when several set Default", func(t *testing.T) {
+		resetActiveCatalog(t)
+		fp16 := CatalogFile{RemotePath: "m_fp16.onnx", LocalName: "m_fp16.onnx", Role: RoleModel, SHA256: "c", SizeBytes: 7}
+		setActiveCatalog([]CatalogEntry{{
+			ID: "multidefault", Name: "MultiDefault", Category: CategoryBird, Version: "1",
+			Variants: []CatalogVariant{
+				{ID: "int8-arm", Files: []CatalogFile{int8File}},
+				{ID: "fp32", Default: true, Files: []CatalogFile{fp32}},
+				{ID: "fp16", Default: true, Files: []CatalogFile{fp16}},
+			},
+		}})
+		got, ok := GetCatalogEntry("multidefault")
+		require.True(t, ok)
+		require.Len(t, got.Files, 1)
+		assert.Equal(t, "m_fp32.onnx", got.Files[0].LocalName, "the first Default-flagged variant wins deterministically")
+	})
+
+	t.Run("leaves a single-variant entry untouched", func(t *testing.T) {
+		resetActiveCatalog(t)
+		setActiveCatalog([]CatalogEntry{customEntry("plain")})
+		got, ok := GetCatalogEntry("plain")
+		require.True(t, ok)
+		require.Len(t, got.Files, 1)
+		assert.Equal(t, "plain.onnx", got.Files[0].LocalName)
+		assert.Empty(t, got.Variants)
+	})
+
+	t.Run("does not mutate the caller's entries", func(t *testing.T) {
+		resetActiveCatalog(t)
+		entries := []CatalogEntry{{
+			ID: "immut", Name: "Immut", Category: CategoryBird, Version: "1",
+			Variants: []CatalogVariant{{ID: "fp32", Default: true, Files: []CatalogFile{fp32}}},
+		}}
+		setActiveCatalog(entries)
+		assert.Empty(t, entries[0].Files, "resolution must not mutate the caller's entries (may be EmbeddedCatalog)")
+	})
 }
 
 func TestEmbeddedCatalog_HasFilesWithModelRole(t *testing.T) {

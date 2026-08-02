@@ -53,7 +53,61 @@ type CatalogEntry struct {
 	RequiresONNX    bool          `json:"requires_onnx"`     // if true, model needs ONNX Runtime (not just TFLite)
 	UpstreamURL     string        `json:"upstream_url"`      // URL to the upstream project repository
 	HuggingFaceRepo string        `json:"hugging_face_repo"` // HuggingFace repository path
-	Files           []CatalogFile `json:"files"`             // files to download for this model
+	Files           []CatalogFile `json:"files"`             // files to download for this model (the resolved default variant's files when Variants is set)
+	// Variants lists hardware/regional variants of this model (fp32, int8-arm,
+	// regional slices). When non-empty, the catalog layer resolves Files to the
+	// default variant's files so every Files consumer keeps working unchanged;
+	// Variants itself is read only by the recommender, the gallery API, and the
+	// install path when the user picks a non-default variant. Omitted (nil) for
+	// single-variant models, which keep their own Files. omitempty keeps the
+	// on-disk JSON of existing single-variant entries byte-identical, so adding
+	// this field does not shift catalogChecksum or force a schema-version bump.
+	Variants []CatalogVariant `json:"variants,omitempty"`
+}
+
+// CatalogVariant describes one hardware or regional variant of a model: a
+// concrete set of files selected for a class of hosts (e.g. fp32 for CPU, an
+// int8-arm build for low-RAM ARM, or a region-sliced build). Exactly one variant
+// per entry should set Default. Resolution picks the first Default-flagged
+// variant, or the first variant when none is flagged (see defaultVariant).
+type CatalogVariant struct {
+	ID           string                    `json:"id"`                      // stable variant id (e.g. "fp32", "int8-arm", "fp32@nordic")
+	Region       string                    `json:"region"`                  // geographic region, or empty for a global variant
+	Precision    string                    `json:"precision"`               // numeric precision (e.g. "fp32", "fp16", "int8")
+	SpeciesCount int                       `json:"species_count"`           // species this variant can identify (regional slices differ from global)
+	Default      bool                      `json:"default"`                 // if true, the variant resolved into Files absent an explicit choice
+	Requirements VariantRequirements       `json:"requirements"`            // host capabilities this variant needs
+	Backends     map[string]BackendSupport `json:"backends,omitempty"`      // per-backend support, keyed by backend token (e.g. "onnxruntime-cpu")
+	Benchmarks   []Benchmark               `json:"benchmarks,omitempty"`    // measured latency/memory per device
+	Files        []CatalogFile             `json:"files"`                   // files to download for this variant
+	Legacy       bool                      `json:"legacy"`                  // if true, hidden unless already installed (superseded build)
+	SupersededBy string                    `json:"superseded_by,omitempty"` // id of the variant that replaces this one, if any
+}
+
+// VariantRequirements declares the host capabilities a variant needs. Arch and
+// Backends are any-of: a host matches when it carries at least one listed token.
+// An empty slice means "no constraint on this axis".
+type VariantRequirements struct {
+	Arch     []string `json:"arch,omitempty"`     // any-of capability tokens (e.g. "aarch64", "armv7l"); empty = any arch
+	Backends []string `json:"backends,omitempty"` // any-of backend tokens (e.g. "onnxruntime-cpu"); empty = any backend
+	MinRAMMB int      `json:"min_ram_mb"`         // minimum host RAM in MB; 0 = no floor
+	Excludes []string `json:"excludes,omitempty"` // capability tokens that disqualify a host (e.g. a known-bad GPU generation)
+}
+
+// BackendSupport records whether an inference backend runs a variant and whether
+// it is the recommended backend for it. Mirrors the manifest's per-backend map.
+type BackendSupport struct {
+	Supported   bool `json:"supported"`   // the backend can execute this variant
+	Recommended bool `json:"recommended"` // the backend is the preferred way to run this variant
+}
+
+// Benchmark is a measured latency (and optional memory) figure for a variant on
+// a specific device and backend. Used by the recommender and the gallery card.
+type Benchmark struct {
+	Device    string `json:"device"`               // device identifier (e.g. "rpi5-a76")
+	Backend   string `json:"backend"`              // backend the figure was measured with
+	LatencyMs int    `json:"latency_ms,omitempty"` // single-inference latency in milliseconds
+	RSSMB     int    `json:"rss_mb,omitempty"`     // resident memory in MB, when measured
 }
 
 // CatalogFile describes a single file within a model's HuggingFace repository.
@@ -471,12 +525,56 @@ var (
 	activeCatalog []CatalogEntry
 )
 
+// defaultVariant returns the variant resolved into Files when no explicit choice
+// is made: the one flagged Default, else the first. Returns nil for a
+// single-variant entry (len(Variants) == 0).
+func defaultVariant(entry *CatalogEntry) *CatalogVariant {
+	if len(entry.Variants) == 0 {
+		return nil
+	}
+	for i := range entry.Variants {
+		if entry.Variants[i].Default {
+			return &entry.Variants[i]
+		}
+	}
+	return &entry.Variants[0]
+}
+
+// resolveVariantDefaults returns entries with each variant entry's Files
+// populated from its default variant, so every Files consumer sees the effective
+// default variant's files. Single-variant entries (no Variants) are returned
+// unchanged. When no entry carries variants (the common case) the input slice is
+// returned as-is with no allocation; otherwise a shallow copy is made and only
+// the variant entries' Files are replaced, so the input (which may be the
+// EmbeddedCatalog global) is never mutated. Variants is preserved on every entry
+// for the gallery API and the install path.
+func resolveVariantDefaults(entries []CatalogEntry) []CatalogEntry {
+	hasVariants := false
+	for i := range entries {
+		if len(entries[i].Variants) > 0 {
+			hasVariants = true
+			break
+		}
+	}
+	if !hasVariants {
+		return entries
+	}
+	out := slices.Clone(entries)
+	for i := range out {
+		if v := defaultVariant(&out[i]); v != nil {
+			out[i].Files = v.Files
+		}
+	}
+	return out
+}
+
 // currentCatalogLocked returns the active runtime catalog, falling back to the
-// built-in EmbeddedCatalog when no catalog has been loaded. Callers must hold
-// catalogMu (read or write).
+// built-in EmbeddedCatalog when no catalog has been loaded. In both cases each
+// variant entry's Files is resolved to its default variant's files. Callers must
+// hold catalogMu (read or write).
 func currentCatalogLocked() []CatalogEntry {
 	if activeCatalog == nil {
-		return EmbeddedCatalog
+		return resolveVariantDefaults(EmbeddedCatalog)
 	}
 	return activeCatalog
 }
@@ -487,8 +585,9 @@ func currentCatalogLocked() []CatalogEntry {
 // it to inject a catalog must run serially (no t.Parallel), since it mutates
 // this package-global.
 func setActiveCatalog(entries []CatalogEntry) {
+	resolved := resolveVariantDefaults(entries)
 	catalogMu.Lock()
-	activeCatalog = entries
+	activeCatalog = resolved
 	catalogMu.Unlock()
 }
 
