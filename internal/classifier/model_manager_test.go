@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // Test URL paths used in httptest handlers.
@@ -199,6 +200,172 @@ func TestModelManager_ScanInstalled_VariantEntryNoFileNotInstalled(t *testing.T)
 	mm.ScanInstalled()
 
 	assert.False(t, mm.IsInstalled(entry.ID), "a variant entry with no model file on disk must not be installed")
+}
+
+// flatServerEntry builds a synthetic flat (single-variant) catalog entry plus an
+// httptest server that serves its model and labels files, for exercising the
+// install download path. Returns the entry, a fresh modelsDir, and the server
+// base URL. Both files carry real SHA-256 checksums so the download path's
+// verification succeeds.
+func flatServerEntry(t *testing.T) (entry CatalogEntry, modelsDir, srvURL string) {
+	t.Helper()
+	modelContent := []byte("fake-onnx-model-binary-data")
+	labelsContent := []byte("species_a\nspecies_b\n")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case testPathModelsONNX:
+			_, _ = w.Write(modelContent)
+		case testPathModelsLabels:
+			_, _ = w.Write(labelsContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	files := []CatalogFile{
+		{RemotePath: "models/test.onnx", LocalName: "test.onnx", Role: RoleModel, SHA256: sha256Hex(modelContent), SizeBytes: int64(len(modelContent))},
+		{RemotePath: "models/labels.txt", LocalName: "labels.txt", Role: RoleLabels, SHA256: sha256Hex(labelsContent), SizeBytes: int64(len(labelsContent))},
+	}
+	entry = CatalogEntry{
+		ID:              "test-preflight",
+		Name:            "Test Preflight Model",
+		Version:         "1.0",
+		HuggingFaceRepo: "test/repo",
+		Files:           files,
+	}
+	return entry, t.TempDir(), srv.URL
+}
+
+func TestModelManager_Install_RejectsInsufficientDiskSpace(t *testing.T) {
+	t.Parallel()
+
+	entry, modelsDir, srvURL := flatServerEntry(t)
+	mm := NewModelManager(modelsDir, nil, nil)
+	// Report far less free space than the download needs, so the preflight rejects.
+	mm.freeSpaceFn = func(string) (uint64, error) { return 1024, nil }
+
+	err := mm.Install(t.Context(), &entry, "", srvURL, nil)
+	require.Error(t, err, "install must be rejected when free space is below the download total")
+	assert.Contains(t, err.Error(), "disk space", "the error should name the disk-space shortfall")
+	assert.False(t, mm.IsInstalled(entry.ID), "a preflight-rejected install must not be recorded")
+	_, statErr := os.Stat(filepath.Join(modelsDir, entry.ID, "test.onnx"))
+	assert.True(t, os.IsNotExist(statErr), "no model file should be written when the preflight rejects the install")
+
+	// The rejection is surfaced through the retained download state, which is what
+	// SSE pollers read, so the user learns why the install stopped.
+	st := mm.GetDownloadState(entry.ID)
+	require.NotNil(t, st, "a rejected install must leave a retained failed download state for SSE pollers")
+	assert.Equal(t, StatusFailed, st.Status, "the retained state must be marked failed")
+	assert.Contains(t, st.Error, "disk space", "the retained failure must carry the disk-space reason")
+}
+
+func TestModelManager_Install_SkipsPreflightWhenSizeUnknown(t *testing.T) {
+	t.Parallel()
+
+	entry, modelsDir, srvURL := flatServerEntry(t)
+	// A catalog that does not declare sizes (size_bytes == 0) gives the preflight
+	// nothing to check, so it must fail open and let the install proceed rather
+	// than reject on the bare margin. (Files still download and verify by SHA.)
+	for i := range entry.Files {
+		entry.Files[i].SizeBytes = 0
+	}
+	mm := NewModelManager(modelsDir, nil, nil)
+	mm.freeSpaceFn = func(string) (uint64, error) { return 1, nil } // effectively no free space
+
+	require.NoError(t, mm.Install(t.Context(), &entry, "", srvURL, nil))
+	assert.True(t, mm.IsInstalled(entry.ID), "an unknown-size install must not be blocked by the preflight")
+}
+
+func TestModelManager_Install_DiskSpaceBoundary(t *testing.T) {
+	t.Parallel()
+
+	// The preflight proceeds when free space is exactly the required amount and
+	// rejects one byte short, pinning the `>=` comparison against an off-by-one or
+	// inverted-operator regression.
+	tests := []struct {
+		name      string
+		freeDelta int64 // free space relative to the required amount
+		wantErr   bool
+	}{
+		{name: "exactly enough", freeDelta: 0, wantErr: false},
+		{name: "one byte short", freeDelta: -1, wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			entry, modelsDir, srvURL := flatServerEntry(t)
+			var total int64
+			for _, f := range entry.Files {
+				total += f.SizeBytes
+			}
+			free := uint64(total + diskSpaceMarginBytes + tc.freeDelta)
+			mm := NewModelManager(modelsDir, nil, nil)
+			mm.freeSpaceFn = func(string) (uint64, error) { return free, nil }
+
+			err := mm.Install(t.Context(), &entry, "", srvURL, nil)
+			if tc.wantErr {
+				require.Error(t, err, "one byte below the requirement must be rejected")
+				assert.False(t, mm.IsInstalled(entry.ID))
+			} else {
+				require.NoError(t, err, "exactly the required free space must be accepted")
+				assert.True(t, mm.IsInstalled(entry.ID))
+			}
+		})
+	}
+}
+
+func TestModelManager_Install_SucceedsWithAmpleDiskSpace(t *testing.T) {
+	t.Parallel()
+
+	entry, modelsDir, srvURL := flatServerEntry(t)
+	mm := NewModelManager(modelsDir, nil, nil)
+	// Ample free space: the preflight must not block a valid install.
+	mm.freeSpaceFn = func(string) (uint64, error) { return 1 << 40, nil } // 1 TiB
+
+	require.NoError(t, mm.Install(t.Context(), &entry, "", srvURL, nil))
+	assert.True(t, mm.IsInstalled(entry.ID), "install should succeed when free space exceeds the download total")
+}
+
+func TestModelManager_Install_ProceedsWhenDiskCheckErrors(t *testing.T) {
+	t.Parallel()
+
+	entry, modelsDir, srvURL := flatServerEntry(t)
+	mm := NewModelManager(modelsDir, nil, nil)
+	// A failing free-space probe must fail open: the install proceeds rather than
+	// being blocked by an inability to measure free space.
+	mm.freeSpaceFn = func(string) (uint64, error) {
+		return 0, errors.Newf("simulated statfs failure").Build()
+	}
+
+	require.NoError(t, mm.Install(t.Context(), &entry, "", srvURL, nil))
+	assert.True(t, mm.IsInstalled(entry.ID), "a free-space probe error must not block the install (fail open)")
+}
+
+func TestModelManager_ScanInstalled_PrunesRemovedModel(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("battybirdnet-eu")
+	require.True(t, ok, "expected battybirdnet-eu catalog entry to exist")
+	modelFileName := modelRoleLocalName(t, entry.Files)
+
+	modelsDir := t.TempDir()
+	subdir := filepath.Join(modelsDir, entry.ID)
+	require.NoError(t, os.MkdirAll(subdir, 0o755))
+	modelPath := filepath.Join(subdir, modelFileName)
+	require.NoError(t, os.WriteFile(modelPath, []byte("fake-onnx-data"), 0o644))
+
+	mm := NewModelManager(modelsDir, nil, nil)
+	mm.ScanInstalled()
+	require.True(t, mm.IsInstalled(entry.ID), "the model should be detected while its file is on disk")
+
+	// Remove the model out-of-band, then rescan: the stale entry must be pruned.
+	require.NoError(t, os.RemoveAll(subdir))
+	mm.ScanInstalled()
+
+	assert.False(t, mm.IsInstalled(entry.ID), "a model whose files were removed out-of-band must be pruned on rescan")
+	for _, im := range mm.ListInstalled() {
+		assert.NotEqual(t, entry.ID, im.CatalogID, "the pruned model must not remain in the installed list")
+	}
 }
 
 func TestModelManager_Install_RecordsDefaultVariantID(t *testing.T) {
