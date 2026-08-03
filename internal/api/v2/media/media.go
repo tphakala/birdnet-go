@@ -324,10 +324,19 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 
 	// ID-based routes using SFS. Registered on c.Echo (not the group); the
 	// GET /api/v2/audio/:id route is greedy and catches all /api/v2/audio/* paths.
-	c.Echo.GET("/api/v2/audio/:id", c.ServeAudioByID)
-	c.Echo.GET("/api/v2/spectrogram/:id", c.ServeSpectrogramByID)
-	c.Echo.GET("/api/v2/spectrogram/:id/status", c.GetSpectrogramStatus)
-	c.Echo.POST("/api/v2/spectrogram/:id/generate", c.GenerateSpectrogramByID)
+	//
+	// PrivateModeAuth is attached per-route here because these routes live on
+	// c.Echo, not the v2 group, so they do NOT inherit the group-level
+	// c.Group.Use(c.PrivateModeAuth) gate (Echo group middleware wraps only routes
+	// registered through that group). Without it, stored detection audio and
+	// spectrograms are reachable unauthenticated even when Private Mode is enabled
+	// (GHSA-c7jx-552f-94hh). PrivateModeAuth, not AuthMiddleware, is used so these
+	// read routes stay publicly reachable when Private Mode is off, matching the
+	// grouped /media/* aliases that serve the same media through the group.
+	c.Echo.GET("/api/v2/audio/:id", c.ServeAudioByID, c.PrivateModeAuth)
+	c.Echo.GET("/api/v2/spectrogram/:id", c.ServeSpectrogramByID, c.PrivateModeAuth)
+	c.Echo.GET("/api/v2/spectrogram/:id/status", c.GetSpectrogramStatus, c.PrivateModeAuth)
+	c.Echo.POST("/api/v2/spectrogram/:id/generate", c.GenerateSpectrogramByID, c.PrivateModeAuth)
 
 	// Clip extraction (requires authentication)
 	c.Echo.POST("/api/v2/audio/:id/clip", c.ExtractAudioClipByID, c.AuthMiddleware)
@@ -342,6 +351,31 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 	g.GET("/media/audio", c.ServeAudioByQueryID)
 
 	c.LogInfoIfEnabled("Media routes initialized successfully")
+}
+
+// mediaCacheVisibility returns the Cache-Control visibility token for a served
+// media response: "private" when Private Mode is enabled, otherwise "public".
+// In Private Mode the media is access-controlled, so "private" keeps shared or
+// proxy caches from retaining it and re-serving it to unauthenticated clients
+// (GHSA-c7jx-552f-94hh). Read per request via CurrentSettings() so a hot-reload
+// toggle of Private Mode takes effect without a restart.
+func (c *Handler) mediaCacheVisibility() string {
+	if c.CurrentSettings().Security.PrivateMode {
+		return "private"
+	}
+	return "public"
+}
+
+// setPrivateAudioCacheControl marks an audio response private when Private Mode
+// is enabled so shared/proxy caches never retain access-controlled detection
+// audio, which can contain sensitive ambient speech (GHSA-c7jx-552f-94hh).
+// Audio responses carry no Cache-Control otherwise, so this is a no-op in public
+// mode and preserves the prior behavior; "private" (not "no-store") still lets
+// the requesting browser cache the clip, so playback and seeking are unaffected.
+func (c *Handler) setPrivateAudioCacheControl(ctx echo.Context) {
+	if c.CurrentSettings().Security.PrivateMode {
+		ctx.Response().Header().Set("Cache-Control", "private")
+	}
 }
 
 // translateSecureFSError handles SecureFS errors consistently across handler methods.
@@ -805,6 +839,9 @@ func (c *Handler) ServeAudioClip(ctx echo.Context) error {
 
 	setAudioContentDisposition(ctx, filepath.Base(normalizedFilename))
 
+	// In Private Mode, keep shared/proxy caches from retaining this clip.
+	c.setPrivateAudioCacheControl(ctx)
+
 	// Serve the file using SecureFS. It handles path validation and serves the file.
 	// ServeRelativeFile is expected to return appropriate echo.HTTPErrors (400, 404, 500).
 	err = c.SFS.ServeRelativeFile(ctx, normalizedFilename)
@@ -904,6 +941,9 @@ func (c *Handler) ServeAudioByID(ctx echo.Context) error {
 
 	// Ensure Accept-Ranges header is set for iOS Safari.
 	ctx.Response().Header().Set(headerAcceptRanges, acceptRangesBytes)
+
+	// In Private Mode, keep shared/proxy caches from retaining this clip.
+	c.setPrivateAudioCacheControl(ctx)
 
 	// Serve the file using SecureFS.
 	err = c.SFS.ServeRelativeFile(ctx, normalizedClipPath)
@@ -1552,7 +1592,7 @@ func (c *Handler) handleUserRequestedMode(ctx echo.Context, noteID, clipPath str
 				logger.String("path", ctx.Request().URL.Path),
 				logger.String("ip", ctx.RealIP()))
 
-			ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", SpectrogramCacheSeconds))
+			ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("%s, max-age=%d, immutable", c.mediaCacheVisibility(), SpectrogramCacheSeconds))
 			err = c.SFS.ServeRelativeFile(ctx, relSpectrogramPath)
 			if err != nil {
 				if !ctx.Response().Committed {
@@ -1658,7 +1698,7 @@ func (c *Handler) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath str
 	// Set cache headers before serving - spectrograms are deterministic (same clip + params = same image)
 	// and never change once generated. This allows browsers to serve from disk cache on reload,
 	// avoiding HTTP/1.1 connection exhaustion when loading many detection cards simultaneously.
-	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", SpectrogramCacheSeconds))
+	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("%s, max-age=%d, immutable", c.mediaCacheVisibility(), SpectrogramCacheSeconds))
 
 	// Serve the generated spectrogram using SecureFS
 	serveStart := time.Now()
@@ -1848,7 +1888,7 @@ func (c *Handler) ServeSpectrogram(ctx echo.Context) error {
 	}
 
 	// Serve the generated spectrogram using SecureFS with cache headers
-	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", SpectrogramCacheSeconds))
+	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("%s, max-age=%d, immutable", c.mediaCacheVisibility(), SpectrogramCacheSeconds))
 	err = c.SFS.ServeRelativeFile(ctx, spectrogramPath)
 	if err != nil {
 		if !ctx.Response().Committed {
@@ -3627,6 +3667,11 @@ func (c *Handler) serveImageFile(ctx echo.Context, filePath, contentType string)
 	if contentType != "" {
 		ctx.Response().Header().Set("Content-Type", contentType)
 	}
+	// Species images are public bird reference photos keyed by scientific name
+	// (identical for every user), not access-controlled detection media, so they
+	// stay publicly cacheable even in Private Mode. Unlike the spectrogram/audio
+	// serves they are intentionally NOT routed through mediaCacheVisibility()
+	// (GHSA-c7jx-552f-94hh); this "public" is deliberate, not a missed site.
 	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", ImageCacheSeconds))
 
 	// ETag based on modification time and size
