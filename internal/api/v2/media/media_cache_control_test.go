@@ -24,6 +24,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
 // newCacheControlTestHandler builds a media Handler whose settings snapshot has
@@ -140,6 +141,101 @@ func TestServeAudioClipCacheControlPrivateInPrivateMode(t *testing.T) {
 
 			assert.Equal(t, tc.wantCacheControl, rec.Header().Get("Cache-Control"),
 				"audio Cache-Control mismatch in %s", tc.name)
+		})
+	}
+}
+
+// TestServeAudioByIDCacheControlHonorsPrivateMode drives the ID-based audio route
+// ServeAudioByID, one of the endpoints named in GHSA-c7jx-552f-94hh, and asserts
+// the Private Mode Cache-Control is wired into its response too, not only the
+// filename-based ServeAudioClip sibling. Both call the same
+// setPrivateAudioCacheControl helper but at different sites, so a regression that
+// drops the call from the ID route alone would slip past the ServeAudioClip test.
+func TestServeAudioByIDCacheControlHonorsPrivateMode(t *testing.T) {
+	testCases := []struct {
+		name             string
+		privateMode      bool
+		wantCacheControl string // exact expected header ("" means header absent)
+	}{
+		{"public mode sets no cache-control", false, ""},
+		{"private mode marks response private", true, "private"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, e, root := newCacheControlTestHandler(t, tc.privateMode)
+
+			const noteID = "42"
+			clipFilename := "clip_by_id.wav"
+			require.NoError(t, createTestAudioFile(t, filepath.Join(root, clipFilename)))
+
+			mockDS := mocks.NewMockInterface(t)
+			mockDS.EXPECT().GetNoteClipPath(noteID).Return(clipFilename, nil)
+			h.DS = mockDS
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/audio/"+noteID, http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetParamNames("id")
+			c.SetParamValues(noteID)
+
+			require.NoError(t, h.ServeAudioByID(c))
+			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+			assert.Equal(t, tc.wantCacheControl, rec.Header().Get("Cache-Control"),
+				"audio-by-ID Cache-Control mismatch in %s", tc.name)
+		})
+	}
+}
+
+// TestServeSpectrogramByIDCacheControlHonorsPrivateMode drives the ID-based
+// spectrogram route ServeSpectrogramByID, the other advisory endpoint, with an
+// already-generated spectrogram so the serve path runs without external tools,
+// and asserts the Private Mode visibility token reaches the response. This guards
+// the ID-based serve sites that share mediaCacheVisibility() with the
+// filename-based ServeSpectrogram covered above.
+func TestServeSpectrogramByIDCacheControlHonorsPrivateMode(t *testing.T) {
+	testCases := []struct {
+		name           string
+		privateMode    bool
+		wantVisibility string
+	}{
+		{"public mode serves public cache", false, "public"},
+		{"private mode serves private cache", true, "private"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, e, root := newCacheControlTestHandler(t, tc.privateMode)
+
+			const noteID = "42"
+			audioBase := "clip_by_id"
+			require.NoError(t, createTestAudioFile(t, filepath.Join(root, audioBase+".wav")))
+			// Default raw=true with size=lg (1026px). Provide both raw and legend
+			// variants so the serve path finds the fixture regardless of raw parsing.
+			require.NoError(t, os.WriteFile(filepath.Join(root, audioBase+"_1026px.png"),
+				[]byte("id spectrogram"), 0o600))
+			require.NoError(t, os.WriteFile(filepath.Join(root, audioBase+"_1026px-legend.png"),
+				[]byte("id legend spectrogram"), 0o600))
+
+			mockDS := mocks.NewMockInterface(t)
+			mockDS.EXPECT().GetNoteClipPath(noteID).Return(audioBase+".wav", nil)
+			mockDS.EXPECT().GetNoteModelType(noteID).Return("bird", nil).Maybe()
+			h.DS = mockDS
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/spectrogram/"+noteID+"?size=lg", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetParamNames("id")
+			c.SetParamValues(noteID)
+
+			require.NoError(t, h.ServeSpectrogramByID(c))
+			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+			cacheControl := rec.Header().Get("Cache-Control")
+			assert.Truef(t, strings.HasPrefix(cacheControl, tc.wantVisibility+", "),
+				"spectrogram-by-ID Cache-Control must start with %q visibility in %s, got %q",
+				tc.wantVisibility, tc.name, cacheControl)
 		})
 	}
 }
