@@ -91,7 +91,7 @@
     "@playwright/test": "^1.61.0",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "@tailwindcss/vite": "^4.3.1",
-    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/svelte": "^5.4.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/d3": "^7.4.3",
