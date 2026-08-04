@@ -160,6 +160,8 @@ describe('DetectionDetail audio download', () => {
 
     const downloadLink = container.querySelector<HTMLAnchorElement>('a.meta-download');
     expect(downloadLink?.getAttribute('href')).toBe('/api/v2/audio/1239');
-    expect(downloadLink).toHaveAttribute('download');
+    // Keep the attribute valueless so the response's Content-Disposition header
+    // supplies the canonical filename and extension.
+    expect(downloadLink).toHaveAttribute('download', '');
   });
 });
