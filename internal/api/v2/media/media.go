@@ -501,6 +501,21 @@ func (c *Handler) translateAudioServeError(ctx echo.Context, err error, userMsg 
 	return c.translateSecureFSError(ctx, err, userMsg)
 }
 
+// handleRequestContextError distinguishes a disconnected client from a request
+// deadline. Canceled requests need no response, while server-side deadlines must
+// remain visible as timeout failures.
+func (c *Handler) handleRequestContextError(ctx echo.Context) (bool, error) {
+	requestErr := ctx.Request().Context().Err()
+	switch {
+	case errors.Is(requestErr, context.Canceled):
+		return true, nil
+	case errors.Is(requestErr, context.DeadlineExceeded):
+		return true, c.translateSecureFSError(ctx, requestErr, "Request timed out")
+	default:
+		return false, nil
+	}
+}
+
 // parseRawParameter parses the raw query parameter for spectrogram generation.
 // It defaults to true for backward compatibility with existing cached spectrograms.
 // Accepts: "true", "false", "1", "0", "t", "f", "yes", "no", "on", "off"
@@ -1128,8 +1143,8 @@ func (c *Handler) ExtractAudioClipByID(ctx echo.Context) error {
 		FFmpegPath: c.CurrentSettings().Realtime.Audio.FfmpegPath,
 	})
 	if err != nil {
-		if ctx.Request().Context().Err() != nil {
-			return nil // Client disconnected
+		if handled, contextErr := c.handleRequestContextError(ctx); handled {
+			return contextErr
 		}
 		c.logTranscodeFailure(noteID, "media_clip_transcode_failed", req.Format, filters, err)
 		return c.HandleError(ctx, err, "Failed to extract audio clip", http.StatusInternalServerError)
@@ -1270,8 +1285,8 @@ func (c *Handler) ProcessAudioByID(ctx echo.Context) error {
 
 	if err := ffmpeg.ProcessAudioToFile(ctx.Request().Context(), absolutePath,
 		c.CurrentSettings().Realtime.Audio.FfmpegPath, filters, tmpPath); err != nil {
-		if ctx.Request().Context().Err() != nil {
-			return nil // Client disconnected
+		if handled, contextErr := c.handleRequestContextError(ctx); handled {
+			return contextErr
 		}
 		c.logTranscodeFailure(noteID, "media_processed_audio_failed", processedAudioFormat, &filters, err)
 		return c.HandleError(ctx, err, "Failed to process audio", http.StatusInternalServerError)
@@ -1388,8 +1403,8 @@ func (c *Handler) ProcessedSpectrogramByID(ctx echo.Context) error {
 
 	if err := ffmpeg.ProcessAudioToFile(ctx.Request().Context(), absolutePath,
 		c.CurrentSettings().Realtime.Audio.FfmpegPath, filters, tmpPath); err != nil {
-		if ctx.Request().Context().Err() != nil {
-			return nil // Client disconnected
+		if handled, contextErr := c.handleRequestContextError(ctx); handled {
+			return contextErr
 		}
 		c.logTranscodeFailure(noteID, "media_processed_spectrogram_failed", processedAudioFormat, &filters, err)
 		return c.HandleError(ctx, err, "Failed to process audio", http.StatusInternalServerError)
@@ -1411,8 +1426,8 @@ func (c *Handler) ProcessedSpectrogramByID(ctx echo.Context) error {
 	profileOpt := spectrogram.WithFrequencyProfile(c.resolveDetectionFrequencyProfile(noteID))
 
 	if err := c.spectrogramGenerator.GenerateFromFile(ctx.Request().Context(), tmpPath, tmpSpectrogramPath, params.width, params.raw, profileOpt); err != nil {
-		if ctx.Request().Context().Err() != nil {
-			return nil
+		if handled, contextErr := c.handleRequestContextError(ctx); handled {
+			return contextErr
 		}
 		return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
 	}
