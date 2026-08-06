@@ -202,8 +202,10 @@ func (p *Processor) LearnFromApprovedDetection(modelID, speciesLowercase, scient
 		return
 	}
 
-	// Use global threshold as base (species has no custom threshold)
-	baseThreshold := float32(settings.BirdNET.Threshold)
+	// Use the model-global threshold as base (species has no custom threshold).
+	// Perch v2 / BirdNET v3.0 with their override enabled seed from their own
+	// threshold, Bat from the bat threshold, every other model from BirdNET.
+	baseThreshold := modelGlobalConfidenceThreshold(settings, modelID)
 
 	// Calculate learning cooldown based on detection window duration
 	// This prevents multiple threshold learnings within a single detection event
@@ -453,6 +455,9 @@ func (p *Processor) GetDynamicThresholdData() []DynamicThresholdData {
 	p.thresholdsMutex.RLock()
 	defer p.thresholdsMutex.RUnlock()
 
+	// Snapshot settings once so the reported base threshold matches the model-aware
+	// value the recalculation path uses (Bat/Perch/BirdNET v3.0 can each differ).
+	settings := p.currentSettings()
 	data := make([]DynamicThresholdData, 0, len(p.DynamicThresholds))
 	now := time.Now()
 
@@ -465,6 +470,7 @@ func (p *Processor) GetDynamicThresholdData() []DynamicThresholdData {
 			ModelName:      modelName,
 			Level:          dt.Level,
 			CurrentValue:   dt.CurrentValue,
+			BaseThreshold:  float64(modelGlobalConfidenceThreshold(settings, modelName)),
 			HighConfCount:  dt.HighConfCount,
 			ExpiresAt:      dt.Timer,
 			IsActive:       dt.Timer.After(now),
@@ -481,6 +487,7 @@ type DynamicThresholdData struct {
 	ModelName      string    `json:"modelName"`
 	Level          int       `json:"level"`
 	CurrentValue   float64   `json:"currentValue"`
+	BaseThreshold  float64   `json:"baseThreshold"` // model-aware global base this entry derives from
 	HighConfCount  int       `json:"highConfCount"`
 	ExpiresAt      time.Time `json:"expiresAt"`
 	IsActive       bool      `json:"isActive"`
@@ -502,22 +509,27 @@ func levelMultiplier(level int) float64 {
 	}
 }
 
-// RecalculateDynamicThresholds recomputes all CurrentValue entries based on the current
-// BirdNET.Threshold. This must be called when the global base threshold changes so that
-// stored absolute values remain consistent with each species' level/tier.
+// RecalculateDynamicThresholds recomputes all CurrentValue entries based on each
+// entry's model-specific base threshold (see modelGlobalConfidenceThreshold).
+// This must be called when any model-global base threshold changes so that stored
+// absolute values remain consistent with each species' level/tier.
 // Species with custom per-species thresholds are not present in the dynamic thresholds
 // map (they are filtered out in LearnFromApprovedDetection), so no special handling is needed.
 func (p *Processor) RecalculateDynamicThresholds() {
 	log := GetLogger()
 	settings := p.currentSettings()
-	newBase := float64(settings.BirdNET.Threshold)
 	minThreshold := settings.Realtime.DynamicThreshold.Min
 
 	p.thresholdsMutex.Lock()
 	defer p.thresholdsMutex.Unlock()
 
 	recalculated := 0
-	for species, dt := range p.DynamicThresholds {
+	for key, dt := range p.DynamicThresholds {
+		// The base threshold is model-specific: Perch v2 / BirdNET v3.0 with their
+		// override enabled use their own base, Bat uses the bat base, and every
+		// other model uses the primary BirdNET base.
+		modelID, species := splitDynamicThresholdKey(key)
+		newBase := float64(modelGlobalConfidenceThreshold(settings, modelID))
 		oldValue := dt.CurrentValue
 		newValue := newBase * levelMultiplier(dt.Level)
 
@@ -533,6 +545,7 @@ func (p *Processor) RecalculateDynamicThresholds() {
 			if settings.Realtime.DynamicThreshold.Debug {
 				log.Debug("Recalculated dynamic threshold for new base",
 					logger.String("species", species),
+					logger.String("model_id", modelID),
 					logger.Int("level", dt.Level),
 					logger.Float64("old_value", oldValue),
 					logger.Float64("new_value", newValue),
@@ -544,7 +557,6 @@ func (p *Processor) RecalculateDynamicThresholds() {
 	if recalculated > 0 {
 		log.Info("Recalculated dynamic thresholds for new base threshold",
 			logger.Int("recalculated", recalculated),
-			logger.Int("total", len(p.DynamicThresholds)),
-			logger.Float64("new_base", newBase))
+			logger.Int("total", len(p.DynamicThresholds)))
 	}
 }

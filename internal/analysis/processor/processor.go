@@ -706,10 +706,7 @@ func (p *Processor) processDetections(item classifier.Results) {
 				maxConf = r.Confidence
 			}
 		}
-		threshold := float32(settings.BirdNET.Threshold)
-		if item.ModelID == classifier.RegistryIDBat {
-			threshold = float32(settings.Bat.Threshold)
-		}
+		threshold := modelGlobalConfidenceThreshold(settings, item.ModelID)
 		p.pipelineStats.RecordInference(item.Source.ID, item.ModelID, len(item.Results), len(detectionResults), maxConf, threshold)
 	}
 
@@ -1183,7 +1180,7 @@ func (p *Processor) createDetectionResult(settings *conf.Settings,
 		Confidence:     math.Round(confidence*100) / 100,
 		Latitude:       settings.BirdNET.Latitude,
 		Longitude:      settings.BirdNET.Longitude,
-		Threshold:      settings.BirdNET.Threshold,
+		Threshold:      float64(modelGlobalConfidenceThreshold(settings, modelID)),
 		Sensitivity:    settings.BirdNET.Sensitivity,
 		ClipName:       clipName,
 		ProcessingTime: elapsedTime,
@@ -1338,8 +1335,8 @@ func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifie
 
 // getBaseConfidenceThreshold retrieves the confidence threshold for a species, using custom or global thresholds.
 // It supports lookup by both common name and scientific name for consistency with include/exclude matching.
-// The modelID parameter selects which global threshold to use when no per-species config exists:
-// bat models use settings.Bat.Threshold, all others use settings.BirdNET.Threshold.
+// The modelID parameter selects which global threshold to use when no per-species config exists;
+// see modelGlobalConfidenceThreshold for the per-model selection rules.
 func (p *Processor) getBaseConfidenceThreshold(settings *conf.Settings, commonName, scientificName, modelID string) float32 {
 	// Check if species has a custom threshold using both common and scientific name lookup
 	if config, exists := lookupSpeciesConfig(settings.Realtime.Species.Config, commonName, scientificName); exists {
@@ -1353,9 +1350,28 @@ func (p *Processor) getBaseConfidenceThreshold(settings *conf.Settings, commonNa
 		return float32(config.Threshold)
 	}
 
-	// Fall back to model-specific global threshold
-	if modelID == classifier.RegistryIDBat {
+	// Fall back to the model-specific global threshold.
+	return modelGlobalConfidenceThreshold(settings, modelID)
+}
+
+// modelGlobalConfidenceThreshold returns the global confidence threshold applied
+// to a model's detections when the species has no custom per-species threshold.
+// The Bat model always uses its own threshold. Perch v2 and BirdNET v3.0 use
+// their own threshold only when their OverrideThreshold toggle is enabled;
+// otherwise, and for every other model (including the primary BirdNET), the
+// primary BirdNET threshold applies.
+func modelGlobalConfidenceThreshold(settings *conf.Settings, modelID string) float32 {
+	switch modelID {
+	case classifier.RegistryIDBat:
 		return float32(settings.Bat.Threshold)
+	case classifier.RegistryIDPerchV2:
+		if settings.Perch.OverrideThreshold {
+			return float32(settings.Perch.Threshold)
+		}
+	case classifier.RegistryIDBirdNETV3:
+		if settings.BirdNETV3.OverrideThreshold {
+			return float32(settings.BirdNETV3.Threshold)
+		}
 	}
 	return float32(settings.BirdNET.Threshold)
 }

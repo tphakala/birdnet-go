@@ -72,13 +72,38 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"BirdNET.HuggingFaceEndpoint": {categories: []hotReloadCategory{hotReloadFresh}},
 
 	// --- Perch ---
+	// Parent is restart: model/label path and locale changes reload the model.
+	// The threshold override + value are read live by the processor, so they
+	// hot-reload and only need a dynamic-threshold recalculation.
 	"Perch": {categories: []hotReloadCategory{hotReloadRestart}},
+	"Perch.Threshold": {
+		categories: []hotReloadCategory{hotReloadFresh},
+		action:     "recalculate_dynamic_thresholds",
+	},
+	"Perch.OverrideThreshold": {
+		categories: []hotReloadCategory{hotReloadFresh},
+		action:     "recalculate_dynamic_thresholds",
+	},
 
 	// --- BirdNET v3.0 ---
 	"BirdNETV3": {categories: []hotReloadCategory{hotReloadRestart}},
+	"BirdNETV3.Threshold": {
+		categories: []hotReloadCategory{hotReloadFresh},
+		action:     "recalculate_dynamic_thresholds",
+	},
+	"BirdNETV3.OverrideThreshold": {
+		categories: []hotReloadCategory{hotReloadFresh},
+		action:     "recalculate_dynamic_thresholds",
+	},
 
 	// --- Bat ---
 	"Bat": {categories: []hotReloadCategory{hotReloadFresh}},
+	// The bat dynamic-threshold base is now model-aware, so a bat threshold change
+	// must recalculate existing bat dynamic thresholds (mirrors BirdNET.Threshold).
+	"Bat.Threshold": {
+		categories: []hotReloadCategory{hotReloadFresh},
+		action:     "recalculate_dynamic_thresholds",
+	},
 
 	// --- BSG ---
 	"BSG": {categories: []hotReloadCategory{hotReloadRestart}},
