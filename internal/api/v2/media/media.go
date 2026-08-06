@@ -65,6 +65,7 @@ const (
 const (
 	headerAcceptRanges = "Accept-Ranges"
 	acceptRangesBytes  = "bytes"
+	requestTimeoutMsg  = "Request timed out"
 )
 
 // Cache duration in seconds for HTTP Cache-Control headers on media responses.
@@ -510,7 +511,7 @@ func (c *Handler) handleRequestContextError(ctx echo.Context) (bool, error) {
 	case errors.Is(requestErr, context.Canceled):
 		return true, nil
 	case errors.Is(requestErr, context.DeadlineExceeded):
-		return true, c.translateSecureFSError(ctx, requestErr, "Request timed out")
+		return true, c.translateSecureFSError(ctx, requestErr, requestTimeoutMsg)
 	default:
 		return false, nil
 	}
