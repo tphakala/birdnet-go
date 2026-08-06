@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -999,6 +1000,81 @@ func TestGetBaseConfidenceThreshold_CustomOverridesModel(t *testing.T) {
 
 	threshold := p.getBaseConfidenceThreshold(settings, "Common Pipistrelle", "Pipistrellus pipistrellus", "Bat")
 	assert.InDelta(t, 0.5, float64(threshold), 0.001, "custom species threshold should override bat global threshold")
+}
+
+// TestModelGlobalConfidenceThreshold verifies the per-model base threshold
+// selection: Bat always uses its own threshold, Perch v2 and BirdNET v3.0 use
+// theirs only when their override toggle is on, and everything else follows the
+// primary BirdNET threshold.
+func TestModelGlobalConfidenceThreshold(t *testing.T) {
+	t.Parallel()
+
+	newSettings := func() *conf.Settings {
+		s := &conf.Settings{}
+		s.BirdNET.Threshold = 0.8
+		s.Bat.Threshold = 0.3
+		s.Perch.Threshold = 0.5
+		s.BirdNETV3.Threshold = 0.6
+		return s
+	}
+
+	tests := []struct {
+		name          string
+		modelID       string
+		perchOverride bool
+		v3Override    bool
+		want          float64
+	}{
+		{"birdnet primary uses birdnet threshold", "BirdNET_V2.4", false, false, 0.8},
+		{"bat always uses bat threshold", classifier.RegistryIDBat, false, false, 0.3},
+		{"perch without override follows birdnet", classifier.RegistryIDPerchV2, false, false, 0.8},
+		{"perch with override uses perch threshold", classifier.RegistryIDPerchV2, true, false, 0.5},
+		{"birdnetv3 without override follows birdnet", classifier.RegistryIDBirdNETV3, false, false, 0.8},
+		{"birdnetv3 with override uses its threshold", classifier.RegistryIDBirdNETV3, false, true, 0.6},
+		{"unknown model follows birdnet", "SomeOtherModel", true, true, 0.8},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			settings := newSettings()
+			settings.Perch.OverrideThreshold = tt.perchOverride
+			settings.BirdNETV3.OverrideThreshold = tt.v3Override
+
+			got := modelGlobalConfidenceThreshold(settings, tt.modelID)
+			assert.InDelta(t, tt.want, float64(got), 0.001)
+		})
+	}
+}
+
+// TestGetBaseConfidenceThreshold_PerchOverride verifies Perch v2 detections
+// follow the BirdNET threshold unless the Perch override toggle is enabled, and
+// that a per-species custom threshold still wins regardless of the toggle.
+func TestGetBaseConfidenceThreshold_PerchOverride(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.BirdNET.Threshold = 0.8
+	settings.Perch.Threshold = 0.5
+
+	p := &Processor{Settings: settings}
+
+	// Override off: Perch follows BirdNET.
+	settings.Perch.OverrideThreshold = false
+	off := p.getBaseConfidenceThreshold(settings, "American Robin", "Turdus migratorius", classifier.RegistryIDPerchV2)
+	assert.InDelta(t, 0.8, float64(off), 0.001, "perch without override should follow BirdNET threshold")
+
+	// Override on: Perch uses its own threshold.
+	settings.Perch.OverrideThreshold = true
+	on := p.getBaseConfidenceThreshold(settings, "American Robin", "Turdus migratorius", classifier.RegistryIDPerchV2)
+	assert.InDelta(t, 0.5, float64(on), 0.001, "perch with override should use Perch threshold")
+
+	// Per-species custom threshold wins even with the override on.
+	settings.Realtime.Species.Config = map[string]conf.SpeciesConfig{
+		"american robin": {Threshold: 0.42},
+	}
+	custom := p.getBaseConfidenceThreshold(settings, "American Robin", "Turdus migratorius", classifier.RegistryIDPerchV2)
+	assert.InDelta(t, 0.42, float64(custom), 0.001, "custom species threshold should override the perch override")
 }
 
 // TestValidateAndLogBatFilterConfig verifies that invalid bat FP filter levels

@@ -1306,18 +1306,20 @@ type RangeFilterSettings struct {
 
 // PerchConfig holds configuration for the Google Perch v2 model.
 type PerchConfig struct {
-	ModelPath string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to Perch v2 ONNX model file
-	LabelPath string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to Perch v2 label CSV file
-	Threshold float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for detections
-	Locale    string  `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation
+	ModelPath         string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to Perch v2 ONNX model file
+	LabelPath         string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to Perch v2 label CSV file
+	OverrideThreshold bool    `yaml:"overridethreshold" json:"overrideThreshold"`     // when true, gate Perch detections on Threshold instead of following BirdNET.Threshold
+	Threshold         float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for detections (applied only when OverrideThreshold is true)
+	Locale            string  `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation
 }
 
 // BirdNETV3Config holds configuration for the BirdNET v3.0 acoustic classifier.
 type BirdNETV3Config struct {
-	ModelPath string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to BirdNET v3.0 ONNX model file
-	LabelPath string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to BirdNET v3.0 label file
-	Threshold float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for detections
-	Locale    string  `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation
+	ModelPath         string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to BirdNET v3.0 ONNX model file
+	LabelPath         string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to BirdNET v3.0 label file
+	OverrideThreshold bool    `yaml:"overridethreshold" json:"overrideThreshold"`     // when true, gate BirdNET v3.0 detections on Threshold instead of following BirdNET.Threshold
+	Threshold         float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for detections (applied only when OverrideThreshold is true)
+	Locale            string  `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation
 }
 
 // BatConfig holds configuration for bat detection using BirdNET v2.4 embeddings.

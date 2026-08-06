@@ -90,8 +90,15 @@ func setDefaultConfig() {
 	viper.SetDefault("birdnet.rangefilter.model", RangeFilterModelLatest)
 	viper.SetDefault("birdnet.rangefilter.threshold", 0.01)
 
-	// Perch model configuration
+	// Perch model configuration.
+	// OverrideThreshold defaults false so Perch follows birdnet.threshold until the
+	// user opts in; Threshold is the value used once the override is enabled.
+	viper.SetDefault("perch.overridethreshold", false)
 	viper.SetDefault("perch.threshold", 0.5)
+
+	// BirdNET v3.0 model configuration (same override semantics as Perch).
+	viper.SetDefault("birdnetv3.overridethreshold", false)
+	viper.SetDefault("birdnetv3.threshold", 0.5)
 
 	// Bat detection configuration
 	viper.SetDefault("bat.threshold", 0.5)

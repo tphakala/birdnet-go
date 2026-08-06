@@ -1094,6 +1094,8 @@ func getSettingsSectionValue(settings *conf.Settings, section string) (any, erro
 		return &settings.Output, nil
 	case "perch":
 		return &settings.Perch, nil
+	case "birdnetv3":
+		return &settings.BirdNETV3, nil
 	case "bat":
 		return &settings.Bat, nil
 	case "models":
@@ -2691,11 +2693,19 @@ func birdnetSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	return false
 }
 
-// baseThresholdChanged checks if the global BirdNET confidence threshold has changed.
-// When this changes, dynamic threshold CurrentValue entries must be recalculated
-// since they store absolute values derived from the base threshold.
+// baseThresholdChanged checks if any model-global confidence base threshold has
+// changed. When one does, dynamic threshold CurrentValue entries must be
+// recalculated since they store absolute values derived from the base threshold.
+// This covers the primary BirdNET threshold, the Bat threshold, and the Perch v2
+// and BirdNET v3.0 override toggles and values, which all feed
+// modelGlobalConfidenceThreshold.
 func baseThresholdChanged(oldSettings, currentSettings *conf.Settings) bool {
-	return oldSettings.BirdNET.Threshold != currentSettings.BirdNET.Threshold
+	return oldSettings.BirdNET.Threshold != currentSettings.BirdNET.Threshold ||
+		oldSettings.Bat.Threshold != currentSettings.Bat.Threshold ||
+		oldSettings.Perch.OverrideThreshold != currentSettings.Perch.OverrideThreshold ||
+		oldSettings.Perch.Threshold != currentSettings.Perch.Threshold ||
+		oldSettings.BirdNETV3.OverrideThreshold != currentSettings.BirdNETV3.OverrideThreshold ||
+		oldSettings.BirdNETV3.Threshold != currentSettings.BirdNETV3.Threshold
 }
 
 // dynamicThresholdEnabledChanged checks if the DynamicThreshold.Enabled flag was toggled.

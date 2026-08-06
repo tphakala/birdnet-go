@@ -129,6 +129,26 @@ export interface BatSettings {
   };
 }
 
+// Secondary acoustic classifiers (Perch v2, BirdNET v3.0). Their detections
+// follow the primary BirdNET threshold unless overrideThreshold is enabled, in
+// which case `threshold` gates them instead. modelPath/labelPath/locale are
+// managed by the model gallery, not the detection-settings form.
+export interface PerchSettings {
+  modelPath?: string | null;
+  labelPath?: string | null;
+  overrideThreshold: boolean;
+  threshold: number;
+  locale?: string;
+}
+
+export interface BirdNetV3Settings {
+  modelPath?: string | null;
+  labelPath?: string | null;
+  overrideThreshold: boolean;
+  threshold: number;
+  locale?: string;
+}
+
 export interface SQLiteSettings {
   enabled: boolean;
   path: string;
@@ -825,6 +845,8 @@ export interface SettingsFormData {
   main: MainSettings;
   birdnet: BirdNetSettings;
   bat?: BatSettings;
+  perch?: PerchSettings;
+  birdnetv3?: BirdNetV3Settings;
   input?: unknown; // Not exposed via JSON
   realtime?: RealtimeSettings;
   webServer?: WebServerSettings;
@@ -894,6 +916,14 @@ function createEmptySettings(): SettingsFormData {
       ultrasonicFilter: {
         enabled: true,
       },
+    },
+    perch: {
+      overrideThreshold: false,
+      threshold: 0.5,
+    },
+    birdnetv3: {
+      overrideThreshold: false,
+      threshold: 0.5,
     },
     realtime: {
       interval: 15,
@@ -1126,6 +1156,10 @@ export const mainSettings = derived(settingsStore, $store => $store.formData.mai
 export const birdnetSettings = derived(settingsStore, $store => $store.formData.birdnet);
 
 export const batSettings = derived(settingsStore, $store => $store.formData.bat);
+
+export const perchSettings = derived(settingsStore, $store => $store.formData.perch);
+
+export const birdNetV3Settings = derived(settingsStore, $store => $store.formData.birdnetv3);
 
 export const realtimeSettings = derived(settingsStore, $store => $store.formData.realtime);
 

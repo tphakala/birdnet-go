@@ -513,9 +513,13 @@
           "type": "string",
           "description": "path to BirdNET v3.0 label file"
         },
+        "overridethreshold": {
+          "type": "boolean",
+          "description": "when true, gate BirdNET v3.0 detections on Threshold instead of following BirdNET.Threshold"
+        },
         "threshold": {
           "type": "number",
-          "description": "confidence threshold for detections"
+          "description": "confidence threshold for detections (applied only when OverrideThreshold is true)"
         },
         "locale": {
           "type": "string",
@@ -1495,9 +1499,13 @@
           "type": "string",
           "description": "path to Perch v2 label CSV file"
         },
+        "overridethreshold": {
+          "type": "boolean",
+          "description": "when true, gate Perch detections on Threshold instead of following BirdNET.Threshold"
+        },
         "threshold": {
           "type": "number",
-          "description": "confidence threshold for detections"
+          "description": "confidence threshold for detections (applied only when OverrideThreshold is true)"
         },
         "locale": {
           "type": "string",

@@ -28,9 +28,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { downloadBlob } from '$lib/utils/fileHelpers';
-  import type { CatalogEntry, DownloadProgress } from '$lib/types/models';
+  import type { CatalogEntry, DownloadProgress, InstalledModel } from '$lib/types/models';
   import {
     fetchCatalog,
+    fetchInstalled,
     installModel,
     reinstallModel,
     uninstallModel,
@@ -57,6 +58,8 @@
     dynamicThresholdSettings,
     realtimeSettings,
     batSettings,
+    perchSettings,
+    birdNetV3Settings,
   } from '$lib/stores/settings';
   import { cn } from '$lib/utils/cn.js';
   import { api, ApiError, getCsrfToken } from '$lib/utils/api';
@@ -115,6 +118,9 @@
 
   // ── Gallery (Models tab) state ────────────────────────────────────────
   let catalog = $state<CatalogEntry[]>([]);
+  // Installed models incl. hidden ones (drives the secondary-model threshold
+  // sections, which the visibility-filtered catalog cannot).
+  let installedModels = $state<InstalledModel[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
 
@@ -161,6 +167,16 @@
   // Check if a bat model is installed
   const hasBatModel = $derived(catalog.some(e => e.installed && e.category === 'bat'));
   const batFPLevel = $derived(bat.falsePositiveFilter?.level ?? 0);
+
+  // Secondary acoustic classifiers with a per-model threshold override. These are
+  // gated on the installed-models list (not the catalog): the catalog endpoint
+  // hides foundation/preview models such as BirdNET v3.0 via VisibleCatalog(), so
+  // a catalog-based check would never light up the v3.0 section. The installed
+  // endpoint returns every downloaded model, hidden or not, keyed by catalogId.
+  let perch = $derived($perchSettings ?? { overrideThreshold: false, threshold: 0.5 });
+  let birdnetV3 = $derived($birdNetV3Settings ?? { overrideThreshold: false, threshold: 0.5 });
+  const hasPerchModel = $derived(installedModels.some(m => m.catalogId.startsWith('perch')));
+  const hasBirdNetV3Model = $derived(installedModels.some(m => m.catalogId === 'birdnet-v3.0'));
 
   // ── Derived catalog views ─────────────────────────────────────────────
   const installedEntries = $derived(catalog.filter(e => e.installed));
@@ -772,6 +788,40 @@
     settingsActions.updateSection('birdnet', { threshold: value });
   }
 
+  // Config for the shared secondary-model threshold section snippet.
+  interface SecondaryModelThresholdConfig {
+    titleKey: string;
+    descKey: string;
+    thresholdLabelKey: string;
+    // The BirdNET threshold this model follows while the override is off; shown
+    // in the disabled field so the number on screen matches the effective value.
+    effectiveThreshold: number;
+    current: { overrideThreshold: boolean; threshold: number };
+    originalOverride: boolean;
+    originalThreshold: number;
+    onOverride: (_value: boolean) => void;
+    onThreshold: (_value: number) => void;
+  }
+
+  // Secondary-model threshold override handlers. When the override is off, the
+  // model follows the BirdNET threshold (backend modelGlobalConfidenceThreshold),
+  // so the threshold field is disabled until the override is enabled.
+  function updatePerchOverride(value: boolean) {
+    settingsActions.updateSection('perch', { overrideThreshold: value });
+  }
+
+  function updatePerchThreshold(value: number) {
+    settingsActions.updateSection('perch', { threshold: value });
+  }
+
+  function updateBirdNetV3Override(value: boolean) {
+    settingsActions.updateSection('birdnetv3', { overrideThreshold: value });
+  }
+
+  function updateBirdNetV3Threshold(value: number) {
+    settingsActions.updateSection('birdnetv3', { threshold: value });
+  }
+
   // ── Gallery tab definitions ───────────────────────────────────────────
   const galleryTabs: TabDefinition[] = $derived([
     {
@@ -825,10 +875,21 @@
     try {
       const response = await fetchCatalog();
       catalog = response.catalog;
+      // Refresh the installed list alongside the catalog so the secondary-model
+      // threshold sections track install/uninstall. Swallows its own errors.
+      await loadInstalledModels();
     } catch (e) {
       error = e instanceof Error ? e.message : t('analysis.gallery.errors.catalogLoadFailed');
     } finally {
       loading = false;
+    }
+  }
+
+  async function loadInstalledModels() {
+    try {
+      installedModels = await fetchInstalled();
+    } catch (e) {
+      logger.error('Failed to load installed models:', e);
     }
   }
 
@@ -990,6 +1051,39 @@
   }
 </script>
 
+<!-- ── Secondary-model threshold override section (Perch v2, BirdNET v3.0) ── -->
+{#snippet secondaryModelThreshold(cfg: SecondaryModelThresholdConfig)}
+  <SettingsSection
+    title={t(cfg.titleKey)}
+    description={t(cfg.descKey)}
+    defaultOpen={true}
+    originalData={{ override: cfg.originalOverride, threshold: cfg.originalThreshold }}
+    currentData={{ override: cfg.current.overrideThreshold, threshold: cfg.current.threshold }}
+  >
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <Checkbox
+        checked={cfg.current.overrideThreshold}
+        label={t('analysis.detection.secondaryThresholdOverride.label')}
+        helpText={t('analysis.detection.secondaryThresholdOverride.helpText')}
+        disabled={store.isLoading || store.isSaving}
+        onchange={cfg.onOverride}
+      />
+      <NumberField
+        label={t(cfg.thresholdLabelKey)}
+        value={cfg.current.overrideThreshold ? cfg.current.threshold : cfg.effectiveThreshold}
+        onUpdate={cfg.onThreshold}
+        min={0.01}
+        max={0.99}
+        step={0.01}
+        disabled={store.isLoading || store.isSaving || !cfg.current.overrideThreshold}
+        helpText={cfg.current.overrideThreshold
+          ? t('analysis.detection.secondaryThreshold.helpText')
+          : t('analysis.detection.secondaryThreshold.followsBirdnet')}
+      />
+    </div>
+  </SettingsSection>
+{/snippet}
+
 <!-- ── Settings Tab Content ──────────────────────────────────────────── -->
 {#snippet settingsTabContent()}
   <div class="space-y-6">
@@ -1077,7 +1171,37 @@
       {/if}
     </SettingsSection>
 
-    <!-- 2. Bat Detection (only when a bat model is installed) -->
+    <!-- 2. Perch v2 threshold override (only when the Perch model is installed) -->
+    {#if hasPerchModel}
+      {@render secondaryModelThreshold({
+        titleKey: 'analysis.perch.title',
+        descKey: 'analysis.perch.description',
+        thresholdLabelKey: 'analysis.detection.perchThreshold.label',
+        effectiveThreshold: birdnet?.threshold ?? 0.3,
+        current: perch,
+        originalOverride: store.originalData.perch?.overrideThreshold ?? false,
+        originalThreshold: store.originalData.perch?.threshold ?? 0.5,
+        onOverride: updatePerchOverride,
+        onThreshold: updatePerchThreshold,
+      })}
+    {/if}
+
+    <!-- 3. BirdNET v3.0 threshold override (only when the v3.0 model is installed) -->
+    {#if hasBirdNetV3Model}
+      {@render secondaryModelThreshold({
+        titleKey: 'analysis.birdnetv3.title',
+        descKey: 'analysis.birdnetv3.description',
+        thresholdLabelKey: 'analysis.detection.birdnetv3Threshold.label',
+        effectiveThreshold: birdnet?.threshold ?? 0.3,
+        current: birdnetV3,
+        originalOverride: store.originalData.birdnetv3?.overrideThreshold ?? false,
+        originalThreshold: store.originalData.birdnetv3?.threshold ?? 0.5,
+        onOverride: updateBirdNetV3Override,
+        onThreshold: updateBirdNetV3Threshold,
+      })}
+    {/if}
+
+    <!-- 4. Bat Detection (only when a bat model is installed) -->
     {#if hasBatModel}
       <SettingsSection
         title={t('analysis.bat.title')}
@@ -1146,7 +1270,7 @@
       </SettingsSection>
     {/if}
 
-    <!-- 3. Range Filter -->
+    <!-- 5. Range Filter -->
     <SettingsSection
       title={t('settings.main.sections.rangeFilter.title')}
       description={t('settings.main.sections.rangeFilter.description')}
@@ -1337,7 +1461,7 @@
       {/if}
     </SettingsSection>
 
-    <!-- 4. Dynamic Threshold -->
+    <!-- 6. Dynamic Threshold -->
     <SettingsSection
       title={t('settings.main.sections.dynamicThreshold.title')}
       description={t('settings.main.sections.dynamicThreshold.description')}
@@ -1394,7 +1518,7 @@
       {/if}
     </SettingsSection>
 
-    <!-- 5. Advanced (collapsed by default) -->
+    <!-- 7. Advanced (collapsed by default) -->
     <SettingsSection
       title={t('analysis.advanced.title')}
       description={t('analysis.advanced.description')}

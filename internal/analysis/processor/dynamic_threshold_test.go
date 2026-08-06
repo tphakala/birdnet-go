@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -16,6 +17,50 @@ const testModelID = "BirdNET_V2.4"
 // testThresholdKey builds the composite key used for direct map assertions in tests.
 func testThresholdKey(species string) string {
 	return dynamicThresholdKey(testModelID, species)
+}
+
+// TestRecalculateDynamicThresholds_PerModelBase verifies that each dynamic
+// threshold entry recomputes against its own model's base threshold: a Perch v2
+// entry with the Perch override enabled uses the Perch base, while a BirdNET
+// entry uses the primary BirdNET base, rather than both using BirdNET.Threshold.
+func TestRecalculateDynamicThresholds_PerModelBase(t *testing.T) {
+	p := newTestProcessor()
+	p.Settings.BirdNET.Threshold = 0.80
+	p.Settings.Perch = conf.PerchConfig{OverrideThreshold: true, Threshold: 0.40}
+
+	// Both entries at level 1 (multiplier 0.75). Seed CurrentValue with the old
+	// BirdNET-derived value so a per-model recompute must move the Perch entry.
+	birdKey := dynamicThresholdKey(testModelID, "american robin")
+	perchKey := dynamicThresholdKey(classifier.RegistryIDPerchV2, "eurasian wren")
+	future := time.Now().Add(time.Hour)
+	p.DynamicThresholds[birdKey] = &DynamicThreshold{Level: 1, CurrentValue: 0.80 * 0.75, Timer: future}
+	p.DynamicThresholds[perchKey] = &DynamicThreshold{Level: 1, CurrentValue: 0.80 * 0.75, Timer: future}
+
+	p.RecalculateDynamicThresholds()
+
+	assert.InDelta(t, 0.80*0.75, p.DynamicThresholds[birdKey].CurrentValue, 0.001,
+		"BirdNET entry should recompute off the BirdNET base 0.80")
+	assert.InDelta(t, 0.40*0.75, p.DynamicThresholds[perchKey].CurrentValue, 0.001,
+		"Perch entry with override should recompute off the Perch base 0.40, not BirdNET 0.80")
+}
+
+// TestLearnFromApprovedDetection_PerModelBase verifies dynamic-threshold learning
+// seeds from the model-specific base: a Perch v2 species with the Perch override
+// enabled learns off the Perch threshold, not BirdNET.Threshold.
+func TestLearnFromApprovedDetection_PerModelBase(t *testing.T) {
+	p := newTestProcessor()
+	p.Settings.BirdNET.Threshold = 0.80
+	p.Settings.Perch = conf.PerchConfig{OverrideThreshold: true, Threshold: 0.40}
+
+	p.LearnFromApprovedDetection(classifier.RegistryIDPerchV2, "eurasian wren", "Troglodytes troglodytes", 0.95)
+
+	key := dynamicThresholdKey(classifier.RegistryIDPerchV2, "eurasian wren")
+	dt := p.DynamicThresholds[key]
+	if assert.NotNil(t, dt, "Perch dynamic threshold entry should be created") {
+		assert.Equal(t, 1, dt.Level, "first learning should reach level 1")
+		assert.InDelta(t, 0.40*0.75, dt.CurrentValue, 0.001,
+			"Perch learning should seed off the Perch base 0.40, not BirdNET 0.80")
+	}
 }
 
 // newTestProcessor creates a Processor with default settings for dynamic threshold testing
