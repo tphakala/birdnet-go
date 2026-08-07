@@ -26,6 +26,7 @@ const (
 	EventStreamError        = "stream.error"
 
 	EventDetectionNewSpecies = "detection.new_species"
+	EventDetectionLifer      = "detection.lifer"
 	EventDetectionOccurred   = "detection.occurred"
 
 	EventApplicationStarted = "application.started"
@@ -86,6 +87,7 @@ const (
 	PropertyNoveltyEpisodeDays  = events.DetectionMetadataNoveltyEpisodeDays
 	PropertyNoveltyEpisodeStart = events.DetectionMetadataNoveltyEpisodeStart
 	PropertyIsNewSpecies        = "is_new_species"
+	PropertyIsLifer             = events.DetectionMetadataIsLifer
 )
 
 // Action targets identify where notifications are sent.
@@ -100,6 +102,8 @@ const (
 const (
 	RuleKeyNewSpeciesName  = "settings.alerts.builtInRules.newSpecies.name"
 	RuleKeyNewSpeciesDesc  = "settings.alerts.builtInRules.newSpecies.description"
+	RuleKeyLiferName       = "settings.alerts.builtInRules.lifer.name"
+	RuleKeyLiferDesc       = "settings.alerts.builtInRules.lifer.description"
 	RuleKeyStreamDiscName  = "settings.alerts.builtInRules.streamDisconnected.name"
 	RuleKeyStreamDiscDesc  = "settings.alerts.builtInRules.streamDisconnected.description"
 	RuleKeyStreamErrorName = "settings.alerts.builtInRules.streamError.name"

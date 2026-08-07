@@ -246,6 +246,12 @@ func applyDetectionTemplates(notifType notification.Type, title, message string,
 	if notifType != notification.TypeDetection {
 		return title, message
 	}
+	// A lifer notification uses its own default wording (the "Lifer detected"
+	// rule name + the default detection message), not the new-species template —
+	// even when the species is also new to this install — so it reads as a lifer.
+	if isLifer, _ := eventProps[PropertyIsLifer].(bool); isLifer {
+		return title, message
+	}
 	isNew, _ := eventProps[PropertyIsNewSpecies].(bool)
 	if !isNew {
 		return title, message

@@ -317,6 +317,157 @@ func TestPublishDetectionEvent_SuppressedNewSpecies(t *testing.T) {
 	assert.False(t, received[0].IsNewSpecies(), "suppressed new species should publish as ordinary detection")
 }
 
+// TestPublishDetectionEvent_LiferOnList verifies that a species already on
+// the user's imported life list does not raise a lifer notification.
+func TestPublishDetectionEvent_LiferOnList(t *testing.T) {
+	consumer := setupEventBusWithConsumer(t)
+
+	det := testDetection()
+	settings := &conf.Settings{Debug: true}
+	settings.Realtime.LifeList.Enabled = true
+	settings.Realtime.LifeList.Species = []string{det.Result.Species.ScientificName + "_" + det.Result.Species.CommonName}
+
+	mockDS := mocks.NewMockInterface(t)
+	tracker := species.NewTrackerFromSettings(mockDS, &conf.SpeciesTrackingSettings{
+		Enabled:                      true,
+		NewSpeciesWindowDays:         testWindowDays,
+		SyncIntervalMinutes:          testSyncIntervalMins,
+		NotificationSuppressionHours: testSuppressionHours,
+	})
+
+	action := &DatabaseAction{
+		Settings:          settings,
+		Result:            det.Result,
+		CorrelationID:     "test-lifer-on-list",
+		NewSpeciesTracker: tracker,
+	}
+
+	action.publishDetectionEvent(false, 30, species.NoveltyStatus{})
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		assert.Len(collect, consumer.GetReceivedEvents(), 1)
+	}, 2*time.Second, 50*time.Millisecond)
+
+	metadata := consumer.GetReceivedEvents()[0].GetMetadata()
+	assert.NotContains(t, metadata, events.DetectionMetadataIsLifer,
+		"species already on the life list must not be flagged as a lifer")
+}
+
+// TestPublishDetectionEvent_LiferNotOnList verifies that a species not on
+// the life list is flagged as a lifer on first detection, and that a repeat
+// detection within the suppression window is not flagged again.
+func TestPublishDetectionEvent_LiferNotOnList(t *testing.T) {
+	consumer := setupEventBusWithConsumer(t)
+
+	det := testDetection()
+	settings := &conf.Settings{Debug: true}
+	settings.Realtime.LifeList.Enabled = true
+	settings.Realtime.LifeList.Species = []string{"Turdus merula_Common Blackbird"} // unrelated species
+
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.EXPECT().
+		GetActiveNotificationHistory(mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).
+		Maybe()
+	mockDS.EXPECT().
+		GetActiveNotificationHistoryByType(mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).
+		Maybe()
+	mockDS.EXPECT().
+		SaveNotificationHistory(mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
+		Return(nil).
+		Maybe()
+
+	tracker := species.NewTrackerFromSettings(mockDS, &conf.SpeciesTrackingSettings{
+		Enabled:                      true,
+		NewSpeciesWindowDays:         testWindowDays,
+		SyncIntervalMinutes:          testSyncIntervalMins,
+		NotificationSuppressionHours: testSuppressionHours,
+	})
+
+	action := &DatabaseAction{
+		Settings:          settings,
+		Result:            det.Result,
+		CorrelationID:     "test-lifer-not-on-list",
+		NewSpeciesTracker: tracker,
+	}
+
+	// First detection: should be flagged as a lifer.
+	action.publishDetectionEvent(false, 30, species.NoveltyStatus{})
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		assert.Len(collect, consumer.GetReceivedEvents(), 1)
+	}, 2*time.Second, 50*time.Millisecond)
+
+	metadata := consumer.GetReceivedEvents()[0].GetMetadata()
+	assert.Equal(t, true, metadata[events.DetectionMetadataIsLifer],
+		"species not on the life list must be flagged as a lifer on first detection")
+
+	// Second detection, same species, still within the suppression window:
+	// must not be flagged again.
+	action.publishDetectionEvent(false, 30, species.NoveltyStatus{})
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		assert.Len(collect, consumer.GetReceivedEvents(), 2)
+	}, 2*time.Second, 50*time.Millisecond)
+
+	metadata2 := consumer.GetReceivedEvents()[1].GetMetadata()
+	assert.NotContains(t, metadata2, events.DetectionMetadataIsLifer,
+		"a repeat detection within the suppression window must not re-flag as a lifer")
+}
+
+// TestPublishDetectionEvent_LiferIndependentOfNewSpecies verifies that lifer
+// status is orthogonal to isNewSpecies: a new-species detection for a species
+// already on the life list must not be flagged as a lifer.
+func TestPublishDetectionEvent_LiferIndependentOfNewSpecies(t *testing.T) {
+	consumer := setupEventBusWithConsumer(t)
+
+	det := testDetection()
+	settings := &conf.Settings{Debug: true}
+	settings.Realtime.LifeList.Enabled = true
+	settings.Realtime.LifeList.Species = []string{det.Result.Species.ScientificName + "_" + det.Result.Species.CommonName}
+
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.EXPECT().
+		GetActiveNotificationHistory(mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).
+		Maybe()
+	mockDS.EXPECT().
+		GetActiveNotificationHistoryByType(mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).
+		Maybe()
+	mockDS.EXPECT().
+		SaveNotificationHistory(mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
+		Return(nil).
+		Maybe()
+
+	tracker := species.NewTrackerFromSettings(mockDS, &conf.SpeciesTrackingSettings{
+		Enabled:                      true,
+		NewSpeciesWindowDays:         testWindowDays,
+		SyncIntervalMinutes:          testSyncIntervalMins,
+		NotificationSuppressionHours: testSuppressionHours,
+	})
+
+	action := &DatabaseAction{
+		Settings:          settings,
+		Result:            det.Result,
+		CorrelationID:     "test-lifer-vs-new-species",
+		NewSpeciesTracker: tracker,
+	}
+
+	// isNewSpecies=true, but species IS on the life list: must publish as new
+	// species without a lifer flag.
+	action.publishDetectionEvent(true, 0, species.NoveltyStatus{})
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		assert.Len(collect, consumer.GetReceivedEvents(), 1)
+	}, 2*time.Second, 50*time.Millisecond)
+
+	received := consumer.GetReceivedEvents()[0]
+	assert.True(t, received.IsNewSpecies())
+	assert.NotContains(t, received.GetMetadata(), events.DetectionMetadataIsLifer)
+}
+
 // TestPublishDetectionEvent_NoEventBus verifies graceful handling when the
 // event bus is not initialized.
 func TestPublishDetectionEvent_NoEventBus(t *testing.T) {

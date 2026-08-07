@@ -644,6 +644,13 @@ func (s *testLegacyInterface) GetActiveNotificationHistory(_ context.Context, af
 	return history, err
 }
 
+// GetActiveNotificationHistoryByType implements datastore.Interface.
+func (s *testLegacyInterface) GetActiveNotificationHistoryByType(_ context.Context, notificationType string, after time.Time) ([]datastore.NotificationHistory, error) {
+	var history []datastore.NotificationHistory
+	err := s.db.Where("notification_type = ? AND expires_at > ?", notificationType, after).Find(&history).Error
+	return history, err
+}
+
 // GetAllDailyEvents implements datastore.Interface.
 func (s *testLegacyInterface) GetAllDailyEvents() ([]datastore.DailyEvents, error) {
 	var events []datastore.DailyEvents

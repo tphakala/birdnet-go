@@ -550,6 +550,25 @@ export interface SpeciesTrackingSettings {
   seasonalTracking: SeasonalTrackingSettings;
 }
 
+// Life list settings: a real-world life list (e.g. imported from eBird),
+// used to distinguish a genuine "lifer" (species never seen anywhere) from
+// speciesTracking's per-install "new species" concept.
+export interface LifeListSettings {
+  enabled: boolean;
+  // "Scientific name_Common name" entries, same convention as SpeciesSettings.include.
+  // A Go nil slice marshals to JSON null, so this arrives as `null` on any
+  // install that hasn't saved a life list yet — never assume it's an array.
+  species: string[] | null;
+}
+
+// The shape callers actually get from the `lifeListSettings` derived store: the
+// nullable wire `species` is normalized to an array there, once, so no consumer
+// has to repeat the guard. LifeListSettings itself stays nullable — it describes
+// what the backend sends, not what the UI consumes.
+export type NormalizedLifeListSettings = Omit<LifeListSettings, 'species'> & {
+  species: string[];
+};
+
 // Extended capture settings
 export interface ExtendedCaptureSettings {
   enabled: boolean;
@@ -590,6 +609,7 @@ export interface RealtimeSettings {
   species?: SpeciesSettings;
   weather?: WeatherSettings;
   speciesTracking?: SpeciesTrackingSettings;
+  lifeList?: LifeListSettings;
   extendedCapture?: ExtendedCaptureSettings;
   ebird?: EBirdSettings;
 }
@@ -1250,6 +1270,20 @@ export const speciesTrackingSettings = derived(
   settingsStore,
   $store => $store.formData.realtime?.speciesTracking
 );
+
+// Life list settings derived store. Normalizes here rather than at each call
+// site: a Go nil slice marshals to JSON null, so `species` arrives as `null` on
+// any install that has never saved a life list. This is the single place that
+// guarantees an array — do not re-guard downstream.
+export const lifeListSettings = derived(settingsStore, ($store): NormalizedLifeListSettings => {
+  const raw = $store.formData.realtime?.lifeList;
+  // Bind before the check: TS won't narrow `raw` from a test on `raw?.species`.
+  const species = raw?.species;
+  return {
+    enabled: raw?.enabled ?? false,
+    species: Array.isArray(species) ? species : [],
+  };
+});
 
 // Extended capture settings derived store
 export const extendedCaptureSettings = derived(
