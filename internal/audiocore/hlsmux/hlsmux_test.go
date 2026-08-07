@@ -3,6 +3,7 @@ package hlsmux
 import (
 	"bytes"
 	"errors"
+	"math"
 	"runtime"
 	"strconv"
 	"strings"
@@ -86,8 +87,11 @@ func TestNewValidatesConfig(t *testing.T) {
 		errMsg string
 	}{
 		{"zero codec", func(c *Config) { c.Codec = Codec{} }, "codec is not set"},
-		{"zero sample rate", func(c *Config) { c.SampleRate = 0 }, "sample rate must be positive"},
-		{"negative sample rate", func(c *Config) { c.SampleRate = -1 }, "sample rate must be positive"},
+		{"zero sample rate", func(c *Config) { c.SampleRate = 0 }, "below the minimum"},
+		{"negative sample rate", func(c *Config) { c.SampleRate = -1 }, "below the minimum"},
+		{"sample rate below floor", func(c *Config) { c.SampleRate = 7999 }, "below the minimum"},
+		{"sample rate above ceiling", func(c *Config) { c.SampleRate = 384001 }, "exceeds the maximum"},
+		{"extreme sample rate overflow case", func(c *Config) { c.SampleRate = math.MaxInt32 }, "exceeds the maximum"},
 		{"three channels", func(c *Config) { c.Channels = 3 }, "channel count must be 1 or 2"},
 		{"zero channels", func(c *Config) { c.Channels = 0 }, "channel count must be 1 or 2"},
 		{"negative bitrate", func(c *Config) { c.BitrateKbps = -1 }, "bitrate must not be negative"},
@@ -1118,11 +1122,6 @@ func TestNewRejectsSegmentTargetBelowOneAccessUnit(t *testing.T) {
 			name: "a large-frame codec needs a longer segment",
 			rate: testRate, segment: 100 * time.Millisecond,
 			frameSizes: []int{8192}, errMsg: "smaller than codec",
-		},
-		{
-			name: "a 1 Hz rate yields less than one sample per segment",
-			rate: 1, segment: MinSegmentDuration,
-			frameSizes: []int{aacFrame}, errMsg: "less than one sample",
 		},
 	}
 
