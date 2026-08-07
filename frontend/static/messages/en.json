@@ -980,7 +980,21 @@
     },
     "history": {
       "title": "Detection History",
-      "comingSoon": "History tracking coming soon..."
+      "firstHeard": "First heard",
+      "lastHeard": "Last heard",
+      "totalDetections": "Detections",
+      "dailyWindow": "Daily detections, 30 days to {date}",
+      "recentTitle": "Other recent detections",
+      "viewAll": "View all {count} in Detections",
+      "noOthers": "This is the only detection of this species so far.",
+      "loading": "Loading species history...",
+      "loadError": "Could not load history for this species.",
+      "unavailable": "History is not available for this detection.",
+      "aria": {
+        "sparkline": "Daily detection counts for the 30 days ending {date}",
+        "recentList": "Other recent detections of this species",
+        "openDetection": "Open detection from {timestamp}"
+      }
     },
     "notes": {
       "title": "Notes & Comments",
