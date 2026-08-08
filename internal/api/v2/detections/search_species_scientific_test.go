@@ -2,6 +2,7 @@ package detections
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"testing"
 
@@ -70,6 +71,29 @@ func TestResolveCommonNameSubstrings(t *testing.T) {
 		assert.Nil(t, c.resolveCommonNameSubstrings("   "))
 		assert.Nil(t, c.resolveCommonNameSubstrings("unknown"))
 	})
+
+	t.Run("sorts before capping broad matches deterministically", func(t *testing.T) {
+		t.Parallel()
+		const total = maxSearchSpeciesScientific + 50
+		folded := make(map[string]string, total)
+		for i := range total {
+			folded[fmt.Sprintf("Genus %03d", i)] = apicore.NormalizeForLookup("Barn Owl")
+		}
+		broad := &Handler{
+			Core:                    &apicore.Core{},
+			loadFoldedCommonNameMap: func() map[string]string { return folded },
+		}
+
+		got := broad.resolveCommonNameSubstrings("barn owl")
+		// Every entry matches, so the cap must trim to the maximum.
+		require.Len(t, got, maxSearchSpeciesScientific)
+		// Sorting happens before the cap: the kept window is the first N names in
+		// sorted order, so a cap applied before the sort (returning a random N of
+		// the 150) would fail these deterministic bounds.
+		assert.Equal(t, "Genus 000", got[0])
+		assert.Equal(t, fmt.Sprintf("Genus %03d", maxSearchSpeciesScientific-1), got[len(got)-1])
+		assert.NotContains(t, got, fmt.Sprintf("Genus %03d", maxSearchSpeciesScientific))
+	})
 }
 
 // TestMergeSpeciesScientific verifies deterministic, bounded union of server-
@@ -103,7 +127,7 @@ func TestMergeSpeciesScientific(t *testing.T) {
 		}
 
 		got := mergeSpeciesScientific([]string{"Tyto alba", "Tyto furcata"}, clientMatches)
-		assert.Len(t, got, maxSearchSpeciesScientific)
+		require.Len(t, got, maxSearchSpeciesScientific)
 		assert.Equal(t, []string{"Tyto alba", "Tyto furcata"}, got[:2])
 		assert.Contains(t, got, "Species 0")
 		assert.NotContains(t, got, "Species "+strconv.Itoa(maxSearchSpeciesScientific-1))
