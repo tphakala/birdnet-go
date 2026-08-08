@@ -28,6 +28,9 @@ ARG NEO_SHA256_ZE_GPU=8bef9f24e03f826f93c076081bda13c6ac3afbd9e42b9fb8f298fab652
 # what intel-opencl-icd-legacy1/intel-level-zero-gpu-legacy1 depend on.
 # See: https://github.com/intel/compute-runtime/blob/master/LEGACY_PLATFORMS.md
 ARG LEGACY_NEO_VERSION=24.35.30872.22
+# The level-zero-gpu package carries its own 1.3.x version string that differs
+# from the 24.35.x compute-runtime release tag it ships under.
+ARG LEGACY_ZE_GPU_VERSION=1.3.30872.22
 ARG LEGACY_IGC_TAG=igc-1.0.17537.20
 ARG LEGACY_IGC_VERSION=1.0.17537.20
 ARG LEGACY_SHA256_IGC_CORE=7f2af5b0e567a43625a748effb744d0b3c96acf805467d099e46eee617e11b2a
@@ -272,6 +275,7 @@ ARG NEO_SHA256_OPENCL_ICD
 ARG NEO_SHA256_IGDGMM
 ARG NEO_SHA256_ZE_GPU
 ARG LEGACY_NEO_VERSION
+ARG LEGACY_ZE_GPU_VERSION
 ARG LEGACY_IGC_TAG
 ARG LEGACY_IGC_VERSION
 ARG LEGACY_SHA256_IGC_CORE
@@ -292,7 +296,7 @@ RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
         "https://github.com/intel/intel-graphics-compiler/releases/download/${LEGACY_IGC_TAG}/intel-igc-core_${LEGACY_IGC_VERSION}_amd64.deb" \
         "https://github.com/intel/intel-graphics-compiler/releases/download/${LEGACY_IGC_TAG}/intel-igc-opencl_${LEGACY_IGC_VERSION}_amd64.deb" \
         "https://github.com/intel/compute-runtime/releases/download/${LEGACY_NEO_VERSION}/intel-opencl-icd-legacy1_${LEGACY_NEO_VERSION}_amd64.deb" \
-        "https://github.com/intel/compute-runtime/releases/download/${LEGACY_NEO_VERSION}/intel-level-zero-gpu-legacy1_1.3.30872.22_amd64.deb" && \
+        "https://github.com/intel/compute-runtime/releases/download/${LEGACY_NEO_VERSION}/intel-level-zero-gpu-legacy1_${LEGACY_ZE_GPU_VERSION}_amd64.deb" && \
       printf '%s\n' \
         "${NEO_SHA256_IGC_CORE} intel-igc-core-2_${IGC_VERSION}_amd64.deb" \
         "${NEO_SHA256_IGC_OPENCL} intel-igc-opencl-2_${IGC_VERSION}_amd64.deb" \
@@ -302,7 +306,7 @@ RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
         "${LEGACY_SHA256_IGC_CORE} intel-igc-core_${LEGACY_IGC_VERSION}_amd64.deb" \
         "${LEGACY_SHA256_IGC_OPENCL} intel-igc-opencl_${LEGACY_IGC_VERSION}_amd64.deb" \
         "${LEGACY_SHA256_OPENCL_ICD} intel-opencl-icd-legacy1_${LEGACY_NEO_VERSION}_amd64.deb" \
-        "${LEGACY_SHA256_ZE_GPU} intel-level-zero-gpu-legacy1_1.3.30872.22_amd64.deb" \
+        "${LEGACY_SHA256_ZE_GPU} intel-level-zero-gpu-legacy1_${LEGACY_ZE_GPU_VERSION}_amd64.deb" \
         | sha256sum -c - && \
       dpkg -i *.deb && \
       rm -rf /tmp/neo /var/lib/apt/lists/*; \
