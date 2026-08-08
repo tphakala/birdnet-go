@@ -43,9 +43,16 @@ func TestResolveSQLitePathNeverProducesBareDSN(t *testing.T) {
 	t.Parallel()
 
 	const pragmas = "_journal_mode=WAL&_busy_timeout=30000"
-	for _, configured := range []string{"", "   ", "\t"} {
-		dsn := buildSQLiteDSN(resolveSQLitePath(configured), pragmas)
-		assert.NotEmpty(t, dsn)
-		assert.NotEqual(t, byte('?'), dsn[0], "DSN must not start with '?' for input %q", configured)
+	for name, configured := range map[string]string{
+		"empty":  "",
+		"spaces": "   ",
+		"tab":    "\t",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			dsn := buildSQLiteDSN(resolveSQLitePath(configured), pragmas)
+			assert.NotEmpty(t, dsn)
+			assert.NotEqual(t, byte('?'), dsn[0], "DSN must not start with '?' for input %q", configured)
+		})
 	}
 }

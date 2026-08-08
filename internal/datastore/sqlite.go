@@ -640,12 +640,16 @@ func (s *SQLiteStore) UpdateNote(id string, updates map[string]any) error {
 	return s.DB.Model(&Note{}).Where("id = ?", id).Updates(updates).Error
 }
 
-// GetDBPath returns the database file path for telemetry integration
+// GetDBPath returns the database file path for telemetry integration. It
+// resolves a blank configured path to the same default Open() falls back to, so
+// callers never see an empty path while the connection actually runs against the
+// default database.
 func (s *SQLiteStore) GetDBPath() string {
-	if s.Settings != nil && s.Settings.Output.SQLite.Path != "" {
-		return s.Settings.Output.SQLite.Path
+	var configured string
+	if s.Settings != nil {
+		configured = s.Settings.Output.SQLite.Path
 	}
-	return ""
+	return resolveSQLitePath(configured)
 }
 
 // CheckpointWAL forces a checkpoint of the Write-Ahead Log to ensure all changes are written to the main database file.
