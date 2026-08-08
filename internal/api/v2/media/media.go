@@ -470,7 +470,7 @@ func (c *Handler) translateSecureFSError(ctx echo.Context, err error, userMsg st
 			logger.Bool("tunneled", isTunneled),
 			logger.String("tunnel_provider", tunnelProvider),
 		)
-		return c.HandleError(ctx, err, "Request timed out", http.StatusRequestTimeout)
+		return c.HandleError(ctx, err, requestTimeoutMsg, http.StatusRequestTimeout)
 	case errors.Is(err, context.Canceled):
 		c.LogInfoIfEnabled("Request canceled by client",
 			logger.Error(err),
