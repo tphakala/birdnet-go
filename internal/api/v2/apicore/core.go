@@ -251,6 +251,12 @@ func (c *Core) EBird() *ebird.Client {
 // on a live settings change. The client is cheap to build (no network I/O).
 func (c *Core) buildEBirdClient(settings *conf.Settings) *ebird.Client {
 	log := GetLogger()
+	if settings == nil {
+		// Defensive: conf.Setting() can return nil if settings cannot be loaded.
+		// Treat it as "no eBird client" rather than dereferencing a nil settings.
+		log.Warn("Cannot build eBird client: settings unavailable")
+		return nil
+	}
 	if !settings.Realtime.EBird.Enabled {
 		log.Debug("eBird integration disabled")
 		return nil

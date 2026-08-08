@@ -68,7 +68,9 @@ func TestCoreEBirdAccessor(t *testing.T) {
 // take effect without a restart (issue #4102).
 func TestReconfigureEBird(t *testing.T) {
 	// Not parallel: mutates the global conf singleton via conf.StoreSettings.
-	orig := conf.Setting()
+	// Snapshot with GetSettings (reads the published pointer) rather than Setting
+	// (which can lazily load from disk and add I/O and log noise to a unit test).
+	orig := conf.GetSettings()
 	t.Cleanup(func() { conf.StoreSettings(orig) })
 
 	c := &Core{}

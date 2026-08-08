@@ -135,13 +135,17 @@ type taxonomyLookupResult struct {
 // under both, 56 only under the current name and 27 only under the legacy one. Trying
 // one name alone therefore drops the taxonomy block for a knowable species.
 func (c *Handler) lookupTaxonomyEitherName(ctx context.Context, primary, secondary string) *taxonomyLookupResult {
-	if result := c.lookupTaxonomyTree(ctx, primary); result != nil {
+	// Load the eBird client once so both name attempts use the same snapshot; it can
+	// be swapped concurrently by a settings hot-reload (ReconfigureEBird), and a
+	// per-call reload could otherwise make the second attempt use a different client.
+	client := c.EBird()
+	if result := c.lookupTaxonomyTree(ctx, client, primary); result != nil {
 		return result
 	}
 	if strings.EqualFold(primary, secondary) {
 		return nil
 	}
-	return c.lookupTaxonomyTree(ctx, secondary)
+	return c.lookupTaxonomyTree(ctx, client, secondary)
 }
 
 // resolveEitherName localizes a common name under whichever of the two scientific names
@@ -159,7 +163,7 @@ func (c *Handler) resolveEitherName(bn *classifier.Orchestrator, primary, second
 
 // lookupTaxonomyTree attempts to find taxonomy for a species, trying local DB first then eBird.
 // Returns nil result (not error) if taxonomy is unavailable from both sources.
-func (c *Handler) lookupTaxonomyTree(ctx context.Context, scientificName string) *taxonomyLookupResult {
+func (c *Handler) lookupTaxonomyTree(ctx context.Context, client *ebird.Client, scientificName string) *taxonomyLookupResult {
 	// Try local taxonomy database first (fast, no network)
 	if c.TaxonomyDB != nil {
 		tree, err := c.TaxonomyDB.BuildFamilyTree(scientificName)
@@ -170,9 +174,8 @@ func (c *Handler) lookupTaxonomyTree(ctx context.Context, scientificName string)
 		c.Debug("Local taxonomy lookup failed for %s: %v, falling back to eBird API", scientificName, err)
 	}
 
-	// Fall back to eBird API. Load the client once; it may be swapped concurrently
-	// by a settings hot-reload (ReconfigureEBird).
-	if client := c.EBird(); client != nil {
+	// Fall back to eBird API using the client snapshot the caller loaded.
+	if client != nil {
 		tree, err := client.BuildFamilyTree(ctx, scientificName)
 		if err != nil {
 			c.Debug("Failed to get taxonomy info from eBird for species %s: %v", scientificName, err)
