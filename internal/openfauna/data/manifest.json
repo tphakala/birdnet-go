@@ -1,0 +1,6 @@
+{
+  "schema_version": "2.1.0",
+  "species_count": 15439,
+  "alias_count": 237,
+  "source": "openfauna-build"
+}

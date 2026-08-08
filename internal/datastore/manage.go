@@ -457,6 +457,7 @@ func legacyEntities() []legacyEntityMapping {
 		{&DynamicThreshold{}, "dynamic_thresholds"},
 		{&ThresholdEvent{}, "threshold_events"},            // BG-59: Threshold change history
 		{&NotificationHistory{}, "notification_histories"}, // BG-17: Notification suppression persistence
+		{&SpeciesNote{}, "species_notes"},                  // Species guide: per-species user notes
 	}
 }
 

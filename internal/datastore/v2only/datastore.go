@@ -131,6 +131,7 @@ type Datastore struct {
 	notification repository.NotificationHistoryRepository
 	appEvent     repository.AppEventRepository
 	log          logger.Logger
+	metricsMu    sync.RWMutex // guards metrics (SetMetrics can swap it concurrently)
 	metrics      *datastore.Metrics
 	timezone     *time.Location
 	suncalc      *suncalc.SunCalc
@@ -238,6 +239,13 @@ func New(cfg *Config) (*Datastore, error) {
 	// Register GORM callbacks for query latency tracking.
 	dbCounters := &dbstats.Counters{}
 	dbstats.RegisterCallbacks(db, dbCounters)
+
+	// Auto-migrate the species_notes table. It is a v1-origin entity used by the
+	// species guide feature; the guide_caches table is migrated by the guide
+	// store itself once GormDB() is wired.
+	if err := db.AutoMigrate(&datastore.SpeciesNote{}); err != nil {
+		return nil, fmt.Errorf("failed to migrate species_notes table: %w", err)
+	}
 
 	// Get or verify species label type ID.
 	// Uses the helper so a zero id (FK orphan) causes construction to fail early.
@@ -469,7 +477,19 @@ func (ds *Datastore) Close() error {
 
 // SetMetrics sets the metrics instance.
 func (ds *Datastore) SetMetrics(metrics *datastore.Metrics) {
+	ds.metricsMu.Lock()
 	ds.metrics = metrics
+	ds.metricsMu.Unlock()
+}
+
+// getMetrics returns the current metrics instance under the read lock, mirroring the
+// legacy store's accessor so hot-path readers (e.g. species-note CRUD) never race a
+// concurrent SetMetrics swap.
+func (ds *Datastore) getMetrics() *datastore.Metrics {
+	ds.metricsMu.RLock()
+	m := ds.metrics
+	ds.metricsMu.RUnlock()
+	return m
 }
 
 // Manager returns the underlying database manager.
@@ -1844,6 +1864,51 @@ func (ds *Datastore) DeleteNoteComment(commentID string) error {
 		return err
 	}
 	return ds.detection.DeleteComment(ctx, id)
+}
+
+// ============================================================
+// Species Guide Note Methods
+// ============================================================
+//
+// Species guide notes persist to the species_notes table on the v2 database
+// (auto-migrated in New). The implementation itself is shared with the legacy
+// DataStore via datastore.SpeciesNoteOps — both stores back the same API
+// surface, so they must agree on normalization, ordering, the result limit,
+// which note IDs are accepted, and lock-retry behaviour. These methods only
+// bind the ops to this store's GORM handle and metrics.
+
+// GormDB exposes the underlying GORM handle so the species guide cache store can
+// build and query its guide_caches table on the v2 database.
+func (ds *Datastore) GormDB() *gorm.DB { return ds.manager.DB() }
+
+// speciesNotes binds the shared species-note operations to this store.
+func (ds *Datastore) speciesNotes() datastore.SpeciesNoteOps {
+	return datastore.NewSpeciesNoteOps(ds.manager.DB(), ds.getMetrics())
+}
+
+// GetSpeciesNotes returns all notes for a species, newest first.
+func (ds *Datastore) GetSpeciesNotes(ctx context.Context, scientificName string) ([]datastore.SpeciesNote, error) {
+	return ds.speciesNotes().GetSpeciesNotes(ctx, scientificName)
+}
+
+// GetSpeciesNoteByID returns a single note by ID, or ErrSpeciesNoteNotFound.
+func (ds *Datastore) GetSpeciesNoteByID(ctx context.Context, id uint) (*datastore.SpeciesNote, error) {
+	return ds.speciesNotes().GetSpeciesNoteByID(ctx, id)
+}
+
+// SaveSpeciesNote persists a new note after normalizing its fields.
+func (ds *Datastore) SaveSpeciesNote(ctx context.Context, note *datastore.SpeciesNote) error {
+	return ds.speciesNotes().SaveSpeciesNote(ctx, note)
+}
+
+// UpdateSpeciesNote updates a note's entry, or returns ErrSpeciesNoteNotFound.
+func (ds *Datastore) UpdateSpeciesNote(ctx context.Context, noteID, entry string) error {
+	return ds.speciesNotes().UpdateSpeciesNote(ctx, noteID, entry)
+}
+
+// DeleteSpeciesNote removes a note by ID, or returns ErrSpeciesNoteNotFound.
+func (ds *Datastore) DeleteSpeciesNote(ctx context.Context, noteID string) error {
+	return ds.speciesNotes().DeleteSpeciesNote(ctx, noteID)
 }
 
 // ============================================================

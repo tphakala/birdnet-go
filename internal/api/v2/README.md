@@ -290,6 +290,36 @@ The two verbs report differently under the same `skippedFields` response key, so
 | GET    | `/species/:code/thumbnail`          | `GetSpeciesThumbnail`     | ❌   | Get bird thumbnail image by species code (redirects to image URL) |
 | GET    | `/species/dictionary/:locale`       | `ServeSpeciesDictionary`  | ❌   | Precompressed per-locale species name dictionary (gzip JSON)      |
 
+### Species Guide (`speciesguide/speciesguide.go`)
+
+Every endpoint in this domain is gated by `realtime.dashboard.speciesguide.enabled` (404 when disabled). Guide and similar are rate-limited. All notes endpoints — reads included — require authentication, since notes are user-authored and may contain sensitive content.
+
+Per-section `show*` gating is **not** uniform, so do not assume a flag stops an endpoint serving:
+
+| Flag                 | Effect                                                                                                                                                              |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `showSimilarSpecies` | Gates `/similar` entirely (404 when off).                                                                                                                           |
+| `showNotes`          | Gates the notes endpoints entirely (404 when off).                                                                                                                  |
+| `showEnrichments`    | Shapes the `/guide` response only — omits `current_season` and `external_links`. The endpoint still returns 200 with the description, quality, source and features. |
+| `showTaxonomy`       | Shapes the response only; the endpoint still serves.                                                                                                                |
+
+`/guide` itself is gated **only** by `enabled`. The `features` block in its response reports every flag's current value so the client can gate its own sections against a server-authoritative copy rather than its own possibly-stale settings.
+
+Status and shape notes, since none of these are inferable from the table:
+
+- `/guide` answers **503** (not 502) when no cache or provider can serve it, so a client can distinguish "temporarily unavailable, retry" from an upstream fault.
+- `/guide` returns **200 with `external_links`** for a species that has offline links but no prose. **404** is reserved for a species with nothing to offer at all. Previously a prose-less species 404'd and its links were discarded, while `/similar` returned links for that same species — the two endpoints disagreed about the same bird.
+- `/similar` returns **200 with `guide_unavailable: true`** when the guide cache could not be consulted, so a degraded rail is distinguishable from "these species genuinely have no guides". Clients should surface that state rather than rendering an empty list.
+
+| Method | Route                               | Handler             | Auth | Description                                                                                                           |
+| ------ | ----------------------------------- | ------------------- | ---- | --------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/species/:scientific_name/guide`   | `GetSpeciesGuide`   | ❌   | Offline species guide: taxonomy, localized common name, external links; optional Wikipedia description. Rate-limited. |
+| GET    | `/species/:scientific_name/similar` | `GetSimilarSpecies` | ❌   | Similar-species (same-genus, then same-family) comparison with per-candidate guide summaries/links. Rate-limited.     |
+| GET    | `/species/:scientific_name/notes`   | `GetSpeciesNotes`   | ✅   | List user notes for a species                                                                                         |
+| POST   | `/species/:scientific_name/notes`   | `CreateSpeciesNote` | ✅   | Create a user note for a species                                                                                      |
+| PUT    | `/species/notes/:id`                | `UpdateSpeciesNote` | ✅   | Update a user note by id                                                                                              |
+| DELETE | `/species/notes/:id`                | `DeleteSpeciesNote` | ✅   | Delete a user note by id                                                                                              |
+
 ### Server-Sent Events (`sse/sse.go`)
 
 | Method | Route                 | Handler             | Auth | Description                  |
