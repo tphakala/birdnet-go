@@ -250,7 +250,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	// delete or rename a species-config entry by omitting its key.
 	if err := mergeFullSettings(updated, requestBody); err != nil {
 		c.LogAPIRequest(ctx, logger.LogLevelError, "Failed to merge settings update", logger.Error(err))
-		return c.HandleError(ctx, err, "Failed to parse request body", http.StatusBadRequest)
+		return c.HandleError(ctx, err, "Failed to apply settings update", http.StatusBadRequest)
 	}
 
 	// Restore redacted secret placeholders to their live values so the merge does
@@ -869,6 +869,12 @@ func settingsFieldType(t reflect.Type, key string) reflect.Type {
 	}
 
 	for f := range t.Fields() {
+		// encoding/json ignores unexported fields, so mirror that: an unexported
+		// field whose name matches key must not shadow the exported field the
+		// request key actually refers to.
+		if !f.IsExported() {
+			continue
+		}
 		name := f.Name
 		tagged := false
 		if tag := f.Tag.Get("json"); tag != "" {

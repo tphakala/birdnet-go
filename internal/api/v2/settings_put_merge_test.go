@@ -59,7 +59,7 @@ func TestPutNarrowUpdatePreservesOmittedFields(t *testing.T) {
 	got := controller.Settings.Load()
 	assert.InDelta(t, 1.2, got.BirdNET.Sensitivity, 0.0001, "the field that was sent must change")
 	// Everything omitted from the body must be preserved (this is the bug).
-	assert.InDelta(t, 40.7128, got.BirdNET.Latitude, 0.0001, "latitude must not reset to 0")
+	assert.InDelta(t, testNewYorkLatitude, got.BirdNET.Latitude, 0.0001, "latitude must not reset to 0")
 	assert.InDelta(t, testNewYorkLongitude, got.BirdNET.Longitude, 0.0001, "longitude must not reset to 0")
 	assert.InDelta(t, 0.8, got.BirdNET.Threshold, 0.0001, "threshold must be preserved")
 	assert.Equal(t, "/data/birdnet.db", got.Output.SQLite.Path, "sqlite path must not be blanked")
