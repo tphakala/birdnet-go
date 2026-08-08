@@ -10,7 +10,6 @@ import (
 	"reflect"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -232,34 +231,52 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	// StoreSettings calls (range filter, etc.) cannot desynchronize it.
 	publishGlobal := c.isGlobalOwner
 
-	// Parse the request body
-	var updatedSettings conf.Settings
-	if err := ctx.Bind(&updatedSettings); err != nil {
-		c.LogAPIRequest(ctx, logger.LogLevelError, "Failed to bind request body for settings update", logger.Error(err))
+	// Parse the request body as raw JSON. Binding into a typed conf.Settings (the
+	// previous behavior) filled every field the body omitted with its Go zero
+	// value, which the reflective apply then wrote over the live value, silently
+	// blanking unmentioned settings (issue #3993: lat/long reset to 0,0,
+	// output.sqlite.path cleared, species lists and integrations dropped). Merging
+	// the raw JSON into the clone preserves keys the caller did not send.
+	requestBody, err := parseAndValidateJSON(ctx)
+	if err != nil {
+		c.LogAPIRequest(ctx, logger.LogLevelError, "Failed to parse request body for settings update", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to parse request body", http.StatusBadRequest)
 	}
 
-	// Restore redacted secret fields to their current values so the update
-	// logic does not overwrite real secrets with the placeholder. Operate on
-	// updated (clone) as the canonical destination, not on current.
-	if err := restoreRedactedSecrets(updated, &updatedSettings); err != nil {
+	// Deep-merge the incoming JSON into the clone, preserving keys absent from the
+	// request. This is the same omission-preserving merge PATCH uses per section,
+	// applied to the whole settings object; Go map-typed fields (species config,
+	// taxonomy synonyms) are replaced wholesale when present so the UI can still
+	// delete or rename a species-config entry by omitting its key.
+	if err := mergeFullSettings(updated, requestBody); err != nil {
+		c.LogAPIRequest(ctx, logger.LogLevelError, "Failed to merge settings update", logger.Error(err))
+		return c.HandleError(ctx, err, "Failed to apply settings update", http.StatusBadRequest)
+	}
+
+	// Restore redacted secret placeholders to their live values so the merge does
+	// not persist the placeholder over a real secret. current is the source of
+	// truth for pre-update secrets (same argument order and ordering as PATCH).
+	if err := restoreRedactedSecrets(current, updated); err != nil {
 		c.LogAPIRequest(ctx, logger.LogLevelWarn, "Redacted sentinel validation failed", logger.Error(err))
 		return c.HandleError(ctx, err, "Cannot save: some secret fields contain the redacted placeholder because their identifying key was changed while the secret was hidden. Re-enter the secret values.", http.StatusBadRequest)
 	}
 
-	// Apply allowed field updates to the clone.
-	skippedFields, err := updateAllowedSettingsWithTracking(updated, &updatedSettings)
-	if err != nil {
-		c.LogAPIRequest(ctx, logger.LogLevelError, "Error updating allowed settings fields", logger.Error(err), logger.Any("skipped_fields", skippedFields))
-		return c.HandleError(ctx, err, "Failed to update settings", http.StatusInternalServerError)
-	}
+	// Enforce the blocked-field map: revert every blocked leaf to its pre-update
+	// value. The merge above wrote whatever the request carried, so this is what
+	// stops a client changing a never-updatable-via-API field, and it is what
+	// restores Security.BasicAuth.ClientID/ClientSecret, which sanitizeSettingsForAPI
+	// BLANKS (not redacts) so a full-object round trip carries empty strings for
+	// them. Same mechanism PATCH uses (restoreBlockedFields), replacing the
+	// field-by-field skip the old typed walk performed.
+	skippedFields := restoreBlockedFields(current, updated)
 	if len(skippedFields) > 0 {
-		// Debug, not Warn as on the PATCH path, and deliberately so: this walk
-		// appends every blocked and every yaml:"-" field it passes regardless of
-		// what the request contained, so the list is long on every request and
-		// says nothing about client intent. PATCH reports only fields it actually
-		// had to revert, which is worth a Warn.
-		c.LogAPIRequest(ctx, logger.LogLevelDebug, "Skipped protected fields during settings update", logger.Any("skipped_fields", skippedFields))
+		// Debug, not Warn as on the PATCH path, and deliberately so: the frontend
+		// sends the full settings object on every save, and the blanked BasicAuth
+		// client credentials are reverted (and thus reported) on every save that
+		// has BasicAuth configured. Logging that at Warn would fire on every save.
+		// PATCH warns because it only touches the security section when the client
+		// actually PATCHes it.
+		c.LogAPIRequest(ctx, logger.LogLevelDebug, "Reverted blocked settings fields during full settings update", logger.Any("skipped_fields", skippedFields))
 	}
 
 	// Normalize species config keys to lowercase for case-insensitive matching.
@@ -356,224 +373,6 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		"restart_required": restart.IsRestartRequired(),
 		"restart_reasons":  restart.GetRestartReasons(),
 	})
-}
-
-// updateAllowedSettingsWithTracking updates only the allowed fields and returns a list of skipped fields
-func updateAllowedSettingsWithTracking(current, updated *conf.Settings) ([]string, error) {
-	var skippedFields []string
-	err := updateAllowedFieldsRecursivelyWithTracking(
-		reflect.ValueOf(current).Elem(),
-		reflect.ValueOf(updated).Elem(),
-		getBlockedFieldMap(), // Using blacklist instead of whitelist
-		&skippedFields,
-		"",
-	)
-	return skippedFields, err
-}
-
-// updateAllowedFieldsRecursivelyWithTracking handles recursive field updates and tracks skipped fields
-// Using BLACKLIST approach - fields are allowed by default unless blocked or marked with yaml:"-"
-func updateAllowedFieldsRecursivelyWithTracking(
-	currentValue, updatedValue reflect.Value,
-	blockedFields map[string]any,
-	skippedFields *[]string,
-	prefix string,
-) error {
-	if currentValue.Kind() != reflect.Struct || updatedValue.Kind() != reflect.Struct {
-		return fmt.Errorf("both values must be structs")
-	}
-
-	//nolint:gocritic // Need index i for getFieldInfo() and Field(i) calls
-	for i := range currentValue.NumField() {
-		fieldInfo := currentValue.Type().Field(i)
-		fieldName := fieldInfo.Name
-		currentField := currentValue.Field(i)
-
-		// Skip fields marked with yaml:"-" (runtime-only fields)
-		yamlTag := fieldInfo.Tag.Get("yaml")
-		if yamlTag == "-" {
-			fieldPath := prefix
-			if fieldPath != "" {
-				fieldPath += "."
-			}
-			fieldPath += fieldName
-			*skippedFields = append(*skippedFields, fieldPath+" (runtime-only)")
-			continue
-		}
-
-		// Get updated field and skip if not valid
-		updatedField := updatedValue.FieldByName(fieldName)
-		if !updatedField.IsValid() {
-			continue
-		}
-
-		// Get field info (path and json tag)
-		fieldPath, jsonTag := getFieldInfo(currentValue, i, fieldName, prefix)
-
-		// Process the field based on permissions and type
-		if err := processField(currentField, updatedField, fieldName, fieldPath, jsonTag,
-			blockedFields, skippedFields); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// getFieldInfo extracts path and JSON tag information for a field
-func getFieldInfo(valueType reflect.Value, fieldIndex int, fieldName, prefix string) (fieldPath, jsonTag string) {
-	// Get JSON tag name for more readable logging
-	jsonTag = valueType.Type().Field(fieldIndex).Tag.Get("json")
-	if jsonTag == "" {
-		jsonTag = fieldName
-	} else {
-		// Extract the name part before any comma in the json tag
-		if commaIdx := strings.Index(jsonTag, ","); commaIdx > 0 {
-			jsonTag = jsonTag[:commaIdx]
-		}
-	}
-
-	// Build the full path to this field
-	fieldPath = fieldName
-	if prefix != "" {
-		fieldPath = prefix + "." + fieldName
-	}
-
-	return fieldPath, jsonTag
-}
-
-// processField handles a single field based on its permissions and type
-func processField(
-	currentField, updatedField reflect.Value,
-	fieldName, fieldPath, jsonTag string,
-	blockedFields map[string]any,
-	skippedFields *[]string,
-) error {
-	// Check field permissions using blacklist approach
-	blockedSubfields, isBlockedAsMap := blockedFields[fieldName].(map[string]any)
-
-	if !isBlockedAsMap {
-		// Handle field based on permission (if it's a simple boolean permission or not in blocklist)
-		return handleFieldPermission(currentField, updatedField, fieldName, fieldPath, jsonTag,
-			blockedFields, skippedFields)
-	}
-
-	// Handle field based on its type (struct, pointer, or primitive)
-	return handleFieldByType(currentField, updatedField, fieldName, fieldPath, jsonTag,
-		blockedSubfields, skippedFields)
-}
-
-// handleFieldPermission processes a field based on its permission settings
-func handleFieldPermission(
-	currentField, updatedField reflect.Value,
-	fieldName, fieldPath, jsonTag string,
-	blockedFields map[string]any,
-	skippedFields *[]string,
-) error {
-	// INVERTED LOGIC: Default is to ALLOW unless explicitly blocked
-	// Check if field is in the blocklist
-	if blocked, exists := blockedFields[fieldName]; exists {
-		if blockedBool, isBool := blocked.(bool); isBool && blockedBool {
-			// Field is explicitly blocked
-			*skippedFields = append(*skippedFields, fieldPath)
-			return nil // Skip this field
-		}
-	}
-
-	// By default, the field is allowed to be updated
-	if currentField.CanSet() {
-		// Check if we need to validate this field
-		validationErr := validateField(fieldName, updatedField.Interface())
-		if validationErr != nil {
-			return fmt.Errorf("validation failed for field %s: %w", jsonTag, validationErr)
-		}
-		currentField.Set(updatedField)
-	}
-
-	return nil
-}
-
-// handleFieldByType processes a field based on its type (struct, pointer, or primitive)
-func handleFieldByType(
-	currentField, updatedField reflect.Value,
-	fieldName, fieldPath, jsonTag string,
-	blockedSubfields map[string]any,
-	skippedFields *[]string,
-) error {
-	// For struct fields
-	if currentField.Kind() == reflect.Struct && updatedField.Kind() == reflect.Struct {
-		return handleStructField(currentField, updatedField, fieldPath, blockedSubfields, skippedFields)
-	}
-
-	// For fields that are pointers to structs
-	if currentField.Kind() == reflect.Pointer && updatedField.Kind() == reflect.Pointer {
-		return handlePointerField(currentField, updatedField, fieldPath, blockedSubfields, skippedFields)
-	}
-
-	// For primitive fields or other types
-	return handlePrimitiveField(currentField, updatedField, fieldName, jsonTag)
-}
-
-// handleStructField handles struct fields recursively
-func handleStructField(
-	currentField, updatedField reflect.Value,
-	fieldPath string,
-	blockedSubfields map[string]any,
-	skippedFields *[]string,
-) error {
-	return updateAllowedFieldsRecursivelyWithTracking(
-		currentField,
-		updatedField,
-		blockedSubfields,
-		skippedFields,
-		fieldPath,
-	)
-}
-
-// handlePointerField handles pointer fields, including nil pointer cases
-func handlePointerField(
-	currentField, updatedField reflect.Value,
-	fieldPath string,
-	blockedSubfields map[string]any,
-	skippedFields *[]string,
-) error {
-	// Create a new struct if current is nil but updated is not
-	if currentField.IsNil() && !updatedField.IsNil() {
-		newStruct := reflect.New(currentField.Type().Elem())
-		currentField.Set(newStruct)
-	}
-
-	// If both pointers are non-nil and point to structs, update recursively
-	if !currentField.IsNil() && !updatedField.IsNil() {
-		if currentField.Elem().Kind() == reflect.Struct && updatedField.Elem().Kind() == reflect.Struct {
-			return updateAllowedFieldsRecursivelyWithTracking(
-				currentField.Elem(),
-				updatedField.Elem(),
-				blockedSubfields,
-				skippedFields,
-				fieldPath,
-			)
-		}
-	}
-
-	return nil
-}
-
-// handlePrimitiveField handles primitive fields (int, string, etc.)
-func handlePrimitiveField(
-	currentField, updatedField reflect.Value,
-	fieldName, jsonTag string,
-) error {
-	if currentField.CanSet() {
-		// Check if we need to validate this field
-		validationErr := validateField(fieldName, updatedField.Interface())
-		if validationErr != nil {
-			return fmt.Errorf("validation failed for field %s: %w", jsonTag, validationErr)
-		}
-		currentField.Set(updatedField)
-	}
-
-	return nil
 }
 
 // publishAndSaveSettings publishes updated settings and persists to disk.
@@ -727,9 +526,9 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	skippedFields := restoreBlockedFields(current, updated)
 	if len(skippedFields) > 0 {
 		// Same field key as the PUT path and as the response JSON, so one query
-		// finds a rejection on either verb. The two are still distinguishable:
-		// this one is Warn and fires only on a real rejection, PUT's is Debug and
-		// lists every blocked and runtime-only field on every request.
+		// finds a rejection on either verb. The two differ only in log level: this
+		// one is Warn, PUT's is Debug, because a full-object PUT reverts the blanked
+		// BasicAuth client credentials on every save (see the PUT call site).
 		c.LogAPIRequest(ctx, logger.LogLevelWarn, "Rejected update to blocked settings fields",
 			logger.String("section", section),
 			logger.Any("skipped_fields", skippedFields))
@@ -967,6 +766,204 @@ func deepMergeMaps(dst, src map[string]any) map[string]any {
 	return result
 }
 
+// mergeFullSettings merges a full-settings PUT body into target, preserving keys
+// the caller omitted (issue #3993). It mirrors mergeJSONIntoStruct but differs in
+// two ways that matter only for the whole-settings object:
+//
+//   - it uses deepMergeSettingsMaps, which REPLACES Go map-typed fields wholesale
+//     instead of merging them key-by-key, and
+//   - it zeroes the target's JSON-visible slices AND maps (zeroJSONSliceAndMapFields)
+//     before the final unmarshal.
+//
+// Both are needed so a full-object PUT can delete or rename a species-config entry
+// by omitting its key: deepMergeSettingsMaps drops the key from the merged JSON,
+// and zeroing the target map first stops json.Unmarshal (which keeps existing
+// entries when unmarshaling an object into a non-nil map) from resurrecting it.
+// PATCH keeps its own key-by-key merge (mergeJSONIntoStruct), so a partial section
+// PATCH still merges into the existing map.
+func mergeFullSettings(target *conf.Settings, data json.RawMessage) error {
+	var updateMap map[string]any
+	if err := json.Unmarshal(data, &updateMap); err != nil {
+		return err
+	}
+
+	currentJSON, err := json.Marshal(target)
+	if err != nil {
+		return err
+	}
+	var currentMap map[string]any
+	if err := json.Unmarshal(currentJSON, &currentMap); err != nil {
+		return err
+	}
+
+	merged := deepMergeSettingsMaps(currentMap, updateMap, reflect.TypeFor[conf.Settings]())
+
+	mergedJSON, err := json.Marshal(merged)
+	if err != nil {
+		return err
+	}
+
+	// Clear slices and maps first so json.Unmarshal repopulates them from the
+	// merged JSON alone (see zeroJSONSliceAndMapFields).
+	zeroJSONSliceAndMapFields(reflect.ValueOf(target))
+
+	return json.Unmarshal(mergedJSON, target)
+}
+
+// deepMergeSettingsMaps deep-merges src into dst like deepMergeMaps, EXCEPT that a
+// key whose target struct field is a Go map (reflect.Map) is REPLACED wholesale
+// rather than merged key-by-key. t is the Go type of the struct dst represents and
+// is used only to tell struct fields (which merge, preserving keys the caller
+// omitted: the #3993 fix) from Go map fields (which replace, so the caller can
+// delete a map entry by omitting it). When t is nil or the field cannot be
+// resolved it falls back to deepMergeMaps behavior (merge), so a key that cannot
+// be typed can never silently drop sibling data.
+func deepMergeSettingsMaps(dst, src map[string]any, t reflect.Type) map[string]any {
+	result := make(map[string]any, len(dst))
+	maps.Copy(result, dst)
+
+	for k, v := range src {
+		if v == nil {
+			// Explicit null: honor it (clears the field), matching deepMergeMaps.
+			result[k] = nil
+			continue
+		}
+
+		fieldType := settingsFieldType(t, k)
+		isGoMap := fieldType != nil && fieldType.Kind() == reflect.Map
+
+		// Recurse only for struct-shaped fields; Go maps and everything else are
+		// replaced with the incoming value.
+		if !isGoMap {
+			if dstMap, dstOk := dst[k].(map[string]any); dstOk {
+				if srcMap, srcOk := v.(map[string]any); srcOk {
+					result[k] = deepMergeSettingsMaps(dstMap, srcMap, fieldType)
+					continue
+				}
+			}
+		}
+
+		result[k] = v
+	}
+
+	return result
+}
+
+// settingsFieldType returns the pointer-dereferenced type of the struct field in t
+// whose JSON name matches key, or nil if t is not a struct or has no such field.
+// Matching mirrors encoding/json: the json tag name (the part before the first
+// comma) wins case-insensitively, otherwise the Go field name case-insensitively.
+// Fields tagged json:"-" are ignored. It recurses into untagged embedded structs
+// to reach promoted fields and carries no cycle guard; that is safe because it is
+// only called on conf.Settings, an acyclic type with no self-referential pointer
+// embedding.
+func settingsFieldType(t reflect.Type, key string) reflect.Type {
+	if t == nil {
+		return nil
+	}
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct {
+		return nil
+	}
+
+	for f := range t.Fields() {
+		// encoding/json ignores unexported fields, so mirror that: an unexported
+		// field whose name matches key must not shadow the exported field the
+		// request key actually refers to.
+		if !f.IsExported() {
+			continue
+		}
+		name := f.Name
+		tagged := false
+		if tag := f.Tag.Get("json"); tag != "" {
+			if comma := strings.IndexByte(tag, ','); comma >= 0 {
+				tag = tag[:comma]
+			}
+			if tag == "-" {
+				continue
+			}
+			if tag != "" {
+				name = tag
+				tagged = true
+			}
+		}
+		if strings.EqualFold(name, key) {
+			ft := f.Type
+			for ft.Kind() == reflect.Pointer {
+				ft = ft.Elem()
+			}
+			return ft
+		}
+		// An untagged embedded struct promotes its fields to the parent level
+		// (encoding/json semantics), so resolve key among the promoted fields.
+		// reflect.Type.Fields yields the embedded field itself, not its promoted
+		// members, so this recursion is what reaches them.
+		if f.Anonymous && !tagged {
+			embedded := f.Type
+			for embedded.Kind() == reflect.Pointer {
+				embedded = embedded.Elem()
+			}
+			if embedded.Kind() == reflect.Struct {
+				if ft := settingsFieldType(embedded, key); ft != nil {
+					return ft
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// zeroJSONSliceAndMapFields is zeroJSONSliceFields extended to also zero
+// JSON-visible Go map fields. mergeFullSettings replaces map fields wholesale in
+// the merged JSON, but json.Unmarshal keeps existing entries when it unmarshals a
+// JSON object into a non-nil Go map, so a species-config entry the caller deleted
+// would survive in the target clone unless the map is cleared first. Slices are
+// zeroed for the same stale-backing-array reason as zeroJSONSliceFields. Fields
+// tagged json:"-" are skipped because they hold runtime values absent from the
+// merged JSON. Kept separate from zeroJSONSliceFields so the PATCH merge keeps its
+// key-by-key map merge.
+func zeroJSONSliceAndMapFields(v reflect.Value) {
+	if v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return
+		}
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		return
+	}
+	for sf, field := range v.Fields() {
+		if !field.CanSet() {
+			continue
+		}
+		// Skip fields invisible to JSON — they hold runtime values not present in
+		// mergedJSON and would be permanently lost.
+		if tag, ok := sf.Tag.Lookup("json"); ok && tag == "-" {
+			continue
+		}
+		switch field.Kind() {
+		case reflect.Slice, reflect.Map:
+			field.Set(reflect.Zero(field.Type()))
+		case reflect.Struct:
+			zeroJSONSliceAndMapFields(field)
+		case reflect.Pointer:
+			if !field.IsNil() && field.Elem().Kind() == reflect.Struct {
+				zeroJSONSliceAndMapFields(field)
+			}
+		default:
+			// Slices and maps are zeroed above; scalars and structs are left as
+			// they are and json.Unmarshal overwrites them from the merged JSON. A
+			// JSON null is the one value json.Unmarshal ignores for a non-pointer
+			// scalar or struct, so a null in the body leaves such a field at its
+			// current value rather than clearing it. This matches PATCH's
+			// mergeJSONIntoStruct exactly (null clears slices and maps, is a no-op
+			// for scalars and structs).
+		}
+	}
+}
+
 // normalizeSpeciesConfigKeysInJSON normalizes species config map keys to lowercase in the JSON data.
 // This ensures case-insensitive key matching during deep merge operations.
 // For "species" section: normalizes keys in the "config" field
@@ -1131,10 +1128,9 @@ func handleGenericSection(sectionPtr any, data json.RawMessage, sectionName stri
 	// audio tool paths live under the map's "Realtime" key, which a lookup keyed
 	// on the section name "audio" would never find.
 	//
-	// A note claiming "the actual blocking happens in
-	// updateAllowedFieldsRecursivelyWithTracking" used to live here. That function
-	// is only reachable from PUT, so it read as enforcement while nothing on this
-	// path enforced anything. Do not reintroduce enforcement here.
+	// Blocked-field enforcement for both write paths lives in restoreBlockedFields,
+	// called after the merge by UpdateSettings (PUT) and UpdateSectionSettings
+	// (PATCH). Do not reintroduce enforcement here: this function only merges.
 	return nil
 }
 
@@ -1705,82 +1701,14 @@ func getSettingsSection(settings *conf.Settings, section string) (any, error) {
 	}
 }
 
-// Field validation constants
+// Coordinate validation constants, used by validateFloatInRange for the birdnet
+// section's latitude/longitude bounds.
 const (
-	minPort        = 1
-	maxPort        = 65535
-	minLatitude    = -90
-	maxLatitude    = 90
-	minLongitude   = -180
-	maxLongitude   = 180
-	minPasswordLen = 8
+	minLatitude  = -90
+	maxLatitude  = 90
+	minLongitude = -180
+	maxLongitude = 180
 )
-
-// fieldValidators maps field names to their validation functions
-var fieldValidators = map[string]func(value any) error{
-	"port":      validatePort,
-	"latitude":  validateLatitude,
-	"longitude": validateLongitude,
-	"password":  validatePassword,
-}
-
-// validateField performs validation on specific fields that require extra checks
-// Returns nil if validation passes, error otherwise
-func validateField(fieldName string, value any) error {
-	if validator, ok := fieldValidators[fieldName]; ok {
-		return validator(value)
-	}
-	return nil
-}
-
-// validatePort validates port numbers in valid range (1-65535)
-func validatePort(value any) error {
-	switch port := value.(type) {
-	case int:
-		if port < minPort || port > maxPort {
-			return fmt.Errorf("port must be between %d and %d", minPort, maxPort)
-		}
-	case string:
-		portInt, err := strconv.Atoi(port)
-		if err != nil {
-			return fmt.Errorf("port must be a valid number")
-		}
-		if portInt < minPort || portInt > maxPort {
-			return fmt.Errorf("port must be between %d and %d", minPort, maxPort)
-		}
-	}
-	return nil
-}
-
-// validateLatitude validates latitude range (-90 to 90)
-func validateLatitude(value any) error {
-	if lat, ok := value.(float64); ok {
-		if lat < minLatitude || lat > maxLatitude {
-			return fmt.Errorf("latitude must be between %d and %d", minLatitude, maxLatitude)
-		}
-	}
-	return nil
-}
-
-// validateLongitude validates longitude range (-180 to 180)
-func validateLongitude(value any) error {
-	if lng, ok := value.(float64); ok {
-		if lng < minLongitude || lng > maxLongitude {
-			return fmt.Errorf("longitude must be between %d and %d", minLongitude, maxLongitude)
-		}
-	}
-	return nil
-}
-
-// validatePassword validates password minimum length
-func validatePassword(value any) error {
-	if pass, ok := value.(string); ok {
-		if pass != "" && len(pass) < minPasswordLen {
-			return fmt.Errorf("password must be at least %d characters long", minPasswordLen)
-		}
-	}
-	return nil
-}
 
 // redactedValue is the placeholder used for secret fields in API responses.
 // The frontend can check for this value to show a "secret is set" indicator.
@@ -2157,13 +2085,13 @@ func redact(s string) string {
 //
 // IMPORTANT: Only add fields here if they pose a security risk.
 //
-// A yaml:"-" tag is NOT an equivalent protection, and the two write paths differ
-// on it: PUT additionally skips every yaml:"-" field, while PATCH enforces this
-// map alone (a yaml:"-" field with a live json tag is merged like any other, and
-// PATCH relies on whatever re-derives it downstream). Any runtime-only field
-// that must not be client-settable on BOTH paths belongs in this map, whatever
-// its yaml tag. TestPatchYamlDashFieldsAreEitherBlockedOrRederived pins the
-// current set so a new one cannot slip in unnoticed.
+// A yaml:"-" tag is NOT an equivalent protection: a field with yaml:"-" but a live
+// json tag is merged from the request like any other on both write paths, so it
+// must be in this map (or re-derived downstream) to be safe. Both PUT and PATCH now
+// merge the request and enforce this map alone. Any runtime-only field that must
+// not be client-settable on BOTH paths belongs in this map, whatever its yaml tag.
+// TestPatchYamlDashFieldsAreEitherBlockedOrRederived pins the current set so a new
+// one cannot slip in unnoticed.
 func getBlockedFieldMap() map[string]any {
 	return map[string]any{
 		// Block these top-level runtime fields
@@ -2233,21 +2161,13 @@ func getBlockedFieldMap() map[string]any {
 // which sits on this same path and also restores from the snapshot after a
 // merge.
 //
-// PUT does not call this. It enforces the same map field by field BEFORE
-// anything is written: updateAllowedFieldsRecursivelyWithTracking walks into
-// handleFieldPermission, which returns early ("return nil // Skip this field")
-// for a blocked leaf, so the value from the request is never assigned.
-// TestPutCannotChangeBlockedFields pins that arm against four of the 19 leaves.
-// Of the rest, 9 are yaml:"-" and are skipped by an earlier arm of the same walk
-// before the blocked map is consulted at all, so they are covered twice on that
-// path. That leaves 6 resting on the blocked arm alone with no test of their own
-// on the PUT path: the two audio tool paths, Security.SessionDuration, and the
-// three Security.BasicAuth lifetime and client-id fields.
-//
-// The two paths report differently, and only PATCH matches the description
-// above: PUT appends every blocked path it walks past whether or not the request
-// changed it, plus every yaml:"-" field as "<path> (runtime-only)", so its list
-// is never empty and is not a rejection report.
+// Both write paths call this. UpdateSettings (PUT) and UpdateSectionSettings
+// (PATCH) each merge the request into the clone and then call restoreBlockedFields
+// to revert the blocked leaves, so enforcement and reporting are identical on both
+// verbs: the returned list names only the blocked paths whose value the request
+// actually changed, and is [] when none did. TestPutCannotChangeBlockedFields and
+// TestPatchCannotChangeBlockedFields pin the two entry points;
+// TestRestoreBlockedFieldsCoversEveryLeaf pins the leaves.
 func restoreBlockedFields(current, updated *conf.Settings) []string {
 	// Non-nil so the response carries [] rather than null when nothing was
 	// rejected, matching what the endpoint documentation promises.
