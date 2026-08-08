@@ -35,6 +35,7 @@ const (
 	MsgSettingsUpdatingIntervals              = "notifications.content.settings.updatingIntervals"
 	MsgSettingsReconfiguringMqtt              = "notifications.content.settings.reconfiguringMqtt"
 	MsgSettingsReconfiguringBirdweather       = "notifications.content.settings.reconfiguringBirdweather"
+	MsgSettingsReconfiguringEbird             = "notifications.content.settings.reconfiguringEbird"
 	MsgSettingsReconfiguringStreams           = "notifications.content.settings.reconfiguringStreams"
 	MsgSettingsReconfiguringTelemetry         = "notifications.content.settings.reconfiguringTelemetry"
 	MsgSettingsReconfiguringSpeciesTracking   = "notifications.content.settings.reconfiguringSpeciesTracking"

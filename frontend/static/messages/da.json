@@ -412,6 +412,7 @@
         "updatingIntervals": "Opdaterer detektionsintervaller...",
         "reconfiguringMqtt": "Opdaterer MQTT-forbindelse...",
         "reconfiguringBirdweather": "Opdaterer BirdWeather-integration...",
+        "reconfiguringEbird": "Updating eBird integration...",
         "reconfiguringStreams": "Opdaterer lydstreams...",
         "reconfiguringTelemetry": "Opdaterer telemetriindstillinger...",
         "reconfiguringPushNotifications": "Omkonfigurerer push-notifikationsudbydere...",

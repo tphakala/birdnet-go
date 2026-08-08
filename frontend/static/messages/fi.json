@@ -412,6 +412,7 @@
         "updatingIntervals": "Päivitetään havaintovälejä...",
         "reconfiguringMqtt": "Päivitetään MQTT-yhteyttä...",
         "reconfiguringBirdweather": "Päivitetään BirdWeather-integraatiota...",
+        "reconfiguringEbird": "Updating eBird integration...",
         "reconfiguringStreams": "Päivitetään äänistriimejä...",
         "reconfiguringTelemetry": "Päivitetään telemetria-asetuksia...",
         "reconfiguringPushNotifications": "Määritetään push-ilmoitusten tarjoajia uudelleen...",

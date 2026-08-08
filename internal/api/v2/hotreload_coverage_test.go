@@ -180,7 +180,7 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"Realtime.Birdweather": {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_birdweather"},
 
 	// -- eBird --
-	"Realtime.EBird": {categories: []hotReloadCategory{hotReloadFresh}},
+	"Realtime.EBird": {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_ebird"},
 
 	// -- OpenWeather (runtime, yaml:"-") --
 	"Realtime.OpenWeather": {categories: []hotReloadCategory{hotReloadRuntime}},

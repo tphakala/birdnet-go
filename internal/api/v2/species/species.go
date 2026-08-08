@@ -2,7 +2,7 @@
 // /api/v2/species/* and /api/v2/taxonomy/* endpoints (species info, rarity, the
 // all-species picker list, the species dictionary, thumbnails, and genus/family/
 // tree taxonomy lookups). The Handler embeds *apicore.Core by pointer so the
-// shared dependencies and helpers (Processor, TaxonomyDB, EBirdClient,
+// shared dependencies and helpers (Processor, TaxonomyDB, the EBird() accessor,
 // BirdImageCache, CurrentLocale, HandleError, the logging helpers) promote onto
 // it; the facade constructs one Handler and calls RegisterRoutes to wire the
 // routes in their existing order.
@@ -170,9 +170,10 @@ func (c *Handler) lookupTaxonomyTree(ctx context.Context, scientificName string)
 		c.Debug("Local taxonomy lookup failed for %s: %v, falling back to eBird API", scientificName, err)
 	}
 
-	// Fall back to eBird API
-	if c.EBirdClient != nil {
-		tree, err := c.EBirdClient.BuildFamilyTree(ctx, scientificName)
+	// Fall back to eBird API. Load the client once; it may be swapped concurrently
+	// by a settings hot-reload (ReconfigureEBird).
+	if client := c.EBird(); client != nil {
+		tree, err := client.BuildFamilyTree(ctx, scientificName)
 		if err != nil {
 			c.Debug("Failed to get taxonomy info from eBird for species %s: %v", scientificName, err)
 			return nil
@@ -652,14 +653,20 @@ func (c *Handler) GetSpeciesTaxonomy(ctx echo.Context) error {
 // getDetailedTaxonomy retrieves detailed taxonomy information
 // Tries local database first, falls back to eBird API if needed
 func (c *Handler) getDetailedTaxonomy(ctx context.Context, scientificName, locale string, includeSubspecies, includeHierarchy bool) (*TaxonomyInfo, error) {
+	// Load the eBird client once for the whole request and thread it through the
+	// helpers below. The client can be swapped concurrently by a settings
+	// hot-reload (ReconfigureEBird); re-reading it in each helper would risk a
+	// nil-after-check TOCTOU across method boundaries.
+	client := c.EBird()
+
 	// Try local taxonomy database first
-	if info := c.tryLocalTaxonomy(ctx, scientificName, locale, includeSubspecies, includeHierarchy); info != nil {
+	if info := c.tryLocalTaxonomy(ctx, client, scientificName, locale, includeSubspecies, includeHierarchy); info != nil {
 		return info, nil
 	}
 
 	// Fall back to eBird API
-	if c.EBirdClient != nil {
-		return c.getEBirdTaxonomy(ctx, scientificName, locale, includeSubspecies)
+	if client != nil {
+		return c.getEBirdTaxonomy(ctx, client, scientificName, locale, includeSubspecies)
 	}
 
 	// Neither local DB nor eBird API available
@@ -673,7 +680,7 @@ func (c *Handler) getDetailedTaxonomy(ctx context.Context, scientificName, local
 
 // tryLocalTaxonomy attempts to retrieve taxonomy from the local database.
 // Returns nil if local DB is unavailable or lookup fails.
-func (c *Handler) tryLocalTaxonomy(ctx context.Context, scientificName, locale string, includeSubspecies, includeHierarchy bool) *TaxonomyInfo {
+func (c *Handler) tryLocalTaxonomy(ctx context.Context, client *ebird.Client, scientificName, locale string, includeSubspecies, includeHierarchy bool) *TaxonomyInfo {
 	if c.TaxonomyDB == nil {
 		return nil
 	}
@@ -698,7 +705,7 @@ func (c *Handler) tryLocalTaxonomy(ctx context.Context, scientificName, locale s
 	}
 
 	// Enhance with eBird data if needed
-	c.enhanceWithEBirdData(ctx, info, scientificName, locale, includeSubspecies)
+	c.enhanceWithEBirdData(ctx, client, info, scientificName, locale, includeSubspecies)
 
 	return info
 }
@@ -719,13 +726,13 @@ func convertToTaxonomyHierarchy(tree *ebird.TaxonomyTree) TaxonomyHierarchy {
 }
 
 // enhanceWithEBirdData adds subspecies and locale data from eBird API to local taxonomy info.
-func (c *Handler) enhanceWithEBirdData(ctx context.Context, info *TaxonomyInfo, scientificName, locale string, includeSubspecies bool) {
-	if c.EBirdClient == nil || (!includeSubspecies && locale == "") {
+func (c *Handler) enhanceWithEBirdData(ctx context.Context, client *ebird.Client, info *TaxonomyInfo, scientificName, locale string, includeSubspecies bool) {
+	if client == nil || (!includeSubspecies && locale == "") {
 		return
 	}
 
 	c.Debug("Enhancing local taxonomy data with eBird API for subspecies/locale")
-	ebirdInfo, err := c.getEBirdTaxonomy(ctx, scientificName, locale, includeSubspecies)
+	ebirdInfo, err := c.getEBirdTaxonomy(ctx, client, scientificName, locale, includeSubspecies)
 	if err != nil {
 		return
 	}
@@ -743,9 +750,9 @@ func (c *Handler) enhanceWithEBirdData(ctx context.Context, info *TaxonomyInfo, 
 }
 
 // getEBirdTaxonomy retrieves taxonomy information from eBird API
-func (c *Handler) getEBirdTaxonomy(ctx context.Context, scientificName, locale string, includeSubspecies bool) (*TaxonomyInfo, error) {
+func (c *Handler) getEBirdTaxonomy(ctx context.Context, client *ebird.Client, scientificName, locale string, includeSubspecies bool) (*TaxonomyInfo, error) {
 	// Get full taxonomy data with locale if specified
-	taxonomyData, err := c.EBirdClient.GetTaxonomy(ctx, locale)
+	taxonomyData, err := client.GetTaxonomy(ctx, locale)
 	if err != nil {
 		return nil, err
 	}

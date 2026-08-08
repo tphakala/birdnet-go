@@ -412,6 +412,7 @@
         "updatingIntervals": "Aktualizuji intervaly detekce…",
         "reconfiguringMqtt": "Aktualizuji připojení MQTT…",
         "reconfiguringBirdweather": "Aktualizuji integraci BirdWeather…",
+        "reconfiguringEbird": "Updating eBird integration...",
         "reconfiguringStreams": "Aktualizuji audio streamy…",
         "reconfiguringTelemetry": "Aktualizuji nastavení telemetrie…",
         "reconfiguringPushNotifications": "Překonfiguruji poskytovatele push oznámení…",

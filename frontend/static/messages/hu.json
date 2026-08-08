@@ -412,6 +412,7 @@
         "updatingIntervals": "Detektálási intervallumok frissítése...",
         "reconfiguringMqtt": "MQTT kapcsolat frissítése...",
         "reconfiguringBirdweather": "BirdWeather integráció frissítése...",
+        "reconfiguringEbird": "Updating eBird integration...",
         "reconfiguringStreams": "Hang streamek frissítése...",
         "reconfiguringTelemetry": "Telemetria beállítások frissítése...",
         "reconfiguringPushNotifications": "Push értesítési szolgáltatók újrakonfigurálása...",

@@ -345,7 +345,10 @@ func (c *Handler) GetExpectedTodayRegional(ctx echo.Context) error {
 }
 
 func (c *Handler) getExpectedTodayRegionalImpl(ctx echo.Context) error {
-	if c.EBirdClient == nil {
+	// Load the eBird client once; it may be swapped concurrently by a settings
+	// hot-reload (ReconfigureEBird), so reuse this pointer for the whole request.
+	client := c.EBird()
+	if client == nil {
 		return ctx.JSON(http.StatusOK, ExpectedTodayRegionalResponse{
 			Species:   []RegionalSpeciesItem{},
 			Available: false,
@@ -371,7 +374,7 @@ func (c *Handler) getExpectedTodayRegionalImpl(ctx echo.Context) error {
 	reqCtx, cancel := context.WithTimeout(ctx.Request().Context(), insightsQueryTimeout)
 	defer cancel()
 
-	observations, err := c.EBirdClient.GetRecentObservations(reqCtx, lat, lng, 14)
+	observations, err := client.GetRecentObservations(reqCtx, lat, lng, 14)
 	if err != nil {
 		return c.handleAnalyticsQueryError(ctx, err, "eBird observations", "Failed to query eBird observations")
 	}
