@@ -57,6 +57,10 @@
   import { api } from '$lib/utils/api';
   import { getLocalDateString } from '$lib/utils/date';
   import {
+    compareActiveSpeciesForExport,
+    resolveActiveSpeciesScores,
+  } from '$lib/utils/speciesScores';
+  import {
     buildSpeciesNameMaps,
     isSpeciesInList,
     normalizeForLookup,
@@ -197,6 +201,8 @@
     commonName: string;
     scientificName: string;
     score: number;
+    exportScore: number;
+    exportOrder: number;
     isManuallyIncluded: boolean;
     hasCustomConfig: boolean;
   }
@@ -660,6 +666,7 @@
           scientificName: string;
           commonName: string;
           score: number;
+          rangeScore?: number;
           isManuallyIncluded?: boolean;
           hasCustomConfig?: boolean;
         }>;
@@ -695,21 +702,32 @@
       const includeSet = new Set((currentInclude ?? []).map(s => normalizeForLookup(s)));
       const configKeys = new Set(Object.keys(currentConfig ?? {}).map(s => normalizeForLookup(s)));
 
+      // Newer backends carry override provenance after resolving aliases against
+      // the actual model labels. Fall back to literal matching for compatibility
+      // with older API responses that do not include the flag.
+      const isManuallyIncluded = (species: (typeof response.species)[number]): boolean =>
+        species.isManuallyIncluded ??
+        isInNameSet(includeSet, species.commonName, species.scientificName);
+      const hasCustomConfig = (species: (typeof response.species)[number]): boolean =>
+        species.hasCustomConfig ??
+        isInNameSet(configKeys, species.commonName, species.scientificName);
+
+      // Filter species that pass the threshold OR are manually included
+      // Go serializes a nil slice as JSON null, so guard before iterating.
       const mappedSpecies: ActiveSpecies[] = (response.species ?? [])
-        .filter(
-          s =>
-            s.score >= threshold ||
-            (s.isManuallyIncluded ?? isInNameSet(includeSet, s.commonName, s.scientificName))
-        )
-        .map(s => ({
-          commonName: s.commonName,
-          scientificName: s.scientificName,
-          score: s.score,
-          isManuallyIncluded:
-            s.isManuallyIncluded ?? isInNameSet(includeSet, s.commonName, s.scientificName),
-          hasCustomConfig:
-            s.hasCustomConfig ?? isInNameSet(configKeys, s.commonName, s.scientificName),
-        }));
+        .filter(s => s.score >= threshold || isManuallyIncluded(s))
+        .map((s, exportOrder) => {
+          const scores = resolveActiveSpeciesScores(s.score, s.rangeScore);
+          return {
+            commonName: s.commonName,
+            scientificName: s.scientificName,
+            score: scores.displayScore,
+            exportScore: scores.exportScore,
+            exportOrder,
+            isManuallyIncluded: isManuallyIncluded(s),
+            hasCustomConfig: hasCustomConfig(s),
+          };
+        });
 
       // Sort by score descending
       mappedSpecies.sort((a, b) => b.score - a.score);
@@ -900,13 +918,15 @@
     if (!activeSpeciesState.data?.species.length) return;
 
     const headers = ['Common Name', 'Scientific Name', 'Score', 'Included', 'Configured'];
-    const rows = activeSpeciesState.data.species.map(s => [
-      escapeCsvField(s.commonName),
-      escapeCsvField(s.scientificName),
-      escapeCsvField(s.score.toFixed(4)),
-      escapeCsvField(s.isManuallyIncluded ? 'Yes' : 'No'),
-      escapeCsvField(s.hasCustomConfig ? 'Yes' : 'No'),
-    ]);
+    const rows = [...activeSpeciesState.data.species]
+      .sort(compareActiveSpeciesForExport)
+      .map(s => [
+        escapeCsvField(s.commonName),
+        escapeCsvField(s.scientificName),
+        escapeCsvField(s.exportScore.toFixed(4)),
+        escapeCsvField(s.isManuallyIncluded ? 'Yes' : 'No'),
+        escapeCsvField(s.hasCustomConfig ? 'Yes' : 'No'),
+      ]);
 
     const csvContent = [headers.map(escapeCsvField).join(','), ...rows.map(r => r.join(','))].join(
       '\n'
