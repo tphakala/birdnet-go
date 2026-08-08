@@ -35,10 +35,10 @@ func TestBuildLocaleDictionaryFromStream_SparseLocaleEnglishFallback(t *testing.
 	require.NoError(t, err)
 
 	want := map[string]string{
-		"Barbastella barbastellus": "mopsilepakko",       // target locale wins
-		"Strix aluco":              "lehtopöllö",          // target locale wins
-		"Turdus merula":            "Common Blackbird",    // English fallback (no fi)
-		"Perca fluviatilis":        "European Perch",      // English fallback (secondary-model/Perch label)
+		"Barbastella barbastellus": "mopsilepakko",     // target locale wins
+		"Strix aluco":              "lehtopöllö",       // target locale wins
+		"Turdus merula":            "Common Blackbird", // English fallback (no fi)
+		"Perca fluviatilis":        "European Perch",   // English fallback (secondary-model/Perch label)
 	}
 	assert.Equal(t, want, got)
 

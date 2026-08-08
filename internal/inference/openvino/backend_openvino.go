@@ -413,16 +413,15 @@ static const char* ovbind_devices_at(const ov_available_devices_t* devices, size
 */
 import "C" //nolint:gocritic // dupImport: cgo import "C" must be separate from regular imports
 
-import "unsafe" //nolint:gocritic // dupImport: false positive with cgo import "C"
-
 import (
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"unsafe"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
-)
+) //nolint:gocritic // dupImport: false positive with cgo import "C"
 
 // Supported reports whether the OpenVINO backend is compiled into this build.
 // True here (built under the "openvino" tag); false in stub_noopenvino.go.

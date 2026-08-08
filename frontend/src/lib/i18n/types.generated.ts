@@ -364,6 +364,8 @@ export type TranslationKey =
   | 'notifications.content.settings.oauthRestartRequired'
   | 'notifications.content.settings.databaseRestartRequired'
   | 'notifications.content.settings.loggingRestartRequired'
+  | 'notifications.content.settings.ebirdRestartRequired'
+  | 'notifications.content.settings.weatherRestartRequired'
   | 'notifications.content.settings.reconfiguringSoundLevel'
   | 'notifications.content.settings.reconfiguringAudioSources'
   | 'notifications.content.settings.rebuildingExtendedCapture'

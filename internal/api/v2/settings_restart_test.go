@@ -298,9 +298,9 @@ func TestHotReloadRestartFieldsCovered(t *testing.T) {
 	// registry restart-category field path -> the settingsChangeChecks entry
 	// (by name) that marks restart when it changes.
 	restartCovered := map[string]string{
-		"Logging": "Logging",
-		"Output":  "Database",
-		"Realtime.EBird": "eBird",
+		"Logging":          "Logging",
+		"Output":           "Database",
+		"Realtime.EBird":   "eBird",
 		"Realtime.Weather": "Weather",
 	}
 	// registry restart-category field paths intentionally NOT wired to a restart

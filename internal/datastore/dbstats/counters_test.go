@@ -12,7 +12,7 @@ func TestRecordRead(t *testing.T) {
 	t.Parallel()
 	c := &Counters{}
 
-	c.RecordRead(500) // 0.5ms
+	c.RecordRead(500)  // 0.5ms
 	c.RecordRead(1000) // 1ms
 
 	assert.Equal(t, int64(2), c.ReadCount.Load())
@@ -37,8 +37,8 @@ func TestSlowQueryCounting(t *testing.T) {
 	t.Parallel()
 	c := &Counters{}
 
-	c.RecordRead(50_000)  // 50ms — not slow
-	c.RecordRead(100_001) // 100.001ms — slow
+	c.RecordRead(50_000)   // 50ms — not slow
+	c.RecordRead(100_001)  // 100.001ms — slow
 	c.RecordWrite(200_000) // 200ms — slow
 
 	assert.Equal(t, int64(2), c.SlowQueryCount.Load())

@@ -1,0 +1,14 @@
+{
+  "success": true,
+  "timestamp": "2026-08-08T02:12:23.518Z",
+  "summary": {
+    "uniqueKeysUsed": 0,
+    "totalUsages": 0,
+    "totalFiles": 0,
+    "translationKeysDefined": 4002,
+    "missingInTranslations": 0,
+    "unusedInCode": 0
+  },
+  "issues": [],
+  "unusedKeys": []
+}
