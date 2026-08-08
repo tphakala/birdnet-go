@@ -153,15 +153,13 @@ func (p *Processor) initializeMQTT(settings *conf.Settings) {
 	// MQTT dead until the next restart.
 	//
 	// Logged at warn rather than error to match onConnectionLost: a recoverable
-	// connection failure is not a fault worth paging on.
+	// connection failure is not a fault worth paging on. Connect already reported
+	// this failure to telemetry once inside the mqtt package, so no error is built
+	// here; building one would duplicate the Sentry event for a single startup
+	// outage, which is the noise this warn-level, retry-on-failure path avoids.
 	if err := mqttClient.Connect(ctx); err != nil {
 		log.Warn("failed to connect to MQTT broker, retrying in background",
 			logger.Error(err))
-		_ = errors.New(err).
-			Component("analysis.processor").
-			Category(errors.CategoryMQTTConnection).
-			Context("operation", "mqtt_connect").
-			Build()
 		mqttClient.StartReconnectLoop()
 	}
 
