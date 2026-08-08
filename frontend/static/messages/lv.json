@@ -412,6 +412,7 @@
         "updatingIntervals": "Atjaunina noteikšanas intervālus...",
         "reconfiguringMqtt": "Atjaunina MQTT savienojumu...",
         "reconfiguringBirdweather": "Atjaunina BirdWeather integrāciju...",
+        "reconfiguringEbird": "Updating eBird integration...",
         "reconfiguringStreams": "Atjaunina audio straumes...",
         "reconfiguringTelemetry": "Atjaunina telemetrijas iestatījumus...",
         "reconfiguringPushNotifications": "Pārkonfigurē push paziņojumu pakalpojumu sniedzējus...",

@@ -412,6 +412,7 @@
         "updatingIntervals": "Aggiornamento degli intervalli di rilevamento...",
         "reconfiguringMqtt": "Aggiornamento della connessione MQTT...",
         "reconfiguringBirdweather": "Aggiornamento dell'integrazione BirdWeather...",
+        "reconfiguringEbird": "Updating eBird integration...",
         "reconfiguringStreams": "Aggiornamento dei flussi audio...",
         "reconfiguringTelemetry": "Aggiornamento delle impostazioni di telemetria...",
         "reconfiguringPushNotifications": "Riconfigurazione dei provider di notifica push...",

@@ -354,6 +354,7 @@ export type TranslationKey =
   | 'notifications.content.settings.updatingIntervals'
   | 'notifications.content.settings.reconfiguringMqtt'
   | 'notifications.content.settings.reconfiguringBirdweather'
+  | 'notifications.content.settings.reconfiguringEbird'
   | 'notifications.content.settings.reconfiguringStreams'
   | 'notifications.content.settings.reconfiguringTelemetry'
   | 'notifications.content.settings.reconfiguringPushNotifications'

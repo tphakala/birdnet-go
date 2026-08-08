@@ -322,6 +322,8 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleReconfigureStreams()
 	case "reconfigure_birdweather":
 		cm.handleReconfigureBirdWeather()
+	case "reconfigure_ebird":
+		cm.handleReconfigureEBird()
 	case "update_detection_intervals":
 		cm.handleUpdateDetectionIntervals()
 	case "reconfigure_sound_level":
@@ -592,6 +594,40 @@ func (cm *ControlMonitor) handleReconfigureBirdWeather() {
 	}
 
 	emitHotReload("birdweather")
+}
+
+// handleReconfigureEBird rebuilds the eBird API client from the current settings.
+// The client lives on the API controller (apicore.Core), not the processor, so
+// this delegates to the controller's thread-safe ReconfigureEBird, which reads
+// settings live and atomically swaps the client that request handlers read.
+func (cm *ControlMonitor) handleReconfigureEBird() {
+	GetLogger().Info("Reconfiguring eBird integration")
+
+	if cm.apiController == nil {
+		GetLogger().Error("API controller not available for eBird reconfiguration")
+		cm.notifyError("Failed to reconfigure eBird", errors.Newf("API controller not available").
+			Component("analysis").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "reconfigure_ebird").
+			Build())
+		return
+	}
+
+	// Report the actual outcome, mirroring handleReconfigureBirdWeather, rather
+	// than reporting success unconditionally. ReconfigureEBird returns nil when
+	// eBird is disabled or misconfigured (e.g. enabled with no API key), in which
+	// case buildEBirdClient has already surfaced the specific reason.
+	if cm.apiController.ReconfigureEBird() != nil {
+		GetLogger().Info("eBird integration configured successfully")
+		cm.notifySuccess("eBird integration configured successfully")
+	} else if s := conf.Setting(); s != nil && s.Realtime.EBird.Enabled {
+		GetLogger().Warn("eBird enabled but not configured; see prior notification")
+	} else {
+		GetLogger().Info("eBird integration disabled")
+		cm.notifySuccess("eBird integration disabled")
+	}
+
+	emitHotReload("ebird")
 }
 
 // handleUpdateDetectionIntervals updates event tracking intervals for species

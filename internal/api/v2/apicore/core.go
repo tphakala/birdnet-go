@@ -71,11 +71,17 @@ type Core struct {
 	BirdImageCache *imageprovider.BirdImageCache
 	SunCalc        *suncalc.SunCalc
 	Processor      *processor.Processor
-	EBirdClient    *ebird.Client
-	TaxonomyDB     *classifier.TaxonomyDatabase
-	SFS            *securefs.SecureFS     // SecureFS instance for media
-	APILogger      logger.Logger          // Structured logger for API operations
-	Metrics        *observability.Metrics // Shared metrics instance
+	// eBirdClient holds the eBird API client as a lock-free atomic pointer so it
+	// can be rebuilt live when Realtime.EBird settings change (see ReconfigureEBird)
+	// while concurrent request handlers read it via EBird(). Same copy-on-write
+	// pattern as Settings/Engine/AudioWatchdog. nil when eBird is disabled or
+	// misconfigured. Read it exactly once per request via EBird() and reuse the
+	// loaded pointer; do not call EBird() twice and assume the same instance.
+	eBirdClient atomic.Pointer[ebird.Client]
+	TaxonomyDB  *classifier.TaxonomyDatabase
+	SFS         *securefs.SecureFS     // SecureFS instance for media
+	APILogger   logger.Logger          // Structured logger for API operations
+	Metrics     *observability.Metrics // Shared metrics instance
 
 	// AuthMiddleware is the authentication middleware function (injected from server
 	// via WithAuthMiddleware). Read by PrivateModeAuth, GetAuthMiddleware, and the
@@ -223,38 +229,83 @@ func NewCore(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	// Initialize SSE manager
 	c.SSEManager = NewSSEManager()
 
-	// Initialize eBird client if enabled
-	log := GetLogger()
-	if settings.Realtime.EBird.Enabled {
-		if settings.Realtime.EBird.APIKey == "" {
-			// Create notification for missing API key
-			// The Build() method automatically publishes to the event bus for notifications
-			_ = errors.Newf("eBird integration enabled but API key not configured").
-				Category(errors.CategoryConfiguration).
-				Context("setting", "realtime.ebird.apikey").
-				Component("ebird").
-				Build()
-			log.Warn("eBird integration enabled but API key not configured")
-		} else {
-			ebirdConfig := ebird.Config{
-				APIKey:   settings.Realtime.EBird.APIKey,
-				CacheTTL: time.Duration(settings.Realtime.EBird.CacheTTL) * time.Hour,
-			}
-			ebirdClient, err := ebird.NewClient(ebirdConfig)
-			if err != nil {
-				// Initialization error - already enhanced by ebird.NewClient
-				log.Warn("Failed to initialize eBird client", logger.Error(err))
-				// Continue without eBird client - it's not critical
-			} else {
-				c.EBirdClient = ebirdClient
-				log.Info("Initialized eBird API client")
-			}
-		}
-	} else {
-		log.Debug("eBird integration disabled")
-	}
+	// Initialize eBird client if enabled. Stored atomically so it can be rebuilt
+	// live on a settings change (ReconfigureEBird) without racing request readers.
+	c.eBirdClient.Store(c.buildEBirdClient(settings))
 
 	return c, nil
+}
+
+// EBird returns the current eBird API client, or nil when eBird is disabled or
+// misconfigured. Callers MUST load it once and reuse the returned pointer for the
+// whole request; the client can be swapped concurrently by ReconfigureEBird, so
+// re-reading it mid-request risks a nil after a check.
+func (c *Core) EBird() *ebird.Client {
+	return c.eBirdClient.Load()
+}
+
+// buildEBirdClient constructs an eBird API client from the given settings, or
+// returns nil when eBird is disabled, the API key is missing, or construction
+// fails. It is used both at startup and by ReconfigureEBird, so the same
+// enabled/misconfigured handling (including the missing-key notification) applies
+// on a live settings change. The client is cheap to build (no network I/O).
+func (c *Core) buildEBirdClient(settings *conf.Settings) *ebird.Client {
+	log := GetLogger()
+	if settings == nil {
+		// Defensive: conf.Setting() can return nil if settings cannot be loaded.
+		// Treat it as "no eBird client" rather than dereferencing a nil settings.
+		log.Warn("Cannot build eBird client: settings unavailable")
+		return nil
+	}
+	if !settings.Realtime.EBird.Enabled {
+		log.Debug("eBird integration disabled")
+		return nil
+	}
+	if settings.Realtime.EBird.APIKey == "" {
+		// Notify about the missing API key. The Build() method automatically
+		// publishes to the event bus for notifications, so enabling eBird without
+		// a key via the UI surfaces the problem immediately.
+		_ = errors.Newf("eBird integration enabled but API key not configured").
+			Category(errors.CategoryConfiguration).
+			Context("setting", "realtime.ebird.apikey").
+			Component("ebird").
+			Build()
+		log.Warn("eBird integration enabled but API key not configured")
+		return nil
+	}
+	ebirdConfig := ebird.Config{
+		APIKey:   settings.Realtime.EBird.APIKey,
+		CacheTTL: time.Duration(settings.Realtime.EBird.CacheTTL) * time.Hour,
+	}
+	ebirdClient, err := ebird.NewClient(ebirdConfig)
+	if err != nil {
+		// Initialization error - already enhanced by ebird.NewClient.
+		// Continue without an eBird client - it's not critical.
+		log.Warn("Failed to initialize eBird client", logger.Error(err))
+		return nil
+	}
+	log.Info("Initialized eBird API client")
+	return ebirdClient
+}
+
+// ReconfigureEBird rebuilds the eBird API client from the current settings and
+// swaps it in atomically, so changes made via the UI take effect without a
+// restart. It reads settings live via conf.Setting() and is safe to call from the
+// control-monitor goroutine while request handlers read the client via EBird().
+// It returns the resulting client, which is nil when eBird is disabled or
+// misconfigured, so the caller can report the outcome accurately.
+//
+// The previous client is intentionally NOT Closed here. Close() stops its
+// rate-limiter ticker, and ebird.Client.doRequest blocks on a bare receive from
+// that ticker while holding the client mutex, so stopping it under an in-flight
+// request would hang that request (and every other caller waiting on the mutex)
+// forever. Requests that already loaded the old pointer keep using its live
+// limiter; once the last reference is dropped, Go's runtime garbage-collects the
+// orphaned ticker (the same reliance on Go 1.23+ timer GC used in internal/weather).
+func (c *Core) ReconfigureEBird() *ebird.Client {
+	client := c.buildEBirdClient(conf.Setting())
+	c.eBirdClient.Store(client)
+	return client
 }
 
 // resolveAndValidateMediaPath resolves a potentially relative media path and ensures it exists as a directory.
