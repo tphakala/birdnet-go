@@ -422,6 +422,8 @@
         "oauthRestartRequired": "Tunnistautumispalveluntarjoajan asetukset muuttuivat. Uudelleenkäynnistys vaaditaan.",
         "databaseRestartRequired": "Tietokannan asetuksia muutettu. Uudelleenkäynnistys vaaditaan.",
         "loggingRestartRequired": "Lokin asetuksia muutettu. Uudelleenkäynnistys vaaditaan.",
+        "ebirdRestartRequired": "eBird settings changed. Restart required.",
+        "weatherRestartRequired": "Weather settings changed. Restart required.",
         "reconfiguringSoundLevel": "Päivitetään äänitason seurantaa...",
         "reconfiguringAudioSources": "Määritetään äänilähteitä uudelleen...",
         "rebuildingExtendedCapture": "Rakennetaan laajennetun tallennuksen suodatinta uudelleen...",

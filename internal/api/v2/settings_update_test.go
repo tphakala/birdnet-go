@@ -833,3 +833,25 @@ func TestStreamsSettingsChanged_MediaMode(t *testing.T) {
 		})
 	}
 }
+
+func TestSettingsUpdate_EBird(t *testing.T) {
+	t.Parallel()
+
+	base := apitest.NewValidTestSettings()
+	updated := conf.CloneSettings(base)
+	updated.Realtime.EBird.Enabled = !base.Realtime.EBird.Enabled
+
+	assert.True(t, ebirdSettingsChanged(base, updated), "detector should report true when eBird settings change")
+	assert.False(t, ebirdSettingsChanged(base, conf.CloneSettings(base)), "detector should report false for identical settings")
+}
+
+func TestSettingsUpdate_Weather(t *testing.T) {
+	t.Parallel()
+
+	base := apitest.NewValidTestSettings()
+	updated := conf.CloneSettings(base)
+	updated.Realtime.Weather.Provider = "openweather"
+
+	assert.True(t, weatherSettingsChanged(base, updated), "detector should report true when Weather settings change")
+	assert.False(t, weatherSettingsChanged(base, conf.CloneSettings(base)), "detector should report false for identical settings")
+}

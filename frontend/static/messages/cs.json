@@ -422,6 +422,8 @@
         "oauthRestartRequired": "Nastavení poskytovatele ověřování byla změněna. Je vyžadován restart.",
         "databaseRestartRequired": "Nastavení databáze se změnilo. Je vyžadován restart.",
         "loggingRestartRequired": "Nastavení protokolování se změnilo. Je vyžadován restart.",
+        "ebirdRestartRequired": "eBird settings changed. Restart required.",
+        "weatherRestartRequired": "Weather settings changed. Restart required.",
         "reconfiguringSoundLevel": "Aktualizuji monitorování hladiny zvuku…",
         "reconfiguringAudioSources": "Překonfiguruji zdroje zvuku…",
         "rebuildingExtendedCapture": "Přestavuji filtr rozšířeného nahrávání…",

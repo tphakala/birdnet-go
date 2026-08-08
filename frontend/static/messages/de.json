@@ -422,6 +422,8 @@
         "oauthRestartRequired": "Authentifizierungsanbieter-Einstellungen geändert. Neustart erforderlich.",
         "databaseRestartRequired": "Datenbankeinstellungen geändert. Neustart erforderlich.",
         "loggingRestartRequired": "Protokollierungseinstellungen geändert. Neustart erforderlich.",
+        "ebirdRestartRequired": "eBird settings changed. Restart required.",
+        "weatherRestartRequired": "Weather settings changed. Restart required.",
         "reconfiguringSoundLevel": "Lautstärkeüberwachung wird aktualisiert...",
         "reconfiguringAudioSources": "Audioquellen werden neu konfiguriert...",
         "rebuildingExtendedCapture": "Erweiterter Aufnahmefilter wird neu aufgebaut...",

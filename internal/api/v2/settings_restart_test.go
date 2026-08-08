@@ -300,6 +300,8 @@ func TestHotReloadRestartFieldsCovered(t *testing.T) {
 	restartCovered := map[string]string{
 		"Logging": "Logging",
 		"Output":  "Database",
+		"Realtime.EBird": "eBird",
+		"Realtime.Weather": "Weather",
 	}
 	// registry restart-category field paths intentionally NOT wired to a restart
 	// marker yet, with the reason. See docs/superpowers/specs/2026-06-16-restart-required-tracking.md.

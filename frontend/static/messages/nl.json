@@ -422,6 +422,8 @@
         "oauthRestartRequired": "Authenticatieproviderinstellingen gewijzigd. Herstart vereist.",
         "databaseRestartRequired": "Database-instellingen gewijzigd. Herstart vereist.",
         "loggingRestartRequired": "Logboek-instellingen gewijzigd. Herstart vereist.",
+        "ebirdRestartRequired": "eBird settings changed. Restart required.",
+        "weatherRestartRequired": "Weather settings changed. Restart required.",
         "reconfiguringSoundLevel": "Geluidsniveaubewaking wordt bijgewerkt...",
         "reconfiguringAudioSources": "Audiobronnen worden opnieuw geconfigureerd...",
         "rebuildingExtendedCapture": "Filter voor uitgebreide opname wordt opnieuw opgebouwd...",

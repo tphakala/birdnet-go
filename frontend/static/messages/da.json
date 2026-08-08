@@ -422,6 +422,8 @@
         "oauthRestartRequired": "Godkendelsesudbyderindstillinger ændret. Genstart påkrævet.",
         "databaseRestartRequired": "Databaseindstillinger ændret. Genstart påkrævet.",
         "loggingRestartRequired": "Logningsindstillinger ændret. Genstart påkrævet.",
+        "ebirdRestartRequired": "eBird settings changed. Restart required.",
+        "weatherRestartRequired": "Weather settings changed. Restart required.",
         "reconfiguringSoundLevel": "Opdaterer lydniveauovervågning...",
         "reconfiguringAudioSources": "Genkonfigurerer lydkilder...",
         "rebuildingExtendedCapture": "Genopbygger udvidet optagelsesfilter...",

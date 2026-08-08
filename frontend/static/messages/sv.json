@@ -422,6 +422,8 @@
         "oauthRestartRequired": "Autentiseringsleverantörsinställningar ändrade. Omstart krävs.",
         "databaseRestartRequired": "Databasinställningar har ändrats. Omstart krävs.",
         "loggingRestartRequired": "Logginställningar har ändrats. Omstart krävs.",
+        "ebirdRestartRequired": "eBird settings changed. Restart required.",
+        "weatherRestartRequired": "Weather settings changed. Restart required.",
         "reconfiguringSoundLevel": "Uppdaterar ljudnivååvervakning...",
         "reconfiguringAudioSources": "Konfigurerar om ljudkällor...",
         "rebuildingExtendedCapture": "Bygger om filter för utökad inspelning...",

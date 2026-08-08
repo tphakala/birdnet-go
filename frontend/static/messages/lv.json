@@ -422,6 +422,8 @@
         "oauthRestartRequired": "Autentifikācijas nodrošinātāja iestatījumi mainīti. Nepieciešama restartēšana.",
         "databaseRestartRequired": "Datu bāzes iestatījumi mainīti. Nepieciešams restarts.",
         "loggingRestartRequired": "Žurnalēšanas iestatījumi mainīti. Nepieciešams restarts.",
+        "ebirdRestartRequired": "eBird settings changed. Restart required.",
+        "weatherRestartRequired": "Weather settings changed. Restart required.",
         "reconfiguringSoundLevel": "Atjaunina skaņas līmeņa uzraudzību...",
         "reconfiguringAudioSources": "Audio avotu pārkonfigurēšana...",
         "rebuildingExtendedCapture": "Pārbūvē paplašinātās ierakstīšanas filtru...",

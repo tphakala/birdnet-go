@@ -2475,6 +2475,8 @@ const (
 	reasonDatabaseRestart  = "restart.reasons.database"
 	reasonLoggingRestart   = "restart.reasons.logging"
 	reasonOAuthRestart     = "restart.reasons.oauth"
+	reasonEBirdRestart     = "restart.reasons.ebird"
+	reasonWeatherRestart   = "restart.reasons.weather"
 )
 
 // settingsChangeChecks defines the settings change detectors that dispatch an
@@ -2503,6 +2505,8 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"OAuth providers", "", oauthProvidersChanged, "Authentication provider settings changed. Restart required to apply.", notification.MsgSettingsOauthRestart, ToastTypeWarning, toastDurationExtended},
 	{"Database", "", outputSettingsChanged, "Database settings changed. Restart required to apply.", notification.MsgSettingsDatabaseRestart, ToastTypeWarning, toastDurationExtended},
 	{"Logging", "", loggingSettingsChanged, "Logging settings changed. Restart required to apply.", notification.MsgSettingsLoggingRestart, ToastTypeWarning, toastDurationExtended},
+	{"eBird", "", ebirdSettingsChanged, "eBird settings changed. Restart required to apply.", notification.MsgSettingsEbirdRestart, ToastTypeWarning, toastDurationExtended},
+	{"Weather", "", weatherSettingsChanged, "Weather settings changed. Restart required to apply.", notification.MsgSettingsWeatherRestart, ToastTypeWarning, toastDurationExtended},
 	{"Log deduplication", "reconfigure_log_deduplication", logDeduplicationSettingsChanged, "Reconfiguring log deduplication...", "", ToastTypeInfo, toastDurationShort},
 	{"RTSP health", "reconfigure_rtsp_health", rtspHealthSettingsChanged, "Reconfiguring RTSP health monitoring...", "", ToastTypeInfo, toastDurationShort},
 	{"Monitoring", "reconfigure_monitoring", monitoringSettingsChanged, "Reconfiguring system monitoring...", "", ToastTypeInfo, toastDurationShort},
@@ -2520,6 +2524,8 @@ var restartRequiringChecks = map[string]string{
 	"OAuth providers": reasonOAuthRestart,
 	"Database":        reasonDatabaseRestart,
 	"Logging":         reasonLoggingRestart,
+	"eBird":           reasonEBirdRestart,
+	"Weather":         reasonWeatherRestart,
 }
 
 // handleSettingsChanges checks if important settings have changed and triggers appropriate actions
@@ -3081,6 +3087,18 @@ func outputSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 // restart to take effect.
 func loggingSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	return !reflect.DeepEqual(oldSettings.Logging, currentSettings.Logging)
+}
+
+// ebirdSettingsChanged checks if eBird settings have changed.
+// The eBird client is initialized once at startup, so changes require a restart.
+func ebirdSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	return !reflect.DeepEqual(oldSettings.Realtime.EBird, currentSettings.Realtime.EBird)
+}
+
+// weatherSettingsChanged checks if weather settings have changed.
+// The weather providers are initialized once at startup, so changes require a restart.
+func weatherSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	return !reflect.DeepEqual(oldSettings.Realtime.Weather, currentSettings.Realtime.Weather)
 }
 
 // logDeduplicationSettingsChanged checks if log deduplication settings have changed.

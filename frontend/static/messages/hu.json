@@ -422,6 +422,8 @@
         "oauthRestartRequired": "Hitelesítési szolgáltató beállítások megváltoztak. Újraindítás szükséges.",
         "databaseRestartRequired": "Adatbázis beállítások megváltoztak. Újraindítás szükséges.",
         "loggingRestartRequired": "Naplózási beállítások megváltoztak. Újraindítás szükséges.",
+        "ebirdRestartRequired": "eBird settings changed. Restart required.",
+        "weatherRestartRequired": "Weather settings changed. Restart required.",
         "reconfiguringSoundLevel": "Hangszint monitorozás frissítése...",
         "reconfiguringAudioSources": "Hangforrások újrakonfigurálása...",
         "rebuildingExtendedCapture": "Kiterjesztett rögzítési szűrő újraépítése...",

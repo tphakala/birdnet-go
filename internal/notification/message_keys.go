@@ -45,6 +45,8 @@ const (
 	MsgSettingsOauthRestart                   = "notifications.content.settings.oauthRestartRequired"
 	MsgSettingsDatabaseRestart                = "notifications.content.settings.databaseRestartRequired"
 	MsgSettingsLoggingRestart                 = "notifications.content.settings.loggingRestartRequired"
+	MsgSettingsEbirdRestart                   = "notifications.content.settings.ebirdRestartRequired"
+	MsgSettingsWeatherRestart                 = "notifications.content.settings.weatherRestartRequired"
 
 	// Audio settings toasts
 	MsgSettingsReconfiguringSoundLevel   = "notifications.content.settings.reconfiguringSoundLevel"
