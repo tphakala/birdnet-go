@@ -18,12 +18,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
-// nameMaps holds the bidirectional BirdNET label lookup maps. Grouping them
-// into one struct lets a single atomic.Value Store swap both maps together,
-// avoiding any window where readers could see a partially updated pair.
+// nameMaps holds the BirdNET display, folded-search, and exact-resolution maps.
+// Grouping them lets a single atomic.Value Store swap one consistent snapshot,
+// avoiding any window where readers could see a partially updated set.
 type nameMaps struct {
 	// sciToCommon maps scientific name -> common name.
 	sciToCommon map[string]string
+	// sciToCommonFolded maps scientific name -> NFC-normalised, lowercased common
+	// name for allocation-free substring matching on the search hot path.
+	sciToCommonFolded map[string]string
 	// commonToSci maps NFC-normalised, lowercased common name -> scientific name.
 	commonToSci map[string]string
 }
@@ -42,14 +45,16 @@ type nameMaps struct {
 // not cover keep their embedded common name.
 func buildNameMaps(labels []string, resolver datastore.SpeciesNameResolver) *nameMaps {
 	nm := &nameMaps{
-		sciToCommon: make(map[string]string, len(labels)),
-		commonToSci: make(map[string]string, len(labels)),
+		sciToCommon:       make(map[string]string, len(labels)),
+		sciToCommonFolded: make(map[string]string, len(labels)),
+		commonToSci:       make(map[string]string, len(labels)),
 	}
 	ambiguous := make(map[string]struct{})
 	for _, sn := range datastore.ResolveLabelNames(labels, resolver) {
 		nm.sciToCommon[sn.Scientific] = sn.Common
 
 		key := apicore.NormalizeForLookup(sn.Common)
+		nm.sciToCommonFolded[sn.Scientific] = key
 		if _, seen := ambiguous[key]; seen {
 			continue
 		}
@@ -65,10 +70,11 @@ func buildNameMaps(labels []string, resolver datastore.SpeciesNameResolver) *nam
 
 // emptyNameMaps is returned by loadNameMaps when the atomic.Value has not been
 // populated yet (a narrow startup window before initInsightsRoutes runs). It
-// avoids allocating a fresh struct and two empty maps on every cold-path call.
+// avoids allocating a fresh struct and empty maps on every cold-path call.
 var emptyNameMaps = &nameMaps{
-	sciToCommon: map[string]string{},
-	commonToSci: map[string]string{},
+	sciToCommon:       map[string]string{},
+	sciToCommonFolded: map[string]string{},
+	commonToSci:       map[string]string{},
 }
 
 // loadNameMaps returns the current name-maps struct. Always returns a non-nil
@@ -90,6 +96,12 @@ func (c *Controller) loadCommonToScientificMap() map[string]string {
 // Always returns a non-nil map.
 func (c *Controller) loadCommonNameMap() map[string]string {
 	return c.loadNameMaps().sciToCommon
+}
+
+// loadFoldedCommonNameMap returns the current scientific-to-normalized-common
+// lookup map used by substring search. Always returns a non-nil map.
+func (c *Controller) loadFoldedCommonNameMap() map[string]string {
+	return c.loadNameMaps().sciToCommonFolded
 }
 
 // canonicalizeExcludeList canonicalizes the species exclude list (resolve each
