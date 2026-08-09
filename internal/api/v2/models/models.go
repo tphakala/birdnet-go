@@ -295,14 +295,17 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "model manager is not available", http.StatusServiceUnavailable)
 	}
 
-	// Parse the optional variant selection from the request body. An absent body
-	// or empty variantId installs (or switches to) the default variant, preserving
-	// the pre-variant call shape. A body naming a variant this entry does not offer
-	// is rejected up front so the client sees a 400 rather than a silent async
-	// failure over the progress stream.
+	// Parse the optional variant selection from the request body. Bind only when a
+	// body was actually sent: an absent body (the default no-variant call) installs
+	// the default variant and preserves the pre-variant call shape, whereas binding
+	// an empty body under a JSON content-type would 400. A present body naming a
+	// variant this entry does not offer is rejected up front so the client sees a
+	// 400 rather than a silent async failure over the progress stream.
 	var req installModelRequest
-	if err := ctx.Bind(&req); err != nil {
-		return c.HandleError(ctx, err, "invalid request body", http.StatusBadRequest)
+	if ctx.Request().ContentLength != 0 {
+		if err := ctx.Bind(&req); err != nil {
+			return c.HandleError(ctx, err, "invalid request body", http.StatusBadRequest)
+		}
 	}
 	if !classifier.VariantSelectable(&entry, req.VariantID) {
 		return c.HandleError(ctx, nil, "unknown variant "+req.VariantID+" for model "+catalogID, http.StatusBadRequest)
