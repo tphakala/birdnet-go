@@ -421,6 +421,25 @@ func validateSpeciesTrackingSettings(settings *SpeciesTrackingSettings) error {
 		if err := validateSeasonalTrackingSettings(&settings.SeasonalTracking); err != nil {
 			return err
 		}
+
+		// Validate infrequent tracking settings
+		if err := validateInfrequentTrackingSettings(&settings.InfrequentTracking); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateInfrequentTrackingSettings(settings *InfrequentTrackingSettings) error {
+	if settings.Enabled {
+		// Validate absence days
+		if settings.AbsenceDays < 1 || settings.AbsenceDays > 365 {
+			return errors.Newf("infrequent tracking absence days must be between 1 and 365, got %d", settings.AbsenceDays).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "infrequent-tracking-absence-days").
+				Context("absence_days", settings.AbsenceDays).
+				Build()
+		}
 	}
 	return nil
 }

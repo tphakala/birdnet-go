@@ -323,6 +323,7 @@ notification:
 | `{{.DetectionURL}}`       | Link to detection details  | `http://host:port/ui/detections/123`              |
 | `{{.ImageURL}}`           | Link to species image      | `http://host:port/api/v2/media/species-image?...` |
 | `{{.DaysSinceFirstSeen}}` | Days since first detection | 0 for new species                                 |
+| `{{.DaysSinceLastSeen}}`  | Days since previous detection before a return | 0 for first-ever/same-day       |
 
 ### Template Examples
 

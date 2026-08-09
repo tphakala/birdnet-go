@@ -624,6 +624,7 @@
       "categoryYear": "Ny i år",
       "categorySeason": "Ny denna säsong",
       "categorySeasonNamed": "Ny detta {season}",
+      "categoryInfrequent": "Sällsynt",
       "maxConfidenceShort": "Max {confidence} %",
       "detections": "{count, plural, one {# upptäckt} other {# upptäckter}}",
       "lastSeen": "Senast: {days, plural, =0 {idag} one {för # dag sedan} other {för # dagar sedan}}"
@@ -658,7 +659,8 @@
         "viewSixHourly": "Visa alla detekteringar för {startHour}:00-{endHour}:00",
         "hourlyDetections": "{count} detekteringar kl. {hour}:00 - Klicka för att visa",
         "biHourlyDetections": "{count} detekteringar från {startHour}:00-{endHour}:00 - Klicka för att visa",
-        "sixHourlyDetections": "{count} detekteringar från {startHour}:00-{endHour}:00 - Klicka för att visa"
+        "sixHourlyDetections": "{count} detekteringar från {startHour}:00-{endHour}:00 - Klicka för att visa",
+        "infrequent": "Sällsynt - återkom efter {days, plural, one {# dags} other {# dagars}} frånvaro"
       },
       "loading": {
         "preparing": "Förbereder data...",
@@ -2746,7 +2748,8 @@
           "detectionPath": "Relativ sökväg till detektion (t.ex. \"/ui/detections/1234\")",
           "detectionUrl": "Fullständig URL till detektion i gränssnittet",
           "imageUrl": "Länk till artbild",
-          "daysSinceFirstSeen": "Antal dagar sedan första detektionen"
+          "daysSinceFirstSeen": "Antal dagar sedan första detektionen",
+          "daysSinceLastSeen": "Antal dagar sedan senaste detekteringen"
         }
       },
       "testNotification": {
@@ -4269,6 +4272,18 @@
             "hemisphereNote": "Säsongsdatum konfigureras automatiskt baserat på din latitud. Norra halvklotet använder standardsäsonger, södra halvklotet har förskjutna datum och ekvatoriella regioner använder regn-/torrsäsonger."
           }
         },
+        "infrequent": {
+          "title": "Spårning av sällsynta arter",
+          "description": "Markerar arter som återkommer efter lång frånvaro (sällsynta återvändande besökare)",
+          "enabled": {
+            "label": "Aktivera spårning av sällsynta arter",
+            "helpText": "Spåra och meddela när en art detekteras igen efter lång frånvaro"
+          },
+          "absenceDays": {
+            "label": "Frånvarotröskel (dagar)",
+            "helpText": "Minsta antal dagar sedan senaste detekteringen innan en återvändande art markeras som 'sällsynt' (1-365)"
+          }
+        },
         "months": {
           "january": "Januari",
           "february": "Februari",
@@ -4466,6 +4481,7 @@
           "stream_disconnected": "Ström frånkopplad",
           "stream_error": "Strömfel",
           "detection_new_species": "Ny art detekterad",
+          "detection_infrequent_species": "Sällsynt art detekterad",
           "detection_occurred": "Detektering utförd",
           "application_started": "Applikation startad",
           "application_stopped": "Applikation stoppad",
@@ -4515,6 +4531,10 @@
         "newSpecies": {
           "name": "Ny art detekterad",
           "description": "Meddelar när en art detekteras för första gången"
+        },
+        "infrequentSpecies": {
+          "name": "Sällsynt art detekterad",
+          "description": "Meddelar när en art återkommer efter lång frånvaro"
         },
         "streamDisconnected": {
           "name": "Ljudström frånkopplad",
