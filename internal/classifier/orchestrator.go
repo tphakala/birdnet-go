@@ -455,23 +455,38 @@ func (o *Orchestrator) resolveInstalledPaths(registryID string) (modelPath, labe
 			continue
 		}
 		subdir := filepath.Join(o.modelsDir, entry.ID)
-		var mp, lp, ep string
-		for _, f := range entry.Files {
-			switch f.Role {
-			case RoleModel:
-				mp = filepath.Join(subdir, f.LocalName)
-			case RoleLabels:
-				lp = filepath.Join(subdir, f.LocalName)
-			case RoleEmbeddings:
-				ep = filepath.Join(o.modelsDir, "shared", f.LocalName)
+
+		// A variant entry's resolved Files name the DEFAULT variant, which is not
+		// the file on disk when a non-default variant is installed. Probe each
+		// variant's own files and return the one whose model file exists (a
+		// completed switch leaves exactly one), so a non-default install still
+		// resolves here when settings carry no path. Flat entries probe entry.Files.
+		fileSets := [][]CatalogFile{entry.Files}
+		if len(entry.Variants) > 0 {
+			fileSets = make([][]CatalogFile, 0, len(entry.Variants))
+			for j := range entry.Variants {
+				fileSets = append(fileSets, entry.Variants[j].Files)
 			}
 		}
-		if mp != "" {
-			if _, err := os.Stat(mp); err == nil {
-				log.Debug("resolved model paths from gallery",
-					logger.String("registry_id", registryID),
-					logger.String("model_path", mp))
-				return mp, lp, ep
+		for _, files := range fileSets {
+			var mp, lp, ep string
+			for _, f := range files {
+				switch f.Role {
+				case RoleModel:
+					mp = filepath.Join(subdir, f.LocalName)
+				case RoleLabels:
+					lp = filepath.Join(subdir, f.LocalName)
+				case RoleEmbeddings:
+					ep = filepath.Join(o.modelsDir, "shared", f.LocalName)
+				}
+			}
+			if mp != "" {
+				if _, err := os.Stat(mp); err == nil {
+					log.Debug("resolved model paths from gallery",
+						logger.String("registry_id", registryID),
+						logger.String("model_path", mp))
+					return mp, lp, ep
+				}
 			}
 		}
 	}
