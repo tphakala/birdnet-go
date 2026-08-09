@@ -11,6 +11,7 @@ package models
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -295,17 +297,18 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "model manager is not available", http.StatusServiceUnavailable)
 	}
 
-	// Parse the optional variant selection from the request body. Bind only when a
-	// body was actually sent: an absent body (the default no-variant call) installs
-	// the default variant and preserves the pre-variant call shape, whereas binding
-	// an empty body under a JSON content-type would 400. A present body naming a
-	// variant this entry does not offer is rejected up front so the client sees a
-	// 400 rather than a silent async failure over the progress stream.
+	// Parse the optional variant selection from the request body. The body is
+	// optional: an absent or empty body installs the default variant, preserving
+	// the pre-variant call shape, so an empty-body io.EOF is tolerated. Decoding the
+	// body directly (rather than ctx.Bind, which 400s an empty body under a JSON
+	// content-type, and rather than gating on ContentLength, which is -1 for chunked
+	// requests) keeps that contract robust while still binding a real chunked body.
+	// Malformed JSON is a 400 so the client sees the error synchronously rather than
+	// as a silent async failure over the progress stream. The body reader is bounded
+	// by the server's body-limit middleware.
 	var req installModelRequest
-	if ctx.Request().ContentLength != 0 {
-		if err := ctx.Bind(&req); err != nil {
-			return c.HandleError(ctx, err, "invalid request body", http.StatusBadRequest)
-		}
+	if err := json.NewDecoder(ctx.Request().Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		return c.HandleError(ctx, err, "invalid request body", http.StatusBadRequest)
 	}
 	if !classifier.VariantSelectable(&entry, req.VariantID) {
 		return c.HandleError(ctx, nil, "unknown variant "+req.VariantID+" for model "+catalogID, http.StatusBadRequest)

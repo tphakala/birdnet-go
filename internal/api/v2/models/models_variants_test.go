@@ -79,6 +79,28 @@ func TestInstallModel_RejectsUnknownVariant(t *testing.T) {
 	assert.Contains(t, rec.Body.String(), "unknown variant")
 }
 
+// TestInstallModel_RejectsMalformedBody verifies a malformed JSON body is
+// rejected with 400 (an empty body, by contrast, is tolerated and installs the
+// default variant).
+func TestInstallModel_RejectsMalformedBody(t *testing.T) {
+	core := apitest.NewCore(t)
+	core.ModelManager = classifier.NewModelManager(t.TempDir(), nil, nil)
+	h := New(core)
+	e := echo.New()
+
+	body := strings.NewReader(`{"variantId":`) // truncated JSON
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/models/install/perch-v2", body)
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetParamNames("id")
+	ctx.SetParamValues("perch-v2")
+
+	require.NoError(t, h.InstallModel(ctx))
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "invalid request body")
+}
+
 // TestBuildVariantResponses_LegacyHiddenUnlessInstalled verifies a superseded
 // (Legacy) variant is hidden from the gallery unless it is the installed one, and
 // that the Installed flag is set for the on-disk variant.
