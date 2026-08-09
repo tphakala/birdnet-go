@@ -120,6 +120,66 @@ func TestBridge_NewSpecies_EmitsBothEvents(t *testing.T) {
 	}
 }
 
+func TestBridge_Lifer_EmitsBothEvents(t *testing.T) {
+	bridge, mu, captured := setupBridgeWithCapture(t)
+
+	event, err := events.NewDetectionEvent("Test Bird", "Testus birdus", 0.9, "mic", false, 30)
+	require.NoError(t, err)
+	event.GetMetadata()[events.DetectionMetadataIsLifer] = true
+
+	require.NoError(t, bridge.ProcessDetectionEvent(event))
+
+	result := waitForEvents(t, mu, captured, 2)
+	assert.Len(t, result, 2)
+
+	eventNames := []string{result[0].EventName, result[1].EventName}
+	assert.Contains(t, eventNames, EventDetectionOccurred)
+	assert.Contains(t, eventNames, EventDetectionLifer)
+
+	for _, r := range result {
+		assert.Equal(t, "Test Bird", r.Properties[PropertySpeciesName])
+		assert.Equal(t, true, r.Properties[PropertyIsLifer])
+	}
+}
+
+func TestBridge_NotLifer_EmitsOccurredOnly(t *testing.T) {
+	bridge, mu, captured := setupBridgeWithCapture(t)
+
+	event, err := events.NewDetectionEvent("Test Bird", "Testus birdus", 0.9, "mic", false, 30)
+	require.NoError(t, err)
+	// is_lifer metadata deliberately absent, matching the "set only when
+	// true" convention.
+
+	require.NoError(t, bridge.ProcessDetectionEvent(event))
+
+	result := waitForEvents(t, mu, captured, 1)
+	assert.Len(t, result, 1)
+	assert.Equal(t, EventDetectionOccurred, result[0].EventName)
+}
+
+// TestBridge_NewSpeciesAndLifer_LiferTakesPrecedence verifies that a detection
+// which is both new-to-this-install and a lifer emits detection.occurred and
+// detection.lifer but NOT detection.new_species — the user gets a single lifer
+// alert (the more significant one), not a duplicate new-species alert.
+func TestBridge_NewSpeciesAndLifer_LiferTakesPrecedence(t *testing.T) {
+	bridge, mu, captured := setupBridgeWithCapture(t)
+
+	event, err := events.NewDetectionEvent("Test Bird", "Testus birdus", 0.9, "mic", true, 0)
+	require.NoError(t, err)
+	event.GetMetadata()[events.DetectionMetadataIsLifer] = true
+
+	require.NoError(t, bridge.ProcessDetectionEvent(event))
+
+	result := waitForEvents(t, mu, captured, 2)
+	assert.Len(t, result, 2)
+
+	eventNames := []string{result[0].EventName, result[1].EventName}
+	assert.Contains(t, eventNames, EventDetectionOccurred)
+	assert.Contains(t, eventNames, EventDetectionLifer)
+	assert.NotContains(t, eventNames, EventDetectionNewSpecies,
+		"a lifer that is also new to this install must not also emit new_species")
+}
+
 func TestBridge_NewSpecies_IndependentPropertyMaps(t *testing.T) {
 	bridge, mu, captured := setupBridgeWithCapture(t)
 

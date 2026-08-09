@@ -39,6 +39,7 @@
     speciesSettings,
     realtimeSettings,
     speciesTrackingSettings,
+    lifeListSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { SpeciesConfig, SpeciesSettings } from '$lib/stores/settings';
@@ -51,6 +52,7 @@
   import SpeciesListCard from '$lib/desktop/features/settings/components/SpeciesListCard.svelte';
   import SpeciesConfigEditor from '$lib/desktop/features/settings/components/SpeciesConfigEditor.svelte';
   import SpeciesConfigTable from '$lib/desktop/features/settings/components/SpeciesConfigTable.svelte';
+  import LifeListImportField from '$lib/desktop/features/settings/components/LifeListImportField.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
@@ -84,6 +86,7 @@
     CalendarClock,
     Activity,
     TriangleAlert,
+    Star,
   } from '@lucide/svelte';
   import { toastActions } from '$lib/stores/toast';
 
@@ -399,6 +402,10 @@
     )
   );
 
+  let lifeListHasChanges = $derived(
+    hasSettingsChanged(store.originalData.realtime?.lifeList, store.formData.realtime?.lifeList)
+  );
+
   let synonymsHasChanges = $derived(
     hasSettingsChanged(store.originalData.taxonomySynonyms, store.formData.taxonomySynonyms)
   );
@@ -416,6 +423,37 @@
 
   // Tracking settings state
   let trackingSettings = $derived($speciesTrackingSettings);
+
+  // Life list settings state. `species` is normalized to an array inside the
+  // `lifeListSettings` derived store (a Go nil slice marshals to JSON null) —
+  // that store is the single source of truth for this invariant, so the guard
+  // is deliberately not repeated here.
+  let lifeList = $derived($lifeListSettings);
+
+  function setLifeListEnabled(enabled: boolean) {
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      lifeList: { ...lifeList, enabled },
+    });
+  }
+
+  // A new CSV upload replaces the whole life list — see LifeListImportField's
+  // doc comment. The CSV-level "N of M rows imported" summary is already
+  // shown by LifeListImportField itself, so this deliberately does not fire
+  // a second toast.
+  function importLifeListSpecies(entries: string[]) {
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      lifeList: { ...lifeList, species: entries },
+    });
+  }
+
+  function clearLifeList() {
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      lifeList: { ...lifeList, species: [] },
+    });
+  }
 
   // Month options for dropdown menus (derived once, used multiple times)
   let monthOptions = $derived(
@@ -1227,6 +1265,13 @@
       hasChanges: trackingHasChanges,
     },
     {
+      id: 'lifeList',
+      label: t('settings.species.lifeList.tabLabel'),
+      icon: Star,
+      content: lifeListTabContent,
+      hasChanges: lifeListHasChanges,
+    },
+    {
       id: 'dynamicThreshold',
       label: t('settings.species.dynamicThreshold.tabLabel'),
       icon: Activity,
@@ -1989,6 +2034,38 @@
         </div>
       </SettingsSection>
     {/if}
+  </div>
+{/snippet}
+
+<!-- Life List Tab Content -->
+{#snippet lifeListTabContent()}
+  <div class="space-y-6">
+    <SettingsSection
+      title={t('settings.species.lifeList.title')}
+      description={t('settings.species.lifeList.description')}
+      defaultOpen={true}
+      originalData={store.originalData.realtime?.lifeList}
+      currentData={store.formData.realtime?.lifeList}
+    >
+      <div class="space-y-4">
+        <Checkbox
+          checked={lifeList.enabled}
+          label={t('settings.species.lifeList.enableLabel')}
+          helpText={t('settings.species.lifeList.enableHelp')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={setLifeListEnabled}
+        />
+
+        {#if lifeList.enabled}
+          <LifeListImportField
+            speciesCount={lifeList.species.length}
+            disabled={store.isLoading || store.isSaving}
+            onImport={importLifeListSpecies}
+            onClear={clearLifeList}
+          />
+        {/if}
+      </div>
+    </SettingsSection>
   </div>
 {/snippet}
 

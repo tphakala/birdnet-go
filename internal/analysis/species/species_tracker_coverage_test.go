@@ -25,6 +25,8 @@ func TestIsNewSpecies(t *testing.T) {
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistoryByType", mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
 	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
@@ -70,6 +72,8 @@ func TestGetBatchSpeciesStatus(t *testing.T) {
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistoryByType", mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
 	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
@@ -205,6 +209,8 @@ func TestCleanupExpiredCache(t *testing.T) {
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistoryByType", mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
 	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
@@ -260,6 +266,8 @@ func TestCleanupExpiredCacheLRU(t *testing.T) {
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistoryByType", mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
 	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
@@ -322,6 +330,8 @@ func TestCheckAndUpdateSpeciesAtomic(t *testing.T) {
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistoryByType", mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
 	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
@@ -406,6 +416,8 @@ func TestIsSeasonMapInitializedAndCount(t *testing.T) {
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistoryByType", mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
 	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
@@ -479,6 +491,8 @@ func TestExpireCacheForTesting(t *testing.T) {
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistoryByType", mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
 	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
@@ -524,6 +538,8 @@ func TestClearCacheForTestingMethod(t *testing.T) {
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistoryByType", mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
 	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
@@ -574,6 +590,8 @@ func TestShouldSuppressNotificationMethod(t *testing.T) {
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistoryByType", mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
 	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
@@ -641,6 +659,8 @@ func TestRecordNotificationSentMethod(t *testing.T) {
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistoryByType", mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
 	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
@@ -703,6 +723,8 @@ func TestCleanupOldNotificationRecordsMethod(t *testing.T) {
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistoryByType", mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
 	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
@@ -785,6 +807,8 @@ func TestCheckAndResetPeriods(t *testing.T) {
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistoryByType", mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
 	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
@@ -917,6 +941,8 @@ func TestPruneOldEntriesComprehensive(t *testing.T) {
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistoryByType", mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: Notification persistence - async operations
 	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
@@ -1028,6 +1054,8 @@ func TestConcurrentOperationsStress(t *testing.T) {
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistoryByType", mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()

@@ -891,6 +891,7 @@ type RealtimeSettings struct {
 	Weather          WeatherSettings          `yaml:"weather" json:"weather"`                   // Weather provider related settings
 	SpeciesTracking  SpeciesTrackingSettings  `yaml:"speciestracking" json:"speciesTracking"`   // New species tracking settings
 	ExtendedCapture  ExtendedCaptureSettings  `yaml:"extendedcapture" json:"extendedCapture"`   // Extended capture for long calling species
+	LifeList         LifeListSettings         `yaml:"lifelist" json:"lifeList"`                 // Real-world life list (e.g. imported from eBird) for lifer notifications
 }
 
 // SpeciesAction represents a single action configuration
@@ -933,6 +934,23 @@ type SpeciesTrackingSettings struct {
 	NotificationSuppressionHours int                      `yaml:"notificationsuppressionhours" json:"notificationSuppressionHours"` // Hours to suppress duplicate notifications (default: 168)
 	YearlyTracking               YearlyTrackingSettings   `yaml:"yearlytracking" json:"yearlyTracking"`                             // Settings for yearly species tracking
 	SeasonalTracking             SeasonalTrackingSettings `yaml:"seasonaltracking" json:"seasonalTracking"`                         // Settings for seasonal species tracking
+}
+
+// LifeListSettings contains the user's real-world life list (e.g. imported
+// from an eBird export), used to distinguish a genuine "lifer" (a species
+// never seen anywhere) from the app's own per-install "new species" tracking.
+//
+// Unlike RangeFilterSettings.Species (only ever rewritten by the geo-model
+// rebuild path via UpdateIncludedSpecies), Species here is edited directly
+// through the general settings save endpoint, so it deliberately has no
+// precomputed lookup map: a cached map would go stale the moment a user
+// edits the list through the UI, since the settings merge-patch handler has
+// no hook to rebuild it. IsOnLifeList does a canonicalized linear scan
+// instead — checked once per saved detection, not a hot path, so this is
+// not a meaningful cost even for a list of several thousand species.
+type LifeListSettings struct {
+	Enabled bool     `yaml:"enabled" json:"enabled"` // true to enable lifer notifications
+	Species []string `yaml:"species" json:"species"` // Life list entries, "Scientific name_Common name" format (same convention as SpeciesSettings.Include)
 }
 
 // YearlyTrackingSettings contains settings for tracking first arrivals each year

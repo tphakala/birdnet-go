@@ -1084,6 +1084,66 @@ func (_c *MockInterface_GetActiveNotificationHistory_Call) RunAndReturn(run func
 	return _c
 }
 
+// GetActiveNotificationHistoryByType provides a mock function with given fields: ctx, notificationType, after
+func (_m *MockInterface) GetActiveNotificationHistoryByType(ctx context.Context, notificationType string, after time.Time) ([]datastore.NotificationHistory, error) {
+	ret := _m.Called(ctx, notificationType, after)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetActiveNotificationHistoryByType")
+	}
+
+	var r0 []datastore.NotificationHistory
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, time.Time) ([]datastore.NotificationHistory, error)); ok {
+		return rf(ctx, notificationType, after)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, time.Time) []datastore.NotificationHistory); ok {
+		r0 = rf(ctx, notificationType, after)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.NotificationHistory)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, time.Time) error); ok {
+		r1 = rf(ctx, notificationType, after)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetActiveNotificationHistoryByType_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetActiveNotificationHistoryByType'
+type MockInterface_GetActiveNotificationHistoryByType_Call struct {
+	*mock.Call
+}
+
+// GetActiveNotificationHistoryByType is a helper method to define mock.On call
+//   - ctx context.Context
+//   - notificationType string
+//   - after time.Time
+func (_e *MockInterface_Expecter) GetActiveNotificationHistoryByType(ctx interface{}, notificationType interface{}, after interface{}) *MockInterface_GetActiveNotificationHistoryByType_Call {
+	return &MockInterface_GetActiveNotificationHistoryByType_Call{Call: _e.mock.On("GetActiveNotificationHistoryByType", ctx, notificationType, after)}
+}
+
+func (_c *MockInterface_GetActiveNotificationHistoryByType_Call) Run(run func(ctx context.Context, notificationType string, after time.Time)) *MockInterface_GetActiveNotificationHistoryByType_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetActiveNotificationHistoryByType_Call) Return(_a0 []datastore.NotificationHistory, _a1 error) *MockInterface_GetActiveNotificationHistoryByType_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetActiveNotificationHistoryByType_Call) RunAndReturn(run func(context.Context, string, time.Time) ([]datastore.NotificationHistory, error)) *MockInterface_GetActiveNotificationHistoryByType_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetActivityHeatmap provides a mock function with given fields: ctx, startDate, endDate, species
 func (_m *MockInterface) GetActivityHeatmap(ctx context.Context, startDate string, endDate string, species string) (datastore.ActivityHeatmapData, error) {
 	ret := _m.Called(ctx, startDate, endDate, species)
