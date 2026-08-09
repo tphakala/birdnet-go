@@ -116,11 +116,13 @@ func (b *DetectionAlertBridge) ProcessDetectionEvent(event events.DetectionEvent
 
 // isInfrequentDetection reports whether a returning detection qualifies as
 // "infrequent": tracking enabled and the pre-return absence gap exceeds the
-// configured threshold. days_since_last_seen is absent for first-ever and
-// same-day detections, so those never qualify. New species detections take
-// precedence over the infrequent tier (matching the frontend's lifetime >
-// year > season > infrequent ordering), so an already-new detection never
-// also qualifies as infrequent.
+// configured threshold. days_since_last_seen is absent for first-ever
+// detections and 0 for same-day repeats, so neither qualifies. Lifetime-new
+// detections (is_new_species) take precedence and never also qualify as
+// infrequent. Year/season novelty are dashboard-only badges with no alert
+// event of their own, so they are not suppressed here: a returning visitor
+// that is also "new this year/season" can still emit an infrequent alert
+// while the dashboard shows the higher-precedence badge.
 func isInfrequentDetection(properties map[string]any) bool {
 	if isNew, ok := properties[PropertyIsNewSpecies].(bool); ok && isNew {
 		return false

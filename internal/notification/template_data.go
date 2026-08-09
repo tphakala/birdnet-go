@@ -79,8 +79,9 @@ func NewTemplateData(event events.DetectionEvent, baseURL string, timeAs24h bool
 
 	scientificName := event.GetScientificName()
 
-	// Days since the previous detection before this one; the metadata may be omitted
-	// (e.g., first-ever detections or non-novelty same-day repeats), so it defaults to 0.
+	// Days since the previous detection before this one. The metadata may be omitted
+	// (e.g., first-ever detections) or present as 0 (e.g., same-day repeats), so it
+	// defaults to 0 when absent.
 	var daysSinceLastSeen int
 	if days, ok := metadata[events.DetectionMetadataDaysSinceLastSeen].(int); ok {
 		daysSinceLastSeen = days

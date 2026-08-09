@@ -56,9 +56,11 @@ Shows up to 12 species, ordered by novelty category then detection count.
   };
 
   // Absence threshold for the infrequent tier; undefined disables it so the
-  // category never activates when infrequent tracking is turned off.
+  // category never activates when species tracking or infrequent tracking is
+  // turned off (matching the gate in DailySummaryCard).
   const infrequentThresholdDays = $derived(
-    $speciesTrackingSettings?.infrequentTracking?.enabled === true
+    $speciesTrackingSettings?.enabled === true &&
+      $speciesTrackingSettings.infrequentTracking?.enabled === true
       ? ($speciesTrackingSettings.infrequentTracking.absenceDays ?? 14)
       : undefined
   );
