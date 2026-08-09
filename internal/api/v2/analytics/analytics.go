@@ -20,11 +20,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-const placeholderImageURL = "/ui/assets/bird-placeholder.svg"
 const maxSpeciesBatch = 10
 
 // Analytics constants (file-local)
@@ -42,10 +40,12 @@ const (
 	minConfidenceBins     = 5
 	maxConfidenceBins     = 50
 
-	// Species ridgeline (who-sings-when) top-N bounds. The default matches the chart's maxSpecies
-	// cap; the max keeps the ridgeline readable (more than ~8 overlapping ridges are unreadable).
+	// Species ridgeline (who-sings-when) top-N bounds. The default is the readable top-N shown with no
+	// selection; the max matches the control bar's species cap (MAX_SPECIES) so an explicit selection
+	// of up to that many species is honored in full rather than silently truncated (a selection larger
+	// than the default is the user's deliberate choice, crowding and all). Mirrors the succession max.
 	defaultSpeciesRidgelineLimit = 5
-	maxSpeciesRidgelineLimit     = 8
+	maxSpeciesRidgelineLimit     = 10
 
 	// Arrival/departure phenology top-N bounds. The default matches the chart's maxSpecies cap; the
 	// max keeps the Gantt's residency bars legible within the card's fixed height (one bar per species,
@@ -329,9 +329,13 @@ func (c *Handler) processBatchDates(ctx context.Context, dates []string, minConf
 			break
 		}
 		// Bound each date's queries individually so one slow date cannot hang the batch.
-		dateCtx, cancel := context.WithTimeout(ctx, analyticsQueryTimeout)
-		result, err := c.processSingleDateForBatch(dateCtx, selectedDate, minConfidence, limit, ip, path)
-		cancel()
+		// Run in a closure with defer cancel() so the context timer is released even if
+		// processSingleDateForBatch panics, instead of leaking until the timeout fires.
+		result, err := func() ([]SpeciesDailySummary, error) {
+			dateCtx, cancel := context.WithTimeout(ctx, analyticsQueryTimeout)
+			defer cancel()
+			return c.processSingleDateForBatch(dateCtx, selectedDate, minConfidence, limit, ip, path)
+		}()
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				break // client disconnected; stop the batch without recording a failure
@@ -436,7 +440,8 @@ func (c *Handler) aggregateDailySpeciesData(ctx context.Context, notes []datasto
 	// Batch fetch hourly counts for all species in single query
 	speciesList := slices.Collect(maps.Keys(uniqueSpecies))
 
-	hourlyCounts, err := c.DS.GetBatchHourlyOccurrences(ctx, selectedDate, speciesList, minConfidence)
+	// This summary covers a single day, so the range collapses to that one date.
+	hourlyCounts, err := c.DS.GetBatchHourlyOccurrences(ctx, selectedDate, selectedDate, speciesList, minConfidence)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get batch hourly occurrences: %w", err)
 	}
@@ -502,9 +507,6 @@ func (c *Handler) buildDailySpeciesSummaryResponse(aggregatedData map[string]agg
 	// Collect species names with detections
 	scientificNames := collectSpeciesWithDetections(aggregatedData)
 
-	// Batch fetch thumbnail URLs (cached only for fast response)
-	thumbnailURLs := c.batchFetchCachedThumbnails(scientificNames)
-
 	// Parse selected date for status computation
 	statusTime := parseStatusTimeFromDate(selectedDate)
 
@@ -515,7 +517,13 @@ func (c *Handler) buildDailySpeciesSummaryResponse(aggregatedData map[string]agg
 	result := make([]SpeciesDailySummary, 0, len(scientificNames))
 	for _, scientificName := range scientificNames {
 		data := aggregatedData[scientificName]
-		thumbnailURL := getThumbnailWithFallback(thumbnailURLs, scientificName)
+		// Emit the media-proxy URL directly rather than pre-resolving from the
+		// cache-only batch path. The proxy (ServeSpeciesImageProxy) resolves via
+		// the single-item Get() fallback chain and the local file cache, so
+		// dashboard thumbnails honor the configured fallback provider even when
+		// the primary provider has a negative cache entry (issue #3806). The
+		// frontend swaps to the placeholder on a 404 via handleBirdImageError.
+		thumbnailURL := buildThumbnailURL(scientificName)
 		summary := buildSpeciesSummaryFromData(&data, thumbnailURL)
 		if status, exists := batchSpeciesStatus[scientificName]; exists {
 			applySpeciesStatusToSummary(&summary, &status)
@@ -535,23 +543,6 @@ func collectSpeciesWithDetections(aggregatedData map[string]aggregatedBirdInfo) 
 		}
 	}
 	return names
-}
-
-// batchFetchCachedThumbnails fetches thumbnail URLs from cache only
-func (c *Handler) batchFetchCachedThumbnails(scientificNames []string) map[string]string {
-	thumbnailURLs := make(map[string]string)
-	cache := c.BirdImageCache
-	if cache == nil || len(scientificNames) == 0 {
-		return thumbnailURLs
-	}
-
-	batchResults := cache.GetBatchCachedOnly(scientificNames)
-	for name := range batchResults {
-		if img := batchResults[name]; img.URL != "" && !img.IsNegativeEntry() {
-			thumbnailURLs[name] = imageprovider.ProxyImageURL(name)
-		}
-	}
-	return thumbnailURLs
 }
 
 // parseStatusTimeFromDate parses selected date for species status computation
@@ -579,14 +570,6 @@ func (c *Handler) batchFetchSpeciesStatus(scientificNames []string, statusTime t
 		return nil
 	}
 	return tracker.GetBatchSpeciesStatus(scientificNames, statusTime)
-}
-
-// getThumbnailWithFallback returns thumbnail URL or placeholder
-func getThumbnailWithFallback(thumbnailURLs map[string]string, scientificName string) string {
-	if url, ok := thumbnailURLs[scientificName]; ok && url != "" {
-		return url
-	}
-	return placeholderImageURL
 }
 
 // buildSpeciesSummaryFromData creates a SpeciesDailySummary from aggregated data
@@ -674,10 +657,12 @@ func (c *Handler) GetSpeciesSummary(ctx echo.Context) error {
 		)
 	}
 
-	// Build response with thumbnails
-	scientificNames := extractScientificNames(summaryData)
-	thumbnailURLs := c.batchFetchThumbnailsWithLogging(scientificNames, ip, path)
-	response := c.convertSummaryDataToResponse(summaryData, thumbnailURLs)
+	// Build response. Emit the media-proxy URL for every species (defer-to-proxy,
+	// matching the dashboard fix in #3806): ServeSpeciesImageProxy resolves images via
+	// the single-item Get() fallback chain and the local file cache, so species the
+	// primary provider lacks but a fallback has are honored at request time and a 404
+	// is cached. The frontend swaps to a placeholder on error.
+	response := c.convertSummaryDataToResponse(summaryData)
 
 	// Apply limit
 	response, limit := c.applyOptionalLimit(ctx, response, ip, path)
@@ -703,43 +688,8 @@ func (c *Handler) fetchSpeciesSummaryData(ctx echo.Context, startDate, endDate s
 	return summaryData, time.Since(dbStart), err
 }
 
-// extractScientificNames extracts scientific names from summary data
-func extractScientificNames(summaryData []datastore.SpeciesSummaryData) []string {
-	names := make([]string, 0, len(summaryData))
-	for i := range summaryData {
-		names = append(names, summaryData[i].ScientificName)
-	}
-	return names
-}
-
-// batchFetchThumbnailsWithLogging fetches thumbnails with debug logging
-func (c *Handler) batchFetchThumbnailsWithLogging(scientificNames []string, ip, path string) map[string]imageprovider.BirdImage {
-	cache := c.BirdImageCache
-	if cache == nil || len(scientificNames) == 0 {
-		return nil
-	}
-
-	c.LogDebugIfEnabled("Fetching cached thumbnails only",
-		logger.Int("count", len(scientificNames)),
-		logger.String("ip", ip),
-		logger.String("path", path),
-	)
-	thumbStart := time.Now()
-	thumbnailURLs := cache.GetBatchCachedOnly(scientificNames)
-	thumbDuration := time.Since(thumbStart)
-	c.LogInfoIfEnabled("Cached thumbnail fetch completed",
-		logger.Int64("duration_ms", thumbDuration.Milliseconds()),
-		logger.Int("cached_count", len(thumbnailURLs)),
-		logger.Int("requested_count", len(scientificNames)),
-		logger.String("ip", ip),
-		logger.String("path", path),
-	)
-
-	return thumbnailURLs
-}
-
 // convertSummaryDataToResponse converts datastore models to API response
-func (c *Handler) convertSummaryDataToResponse(summaryData []datastore.SpeciesSummaryData, thumbnailURLs map[string]imageprovider.BirdImage) []SpeciesSummary {
+func (c *Handler) convertSummaryDataToResponse(summaryData []datastore.SpeciesSummaryData) []SpeciesSummary {
 	response := make([]SpeciesSummary, 0, len(summaryData))
 
 	for i := range summaryData {
@@ -753,30 +703,23 @@ func (c *Handler) convertSummaryDataToResponse(summaryData []datastore.SpeciesSu
 			LastHeard:      formatTimeIfNotZero(data.LastSeen),
 			AvgConfidence:  data.AvgConfidence,
 			MaxConfidence:  data.MaxConfidence,
-			ThumbnailURL:   getThumbnailURLFromBirdImage(thumbnailURLs, data.ScientificName),
+			ThumbnailURL:   buildThumbnailURL(data.ScientificName),
 		})
 	}
 
 	return response
 }
 
-// formatTimeIfNotZero formats time as string if not zero
+// formatTimeIfNotZero formats a timestamp as an ISO 8601 (RFC3339) string with a
+// timezone offset, or "" if the time is zero. RFC3339 is the timestamp format used
+// across the rest of the v2 API (detections, SSE, weather, notifications), so the
+// species summary's first_heard/last_heard match it and carry an unambiguous offset
+// for timezone-aware clients. See issue #3793.
 func formatTimeIfNotZero(t time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
-	return t.Format(time.DateTime)
-}
-
-// getThumbnailURLFromBirdImage extracts URL from BirdImage map
-func getThumbnailURLFromBirdImage(thumbnailURLs map[string]imageprovider.BirdImage, scientificName string) string {
-	if thumbnailURLs == nil {
-		return ""
-	}
-	if img, ok := thumbnailURLs[scientificName]; ok && img.URL != "" && !img.IsNegativeEntry() {
-		return imageprovider.ProxyImageURL(scientificName)
-	}
-	return ""
+	return t.Format(time.RFC3339)
 }
 
 // applyOptionalLimit parses and applies limit parameter
@@ -1544,18 +1487,49 @@ func (c *Handler) GetAnalyticsSun(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, resp)
 }
 
+// parseSpeciesParams normalizes the repeated ?species query values into a scientific-name filter:
+// each value is trimmed, empty entries are dropped (so a stray "?species=" does not turn into a
+// filter that matches nothing), and case-insensitive duplicates are collapsed to their first
+// occurrence (preserving its original casing) so a repeated selection does not inflate the IN clause.
+// Returns nil when no usable value remains, which the datastore reads as "no filter" (top-N by volume).
+func parseSpeciesParams(raw []string) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(raw))
+	speciesFilter := make([]string, 0, len(raw))
+	for _, s := range raw {
+		trimmed := strings.TrimSpace(s)
+		if trimmed == "" {
+			continue
+		}
+		key := strings.ToLower(trimmed)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		speciesFilter = append(speciesFilter, trimmed)
+	}
+	if len(speciesFilter) == 0 {
+		return nil
+	}
+	return speciesFilter
+}
+
 // serveTopNHourlyChart is the shared request flow for the top-N-by-volume hour-of-day analytics
 // endpoints (who-sings-when ridgeline, acoustic succession): require and strictly validate
-// start_date/end_date, default the end to a 30-day window, parse and clamp the limit, run the query
-// under the analytics timeout (mapping a deadline to HTTP 408), and serialize the response as a JSON
-// array. The endpoints differ only in their limit bounds, the datastore query, and the response
+// start_date/end_date, default the end to a 30-day window, parse and clamp the limit, read the
+// optional repeated species filter, run the query under the analytics timeout (mapping a deadline to
+// HTTP 408), and serialize the response as a JSON array. An empty species filter keeps the top-N
+// default; a non-empty one narrows the chart to the selection (still volume-ordered, capped at the
+// limit). The endpoints differ only in their limit bounds, the datastore query, and the response
 // shape, which are passed in; operation names the endpoint in validation/error messages and logs.
 func serveTopNHourlyChart[T any](
 	c *Handler,
 	ctx echo.Context,
 	operation string,
 	defaultLimit, maxLimit int,
-	query func(context.Context, string, string, int) ([]T, error),
+	query func(context.Context, string, string, []string, int) ([]T, error),
 	respond func([]T) any,
 ) error {
 	// Validate required parameter
@@ -1587,10 +1561,26 @@ func serveTopNHourlyChart[T any](
 
 	limit := apicore.ParsePaginationLimit(ctx.QueryParam("limit"), defaultLimit, maxLimit)
 
+	// Optional repeated species filter (?species=A&species=B): trimmed and empty-filtered. When empty
+	// the query keeps its top-N-by-volume default; when non-empty it narrows to the selection (still
+	// volume-ordered, capped at limit). Mirrors how the batch time-of-day endpoint reads species.
+	speciesFilter := parseSpeciesParams(ctx.QueryParams()["species"])
+
+	// Bound the selection the same way the batch time-of-day endpoints do. The datastore drops the
+	// row limit entirely once a species filter is present (a species can own several model labels,
+	// so limiting by label row would truncate selected species), which means `limit` no longer caps
+	// the result on this path. Without this guard the repeated ?species param is an unbounded input:
+	// the IN list, the row count and the response all grow with whatever the client sends. The cap
+	// matches the control bar's MAX_SPECIES, so a legitimate UI selection always fits.
+	if err := c.validateBatchSize(ctx, len(speciesFilter), maxSpeciesBatch, operation); err != nil {
+		return err
+	}
+
 	c.LogInfoIfEnabled("Retrieving "+operation,
 		logger.String("start_date", startDate),
 		logger.String("end_date", endDate),
 		logger.Int("limit", limit),
+		logger.Int("species_filter_count", len(speciesFilter)),
 		logger.String("ip", ctx.RealIP()),
 		logger.String("path", ctx.Request().URL.Path),
 	)
@@ -1599,13 +1589,26 @@ func serveTopNHourlyChart[T any](
 	ctxWithTimeout, cancel := withAnalyticsTimeout(ctx)
 	defer cancel()
 
-	data, err := query(ctxWithTimeout, startDate, endDate, limit)
+	data, err := query(ctxWithTimeout, startDate, endDate, speciesFilter, limit)
 	if err != nil {
 		return c.handleAnalyticsQueryError(ctx, err, operation, "Failed to get "+operation,
 			logger.String("start_date", startDate),
 			logger.String("end_date", endDate),
 			logger.Int("limit", limit),
 			logger.String("ip", ctx.RealIP()),
+			logger.String("path", ctx.Request().URL.Path),
+		)
+	}
+
+	// Diagnostic: with an explicit selection the client sends limit == len(selection), so fewer rows
+	// than selected means some selected species produced no chart data (no in-range detections, all
+	// false positives, or a scientific-name mismatch between the selector and this ranking). Surfaces
+	// the "N selected, fewer drawn" ridgeline symptom in logs with the exact names.
+	if len(speciesFilter) > 0 && len(data) < len(speciesFilter) {
+		c.LogInfoIfEnabled(operation+": some selected species returned no data",
+			logger.Int("selected", len(speciesFilter)),
+			logger.Int("returned", len(data)),
+			logger.String("selected_species", strings.Join(speciesFilter, ", ")),
 			logger.String("path", ctx.Request().URL.Path),
 		)
 	}
@@ -1622,8 +1625,10 @@ func serveTopNHourlyChart[T any](
 }
 
 // GetSpeciesHourlyDistribution handles GET /api/v2/analytics/time/distribution/species
-// Returns the normalized hour-of-day activity distribution for the top N species by detection
-// volume over the date range, powering the who-sings-when ridgeline (design spec section 6.2).
+// Returns the normalized hour-of-day activity distribution powering the who-sings-when ridgeline
+// (design spec section 6.2). With no species filter it covers the top N species by detection volume
+// over the date range; with a repeated ?species filter it covers just the selected species (still
+// volume-ordered, capped at the limit).
 func (c *Handler) GetSpeciesHourlyDistribution(ctx echo.Context) error {
 	return serveTopNHourlyChart(c, ctx, "species hourly distribution",
 		defaultSpeciesRidgelineLimit, maxSpeciesRidgelineLimit,
@@ -1659,10 +1664,11 @@ func newAcousticSuccessionResponse(data []datastore.SpeciesHourlyCounts) []acous
 }
 
 // GetAcousticSuccession handles GET /api/v2/analytics/time/succession
-// Returns the per-species raw hour-of-day detection counts for the top-N species by volume, powering
-// the acoustic succession streamgraph in the Activity Patterns tab (design spec #1155, Tier-2). The
-// counts are unnormalized so the frontend can stack them into a streamgraph whose band width is
-// detection volume.
+// Returns the per-species raw hour-of-day detection counts powering the acoustic succession
+// streamgraph in the Activity Patterns tab (design spec #1155, Tier-2). With no species filter it
+// covers the top-N species by volume; with a repeated ?species filter it covers just the selected
+// species (still volume-ordered, capped at the limit). The counts are unnormalized so the frontend
+// can stack them into a streamgraph whose band width is detection volume.
 func (c *Handler) GetAcousticSuccession(ctx echo.Context) error {
 	return serveTopNHourlyChart(c, ctx, "acoustic succession",
 		defaultSpeciesSuccessionLimit, maxSpeciesSuccessionLimit,
@@ -2323,48 +2329,22 @@ func (c *Handler) validateNewSpeciesDateParams(ctx echo.Context, startDate, endD
 	return c.validateDateOrderWithResponse(ctx, startDate, endDate, operation)
 }
 
-// convertNewSpeciesToResponse converts new species data to API response format
+// convertNewSpeciesToResponse converts new species data to API response format.
+// Thumbnails defer to the media proxy (see buildThumbnailURL / #3806): the proxy
+// resolves via the single-item Get() fallback chain and local file cache, so a
+// species the primary provider lacks but a fallback has is honored at request time.
 func (c *Handler) convertNewSpeciesToResponse(newSpeciesData []datastore.NewSpeciesData) []NewSpeciesResponse {
-	scientificNames := extractNewSpeciesNames(newSpeciesData)
-	thumbnailURLs := c.batchFetchThumbnailURLs(scientificNames)
-
 	response := make([]NewSpeciesResponse, 0, len(newSpeciesData))
 	for _, data := range newSpeciesData {
 		response = append(response, NewSpeciesResponse{
 			ScientificName: data.ScientificName,
 			CommonName:     data.CommonName,
 			FirstHeardDate: data.FirstSeenDate,
-			ThumbnailURL:   getThumbnailWithFallback(thumbnailURLs, data.ScientificName),
+			ThumbnailURL:   buildThumbnailURL(data.ScientificName),
 			CountInPeriod:  data.CountInPeriod,
 		})
 	}
 	return response
-}
-
-// extractNewSpeciesNames extracts scientific names from new species data
-func extractNewSpeciesNames(data []datastore.NewSpeciesData) []string {
-	names := make([]string, 0, len(data))
-	for _, d := range data {
-		names = append(names, d.ScientificName)
-	}
-	return names
-}
-
-// batchFetchThumbnailURLs fetches thumbnail URLs from cache
-func (c *Handler) batchFetchThumbnailURLs(scientificNames []string) map[string]string {
-	thumbnailURLs := make(map[string]string)
-	cache := c.BirdImageCache
-	if cache == nil {
-		return thumbnailURLs
-	}
-
-	batchResults := cache.GetBatch(scientificNames)
-	for name := range batchResults {
-		if img := batchResults[name]; img.URL != "" && !img.IsNegativeEntry() {
-			thumbnailURLs[name] = imageprovider.ProxyImageURL(name)
-		}
-	}
-	return thumbnailURLs
 }
 
 // Helper function to sum array values
@@ -2462,36 +2442,16 @@ func (c *Handler) GetSpeciesThumbnails(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, result)
 }
 
-// buildThumbnailMap creates a map of species names to thumbnail URLs.
+// buildThumbnailMap maps each requested species to its media-proxy thumbnail URL.
+// Defer-to-proxy (see buildThumbnailURL / #3806): ServeSpeciesImageProxy resolves via
+// the single-item Get() fallback chain and the local file cache and caches a 404, so a
+// species the primary provider lacks but a fallback has is honored at request time. The
+// frontend swaps to a placeholder on error.
 func (c *Handler) buildThumbnailMap(speciesParams []string) map[string]string {
-	result := make(map[string]string)
-
-	cache := c.BirdImageCache
-	if cache == nil {
-		for _, name := range speciesParams {
-			result[name] = placeholderImageURL
-		}
-		return result
-	}
-
-	images := cache.GetBatch(speciesParams)
-
-	// Convert to simple map of scientific name -> proxy URL
-	for name := range images {
-		if img := images[name]; img.URL != "" && !img.IsNegativeEntry() {
-			result[name] = imageprovider.ProxyImageURL(name)
-		} else {
-			result[name] = placeholderImageURL
-		}
-	}
-
-	// Add placeholder for any missing species
+	result := make(map[string]string, len(speciesParams))
 	for _, name := range speciesParams {
-		if _, exists := result[name]; !exists {
-			result[name] = placeholderImageURL
-		}
+		result[name] = buildThumbnailURL(name)
 	}
-
 	return result
 }
 
@@ -2502,14 +2462,15 @@ func (c *Handler) GetBatchHourlySpeciesData(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 
 	// Validate parameters
-	speciesParams, date, err := c.validateBatchHourlyParams(ctx, operation)
+	speciesParams, startDate, endDate, err := c.validateBatchHourlyParams(ctx, operation)
 	if err != nil {
 		return err
 	}
 
 	minConfidence := c.parseOptionalFloat(ctx, "min_confidence", 0.0, apicore.PercentageMultiplier)
 	c.LogInfoIfEnabled("Retrieving batch hourly species data",
-		logger.String("date", date),
+		logger.String("start_date", startDate),
+		logger.String("end_date", endDate),
 		logger.Int("species_count", len(speciesParams)),
 		logger.Float64("min_confidence", minConfidence),
 		logger.String("ip", ip),
@@ -2517,55 +2478,80 @@ func (c *Handler) GetBatchHourlySpeciesData(ctx echo.Context) error {
 	)
 
 	// Process all species
-	results, processingErrors := c.processHourlyBatchSpecies(ctx, speciesParams, date, ip, path)
+	results, processingErrors := c.processHourlyBatchSpecies(ctx, speciesParams, startDate, endDate, ip, path, minConfidence)
 
 	// Handle results
 	return c.handleBatchHourlyResults(ctx, results, processingErrors, len(speciesParams), ip, path)
 }
 
-// validateBatchHourlyParams validates and returns batch hourly parameters
-func (c *Handler) validateBatchHourlyParams(ctx echo.Context, operation string) (speciesParams []string, date string, err error) {
+// validateBatchHourlyParams validates and returns batch hourly parameters.
+//
+// The hour-of-day pattern is requested for a date RANGE (start_date/end_date, both inclusive) so
+// the chart reflects the user's whole selected period. The original single `date` param is still
+// accepted for backwards compatibility and collapses to a one-day range.
+func (c *Handler) validateBatchHourlyParams(ctx echo.Context, operation string) (speciesParams []string, startDate, endDate string, err error) {
 	speciesParams = ctx.QueryParams()["species"]
-	date = ctx.QueryParam("date")
+	startDate = ctx.QueryParam("start_date")
+	endDate = ctx.QueryParam("end_date")
+	singleDate := ctx.QueryParam("date")
 
 	if err := c.requireQueryArrayParam(ctx, "species", operation); err != nil {
-		return nil, "", err
-	}
-	if err := c.requireQueryParam(ctx, "date", operation); err != nil {
-		return nil, "", err
-	}
-	if err := c.validateDateFormatWithResponse(ctx, date, "date", operation); err != nil {
-		return nil, "", err
-	}
-	if err := c.validateBatchSize(ctx, len(speciesParams), maxSpeciesBatch, operation); err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 
-	return speciesParams, date, nil
+	// Legacy single-date form: `date` alone covers exactly that day.
+	if startDate == "" && endDate == "" {
+		if err := c.requireQueryParam(ctx, "date", operation); err != nil {
+			return nil, "", "", err
+		}
+		if err := c.validateDateFormatWithResponse(ctx, singleDate, "date", operation); err != nil {
+			return nil, "", "", err
+		}
+		startDate, endDate = singleDate, singleDate
+	} else {
+		// Range form: both bounds are required so the window is never open-ended.
+		if err := c.requireQueryParam(ctx, "start_date", operation); err != nil {
+			return nil, "", "", err
+		}
+		if err := c.requireQueryParam(ctx, "end_date", operation); err != nil {
+			return nil, "", "", err
+		}
+		if err := c.validateDateFormatWithResponse(ctx, startDate, "start_date", operation); err != nil {
+			return nil, "", "", err
+		}
+		if err := c.validateDateFormatWithResponse(ctx, endDate, "end_date", operation); err != nil {
+			return nil, "", "", err
+		}
+		if err := c.validateDateOrderWithResponse(ctx, startDate, endDate, operation); err != nil {
+			return nil, "", "", err
+		}
+	}
+
+	if err := c.validateBatchSize(ctx, len(speciesParams), maxSpeciesBatch, operation); err != nil {
+		return nil, "", "", err
+	}
+
+	return speciesParams, startDate, endDate, nil
 }
 
-// processHourlyBatchSpecies processes each species for batch hourly data
-func (c *Handler) processHourlyBatchSpecies(ctx echo.Context, speciesParams []string, date, ip, path string) (results map[string][]HourlyDistribution, processingErrors []string) {
+// processHourlyBatchSpecies returns the hour-of-day counts for every requested species, summed
+// over the inclusive [startDate, endDate] range.
+//
+// The whole batch is one datastore query: the datastore resolves each scientific name to all of
+// its model label IDs and aggregates them, so a species carrying several labels is summed rather
+// than split (and a large selection no longer costs one query per species).
+func (c *Handler) processHourlyBatchSpecies(ctx echo.Context, speciesParams []string, startDate, endDate, ip, path string, minConfidence float64) (results map[string][]HourlyDistribution, processingErrors []string) {
 	results = make(map[string][]HourlyDistribution)
 	processingErrors = make([]string, 0)
+
+	// Deduplicate the request while remembering the caller's exact key: results stay keyed by the
+	// user-facing species string, but the query needs scientific names. Two different inputs can
+	// resolve to the same scientific name, so one query name may feed several result keys.
+	queryNames := make([]string, 0, len(speciesParams))
+	inputsByQueryName := make(map[string][]string, len(speciesParams))
 	seen := make(map[string]bool)
 
-	// Stop the batch when the client disconnects or the server shuts down. Each
-	// per-species query is bounded individually by analyticsQueryTimeout (below) so
-	// one slow query cannot hang the batch, without capping the total time a
-	// legitimately large batch may take on slower hardware.
-	reqCtx := ctx.Request().Context()
-
 	for _, speciesItem := range speciesParams {
-		if err := reqCtx.Err(); err != nil {
-			c.LogDebugIfEnabled("Batch hourly species data: client canceled request",
-				logger.String("species", speciesItem),
-				logger.Error(err),
-				logger.String("ip", ip),
-				logger.String("path", path),
-			)
-			break
-		}
 		speciesItem = strings.TrimSpace(speciesItem)
 		if speciesItem == "" || seen[speciesItem] {
 			continue
@@ -2579,25 +2565,53 @@ func (c *Handler) processHourlyBatchSpecies(ctx echo.Context, speciesParams []st
 			queryItem = resolved
 		}
 
-		queryCtx, cancel := withAnalyticsTimeout(ctx)
-		hourlyData, err := c.DS.GetHourlyAnalyticsData(queryCtx, date, queryItem)
-		cancel()
-		if err != nil {
-			if c.logBatchQueryError("Error getting hourly data for species in batch request", err,
-				logger.String("species", speciesItem),
-				logger.String("date", date),
-				logger.String("ip", ip),
-				logger.String("path", path),
-			) {
-				break // client disconnected; stop the batch
-			}
-			processingErrors = append(processingErrors, fmt.Sprintf("Failed to get hourly data for species %s: %v", speciesItem, err))
+		if _, dup := inputsByQueryName[queryItem]; !dup {
+			queryNames = append(queryNames, queryItem)
+		}
+		inputsByQueryName[queryItem] = append(inputsByQueryName[queryItem], speciesItem)
+
+		// Every requested species gets an entry, so a species with no detections in the range
+		// renders as a flat zero line rather than disappearing from the response.
+		results[speciesItem] = initEmptyHourlyDistribution()
+	}
+
+	if len(queryNames) == 0 {
+		return results, processingErrors
+	}
+
+	queryCtx, cancel := withAnalyticsTimeout(ctx)
+	defer cancel()
+	hourlyByName, err := c.DS.GetBatchHourlyOccurrences(queryCtx, startDate, endDate, queryNames, minConfidence)
+	if err != nil {
+		c.logBatchQueryError("Error getting batch hourly data", err,
+			logger.String("start_date", startDate),
+			logger.String("end_date", endDate),
+			logger.Int("species_count", len(queryNames)),
+			logger.String("ip", ip),
+			logger.String("path", path),
+		)
+		processingErrors = append(processingErrors, fmt.Sprintf("Failed to get hourly data: %v", err))
+		// Discard the pre-seeded zero entries. handleBatchResponse decides success from the
+		// result count, so returning them would report a failed query as HTTP 200 with "no
+		// detections at any hour" - a database error or query timeout would be indistinguishable
+		// from a genuinely quiet period. With no results it correctly answers 500.
+		return make(map[string][]HourlyDistribution), processingErrors
+	}
+
+	// Drive from the requested species rather than the response: a species with no rows keeps the
+	// zero-filled entry created above instead of vanishing from the payload.
+	for queryName, inputKeys := range inputsByQueryName {
+		hourly, ok := hourlyByName[queryName]
+		if !ok {
 			continue
 		}
-
-		hourlyDistribution := initEmptyHourlyDistribution()
-		fillHourlyDistributionFromAnalytics(hourlyDistribution, hourlyData)
-		results[speciesItem] = hourlyDistribution
+		for _, inputKey := range inputKeys {
+			distribution := initEmptyHourlyDistribution()
+			for hour := range apicore.HoursPerDay {
+				distribution[hour].Count = hourly[hour]
+			}
+			results[inputKey] = distribution
+		}
 	}
 
 	return results, processingErrors

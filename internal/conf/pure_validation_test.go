@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestValidateBirdNETSettings_Valid verifies valid BirdNET configurations pass.
@@ -263,38 +264,6 @@ func TestValidateBirdweatherSettings_Invalid(t *testing.T) {
 		expectError string
 	}{
 		{
-			name: "enabled without ID",
-			settings: BirdweatherSettings{
-				Enabled: true,
-				ID:      "",
-			},
-			expectError: "Birdweather ID is required",
-		},
-		{
-			name: "invalid ID too short",
-			settings: BirdweatherSettings{
-				Enabled: true,
-				ID:      "short",
-			},
-			expectError: "Invalid Birdweather ID format",
-		},
-		{
-			name: "invalid ID too long",
-			settings: BirdweatherSettings{
-				Enabled: true,
-				ID:      "abcdef123456789012345678extra",
-			},
-			expectError: "Invalid Birdweather ID format",
-		},
-		{
-			name: "invalid ID with special characters",
-			settings: BirdweatherSettings{
-				Enabled: true,
-				ID:      "abcdef12345678901234567!",
-			},
-			expectError: "Invalid Birdweather ID format",
-		},
-		{
 			name: "threshold too low",
 			settings: BirdweatherSettings{
 				Enabled:   true,
@@ -338,6 +307,46 @@ func TestValidateBirdweatherSettings_Invalid(t *testing.T) {
 				}
 			}
 			assert.True(t, found, "expected error containing %q, got errors: %v", tt.expectError, result.Errors)
+		})
+	}
+}
+
+// TestValidateBirdweatherSettings_UnusableIDIsFatal verifies that an unusable
+// station ID is reported as an error and only as an error. It used to be reported
+// as an error AND as a "will be disabled" warning that cleared Enabled on the
+// normalized copy, so one condition carried two contradictory severities. The
+// graceful half now lives in normalizeIncompleteFeatures, which runs before this
+// validator on the load path; keeping the error here is what stops the settings API
+// from accepting a bad ID and silently saving BirdWeather switched off.
+func TestValidateBirdweatherSettings_UnusableIDIsFatal(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name        string
+		id          string
+		expectError string
+	}{
+		{name: "enabled without ID", id: "", expectError: "Birdweather ID is required"},
+		{name: "ID too short", id: "short", expectError: "Invalid Birdweather ID format"},
+		{name: "ID too long", id: "abcdef123456789012345678extra", expectError: "Invalid Birdweather ID format"},
+		{name: "ID with special characters", id: "abcdef12345678901234567!", expectError: "Invalid Birdweather ID format"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			settings := BirdweatherSettings{Enabled: true, ID: tt.id}
+
+			result := ValidateBirdweatherSettings(&settings)
+
+			assert.False(t, result.Valid)
+			assert.Contains(t, strings.Join(result.Errors, " "), tt.expectError)
+			assert.Empty(t, result.Warnings,
+				"the condition must carry one severity, not an error and a warning at once")
+
+			normalized, ok := result.Normalized.(*BirdweatherSettings)
+			require.True(t, ok, "expected normalized BirdweatherSettings")
+			assert.True(t, normalized.Enabled,
+				"a rejected save must not report the integration as switched off")
 		})
 	}
 }

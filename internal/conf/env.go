@@ -320,7 +320,7 @@ func validateEnvTLSMode(value string) error {
 
 func validateEnvRangeFilterModel(value string) error {
 	value = strings.TrimSpace(value)
-	validModels := []string{"latest", "legacy", "v3"}
+	validModels := []string{RangeFilterModelLatest, RangeFilterModelLegacy, RangeFilterModelV3}
 	if !slices.Contains(validModels, value) {
 		return fmt.Errorf("must be one of: %s", strings.Join(validModels, ", "))
 	}

@@ -37,6 +37,8 @@ export interface ImportStatusResponse {
   status: 'idle' | 'running' | 'done';
   progress?: ImportProgress;
   error?: string;
+  /** True when the run ended by user cancel (or deadline), not failure. */
+  cancelled?: boolean;
 }
 
 export type WizardStep = 'source' | 'mode' | 'confirm' | 'progress' | 'done';

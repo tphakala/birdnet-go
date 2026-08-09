@@ -63,3 +63,10 @@ REFACTOR_CHANGELOG.md
 # Python bytecode caches (db-doctor and other tools/ scripts)
 __pycache__/
 *.pyc
+
+# Release-notes drafts are transient working files (deleted after each release);
+# they must never be committed. See the drafting-release-changelog skill.
+RELEASE_NOTES_DRAFT.md
+
+# Compiled Go test binaries (`go test -c`), which are easy to sweep in with `git add -A`
+*.test

@@ -27,10 +27,14 @@ const (
 // ErrMQTTClientNotReady is returned by PublishMQTT whenever the MQTT client
 // reference is nil, regardless of whether MQTT is enabled in settings. In
 // practice this happens when MQTT is configured but:
-//   - initializeMQTT() failed to connect at startup (broker unreachable,
-//     auth failure, TLS issue, etc.)
+//   - initializeMQTT() failed to create the client (invalid broker address, TLS
+//     material that will not load, etc.)
 //   - The client is between DisconnectMQTTClient() and SetMQTTClient() during
 //     runtime reconfiguration.
+//
+// A client that failed only to *connect* is retained with its reconnect loop
+// armed, so it does not surface here: those publishes are suppressed inside the
+// mqtt package while it reconnects.
 //
 // Callers in streaming publish paths (sound level, etc.) should check for
 // this sentinel with errors.Is and treat it as a graceful no-op to avoid
@@ -75,9 +79,9 @@ func (p *Processor) DisconnectMQTTClient() {
 // PublishMQTT safely publishes a message using the MQTT client if available.
 // Does NOT pre-check IsConnected() to avoid TOCTOU race (GitHub #2397).
 //
-// When the MQTT client reference is nil (initializeMQTT() failed at startup,
-// or the client is between DisconnectMQTTClient() and SetMQTTClient()), this
-// returns ErrMQTTClientNotReady. Streaming publishers that run on a timer
+// When the MQTT client reference is nil (initializeMQTT() could not create the
+// client, or the client is between DisconnectMQTTClient() and SetMQTTClient()),
+// this returns ErrMQTTClientNotReady. Streaming publishers that run on a timer
 // (sound level publisher, etc.) should check for this sentinel with
 // errors.Is and silently skip to avoid flooding telemetry. See
 // internal/analysis/sound_level.go for the canonical caller pattern.
@@ -93,12 +97,18 @@ func (p *Processor) PublishMQTT(ctx context.Context, topic, payload string) erro
 	if client != nil {
 		return client.Publish(ctx, topic, payload)
 	}
-	// Emit a single warn log per process lifetime so operators learn MQTT is
-	// configured but not reachable. Subsequent attempts are silent — the
-	// sentinel is all the caller needs to decide to skip.
-	p.mqttNotReadyWarnOnce.Do(func() {
+	// Emit one warn log per topic so operators learn MQTT is configured but not
+	// reachable. Subsequent attempts on that topic are silent — the sentinel is
+	// all the caller needs to decide to skip.
+	//
+	// Keyed on the topic rather than guarded once per process, because the line
+	// names the topic and a process-wide guard would report a topic the operator
+	// may have since changed away from: the topic derives from the
+	// hot-reloadable Realtime.MQTT.Topic setting. The key space is bounded by
+	// how many distinct topics the configuration has held, not by traffic.
+	p.mqttNotReadyWarnLogged.do(topic, func() {
 		GetLogger().Warn(
-			"MQTT publish suppressed: client not ready (further suppressed publishes are silent)",
+			"MQTT publish suppressed: client not ready (further suppressed publishes on this topic are silent)",
 			logger.String("topic", topic),
 			logger.String("operation", "publish_mqtt_not_ready"))
 	})
@@ -136,18 +146,23 @@ func (p *Processor) initializeMQTT(settings *conf.Settings) {
 	ctx, cancel := context.WithTimeout(context.Background(), mqttConnectionTimeout)
 	defer cancel() // Ensure the cancel function is called to release resources
 
-	// Attempt to connect to the MQTT broker
+	// Attempt to connect to the MQTT broker. A failure here is not fatal: MQTT is
+	// an optional integration, and at boot the broker is commonly unreachable for
+	// a few seconds while the network comes up. Retain the client and arm its
+	// reconnect loop so it recovers on its own; discarding it here would leave
+	// MQTT dead until the next restart.
+	//
+	// Logged at warn rather than error to match onConnectionLost: a recoverable
+	// connection failure is not a fault worth paging on. Connect already reported
+	// this failure to telemetry once inside the mqtt package, so no error is built
+	// here; building one would duplicate the Sentry event for a single startup
+	// outage, which is the noise this warn-level, retry-on-failure path avoids.
 	if err := mqttClient.Connect(ctx); err != nil {
-		log.Error("failed to connect to MQTT broker", logger.Error(err))
-		_ = errors.New(err).
-			Component("analysis.processor").
-			Category(errors.CategoryMQTTConnection).
-			Context("operation", "mqtt_connect").
-			Build()
-		return
+		log.Warn("failed to connect to MQTT broker, retrying in background",
+			logger.Error(err))
+		mqttClient.StartReconnectLoop()
 	}
 
-	// Set the client only if connection was successful
 	p.SetMQTTClient(mqttClient)
 }
 

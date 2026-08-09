@@ -157,6 +157,7 @@ func sanitizeConfig(config *conf.Settings) *conf.Settings {
 	sanitized.Security.GoogleAuth.ClientSecret = ""
 	sanitized.Security.GithubAuth.ClientSecret = ""
 	sanitized.Security.SessionSecret = ""
+	sanitized.Diagnostics.Profiling.Token = ""
 	sanitized.Output.MySQL.Password = ""
 	sanitized.Realtime.MQTT.Password = ""
 	sanitized.Realtime.Weather.OpenWeather.APIKey = ""

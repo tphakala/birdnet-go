@@ -234,7 +234,13 @@ func (a *MqttAction) Execute(_ context.Context, data any) error {
 	}
 
 	// Get bird image of detected bird using the shared helper
-	birdImage := getBirdImageFromCache(a.BirdImageCache, a.Result.Species.ScientificName, a.Result.Species.CommonName, a.CorrelationID)
+	birdImage := getBirdImageFromCache(a.DetectionCtx, a.BirdImageCache, a.Result.Species.ScientificName, a.Result.Species.CommonName, a.CorrelationID)
+	// The URL stays the provider's upstream address. An MQTT subscriber is not a
+	// browser with an origin to resolve against, and the usual consumer (Home
+	// Assistant, a dashboard, an automation forwarding the image to a phone) may be
+	// off the LAN entirely, so a media-proxy URL is unusable there for the same
+	// reason it is unusable in a notification embed. Tracked separately along with
+	// the notification case.
 
 	// Get detection ID from shared context (set by DatabaseAction in CompositeAction sequence)
 	var detectionID uint
@@ -363,8 +369,8 @@ func (a *UpdateRangeFilterAction) Execute(ctx context.Context, data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	// Get current date for the range filter calculation
-	today := time.Now().Truncate(24 * time.Hour)
+	// Get current local calendar date for the range filter calculation
+	today := conf.LocalNoon(time.Now())
 
 	// Update location based species list
 	speciesScores, err := a.Bn.GetProbableSpecies(today, 0.0)
@@ -439,8 +445,10 @@ func (a *SSEAction) Execute(_ context.Context, data any) error {
 		}
 	}
 
-	// Get bird image of detected bird using the shared helper
-	birdImage := getBirdImageFromCache(a.BirdImageCache, a.Result.Species.ScientificName, a.Result.Species.CommonName, a.CorrelationID)
+	// Get bird image of detected bird using the shared helper. NewSSEDetectionData
+	// substitutes the media-proxy URL, so only the attribution metadata is taken
+	// from here.
+	birdImage := getBirdImageFromCache(a.DetectionCtx, a.BirdImageCache, a.Result.Species.ScientificName, a.Result.Species.CommonName, a.CorrelationID)
 
 	// Convert Result to Note for SSEBroadcaster (backward compatible SSE payload)
 	note := datastore.NoteFromResult(&a.Result)

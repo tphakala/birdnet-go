@@ -22,7 +22,19 @@ permissions:
 
 jobs:
   e2e-tests:
-    # Disabled: E2E tests consistently time out — backend endpoints unavailable in CI
+    # Disabled: the suite trips the SSE connection rate limit (10 requests per
+    # minute per IP, see sseRateLimitRequests in internal/api/v2/sse/sse.go).
+    # Every test that loads the dashboard opens a ReconnectingEventSource, so
+    # past roughly 10 navigations the stream endpoints start returning 429, and
+    # the reconnect then consumes further tokens. The console-error specs
+    # correctly flag those errors; the resulting failures plus retries: 2 are
+    # what exhaust the job time budget.
+    #
+    # The backend itself is fine in CI: /api/v2/health responds normally, and
+    # frontend-integration-test.yml uses the same startup block and passes.
+    # Re-enabling needs the rate limit made configurable (so CI can relax it)
+    # plus a pass over stale selectors in the color-scheme, delete-modal and
+    # datepicker specs.
     if: false
     name: E2E Tests
     runs-on: ubuntu-24.04
@@ -34,7 +46,7 @@ jobs:
 
       # --- Go backend setup ---
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: 'go.mod'
           cache: true
@@ -44,7 +56,7 @@ jobs:
 
       # --- Node.js setup ---
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: 'npm'

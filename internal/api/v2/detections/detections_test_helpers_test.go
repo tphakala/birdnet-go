@@ -40,6 +40,13 @@ func buildTestHandler(t *testing.T, core *apicore.Core, commonToSci, sciToCommon
 		func(_, _ *conf.Settings) error { return nil },
 		func(echo.Context) bool { return false },
 		func() map[string]string { return sciToCommon },
+		func() map[string]string {
+			folded := make(map[string]string, len(sciToCommon))
+			for scientific, common := range sciToCommon {
+				folded[scientific] = apicore.NormalizeForLookup(common)
+			}
+			return folded
+		},
 		func() map[string]string { return commonToSci },
 	)
 }

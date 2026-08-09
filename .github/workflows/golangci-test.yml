@@ -37,6 +37,9 @@ env:
   # Number of parallel shards the portable unit suite is split across. Keep in
   # sync with the matrix below and the `NR % <N>` modulo in the shard step.
   UNIT_SHARDS: 4
+  # Must match BASE_BUILD_TAGS in Taskfile.yml (see the comment there for the
+  # full list of files that carry this tag and must change together).
+  BASE_BUILD_TAGS: goaac_simd
 
 jobs:
   golangci:
@@ -57,7 +60,7 @@ jobs:
           - 1883:1883
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: 'go.mod'
           cache: true
@@ -68,6 +71,15 @@ jobs:
 
       - name: Setup ONNX Runtime
         uses: ./.github/actions/setup-onnxruntime
+
+      # notflite is retained as a minimal, strictly-ONNX build option, but after
+      # arm64 containers went back to linking libtensorflowlite_c no shipped
+      # artifact builds the notflite tag by default. Compile the whole tree with it
+      # once (shard 0) so the stub path (internal/inference/tflite/stub_notflite.go,
+      # internal/classifier/tflite_unavailable.go) cannot bitrot unnoticed.
+      - name: Compile check (notflite stub path)
+        if: matrix.shard == 0
+        run: go build -tags "noembed,skipfrontend,notflite" ./...
 
       - name: Install FFmpeg, SoX, and test dependencies
         uses: ./.github/actions/setup-apt-packages
@@ -106,7 +118,10 @@ jobs:
           # `go list` order is deterministic for a given checkout, so the split is
           # stable, and new packages are picked up automatically (no hand-curated
           # lists to maintain). noembed,skipfrontend skip model/frontend embedding.
-          go list -tags noembed,skipfrontend ./... \
+          # Tags are kept identical to the `go test` step below so the enumerated
+          # package set cannot drift from the tested one if a package ever becomes
+          # build-tag conditional.
+          go list -tags noembed,skipfrontend,"$BASE_BUILD_TAGS" ./... \
             | awk -v n="${UNIT_SHARDS}" -v s="${{ matrix.shard }}" 'NR % n == s' \
             > shard_pkgs.txt
           echo "Shard ${{ matrix.shard }} owns $(wc -l < shard_pkgs.txt) packages:"
@@ -133,7 +148,7 @@ jobs:
             --rerun-fails-max-failures=15 \
             --rerun-fails-report="rerun-unit-${{ matrix.shard }}.txt" \
             --packages "${PKGS[*]}" \
-            -- -tags noembed,skipfrontend -race -short -timeout 300s
+            -- -tags noembed,skipfrontend,$BASE_BUILD_TAGS -race -short -timeout 300s
         timeout-minutes: 12
 
       - name: Cleanup any remaining processes
@@ -158,7 +173,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: 'go.mod'
           cache: true
@@ -275,7 +290,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: 'go.mod'
           cache: true

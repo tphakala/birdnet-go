@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -412,6 +413,7 @@ func TestConvertAdvancedFilters(t *testing.T) {
 			{"confidence_asc", SortFieldConfidence, false},
 			{"confidence_desc", SortFieldConfidence, true},
 			{"status", SortFieldStatus, false},
+			{datastore.SortBySearchDefault, SortFieldDetectedAt, true},
 			{"", SortFieldDetectedAt, true},
 		}
 
@@ -425,6 +427,30 @@ func TestConvertAdvancedFilters(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("text and explicit scientific alternatives share the OR branch", func(t *testing.T) {
+		deps := &FilterLookupDeps{
+			LabelRepo: &mockLabelRepository{
+				labels: map[string]*entities.Label{
+					"Tyto alba":    {ID: 11},
+					"Tyto furcata": {ID: 22},
+				},
+			},
+			SciToCommon: map[string]string{
+				"Tyto alba":    "Barn Owl",
+				"Tyto furcata": "Schleiereule",
+			},
+		}
+		filters := &datastore.AdvancedSearchFilters{
+			TextQuery:         "barn owl",
+			SpeciesScientific: []string{"Tyto alba", "Tyto furcata"},
+		}
+
+		result, err := ConvertAdvancedFilters(ctx, filters, deps, tz)
+		require.NoError(t, err)
+		assert.Equal(t, "barn owl", result.Query)
+		assert.ElementsMatch(t, []uint{11, 22}, result.CommonLabelIDs)
+	})
 }
 
 // =============================================================================
@@ -433,7 +459,9 @@ func TestConvertAdvancedFilters(t *testing.T) {
 
 // mockLabelRepository is a simple mock for testing ResolveSpeciesToLabelIDs
 type mockLabelRepository struct {
-	labels map[string]*entities.Label
+	labels      map[string]*entities.Label
+	batchCalls  atomic.Int64
+	singleCalls atomic.Int64
 }
 
 // GetOrCreate implements LabelRepository.
@@ -503,6 +531,7 @@ func (m *mockLabelRepository) GetByScientificName(_ context.Context, name string
 
 // GetLabelIDsByScientificName implements LabelRepository (cross-model ID lookup).
 func (m *mockLabelRepository) GetLabelIDsByScientificName(_ context.Context, name string) ([]uint, error) {
+	m.singleCalls.Add(1)
 	if label, ok := m.labels[name]; ok {
 		return []uint{label.ID}, nil
 	}
@@ -511,6 +540,7 @@ func (m *mockLabelRepository) GetLabelIDsByScientificName(_ context.Context, nam
 
 // GetByScientificNames implements LabelRepository (batch cross-model lookup).
 func (m *mockLabelRepository) GetByScientificNames(_ context.Context, names []string) (map[string][]*entities.Label, error) {
+	m.batchCalls.Add(1)
 	result := make(map[string][]*entities.Label, len(names))
 	for _, name := range names {
 		if label, ok := m.labels[name]; ok {
@@ -602,6 +632,8 @@ func TestResolveSpeciesToLabelIDs(t *testing.T) {
 		result, err := ResolveSpeciesToLabelIDs(ctx, deps, []string{"Turdus merula", "Parus major"})
 		require.NoError(t, err)
 		assert.ElementsMatch(t, []uint{1, 2}, result)
+		assert.Equal(t, int64(1), labelRepo.batchCalls.Load(), "all scientific names should resolve in one batch")
+		assert.Zero(t, labelRepo.singleCalls.Load())
 	})
 
 	t.Run("unknown species returns sentinel", func(t *testing.T) {

@@ -23,7 +23,7 @@
     "high_confidence": true,
     "first_heard": "09:09:54",
     "latest_heard": "09:09:54",
-    "thumbnail_url": "https://upload.wikimedia.org/..."
+    "thumbnail_url": "/api/v2/media/image/Crex%20crex"
   }
 ]
 ```

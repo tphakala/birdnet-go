@@ -97,11 +97,21 @@ func GetValidSizes() []string {
 func BuildSpectrogramPath(clipPath string) (string, error) {
 	ext := filepath.Ext(clipPath)
 	if ext == "" {
+		// Only the basename goes into the context. Callers pass a path joined
+		// against the export directory, and this error is reported to Sentry,
+		// where the directory prefix would leak the account name and directory
+		// layout of the reporting machine. The diagnostic here is which file
+		// lacks an extension, which the basename answers on its own.
+		//
+		// Keyed clip_basename rather than clip_name because clip_name is already
+		// taken: elsewhere it carries the DB column value, which keeps its
+		// year/month directories. Reusing it for a bare filename would make one
+		// key mean two shapes.
 		return "", errors.Newf("clip path has no extension").
 			Component("spectrogram").
 			Category(errors.CategoryValidation).
 			Context("operation", "build_spectrogram_path").
-			Context("clip_path", clipPath).
+			Context("clip_basename", filepath.Base(clipPath)).
 			Build()
 	}
 
@@ -114,11 +124,11 @@ func BuildSpectrogramPath(clipPath string) (string, error) {
 // and process kills (e.g. context-triggered SIGKILL/SIGTERM).
 //
 // The function checks for operational errors in this order:
-// 1. Context errors (Canceled, DeadlineExceeded)
-// 2. An operational classification already attached upstream: a CategorySystem
-//    EnhancedError tagged PriorityLow (set by the generator via isOperationalExecError)
-// 3. Process exit codes (SIGKILL=137, SIGTERM=143) - more reliable than string matching
-// 4. String matching for "signal: killed" - fallback for compatibility
+//  1. Context errors (Canceled, DeadlineExceeded)
+//  2. An operational classification already attached upstream: a CategorySystem
+//     EnhancedError tagged PriorityLow (set by the generator via isOperationalExecError)
+//  3. Process exit codes (SIGKILL=137, SIGTERM=143) - more reliable than string matching
+//  4. String matching for "signal: killed" - fallback for compatibility
 func IsOperationalError(err error) bool {
 	if err == nil {
 		return false
@@ -203,8 +213,11 @@ func BuildSpectrogramPathWithParams(audioPath string, width int, raw bool) (stri
 		return "", errors.Newf("audio path has no extension").
 			Component("spectrogram").
 			Category(errors.CategoryValidation).
+			// Basename only, for the reason spelled out on the sibling above:
+			// this error is reported to Sentry and the directory prefix leaks
+			// the account name and layout of the reporting machine.
 			Context("operation", "build_spectrogram_path_with_params").
-			Context("audio_path", audioPath).
+			Context("clip_basename", filepath.Base(audioPath)).
 			Build()
 	}
 	baseName := strings.TrimSuffix(audioPath, ext)

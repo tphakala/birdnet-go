@@ -3,6 +3,7 @@
   import { t } from '$lib/i18n';
   import { formatDate } from '$lib/utils/formatters';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
 
   interface SpeciesData {
     common_name: string;
@@ -26,23 +27,18 @@
     return (value * 100).toFixed(1) + '%';
   }
 
-  let imageLoadFailed = $state(false);
   let displayName = $derived(localizeSpeciesName(species.scientific_name, species.common_name));
-
-  function handleImageError() {
-    imageLoadFailed = true;
-  }
 </script>
 
 <div class={cn('card bg-[var(--color-base-200)]', className)}>
   <figure class="px-4 pt-4">
     <div class="rounded-xl w-full aspect-[4/3] overflow-hidden bg-[var(--color-base-300)]">
-      {#if species.thumbnail_url && !imageLoadFailed}
+      {#if species.thumbnail_url}
         <img
           src={species.thumbnail_url}
           alt={displayName}
           class="h-full w-full object-cover"
-          onerror={handleImageError}
+          onerror={handleBirdImageError}
         />
       {/if}
     </div>

@@ -439,15 +439,16 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		c.getSettingsOrFallback, c.publishAndSaveSettings, c.handleSettingsChanges)
 	// The detections handler needs the same facade settings-save machinery as the
 	// integrations/TLS handlers (the review/ignore exclude-list mutation persists
-	// settings) plus three more facade-owned function dependencies whose subsystems
+	// settings) plus four more facade-owned function dependencies whose subsystems
 	// are not extracted yet: the auth check (isClientAuthenticated) and the cached
-	// name-map accessors (loadCommonNameMap/loadCommonToScientificMap). c is fully
+	// name-map accessors (display, folded-search, and exact-resolution maps). c is fully
 	// constructed here and these deps are stable for its lifetime; the method values
 	// read their backing fields at call time (so the post-option authService is
 	// observed), so this is wired before the functional options loop.
 	c.detections = detections.New(c.Core, &c.settingsMutex,
 		c.getSettingsOrFallback, c.publishAndSaveSettings, c.handleSettingsChanges,
-		c.isClientAuthenticated, c.loadCommonNameMap, c.loadCommonToScientificMap)
+		c.isClientAuthenticated, c.loadCommonNameMap, c.loadFoldedCommonNameMap,
+		c.loadCommonToScientificMap)
 	// The analytics handler is injected the same facade-owned dependencies as
 	// detections: the auth check (isClientAuthenticated, read per request so the
 	// public /analytics/sources response anonymizes source names) and the cached

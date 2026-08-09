@@ -188,6 +188,12 @@ function coerceStreamConfig(stream: unknown): UnknownSettings {
       rawStream.transport === 'udp' || rawStream.transport === 'tcp'
         ? rawStream.transport
         : undefined,
+    mediaMode:
+      rawStream.mediaMode === 'auto' ||
+      rawStream.mediaMode === 'audio-only' ||
+      rawStream.mediaMode === 'full-stream'
+        ? rawStream.mediaMode
+        : undefined,
   };
 
   // Clamp gain to the same -40..+40 dB range as sound card gain (backend

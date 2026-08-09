@@ -118,6 +118,63 @@ func TestScrubMessage(t *testing.T) {
 	}
 }
 
+func TestScrubQueryString(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		rawQuery    string
+		wantEmpty   bool
+		contains    []string
+		notContains []string
+	}{
+		{
+			name:      "empty query stays empty",
+			rawQuery:  "",
+			wantEmpty: true,
+		},
+		{
+			name:        "plain token value is redacted",
+			rawQuery:    "token=secretvalue123&foo=bar",
+			contains:    []string{"[TOKEN]", "foo=bar"},
+			notContains: []string{"secretvalue123"},
+		},
+		{
+			name:        "percent-encoded token value is redacted after decoding",
+			rawQuery:    "token=ab%2Bcd1234567890",
+			contains:    []string{"[TOKEN]"},
+			notContains: []string{"ab%2Bcd1234567890", "ab+cd1234567890", "1234567890"},
+		},
+		{
+			// A literal '+' in a base64 token must stay part of the token value:
+			// url.PathUnescape preserves it (QueryUnescape would turn it into a space
+			// and split the value, leaking the tail past the scrubber).
+			name:        "literal plus in token value is redacted not split on a space",
+			rawQuery:    "token=ab+cd1234567890",
+			contains:    []string{"[TOKEN]"},
+			notContains: []string{"ab+cd1234567890", "ab cd1234567890", "1234567890"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := ScrubQueryString(tt.rawQuery)
+			if tt.wantEmpty {
+				assert.Empty(t, got)
+				return
+			}
+			for _, expected := range tt.contains {
+				assert.Contains(t, got, expected)
+			}
+			for _, unexpected := range tt.notContains {
+				assert.NotContainsf(t, got, unexpected, "secret %q must be scrubbed", unexpected)
+			}
+		})
+	}
+}
+
 func TestAnonymizeURL(t *testing.T) {
 	t.Parallel()
 

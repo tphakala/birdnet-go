@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { t } from '$lib/i18n';
   import { api, ApiError } from '$lib/utils/api';
-  import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
+  import type { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
   import { toastActions } from '$lib/stores/toast';
   import { loggers } from '$lib/utils/logger';
   import Modal from '$lib/desktop/components/ui/Modal.svelte';
@@ -11,7 +11,7 @@
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import ProgressBar from '$lib/desktop/components/ui/ProgressBar.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
-  import { CheckCircle2, XCircle, ArrowLeft, ArrowRight } from '@lucide/svelte';
+  import { CheckCircle2, XCircle, Unplug, ArrowLeft, ArrowRight } from '@lucide/svelte';
   import type {
     ImportSourcesResponse,
     SourceCandidate,
@@ -21,21 +21,29 @@
     StartImportRequest,
     StartImportResponse,
     ImportProgress,
-    ImportErrorEvent,
     CancelResponse,
     ImportStatusResponse,
     WizardStep,
   } from '../types';
-  import { deriveSourceStepState, isUnreadable, buildDetectionsFilterUrl } from '../utils';
+  import ImportCountTile from './ImportCountTile.svelte';
+  import {
+    buildDetectionsFilterUrl,
+    connectImportProgressStream,
+    deriveSourceStepState,
+    importProgressPercent,
+    isUnreadable,
+  } from '../utils';
   import { formatNumber } from '$lib/utils/formatters';
 
   const logger = loggers.ui;
 
   interface Props {
     onClose: () => void;
+    /** Fires when the wizard starts a new import job (start or elevate). */
+    onImportStarted?: () => void;
   }
 
-  let { onClose }: Props = $props();
+  let { onClose, onImportStarted }: Props = $props();
 
   // Wizard state
   let currentStep = $state<WizardStep>('source');
@@ -78,6 +86,10 @@
   let importComplete = $state(false);
   let importCancelled = $state(false);
   let importError = $state<string | null>(null);
+  // Set when the progress stream stalls and a status re-poll confirms the job is
+  // gone (server restarted mid-import). Honest terminal state: the import did not
+  // finish here and its real outcome is unknown, so it is neither success nor error.
+  let importInterrupted = $state(false);
   let isCancelling = $state(false);
   let eventSource: ReconnectingEventSource | null = null;
   let destroyed = false;
@@ -87,26 +99,13 @@
 
   let currentStepIndex = $derived(stepLabels.indexOf(currentStep));
 
-  let progressPercent = $derived.by(() => {
-    if (
-      !importProgress ||
-      typeof importProgress.total !== 'number' ||
-      typeof importProgress.processed !== 'number' ||
-      importProgress.total <= 0
-    ) {
-      return 0;
-    }
-    return Math.max(
-      0,
-      Math.min(100, Math.round((importProgress.processed / importProgress.total) * 100))
-    );
-  });
+  let progressPercent = $derived(importProgressPercent(importProgress));
 
   function applyFinalStatus(s: ImportStatusResponse) {
     if (s.progress) importProgress = s.progress;
+    importCancelled = s.cancelled === true;
     importError = s.error ? t('system.importExport.errors.importFailed') : null;
-    importComplete = !s.error;
-    importCancelled = false;
+    importComplete = !s.error && !importCancelled;
     currentStep = 'done';
   }
 
@@ -159,6 +158,7 @@
     importComplete = false;
     importCancelled = false;
     importError = null;
+    importInterrupted = false;
     errorMessage = null;
     isCancelling = false;
     sourcePath = '';
@@ -281,6 +281,7 @@
       jobId = resp.job_id;
       currentStep = 'progress';
       connectEventSource(resp.job_id);
+      onImportStarted?.();
     } catch (err) {
       if (destroyed) return;
       // Genuine HTTP/network error: show the error and allow retry.
@@ -295,70 +296,69 @@
 
   function connectEventSource(id: string) {
     closeEventSource();
-    const es = new ReconnectingEventSource(`/api/v2/import/jobs/${id}/progress`);
-
-    es.addEventListener('progress', (event: Event) => {
-      try {
-        const data = JSON.parse((event as MessageEvent).data) as ImportProgress;
-        importProgress = data;
-      } catch (e) {
-        logger.error('Failed to parse progress event', e);
-      }
+    eventSource = connectImportProgressStream(id, {
+      onProgress: p => {
+        importProgress = p;
+      },
+      onComplete: p => {
+        if (p) importProgress = p;
+        importComplete = true;
+        currentStep = 'done';
+        closeEventSource();
+      },
+      onCancelled: p => {
+        if (p) importProgress = p;
+        importCancelled = true;
+        currentStep = 'done';
+        closeEventSource();
+      },
+      onError: p => {
+        if (p) importProgress = p;
+        // Always show the localized message, never the raw backend string.
+        importError = t('system.importExport.errors.importFailed');
+        currentStep = 'done';
+        closeEventSource();
+      },
+      onStalled: () => {
+        void reconcileAfterStall();
+      },
     });
+  }
 
-    es.addEventListener('complete', (event: Event) => {
-      try {
-        const data = JSON.parse((event as MessageEvent).data) as ImportProgress;
-        importProgress = data;
-      } catch (e) {
-        logger.error('Failed to parse complete event', e);
-      }
-      importComplete = true;
-      currentStep = 'done';
-      closeEventSource();
-    });
-
-    es.addEventListener('cancelled', (event: Event) => {
-      try {
-        const data = JSON.parse((event as MessageEvent).data) as ImportProgress;
-        importProgress = data;
-      } catch {
-        // ignore parse errors for cancelled event
-      }
-      importCancelled = true;
-      currentStep = 'done';
-      closeEventSource();
-    });
-
-    es.addEventListener('error', (event: Event) => {
-      // EventSource also fires 'error' for native transport drops (no .data);
-      // ReconnectingEventSource reconnects those, so do not terminate the job on them.
-      if (!(event instanceof MessageEvent) || typeof event.data !== 'string') {
+  /**
+   * The progress stream has been failing to reconnect. Re-poll the authoritative
+   * status: a finished job shows its real terminal state; a job that is simply
+   * gone (server restarted mid-import) shows an honest "interrupted" state; a
+   * still-running same job keeps the stream. A failed fetch (server unreachable)
+   * is ignored so the stream keeps retrying and the next stall tick reconciles.
+   */
+  async function reconcileAfterStall() {
+    // Only meaningful while still on the progress step; a terminal SSE event may
+    // have already moved us to 'done'.
+    if (destroyed || currentStep !== 'progress') return;
+    const myJobId = jobId;
+    try {
+      const s = await api.get<ImportStatusResponse>('/api/v2/import/status');
+      // Re-check after the await: an SSE terminal event could have landed a real
+      // outcome, or a fresh import could have started, during the fetch. Either
+      // way this reconcile is stale and must not clobber the newer state.
+      if (destroyed || currentStep !== 'progress' || jobId !== myJobId) return;
+      // Adopt a finished status only when it describes the job we were watching;
+      // the single-slot status endpoint could otherwise report a different job.
+      if (s.status === 'done' && s.job_id === myJobId) {
+        closeEventSource();
+        applyFinalStatus(s);
         return;
       }
-      try {
-        const data = JSON.parse(event.data) as ImportErrorEvent;
-        importProgress = {
-          total: data.total,
-          processed: data.processed,
-          inserted: data.inserted,
-          skipped: data.skipped,
-          errors: data.errors,
-          phase: data.phase,
-        };
-      } catch (e) {
-        logger.error('Failed to parse import error event', e);
-      }
-      // Always show the localized message, never the raw backend string.
-      importError = t('system.importExport.errors.importFailed');
-      currentStep = 'done';
+      if (s.running && s.job_id === myJobId) return; // transient blip; keep the stream
+      // Our job is gone (server restarted, or a different job now holds the slot).
       closeEventSource();
-    });
-
-    // heartbeat: keep-alive only, no-op
-    es.addEventListener('heartbeat', (_event: Event) => {});
-
-    eventSource = es;
+      importInterrupted = true;
+      currentStep = 'done';
+    } catch (err) {
+      // Server unreachable: keep retrying; reconcile again on the next stall tick.
+      logger.debug('import status reconcile failed after stall; will retry', err);
+    }
   }
 
   function closeEventSource() {
@@ -384,6 +384,7 @@
       jobId = resp.job_id;
       currentStep = 'progress';
       connectEventSource(resp.job_id);
+      onImportStarted?.();
     } catch (err) {
       if (destroyed) return;
       if (err instanceof ApiError) {
@@ -412,9 +413,20 @@
           try {
             const s = await api.get<ImportStatusResponse>('/api/v2/import/status');
             if (destroyed) return;
-            applyFinalStatus(s);
+            if (s.job_id === jobId) {
+              applyFinalStatus(s);
+            } else {
+              // The status endpoint no longer describes the job we cancelled;
+              // report the cancellation rather than adopting an unrelated outcome.
+              importCancelled = true;
+              currentStep = 'done';
+            }
           } catch (err) {
             logger.error('Failed to load final import status after cancel', err);
+            // Fall back to a terminal state so the wizard never wedges on
+            // "Cancelling..." when the final status fetch fails.
+            importCancelled = true;
+            currentStep = 'done';
           }
         }
       }
@@ -932,42 +944,29 @@
 
           {#if importProgress}
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div class="text-center p-2 rounded bg-[var(--color-base-200)]">
-                <div class="text-lg font-semibold text-[var(--color-base-content)]">
-                  {formatNumber(importProgress.processed)}
-                </div>
-                <div class="text-xs text-[var(--color-base-content)]/60">
-                  {t('system.importExport.progress.processed')}
-                </div>
-              </div>
-              <div class="text-center p-2 rounded bg-[var(--color-base-200)]">
-                <div class="text-lg font-semibold text-[var(--color-success)]">
-                  {formatNumber(importProgress.inserted)}
-                </div>
-                <div class="text-xs text-[var(--color-base-content)]/60">
-                  {t('system.importExport.progress.inserted')}
-                </div>
-              </div>
-              <div class="text-center p-2 rounded bg-[var(--color-base-200)]">
-                <div class="text-lg font-semibold text-[var(--color-base-content)]/60">
-                  {formatNumber(importProgress.skipped)}
-                </div>
-                <div class="text-xs text-[var(--color-base-content)]/60">
-                  {t('system.importExport.progress.skipped')}
-                </div>
-              </div>
-              <div class="text-center p-2 rounded bg-[var(--color-base-200)]">
-                <div
-                  class="text-lg font-semibold {importProgress.errors > 0
-                    ? 'text-[var(--color-error)]'
-                    : 'text-[var(--color-base-content)]/60'}"
-                >
-                  {formatNumber(importProgress.errors)}
-                </div>
-                <div class="text-xs text-[var(--color-base-content)]/60">
-                  {t('system.importExport.progress.errors')}
-                </div>
-              </div>
+              <ImportCountTile
+                value={importProgress.processed}
+                label={t('system.importExport.progress.processed')}
+                size="md"
+              />
+              <ImportCountTile
+                value={importProgress.inserted}
+                label={t('system.importExport.progress.inserted')}
+                tone="success"
+                size="md"
+              />
+              <ImportCountTile
+                value={importProgress.skipped}
+                label={t('system.importExport.progress.skipped')}
+                tone="muted"
+                size="md"
+              />
+              <ImportCountTile
+                value={importProgress.errors}
+                label={t('system.importExport.progress.errors')}
+                tone={importProgress.errors > 0 ? 'error' : 'muted'}
+                size="md"
+              />
             </div>
           {/if}
 
@@ -988,7 +987,7 @@
         <!-- Done step -->
         <div class="space-y-4 text-center">
           {#if importComplete && !importError && !importCancelled}
-            <CheckCircle2 class="size-12 mx-auto text-[var(--color-success)]" />
+            <CheckCircle2 class="size-12 mx-auto text-[var(--color-success)]" aria-hidden="true" />
             <div>
               <h4 class="text-lg font-semibold text-[var(--color-base-content)]">
                 {t('system.importExport.done.successTitle')}
@@ -999,34 +998,24 @@
             </div>
             {#if importProgress}
               <div class="grid grid-cols-3 gap-3 text-left">
-                <div class="p-3 rounded-lg bg-[var(--color-base-200)] text-center">
-                  <div class="text-xl font-bold text-[var(--color-success)]">
-                    {formatNumber(importProgress.inserted)}
-                  </div>
-                  <div class="text-xs text-[var(--color-base-content)]/60">
-                    {t('system.importExport.progress.inserted')}
-                  </div>
-                </div>
-                <div class="p-3 rounded-lg bg-[var(--color-base-200)] text-center">
-                  <div class="text-xl font-bold text-[var(--color-base-content)]/60">
-                    {formatNumber(importProgress.skipped)}
-                  </div>
-                  <div class="text-xs text-[var(--color-base-content)]/60">
-                    {t('system.importExport.progress.skipped')}
-                  </div>
-                </div>
-                <div class="p-3 rounded-lg bg-[var(--color-base-200)] text-center">
-                  <div
-                    class="text-xl font-bold {importProgress.errors > 0
-                      ? 'text-[var(--color-error)]'
-                      : 'text-[var(--color-base-content)]/60'}"
-                  >
-                    {formatNumber(importProgress.errors)}
-                  </div>
-                  <div class="text-xs text-[var(--color-base-content)]/60">
-                    {t('system.importExport.progress.errors')}
-                  </div>
-                </div>
+                <ImportCountTile
+                  value={importProgress.inserted}
+                  label={t('system.importExport.progress.inserted')}
+                  tone="success"
+                  size="lg"
+                />
+                <ImportCountTile
+                  value={importProgress.skipped}
+                  label={t('system.importExport.progress.skipped')}
+                  tone="muted"
+                  size="lg"
+                />
+                <ImportCountTile
+                  value={importProgress.errors}
+                  label={t('system.importExport.progress.errors')}
+                  tone={importProgress.errors > 0 ? 'error' : 'muted'}
+                  size="lg"
+                />
               </div>
               <div class="mt-2">
                 <a
@@ -1039,7 +1028,7 @@
               </div>
             {/if}
           {:else if importCancelled}
-            <XCircle class="size-12 mx-auto text-[var(--color-warning)]" />
+            <XCircle class="size-12 mx-auto text-[var(--color-warning)]" aria-hidden="true" />
             <div>
               <h4 class="text-lg font-semibold text-[var(--color-base-content)]">
                 {t('system.importExport.done.cancelledTitle')}
@@ -1056,12 +1045,31 @@
               </p>
             {/if}
           {:else if importError}
-            <XCircle class="size-12 mx-auto text-[var(--color-error)]" />
+            <XCircle class="size-12 mx-auto text-[var(--color-error)]" aria-hidden="true" />
             <div>
               <h4 class="text-lg font-semibold text-[var(--color-base-content)]">
                 {t('system.importExport.done.errorTitle')}
               </h4>
               <p class="text-sm text-[var(--color-base-content)]/70 mt-1">{importError}</p>
+            </div>
+          {:else if importInterrupted}
+            <Unplug class="size-12 mx-auto text-[var(--color-warning)]" aria-hidden="true" />
+            <div>
+              <h4 class="text-lg font-semibold text-[var(--color-base-content)]">
+                {t('system.importExport.done.interruptedTitle')}
+              </h4>
+              <p class="text-sm text-[var(--color-base-content)]/70 mt-1">
+                {t('system.importExport.done.interruptedDescription')}
+              </p>
+            </div>
+            <div class="mt-2">
+              <a
+                href={buildDetectionsFilterUrl()}
+                onclick={() => onClose()}
+                class="inline-flex items-center gap-1.5 text-sm text-[var(--color-primary)] hover:underline"
+              >
+                {t('system.importExport.done.viewDetectionsLink')}
+              </a>
             </div>
           {/if}
         </div>

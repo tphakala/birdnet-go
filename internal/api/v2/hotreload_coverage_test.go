@@ -67,12 +67,43 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"BirdNET.Backend":            {categories: []hotReloadCategory{hotReloadFresh}, action: "reload_birdnet"},
 	"BirdNET.OpenVINODevice":     {categories: []hotReloadCategory{hotReloadFresh}, action: "reload_birdnet"},
 	"BirdNET.Version":            {categories: []hotReloadCategory{hotReloadFresh}, action: "reload_birdnet"},
+	// Read fresh by the model manager on every download, so a mirror change
+	// applies to the next install with no reload or restart.
+	"BirdNET.HuggingFaceEndpoint": {categories: []hotReloadCategory{hotReloadFresh}},
 
 	// --- Perch ---
+	// Parent is restart: model/label path and locale changes reload the model.
+	// The threshold override + value are read live by the processor, so they
+	// hot-reload and only need a dynamic-threshold recalculation.
 	"Perch": {categories: []hotReloadCategory{hotReloadRestart}},
+	"Perch.Threshold": {
+		categories: []hotReloadCategory{hotReloadFresh},
+		action:     "recalculate_dynamic_thresholds",
+	},
+	"Perch.OverrideThreshold": {
+		categories: []hotReloadCategory{hotReloadFresh},
+		action:     "recalculate_dynamic_thresholds",
+	},
+
+	// --- BirdNET v3.0 ---
+	"BirdNETV3": {categories: []hotReloadCategory{hotReloadRestart}},
+	"BirdNETV3.Threshold": {
+		categories: []hotReloadCategory{hotReloadFresh},
+		action:     "recalculate_dynamic_thresholds",
+	},
+	"BirdNETV3.OverrideThreshold": {
+		categories: []hotReloadCategory{hotReloadFresh},
+		action:     "recalculate_dynamic_thresholds",
+	},
 
 	// --- Bat ---
 	"Bat": {categories: []hotReloadCategory{hotReloadFresh}},
+	// The bat dynamic-threshold base is now model-aware, so a bat threshold change
+	// must recalculate existing bat dynamic thresholds (mirrors BirdNET.Threshold).
+	"Bat.Threshold": {
+		categories: []hotReloadCategory{hotReloadFresh},
+		action:     "recalculate_dynamic_thresholds",
+	},
 
 	// --- BSG ---
 	"BSG": {categories: []hotReloadCategory{hotReloadRestart}},
@@ -149,7 +180,7 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"Realtime.Birdweather": {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_birdweather"},
 
 	// -- eBird --
-	"Realtime.EBird": {categories: []hotReloadCategory{hotReloadFresh}},
+	"Realtime.EBird": {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_ebird"},
 
 	// -- OpenWeather (runtime, yaml:"-") --
 	"Realtime.OpenWeather": {categories: []hotReloadCategory{hotReloadRuntime}},
@@ -166,6 +197,7 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"Realtime.RTSP.Streams.*.Type":        {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_rtsp_sources"},
 	"Realtime.RTSP.Streams.*.Transport":   {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_rtsp_sources"},
 	"Realtime.RTSP.Streams.*.ChannelMode": {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_rtsp_sources"},
+	"Realtime.RTSP.Streams.*.MediaMode":   {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_rtsp_sources"},
 	"Realtime.RTSP.Streams.*.Gain":        {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_rtsp_sources"},
 	"Realtime.RTSP.Streams.*.Equalizer":   {categories: []hotReloadCategory{hotReloadFresh}},
 	"Realtime.RTSP.Streams.*.QuietHours":  {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_quiet_hours"},
@@ -234,6 +266,24 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 
 	// --- Sentry ---
 	"Sentry": {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_telemetry"},
+
+	// --- Diagnostics ---
+	// Two different mechanisms, both actionless, which is why this stays one
+	// coarse entry.
+	//
+	// Enabled and Token: the pprof routes are registered unconditionally and
+	// gated by middleware that reads the live snapshot per request, so a change
+	// is observed on the next request with no restart and no action. Enabling
+	// profiling also mints the token during the same save
+	// (ensureProfilingTokenForSave), so the endpoint is usable immediately
+	// rather than refusing until the next start.
+	//
+	// BlockRate and MutexFraction: applied directly by handleSettingsChanges via
+	// profiling.ApplyRates. They declare no action because the runtime setters
+	// are process-global calls with no dependencies; routing them through
+	// controlChan would queue them behind audio reconfiguration and would apply
+	// them only in realtime analysis mode, where the control monitor runs.
+	"Diagnostics": {categories: []hotReloadCategory{hotReloadFresh}},
 
 	// --- Output ---
 	"Output": {categories: []hotReloadCategory{hotReloadRestart}},

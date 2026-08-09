@@ -1,11 +1,64 @@
 package classifier
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestVariantFilesByID(t *testing.T) {
+	t.Parallel()
+
+	modelFile := CatalogFile{RemotePath: "m.onnx", LocalName: "m.onnx", Role: RoleModel}
+	int8File := CatalogFile{RemotePath: "m_int8.onnx", LocalName: "m_int8.onnx", Role: RoleModel}
+	flatEntry := CatalogEntry{ID: "flat", Files: []CatalogFile{modelFile}}
+	variantEntry := CatalogEntry{ID: "v", Variants: []CatalogVariant{
+		{ID: "fp32", Default: true, Files: []CatalogFile{modelFile}},
+		{ID: "int8-arm", Files: []CatalogFile{int8File}},
+	}}
+
+	t.Run("empty variant id returns entry Files", func(t *testing.T) {
+		t.Parallel()
+		files, ok := variantFilesByID(&flatEntry, "")
+		require.True(t, ok)
+		assert.Equal(t, flatEntry.Files, files)
+	})
+
+	t.Run("empty variant id on a variant entry returns top-level Files", func(t *testing.T) {
+		t.Parallel()
+		// On a resolved entry, top-level Files is the default variant's files.
+		files, ok := variantFilesByID(&variantEntry, "")
+		require.True(t, ok)
+		assert.Equal(t, variantEntry.Files, files)
+	})
+
+	t.Run("selects the named non-default variant", func(t *testing.T) {
+		t.Parallel()
+		files, ok := variantFilesByID(&variantEntry, "int8-arm")
+		require.True(t, ok)
+		require.Len(t, files, 1)
+		assert.Equal(t, "m_int8.onnx", files[0].LocalName)
+	})
+
+	t.Run("unknown variant id reports not found", func(t *testing.T) {
+		t.Parallel()
+		files, ok := variantFilesByID(&variantEntry, "does-not-exist")
+		assert.False(t, ok)
+		assert.Nil(t, files)
+	})
+
+	t.Run("non-empty variant id on a flat entry reports not found", func(t *testing.T) {
+		t.Parallel()
+		// A flat entry has no variants, so any non-empty selection is unknown and
+		// must be rejected rather than silently resolving to the flat Files.
+		files, ok := variantFilesByID(&flatEntry, "int8-arm")
+		assert.False(t, ok)
+		assert.Nil(t, files)
+	})
+}
 
 func TestEmbeddedCatalog_UniqueIDs(t *testing.T) {
 	t.Parallel()
@@ -31,10 +84,146 @@ func TestEmbeddedCatalog_ValidRegistryIDs(t *testing.T) {
 	}
 }
 
+// assertFilesHaveChecksums asserts every file carries a valid 32-byte hex SHA-256
+// and a positive size. It validates that the checksum DECODES to a 32-byte digest,
+// not just that it is 64 characters: a 64-char non-hex string would never match a
+// real digest and so would fail closed at download time, but it has no business in
+// the catalog. hex.DecodeString("") returns no error, so the length check is what
+// rejects an empty checksum. label names the entry (and variant) for failures.
+func assertFilesHaveChecksums(t *testing.T, label string, files []CatalogFile) {
+	t.Helper()
+	for _, f := range files {
+		raw, err := hex.DecodeString(f.SHA256)
+		if assert.NoErrorf(t, err,
+			"catalog %q file %q must carry a hex SHA-256", label, f.RemotePath) {
+			assert.Lenf(t, raw, sha256.Size,
+				"catalog %q file %q SHA-256 must decode to 32 bytes", label, f.RemotePath)
+		}
+		assert.Positivef(t, f.SizeBytes,
+			"catalog %q file %q must carry a positive SizeBytes", label, f.RemotePath)
+	}
+}
+
+// TestEmbeddedCatalog_AllFilesHaveChecksums verifies every downloadable file in the
+// catalog carries a real SHA-256 and a non-zero size. An empty SHA-256 makes
+// verifySHA256 a no-op, so the file would be downloaded and loaded with no integrity
+// check at all; a zero size makes the download progress bar meaningless. The invariant
+// must hold for every entry, including Hidden ones, because Hidden is a UI and install
+// gate, not an integrity guarantee: a Hidden entry can still be reached by config or a
+// future un-hide, and every file the gallery can fetch must be verifiable. Variant
+// entries carry files under Variants (their top-level Files is empty and resolved at
+// load time), so both are checked.
+func TestEmbeddedCatalog_AllFilesHaveChecksums(t *testing.T) {
+	t.Parallel()
+
+	for _, entry := range EmbeddedCatalog {
+		assertFilesHaveChecksums(t, entry.ID, entry.Files)
+		for _, v := range entry.Variants {
+			assertFilesHaveChecksums(t, entry.ID+"/"+v.ID, v.Files)
+		}
+	}
+}
+
+func TestResolveVariantDefaults(t *testing.T) {
+	// setActiveCatalog mutates a package global, so this test runs serially.
+	fp32 := CatalogFile{RemotePath: "m_fp32.onnx", LocalName: "m_fp32.onnx", Role: RoleModel, SHA256: "a", SizeBytes: 10}
+	int8File := CatalogFile{RemotePath: "m_int8.onnx", LocalName: "m_int8.onnx", Role: RoleModel, SHA256: "b", SizeBytes: 5}
+
+	t.Run("resolves the default variant into Files and preserves Variants", func(t *testing.T) {
+		resetActiveCatalog(t)
+		setActiveCatalog([]CatalogEntry{{
+			ID: "multi", Name: "Multi", Category: CategoryBird, Version: "1",
+			Variants: []CatalogVariant{
+				{ID: "int8-arm", Files: []CatalogFile{int8File}},
+				{ID: "fp32", Default: true, Files: []CatalogFile{fp32}},
+			},
+		}})
+		got, ok := GetCatalogEntry("multi")
+		require.True(t, ok)
+		require.Len(t, got.Files, 1)
+		assert.Equal(t, "m_fp32.onnx", got.Files[0].LocalName, "Files must resolve to the default variant")
+		assert.Len(t, got.Variants, 2, "Variants must be preserved for the gallery and install path")
+	})
+
+	t.Run("falls back to the first variant when none is marked default", func(t *testing.T) {
+		resetActiveCatalog(t)
+		setActiveCatalog([]CatalogEntry{{
+			ID: "nodefault", Name: "NoDefault", Category: CategoryBird, Version: "1",
+			Variants: []CatalogVariant{
+				{ID: "int8-arm", Files: []CatalogFile{int8File}},
+				{ID: "fp32", Files: []CatalogFile{fp32}},
+			},
+		}})
+		got, ok := GetCatalogEntry("nodefault")
+		require.True(t, ok)
+		require.Len(t, got.Files, 1)
+		assert.Equal(t, "m_int8.onnx", got.Files[0].LocalName, "Files must resolve to the first variant")
+	})
+
+	t.Run("picks the first Default-flagged variant when several set Default", func(t *testing.T) {
+		resetActiveCatalog(t)
+		fp16 := CatalogFile{RemotePath: "m_fp16.onnx", LocalName: "m_fp16.onnx", Role: RoleModel, SHA256: "c", SizeBytes: 7}
+		setActiveCatalog([]CatalogEntry{{
+			ID: "multidefault", Name: "MultiDefault", Category: CategoryBird, Version: "1",
+			Variants: []CatalogVariant{
+				{ID: "int8-arm", Files: []CatalogFile{int8File}},
+				{ID: "fp32", Default: true, Files: []CatalogFile{fp32}},
+				{ID: "fp16", Default: true, Files: []CatalogFile{fp16}},
+			},
+		}})
+		got, ok := GetCatalogEntry("multidefault")
+		require.True(t, ok)
+		require.Len(t, got.Files, 1)
+		assert.Equal(t, "m_fp32.onnx", got.Files[0].LocalName, "the first Default-flagged variant wins deterministically")
+	})
+
+	t.Run("leaves a single-variant entry untouched", func(t *testing.T) {
+		resetActiveCatalog(t)
+		setActiveCatalog([]CatalogEntry{customEntry("plain")})
+		got, ok := GetCatalogEntry("plain")
+		require.True(t, ok)
+		require.Len(t, got.Files, 1)
+		assert.Equal(t, "plain.onnx", got.Files[0].LocalName)
+		assert.Empty(t, got.Variants)
+	})
+
+	t.Run("does not mutate the caller's entries", func(t *testing.T) {
+		resetActiveCatalog(t)
+		entries := []CatalogEntry{{
+			ID: "immut", Name: "Immut", Category: CategoryBird, Version: "1",
+			Variants: []CatalogVariant{{ID: "fp32", Default: true, Files: []CatalogFile{fp32}}},
+		}}
+		setActiveCatalog(entries)
+		assert.Empty(t, entries[0].Files, "resolution must not mutate the caller's entries (may be EmbeddedCatalog)")
+	})
+}
+
+// hasModelRoleFile reports whether files contains a file with the model role.
+func hasModelRoleFile(files []CatalogFile) bool {
+	for i := range files {
+		if files[i].Role == RoleModel {
+			return true
+		}
+	}
+	return false
+}
+
 func TestEmbeddedCatalog_HasFilesWithModelRole(t *testing.T) {
 	t.Parallel()
 
 	for _, entry := range EmbeddedCatalog {
+		// Variant entries carry files under Variants; their top-level Files is empty
+		// in the raw embedded catalog and resolved to the default variant at load
+		// time. Every variant must ship files including a model-role file.
+		if len(entry.Variants) > 0 {
+			for _, v := range entry.Variants {
+				require.NotEmptyf(t, v.Files, "catalog entry %q variant %q has no files", entry.ID, v.ID)
+				assert.Truef(t, hasModelRoleFile(v.Files),
+					"catalog entry %q variant %q has no file with role \"model\"", entry.ID, v.ID)
+			}
+			continue
+		}
+
 		require.NotEmpty(t, entry.Files, "catalog entry %q has no files", entry.ID)
 
 		// Shared-only entries (e.g. geomodels) use geomodel-role files instead of RoleModel.
@@ -42,14 +231,7 @@ func TestEmbeddedCatalog_HasFilesWithModelRole(t *testing.T) {
 			continue
 		}
 
-		hasModel := false
-		for _, f := range entry.Files {
-			if f.Role == RoleModel {
-				hasModel = true
-				break
-			}
-		}
-		assert.True(t, hasModel, "catalog entry %q has no file with role \"model\"", entry.ID)
+		assert.True(t, hasModelRoleFile(entry.Files), "catalog entry %q has no file with role \"model\"", entry.ID)
 	}
 }
 
@@ -117,24 +299,40 @@ func TestEmbeddedCatalog_BatEntriesHaveEmbeddingsFile(t *testing.T) {
 			continue
 		}
 
-		hasEmbeddings := false
+		embeddingsCount := 0
 		for _, f := range entry.Files {
-			if f.Role == RoleEmbeddings {
-				hasEmbeddings = true
-				assert.Equal(t, "birdnet-v24-embeddings.onnx", f.LocalName,
-					"bat entry %q should use shared embeddings file", entry.ID)
-				break
+			if f.Role != RoleEmbeddings {
+				continue
 			}
+			embeddingsCount++
+			// LocalName is kept stable for drop-in compatibility with existing
+			// installs; RemotePath points at the DFT-truncated backbone (bit-exact,
+			// ~2x faster). The two intentionally differ, so assert both. Size and
+			// SHA256 are pinned to literals (not the embeddingsSizeBytes/embeddingsSHA256
+			// constants) so this locks the exact expected file content: comparing the
+			// field to the constant it is assigned from would be a tautology, whereas a
+			// literal catches an accidental constant change and forces a deliberate model
+			// swap to update the test too. No break: validate every embeddings file so a
+			// future entry carrying a second, mismatched one would still fail.
+			assert.Equal(t, "birdnet-v24-embeddings.onnx", f.LocalName,
+				"bat entry %q should use shared embeddings file", entry.ID)
+			assert.Equal(t, "birdnet-v2.4-embeddings-fp32-dfttrunc.onnx", f.RemotePath,
+				"bat entry %q should fetch the DFT-truncated backbone", entry.ID)
+			assert.Equal(t, int64(58763257), f.SizeBytes,
+				"bat entry %q embeddings size should match the DFT-truncated backbone", entry.ID)
+			assert.Equal(t, "b91139d3c63d55d742779a56531078bc88366a09bcc9bd6a9b703d425914c380", f.SHA256,
+				"bat entry %q embeddings checksum should match the DFT-truncated backbone", entry.ID)
 		}
-		assert.True(t, hasEmbeddings, "bat entry %q must have an embeddings file", entry.ID)
+		assert.Equal(t, 1, embeddingsCount, "bat entry %q must have exactly one embeddings file", entry.ID)
 	}
 }
 
 func TestEmbeddedCatalog_EntryCount(t *testing.T) {
 	t.Parallel()
 
-	// 2 wildlife + 1 bird + 1 geomodel + 11 bat = 15 total
-	assert.Len(t, EmbeddedCatalog, 15, "expected 15 total catalog entries")
+	// 2 wildlife + 2 bird + 1 geomodel + 11 bat = 16 total
+	// (bird: bsg-finland + the collapsed hidden BirdNET v2.4 foundation entry)
+	assert.Len(t, EmbeddedCatalog, 16, "expected 16 total catalog entries")
 }
 
 func TestVisibleCatalog_ExcludesHiddenEntries(t *testing.T) {
@@ -155,8 +353,26 @@ func TestVisibleCatalog_ExcludesHiddenEntries(t *testing.T) {
 	require.True(t, ok)
 	assert.True(t, bsg.Hidden)
 
-	// Visible count should be total minus hidden
-	assert.Len(t, visible, len(EmbeddedCatalog)-2)
+	// The collapsed BirdNET v2.4 entry is a hidden foundation entry.
+	hiddenFoundation := []string{"birdnet-v2.4"}
+	for _, id := range hiddenFoundation {
+		entry, ok := GetCatalogEntry(id)
+		require.True(t, ok, "expected to find hidden catalog entry %q", id)
+		assert.True(t, entry.Hidden, "entry %q must be hidden", id)
+	}
+
+	// The hidden entries must be directly absent from the visible set, not just
+	// inferred from the count assertion below.
+	for i := range visible {
+		assert.NotContains(t, hiddenFoundation, visible[i].ID,
+			"hidden entry %q must be excluded from the visible catalog", visible[i].ID)
+	}
+
+	// Visible count should be total minus the 3 hidden entries
+	// (birdnet-v3.0, bsg-finland, and the collapsed BirdNET v2.4 foundation entry).
+	// The hardcoded count is an intentional tripwire: a new hidden entry must
+	// update it, forcing a conscious check that the exclusion is intended.
+	assert.Len(t, visible, len(EmbeddedCatalog)-3)
 }
 
 func TestGetCatalogEntry_BSGFinland(t *testing.T) {
@@ -192,4 +408,213 @@ func TestGetCatalogEntry_BirdNETv30(t *testing.T) {
 	assert.Equal(t, "BirdNET v3.0", entry.Name)
 	assert.Equal(t, RegistryIDBirdNETV3, entry.RegistryID)
 	assert.Equal(t, CategoryWildlife, entry.Category)
+}
+
+// TestEmbeddedCatalog_BirdNETv24Variants pins the identity of the collapsed hidden
+// BirdNET v2.4 entry and its two DFT-truncated hardware variants: their RemotePath,
+// LocalName, size, and checksum are the authoritative values published on HuggingFace.
+// The entry is intentionally hidden (no primary-variant selector yet) and keyed to the
+// permanent BirdNET v2.4 registry ID. Literals mean an accidental edit, revert, or
+// checksum drift is caught here.
+func TestEmbeddedCatalog_BirdNETv24Variants(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("birdnet-v2.4")
+	require.True(t, ok, "expected to find catalog entry birdnet-v2.4")
+	assert.Equal(t, CategoryBird, entry.Category, "birdnet-v2.4 must be a bird model")
+	assert.True(t, entry.Hidden, "birdnet-v2.4 must be hidden (no primary-variant selector yet)")
+	assert.True(t, entry.RequiresONNX, "birdnet-v2.4 must require ONNX")
+	assert.Equal(t, permanentRegistryID, entry.RegistryID,
+		"birdnet-v2.4 must map to the permanent BirdNET v2.4 registry ID")
+	assert.Equal(t, "tphakala/BirdNET-v2.4", entry.HuggingFaceRepo, "birdnet-v2.4 repo")
+
+	cases := []struct {
+		variantID  string
+		remotePath string
+		sha256     string
+		sizeBytes  int64
+		isDefault  bool
+	}{
+		{
+			variantID:  "fp32-dfttrunc",
+			remotePath: "BirdNET_v2.4_fp32_dfttrunc.onnx",
+			sha256:     "3b72e88b3ad0c310a41adabccf8cf75b1a05daeeb40884ebd38038c91d0e423d",
+			sizeBytes:  54068648,
+			isDefault:  true,
+		},
+		{
+			variantID:  "int8-arm-dfttrunc",
+			remotePath: "BirdNET_v2.4_int8_arm_dfttrunc.onnx",
+			sha256:     "7550498ba996064feca12005ff4133eb1d35741c4061376e7a987d8227518893",
+			sizeBytes:  38727042,
+			isDefault:  false,
+		},
+	}
+	require.Lenf(t, entry.Variants, len(cases), "birdnet-v2.4 must have exactly %d variants", len(cases))
+
+	defaults := 0
+	for i, tc := range cases {
+		v := entry.Variants[i]
+		assert.Equalf(t, tc.variantID, v.ID, "variant %d id", i)
+		assert.Equalf(t, tc.isDefault, v.Default, "variant %q default flag", tc.variantID)
+		assert.Falsef(t, v.Legacy, "variant %q must not be Legacy", tc.variantID)
+		if v.Default {
+			defaults++
+		}
+		require.Lenf(t, v.Files, 1, "variant %q must have exactly one (model) file", tc.variantID)
+		f := v.Files[0]
+		assert.Equalf(t, RoleModel, f.Role, "variant %q file must have the model role", tc.variantID)
+		assert.Equalf(t, tc.remotePath, f.RemotePath, "variant %q RemotePath", tc.variantID)
+		assert.Equalf(t, tc.remotePath, f.LocalName, "variant %q LocalName", tc.variantID)
+		assert.Equalf(t, tc.sha256, f.SHA256, "variant %q checksum", tc.variantID)
+		assert.Equalf(t, tc.sizeBytes, f.SizeBytes, "variant %q size", tc.variantID)
+	}
+	assert.Equal(t, 1, defaults, "birdnet-v2.4 must have exactly one Default variant")
+}
+
+// TestEmbeddedCatalog_GlobalVariantResolution verifies the multi-variant global
+// entries (Perch v2, BirdNET v3.0) resolve their default variant into entry.Files
+// with the model and labels LocalName + checksum unchanged from the pre-variant flat
+// entries (so existing installs are undisturbed), carry the shared geomodel + taxonomy
+// companions, and declare exactly one Default variant with no Legacy variant.
+func TestEmbeddedCatalog_GlobalVariantResolution(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		id          string
+		variantIDs  []string
+		modelLocal  string
+		modelSHA    string
+		labelsLocal string
+		labelsSHA   string
+	}{
+		{
+			id:          "perch-v2",
+			variantIDs:  []string{"fp32", "no-dft-fp32", "int8-arm"},
+			modelLocal:  "perch_v2.onnx",
+			modelSHA:    "bf0c8467a924cb074663970ca4a0ab1e143602121930209657d0dff5d5cefa1f",
+			labelsLocal: "perch_v2_labels.txt",
+			labelsSHA:   "e4d5c0397d8fb08bf90c6b13a34810af53504faad927e472fcc567793c9de057",
+		},
+		{
+			id:          "birdnet-v3.0",
+			variantIDs:  []string{"fp32", "fp16"},
+			modelLocal:  "birdnet_v3.0_fp32.onnx",
+			modelSHA:    "05535c3ef6ce3f9e523706dd3e144cb6db96bc202e9047f4973961256acbf997",
+			labelsLocal: "birdnet_v3.0_labels.txt",
+			labelsSHA:   "4f4ef82f1704c66cf4da9f59757c12baa34ff98863fa2627e33c302fc92997aa",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.id, func(t *testing.T) {
+			t.Parallel()
+			entry, ok := GetCatalogEntry(tc.id)
+			require.Truef(t, ok, "expected to find catalog entry %q", tc.id)
+
+			gotIDs := make([]string, len(entry.Variants))
+			defaults := 0
+			for i := range entry.Variants {
+				gotIDs[i] = entry.Variants[i].ID
+				if entry.Variants[i].Default {
+					defaults++
+				}
+				assert.Falsef(t, entry.Variants[i].Legacy, "%s variant %q must not be Legacy", tc.id, entry.Variants[i].ID)
+			}
+			assert.Equalf(t, tc.variantIDs, gotIDs, "%s variant ids", tc.id)
+			assert.Equalf(t, 1, defaults, "%s must have exactly one Default variant", tc.id)
+
+			// Resolved Files: default model + labels LocalName/sha unchanged, companions present.
+			var model, labels *CatalogFile
+			hasGeomodel, hasTaxonomy := false, false
+			for i := range entry.Files {
+				switch entry.Files[i].Role {
+				case RoleModel:
+					model = &entry.Files[i]
+				case RoleLabels:
+					labels = &entry.Files[i]
+				case RoleGeomodelModel, RoleGeomodelLabels:
+					hasGeomodel = true
+				case RoleTaxonomy:
+					hasTaxonomy = true
+				}
+			}
+			require.NotNilf(t, model, "%s resolved Files must contain a model file", tc.id)
+			require.NotNilf(t, labels, "%s resolved Files must contain a labels file", tc.id)
+			assert.Equalf(t, tc.modelLocal, model.LocalName, "%s default model LocalName", tc.id)
+			assert.Equalf(t, tc.modelSHA, model.SHA256, "%s default model checksum", tc.id)
+			assert.Equalf(t, tc.labelsLocal, labels.LocalName, "%s labels LocalName", tc.id)
+			assert.Equalf(t, tc.labelsSHA, labels.SHA256, "%s labels checksum", tc.id)
+			assert.Truef(t, hasGeomodel, "%s resolved Files must carry the geomodel companion", tc.id)
+			assert.Truef(t, hasTaxonomy, "%s resolved Files must carry the taxonomy companion", tc.id)
+		})
+	}
+}
+
+// fileRoles returns the set of file roles present in files.
+func fileRoles(files []CatalogFile) map[string]bool {
+	roles := make(map[string]bool, len(files))
+	for i := range files {
+		roles[files[i].Role] = true
+	}
+	return roles
+}
+
+// TestEmbeddedCatalog_VariantFilesSelfContained verifies that EVERY variant (not
+// just the resolved default) carries the companions it needs. resolveVariantDefaults
+// sets entry.Files = variant.Files without merging, so a variant that omits the
+// geomodel/taxonomy companion would silently break the range-filter wiring once a
+// variant selector installs it. Perch v2 and BirdNET v3.0 variants must each carry
+// model + labels + geomodel + taxonomy; BirdNET v2.4 variants deliberately carry only
+// the model (embedded labels, no geomodel).
+func TestEmbeddedCatalog_VariantFilesSelfContained(t *testing.T) {
+	t.Parallel()
+
+	withCompanions := map[string]bool{"perch-v2": true, "birdnet-v3.0": true}
+	modelOnly := map[string]bool{"birdnet-v2.4": true}
+
+	for i := range EmbeddedCatalog {
+		entry := &EmbeddedCatalog[i]
+		wantCompanions := withCompanions[entry.ID]
+		wantModelOnly := modelOnly[entry.ID]
+		if !wantCompanions && !wantModelOnly {
+			continue
+		}
+		require.NotEmptyf(t, entry.Variants, "entry %q expected to carry variants", entry.ID)
+		for j := range entry.Variants {
+			v := &entry.Variants[j]
+			roles := fileRoles(v.Files)
+			assert.Truef(t, roles[RoleModel], "%s/%s must carry a model file", entry.ID, v.ID)
+			if wantCompanions {
+				assert.Truef(t, roles[RoleLabels], "%s/%s must carry a labels file", entry.ID, v.ID)
+				assert.Truef(t, roles[RoleGeomodelModel], "%s/%s must carry the geomodel model companion", entry.ID, v.ID)
+				assert.Truef(t, roles[RoleGeomodelLabels], "%s/%s must carry the geomodel labels companion", entry.ID, v.ID)
+				assert.Truef(t, roles[RoleTaxonomy], "%s/%s must carry the taxonomy companion", entry.ID, v.ID)
+			}
+			if wantModelOnly {
+				assert.Falsef(t, roles[RoleGeomodelModel], "%s/%s must NOT carry a geomodel companion (uses embedded labels)", entry.ID, v.ID)
+				assert.Falsef(t, roles[RoleTaxonomy], "%s/%s must NOT carry a taxonomy companion", entry.ID, v.ID)
+				assert.Falsef(t, roles[RoleLabels], "%s/%s must NOT carry a downloaded labels file (embedded)", entry.ID, v.ID)
+			}
+		}
+	}
+}
+
+// TestEmbeddedCatalog_VariantEntriesHaveNoTopLevelFiles pins the mutual-exclusion
+// invariant on the RAW embedded catalog: an entry that declares Variants must leave
+// its top-level Files empty (resolveVariantDefaults fills it from the default variant
+// at load time, and validateCatalogEntryFiles rejects an entry that sets both). This
+// reads EmbeddedCatalog directly, not GetCatalogEntry, because the latter returns the
+// resolved catalog where Files is intentionally populated.
+func TestEmbeddedCatalog_VariantEntriesHaveNoTopLevelFiles(t *testing.T) {
+	t.Parallel()
+
+	for i := range EmbeddedCatalog {
+		entry := &EmbeddedCatalog[i]
+		if len(entry.Variants) == 0 {
+			continue
+		}
+		assert.Emptyf(t, entry.Files,
+			"catalog entry %q declares variants, so its top-level Files must be empty (resolved at load time; the loader rejects an entry that sets both)", entry.ID)
+	}
 }

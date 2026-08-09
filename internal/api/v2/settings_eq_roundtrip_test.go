@@ -41,9 +41,8 @@ func putTestSettingsJSON(t *testing.T, settings *conf.Settings, eqOverride map[s
 }
 
 // TestEQFilterRoundTrip_PUT verifies that equalizer filters survive the full
-// PUT /api/v2/settings path that the frontend save button uses. This tests
-// the ctx.Bind -> updateAllowedFieldsRecursivelyWithTracking flow, not the
-// PATCH mergeJSONIntoStruct flow.
+// PUT /api/v2/settings path that the frontend save button uses. PUT now runs the
+// same omission-preserving deep-merge family as PATCH (mergeFullSettings).
 func TestEQFilterRoundTrip_PUT(t *testing.T) {
 	t.Parallel()
 

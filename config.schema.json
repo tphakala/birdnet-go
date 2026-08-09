@@ -494,10 +494,41 @@
         "openvinodevice": {
           "type": "string",
           "description": "OpenVINO device preference: \"auto\" (default), \"cpu\", or \"gpu\""
+        },
+        "huggingfaceendpoint": {
+          "type": "string",
+          "description": "model download host, e.g. \"https://hf-mirror.com\" where huggingface.co is blocked; empty falls back to $HF_ENDPOINT then https://huggingface.co"
         }
       },
       "additionalProperties": false,
       "type": "object"
+    },
+    "BirdNETV3Config": {
+      "properties": {
+        "modelpath": {
+          "type": "string",
+          "description": "path to BirdNET v3.0 ONNX model file"
+        },
+        "labelpath": {
+          "type": "string",
+          "description": "path to BirdNET v3.0 label file"
+        },
+        "overridethreshold": {
+          "type": "boolean",
+          "description": "when true, gate BirdNET v3.0 detections on Threshold instead of following BirdNET.Threshold"
+        },
+        "threshold": {
+          "type": "number",
+          "description": "confidence threshold for detections (applied only when OverrideThreshold is true)"
+        },
+        "locale": {
+          "type": "string",
+          "description": "locale for species label translation"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "BirdNETV3Config holds configuration for the BirdNET v3.0 acoustic classifier."
     },
     "BirdweatherSettings": {
       "properties": {
@@ -724,6 +755,17 @@
       "additionalProperties": false,
       "type": "object",
       "description": "DetectionsGridConfig holds configuration for the detections grid element."
+    },
+    "DiagnosticsConfig": {
+      "properties": {
+        "profiling": {
+          "$ref": "#/$defs/ProfilingConfig",
+          "description": "pprof HTTP endpoint configuration"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "DiagnosticsConfig groups the developer-facing diagnostics features."
     },
     "DiskMonitorConfig": {
       "properties": {
@@ -1359,7 +1401,7 @@
         },
         "loudnessrange": {
           "type": "number",
-          "description": "loudness range in LU (default: 7)"
+          "description": "Deprecated: no longer applied; retained so existing configs keep loading."
         },
         "truepeak": {
           "type": "number",
@@ -1368,7 +1410,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "description": "NormalizationSettings contains audio normalization configuration based on EBU R128 standard"
+      "description": "NormalizationSettings contains audio normalization configuration based on EBU R128 standard."
     },
     "NotificationConfig": {
       "properties": {
@@ -1472,9 +1514,13 @@
           "type": "string",
           "description": "path to Perch v2 label CSV file"
         },
+        "overridethreshold": {
+          "type": "boolean",
+          "description": "when true, gate Perch detections on Threshold instead of following BirdNET.Threshold"
+        },
         "threshold": {
           "type": "number",
-          "description": "confidence threshold for detections"
+          "description": "confidence threshold for detections (applied only when OverrideThreshold is true)"
         },
         "locale": {
           "type": "string",
@@ -1503,6 +1549,29 @@
       "additionalProperties": false,
       "type": "object",
       "description": "PrivacyFilterSettings contains settings for the privacy filter."
+    },
+    "ProfilingConfig": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to serve /debug/pprof/* on the web server"
+        },
+        "token": {
+          "type": "string",
+          "description": "secret required when no auth provider is configured; generated automatically"
+        },
+        "blockrate": {
+          "type": "integer",
+          "description": "nanoseconds of blocked time per sample; 0 disables. Independent of enabled: sampling costs CPU continuously whether or not a profile is ever fetched, so 0 is the only free setting and a very coarse rate still pays most of the cost. Recommended starting point: 10000. Values above 1e15 nanoseconds, about 11 days per sample, are clamped to that ceiling; no useful configuration reaches it. Hot-reloadable via the settings API."
+        },
+        "mutexfraction": {
+          "type": "integer",
+          "description": "reports one sampled event per this many contention events; 0 disables. Independent of enabled: sampling costs CPU continuously whether or not a profile is ever fetched. Recommended starting point: 100. Hot-reloadable via the settings API."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ProfilingConfig gates the Go pprof HTTP endpoints."
     },
     "PublicAccess": {
       "properties": {
@@ -1989,7 +2058,7 @@
         },
         "windowdays": {
           "type": "integer",
-          "description": "Days to show \"new this season\" indicator (default: 21)"
+          "description": "Days to show \"new this season\" indicator (default: 7)"
         },
         "seasons": {
           "oneOf": [
@@ -2147,6 +2216,10 @@
           "$ref": "#/$defs/PerchConfig",
           "description": "Perch v2 model configuration"
         },
+        "birdnetv3": {
+          "$ref": "#/$defs/BirdNETV3Config",
+          "description": "BirdNET v3.0 acoustic classifier configuration"
+        },
         "bat": {
           "$ref": "#/$defs/BatConfig",
           "description": "Bat detection configuration"
@@ -2192,6 +2265,10 @@
         "sentry": {
           "$ref": "#/$defs/SentrySettings",
           "description": "Sentry error tracking configuration"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/DiagnosticsConfig",
+          "description": "developer diagnostics (pprof profiling)"
         },
         "output": {
           "properties": {
@@ -2403,7 +2480,7 @@
         },
         "newspecieswindowdays": {
           "type": "integer",
-          "description": "Days to consider a species \"new\" (default: 14)"
+          "description": "Days to consider a species \"new\" (default: 7)"
         },
         "syncintervalminutes": {
           "type": "integer",
@@ -2486,6 +2563,10 @@
         "channelMode": {
           "type": "string",
           "description": "Channel handling: downmix, left, or right"
+        },
+        "mediaMode": {
+          "type": "string",
+          "description": "RTSP media request: auto, audio-only, or full-stream (ignored for non-RTSP)"
         },
         "gain": {
           "type": "number",
@@ -2808,7 +2889,7 @@
         },
         "windowdays": {
           "type": "integer",
-          "description": "Days to show \"new this year\" indicator (default: 30)"
+          "description": "Days to show \"new this year\" indicator (default: 7)"
         }
       },
       "additionalProperties": false,

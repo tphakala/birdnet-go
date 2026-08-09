@@ -35,6 +35,7 @@
   let lockDetection = $state(false);
   let ignoreSpecies = $state(false);
   let comment = $state('');
+  let originalComment = $state('');
   let isLoading = $state(false);
   let errorMessage = $state<string | null>(null);
   let showCommentSection = $state(false);
@@ -51,6 +52,7 @@
       const firstComment = safeArrayAccess(detection.comments || [], 0);
       const firstCommentValue = firstComment?.entry || '';
       comment = firstCommentValue;
+      originalComment = firstCommentValue;
       // Use firstCommentValue (local variable) instead of comment ($state) to avoid
       // creating a reactive dependency that would reset the section when typing
       showCommentSection = !!firstCommentValue;
@@ -79,7 +81,7 @@
             verified: reviewStatus,
             lock_detection: desiredLockState,
             ignore_species: ignoreSpecies ? detection.commonName : null,
-            comment: comment,
+            comment: comment !== originalComment ? comment : undefined,
           }),
         });
       }

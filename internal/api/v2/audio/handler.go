@@ -64,8 +64,14 @@ const (
 	filePermReadWrite  = 0o644
 	filePermExecutable = 0o755
 
-	// defaultReadBufferSize is the default channel/buffer capacity for the HLS
-	// audio feed.
+	// defaultReadBufferSize is the slot capacity of an HLS audio feed's channel.
+	//
+	// It bounds how many chunks can be queued, not how much memory they hold:
+	// chunk size belongs to the producer, so the same slot count is 33 MB of
+	// PCM for a 32 KiB RTSP frame and under 1 MB for a sound card's 10 ms
+	// period. The memory bound is audioFeed's byte budget; this is sized so
+	// that even the smallest chunks reach that budget before they run out of
+	// slots. The ring itself costs one audioChunk header per slot (48 bytes).
 	defaultReadBufferSize = 1024
 )
 

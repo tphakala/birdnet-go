@@ -9,12 +9,78 @@
  * omitempty.
  */
 
+/**
+ * Single-board computer the host runs on, as named by its device tree. Absent
+ * on hosts with no device tree, which is every PC.
+ */
+export interface InferenceBoard {
+  /** Board family, e.g. "raspberry-pi" or "generic". */
+  kind: string;
+  /** Device-tree model string, e.g. "Raspberry Pi 5 Model B Rev 1.0". */
+  model?: string;
+  /** System-on-chip identifier, e.g. "bcm2712". */
+  soc?: string;
+  /** Performance band ("pi5", "pi4", "pi3"); absent for undistinguished boards. */
+  tier?: string;
+}
+
+/** Reason codes the server can attach to an accelerator. */
+export type GpuReasonCode = 'render-node-unavailable' | 'render-node-permission' | 'no-runtime';
+
+/**
+ * A GPU present on the host. Reported whether or not it can be reached, so the
+ * panel can explain an unreachable one instead of hiding it.
+ */
+export interface InferenceAccelerator {
+  /** "igpu" or "dgpu". */
+  kind: string;
+  /** "intel", "amd" or "nvidia". */
+  vendor: string;
+  /**
+   * Display name pairing the vendor with the PCI IDs. Not unique: two identical
+   * cards produce the same name, so it must never be used as a list key.
+   */
+  name?: string;
+  /**
+   * Whether the server can open this device's DRM render node. This is not a
+   * prediction that inference will run here; the device a model actually uses
+   * is reported per model in `models[].device`.
+   */
+  accessible: boolean;
+  /**
+   * Every reason code explaining why this GPU is not an inference target, most
+   * fundamental first. Each is rendered by `gpuReasonLabel`, which maps it to a
+   * flat `system.inference.gpuReason<Code>` translation key.
+   *
+   * A list because the blockers stack: a card can be both unreachable and of a
+   * vendor no build supports, and learning that one restart at a time is the
+   * outcome worth avoiding.
+   */
+  reasons?: GpuReasonCode[];
+}
+
 /** Host hardware and runtime environment the models run on. */
 export interface InferenceHardware {
   arch: string;
   cpuModel: string;
   environment: string;
   fp16: boolean;
+  board?: InferenceBoard;
+  accelerators?: InferenceAccelerator[];
+  /** Effective memory ceiling: host RAM clamped by any cgroup limit. */
+  totalRamBytes?: number;
+  physicalCores?: number;
+  /**
+   * Capability tokens this host matches, in the model manifests' vocabulary.
+   *
+   * No UI reads this: the row that rendered the tokens was removed, because
+   * every one of them is derived from a fact the card already states. The field
+   * is kept to mirror the server contract, which still sends it, so a raw call
+   * to the endpoint remains a usable diagnostic for which model builds a host
+   * matches. Do not treat it as dead and delete it without dropping the Go
+   * field too (internal/api/v2/system/inference_status.go).
+   */
+  capabilities?: string[];
 }
 
 /** Availability state for a compiled-in inference backend. */

@@ -2,7 +2,6 @@ package spectrogram
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -1209,6 +1208,11 @@ func TestGetStyleArgs(t *testing.T) {
 // TestGetFFmpegColorMode tests that FFmpeg color modes match the expected
 // values for each style preset, ensuring the FFmpeg fallback produces
 // visually consistent spectrograms with the Sox primary path.
+// Expectations are literal strings on purpose: asserting against the
+// ffmpegColor* constants would still pass with swapped values (issue #3835).
+// In FFmpeg's showspectrumpic filter "intensity" is the colorful heat map
+// (the filter's own default), while "channel" colors per audio channel and
+// renders mono clips in a single hue, i.e. black and white.
 func TestGetFFmpegColorMode(t *testing.T) {
 	t.Parallel()
 
@@ -1218,34 +1222,34 @@ func TestGetFFmpegColorMode(t *testing.T) {
 		wantColor string
 	}{
 		{
-			name:      "default style uses channel color mode",
+			name:      "default style uses intensity (colorful heat map)",
 			style:     conf.SpectrogramStyleDefault,
-			wantColor: ffmpegColorDefault,
+			wantColor: "intensity",
 		},
 		{
-			name:      "scientific dark uses intensity (grayscale)",
+			name:      "scientific dark uses channel (grayscale for mono)",
 			style:     conf.SpectrogramStyleScientificDark,
-			wantColor: ffmpegColorIntensity,
+			wantColor: "channel",
 		},
 		{
 			name:      "high contrast dark uses fire (high saturation)",
 			style:     conf.SpectrogramStyleHighContrastDark,
-			wantColor: ffmpegColorFire,
+			wantColor: "fire",
 		},
 		{
-			name:      "scientific uses intensity (grayscale)",
+			name:      "scientific uses channel (grayscale for mono)",
 			style:     conf.SpectrogramStyleScientific,
-			wantColor: ffmpegColorIntensity,
+			wantColor: "channel",
 		},
 		{
-			name:      "unknown style falls back to channel default",
+			name:      "unknown style falls back to colorful default",
 			style:     "nonexistent_style",
-			wantColor: ffmpegColorDefault,
+			wantColor: "intensity",
 		},
 		{
-			name:      "empty style falls back to channel default",
+			name:      "empty style falls back to colorful default",
 			style:     "",
-			wantColor: ffmpegColorDefault,
+			wantColor: "intensity",
 		},
 	}
 
@@ -1272,24 +1276,24 @@ func TestFFmpegFallback_AppliesStyleSetting(t *testing.T) {
 		expectInColor string // substring expected in the FFmpeg filter
 	}{
 		{
-			name:          "default style includes channel color",
+			name:          "default style includes intensity color",
 			style:         conf.SpectrogramStyleDefault,
-			expectInColor: "color=" + ffmpegColorDefault,
+			expectInColor: "color=intensity",
 		},
 		{
-			name:          "scientific dark includes intensity color",
+			name:          "scientific dark includes channel color",
 			style:         conf.SpectrogramStyleScientificDark,
-			expectInColor: "color=" + ffmpegColorIntensity,
+			expectInColor: "color=channel",
 		},
 		{
 			name:          "high contrast dark includes fire color",
 			style:         conf.SpectrogramStyleHighContrastDark,
-			expectInColor: "color=" + ffmpegColorFire,
+			expectInColor: "color=fire",
 		},
 		{
-			name:          "scientific includes intensity color",
+			name:          "scientific includes channel color",
 			style:         conf.SpectrogramStyleScientific,
-			expectInColor: "color=" + ffmpegColorIntensity,
+			expectInColor: "color=channel",
 		},
 	}
 
@@ -1297,11 +1301,7 @@ func TestFFmpegFallback_AppliesStyleSetting(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			// Build the same filter string that generateWithFFmpeg constructs,
-			// verifying the style-aware color parameter is integrated correctly.
-			colorMode := getFFmpegColorMode(tt.style)
-			filterStr := fmt.Sprintf("showspectrumpic=s=%dx%d:legend=%d:gain=%s:drange=%s:color=%s",
-				400, fftFriendlyHeight(400), 1, ffmpegGain, ffmpegDrange, colorMode)
+			filterStr := buildFFmpegSpectrogramFilter(400, false, tt.style, FrequencyProfile{})
 			assert.Contains(t, filterStr, tt.expectInColor,
 				"FFmpeg filter string should include style-aware color mode")
 		})

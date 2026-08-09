@@ -695,3 +695,40 @@ func TestGetLatestWeather(t *testing.T) {
 
 	// Verify mock expectations
 }
+
+// TestFindHourlyWeatherByHourString verifies fallback correctly matches localized hour
+func TestFindHourlyWeatherByHourString(t *testing.T) {
+	// Go 1.25: Add test metadata
+	t.Attr("component", "weather")
+	t.Attr("type", "unit")
+	t.Attr("feature", "hourly-weather-fallback")
+
+	// Mock time.Local to a non-UTC offset (e.g., +03:00)
+	originalLocal := time.Local
+	defer func() { time.Local = originalLocal }()
+
+	loc := time.FixedZone("TestZone", 3*3600)
+	time.Local = loc
+
+	// Setup
+	_, _, controller := setupWeatherTestEnvironment(t)
+
+	// Provide hourlyWeatherList in UTC.
+	// In the local zone, 12:00 UTC is 15:00 local time.
+	hwList := []datastore.HourlyWeather{
+		{
+			Time:        time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
+			Temperature: 15.0,
+		},
+	}
+
+	// Requesting 15:xx local time should match the 12:00 UTC record
+	resp := controller.findHourlyWeatherByHourString(hwList, "15:30:00", "test-id", "127.0.0.1", "/api")
+	assert.NotEmpty(t, resp.Time)
+	assert.Equal(t, "15:00:00", resp.Time)
+	assert.InDelta(t, 15.0, resp.Temperature, 0.01)
+
+	// Mismatch test: requesting 12:xx local time should fail to match 12:00 UTC
+	respMismatch := controller.findHourlyWeatherByHourString(hwList, "12:30:00", "test-id", "127.0.0.1", "/api")
+	assert.Empty(t, respMismatch.Time)
+}

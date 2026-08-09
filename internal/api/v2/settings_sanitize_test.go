@@ -101,6 +101,8 @@ func settingsWithSecrets(t *testing.T) *conf.Settings {
 		},
 	}
 
+	s.Diagnostics.Profiling.Token = "diagnostics-token-secret"
+
 	return s
 }
 
@@ -144,6 +146,9 @@ func TestSanitizeSettingsForAPI_RedactsAllSecrets(t *testing.T) {
 
 	// --- eBird ---
 	assert.Equal(t, redactedValue, sanitized.Realtime.EBird.APIKey, "ebird.apiKey must be redacted")
+
+	// --- Diagnostics ---
+	assert.Equal(t, redactedValue, sanitized.Diagnostics.Profiling.Token, "diagnostics.profiling.token must be redacted")
 
 	// --- Backup ---
 	assert.Equal(t, redactedValue, sanitized.Backup.EncryptionKey, "backup.encryptionKey must be redacted")

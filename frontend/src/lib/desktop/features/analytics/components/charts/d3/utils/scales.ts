@@ -16,6 +16,15 @@ import { generateSpeciesColors, getCurrentTheme } from './theme';
 export interface LinearScaleConfig {
   domain: [number, number];
   range: [number, number];
+  /**
+   * Round the domain outward to "nice" values (default true).
+   *
+   * Pass false when the domain is already exact and must not grow. An hour-of-day axis is the
+   * motivating case: `nice()` stretches [0, 23] to [0, 24], which leaves the final hour ~4% short
+   * of the plot edge and adds a tick beyond the data (which an hour formatter then clamps back to
+   * "23:00", labelling hour 24 as 23:00).
+   */
+  nice?: boolean;
 }
 
 export interface BandScaleConfig {
@@ -42,7 +51,10 @@ export function createLinearScale(config: LinearScaleConfig): ScaleLinear<number
     throw new TypeError('createLinearScale: domain must be [number, number]');
   }
 
-  const scale = scaleLinear().domain(config.domain).range(config.range).nice();
+  const scale = scaleLinear().domain(config.domain).range(config.range);
+  if (config.nice ?? true) {
+    scale.nice();
+  }
 
   return scale;
 }

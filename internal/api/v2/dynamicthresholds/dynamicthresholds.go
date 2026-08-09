@@ -248,7 +248,6 @@ func (c *Handler) addMemoryThresholds(thresholdMap map[string]*DynamicThresholdR
 		return
 	}
 	memoryData := proc.GetDynamicThresholdData()
-	baseThreshold := c.CurrentSettings().BirdNET.Threshold
 
 	for _, dt := range memoryData {
 		key := strings.ToLower(dt.ModelName) + ":" + strings.ToLower(dt.SpeciesName)
@@ -256,14 +255,16 @@ func (c *Handler) addMemoryThresholds(thresholdMap map[string]*DynamicThresholdR
 			// Update existing entry with in-memory values
 			applyMemoryOverlay(existing, dt.Level, dt.HighConfCount, dt.CurrentValue, dt.ExpiresAt, dt.IsActive, dt.ScientificName)
 		} else {
-			// Add new entry from memory
+			// Add new entry from memory. BaseThreshold is model-aware (Perch v2 /
+			// BirdNET v3.0 override, Bat, or the primary BirdNET base) so the
+			// displayed base matches the value the recalculation path applies.
 			thresholdMap[key] = &DynamicThresholdResponse{
 				SpeciesName:    dt.SpeciesName,
 				ScientificName: dt.ScientificName,
 				ModelName:      dt.ModelName,
 				Level:          dt.Level,
 				CurrentValue:   dt.CurrentValue,
-				BaseThreshold:  float64(baseThreshold),
+				BaseThreshold:  dt.BaseThreshold,
 				HighConfCount:  dt.HighConfCount,
 				ExpiresAt:      dt.ExpiresAt,
 				IsActive:       dt.IsActive,

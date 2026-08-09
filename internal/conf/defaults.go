@@ -87,11 +87,18 @@ func setDefaultConfig() {
 
 	// Range filter configuration
 	viper.SetDefault("birdnet.rangefilter.debug", false)
-	viper.SetDefault("birdnet.rangefilter.model", "latest")
+	viper.SetDefault("birdnet.rangefilter.model", RangeFilterModelLatest)
 	viper.SetDefault("birdnet.rangefilter.threshold", 0.01)
 
-	// Perch model configuration
+	// Perch model configuration.
+	// OverrideThreshold defaults false so Perch follows birdnet.threshold until the
+	// user opts in; Threshold is the value used once the override is enabled.
+	viper.SetDefault("perch.overridethreshold", false)
 	viper.SetDefault("perch.threshold", 0.5)
+
+	// BirdNET v3.0 model configuration (same override semantics as Perch).
+	viper.SetDefault("birdnetv3.overridethreshold", false)
+	viper.SetDefault("birdnetv3.threshold", 0.5)
 
 	// Bat detection configuration
 	viper.SetDefault("bat.threshold", 0.5)
@@ -111,7 +118,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.processingtime", false)
 
 	// Audio source configuration (multi-source array).
-	// Default is empty — fresh installs get no source, user configures via UI.
+	// Default is empty: fresh installs get no source, user configures via UI.
 	// Legacy configs with realtime.audio.source are migrated by MigrateAudioSourceConfig.
 	// An empty default ensures the migration guard sees len(Sources)==0 and runs correctly.
 	viper.SetDefault("realtime.audio.sources", []map[string]any{})
@@ -119,23 +126,23 @@ func setDefaultConfig() {
 
 	// Sound level monitoring configuration
 	viper.SetDefault("realtime.audio.soundlevel.enabled", false)
-	viper.SetDefault("realtime.audio.soundlevel.interval", 10)
+	viper.SetDefault("realtime.audio.soundlevel.interval", DefaultSoundLevelInterval)
 
 	// Audio capture configuration
 	viper.SetDefault("realtime.audio.export.debug", false)
 	viper.SetDefault("realtime.audio.export.enabled", true)
 	viper.SetDefault("realtime.audio.export.path", "clips/")
 	viper.SetDefault("realtime.audio.export.type", "wav")
-	viper.SetDefault("realtime.audio.export.bitrate", "96k")
-	viper.SetDefault("realtime.audio.export.length", 15)
+	viper.SetDefault("realtime.audio.export.bitrate", DefaultAudioExportBitrate)
+	viper.SetDefault("realtime.audio.export.length", DefaultAudioExportLength)
 	viper.SetDefault("realtime.audio.export.preCapture", 3)
 	viper.SetDefault("realtime.audio.export.gain", 0.0)
 
 	// Audio normalization configuration (EBU R128 standard)
-	viper.SetDefault("realtime.audio.export.normalization.enabled", false)     // disabled by default
-	viper.SetDefault("realtime.audio.export.normalization.targetLUFS", -23.0)  // EBU R128 broadcast standard
-	viper.SetDefault("realtime.audio.export.normalization.loudnessRange", 7.0) // typical range for broadcast
-	viper.SetDefault("realtime.audio.export.normalization.truePeak", -2.0)     // headroom to prevent clipping
+	viper.SetDefault("realtime.audio.export.normalization.enabled", false)                             // disabled by default
+	viper.SetDefault("realtime.audio.export.normalization.targetLUFS", DefaultNormalizationTargetLUFS) // EBU R128 broadcast standard
+	viper.SetDefault("realtime.audio.export.normalization.loudnessRange", 7.0)                         // typical range for broadcast
+	viper.SetDefault("realtime.audio.export.normalization.truePeak", -2.0)                             // headroom to prevent clipping
 
 	// Quiet hours configuration (sound card)
 	viper.SetDefault("realtime.audio.quiethours.enabled", false)
@@ -166,7 +173,7 @@ func setDefaultConfig() {
 
 	// Dashboard thumbnails configuration
 	viper.SetDefault("realtime.dashboard.thumbnails.debug", false)
-	viper.SetDefault("realtime.dashboard.thumbnails.summary", false)
+	viper.SetDefault("realtime.dashboard.thumbnails.summary", true)
 	viper.SetDefault("realtime.dashboard.thumbnails.recent", true)
 	viper.SetDefault("realtime.dashboard.thumbnails.imageprovider", "avicommons")
 	viper.SetDefault("realtime.dashboard.thumbnails.fallbackpolicy", "none")
@@ -188,8 +195,8 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.audio.export.retention.enabled", true)
 	viper.SetDefault("realtime.audio.export.retention.debug", false)
 	viper.SetDefault("realtime.audio.export.retention.policy", "usage")
-	viper.SetDefault("realtime.audio.export.retention.maxusage", "80%")
-	viper.SetDefault("realtime.audio.export.retention.maxage", "30d")
+	viper.SetDefault("realtime.audio.export.retention.maxusage", DefaultRetentionMaxUsage)
+	viper.SetDefault("realtime.audio.export.retention.maxage", DefaultRetentionMaxAge)
 	viper.SetDefault("realtime.audio.export.retention.minclips", 10)
 	viper.SetDefault("realtime.audio.export.retention.keepspectrograms", true)
 	viper.SetDefault("realtime.audio.export.retention.checkinterval", DefaultCleanupCheckInterval)
@@ -199,7 +206,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.dynamicthreshold.debug", false)
 	viper.SetDefault("realtime.dynamicthreshold.trigger", 0.90)
 	viper.SetDefault("realtime.dynamicthreshold.min", 0.20)
-	viper.SetDefault("realtime.dynamicthreshold.validhours", 24)
+	viper.SetDefault("realtime.dynamicthreshold.validhours", DefaultDynamicThresholdValidHours)
 
 	// Log deduplication configuration
 	viper.SetDefault("realtime.logdeduplication.enabled", true)
@@ -280,7 +287,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.mqtt.retrysettings.maxretries", 5)
 	viper.SetDefault("realtime.mqtt.retrysettings.initialdelay", 30)
 	viper.SetDefault("realtime.mqtt.retrysettings.maxdelay", 3600)
-	viper.SetDefault("realtime.mqtt.retrysettings.backoffmultiplier", 2.0)
+	viper.SetDefault("realtime.mqtt.retrysettings.backoffmultiplier", DefaultRetryBackoffMultiplier)
 
 	// Home Assistant MQTT auto-discovery configuration
 	viper.SetDefault("realtime.mqtt.homeassistant.enabled", false)
@@ -301,7 +308,7 @@ func setDefaultConfig() {
 
 	// Telemetry configuration
 	viper.SetDefault("realtime.telemetry.enabled", false)
-	viper.SetDefault("realtime.telemetry.listen", "0.0.0.0:8090")
+	viper.SetDefault("realtime.telemetry.listen", DefaultTelemetryListen)
 
 	// System monitoring configuration
 	viper.SetDefault("realtime.monitoring.enabled", true)
@@ -316,19 +323,19 @@ func setDefaultConfig() {
 
 	// Species tracking configuration
 	viper.SetDefault("realtime.speciestracking.enabled", true)
-	viper.SetDefault("realtime.speciestracking.newspecieswindowdays", 7)
-	viper.SetDefault("realtime.speciestracking.syncintervalminutes", 60)
-	viper.SetDefault("realtime.speciestracking.notificationsuppressionhours", 168) // 7 days
+	viper.SetDefault("realtime.speciestracking.newspecieswindowdays", DefaultNewSpeciesWindowDays)
+	viper.SetDefault("realtime.speciestracking.syncintervalminutes", DefaultSpeciesSyncIntervalMinutes)
+	viper.SetDefault("realtime.speciestracking.notificationsuppressionhours", DefaultNotificationSuppressionHours) // 7 days
 
 	// Yearly tracking defaults
 	viper.SetDefault("realtime.speciestracking.yearlytracking.enabled", true)
-	viper.SetDefault("realtime.speciestracking.yearlytracking.resetmonth", 1)
-	viper.SetDefault("realtime.speciestracking.yearlytracking.resetday", 1)
-	viper.SetDefault("realtime.speciestracking.yearlytracking.windowdays", 7)
+	viper.SetDefault("realtime.speciestracking.yearlytracking.resetmonth", DefaultYearlyTrackingResetMonth)
+	viper.SetDefault("realtime.speciestracking.yearlytracking.resetday", DefaultYearlyTrackingResetDay)
+	viper.SetDefault("realtime.speciestracking.yearlytracking.windowdays", DefaultYearlyTrackingWindowDays)
 
 	// Seasonal tracking defaults
 	viper.SetDefault("realtime.speciestracking.seasonaltracking.enabled", true)
-	viper.SetDefault("realtime.speciestracking.seasonaltracking.windowdays", 7)
+	viper.SetDefault("realtime.speciestracking.seasonaltracking.windowdays", DefaultSeasonalTrackingWindowDays)
 
 	// Infrequent tracking defaults (opt-in, unlike yearly/seasonal tracking)
 	viper.SetDefault("realtime.speciestracking.infrequenttracking.enabled", false)
@@ -347,7 +354,7 @@ func setDefaultConfig() {
 	// Webserver configuration
 	viper.SetDefault("webserver.debug", false)
 	viper.SetDefault("webserver.enabled", true)
-	viper.SetDefault("webserver.port", "8080")
+	viper.SetDefault("webserver.port", DefaultWebServerPort)
 
 	// Live stream configuration
 	viper.SetDefault("webserver.livestream.debug", false)
@@ -449,6 +456,17 @@ func setDefaultConfig() {
 
 	// Alerting rules engine
 	viper.SetDefault("alerting.history_retention_days", 30)
+
+	// Diagnostics: pprof profiling endpoints. Off by default; the token is
+	// generated on demand when profiling is enabled without an auth provider.
+	//
+	// The two sampling rates default to 0, meaning off, and are independent of
+	// the endpoint: serving /debug/pprof must not start charging the audio path
+	// for block and mutex samples.
+	viper.SetDefault("diagnostics.profiling.enabled", false)
+	viper.SetDefault("diagnostics.profiling.token", "")
+	viper.SetDefault("diagnostics.profiling.blockrate", 0)
+	viper.SetDefault("diagnostics.profiling.mutexfraction", 0)
 }
 
 // setModuleLogDefaults sets default values for a module log configuration

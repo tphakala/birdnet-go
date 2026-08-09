@@ -2,9 +2,13 @@ package imageprovider_test
 
 import (
 	"fmt"
+	"os"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -12,13 +16,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
+// benchLiveNetworkEnv gates benchmarks that issue real requests to third-party APIs.
+const benchLiveNetworkEnv = "BIRDNET_BENCH_LIVE"
+
 // Benchmark scenarios:
 // 1. Cache hit performance - measuring in-memory lookup speed
 // 2. Cache miss with DB lookup - measuring DB fetch overhead
 // 3. Cache miss with provider fetch - measuring full fetch cycle
 // 4. Concurrent access patterns - measuring contention/locking overhead
 // 5. Rate limiting impact - measuring how rate limiting affects throughput
-// 6. Batch operations - measuring GetBatch performance
 
 // benchmarkCacheSetup creates a cache for benchmarking with proper cleanup.
 func benchmarkCacheSetup(b *testing.B, provider imageprovider.ImageProvider, store datastore.Interface) *imageprovider.BirdImageCache {
@@ -121,7 +127,7 @@ func BenchmarkCacheMissWithDBHit(b *testing.B) {
 		if err := mockStore.SaveImageCache(&datastore.ImageCache{
 			ScientificName: species,
 			ProviderName:   "wikimedia",
-			URL:            fmt.Sprintf("http://example.com/%s.jpg", species),
+			URL:            fmt.Sprintf("http://127.0.0.1/%s.jpg", species),
 			CachedAt:       time.Now(),
 		}); err != nil {
 			b.Fatalf("Failed to pre-populate DB store: %v", err)
@@ -233,26 +239,24 @@ func BenchmarkConcurrentCacheAccess(b *testing.B) {
 	})
 }
 
-// BenchmarkRateLimitedFetch measures the impact of rate limiting on fetch operations
+// BenchmarkRateLimitedFetch measures the impact of rate limiting on fetch operations.
+//
+// This benchmark issues real requests to the live Wikipedia API, so it is opt-in: an
+// unguarded `go test -bench=.` would otherwise hammer a third-party service from CI
+// and produce numbers that depend on someone else's rate limiting. Run it with
+// BIRDNET_BENCH_LIVE=1 when measuring the limiter deliberately.
 func BenchmarkRateLimitedFetch(b *testing.B) {
+	// ParseBool, not a non-empty check: BIRDNET_BENCH_LIVE=0 is how anyone would
+	// disable a flag, and an emptiness test would have enabled it instead.
+	if live, err := strconv.ParseBool(os.Getenv(benchLiveNetworkEnv)); err != nil || !live {
+		b.Skipf("skipping live-network benchmark; set %s=1 to run it", benchLiveNetworkEnv)
+	}
+
 	// This benchmark will use the actual Wikipedia provider to test rate limiting
 	provider, err := imageprovider.NewWikiMediaProvider()
 	if err != nil {
 		b.Fatalf("Failed to create WikiMedia provider: %v", err)
 	}
-
-	mockStore := newMockStore()
-	metrics, err := observability.NewMetrics()
-	if err != nil {
-		b.Fatalf("Failed to create metrics: %v", err)
-	}
-
-	cache := imageprovider.InitCache("wikimedia", provider, metrics, mockStore)
-	defer func() {
-		if err := cache.Close(); err != nil {
-			b.Errorf("Failed to close cache: %v", err)
-		}
-	}()
 
 	// Test species that are likely to exist in Wikipedia
 	testSpecies := []string{
@@ -275,40 +279,6 @@ func BenchmarkRateLimitedFetch(b *testing.B) {
 		}
 		i++
 	}
-}
-
-// BenchmarkGetBatch measures batch fetch performance
-func BenchmarkGetBatch(b *testing.B) {
-	mockProvider := &mockImageProvider{}
-	mockStore := newMockStore()
-	cache := benchmarkCacheSetup(b, mockProvider, mockStore)
-
-	batchSizes := []int{10, 50, 100}
-	for _, size := range batchSizes {
-		b.Run(fmt.Sprintf("BatchSize_%d", size), func(b *testing.B) {
-			species := generateSpeciesNames(size, "Species")
-			benchmarkPrePopulateCache(b, cache, species[:size/2])
-
-			b.ReportAllocs()
-			b.ResetTimer()
-
-			for b.Loop() {
-				results := cache.GetBatch(species)
-				if len(results) != size {
-					b.Fatalf("Expected %d results, got %d", size, len(results))
-				}
-			}
-		})
-	}
-}
-
-// generateSpeciesNames creates a slice of species names with the given prefix.
-func generateSpeciesNames(count int, prefix string) []string {
-	species := make([]string, count)
-	for i := range count {
-		species[i] = fmt.Sprintf("%s_%d", prefix, i)
-	}
-	return species
 }
 
 // BenchmarkMemoryUsage measures the memory overhead of the cache
@@ -369,26 +339,32 @@ func BenchmarkCacheRefreshCycle(b *testing.B) {
 		if err := mockStore.SaveImageCache(&datastore.ImageCache{
 			ScientificName: species,
 			ProviderName:   "wikimedia",
-			URL:            fmt.Sprintf("http://example.com/old_%s.jpg", species),
+			URL:            fmt.Sprintf("http://127.0.0.1/old_%s.jpg", species),
 			CachedAt:       staleTime,
 		}); err != nil {
 			b.Fatalf("Failed to save stale cache entry: %v", err)
 		}
 	}
 
-	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-	if err != nil {
-		b.Fatalf("Failed to create cache: %v", err)
-	}
+	// InitCache with the mock already installed, not CreateDefaultCache followed
+	// by SetImageProvider: the refresh goroutine starts immediately, and if it
+	// reaches shouldSkipRefresh while the lazy Wikipedia provider is still in
+	// place it returns and does not run again for an hour, so the poll below
+	// would never see a fetch. Same reason TestBirdImageCacheRefresh gives.
+	cache := imageprovider.InitCache("wikimedia", mockProvider, metrics, mockStore)
 	defer func() {
 		if err := cache.Close(); err != nil {
 			b.Errorf("Failed to close cache: %v", err)
 		}
 	}()
-	cache.SetImageProvider(mockProvider)
 
-	// Let refresh cycle run
-	time.Sleep(2 * time.Second)
+	// Wait until the refresh cycle has actually started working rather than
+	// sleeping for a duration guessed from refreshDelay. The sweep waits
+	// refreshDelay (2s) before each entry, so the first fetch lands just past
+	// that; poll for it with headroom instead of racing the boundary.
+	require.Eventually(b, func() bool { return mockProvider.getFetchCount() > 0 },
+		10*time.Second, 50*time.Millisecond,
+		"the background refresh sweep should have started fetching stale entries")
 
 	b.ReportAllocs()
 

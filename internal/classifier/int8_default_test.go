@@ -112,11 +112,14 @@ func TestDefaultClassifierModelInfo_AMD64AlwaysTFLite(t *testing.T) {
 	assert.Equal(t, BackendTFLite, info.Backend)
 }
 
-// TestRemapV24ForONNXOnly verifies that on ONNX-only (notflite) builds a
-// registry-resolved BirdNET v2.4 TFLite model (from version:"2.4" or the default)
-// is transparently remapped to the INT8 ONNX entry when present, so existing
-// arm64 configs keep starting instead of failing on the missing TFLite backend.
-func TestRemapV24ForONNXOnly(t *testing.T) {
+// TestRemapV24ToONNXOnARM64 verifies the stock v2.4 TFLite default is remapped to
+// the INT8-ARM ONNX entry when ONNX is the right stock backend and the file is
+// present: on arm64 (its reduced-memory default, TFLite still linked for custom
+// models) and on a non-arm64 notflite build (no TFLite backend to run). A normal
+// non-arm64 build keeps FP32 TFLite even with the ONNX file present, arm64 without
+// the ONNX file stays on TFLite, and a user-supplied .tflite (CustomPath) is never
+// swapped.
+func TestRemapV24ToONNXOnARM64(t *testing.T) {
 	t.Parallel()
 
 	v24 := ModelRegistry[DefaultModelVersion]
@@ -128,38 +131,48 @@ func TestRemapV24ForONNXOnly(t *testing.T) {
 	}
 	findMiss := func(string) (string, bool) { return "", false }
 
-	t.Run("tflite available: unchanged", func(t *testing.T) {
-		t.Parallel()
-		got := remapV24ForONNXOnly(&v24, true, findHit)
-		assert.Equal(t, DefaultModelVersion, got.ID)
-		assert.Equal(t, BackendTFLite, got.Backend)
-	})
-	t.Run("onnx-only + int8 present: remapped to unified ONNX", func(t *testing.T) {
-		t.Parallel()
-		got := remapV24ForONNXOnly(&v24, false, findHit)
+	assertRemappedToONNX := func(t *testing.T, got ModelInfo) {
+		t.Helper()
 		assert.Equal(t, DefaultModelVersion, got.ID)
 		assert.Equal(t, BackendONNX, got.Backend)
 		assert.Equal(t, QuantizationINT8, got.Quantization)
 		assert.True(t, got.IsStock)
 		assert.Equal(t, "/models/"+DefaultBirdNETINT8ONNXModelName, got.CustomPath)
-	})
-	t.Run("onnx-only but int8 absent: unchanged (fails clearly downstream)", func(t *testing.T) {
+	}
+
+	t.Run("arm64 (tflite linked) + int8 present: remapped to ONNX", func(t *testing.T) {
 		t.Parallel()
-		got := remapV24ForONNXOnly(&v24, false, findMiss)
+		assertRemappedToONNX(t, remapV24ToONNXOnARM64(&v24, "arm64", true, findHit))
+	})
+	t.Run("non-arm64 notflite + int8 present: remapped to ONNX (no-TFLite fallback)", func(t *testing.T) {
+		t.Parallel()
+		assertRemappedToONNX(t, remapV24ToONNXOnARM64(&v24, "amd64", false, findHit))
+	})
+	t.Run("normal amd64 (tflite available) + int8 present: not remapped", func(t *testing.T) {
+		t.Parallel()
+		got := remapV24ToONNXOnARM64(&v24, "amd64", true, findHit)
 		assert.Equal(t, DefaultModelVersion, got.ID)
+		assert.Equal(t, BackendTFLite, got.Backend)
+	})
+	t.Run("arm64 but int8 absent: unchanged (fails clearly downstream)", func(t *testing.T) {
+		t.Parallel()
+		got := remapV24ToONNXOnARM64(&v24, "arm64", true, findMiss)
+		assert.Equal(t, DefaultModelVersion, got.ID)
+		assert.Equal(t, BackendTFLite, got.Backend)
 	})
 	t.Run("explicit custom .tflite path: not remapped", func(t *testing.T) {
 		t.Parallel()
 		custom := v24
 		custom.CustomPath = "/data/model/my.tflite"
-		got := remapV24ForONNXOnly(&custom, false, findHit)
+		got := remapV24ToONNXOnARM64(&custom, "arm64", true, findHit)
 		assert.Equal(t, DefaultModelVersion, got.ID)
 		assert.Equal(t, "/data/model/my.tflite", got.CustomPath)
+		assert.Equal(t, BackendTFLite, got.Backend)
 	})
 	t.Run("non-v2.4 entry: unchanged", func(t *testing.T) {
 		t.Parallel()
 		perch := ModelRegistry[RegistryIDPerchV2]
-		got := remapV24ForONNXOnly(&perch, false, findHit)
+		got := remapV24ToONNXOnARM64(&perch, "arm64", true, findHit)
 		assert.Equal(t, RegistryIDPerchV2, got.ID)
 	})
 }
@@ -251,9 +264,9 @@ func TestDetermineModelInfoINT8ONNX(t *testing.T) {
 	assert.False(t, info.IsStock, "explicit modelpath is not stock")
 }
 
-// TestRemapV24ForONNXOnlyUnified verifies that remapV24ForONNXOnly returns the
+// TestRemapV24ToONNXOnARM64Unified verifies that remapV24ToONNXOnARM64 returns the
 // unified BirdNET_V2.4 ID (not the forked INT8 ID) when remapping to ONNX.
-func TestRemapV24ForONNXOnlyUnified(t *testing.T) {
+func TestRemapV24ToONNXOnARM64Unified(t *testing.T) {
 	t.Parallel()
 	find := func(name string) (string, bool) {
 		if name == DefaultBirdNETINT8ONNXModelName {
@@ -262,9 +275,83 @@ func TestRemapV24ForONNXOnlyUnified(t *testing.T) {
 		return "", false
 	}
 	base := ModelRegistry[DefaultModelVersion]
-	got := remapV24ForONNXOnly(&base, false /*tfliteAvailable*/, find)
+	got := remapV24ToONNXOnARM64(&base, "arm64", true, find)
 	assert.Equal(t, DefaultModelVersion, got.ID)
 	assert.Equal(t, BackendONNX, got.Backend)
 	assert.Equal(t, QuantizationINT8, got.Quantization)
 	assert.True(t, got.IsStock)
+}
+
+// TestIsAutoSelectRangeFilterModel verifies that the empty string and the "latest"
+// default sentinel both request automatic range-filter backend selection, while
+// explicit model choices do not. Regression guard for #3932, where the default
+// "latest" dead-ended at the TFLite backend on ONNX-only arm64 images.
+func TestIsAutoSelectRangeFilterModel(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		model string
+		want  bool
+	}{
+		{"empty string is auto-select", "", true},
+		{"latest sentinel is auto-select", conf.RangeFilterModelLatest, true},
+		{"explicit v3 is not auto-select", "v3", false},
+		{"legacy is not auto-select", "legacy", false},
+		{"custom value is not auto-select", "custom", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, isAutoSelectRangeFilterModel(tt.model))
+		})
+	}
+}
+
+// TestShouldSelectDefaultONNXRangeFilter verifies the arm64 default ONNX MData
+// range-filter selection. It fires for the auto-select models ("" and "latest") on
+// arm64 with a v2.4-family classifier when the ONNX file is present, and is correctly
+// suppressed by an explicit ModelPath, a non-auto-select model, a non-v2.4 classifier,
+// amd64, or a missing file. The "latest" cases are the #3932 regression guard: the
+// default config must select the shipped ONNX MData model on ONNX-only arm64 images
+// instead of dead-ending at the unavailable TFLite model.
+func TestShouldSelectDefaultONNXRangeFilter(t *testing.T) {
+	t.Parallel()
+
+	onnxName := DefaultRangeFilterV2ONNXModelName
+	findHit := func(name string) (string, bool) {
+		if name == onnxName {
+			return "/models/" + name, true
+		}
+		return "", false
+	}
+	findMiss := func(string) (string, bool) { return "", false }
+	wantPath := "/models/" + onnxName
+
+	tests := []struct {
+		name       string
+		model      string
+		modelPath  string
+		classifier string
+		goarch     string
+		find       func(string) (string, bool)
+		wantPath   string
+		wantOK     bool
+	}{
+		{"latest on arm64 v2.4 with file selects ONNX MData", conf.RangeFilterModelLatest, "", DefaultModelVersion, "arm64", findHit, wantPath, true},
+		{"empty on arm64 v2.4 with file selects ONNX MData", "", "", DefaultModelVersion, "arm64", findHit, wantPath, true},
+		{"explicit v3 does not auto-select", "v3", "", DefaultModelVersion, "arm64", findHit, "", false},
+		{"legacy does not auto-select", "legacy", "", DefaultModelVersion, "arm64", findHit, "", false},
+		{"explicit ModelPath suppresses selection", conf.RangeFilterModelLatest, "/data/custom.onnx", DefaultModelVersion, "arm64", findHit, "", false},
+		{"non-v2.4 classifier is skipped", conf.RangeFilterModelLatest, "", RegistryIDPerchV2, "arm64", findHit, "", false},
+		{"amd64 is skipped", conf.RangeFilterModelLatest, "", DefaultModelVersion, "amd64", findHit, "", false},
+		{"arm64 without file falls through", conf.RangeFilterModelLatest, "", DefaultModelVersion, "arm64", findMiss, "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			path, ok := shouldSelectDefaultONNXRangeFilter(tt.model, tt.modelPath, tt.classifier, tt.goarch, tt.find)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.wantPath, path)
+		})
+	}
 }

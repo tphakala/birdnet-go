@@ -15,7 +15,28 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/api/v2/dto"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+)
+
+// Species fixtures for the name-resolution and rarity tests. testAliasName and
+// testCanonName are a real legacy/current synonym pair from the vendored OpenFauna
+// alias map, so these tests exercise the actual alias data rather than a stub.
+const (
+	testSciName     = "Turdus migratorius"
+	testCommonName  = "American Robin"
+	testAliasName   = "Streptopelia senegalensis"
+	testCanonName   = "Spilopelia senegalensis"
+	testCanonCommon = "Laughing Dove"
+)
+
+// Two species BirdNET v2.4 ships separately while the OpenFauna alias map maps the
+// second onto the first. Any match keyed only on the canonical name merges them.
+const (
+	collidingSciA    = "Dicrurus adsimilis"
+	collidingCommonA = "Fork-tailed Drongo"
+	collidingSciB    = "Dicrurus divaricatus"
+	collidingCommonB = "Glossy-backed Drongo"
 )
 
 // newSpeciesHandler builds a minimal species Handler with valid default settings
@@ -257,7 +278,7 @@ func TestSpeciesInfoJSONSerialization(t *testing.T) {
 	info := SpeciesInfo{
 		ScientificName: "Turdus migratorius",
 		CommonName:     "American Robin",
-		Rarity: &SpeciesRarityInfo{
+		Rarity: SpeciesRarityInfo{
 			Status:           RarityCommon,
 			Score:            0.65,
 			LocationBased:    true,
@@ -392,7 +413,7 @@ func TestTaxonomyInfoJSONSerialization(t *testing.T) {
 	info := TaxonomyInfo{
 		ScientificName: "Turdus migratorius",
 		SpeciesCode:    "amero",
-		Taxonomy: &TaxonomyHierarchy{
+		Taxonomy: TaxonomyHierarchy{
 			Kingdom: "Animalia",
 			Phylum:  "Chordata",
 			Class:   "Aves",
@@ -548,7 +569,7 @@ func TestGetAllSpecies(t *testing.T) {
 			var response AllSpeciesResponse
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 			assert.Equal(t, tt.expectedCount, response.Count)
-			assert.Len(t, response.Species, tt.expectedCount)
+			require.Len(t, response.Species, tt.expectedCount)
 
 			if tt.expectedCount > 0 {
 				// Verify first species is parsed correctly
@@ -563,4 +584,332 @@ func TestGetAllSpecies(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestResolveSpeciesLabel(t *testing.T) {
+	t.Parallel()
+
+	allLabels := []string{
+		testCanonName + "_" + testCanonCommon,
+		testSciName + "_" + testCommonName,
+	}
+
+	tests := []struct {
+		name       string
+		targetSci  string
+		wantLabel  string
+		wantCommon string
+	}{
+		{
+			name:       "exact match",
+			targetSci:  testSciName,
+			wantLabel:  testSciName + "_" + testCommonName,
+			wantCommon: testCommonName,
+		},
+		{
+			name:       "taxonomic alias",
+			targetSci:  testAliasName,
+			wantLabel:  testCanonName + "_" + testCanonCommon,
+			wantCommon: testCanonCommon,
+		},
+		{
+			name:       "case mismatch match",
+			targetSci:  " tURdus MIgratoRIUS ",
+			wantLabel:  testSciName + "_" + testCommonName,
+			wantCommon: testCommonName,
+		},
+		{
+			name:       "not found",
+			targetSci:  "Unknown species",
+			wantLabel:  "",
+			wantCommon: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			gotLabel, gotCommon := resolveSpeciesLabel(tt.targetSci, allLabels)
+			assert.Equal(t, tt.wantLabel, gotLabel)
+			assert.Equal(t, tt.wantCommon, gotCommon)
+		})
+	}
+}
+
+func TestResolveSpeciesLabel_Empty(t *testing.T) {
+	t.Parallel()
+	gotLabel, gotCommon := resolveSpeciesLabel("Turdus migratorius", nil)
+	assert.Empty(t, gotLabel)
+	assert.Empty(t, gotCommon)
+}
+
+func TestComputeRarity(t *testing.T) {
+	t.Parallel()
+
+	geomodelLabels := []string{
+		testCanonName + "_" + testCanonCommon,
+		testSciName + "_" + testCommonName,
+		"Universal GeomodelOnly_Species",
+	}
+	classifierLabels := []string{
+		testCanonName + "_" + testCanonCommon,
+		testSciName + "_" + testCommonName,
+	}
+
+	scores := []classifier.SpeciesScore{
+		{Label: testSciName + "_" + testCommonName, Score: 0.9},
+		{Label: testCanonName + "_" + testCanonCommon, Score: 0.1},
+	}
+
+	tests := []struct {
+		name       string
+		targetSci  string
+		wantScore  float64
+		wantStatus RarityStatus
+	}{
+		{
+			name:       "found in scores (very common)",
+			targetSci:  testSciName,
+			wantScore:  0.9,
+			wantStatus: RarityVeryCommon,
+		},
+		{
+			name:       "found in scores via alias",
+			targetSci:  testAliasName,
+			wantScore:  0.1,
+			wantStatus: RarityRare,
+		},
+		{
+			name:       "case mismatch in alias",
+			targetSci:  " STreptoPeliA SenEgaLenSiS ",
+			wantScore:  0.1,
+			wantStatus: RarityRare,
+		},
+		{
+			name:       "universal geomodel only (very rare)",
+			targetSci:  "Universal GeomodelOnly",
+			wantScore:  0.0,
+			wantStatus: RarityVeryRare,
+		},
+		{
+			name:       "unknown species (no coverage)",
+			targetSci:  "Completely Unknown",
+			wantScore:  0.0,
+			wantStatus: RarityUnknown,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			gotScore, gotStatus := computeRarity(tt.targetSci, scores, geomodelLabels, classifierLabels)
+			assert.InDelta(t, tt.wantScore, gotScore, 0.001)
+			assert.Equal(t, tt.wantStatus, gotStatus)
+		})
+	}
+}
+
+func TestComputeRarity_Empty(t *testing.T) {
+	t.Parallel()
+	gotScore, gotStatus := computeRarity("Turdus migratorius", nil, nil, nil)
+	assert.InDelta(t, 0.0, gotScore, 0.001)
+	assert.Equal(t, RarityUnknown, gotStatus)
+}
+
+// TestComputeRarity_GeomodelLabelsTakePrecedence pins the reported bug. Coverage is
+// decided by the geomodel's vocabulary, so a species the classifier can name but the
+// geomodel cannot score has no occurrence probability and must report unknown rather
+// than a misleading "very rare".
+func TestComputeRarity_GeomodelLabelsTakePrecedence(t *testing.T) {
+	t.Parallel()
+
+	geomodelLabels := []string{testCanonName + "_" + testCanonCommon}
+	classifierLabels := []string{
+		testCanonName + "_" + testCanonCommon,
+		testSciName + "_" + testCommonName,
+	}
+
+	_, status := computeRarity(testSciName, nil, geomodelLabels, classifierLabels)
+	assert.Equal(t, RarityUnknown, status,
+		"classifier-only species has no geomodel occurrence probability")
+
+	_, status = computeRarity(testCanonName, nil, geomodelLabels, classifierLabels)
+	assert.Equal(t, RarityVeryRare, status,
+		"geomodel-covered species below threshold is very rare")
+}
+
+// TestComputeRarity_NoGeomodelLabels covers the range-filter backends whose vocabulary
+// is the classifier's own label set: the TFLite meta model, the plain ONNX range
+// filter, and an unconfigured location. GetRarityContext reports no geomodel vocabulary
+// for those, so coverage must fall back to the classifier labels instead of reporting
+// every species as unknown.
+func TestComputeRarity_NoGeomodelLabels(t *testing.T) {
+	t.Parallel()
+
+	classifierLabels := []string{
+		testCanonName + "_" + testCanonCommon,
+		testSciName + "_" + testCommonName,
+	}
+
+	tests := []struct {
+		name       string
+		targetSci  string
+		wantStatus RarityStatus
+	}{
+		{
+			name:       "classifier species below threshold is very rare",
+			targetSci:  testSciName,
+			wantStatus: RarityVeryRare,
+		},
+		{
+			name:       "legacy synonym of a classifier species is still covered",
+			targetSci:  testAliasName,
+			wantStatus: RarityVeryRare,
+		},
+		{
+			name:       "species outside the classifier has no coverage",
+			targetSci:  "Myotis brandtii",
+			wantStatus: RarityUnknown,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			gotScore, gotStatus := computeRarity(tt.targetSci, nil, nil, classifierLabels)
+			assert.InDelta(t, 0.0, gotScore, 0.001)
+			assert.Equal(t, tt.wantStatus, gotStatus)
+		})
+	}
+}
+
+// TestResolveSpeciesLabel_CollidingSpecies guards a defect an earlier revision shipped:
+// matching on the canonical name alone answered a request for one of these two species
+// with the other's label and common name, because the alias map merges them while
+// BirdNET v2.4 ships both.
+func TestResolveSpeciesLabel_CollidingSpecies(t *testing.T) {
+	t.Parallel()
+
+	allLabels := []string{
+		collidingSciA + "_" + collidingCommonA,
+		collidingSciB + "_" + collidingCommonB,
+	}
+
+	gotLabel, gotCommon := resolveSpeciesLabel(collidingSciB, allLabels)
+	assert.Equal(t, collidingSciB+"_"+collidingCommonB, gotLabel,
+		"an exact scientific-name match must win over the alias collapse")
+	assert.Equal(t, collidingCommonB, gotCommon)
+
+	gotLabel, gotCommon = resolveSpeciesLabel(collidingSciA, allLabels)
+	assert.Equal(t, collidingSciA+"_"+collidingCommonA, gotLabel)
+	assert.Equal(t, collidingCommonA, gotCommon)
+}
+
+// TestResolveSpeciesLabel_LegacyLabelCanonicalTarget covers the production-relevant
+// direction the other alias cases miss: the LABEL carries the legacy synonym (as BirdNET
+// v2.4's own labels do) while the request uses the current name.
+func TestResolveSpeciesLabel_LegacyLabelCanonicalTarget(t *testing.T) {
+	t.Parallel()
+
+	allLabels := []string{testAliasName + "_" + testCanonCommon}
+
+	gotLabel, gotCommon := resolveSpeciesLabel(testCanonName, allLabels)
+	assert.Equal(t, testAliasName+"_"+testCanonCommon, gotLabel,
+		"canonicalization must apply to the label side, not only the request side")
+	assert.Equal(t, testCanonCommon, gotCommon)
+}
+
+// TestComputeRarity_CollidingSpecies is the rarity-side counterpart to
+// TestResolveSpeciesLabel_CollidingSpecies: each species must report its own score.
+func TestComputeRarity_CollidingSpecies(t *testing.T) {
+	t.Parallel()
+
+	labels := []string{
+		collidingSciA + "_" + collidingCommonA,
+		collidingSciB + "_" + collidingCommonB,
+	}
+	// Descending by score, as the probable-species list arrives.
+	scores := []classifier.SpeciesScore{
+		{Label: collidingSciA + "_" + collidingCommonA, Score: 0.9},
+		{Label: collidingSciB + "_" + collidingCommonB, Score: 0.1},
+	}
+
+	gotScore, gotStatus := computeRarity(collidingSciB, scores, labels, labels)
+	assert.InDelta(t, 0.1, gotScore, 0.001, "the merged species must keep its own score")
+	assert.Equal(t, RarityRare, gotStatus)
+
+	gotScore, gotStatus = computeRarity(collidingSciA, scores, labels, labels)
+	assert.InDelta(t, 0.9, gotScore, 0.001)
+	assert.Equal(t, RarityVeryCommon, gotStatus)
+}
+
+// TestComputeRarity_SyntheticScoresReportUnknown pins that a score injected for a species
+// OUTSIDE the coverage vocabulary is not read as a rarity, whatever its value.
+// PassUnmappedSpecies injects unmapped species at 0.0, which is the case this fully
+// covers: previously they read as very_rare, so the badge depended on an unrelated
+// toggle.
+//
+// Note what this does NOT cover. addUserOverrideSpeciesScores also injects at 1.0, but
+// resolveOverrideLabels resolves an override against the geomodel labels first, so a
+// force-included species the geomodel knows sits INSIDE the coverage vocabulary and
+// still reads as very_common. Only an override outside it, as constructed here, reaches
+// the unknown path. Separating a real score from an injected one needs the range filter
+// to tag synthetic entries.
+func TestComputeRarity_SyntheticScoresReportUnknown(t *testing.T) {
+	t.Parallel()
+
+	const unmappedSci = "Myotis brandtii"
+	geomodelLabels := []string{testCanonName + "_" + testCanonCommon}
+	// A species present in neither vocabulary, standing in for one the range filter
+	// cannot rank. classifierLabels is the primary model's own set in production.
+	classifierLabels := []string{testSciName + "_" + testCommonName}
+
+	tests := []struct {
+		name  string
+		score float64
+		why   string
+	}{
+		{name: "unmapped species injected at 0.0", score: 0.0, why: "must not read as very_rare"},
+		{name: "uncovered override injected at 1.0", score: 1.0, why: "must not read as very_common"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			scores := []classifier.SpeciesScore{{Label: unmappedSci + "_Brandt's Bat", Score: tt.score}}
+			gotScore, gotStatus := computeRarity(unmappedSci, scores, geomodelLabels, classifierLabels)
+			assert.Equal(t, RarityUnknown, gotStatus, tt.why)
+			assert.InDelta(t, 0.0, gotScore, 0.001)
+		})
+	}
+}
+
+// TestSpeciesInfoJSONOmitsUnsetBlocks pins the omitzero half of the wire contract. The
+// populated direction is covered by TestSpeciesInfoJSONSerialization; without this,
+// reverting omitzero to omitempty would go unnoticed and start emitting zero-valued
+// "rarity" and "taxonomy" objects on every response where the lookup was skipped,
+// breaking clients that gate on the key's presence.
+func TestSpeciesInfoJSONOmitsUnsetBlocks(t *testing.T) {
+	t.Parallel()
+
+	data, err := json.Marshal(SpeciesInfo{ScientificName: testSciName, CommonName: testCommonName})
+	require.NoError(t, err)
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(data, &parsed))
+	assert.NotContains(t, parsed, "rarity", "an unset rarity block must be omitted, not emitted as zeros")
+	assert.NotContains(t, parsed, "taxonomy", "an unset taxonomy block must be omitted, not emitted as zeros")
+	assert.Contains(t, parsed, "scientific_name")
+}
+
+// TestTaxonomyInfoJSONOmitsUnsetHierarchy is the TaxonomyInfo counterpart.
+func TestTaxonomyInfoJSONOmitsUnsetHierarchy(t *testing.T) {
+	t.Parallel()
+
+	data, err := json.Marshal(TaxonomyInfo{ScientificName: testSciName})
+	require.NoError(t, err)
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(data, &parsed))
+	assert.NotContains(t, parsed, "taxonomy", "an unset hierarchy must be omitted, not emitted as zeros")
 }

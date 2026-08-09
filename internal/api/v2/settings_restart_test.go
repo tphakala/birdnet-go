@@ -308,6 +308,7 @@ func TestHotReloadRestartFieldsCovered(t *testing.T) {
 		"BirdNET.OpenVINOPath":    "OpenVINO library path; loaded once at init and not safely unloadable, so it takes effect on restart (mirrors ONNXRuntimePath)",
 		"Models":                  "model registry path; restart-vs-reload undecided",
 		"Perch":                   "perch model path; not wired",
+		"BirdNETV3":               "BirdNET v3.0 model path; not wired",
 		"BSG":                     "BSG model path; not wired",
 		"Realtime.Audio.Watchdog": "no UI controls (project decision)",
 		"LowMemory":               "startup-only memory policy; not exposed via the live settings API",

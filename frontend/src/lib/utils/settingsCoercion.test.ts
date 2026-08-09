@@ -142,4 +142,26 @@ describe('settingsCoercion realtime rtsp streams', () => {
 
     expect(result.rtsp.streams[0]?.gain).toBeUndefined();
   });
+
+  it('preserves valid media modes', () => {
+    for (const mode of ['auto', 'audio-only', 'full-stream']) {
+      const result = coerceSettings('realtime', {
+        rtsp: {
+          streams: [{ name: 'Cam', url: 'rtsp://cam7', type: 'rtsp', mediaMode: mode }],
+        },
+      }) as { rtsp: { streams: Array<Record<string, unknown>> } };
+
+      expect(result.rtsp.streams[0]?.mediaMode).toBe(mode);
+    }
+  });
+
+  it('drops an invalid media mode', () => {
+    const result = coerceSettings('realtime', {
+      rtsp: {
+        streams: [{ name: 'Cam', url: 'rtsp://cam8', type: 'rtsp', mediaMode: 'video-only' }],
+      },
+    }) as { rtsp: { streams: Array<Record<string, unknown>> } };
+
+    expect(result.rtsp.streams[0]?.mediaMode).toBeUndefined();
+  });
 });

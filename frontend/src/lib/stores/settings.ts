@@ -75,6 +75,11 @@ export interface BirdNetSettings {
   longitude: number;
   locationConfigured: boolean; // true when location has been explicitly configured
   rangeFilter: RangeFilterSettings;
+  // Host used for model downloads, e.g. https://hf-mirror.com where
+  // huggingface.co is unreachable. When empty the backend falls back to the
+  // HF_ENDPOINT environment variable first and only then to https://huggingface.co,
+  // so an empty value here does not necessarily mean the default host is in use.
+  huggingFaceEndpoint?: string;
 }
 
 export interface DynamicThresholdSettings {
@@ -122,6 +127,26 @@ export interface BatSettings {
   ultrasonicFilter?: {
     enabled: boolean;
   };
+}
+
+// Secondary acoustic classifiers (Perch v2, BirdNET v3.0). Their detections
+// follow the primary BirdNET threshold unless overrideThreshold is enabled, in
+// which case `threshold` gates them instead. modelPath/labelPath/locale are
+// managed by the model gallery, not the detection-settings form.
+export interface PerchSettings {
+  modelPath?: string | null;
+  labelPath?: string | null;
+  overrideThreshold: boolean;
+  threshold: number;
+  locale?: string;
+}
+
+export interface BirdNetV3Settings {
+  modelPath?: string | null;
+  labelPath?: string | null;
+  overrideThreshold: boolean;
+  threshold: number;
+  locale?: string;
 }
 
 export interface SQLiteSettings {
@@ -191,6 +216,8 @@ export type StreamType = (typeof StreamTypes)[keyof typeof StreamTypes];
 
 export type ChannelMode = 'downmix' | 'left' | 'right';
 
+export type MediaMode = 'auto' | 'audio-only' | 'full-stream';
+
 // QuietHoursConfig represents quiet hours configuration for a stream or sound card
 export interface QuietHoursConfig {
   enabled: boolean;
@@ -223,6 +250,7 @@ export interface StreamConfig {
   type: StreamType; // Stream type: rtsp, http, hls, rtmp, udp
   transport?: 'tcp' | 'udp'; // Transport protocol (for RTSP/RTMP only)
   channelMode?: ChannelMode; // Channel selection mode: downmix, left, or right
+  mediaMode?: MediaMode; // RTSP media request: auto, audio-only, or full-stream (empty = full-stream)
   models?: string[]; // Model IDs for this stream (e.g., ["birdnet", "perch_v2"])
   equalizer?: EqualizerSettings; // Per-stream EQ (undefined = use global)
   quietHours?: QuietHoursConfig; // Quiet hours configuration
@@ -824,6 +852,8 @@ export interface SettingsFormData {
   main: MainSettings;
   birdnet: BirdNetSettings;
   bat?: BatSettings;
+  perch?: PerchSettings;
+  birdnetv3?: BirdNetV3Settings;
   input?: unknown; // Not exposed via JSON
   realtime?: RealtimeSettings;
   webServer?: WebServerSettings;
@@ -883,6 +913,7 @@ function createEmptySettings(): SettingsFormData {
         speciesCount: null,
         species: [],
       },
+      huggingFaceEndpoint: '',
     },
     bat: {
       enabled: false,
@@ -892,6 +923,14 @@ function createEmptySettings(): SettingsFormData {
       ultrasonicFilter: {
         enabled: true,
       },
+    },
+    perch: {
+      overrideThreshold: false,
+      threshold: 0.5,
+    },
+    birdnetv3: {
+      overrideThreshold: false,
+      threshold: 0.5,
     },
     realtime: {
       interval: 15,
@@ -1124,6 +1163,10 @@ export const mainSettings = derived(settingsStore, $store => $store.formData.mai
 export const birdnetSettings = derived(settingsStore, $store => $store.formData.birdnet);
 
 export const batSettings = derived(settingsStore, $store => $store.formData.bat);
+
+export const perchSettings = derived(settingsStore, $store => $store.formData.perch);
+
+export const birdNetV3Settings = derived(settingsStore, $store => $store.formData.birdnetv3);
 
 export const realtimeSettings = derived(settingsStore, $store => $store.formData.realtime);
 
@@ -1366,7 +1409,7 @@ export const settingsActions = {
       // session. Read newLocale from coercedFormData (the value we actually
       // persisted) and compare to originalData (the snapshot loaded from
       // the backend). This avoids clobbering a locale chosen via the sidebar
-      // LanguageSelector — which updates localStorage but not the backend —
+      // LanguageSelector (which updates localStorage but not the backend)
       // with whatever stale value the backend still holds, and matches the
       // coercedFormData-based comparison used by the TLS check below.
       const newLocale = coercedFormData.realtime?.dashboard?.locale;

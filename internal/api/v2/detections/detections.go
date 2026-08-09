@@ -194,13 +194,16 @@ type WeatherInfo struct {
 	MoonIllumination float64 `json:"moonIllumination,omitempty"`
 }
 
-// DetectionRequest represents the query parameters for listing detections
+// DetectionRequest is the JSON request body for the review and lock endpoints.
+// LockDetection is a pointer so the review handler can tell "field omitted" (nil,
+// leave the lock untouched) apart from an explicit false (unlock): a plain bool
+// would make an omitted field read as false and silently unlock a locked detection.
 type DetectionRequest struct {
 	Comment       string `json:"comment,omitempty"`
 	Verified      string `json:"verified,omitempty"`
-	IgnoreSpecies string `json:"ignoreSpecies,omitempty"`
+	IgnoreSpecies string `json:"ignore_species,omitempty"`
 	Locked        bool   `json:"locked,omitempty"`
-	LockDetection bool   `json:"lock_detection,omitempty"`
+	LockDetection *bool  `json:"lock_detection,omitempty"`
 }
 
 // PaginatedResponse represents a paginated API response
@@ -220,16 +223,17 @@ type TimeOfDayResponse struct {
 
 // detectionQueryParams holds all query parameters for detection requests
 type detectionQueryParams struct {
-	Date       string
-	Hour       string
-	Duration   int
-	Species    string
-	Search     string
-	StartDate  string
-	EndDate    string
-	NumResults int
-	Offset     int
-	QueryType  string
+	Date             string
+	Hour             string
+	Duration         int
+	Species          string
+	Search           string
+	SearchScientific []string
+	StartDate        string
+	EndDate          string
+	NumResults       int
+	Offset           int
+	QueryType        string
 	// Advanced filter parameters
 	Confidence string
 	TimeOfDay  string
@@ -246,8 +250,8 @@ type detectionQueryParams struct {
 // advancedSearchCacheKey generates a deterministic cache key for advanced search queries.
 // Includes all filter parameters to avoid cache collisions.
 func (p *detectionQueryParams) advancedSearchCacheKey() string {
-	return fmt.Sprintf("adv_search:%s:%d:%d:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%d",
-		p.Search, p.NumResults, p.Offset,
+	return fmt.Sprintf("adv_search:%s:%s:%d:%d:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%d",
+		p.Search, strings.Join(p.SearchScientific, "\x00"), p.NumResults, p.Offset,
 		p.Confidence, p.TimeOfDay, p.HourRange,
 		p.Verified, p.Location, p.Locked,
 		p.Species, p.Date, p.StartDate+":"+p.EndDate,
@@ -616,14 +620,19 @@ func (p *detectionQueryParams) needsAdvancedRouting() bool {
 
 // getDetectionsByQueryType retrieves detections based on the query type
 func (c *Handler) getDetectionsByQueryType(params *detectionQueryParams) ([]datastore.Note, int64, error) {
-	// Resolve locale common names to scientific names before routing so every
-	// query type benefits without per-case duplication.
+	// Species filtering is exact, so an unambiguous common name can be replaced
+	// with its scientific name directly.
 	if resolved, hit := c.resolveSpeciesToScientific(params.Species); hit {
 		params.Species = resolved
 	}
-	if resolved, hit := c.resolveSpeciesToScientific(params.Search); hit {
-		params.Search = resolved
-	}
+
+	// Free-text search is different: an exact common name can also be a substring
+	// of another species (Barn Owl / American Barn Owl). Keep the raw text and add
+	// every active-locale common-name substring match as an OR-ed scientific-name
+	// alternative. Replacing the raw term with one exact resolution would silently
+	// narrow the result set.
+	params.Search = strings.TrimSpace(params.Search)
+	params.SearchScientific = c.resolveCommonNameSubstrings(params.Search)
 
 	switch params.QueryType {
 	case queryTypeHourly:
@@ -640,7 +649,7 @@ func (c *Handler) getDetectionsByQueryType(params *detectionQueryParams) ([]data
 		if params.needsAdvancedRouting() {
 			return c.getSearchDetectionsAdvanced(params)
 		}
-		return c.getSearchDetections(params.Search, params.NumResults, params.Offset)
+		return c.getSearchDetections(params.Search, params.SearchScientific, params.NumResults, params.Offset)
 	default:
 		if params.needsAdvancedRouting() {
 			return c.getSearchDetectionsAdvanced(params)
@@ -1049,10 +1058,11 @@ func (c *Handler) getSearchDetectionsAdvanced(params *detectionQueryParams) ([]d
 // buildAdvancedSearchFilters constructs search filters from query parameters
 func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams) datastore.AdvancedSearchFilters {
 	filters := datastore.AdvancedSearchFilters{
-		TextQuery:     params.Search,
-		Limit:         params.NumResults,
-		Offset:        params.Offset,
-		SortAscending: false,
+		TextQuery:         params.Search,
+		SpeciesScientific: params.SearchScientific,
+		Limit:             params.NumResults,
+		Offset:            params.Offset,
+		SortAscending:     false,
 	}
 
 	// Apply confidence filter using shared helper
@@ -1116,10 +1126,11 @@ func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams) datas
 	return filters
 }
 
-// getSearchDetections handles search query type logic
-func (c *Handler) getSearchDetections(search string, numResults, offset int) ([]datastore.Note, int64, error) {
+// getSearchDetections returns cached or datastore results for raw text, unioning
+// any resolved scientific-name alternatives through advanced search.
+func (c *Handler) getSearchDetections(search string, scientific []string, numResults, offset int) ([]datastore.Note, int64, error) {
 	// Generate a cache key based on parameters
-	cacheKey := fmt.Sprintf("search:%s:%d:%d", search, numResults, offset)
+	cacheKey := fmt.Sprintf("search:%s:%s:%d:%d", search, strings.Join(scientific, "\x00"), numResults, offset)
 
 	// Check if data is in cache
 	if cachedData, found := c.DetectionCache.Get(cacheKey); found {
@@ -1130,8 +1141,23 @@ func (c *Handler) getSearchDetections(search string, numResults, offset int) ([]
 		return cachedResult.Notes, cachedResult.Total, nil
 	}
 
-	// If not in cache, query the database
-	notes, totalCount, err := c.DS.SearchNotes(search, false, numResults, offset)
+	// If the active common-name map found scientific alternatives, use the
+	// advanced datastore path that can OR them with the raw text. Otherwise retain
+	// the lightweight legacy call for ordinary scientific/unknown text queries.
+	var notes []datastore.Note
+	var totalCount int64
+	var err error
+	if len(scientific) > 0 {
+		notes, totalCount, err = c.DS.SearchNotesAdvanced(&datastore.AdvancedSearchFilters{
+			TextQuery:         search,
+			SpeciesScientific: scientific,
+			Limit:             numResults,
+			Offset:            offset,
+			SortBy:            datastore.SortBySearchDefault,
+		})
+	} else {
+		notes, totalCount, err = c.DS.SearchNotes(search, false, numResults, offset)
+	}
 	if err != nil {
 		c.LogErrorIfEnabled("Failed to search notes",
 			logger.String("query", search),
@@ -1433,8 +1459,14 @@ func (c *Handler) ReviewDetection(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)
 	}
 
-	// Check lock status (both in-memory and database for race condition)
-	if c.checkDetectionNotLocked(ctx, idStr, note.Locked) {
+	// A locked detection is frozen against changes, EXCEPT an explicit unlock: when
+	// the request unlocks it (currently locked, lock_detection explicitly false),
+	// allow it through so the unlock (and any changes made alongside it) are applied.
+	// This mirrors LockDetection, which only enforces the lock guard when locking.
+	// lock_detection is a *bool: a nil (omitted) value is NOT an unlock, so a
+	// verify-only request that omits the field cannot silently unlock the detection.
+	unlocking := note.Locked && req.LockDetection != nil && !*req.LockDetection
+	if !unlocking && c.checkDetectionNotLocked(ctx, idStr, note.Locked) {
 		return nil // Response already handled by checkDetectionNotLocked
 	}
 
@@ -1465,21 +1497,23 @@ func (c *Handler) ReviewDetection(ctx echo.Context) error {
 		}
 	}
 
-	// Handle lock/unlock request separately
-	if req.LockDetection != note.Locked {
+	// Handle lock/unlock request separately. A nil LockDetection means the field was
+	// omitted from the request, so the lock state is left untouched.
+	if req.LockDetection != nil && *req.LockDetection != note.Locked {
+		newLocked := *req.LockDetection
 		c.LogInfoIfEnabled("Updating lock status",
 			logger.String("detection_id", idStr),
 			logger.Bool("current_locked", note.Locked),
-			logger.Bool("new_locked", req.LockDetection),
+			logger.Bool("new_locked", newLocked),
 			logger.String("ip", ctx.RealIP()),
 		)
 
-		err = c.AddLock(note.ID, req.LockDetection)
+		err = c.AddLock(note.ID, newLocked)
 		if err != nil {
 			// Log the lock operation failure
 			c.LogErrorIfEnabled("Failed to update lock status",
 				logger.String("detection_id", idStr),
-				logger.Bool("attempted_lock_state", req.LockDetection),
+				logger.Bool("attempted_lock_state", newLocked),
 				logger.Error(err),
 				logger.String("ip", ctx.RealIP()),
 			)

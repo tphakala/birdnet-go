@@ -1,3 +1,12 @@
+// Image URLs in this package's tests point at 127.0.0.1 on purpose.
+//
+// A cached image URL is not inert: a refresh hands it to DownloadAndStore, which
+// really fetches it. With hosts like upload.wikimedia.org and example.com in the
+// fixtures, running the test suite opened live connections to those hosts, and a
+// keep-alive connection still idle when the package finished failed the
+// TestMain goroutine-leak check at random. The SSRF dialer rejects a loopback
+// literal before resolving or dialing anything, so these URLs stay opaque
+// strings and the suite touches no network.
 package imageprovider
 
 import (
@@ -87,12 +96,12 @@ func TestFindStaleEntriesSkipsNegativeEntries(t *testing.T) {
 	entries := []datastore.ImageCache{
 		{
 			ScientificName: "Turdus merula",
-			URL:            "https://example.com/blackbird.jpg",
+			URL:            "https://127.0.0.1/blackbird.jpg",
 			CachedAt:       now.Add(-defaultCacheTTL - time.Hour),
 		},
 		{
 			ScientificName: "Parus major",
-			URL:            "https://example.com/great-tit.jpg",
+			URL:            "https://127.0.0.1/great-tit.jpg",
 			CachedAt:       now.Add(-time.Hour),
 		},
 		{
@@ -128,21 +137,21 @@ func TestDbEntryToBirdImage(t *testing.T) {
 			entry: &datastore.ImageCache{
 				ScientificName: "Parus major",
 				ProviderName:   "wikimedia",
-				URL:            "http://example.com/parus.jpg",
+				URL:            "http://127.0.0.1/parus.jpg",
 				LicenseName:    "CC BY-SA 4.0",
 				LicenseURL:     "http://creativecommons.org/licenses/by-sa/4.0/",
 				AuthorName:     "John Doe",
-				AuthorURL:      "http://example.com/johndoe",
+				AuthorURL:      "http://127.0.0.1/johndoe",
 				CachedAt:       cachedTime,
 			},
 			want: BirdImage{
 				ScientificName: "Parus major",
 				SourceProvider: "wikimedia",
-				URL:            "http://example.com/parus.jpg",
+				URL:            "http://127.0.0.1/parus.jpg",
 				LicenseName:    "CC BY-SA 4.0",
 				LicenseURL:     "http://creativecommons.org/licenses/by-sa/4.0/",
 				AuthorName:     "John Doe",
-				AuthorURL:      "http://example.com/johndoe",
+				AuthorURL:      "http://127.0.0.1/johndoe",
 				CachedAt:       cachedTime,
 			},
 		},
@@ -166,13 +175,13 @@ func TestDbEntryToBirdImage(t *testing.T) {
 			entry: &datastore.ImageCache{
 				ScientificName: "Turdus merula",
 				ProviderName:   "avicommons",
-				URL:            "http://example.com/blackbird.jpg",
+				URL:            "http://127.0.0.1/blackbird.jpg",
 				CachedAt:       cachedTime,
 			},
 			want: BirdImage{
 				ScientificName: "Turdus merula",
 				SourceProvider: "avicommons",
-				URL:            "http://example.com/blackbird.jpg",
+				URL:            "http://127.0.0.1/blackbird.jpg",
 				CachedAt:       cachedTime,
 			},
 		},
@@ -407,7 +416,7 @@ func TestBuildDebugURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := buildDebugURL(tt.params)
+			got := (&wikiMediaProvider{}).buildDebugURL(tt.params)
 			require.NotEmpty(t, got, "buildDebugURL should not return empty string")
 			tt.check(t, got)
 		})
@@ -425,7 +434,7 @@ func TestBirdImageIsNegativeEntry(t *testing.T) {
 	}{
 		{
 			name: "positive entry",
-			img:  BirdImage{URL: "http://example.com/bird.jpg"},
+			img:  BirdImage{URL: "http://127.0.0.1/bird.jpg"},
 			want: false,
 		},
 		{
@@ -460,7 +469,7 @@ func TestBirdImageGetTTL(t *testing.T) {
 	}{
 		{
 			name: "positive entry gets default TTL",
-			img:  BirdImage{URL: "http://example.com/bird.jpg"},
+			img:  BirdImage{URL: "http://127.0.0.1/bird.jpg"},
 			want: defaultCacheTTL,
 		},
 		{
