@@ -164,6 +164,25 @@ func validateRetentionSettings(settings *RetentionSettings) error {
 	return nil
 }
 
+// clampRarityHighlightThreshold clamps the rare-species highlight threshold to the
+// valid occurrence-probability range [0, 1]. Non-finite values reset to the default.
+func clampRarityHighlightThreshold(r *RarityHighlight) {
+	t := r.Threshold
+	if !math.IsNaN(t) && !math.IsInf(t, 0) && t >= 0 && t <= 1 {
+		return
+	}
+	GetLogger().Warn("Dashboard rarity highlight threshold out of range (0-1), clamping",
+		logger.Float64("invalid_value", t))
+	switch {
+	case math.IsNaN(t) || math.IsInf(t, 0):
+		r.Threshold = DefaultRarityHighlightThreshold
+	case t < 0:
+		r.Threshold = 0
+	default:
+		r.Threshold = 1
+	}
+}
+
 func validateDashboardSettings(settings *Dashboard) error {
 	// Validate deprecated root SummaryLimit (only when non-zero, i.e. not yet migrated)
 	if settings.SummaryLimit != 0 && (settings.SummaryLimit < 10 || settings.SummaryLimit > 1000) {
@@ -230,6 +249,9 @@ func validateDashboardSettings(settings *Dashboard) error {
 			settings.DefaultAudioGain = MaxPlaybackGain
 		}
 	}
+
+	// Validate rare-species highlight threshold (an occurrence probability, 0-1).
+	clampRarityHighlightThreshold(&settings.Rarity)
 
 	// Validate spectrogram settings
 	if settings.Spectrogram.Mode != "" {

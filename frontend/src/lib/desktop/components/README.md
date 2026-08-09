@@ -24,6 +24,7 @@ This folder contains **shared components** used across the application. Feature-
 
 - `ConfidenceCircle.svelte` - Circular confidence indicator with progress ring
 - `DataTable.svelte` - Generic data table with controlled (parent-driven) sorting
+- `RareSpeciesIndicator.svelte` - Red star + tooltip shown when a species' geomodel occurrence probability is at or below the configurable Dashboard.Rarity threshold; reads the rarity score cache (`rarity.svelte.ts`)
 - `SortableDataTable.svelte` - Card-wrapped table with built-in client-side sorting and search, header bar (icon/title/count/search/actions), and loading/empty/no-results states; composes SortableHeader, ResizableContainer, and EmptyState
 - `StatsCard.svelte` - Statistical information card
 - `StatusBadges.svelte` - Status indicators (verified, locked, etc.)

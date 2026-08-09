@@ -17,6 +17,7 @@
   import { t } from '$lib/i18n';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import RareSpeciesIndicator from '$lib/desktop/components/data/RareSpeciesIndicator.svelte';
 
   interface Props {
     detection: Detection;
@@ -70,6 +71,7 @@
     <!-- Name row with verification badge -->
     <div class="species-name-row">
       <span class="species-name">{displayName}</span>
+      <RareSpeciesIndicator scientificName={detection.scientificName} />
       {#if isVerified}
         <span
           class="verified-badge"
