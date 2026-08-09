@@ -665,6 +665,15 @@ func variantFilesByID(entry *CatalogEntry, variantID string) (files []CatalogFil
 	return nil, false
 }
 
+// VariantSelectable reports whether variantID names a valid selectable variant of
+// entry. An empty variantID (meaning the default variant) is always valid. It is
+// the exported form of the internal variant lookup, for API-layer validation of a
+// requested variant before an install/switch is dispatched.
+func VariantSelectable(entry *CatalogEntry, variantID string) bool {
+	_, ok := variantFilesByID(entry, variantID)
+	return ok
+}
+
 // resolveVariantDefaults returns entries with each variant entry's Files
 // populated from its default variant, so every Files consumer sees the effective
 // default variant's files. Single-variant entries (no Variants) are returned

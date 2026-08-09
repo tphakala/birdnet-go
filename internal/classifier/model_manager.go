@@ -160,15 +160,34 @@ func (mm *ModelManager) ScanInstalled() {
 	// before taking mm.mu; ActiveCatalog acquires its own lock.
 	catalog := ActiveCatalog()
 
+	// Snapshot settings once for the variant tie-break (which variant a family's
+	// recorded model path points at). GetSettings returns an atomic snapshot.
+	settings := conf.GetSettings()
+
 	// Phase 1: scan the filesystem under mm.mu.
 	mm.mu.Lock()
-	// Reconcile against disk: Phase 1 fully repopulates mm.installed by statting
-	// each entry's files, so clearing first drops any model whose files were
-	// removed out-of-band since the last scan. The clear and the repopulation both
-	// run under mm.mu, so a concurrent reader (RLock) never observes the empty map.
+	// Preserve in-flight installs/switches: replaceVariant swaps mm.installed and
+	// writes files after its own unlock while entry.ID stays in mm.downloading, so
+	// re-deriving those entries from disk here (both variant files may be present
+	// mid-switch) would record the wrong variant. Keep the in-flight record and
+	// skip the disk scan for those ids. Reconcile the rest against disk: Phase 1
+	// fully repopulates mm.installed by statting each entry's files, so clearing
+	// first drops any model whose files were removed out-of-band since the last
+	// scan. The clear and the repopulation both run under mm.mu, so a concurrent
+	// reader (RLock) never observes the empty map.
+	inFlight := make(map[string]InstalledModel)
+	for id := range mm.downloading {
+		if im, ok := mm.installed[id]; ok {
+			inFlight[id] = im
+		}
+	}
 	clear(mm.installed)
+	maps.Copy(mm.installed, inFlight)
 	for i := range catalog {
 		entry := &catalog[i]
+		if _, downloading := mm.downloading[entry.ID]; downloading {
+			continue
+		}
 		subdir := filepath.Join(mm.modelsDir, entry.ID)
 
 		// Variant entries: detect which hardware variant is present on disk
@@ -177,7 +196,7 @@ func (mm *ModelManager) ScanInstalled() {
 		// file, so a variant entry is never shared-only and never needs the
 		// shared-only fall-through below.
 		if len(entry.Variants) > 0 {
-			if im, ok := scanVariantEntry(entry, subdir); ok {
+			if im, ok := scanVariantEntry(entry, subdir, installedModelBasenameHint(settings, entry.RegistryID)); ok {
 				mm.installed[entry.ID] = im
 				log.Debug("Found installed model variant",
 					logger.String("catalog_id", entry.ID),
@@ -300,12 +319,31 @@ func modelAndLabelsFiles(files []CatalogFile) (modelFile, labelsFile string) {
 }
 
 // scanVariantEntry determines which variant of a variant-carrying catalog entry
-// is installed on disk under subdir. It checks the default variant first so an
-// ambiguous on-disk state (e.g. both files present after a crashed replace)
-// resolves to the default, matching pre-variant behaviour; it then falls back to
-// the remaining variants in catalog order. ok is false when no variant's model
-// file is present on disk.
-func scanVariantEntry(entry *CatalogEntry, subdir string) (InstalledModel, bool) {
+// is installed on disk under subdir. modelBasenameHint is the basename of the
+// model path recorded in settings for this family (empty when unknown): the
+// variant whose model file matches it is preferred, so an ambiguous on-disk state
+// (e.g. both files present after a crashed replace) resolves to the variant the
+// loader will actually open. It then falls back to the default variant, then the
+// remaining variants in catalog order. ok is false when no variant's model file
+// is present on disk.
+func scanVariantEntry(entry *CatalogEntry, subdir, modelBasenameHint string) (InstalledModel, bool) {
+	// Prefer the variant whose model file matches the persisted settings path.
+	// After a crashed replace both variants' files can be present on disk; the
+	// settings path is what the loader (buildPerch/buildBirdNETV3) actually opens,
+	// so aligning the detected variant to it keeps the reported install consistent
+	// with what runs, rather than silently reporting the default.
+	if modelBasenameHint != "" {
+		for i := range entry.Variants {
+			v := &entry.Variants[i]
+			mf, _ := modelAndLabelsFiles(v.Files)
+			if mf == modelBasenameHint {
+				if im, ok := installedFromVariant(entry, v, subdir); ok {
+					return im, true
+				}
+				break
+			}
+		}
+	}
 	def := defaultVariant(entry)
 	if def != nil {
 		if im, ok := installedFromVariant(entry, def, subdir); ok {
@@ -322,6 +360,31 @@ func scanVariantEntry(entry *CatalogEntry, subdir string) (InstalledModel, bool)
 		}
 	}
 	return InstalledModel{}, false
+}
+
+// installedModelBasenameHint returns the basename of the model path recorded in
+// settings for the given registry ID, or "" when settings are absent or the
+// family carries no path. It is the tie-break scanVariantEntry uses to resolve an
+// ambiguous multi-variant on-disk state to the variant the loader actually opens.
+func installedModelBasenameHint(settings *conf.Settings, registryID string) string {
+	if settings == nil {
+		return ""
+	}
+	var p string
+	switch registryID {
+	case RegistryIDBirdNETV3:
+		p = settings.BirdNETV3.ModelPath
+	case RegistryIDPerchV2:
+		p = settings.Perch.ModelPath
+	case RegistryIDBSG:
+		p = settings.BSG.ModelPath
+	case RegistryIDBat:
+		p = settings.Bat.ClassifierModel
+	}
+	if p == "" {
+		return ""
+	}
+	return filepath.Base(p)
 }
 
 // installedFromVariant builds the InstalledModel for a specific variant if its
@@ -599,6 +662,20 @@ func (mm *ModelManager) IsInstalled(catalogID string) bool {
 	return ok
 }
 
+// InstalledVariantID returns the installed variant id for catalogID and true, or
+// "" and false when the model is not installed. An installed flat (pre-variant)
+// entry reports an empty variant id with ok=true, so callers can distinguish
+// "installed, single implicit variant" from "not installed".
+func (mm *ModelManager) InstalledVariantID(catalogID string) (variantID string, ok bool) {
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
+	im, found := mm.installed[catalogID]
+	if !found {
+		return "", false
+	}
+	return im.VariantID, true
+}
+
 // scanSharedOnlyEntry checks whether a catalog entry whose files all live in
 // models/shared/ (e.g. geomodels) is installed. If all shared files exist on
 // disk, it registers the entry in mm.installed and returns true. The caller
@@ -706,6 +783,18 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 	im, installed := mm.installed[catalogID]
 	if !installed {
 		return errors.Newf("model %s is not installed", catalogID).
+			Component("classifier.model_manager").
+			Category(errors.CategoryValidation).
+			Context("catalog_id", catalogID).
+			Build()
+	}
+
+	// Refuse while a download or variant switch is in flight for this model. A
+	// concurrent replaceVariant swaps mm.installed and writes files after its own
+	// unlock; uninstalling in that window would delete the old files and clear
+	// config only for the switch to resurrect the entry as a zombie install.
+	if _, downloading := mm.downloading[catalogID]; downloading {
+		return errors.Newf("model %s is being downloaded; cannot uninstall", catalogID).
 			Component("classifier.model_manager").
 			Category(errors.CategoryValidation).
 			Context("catalog_id", catalogID).
@@ -1024,6 +1113,265 @@ func (mm *ModelManager) Reinstall(ctx context.Context, entry *CatalogEntry, base
 	return nil
 }
 
+// InstallOrReplace installs the selected variant of entry when nothing is
+// installed for it, or switches an already-installed model to a different variant
+// (download-before-delete). The installed-state check and the download
+// registration happen under a single mm.mu acquisition so a concurrent Uninstall
+// (which refuses while a download is in progress) cannot race between the check
+// and the act. An empty variantID selects the entry's default variant; an unknown
+// variant id is rejected. Re-selecting the already-installed variant is a no-op.
+// The baseURL parameter overrides the HuggingFace URL for testing.
+func (mm *ModelManager) InstallOrReplace(ctx context.Context, entry *CatalogEntry, variantID, baseURL string, progress chan<- DownloadState) error {
+	// Reject an unknown variant selection before any lock or state change.
+	if _, ok := variantFilesByID(entry, variantID); !ok {
+		return errors.Newf("unknown variant %q for model %s", variantID, entry.ID).
+			Component("classifier.model_manager").
+			Category(errors.CategoryValidation).
+			Context("catalog_id", entry.ID).
+			Context("variant_id", variantID).
+			Build()
+	}
+
+	// Resolve the effective target variant id (empty = default) for the
+	// same-variant comparison and the replace path.
+	target := variantID
+	if target == "" {
+		if v := defaultVariant(entry); v != nil {
+			target = v.ID
+		}
+	}
+
+	mm.mu.Lock()
+	if _, downloading := mm.downloading[entry.ID]; downloading {
+		mm.mu.Unlock()
+		return errors.Newf("model %s is already being downloaded", entry.ID).
+			Component("classifier.model_manager").
+			Category(errors.CategoryValidation).
+			Context("catalog_id", entry.ID).
+			Build()
+	}
+	current, installed := mm.installed[entry.ID]
+	if installed && current.VariantID == target {
+		// Idempotent: the requested variant is already the installed one.
+		mm.mu.Unlock()
+		return nil
+	}
+	if !installed {
+		// Fresh install: delegate to Install, which registers the download and owns
+		// its failure cleanup. There is no installed entry for a concurrent Uninstall
+		// to race, so releasing the lock before Install re-acquires it is safe.
+		mm.mu.Unlock()
+		return mm.Install(ctx, entry, variantID, baseURL, progress)
+	}
+	// Variant switch: register the switch atomically with the installed-state
+	// decision, so a concurrent Uninstall (which refuses while downloading) cannot
+	// slip in between the check and replaceVariant swapping mm.installed.
+	mm.downloading[entry.ID] = &DownloadState{
+		CatalogID: entry.ID,
+		Status:    StatusDownloading,
+	}
+	mm.mu.Unlock()
+
+	return mm.replaceVariant(ctx, entry, &current, target, baseURL, progress)
+}
+
+// replaceVariant switches an installed model to newVariantID using a
+// download-before-delete strategy: the new variant's files are downloaded and
+// verified first (the old model keeps running), then the old model is unloaded,
+// the install record and config are swapped to the new variant, the new model is
+// loaded, and only then are the old variant's superseded files removed. Any
+// failure before the swap leaves the old variant installed and loaded, so a
+// failed switch never strands the working model. The caller must have registered
+// entry.ID in mm.downloading; replaceVariant keeps it registered until the
+// superseded files are gone (so a concurrent ScanInstalled treats the switch as
+// in-flight) and clears it (or schedules cleanup on failure) before returning.
+func (mm *ModelManager) replaceVariant(ctx context.Context, entry *CatalogEntry, old *InstalledModel, newVariantID, baseURL string, progress chan<- DownloadState) error {
+	log := GetLogger()
+
+	// 1. Download the NEW variant's files (they coexist with the old on disk
+	//    because a family's variants use distinct model LocalNames).
+	//    cleanupOnFailure=true so a failed switch leaves no partial new files.
+	_, modelPath, labelsPath, embeddingsPath, err := mm.downloadVariantFiles(ctx, entry, newVariantID, baseURL, progress, true)
+	if err != nil {
+		// downloadVariantFiles already marked the state failed; retain it briefly
+		// for SSE pollers, then clear. The old variant is untouched and loaded.
+		time.AfterFunc(failedStateRetention, func() {
+			mm.removeDownloading(entry.ID)
+		})
+		return err
+	}
+
+	// 2. Unload the old model before activating the new one. The new files are
+	//    already on disk, so an unload failure aborts cleanly with the old variant
+	//    still installed and loaded.
+	if mm.orchestrator != nil && entry.RegistryID != "" && mm.orchestrator.IsModelLoaded(entry.RegistryID) {
+		if unloadErr := mm.orchestrator.UnloadModel(entry.RegistryID); unloadErr != nil {
+			log.Warn("Variant switch refused: model could not be unloaded (still in use)",
+				logger.String("catalog_id", entry.ID),
+				logger.String("registry_id", entry.RegistryID),
+				logger.Error(unloadErr))
+			switchErr := errors.Newf("cannot switch %s to variant %q: model still in use", entry.ID, newVariantID).
+				Component("classifier.model_manager").
+				Category(errors.CategorySystem).
+				Context("catalog_id", entry.ID).
+				Context("registry_id", entry.RegistryID).
+				Context("unload_error", unloadErr.Error()).
+				Build()
+			// The new variant's files were downloaded but never activated; remove
+			// them (keeping shared companions) so the aborted switch strands no model
+			// file. The old variant stays installed and loaded.
+			mm.removeSupersededVariantFiles(log, entry, newVariantID, old.VariantID)
+			// Report the failure over SSE: a bare removeDownloading would leave the
+			// stream to read nil-state + IsInstalled as a false success.
+			mm.markFailed(entry.ID, switchErr, progress)
+			time.AfterFunc(failedStateRetention, func() {
+				mm.removeDownloading(entry.ID)
+			})
+			return switchErr
+		}
+		mm.notifyTopologyChanged()
+	}
+
+	// 3. Swap the install record to the new variant. entry.ID stays in
+	//    mm.downloading (cleared only in step 7) so a concurrent ScanInstalled
+	//    treats the switch as in-flight until the superseded files are removed.
+	mm.mu.Lock()
+	mm.installed[entry.ID] = InstalledModel{
+		CatalogID:   entry.ID,
+		VariantID:   newVariantID,
+		ModelPath:   modelPath,
+		LabelsPath:  labelsPath,
+		InstalledAt: time.Now(),
+		Version:     entry.Version,
+	}
+	mm.mu.Unlock()
+
+	// 4. Persist the new variant's paths BEFORE loading, so buildPerch /
+	//    buildBirdNETV3 (which read settings.<family>.ModelPath first) load the new
+	//    file, and a crash/restart before step 6 still resolves the new variant.
+	mm.applyConfigForInstall(entry, modelPath, labelsPath, embeddingsPath)
+
+	// 5. Load the new variant (the old one was unloaded in step 2).
+	mm.hotLoadAfterInstall(log, entry)
+
+	// hotLoadAfterInstall only logs a load failure. If the new variant did not
+	// load, the old model is already unloaded, so completing the switch (deleting
+	// the old files and reporting success) would leave the family with no
+	// classifier loaded while the API reported success. Roll back to the previous
+	// variant instead, extending the download-before-delete guarantee to a LOAD
+	// failure. Skipped when there is no orchestrator to verify against.
+	if mm.orchestrator != nil && entry.RegistryID != "" && !mm.orchestrator.IsModelLoaded(entry.RegistryID) {
+		return mm.rollbackVariantSwitch(log, entry, old, newVariantID, progress)
+	}
+
+	// 6. Remove the OLD variant's superseded files (never shared companions).
+	mm.removeSupersededVariantFiles(log, entry, old.VariantID, newVariantID)
+
+	// 7. The switch is complete: clear the in-flight marker and report success.
+	mm.removeDownloading(entry.ID)
+	sendProgress(progress, entry.ID, StatusComplete)
+
+	log.Info("Model variant switched",
+		logger.String("catalog_id", entry.ID),
+		logger.String("from_variant", old.VariantID),
+		logger.String("to_variant", newVariantID),
+		logger.String("model_path", modelPath))
+
+	return nil
+}
+
+// rollbackVariantSwitch restores the previously-installed variant after the new
+// variant was written and activated but failed to load. It re-records the old
+// variant, re-persists its paths, reloads it, and removes the new variant's
+// now-unused files, so a load failure during a switch leaves the family running
+// its previous working variant rather than nothing. It reports the switch as
+// failed over the progress stream. The caller must have registered entry.ID in
+// mm.downloading; rollbackVariantSwitch schedules its cleanup.
+func (mm *ModelManager) rollbackVariantSwitch(log logger.Logger, entry *CatalogEntry, old *InstalledModel, newVariantID string, progress chan<- DownloadState) error {
+	log.Warn("New variant failed to load; rolling back to the previous variant",
+		logger.String("catalog_id", entry.ID),
+		logger.String("failed_variant", newVariantID),
+		logger.String("restored_variant", old.VariantID))
+
+	// Restore the install record to the old variant.
+	mm.mu.Lock()
+	mm.installed[entry.ID] = *old
+	mm.mu.Unlock()
+
+	// Re-persist the old variant's paths (step 4 wrote the new ones) and reload it.
+	// Companion files are identical across a family's variants, so the old variant's
+	// embeddings path (bat only) is derived from its own file list for completeness.
+	oldEmbeddings := ""
+	if oldFiles, ok := variantFilesByID(entry, old.VariantID); ok {
+		for _, f := range oldFiles {
+			if f.Role == RoleEmbeddings {
+				oldEmbeddings = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+				break
+			}
+		}
+	}
+	mm.applyConfigForInstall(entry, old.ModelPath, old.LabelsPath, oldEmbeddings)
+	mm.hotLoadAfterInstall(log, entry)
+
+	// The new variant is unusable on this host: remove its files (keeping shared
+	// companions) so disk state matches the restored record.
+	mm.removeSupersededVariantFiles(log, entry, newVariantID, old.VariantID)
+
+	switchErr := errors.Newf("switched %s to variant %q but it failed to load; restored previous variant %q", entry.ID, newVariantID, old.VariantID).
+		Component("classifier.model_manager").
+		Category(errors.CategoryModelInit).
+		Context("catalog_id", entry.ID).
+		Context("failed_variant", newVariantID).
+		Context("restored_variant", old.VariantID).
+		Build()
+	mm.markFailed(entry.ID, switchErr, progress)
+	time.AfterFunc(failedStateRetention, func() {
+		mm.removeDownloading(entry.ID)
+	})
+	return switchErr
+}
+
+// removeSupersededVariantFiles deletes the old variant's files that the new
+// variant does not also carry, after a variant switch. A file whose LocalName the
+// new variant also uses (shared companions keep identical names across a family's
+// variants) is kept. Files with a shared role are skipped entirely and left to
+// Uninstall/cleanupSharedFiles: their lifecycle spans models, so a variant that
+// drops a companion must not globally delete a file another model still needs.
+func (mm *ModelManager) removeSupersededVariantFiles(log logger.Logger, entry *CatalogEntry, oldVariantID, newVariantID string) {
+	oldFiles, ok := variantFilesByID(entry, oldVariantID)
+	if !ok {
+		// The old variant is no longer in the catalog: its file list is unknown, so
+		// there is nothing safe to target. A leaked model file, if any, is recovered
+		// by a later scan's reconciliation rather than guessed at here.
+		return
+	}
+	newFiles, _ := variantFilesByID(entry, newVariantID)
+	keep := make(map[string]struct{}, len(newFiles))
+	for _, f := range newFiles {
+		keep[f.LocalName] = struct{}{}
+	}
+	subdir := filepath.Join(mm.modelsDir, entry.ID)
+	for _, f := range oldFiles {
+		if _, retained := keep[f.LocalName]; retained {
+			continue
+		}
+		if isSharedRole(f.Role) {
+			continue
+		}
+		path := filepath.Join(subdir, f.LocalName)
+		if rmErr := os.Remove(path); rmErr != nil && !os.IsNotExist(rmErr) {
+			log.Warn("Failed to remove superseded variant file after switch",
+				logger.String("catalog_id", entry.ID),
+				logger.String("path", path),
+				logger.Error(rmErr))
+		} else if rmErr == nil {
+			log.Info("Removed superseded variant file after switch",
+				logger.String("catalog_id", entry.ID),
+				logger.String("path", path))
+		}
+	}
+}
+
 // preflightDiskSpace reports an error when the filesystem holding the models
 // directory cannot fit totalDownloadBytes plus a safety margin, so a large
 // download fails fast instead of part-way through. It is a no-op when there is
@@ -1059,17 +1407,18 @@ func (mm *ModelManager) preflightDiskSpace(entry *CatalogEntry, filesToDownload 
 		Build()
 }
 
-// downloadModelFiles handles the actual file download, validation, recording,
-// config application, and hot-load for a catalog entry. variantID selects which
-// variant's files to download (empty = the entry's default variant); an unknown
-// variant is a backstop failure, since callers validate it first. The caller must
-// have already registered the entry in mm.downloading before calling this method.
-// On failure, downloadModelFiles calls markFailed but the caller is responsible
-// for scheduling cleanup of the download state (e.g., via time.AfterFunc).
-// When cleanupOnFailure is true (Install), newly downloaded files are removed
-// on failure. When false (Reinstall), repaired files are kept so partial
-// progress is not lost.
-func (mm *ModelManager) downloadModelFiles(ctx context.Context, entry *CatalogEntry, variantID, baseURL string, progress chan<- DownloadState, cleanupOnFailure bool) error {
+// downloadVariantFiles downloads and verifies the files for the selected variant
+// of entry into the models directory, reporting progress and returning the
+// resolved model, labels, and embeddings paths. variantID selects the variant
+// (empty = the entry's default). It deliberately does NOT record the install,
+// apply config, hot-load, or clear mm.downloading; the caller owns that lifecycle
+// so both the install path (downloadModelFiles) and the variant-replace path
+// (replaceVariant) can share the download while differing in how they activate
+// the result. The caller must have registered the entry in mm.downloading. On
+// failure it calls markFailed, and when cleanupOnFailure is true it removes the
+// files it downloaded this call (Install); when false, partial progress is kept
+// (Reinstall).
+func (mm *ModelManager) downloadVariantFiles(ctx context.Context, entry *CatalogEntry, variantID, baseURL string, progress chan<- DownloadState, cleanupOnFailure bool) (files []CatalogFile, modelPath, labelsPath, embeddingsPath string, err error) {
 	log := GetLogger()
 
 	// Resolve the files for the requested variant (empty selection = default).
@@ -1078,29 +1427,29 @@ func (mm *ModelManager) downloadModelFiles(ctx context.Context, entry *CatalogEn
 	// default variant's files.
 	files, okVariant := variantFilesByID(entry, variantID)
 	if !okVariant {
-		err := errors.Newf("unknown variant %q for model %s", variantID, entry.ID).
+		vErr := errors.Newf("unknown variant %q for model %s", variantID, entry.ID).
 			Component("classifier.model_manager").
 			Category(errors.CategoryValidation).
 			Context("catalog_id", entry.ID).
 			Context("variant_id", variantID).
 			Build()
-		mm.markFailed(entry.ID, err, progress)
-		return err
+		mm.markFailed(entry.ID, vErr, progress)
+		return nil, "", "", "", vErr
 	}
 
 	// Create model subdirectory only if the entry has non-shared files.
 	// Shared-only entries (e.g. geomodels) store all files in models/shared/.
 	subdir := filepath.Join(mm.modelsDir, entry.ID)
 	if !IsSharedOnly(entry) {
-		if err := os.MkdirAll(subdir, 0o755); err != nil {
-			mkdirErr := errors.Newf("failed to create model directory %s: %v", subdir, err).
+		if mkErr := os.MkdirAll(subdir, 0o755); mkErr != nil {
+			mkdirErr := errors.Newf("failed to create model directory %s: %v", subdir, mkErr).
 				Component("classifier.model_manager").
 				Category(errors.CategoryFileIO).
 				Context("catalog_id", entry.ID).
 				Context("directory", subdir).
 				Build()
 			mm.markFailed(entry.ID, mkdirErr, progress)
-			return mkdirErr
+			return nil, "", "", "", mkdirErr
 		}
 	}
 
@@ -1129,7 +1478,7 @@ func (mm *ModelManager) downloadModelFiles(ctx context.Context, entry *CatalogEn
 	filesToDownload := 0
 	for _, f := range files {
 		destPath := fileDestPath(f)
-		if _, err := os.Stat(destPath); err != nil {
+		if _, statErr := os.Stat(destPath); statErr != nil {
 			totalAllBytes += f.SizeBytes
 			filesToDownload++
 		} else if f.SHA256 != "" && !verifySHA256(destPath, f.SHA256) {
@@ -1147,9 +1496,9 @@ func (mm *ModelManager) downloadModelFiles(ctx context.Context, entry *CatalogEn
 	// part-way through and leaving partial files behind. No model files have been
 	// downloaded yet (the subdirectory may already exist), so no cleanup is needed
 	// on the reject path.
-	if err := mm.preflightDiskSpace(entry, filesToDownload, totalAllBytes); err != nil {
-		mm.markFailed(entry.ID, err, progress)
-		return err
+	if pfErr := mm.preflightDiskSpace(entry, filesToDownload, totalAllBytes); pfErr != nil {
+		mm.markFailed(entry.ID, pfErr, progress)
+		return nil, "", "", "", pfErr
 	}
 
 	// Resolve the HuggingFace host once per install so every file in the same
@@ -1169,14 +1518,13 @@ func (mm *ModelManager) downloadModelFiles(ctx context.Context, entry *CatalogEn
 	}
 
 	// Download each file.
-	var modelPath, labelsPath string
 	var completedBytes int64
 	fileIndex := 0
 	for _, f := range files {
 		destPath := fileDestPath(f)
 
 		// Skip download if file already exists and passes SHA256 validation.
-		if _, err := os.Stat(destPath); err == nil && !needsRedownload[destPath] {
+		if _, statErr := os.Stat(destPath); statErr == nil && !needsRedownload[destPath] {
 			log.Debug("File already exists, skipping download",
 				logger.String("catalog_id", entry.ID),
 				logger.String("path", destPath))
@@ -1216,16 +1564,16 @@ func (mm *ModelManager) downloadModelFiles(ctx context.Context, entry *CatalogEn
 		}
 		mm.mu.Unlock()
 
-		if err := mm.downloadFile(ctx, entry.ID, url, destPath, f.SHA256, completedBytes); err != nil {
+		if dlErr := mm.downloadFile(ctx, entry.ID, url, destPath, f.SHA256, completedBytes); dlErr != nil {
 			log.Error("Failed to download file",
 				logger.String("catalog_id", entry.ID),
 				logger.String("url", url),
-				logger.Error(err))
-			mm.markFailed(entry.ID, err, progress)
+				logger.Error(dlErr))
+			mm.markFailed(entry.ID, dlErr, progress)
 			if cleanupOnFailure {
 				cleanup()
 			}
-			return err
+			return nil, "", "", "", dlErr
 		}
 
 		completedBytes += f.SizeBytes
@@ -1241,6 +1589,33 @@ func (mm *ModelManager) downloadModelFiles(ctx context.Context, entry *CatalogEn
 
 	// For shared-only entries (e.g. geomodels), derive paths from shared files.
 	modelPath, labelsPath = resolveSharedPaths(files, modelPath, labelsPath, fileDestPath)
+
+	// Find embeddings path for bat models.
+	for _, f := range files {
+		if f.Role == RoleEmbeddings {
+			embeddingsPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			break
+		}
+	}
+
+	return files, modelPath, labelsPath, embeddingsPath, nil
+}
+
+// downloadModelFiles installs a catalog entry's selected variant: it delegates
+// the file download and verification to downloadVariantFiles, then records the
+// install, applies config, and hot-loads the model. It is the install/reinstall
+// entry point; the variant-switch path (replaceVariant) uses downloadVariantFiles
+// directly so it can interpose an unload between download and load. The caller
+// must have registered the entry in mm.downloading. cleanupOnFailure is passed
+// through: true (Install) removes newly downloaded files on failure, false
+// (Reinstall) keeps repaired files so partial progress is not lost.
+func (mm *ModelManager) downloadModelFiles(ctx context.Context, entry *CatalogEntry, variantID, baseURL string, progress chan<- DownloadState, cleanupOnFailure bool) error {
+	log := GetLogger()
+
+	_, modelPath, labelsPath, embeddingsPath, err := mm.downloadVariantFiles(ctx, entry, variantID, baseURL, progress, cleanupOnFailure)
+	if err != nil {
+		return err
+	}
 
 	// Record the installed variant: the selected one, or the default variant when
 	// the caller did not specify a selection (empty = default). This keeps the
@@ -1265,14 +1640,6 @@ func (mm *ModelManager) downloadModelFiles(ctx context.Context, entry *CatalogEn
 	delete(mm.downloading, entry.ID)
 	mm.mu.Unlock()
 
-	// Find embeddings path for bat models.
-	embeddingsPath := ""
-	for _, f := range files {
-		if f.Role == RoleEmbeddings {
-			embeddingsPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
-			break
-		}
-	}
 	mm.applyConfigForInstall(entry, modelPath, labelsPath, embeddingsPath)
 
 	mm.hotLoadAfterInstall(log, entry)

@@ -11,6 +11,7 @@ package models
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -78,6 +80,31 @@ type CatalogEntryResponse struct {
 	IncompatibleReason string `json:"incompatibleReason,omitempty"`
 	TotalSizeBytes     int64  `json:"totalSizeBytes"`
 	HasGeomodel        bool   `json:"hasGeomodel"`
+	// InstalledVariantID is the id of the currently installed variant, or "" when
+	// the model is not installed or is a flat (pre-variant) entry.
+	InstalledVariantID string `json:"installedVariantId,omitempty"`
+	// Variants lists the selectable hardware/regional variants of this model,
+	// omitted for flat single-variant entries.
+	Variants []CatalogVariantResponse `json:"variants,omitempty"`
+}
+
+// CatalogVariantResponse describes one selectable hardware or regional variant of
+// a catalog entry for the gallery UI.
+type CatalogVariantResponse struct {
+	ID                string `json:"id"`
+	Region            string `json:"region,omitempty"`
+	Precision         string `json:"precision,omitempty"`
+	SpeciesCount      int    `json:"speciesCount"`
+	Default           bool   `json:"default"`
+	Installed         bool   `json:"installed"`
+	SizeBytes         int64  `json:"sizeBytes"`
+	HeadlineLatencyMs int    `json:"headlineLatencyMs,omitempty"`
+}
+
+// installModelRequest is the optional JSON body of POST /models/install/:id. An
+// absent body or empty variantId installs (or switches to) the default variant.
+type installModelRequest struct {
+	VariantID string `json:"variantId"`
 }
 
 // ListModels returns classifier models that are enabled in the configuration.
@@ -147,10 +174,14 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 			totalSize += f.SizeBytes
 		}
 
-		// Check install status via ModelManager.
+		// Check install status via ModelManager, capturing which variant is on disk.
 		installed := false
+		installedVariantID := ""
 		if c.ModelManager != nil {
-			installed = c.ModelManager.IsInstalled(entry.ID)
+			if vid, ok := c.ModelManager.InstalledVariantID(entry.ID); ok {
+				installed = true
+				installedVariantID = vid
+			}
 		}
 
 		// Models requiring ONNX Runtime are incompatible when ORT is absent.
@@ -178,12 +209,58 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 			IncompatibleReason: incompatibleReason,
 			TotalSizeBytes:     totalSize,
 			HasGeomodel:        classifier.HasGeomodelFiles(entry),
+			InstalledVariantID: installedVariantID,
+			Variants:           buildVariantResponses(entry, installed, installedVariantID),
 		})
 	}
 
 	return ctx.JSON(http.StatusOK, map[string]any{
 		"catalog": catalog,
 	})
+}
+
+// buildVariantResponses maps a catalog entry's variants to their API form. It
+// returns nil for a flat (single-variant) entry so the field is omitted. A Legacy
+// variant (a superseded build) is hidden unless it is the one currently installed,
+// so the gallery never offers a fresh install of a deprecated build.
+func buildVariantResponses(entry *classifier.CatalogEntry, installed bool, installedVariantID string) []CatalogVariantResponse {
+	if len(entry.Variants) == 0 {
+		return nil
+	}
+	variants := make([]CatalogVariantResponse, 0, len(entry.Variants))
+	for j := range entry.Variants {
+		v := &entry.Variants[j]
+		isInstalledVariant := installed && installedVariantID == v.ID
+		if v.Legacy && !isInstalledVariant {
+			continue
+		}
+
+		var sizeBytes int64
+		for _, f := range v.Files {
+			sizeBytes += f.SizeBytes
+		}
+
+		// Headline latency: the smallest positive measured latency across this
+		// variant's benchmarks, or 0 when none were measured.
+		headlineLatencyMs := 0
+		for _, b := range v.Benchmarks {
+			if b.LatencyMs > 0 && (headlineLatencyMs == 0 || b.LatencyMs < headlineLatencyMs) {
+				headlineLatencyMs = b.LatencyMs
+			}
+		}
+
+		variants = append(variants, CatalogVariantResponse{
+			ID:                v.ID,
+			Region:            v.Region,
+			Precision:         v.Precision,
+			SpeciesCount:      v.SpeciesCount,
+			Default:           v.Default,
+			Installed:         isInstalledVariant,
+			SizeBytes:         sizeBytes,
+			HeadlineLatencyMs: headlineLatencyMs,
+		})
+	}
+	return variants
 }
 
 // GetInstalledModels returns all models that have been downloaded and installed.
@@ -220,6 +297,23 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "model manager is not available", http.StatusServiceUnavailable)
 	}
 
+	// Parse the optional variant selection from the request body. The body is
+	// optional: an absent or empty body installs the default variant, preserving
+	// the pre-variant call shape, so an empty-body io.EOF is tolerated. Decoding the
+	// body directly (rather than ctx.Bind, which 400s an empty body under a JSON
+	// content-type, and rather than gating on ContentLength, which is -1 for chunked
+	// requests) keeps that contract robust while still binding a real chunked body.
+	// Malformed JSON is a 400 so the client sees the error synchronously rather than
+	// as a silent async failure over the progress stream. The body reader is bounded
+	// by the server's body-limit middleware.
+	var req installModelRequest
+	if err := json.NewDecoder(ctx.Request().Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		return c.HandleError(ctx, err, "invalid request body", http.StatusBadRequest)
+	}
+	if !classifier.VariantSelectable(&entry, req.VariantID) {
+		return c.HandleError(ctx, nil, "unknown variant "+req.VariantID+" for model "+catalogID, http.StatusBadRequest)
+	}
+
 	// Reject installation of ONNX-dependent models when ORT is unavailable.
 	if entry.RequiresONNX {
 		ortStatus := inference.CheckORTAvailability(c.CurrentSettings().BirdNET.ONNXRuntimePath)
@@ -241,9 +335,10 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 				)
 			}
 		}()
-		if err := c.ModelManager.Install(c.Context(), &entry, "", "", progressChan); err != nil {
+		if err := c.ModelManager.InstallOrReplace(c.Context(), &entry, req.VariantID, "", progressChan); err != nil {
 			c.LogErrorIfEnabled("Model install failed",
 				logger.String("catalog_id", catalogID),
+				logger.String("variant_id", req.VariantID),
 				logger.Error(err),
 			)
 		}
@@ -255,6 +350,7 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 
 	return ctx.JSON(http.StatusAccepted, map[string]string{
 		"catalogId": catalogID,
+		"variantId": req.VariantID,
 		"status":    classifier.StatusDownloading,
 	})
 }
