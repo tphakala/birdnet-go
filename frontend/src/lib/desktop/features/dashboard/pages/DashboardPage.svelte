@@ -68,7 +68,7 @@ Performance Optimizations:
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { navigation } from '$lib/stores/navigation.svelte';
   import { connectionState } from '$lib/stores/connectionState.svelte';
-  import { appState } from '$lib/stores/appState.svelte';
+  import { appState, isGuestMode } from '$lib/stores/appState.svelte';
   import {
     birdnetSettings,
     dashboardLayout,
@@ -77,7 +77,6 @@ Performance Optimizations:
   } from '$lib/stores/settings';
   import type { Dashboard, DashboardElement, DashboardLayout } from '$lib/stores/settings';
   import { dashboardEditMode } from '$lib/stores/dashboardEditMode';
-  import { guestDashboardLayout, saveGuestLayout } from '$lib/stores/guestDashboardLayout';
   import BannerCard from '$lib/desktop/features/dashboard/components/BannerCard.svelte';
   import VideoEmbedCard from '$lib/desktop/features/dashboard/components/VideoEmbedCard.svelte';
   import MiniSpectrogram from '$lib/desktop/features/dashboard/components/MiniSpectrogram.svelte';
@@ -173,8 +172,13 @@ Performance Optimizations:
   // blocks navigation to the server's current date (#3005).
   let serverTimezone = $state('');
 
-  // Subscribe to edit mode store
-  let isEditing = $derived($dashboardEditMode);
+  // Guest detection: security is on but user has no access (not authenticated).
+  // Guests view the owner's published dashboard read-only and can never enter
+  // edit mode, even if the shared edit-mode store is somehow set (issue #4112).
+  let isGuest = $derived(isGuestMode());
+
+  // Subscribe to edit mode store; guests are never treated as editing.
+  let isEditing = $derived($dashboardEditMode && !isGuest);
 
   // Dashboard layout: derive enabled elements from layout config with fallback
   const defaultElements: DashboardElement[] = [
@@ -188,21 +192,19 @@ Performance Optimizations:
   // alone would incorrectly treat the defaults as "loaded" for guests (where
   // loadSettings() is intentionally skipped to avoid 401 errors).
   let settingsLoaded = $derived($settingsDataLoaded);
-  // Guest detection: security is on but user has no access (not authenticated)
-  let isGuest = $derived(appState.security.enabled && !appState.security.accessAllowed);
-  // Priority: authenticated settings > guest localStorage > public app config > hardcoded defaults
+  // Priority: authenticated settings > public app config > hardcoded defaults.
+  // Guests fall through to the owner's published layout (appState.layout, from
+  // the public app config); they cannot customize the dashboard (issue #4112).
   // Source is computed alongside elements so the priority logic exists in one place.
   let layoutResolution = $derived(
     settingsLoaded && $dashboardLayout?.elements
       ? { elements: $dashboardLayout.elements, source: 'settings-store' as const }
-      : isGuest && $guestDashboardLayout?.elements
-        ? { elements: $guestDashboardLayout.elements, source: 'guest-localstorage' as const }
-        : appState.layout?.elements
-          ? {
-              elements: appState.layout.elements as DashboardElement[],
-              source: 'app-config' as const,
-            }
-          : { elements: defaultElements, source: 'hardcoded-defaults' as const }
+      : appState.layout?.elements
+        ? {
+            elements: appState.layout.elements as DashboardElement[],
+            source: 'app-config' as const,
+          }
+        : { elements: defaultElements, source: 'hardcoded-defaults' as const }
   );
   let layoutElements = $derived(layoutResolution.elements);
 
@@ -232,13 +234,8 @@ Performance Optimizations:
   }
 
   function handleLayoutChange(newLayout: DashboardLayout) {
-    if (isGuest) {
-      // Guest users: update the reactive store so the derived layoutElements reacts immediately.
-      // localStorage persistence is handled by saveGuestLayout inside the store module.
-      saveGuestLayout(newLayout);
-      return;
-    }
-
+    // Only authenticated users reach edit mode, so this always writes to the
+    // settings store (guests can never trigger a layout change; issue #4112).
     // Update settings store directly for immediate reactivity
     const defaultDashboard: Dashboard = {
       thumbnails: { summary: true, recent: true, imageProvider: '', fallbackPolicy: '' },
@@ -1350,7 +1347,6 @@ Performance Optimizations:
   <DashboardEditMode
     layout={currentLayout}
     editMode={isEditing}
-    {isGuest}
     onLayoutChange={handleLayoutChange}
     onEditModeChange={handleEditModeChange}
   >
