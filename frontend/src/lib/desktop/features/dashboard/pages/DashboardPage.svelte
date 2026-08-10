@@ -192,19 +192,25 @@ Performance Optimizations:
   // alone would incorrectly treat the defaults as "loaded" for guests (where
   // loadSettings() is intentionally skipped to avoid 401 errors).
   let settingsLoaded = $derived($settingsDataLoaded);
+  // Identifies which source the resolved layout came from (for debug logging).
+  const LAYOUT_SOURCE = {
+    SETTINGS_STORE: 'settings-store',
+    APP_CONFIG: 'app-config',
+    HARDCODED_DEFAULTS: 'hardcoded-defaults',
+  } as const;
   // Priority: authenticated settings > public app config > hardcoded defaults.
   // Guests fall through to the owner's published layout (appState.layout, from
   // the public app config); they cannot customize the dashboard (issue #4112).
   // Source is computed alongside elements so the priority logic exists in one place.
   let layoutResolution = $derived(
     settingsLoaded && $dashboardLayout?.elements
-      ? { elements: $dashboardLayout.elements, source: 'settings-store' as const }
+      ? { elements: $dashboardLayout.elements, source: LAYOUT_SOURCE.SETTINGS_STORE }
       : appState.layout?.elements
         ? {
             elements: appState.layout.elements as DashboardElement[],
-            source: 'app-config' as const,
+            source: LAYOUT_SOURCE.APP_CONFIG,
           }
-        : { elements: defaultElements, source: 'hardcoded-defaults' as const }
+        : { elements: defaultElements, source: LAYOUT_SOURCE.HARDCODED_DEFAULTS }
   );
   let layoutElements = $derived(layoutResolution.elements);
 
