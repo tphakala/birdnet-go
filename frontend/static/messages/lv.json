@@ -430,7 +430,8 @@
         "equalizerUpdateFailed": "Neizdevās atjaunināt audio ekvalaizera iestatījumus",
         "equalizerUpdated": "Audio ekvalaizera iestatījumi atjaunināti",
         "savedSuccessfully": "Iestatījumi veiksmīgi saglabāti",
-        "saveFailed": "Neizdevās saglabāt iestatījumus"
+        "saveFailed": "Neizdevās saglabāt iestatījumus",
+        "reconfiguringSpeciesGuide": "Tiek atjaunināts sugu ceļvedis..."
       },
       "migration": {
         "startedTitle": "Datubāzes migrācija sākta",
@@ -1989,7 +1990,68 @@
         "detections": "Atpazīšanas:",
         "confidence": "Ticamība:",
         "first": "Pirmā:"
-      }
+      },
+      "guide": {
+        "title": "Ceļvedis",
+        "noSimilar": "Līdzīgas sugas nav atrastas",
+        "loading": "Notiek ceļveža ielāde…",
+        "unavailable": "Sugu ceļvedis īslaicīgi nav pieejams. Lūdzu, mēģiniet vēlāk.",
+        "loadFailed": "Neizdevās ielādēt sugas ceļvedi. Lūdzu, mēģiniet vēlreiz.",
+        "noGuide": "Šai sugai ceļvedis nav pieejams.",
+        "expectedness": {
+          "expected": "Šeit sagaidāms",
+          "uncommon": "Šeit neparasts",
+          "rare": "Šeit rets",
+          "unexpected": "Šeit negaidīts"
+        },
+        "season": {
+          "spring": "Pavasaris",
+          "summer": "Vasara",
+          "autumn": "Rudens",
+          "winter": "Ziema",
+          "wet1": "Pirmā lietus sezona",
+          "dry1": "Pirmā sausā sezona",
+          "wet2": "Otrā lietus sezona",
+          "dry2": "Otrā sausā sezona"
+        },
+        "description": "Apraksts",
+        "songsAndCalls": "Dziesmas un saucieni",
+        "externalLinks": "Ārējie resursi",
+        "speciesGuide": "Sugu ceļvedis"
+      },
+      "notes": {
+        "title": "Piezīmes",
+        "placeholder": "Pievienot piezīmi par šo sugu…",
+        "editLabel": "Rediģēt piezīmi",
+        "save": "Saglabāt piezīmi",
+        "empty": "Vēl nav piezīmju.",
+        "deleteConfirm": "Dzēst šo piezīmi?",
+        "deleteFailed": "Neizdevās izdzēst piezīmi.",
+        "saveFailed": "Neizdevās saglabāt piezīmi.",
+        "loadFailed": "Neizdevās ielādēt piezīmes.",
+        "saveDisabledReason": "Ievadiet piezīmes tekstu, lai iespējotu saglabāšanu.",
+        "tooLong": "Piezīme ir pārāk gara (ne vairāk kā {max} rakstzīmes).",
+        "truncated": "Tiek rādītas {max} jaunākās piezīmes; vecākās piezīmes ir paslēptas."
+      },
+      "similar": {
+        "title": "Līdzīgas sugas",
+        "empty": "Līdzīgas sugas nav atrastas.",
+        "versus": "vs {species}",
+        "selectPrompt": "Atlasiet sugu, ko salīdzināt ar {species}.",
+        "linksOnly": "Tikai saites",
+        "exploreResources": "Nav salīdzinājuma informācijas. Izpētiet resursus:",
+        "cardLoading": "Notiek salīdzinājuma ielāde…",
+        "cardNoGuide": "Šai sugai ceļvedis nav pieejams.",
+        "cardError": "Neizdevās ielādēt šo sugu. Mēģiniet citu.",
+        "cardNoSections": "Šai sugai nav pieejamu salīdzināšanas datu.",
+        "sections": {
+          "appearance": "Izskats",
+          "voice": "Balss",
+          "habitat": "Biotops un izplatība",
+          "behaviour": "Uzvedība"
+        }
+      },
+      "viewGuide": "Skatīt ceļvedi sugai {species}"
     },
     "advanced": {
       "chartControls": "Diagrammu vadība",
@@ -4593,7 +4655,8 @@
         "appearance": "Izskats",
         "language": "Valoda un reģions",
         "visualContent": "Vizuālais saturs",
-        "audioPlayback": "Audio atskaņošana"
+        "audioPlayback": "Audio atskaņošana",
+        "speciesGuide": "Sugu ceļvedis"
       },
       "appearance": {
         "title": "Izskats",
@@ -4613,6 +4676,50 @@
         "defaultGain": "Noklusējuma skaļuma pastiprināšana",
         "defaultGainHelpText": "Sākotnējā pastiprināšana, kas tiek piemērota, atskaņojot ierakstus. Putnu skaņas bieži ir klusas, tāpēc ieteicama 6-12 dB pastiprināšana.",
         "defaultGainUnit": "dB"
+      },
+      "speciesGuide": {
+        "title": "Sugu ceļvedis",
+        "description": "Papildiniet noteikšanas ar taksonomiju, vispārpieņemtiem nosaukumiem, ārējām saitēm un līdzīgām sugām — bezsaistē, izmantojot OpenFauna; Wikipedia apraksti ir neobligāts tiešsaistes papildinājums.",
+        "disabledReason": "Vispirms iespējojiet sugu ceļvedi",
+        "enabled": {
+          "label": "Iespējot sugu ceļvedi",
+          "helpText": "Rādīt ceļveža konteksta informāciju noteikšanas detaļās un sugas logā."
+        },
+        "enableWikipedia": {
+          "label": "Wikipedia apraksti",
+          "helpText": "Iegūt arī rakstu aprakstus no Wikipedia (nepieciešams internets). Pēc noklusējuma izslēgts – taksonomija, vispārpieņemtie nosaukumi un ārējās saites vienmēr darbojas bezsaistē, izmantojot OpenFauna."
+        },
+        "enableSupplementaryLinks": {
+          "label": "Papildu saites",
+          "helpText": "Pievienot Xeno-canto audio saites un Wikipedia saiti sugām, kuras nesatur bezsaistes datu kopa. Saites atver ārējas vietnes; fonā netiek iegūti nekādi dati."
+        },
+        "warmTopN": {
+          "label": "Iepriekš ielādēt biežākās sugas",
+          "helpText": "Palaišanas laikā iepriekš ielādēt visbiežāk noteikto sugu ceļvežus (0 atspējo iepriekšēju ielādi)."
+        },
+        "preFetchEnabled": {
+          "label": "Iepriekšēja ielāde noteikšanas brīdī",
+          "helpText": "Iegūt ceļvedi, kad suga tiek noteikta pirmo reizi, lai vēlāk tas ielādētos uzreiz."
+        },
+        "sections": {
+          "title": "Ceļveža sadaļas"
+        },
+        "showNotes": {
+          "label": "Rādīt piezīmes",
+          "helpText": "Atļaut lietotāja piezīmes katrai sugai."
+        },
+        "showEnrichments": {
+          "label": "Rādīt papildinājumus un saites",
+          "helpText": "Rādīt kvalitātes, sagaidāmības un sezonas nozīmītes, kā arī ārējās atsauces saites (Wikipedia, iNaturalist, GBIF, eBird). Izslēdziet, lai paslēptu tās visas, tostarp saites."
+        },
+        "showSimilarSpecies": {
+          "label": "Rādīt līdzīgas sugas",
+          "helpText": "Rādīt līdzīgu sugu salīdzināšanas paneli."
+        },
+        "showTaxonomy": {
+          "label": "Rādīt taksonomiju",
+          "helpText": "Rādīt taksonomisko hierarhiju (no klases līdz sugai) un pasugas."
+        }
       }
     },
     "restartRequired": "Dažām izmaiņām nepieciešama servera pārstartēšana, lai tās stātos spēkā. Lūdzu, pārstartējiet BirdNET-Go."
@@ -5042,6 +5149,9 @@
       "hostRequired": "Resursdatora parametrs ir obligāts",
       "invalidHost": "Nederīgs resursdatora parametrs",
       "rateLimit": "Pārāk daudz paziņojumu straumes pieslēgšanās mēģinājumu, lūdzu, uzgaidiet pirms atkārtota mēģinājuma"
+    },
+    "speciesGuide": {
+      "rateLimit": "Pārāk daudz pieprasījumu sugu ceļvedim. Lūdzu, uzgaidiet pirms atkārtota mēģinājuma."
     },
     "streams": {
       "test": {

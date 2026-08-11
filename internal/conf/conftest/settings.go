@@ -129,6 +129,23 @@ func (b *SettingsBuilder) WithImageProvider(provider, fallbackPolicy string) *Se
 	return b
 }
 
+// WithSpeciesGuide enables the species guide and sets whether online Wikipedia
+// descriptions are enabled (taxonomy/common names/links always come from the
+// offline OpenFauna dataset).
+//
+// Every other field is seeded from conf.DefaultSpeciesGuideConfig rather than
+// left at its Go zero value. The builder does not go through viper, where the
+// production defaults live, so zero-valuing them would hand tests a config that
+// is the inverse of production on the Show* toggles and PreFetchEnabled — and a
+// handler that returns 200 in production would 404 under test.
+func (b *SettingsBuilder) WithSpeciesGuide(enableWikipedia bool) *SettingsBuilder {
+	guide := conf.DefaultSpeciesGuideConfig()
+	guide.Enabled = true
+	guide.EnableWikipedia = enableWikipedia
+	b.settings.Realtime.Dashboard.SpeciesGuide = guide
+	return b
+}
+
 // WithWebServer configures web server settings.
 func (b *SettingsBuilder) WithWebServer(port string, enabled bool) *SettingsBuilder {
 	b.settings.WebServer.Port = port

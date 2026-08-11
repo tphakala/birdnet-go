@@ -398,6 +398,8 @@ func init() {
 	RegisterComponent("ffmpeg-stream", "ffmpeg-stream")
 	RegisterComponent("datastore", "datastore")
 	RegisterComponent("imageprovider", "imageprovider")
+	RegisterComponent("guideprovider", "guideprovider")
+	RegisterComponent("speciesguide", "api-species-guide")
 	RegisterComponent("diskmanager", "diskmanager")
 	RegisterComponent("ebird", "ebird")
 	RegisterComponent("mqtt", "mqtt")

@@ -29,6 +29,10 @@
   import { loggers } from '$lib/utils/logger';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
+  import SpeciesComparison from '$lib/desktop/components/ui/SpeciesComparison.svelte';
+  import SpeciesNotes from '$lib/desktop/components/ui/SpeciesNotes.svelte';
+  import { speciesGuideStoreSettings } from '$lib/stores/settings';
+  import { createSpeciesGuideConfig } from '$lib/utils/speciesGuideConfig.svelte';
   import {
     Download,
     Camera,
@@ -98,6 +102,17 @@
 
   // State
   let activeTab = $state<TabType>('overview');
+
+  // Species guide config (gated on settings). The panel itself collapses in place
+  // inside SpeciesComparison. Gating must work for unauthenticated guests too — the
+  // guide endpoints and GET /settings/dashboard are public, but the settings store
+  // is populated only by the auth-protected full-settings load.
+  // resolveSpeciesGuideConfig prefers the store value (live for authenticated users)
+  // and falls back to one cached fetch of the public dashboard-settings endpoint.
+  const guideConfig = createSpeciesGuideConfig(() => $speciesGuideStoreSettings);
+  let guideEnabled = $derived(guideConfig.enabled);
+  let showSimilarSpecies = $derived(guideConfig.showSimilarSpecies);
+  let showNotes = $derived(guideConfig.showNotes);
 
   // Dynamic review component loading
   let ReviewCard: ReviewCardComponent | null = $state(null);
@@ -923,6 +938,36 @@
               />
             </div>
           </div>
+        </div>
+      </section>
+    {/if}
+
+    <!-- Species Guide panel (opt-in; gated on settings). The comparison mounts
+         whenever the guide is enabled: description and enrichments are part of
+         the guide feature itself, while the similar-species section inside it is
+         gated separately by showSimilarSpecies. -->
+    {#if guideEnabled}
+      <section class="surface-card" aria-labelledby="species-guide-heading">
+        <div class="p-5 md:p-6 space-y-6">
+          <h2 id="species-guide-heading" class="sr-only">
+            {t('analytics.species.guide.title')}
+          </h2>
+          <!-- Key on the species so the guide + notes remount (and refetch) when
+               navigating between detections of different species in place. -->
+          {#key detection.scientificName}
+            <!-- Pass an explicit "Species guide" heading so the collapsible bar
+                 describes the section rather than repeating the bird's name (already
+                 shown in the page header). -->
+            <SpeciesComparison
+              scientificName={detection.scientificName}
+              commonName={localizeSpeciesName(detection.scientificName, detection.commonName)}
+              heading={t('analytics.species.guide.speciesGuide')}
+              {showSimilarSpecies}
+            />
+            {#if showNotes && $isAuthenticated}
+              <SpeciesNotes scientificName={detection.scientificName} />
+            {/if}
+          {/key}
         </div>
       </section>
     {/if}

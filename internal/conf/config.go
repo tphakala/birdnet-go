@@ -188,6 +188,57 @@ type Dashboard struct {
 	Layout           DashboardLayout      `yaml:"layout" json:"layout"`                                 // configurable dashboard element layout
 	DefaultAudioGain float64              `yaml:"defaultaudiogain" json:"defaultAudioGain"`             // Default playback gain in dB (0-24)
 	LiveSpectrogram  bool                 `yaml:"livespectrogram" json:"liveSpectrogram"`               // auto-start live spectrogram on dashboard
+	SpeciesGuide     SpeciesGuideConfig   `yaml:"speciesguide" json:"speciesGuide"`                     // species guide settings (offline OpenFauna; optional Wikipedia descriptions)
+}
+
+// SpeciesGuideConfig holds configuration for the species guide.
+//
+// Taxonomy, localized common names, and external links always come from the
+// embedded, offline OpenFauna dataset whenever the feature is enabled. The only
+// online piece — the Wikipedia article description (which OpenFauna cannot
+// provide) — is opt-in via EnableWikipedia and defaults to off, so the guide
+// works fully offline out of the box.
+//
+// EnableSupplementaryLinks opts into computed fallback links (Xeno-canto plus a
+// Wikipedia link for species the offline dataset does not cover); it defaults
+// off and needs no network access at render time.
+//
+// The four Show* sub-section toggles default ON via viper defaults (see
+// setDefaultConfig), so an unset config shows every section when the guide is
+// enabled; a user opts a section out by setting its flag false.
+type SpeciesGuideConfig struct {
+	Enabled                  bool `yaml:"enabled" json:"enabled"`
+	EnableWikipedia          bool `yaml:"enablewikipedia" json:"enableWikipedia"`                       // opt in to online Wikipedia descriptions (default off)
+	EnableSupplementaryLinks bool `yaml:"enablesupplementarylinks" json:"enableSupplementaryLinks"`     // opt in to computed fallback links (Xeno-canto + Wikipedia gap-fill); default off
+	WarmTopN                 int  `yaml:"warmtopn" json:"warmTopN" jsonschema:"minimum=0,maximum=1000"` // top-N species warmed on startup (0 = off; clamped to SpeciesGuideMaxWarmTopN)
+	PreFetchEnabled          bool `yaml:"prefetchenabled" json:"preFetchEnabled"`                       // pre-fetch guides for newly detected species
+	ShowNotes                bool `yaml:"shownotes" json:"showNotes"`                                   // default true
+	ShowEnrichments          bool `yaml:"showenrichments" json:"showEnrichments"`                       // default true
+	ShowSimilarSpecies       bool `yaml:"showsimilarspecies" json:"showSimilarSpecies"`                 // default true
+	ShowTaxonomy             bool `yaml:"showtaxonomy" json:"showTaxonomy"`                             // default true
+}
+
+// DefaultSpeciesGuideConfig returns the species guide configuration of a fresh
+// install. It is the single source of truth for these defaults: setDefaultConfig
+// registers the viper defaults from it, and test helpers that build settings
+// without going through viper (conftest.SettingsBuilder) seed from it, so a
+// test-built config cannot silently differ from production.
+func DefaultSpeciesGuideConfig() SpeciesGuideConfig {
+	return SpeciesGuideConfig{
+		// The guide is opt-in; online Wikipedia descriptions and computed
+		// supplementary links are separate opt-ins on top of it, so the guide
+		// works fully offline out of the box.
+		Enabled:                  false,
+		EnableWikipedia:          false,
+		EnableSupplementaryLinks: false,
+		WarmTopN:                 SpeciesGuideDefaultWarmTopN,
+		PreFetchEnabled:          true,
+		// Once the guide is enabled, every sub-section shows unless opted out.
+		ShowNotes:          true,
+		ShowEnrichments:    true,
+		ShowSimilarSpecies: true,
+		ShowTaxonomy:       true,
+	}
 }
 
 // DashboardLayout defines the ordered list of elements displayed on the dashboard.
