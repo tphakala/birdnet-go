@@ -5283,6 +5283,28 @@
     "gallery": {
       "title": "Galerie modelů",
       "description": "Správa klasifikačních modelů pro detekci ptáků a netopýrů.",
+      "variants": {
+        "title": "Varianta modelu",
+        "recommended": "Doporučeno",
+        "recommendedForHardware": "Nejlepší pro váš hardware",
+        "installed": "Nainstalováno",
+        "default": "Výchozí",
+        "incompatible": "Není k dispozici pro váš hardware",
+        "showAll": "Zobrazit všechny varianty ({count})",
+        "latency": "~{ms} ms"
+      },
+      "reasons": {
+        "backendRecommended": "Běží na {backend}, doporučeném backendu pro váš hardware",
+        "backendSupported": "Běží na {backend}",
+        "precisionFp16Native": "Verze s poloviční přesností odpovídající vašemu procesoru",
+        "ramConstrainedFit": "Kvantizovaná verze optimalizovaná pro vaši dostupnou paměť",
+        "benchmarkMeasured": "Nejrychlejší na vašem zařízení podle měření výkonu",
+        "variantLegacy": "Nahrazeno novější verzí",
+        "archUnsupported": "Vyžaduje procesor {required}",
+        "backendMissing": "Vyžaduje inferenční backend, který není dostupný ({required})",
+        "ramInsufficient": "Vyžaduje alespoň {requiredMb} MB paměti",
+        "hardwareExcluded": "Nepodporováno na vašem hardwaru ({token})"
+      },
       "tabs": {
         "installed": "Nainstalované",
         "available": "Dostupné"

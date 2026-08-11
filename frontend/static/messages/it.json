@@ -5283,6 +5283,28 @@
     "gallery": {
       "title": "Galleria modelli",
       "description": "Gestisci i modelli di classificazione per il rilevamento di uccelli e pipistrelli.",
+      "variants": {
+        "title": "Variante modello",
+        "recommended": "Consigliato",
+        "recommendedForHardware": "Il migliore per il tuo hardware",
+        "installed": "Installato",
+        "default": "Predefinito",
+        "incompatible": "Non disponibile per il tuo hardware",
+        "showAll": "Mostra tutte le varianti ({count})",
+        "latency": "~{ms} ms"
+      },
+      "reasons": {
+        "backendRecommended": "Eseguito su {backend}, il backend consigliato per il tuo hardware",
+        "backendSupported": "Eseguito su {backend}",
+        "precisionFp16Native": "Versione a mezza precisione adatta al tuo processore",
+        "ramConstrainedFit": "Versione quantizzata ottimizzata per la tua memoria disponibile",
+        "benchmarkMeasured": "Il più veloce sul tuo dispositivo secondo i benchmark",
+        "variantLegacy": "Sostituito da una versione più recente",
+        "archUnsupported": "Richiede un processore {required}",
+        "backendMissing": "Richiede un backend di inferenza che la tua versione non può raggiungere ({required})",
+        "ramInsufficient": "Richiede almeno {requiredMb} MB di memoria",
+        "hardwareExcluded": "Non supportato dal tuo hardware ({token})"
+      },
       "tabs": {
         "installed": "Installati",
         "available": "Disponibili"

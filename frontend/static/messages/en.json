@@ -5283,6 +5283,28 @@
     "gallery": {
       "title": "Model Gallery",
       "description": "Manage classifier models for bird and bat detection.",
+      "variants": {
+        "title": "Model variant",
+        "recommended": "Recommended",
+        "recommendedForHardware": "Best for your hardware",
+        "installed": "Installed",
+        "default": "Default",
+        "incompatible": "Not available for your hardware",
+        "showAll": "Show all variants ({count})",
+        "latency": "~{ms} ms"
+      },
+      "reasons": {
+        "backendRecommended": "Runs on {backend}, the recommended backend for your hardware",
+        "backendSupported": "Runs on {backend}",
+        "precisionFp16Native": "Half-precision build matched to your CPU",
+        "ramConstrainedFit": "Quantized build sized for your available memory",
+        "benchmarkMeasured": "Fastest on your device in measured benchmarks",
+        "variantLegacy": "Superseded by a newer build",
+        "archUnsupported": "Requires a {required} CPU",
+        "backendMissing": "Needs an inference backend your build cannot reach ({required})",
+        "ramInsufficient": "Needs at least {requiredMb} MB of memory",
+        "hardwareExcluded": "Not supported on your hardware ({token})"
+      },
       "tabs": {
         "installed": "Installed",
         "available": "Available"

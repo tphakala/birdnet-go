@@ -5283,6 +5283,28 @@
     "gallery": {
       "title": "Galería de modelos",
       "description": "Gestionar modelos clasificadores para la detección de aves y murciélagos.",
+      "variants": {
+        "title": "Variante de modelo",
+        "recommended": "Recomendado",
+        "recommendedForHardware": "Ideal para tu hardware",
+        "installed": "Instalado",
+        "default": "Predeterminado",
+        "incompatible": "No disponible para tu hardware",
+        "showAll": "Mostrar todas las variantes ({count})",
+        "latency": "~{ms} ms"
+      },
+      "reasons": {
+        "backendRecommended": "Se ejecuta en {backend}, el backend recomendado para tu hardware",
+        "backendSupported": "Se ejecuta en {backend}",
+        "precisionFp16Native": "Versión de media precisión adaptada a tu procesador",
+        "ramConstrainedFit": "Versión cuantizada ajustada a tu memoria disponible",
+        "benchmarkMeasured": "El más rápido en tu dispositivo según pruebas de rendimiento",
+        "variantLegacy": "Reemplazado por una versión más reciente",
+        "archUnsupported": "Requiere un procesador {required}",
+        "backendMissing": "Necesita un backend de inferencia que tu versión no puede alcanzar ({required})",
+        "ramInsufficient": "Necesita al menos {requiredMb} MB de memoria",
+        "hardwareExcluded": "No compatible con tu hardware ({token})"
+      },
       "tabs": {
         "installed": "Instalados",
         "available": "Disponibles"

@@ -19,7 +19,7 @@ import (
 // default variant.
 func TestGetModelCatalog_EmitsVariants(t *testing.T) {
 	core := apitest.NewCore(t)
-	h := New(core)
+	h := New(core, nil)
 	e := echo.New()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/models/catalog", http.NoBody)
@@ -63,7 +63,7 @@ func TestGetModelCatalog_EmitsVariants(t *testing.T) {
 func TestInstallModel_RejectsUnknownVariant(t *testing.T) {
 	core := apitest.NewCore(t)
 	core.ModelManager = classifier.NewModelManager(t.TempDir(), nil, nil)
-	h := New(core)
+	h := New(core, nil)
 	e := echo.New()
 
 	body := strings.NewReader(`{"variantId":"does-not-exist"}`)
@@ -85,7 +85,7 @@ func TestInstallModel_RejectsUnknownVariant(t *testing.T) {
 func TestInstallModel_RejectsMalformedBody(t *testing.T) {
 	core := apitest.NewCore(t)
 	core.ModelManager = classifier.NewModelManager(t.TempDir(), nil, nil)
-	h := New(core)
+	h := New(core, nil)
 	e := echo.New()
 
 	body := strings.NewReader(`{"variantId":`) // truncated JSON
@@ -122,7 +122,7 @@ func TestBuildVariantResponses_LegacyHiddenUnlessInstalled(t *testing.T) {
 	}
 
 	// Not installed: the legacy variant is hidden, none is marked installed.
-	notInstalled := buildVariantResponses(entry, false, "")
+	notInstalled := buildVariantResponses(entry, false, "", nil)
 	assert.Contains(t, ids(notInstalled), "cur")
 	assert.NotContains(t, ids(notInstalled), "old", "a legacy variant is hidden when not installed")
 	for _, v := range notInstalled {
@@ -130,7 +130,7 @@ func TestBuildVariantResponses_LegacyHiddenUnlessInstalled(t *testing.T) {
 	}
 
 	// The legacy variant is the installed one: it stays visible and is flagged.
-	withLegacy := buildVariantResponses(entry, true, "old")
+	withLegacy := buildVariantResponses(entry, true, "old", nil)
 	assert.Contains(t, ids(withLegacy), "old", "a legacy variant stays visible when it is installed")
 	for _, v := range withLegacy {
 		switch v.ID {

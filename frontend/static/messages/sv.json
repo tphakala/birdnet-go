@@ -5283,6 +5283,28 @@
     "gallery": {
       "title": "Modellgalleri",
       "description": "Hantera klassificeringsmodeller för fågel- och fladdermusdetektion.",
+      "variants": {
+        "title": "Modellvariant",
+        "recommended": "Rekommenderad",
+        "recommendedForHardware": "Bäst för din hårdvara",
+        "installed": "Installerad",
+        "default": "Standard",
+        "incompatible": "Inte tillgänglig för din hårdvara",
+        "showAll": "Visa alla varianter ({count})",
+        "latency": "~{ms} ms"
+      },
+      "reasons": {
+        "backendRecommended": "Körs på {backend}, den rekommenderade backend-motorn för din hårdvara",
+        "backendSupported": "Körs på {backend}",
+        "precisionFp16Native": "Halvprecisionsbygge anpassat för din CPU",
+        "ramConstrainedFit": "Kvantiserat bygge anpassat för ditt tillgängliga minne",
+        "benchmarkMeasured": "Snabbast på din enhet enligt prestandatester",
+        "variantLegacy": "Ersatt av en nyare version",
+        "archUnsupported": "Kräver en {required} CPU",
+        "backendMissing": "Kräver en inference-backend som din version inte kan nå ({required})",
+        "ramInsufficient": "Kräver minst {requiredMb} MB minne",
+        "hardwareExcluded": "Stöds inte på din hårdvara ({token})"
+      },
       "tabs": {
         "installed": "Installerade",
         "available": "Tillgängliga"

@@ -5283,6 +5283,28 @@
     "gallery": {
       "title": "Modellgalleri",
       "description": "Administrer klassifikatormodeller for fugle- og flaggermusdeteksjon.",
+      "variants": {
+        "title": "Modellvariant",
+        "recommended": "Anbefalt",
+        "recommendedForHardware": "Best for din maskinvare",
+        "installed": "Installert",
+        "default": "Standard",
+        "incompatible": "Ikke tilgjengelig for maskinvaren din",
+        "showAll": "Vis alle varianter ({count})",
+        "latency": "~{ms} ms"
+      },
+      "reasons": {
+        "backendRecommended": "Kjører på {backend}, som er den anbefalte backenden for din maskinvare",
+        "backendSupported": "Kjører på {backend}",
+        "precisionFp16Native": "Halvpresisjonsversjon tilpasset din CPU",
+        "ramConstrainedFit": "Kvantisert versjon tilpasset ditt tilgjengelige minne",
+        "benchmarkMeasured": "Raskest på din enhet i utførte ytelsestester",
+        "variantLegacy": "Erstattet av en nyere versjon",
+        "archUnsupported": "Krever en {required} CPU",
+        "backendMissing": "Krever en inference-backend som versjonen din ikke når ({required})",
+        "ramInsufficient": "Krever minst {requiredMb} MB minne",
+        "hardwareExcluded": "Støttes ikke på din maskinvare ({token})"
+      },
       "tabs": {
         "installed": "Installert",
         "available": "Tilgjengelig"

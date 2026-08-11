@@ -5283,6 +5283,28 @@
     "gallery": {
       "title": "Malligalleria",
       "description": "Hallitse lintu- ja lepakkotunnistuksen luokittelumalleja.",
+      "variants": {
+        "title": "Mallivariantti",
+        "recommended": "Suositeltu",
+        "recommendedForHardware": "Paras laitteistollesi",
+        "installed": "Asennettu",
+        "default": "Oletus",
+        "incompatible": "Ei saatavilla laitteistollesi",
+        "showAll": "Näytä kaikki variantit ({count})",
+        "latency": "~{ms} ms"
+      },
+      "reasons": {
+        "backendRecommended": "Käyttää taustajärjestelmää {backend}, joka on suositeltu laitteistollesi",
+        "backendSupported": "Käyttää taustajärjestelmää {backend}",
+        "precisionFp16Native": "Puolitarkkuusmalli (fp16), optimoitu suorittimellesi",
+        "ramConstrainedFit": "Kvantisoitu malli, mitoitettu käytettävissä olevalle muistillesi",
+        "benchmarkMeasured": "Laitteesi nopein suorituskykytestien perusteella",
+        "variantLegacy": "Korvattu uudemmalla versiolla",
+        "archUnsupported": "Vaatii {required}-suorittimen",
+        "backendMissing": "Vaatii inferenssin taustajärjestelmän, joka ei ole käytettävissä ({required})",
+        "ramInsufficient": "Vaatii vähintään {requiredMb} MB muistia",
+        "hardwareExcluded": "Ei tue laitteistoasi ({token})"
+      },
       "tabs": {
         "installed": "Asennetut",
         "available": "Saatavilla"

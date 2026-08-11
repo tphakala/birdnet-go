@@ -5283,6 +5283,28 @@
     "gallery": {
       "title": "Modellgaléria",
       "description": "Osztályozó modellek kezelése madár- és denevérdetektáláshoz.",
+      "variants": {
+        "title": "Modellváltozat",
+        "recommended": "Ajánlott",
+        "recommendedForHardware": "A legjobb a hardveredhez",
+        "installed": "Telepítve",
+        "default": "Alapértelmezett",
+        "incompatible": "Nem érhető el az Ön hardveréhez",
+        "showAll": "Összes változat mutatása ({count})",
+        "latency": "~{ms} ms"
+      },
+      "reasons": {
+        "backendRecommended": "Ezen fut: {backend}, amely a hardveredhez ajánlott backend",
+        "backendSupported": "Ezen fut: {backend}",
+        "precisionFp16Native": "A CPU-hoz igazított félpontosságú (fp16) build",
+        "ramConstrainedFit": "A rendelkezésre álló memóriához méretezett kvantált build",
+        "benchmarkMeasured": "Mérések alapján a leggyorsabb az eszközödön",
+        "variantLegacy": "Egy újabb build váltotta fel",
+        "archUnsupported": "Egy {required} CPU szükséges hozzá",
+        "backendMissing": "Olyan következtetési backendet igényel, amelyet a build nem ér el ({required})",
+        "ramInsufficient": "Legalább {requiredMb} MB memória szükséges",
+        "hardwareExcluded": "Nem támogatott a hardvereden ({token})"
+      },
       "tabs": {
         "installed": "Telepített",
         "available": "Elérhető"

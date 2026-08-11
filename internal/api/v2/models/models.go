@@ -18,10 +18,13 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/classifier/recommend"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/hwprofile"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -31,13 +34,28 @@ import (
 // carries atomic/lock-bearing fields and must never be copied by value.
 type Handler struct {
 	*apicore.Core
+	// authService gates the hardware-derived recommendation fields on the public
+	// catalog endpoint to authenticated (or auth-not-required) requests, so an
+	// anonymous caller on an auth-enabled instance cannot read the host's hardware
+	// profile. nil in tests and when WithAuthService was not injected, in which
+	// case enrichment is computed unconditionally (there is no auth boundary to
+	// protect).
+	authService auth.Service
+	// hardwareProfile resolves the host inference profile for the recommender. It
+	// is an injectable seam: nil means "use the default live probe"
+	// (defaultHardwareProfile), and tests set it to synthetic hardware. A
+	// per-Handler field rather than a package global, so tests stay parallel-safe.
+	// It receives the request's already-probed ONNX Runtime status so the default
+	// probe does not re-check ORT that GetModelCatalog just checked.
+	hardwareProfile func(ort inference.ORTStatus) hwprofile.Profile
 }
 
-// New builds a models Handler around the shared core. The models handlers need
-// only the shared *apicore.Core (ModelManager, settings, error/log helpers and
-// the goroutine plumbing), so there are no facade-owned dependencies to inject.
-func New(core *apicore.Core) *Handler {
-	return &Handler{Core: core}
+// New builds a models Handler around the shared core and the facade-injected
+// auth service. The auth service is read only to gate the catalog endpoint's
+// hardware-recommendation fields; every other dependency (ModelManager,
+// settings, error/log helpers, goroutine plumbing) promotes from *apicore.Core.
+func New(core *apicore.Core, authService auth.Service) *Handler {
+	return &Handler{Core: core, authService: authService}
 }
 
 // RegisterRoutes registers all model-related API endpoints on the supplied API
@@ -86,6 +104,10 @@ type CatalogEntryResponse struct {
 	// Variants lists the selectable hardware/regional variants of this model,
 	// omitted for flat single-variant entries.
 	Variants []CatalogVariantResponse `json:"variants,omitempty"`
+	// RecommendedVariantID is the variant the gallery preselects for this host.
+	// Omitted for flat entries and when the request is not eligible for hardware
+	// recommendations (an unauthenticated request on an auth-enabled instance).
+	RecommendedVariantID string `json:"recommendedVariantId,omitempty"`
 }
 
 // CatalogVariantResponse describes one selectable hardware or regional variant of
@@ -99,6 +121,25 @@ type CatalogVariantResponse struct {
 	Installed         bool   `json:"installed"`
 	SizeBytes         int64  `json:"sizeBytes"`
 	HeadlineLatencyMs int    `json:"headlineLatencyMs,omitempty"`
+	// Compatible reports whether this variant can run on the host. It defaults to
+	// true (no hardware evaluation performed) so a client that did not receive
+	// recommendations does not render every variant as incompatible.
+	Compatible bool `json:"compatible"`
+	// Recommended marks the single variant the gallery preselects for this host.
+	Recommended bool `json:"recommended"`
+	// Reasons explain the recommendation score; Blockers explain incompatibility.
+	// Both are structured codes the frontend localizes, omitted when the request
+	// is not eligible for hardware recommendations.
+	Reasons  []VariantReasonResponse `json:"reasons,omitempty"`
+	Blockers []VariantReasonResponse `json:"blockers,omitempty"`
+}
+
+// VariantReasonResponse is a structured, localizable reason for a variant's
+// compatibility or recommendation. Code is an i18n key stem (never an English
+// sentence); Args carries the values the frontend interpolates into the string.
+type VariantReasonResponse struct {
+	Code string            `json:"code"`
+	Args map[string]string `json:"args,omitempty"`
 }
 
 // installModelRequest is the optional JSON body of POST /models/install/:id. An
@@ -165,6 +206,17 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 	// Check ORT availability once, reuse for all entries that require ONNX.
 	ortStatus := inference.CheckORTAvailability(c.CurrentSettings().BirdNET.ONNXRuntimePath)
 
+	// Hardware recommendations are gated to authenticated (or auth-not-required)
+	// requests, so an anonymous caller on an auth-enabled instance cannot read the
+	// host's hardware profile from this public endpoint. When enrichment is off,
+	// recsByVariant/recommendedVariant stay nil and every variant reports the
+	// neutral Compatible=true with no reasons.
+	var recsByVariant map[string]map[string]recommend.Recommendation
+	var recommendedVariant map[string]string
+	if c.recommendationsAllowed(ctx) {
+		recsByVariant, recommendedVariant = c.rankCatalog(visible, ortStatus)
+	}
+
 	for i := range visible {
 		entry := &visible[i]
 
@@ -193,24 +245,25 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 		}
 
 		catalog = append(catalog, CatalogEntryResponse{
-			ID:                 entry.ID,
-			Name:               entry.Name,
-			Description:        entry.Description,
-			Author:             entry.Author,
-			License:            entry.License,
-			CommercialUse:      entry.CommercialUse,
-			Category:           entry.Category,
-			Region:             entry.Region,
-			SpeciesCount:       entry.SpeciesCount,
-			Version:            entry.Version,
-			UpstreamURL:        entry.UpstreamURL,
-			Installed:          installed,
-			Compatible:         compatible,
-			IncompatibleReason: incompatibleReason,
-			TotalSizeBytes:     totalSize,
-			HasGeomodel:        classifier.HasGeomodelFiles(entry),
-			InstalledVariantID: installedVariantID,
-			Variants:           buildVariantResponses(entry, installed, installedVariantID),
+			ID:                   entry.ID,
+			Name:                 entry.Name,
+			Description:          entry.Description,
+			Author:               entry.Author,
+			License:              entry.License,
+			CommercialUse:        entry.CommercialUse,
+			Category:             entry.Category,
+			Region:               entry.Region,
+			SpeciesCount:         entry.SpeciesCount,
+			Version:              entry.Version,
+			UpstreamURL:          entry.UpstreamURL,
+			Installed:            installed,
+			Compatible:           compatible,
+			IncompatibleReason:   incompatibleReason,
+			TotalSizeBytes:       totalSize,
+			HasGeomodel:          classifier.HasGeomodelFiles(entry),
+			InstalledVariantID:   installedVariantID,
+			RecommendedVariantID: recommendedVariant[entry.ID],
+			Variants:             buildVariantResponses(entry, installed, installedVariantID, recsByVariant[entry.ID]),
 		})
 	}
 
@@ -219,11 +272,14 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 	})
 }
 
-// buildVariantResponses maps a catalog entry's variants to their API form. It
-// returns nil for a flat (single-variant) entry so the field is omitted. A Legacy
-// variant (a superseded build) is hidden unless it is the one currently installed,
-// so the gallery never offers a fresh install of a deprecated build.
-func buildVariantResponses(entry *classifier.CatalogEntry, installed bool, installedVariantID string) []CatalogVariantResponse {
+// buildVariantResponses maps a catalog entry's variants to their API form,
+// joining in the per-variant recommendations when recs is non-nil (recs is nil
+// when the request is not eligible for hardware recommendations, and is keyed by
+// variant ID). It returns nil for a flat (single-variant) entry so the field is
+// omitted, and hides a Legacy (superseded) variant unless it is the one
+// currently installed, so the gallery never offers a fresh install of a
+// deprecated build.
+func buildVariantResponses(entry *classifier.CatalogEntry, installed bool, installedVariantID string, recs map[string]recommend.Recommendation) []CatalogVariantResponse {
 	if len(entry.Variants) == 0 {
 		return nil
 	}
@@ -249,7 +305,7 @@ func buildVariantResponses(entry *classifier.CatalogEntry, installed bool, insta
 			}
 		}
 
-		variants = append(variants, CatalogVariantResponse{
+		resp := CatalogVariantResponse{
 			ID:                v.ID,
 			Region:            v.Region,
 			Precision:         v.Precision,
@@ -258,9 +314,97 @@ func buildVariantResponses(entry *classifier.CatalogEntry, installed bool, insta
 			Installed:         isInstalledVariant,
 			SizeBytes:         sizeBytes,
 			HeadlineLatencyMs: headlineLatencyMs,
-		})
+			// Neutral default: without a recommendation the variant is not claimed
+			// incompatible. Overwritten below when recommendations are present.
+			Compatible: true,
+		}
+		if rec, ok := recs[v.ID]; ok {
+			resp.Compatible = rec.Compatible
+			resp.Recommended = rec.Recommended
+			resp.Reasons = toReasonResponses(rec.Reasons)
+			resp.Blockers = toReasonResponses(rec.Blockers)
+		}
+		variants = append(variants, resp)
 	}
 	return variants
+}
+
+// recommendationsAllowed reports whether this request may receive the
+// hardware-derived recommendation fields. Auth-not-required (a home LAN with
+// auth disabled, or a subnet-bypass client) and authenticated requests both
+// qualify; an anonymous request on an auth-enabled instance does not. A nil
+// authService (tests, or WithAuthService not injected) allows enrichment,
+// because there is then no auth boundary whose leak we are guarding.
+func (c *Handler) recommendationsAllowed(ctx echo.Context) bool {
+	return c.authService == nil || c.authService.IsAuthenticated(ctx)
+}
+
+// rankCatalog computes the per-host variant recommendations for the visible
+// catalog, indexed by catalog ID then variant ID, plus the recommended variant
+// per entry.
+func (c *Handler) rankCatalog(entries []classifier.CatalogEntry, ort inference.ORTStatus) (byVariant map[string]map[string]recommend.Recommendation, recommended map[string]string) {
+	profileFn := c.hardwareProfile
+	if profileFn == nil {
+		profileFn = defaultHardwareProfile
+	}
+	profile := profileFn(ort)
+	recs := recommend.Rank(recommend.Input{
+		Capabilities:  profile.Capabilities(),
+		TotalRAMBytes: profile.TotalRAMBytes,
+		DeviceClass:   recommend.DeviceClass(profile.Board.Tier, profile.Arch),
+		Entries:       entries,
+	})
+
+	byVariant = make(map[string]map[string]recommend.Recommendation, len(entries))
+	recommended = make(map[string]string)
+	for i := range recs {
+		r := &recs[i]
+		m := byVariant[r.CatalogID]
+		if m == nil {
+			m = make(map[string]recommend.Recommendation)
+			byVariant[r.CatalogID] = m
+		}
+		m[r.VariantID] = *r
+		if r.Recommended {
+			recommended[r.CatalogID] = r.VariantID
+		}
+	}
+	return byVariant, recommended
+}
+
+// defaultHardwareProfile resolves the live host profile from the already-probed
+// ONNX Runtime status plus a per-request OpenVINO device probe, mirroring the
+// inference-status endpoint (internal/api/v2/system/inference_status.go). The ORT
+// status is passed in (probed once per request by GetModelCatalog) rather than
+// re-probed here, and the OpenVINO device list feeds GPU capability derivation.
+// It is the production value of the hardwareProfile seam.
+func defaultHardwareProfile(ort inference.ORTStatus) hwprofile.Profile {
+	ov := inference.CheckOpenVINOAvailability()
+	var devices []string
+	if ov.Supported {
+		for _, d := range []string{inference.OVDeviceCPU, inference.OVDeviceGPU} {
+			if inference.OpenVINOHasDevice(d) {
+				devices = append(devices, d)
+			}
+		}
+	}
+	return hwprofile.Hardware().WithBackends(hwprofile.Backends{
+		TFLite:   hwprofile.BackendStatus{Available: hwprofile.TFLiteLinked()},
+		ONNX:     hwprofile.BackendStatus{Available: ort.Available, Initialized: ort.Initialized, Version: ort.Version},
+		OpenVINO: hwprofile.OpenVINOStatus{Supported: ov.Supported, Active: ov.Active, Devices: devices},
+	})
+}
+
+// toReasonResponses maps recommender reasons to their API form.
+func toReasonResponses(reasons []recommend.Reason) []VariantReasonResponse {
+	if len(reasons) == 0 {
+		return nil
+	}
+	out := make([]VariantReasonResponse, len(reasons))
+	for i := range reasons {
+		out[i] = VariantReasonResponse{Code: reasons[i].Code, Args: reasons[i].Args}
+	}
+	return out
 }
 
 // GetInstalledModels returns all models that have been downloaded and installed.

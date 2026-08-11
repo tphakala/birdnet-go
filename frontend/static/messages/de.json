@@ -5283,6 +5283,28 @@
     "gallery": {
       "title": "Modellgalerie",
       "description": "Klassifikatormodelle für Vogel- und Fledermauserkennungen verwalten.",
+      "variants": {
+        "title": "Modellvariante",
+        "recommended": "Empfohlen",
+        "recommendedForHardware": "Am besten für Ihre Hardware",
+        "installed": "Installiert",
+        "default": "Standard",
+        "incompatible": "Für Ihre Hardware nicht verfügbar",
+        "showAll": "Alle Varianten anzeigen ({count})",
+        "latency": "~{ms} ms"
+      },
+      "reasons": {
+        "backendRecommended": "Läuft auf {backend}, dem empfohlenen Backend für Ihre Hardware",
+        "backendSupported": "Läuft auf {backend}",
+        "precisionFp16Native": "Half-Precision-Build, abgestimmt auf Ihren Prozessor",
+        "ramConstrainedFit": "Quantisierter Build, optimiert für Ihren verfügbaren Speicher",
+        "benchmarkMeasured": "Am schnellsten auf Ihrem Gerät laut Benchmarks",
+        "variantLegacy": "Durch einen neueren Build ersetzt",
+        "archUnsupported": "Erfordert einen {required}-Prozessor",
+        "backendMissing": "Benötigt ein Inference-Backend, das nicht erreichbar ist ({required})",
+        "ramInsufficient": "Benötigt mindestens {requiredMb} MB Speicher",
+        "hardwareExcluded": "Wird von Ihrer Hardware nicht unterstützt ({token})"
+      },
       "tabs": {
         "installed": "Installiert",
         "available": "Verfügbar"

@@ -42,6 +42,7 @@
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
+  import ModelVariantPicker from '$lib/desktop/features/settings/components/ModelVariantPicker.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import FalsePositiveFilterControl, {
     type FilterLevel,
@@ -66,6 +67,7 @@
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { toastActions } from '$lib/stores/toast';
   import { formatBytes, formatNumber } from '$lib/utils/formatters';
+  import { pickPreselectedVariant } from '$lib/utils/variantSelection';
   import { safeArrayAccess } from '$lib/utils/security';
   import { loggers } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
@@ -131,6 +133,23 @@
   let completionTimer: ReturnType<typeof setTimeout> | undefined;
 
   let licenseModel = $state<CatalogEntry | null>(null);
+  // The variant preselected in the license/install dialog: the server-recommended
+  // one by default, overridable by the user. Empty for flat (variant-less) entries.
+  let selectedVariantId = $state('');
+  // The download-size row and the install target follow the selected variant when
+  // the entry has variants; otherwise they fall back to the whole-entry size.
+  const licenseSelectedVariant = $derived(
+    licenseModel?.variants?.find(v => v.id === selectedVariantId) ?? null
+  );
+  const licenseDownloadSize = $derived(
+    licenseSelectedVariant?.sizeBytes ?? licenseModel?.totalSizeBytes ?? 0
+  );
+  // Block install when the selected variant cannot run on this host (e.g. every
+  // variant is incompatible, so the preselected one is blocked). The default
+  // path preselects a compatible variant, so this only fires in the all-blocked case.
+  const installBlocked = $derived(
+    licenseSelectedVariant != null && !licenseSelectedVariant.compatible
+  );
   let removeConfirmModel = $state<CatalogEntry | null>(null);
 
   // Element bindings should NOT use $state - causes showModal() to fail
@@ -895,6 +914,9 @@
 
   function openLicenseDialog(entry: CatalogEntry) {
     licenseModel = entry;
+    // Smart default: preselect the recommended variant (falls back sensibly when
+    // there is no recommendation). Empty string for flat entries.
+    selectedVariantId = pickPreselectedVariant(entry);
     licenseDialogRef?.showModal();
   }
 
@@ -905,13 +927,19 @@
 
   async function handleInstall() {
     if (!licenseModel) return;
+    // Never install a variant the recommender flagged incompatible with this host
+    // (the button is disabled in this state; this guards a programmatic call too).
+    if (installBlocked) return;
     const modelId = licenseModel.id;
+    // Only send a variantId when the entry actually offers variants; a flat entry
+    // installs its single build with no variant.
+    const variantId = licenseModel.variants?.length ? selectedVariantId : undefined;
     closeLicenseDialog();
     installingId = modelId;
     downloadProgress = null;
 
     try {
-      await installModel(modelId);
+      await installModel(modelId, variantId);
 
       if (progressCleanup) progressCleanup();
       progressCleanup = subscribeInstallProgress(
@@ -2212,11 +2240,21 @@
                 >{t('analysis.gallery.license.downloadSize')}</th
               >
               <td class="px-4 pt-1 pb-4 text-right align-top text-[var(--color-base-content)]"
-                >{formatBytes(licenseModel.totalSizeBytes)}</td
+                >{formatBytes(licenseDownloadSize)}</td
               >
             </tr>
           </tbody>
         </table>
+
+        {#if licenseModel.variants && licenseModel.variants.length > 0}
+          <ModelVariantPicker
+            variants={licenseModel.variants}
+            installedVariantId={licenseModel.installedVariantId}
+            {selectedVariantId}
+            onSelect={id => (selectedVariantId = id)}
+            idPrefix="license-variant"
+          />
+        {/if}
 
         {#if !licenseModel.commercialUse}
           <div
@@ -2230,16 +2268,25 @@
         {/if}
       </div>
 
+      {#if installBlocked}
+        <p class="mt-4 text-sm text-[var(--color-error)]" role="alert">
+          {t('analysis.gallery.variants.incompatible')}
+        </p>
+      {/if}
       <div class="mt-6 flex justify-end gap-3">
         <button
+          type="button"
           onclick={closeLicenseDialog}
           class="rounded-lg border border-[var(--color-base-300)] px-4 py-2 text-sm font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] transition-colors"
         >
           {t('common.cancel')}
         </button>
         <button
+          type="button"
           onclick={handleInstall}
-          class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors"
+          disabled={installBlocked}
+          title={installBlocked ? t('analysis.gallery.variants.incompatible') : undefined}
+          class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Download class="size-4" />
           {t('analysis.gallery.license.acceptAndInstall')}

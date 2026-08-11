@@ -5283,6 +5283,28 @@
     "gallery": {
       "title": "Modeļu galerija",
       "description": "Pārvaldiet klasifikācijas modeļus putnu un sikspārņu noteikšanai.",
+      "variants": {
+        "title": "Modeļa variants",
+        "recommended": "Ieteicams",
+        "recommendedForHardware": "Labākais jūsu aparatūrai",
+        "installed": "Instalēts",
+        "default": "Noklusējuma",
+        "incompatible": "Nav pieejams jūsu aparatūrai",
+        "showAll": "Rādīt visus variantus ({count})",
+        "latency": "~{ms} ms"
+      },
+      "reasons": {
+        "backendRecommended": "Darbojas ar {backend}, kas ir ieteicamā aizmugursistēma jūsu aparatūrai",
+        "backendSupported": "Darbojas ar {backend}",
+        "precisionFp16Native": "Pusprecizitātes versija, kas pielāgota jūsu procesoram",
+        "ramConstrainedFit": "Kvantizēta versija, kas pielāgota jūsu pieejamajai atmiņai",
+        "benchmarkMeasured": "Ātrākais jūsu ierīcē saskaņā ar veiktspējas testiem",
+        "variantLegacy": "Aizstāts ar jaunāku versiju",
+        "archUnsupported": "Nepieciešams {required} procesors",
+        "backendMissing": "Nepieciešama inferences aizmugursistēma, ko jūsu versija nevar sasniegt ({required})",
+        "ramInsufficient": "Nepieciešami vismaz {requiredMb} MB atmiņas",
+        "hardwareExcluded": "Nav atbalstīts jūsu aparatūrā ({token})"
+      },
       "tabs": {
         "installed": "Instalētie",
         "available": "Pieejamie"
