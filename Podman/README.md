@@ -70,6 +70,8 @@ podman run -d --name birdnet-go \
 
 Note that `--group-add keep-groups` on its own is not enough with the default configuration: the entrypoint drops privileges with `gosu`, which clears the inherited `audio` group, so the sound card becomes inaccessible after the drop. Adding `--userns=keep-id` (as above) avoids the privilege drop and is the reliable recipe.
 
+`--group-add keep-groups` requires the `crun` OCI runtime: it works by telling the runtime to skip the `setgroups` call so the container keeps the host's supplementary groups, and `runc` does not implement that annotation. Podman uses `crun` by default on the distributions this project targets, so this is usually already the case; check yours with `podman info --format '{{.Host.OCIRuntime.Name}}'`.
+
 Set `SKIP_DEVICE_PERMS=true` to make the entrypoint skip all `/dev/snd` and `/dev/dri` permission handling, for example when your runtime configuration already grants device access or when you want the device fixups silenced entirely.
 
 ## Compatibility
