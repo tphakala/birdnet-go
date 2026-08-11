@@ -468,9 +468,6 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// (c.media.ServeSpeciesImageProxy). They are passed as bound method values; c
 	// is fully constructed here, so the method values are stable for its lifetime.
 	c.species = species.New(c.Core, c.loadCommonNameMap, c.media.ServeSpeciesImageProxy)
-	// The models handler needs only the shared core (ModelManager and the
-	// settings/error/log/goroutine helpers all promote from it).
-	c.models = models.New(c.Core)
 	// The support handler needs only the shared core (settings, datastore, V2
 	// manager, and the error/log/goroutine helpers all promote from it).
 	c.support = support.New(c.Core)
@@ -549,6 +546,15 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// Settings/AuthMiddleware helpers promote from c.Core; the live audio-level
 	// channel is wired later via SetAudioLevelChan.
 	c.audio = audioapi.New(c.Core, c.authService)
+
+	// Construct the models domain handler AFTER the functional options are applied
+	// so it captures the post-option authService. The catalog endpoint uses it to
+	// gate the hardware-derived recommendation fields to authenticated (or
+	// auth-not-required) requests, so an anonymous caller on an auth-enabled
+	// instance does not learn the host's hardware profile. authService never
+	// changes after this point, so capturing it here is behaviorally identical to
+	// a per-request read; every other models dependency promotes from c.Core.
+	c.models = models.New(c.Core, c.authService)
 
 	// Log auth configuration status
 	log := GetLogger()

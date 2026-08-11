@@ -3846,6 +3846,24 @@ export type TranslationKey =
   | 'analysis.downloadSource.endpoint.validationMessage'
   | 'analysis.gallery.title'
   | 'analysis.gallery.description'
+  | 'analysis.gallery.variants.title'
+  | 'analysis.gallery.variants.recommended'
+  | 'analysis.gallery.variants.recommendedForHardware'
+  | 'analysis.gallery.variants.installed'
+  | 'analysis.gallery.variants.default'
+  | 'analysis.gallery.variants.incompatible'
+  | 'analysis.gallery.variants.showAll' // params: count
+  | 'analysis.gallery.variants.latency' // params: ms
+  | 'analysis.gallery.reasons.backendRecommended' // params: backend
+  | 'analysis.gallery.reasons.backendSupported' // params: backend
+  | 'analysis.gallery.reasons.precisionFp16Native'
+  | 'analysis.gallery.reasons.ramConstrainedFit'
+  | 'analysis.gallery.reasons.benchmarkMeasured'
+  | 'analysis.gallery.reasons.variantLegacy'
+  | 'analysis.gallery.reasons.archUnsupported' // params: required
+  | 'analysis.gallery.reasons.backendMissing' // params: required
+  | 'analysis.gallery.reasons.ramInsufficient' // params: requiredMb
+  | 'analysis.gallery.reasons.hardwareExcluded' // params: token
   | 'analysis.gallery.tabs.installed'
   | 'analysis.gallery.tabs.available'
   | 'analysis.gallery.loading'
@@ -4407,6 +4425,14 @@ export type TranslationParams = {
     version: string | number;
     species: string | number;
   };
+  'analysis.gallery.variants.showAll': { count: string | number };
+  'analysis.gallery.variants.latency': { ms: string | number };
+  'analysis.gallery.reasons.backendRecommended': { backend: string | number };
+  'analysis.gallery.reasons.backendSupported': { backend: string | number };
+  'analysis.gallery.reasons.archUnsupported': { required: string | number };
+  'analysis.gallery.reasons.backendMissing': { required: string | number };
+  'analysis.gallery.reasons.ramInsufficient': { requiredMb: string | number };
+  'analysis.gallery.reasons.hardwareExcluded': { token: string | number };
   'analysis.gallery.species': { count: string | number };
   'analysis.gallery.removeDialog.title': { name: string | number };
 };

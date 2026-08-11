@@ -17,7 +17,7 @@ import (
 func TestModelsRouteRegistration(t *testing.T) {
 	e := echo.New()
 	core := apitest.NewCore(t, apitest.WithEcho(e))
-	h := New(core)
+	h := New(core, nil)
 
 	h.RegisterRoutes(core.Group)
 
@@ -40,7 +40,7 @@ func TestModelsRouteRegistration(t *testing.T) {
 // unused model.
 func TestInstallModel_RejectsHiddenEntries(t *testing.T) {
 	core := apitest.NewCore(t)
-	h := New(core)
+	h := New(core, nil)
 	e := echo.New()
 
 	hiddenIDs := []string{"birdnet-v2.4"}

@@ -5283,6 +5283,28 @@
     "gallery": {
       "title": "Modellengalerij",
       "description": "Beheer classificatiemodellen voor vogel- en vleermuisdetectie.",
+      "variants": {
+        "title": "Modelvariant",
+        "recommended": "Aanbevolen",
+        "recommendedForHardware": "Beste voor jouw hardware",
+        "installed": "Geïnstalleerd",
+        "default": "Standaard",
+        "incompatible": "Niet beschikbaar voor uw hardware",
+        "showAll": "Toon alle varianten ({count})",
+        "latency": "~{ms} ms"
+      },
+      "reasons": {
+        "backendRecommended": "Draait op {backend}, de aanbevolen backend voor jouw hardware",
+        "backendSupported": "Draait op {backend}",
+        "precisionFp16Native": "Halve-precisie versie afgestemd op je processor",
+        "ramConstrainedFit": "Gekwantiseerde versie aangepast aan je beschikbare geheugen",
+        "benchmarkMeasured": "Snelste op jouw apparaat in gemeten benchmarks",
+        "variantLegacy": "Vervangen door een nieuwere versie",
+        "archUnsupported": "Vereist een {required} processor",
+        "backendMissing": "Heeft een inference backend nodig die je installatie niet kan bereiken ({required})",
+        "ramInsufficient": "Heeft minimaal {requiredMb} MB geheugen nodig",
+        "hardwareExcluded": "Niet ondersteund op jouw hardware ({token})"
+      },
       "tabs": {
         "installed": "Geïnstalleerd",
         "available": "Beschikbaar"

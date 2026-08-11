@@ -5283,6 +5283,28 @@
     "gallery": {
       "title": "Galeria de modelos",
       "description": "Gerenciar modelos classificadores para detecção de aves e morcegos.",
+      "variants": {
+        "title": "Variante do modelo",
+        "recommended": "Recomendado",
+        "recommendedForHardware": "Ideal para o seu hardware",
+        "installed": "Instalado",
+        "default": "Padrão",
+        "incompatible": "Não disponível para o seu hardware",
+        "showAll": "Mostrar todas as variantes ({count})",
+        "latency": "~{ms} ms"
+      },
+      "reasons": {
+        "backendRecommended": "Roda em {backend}, o backend recomendado para o seu hardware",
+        "backendSupported": "Roda em {backend}",
+        "precisionFp16Native": "Versão de meia precisão ajustada para o seu processador",
+        "ramConstrainedFit": "Versão quantizada otimizada para a memória disponível",
+        "benchmarkMeasured": "O mais rápido no seu dispositivo segundo os testes de desempenho",
+        "variantLegacy": "Substituído por uma versão mais recente",
+        "archUnsupported": "Requer um processador {required}",
+        "backendMissing": "Necessita de um backend de inferência que a sua versão não consegue alcançar ({required})",
+        "ramInsufficient": "Necessita de pelo menos {requiredMb} MB de memória",
+        "hardwareExcluded": "Não suportado no seu hardware ({token})"
+      },
       "tabs": {
         "installed": "Instalados",
         "available": "Disponíveis"

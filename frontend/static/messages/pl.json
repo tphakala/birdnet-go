@@ -5283,6 +5283,28 @@
     "gallery": {
       "title": "Galeria modeli",
       "description": "Zarządzaj modelami klasyfikatorów do detekcji ptaków i nietoperzy.",
+      "variants": {
+        "title": "Wariant modelu",
+        "recommended": "Zalecane",
+        "recommendedForHardware": "Najlepsze dla twojego sprzętu",
+        "installed": "Zainstalowany",
+        "default": "Domyślne",
+        "incompatible": "Niedostępne dla Twojego sprzętu",
+        "showAll": "Pokaż wszystkie warianty ({count})",
+        "latency": "~{ms} ms"
+      },
+      "reasons": {
+        "backendRecommended": "Działa na {backend}, zalecanym backendzie dla twojego sprzętu",
+        "backendSupported": "Działa na {backend}",
+        "precisionFp16Native": "Wersja o połowicznej precyzji dopasowana do twojego procesora",
+        "ramConstrainedFit": "Skwantyzowana wersja dopasowana do dostępnej pamięci",
+        "benchmarkMeasured": "Najszybszy na twoim urządzeniu w przeprowadzonych testach",
+        "variantLegacy": "Zastąpiony nowszą wersją",
+        "archUnsupported": "Wymaga procesora {required}",
+        "backendMissing": "Wymaga backendu wnioskowania, który jest niedostępny ({required})",
+        "ramInsufficient": "Wymaga co najmniej {requiredMb} MB pamięci",
+        "hardwareExcluded": "Brak wsparcia na twoim sprzęcie ({token})"
+      },
       "tabs": {
         "installed": "Zainstalowane",
         "available": "Dostępne"

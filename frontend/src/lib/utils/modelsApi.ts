@@ -23,9 +23,14 @@ export async function fetchInstalled(): Promise<InstalledModel[]> {
   return api.get<InstalledModel[]>(`${BASE}/installed`);
 }
 
-/** Start an asynchronous model install. Returns once the server accepts the request. */
-export async function installModel(id: string): Promise<void> {
-  await api.post(`${BASE}/install/${encodeURIComponent(id)}`);
+/**
+ * Start an asynchronous model install. Returns once the server accepts the
+ * request. When `variantId` is given the server installs (or switches to) that
+ * hardware/regional variant; omitting it installs the entry's default variant.
+ */
+export async function installModel(id: string, variantId?: string): Promise<void> {
+  const body = variantId ? { variantId } : undefined;
+  await api.post(`${BASE}/install/${encodeURIComponent(id)}`, body);
 }
 
 /** Remove an installed model from disk. */
