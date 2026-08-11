@@ -38,12 +38,25 @@ services:
     volumes:
       - ./config:/config
       - ./data:/data
-    # Mount HLS stream segment files directory as tmpfs (RAM disk)
+    # Mount HLS stream segment files directory as tmpfs (RAM disk). mode=1777 (a
+    # sticky world-writable dir like /tmp) keeps it writable whatever UID the app
+    # runs as, including under the rootless-audio opt-in below.
     tmpfs:
-      - /config/hls:exec,size=50M,uid=${BIRDNET_UID:-1000},gid=${BIRDNET_GID:-1000},mode=0755
+      - /config/hls:exec,size=50M,mode=1777
     # For ALSA audio input (sound card)
     devices:
       - /dev/snd:/dev/snd
+    # Rootless audio (opt-in): to give the app sound-card access under rootless
+    # Podman, uncomment userns_mode + group_add below AND add this at the very top
+    # of the file (podman-compose pods conflict with a per-container userns):
+    #   x-podman:
+    #     in_pod: false
+    # keep-id runs the app as your host UID, so an EXISTING install must re-own
+    # its volumes first (see Podman/README.md). It needs the crun OCI runtime
+    # (install crun; Podman then uses it) and a recent podman-compose.
+    #userns_mode: keep-id
+    #group_add:
+    #  - keep-groups
     # Podman uses bridge networking - no need for host.docker.internal
 
   # Optional: Add Cloudflared for secure internet access through Cloudflare Tunnel
