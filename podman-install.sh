@@ -1840,14 +1840,20 @@ EOF
             sudo apt-get update -qq >/dev/null 2>&1 || true
             sudo apt-get install -qq -y crun >/dev/null 2>&1 || true
         fi
-        # Only enable keep-id/keep-groups when crun is actually available; without
-        # it keep-groups is a silent no-op and the sound card stays inaccessible,
-        # so leave the unit in its default (subuid) mode rather than switch the app
-        # to the host UID for no benefit.
-        if command -v crun >/dev/null 2>&1; then
+        # Enable keep-id/keep-groups when preserving a prior opt-in (reverting it
+        # would break volumes already re-owned to the host UID), or on a fresh
+        # install when crun is available. On a fresh install without crun, leave
+        # the default (subuid) mode instead: keep-groups would be a no-op, so
+        # switching the app to the host UID would gain nothing.
+        if [ "$had_rootless_audio" = "true" ] || command -v crun >/dev/null 2>&1; then
             sed -i 's|^#UserNS=keep-id|UserNS=keep-id|; s|^#GroupAdd=keep-groups|GroupAdd=keep-groups|' "$quadlet_target"
-            log_message "INFO" "Enabled rootless audio (keep-id + keep-groups + crun) in Quadlet unit"
-            print_message "🔊 Rootless audio enabled (keep-id + keep-groups + crun): sound card works out of the box" "$GREEN"
+            if command -v crun >/dev/null 2>&1; then
+                log_message "INFO" "Enabled rootless audio (keep-id + keep-groups + crun) in Quadlet unit"
+                print_message "🔊 Rootless audio enabled (keep-id + keep-groups + crun): sound card works out of the box" "$GREEN"
+            else
+                log_message "WARN" "Kept rootless audio (keep-id) enabled but crun is missing; audio needs crun"
+                print_message "⚠️  Rootless audio (keep-id) kept enabled, but crun is missing so the sound card will not work until you install it (see Podman/README.md)" "$YELLOW"
+            fi
         else
             log_message "WARN" "crun unavailable; left rootless audio disabled (see Podman/README.md)"
             print_message "⚠️  crun is unavailable, so rootless audio was not enabled (see Podman/README.md)" "$YELLOW"
