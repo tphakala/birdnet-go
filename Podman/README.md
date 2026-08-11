@@ -33,11 +33,9 @@ Copy the appropriate example file to `.env` and customize for your setup.
 
 ## Entrypoint Script
 
-- **`entrypoint-podman.sh`** - Podman-optimized entrypoint script
-  - Handles both rootful and rootless container execution
-  - Uses gosu for privilege dropping in rootful mode
-  - Includes pre-flight checks (disk space, config writability)
-  - Timezone configuration support via TZ environment variable
+The published container images use the shared entrypoint baked in from `Docker/entrypoint.sh`, which already handles both rootful and rootless execution under Docker and Podman (user/group setup, device permissions, timezone, and pre-flight checks for disk space and config writability).
+
+- **`entrypoint-podman.sh`** - kept for reference only. It is **not** part of the published images and is not wired into any compose or Quadlet file, so it does not run in normal deployments.
 
 ## Installation
 
@@ -54,6 +52,25 @@ The script will:
 3. Detect and handle any existing Docker installations
 4. Set up Quadlet systemd integration
 5. Configure and start BirdNET-Go
+
+## Rootless Audio Access
+
+Rootless Podman runs the container inside a user namespace. Host-owned `/dev/snd` nodes appear as `nobody:nogroup` inside that namespace, and the container's "root" is an unprivileged host user that cannot change their permissions. Older images tried anyway and printed `chmod: changing permissions of '/dev/snd/...': Operation not permitted` for every node. The entrypoint now detects the rootless user namespace, skips that futile fixup, and prints a short note instead of the error spam.
+
+To actually capture audio in rootless Podman, keep your host user identity and its supplementary groups inside the container with `--userns=keep-id --group-add keep-groups`. Your host user must be a member of the host `audio` group. With `keep-id` the app runs directly as your host UID (not as a namespaced fake root), so the entrypoint takes its rootless path and does not drop privileges, which preserves the `audio` group membership that `keep-groups` provides:
+
+```bash
+podman run -d --name birdnet-go \
+  --userns=keep-id --group-add keep-groups \
+  --device /dev/snd \
+  -p 8080:8080 \
+  -v ./config:/config -v ./data:/data \
+  ghcr.io/tphakala/birdnet-go:nightly
+```
+
+Note that `--group-add keep-groups` on its own is not enough with the default configuration: the entrypoint drops privileges with `gosu`, which clears the inherited `audio` group, so the sound card becomes inaccessible after the drop. Adding `--userns=keep-id` (as above) avoids the privilege drop and is the reliable recipe.
+
+Set `SKIP_DEVICE_PERMS=true` to make the entrypoint skip all `/dev/snd` and `/dev/dri` permission handling, for example when your runtime configuration already grants device access or when you want the device fixups silenced entirely.
 
 ## Compatibility
 
