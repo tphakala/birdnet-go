@@ -70,7 +70,7 @@ Note that `--group-add keep-groups` on its own is not enough with the default co
 
 `--group-add keep-groups` requires the `crun` OCI runtime: it works by telling the runtime to skip the `setgroups` call so the container keeps the host's supplementary groups, and `runc` does not implement that annotation (under `runc` the container still starts, but the sound card stays inaccessible). Some distributions ship `podman` with `runc` and without `crun` (Debian 13 for example), so install `crun` if it is missing and Podman will then prefer it. Check your active runtime with `podman info --format '{{.Host.OCIRuntime.Name}}'`.
 
-Set `SKIP_DEVICE_PERMS=true` to make the entrypoint skip all `/dev/snd` and `/dev/dri` permission handling, for example when your runtime configuration already grants device access or when you want to skip the device fixups entirely. The entrypoint still prints a one-line confirmation that the flag took effect, mirroring `SKIP_CHOWN`.
+Set `SKIP_DEVICE_PERMS=true` to make the entrypoint skip all `/dev/snd` and `/dev/dri` permission handling, for example when your runtime configuration already grants device access or when you want to skip the device permission fixes entirely. The entrypoint still prints a one-line confirmation that the flag took effect, mirroring `SKIP_CHOWN`.
 
 ### Enabling audio in the shipped compose and Quadlet files
 

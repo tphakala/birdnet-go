@@ -16,7 +16,7 @@ AddDevice=-/dev/snd:/dev/snd
 # Rootless audio (opt-in): uncomment the two lines below to reach the sound card
 # under rootless Podman. It runs the app as your host UID, so an EXISTING install
 # must re-own its volumes first, and it needs the crun OCI runtime (install crun;
-# Podman then uses it). A fresh podman-install.sh run does both automatically.
+# Podman then uses it). A fresh install via podman-install.sh does both for you.
 # See Podman/README.md (Rootless Audio Access).
 #UserNS=keep-id
 #GroupAdd=keep-groups
