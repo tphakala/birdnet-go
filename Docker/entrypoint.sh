@@ -11,8 +11,9 @@ SKIP_CHOWN="$(echo "${SKIP_CHOWN:-false}" | tr '[:upper:]' '[:lower:]')"
 
 # SKIP_DEVICE_PERMS: set to "true" to skip all /dev/snd and /dev/dri permission
 # and group adjustments. Useful when the container runtime already grants device
-# access (for example rootless Podman with --group-add keep-groups), or to skip
-# the device fixups entirely (for example on read-only device mounts).
+# access (for example rootless Podman with --userns=keep-id --group-add
+# keep-groups), or to skip the device fixups entirely (for example on read-only
+# device mounts).
 SKIP_DEVICE_PERMS="$(echo "${SKIP_DEVICE_PERMS:-false}" | tr '[:upper:]' '[:lower:]')"
 
 echo "Starting BirdNET-Go with UID:$APP_UID, GID:$APP_GID"
