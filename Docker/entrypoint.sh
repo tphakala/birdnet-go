@@ -11,8 +11,8 @@ SKIP_CHOWN="$(echo "${SKIP_CHOWN:-false}" | tr '[:upper:]' '[:lower:]')"
 
 # SKIP_DEVICE_PERMS: set to "true" to skip all /dev/snd and /dev/dri permission
 # and group adjustments. Useful when the container runtime already grants device
-# access (for example rootless Podman with --group-add keep-groups), or to
-# silence device fixups on read-only device mounts.
+# access (for example rootless Podman with --group-add keep-groups), or to skip
+# the device fixups entirely (for example on read-only device mounts).
 SKIP_DEVICE_PERMS="$(echo "${SKIP_DEVICE_PERMS:-false}" | tr '[:upper:]' '[:lower:]')"
 
 echo "Starting BirdNET-Go with UID:$APP_UID, GID:$APP_GID"
@@ -47,11 +47,11 @@ PROC_UID_MAP="/proc/self/uid_map"
 
 # Detect whether "root" is only root inside a user namespace, i.e. rootless
 # Podman/Docker (or dockerd with userns-remap). Such a namespaced fake root has
-# no capability over host-owned device nodes, so chmod on /dev/snd or /dev/dri
-# always fails with EPERM and only spams errors. Real (rootful) root maps
-# "0 0 4294967295" in uid_map; a namespaced root maps container UID 0 to a
-# nonzero host UID. If uid_map is unreadable we assume real root and keep the
-# previous behavior.
+# no capability over host-owned device nodes, so a chmod on the host-owned
+# /dev/snd nodes always fails with EPERM and only spams errors. Real (rootful)
+# root maps "0 0 4294967295" in uid_map; a namespaced root maps container UID 0
+# to a nonzero host UID. If uid_map is unreadable we assume real root and keep
+# the previous behavior.
 is_rootless_userns() {
     local host_uid_for_root
     host_uid_for_root=$(awk '$1 == 0 { print $2; exit }' "$PROC_UID_MAP" 2>/dev/null) || true
@@ -264,7 +264,7 @@ if [ -d "/dev/dri" ]; then
         # started already in the host render group (e.g. via --group-add
         # keep-groups or --group-add on the run command). This is a heads-up, not
         # an error.
-        echo "Note: /dev/dri present but running rootless; relying on pre-set render group membership for Intel iGPU access"
+        echo "Note: /dev/dri present but running as a non-root user; relying on pre-set render group membership for Intel iGPU access"
     fi
 fi
 
