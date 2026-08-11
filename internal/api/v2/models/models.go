@@ -45,7 +45,9 @@ type Handler struct {
 	// is an injectable seam: nil means "use the default live probe"
 	// (defaultHardwareProfile), and tests set it to synthetic hardware. A
 	// per-Handler field rather than a package global, so tests stay parallel-safe.
-	hardwareProfile func(onnxRuntimePath string) hwprofile.Profile
+	// It receives the request's already-probed ONNX Runtime status so the default
+	// probe does not re-check ORT that GetModelCatalog just checked.
+	hardwareProfile func(ort inference.ORTStatus) hwprofile.Profile
 }
 
 // New builds a models Handler around the shared core and the facade-injected
@@ -212,7 +214,7 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 	var recsByVariant map[string]map[string]recommend.Recommendation
 	var recommendedVariant map[string]string
 	if c.recommendationsAllowed(ctx) {
-		recsByVariant, recommendedVariant = c.rankCatalog(visible)
+		recsByVariant, recommendedVariant = c.rankCatalog(visible, ortStatus)
 	}
 
 	for i := range visible {
@@ -340,12 +342,12 @@ func (c *Handler) recommendationsAllowed(ctx echo.Context) bool {
 // rankCatalog computes the per-host variant recommendations for the visible
 // catalog, indexed by catalog ID then variant ID, plus the recommended variant
 // per entry.
-func (c *Handler) rankCatalog(entries []classifier.CatalogEntry) (byVariant map[string]map[string]recommend.Recommendation, recommended map[string]string) {
+func (c *Handler) rankCatalog(entries []classifier.CatalogEntry, ort inference.ORTStatus) (byVariant map[string]map[string]recommend.Recommendation, recommended map[string]string) {
 	profileFn := c.hardwareProfile
 	if profileFn == nil {
 		profileFn = defaultHardwareProfile
 	}
-	profile := profileFn(c.CurrentSettings().BirdNET.ONNXRuntimePath)
+	profile := profileFn(ort)
 	recs := recommend.Rank(recommend.Input{
 		Capabilities:  profile.Capabilities(),
 		TotalRAMBytes: profile.TotalRAMBytes,
@@ -370,13 +372,13 @@ func (c *Handler) rankCatalog(entries []classifier.CatalogEntry) (byVariant map[
 	return byVariant, recommended
 }
 
-// defaultHardwareProfile resolves the live host profile with per-request backend
-// probes, mirroring the inference-status endpoint (internal/api/v2/system/
-// inference_status.go): the ONNX Runtime path comes from settings so a
-// hot-reloaded runtime path is honored, and the OpenVINO device list feeds GPU
-// capability derivation. It is the production value of the hardwareProfile seam.
-func defaultHardwareProfile(onnxRuntimePath string) hwprofile.Profile {
-	ort := inference.CheckORTAvailability(onnxRuntimePath)
+// defaultHardwareProfile resolves the live host profile from the already-probed
+// ONNX Runtime status plus a per-request OpenVINO device probe, mirroring the
+// inference-status endpoint (internal/api/v2/system/inference_status.go). The ORT
+// status is passed in (probed once per request by GetModelCatalog) rather than
+// re-probed here, and the OpenVINO device list feeds GPU capability derivation.
+// It is the production value of the hardwareProfile seam.
+func defaultHardwareProfile(ort inference.ORTStatus) hwprofile.Profile {
 	ov := inference.CheckOpenVINOAvailability()
 	var devices []string
 	if ov.Supported {

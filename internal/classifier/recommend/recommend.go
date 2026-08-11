@@ -9,8 +9,8 @@
 package recommend
 
 import (
+	"cmp"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -254,8 +254,14 @@ func evaluateVariant(catalogID string, v *classifier.CatalogVariant, in *Input, 
 	if len(v.Requirements.Arch) > 0 && !anyPresent(v.Requirements.Arch, in.Capabilities) {
 		blockers = append(blockers, Reason{Code: BlockerArchUnsupported, Args: joinArg("required", v.Requirements.Arch)})
 	}
+	// The explicit Requirements.Backends any-of filter and the backendTerm
+	// candidates-empty check below both mean "this host reaches no usable backend
+	// for the variant". A variant that trips both must still surface a single
+	// backend.missing blocker, so the second occurrence is suppressed.
+	backendMissing := false
 	if len(v.Requirements.Backends) > 0 && !anyPresent(v.Requirements.Backends, in.Capabilities) {
 		blockers = append(blockers, Reason{Code: BlockerBackendMissing, Args: joinArg("required", v.Requirements.Backends)})
+		backendMissing = true
 	}
 	// The RAM filter applies only when host RAM is known (TotalRAMBytes > 0).
 	// When memory detection failed, hwprofile reports 0; an unknown RAM figure is
@@ -276,7 +282,9 @@ func evaluateVariant(catalogID string, v *classifier.CatalogVariant, in *Input, 
 	// records the rank used to break score ties.
 	backendRank := backendRankUnavailable
 	if term, missing := backendTerm(v, in.Capabilities); missing {
-		blockers = append(blockers, Reason{Code: BlockerBackendMissing, Args: joinArg("required", backendKeys(v.Backends))})
+		if !backendMissing {
+			blockers = append(blockers, Reason{Code: BlockerBackendMissing, Args: joinArg("required", backendKeys(v.Backends))})
+		}
 	} else if term.applies {
 		score += term.score
 		reasons = append(reasons, Reason{Code: term.code, Args: map[string]string{"backend": term.backend}})
@@ -455,21 +463,24 @@ func latencyRange(latencies map[string]int) (minLat, maxLat int) {
 // sortScored orders variants best-first: compatible before blocked, then higher
 // score, then better backend rank, then smaller download, then variant id.
 func sortScored(scoredVariants []scoredVariant) {
-	sort.SliceStable(scoredVariants, func(a, b int) bool {
-		x, y := &scoredVariants[a], &scoredVariants[b]
+	slices.SortStableFunc(scoredVariants, func(x, y scoredVariant) int {
 		if x.rec.Compatible != y.rec.Compatible {
-			return x.rec.Compatible
+			if x.rec.Compatible {
+				return -1
+			}
+			return 1
 		}
-		if x.rec.Score != y.rec.Score {
-			return x.rec.Score > y.rec.Score
+		// Score is ranked descending, so y is compared against x.
+		if c := cmp.Compare(y.rec.Score, x.rec.Score); c != 0 {
+			return c
 		}
-		if x.backendRank != y.backendRank {
-			return x.backendRank < y.backendRank
+		if c := cmp.Compare(x.backendRank, y.backendRank); c != 0 {
+			return c
 		}
-		if x.sizeBytes != y.sizeBytes {
-			return x.sizeBytes < y.sizeBytes
+		if c := cmp.Compare(x.sizeBytes, y.sizeBytes); c != 0 {
+			return c
 		}
-		return x.rec.VariantID < y.rec.VariantID
+		return cmp.Compare(x.rec.VariantID, y.rec.VariantID)
 	})
 }
 

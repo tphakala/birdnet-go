@@ -13,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/classifier/recommend"
 	"github.com/tphakala/birdnet-go/internal/hwprofile"
+	"github.com/tphakala/birdnet-go/internal/inference"
 )
 
 // stubAuth is a minimal auth.Service double that answers only IsAuthenticated.
@@ -79,7 +80,7 @@ func findVariant(entry *CatalogEntryResponse, id string) *CatalogVariantResponse
 func TestGetModelCatalog_MarksRecommendedVariant(t *testing.T) {
 	core := apitest.NewCore(t)
 	h := New(core, nil) // nil authService -> enrichment allowed
-	h.hardwareProfile = func(string) hwprofile.Profile { return amd64ONNXProfile() }
+	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile { return amd64ONNXProfile() }
 
 	perch := findEntry(catalogRequest(t, h), "perch-v2")
 	require.NotNil(t, perch)
@@ -105,7 +106,7 @@ func TestGetModelCatalog_MarksRecommendedVariant(t *testing.T) {
 func TestGetModelCatalog_BlockedVariantCarriesBlockers(t *testing.T) {
 	core := apitest.NewCore(t)
 	h := New(core, nil)
-	h.hardwareProfile = func(string) hwprofile.Profile { return amd64ONNXProfile() }
+	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile { return amd64ONNXProfile() }
 
 	perch := findEntry(catalogRequest(t, h), "perch-v2")
 	require.NotNil(t, perch)
@@ -121,7 +122,7 @@ func TestGetModelCatalog_BlockedVariantCarriesBlockers(t *testing.T) {
 func TestGetModelCatalog_FlatEntriesUnchanged(t *testing.T) {
 	core := apitest.NewCore(t)
 	h := New(core, nil)
-	h.hardwareProfile = func(string) hwprofile.Profile { return amd64ONNXProfile() }
+	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile { return amd64ONNXProfile() }
 
 	catalog := catalogRequest(t, h)
 	// A geomodel is a flat (variant-less) entry.
@@ -135,7 +136,7 @@ func TestGetModelCatalog_AuthGatedForUnauthenticated(t *testing.T) {
 	core := apitest.NewCore(t)
 	stub := &stubAuth{authenticated: false}
 	h := New(core, stub)
-	h.hardwareProfile = func(string) hwprofile.Profile {
+	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile {
 		t.Fatal("hardware profile must not be probed for an unauthenticated request")
 		return hwprofile.Profile{}
 	}
@@ -156,7 +157,7 @@ func TestGetModelCatalog_AuthenticatedGetsRecommendations(t *testing.T) {
 	core := apitest.NewCore(t)
 	stub := &stubAuth{authenticated: true}
 	h := New(core, stub)
-	h.hardwareProfile = func(string) hwprofile.Profile { return amd64ONNXProfile() }
+	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile { return amd64ONNXProfile() }
 
 	perch := findEntry(catalogRequest(t, h), "perch-v2")
 	require.NotNil(t, perch)

@@ -502,6 +502,40 @@ func TestRank_LegacyNotRecommended(t *testing.T) {
 	assert.False(t, oldRec.Recommended)
 }
 
+func TestRank_BackendMissingNotDuplicated(t *testing.T) {
+	t.Parallel()
+
+	// A variant that both requires a backend the host lacks (Requirements.Backends)
+	// AND whose Backends map has no host-available candidate trips both the hard
+	// filter and the backend-term missing path. It must still yield exactly one
+	// backend.missing blocker, not two.
+	entry := classifier.CatalogEntry{
+		ID: "dup",
+		Variants: []classifier.CatalogVariant{
+			{
+				ID:           "needs-gpu",
+				Requirements: classifier.VariantRequirements{Backends: []string{hwprofile.CapOpenVINOGPU}},
+				Backends:     map[string]classifier.BackendSupport{hwprofile.CapOpenVINOGPU: {Supported: true, Recommended: true}},
+			},
+		},
+	}
+	recs := Rank(Input{
+		Capabilities: []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU}, // no openvino-gpu
+		Entries:      []classifier.CatalogEntry{entry},
+	})
+	rec, ok := variantRec(recs, "dup", "needs-gpu")
+	require.True(t, ok)
+	assert.False(t, rec.Compatible)
+
+	count := 0
+	for _, b := range rec.Blockers {
+		if b.Code == BlockerBackendMissing {
+			count++
+		}
+	}
+	assert.Equal(t, 1, count, "backend.missing must appear once, not duplicated (blockers: %+v)", rec.Blockers)
+}
+
 // --- test helpers ---
 
 func hasBlocker(rec *Recommendation, code string) bool {
