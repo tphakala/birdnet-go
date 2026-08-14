@@ -498,6 +498,10 @@
         "huggingfaceendpoint": {
           "type": "string",
           "description": "model download host, e.g. \"https://hf-mirror.com\" where huggingface.co is blocked; empty falls back to $HF_ENDPOINT then https://huggingface.co"
+        },
+        "modelregion": {
+          "type": "string",
+          "description": "regional model preference: \"auto\" (resolve from coordinates, default), \"global\" (always global models), or a region slug pin (e.g. \"iberia\"); empty is treated as \"auto\""
         }
       },
       "additionalProperties": false,

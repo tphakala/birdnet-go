@@ -1,0 +1,211 @@
+package models
+
+import (
+	"cmp"
+	"maps"
+	"net/http"
+	"slices"
+
+	"github.com/labstack/echo/v4"
+
+	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/classifier/region"
+)
+
+// RegionOption is one selectable region in the gallery dropdown.
+type RegionOption struct {
+	Slug         string `json:"slug"`
+	Name         string `json:"name"`
+	Group        string `json:"group"`        // continental bucket slug, for grouping in the UI
+	GroupDisplay string `json:"groupDisplay"` // continental bucket display name
+	Tier         int    `json:"tier"`
+}
+
+// RegionResolution is the coordinate-resolution outcome the UI renders as the
+// "detected region" why-line. Slug is empty when the global model applies.
+type RegionResolution struct {
+	Slug      string `json:"slug"`
+	Source    string `json:"source"`
+	Ambiguous bool   `json:"ambiguous"`
+	RunnerUp  string `json:"runnerUp,omitempty"`
+}
+
+// RegionFamily reports how one installed-or-available model family resolves under
+// the configured coordinates, so the UI can surface a per-family difference (the
+// D8 divergence case). Today all families share geometry and resolve identically.
+type RegionFamily struct {
+	CatalogID              string           `json:"catalogId"`
+	Repo                   string           `json:"repo"`
+	Installed              bool             `json:"installed"`
+	InstalledVariantRegion string           `json:"installedVariantRegion"` // region of the installed variant, "" for a global/hardware variant
+	Resolved               RegionResolution `json:"resolved"`
+}
+
+// ModelRegionsResponse is the payload of GET /api/v2/models/regions. It never
+// echoes the raw coordinates back; only the resolved region slug leaves the
+// server, so the endpoint reveals no more location precision than the region
+// tiles themselves.
+type ModelRegionsResponse struct {
+	ModelRegion        string           `json:"modelRegion"`        // the saved BirdNET.ModelRegion setting
+	LocationConfigured bool             `json:"locationConfigured"` // whether the station location is set
+	Resolved           RegionResolution `json:"resolved"`           // what "auto" resolves to from the coordinates
+	Regions            []RegionOption   `json:"regions"`            // dropdown options, union across families
+	Families           []RegionFamily   `json:"families"`           // per-family resolution
+}
+
+// GetModelRegions returns the region table for the gallery region selector: the
+// selectable regions, what the configured coordinates resolve to under "auto"
+// (regardless of the saved mode, so the UI can preview an unsaved choice), and
+// the per-family resolution. It is auth-gated because the resolved region and
+// per-family fields are derived from the user's coordinates (approximate
+// location); on an auth-disabled install the middleware passes through. The raw
+// coordinates are never echoed back.
+func (c *Handler) GetModelRegions(ctx echo.Context) error {
+	s := c.CurrentSettings()
+
+	tables, err := region.Tables()
+	if err != nil {
+		return c.HandleError(ctx, err, "region data unavailable", http.StatusInternalServerError)
+	}
+
+	// Coordinate resolution is only meaningful once the user has set a station
+	// location. Until then, auto resolves to the global model. Gating on
+	// LocationConfigured (rather than trusting that the 0,0 default falls outside
+	// every tile) keeps an unconfigured station on the global model even if a
+	// future tile ever covers the null-island origin.
+	families := c.buildRegionFamilies(tables, s.BirdNET.LocationConfigured, s.BirdNET.Latitude, s.BirdNET.Longitude)
+
+	resolved := RegionResolution{Source: string(region.SourceGlobal)}
+	if s.BirdNET.LocationConfigured {
+		// All families carry identical geometry (enforced by a region-package
+		// test), so any family's auto resolution is the detected region. Reuse the
+		// first to avoid a redundant sweep, falling back to a representative table
+		// only when no visible family maps to a region table.
+		switch {
+		case len(families) > 0:
+			resolved = families[0].Resolved
+		default:
+			if rep := representativeTable(tables); rep != nil {
+				sel := region.Select(rep, region.ModeAuto, s.BirdNET.Latitude, s.BirdNET.Longitude)
+				resolved = toRegionResolution(&sel)
+			}
+		}
+	}
+
+	return ctx.JSON(http.StatusOK, ModelRegionsResponse{
+		ModelRegion:        s.BirdNET.ModelRegion,
+		LocationConfigured: s.BirdNET.LocationConfigured,
+		Resolved:           resolved,
+		Regions:            buildRegionOptions(tables),
+		Families:           families,
+	})
+}
+
+// representativeTable picks a deterministic table from the embedded set (lowest
+// repo id), used for the geometry-only top-level resolution. Returns nil when no
+// table is embedded.
+func representativeTable(tables map[string]*region.Table) *region.Table {
+	repos := slices.Sorted(maps.Keys(tables))
+	if len(repos) == 0 {
+		return nil
+	}
+	return tables[repos[0]]
+}
+
+// buildRegionOptions flattens the embedded tables into a deduplicated, sorted
+// list of dropdown options. Tables are visited in sorted repo order so that, for
+// a slug shared across families, the display metadata is taken deterministically
+// from the lowest-keyed repo (matching representativeTable) rather than from a
+// random map-iteration winner. Ordering is by group display, then name, then
+// slug (a unique final tiebreaker) for a stable UI.
+func buildRegionOptions(tables map[string]*region.Table) []RegionOption {
+	seen := make(map[string]RegionOption)
+	for _, repo := range slices.Sorted(maps.Keys(tables)) {
+		tbl := tables[repo]
+		for slug := range tbl.Regions {
+			if _, ok := seen[slug]; ok {
+				continue
+			}
+			r := tbl.Regions[slug]
+			seen[slug] = RegionOption{
+				Slug:         slug,
+				Name:         r.Name,
+				Group:        r.Group,
+				GroupDisplay: r.GroupDisplay,
+				Tier:         r.Tier,
+			}
+		}
+	}
+	options := slices.Collect(maps.Values(seen))
+	slices.SortFunc(options, func(a, b RegionOption) int {
+		if c := cmp.Compare(a.GroupDisplay, b.GroupDisplay); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(a.Name, b.Name); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Slug, b.Slug)
+	})
+	return options
+}
+
+// buildRegionFamilies reports per-family resolution for every visible catalog
+// entry whose HuggingFace repo has a region table. When the station location is
+// not configured, coordinate resolution is skipped and every family reports the
+// global model, matching how auto falls back without coordinates.
+func (c *Handler) buildRegionFamilies(tables map[string]*region.Table, locationConfigured bool, lat, lon float64) []RegionFamily {
+	visible := classifier.VisibleCatalog()
+	families := make([]RegionFamily, 0, len(visible))
+	for i := range visible {
+		e := &visible[i]
+		tbl, ok := tables[e.HuggingFaceRepo]
+		if !ok {
+			continue
+		}
+		installed := false
+		installedVariantID := ""
+		if c.ModelManager != nil {
+			if vid, ok := c.ModelManager.InstalledVariantID(e.ID); ok {
+				installed = true
+				installedVariantID = vid
+			}
+		}
+		resolved := RegionResolution{Source: string(region.SourceGlobal)}
+		if locationConfigured {
+			sel := region.Select(tbl, region.ModeAuto, lat, lon)
+			resolved = toRegionResolution(&sel)
+		}
+		families = append(families, RegionFamily{
+			CatalogID:              e.ID,
+			Repo:                   e.HuggingFaceRepo,
+			Installed:              installed,
+			InstalledVariantRegion: variantRegion(e, installedVariantID),
+			Resolved:               resolved,
+		})
+	}
+	return families
+}
+
+// variantRegion returns the region slug of the entry's variant with the given
+// id, or "" when the id is empty (a flat entry) or the variant is global.
+func variantRegion(entry *classifier.CatalogEntry, variantID string) string {
+	if variantID == "" {
+		return ""
+	}
+	for i := range entry.Variants {
+		if entry.Variants[i].ID == variantID {
+			return entry.Variants[i].Region
+		}
+	}
+	return ""
+}
+
+// toRegionResolution maps a resolver Selection to its API form.
+func toRegionResolution(sel *region.Selection) RegionResolution {
+	return RegionResolution{
+		Slug:      sel.Slug,
+		Source:    string(sel.Source),
+		Ambiguous: sel.Ambiguous,
+		RunnerUp:  sel.RunnerUp,
+	}
+}

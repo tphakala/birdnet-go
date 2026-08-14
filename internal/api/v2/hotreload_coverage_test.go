@@ -70,6 +70,10 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	// Read fresh by the model manager on every download, so a mirror change
 	// applies to the next install with no reload or restart.
 	"BirdNET.HuggingFaceEndpoint": {categories: []hotReloadCategory{hotReloadFresh}},
+	// Read fresh by the regions endpoint per request; nothing caches it at
+	// startup and it does not drive model loading, so no reload or restart is
+	// needed.
+	"BirdNET.ModelRegion": {categories: []hotReloadCategory{hotReloadFresh}},
 
 	// --- Perch ---
 	// Parent is restart: model/label path and locale changes reload the model.

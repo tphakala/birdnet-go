@@ -64,6 +64,7 @@ func New(core *apicore.Core, authService auth.Service) *Handler {
 func (c *Handler) RegisterRoutes(g *echo.Group) {
 	g.GET("/models", c.ListModels)
 	g.GET("/models/catalog", c.GetModelCatalog)
+	g.GET("/models/regions", c.GetModelRegions, c.AuthMiddleware)
 	g.GET("/models/installed", c.GetInstalledModels)
 	g.POST("/models/install/:id", c.InstallModel, c.AuthMiddleware)
 	g.POST("/models/reinstall/:id", c.ReinstallModel, c.AuthMiddleware)
