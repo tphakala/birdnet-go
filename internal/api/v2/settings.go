@@ -1539,20 +1539,28 @@ func validateBirdNETSection(data json.RawMessage) error {
 // bad one is a 400. "auto", "global", the empty string, and a well-formed region
 // slug are accepted; an unknown but well-formed slug is allowed because the
 // per-family resolver degrades it gracefully.
+//
+// The key match is case-insensitive on purpose: encoding/json binds struct
+// fields case-insensitively, so a payload key like "modelregion" still reaches
+// BirdNETConfig.ModelRegion on merge. Matching only the exact "modelRegion" key
+// would let a case-variant key slip past this check and persist an unvalidated
+// value.
 func validateModelRegionField(updateMap map[string]any) error {
-	raw, ok := updateMap["modelRegion"]
-	if !ok || raw == nil {
-		return nil
+	for key, raw := range updateMap {
+		if !strings.EqualFold(key, "modelRegion") || raw == nil {
+			continue
+		}
+		region, ok := raw.(string)
+		if !ok {
+			return fmt.Errorf("modelRegion must be a string")
+		}
+		if region == "" || region == conf.ModelRegionAuto || region == conf.ModelRegionGlobal ||
+			conf.ModelRegionSlugPattern.MatchString(region) {
+			continue
+		}
+		return fmt.Errorf("modelRegion must be 'auto', 'global', or a region slug")
 	}
-	region, ok := raw.(string)
-	if !ok {
-		return fmt.Errorf("modelRegion must be a string")
-	}
-	if region == "" || region == conf.ModelRegionAuto || region == conf.ModelRegionGlobal ||
-		conf.ModelRegionSlugPattern.MatchString(region) {
-		return nil
-	}
-	return fmt.Errorf("modelRegion must be 'auto', 'global', or a region slug")
+	return nil
 }
 
 // validateWebServerSection validates WebServer settings including LiveStream fields.

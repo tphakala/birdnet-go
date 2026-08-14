@@ -19,7 +19,7 @@ per-tile `classes` count differs between families.
 
 Refresh from a sibling `acoustic-models` checkout with:
 
-```
+```sh
 task sync-region-snapshots
 ```
 

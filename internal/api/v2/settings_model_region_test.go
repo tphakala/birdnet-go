@@ -61,3 +61,20 @@ func TestPatchModelRegionRejectsMalformed(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 	assert.Contains(t, response["error"], "modelRegion must be")
 }
+
+// TestPatchModelRegionRejectsCaseVariantKey guards the case-insensitive key
+// match: encoding/json binds a case-variant key like "modelregion" to
+// BirdNETConfig.ModelRegion on merge, so the validator must reject a malformed
+// value under any casing, not only the exact "modelRegion" key.
+func TestPatchModelRegionRejectsCaseVariantKey(t *testing.T) {
+	e := echo.New()
+	controller := getTestController(t, e)
+	controller.Settings.Load().WebServer.Debug = true // expose the raw error field
+
+	rec := patchBirdNET(t, controller, e, map[string]any{"modelregion": "Bad Region!"})
+	assert.Equal(t, http.StatusBadRequest, rec.Code, "a malformed case-variant key must not bypass validation")
+
+	var response map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	assert.Contains(t, response["error"], "modelRegion must be")
+}
