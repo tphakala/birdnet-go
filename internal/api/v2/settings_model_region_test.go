@@ -78,3 +78,18 @@ func TestPatchModelRegionRejectsCaseVariantKey(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 	assert.Contains(t, response["error"], "modelRegion must be")
 }
+
+// TestPatchModelRegionRejectsDuplicateCaseKeys rejects a payload carrying the
+// key under two different casings, whose bind order json resolves ambiguously.
+func TestPatchModelRegionRejectsDuplicateCaseKeys(t *testing.T) {
+	e := echo.New()
+	controller := getTestController(t, e)
+	controller.Settings.Load().WebServer.Debug = true // expose the raw error field
+
+	rec := patchBirdNET(t, controller, e, map[string]any{"modelRegion": "auto", "modelregion": "iberia"})
+	assert.Equal(t, http.StatusBadRequest, rec.Code, "duplicate case-variant keys must be rejected")
+
+	var response map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	assert.Contains(t, response["error"], "multiple times")
+}
