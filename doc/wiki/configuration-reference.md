@@ -74,6 +74,7 @@ BirdNET configuration
 | `birdnet.backend` | string | inference backend preference: "auto" (default), "onnx", or "openvino" |
 | `birdnet.openvinodevice` | string | OpenVINO device preference: "auto" (default), "cpu", or "gpu" |
 | `birdnet.huggingfaceendpoint` | string | model download host, e.g. "https://hf-mirror.com" where huggingface.co is blocked; empty falls back to $HF_ENDPOINT then https://huggingface.co |
+| `birdnet.modelregion` | string | regional model preference: "auto" (resolve from coordinates, default), "global" (always global models), or a region slug pin (e.g. "iberia"); empty is treated as "auto" |
 
 ## perch
 

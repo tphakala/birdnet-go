@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"iter"
+	"regexp"
 	"strings"
 	"time"
 
@@ -1300,6 +1301,7 @@ type BirdNETConfig struct {
 	Backend             string              `yaml:"backend,omitempty" json:"backend,omitempty"`                         // inference backend preference: "auto" (default), "onnx", or "openvino"
 	OpenVINODevice      string              `yaml:"openvinodevice,omitempty" json:"openVinoDevice,omitempty"`           // OpenVINO device preference: "auto" (default), "cpu", or "gpu"
 	HuggingFaceEndpoint string              `yaml:"huggingfaceendpoint,omitempty" json:"huggingFaceEndpoint,omitempty"` // model download host, e.g. "https://hf-mirror.com" where huggingface.co is blocked; empty falls back to $HF_ENDPOINT then https://huggingface.co
+	ModelRegion         string              `yaml:"modelregion,omitempty" json:"modelRegion,omitempty"`                 // regional model preference: "auto" (resolve from coordinates, default), "global" (always global models), or a region slug pin (e.g. "iberia"); empty is treated as "auto"
 }
 
 // Inference backend preferences for BirdNET.Backend.
@@ -1317,6 +1319,25 @@ const (
 	OVDeviceCPU  = "cpu"
 	OVDeviceGPU  = "gpu"
 )
+
+// Model region preferences for BirdNET.ModelRegion. "auto" resolves the regional
+// model from the configured coordinates and falls back to the global model when
+// nothing resolves; "global" always prefers the global model; any other value is
+// a pinned region slug. An empty string is treated as "auto". These mirror the
+// resolver's mode vocabulary in internal/classifier/region (ModeAuto/ModeGlobal),
+// kept as independent literals so this foundational config package stays free of a
+// classifier dependency; a drift-guard test asserts they stay equal.
+const (
+	ModelRegionAuto   = "auto"
+	ModelRegionGlobal = "global"
+)
+
+// ModelRegionSlugPattern validates a pinned region slug: lowercase alphanumeric
+// segments joined by single hyphens (e.g. "iberia", "north-america-east"). It is
+// syntactic only; an unknown but well-formed slug is accepted, because the
+// per-family resolver degrades an unknown slug to coordinates then global, and a
+// slug may be valid for a model family added later.
+var ModelRegionSlugPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
 // RangeFilterSettings contains settings for the range filter
 type RangeFilterSettings struct {

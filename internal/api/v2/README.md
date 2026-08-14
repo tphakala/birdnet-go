@@ -548,6 +548,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 | ------ | ------------------------------ | ----------------------- | ---- | ----------------------------------------------------- |
 | GET    | `/models`                      | `ListModels`            | ❌   | List available classifier models                      |
 | GET    | `/models/catalog`              | `GetModelCatalog`       | ❌   | Model gallery catalog with install status             |
+| GET    | `/models/regions`              | `GetModelRegions`       | ✅   | Region selector data: selectable regions, the auto-resolved region for the configured coordinates, and per-family resolution (auth-gated; never echoes raw coordinates) |
 | GET    | `/models/installed`            | `GetInstalledModels`    | ❌   | List downloaded models                                |
 | POST   | `/models/install/:id`          | `InstallModel`          | ✅   | Download and install a catalog model                  |
 | POST   | `/models/reinstall/:id`        | `ReinstallModel`        | ✅   | Re-download missing/corrupt files for installed model |

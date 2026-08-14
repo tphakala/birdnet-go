@@ -1527,7 +1527,32 @@ func validateBirdNETSection(data json.RawMessage) error {
 	if err := validateFloatInRange(updateMap, "latitude", minLatitude, maxLatitude, "latitude"); err != nil {
 		return err
 	}
-	return validateFloatInRange(updateMap, "longitude", minLongitude, maxLongitude, "longitude")
+	if err := validateFloatInRange(updateMap, "longitude", minLongitude, maxLongitude, "longitude"); err != nil {
+		return err
+	}
+	return validateModelRegionField(updateMap)
+}
+
+// validateModelRegionField rejects a malformed modelRegion in a PATCH/PUT
+// payload. Unlike the startup validator (which warns and normalizes an aged
+// config), a value submitted through the API is expected to be well-formed, so a
+// bad one is a 400. "auto", "global", the empty string, and a well-formed region
+// slug are accepted; an unknown but well-formed slug is allowed because the
+// per-family resolver degrades it gracefully.
+func validateModelRegionField(updateMap map[string]any) error {
+	raw, ok := updateMap["modelRegion"]
+	if !ok || raw == nil {
+		return nil
+	}
+	region, ok := raw.(string)
+	if !ok {
+		return fmt.Errorf("modelRegion must be a string")
+	}
+	if region == "" || region == conf.ModelRegionAuto || region == conf.ModelRegionGlobal ||
+		conf.ModelRegionSlugPattern.MatchString(region) {
+		return nil
+	}
+	return fmt.Errorf("modelRegion must be 'auto', 'global', or a region slug")
 }
 
 // validateWebServerSection validates WebServer settings including LiveStream fields.
