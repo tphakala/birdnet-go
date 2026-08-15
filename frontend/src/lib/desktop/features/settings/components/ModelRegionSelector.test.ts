@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { tick } from 'svelte';
 import { render, fireEvent, cleanup, waitFor } from '@testing-library/svelte';
 import ModelRegionSelector from './ModelRegionSelector.svelte';
 import { settingsActions } from '$lib/stores/settings';
@@ -13,14 +14,29 @@ function response(overrides: Partial<ModelRegionsResponse> = {}): ModelRegionsRe
     locationConfigured: true,
     resolved: { slug: 'nordic', source: 'auto', ambiguous: false },
     regions: [
-      { slug: 'nordic', name: 'Nordic', group: 'europe', groupDisplay: 'Europe', tier: 50 },
-      { slug: 'iberia', name: 'Iberia', group: 'europe', groupDisplay: 'Europe', tier: 50 },
+      {
+        slug: 'nordic',
+        name: 'Nordic',
+        group: 'europe',
+        groupDisplay: 'Europe',
+        tier: 50,
+        countries: { core: ['FI', 'SE', 'NO', 'DK'], partial: [] },
+      },
+      {
+        slug: 'iberia',
+        name: 'Iberia',
+        group: 'europe',
+        groupDisplay: 'Europe',
+        tier: 50,
+        countries: { core: ['ES', 'PT'], partial: ['FR'] },
+      },
       {
         slug: 'andes',
         name: 'Andes',
         group: 'south-america',
         groupDisplay: 'South America',
         tier: 50,
+        countries: { core: ['CO', 'EC', 'PE'], partial: [] },
       },
     ],
     families: [],
@@ -59,8 +75,12 @@ async function renderLoaded(props: Record<string, unknown> = {}) {
 describe('ModelRegionSelector', () => {
   beforeEach(() => {
     cleanup();
+    vi.clearAllMocks(); // isolate call history (module mocks persist across tests)
     settingsActions.resetAllSettings();
     vi.mocked(modelsApi.fetchModelRegions).mockResolvedValue(response());
+    vi.mocked(modelsApi.fetchRegionCoverageMap).mockResolvedValue(
+      '<svg class="cov" viewBox="0 0 800 600"></svg>'
+    );
   });
 
   afterEach(() => {
@@ -197,5 +217,98 @@ describe('ModelRegionSelector', () => {
     const { container } = await renderLoaded();
     expect(radioByValue(container, 'auto')?.checked).toBe(true);
     expect(container.textContent).toContain('analysis.gallery.region.why.resolved');
+  });
+
+  it('auto-resolved: renders the coverage map and localized country list', async () => {
+    const { container } = await renderLoaded();
+    expect(container.textContent).toContain('analysis.gallery.region.countriesCore');
+    await waitFor(() => expect(container.querySelector('svg.cov')).not.toBeNull());
+    // The inlined SVG is aria-hidden so the wrapper's localized label is the only
+    // accessible name.
+    expect(container.querySelector('svg.cov')?.getAttribute('aria-hidden')).toBe('true');
+    expect(modelsApi.fetchRegionCoverageMap).toHaveBeenCalledWith('nordic');
+  });
+
+  it('map fetch failure: shows the unavailable line but keeps the country list', async () => {
+    vi.mocked(modelsApi.fetchRegionCoverageMap).mockRejectedValue(new Error('boom'));
+    const { container } = await renderLoaded();
+    await waitFor(() =>
+      expect(container.textContent).toContain('analysis.gallery.region.mapUnavailable')
+    );
+    expect(container.textContent).toContain('analysis.gallery.region.countriesCore');
+  });
+
+  it('global mode: no coverage map or country list, and no map fetch', async () => {
+    setMode('global');
+    const { container } = await renderLoaded();
+    expect(container.textContent).not.toContain('analysis.gallery.region.countriesCore');
+    expect(modelsApi.fetchRegionCoverageMap).not.toHaveBeenCalled();
+  });
+
+  it('pinned-known: shows the pinned region detail (map + countries)', async () => {
+    setMode('iberia');
+    const { container } = await renderLoaded();
+    await waitFor(() => expect(container.querySelector('svg.cov')).not.toBeNull());
+    expect(container.textContent).toContain('analysis.gallery.region.countriesCore');
+    expect(modelsApi.fetchRegionCoverageMap).toHaveBeenCalledWith('iberia');
+  });
+
+  it('drops an out-of-order coverage-map response for a region the user left', async () => {
+    // Controllable deferred per slug so the two in-flight fetches can be resolved
+    // out of order. A Map (not an object) avoids object-injection lint.
+    const deferreds = new Map<string, (svg: string) => void>();
+    vi.mocked(modelsApi.fetchRegionCoverageMap).mockImplementation(
+      (slug: string) =>
+        new Promise<string>(resolve => {
+          deferreds.set(slug, resolve);
+        })
+    );
+
+    // Initial auto render fetches nordic (still pending).
+    const { container } = await renderLoaded();
+    await waitFor(() => expect(deferreds.get('nordic')).toBeDefined());
+
+    // User switches to a pinned region: the effect cancels the nordic run and
+    // fetches iberia.
+    setMode('iberia');
+    await waitFor(() => expect(deferreds.get('iberia')).toBeDefined());
+
+    // The current region (iberia) resolves first and renders.
+    deferreds.get('iberia')?.('<svg class="cov" data-region="iberia"></svg>');
+    await waitFor(() =>
+      expect(container.querySelector('svg[data-region="iberia"]')).not.toBeNull()
+    );
+
+    // The stale nordic response resolves late; the cancel guard must drop it so it
+    // does not render under the iberia label. Run the stale .then microtask, then
+    // flush pending DOM so a regressed guard (which would set coverageSvg) would
+    // actually render nordic and fail the assertion.
+    deferreds.get('nordic')?.('<svg class="cov" data-region="nordic"></svg>');
+    await Promise.resolve();
+    await tick();
+    expect(container.querySelector('svg[data-region="nordic"]')).toBeNull();
+    expect(container.querySelector('svg[data-region="iberia"]')).not.toBeNull();
+  });
+
+  it('country list truncates a long core set and expands on demand', async () => {
+    const americas = {
+      slug: 'americas',
+      name: 'Americas',
+      group: 'south-america',
+      groupDisplay: 'South America',
+      tier: 50,
+      countries: {
+        core: ['US', 'CA', 'MX', 'BR', 'AR', 'CL', 'PE', 'CO', 'EC', 'BO'],
+        partial: [],
+      },
+    };
+    vi.mocked(modelsApi.fetchModelRegions).mockResolvedValue(
+      response({ regions: [americas], resolved: resolved({ slug: 'americas' }) })
+    );
+    const { container } = await renderLoaded();
+    const moreBtn = buttonByText(container, 'analysis.gallery.region.countriesMore');
+    expect(moreBtn).not.toBeNull();
+    await fireEvent.click(moreBtn as HTMLButtonElement);
+    expect(buttonByText(container, 'analysis.gallery.region.countriesLess')).not.toBeNull();
   });
 });

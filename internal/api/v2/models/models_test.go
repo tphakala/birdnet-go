@@ -25,6 +25,7 @@ func TestModelsRouteRegistration(t *testing.T) {
 		"GET /api/v2/models",
 		"GET /api/v2/models/catalog",
 		"GET /api/v2/models/regions",
+		"GET /api/v2/models/regions/:slug/map",
 		"GET /api/v2/models/installed",
 		"POST /api/v2/models/install/:id",
 		"POST /api/v2/models/reinstall/:id",

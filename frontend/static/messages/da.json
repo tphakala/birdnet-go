@@ -5300,6 +5300,13 @@
         "switchToAuto": "Skift til automatisk",
         "loading": "Indlæser regioner...",
         "loadFailed": "Kunne ikke indlæse regionsdata",
+        "mapLoading": "Indlæser dækningskort...",
+        "mapUnavailable": "Dækningskort ikke tilgængeligt",
+        "mapAria": "Dækningskort for {region}",
+        "countriesCore": "Dækker: {countries}",
+        "countriesPartial": "Delvis dækning: {countries}",
+        "countriesMore": "og {count} mere",
+        "countriesLess": "Vis færre",
         "why": {
           "noLocation": "Automatisk valg kræver en stationsplacering. Indstil den i Hovedindstillinger; den globale model bruges indtil da.",
           "outsideCoverage": "Din placering er uden for alle regionale modellers dækning, så den globale model bruges.",

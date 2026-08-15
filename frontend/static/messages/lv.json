@@ -5300,6 +5300,13 @@
         "switchToAuto": "Pārslēgties uz automātisko",
         "loading": "Ielādē reģionus...",
         "loadFailed": "Neizdevās ielādēt reģiona datus",
+        "mapLoading": "Ielādē pārklājuma karti...",
+        "mapUnavailable": "Pārklājuma karte nav pieejama",
+        "mapAria": "{region} pārklājuma karte",
+        "countriesCore": "Aptver: {countries}",
+        "countriesPartial": "Daļējs pārklājums: {countries}",
+        "countriesMore": "un vēl {count}",
+        "countriesLess": "Rādīt mazāk",
         "why": {
           "noLocation": "Automātiskajai atlasei nepieciešama stacijas atrašanās vieta. Iestatiet to Galvenajos iestatījumos; līdz tam tiek izmantots globālais modelis.",
           "outsideCoverage": "Jūsu atrašanās vieta ir ārpus visu reģionālo modeļu pārklājuma, tāpēc tiek izmantots globālais modelis.",

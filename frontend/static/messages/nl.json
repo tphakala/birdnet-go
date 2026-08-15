@@ -5300,6 +5300,13 @@
         "switchToAuto": "Overschakelen naar automatisch",
         "loading": "Regio's laden...",
         "loadFailed": "Kan regiogegevens niet laden",
+        "mapLoading": "Dekkingskaart laden...",
+        "mapUnavailable": "Dekkingskaart niet beschikbaar",
+        "mapAria": "Dekkingskaart van {region}",
+        "countriesCore": "Dekt: {countries}",
+        "countriesPartial": "Gedeeltelijke dekking: {countries}",
+        "countriesMore": "en nog {count}",
+        "countriesLess": "Minder tonen",
         "why": {
           "noLocation": "Automatische selectie vereist een stationslocatie. Stel deze in bij Hoofdinstellingen; tot die tijd wordt het globale model gebruikt.",
           "outsideCoverage": "Uw locatie valt buiten de dekking van alle regionale modellen, dus wordt het globale model gebruikt.",

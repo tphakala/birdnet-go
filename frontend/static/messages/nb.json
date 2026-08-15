@@ -5300,6 +5300,13 @@
         "switchToAuto": "Bytt til automatisk",
         "loading": "Laster regioner...",
         "loadFailed": "Innlasting av regiondata mislyktes",
+        "mapLoading": "Laster inn dekningskart...",
+        "mapUnavailable": "Dekningskart utilgjengelig",
+        "mapAria": "Dekningskart for {region}",
+        "countriesCore": "Dekker: {countries}",
+        "countriesPartial": "Delvis dekning: {countries}",
+        "countriesMore": "og {count} til",
+        "countriesLess": "Vis færre",
         "why": {
           "noLocation": "Automatisk valg krever en stasjonsposisjon. Angi den i Hovedinnstillinger; den globale modellen brukes inntil da.",
           "outsideCoverage": "Posisjonen din er utenfor dekningsområdet til alle regionale modeller, så den globale modellen brukes.",

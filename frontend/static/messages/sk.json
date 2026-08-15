@@ -5300,6 +5300,13 @@
         "switchToAuto": "Prepnúť na automatický",
         "loading": "Načítavajú sa regióny...",
         "loadFailed": "Nepodarilo sa načítať údaje o regióne",
+        "mapLoading": "Načítava sa mapa pokrytia...",
+        "mapUnavailable": "Mapa pokrytia nie je k dispozícii",
+        "mapAria": "Mapa pokrytia regiónu {region}",
+        "countriesCore": "Pokrýva: {countries}",
+        "countriesPartial": "Čiastočné pokrytie: {countries}",
+        "countriesMore": "a ďalších {count}",
+        "countriesLess": "Zobraziť menej",
         "why": {
           "noLocation": "Automatický výber vyžaduje polohu stanice. Nastavte ju v Hlavných nastaveniach; dovtedy sa používa globálny model.",
           "outsideCoverage": "Vaša poloha je mimo pokrytia všetkých regionálnych modelov, preto sa používa globálny model.",
