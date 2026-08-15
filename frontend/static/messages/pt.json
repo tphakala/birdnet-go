@@ -458,6 +458,11 @@
         "unavailableTitle": "ONNX Runtime não disponível",
         "unavailableMessage": "O ONNX Runtime {requiredVersion} é necessário para {modelName}, mas não foi encontrado. Consulte o guia de instalação: {installGuideURL}"
       },
+      "region": {
+        "staleTitle": "A região do modelo pode estar desatualizada",
+        "staleMessage": "{modelName} está instalado para {oldRegion}, mas a sua nova localização corresponde a {newRegion}. Pode mudar de variante a partir da galeria de modelos nas Configurações.",
+        "staleGlobalMessage": "{modelName} está instalado para {oldRegion}, mas a sua nova localização está fora da sua cobertura. Pode mudar para a variante global a partir da galeria de modelos nas Configurações."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valor atual: {value}% (limite: {threshold}%)",
@@ -5283,6 +5288,29 @@
     "gallery": {
       "title": "Galeria de modelos",
       "description": "Gerenciar modelos classificadores para detecção de aves e morcegos.",
+      "region": {
+        "title": "Região do modelo",
+        "modeAuto": "Automático",
+        "modeAutoHint": "Escolher a melhor variante regional a partir da localização da estação",
+        "modeGlobal": "Global",
+        "modeGlobalHint": "Usar sempre o modelo mundial",
+        "pinLabel": "Fixar uma região específica",
+        "pinnedBadge": "Fixado",
+        "pinAction": "Fixar {region}",
+        "switchToAuto": "Mudar para automático",
+        "loading": "Carregando regiões...",
+        "loadFailed": "Falha ao carregar dados da região",
+        "why": {
+          "noLocation": "A seleção automática requer a localização da estação. Defina-a nas Configurações principais; o modelo global será usado até lá.",
+          "outsideCoverage": "A sua localização está fora da cobertura de todos os modelos regionais, pelo que é utilizado o modelo global.",
+          "ambiguous": "A sua localização fica perto da fronteira entre {region} e {runnerUp}. A seleção automática utiliza {region}; fixe qualquer uma para tornar a escolha explícita.",
+          "resolved": "Região detetada a partir da sua localização: {region}.",
+          "global": "O modelo global é sempre utilizado, independentemente da localização da estação.",
+          "pinned": "Fixado em {region}. A localização da estação não afeta a seleção do modelo.",
+          "pinnedMismatch": "A sua localização corresponde atualmente a {resolved}.",
+          "pinnedUnknown": "A região fixada \"{region}\" não está disponível no catálogo de modelos atual. As famílias de modelos recorrem à sua localização ou ao modelo global."
+        }
+      },
       "variants": {
         "title": "Variante do modelo",
         "recommended": "Recomendado",

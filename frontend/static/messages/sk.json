@@ -458,6 +458,11 @@
         "unavailableTitle": "ONNX Runtime nie je k dispozícii",
         "unavailableMessage": "ONNX Runtime {requiredVersion} je vyžadovaný pre {modelName}, ale nebol nájdený. Pozrite si príručku inštalácie: {installGuideURL}"
       },
+      "region": {
+        "staleTitle": "Región modelu môže byť zastaraný",
+        "staleMessage": "{modelName} je nainštalovaný pre {oldRegion}, ale vaša nová poloha zodpovedá {newRegion}. Varianty môžete zmeniť v galérii modelov v Nastaveniach.",
+        "staleGlobalMessage": "{modelName} je nainštalovaný pre {oldRegion}, ale vaša nová poloha je mimo jeho pokrytia. Na globálny variant môžete prepnúť v galérii modelov v Nastaveniach."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuálna hodnota: {value}% (prahová hodnota: {threshold}%)",
@@ -5283,6 +5288,29 @@
     "gallery": {
       "title": "Galéria modelov",
       "description": "Správa klasifikačných modelov pre detekciu vtákov a netopierov.",
+      "region": {
+        "title": "Región modelu",
+        "modeAuto": "Automaticky",
+        "modeAutoHint": "Vybrať najlepší regionálny variant podľa polohy stanice",
+        "modeGlobal": "Globálny",
+        "modeGlobalHint": "Vždy používať celosvetový model",
+        "pinLabel": "Pripnúť konkrétny región",
+        "pinnedBadge": "Pripnuté",
+        "pinAction": "Pripnúť {region}",
+        "switchToAuto": "Prepnúť na automatický",
+        "loading": "Načítavajú sa regióny...",
+        "loadFailed": "Nepodarilo sa načítať údaje o regióne",
+        "why": {
+          "noLocation": "Automatický výber vyžaduje polohu stanice. Nastavte ju v Hlavných nastaveniach; dovtedy sa používa globálny model.",
+          "outsideCoverage": "Vaša poloha je mimo pokrytia všetkých regionálnych modelov, preto sa používa globálny model.",
+          "ambiguous": "Vaša poloha je blízko hranice medzi {region} a {runnerUp}. Automatický výber používa {region}; pripnite ktorýkoľvek z nich na jednoznačnú voľbu.",
+          "resolved": "Zistený región z vašej polohy: {region}.",
+          "global": "Globálny model sa používa vždy bez ohľadu na polohu stanice.",
+          "pinned": "Pripnuté k {region}. Poloha stanice nemá vplyv na výber modelu.",
+          "pinnedMismatch": "Vaša poloha v súčasnosti zodpovedá {resolved}.",
+          "pinnedUnknown": "Pripnutý región \"{region}\" nie je dostupný v aktuálnom katalógu modelov. Rodiny modelov prejdú na vašu polohu alebo globálny model."
+        }
+      },
       "variants": {
         "title": "Variant modelu",
         "recommended": "Odporúčané",

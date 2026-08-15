@@ -458,6 +458,11 @@
         "unavailableTitle": "ONNX Runtime ikke tilgjengelig",
         "unavailableMessage": "ONNX Runtime {requiredVersion} kreves for {modelName}, men ble ikke funnet. Se installasjonsveiledningen: {installGuideURL}"
       },
+      "region": {
+        "staleTitle": "Modellregionen kan være utdatert",
+        "staleMessage": "{modelName} er installert for {oldRegion}, men den nye posisjonen din tilsvarer {newRegion}. Du kan bytte varianter fra modellgalleriet i Innstillinger.",
+        "staleGlobalMessage": "{modelName} er installert for {oldRegion}, men den nye posisjonen din er utenfor dekningsområdet. Du kan bytte til den globale varianten fra modellgalleriet i Innstillinger."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Gjeldende verdi: {value}% (terskel: {threshold}%)",
@@ -5283,6 +5288,29 @@
     "gallery": {
       "title": "Modellgalleri",
       "description": "Administrer klassifikatormodeller for fugle- og flaggermusdeteksjon.",
+      "region": {
+        "title": "Modellregion",
+        "modeAuto": "Automatisk",
+        "modeAutoHint": "Velg den beste regionale varianten fra stasjonsposisjonen",
+        "modeGlobal": "Global",
+        "modeGlobalHint": "Bruk alltid den verdensomspennende modellen",
+        "pinLabel": "Fest en bestemt region",
+        "pinnedBadge": "Festet",
+        "pinAction": "Fest {region}",
+        "switchToAuto": "Bytt til automatisk",
+        "loading": "Laster regioner...",
+        "loadFailed": "Innlasting av regiondata mislyktes",
+        "why": {
+          "noLocation": "Automatisk valg krever en stasjonsposisjon. Angi den i Hovedinnstillinger; den globale modellen brukes inntil da.",
+          "outsideCoverage": "Posisjonen din er utenfor dekningsområdet til alle regionale modeller, så den globale modellen brukes.",
+          "ambiguous": "Posisjonen din er nær grensen mellom {region} og {runnerUp}. Automatisk valg bruker {region}; fest en av dem for å gjøre valget eksplisitt.",
+          "resolved": "Gjenkjent region fra posisjonen din: {region}.",
+          "global": "Den globale modellen brukes alltid, uavhengig av stasjonsposisjonen.",
+          "pinned": "Festet til {region}. Stasjonsposisjonen påvirker ikke modellvalget.",
+          "pinnedMismatch": "Posisjonen din tilsvarer for øyeblikket {resolved}.",
+          "pinnedUnknown": "Den festede regionen \"{region}\" er ikke tilgjengelig i den gjeldende modellkatalogen. Modellfamilier faller tilbake på posisjonen din eller den globale modellen."
+        }
+      },
       "variants": {
         "title": "Modellvariant",
         "recommended": "Anbefalt",

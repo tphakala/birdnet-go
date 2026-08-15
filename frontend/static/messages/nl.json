@@ -458,6 +458,11 @@
         "unavailableTitle": "ONNX Runtime niet beschikbaar",
         "unavailableMessage": "ONNX Runtime {requiredVersion} is vereist voor {modelName}, maar werd niet gevonden. Zie de installatiegids: {installGuideURL}"
       },
+      "region": {
+        "staleTitle": "Modelregio is mogelijk verouderd",
+        "staleMessage": "{modelName} is geïnstalleerd voor {oldRegion}, maar uw nieuwe locatie komt overeen met {newRegion}. U kunt van variant wisselen via de modellengalerij in Instellingen.",
+        "staleGlobalMessage": "{modelName} is geïnstalleerd voor {oldRegion}, maar uw nieuwe locatie valt buiten de dekking. U kunt overschakelen naar de globale variant via de modellengalerij in Instellingen."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Huidige waarde: {value}% (drempelwaarde: {threshold}%)",
@@ -5283,6 +5288,29 @@
     "gallery": {
       "title": "Modellengalerij",
       "description": "Beheer classificatiemodellen voor vogel- en vleermuisdetectie.",
+      "region": {
+        "title": "Modelregio",
+        "modeAuto": "Automatisch",
+        "modeAutoHint": "Kies de beste regionale variant op basis van de stationslocatie",
+        "modeGlobal": "Globaal",
+        "modeGlobalHint": "Altijd het wereldwijde model gebruiken",
+        "pinLabel": "Een specifieke regio vastzetten",
+        "pinnedBadge": "Vastgezet",
+        "pinAction": "{region} vastzetten",
+        "switchToAuto": "Overschakelen naar automatisch",
+        "loading": "Regio's laden...",
+        "loadFailed": "Kan regiogegevens niet laden",
+        "why": {
+          "noLocation": "Automatische selectie vereist een stationslocatie. Stel deze in bij Hoofdinstellingen; tot die tijd wordt het globale model gebruikt.",
+          "outsideCoverage": "Uw locatie valt buiten de dekking van alle regionale modellen, dus wordt het globale model gebruikt.",
+          "ambiguous": "Uw locatie ligt dicht bij de grens tussen {region} en {runnerUp}. Automatische selectie gebruikt {region}; zet er een vast om de keuze expliciet te maken.",
+          "resolved": "Gedetecteerde regio op basis van uw locatie: {region}.",
+          "global": "Het globale model wordt altijd gebruikt, ongeacht de stationslocatie.",
+          "pinned": "Vastgezet op {region}. De stationslocatie heeft geen invloed op de modelselectie.",
+          "pinnedMismatch": "Uw locatie komt momenteel overeen met {resolved}.",
+          "pinnedUnknown": "De vastgezette regio \"{region}\" is niet beschikbaar in de huidige modelcatalogus. Modelfamilies vallen terug op uw locatie of het globale model."
+        }
+      },
       "variants": {
         "title": "Modelvariant",
         "recommended": "Aanbevolen",

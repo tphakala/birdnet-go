@@ -43,6 +43,7 @@
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import ModelVariantPicker from '$lib/desktop/features/settings/components/ModelVariantPicker.svelte';
+  import ModelRegionSelector from '$lib/desktop/features/settings/components/ModelRegionSelector.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import FalsePositiveFilterControl, {
     type FilterLevel,
@@ -1607,7 +1608,10 @@
       title={t('analysis.gallery.title')}
       description={t('analysis.gallery.description')}
       defaultOpen={true}
+      originalData={{ modelRegion: store.originalData.birdnet?.modelRegion ?? 'auto' }}
+      currentData={{ modelRegion: birdnet?.modelRegion ?? 'auto' }}
     >
+      <ModelRegionSelector disabled={store.isLoading || store.isSaving} />
       <SettingsTabs tabs={galleryTabs} bind:activeTab={galleryTab} showActions={false} />
     </SettingsSection>
 

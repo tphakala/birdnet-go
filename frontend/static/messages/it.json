@@ -458,6 +458,11 @@
         "unavailableTitle": "ONNX Runtime non disponibile",
         "unavailableMessage": "ONNX Runtime {requiredVersion} è richiesto per {modelName} ma non è stato trovato. Consulta la guida all'installazione: {installGuideURL}"
       },
+      "region": {
+        "staleTitle": "La regione del modello potrebbe essere obsoleta",
+        "staleMessage": "{modelName} è installato per {oldRegion}, ma la tua nuova posizione corrisponde a {newRegion}. Puoi cambiare variante dalla galleria modelli in Impostazioni.",
+        "staleGlobalMessage": "{modelName} è installato per {oldRegion}, ma la tua nuova posizione è al di fuori della sua copertura. Puoi passare alla variante globale dalla galleria modelli in Impostazioni."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valore attuale: {value}% (soglia: {threshold}%)",
@@ -5283,6 +5288,29 @@
     "gallery": {
       "title": "Galleria modelli",
       "description": "Gestisci i modelli di classificazione per il rilevamento di uccelli e pipistrelli.",
+      "region": {
+        "title": "Regione del modello",
+        "modeAuto": "Automatico",
+        "modeAutoHint": "Scegli la migliore variante regionale in base alla posizione della stazione",
+        "modeGlobal": "Globale",
+        "modeGlobalHint": "Usa sempre il modello mondiale",
+        "pinLabel": "Fissa una regione specifica",
+        "pinnedBadge": "Fissato",
+        "pinAction": "Fissa {region}",
+        "switchToAuto": "Passa ad automatico",
+        "loading": "Caricamento regioni...",
+        "loadFailed": "Impossibile caricare i dati della regione",
+        "why": {
+          "noLocation": "La selezione automatica richiede la posizione della stazione. Impostala nelle Impostazioni Principali; fino ad allora verrà utilizzato il modello globale.",
+          "outsideCoverage": "La tua posizione è al di fuori della copertura di qualsiasi modello regionale, pertanto viene utilizzato il modello globale.",
+          "ambiguous": "La tua posizione è vicina al confine tra {region} e {runnerUp}. La selezione automatica utilizza {region}; fissa una delle due per rendere esplicita la scelta.",
+          "resolved": "Regione rilevata dalla tua posizione: {region}.",
+          "global": "Il modello globale viene sempre utilizzato, indipendentemente dalla posizione della stazione.",
+          "pinned": "Fissato su {region}. La posizione della stazione non influisce sulla selezione del modello.",
+          "pinnedMismatch": "La tua posizione corrisponde attualmente a {resolved}.",
+          "pinnedUnknown": "La regione fissata \"{region}\" non è disponibile nell'attuale catalogo modelli. Le famiglie di modelli useranno come fallback la tua posizione o il modello globale."
+        }
+      },
       "variants": {
         "title": "Variante modello",
         "recommended": "Consigliato",

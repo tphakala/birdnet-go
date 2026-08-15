@@ -458,6 +458,11 @@
         "unavailableTitle": "ONNX Runtime nicht verfügbar",
         "unavailableMessage": "ONNX Runtime {requiredVersion} wird für {modelName} benötigt, wurde aber nicht gefunden. Siehe Installationsanleitung: {installGuideURL}"
       },
+      "region": {
+        "staleTitle": "Modellregion ist möglicherweise veraltet",
+        "staleMessage": "{modelName} ist für {oldRegion} installiert, aber Ihr neuer Standort entspricht {newRegion}. Sie können Varianten in der Modellgalerie unter Einstellungen wechseln.",
+        "staleGlobalMessage": "{modelName} ist für {oldRegion} installiert, aber Ihr neuer Standort liegt außerhalb der Abdeckung. Sie können in der Modellgalerie unter Einstellungen zur globalen Variante wechseln."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktueller Wert: {value}% (Schwellenwert: {threshold}%)",
@@ -5283,6 +5288,29 @@
     "gallery": {
       "title": "Modellgalerie",
       "description": "Klassifikatormodelle für Vogel- und Fledermauserkennungen verwalten.",
+      "region": {
+        "title": "Modellregion",
+        "modeAuto": "Automatisch",
+        "modeAutoHint": "Beste regionale Variante anhand des Stationsstandorts auswählen",
+        "modeGlobal": "Global",
+        "modeGlobalHint": "Immer das weltweite Modell verwenden",
+        "pinLabel": "Bestimmte Region anheften",
+        "pinnedBadge": "Angeheftet",
+        "pinAction": "{region} anheften",
+        "switchToAuto": "Auf automatisch wechseln",
+        "loading": "Regionen werden geladen...",
+        "loadFailed": "Regionsdaten konnten nicht geladen werden",
+        "why": {
+          "noLocation": "Die automatische Auswahl erfordert einen Stationsstandort. Legen Sie ihn in den Haupteinstellungen fest; bis dahin wird das globale Modell verwendet.",
+          "outsideCoverage": "Ihr Standort liegt außerhalb der Abdeckung aller regionalen Modelle, daher wird das globale Modell verwendet.",
+          "ambiguous": "Ihr Standort liegt nahe der Grenze zwischen {region} und {runnerUp}. Die automatische Auswahl verwendet {region}; heften Sie eine der beiden an, um die Auswahl explizit festzulegen.",
+          "resolved": "Aus Ihrem Standort erkannte Region: {region}.",
+          "global": "Es wird immer das globale Modell verwendet, unabhängig vom Stationsstandort.",
+          "pinned": "An {region} angeheftet. Der Stationsstandort hat keinen Einfluss auf die Modellauswahl.",
+          "pinnedMismatch": "Ihr Standort entspricht derzeit {resolved}.",
+          "pinnedUnknown": "Die angeheftete Region \"{region}\" ist im aktuellen Modellkatalog nicht verfügbar. Modellfamilien weichen auf Ihren Standort oder das globale Modell aus."
+        }
+      },
       "variants": {
         "title": "Modellvariante",
         "recommended": "Empfohlen",

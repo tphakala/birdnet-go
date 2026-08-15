@@ -458,6 +458,11 @@
         "unavailableTitle": "ONNX Runtime non disponible",
         "unavailableMessage": "ONNX Runtime {requiredVersion} est requis pour {modelName} mais n'a pas été trouvé. Voir le guide d'installation : {installGuideURL}"
       },
+      "region": {
+        "staleTitle": "La région du modèle est peut-être obsolète",
+        "staleMessage": "{modelName} est installé pour {oldRegion}, mais votre nouvel emplacement correspond à {newRegion}. Vous pouvez changer de variante depuis la galerie de modèles dans les Paramètres.",
+        "staleGlobalMessage": "{modelName} est installé pour {oldRegion}, mais votre nouvel emplacement est en dehors de sa couverture. Vous pouvez passer à la variante globale depuis la galerie de modèles dans les Paramètres."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valeur actuelle : {value}% (seuil : {threshold}%)",
@@ -5283,6 +5288,29 @@
     "gallery": {
       "title": "Galerie de modèles",
       "description": "Gérer les modèles classificateurs pour la détection des oiseaux et des chauves-souris.",
+      "region": {
+        "title": "Région du modèle",
+        "modeAuto": "Automatique",
+        "modeAutoHint": "Choisir la meilleure variante régionale selon l'emplacement de la station",
+        "modeGlobal": "Global",
+        "modeGlobalHint": "Toujours utiliser le modèle mondial",
+        "pinLabel": "Épingler une région spécifique",
+        "pinnedBadge": "Épinglé",
+        "pinAction": "Épingler {region}",
+        "switchToAuto": "Passer en automatique",
+        "loading": "Chargement des régions...",
+        "loadFailed": "Échec du chargement des données de région",
+        "why": {
+          "noLocation": "La sélection automatique nécessite un emplacement de station. Définissez-le dans les Paramètres principaux ; le modèle global est utilisé jusque-là.",
+          "outsideCoverage": "Votre emplacement est en dehors de la couverture de tous les modèles régionaux, le modèle global est donc utilisé.",
+          "ambiguous": "Votre emplacement est proche de la frontière entre {region} et {runnerUp}. La sélection automatique utilise {region} ; épinglez l'une d'elles pour rendre le choix explicite.",
+          "resolved": "Région détectée à partir de votre position : {region}.",
+          "global": "Le modèle global est toujours utilisé, quel que soit l'emplacement de la station.",
+          "pinned": "Épinglé sur {region}. L'emplacement de la station n'affecte pas la sélection du modèle.",
+          "pinnedMismatch": "Votre emplacement correspond actuellement à {resolved}.",
+          "pinnedUnknown": "La région épinglée \"{region}\" n'est pas disponible dans le catalogue de modèles actuel. Les familles de modèles se rabattent sur votre emplacement ou le modèle global."
+        }
+      },
       "variants": {
         "title": "Variante du modèle",
         "recommended": "Recommandé",

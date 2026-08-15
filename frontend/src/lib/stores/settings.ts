@@ -74,6 +74,12 @@ export interface BirdNetSettings {
   latitude: number;
   longitude: number;
   locationConfigured: boolean; // true when location has been explicitly configured
+  /**
+   * Regional model preference for the gallery: 'auto' (resolve the best regional
+   * variant from the station location), 'global' (always the worldwide model), or
+   * a region slug. '' and absent both mean 'auto' (the Go field is omitempty).
+   */
+  modelRegion?: string;
   rangeFilter: RangeFilterSettings;
   // Host used for model downloads, e.g. https://hf-mirror.com where
   // huggingface.co is unreachable. When empty the backend falls back to the
@@ -907,6 +913,7 @@ function createEmptySettings(): SettingsFormData {
       latitude: 0,
       longitude: 0,
       locationConfigured: false,
+      modelRegion: 'auto',
       rangeFilter: {
         threshold: 0.03,
         passUnmappedSpecies: false,

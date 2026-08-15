@@ -179,25 +179,11 @@ func (c *Handler) buildRegionFamilies(tables map[string]*region.Table, locationC
 			CatalogID:              e.ID,
 			Repo:                   e.HuggingFaceRepo,
 			Installed:              installed,
-			InstalledVariantRegion: variantRegion(e, installedVariantID),
+			InstalledVariantRegion: classifier.VariantRegion(e, installedVariantID),
 			Resolved:               resolved,
 		})
 	}
 	return families
-}
-
-// variantRegion returns the region slug of the entry's variant with the given
-// id, or "" when the id is empty (a flat entry) or the variant is global.
-func variantRegion(entry *classifier.CatalogEntry, variantID string) string {
-	if variantID == "" {
-		return ""
-	}
-	for i := range entry.Variants {
-		if entry.Variants[i].ID == variantID {
-			return entry.Variants[i].Region
-		}
-	}
-	return ""
 }
 
 // toRegionResolution maps a resolver Selection to its API form.
