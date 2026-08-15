@@ -134,3 +134,65 @@ func TestModelRegionConstantsMatchResolver(t *testing.T) {
 	assert.Equal(t, region.ModeAuto, conf.ModelRegionAuto, "auto mode constant drifted")
 	assert.Equal(t, region.ModeGlobal, conf.ModelRegionGlobal, "global mode constant drifted")
 }
+
+// TestResolveRecommendRegion covers the slug the recommender scores against for
+// each ModelRegion mode. It mutates process-global settings via WithSettingsFunc,
+// so it must not run in parallel.
+func TestResolveRecommendRegion(t *testing.T) {
+	// A valid slug from the embedded table, for the pinned cases, taken from the
+	// data rather than hardcoded so a future slug rename does not silently pass.
+	tables, err := region.Tables()
+	require.NoError(t, err)
+	rep := representativeTable(tables)
+	require.NotNil(t, rep)
+	var validSlug string
+	for slug := range rep.Regions {
+		validSlug = slug
+		break
+	}
+	require.NotEmpty(t, validSlug)
+
+	resolve := func(t *testing.T, mutate func(*conf.Settings)) string {
+		t.Helper()
+		core := apitest.NewCore(t, apitest.WithSettingsFunc(mutate))
+		return New(core, nil).resolveRecommendRegion()
+	}
+
+	t.Run("auto with configured coordinates resolves a region", func(t *testing.T) {
+		got := resolve(t, func(s *conf.Settings) {
+			s.BirdNET.Latitude = 4.7 // Bogota, inside a region tile
+			s.BirdNET.Longitude = -74.1
+			s.BirdNET.LocationConfigured = true
+			s.BirdNET.ModelRegion = conf.ModelRegionAuto
+		})
+		assert.NotEmpty(t, got, "configured coordinates over land resolve to a region")
+	})
+
+	t.Run("global mode yields the global model", func(t *testing.T) {
+		got := resolve(t, func(s *conf.Settings) {
+			s.BirdNET.Latitude = 4.7
+			s.BirdNET.Longitude = -74.1
+			s.BirdNET.LocationConfigured = true
+			s.BirdNET.ModelRegion = conf.ModelRegionGlobal
+		})
+		assert.Empty(t, got, "global mode opts out of regional selection")
+	})
+
+	t.Run("no configured location under auto yields the global model", func(t *testing.T) {
+		got := resolve(t, func(s *conf.Settings) {
+			s.BirdNET.Latitude = 4.7 // coordinates present but not marked configured
+			s.BirdNET.Longitude = -74.1
+			s.BirdNET.LocationConfigured = false
+			s.BirdNET.ModelRegion = conf.ModelRegionAuto
+		})
+		assert.Empty(t, got, "auto resolution requires a configured location")
+	})
+
+	t.Run("pinned region is honored without a configured location", func(t *testing.T) {
+		got := resolve(t, func(s *conf.Settings) {
+			s.BirdNET.LocationConfigured = false
+			s.BirdNET.ModelRegion = validSlug
+		})
+		assert.Equal(t, validSlug, got, "an explicit region pin does not require coordinates")
+	})
+}

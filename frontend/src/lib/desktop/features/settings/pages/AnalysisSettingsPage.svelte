@@ -68,7 +68,7 @@
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { toastActions } from '$lib/stores/toast';
   import { formatBytes, formatNumber } from '$lib/utils/formatters';
-  import { pickPreselectedVariant } from '$lib/utils/variantSelection';
+  import { pickPreselectedVariant, reasonKey } from '$lib/utils/variantSelection';
   import { safeArrayAccess } from '$lib/utils/security';
   import { loggers } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
@@ -113,6 +113,20 @@
       if (id.startsWith(prefix)) return logo;
     }
     return null;
+  }
+
+  // Render an entry-level incompatibility code (e.g. "backend.onnx_unavailable")
+  // through the same i18n reason path the variant picker uses, falling back to a
+  // generic localized line when the code is absent or has no translation, so a
+  // structured code never surfaces to the user as a raw dotted string.
+  // Entry-level codes carry no interpolation args (unlike variant reasons), so no
+  // args are threaded here; a future parameterized entry-level code would need an
+  // args field on CatalogEntryResponse.IncompatibleReason and a change here.
+  function entryIncompatibleText(code: string | undefined, fallbackKey: string): string {
+    if (!code) return t(fallbackKey);
+    const key = reasonKey(code);
+    const translated = t(key);
+    return translated === key ? t(fallbackKey) : translated;
   }
 
   // ── Page-level tab state ──────────────────────────────────────────────
@@ -1810,7 +1824,12 @@
                 class="mt-3 flex items-start gap-2 rounded-lg bg-red-500/10 p-3 text-xs text-red-700 dark:text-red-400"
               >
                 <XCircle class="h-4 w-4 shrink-0 mt-0.5" />
-                <span>{entry.incompatibleReason || t('analysis.gallery.onnxRuntimeMissing')}</span>
+                <span
+                  >{entryIncompatibleText(
+                    entry.incompatibleReason,
+                    'analysis.gallery.onnxRuntimeMissing'
+                  )}</span
+                >
               </div>
             {/if}
             <!-- Metadata grid -->
@@ -1994,7 +2013,12 @@
         class="mt-3 flex items-start gap-2 rounded-lg bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400"
       >
         <TriangleAlert class="h-4 w-4 shrink-0 mt-0.5" />
-        <span>{entry.incompatibleReason || t('analysis.gallery.onnxRuntimeRequired')}</span>
+        <span
+          >{entryIncompatibleText(
+            entry.incompatibleReason,
+            'analysis.gallery.onnxRuntimeRequired'
+          )}</span
+        >
       </div>
     {/if}
 

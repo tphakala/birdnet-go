@@ -83,19 +83,26 @@ type ModelListItem struct {
 
 // CatalogEntryResponse represents a model in the catalog API response.
 type CatalogEntryResponse struct {
-	ID                 string `json:"id"`
-	Name               string `json:"name"`
-	Description        string `json:"description"`
-	Author             string `json:"author"`
-	License            string `json:"license"`
-	CommercialUse      bool   `json:"commercialUse"`
-	Category           string `json:"category"`
-	Region             string `json:"region"`
-	SpeciesCount       int    `json:"speciesCount"`
-	Version            string `json:"version"`
-	UpstreamURL        string `json:"upstreamUrl,omitempty"`
-	Installed          bool   `json:"installed"`
-	Compatible         bool   `json:"compatible"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Description   string `json:"description"`
+	Author        string `json:"author"`
+	License       string `json:"license"`
+	CommercialUse bool   `json:"commercialUse"`
+	Category      string `json:"category"`
+	Region        string `json:"region"`
+	SpeciesCount  int    `json:"speciesCount"`
+	Version       string `json:"version"`
+	UpstreamURL   string `json:"upstreamUrl,omitempty"`
+	Installed     bool   `json:"installed"`
+	Compatible    bool   `json:"compatible"`
+	// IncompatibleReason is a structured, localizable code (an i18n key stem such
+	// as "backend.onnx_unavailable"), never a raw English message, so the fully
+	// i18n'd gallery can translate it; a client renders it through the same reason
+	// path as the variant reasons, falling back to the code. The specific
+	// underlying error (e.g. which ONNX Runtime library was missing) is not in
+	// this passive listing; it is returned in full when the user attempts to
+	// install the model.
 	IncompatibleReason string `json:"incompatibleReason,omitempty"`
 	TotalSizeBytes     int64  `json:"totalSizeBytes"`
 	HasGeomodel        bool   `json:"hasGeomodel"`
@@ -198,6 +205,15 @@ func (c *Handler) ListModels(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, models)
 }
 
+// incompatibleReasonONNXUnavailable is the structured, localizable code set on
+// an entry that needs ONNX Runtime when the host has none. It replaces the raw
+// ORT error string (which the i18n'd gallery could not translate) and renders
+// through the same reasonKey path as the variant reasons, with a fallback to the
+// code itself. It is an entry-level signal (gated on RequiresONNX here, not a
+// per-variant blocker), so it lives in this package rather than the recommender's
+// variant vocabulary.
+const incompatibleReasonONNXUnavailable = "backend.onnx_unavailable"
+
 // GetModelCatalog returns the embedded model catalog enriched with install
 // status and compatibility information.
 func (c *Handler) GetModelCatalog(ctx echo.Context) error {
@@ -242,7 +258,7 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 		incompatibleReason := ""
 		if entry.RequiresONNX && !ortStatus.Available {
 			compatible = false
-			incompatibleReason = ortStatus.Error
+			incompatibleReason = incompatibleReasonONNXUnavailable
 		}
 
 		catalog = append(catalog, CatalogEntryResponse{
@@ -265,6 +281,22 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 			InstalledVariantID:   installedVariantID,
 			RecommendedVariantID: recommendedVariant[entry.ID],
 			Variants:             buildVariantResponses(entry, installed, installedVariantID, recsByVariant[entry.ID]),
+		})
+	}
+
+	// Recommended-first ordering for the Available tab: entries with a compatible
+	// hardware recommendation sort ahead of entries with none, catalog order
+	// preserved within each group (stable sort). A flat entry (no variants) is
+	// never ranked by the recommender, so it counts as recommendable to keep it
+	// from sinking below variant-bearing entries; the sort only demotes a
+	// variant-bearing entry whose every variant is incompatible with this host.
+	// Applied only when recommendations were computed (an eligible request); an
+	// ineligible caller keeps the stable default catalog order.
+	if recommendedVariant != nil {
+		sort.SliceStable(catalog, func(i, j int) bool {
+			ri := recommendedVariant[catalog[i].ID] != "" || len(catalog[i].Variants) == 0
+			rj := recommendedVariant[catalog[j].ID] != "" || len(catalog[j].Variants) == 0
+			return ri && !rj
 		})
 	}
 
@@ -349,11 +381,12 @@ func (c *Handler) rankCatalog(entries []classifier.CatalogEntry, ort inference.O
 		profileFn = defaultHardwareProfile
 	}
 	profile := profileFn(ort)
-	recs := recommend.Rank(recommend.Input{
-		Capabilities:  profile.Capabilities(),
-		TotalRAMBytes: profile.TotalRAMBytes,
-		DeviceClass:   recommend.DeviceClass(profile.Board.Tier, profile.Arch),
-		Entries:       entries,
+	recs := recommend.Rank(&recommend.Input{
+		Capabilities:   profile.Capabilities(),
+		TotalRAMBytes:  profile.TotalRAMBytes,
+		DeviceClass:    recommend.DeviceClass(profile.Board.Tier, profile.Arch),
+		ResolvedRegion: c.resolveRecommendRegion(),
+		Entries:        entries,
 	})
 
 	byVariant = make(map[string]map[string]recommend.Recommendation, len(entries))

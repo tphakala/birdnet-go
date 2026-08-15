@@ -3878,6 +3878,8 @@ export type TranslationKey =
   | 'analysis.gallery.variants.latency' // params: ms
   | 'analysis.gallery.reasons.backendRecommended' // params: backend
   | 'analysis.gallery.reasons.backendSupported' // params: backend
+  | 'analysis.gallery.reasons.regionMatched' // params: region
+  | 'analysis.gallery.reasons.regionGlobalFallback'
   | 'analysis.gallery.reasons.precisionFp16Native'
   | 'analysis.gallery.reasons.ramConstrainedFit'
   | 'analysis.gallery.reasons.benchmarkMeasured'
@@ -3886,6 +3888,7 @@ export type TranslationKey =
   | 'analysis.gallery.reasons.backendMissing' // params: required
   | 'analysis.gallery.reasons.ramInsufficient' // params: requiredMb
   | 'analysis.gallery.reasons.hardwareExcluded' // params: token
+  | 'analysis.gallery.reasons.backendOnnxUnavailable'
   | 'analysis.gallery.tabs.installed'
   | 'analysis.gallery.tabs.available'
   | 'analysis.gallery.loading'
@@ -4466,6 +4469,7 @@ export type TranslationParams = {
   'analysis.gallery.variants.latency': { ms: string | number };
   'analysis.gallery.reasons.backendRecommended': { backend: string | number };
   'analysis.gallery.reasons.backendSupported': { backend: string | number };
+  'analysis.gallery.reasons.regionMatched': { region: string | number };
   'analysis.gallery.reasons.archUnsupported': { required: string | number };
   'analysis.gallery.reasons.backendMissing': { required: string | number };
   'analysis.gallery.reasons.ramInsufficient': { requiredMb: string | number };

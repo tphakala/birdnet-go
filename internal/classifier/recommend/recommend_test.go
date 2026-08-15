@@ -151,7 +151,7 @@ func TestRank_HardwareMatrix(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			recs := Rank(Input{
+			recs := Rank(&Input{
 				Capabilities:  tt.caps,
 				TotalRAMBytes: tt.ram,
 				DeviceClass:   tt.deviceClass,
@@ -203,7 +203,7 @@ func TestRank_Blockers(t *testing.T) {
 		},
 	}
 
-	recs := Rank(Input{
+	recs := Rank(&Input{
 		Capabilities:  []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU, "openvino-gpu-intel-gen12"},
 		TotalRAMBytes: ramLow, // 1.5 GiB, below the 4 GiB floor
 		DeviceClass:   deviceClassX86,
@@ -243,7 +243,7 @@ func TestRank_BenchmarkScaling(t *testing.T) {
 			{ID: "slow", Backends: backend, Benchmarks: []classifier.Benchmark{{Device: deviceClassRPi5, Backend: hwprofile.CapONNXRuntimeCPU, LatencyMs: 500}}},
 		},
 	}
-	recs := Rank(Input{
+	recs := Rank(&Input{
 		Capabilities: []string{hwprofile.CapAArch64, hwprofile.CapONNXRuntimeCPU},
 		DeviceClass:  deviceClassRPi5,
 		Entries:      []classifier.CatalogEntry{entry},
@@ -259,7 +259,7 @@ func TestRank_BenchmarkScaling(t *testing.T) {
 			{ID: "b", Backends: backend},
 		},
 	}
-	recsSingle := Rank(Input{
+	recsSingle := Rank(&Input{
 		Capabilities: []string{hwprofile.CapAArch64, hwprofile.CapONNXRuntimeCPU},
 		DeviceClass:  deviceClassRPi5,
 		Entries:      []classifier.CatalogEntry{single},
@@ -282,7 +282,7 @@ func TestRank_TieBreaks(t *testing.T) {
 			{ID: "small", Backends: backend, Files: []classifier.CatalogFile{{SizeBytes: 100}}},
 		},
 	}
-	recs := Rank(Input{
+	recs := Rank(&Input{
 		Capabilities: []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU},
 		Entries:      []classifier.CatalogEntry{entry},
 	})
@@ -310,7 +310,7 @@ func TestRank_BestBackendFromRecommendedSet(t *testing.T) {
 		},
 	}
 	entry := classifier.CatalogEntry{ID: "backend-choice", Variants: []classifier.CatalogVariant{gpuSupportedCPURecommended, gpuRecommended}}
-	recs := Rank(Input{
+	recs := Rank(&Input{
 		Capabilities: []string{hwprofile.CapX86_64, hwprofile.CapOpenVINOCPU, hwprofile.CapOpenVINOGPU},
 		Entries:      []classifier.CatalogEntry{entry},
 	})
@@ -331,7 +331,7 @@ func TestRank_LegacyDemoted(t *testing.T) {
 			{ID: "old", Legacy: true, Backends: backend},
 		},
 	}
-	recs := Rank(Input{
+	recs := Rank(&Input{
 		Capabilities: []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU},
 		Entries:      []classifier.CatalogEntry{entry},
 	})
@@ -345,7 +345,7 @@ func TestRank_EmptyVariantsProducesNothing(t *testing.T) {
 	t.Parallel()
 
 	flat := classifier.CatalogEntry{ID: "flat", Files: []classifier.CatalogFile{{SizeBytes: 10}}}
-	recs := Rank(Input{
+	recs := Rank(&Input{
 		Capabilities: []string{hwprofile.CapX86_64},
 		Entries:      []classifier.CatalogEntry{flat},
 	})
@@ -360,15 +360,120 @@ func TestRank_EmptyBackendsMapNotBlocked(t *testing.T) {
 		ID:       "user-catalog",
 		Variants: []classifier.CatalogVariant{{ID: "plain"}},
 	}
-	recs := Rank(Input{
+	recs := Rank(&Input{
 		Capabilities: []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU},
 		Entries:      []classifier.CatalogEntry{entry},
 	})
 	rec, ok := variantRec(recs, "user-catalog", "plain")
 	require.True(t, ok)
 	assert.True(t, rec.Compatible, "no backend info means no blocker")
-	assert.Empty(t, rec.Reasons, "no backend info means no backend term")
+	assert.False(t, hasReason(&rec, ReasonBackendRecommended), "no backend info means no backend term")
+	assert.False(t, hasReason(&rec, ReasonBackendSupported), "no backend info means no backend term")
+	// A global variant with no region resolved still earns the global fallback,
+	// which is the only reason present here.
+	assert.True(t, hasReason(&rec, ReasonRegionGlobalFallback), "global variant, no region resolved")
 	assert.True(t, rec.Recommended, "the only compatible variant is recommended")
+}
+
+// regionEntry builds a synthetic entry with one global variant plus one variant
+// per given region slug, for the region-axis tests. Variants carry no hardware
+// requirements, so they are all compatible and the region term is isolated. The
+// global variant's download is the largest and the regional ones are 1 byte, so
+// a bare hardware tie-break (which prefers the smaller download) would favor a
+// regional variant; the region term must override that.
+func regionEntry(globalSize int64, regions ...string) classifier.CatalogEntry {
+	e := classifier.CatalogEntry{
+		ID: "regional-model",
+		Variants: []classifier.CatalogVariant{
+			{ID: "global", Files: []classifier.CatalogFile{{SizeBytes: globalSize}}},
+		},
+	}
+	for _, r := range regions {
+		e.Variants = append(e.Variants, classifier.CatalogVariant{
+			ID:     "slice-" + r,
+			Region: r,
+			Files:  []classifier.CatalogFile{{SizeBytes: 1}},
+		})
+	}
+	return e
+}
+
+func TestRank_RegionMatched(t *testing.T) {
+	t.Parallel()
+
+	entry := regionEntry(100, "iberia", "amazonia")
+	recs := Rank(&Input{
+		Capabilities:   []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU},
+		ResolvedRegion: "iberia",
+		Entries:        []classifier.CatalogEntry{entry},
+	})
+
+	assert.Equal(t, "slice-iberia", recommendedVariant(recs, "regional-model"), "the matching regional slice wins")
+
+	iberia, ok := variantRec(recs, "regional-model", "slice-iberia")
+	require.True(t, ok)
+	assert.True(t, hasReason(&iberia, ReasonRegionMatched))
+	assert.Equal(t, "iberia", reasonArg(&iberia, ReasonRegionMatched, "region"))
+
+	// A matching regional slice suppresses the global fallback: the global variant
+	// earns no region reason when the entry ships the resolved region.
+	global, ok := variantRec(recs, "regional-model", "global")
+	require.True(t, ok)
+	assert.False(t, hasReason(&global, ReasonRegionGlobalFallback), "global fallback suppressed when a slice matches")
+	assert.False(t, hasReason(&global, ReasonRegionMatched))
+
+	// A non-matching slice earns nothing on the region axis.
+	amazonia, ok := variantRec(recs, "regional-model", "slice-amazonia")
+	require.True(t, ok)
+	assert.False(t, hasReason(&amazonia, ReasonRegionMatched))
+	assert.False(t, hasReason(&amazonia, ReasonRegionGlobalFallback))
+}
+
+func TestRank_RegionGlobalFallback(t *testing.T) {
+	t.Parallel()
+
+	entry := regionEntry(100, "iberia")
+	recs := Rank(&Input{
+		Capabilities:   []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU},
+		ResolvedRegion: "", // no region resolved (global mode, or no coordinates)
+		Entries:        []classifier.CatalogEntry{entry},
+	})
+
+	assert.Equal(t, "global", recommendedVariant(recs, "regional-model"), "global wins the +50 fallback when no region resolves")
+
+	global, ok := variantRec(recs, "regional-model", "global")
+	require.True(t, ok)
+	assert.True(t, hasReason(&global, ReasonRegionGlobalFallback))
+
+	slice, ok := variantRec(recs, "regional-model", "slice-iberia")
+	require.True(t, ok)
+	assert.False(t, hasReason(&slice, ReasonRegionMatched), "no region resolved means no regional match")
+}
+
+func TestRank_RegionResolvedButNoMatchingSlice(t *testing.T) {
+	t.Parallel()
+
+	// The resolved region (amazonia) has no slice in this entry. The global model
+	// must still beat the wrong-region iberia slice, even though iberia is the
+	// smaller download and would win a bare hardware tie-break. This is the
+	// mis-recommendation hazard the global fallback is designed to close.
+	entry := regionEntry(100, "iberia")
+	recs := Rank(&Input{
+		Capabilities:   []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU},
+		ResolvedRegion: "amazonia",
+		Entries:        []classifier.CatalogEntry{entry},
+	})
+
+	assert.Equal(t, "global", recommendedVariant(recs, "regional-model"), "global fallback beats a wrong-region slice")
+
+	global, ok := variantRec(recs, "regional-model", "global")
+	require.True(t, ok)
+	assert.True(t, hasReason(&global, ReasonRegionGlobalFallback))
+
+	slice, ok := variantRec(recs, "regional-model", "slice-iberia")
+	require.True(t, ok)
+	assert.False(t, hasReason(&slice, ReasonRegionMatched))
+	assert.False(t, hasReason(&slice, ReasonRegionGlobalFallback))
 }
 
 func TestRank_PureInputNotMutated(t *testing.T) {
@@ -384,7 +489,7 @@ func TestRank_PureInputNotMutated(t *testing.T) {
 	before := len(in.Entries[0].Variants)
 	beforeCaps := slices.Clone(in.Capabilities)
 
-	_ = Rank(in)
+	_ = Rank(&in)
 
 	assert.Len(t, in.Entries[0].Variants, before, "entry variants unchanged")
 	assert.Equal(t, beforeCaps, in.Capabilities, "capabilities unchanged")
@@ -401,9 +506,9 @@ func TestRank_Deterministic(t *testing.T) {
 		DeviceClass:   deviceClassX86,
 		Entries:       []classifier.CatalogEntry{perch, v3},
 	}
-	first := Rank(in)
+	first := Rank(&in)
 	for range 20 {
-		assert.Equal(t, first, Rank(in), "Rank is deterministic across repeated calls")
+		assert.Equal(t, first, Rank(&in), "Rank is deterministic across repeated calls")
 	}
 }
 
@@ -434,7 +539,7 @@ func TestRank_FP16NativeBonus(t *testing.T) {
 	// precision bonus. This is the case the matrix test could not reach (perch-v2
 	// has no fp16 variant).
 	v3 := realEntry(t, "birdnet-v3.0")
-	recs := Rank(Input{
+	recs := Rank(&Input{
 		Capabilities: []string{hwprofile.CapAArch64, hwprofile.CapAArch64A76, hwprofile.CapONNXRuntimeCPU, hwprofile.CapFP16Native},
 		DeviceClass:  deviceClassRPi5,
 		Entries:      []classifier.CatalogEntry{v3},
@@ -460,7 +565,7 @@ func TestRank_LowRAMInt8Bonus(t *testing.T) {
 		},
 	}
 
-	lowRAM := Rank(Input{
+	lowRAM := Rank(&Input{
 		Capabilities:  []string{hwprofile.CapAArch64, hwprofile.CapONNXRuntimeCPU, hwprofile.CapLowRAM},
 		TotalRAMBytes: ramLow,
 		Entries:       []classifier.CatalogEntry{entry},
@@ -469,7 +574,7 @@ func TestRank_LowRAMInt8Bonus(t *testing.T) {
 	int8Rec, _ := variantRec(lowRAM, "ram-test", "int8")
 	assert.True(t, hasReason(&int8Rec, ReasonRAMConstrainedFit))
 
-	fullRAM := Rank(Input{
+	fullRAM := Rank(&Input{
 		Capabilities:  []string{hwprofile.CapAArch64, hwprofile.CapONNXRuntimeCPU},
 		TotalRAMBytes: ramHigh,
 		Entries:       []classifier.CatalogEntry{entry},
@@ -491,7 +596,7 @@ func TestRank_LegacyNotRecommended(t *testing.T) {
 			{ID: "new", Requirements: classifier.VariantRequirements{Arch: []string{hwprofile.CapAArch64}}, Backends: backend},
 		},
 	}
-	recs := Rank(Input{
+	recs := Rank(&Input{
 		Capabilities: []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU}, // amd64: "new" (aarch64-only) is blocked
 		Entries:      []classifier.CatalogEntry{entry},
 	})
@@ -519,7 +624,7 @@ func TestRank_BackendMissingNotDuplicated(t *testing.T) {
 			},
 		},
 	}
-	recs := Rank(Input{
+	recs := Rank(&Input{
 		Capabilities: []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU}, // no openvino-gpu
 		Entries:      []classifier.CatalogEntry{entry},
 	})

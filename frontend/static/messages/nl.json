@@ -5324,6 +5324,8 @@
       "reasons": {
         "backendRecommended": "Draait op {backend}, de aanbevolen backend voor jouw hardware",
         "backendSupported": "Draait op {backend}",
+        "regionMatched": "Afgestemd op jouw regio ({region})",
+        "regionGlobalFallback": "Globaal model voor jouw locatie",
         "precisionFp16Native": "Halve-precisie versie afgestemd op je processor",
         "ramConstrainedFit": "Gekwantiseerde versie aangepast aan je beschikbare geheugen",
         "benchmarkMeasured": "Snelste op jouw apparaat in gemeten benchmarks",
@@ -5331,7 +5333,8 @@
         "archUnsupported": "Vereist een {required} processor",
         "backendMissing": "Heeft een inference backend nodig die je installatie niet kan bereiken ({required})",
         "ramInsufficient": "Heeft minimaal {requiredMb} MB geheugen nodig",
-        "hardwareExcluded": "Niet ondersteund op jouw hardware ({token})"
+        "hardwareExcluded": "Niet ondersteund op jouw hardware ({token})",
+        "backendOnnxUnavailable": "Vereist ONNX Runtime, dat niet beschikbaar is op dit systeem"
       },
       "tabs": {
         "installed": "Geïnstalleerd",
