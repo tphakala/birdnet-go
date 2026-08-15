@@ -117,8 +117,8 @@ func TestBirdNETV3_LoaderRegistered(t *testing.T) {
 	assert.True(t, ok, "BirdNET v3.0 must have an OpenVINO-capable secondary builder")
 }
 
-// TestBirdNETV3_CatalogEntry guards the catalog entry shape: correct repo, hidden
-// during preview, and the expected model/labels/geomodel/taxonomy companion files.
+// TestBirdNETV3_CatalogEntry guards the catalog entry shape: correct repo, visible
+// in the gallery, and the expected model/labels/geomodel/taxonomy companion files.
 func TestBirdNETV3_CatalogEntry(t *testing.T) {
 	t.Parallel()
 
@@ -127,7 +127,7 @@ func TestBirdNETV3_CatalogEntry(t *testing.T) {
 
 	assert.Equal(t, RegistryIDBirdNETV3, entry.RegistryID)
 	assert.Equal(t, "tphakala/BirdNET-v3.0-Models", entry.HuggingFaceRepo)
-	assert.True(t, entry.Hidden, "v3.0 stays hidden until GA (private HF repo, no final checksums)")
+	assert.False(t, entry.Hidden, "v3.0 is visible in the gallery (public HF repo, pinned checksums, RAM-floor gated)")
 	assert.True(t, entry.RequiresONNX)
 
 	roles := map[string]int{}

@@ -129,26 +129,28 @@ var EmbeddedCatalog = []CatalogEntry{
 	// (EfficientNetV2-S backbone, 11,560 species, 32kHz/5s), paired with the v3.0
 	// geomodel range filter. The HuggingFace repo is public and the file
 	// checksums/sizes below are pinned from it, so this entry's download path is
-	// integrity-checked like every other entry. Kept Hidden until GA and until the
-	// gallery can offer the hardware and regional variant selection a model this
-	// heavy needs (the global fp32 file is 557 MB). Hidden entries are rejected by
-	// the install API (internal/api/v2/models.InstallModel), so this is catalog
-	// metadata only. The backend loader is fully functional, so v3.0 can still be
-	// enabled via config (models.enabled + birdnetv3 model/label paths) for evaluation.
+	// integrity-checked like every other entry. Now visible in the gallery: the
+	// hardware recommender (internal/classifier/recommend) plus the per-variant
+	// MinRAMMB floors below keep the heavy global fp32 (557 MB) and fp16 (279 MB)
+	// builds off hosts that cannot run them. Only the two global variants ship
+	// today; regional tiles remain a later generator pass. The entry stays
+	// labelled a developer preview so users know it is not the GA build. The
+	// backend loader is fully functional and v3.0 can also be enabled via config
+	// (models.enabled + birdnetv3 model/label paths).
 	{
 		ID:              "birdnet-v3.0",
 		Name:            "BirdNET v3.0",
-		Description:     "Global wildlife classifier using the BirdNET v3.0 architecture (11,560 species, birds and other fauna; scientific and common names)",
+		Description:     "Developer preview of the BirdNET v3.0 global wildlife classifier (11,560 species, birds and other fauna; scientific and common names). Not the GA build.",
 		Author:          "Cornell Lab of Ornithology & Chemnitz University of Technology",
 		License:         "CC-BY-SA-4.0",
-		CommercialUse:   false,
+		CommercialUse:   true,
 		Category:        CategoryWildlife,
 		Region:          "",
 		SpeciesCount:    11560,
 		Version:         "3.0",
 		GeomodelVersion: "v3",
 		RegistryID:      RegistryIDBirdNETV3,
-		Hidden:          true,
+		Hidden:          false,
 		RequiresONNX:    true,
 		UpstreamURL:     "https://github.com/birdnet-team/BirdNET-Analyzer",
 		HuggingFaceRepo: "tphakala/BirdNET-v3.0-Models",
@@ -164,12 +166,22 @@ var EmbeddedCatalog = []CatalogEntry{
 				Precision:    "fp32",
 				SpeciesCount: 11560,
 				Default:      true,
+				// RAM floor and benchmarks sourced from the acoustic-models
+				// BirdNET-v3.0-Models.models.json manifest.
+				Requirements: VariantRequirements{MinRAMMB: 800},
 				Backends: map[string]BackendSupport{
 					"onnxruntime-cpu": {Supported: true, Recommended: true},
 					"openvino-cpu":    {Supported: true, Recommended: true},
 					"openvino-gpu":    {Supported: true},
 					"cuda":            {Supported: true, Recommended: true},
 					"tensorrt":        {Supported: true, Recommended: true},
+				},
+				Benchmarks: []Benchmark{
+					{Device: "rpi5-a76", Backend: "openvino-cpu", LatencyMs: 168},
+					{Device: "rpi5-a76", Backend: "onnxruntime-cpu", LatencyMs: 363, RSSMB: 685},
+					{Device: "rpi4b-a72", Backend: "onnxruntime-cpu", LatencyMs: 874, RSSMB: 688},
+					{Device: "x86-i7-1260P", Backend: "onnxruntime-cpu", LatencyMs: 70},
+					{Device: "x86-i7-1260P", Backend: "openvino-gpu", LatencyMs: 95},
 				},
 				Files: slices.Concat([]CatalogFile{
 					{RemotePath: "full/birdnet-v3.0-preview3.1-fp32-b1.onnx", LocalName: "birdnet_v3.0_fp32.onnx", Role: RoleModel, SHA256: "05535c3ef6ce3f9e523706dd3e144cb6db96bc202e9047f4973961256acbf997", SizeBytes: 557212256},
@@ -179,12 +191,20 @@ var EmbeddedCatalog = []CatalogEntry{
 				ID:           "fp16",
 				Precision:    "fp16",
 				SpeciesCount: 11560,
+				// RAM floor, exclude token and benchmarks sourced from the
+				// acoustic-models BirdNET-v3.0-Models.models.json manifest.
+				Requirements: VariantRequirements{MinRAMMB: 1100, Excludes: []string{"openvino-gpu-intel-gen12"}},
 				Backends: map[string]BackendSupport{
 					"openvino-gpu":    {Supported: true, Recommended: true},
 					"cuda":            {Supported: true, Recommended: true},
 					"tensorrt":        {Supported: true, Recommended: true},
 					"onnxruntime-cpu": {Supported: true},
 					"openvino-cpu":    {Supported: true},
+				},
+				Benchmarks: []Benchmark{
+					{Device: "rpi5-a76", Backend: "onnxruntime-cpu", LatencyMs: 381, RSSMB: 480},
+					{Device: "rpi4b-a72", Backend: "onnxruntime-cpu", LatencyMs: 887, RSSMB: 929},
+					{Device: "x86-i7-1260P", Backend: "openvino-gpu", LatencyMs: 81},
 				},
 				Files: slices.Concat([]CatalogFile{
 					{RemotePath: "full/birdnet-v3.0-preview3.1-fp16-b1.onnx", LocalName: "birdnet_v3.0_fp16.onnx", Role: RoleModel, SHA256: "18fc932b9ac7478720ac8ca9077694b6ea62fb00675aa488e77b15e722244e67", SizeBytes: 278787557},
@@ -221,6 +241,9 @@ var EmbeddedCatalog = []CatalogEntry{
 				Precision:    "fp32",
 				SpeciesCount: 14795,
 				Default:      true,
+				// RAM floors sourced from the acoustic-models
+				// Perch-v2-Models.models.json manifest.
+				Requirements: VariantRequirements{MinRAMMB: 700},
 				Backends: map[string]BackendSupport{
 					"onnxruntime-cpu": {Supported: true, Recommended: true},
 					"cuda":            {Supported: true, Recommended: true},
@@ -234,6 +257,7 @@ var EmbeddedCatalog = []CatalogEntry{
 				ID:           "no-dft-fp32",
 				Precision:    "fp32",
 				SpeciesCount: 14795,
+				Requirements: VariantRequirements{MinRAMMB: 750},
 				Backends: map[string]BackendSupport{
 					"openvino-cpu":    {Supported: true, Recommended: true},
 					"openvino-gpu":    {Supported: true, Recommended: true},
@@ -249,7 +273,7 @@ var EmbeddedCatalog = []CatalogEntry{
 				ID:           "int8-arm",
 				Precision:    "int8",
 				SpeciesCount: 14795,
-				Requirements: VariantRequirements{Arch: []string{"aarch64"}},
+				Requirements: VariantRequirements{Arch: []string{"aarch64"}, MinRAMMB: 350},
 				Backends: map[string]BackendSupport{
 					"onnxruntime-cpu": {Supported: true, Recommended: true},
 				},
@@ -328,6 +352,9 @@ var EmbeddedCatalog = []CatalogEntry{
 				ID:        "fp32-dfttrunc",
 				Precision: "fp32",
 				Default:   true,
+				// RAM floors sourced from the acoustic-models
+				// BirdNET-v2.4.models.json manifest.
+				Requirements: VariantRequirements{MinRAMMB: 250},
 				Backends: map[string]BackendSupport{
 					"onnxruntime-cpu": {Supported: true, Recommended: true},
 					"openvino-cpu":    {Supported: true, Recommended: true},
@@ -342,7 +369,7 @@ var EmbeddedCatalog = []CatalogEntry{
 			{
 				ID:           "int8-arm-dfttrunc",
 				Precision:    "int8",
-				Requirements: VariantRequirements{Arch: []string{"aarch64"}},
+				Requirements: VariantRequirements{Arch: []string{"aarch64"}, MinRAMMB: 250},
 				Backends: map[string]BackendSupport{
 					"onnxruntime-cpu": {Supported: true, Recommended: true},
 					"openvino-cpu":    {Supported: true},
