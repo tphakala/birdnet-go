@@ -285,7 +285,7 @@ func TestCatalogByCategory(t *testing.T) {
 	}
 
 	// Verify expected counts
-	assert.Len(t, grouped[CategoryWildlife], 1, "expected 1 visible wildlife catalog entry")
+	assert.Len(t, grouped[CategoryWildlife], 2, "expected 2 visible wildlife catalog entries (perch-v2, birdnet-v3.0)")
 	assert.Empty(t, grouped[CategoryBird], "expected 0 visible bird catalog entries")
 	assert.Len(t, grouped[CategoryGeomodel], 1, "expected 1 visible geomodel catalog entry")
 	assert.Len(t, grouped[CategoryBat], 11, "expected 11 bat catalog entries")
@@ -344,11 +344,21 @@ func TestVisibleCatalog_ExcludesHiddenEntries(t *testing.T) {
 		assert.False(t, entry.Hidden, "visible catalog should not contain hidden entry %q", entry.ID)
 	}
 
-	// Hidden entries should still be findable via GetCatalogEntry
+	// birdnet-v3.0 is now visible (un-hidden): the public HF repo, pinned
+	// checksums, and per-variant RAM floors make it safe to offer in the gallery.
 	birdnetV3, ok := GetCatalogEntry("birdnet-v3.0")
 	require.True(t, ok)
-	assert.True(t, birdnetV3.Hidden)
+	assert.False(t, birdnetV3.Hidden, "birdnet-v3.0 must be visible")
+	foundV3 := false
+	for i := range visible {
+		if visible[i].ID == "birdnet-v3.0" {
+			foundV3 = true
+			break
+		}
+	}
+	assert.True(t, foundV3, "birdnet-v3.0 must appear in the visible catalog")
 
+	// Hidden entries should still be findable via GetCatalogEntry.
 	bsg, ok := GetCatalogEntry("bsg-finland")
 	require.True(t, ok)
 	assert.True(t, bsg.Hidden)
@@ -368,11 +378,11 @@ func TestVisibleCatalog_ExcludesHiddenEntries(t *testing.T) {
 			"hidden entry %q must be excluded from the visible catalog", visible[i].ID)
 	}
 
-	// Visible count should be total minus the 3 hidden entries
-	// (birdnet-v3.0, bsg-finland, and the collapsed BirdNET v2.4 foundation entry).
+	// Visible count should be total minus the 2 hidden entries
+	// (bsg-finland and the collapsed BirdNET v2.4 foundation entry).
 	// The hardcoded count is an intentional tripwire: a new hidden entry must
 	// update it, forcing a conscious check that the exclusion is intended.
-	assert.Len(t, visible, len(EmbeddedCatalog)-3)
+	assert.Len(t, visible, len(EmbeddedCatalog)-2)
 }
 
 func TestGetCatalogEntry_BSGFinland(t *testing.T) {
@@ -408,6 +418,82 @@ func TestGetCatalogEntry_BirdNETv30(t *testing.T) {
 	assert.Equal(t, "BirdNET v3.0", entry.Name)
 	assert.Equal(t, RegistryIDBirdNETV3, entry.RegistryID)
 	assert.Equal(t, CategoryWildlife, entry.Category)
+	assert.False(t, entry.Hidden, "birdnet-v3.0 is visible in the gallery")
+	assert.True(t, entry.CommercialUse, "birdnet-v3.0 is CC-BY-SA-4.0, which permits commercial use")
+}
+
+// TestEmbeddedCatalog_VariantRequirementsPopulated pins the per-variant MinRAMMB
+// floors, the fp16 exclude token, and the BirdNET v3.0 benchmark data. These
+// values are mirrored from the acoustic-models manifests and drive the hardware
+// recommender: without the RAM floors the recommender cannot keep heavy variants
+// off low-RAM hosts, and without at least two comparable benchmarks per entry the
+// latency term stays inert. Literals catch an accidental edit or a manifest drift.
+func TestEmbeddedCatalog_VariantRequirementsPopulated(t *testing.T) {
+	t.Parallel()
+
+	// Expected MinRAMMB per (entry, variant), mirrored from the manifests.
+	wantRAM := map[string]map[string]int{
+		"birdnet-v3.0": {"fp32": 800, "fp16": 1100},
+		"perch-v2":     {"fp32": 700, "no-dft-fp32": 750, "int8-arm": 350},
+		"birdnet-v2.4": {"fp32-dfttrunc": 250, "int8-arm-dfttrunc": 250},
+	}
+	for entryID, variants := range wantRAM {
+		entry, ok := GetCatalogEntry(entryID)
+		require.Truef(t, ok, "expected catalog entry %q", entryID)
+		for variantID, wantMB := range variants {
+			v := variantByID(t, &entry, variantID)
+			assert.Equalf(t, wantMB, v.Requirements.MinRAMMB, "%s/%s MinRAMMB", entryID, variantID)
+		}
+	}
+
+	// The fp16 variant excludes the known-bad Intel gen12 iGPU path.
+	v30, ok := GetCatalogEntry("birdnet-v3.0")
+	require.True(t, ok)
+	fp16 := variantByID(t, &v30, "fp16")
+	assert.Contains(t, fp16.Requirements.Excludes, "openvino-gpu-intel-gen12", "fp16 must exclude the gen12 iGPU path")
+
+	// BirdNET v3.0 is the only family with measured benchmarks. Pin every row
+	// exactly (device, backend, latency, RSS): the latencies drive the
+	// recommender's ranking, so a wrong value is a silent behavior change, not a
+	// count mismatch. Both global variants carry an rpi5-a76 onnxruntime-cpu
+	// measurement, the two comparable members the recommender needs to rank on
+	// latency.
+	fp32 := variantByID(t, &v30, "fp32")
+	assert.Len(t, fp32.Benchmarks, 5, "fp32 benchmark rows")
+	assert.Len(t, fp16.Benchmarks, 3, "fp16 benchmark rows")
+	benchWant := []struct {
+		variantID, device, backend string
+		latencyMs, rssMB           int
+	}{
+		{"fp32", "rpi5-a76", "openvino-cpu", 168, 0},
+		{"fp32", "rpi5-a76", "onnxruntime-cpu", 363, 685},
+		{"fp32", "rpi4b-a72", "onnxruntime-cpu", 874, 688},
+		{"fp32", "x86-i7-1260P", "onnxruntime-cpu", 70, 0},
+		{"fp32", "x86-i7-1260P", "openvino-gpu", 95, 0},
+		{"fp16", "rpi5-a76", "onnxruntime-cpu", 381, 480},
+		{"fp16", "rpi4b-a72", "onnxruntime-cpu", 887, 929},
+		{"fp16", "x86-i7-1260P", "openvino-gpu", 81, 0},
+	}
+	for _, w := range benchWant {
+		t.Run(w.variantID+"/"+w.device+"/"+w.backend, func(t *testing.T) {
+			t.Parallel()
+			b, ok := findBenchmark(variantByID(t, &v30, w.variantID), w.device, w.backend)
+			require.Truef(t, ok, "%s missing benchmark %s/%s", w.variantID, w.device, w.backend)
+			assert.Equalf(t, w.latencyMs, b.LatencyMs, "%s %s/%s latency", w.variantID, w.device, w.backend)
+			assert.Equalf(t, w.rssMB, b.RSSMB, "%s %s/%s rss", w.variantID, w.device, w.backend)
+		})
+	}
+}
+
+// findBenchmark returns the variant's benchmark measured on the given device
+// with the given backend, and whether one exists.
+func findBenchmark(v *CatalogVariant, device, backend string) (Benchmark, bool) {
+	for i := range v.Benchmarks {
+		if v.Benchmarks[i].Device == device && v.Benchmarks[i].Backend == backend {
+			return v.Benchmarks[i], true
+		}
+	}
+	return Benchmark{}, false
 }
 
 // TestEmbeddedCatalog_BirdNETv24Variants pins the identity of the collapsed hidden
