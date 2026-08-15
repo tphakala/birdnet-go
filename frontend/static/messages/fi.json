@@ -5300,6 +5300,13 @@
         "switchToAuto": "Vaihda automaattiseen",
         "loading": "Ladataan alueita...",
         "loadFailed": "Aluetietojen lataaminen epäonnistui",
+        "mapLoading": "Ladataan kattavuuskarttaa...",
+        "mapUnavailable": "Kattavuuskartta ei ole saatavilla",
+        "mapAria": "Alueen {region} kattavuuskartta",
+        "countriesCore": "Kattaa: {countries}",
+        "countriesPartial": "Osittainen kattavuus: {countries}",
+        "countriesMore": "ja {count} muuta",
+        "countriesLess": "Näytä vähemmän",
         "why": {
           "noLocation": "Automaattinen valinta vaatii aseman sijainnin. Aseta se Pääasetuksissa; siihen asti käytetään globaalia mallia.",
           "outsideCoverage": "Sijaintisi on kaikkien alueellisten mallien kattavuusalueen ulkopuolella, joten käytetään globaalia mallia.",

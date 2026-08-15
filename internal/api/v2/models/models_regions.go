@@ -5,20 +5,32 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/region"
+	"github.com/tphakala/birdnet-go/internal/logger"
+)
+
+const (
+	// svgContentType is the media type served for region coverage maps.
+	svgContentType = "image/svg+xml"
+	// coverageMapCacheControl lets a browser reuse an embedded coverage map for
+	// an hour before revalidating. Combined with the per-map ETag, a revalidation
+	// after that window returns 304 unless a binary upgrade changed the bytes.
+	coverageMapCacheControl = "public, max-age=3600"
 )
 
 // RegionOption is one selectable region in the gallery dropdown.
 type RegionOption struct {
-	Slug         string `json:"slug"`
-	Name         string `json:"name"`
-	Group        string `json:"group"`        // continental bucket slug, for grouping in the UI
-	GroupDisplay string `json:"groupDisplay"` // continental bucket display name
-	Tier         int    `json:"tier"`
+	Slug         string           `json:"slug"`
+	Name         string           `json:"name"`
+	Group        string           `json:"group"`        // continental bucket slug, for grouping in the UI
+	GroupDisplay string           `json:"groupDisplay"` // continental bucket display name
+	Tier         int              `json:"tier"`
+	Countries    region.Countries `json:"countries"` // ISO 3166-1 alpha-2 codes the UI localizes client-side
 }
 
 // RegionResolution is the coordinate-resolution outcome the UI renders as the
@@ -101,6 +113,49 @@ func (c *Handler) GetModelRegions(ctx echo.Context) error {
 	})
 }
 
+// GetRegionCoverageMap serves the embedded SVG coverage map for a region slug at
+// GET /api/v2/models/regions/:slug/map. Unlike GetModelRegions it is public and
+// not auth-gated: it returns fixed embedded bytes selected by a client-supplied
+// public slug and reveals nothing derived from the user's location. It sets a
+// strong ETag and honors If-None-Match, so a browser revalidation returns 304.
+// An unknown or malformed slug is a 404, which the UI treats as "no map" and
+// falls back to its text-only country list.
+func (c *Handler) GetRegionCoverageMap(ctx echo.Context) error {
+	slug := ctx.Param("slug")
+	svg, etag, ok := region.CoverageMap(slug)
+	if !ok {
+		return c.HandleError(ctx, nil, "coverage map not found", http.StatusNotFound)
+	}
+	h := ctx.Response().Header()
+	h.Set("Cache-Control", coverageMapCacheControl)
+	h.Set("ETag", etag)
+	if ifNoneMatch(ctx.Request().Header.Get("If-None-Match"), etag) {
+		return ctx.NoContent(http.StatusNotModified)
+	}
+	return ctx.Blob(http.StatusOK, svgContentType, svg)
+}
+
+// ifNoneMatch reports whether an If-None-Match request header matches etag,
+// honoring the "*" wildcard and a comma-separated list of candidate tags. It
+// also accepts the weak form W/"...": reverse proxies and CDNs commonly weaken a
+// strong ETag before it reaches the client, which then echoes the weakened tag
+// back on revalidation, so comparing against the de-weakened candidate still
+// yields the correct 304 instead of re-sending the whole SVG (RFC 7232).
+func ifNoneMatch(header, etag string) bool {
+	if header == "" {
+		return false
+	}
+	if strings.TrimSpace(header) == "*" {
+		return true
+	}
+	for candidate := range strings.SplitSeq(header, ",") {
+		if strings.TrimPrefix(strings.TrimSpace(candidate), "W/") == etag {
+			return true
+		}
+	}
+	return false
+}
+
 // representativeTable picks a deterministic table from the embedded set (lowest
 // repo id), used for the geometry-only top-level resolution. Returns nil when no
 // table is embedded.
@@ -127,6 +182,12 @@ func (c *Handler) resolveRecommendRegion() string {
 	s := c.CurrentSettings()
 	tables, err := region.Tables()
 	if err != nil {
+		// Embedded region data always loads, so a failure here is a real anomaly
+		// worth a log line even though the fallback (global scoring) is safe. Kept
+		// asymmetric with GetModelRegions, which 500s: the recommender must never
+		// fail the gallery over region data.
+		c.LogDebugIfEnabled("region tables unavailable; recommender falling back to global scoring",
+			logger.String("error", err.Error()))
 		return "" // recommender falls back to global scoring; non-fatal
 	}
 	rep := representativeTable(tables)
@@ -167,6 +228,7 @@ func buildRegionOptions(tables map[string]*region.Table) []RegionOption {
 				Group:        r.Group,
 				GroupDisplay: r.GroupDisplay,
 				Tier:         r.Tier,
+				Countries:    r.Countries,
 			}
 		}
 	}

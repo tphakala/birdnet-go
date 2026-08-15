@@ -5300,6 +5300,13 @@
         "switchToAuto": "Auf automatisch wechseln",
         "loading": "Regionen werden geladen...",
         "loadFailed": "Regionsdaten konnten nicht geladen werden",
+        "mapLoading": "Abdeckungskarte wird geladen...",
+        "mapUnavailable": "Abdeckungskarte nicht verfügbar",
+        "mapAria": "Abdeckungskarte für {region}",
+        "countriesCore": "Deckt ab: {countries}",
+        "countriesPartial": "Teilweise Abdeckung: {countries}",
+        "countriesMore": "und {count} weitere",
+        "countriesLess": "Weniger anzeigen",
         "why": {
           "noLocation": "Die automatische Auswahl erfordert einen Stationsstandort. Legen Sie ihn in den Haupteinstellungen fest; bis dahin wird das globale Modell verwendet.",
           "outsideCoverage": "Ihr Standort liegt außerhalb der Abdeckung aller regionalen Modelle, daher wird das globale Modell verwendet.",

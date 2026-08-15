@@ -5300,6 +5300,13 @@
         "switchToAuto": "Cambiar a automático",
         "loading": "Cargando regiones...",
         "loadFailed": "Error al cargar los datos de la región",
+        "mapLoading": "Cargando mapa de cobertura...",
+        "mapUnavailable": "Mapa de cobertura no disponible",
+        "mapAria": "Mapa de cobertura de {region}",
+        "countriesCore": "Cubre: {countries}",
+        "countriesPartial": "Cobertura parcial: {countries}",
+        "countriesMore": "y {count} más",
+        "countriesLess": "Mostrar menos",
         "why": {
           "noLocation": "La selección automática necesita la ubicación de la estación. Configúrela en Configuración principal; hasta entonces se usará el modelo global.",
           "outsideCoverage": "Su ubicación está fuera de la cobertura de todos los modelos regionales, por lo que se utiliza el modelo global.",

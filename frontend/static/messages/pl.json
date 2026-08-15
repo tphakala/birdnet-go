@@ -5300,6 +5300,13 @@
         "switchToAuto": "Przełącz na automatyczny",
         "loading": "Ładowanie regionów...",
         "loadFailed": "Nie udało się załadować danych regionu",
+        "mapLoading": "Ładowanie mapy zasięgu...",
+        "mapUnavailable": "Mapa zasięgu niedostępna",
+        "mapAria": "Mapa zasięgu regionu {region}",
+        "countriesCore": "Obejmuje: {countries}",
+        "countriesPartial": "Częściowy zasięg: {countries}",
+        "countriesMore": "i {count} więcej",
+        "countriesLess": "Pokaż mniej",
         "why": {
           "noLocation": "Automatyczny wybór wymaga lokalizacji stacji. Ustaw ją w Ustawieniach Głównych; do tego czasu używany jest model globalny.",
           "outsideCoverage": "Twoja lokalizacja znajduje się poza zasięgiem wszystkich modeli regionalnych, dlatego używany jest model globalny.",

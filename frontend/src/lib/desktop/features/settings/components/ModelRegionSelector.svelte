@@ -14,8 +14,9 @@
   import { onMount } from 'svelte';
   import { Globe, MapPin } from '@lucide/svelte';
 
-  import { t } from '$lib/i18n';
-  import { fetchModelRegions } from '$lib/utils/modelsApi';
+  import { t, getLocale } from '$lib/i18n';
+  import { fetchModelRegions, fetchRegionCoverageMap } from '$lib/utils/modelsApi';
+  import { localizedCountryNames } from '$lib/utils/countryNames';
   import { loggers } from '$lib/utils/logger';
   import { birdnetSettings, settingsActions } from '$lib/stores/settings';
   import type { ModelRegionsResponse, RegionOption } from '$lib/types/models';
@@ -167,6 +168,110 @@
       pins: [],
       offerAuto: false,
       mismatch,
+    };
+  });
+
+  // --- Active-region detail: coverage map + localized country list ----------
+  // The "active region" is the one whose map and country list we surface: the
+  // auto-resolved region (once a location is configured), or a known pinned
+  // slug. Global, no-location, outside-coverage, and unknown pins have no map.
+  const activeSlug = $derived.by<string>(() => {
+    if (!data) return '';
+    if (selected === 'global') return '';
+    if (selected === 'auto') return data.locationConfigured ? data.resolved.slug : '';
+    return knownSlug(selected) ? selected : '';
+  });
+
+  const activeRegion = $derived<RegionOption | undefined>(
+    activeSlug ? regions.find(r => r.slug === activeSlug) : undefined
+  );
+
+  const locale = $derived(getLocale());
+  const coreCountries = $derived<string[]>(
+    localizedCountryNames(activeRegion?.countries?.core, locale)
+  );
+  const partialCountries = $derived<string[]>(
+    localizedCountryNames(activeRegion?.countries?.partial, locale)
+  );
+
+  // Country lists can be long; show a capped set with a single expand toggle that
+  // governs both the core and the partial list, so neither can render an
+  // unbounded comma-joined line.
+  const COUNTRY_LIMIT = 8;
+  let countriesExpanded = $state(false);
+  const coreVisible = $derived(
+    countriesExpanded ? coreCountries : coreCountries.slice(0, COUNTRY_LIMIT)
+  );
+  const partialVisible = $derived(
+    countriesExpanded ? partialCountries : partialCountries.slice(0, COUNTRY_LIMIT)
+  );
+  const hiddenCountries = $derived(
+    Math.max(0, coreCountries.length - COUNTRY_LIMIT) +
+      Math.max(0, partialCountries.length - COUNTRY_LIMIT)
+  );
+
+  // The inlined SVG map for the active region. Fetched lazily per slug and cached
+  // so toggling between two regions does not refetch. mapFailed drives the
+  // text-only fallback; the country list renders regardless.
+  let coverageSvg = $state<string | null>(null);
+  let mapLoading = $state(false);
+  let mapFailed = $state(false);
+  const mapCache = new Map<string, string>();
+
+  $effect(() => {
+    const slug = activeSlug;
+    // Reset the country disclosure whenever the active region changes.
+    countriesExpanded = false;
+
+    if (!slug) {
+      coverageSvg = null;
+      mapLoading = false;
+      mapFailed = false;
+      return;
+    }
+
+    const cached = mapCache.get(slug);
+    if (cached !== undefined) {
+      coverageSvg = cached;
+      mapLoading = false;
+      mapFailed = false;
+      return;
+    }
+
+    // Guard against out-of-order responses: a slower earlier fetch must not
+    // overwrite the map for a region the user has since switched away from.
+    let cancelled = false;
+    coverageSvg = null;
+    mapFailed = false;
+    mapLoading = true;
+
+    fetchRegionCoverageMap(slug)
+      .then(svg => {
+        // aria-hidden the inlined SVG so the wrapper's localized label is the
+        // only accessible name (the SVG ships a baked English aria-label and
+        // role="img"). Trusted, pipeline-generated, same-origin content. The
+        // \b anchor tolerates any root form (`<svg `, `<svg>`, `<svg\n...`).
+        const safe = svg.replace(/<svg\b/, '<svg aria-hidden="true"');
+        mapCache.set(slug, safe);
+        if (!cancelled) {
+          coverageSvg = safe;
+          mapLoading = false;
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          coverageSvg = null;
+          mapFailed = true;
+          mapLoading = false;
+        }
+        logger.error('Failed to load region coverage map', err, {
+          component: 'ModelRegionSelector',
+          slug,
+        });
+      });
+
+    return () => {
+      cancelled = true;
     };
   });
 </script>
@@ -327,6 +432,86 @@
           </div>
         {/if}
       {/if}
+
+      <!-- Active-region detail: coverage map + localized country list. -->
+      {#if activeRegion}
+        <div class="mt-1 flex flex-col gap-2 rounded-md border border-base-300 p-2">
+          {#if mapLoading}
+            <div role="status" class="text-xs text-base-content/60">
+              {t('analysis.gallery.region.mapLoading')}
+            </div>
+          {:else if coverageSvg}
+            <div
+              class="w-full max-w-sm self-center [&_svg]:h-auto [&_svg]:w-full"
+              role="img"
+              aria-label={t('analysis.gallery.region.mapAria', { region: activeRegion.name })}
+            >
+              <!-- Trusted, pipeline-generated, same-origin embedded SVG selected by a
+                   server-validated slug; the inner SVG is aria-hidden above. -->
+              {@html coverageSvg}
+            </div>
+          {:else if mapFailed}
+            <div role="status" class="text-xs text-base-content/70">
+              {t('analysis.gallery.region.mapUnavailable')}
+            </div>
+          {/if}
+
+          {#if coreCountries.length > 0}
+            <div class="text-xs text-base-content/70">
+              <span class="font-medium"
+                >{t('analysis.gallery.region.countriesCore', {
+                  countries: coreVisible.join(', '),
+                })}</span
+              >
+            </div>
+          {/if}
+
+          {#if partialCountries.length > 0}
+            <div class="text-xs text-base-content/60">
+              {t('analysis.gallery.region.countriesPartial', {
+                countries: partialVisible.join(', '),
+              })}
+            </div>
+          {/if}
+
+          {#if hiddenCountries > 0}
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs self-start"
+              aria-expanded={countriesExpanded}
+              onclick={() => (countriesExpanded = !countriesExpanded)}
+            >
+              {countriesExpanded
+                ? t('analysis.gallery.region.countriesLess')
+                : t('analysis.gallery.region.countriesMore', { count: hiddenCountries })}
+            </button>
+          {/if}
+        </div>
+      {/if}
     </div>
   {/if}
 </fieldset>
+
+<style>
+  /* Theme the inlined coverage SVG to the app's data-theme, not only the OS
+     prefers-color-scheme the SVG ships with. These rules MUST be unlayered and
+     target .cov directly: the SVG's own \3c style> sets the --cov-* vars on a bare
+     .cov{} rule, so an ancestor-scoped or @layer'd override would lose the
+     cascade (see acoustic-models coverage-maps-integration.md). Svelte injects
+     component styles unlayered; :global keeps them from being scoped away. */
+  :global([data-theme='dark'] .cov) {
+    --cov-ocean: #0e1a22;
+    --cov-land: #243039;
+    --cov-core: #3fae7b;
+    --cov-periphery: #2c5f47;
+    --cov-border: #0e1a22;
+  }
+
+  :global([data-theme='light'] .cov) {
+    --cov-ocean: #e9f0f4;
+    --cov-land: #dfe3e8;
+    --cov-core: #2f9e6b;
+    --cov-periphery: #bfe3d0;
+    --cov-border: #ffffff;
+  }
+</style>

@@ -196,3 +196,143 @@ func TestResolveRecommendRegion(t *testing.T) {
 		assert.Equal(t, validSlug, got, "an explicit region pin does not require coordinates")
 	})
 }
+
+// findRegion returns the option with the given slug from the dropdown options.
+func findRegion(t *testing.T, regions []RegionOption, slug string) RegionOption {
+	t.Helper()
+	for i := range regions {
+		if regions[i].Slug == slug {
+			return regions[i]
+		}
+	}
+	t.Fatalf("region %q not present in options", slug)
+	return RegionOption{}
+}
+
+// TestGetModelRegions_OptionsCarryCountries confirms the dropdown options carry
+// the ISO country codes the UI localizes client-side, for both the core set and
+// the partial set (a region that straddles a border).
+func TestGetModelRegions_OptionsCarryCountries(t *testing.T) {
+	resp := getRegions(t, func(s *conf.Settings) {
+		s.BirdNET.Latitude = 4.7 // Bogota (as elsewhere); value is irrelevant here
+		s.BirdNET.Longitude = -74.1
+		s.BirdNET.LocationConfigured = true
+	})
+
+	nordic := findRegion(t, resp.Regions, "nordic")
+	assert.NotEmpty(t, nordic.Countries.Core, "core countries populated")
+	assert.Contains(t, nordic.Countries.Core, "FI", "Nordic covers Finland")
+
+	britishIsles := findRegion(t, resp.Regions, "british-isles")
+	assert.Contains(t, britishIsles.Countries.Core, "GB")
+	assert.NotEmpty(t, britishIsles.Countries.Partial, "British Isles has a partial-coverage country")
+}
+
+// coverageMapReq issues GET /models/regions/:slug/map for slug with an optional
+// If-None-Match header and returns the recorder. The slug is set as a path param
+// directly, so malformed values (traversal, casing) exercise the accessor guard.
+func coverageMapReq(t *testing.T, slug, ifNoneMatch string) *httptest.ResponseRecorder {
+	t.Helper()
+	core := apitest.NewCore(t)
+	h := New(core, nil)
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/models/regions/"+slug+"/map", http.NoBody)
+	if ifNoneMatch != "" {
+		req.Header.Set("If-None-Match", ifNoneMatch)
+	}
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetParamNames("slug")
+	ctx.SetParamValues(slug)
+	require.NoError(t, h.GetRegionCoverageMap(ctx))
+	return rec
+}
+
+// TestGetRegionCoverageMap_ServesSVG confirms a known slug serves the themeable
+// SVG with a strong ETag and cache header, and that a matching If-None-Match
+// yields a bodyless 304.
+func TestGetRegionCoverageMap_ServesSVG(t *testing.T) {
+	rec := coverageMapReq(t, "nordic", "")
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, svgContentType, rec.Header().Get("Content-Type"))
+	assert.Contains(t, rec.Body.String(), `class="cov"`, "serves a themeable coverage SVG")
+	assert.Contains(t, rec.Header().Get("Cache-Control"), "max-age", "sets a cache window")
+
+	etag := rec.Header().Get("ETag")
+	require.NotEmpty(t, etag, "sets a strong ETag")
+
+	// A conditional request carrying the same ETag revalidates to 304 with no body.
+	notModified := coverageMapReq(t, "nordic", etag)
+	assert.Equal(t, http.StatusNotModified, notModified.Code)
+	assert.Empty(t, notModified.Body.String(), "304 carries no body")
+	assert.Equal(t, etag, notModified.Header().Get("ETag"), "304 still echoes the ETag")
+}
+
+// TestGetRegionCoverageMap_NotFound confirms unknown and malformed slugs 404, so
+// the UI falls back to its text-only country list.
+func TestGetRegionCoverageMap_NotFound(t *testing.T) {
+	for _, slug := range []string{"does-not-exist", "../secret", "Nordic", "a/b"} {
+		rec := coverageMapReq(t, slug, "")
+		assert.Equalf(t, http.StatusNotFound, rec.Code, "slug %q must 404", slug)
+	}
+}
+
+// TestIfNoneMatch covers the conditional-request matcher directly, including the
+// wildcard, comma-separated lists, and the weak-validator form a proxy may send.
+func TestIfNoneMatch(t *testing.T) {
+	t.Parallel()
+	const etag = `"abc123"`
+	cases := []struct {
+		name   string
+		header string
+		want   bool
+	}{
+		{"empty header", "", false},
+		{"exact strong match", `"abc123"`, true},
+		{"wildcard", "*", true},
+		{"weak-validator form", `W/"abc123"`, true},
+		{"comma list contains match", `"nope", "abc123"`, true},
+		{"comma list contains weak match", `W/"x", W/"abc123"`, true},
+		{"no match", `"different"`, false},
+		{"prefix-only, not a real tag", `"abc"`, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, ifNoneMatch(tc.header, etag), "header %q", tc.header)
+		})
+	}
+}
+
+// TestGetRegionCoverageMap_MismatchedETagServesBody confirms a stale/mismatched
+// If-None-Match still gets the full SVG (200), not a 304.
+func TestGetRegionCoverageMap_MismatchedETagServesBody(t *testing.T) {
+	rec := coverageMapReq(t, "nordic", `"stale-etag"`)
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), `class="cov"`)
+}
+
+// TestGetModelRegions_OptionsAreSorted pins the (groupDisplay, name, slug)
+// ordering the endpoint promises. The frontend groups consecutive options by
+// their group slug and relies on same-group options being contiguous, so a sort
+// regression here would silently break the gallery's grouped region list.
+func TestGetModelRegions_OptionsAreSorted(t *testing.T) {
+	resp := getRegions(t, func(s *conf.Settings) {
+		s.BirdNET.Latitude = 4.7
+		s.BirdNET.Longitude = -74.1
+		s.BirdNET.LocationConfigured = true
+	})
+	require.Greater(t, len(resp.Regions), 1, "need multiple options to check ordering")
+	for i := 1; i < len(resp.Regions); i++ {
+		prev, cur := resp.Regions[i-1], resp.Regions[i]
+		switch {
+		case prev.GroupDisplay != cur.GroupDisplay:
+			assert.Less(t, prev.GroupDisplay, cur.GroupDisplay, "groupDisplay order at index %d", i)
+		case prev.Name != cur.Name:
+			assert.Less(t, prev.Name, cur.Name, "name order within group at index %d", i)
+		default:
+			assert.Less(t, prev.Slug, cur.Slug, "slug order at index %d", i)
+		}
+	}
+}

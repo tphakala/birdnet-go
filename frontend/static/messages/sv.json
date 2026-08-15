@@ -5300,6 +5300,13 @@
         "switchToAuto": "Växla till automatisk",
         "loading": "Laddar regioner...",
         "loadFailed": "Kunde inte ladda regiondata",
+        "mapLoading": "Läser in täckningskarta...",
+        "mapUnavailable": "Täckningskarta ej tillgänglig",
+        "mapAria": "Täckningskarta för {region}",
+        "countriesCore": "Täcker: {countries}",
+        "countriesPartial": "Delvis täckning: {countries}",
+        "countriesMore": "och {count} till",
+        "countriesLess": "Visa färre",
         "why": {
           "noLocation": "Automatiskt val kräver en stationsplats. Ange den i Huvudinställningar; den globala modellen används fram tills dess.",
           "outsideCoverage": "Din plats är utanför alla regionala modellers täckning, så den globala modellen används.",

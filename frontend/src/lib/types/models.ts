@@ -88,6 +88,12 @@ export interface DownloadProgress {
   error?: string;
 }
 
+/** ISO 3166-1 alpha-2 country codes a region covers. Mirrors Go region.Countries. */
+export interface RegionCountries {
+  core: string[]; // fully inside the model's sampled footprint
+  partial: string[]; // range-straddling or clipped at the footprint edge
+}
+
 /** One selectable region in the gallery region selector. Mirrors Go RegionOption. */
 export interface RegionOption {
   slug: string;
@@ -95,6 +101,9 @@ export interface RegionOption {
   group: string; // continental bucket slug, for grouping in the UI
   groupDisplay: string; // continental bucket display name
   tier: number;
+  // ISO codes localized client-side via Intl.DisplayNames. A nil Go slice
+  // marshals as null, so consumers guard each list with `?? []`.
+  countries: RegionCountries;
 }
 
 /**

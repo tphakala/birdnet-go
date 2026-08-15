@@ -3860,6 +3860,13 @@ export type TranslationKey =
   | 'analysis.gallery.region.switchToAuto'
   | 'analysis.gallery.region.loading'
   | 'analysis.gallery.region.loadFailed'
+  | 'analysis.gallery.region.mapLoading'
+  | 'analysis.gallery.region.mapUnavailable'
+  | 'analysis.gallery.region.mapAria' // params: region
+  | 'analysis.gallery.region.countriesCore' // params: countries
+  | 'analysis.gallery.region.countriesPartial' // params: countries
+  | 'analysis.gallery.region.countriesMore' // params: count
+  | 'analysis.gallery.region.countriesLess'
   | 'analysis.gallery.region.why.noLocation'
   | 'analysis.gallery.region.why.outsideCoverage'
   | 'analysis.gallery.region.why.ambiguous' // params: region, runnerUp
@@ -4460,6 +4467,10 @@ export type TranslationParams = {
     species: string | number;
   };
   'analysis.gallery.region.pinAction': { region: string | number };
+  'analysis.gallery.region.mapAria': { region: string | number };
+  'analysis.gallery.region.countriesCore': { countries: string | number };
+  'analysis.gallery.region.countriesPartial': { countries: string | number };
+  'analysis.gallery.region.countriesMore': { count: string | number };
   'analysis.gallery.region.why.ambiguous': { region: string | number; runnerUp: string | number };
   'analysis.gallery.region.why.resolved': { region: string | number };
   'analysis.gallery.region.why.pinned': { region: string | number };

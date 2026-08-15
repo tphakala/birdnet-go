@@ -39,6 +39,16 @@ export async function fetchModelRegions(): Promise<ModelRegionsResponse> {
 }
 
 /**
+ * Fetch the SVG coverage map for a region slug, as raw markup for inline
+ * rendering. The endpoint is public and returns image/svg+xml, which the shared
+ * api util yields as text. Rejects (404) when a region has no map; the caller
+ * treats that as "no map" and falls back to the text-only country list.
+ */
+export async function fetchRegionCoverageMap(slug: string): Promise<string> {
+  return api.get<string>(`${BASE}/regions/${encodeURIComponent(slug)}/map`);
+}
+
+/**
  * Start an asynchronous model install. Returns once the server accepts the
  * request. When `variantId` is given the server installs (or switches to) that
  * hardware/regional variant; omitting it installs the entry's default variant.
