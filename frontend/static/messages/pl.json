@@ -458,6 +458,11 @@
         "unavailableTitle": "ONNX Runtime niedostępny",
         "unavailableMessage": "ONNX Runtime {requiredVersion} jest wymagany dla {modelName}, ale nie został znaleziony. Zobacz przewodnik instalacji: {installGuideURL}"
       },
+      "region": {
+        "staleTitle": "Region modelu może być nieaktualny",
+        "staleMessage": "{modelName} jest zainstalowany dla {oldRegion}, ale Twoja nowa lokalizacja wskazuje na {newRegion}. Możesz zmienić warianty w galerii modeli w Ustawieniach.",
+        "staleGlobalMessage": "{modelName} jest zainstalowany dla {oldRegion}, ale Twoja nowa lokalizacja znajduje się poza jego zasięgiem. Możesz przełączyć się na wariant globalny w galerii modeli w Ustawieniach."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Bieżąca wartość: {value}% (próg: {threshold}%)",
@@ -5283,6 +5288,29 @@
     "gallery": {
       "title": "Galeria modeli",
       "description": "Zarządzaj modelami klasyfikatorów do detekcji ptaków i nietoperzy.",
+      "region": {
+        "title": "Region modelu",
+        "modeAuto": "Automatyczny",
+        "modeAutoHint": "Wybierz najlepszy wariant regionalny na podstawie lokalizacji stacji",
+        "modeGlobal": "Globalny",
+        "modeGlobalHint": "Zawsze używaj modelu ogólnoświatowego",
+        "pinLabel": "Przypnij określony region",
+        "pinnedBadge": "Przypięty",
+        "pinAction": "Przypnij {region}",
+        "switchToAuto": "Przełącz na automatyczny",
+        "loading": "Ładowanie regionów...",
+        "loadFailed": "Nie udało się załadować danych regionu",
+        "why": {
+          "noLocation": "Automatyczny wybór wymaga lokalizacji stacji. Ustaw ją w Ustawieniach Głównych; do tego czasu używany jest model globalny.",
+          "outsideCoverage": "Twoja lokalizacja znajduje się poza zasięgiem wszystkich modeli regionalnych, dlatego używany jest model globalny.",
+          "ambiguous": "Twoja lokalizacja znajduje się blisko granicy między {region} a {runnerUp}. Automatyczny wybór używa {region}; przypnij jeden z nich, aby dokonać jednoznacznego wyboru.",
+          "resolved": "Wykryty region na podstawie Twojej lokalizacji: {region}.",
+          "global": "Zawsze używany jest model globalny, niezależnie od lokalizacji stacji.",
+          "pinned": "Przypięto do {region}. Lokalizacja stacji nie wpływa na wybór modelu.",
+          "pinnedMismatch": "Twoja lokalizacja wskazuje obecnie na {resolved}.",
+          "pinnedUnknown": "Przypięty region \"{region}\" nie jest dostępny w bieżącym katalogu modeli. Rodziny modeli powracają do Twojej lokalizacji lub modelu globalnego."
+        }
+      },
       "variants": {
         "title": "Wariant modelu",
         "recommended": "Zalecane",

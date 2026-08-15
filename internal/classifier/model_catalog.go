@@ -674,6 +674,22 @@ func VariantSelectable(entry *CatalogEntry, variantID string) bool {
 	return ok
 }
 
+// VariantRegion returns the region slug of entry's variant with the given id, or
+// "" when the id is empty (a flat entry), or no variant matches (a hardware/global
+// variant, or an id dropped from the catalog). It is the shared lookup behind the
+// gallery region endpoint and the coordinate-change staleness detector.
+func VariantRegion(entry *CatalogEntry, variantID string) string {
+	if entry == nil || variantID == "" {
+		return ""
+	}
+	for i := range entry.Variants {
+		if entry.Variants[i].ID == variantID {
+			return entry.Variants[i].Region
+		}
+	}
+	return ""
+}
+
 // resolveVariantDefaults returns entries with each variant entry's Files
 // populated from its default variant, so every Files consumer sees the effective
 // default variant's files. Single-variant entries (no Variants) are returned

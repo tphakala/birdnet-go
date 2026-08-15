@@ -18,6 +18,8 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
+	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/classifier/region"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -1567,12 +1569,12 @@ func validateModelRegionField(updateMap map[string]any) error {
 	if raw == nil {
 		return nil
 	}
-	region, ok := raw.(string)
+	value, ok := raw.(string)
 	if !ok {
 		return fmt.Errorf("modelRegion must be a string")
 	}
-	if region == "" || region == conf.ModelRegionAuto || region == conf.ModelRegionGlobal ||
-		conf.ModelRegionSlugPattern.MatchString(region) {
+	if value == "" || value == conf.ModelRegionAuto || value == conf.ModelRegionGlobal ||
+		conf.ModelRegionSlugPattern.MatchString(value) {
 		return nil
 	}
 	return fmt.Errorf("modelRegion must be 'auto', 'global', or a region slug")
@@ -2559,6 +2561,19 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		profiling.ApplyRates(&currentSettings.Diagnostics.Profiling)
 	}
 
+	// Recommend-only region staleness check (rule D2): a station location change
+	// may make an installed regional model variant stale. Notify the user; never
+	// switch, install, or unload a model. Runs synchronously, like the toast sends
+	// above: the work is a cached region-table load, an in-memory snapshot of the
+	// installed models, a bounded geometry resolve, and a rate-limited in-memory
+	// notification. Placed after the fallible audio reconfig so an audio-reconfig
+	// failure rolls back before notifying; a later disk-save failure in the caller
+	// leaves a dismissible advisory, the same rare window the restart-required
+	// marking above already has.
+	if coordinatesChanged(oldSettings, currentSettings) {
+		c.notifyRegionStaleness(oldSettings, currentSettings)
+	}
+
 	// Trigger reconfigurations asynchronously.
 	// Capture debug flag from the settings snapshot so the goroutine never
 	// reloads settings (which may be republished by a concurrent update).
@@ -2699,12 +2714,63 @@ func rangeFilterSettingsChanged(oldSettings, currentSettings *conf.Settings) boo
 		return true
 	}
 
-	// Check for changes in BirdNET latitude and longitude
-	if oldSettings.BirdNET.Latitude != currentSettings.BirdNET.Latitude || oldSettings.BirdNET.Longitude != currentSettings.BirdNET.Longitude {
+	// Check for changes in BirdNET location (coordinates or the location-configured flag)
+	if coordinatesChanged(oldSettings, currentSettings) {
 		return true
 	}
 
 	return false
+}
+
+// coordinatesChanged reports whether the station location differs between two
+// settings snapshots: the latitude, the longitude, or the LocationConfigured
+// flag. The flag is included so that configuring a location for the first time
+// (LocationConfigured flips false->true while the coordinates may be unchanged)
+// still counts as a change, both for range-filter reload and for region
+// staleness detection.
+func coordinatesChanged(oldSettings, currentSettings *conf.Settings) bool {
+	return oldSettings.BirdNET.LocationConfigured != currentSettings.BirdNET.LocationConfigured ||
+		oldSettings.BirdNET.Latitude != currentSettings.BirdNET.Latitude ||
+		oldSettings.BirdNET.Longitude != currentSettings.BirdNET.Longitude
+}
+
+// notifyRegionStaleness runs the recommend-only region staleness detector after
+// a station location change and emits a bell notification for each installed
+// regional model variant that no longer matches the newly resolved region. Every
+// failure degrades to "no notification": it never blocks or fails the settings
+// save, and it never switches, installs, or unloads a model (rule D2).
+func (c *Controller) notifyRegionStaleness(oldSettings, currentSettings *conf.Settings) {
+	if c.ModelManager == nil {
+		return
+	}
+	tables, err := region.Tables()
+	if err != nil {
+		// Degrade to no notification. The embedded tables are immutable, so this
+		// only fails on a corrupt build (the golden region test guards that); log
+		// at debug so a real regression stays diagnosable.
+		c.LogDebugIfEnabled("region staleness check skipped: region tables unavailable", logger.Error(err))
+		return
+	}
+	installed := c.ModelManager.InstalledRegionalModels()
+	if len(installed) == 0 {
+		return
+	}
+	changes := classifier.DetectRegionStaleness(
+		tables,
+		installed,
+		currentSettings.BirdNET.ModelRegion,
+		classifier.RegionCoords{
+			Lat:        oldSettings.BirdNET.Latitude,
+			Lon:        oldSettings.BirdNET.Longitude,
+			Configured: oldSettings.BirdNET.LocationConfigured,
+		},
+		classifier.RegionCoords{
+			Lat:        currentSettings.BirdNET.Latitude,
+			Lon:        currentSettings.BirdNET.Longitude,
+			Configured: currentSettings.BirdNET.LocationConfigured,
+		},
+	)
+	classifier.NotifyRegionStaleness(changes)
 }
 
 // mqttSettingsChanged checks if MQTT settings have changed

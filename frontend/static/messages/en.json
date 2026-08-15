@@ -458,6 +458,11 @@
         "unavailableTitle": "ONNX Runtime Not Available",
         "unavailableMessage": "ONNX Runtime {requiredVersion} is required for {modelName} but was not found. See the install guide: {installGuideURL}"
       },
+      "region": {
+        "staleTitle": "Model region may be outdated",
+        "staleMessage": "{modelName} is installed for {oldRegion}, but your new location resolves to {newRegion}. You can switch variants from the model gallery in Settings.",
+        "staleGlobalMessage": "{modelName} is installed for {oldRegion}, but your new location is outside its coverage. You can switch to the global variant from the model gallery in Settings."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Current value: {value}% (threshold: {threshold}%)",
@@ -5283,6 +5288,29 @@
     "gallery": {
       "title": "Model Gallery",
       "description": "Manage classifier models for bird and bat detection.",
+      "region": {
+        "title": "Model region",
+        "modeAuto": "Automatic",
+        "modeAutoHint": "Pick the best regional variant from the station location",
+        "modeGlobal": "Global",
+        "modeGlobalHint": "Always use the worldwide model",
+        "pinLabel": "Pin a specific region",
+        "pinnedBadge": "Pinned",
+        "pinAction": "Pin {region}",
+        "switchToAuto": "Switch to automatic",
+        "loading": "Loading regions...",
+        "loadFailed": "Failed to load region data",
+        "why": {
+          "noLocation": "Automatic selection needs a station location. Set it in Main settings; the global model is used until then.",
+          "outsideCoverage": "Your location is outside every regional model's coverage, so the global model is used.",
+          "ambiguous": "Your location is near the border between {region} and {runnerUp}. Automatic selection uses {region}; pin either one to make the choice explicit.",
+          "resolved": "Detected region from your location: {region}.",
+          "global": "The global model is always used, regardless of the station location.",
+          "pinned": "Pinned to {region}. The station location does not affect model selection.",
+          "pinnedMismatch": "Your location currently resolves to {resolved}.",
+          "pinnedUnknown": "The pinned region \"{region}\" is not available in the current model catalog. Model families fall back to your location or the global model."
+        }
+      },
       "variants": {
         "title": "Model variant",
         "recommended": "Recommended",

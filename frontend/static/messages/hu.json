@@ -458,6 +458,11 @@
         "unavailableTitle": "Az ONNX Runtime nem elérhető",
         "unavailableMessage": "Az ONNX Runtime {requiredVersion} szükséges a(z) {modelName} modellhez, de nem található. Lásd a telepítési útmutatót: {installGuideURL}"
       },
+      "region": {
+        "staleTitle": "A modellrégió elavult lehet",
+        "staleMessage": "A(z) {modelName} a(z) {oldRegion} régióhoz van telepítve, de az új helyszíne a következőnek felel meg: {newRegion}. Változatot a Beállítások modellgalériájában válthat.",
+        "staleGlobalMessage": "A(z) {modelName} a(z) {oldRegion} régióhoz van telepítve, de az új helyszíne kívül esik a lefedettségén. A globális változatra a Beállítások modellgalériájában válthat."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Jelenlegi érték: {value}% (küszöbérték: {threshold}%)",
@@ -5283,6 +5288,29 @@
     "gallery": {
       "title": "Modellgaléria",
       "description": "Osztályozó modellek kezelése madár- és denevérdetektáláshoz.",
+      "region": {
+        "title": "Modellrégió",
+        "modeAuto": "Automatikus",
+        "modeAutoHint": "A legjobb regionális változat kiválasztása az állomás helyszíne alapján",
+        "modeGlobal": "Globális",
+        "modeGlobalHint": "Mindig a világszintű modell használata",
+        "pinLabel": "Adott régió rögzítése",
+        "pinnedBadge": "Rögzítve",
+        "pinAction": "{region} rögzítése",
+        "switchToAuto": "Váltás automatikusra",
+        "loading": "Régiók betöltése...",
+        "loadFailed": "Nem sikerült betölteni a régióadatokat",
+        "why": {
+          "noLocation": "Az automatikus kiválasztáshoz állomáshelyszín szükséges. Adja meg a Fő beállításokban; addig a globális modell kerül használatra.",
+          "outsideCoverage": "Az Ön helyszíne kívül esik az összes regionális modell lefedettségén, ezért a globális modell kerül használatra.",
+          "ambiguous": "Az Ön helyszíne {region} és {runnerUp} határának közelében található. Az automatikus kiválasztás a(z) {region} régiót használja; rögzítse valamelyiket a választás egyértelműsítéséhez.",
+          "resolved": "Helyszíne alapján észlelt régió: {region}.",
+          "global": "Mindig a globális modell van használatban, függetlenül az állomás helyszínétől.",
+          "pinned": "Rögzítve a következőhöz: {region}. Az állomás helyszíne nem befolyásolja a modellválasztást.",
+          "pinnedMismatch": "Helyszíne jelenleg a következőre oldódik fel: {resolved}.",
+          "pinnedUnknown": "A rögzített \"{region}\" régió nem érhető el a jelenlegi modellkatalógusban. A modellcsaládok visszatérnek a helyszínéhez vagy a globális modellhez."
+        }
+      },
       "variants": {
         "title": "Modellváltozat",
         "recommended": "Ajánlott",

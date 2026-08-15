@@ -458,6 +458,11 @@
         "unavailableTitle": "ONNX Runtime ei ole käytettävissä",
         "unavailableMessage": "ONNX Runtime {requiredVersion} vaaditaan mallille {modelName}, mutta sitä ei löytynyt. Katso asennusohje: {installGuideURL}"
       },
+      "region": {
+        "staleTitle": "Mallialue saattaa olla vanhentunut",
+        "staleMessage": "{modelName} on asennettu alueelle {oldRegion}, mutta uusi sijaintisi vastaa aluetta {newRegion}. Voit vaihtaa varianttia Asetusten malligalleriasta.",
+        "staleGlobalMessage": "{modelName} on asennettu alueelle {oldRegion}, mutta uusi sijaintisi on sen kattavuusalueen ulkopuolella. Voit vaihtaa globaaliin varianttiin Asetusten malligalleriasta."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Nykyinen arvo: {value}% (raja-arvo: {threshold}%)",
@@ -5283,6 +5288,29 @@
     "gallery": {
       "title": "Malligalleria",
       "description": "Hallitse lintu- ja lepakkotunnistuksen luokittelumalleja.",
+      "region": {
+        "title": "Mallialue",
+        "modeAuto": "Automaattinen",
+        "modeAutoHint": "Valitse paras alueellinen variantti aseman sijainnin perusteella",
+        "modeGlobal": "Globaali",
+        "modeGlobalHint": "Käytä aina maailmanlaajuista mallia",
+        "pinLabel": "Kiinnitä tietty alue",
+        "pinnedBadge": "Kiinnitetty",
+        "pinAction": "Kiinnitä {region}",
+        "switchToAuto": "Vaihda automaattiseen",
+        "loading": "Ladataan alueita...",
+        "loadFailed": "Aluetietojen lataaminen epäonnistui",
+        "why": {
+          "noLocation": "Automaattinen valinta vaatii aseman sijainnin. Aseta se Pääasetuksissa; siihen asti käytetään globaalia mallia.",
+          "outsideCoverage": "Sijaintisi on kaikkien alueellisten mallien kattavuusalueen ulkopuolella, joten käytetään globaalia mallia.",
+          "ambiguous": "Sijaintisi on lähellä alueiden {region} ja {runnerUp} välistä rajaa. Automaattinen valinta käyttää aluetta {region}; tee valinnasta nimenomainen kiinnittämällä jompikumpi.",
+          "resolved": "Sijaintisi perusteella tunnistettu alue: {region}.",
+          "global": "Globaalia mallia käytetään aina aseman sijainnista riippumatta.",
+          "pinned": "Kiinnitetty alueeseen {region}. Aseman sijainti ei vaikuta mallin valintaan.",
+          "pinnedMismatch": "Sijaintisi vastaa tällä hetkellä aluetta {resolved}.",
+          "pinnedUnknown": "Kiinnitetty alue \"{region}\" ei ole saatavilla nykyisessä malliluettelossa. Malliperheet käyttävät varavaihtoehtona sijaintiasi tai globaalia mallia."
+        }
+      },
       "variants": {
         "title": "Mallivariantti",
         "recommended": "Suositeltu",

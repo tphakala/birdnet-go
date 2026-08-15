@@ -458,6 +458,11 @@
         "unavailableTitle": "ONNX Runtime nav pieejams",
         "unavailableMessage": "ONNX Runtime {requiredVersion} ir nepieciešams modelim {modelName}, bet netika atrasts. Skatiet instalēšanas rokasgrāmatu: {installGuideURL}"
       },
+      "region": {
+        "staleTitle": "Modeļa reģions var būt novecojis",
+        "staleMessage": "{modelName} ir instalēts reģionam {oldRegion}, bet jūsu jaunā atrašanās vieta atbilst {newRegion}. Varat pārslēgt variantus no modeļu galerijas sadaļā Iestatījumi.",
+        "staleGlobalMessage": "{modelName} ir instalēts reģionam {oldRegion}, bet jūsu jaunā atrašanās vieta ir ārpus tā pārklājuma. Varat pārslēgties uz globālo variantu no modeļu galerijas sadaļā Iestatījumi."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Pašreizējā vērtība: {value}% (slieksnis: {threshold}%)",
@@ -5283,6 +5288,29 @@
     "gallery": {
       "title": "Modeļu galerija",
       "description": "Pārvaldiet klasifikācijas modeļus putnu un sikspārņu noteikšanai.",
+      "region": {
+        "title": "Modeļa reģions",
+        "modeAuto": "Automātiski",
+        "modeAutoHint": "Izvēlēties labāko reģionālo variantu pēc stacijas atrašanās vietas",
+        "modeGlobal": "Globāls",
+        "modeGlobalHint": "Vienmēr izmantot vispasaules modeli",
+        "pinLabel": "Piespraust noteiktu reģionu",
+        "pinnedBadge": "Piesprausts",
+        "pinAction": "Piespraust {region}",
+        "switchToAuto": "Pārslēgties uz automātisko",
+        "loading": "Ielādē reģionus...",
+        "loadFailed": "Neizdevās ielādēt reģiona datus",
+        "why": {
+          "noLocation": "Automātiskajai atlasei nepieciešama stacijas atrašanās vieta. Iestatiet to Galvenajos iestatījumos; līdz tam tiek izmantots globālais modelis.",
+          "outsideCoverage": "Jūsu atrašanās vieta ir ārpus visu reģionālo modeļu pārklājuma, tāpēc tiek izmantots globālais modelis.",
+          "ambiguous": "Jūsu atrašanās vieta ir tuvu robežai starp {region} un {runnerUp}. Automātiskā atlase izmanto {region}; piespraudiet kādu no tiem, lai izvēle būtu skaidra.",
+          "resolved": "Noteiktais reģions pēc jūsu atrašanās vietas: {region}.",
+          "global": "Vienmēr tiek izmantots globālais modelis neatkarīgi no stacijas atrašanās vietas.",
+          "pinned": "Piesprausts reģionam {region}. Stacijas atrašanās vieta neietekmē modeļa atlasi.",
+          "pinnedMismatch": "Jūsu atrašanās vieta pašlaik atbilst {resolved}.",
+          "pinnedUnknown": "Piespraustais reģions \"{region}\" nav pieejams pašreizējā modeļu katalogā. Modeļu saimes atgriežas pie jūsu atrašanās vietas vai globālā modeļa."
+        }
+      },
       "variants": {
         "title": "Modeļa variants",
         "recommended": "Ieteicams",

@@ -172,4 +172,10 @@ const (
 	// ONNX Runtime availability notifications
 	MsgORTUnavailableTitle   = "notifications.content.ort.unavailableTitle"
 	MsgORTUnavailableMessage = "notifications.content.ort.unavailableMessage"
+
+	// Model region staleness notifications (coordinate change makes an installed
+	// regional model variant stale; recommend-only, never auto-switches a model)
+	MsgModelRegionStaleTitle         = "notifications.content.region.staleTitle"
+	MsgModelRegionStaleMessage       = "notifications.content.region.staleMessage"
+	MsgModelRegionStaleGlobalMessage = "notifications.content.region.staleGlobalMessage"
 )
