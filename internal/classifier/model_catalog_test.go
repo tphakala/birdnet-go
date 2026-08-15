@@ -476,6 +476,7 @@ func TestEmbeddedCatalog_VariantRequirementsPopulated(t *testing.T) {
 	}
 	for _, w := range benchWant {
 		t.Run(w.variantID+"/"+w.device+"/"+w.backend, func(t *testing.T) {
+			t.Parallel()
 			b, ok := findBenchmark(variantByID(t, &v30, w.variantID), w.device, w.backend)
 			require.Truef(t, ok, "%s missing benchmark %s/%s", w.variantID, w.device, w.backend)
 			assert.Equalf(t, w.latencyMs, b.LatencyMs, "%s %s/%s latency", w.variantID, w.device, w.backend)
