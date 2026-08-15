@@ -90,8 +90,10 @@ export interface DownloadProgress {
 
 /** ISO 3166-1 alpha-2 country codes a region covers. Mirrors Go region.Countries. */
 export interface RegionCountries {
-  core: string[]; // fully inside the model's sampled footprint
-  partial: string[]; // range-straddling or clipped at the footprint edge
+  // A nil Go slice marshals as null, so the types include null to force the
+  // `?? []` guard at every call site.
+  core: string[] | null; // fully inside the model's sampled footprint
+  partial: string[] | null; // range-straddling or clipped at the footprint edge
 }
 
 /** One selectable region in the gallery region selector. Mirrors Go RegionOption. */

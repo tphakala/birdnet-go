@@ -233,8 +233,8 @@ tasks:
         AM="{{.ACOUSTIC_MODELS_DIR}}"
         PRIMARY="$AM/models/birdnet-v3.0-regional"
         TWIN="$AM/models/perch-v2-regional"
-        if [ ! -d "$PRIMARY" ]; then
-          echo "regional model tree not found at $PRIMARY" >&2
+        if [ ! -d "$PRIMARY" ] || [ ! -d "$TWIN" ]; then
+          echo "regional model tree not found for both model families ($PRIMARY, $TWIN)" >&2
           exit 1
         fi
         mkdir -p "{{.MAPS_DIR}}"
@@ -245,7 +245,14 @@ tasks:
           src="$d/coverage.svg"
           [ -f "$src" ] || continue
           twin="$TWIN/$slug/coverage.svg"
-          if [ -f "$twin" ] && ! cmp -s "$src" "$twin"; then
+          # The twin must exist AND be byte-identical: the slug-keyed embed serves
+          # one map per slug for both families, so a missing or divergent twin
+          # would silently break that invariant.
+          if [ ! -f "$twin" ]; then
+            echo "coverage.svg for '$slug' is missing from the Perch family; both families must ship it" >&2
+            exit 1
+          fi
+          if ! cmp -s "$src" "$twin"; then
             echo "coverage.svg for '$slug' differs between families; the slug-keyed embed assumes they are identical" >&2
             exit 1
           fi

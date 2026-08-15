@@ -97,6 +97,7 @@ var goldenRoutes = []string{
 	"GET /api/v2/models/install/:id/progress",
 	"GET /api/v2/models/installed",
 	"GET /api/v2/models/regions",
+	"GET /api/v2/models/regions/:slug/map",
 	"GET /api/v2/notifications",
 	"GET /api/v2/notifications/:id",
 	"GET /api/v2/notifications/check-ntfy-server",
