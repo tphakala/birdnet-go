@@ -5324,6 +5324,8 @@
       "reasons": {
         "backendRecommended": "Darbojas ar {backend}, kas ir ieteicamā aizmugursistēma jūsu aparatūrai",
         "backendSupported": "Darbojas ar {backend}",
+        "regionMatched": "Pielāgots jūsu reģionam ({region})",
+        "regionGlobalFallback": "Globālais modelis jūsu atrašanās vietai",
         "precisionFp16Native": "Pusprecizitātes versija, kas pielāgota jūsu procesoram",
         "ramConstrainedFit": "Kvantizēta versija, kas pielāgota jūsu pieejamajai atmiņai",
         "benchmarkMeasured": "Ātrākais jūsu ierīcē saskaņā ar veiktspējas testiem",
@@ -5331,7 +5333,8 @@
         "archUnsupported": "Nepieciešams {required} procesors",
         "backendMissing": "Nepieciešama inferences aizmugursistēma, ko jūsu versija nevar sasniegt ({required})",
         "ramInsufficient": "Nepieciešami vismaz {requiredMb} MB atmiņas",
-        "hardwareExcluded": "Nav atbalstīts jūsu aparatūrā ({token})"
+        "hardwareExcluded": "Nav atbalstīts jūsu aparatūrā ({token})",
+        "backendOnnxUnavailable": "Nepieciešams ONNX Runtime, kas šajā sistēmā nav pieejams"
       },
       "tabs": {
         "installed": "Instalētie",

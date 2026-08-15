@@ -4,8 +4,9 @@
 //
 // It is deliberately pure: no I/O, no globals, no clock. The same Input always
 // yields the same output, so the whole hardware matrix is table-testable
-// without any hardware. The region axis is intentionally absent; a future region
-// resolver will slot into the score without rescaling the terms defined here.
+// without any hardware. The region axis reads Input.ResolvedRegion (resolved by
+// the caller from the host coordinates and the ModelRegion setting); the engine
+// itself performs no geometry.
 package recommend
 
 import (
@@ -18,9 +19,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/hwprofile"
 )
 
-// Score terms. Kept as named constants (no magic numbers) and spaced so the
-// future region terms (+100 matched / +50 global fallback) slot between the
-// hard signals and the modifiers without reordering anything.
+// Score terms. Kept as named constants (no magic numbers). The region terms
+// (+100 matched / +50 global fallback) sit between the hard signals and the
+// per-variant modifiers.
 const (
 	// scoreBackendRecommended is added when the best host-available backend is
 	// the manifest's Recommended way to run the variant.
@@ -28,6 +29,22 @@ const (
 	// scoreBackendSupported is added when the variant runs on a host-available
 	// backend that is merely Supported, not Recommended.
 	scoreBackendSupported = 10
+	// scoreRegionMatched is added when the variant's regional slice matches the
+	// host's resolved region. It is the strongest single term because a regional
+	// slice is numerically identical to the global model on the species it keeps
+	// while cutting peak RSS and latency, so a matching regional variant should
+	// win over any global one.
+	scoreRegionMatched = 100
+	// scoreRegionGlobalFallback is added to a global variant when no regional
+	// slice matches the host (either no region resolved, or the entry ships no
+	// slice for the resolved region). It sits below scoreRegionMatched so a
+	// matching regional variant always outranks the global one, and above the
+	// per-variant precision modifiers so a wrong-region slice cannot outscore the
+	// global model on those alone. (A wrong-region slice that also diverged from
+	// the global sibling in backend support could in principle exceed this margin,
+	// but a region slice mirrors its global sibling's precision and backend, so
+	// that case does not arise in shipped catalog data.)
+	scoreRegionGlobalFallback = 50
 	// scoreFP16Native rewards an fp16 variant on a host with native
 	// half-precision SIMD.
 	scoreFP16Native = 15
@@ -58,6 +75,12 @@ const (
 	// ReasonBackendSupported marks the variant as running on a supported (not
 	// recommended) backend for this host. Arg "backend" names that backend.
 	ReasonBackendSupported = "backend.supported"
+	// ReasonRegionMatched marks a regional variant matching the host's resolved
+	// region. Arg "region" names the slug.
+	ReasonRegionMatched = "region.matched"
+	// ReasonRegionGlobalFallback marks the global variant chosen because no
+	// regional slice matches the host.
+	ReasonRegionGlobalFallback = "region.global_fallback"
 	// ReasonPrecisionFP16Native marks an fp16 variant matched to native
 	// half-precision SIMD.
 	ReasonPrecisionFP16Native = "precision.fp16_native"
@@ -165,6 +188,12 @@ type Input struct {
 	// DeviceClass is the benchmark device identifier for this host, "" when the
 	// host maps to no benchmarked class.
 	DeviceClass string
+	// ResolvedRegion is the region slug the host's coordinates resolved to under
+	// the active ModelRegion mode, or "" when the global model applies (no
+	// coordinates, ModeGlobal, or no tile contains the point). A variant whose
+	// Region equals this slug is the regional match; a global variant (Region
+	// "") earns the fallback bonus whenever no regional slice matches.
+	ResolvedRegion string
 	// Entries is the visible catalog to evaluate.
 	Entries []classifier.CatalogEntry
 }
@@ -189,15 +218,16 @@ func DeviceClass(boardTier, goArch string) string {
 
 // Rank evaluates every variant of every entry and returns the verdicts grouped
 // by entry in input order, ranked best-first within each entry. Flat entries
-// (no variants) produce nothing. Input is never mutated.
-func Rank(in Input) []Recommendation {
+// (no variants) produce nothing. Input is never mutated; it is taken by pointer
+// only to avoid copying the (now region-aware) struct on every call.
+func Rank(in *Input) []Recommendation {
 	out := make([]Recommendation, 0)
 	for i := range in.Entries {
 		entry := &in.Entries[i]
 		if len(entry.Variants) == 0 {
 			continue
 		}
-		out = append(out, rankEntry(entry, &in)...)
+		out = append(out, rankEntry(entry, in)...)
 	}
 	return out
 }
@@ -207,10 +237,25 @@ func Rank(in Input) []Recommendation {
 func rankEntry(entry *classifier.CatalogEntry, in *Input) []Recommendation {
 	bench := benchmarkScores(entry, in)
 
+	// A global variant is the region fallback unless this entry actually ships a
+	// slice for the resolved region. Computing it once here (rather than per
+	// variant) keeps the global variant from earning the fallback bonus when a
+	// matching regional slice exists, and keeps a wrong-region slice from
+	// outscoring the global model on hardware terms when no slice matches.
+	hasMatchingRegion := false
+	if in.ResolvedRegion != "" {
+		for j := range entry.Variants {
+			if entry.Variants[j].Region == in.ResolvedRegion {
+				hasMatchingRegion = true
+				break
+			}
+		}
+	}
+
 	scoredVariants := make([]scoredVariant, 0, len(entry.Variants))
 	for j := range entry.Variants {
 		v := &entry.Variants[j]
-		scoredVariants = append(scoredVariants, evaluateVariant(entry.ID, v, in, bench[v.ID]))
+		scoredVariants = append(scoredVariants, evaluateVariant(entry.ID, v, in, bench[v.ID], hasMatchingRegion))
 	}
 
 	sortScored(scoredVariants)
@@ -245,7 +290,10 @@ type scoredVariant struct {
 
 // evaluateVariant computes the verdict for one variant: its blockers (hard
 // filters), its score terms, and the sort keys used to break ties.
-func evaluateVariant(catalogID string, v *classifier.CatalogVariant, in *Input, bench benchmarkResult) scoredVariant {
+// hasMatchingRegion reports whether the variant's entry ships a slice matching
+// the host's resolved region, which decides whether a global variant earns the
+// region fallback bonus (see rankEntry).
+func evaluateVariant(catalogID string, v *classifier.CatalogVariant, in *Input, bench benchmarkResult, hasMatchingRegion bool) scoredVariant {
 	var reasons, blockers []Reason
 	score := 0
 
@@ -289,6 +337,21 @@ func evaluateVariant(catalogID string, v *classifier.CatalogVariant, in *Input, 
 		score += term.score
 		reasons = append(reasons, Reason{Code: term.code, Args: map[string]string{"backend": term.backend}})
 		backendRank = preferenceRank(term.backend)
+	}
+
+	// Region term. A regional slice matching the host's resolved region is the
+	// strongest correctness signal. A global variant earns the fallback bonus
+	// whenever no slice matches the host (no region resolved, or the entry ships
+	// no slice for the resolved region), so it always outranks a wrong-region
+	// slice, which earns nothing here. Scored after the backend term so the
+	// backend reason stays the headline (reasons[0]) the gallery renders.
+	switch {
+	case in.ResolvedRegion != "" && v.Region == in.ResolvedRegion:
+		score += scoreRegionMatched
+		reasons = append(reasons, Reason{Code: ReasonRegionMatched, Args: map[string]string{"region": v.Region}})
+	case v.Region == "" && (in.ResolvedRegion == "" || !hasMatchingRegion):
+		score += scoreRegionGlobalFallback
+		reasons = append(reasons, Reason{Code: ReasonRegionGlobalFallback})
 	}
 
 	// Modifiers.

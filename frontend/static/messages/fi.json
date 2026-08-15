@@ -5324,6 +5324,8 @@
       "reasons": {
         "backendRecommended": "Käyttää taustajärjestelmää {backend}, joka on suositeltu laitteistollesi",
         "backendSupported": "Käyttää taustajärjestelmää {backend}",
+        "regionMatched": "Sovitettu alueellesi ({region})",
+        "regionGlobalFallback": "Globaali malli sijainnillesi",
         "precisionFp16Native": "Puolitarkkuusmalli (fp16), optimoitu suorittimellesi",
         "ramConstrainedFit": "Kvantisoitu malli, mitoitettu käytettävissä olevalle muistillesi",
         "benchmarkMeasured": "Laitteesi nopein suorituskykytestien perusteella",
@@ -5331,7 +5333,8 @@
         "archUnsupported": "Vaatii {required}-suorittimen",
         "backendMissing": "Vaatii inferenssin taustajärjestelmän, joka ei ole käytettävissä ({required})",
         "ramInsufficient": "Vaatii vähintään {requiredMb} MB muistia",
-        "hardwareExcluded": "Ei tue laitteistoasi ({token})"
+        "hardwareExcluded": "Ei tue laitteistoasi ({token})",
+        "backendOnnxUnavailable": "Vaatii ONNX Runtimen, joka ei ole käytettävissä tässä järjestelmässä"
       },
       "tabs": {
         "installed": "Asennetut",

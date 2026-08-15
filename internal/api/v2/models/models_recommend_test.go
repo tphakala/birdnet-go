@@ -164,3 +164,36 @@ func TestGetModelCatalog_AuthenticatedGetsRecommendations(t *testing.T) {
 	assert.True(t, stub.called)
 	assert.Equal(t, "fp32", perch.RecommendedVariantID, "an authenticated request receives the recommendation")
 }
+
+func TestGetModelCatalog_RecommendedFirstOrdering(t *testing.T) {
+	core := apitest.NewCore(t)
+	h := New(core, nil) // nil authService -> enrichment allowed, so the sort runs
+	// A host with no usable inference backend: every variant-bearing entry has
+	// all variants blocked and is therefore not recommendable, while flat entries
+	// (no variants) stay recommendable. The catalog response must place all
+	// recommendable entries ahead of the non-recommendable ones.
+	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile {
+		return hwprofile.Profile{Arch: "amd64", TotalRAMBytes: 16 * 1024 * 1024 * 1024}
+	}
+
+	catalog := catalogRequest(t, h)
+	require.NotEmpty(t, catalog)
+
+	recommendable := func(e *CatalogEntryResponse) bool {
+		return len(e.Variants) == 0 || e.RecommendedVariantID != ""
+	}
+
+	var haveRec, haveNon, seenNon bool
+	for i := range catalog {
+		if recommendable(&catalog[i]) {
+			haveRec = true
+			assert.Falsef(t, seenNon, "recommendable entry %q sorted after a non-recommendable one", catalog[i].ID)
+		} else {
+			haveNon = true
+			seenNon = true
+		}
+	}
+	// The fixture must exercise both groups, or the ordering assertion is vacuous.
+	require.True(t, haveRec, "expected at least one recommendable entry (flat entries)")
+	require.True(t, haveNon, "expected at least one non-recommendable entry (no backend blocks variant entries)")
+}

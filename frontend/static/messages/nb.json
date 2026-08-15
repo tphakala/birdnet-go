@@ -5324,6 +5324,8 @@
       "reasons": {
         "backendRecommended": "Kjører på {backend}, som er den anbefalte backenden for din maskinvare",
         "backendSupported": "Kjører på {backend}",
+        "regionMatched": "Tilpasset din region ({region})",
+        "regionGlobalFallback": "Global modell for din posisjon",
         "precisionFp16Native": "Halvpresisjonsversjon tilpasset din CPU",
         "ramConstrainedFit": "Kvantisert versjon tilpasset ditt tilgjengelige minne",
         "benchmarkMeasured": "Raskest på din enhet i utførte ytelsestester",
@@ -5331,7 +5333,8 @@
         "archUnsupported": "Krever en {required} CPU",
         "backendMissing": "Krever en inference-backend som versjonen din ikke når ({required})",
         "ramInsufficient": "Krever minst {requiredMb} MB minne",
-        "hardwareExcluded": "Støttes ikke på din maskinvare ({token})"
+        "hardwareExcluded": "Støttes ikke på din maskinvare ({token})",
+        "backendOnnxUnavailable": "Krever ONNX Runtime, som ikke er tilgjengelig på dette systemet"
       },
       "tabs": {
         "installed": "Installert",

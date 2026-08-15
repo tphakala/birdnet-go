@@ -5324,6 +5324,8 @@
       "reasons": {
         "backendRecommended": "Eseguito su {backend}, il backend consigliato per il tuo hardware",
         "backendSupported": "Eseguito su {backend}",
+        "regionMatched": "Adattato alla tua regione ({region})",
+        "regionGlobalFallback": "Modello globale per la tua posizione",
         "precisionFp16Native": "Versione a mezza precisione adatta al tuo processore",
         "ramConstrainedFit": "Versione quantizzata ottimizzata per la tua memoria disponibile",
         "benchmarkMeasured": "Il più veloce sul tuo dispositivo secondo i benchmark",
@@ -5331,7 +5333,8 @@
         "archUnsupported": "Richiede un processore {required}",
         "backendMissing": "Richiede un backend di inferenza che la tua versione non può raggiungere ({required})",
         "ramInsufficient": "Richiede almeno {requiredMb} MB di memoria",
-        "hardwareExcluded": "Non supportato dal tuo hardware ({token})"
+        "hardwareExcluded": "Non supportato dal tuo hardware ({token})",
+        "backendOnnxUnavailable": "Richiede ONNX Runtime, che non è disponibile su questo sistema"
       },
       "tabs": {
         "installed": "Installati",

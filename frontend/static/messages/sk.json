@@ -5324,6 +5324,8 @@
       "reasons": {
         "backendRecommended": "Beží na {backend}, čo je odporúčaný backend pre váš hardvér",
         "backendSupported": "Beží na {backend}",
+        "regionMatched": "Prispôsobené vášmu regiónu ({region})",
+        "regionGlobalFallback": "Globálny model pre vašu polohu",
         "precisionFp16Native": "Verzia s polovičnou presnosťou zodpovedajúca vášmu procesoru",
         "ramConstrainedFit": "Kvantizovaná verzia optimalizovaná pre vašu dostupnú pamäť",
         "benchmarkMeasured": "Najrýchlejší na vašom zariadení podľa meraní výkonu",
@@ -5331,7 +5333,8 @@
         "archUnsupported": "Vyžaduje procesor {required}",
         "backendMissing": "Vyžaduje inferenčný backend, ktorý nie je dostupný ({required})",
         "ramInsufficient": "Vyžaduje aspoň {requiredMb} MB pamäte",
-        "hardwareExcluded": "Nepodporované na vašom hardvéri ({token})"
+        "hardwareExcluded": "Nepodporované na vašom hardvéri ({token})",
+        "backendOnnxUnavailable": "Vyžaduje ONNX Runtime, ktorý nie je v tomto systéme k dispozícii"
       },
       "tabs": {
         "installed": "Nainštalované",

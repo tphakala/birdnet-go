@@ -112,6 +112,40 @@ func representativeTable(tables map[string]*region.Table) *region.Table {
 	return tables[repos[0]]
 }
 
+// resolveRecommendRegion resolves the single region slug the recommender scores
+// against, matching the top-level resolution in GetModelRegions. All families
+// share identical geometry (a region-package test enforces it), so a
+// representative table's resolution is the detected region for every entry.
+// A pinned region is an explicit choice independent of coordinates and is
+// honored even before a station location is configured; auto resolution needs
+// coordinates and otherwise stays on the global model (mirroring GetModelRegions,
+// which keeps an unconfigured station off any tile). Returns "" (the global
+// model) when the location is unconfigured under auto/global mode, no tile
+// applies, or region data is unavailable. This runs per request, so a coordinate
+// or ModelRegion change takes effect on the next gallery load without a restart.
+func (c *Handler) resolveRecommendRegion() string {
+	s := c.CurrentSettings()
+	tables, err := region.Tables()
+	if err != nil {
+		return "" // recommender falls back to global scoring; non-fatal
+	}
+	rep := representativeTable(tables)
+	if rep == nil {
+		return ""
+	}
+	// Auto resolution needs coordinates; without a configured location only an
+	// explicit pin selects a region. region.Select owns the mode classification,
+	// so ask it and honor just the coordinate-independent pinned outcome (its
+	// SourcePinned result), avoiding a null-island auto resolution.
+	if !s.BirdNET.LocationConfigured {
+		if sel := region.Select(rep, s.BirdNET.ModelRegion, 0, 0); sel.Source == region.SourcePinned {
+			return sel.Slug
+		}
+		return ""
+	}
+	return region.Select(rep, s.BirdNET.ModelRegion, s.BirdNET.Latitude, s.BirdNET.Longitude).Slug
+}
+
 // buildRegionOptions flattens the embedded tables into a deduplicated, sorted
 // list of dropdown options. Tables are visited in sorted repo order so that, for
 // a slug shared across families, the display metadata is taken deterministically

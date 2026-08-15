@@ -5324,6 +5324,8 @@
       "reasons": {
         "backendRecommended": "Runs on {backend}, the recommended backend for your hardware",
         "backendSupported": "Runs on {backend}",
+        "regionMatched": "Matched to your region ({region})",
+        "regionGlobalFallback": "Global model for your location",
         "precisionFp16Native": "Half-precision build matched to your CPU",
         "ramConstrainedFit": "Quantized build sized for your available memory",
         "benchmarkMeasured": "Fastest on your device in measured benchmarks",
@@ -5331,7 +5333,8 @@
         "archUnsupported": "Requires a {required} CPU",
         "backendMissing": "Needs an inference backend your build cannot reach ({required})",
         "ramInsufficient": "Needs at least {requiredMb} MB of memory",
-        "hardwareExcluded": "Not supported on your hardware ({token})"
+        "hardwareExcluded": "Not supported on your hardware ({token})",
+        "backendOnnxUnavailable": "Requires ONNX Runtime, which isn't available on this system"
       },
       "tabs": {
         "installed": "Installed",
