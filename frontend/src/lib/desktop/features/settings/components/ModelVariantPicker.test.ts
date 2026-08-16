@@ -220,6 +220,10 @@ describe('ModelVariantPicker', () => {
         idPrefix: 'p10',
       },
     });
-    expect(container.textContent).toContain('region.global_fallback');
+    // Exactly one reason line renders; a length>1 -> length>=1 regression would
+    // render a stray empty second paragraph.
+    const reasonParagraphs = container.querySelectorAll('[class*="text-primary/90"] p');
+    expect(reasonParagraphs).toHaveLength(1);
+    expect(reasonParagraphs[0].textContent).toContain('region.global_fallback');
   });
 });

@@ -98,6 +98,7 @@
   // places can drift apart silently: the reference just stops resolving, with no
   // error anywhere and nothing visible to a sighted reader.
   const FP16_HELP_ID = 'help-fp16';
+  const HARDWARE_CAPABILITIES_HELP_ID = 'hw-capabilities-help';
 
   interface MetricPoint {
     timestamp: string;
@@ -713,11 +714,11 @@
               <span
                 class="text-sm text-muted shrink-0"
                 title={t('system.inference.capabilitiesHelp')}
-                aria-describedby="hw-capabilities-help"
+                aria-describedby={HARDWARE_CAPABILITIES_HELP_ID}
               >
                 {t('system.inference.capabilities')}
               </span>
-              <span id="hw-capabilities-help" class="sr-only"
+              <span id={HARDWARE_CAPABILITIES_HELP_ID} class="sr-only"
                 >{t('system.inference.capabilitiesHelp')}</span
               >
               <div class="flex flex-wrap items-center gap-2">

@@ -1008,6 +1008,8 @@ describe('SystemInference', () => {
       await waitFor(() => {
         expect(container.textContent).toContain(ADVANCED_KEY);
       });
+      // The disclosure must be collapsed by default (token soup stays hidden).
+      expect(container.querySelector('details[open]')).toBeNull();
       expect(container.textContent).toContain(CAPABILITIES_KEY);
       // The two non-derivable tokens this feature exists to surface.
       expect(container.textContent).toContain('low-ram');
