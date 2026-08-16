@@ -134,8 +134,8 @@ var EmbeddedCatalog = []CatalogEntry{
 	// integrity-checked like every other entry. Now visible in the gallery: the
 	// hardware recommender (internal/classifier/recommend) plus the per-variant
 	// MinRAMMB floors below keep the heavy global fp32 (557 MB) and fp16 (279 MB)
-	// builds off hosts that cannot run them. Only the two global variants ship
-	// today; regional tiles remain a later generator pass. The entry stays
+	// builds off hosts that cannot run them. The two global variants plus the 39
+	// regional tiles appended by birdnetV30RegionalVariants ship today. The entry stays
 	// labelled a developer preview so users know it is not the GA build. The
 	// backend loader is fully functional and v3.0 can also be enabled via config
 	// (models.enabled + birdnetv3 model/label paths).
@@ -158,8 +158,8 @@ var EmbeddedCatalog = []CatalogEntry{
 		HuggingFaceRepo: "tphakala/BirdNET-v3.0-Models",
 		// Global GPU-native model published under full/. fp32 is the default
 		// (byte-identical to the previously flat entry); fp16 is the OpenVINO-GPU /
-		// CUDA / TensorRT build. Regional tiles under regional/ are deferred to a
-		// later generator pass. Each variant's Files is self-contained (model +
+		// CUDA / TensorRT build. Regional tiles under regional/ are appended from the
+		// generated birdnetV30RegionalVariants. Each variant's Files is self-contained (model +
 		// labels + geomodel + taxonomy) because resolveVariantDefaults sets
 		// entry.Files = variant.Files without merging anything.
 		Variants: slices.Concat([]CatalogVariant{
@@ -234,8 +234,8 @@ var EmbeddedCatalog = []CatalogEntry{
 		// byte-identical to the previously flat entry, so existing installs stay
 		// detected with no re-download (ScanInstalled keys on LocalName, not repo or
 		// RemotePath). no-dft-fp32 is the OpenVINO/GPU build; int8-arm is the low-RAM
-		// ARM build. Regional tiles under regional/ are deferred to a later generator
-		// pass. Each variant's Files is self-contained (model + labels + geomodel +
+		// ARM build. Regional tiles under regional/ are appended from the generated
+		// perchV2RegionalVariants. Each variant's Files is self-contained (model + labels + geomodel +
 		// taxonomy) because resolveVariantDefaults does not merge companions.
 		Variants: slices.Concat([]CatalogVariant{
 			{

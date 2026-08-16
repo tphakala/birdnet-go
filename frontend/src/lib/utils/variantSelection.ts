@@ -94,14 +94,19 @@ export function topReasons(reasons: VariantReason[] | undefined, limit = 2): str
  * "FP32 (no-dft)", "int8-arm" -> "INT8 (arm)"). Falls back to the raw id when the
  * variant carries no precision. The region, when set, is appended last.
  */
+// Variant-id delimiters: "<precision>[-<descriptor>]" optionally suffixed with
+// "@<region>" for a regional tile (e.g. "int8-arm@nordic").
+const VARIANT_REGION_SEPARATOR = '@';
+const VARIANT_DESCRIPTOR_SEPARATOR = /[-_]/;
+
 export function variantLabel(variant: CatalogVariant): string {
   const precision = variant.precision?.toUpperCase() ?? '';
   // Derive the non-precision descriptor from the id. Strip any "@region" suffix
   // first (the region is appended separately) so a regional id like
   // "int8-arm@nordic" yields the "arm" descriptor, not "arm@nordic".
-  const baseId = variant.id.split('@')[0];
+  const baseId = variant.id.split(VARIANT_REGION_SEPARATOR)[0];
   const extra = baseId
-    .split(/[-_]/)
+    .split(VARIANT_DESCRIPTOR_SEPARATOR)
     .filter(segment => segment !== '' && segment.toLowerCase() !== variant.precision?.toLowerCase())
     .join('-');
   let base = precision || baseId;
