@@ -99,7 +99,10 @@ export function topReasons(reasons: VariantReason[] | undefined, limit = 2): str
 const VARIANT_REGION_SEPARATOR = '@';
 const VARIANT_DESCRIPTOR_SEPARATOR = /[-_]/;
 
-export function variantLabel(variant: CatalogVariant): string {
+export function variantLabel(
+  variant: CatalogVariant,
+  regionNames?: ReadonlyMap<string, string>
+): string {
   const precision = variant.precision?.toUpperCase() ?? '';
   // Derive the non-precision descriptor from the id. Strip any "@region" suffix
   // first (the region is appended separately) so a regional id like
@@ -113,8 +116,12 @@ export function variantLabel(variant: CatalogVariant): string {
   if (precision && extra) {
     base = `${precision} (${extra})`;
   }
-  // The region is shown as its slug. The canonical localized region names live in
-  // the region selector / regions endpoint, not here; surfacing those in the
-  // variant label is a follow-up (would need the slug->name map threaded in).
-  return variant.region ? `${base} (${variant.region})` : base;
+  if (!variant.region) return base;
+  // Resolve the region's canonical display name from the same source the region
+  // selector uses (the regions endpoint, threaded in as a slug->name map). Fall
+  // back to the raw slug when the map is absent or the slug is unknown, so the
+  // label never shows a bare slug when a name is available, and never breaks when
+  // it is not.
+  const regionDisplay = regionNames?.get(variant.region) ?? variant.region;
+  return `${base} (${regionDisplay})`;
 }

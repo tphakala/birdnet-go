@@ -176,6 +176,25 @@ describe('variantLabel', () => {
   it('falls back to the id when precision is absent', () => {
     expect(variantLabel(variant({ id: 'custom' }))).toBe('custom');
   });
+
+  it('resolves the region display name from the map when provided', () => {
+    const names = new Map([['nordic', 'Nordic and Baltic']]);
+    expect(
+      variantLabel(variant({ id: 'fp32@nordic', precision: 'fp32', region: 'nordic' }), names)
+    ).toBe('FP32 (Nordic and Baltic)');
+  });
+
+  it('falls back to the raw slug when the map lacks the region or is absent', () => {
+    const names = new Map([['iberia', 'Iberia']]);
+    // Slug not in the map -> raw slug.
+    expect(
+      variantLabel(variant({ id: 'fp32@nordic', precision: 'fp32', region: 'nordic' }), names)
+    ).toBe('FP32 (nordic)');
+    // No map at all -> raw slug, unchanged from the single-argument behavior.
+    expect(variantLabel(variant({ id: 'fp32@nordic', precision: 'fp32', region: 'nordic' }))).toBe(
+      'FP32 (nordic)'
+    );
+  });
 });
 
 describe('translateReason', () => {

@@ -82,6 +82,7 @@ vi.mock('$lib/utils/api', async () => {
 
 import AnalysisSettingsPage from './AnalysisSettingsPage.svelte';
 import * as modelsApi from '$lib/utils/modelsApi';
+import { settingsStore } from '$lib/stores/settings';
 
 // A network-shaped download failure (matches isNetworkDownloadError's real regex).
 const NETWORK_ERROR = 'HTTP request failed for https://huggingface.co/model: connection refused';
@@ -171,5 +172,87 @@ describe('AnalysisSettingsPage model gallery error handling', () => {
     await waitFor(() => expect(modelsApi.installModel).toHaveBeenCalledTimes(2));
     expect(modelsApi.installModel).toHaveBeenLastCalledWith('test-bird', undefined);
     expect(vi.mocked(modelsApi.fetchCatalog).mock.calls.length).toBe(catalogCallsBeforeRetry);
+  });
+});
+
+describe('AnalysisSettingsPage model gallery in-flight guard and region refetch', () => {
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
+      this.open = true;
+    };
+    HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
+      this.open = false;
+    };
+    // Reset the saved region so each test starts from the 'auto' baseline
+    // (undefined modelRegion resolves to 'auto' in the page).
+    settingsStore.update(s => ({
+      ...s,
+      originalData: {
+        ...s.originalData,
+        birdnet: { ...s.originalData.birdnet, modelRegion: undefined },
+      },
+    }));
+    vi.mocked(modelsApi.fetchInstalled).mockResolvedValue([]);
+    vi.mocked(modelsApi.fetchModelRegions).mockRejectedValue(new Error('no regions in test'));
+  });
+
+  it('disables install on another card while a reinstall is in flight (shared in-flight guard)', async () => {
+    // One installed model (has a Reinstall control) and one available (has Install).
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ id: 'inst', name: 'Installed Model', installed: true }), birdEntry()],
+    });
+    // The reinstall never resolves, so reinstallingId stays set: an action is in flight.
+    vi.mocked(modelsApi.reinstallModel).mockImplementation(() => new Promise<void>(() => {}));
+
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+
+    // Start a reinstall from the installed sub-tab (the default gallery sub-tab).
+    await fireEvent.click(
+      await screen.findByRole('button', {
+        name: /analysis\.gallery\.reinstall.*Installed Model/,
+      })
+    );
+
+    // Switch to Available: the Install button must be disabled while the reinstall runs.
+    await fireEvent.click(
+      await screen.findByRole('tab', { name: /analysis\.gallery\.tabs\.available/ })
+    );
+    const installBtn = await screen.findByRole('button', { name: installButtonName });
+    await waitFor(() => expect(installBtn).toBeDisabled());
+  });
+
+  it('re-fetches the catalog when the saved model region changes, but not on unrelated saves', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [birdEntry()] });
+    render(AnalysisSettingsPage);
+
+    // onMount loads the catalog once for the persisted region.
+    await waitFor(() => expect(modelsApi.fetchCatalog).toHaveBeenCalledTimes(1));
+
+    // A save that changes the region re-fetches, so the server recommendation flags
+    // (computed from the persisted region) follow the selector.
+    settingsStore.update(s => ({
+      ...s,
+      originalData: {
+        ...s.originalData,
+        birdnet: { ...s.originalData.birdnet, modelRegion: 'nordic' },
+      },
+    }));
+    await waitFor(() => expect(modelsApi.fetchCatalog).toHaveBeenCalledTimes(2));
+
+    // A save that changes an unrelated field must NOT re-fetch the catalog.
+    settingsStore.update(s => ({
+      ...s,
+      originalData: {
+        ...s.originalData,
+        birdnet: { ...s.originalData.birdnet, huggingFaceEndpoint: 'https://example.com' },
+      },
+    }));
+    // Let any pending effect flush, then assert the count did not move.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(modelsApi.fetchCatalog).toHaveBeenCalledTimes(2);
   });
 });

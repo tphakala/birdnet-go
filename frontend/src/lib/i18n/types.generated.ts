@@ -3885,14 +3885,22 @@ export type TranslationKey =
   | 'analysis.gallery.variants.default'
   | 'analysis.gallery.variants.incompatible'
   | 'analysis.gallery.variants.showAll' // params: count
+  | 'analysis.gallery.variants.showRegion' // params: region, count
+  | 'analysis.gallery.variants.showHardware' // params: count
+  | 'analysis.gallery.variants.showAllRegions' // params: count
+  | 'analysis.gallery.variants.regionContext' // params: region
+  | 'analysis.gallery.variants.regionContextNone'
+  | 'analysis.gallery.variants.otherRegions'
   | 'analysis.gallery.variants.latency' // params: ms
   | 'analysis.gallery.variants.precisionInfo'
   | 'analysis.gallery.variants.precisionHelp'
+  | 'analysis.gallery.actionInProgress'
   | 'analysis.gallery.reasons.backendRecommended' // params: backend
   | 'analysis.gallery.reasons.backendSupported' // params: backend
   | 'analysis.gallery.reasons.regionMatched' // params: region
   | 'analysis.gallery.reasons.regionGlobalFallback'
   | 'analysis.gallery.reasons.precisionFp16Native'
+  | 'analysis.gallery.reasons.precisionFp16GpuPreferred'
   | 'analysis.gallery.reasons.ramConstrainedFit'
   | 'analysis.gallery.reasons.benchmarkMeasured'
   | 'analysis.gallery.reasons.variantLegacy'
@@ -4486,6 +4494,10 @@ export type TranslationParams = {
   'analysis.gallery.region.why.pinnedMismatch': { resolved: string | number };
   'analysis.gallery.region.why.pinnedUnknown': { region: string | number };
   'analysis.gallery.variants.showAll': { count: string | number };
+  'analysis.gallery.variants.showRegion': { region: string | number; count: string | number };
+  'analysis.gallery.variants.showHardware': { count: string | number };
+  'analysis.gallery.variants.showAllRegions': { count: string | number };
+  'analysis.gallery.variants.regionContext': { region: string | number };
   'analysis.gallery.variants.latency': { ms: string | number };
   'analysis.gallery.reasons.backendRecommended': { backend: string | number };
   'analysis.gallery.reasons.backendSupported': { backend: string | number };
