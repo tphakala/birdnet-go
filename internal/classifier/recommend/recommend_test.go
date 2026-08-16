@@ -170,6 +170,139 @@ func TestRank_HardwareMatrix(t *testing.T) {
 	}
 }
 
+func TestDeviceMatches(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		benchDevice string
+		deviceClass string
+		want        bool
+	}{
+		{"x86-i7-1260P", deviceClassX86, true},
+		{deviceClassX86, deviceClassX86, true},
+		{"x86-n100", deviceClassX86, true},
+		{"x8600", deviceClassX86, false}, // no separating hyphen: not an x86 device
+		{deviceClassRPi5, deviceClassRPi5, true},
+		{deviceClassRPi5, deviceClassRPi4, false},
+		{deviceClassRPi5, deviceClassX86, false},
+		{"x86-i7-1260P", deviceClassRPi5, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.benchDevice+"/"+tt.deviceClass, func(t *testing.T) {
+			t.Parallel()
+			assert.Equalf(t, tt.want, deviceMatches(tt.benchDevice, tt.deviceClass),
+				"deviceMatches(%q, %q)", tt.benchDevice, tt.deviceClass)
+		})
+	}
+}
+
+func TestRank_X86BenchmarkPrefixMatch(t *testing.T) {
+	t.Parallel()
+
+	// Two variants on the same recommended CPU backend so their scores tie, with
+	// x86-i7-1260P benchmark rows the amd64 host must now consume via the x86
+	// device-class prefix match. Before the fix these rows were ignored on x86 and
+	// the tie fell through to size/id; now the faster measured one must win.
+	backend := map[string]classifier.BackendSupport{hwprofile.CapONNXRuntimeCPU: {Supported: true, Recommended: true}}
+	// IDs are chosen so the lexical id tie-break (ascending) would pick the
+	// SLOWER variant: if the x86 rows were not consumed the two scores tie and
+	// "a-slow" would win, so asserting "z-fast" wins makes the winner assertion
+	// itself catch a regression of the prefix match, not just the reason assertion.
+	entry := classifier.CatalogEntry{
+		ID: "x86-bench",
+		Variants: []classifier.CatalogVariant{
+			{ID: "z-fast", Backends: backend, Benchmarks: []classifier.Benchmark{{Device: "x86-i7-1260P", Backend: hwprofile.CapONNXRuntimeCPU, LatencyMs: 50}}},
+			{ID: "a-slow", Backends: backend, Benchmarks: []classifier.Benchmark{{Device: "x86-i7-1260P", Backend: hwprofile.CapONNXRuntimeCPU, LatencyMs: 150}}},
+		},
+	}
+	recs := Rank(&Input{
+		Capabilities: []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU},
+		DeviceClass:  deviceClassX86,
+		Entries:      []classifier.CatalogEntry{entry},
+	})
+	assert.Equal(t, "z-fast", recommendedVariant(recs, "x86-bench"), "faster x86 benchmark wins after prefix match, beating the lexical id tie-break")
+	fastRec, ok := variantRec(recs, "x86-bench", "z-fast")
+	require.True(t, ok)
+	assert.True(t, hasReason(&fastRec, ReasonBenchmarkMeasured), "x86 benchmark row is consumed on an amd64 host")
+}
+
+func TestRank_GPUFP16PreferredOverFasterCPUFP32(t *testing.T) {
+	t.Parallel()
+
+	// Uses the real birdnet-v3.0 entry so the assertion tracks the shipped
+	// benchmark rows: fp32 measures 70 ms on CPU, fp16 81 ms on the iGPU, so the
+	// raw latency term favors fp32 on a GPU host. The size lever must keep fp16.
+	v3 := realEntry(t, "birdnet-v3.0")
+
+	tests := []struct {
+		name            string
+		caps            []string
+		resolvedRegion  string
+		wantRecommended string
+		// wantFP16Lever is the variant expected to carry the fp16 GPU-preferred
+		// reason, or "" when no variant should.
+		wantFP16Lever string
+	}{
+		{
+			name:            "igpu keeps fp16 over faster cpu fp32",
+			caps:            []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU, hwprofile.CapOpenVINOCPU, hwprofile.CapOpenVINOGPU},
+			wantRecommended: "fp16",
+			wantFP16Lever:   "fp16",
+		},
+		{
+			// No GPU backend reachable: fp16's recommended path is not a GPU, so the
+			// lever stays inert and the faster fp32 CPU build is the correct pick.
+			name:            "no gpu falls back to fp32",
+			caps:            []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU, hwprofile.CapOpenVINOCPU},
+			wantRecommended: "fp32",
+			wantFP16Lever:   "",
+		},
+		{
+			// The lever applies at the regional level too: with nordic resolved,
+			// fp16@nordic must stay ahead of the faster-on-CPU fp32@nordic.
+			name:            "igpu keeps fp16 regional slice",
+			caps:            []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU, hwprofile.CapOpenVINOCPU, hwprofile.CapOpenVINOGPU},
+			resolvedRegion:  "nordic",
+			wantRecommended: "fp16@nordic",
+			wantFP16Lever:   "fp16@nordic",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			recs := Rank(&Input{
+				Capabilities:   tt.caps,
+				TotalRAMBytes:  ramHigh,
+				DeviceClass:    deviceClassX86,
+				ResolvedRegion: tt.resolvedRegion,
+				Entries:        []classifier.CatalogEntry{v3},
+			})
+			assert.Equalf(t, tt.wantRecommended, recommendedVariant(recs, "birdnet-v3.0"), "recommended variant")
+
+			// The fp32 sibling must carry a measured benchmark, proving the x86 rows
+			// are actually consumed; otherwise the test could pass vacuously if the
+			// prefix match regressed.
+			fp32ID := "fp32"
+			if tt.resolvedRegion != "" {
+				fp32ID = "fp32@" + tt.resolvedRegion
+			}
+			fp32Rec, ok := variantRec(recs, "birdnet-v3.0", fp32ID)
+			require.Truef(t, ok, "variant %s present", fp32ID)
+			assert.Truef(t, hasReason(&fp32Rec, ReasonBenchmarkMeasured), "%s consumes the x86 benchmark row", fp32ID)
+
+			if tt.wantFP16Lever != "" {
+				leverRec, ok := variantRec(recs, "birdnet-v3.0", tt.wantFP16Lever)
+				require.Truef(t, ok, "variant %s present", tt.wantFP16Lever)
+				assert.Truef(t, hasReason(&leverRec, ReasonPrecisionFP16GPUPreferred), "%s carries the fp16 GPU-preferred reason", tt.wantFP16Lever)
+			} else {
+				fp16Rec, ok := variantRec(recs, "birdnet-v3.0", "fp16")
+				require.True(t, ok)
+				assert.False(t, hasReason(&fp16Rec, ReasonPrecisionFP16GPUPreferred), "lever must not fire without a recommended GPU path")
+			}
+		})
+	}
+}
+
 func TestRank_Blockers(t *testing.T) {
 	t.Parallel()
 

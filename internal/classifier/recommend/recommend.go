@@ -48,6 +48,18 @@ const (
 	// scoreFP16Native rewards an fp16 variant on a host with native
 	// half-precision SIMD.
 	scoreFP16Native = 15
+	// scoreFP16GPUPreferred keeps fp16 the preferred build when the variant's
+	// best host path is a recommended GPU backend. fp16 is the deliberate size
+	// lever for GPU hosts: half the download of fp32 and numerically equivalent
+	// for this use, and running on the GPU frees the CPU for the audio pipeline,
+	// so a CPU latency benchmark must not flip the pick to fp32. The value is
+	// derived from benchmarkMaxScore, the largest advantage the latency term can
+	// ever hand a sibling, plus a small headroom so fp16 wins outright instead of
+	// leaning on the backend-rank tie-break. Like scoreRegionGlobalFallback, this
+	// assumes a regional fp16 slice always has a global fp16 sibling (true in
+	// shipped catalog data), so the term cannot promote a wrong-region slice past
+	// every global variant.
+	scoreFP16GPUPreferred = benchmarkMaxScore + 5
 	// scoreRAMConstrainedFit rewards an int8 variant on a memory-constrained
 	// host, where the quantized build is the one that fits.
 	scoreRAMConstrainedFit = 25
@@ -84,6 +96,9 @@ const (
 	// ReasonPrecisionFP16Native marks an fp16 variant matched to native
 	// half-precision SIMD.
 	ReasonPrecisionFP16Native = "precision.fp16_native"
+	// ReasonPrecisionFP16GPUPreferred marks an fp16 variant kept preferred
+	// because its recommended backend on this host runs on a GPU.
+	ReasonPrecisionFP16GPUPreferred = "precision.fp16_gpu_preferred"
 	// ReasonRAMConstrainedFit marks an int8 variant matched to a low-RAM host.
 	ReasonRAMConstrainedFit = "ram.constrained_fit"
 	// ReasonVariantLegacy marks a superseded build.
@@ -126,6 +141,12 @@ const (
 
 	archAMD64 = "amd64"
 
+	// backendCUDA and backendTensorRT are GPU backend tokens named here so
+	// backendPreference and gpuBackendTokens share one definition rather than
+	// repeating raw strings. The other backend tokens come from hwprofile.
+	backendCUDA     = "cuda"
+	backendTensorRT = "tensorrt"
+
 	precisionFP16 = "fp16"
 	precisionINT8 = "int8"
 
@@ -137,8 +158,8 @@ const (
 // order for completeness; no BirdNET-Go build emits those host tokens yet, so
 // in practice the decision is among the OpenVINO and ONNX Runtime backends.
 var backendPreference = []string{
-	"cuda",
-	"tensorrt",
+	backendCUDA,
+	backendTensorRT,
 	hwprofile.CapOpenVINOGPU,
 	hwprofile.CapOpenVINOCPU,
 	hwprofile.CapONNXRuntimeCPU,
@@ -150,6 +171,18 @@ var backendPreference = []string{
 // var only because len of a slice is not a compile-time constant; it is never
 // reassigned.
 var backendRankUnavailable = len(backendPreference)
+
+// gpuBackendTokens are the backend tokens that execute inference on a GPU
+// rather than the host CPU. Used to gate scoreFP16GPUPreferred, which keeps
+// fp16 preferred only when the variant's recommended path is one of these.
+// Keep this the GPU subset of backendPreference above: a new GPU backend added
+// there must be added here too, or the fp16 size lever will not fire for it.
+var gpuBackendTokens = []string{backendCUDA, backendTensorRT, hwprofile.CapOpenVINOGPU}
+
+// isGPUBackend reports whether a backend token executes inference on a GPU.
+func isGPUBackend(backend string) bool {
+	return slices.Contains(gpuBackendTokens, backend)
+}
 
 // Reason is a structured, renderable explanation for a scoring decision or a
 // hard-filter failure. Args carry the values the frontend interpolates into the
@@ -329,6 +362,9 @@ func evaluateVariant(catalogID string, v *classifier.CatalogVariant, in *Input, 
 	// Backend term. Scores the variant on the best host-available backend and
 	// records the rank used to break score ties.
 	backendRank := backendRankUnavailable
+	// gpuRecommended is set when the variant's Recommended backend on this host
+	// runs on a GPU, gating the fp16 size-lever modifier below.
+	gpuRecommended := false
 	if term, missing := backendTerm(v, in.Capabilities); missing {
 		if !backendMissing {
 			blockers = append(blockers, Reason{Code: BlockerBackendMissing, Args: joinArg("required", backendKeys(v.Backends))})
@@ -337,6 +373,7 @@ func evaluateVariant(catalogID string, v *classifier.CatalogVariant, in *Input, 
 		score += term.score
 		reasons = append(reasons, Reason{Code: term.code, Args: map[string]string{"backend": term.backend}})
 		backendRank = preferenceRank(term.backend)
+		gpuRecommended = term.code == ReasonBackendRecommended && isGPUBackend(term.backend)
 	}
 
 	// Region term. A regional slice matching the host's resolved region is the
@@ -358,6 +395,14 @@ func evaluateVariant(catalogID string, v *classifier.CatalogVariant, in *Input, 
 	if slices.Contains(in.Capabilities, hwprofile.CapFP16Native) && v.Precision == precisionFP16 {
 		score += scoreFP16Native
 		reasons = append(reasons, Reason{Code: ReasonPrecisionFP16Native})
+	}
+	// Keep fp16 the preferred build when its recommended backend on this host is
+	// a GPU, so a faster CPU benchmark on the fp32 sibling cannot flip the pick
+	// away from the deliberate GPU size lever (fp16 is half the download and
+	// numerically equivalent here). See scoreFP16GPUPreferred.
+	if gpuRecommended && v.Precision == precisionFP16 {
+		score += scoreFP16GPUPreferred
+		reasons = append(reasons, Reason{Code: ReasonPrecisionFP16GPUPreferred})
 	}
 	if slices.Contains(in.Capabilities, hwprofile.CapLowRAM) && v.Precision == precisionINT8 {
 		score += scoreRAMConstrainedFit
@@ -483,7 +528,7 @@ func comparableLatency(v *classifier.CatalogVariant, in *Input) (latency int, ok
 	found := false
 	for i := range v.Benchmarks {
 		b := &v.Benchmarks[i]
-		if b.Device != in.DeviceClass || b.LatencyMs <= 0 || !slices.Contains(in.Capabilities, b.Backend) {
+		if !deviceMatches(b.Device, in.DeviceClass) || b.LatencyMs <= 0 || !slices.Contains(in.Capabilities, b.Backend) {
 			continue
 		}
 		if !found || b.LatencyMs < best {
@@ -492,6 +537,19 @@ func comparableLatency(v *classifier.CatalogVariant, in *Input) (latency int, ok
 		}
 	}
 	return best, found
+}
+
+// deviceMatches reports whether a benchmark's Device identifier applies to the
+// host's device class. ARM classes name exact benchmark devices (rpi5-a76,
+// rpi4b-a72), so they match by equality. The generic x86 class covers any
+// x86-* benchmark device, because amd64 hosts are not binned into specific CPU
+// models the way Pi board tiers are; the trailing hyphen keeps a token like
+// "x8600" from matching.
+func deviceMatches(benchDevice, deviceClass string) bool {
+	if deviceClass == deviceClassX86 {
+		return benchDevice == deviceClassX86 || strings.HasPrefix(benchDevice, deviceClassX86+"-")
+	}
+	return benchDevice == deviceClass
 }
 
 // scaleBenchmark maps a latency to a score in [0, benchmarkMaxScore], fastest
