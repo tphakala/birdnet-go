@@ -28,10 +28,16 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { downloadBlob } from '$lib/utils/fileHelpers';
-  import type { CatalogEntry, DownloadProgress, InstalledModel } from '$lib/types/models';
+  import type {
+    CatalogEntry,
+    DownloadProgress,
+    InstalledModel,
+    ModelRegionsResponse,
+  } from '$lib/types/models';
   import {
     fetchCatalog,
     fetchInstalled,
+    fetchModelRegions,
     installModel,
     reinstallModel,
     uninstallModel,
@@ -165,6 +171,26 @@
   let downloadProgress = $state<DownloadProgress | null>(null);
   let completionTimer: ReturnType<typeof setTimeout> | undefined;
 
+  // One shared "any gallery action in flight" predicate. Install and reinstall
+  // share the single downloadProgress state and progressCleanup subscription, so
+  // starting a second action while one runs can strand the first's UI state; every
+  // action gate uses this rather than an ad-hoc subset of the three ids.
+  const galleryActionInFlight = $derived(
+    installingId !== null || reinstallingId !== null || deletingId !== null
+  );
+
+  // Model regions, for localized region names in variant labels and the
+  // region-aware picker. Fetched once on mount; a failure degrades to raw slugs.
+  let regionsData = $state<ModelRegionsResponse | null>(null);
+  // Monotonic sequence guarding loadCatalog against out-of-order responses: a slow
+  // in-flight fetch must not overwrite a newer one (a region-change re-fetch, or
+  // the Retry button). Plain let: intentionally untracked.
+  let catalogRequestSeq = 0;
+  // The saved region the loaded catalog reflects, so the region effect below
+  // re-fetches only when a save actually changes it. Plain let: intentionally
+  // untracked, so mutating it never re-runs the effect.
+  let catalogLoadedRegion: string | null = null;
+
   // Shared DOM id for the Download Source endpoint input, referenced both by the
   // input's own id and by scrollToDownloadSource's getElementById lookup, so the
   // two cannot drift apart.
@@ -200,6 +226,54 @@
   // ── Store-derived state ───────────────────────────────────────────────
   let store = $derived($settingsStore);
   let birdnet = $derived($birdnetSettings);
+
+  // ── Region-aware picker wiring ────────────────────────────────────────
+  // slug -> localized name, from the same regions endpoint the region selector
+  // uses, so the picker labels a region exactly as the selector names it. Guarded
+  // against a missing or still-loading response.
+  const regionNameMap = $derived(new Map((regionsData?.regions ?? []).map(r => [r.slug, r.name])));
+  // The live selected region mode from the unsaved form store (mirrors the
+  // ModelRegionSelector), so the picker's region scoping tracks a selector click
+  // instantly, before any save. Note: until a save the server-computed
+  // recommended flags still reflect the SAVED region, so the recommended variant
+  // may lag the live selection; the effect below re-fetches on save to reconcile.
+  const liveModelRegion = $derived(birdnet?.modelRegion ? birdnet.modelRegion : 'auto');
+  const activeRegionSlug = $derived.by<string>(() => {
+    if (!regionsData) return '';
+    if (liveModelRegion === 'global') return '';
+    if (liveModelRegion === 'auto')
+      return regionsData.locationConfigured ? regionsData.resolved.slug : '';
+    return regionNameMap.has(liveModelRegion) ? liveModelRegion : '';
+  });
+  // The SAVED region the catalog's recommendation flags were computed from. Those
+  // flags come from the persisted setting (resolveRecommendRegion on the server),
+  // so the picker's server-side recommendation only needs a re-fetch when this
+  // changes, not on unsaved toggles.
+  const savedModelRegion = $derived.by<string | null>(() => {
+    const b = store.originalData.birdnet;
+    if (!b) return null; // settings not loaded yet
+    return b.modelRegion ? b.modelRegion : 'auto';
+  });
+
+  // Re-fetch the catalog when the SAVED region changes mid-session (a save), so
+  // the server-computed recommendation flags follow the region selector. Unsaved
+  // selector toggles do not fire this (they only move activeRegionSlug, which
+  // scopes the picker client-side); the first observation after settings load does
+  // not either (onMount already loaded the catalog for the persisted region). The
+  // only tracked read is savedModelRegion, a primitive $derived, so Svelte re-runs
+  // this only when its value actually changes; the catalogLoadedRegion guard is
+  // belt-and-braces.
+  $effect(() => {
+    const region = savedModelRegion;
+    if (region === null) return;
+    if (catalogLoadedRegion === null) {
+      catalogLoadedRegion = region; // onMount already loaded this region's catalog
+      return;
+    }
+    if (region === catalogLoadedRegion) return;
+    catalogLoadedRegion = region;
+    loadCatalog();
+  });
   let dynamicThreshold = $derived(
     $dynamicThresholdSettings ?? {
       enabled: false,
@@ -916,6 +990,7 @@
 
   onMount(() => {
     loadCatalog();
+    loadModelRegions();
     loadBirdnetLocales();
     loadRangeFilterCount();
     loadRangeFilterStatus();
@@ -927,27 +1002,49 @@
 
   // ── Gallery functions ─────────────────────────────────────────────────
   async function loadCatalog() {
+    const seq = ++catalogRequestSeq;
     loading = true;
     catalogError = null;
     try {
       const response = await fetchCatalog();
+      // Bail if a newer loadCatalog started while this one awaited, so a slow
+      // response cannot overwrite the newer region's catalog.
+      if (seq !== catalogRequestSeq) return;
       catalog = response.catalog;
       // Refresh the installed list alongside the catalog so the secondary-model
       // threshold sections track install/uninstall. Swallows its own errors.
-      await loadInstalledModels();
+      await loadInstalledModels(seq);
     } catch (e) {
+      if (seq !== catalogRequestSeq) return;
       catalogError =
         e instanceof Error ? e.message : t('analysis.gallery.errors.catalogLoadFailed');
     } finally {
-      loading = false;
+      // Only the newest request owns the loading flag, so a superseded response
+      // does not clear the spinner out from under the one still running.
+      if (seq === catalogRequestSeq) loading = false;
     }
   }
 
-  async function loadInstalledModels() {
+  // seq, when passed, is the owning loadCatalog request's sequence: a stale
+  // installed-list response is dropped rather than overwriting a newer one.
+  async function loadInstalledModels(seq?: number) {
     try {
-      installedModels = await fetchInstalled();
+      const installed = await fetchInstalled();
+      if (seq !== undefined && seq !== catalogRequestSeq) return;
+      installedModels = installed;
     } catch (e) {
       logger.error('Failed to load installed models:', e);
+    }
+  }
+
+  // Load the model regions for name resolution and region-aware picker scoping.
+  // Best-effort: on failure the picker degrades to raw slugs with no region
+  // scoping, which is strictly better than blocking the gallery.
+  async function loadModelRegions() {
+    try {
+      regionsData = await fetchModelRegions();
+    } catch (e) {
+      logger.error('Failed to load model regions:', e);
     }
   }
 
@@ -969,6 +1066,9 @@
     // Never install a variant the recommender flagged incompatible with this host
     // (the button is disabled in this state; this guards a programmatic call too).
     if (installBlocked) return;
+    // Do not start an install while any gallery action is in flight; they share
+    // the single downloadProgress state and SSE subscription.
+    if (galleryActionInFlight) return;
     const modelId = licenseModel.id;
     const modelName = licenseModel.name;
     // Only send a variantId when the entry actually offers variants; a flat entry
@@ -981,6 +1081,9 @@
   // The install body, extracted so a failed install's Retry can re-run it without
   // reopening the license dialog (the license was accepted this session).
   async function startInstall(modelId: string, modelName: string, variantId: string | undefined) {
+    // Defensive boundary: callers already gate on galleryActionInFlight, but keep
+    // the invariant here so a future caller cannot start an overlapping action.
+    if (galleryActionInFlight) return;
     installError = null;
     installingId = modelId;
     downloadProgress = null;
@@ -1061,6 +1164,8 @@
 
   async function handleUninstall() {
     if (!removeConfirmModel) return;
+    // Do not start a remove while any gallery action is in flight.
+    if (galleryActionInFlight) return;
     const modelId = removeConfirmModel.id;
     const modelName = removeConfirmModel.name;
     closeRemoveDialog();
@@ -1081,12 +1186,14 @@
   }
 
   function handleReinstall(entry: CatalogEntry) {
-    if (reinstallingId || installingId) return;
+    if (galleryActionInFlight) return;
     startReinstall(entry.id, entry.name);
   }
 
   // The reinstall body, extracted so a failed reinstall's Retry can re-run it.
   async function startReinstall(modelId: string, modelName: string) {
+    // Defensive boundary: callers already gate on galleryActionInFlight.
+    if (galleryActionInFlight) return;
     installError = null;
     reinstallingId = modelId;
     downloadProgress = null;
@@ -1142,7 +1249,7 @@
     // when nothing is in flight (each start clears it, every failure resets its id),
     // so this is currently unreachable, but it keeps the invariant explicit and
     // survives future refactors that might retry while an action is running.
-    if (installingId || reinstallingId) return;
+    if (galleryActionInFlight) return;
     const { modelId, modelName, variantId, kind } = installError;
     if (kind === 'install') startInstall(modelId, modelName, variantId);
     else if (kind === 'reinstall') startReinstall(modelId, modelName);
@@ -2062,8 +2169,12 @@
             <!-- Action footer -->
             <div class="mt-3 flex items-center justify-end gap-2">
               <button
+                type="button"
                 onclick={() => handleReinstall(entry)}
-                disabled={reinstallingId !== null || installingId !== null || isDeleting}
+                disabled={galleryActionInFlight}
+                title={galleryActionInFlight && !isReinstalling
+                  ? t('analysis.gallery.actionInProgress')
+                  : undefined}
                 class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--color-base-content)]/80 hover:bg-[var(--color-base-300)] transition-colors disabled:opacity-50"
                 aria-label="{t('analysis.gallery.reinstall')} {entry.name}"
               >
@@ -2076,8 +2187,12 @@
                 {/if}
               </button>
               <button
+                type="button"
                 onclick={() => openRemoveDialog(entry)}
-                disabled={isDeleting || isReinstalling || installingId !== null}
+                disabled={galleryActionInFlight}
+                title={galleryActionInFlight && !isDeleting
+                  ? t('analysis.gallery.actionInProgress')
+                  : undefined}
                 class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors disabled:opacity-50"
                 aria-label="{t('analysis.gallery.remove')} {entry.name}"
               >
@@ -2249,8 +2364,12 @@
     <!-- Action footer (pushed to bottom via mt-auto) -->
     <div class="mt-auto flex items-center justify-end pt-3">
       <button
+        type="button"
         onclick={() => openLicenseDialog(entry)}
-        disabled={!entry.compatible || isInstalling || installingId !== null}
+        disabled={!entry.compatible || galleryActionInFlight}
+        title={galleryActionInFlight && !isInstalling
+          ? t('analysis.gallery.actionInProgress')
+          : undefined}
         class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors disabled:opacity-50"
         aria-label="{t('analysis.gallery.install')} {entry.name}"
       >
@@ -2445,6 +2564,8 @@
             variants={licenseModel.variants}
             installedVariantId={licenseModel.installedVariantId}
             {selectedVariantId}
+            {activeRegionSlug}
+            regionNames={regionNameMap}
             onSelect={id => (selectedVariantId = id)}
             idPrefix="license-variant"
           />

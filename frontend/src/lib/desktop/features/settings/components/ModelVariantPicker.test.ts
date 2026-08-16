@@ -56,8 +56,12 @@ describe('ModelVariantPicker', () => {
     // Only the recommended variant is shown initially.
     expect(radios(container)).toHaveLength(1);
     expect(radioByValue(container, 'fp16')).not.toBeNull();
-    // The toggle reveals the rest.
-    expect(getByRole('button')).toHaveAttribute('aria-expanded', 'false');
+    // The disclosure button reveals the rest, labeled honestly as "show all"
+    // because this fixture has no regional variants to scope to. Assert it is NOT
+    // the region-scoped showAllRegions (of which showAll is a string prefix).
+    const toggle = getByRole('button');
+    expect(toggle.textContent).toContain('analysis.gallery.variants.showAll');
+    expect(toggle.textContent).not.toContain('showAllRegions');
   });
 
   it('reveals all variants when show-all is clicked', async () => {
@@ -96,7 +100,10 @@ describe('ModelVariantPicker', () => {
     });
     await fireEvent.click(getByRole('button')); // reveal all
     const blocked = radioByValue(container, 'int8-arm');
-    expect(blocked?.disabled).toBe(true);
+    // Blocked options use aria-disabled, not native disabled, so they keep keyboard
+    // focus and can announce their reason (accessibility requirement).
+    expect(blocked?.getAttribute('aria-disabled')).toBe('true');
+    expect(blocked?.disabled).toBe(false);
     // reasonText falls back to the raw code when t returns the key (t is mocked to
     // echo the key in tests), so the blocker reason renders the raw dotted code.
     expect(container.textContent).toContain('arch.unsupported');
@@ -117,7 +124,8 @@ describe('ModelVariantPicker', () => {
     });
     await fireEvent.click(getByRole('button')); // reveal all
     const blocked = radioByValue(container, 'blocked-no-reason');
-    expect(blocked?.disabled).toBe(true);
+    expect(blocked?.getAttribute('aria-disabled')).toBe('true');
+    expect(blocked?.disabled).toBe(false);
     // Falls back to the generic localized "incompatible" line, never left blank.
     expect(container.textContent).toContain('analysis.gallery.variants.incompatible');
   });
@@ -255,5 +263,132 @@ describe('ModelVariantPicker', () => {
     expect(reasonItems).toHaveLength(2);
     expect(reasonItems[0].textContent).toContain('backend.recommended');
     expect(reasonItems[1].textContent).toContain('region.matched');
+  });
+
+  it('does not select a blocked variant when clicked (aria-disabled soft-disable)', async () => {
+    const onSelect = vi.fn();
+    const { container, getByRole } = render(ModelVariantPicker, {
+      props: {
+        variants,
+        selectedVariantId: 'fp16',
+        onSelect,
+        idPrefix: 'p12',
+      },
+    });
+    await fireEvent.click(getByRole('button')); // reveal all
+    const blocked = radioByValue(container, 'int8-arm');
+    expect(blocked).not.toBeNull();
+    await fireEvent.click(blocked as HTMLInputElement);
+    // The soft-disable must swallow the interaction: no selection callback, and
+    // the blocked radio does not end up checked.
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(blocked?.checked).toBe(false);
+  });
+
+  it('restores the prior selection when arrow-key focus lands on a blocked variant', async () => {
+    const onSelect = vi.fn();
+    const { container, getByRole } = render(ModelVariantPicker, {
+      props: {
+        variants,
+        selectedVariantId: 'fp16',
+        onSelect,
+        idPrefix: 'p13',
+      },
+    });
+    await fireEvent.click(getByRole('button')); // reveal all
+    const blocked = radioByValue(container, 'int8-arm');
+    const selected = radioByValue(container, 'fp16');
+    expect(blocked).not.toBeNull();
+    expect(selected).not.toBeNull();
+    // Simulate arrow-key roving: the browser synchronously checks the focused
+    // blocked radio and unchecks the prior selection, then fires change. There is
+    // no cancelable click here, so the onclick preventDefault cannot intervene;
+    // only the onchange revert can, and it must restore the prior selection.
+    (blocked as HTMLInputElement).checked = true;
+    (selected as HTMLInputElement).checked = false;
+    await fireEvent.change(blocked as HTMLInputElement);
+    expect(onSelect).not.toHaveBeenCalled();
+    expect((blocked as HTMLInputElement).checked).toBe(false);
+    expect((selected as HTMLInputElement).checked).toBe(true);
+  });
+
+  // Regional fixture: 2 globals, 2 tiles for the active region (nordic), 2 tiles
+  // for another region (iberia). The picker must scope the middle stage to the
+  // active region and never label a filtered stage "all".
+  const regionalVariants: CatalogVariant[] = [
+    variant({ id: 'fp16', precision: 'fp16', recommended: true }),
+    variant({ id: 'fp32', precision: 'fp32', default: true }),
+    variant({ id: 'fp16@nordic', precision: 'fp16', region: 'nordic' }),
+    variant({ id: 'fp32@nordic', precision: 'fp32', region: 'nordic' }),
+    variant({ id: 'fp16@iberia', precision: 'fp16', region: 'iberia' }),
+    variant({ id: 'fp32@iberia', precision: 'fp32', region: 'iberia' }),
+  ];
+  const regionNames = new Map([
+    ['nordic', 'Nordic and Baltic'],
+    ['iberia', 'Iberia'],
+  ]);
+
+  it('scopes the middle disclosure stage to the active region and never over-promises', async () => {
+    const { container, getByRole } = render(ModelVariantPicker, {
+      props: {
+        variants: regionalVariants,
+        selectedVariantId: 'fp16',
+        onSelect: vi.fn(),
+        activeRegionSlug: 'nordic',
+        regionNames,
+        idPrefix: 'r1',
+      },
+    });
+    // Collapsed: only the recommended variant.
+    expect(radios(container)).toHaveLength(1);
+    // A context line states which region is scoping the list.
+    expect(container.textContent).toContain('analysis.gallery.variants.regionContext');
+    // The first disclosure button is region-scoped, not "show all".
+    expect(getByRole('button').textContent).toContain('analysis.gallery.variants.showRegion');
+
+    // Region stage: globals + the nordic tiles, but NOT iberia.
+    await fireEvent.click(getByRole('button'));
+    expect(radioByValue(container, 'fp32')).not.toBeNull();
+    expect(radioByValue(container, 'fp16@nordic')).not.toBeNull();
+    expect(radioByValue(container, 'fp32@nordic')).not.toBeNull();
+    expect(radioByValue(container, 'fp16@iberia')).toBeNull();
+
+    // The next button reveals every remaining region under an "Other regions"
+    // heading, and only now is a button labeled to include all regions.
+    expect(getByRole('button').textContent).toContain('analysis.gallery.variants.showAllRegions');
+    await fireEvent.click(getByRole('button'));
+    expect(radioByValue(container, 'fp16@iberia')).not.toBeNull();
+    expect(container.textContent).toContain('analysis.gallery.variants.otherRegions');
+  });
+
+  it('renders the localized region name in a regional variant label', async () => {
+    const { container, getByRole } = render(ModelVariantPicker, {
+      props: {
+        variants: regionalVariants,
+        selectedVariantId: 'fp16',
+        onSelect: vi.fn(),
+        activeRegionSlug: 'nordic',
+        regionNames,
+        idPrefix: 'r2',
+      },
+    });
+    await fireEvent.click(getByRole('button')); // reveal the region stage
+    // The nordic tile shows the display name from the map, not the raw slug.
+    expect(container.textContent).toContain('Nordic and Baltic');
+    expect(container.textContent).not.toContain('(nordic)');
+  });
+
+  it('prompts to pick a region when regional variants exist but none is active', () => {
+    const { container } = render(ModelVariantPicker, {
+      props: {
+        variants: regionalVariants,
+        selectedVariantId: 'fp16',
+        onSelect: vi.fn(),
+        activeRegionSlug: '',
+        regionNames,
+        idPrefix: 'r3',
+      },
+    });
+    expect(container.textContent).toContain('analysis.gallery.variants.regionContextNone');
   });
 });
