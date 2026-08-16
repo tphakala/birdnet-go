@@ -48,6 +48,9 @@ const (
 	// scoreFP16Native rewards an fp16 variant on a host with native
 	// half-precision SIMD.
 	scoreFP16Native = 15
+	// scoreFP16GPUPreferredHeadroom is the margin above benchmarkMaxScore that
+	// keeps fp16 winning outright rather than on the backend-rank tie-break.
+	scoreFP16GPUPreferredHeadroom = 5
 	// scoreFP16GPUPreferred keeps fp16 the preferred build when the variant's
 	// best host path is a recommended GPU backend. fp16 is the deliberate size
 	// lever for GPU hosts: half the download of fp32 and numerically equivalent
@@ -59,7 +62,7 @@ const (
 	// assumes a regional fp16 slice always has a global fp16 sibling (true in
 	// shipped catalog data), so the term cannot promote a wrong-region slice past
 	// every global variant.
-	scoreFP16GPUPreferred = benchmarkMaxScore + 5
+	scoreFP16GPUPreferred = benchmarkMaxScore + scoreFP16GPUPreferredHeadroom
 	// scoreRAMConstrainedFit rewards an int8 variant on a memory-constrained
 	// host, where the quantized build is the one that fits.
 	scoreRAMConstrainedFit = 25
@@ -399,8 +402,13 @@ func evaluateVariant(catalogID string, v *classifier.CatalogVariant, in *Input, 
 	// Keep fp16 the preferred build when its recommended backend on this host is
 	// a GPU, so a faster CPU benchmark on the fp32 sibling cannot flip the pick
 	// away from the deliberate GPU size lever (fp16 is half the download and
-	// numerically equivalent here). See scoreFP16GPUPreferred.
-	if gpuRecommended && v.Precision == precisionFP16 {
+	// numerically equivalent here). See scoreFP16GPUPreferred. Scoped to x86: the
+	// benchmark flip this counteracts arises only from the x86 CPU benchmark rows,
+	// and CapOpenVINOGPU is not architecture-gated (hwprofile emits it from the
+	// device probe alone), so requiring the x86 capability keeps the lever off any
+	// non-x86 host, where its calibration has not been validated.
+	if gpuRecommended && v.Precision == precisionFP16 &&
+		slices.Contains(in.Capabilities, hwprofile.CapX86_64) {
 		score += scoreFP16GPUPreferred
 		reasons = append(reasons, Reason{Code: ReasonPrecisionFP16GPUPreferred})
 	}

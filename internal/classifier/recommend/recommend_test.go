@@ -303,6 +303,47 @@ func TestRank_GPUFP16PreferredOverFasterCPUFP32(t *testing.T) {
 	}
 }
 
+func TestRank_FP16GPULeverIsX86Only(t *testing.T) {
+	t.Parallel()
+
+	// A hypothetical non-x86 host that still reports a recommended GPU backend
+	// (CapOpenVINOGPU is not architecture-gated in hwprofile, so this is possible
+	// in principle). The fp16 GPU size lever must NOT fire there: the x86
+	// CPU-vs-iGPU benchmark flip it counteracts cannot arise off x86, and its
+	// calibration is unvalidated on other architectures.
+	backend := map[string]classifier.BackendSupport{
+		hwprofile.CapOpenVINOGPU: {Supported: true, Recommended: true},
+	}
+	entry := classifier.CatalogEntry{
+		ID: "fp16-gpu",
+		Variants: []classifier.CatalogVariant{
+			{ID: "fp16", Precision: "fp16", Backends: backend},
+			{ID: "fp32", Precision: "fp32", Backends: backend},
+		},
+	}
+	arm := Rank(&Input{
+		Capabilities: []string{hwprofile.CapAArch64, hwprofile.CapOpenVINOGPU},
+		DeviceClass:  deviceClassRPi5,
+		Entries:      []classifier.CatalogEntry{entry},
+	})
+	armFP16, ok := variantRec(arm, "fp16-gpu", "fp16")
+	require.True(t, ok)
+	assert.False(t, hasReason(&armFP16, ReasonPrecisionFP16GPUPreferred),
+		"the fp16 GPU lever must not fire on a non-x86 host")
+
+	// Sanity: the same entry on an x86 host with a recommended GPU DOES get the
+	// lever, so this is not vacuously passing because the lever is dead everywhere.
+	x86 := Rank(&Input{
+		Capabilities: []string{hwprofile.CapX86_64, hwprofile.CapOpenVINOGPU},
+		DeviceClass:  deviceClassX86,
+		Entries:      []classifier.CatalogEntry{entry},
+	})
+	x86FP16, ok := variantRec(x86, "fp16-gpu", "fp16")
+	require.True(t, ok)
+	assert.True(t, hasReason(&x86FP16, ReasonPrecisionFP16GPUPreferred),
+		"the fp16 GPU lever fires on an x86 host with a recommended GPU backend")
+}
+
 func TestRank_Blockers(t *testing.T) {
 	t.Parallel()
 

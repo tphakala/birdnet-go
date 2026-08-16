@@ -95,6 +95,10 @@ func TestRegionalVariants_MatchManifest(t *testing.T) {
 				require.NotNilf(t, e.Requirements, "manifest entry %q must carry requirements", e.Path)
 				assert.Equalf(t, e.Requirements.MinRAMMB, v.Requirements.MinRAMMB, "RAM floor for %q", e.Path)
 
+				// The generated variant ID is the manifest variant token joined to
+				// the region slug (generator: e.Variant + "@" + e.Region).
+				assert.Equalf(t, e.Variant+"@"+e.Region, v.ID, "variant ID for %q", e.Path)
+
 				// Precision, normalized the same way the generator does.
 				assert.Equalf(t, normalizeManifestPrecision(e.Precision), v.Precision, "precision for %q", e.Path)
 
