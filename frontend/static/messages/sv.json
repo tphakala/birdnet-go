@@ -1706,6 +1706,9 @@
       "fp16": "FP16",
       "fp16Supported": "FP16 stöds",
       "fp16Unsupported": "FP16 stöds inte",
+      "advanced": "Avancerat",
+      "capabilities": "Egenskaper",
+      "capabilitiesHelp": "Hårdvarutaggar som används för att matcha denna maskin mot tillgängliga modellbyggen.",
       "backendTflite": "TensorFlow Lite",
       "backendOnnx": "ONNX Runtime",
       "backendOpenvino": "OpenVINO",
@@ -5341,7 +5344,7 @@
         "backendMissing": "Kräver en inference-backend som din version inte kan nå ({required})",
         "ramInsufficient": "Kräver minst {requiredMb} MB minne",
         "hardwareExcluded": "Stöds inte på din hårdvara ({token})",
-        "backendOnnxUnavailable": "Kräver ONNX Runtime, som inte är tillgängligt på detta system"
+        "backendOnnxUnavailable": "Kräver ONNX Runtime, som inte är tillgängligt på detta system. Docker-avbilder och versionsarkiv innehåller det; se installationsguiden för ONNX Runtime."
       },
       "tabs": {
         "installed": "Installerade",
@@ -5395,7 +5398,11 @@
       "errors": {
         "catalogLoadFailed": "Kunde inte ladda modellkatalogen",
         "installFailed": "Kunde inte starta modellinstallation",
-        "removeFailed": "Kunde inte ta bort modell"
+        "removeFailed": "Kunde inte ta bort modell",
+        "actionFailed": "Det uppstod ett problem med {name}",
+        "downloadSourceHint": "Om huggingface.co är blockerat eller långsamt på ditt nätverk kan du ange en spegelsajt i avsnittet Nedladdningskälla nedan.",
+        "goToDownloadSource": "Gå till Nedladdningskälla",
+        "dismiss": "Avfärda"
       },
       "regionLabel": "Region",
       "speciesLabel": "Arter",
@@ -5403,9 +5410,7 @@
       "reinstalling": "Installerar om...",
       "reinstallComplete": "Filer verifierade",
       "geomodelBadge": "Inkluderar BirdNET v3.0 geomodell",
-      "onnxRuntimeRequired": "Kräver ONNX Runtime som inte är tillgängligt på detta system.",
-      "onnxRuntimeMissing": "ONNX Runtime är inte tillgängligt. Denna modell kan inte köras.",
-      "unavailable": "Ej tillgänglig"
+      "entryIncompatible": "Den här modellen är inte tillgänglig på detta system."
     },
     "bird": {
       "title": "Fågeldetektering",

@@ -1706,6 +1706,9 @@
       "fp16": "FP16",
       "fp16Supported": "FP16 støttes",
       "fp16Unsupported": "FP16 støttes ikke",
+      "advanced": "Avansert",
+      "capabilities": "Egenskaper",
+      "capabilitiesHelp": "Maskinvare-tags som brukes til å matche denne maskinen mot tilgjengelige modellbygg.",
       "backendTflite": "TensorFlow Lite",
       "backendOnnx": "ONNX Runtime",
       "backendOpenvino": "OpenVINO",
@@ -5341,7 +5344,7 @@
         "backendMissing": "Krever en inference-backend som versjonen din ikke når ({required})",
         "ramInsufficient": "Krever minst {requiredMb} MB minne",
         "hardwareExcluded": "Støttes ikke på din maskinvare ({token})",
-        "backendOnnxUnavailable": "Krever ONNX Runtime, som ikke er tilgjengelig på dette systemet"
+        "backendOnnxUnavailable": "Krever ONNX Runtime, som ikke er tilgjengelig på dette systemet. Docker-images og utgivelsesarkiver inkluderer det; se installasjonsveiledningen for ONNX Runtime."
       },
       "tabs": {
         "installed": "Installert",
@@ -5395,7 +5398,11 @@
       "errors": {
         "catalogLoadFailed": "Innlasting av modellkatalog mislyktes",
         "installFailed": "Oppstart av modellinstallasjon mislyktes",
-        "removeFailed": "Fjerning av modell mislyktes"
+        "removeFailed": "Fjerning av modell mislyktes",
+        "actionFailed": "Det oppsto et problem med {name}",
+        "downloadSourceHint": "Hvis huggingface.co er blokkert eller tregt på nettverket ditt, kan du angi en speilserver i seksjonen Nedlastingskilde nedenfor.",
+        "goToDownloadSource": "Gå til Nedlastingskilde",
+        "dismiss": "Avvis"
       },
       "regionLabel": "Region",
       "speciesLabel": "Arter",
@@ -5403,9 +5410,7 @@
       "reinstalling": "Reinstallerer...",
       "reinstallComplete": "Filer verifisert",
       "geomodelBadge": "Inkluderer BirdNET v3.0 geomodell",
-      "onnxRuntimeRequired": "Krever ONNX Runtime som ikke er tilgjengelig på dette systemet.",
-      "onnxRuntimeMissing": "ONNX Runtime er ikke tilgjengelig. Denne modellen kan ikke kjøres.",
-      "unavailable": "Ikke tilgjengelig"
+      "entryIncompatible": "Denne modellen er ikke tilgjengelig på dette systemet."
     },
     "bird": {
       "title": "Fugledeteksjon",

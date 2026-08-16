@@ -1,6 +1,25 @@
-import { describe, it, expect } from 'vitest';
-import { pickPreselectedVariant, reasonKey, variantLabel } from './variantSelection';
-import type { CatalogEntry, CatalogVariant } from '$lib/types/models';
+import { describe, it, expect, vi } from 'vitest';
+import {
+  pickPreselectedVariant,
+  reasonKey,
+  variantLabel,
+  translateReason,
+  topReasons,
+} from './variantSelection';
+import type { CatalogEntry, CatalogVariant, VariantReason } from '$lib/types/models';
+
+// Controlled i18n mock: only these two keys have a "translation"; every other key
+// echoes back, which is how the real t() signals an untranslated key. This lets us
+// exercise both the translated branch and the fallback branch of translateReason.
+vi.mock('$lib/i18n', () => ({
+  t: (key: string) => {
+    const dict: Record<string, string> = {
+      'analysis.gallery.reasons.backendRecommended': 'Best for your hardware',
+      'analysis.gallery.reasons.regionMatched': 'Matched to your region',
+    };
+    return dict[key] ?? key;
+  },
+}));
 
 function variant(overrides: Partial<CatalogVariant> & { id: string }): CatalogVariant {
   return {
@@ -131,5 +150,49 @@ describe('variantLabel', () => {
 
   it('falls back to the id when precision is absent', () => {
     expect(variantLabel(variant({ id: 'custom' }))).toBe('custom');
+  });
+});
+
+describe('translateReason', () => {
+  it('returns the translation when the reason code maps to a real key', () => {
+    expect(translateReason('backend.recommended', undefined, 'raw')).toBe('Best for your hardware');
+  });
+
+  it('returns the fallback when the reason code has no translation', () => {
+    expect(translateReason('some.unmapped_code', undefined, 'raw-fallback')).toBe('raw-fallback');
+  });
+
+  it('passes interpolation args through to t', () => {
+    // regionMatched has a translation, so the translated branch is taken; the mock
+    // ignores args, but this asserts args are accepted without changing the result.
+    expect(translateReason('region.matched', { region: 'Finland' }, 'raw')).toBe(
+      'Matched to your region'
+    );
+  });
+});
+
+describe('topReasons', () => {
+  const reason = (code: string): VariantReason => ({ code });
+
+  it('returns an empty array for no reasons', () => {
+    expect(topReasons(undefined)).toEqual([]);
+    expect(topReasons([])).toEqual([]);
+  });
+
+  it('localizes a single reason', () => {
+    expect(topReasons([reason('backend.recommended')])).toEqual(['Best for your hardware']);
+  });
+
+  it('surfaces the region reason that sits at index 1, not just the headline', () => {
+    expect(topReasons([reason('backend.recommended'), reason('region.matched')])).toEqual([
+      'Best for your hardware',
+      'Matched to your region',
+    ]);
+  });
+
+  it('caps at the limit and falls back to the raw code for unmapped reasons', () => {
+    expect(
+      topReasons([reason('backend.recommended'), reason('region.matched'), reason('extra.one')])
+    ).toEqual(['Best for your hardware', 'Matched to your region']);
   });
 });

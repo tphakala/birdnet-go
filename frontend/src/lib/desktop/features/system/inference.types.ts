@@ -73,11 +73,11 @@ export interface InferenceHardware {
   /**
    * Capability tokens this host matches, in the model manifests' vocabulary.
    *
-   * No UI reads this: the row that rendered the tokens was removed, because
-   * every one of them is derived from a fact the card already states. The field
-   * is kept to mirror the server contract, which still sends it, so a raw call
-   * to the endpoint remains a usable diagnostic for which model builds a host
-   * matches. Do not treat it as dead and delete it without dropping the Go
+   * Rendered by SystemInference's Advanced disclosure on the hardware card. Most
+   * tokens duplicate a fact the card already states, but two do not and are only
+   * visible here: `low-ram` (set below the RAM threshold in
+   * internal/hwprofile/capabilities.go) and `openvino-gpu-intel-gen<N>` (the
+   * per-generation Intel GPU token). Do not delete this without dropping the Go
    * field too (internal/api/v2/system/inference_status.go).
    */
   capabilities?: string[];

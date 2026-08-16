@@ -68,6 +68,25 @@ export async function reinstallModel(id: string): Promise<void> {
   await api.post(`${BASE}/reinstall/${encodeURIComponent(id)}`);
 }
 
+// The server reports model-download failures as raw strings (EnhancedError.Error()
+// forwards the bare message). These three shapes are exactly the CategoryNetwork
+// download failures a mirror endpoint can remedy (internal/classifier/model_manager.go):
+//   "HTTP request failed for <url>: <cause>"  (DNS, connection refused, TLS, timeout)
+//   "HTTP <status> for <url>"                 (host blocked the request or rate-limited)
+//   "read error downloading <url>: <cause>"   (connection dropped mid-transfer)
+// Deliberately NOT matched: the frontend-generated "Connection to server lost"
+// (the BirdNET-Go server dropped, not the model host, so a mirror will not help),
+// checksum/disk errors, and generic install-timeout messages. A miss only omits the
+// mirror hint, so the check fails safe. A structured error category on the download
+// state is the cleaner long-term fix and is tracked separately.
+const NETWORK_DOWNLOAD_ERROR = /HTTP request failed for |HTTP \d{3} for |read error downloading /;
+
+/** True when a model-install failure message looks like a reachability problem the
+ * configurable download source (mirror endpoint) could work around. */
+export function isNetworkDownloadError(message: string): boolean {
+  return NETWORK_DOWNLOAD_ERROR.test(message);
+}
+
 /**
  * Subscribe to SSE progress events for an ongoing model install.
  *

@@ -1706,6 +1706,9 @@
       "fp16": "FP16",
       "fp16Supported": "FP16 understøttet",
       "fp16Unsupported": "FP16 ikke understøttet",
+      "advanced": "Avanceret",
+      "capabilities": "Egenskaber",
+      "capabilitiesHelp": "Hardware-tags, der bruges til at matche denne maskine med de tilgængelige modelbygninger.",
       "backendTflite": "TensorFlow Lite",
       "backendOnnx": "ONNX Runtime",
       "backendOpenvino": "OpenVINO",
@@ -5341,7 +5344,7 @@
         "backendMissing": "Kræver en inference backend, som din version ikke kan nå ({required})",
         "ramInsufficient": "Kræver mindst {requiredMb} MB hukommelse",
         "hardwareExcluded": "Understøttes ikke på din hardware ({token})",
-        "backendOnnxUnavailable": "Kræver ONNX Runtime, som ikke er tilgængelig på dette system"
+        "backendOnnxUnavailable": "Kræver ONNX Runtime, som ikke er tilgængelig på dette system. Docker-images og udgivelsespakker indeholder det; se installationsvejledningen til ONNX Runtime."
       },
       "tabs": {
         "installed": "Installerede",
@@ -5395,7 +5398,11 @@
       "errors": {
         "catalogLoadFailed": "Kunne ikke indlæse modelkatalog",
         "installFailed": "Kunne ikke starte modelinstallation",
-        "removeFailed": "Kunne ikke fjerne model"
+        "removeFailed": "Kunne ikke fjerne model",
+        "actionFailed": "Der opstod et problem med {name}",
+        "downloadSourceHint": "Hvis huggingface.co er blokeret eller langsomt på dit netværk, kan du indstille en spejlserver i sektionen Downloadkilde nedenfor.",
+        "goToDownloadSource": "Gå til Downloadkilde",
+        "dismiss": "Afvis"
       },
       "regionLabel": "Region",
       "speciesLabel": "Arter",
@@ -5403,9 +5410,7 @@
       "reinstalling": "Geninstallerer...",
       "reinstallComplete": "Filer verificeret succesfuldt",
       "geomodelBadge": "Inkluderer BirdNET v3.0 geomodel",
-      "onnxRuntimeRequired": "Kræver ONNX Runtime, som ikke er tilgængelig på dette system.",
-      "onnxRuntimeMissing": "ONNX Runtime er ikke tilgængelig. Denne model kan ikke køre.",
-      "unavailable": "Ikke tilgængelig"
+      "entryIncompatible": "Denne model er ikke tilgængelig på dette system."
     },
     "bird": {
       "title": "Fugleregistrering",

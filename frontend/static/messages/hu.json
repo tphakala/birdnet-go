@@ -1706,6 +1706,9 @@
       "fp16": "FP16",
       "fp16Supported": "FP16 támogatott",
       "fp16Unsupported": "FP16 nem támogatott",
+      "advanced": "Speciális",
+      "capabilities": "Képességek",
+      "capabilitiesHelp": "Hardvercímkék, amelyek a gép és az elérhető modellverziók párosítására szolgálnak.",
       "backendTflite": "TensorFlow Lite",
       "backendOnnx": "ONNX Runtime",
       "backendOpenvino": "OpenVINO",
@@ -5341,7 +5344,7 @@
         "backendMissing": "Olyan következtetési backendet igényel, amelyet a build nem ér el ({required})",
         "ramInsufficient": "Legalább {requiredMb} MB memória szükséges",
         "hardwareExcluded": "Nem támogatott a hardvereden ({token})",
-        "backendOnnxUnavailable": "ONNX Runtime szükséges, amely nem érhető el ezen a rendszeren"
+        "backendOnnxUnavailable": "ONNX Runtime szükséges, amely nem érhető el ezen a rendszeren. A Docker-lemezképek és a kiadási csomagok tartalmazzák; lásd az ONNX Runtime telepítési útmutatóját."
       },
       "tabs": {
         "installed": "Telepített",
@@ -5395,7 +5398,11 @@
       "errors": {
         "catalogLoadFailed": "Nem sikerült betölteni a modellkatalógust",
         "installFailed": "Nem sikerült elindítani a modell telepítését",
-        "removeFailed": "Nem sikerült eltávolítani a modellt"
+        "removeFailed": "Nem sikerült eltávolítani a modellt",
+        "actionFailed": "Probléma történt a következővel: {name}",
+        "downloadSourceHint": "Ha a huggingface.co blokkolva van vagy lassú a hálózatán, állítson be egy tükörszervert az alábbi Letöltési forrás szakaszban.",
+        "goToDownloadSource": "Ugrás a Letöltési forráshoz",
+        "dismiss": "Bezárás"
       },
       "regionLabel": "Régió",
       "speciesLabel": "Fajok",
@@ -5403,9 +5410,7 @@
       "reinstalling": "Újratelepítés...",
       "reinstallComplete": "Fájlok sikeresen ellenőrizve",
       "geomodelBadge": "Tartalmazza a BirdNET v3.0 geomodellt",
-      "onnxRuntimeRequired": "ONNX Runtime szükséges, amely nem elérhető ezen a rendszeren.",
-      "onnxRuntimeMissing": "Az ONNX Runtime nem elérhető. Ez a modell nem futtatható.",
-      "unavailable": "Nem elérhető"
+      "entryIncompatible": "Ez a modell nem érhető el ezen a rendszeren."
     },
     "bird": {
       "title": "Madárészlelés",
