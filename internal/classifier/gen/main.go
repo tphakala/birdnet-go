@@ -158,10 +158,11 @@ type labelChecksum struct {
 }
 
 const (
-	labelsSidecar   = "gen/manifests/labels-checksums.json"
-	outputFile      = "model_catalog_regional_gen.go"
-	expectedRegions = 39
-	regionalPerFam  = 78 // 39 regions x 2 variants
+	labelsSidecar     = "gen/manifests/labels-checksums.json"
+	outputFile        = "model_catalog_regional_gen.go"
+	expectedRegions   = 39
+	variantsPerRegion = 2 // each region ships two precision variants
+	regionalPerFam    = expectedRegions * variantsPerRegion
 )
 
 func main() {
@@ -418,11 +419,11 @@ func render(v *genVariant) string {
 	b.WriteString("Requirements: VariantRequirements{")
 	var reqs []string
 	if len(v.arch) > 0 {
-		reqs = append(reqs, "Arch: "+stringSliceLit(v.arch))
+		reqs = append(reqs, fmt.Sprintf("Arch: %#v", v.arch))
 	}
 	reqs = append(reqs, fmt.Sprintf("MinRAMMB: %d", v.minRAMMB))
 	if len(v.excludes) > 0 {
-		reqs = append(reqs, "Excludes: "+stringSliceLit(v.excludes))
+		reqs = append(reqs, fmt.Sprintf("Excludes: %#v", v.excludes))
 	}
 	b.WriteString(strings.Join(reqs, ", "))
 	b.WriteString("},\n")
@@ -471,14 +472,6 @@ func render(v *genVariant) string {
 
 	b.WriteString("},\n")
 	return b.String()
-}
-
-func stringSliceLit(s []string) string {
-	quoted := make([]string, len(s))
-	for i, v := range s {
-		quoted[i] = fmt.Sprintf("%q", v)
-	}
-	return "[]string{" + strings.Join(quoted, ", ") + "}"
 }
 
 func loadManifest(pathname string) (*manifest, error) {
