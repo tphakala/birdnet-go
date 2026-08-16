@@ -1706,6 +1706,9 @@
       "fp16": "FP16",
       "fp16Supported": "FP16 tuettu",
       "fp16Unsupported": "FP16 ei tuettu",
+      "advanced": "Lisätiedot",
+      "capabilities": "Ominaisuudet",
+      "capabilitiesHelp": "Laitteistotunnisteet, joita käytetään tämän laitteen sovittamiseen saatavilla oleviin malliversioihin.",
       "backendTflite": "TensorFlow Lite",
       "backendOnnx": "ONNX Runtime",
       "backendOpenvino": "OpenVINO",
@@ -5341,7 +5344,7 @@
         "backendMissing": "Vaatii inferenssin taustajärjestelmän, joka ei ole käytettävissä ({required})",
         "ramInsufficient": "Vaatii vähintään {requiredMb} MB muistia",
         "hardwareExcluded": "Ei tue laitteistoasi ({token})",
-        "backendOnnxUnavailable": "Vaatii ONNX Runtimen, joka ei ole käytettävissä tässä järjestelmässä"
+        "backendOnnxUnavailable": "Vaatii ONNX Runtimen, joka ei ole käytettävissä tässä järjestelmässä. Docker-kuvat ja julkaisupaketit sisältävät sen; katso ONNX Runtimen asennusohje."
       },
       "tabs": {
         "installed": "Asennetut",
@@ -5395,7 +5398,11 @@
       "errors": {
         "catalogLoadFailed": "Malliluettelon lataaminen epäonnistui",
         "installFailed": "Mallin asennuksen käynnistäminen epäonnistui",
-        "removeFailed": "Mallin poistaminen epäonnistui"
+        "removeFailed": "Mallin poistaminen epäonnistui",
+        "actionFailed": "Kohteen {name} kanssa ilmeni ongelma",
+        "downloadSourceHint": "Jos huggingface.co on estetty tai hidas verkossasi, aseta peilipalvelin alla olevaan Latauslähde-osioon.",
+        "goToDownloadSource": "Siirry Latauslähteeseen",
+        "dismiss": "Sulje"
       },
       "regionLabel": "Alue",
       "speciesLabel": "Lajit",
@@ -5403,9 +5410,7 @@
       "reinstalling": "Asennetaan uudelleen...",
       "reinstallComplete": "Tiedostot tarkistettu onnistuneesti",
       "geomodelBadge": "Sisältää BirdNET v3.0 -geomallin",
-      "onnxRuntimeRequired": "Vaatii ONNX Runtimen, joka ei ole käytettävissä tässä järjestelmässä.",
-      "onnxRuntimeMissing": "ONNX Runtime ei ole käytettävissä. Tätä mallia ei voi suorittaa.",
-      "unavailable": "Ei käytettävissä"
+      "entryIncompatible": "Tämä malli ei ole saatavilla tässä järjestelmässä."
     },
     "bird": {
       "title": "Lintuhavainnot",

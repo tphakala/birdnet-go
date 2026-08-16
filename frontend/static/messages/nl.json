@@ -1706,6 +1706,9 @@
       "fp16": "FP16",
       "fp16Supported": "FP16 ondersteund",
       "fp16Unsupported": "FP16 niet ondersteund",
+      "advanced": "Geavanceerd",
+      "capabilities": "Mogelijkheden",
+      "capabilitiesHelp": "Hardware-tags die worden gebruikt om deze machine te koppelen aan de beschikbare model-builds.",
       "backendTflite": "TensorFlow Lite",
       "backendOnnx": "ONNX Runtime",
       "backendOpenvino": "OpenVINO",
@@ -5341,7 +5344,7 @@
         "backendMissing": "Heeft een inference backend nodig die je installatie niet kan bereiken ({required})",
         "ramInsufficient": "Heeft minimaal {requiredMb} MB geheugen nodig",
         "hardwareExcluded": "Niet ondersteund op jouw hardware ({token})",
-        "backendOnnxUnavailable": "Vereist ONNX Runtime, dat niet beschikbaar is op dit systeem"
+        "backendOnnxUnavailable": "Vereist ONNX Runtime, dat niet beschikbaar is op dit systeem. Docker-images en release-archieven bevatten dit; zie de ONNX Runtime-installatiehandleiding."
       },
       "tabs": {
         "installed": "Geïnstalleerd",
@@ -5395,7 +5398,11 @@
       "errors": {
         "catalogLoadFailed": "Kan modelcatalogus niet laden",
         "installFailed": "Kan modelinstallatie niet starten",
-        "removeFailed": "Kan model niet verwijderen"
+        "removeFailed": "Kan model niet verwijderen",
+        "actionFailed": "Er is een probleem opgetreden met {name}",
+        "downloadSourceHint": "Als huggingface.co geblokkeerd of traag is op uw netwerk, stel dan een spiegelserver in bij de sectie Downloadbron hieronder.",
+        "goToDownloadSource": "Ga naar Downloadbron",
+        "dismiss": "Negeren"
       },
       "regionLabel": "Regio",
       "speciesLabel": "Soorten",
@@ -5403,9 +5410,7 @@
       "reinstalling": "Opnieuw installeren...",
       "reinstallComplete": "Bestanden succesvol geverifieerd",
       "geomodelBadge": "Bevat BirdNET v3.0 geomodel",
-      "onnxRuntimeRequired": "Vereist ONNX Runtime dat niet beschikbaar is op dit systeem.",
-      "onnxRuntimeMissing": "ONNX Runtime is niet beschikbaar. Dit model kan niet worden uitgevoerd.",
-      "unavailable": "Niet beschikbaar"
+      "entryIncompatible": "Dit model is niet beschikbaar op dit systeem."
     },
     "bird": {
       "title": "Vogeldetectie",

@@ -8,7 +8,7 @@
   import type { CatalogVariant, VariantReason } from '$lib/types/models';
   import { t } from '$lib/i18n';
   import { formatBytes, formatNumber } from '$lib/utils/formatters';
-  import { reasonKey, variantLabel } from '$lib/utils/variantSelection';
+  import { translateReason, topReasons, variantLabel } from '$lib/utils/variantSelection';
 
   interface Props {
     variants: CatalogVariant[];
@@ -52,13 +52,10 @@
   );
   const hiddenCount = $derived(variants.length - visibleVariants.length);
 
+  // Fall back to the raw reason code so an unmapped reason stays inspectable
+  // rather than surfacing a dotted i18n key to the user.
   function reasonText(reason: VariantReason): string {
-    const key = reasonKey(reason.code);
-    const translated = t(key, reason.args);
-    // t returns the key itself when there is no translation; fall back to the raw
-    // reason code so an unmapped reason stays inspectable rather than surfacing a
-    // dotted i18n key to the user.
-    return translated === key ? reason.code : translated;
+    return translateReason(reason.code, reason.args, reason.code);
   }
 
   // The reason shown on a blocked option: its first blocker, or a generic
@@ -135,11 +132,15 @@
           </div>
 
           {#if variant.recommended && variant.reasons?.length}
-            <p class="text-xs text-primary/90">
-              {t('analysis.gallery.variants.recommendedForHardware')}: {reasonText(
-                variant.reasons[0]
-              )}
-            </p>
+            {@const recommendedReasons = topReasons(variant.reasons)}
+            <div class="text-xs text-primary/90">
+              <p>
+                {t('analysis.gallery.variants.recommendedForHardware')}: {recommendedReasons[0]}
+              </p>
+              {#if recommendedReasons.length > 1}
+                <p>{recommendedReasons[1]}</p>
+              {/if}
+            </div>
           {/if}
 
           {#if blocked}

@@ -1706,6 +1706,9 @@
       "fp16": "FP16",
       "fp16Supported": "FP16 supported",
       "fp16Unsupported": "FP16 not supported",
+      "advanced": "Advanced",
+      "capabilities": "Capabilities",
+      "capabilitiesHelp": "Hardware tags used to match this machine against the available model builds.",
       "backendTflite": "TensorFlow Lite",
       "backendOnnx": "ONNX Runtime",
       "backendOpenvino": "OpenVINO",
@@ -5341,7 +5344,7 @@
         "backendMissing": "Needs an inference backend your build cannot reach ({required})",
         "ramInsufficient": "Needs at least {requiredMb} MB of memory",
         "hardwareExcluded": "Not supported on your hardware ({token})",
-        "backendOnnxUnavailable": "Requires ONNX Runtime, which isn't available on this system"
+        "backendOnnxUnavailable": "Requires ONNX Runtime, which isn't available on this system. Docker images and release tarballs include it; see the ONNX Runtime installation guide."
       },
       "tabs": {
         "installed": "Installed",
@@ -5395,7 +5398,11 @@
       "errors": {
         "catalogLoadFailed": "Failed to load model catalog",
         "installFailed": "Failed to start model installation",
-        "removeFailed": "Failed to remove model"
+        "removeFailed": "Failed to remove model",
+        "actionFailed": "There was a problem with {name}",
+        "downloadSourceHint": "If huggingface.co is blocked or slow on your network, set a mirror in the Download Source section below.",
+        "goToDownloadSource": "Go to Download Source",
+        "dismiss": "Dismiss"
       },
       "regionLabel": "Region",
       "speciesLabel": "Species",
@@ -5403,9 +5410,7 @@
       "reinstalling": "Reinstalling...",
       "reinstallComplete": "Files verified successfully",
       "geomodelBadge": "Includes BirdNET v3.0 geomodel",
-      "onnxRuntimeRequired": "Requires ONNX Runtime which is not available on this system.",
-      "onnxRuntimeMissing": "ONNX Runtime is not available. This model cannot run.",
-      "unavailable": "Unavailable"
+      "entryIncompatible": "This model is not available on this system."
     },
     "bird": {
       "title": "Bird Detection",

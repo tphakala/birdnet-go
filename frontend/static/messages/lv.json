@@ -1706,6 +1706,9 @@
       "fp16": "FP16",
       "fp16Supported": "FP16 atbalstīts",
       "fp16Unsupported": "FP16 netiek atbalstīts",
+      "advanced": "Papildu",
+      "capabilities": "Iespējas",
+      "capabilitiesHelp": "Aparatūras tagi, ko izmanto, lai saskaņotu šo datoru ar pieejamajiem modeļu būvējumiem.",
       "backendTflite": "TensorFlow Lite",
       "backendOnnx": "ONNX Runtime",
       "backendOpenvino": "OpenVINO",
@@ -5341,7 +5344,7 @@
         "backendMissing": "Nepieciešama inferences aizmugursistēma, ko jūsu versija nevar sasniegt ({required})",
         "ramInsufficient": "Nepieciešami vismaz {requiredMb} MB atmiņas",
         "hardwareExcluded": "Nav atbalstīts jūsu aparatūrā ({token})",
-        "backendOnnxUnavailable": "Nepieciešams ONNX Runtime, kas šajā sistēmā nav pieejams"
+        "backendOnnxUnavailable": "Nepieciešams ONNX Runtime, kas šajā sistēmā nav pieejams. Docker attēli un laidiena arhīvi to iekļauj; skatiet ONNX Runtime instalēšanas pamācību."
       },
       "tabs": {
         "installed": "Instalētie",
@@ -5395,7 +5398,11 @@
       "errors": {
         "catalogLoadFailed": "Neizdevās ielādēt modeļu katalogu",
         "installFailed": "Neizdevās sākt modeļa instalēšanu",
-        "removeFailed": "Neizdevās noņemt modeli"
+        "removeFailed": "Neizdevās noņemt modeli",
+        "actionFailed": "Radās problēma ar {name}",
+        "downloadSourceHint": "Ja jūsu tīklā huggingface.co ir bloķēts vai lēns, iestatiet spoguļvietni zemāk esošajā sadaļā Lejupielādes avots.",
+        "goToDownloadSource": "Doties uz Lejupielādes avots",
+        "dismiss": "Noraidīt"
       },
       "regionLabel": "Reģions",
       "speciesLabel": "Sugas",
@@ -5403,9 +5410,7 @@
       "reinstalling": "Pārinstalē...",
       "reinstallComplete": "Faili veiksmīgi pārbaudīti",
       "geomodelBadge": "Ietver BirdNET v3.0 ģeomodelis",
-      "onnxRuntimeRequired": "Nepieciešams ONNX Runtime, kas šajā sistēmā nav pieejams.",
-      "onnxRuntimeMissing": "ONNX Runtime nav pieejams. Šo modeli nevar palaist.",
-      "unavailable": "Nav pieejams"
+      "entryIncompatible": "Šis modelis nav pieejams šajā sistēmā."
     },
     "bird": {
       "title": "Putnu noteikšana",

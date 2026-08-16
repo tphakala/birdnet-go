@@ -36,6 +36,7 @@
     reinstallModel,
     uninstallModel,
     subscribeInstallProgress,
+    isNetworkDownloadError,
   } from '$lib/utils/modelsApi';
   import { invalidateModels } from '$lib/stores/models.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
@@ -68,7 +69,7 @@
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { toastActions } from '$lib/stores/toast';
   import { formatBytes, formatNumber } from '$lib/utils/formatters';
-  import { pickPreselectedVariant, reasonKey } from '$lib/utils/variantSelection';
+  import { pickPreselectedVariant, translateReason } from '$lib/utils/variantSelection';
   import { safeArrayAccess } from '$lib/utils/security';
   import { loggers } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
@@ -118,15 +119,15 @@
   // Render an entry-level incompatibility code (e.g. "backend.onnx_unavailable")
   // through the same i18n reason path the variant picker uses, falling back to a
   // generic localized line when the code is absent or has no translation, so a
-  // structured code never surfaces to the user as a raw dotted string.
-  // Entry-level codes carry no interpolation args (unlike variant reasons), so no
-  // args are threaded here; a future parameterized entry-level code would need an
-  // args field on CatalogEntryResponse.IncompatibleReason and a change here.
-  function entryIncompatibleText(code: string | undefined, fallbackKey: string): string {
-    if (!code) return t(fallbackKey);
-    const key = reasonKey(code);
-    const translated = t(key);
-    return translated === key ? t(fallbackKey) : translated;
+  // structured code never surfaces to the user as a raw dotted string. The
+  // fallback is cause-neutral on purpose: it is only reached when the code is
+  // missing or unmapped, which is exactly when the specific cause is not known.
+  // Entry-level codes carry no interpolation args (unlike variant reasons), so
+  // undefined args are passed; a future parameterized entry-level code would need
+  // an args field on CatalogEntryResponse.IncompatibleReason and a change here.
+  function entryIncompatibleText(code: string | undefined): string {
+    const fallback = t('analysis.gallery.entryIncompatible');
+    return code ? translateReason(code, undefined, fallback) : fallback;
   }
 
   // ── Page-level tab state ──────────────────────────────────────────────
@@ -139,7 +140,24 @@
   // sections, which the visibility-filtered catalog cannot).
   let installedModels = $state<InstalledModel[]>([]);
   let loading = $state(true);
-  let error = $state<string | null>(null);
+  // Catalog loading failure: gates the two gallery tab bodies and drives the
+  // banner whose Retry re-runs loadCatalog.
+  let catalogError = $state<string | null>(null);
+
+  // A failed per-model action (install, reinstall, remove). Rendered as a
+  // dismissible banner above the gallery tabs so it never replaces the grid, and
+  // so switching tabs cannot strand it. Carries enough to offer a real Retry and,
+  // for a download-reachability failure, a pointer to the Download Source setting.
+  type GalleryActionKind = 'install' | 'reinstall' | 'remove';
+  interface GalleryActionError {
+    modelId: string;
+    modelName: string;
+    kind: GalleryActionKind;
+    message: string; // raw backend/SSE/ApiError text, kept inspectable
+    variantId?: string; // reused when retrying an install
+    network: boolean; // download could not reach the model host
+  }
+  let installError = $state<GalleryActionError | null>(null);
 
   let installingId = $state<string | null>(null);
   let deletingId = $state<string | null>(null);
@@ -905,7 +923,7 @@
   // ── Gallery functions ─────────────────────────────────────────────────
   async function loadCatalog() {
     loading = true;
-    error = null;
+    catalogError = null;
     try {
       const response = await fetchCatalog();
       catalog = response.catalog;
@@ -913,7 +931,8 @@
       // threshold sections track install/uninstall. Swallows its own errors.
       await loadInstalledModels();
     } catch (e) {
-      error = e instanceof Error ? e.message : t('analysis.gallery.errors.catalogLoadFailed');
+      catalogError =
+        e instanceof Error ? e.message : t('analysis.gallery.errors.catalogLoadFailed');
     } finally {
       loading = false;
     }
@@ -946,10 +965,18 @@
     // (the button is disabled in this state; this guards a programmatic call too).
     if (installBlocked) return;
     const modelId = licenseModel.id;
+    const modelName = licenseModel.name;
     // Only send a variantId when the entry actually offers variants; a flat entry
     // installs its single build with no variant.
     const variantId = licenseModel.variants?.length ? selectedVariantId : undefined;
     closeLicenseDialog();
+    startInstall(modelId, modelName, variantId);
+  }
+
+  // The install body, extracted so a failed install's Retry can re-run it without
+  // reopening the license dialog (the license was accepted this session).
+  async function startInstall(modelId: string, modelName: string, variantId: string | undefined) {
+    installError = null;
     installingId = modelId;
     downloadProgress = null;
 
@@ -983,16 +1010,38 @@
           }, 2000);
         },
         (err: string) => {
-          error = err;
+          installError = reportActionError(modelId, modelName, 'install', err, variantId);
           installingId = null;
           downloadProgress = null;
           progressCleanup = null;
         }
       );
     } catch (e) {
-      error = e instanceof Error ? e.message : t('analysis.gallery.errors.installFailed');
+      const message = e instanceof Error ? e.message : t('analysis.gallery.errors.installFailed');
+      installError = reportActionError(modelId, modelName, 'install', message, variantId);
       installingId = null;
     }
+  }
+
+  // Build a GalleryActionError, classifying whether a mirror endpoint could help.
+  function reportActionError(
+    modelId: string,
+    modelName: string,
+    kind: GalleryActionKind,
+    message: string,
+    variantId?: string
+  ): GalleryActionError {
+    return {
+      modelId,
+      modelName,
+      kind,
+      message,
+      variantId,
+      // A remove failure never involves a download, so it is never network-shaped;
+      // enforce that structurally rather than trusting the delete error's text not
+      // to contain a download-error substring.
+      network: kind !== 'remove' && isNetworkDownloadError(message),
+    };
   }
 
   function openRemoveDialog(entry: CatalogEntry) {
@@ -1008,7 +1057,9 @@
   async function handleUninstall() {
     if (!removeConfirmModel) return;
     const modelId = removeConfirmModel.id;
+    const modelName = removeConfirmModel.name;
     closeRemoveDialog();
+    installError = null;
     deletingId = modelId;
 
     try {
@@ -1016,7 +1067,9 @@
       invalidateModels();
       await loadCatalog();
     } catch (e) {
-      error = e instanceof Error ? e.message : t('analysis.gallery.errors.removeFailed');
+      const message = e instanceof Error ? e.message : t('analysis.gallery.errors.removeFailed');
+      // A remove failure never involves a download, so it is never network-shaped.
+      installError = reportActionError(modelId, modelName, 'remove', message);
     } finally {
       deletingId = null;
     }
@@ -1024,21 +1077,27 @@
 
   async function handleReinstall(entry: CatalogEntry) {
     if (reinstallingId || installingId) return;
-    reinstallingId = entry.id;
+    startReinstall(entry.id, entry.name);
+  }
+
+  // The reinstall body, extracted so a failed reinstall's Retry can re-run it.
+  async function startReinstall(modelId: string, modelName: string) {
+    installError = null;
+    reinstallingId = modelId;
     downloadProgress = null;
 
     try {
-      await reinstallModel(entry.id);
+      await reinstallModel(modelId);
 
       if (progressCleanup) progressCleanup();
       progressCleanup = subscribeInstallProgress(
-        entry.id,
+        modelId,
         (progress: DownloadProgress) => {
           downloadProgress = progress;
         },
         () => {
           downloadProgress = {
-            catalogId: entry.id,
+            catalogId: modelId,
             status: 'complete',
             downloadedBytes: 0,
             totalBytes: 0,
@@ -1048,7 +1107,7 @@
           progressCleanup = null;
           clearTimeout(completionTimer);
           completionTimer = setTimeout(() => {
-            if (reinstallingId === entry.id) {
+            if (reinstallingId === modelId) {
               reinstallingId = null;
               downloadProgress = null;
             }
@@ -1057,16 +1116,39 @@
           }, 2000);
         },
         (err: string) => {
-          error = err;
+          installError = reportActionError(modelId, modelName, 'reinstall', err);
           reinstallingId = null;
           downloadProgress = null;
           progressCleanup = null;
         }
       );
     } catch (e) {
-      error = e instanceof Error ? e.message : t('analysis.gallery.errors.installFailed');
+      const message = e instanceof Error ? e.message : t('analysis.gallery.errors.installFailed');
+      installError = reportActionError(modelId, modelName, 'reinstall', message);
       reinstallingId = null;
     }
+  }
+
+  // Re-run whichever action failed; the stored error object carries what is needed.
+  // A remove failure offers no retry (the card's Remove button is right there).
+  function retryFailedAction() {
+    if (!installError) return;
+    const { modelId, modelName, variantId, kind } = installError;
+    if (kind === 'install') startInstall(modelId, modelName, variantId);
+    else if (kind === 'reinstall') startReinstall(modelId, modelName);
+  }
+
+  function dismissInstallError() {
+    installError = null;
+  }
+
+  // Bring the Download Source setting into view and focus it: the mirror endpoint
+  // is the remedy for a download-reachability failure, and it lives on this same
+  // Models tab, just below the gallery.
+  function scrollToDownloadSource() {
+    const el = document.getElementById('huggingface-endpoint');
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el?.focus();
   }
 
   /** Compute download percentage for progress bar */
@@ -1626,6 +1708,65 @@
       currentData={{ modelRegion: birdnet?.modelRegion ?? 'auto' }}
     >
       <ModelRegionSelector disabled={store.isLoading || store.isSaving} />
+
+      <!-- A failed install/reinstall/remove surfaces here, above the gallery tabs,
+           so it never replaces the model grid and stays visible across tabs. -->
+      {#if installError}
+        <div
+          class="mt-4 flex flex-col gap-2 rounded-lg border border-[var(--color-error)]/30 bg-[var(--color-error)]/10 px-4 py-3 text-sm"
+          role="alert"
+        >
+          <div class="flex items-start gap-3">
+            <AlertTriangle class="size-5 shrink-0 text-[var(--color-error)]" aria-hidden="true" />
+            <div class="min-w-0 flex-1">
+              <p class="font-medium text-[var(--color-base-content)]">
+                {t('analysis.gallery.errors.actionFailed', { name: installError.modelName })}
+              </p>
+              <p class="mt-0.5 break-words text-[var(--color-base-content)]/80">
+                {installError.message}
+              </p>
+              {#if installError.network}
+                <p class="mt-2 text-[var(--color-base-content)]/80">
+                  {t('analysis.gallery.errors.downloadSourceHint')}
+                </p>
+              {/if}
+            </div>
+            <button
+              type="button"
+              class="ml-auto inline-flex items-center justify-center rounded-md p-1.5 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+              aria-label={t('analysis.gallery.errors.dismiss')}
+              onclick={dismissInstallError}
+            >
+              <X class="size-4" />
+            </button>
+          </div>
+          {#if installError.kind !== 'remove' || installError.network}
+            <div class="flex flex-wrap items-center gap-2 pl-8">
+              {#if installError.kind !== 'remove'}
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-base-200)] px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] transition-colors"
+                  onclick={retryFailedAction}
+                >
+                  <RefreshCw class="size-3.5" aria-hidden="true" />
+                  {t('analysis.gallery.retry')}
+                </button>
+              {/if}
+              {#if installError.network}
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-base-200)] px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] transition-colors"
+                  onclick={scrollToDownloadSource}
+                >
+                  <SettingsIcon class="size-3.5" aria-hidden="true" />
+                  {t('analysis.gallery.errors.goToDownloadSource')}
+                </button>
+              {/if}
+            </div>
+          {/if}
+        </div>
+      {/if}
+
       <SettingsTabs tabs={galleryTabs} bind:activeTab={galleryTab} showActions={false} />
     </SettingsSection>
 
@@ -1690,13 +1831,13 @@
           >{t('analysis.gallery.loading')}</span
         >
       </div>
-    {:else if error}
+    {:else if catalogError}
       <div
         class="flex items-center gap-3 rounded-lg border border-[var(--color-error)]/30 bg-[var(--color-error)]/10 px-4 py-3 text-sm"
         role="alert"
       >
         <AlertTriangle class="size-5 shrink-0 text-[var(--color-error)]" />
-        <span class="text-[var(--color-base-content)]">{error}</span>
+        <span class="text-[var(--color-base-content)]">{catalogError}</span>
         <button
           onclick={loadCatalog}
           class="ml-auto flex items-center gap-1.5 rounded-md bg-[var(--color-base-200)] px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] transition-colors"
@@ -1821,15 +1962,11 @@
             <!-- Incompatible warning for installed models -->
             {#if !entry.compatible}
               <div
-                class="mt-3 flex items-start gap-2 rounded-lg bg-red-500/10 p-3 text-xs text-red-700 dark:text-red-400"
+                class="mt-3 flex items-start gap-2 rounded-lg bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-400"
+                role="status"
               >
                 <XCircle class="h-4 w-4 shrink-0 mt-0.5" />
-                <span
-                  >{entryIncompatibleText(
-                    entry.incompatibleReason,
-                    'analysis.gallery.onnxRuntimeMissing'
-                  )}</span
-                >
+                <span>{entryIncompatibleText(entry.incompatibleReason)}</span>
               </div>
             {/if}
             <!-- Metadata grid -->
@@ -2010,15 +2147,11 @@
     <!-- Incompatible warning banner -->
     {#if !entry.compatible}
       <div
-        class="mt-3 flex items-start gap-2 rounded-lg bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400"
+        class="mt-3 flex items-start gap-2 rounded-lg bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400"
+        role="status"
       >
         <TriangleAlert class="h-4 w-4 shrink-0 mt-0.5" />
-        <span
-          >{entryIncompatibleText(
-            entry.incompatibleReason,
-            'analysis.gallery.onnxRuntimeRequired'
-          )}</span
-        >
+        <span>{entryIncompatibleText(entry.incompatibleReason)}</span>
       </div>
     {/if}
 
@@ -2096,13 +2229,13 @@
           >{t('analysis.gallery.loading')}</span
         >
       </div>
-    {:else if error}
+    {:else if catalogError}
       <div
         class="flex items-center gap-3 rounded-lg border border-[var(--color-error)]/30 bg-[var(--color-error)]/10 px-4 py-3 text-sm"
         role="alert"
       >
         <AlertTriangle class="size-5 shrink-0 text-[var(--color-error)]" />
-        <span class="text-[var(--color-base-content)]">{error}</span>
+        <span class="text-[var(--color-base-content)]">{catalogError}</span>
         <button
           onclick={loadCatalog}
           class="ml-auto flex items-center gap-1.5 rounded-md bg-[var(--color-base-200)] px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] transition-colors"

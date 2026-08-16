@@ -176,4 +176,50 @@ describe('ModelVariantPicker', () => {
     await fireEvent.click(fp32 as HTMLInputElement);
     expect(onSelect).toHaveBeenCalledWith('fp32');
   });
+
+  it('surfaces the top two recommendation reasons, including the region reason at index 1', () => {
+    const regional: CatalogVariant[] = [
+      variant({
+        id: 'fp16',
+        precision: 'fp16',
+        recommended: true,
+        reasons: [
+          { code: 'backend.recommended', args: { backend: 'openvino-gpu' } },
+          { code: 'region.matched', args: { region: 'Finland' } },
+        ],
+      }),
+    ];
+    const { container } = render(ModelVariantPicker, {
+      props: {
+        variants: regional,
+        selectedVariantId: 'fp16',
+        onSelect: vi.fn(),
+        idPrefix: 'p9',
+      },
+    });
+    // Under the echo mock both reasons render as their raw codes. The region
+    // reason sits at reasons[1], which the old single-reason render dropped.
+    expect(container.textContent).toContain('backend.recommended');
+    expect(container.textContent).toContain('region.matched');
+  });
+
+  it('renders a single reason without a second line when only one is present', () => {
+    const single: CatalogVariant[] = [
+      variant({
+        id: 'fp32',
+        precision: 'fp32',
+        recommended: true,
+        reasons: [{ code: 'region.global_fallback', args: {} }],
+      }),
+    ];
+    const { container } = render(ModelVariantPicker, {
+      props: {
+        variants: single,
+        selectedVariantId: 'fp32',
+        onSelect: vi.fn(),
+        idPrefix: 'p10',
+      },
+    });
+    expect(container.textContent).toContain('region.global_fallback');
+  });
 });

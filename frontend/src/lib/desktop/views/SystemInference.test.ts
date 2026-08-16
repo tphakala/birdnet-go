@@ -978,4 +978,56 @@ describe('SystemInference', () => {
       expect(container.textContent).toContain('system.inference.gpuReasonUnknown');
     });
   });
+
+  describe('hardware capability tokens (Advanced disclosure)', () => {
+    // The mocked t() returns the key, so these are the strings that reach the DOM.
+    const ADVANCED_KEY = 'system.inference.advanced';
+    const CAPABILITIES_KEY = 'system.inference.capabilities';
+    const HARDWARE_HEADING_KEY = 'system.inference.sectionHardware';
+
+    it('hides the disclosure when the host reports no capability tokens', async () => {
+      installApi(makeSnapshot([makeModel({})], {})); // fixture omits capabilities
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain(HARDWARE_HEADING_KEY);
+      });
+      expect(container.textContent).not.toContain(ADVANCED_KEY);
+    });
+
+    it('reveals the tokens as badges when the host reports them', async () => {
+      installApi(
+        makeSnapshot([makeModel({})], {
+          capabilities: ['low-ram', 'openvino-gpu-intel-gen12'],
+        })
+      );
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain(ADVANCED_KEY);
+      });
+      expect(container.textContent).toContain(CAPABILITIES_KEY);
+      // The two non-derivable tokens this feature exists to surface.
+      expect(container.textContent).toContain('low-ram');
+      expect(container.textContent).toContain('openvino-gpu-intel-gen12');
+    });
+
+    // Placement, not just presence: the tokens describe the host, so the
+    // disclosure must live in the Hardware card (the definition-list card), not
+    // the Backends card. This fails if it is moved next to the FP16 footer.
+    it('places the disclosure in the Hardware card', async () => {
+      installApi(makeSnapshot([makeModel({})], { capabilities: ['low-ram'] }));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain(ADVANCED_KEY);
+      });
+      const card = container.querySelector('details')?.closest('div.rounded-xl');
+      expect(card?.textContent).toContain(HARDWARE_HEADING_KEY);
+      expect(card?.querySelector('dl')).not.toBeNull();
+    });
+  });
 });

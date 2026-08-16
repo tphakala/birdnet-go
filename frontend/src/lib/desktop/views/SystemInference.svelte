@@ -698,6 +698,36 @@
             </dd>
           {/each}
         </dl>
+
+        <!-- Advanced: the raw capability tokens this host matches in the model
+             manifests' vocabulary. Collapsed by default, it is token soup for a
+             casual user, but the low-ram and per-generation Intel GPU tokens are
+             not derivable from any other fact on this card, so this is the only
+             place a user can see the tokens that decided which model was picked. -->
+        {#if snapshot.hardware.capabilities?.length}
+          <details class="mt-3 pt-3 border-t border-[var(--border-100)]">
+            <summary class="text-sm text-muted cursor-pointer">
+              {t('system.inference.advanced')}
+            </summary>
+            <div class="mt-2 flex items-start gap-3">
+              <span
+                class="text-sm text-muted shrink-0"
+                title={t('system.inference.capabilitiesHelp')}
+                aria-describedby="hw-capabilities-help"
+              >
+                {t('system.inference.capabilities')}
+              </span>
+              <span id="hw-capabilities-help" class="sr-only"
+                >{t('system.inference.capabilitiesHelp')}</span
+              >
+              <div class="flex flex-wrap items-center gap-2">
+                {#each snapshot.hardware.capabilities as capability (capability)}
+                  <Badge variant="neutral" size="sm" text={capability} />
+                {/each}
+              </div>
+            </div>
+          </details>
+        {/if}
       </div>
 
       <!-- Inference backends -->

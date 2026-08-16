@@ -1706,6 +1706,9 @@
       "fp16": "FP16",
       "fp16Supported": "FP16 pris en charge",
       "fp16Unsupported": "FP16 non pris en charge",
+      "advanced": "Avancé",
+      "capabilities": "Capacités",
+      "capabilitiesHelp": "Balises matérielles utilisées pour faire correspondre cette machine aux versions de modèles disponibles.",
       "backendTflite": "TensorFlow Lite",
       "backendOnnx": "ONNX Runtime",
       "backendOpenvino": "OpenVINO",
@@ -5341,7 +5344,7 @@
         "backendMissing": "Nécessite un backend d'inférence inaccessible ({required})",
         "ramInsufficient": "Nécessite au moins {requiredMb} MB de mémoire",
         "hardwareExcluded": "Non pris en charge par votre matériel ({token})",
-        "backendOnnxUnavailable": "Nécessite ONNX Runtime, qui n'est pas disponible sur ce système"
+        "backendOnnxUnavailable": "Nécessite ONNX Runtime, qui n'est pas disponible sur ce système. Les images Docker et les archives de publication l'incluent; consultez le guide d'installation d'ONNX Runtime."
       },
       "tabs": {
         "installed": "Installés",
@@ -5395,7 +5398,11 @@
       "errors": {
         "catalogLoadFailed": "Impossible de charger le catalogue de modèles",
         "installFailed": "Impossible de démarrer l'installation du modèle",
-        "removeFailed": "Impossible de supprimer le modèle"
+        "removeFailed": "Impossible de supprimer le modèle",
+        "actionFailed": "Un problème est survenu avec {name}",
+        "downloadSourceHint": "Si huggingface.co est bloqué ou lent sur votre réseau, définissez un miroir dans la section Source de téléchargement ci-dessous.",
+        "goToDownloadSource": "Aller à la source de téléchargement",
+        "dismiss": "Ignorer"
       },
       "regionLabel": "Région",
       "speciesLabel": "Espèces",
@@ -5403,9 +5410,7 @@
       "reinstalling": "Réinstallation...",
       "reinstallComplete": "Fichiers vérifiés avec succès",
       "geomodelBadge": "Inclut le BirdNET v3.0 geomodel",
-      "onnxRuntimeRequired": "Nécessite ONNX Runtime qui n'est pas disponible sur ce système.",
-      "onnxRuntimeMissing": "ONNX Runtime n'est pas disponible. Ce modèle ne peut pas fonctionner.",
-      "unavailable": "Indisponible"
+      "entryIncompatible": "Ce modèle n'est pas disponible sur ce système."
     },
     "bird": {
       "title": "Détection des oiseaux",

@@ -1307,6 +1307,9 @@ export type TranslationKey =
   | 'system.inference.fp16'
   | 'system.inference.fp16Supported'
   | 'system.inference.fp16Unsupported'
+  | 'system.inference.advanced'
+  | 'system.inference.capabilities'
+  | 'system.inference.capabilitiesHelp'
   | 'system.inference.backendTflite'
   | 'system.inference.backendOnnx'
   | 'system.inference.backendOpenvino'
@@ -3936,15 +3939,17 @@ export type TranslationKey =
   | 'analysis.gallery.errors.catalogLoadFailed'
   | 'analysis.gallery.errors.installFailed'
   | 'analysis.gallery.errors.removeFailed'
+  | 'analysis.gallery.errors.actionFailed' // params: name
+  | 'analysis.gallery.errors.downloadSourceHint'
+  | 'analysis.gallery.errors.goToDownloadSource'
+  | 'analysis.gallery.errors.dismiss'
   | 'analysis.gallery.regionLabel'
   | 'analysis.gallery.speciesLabel'
   | 'analysis.gallery.reinstall'
   | 'analysis.gallery.reinstalling'
   | 'analysis.gallery.reinstallComplete'
   | 'analysis.gallery.geomodelBadge'
-  | 'analysis.gallery.onnxRuntimeRequired'
-  | 'analysis.gallery.onnxRuntimeMissing'
-  | 'analysis.gallery.unavailable'
+  | 'analysis.gallery.entryIncompatible'
   | 'analysis.bird.title'
   | 'analysis.bird.description'
   | 'analysis.bat.title'
@@ -4487,6 +4492,7 @@ export type TranslationParams = {
   'analysis.gallery.reasons.hardwareExcluded': { token: string | number };
   'analysis.gallery.species': { count: string | number };
   'analysis.gallery.removeDialog.title': { name: string | number };
+  'analysis.gallery.errors.actionFailed': { name: string | number };
 };
 
 /**

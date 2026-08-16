@@ -1706,6 +1706,9 @@
       "fp16": "FP16",
       "fp16Supported": "FP16 podporované",
       "fp16Unsupported": "FP16 nepodporované",
+      "advanced": "Pokročilé",
+      "capabilities": "Schopnosti",
+      "capabilitiesHelp": "Hardvérové značky používané na priradenie tohto počítača k dostupným zostaveniam modelov.",
       "backendTflite": "TensorFlow Lite",
       "backendOnnx": "ONNX Runtime",
       "backendOpenvino": "OpenVINO",
@@ -5341,7 +5344,7 @@
         "backendMissing": "Vyžaduje inferenčný backend, ktorý nie je dostupný ({required})",
         "ramInsufficient": "Vyžaduje aspoň {requiredMb} MB pamäte",
         "hardwareExcluded": "Nepodporované na vašom hardvéri ({token})",
-        "backendOnnxUnavailable": "Vyžaduje ONNX Runtime, ktorý nie je v tomto systéme k dispozícii"
+        "backendOnnxUnavailable": "Vyžaduje ONNX Runtime, ktorý nie je v tomto systéme k dispozícii. Obrazy Docker a archívy vydaní ho obsahujú; pozrite si návod na inštaláciu ONNX Runtime."
       },
       "tabs": {
         "installed": "Nainštalované",
@@ -5395,7 +5398,11 @@
       "errors": {
         "catalogLoadFailed": "Nepodarilo sa načítať katalóg modelov",
         "installFailed": "Nepodarilo sa spustiť inštaláciu modelu",
-        "removeFailed": "Nepodarilo sa odstrániť model"
+        "removeFailed": "Nepodarilo sa odstrániť model",
+        "actionFailed": "Vyskytol sa problém s {name}",
+        "downloadSourceHint": "Ak je huggingface.co vo vašej sieti zablokované alebo pomalé, nastavte zrkadlový server v sekcii Zdroj sťahovania nižšie.",
+        "goToDownloadSource": "Prejsť na Zdroj sťahovania",
+        "dismiss": "Zavrieť"
       },
       "regionLabel": "Región",
       "speciesLabel": "Druhy",
@@ -5403,9 +5410,7 @@
       "reinstalling": "Preinštalovanie...",
       "reinstallComplete": "Súbory úspešne overené",
       "geomodelBadge": "Obsahuje BirdNET v3.0 geomodel",
-      "onnxRuntimeRequired": "Vyžaduje ONNX Runtime, ktorý nie je v tomto systéme k dispozícii.",
-      "onnxRuntimeMissing": "ONNX Runtime nie je k dispozícii. Tento model nie je možné spustiť.",
-      "unavailable": "Nedostupné"
+      "entryIncompatible": "Tento model nie je v tomto systéme k dispozícii."
     },
     "bird": {
       "title": "Detekcia vtákov",
