@@ -607,8 +607,12 @@ func TestEmbeddedCatalog_GlobalVariantResolution(t *testing.T) {
 				}
 				assert.Falsef(t, entry.Variants[i].Legacy, "%s variant %q must not be Legacy", tc.id, entry.Variants[i].ID)
 			}
-			assert.Equalf(t, tc.variantIDs, gotIDs, "%s variant ids", tc.id)
-			assert.Equalf(t, 1, defaults, "%s must have exactly one Default variant", tc.id)
+			// Global variants come first (slices.Concat(globals, regional...)),
+			// followed by the generated regional tiles.
+			require.GreaterOrEqualf(t, len(gotIDs), len(tc.variantIDs), "%s exposes at least its global variants", tc.id)
+			assert.Equalf(t, tc.variantIDs, gotIDs[:len(tc.variantIDs)], "%s global variant ids come first, in order", tc.id)
+			assert.Lenf(t, gotIDs, len(tc.variantIDs)+regionalTilesPerFamily, "%s exposes its global variants plus %d regional tiles", tc.id, regionalTilesPerFamily)
+			assert.Equalf(t, 1, defaults, "%s must have exactly one Default variant (regional tiles are never Default)", tc.id)
 
 			// Resolved Files: default model + labels LocalName/sha unchanged, companions present.
 			var model, labels *CatalogFile

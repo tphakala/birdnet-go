@@ -96,13 +96,20 @@ export function topReasons(reasons: VariantReason[] | undefined, limit = 2): str
  */
 export function variantLabel(variant: CatalogVariant): string {
   const precision = variant.precision?.toUpperCase() ?? '';
-  const extra = variant.id
+  // Derive the non-precision descriptor from the id. Strip any "@region" suffix
+  // first (the region is appended separately) so a regional id like
+  // "int8-arm@nordic" yields the "arm" descriptor, not "arm@nordic".
+  const baseId = variant.id.split('@')[0];
+  const extra = baseId
     .split(/[-_]/)
     .filter(segment => segment !== '' && segment.toLowerCase() !== variant.precision?.toLowerCase())
     .join('-');
-  let base = precision || variant.id;
+  let base = precision || baseId;
   if (precision && extra) {
     base = `${precision} (${extra})`;
   }
+  // The region is shown as its slug. The canonical localized region names live in
+  // the region selector / regions endpoint, not here; surfacing those in the
+  // variant label is a follow-up (would need the slug->name map threaded in).
   return variant.region ? `${base} (${variant.region})` : base;
 }
