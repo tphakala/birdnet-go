@@ -11,14 +11,23 @@ import type { CatalogEntry, CatalogVariant, VariantReason } from '$lib/types/mod
 // Controlled i18n mock: only these two keys have a "translation"; every other key
 // echoes back, which is how the real t() signals an untranslated key. This lets us
 // exercise both the translated branch and the fallback branch of translateReason.
-vi.mock('$lib/i18n', () => ({
-  t: (key: string) => {
+// The mock t is a spy (declared via vi.hoisted so it exists before the hoisted
+// vi.mock runs) so a test can assert the interpolation args are forwarded to t,
+// not merely that the result is unchanged. It still echoes an unmapped key, which
+// is how the real t() signals an untranslated key.
+const { tSpy } = vi.hoisted(() => ({
+  tSpy: vi.fn((key: string, _args?: Record<string, string>) => {
     const dict: Record<string, string> = {
       'analysis.gallery.reasons.backendRecommended': 'Best for your hardware',
       'analysis.gallery.reasons.regionMatched': 'Matched to your region',
     };
+    // eslint-disable-next-line security/detect-object-injection -- test mock, key is a controlled literal
     return dict[key] ?? key;
-  },
+  }),
+}));
+
+vi.mock('$lib/i18n', () => ({
+  t: tSpy,
 }));
 
 function variant(overrides: Partial<CatalogVariant> & { id: string }): CatalogVariant {
@@ -163,11 +172,15 @@ describe('translateReason', () => {
   });
 
   it('passes interpolation args through to t', () => {
-    // regionMatched has a translation, so the translated branch is taken; the mock
-    // ignores args, but this asserts args are accepted without changing the result.
+    tSpy.mockClear();
+    // regionMatched has a translation, so the translated branch is taken. Assert
+    // the args object reaches t verbatim, not just that the result is unchanged.
     expect(translateReason('region.matched', { region: 'Finland' }, 'raw')).toBe(
       'Matched to your region'
     );
+    expect(tSpy).toHaveBeenCalledWith('analysis.gallery.reasons.regionMatched', {
+      region: 'Finland',
+    });
   });
 });
 

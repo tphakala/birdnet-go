@@ -220,10 +220,40 @@ describe('ModelVariantPicker', () => {
         idPrefix: 'p10',
       },
     });
-    // Exactly one reason line renders; a length>1 -> length>=1 regression would
-    // render a stray empty second paragraph.
-    const reasonParagraphs = container.querySelectorAll('[class*="text-primary/90"] p');
-    expect(reasonParagraphs).toHaveLength(1);
-    expect(reasonParagraphs[0].textContent).toContain('region.global_fallback');
+    // Exactly one reason item renders; a length>1 -> length>=1 regression would
+    // render a stray empty second list item. Count the <li> reasons, not the
+    // heading, so the assertion tracks the actual reason list.
+    const reasonItems = container.querySelectorAll('[class*="text-primary/90"] li');
+    expect(reasonItems).toHaveLength(1);
+    expect(reasonItems[0].textContent).toContain('region.global_fallback');
+  });
+
+  it('renders each of two recommended reasons as its own list item', () => {
+    const twoReasons: CatalogVariant[] = [
+      variant({
+        id: 'fp16',
+        precision: 'fp16',
+        recommended: true,
+        reasons: [
+          { code: 'backend.recommended', args: { backend: 'openvino-gpu' } },
+          { code: 'region.matched', args: { region: 'Finland' } },
+        ],
+      }),
+    ];
+    const { container } = render(ModelVariantPicker, {
+      props: {
+        variants: twoReasons,
+        selectedVariantId: 'fp16',
+        onSelect: vi.fn(),
+        idPrefix: 'p11',
+      },
+    });
+    // Two reasons must render as two distinct <li> items (not one concatenated
+    // line, and not just the first): a "render only reasons[0]" regression drops
+    // to one item, and a "join into one li" regression also fails the count.
+    const reasonItems = container.querySelectorAll('[class*="text-primary/90"] li');
+    expect(reasonItems).toHaveLength(2);
+    expect(reasonItems[0].textContent).toContain('backend.recommended');
+    expect(reasonItems[1].textContent).toContain('region.matched');
   });
 });

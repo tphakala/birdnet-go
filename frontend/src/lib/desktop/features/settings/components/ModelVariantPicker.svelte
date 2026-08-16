@@ -133,13 +133,19 @@
 
           {#if variant.recommended && variant.reasons?.length}
             {@const recommendedReasons = topReasons(variant.reasons)}
+            <!-- Render every surfaced reason as a list item under a labeled
+                 heading: a list announces "N items" to a screen reader, so the
+                 second reason is unambiguously a second reason rather than an
+                 unrelated line. -->
             <div class="text-xs text-primary/90">
-              <p>
-                {t('analysis.gallery.variants.recommendedForHardware')}: {recommendedReasons[0]}
+              <p class="font-medium">
+                {t('analysis.gallery.variants.recommendedForHardware')}:
               </p>
-              {#if recommendedReasons.length > 1}
-                <p>{recommendedReasons[1]}</p>
-              {/if}
+              <ul class="list-disc pl-4 space-y-0.5">
+                {#each recommendedReasons as reason, i (i)}
+                  <li>{reason}</li>
+                {/each}
+              </ul>
             </div>
           {/if}
 

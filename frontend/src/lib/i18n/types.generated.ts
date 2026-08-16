@@ -3886,6 +3886,8 @@ export type TranslationKey =
   | 'analysis.gallery.variants.incompatible'
   | 'analysis.gallery.variants.showAll' // params: count
   | 'analysis.gallery.variants.latency' // params: ms
+  | 'analysis.gallery.variants.precisionInfo'
+  | 'analysis.gallery.variants.precisionHelp'
   | 'analysis.gallery.reasons.backendRecommended' // params: backend
   | 'analysis.gallery.reasons.backendSupported' // params: backend
   | 'analysis.gallery.reasons.regionMatched' // params: region
@@ -3943,6 +3945,8 @@ export type TranslationKey =
   | 'analysis.gallery.errors.downloadSourceHint'
   | 'analysis.gallery.errors.goToDownloadSource'
   | 'analysis.gallery.errors.dismiss'
+  | 'analysis.gallery.errors.details'
+  | 'analysis.gallery.errors.removeRetryHint'
   | 'analysis.gallery.regionLabel'
   | 'analysis.gallery.speciesLabel'
   | 'analysis.gallery.reinstall'
