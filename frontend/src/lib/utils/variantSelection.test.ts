@@ -157,6 +157,22 @@ describe('variantLabel', () => {
     );
   });
 
+  it('strips the @region suffix from the id so it does not leak into the descriptor', () => {
+    // Regression: a regional id like "int8-arm@nordic" must not render the
+    // "@nordic" suffix inside the descriptor as "arm@nordic".
+    expect(variantLabel(variant({ id: 'fp32@nordic', precision: 'fp32', region: 'nordic' }))).toBe(
+      'FP32 (nordic)'
+    );
+    expect(
+      variantLabel(
+        variant({ id: 'int8-arm@southern-africa', precision: 'int8', region: 'southern-africa' })
+      )
+    ).toBe('INT8 (arm) (southern-africa)');
+    expect(
+      variantLabel(variant({ id: 'no-dft-fp32@iberia', precision: 'fp32', region: 'iberia' }))
+    ).toBe('FP32 (no-dft) (iberia)');
+  });
+
   it('falls back to the id when precision is absent', () => {
     expect(variantLabel(variant({ id: 'custom' }))).toBe('custom');
   });

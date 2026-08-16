@@ -120,6 +120,8 @@ type CatalogFile struct {
 	HuggingFaceRepo string `json:"hugging_face_repo"` // override entry-level HuggingFace repo for this file (empty = use entry repo)
 }
 
+//go:generate go run ./gen
+
 // EmbeddedCatalog is the built-in list of models available for download.
 // Each entry provides enough metadata for the gallery UI and enough file
 // information to drive the download process.
@@ -132,8 +134,8 @@ var EmbeddedCatalog = []CatalogEntry{
 	// integrity-checked like every other entry. Now visible in the gallery: the
 	// hardware recommender (internal/classifier/recommend) plus the per-variant
 	// MinRAMMB floors below keep the heavy global fp32 (557 MB) and fp16 (279 MB)
-	// builds off hosts that cannot run them. Only the two global variants ship
-	// today; regional tiles remain a later generator pass. The entry stays
+	// builds off hosts that cannot run them. The two global variants plus the 39
+	// regional tiles appended by birdnetV30RegionalVariants ship today. The entry stays
 	// labelled a developer preview so users know it is not the GA build. The
 	// backend loader is fully functional and v3.0 can also be enabled via config
 	// (models.enabled + birdnetv3 model/label paths).
@@ -156,11 +158,11 @@ var EmbeddedCatalog = []CatalogEntry{
 		HuggingFaceRepo: "tphakala/BirdNET-v3.0-Models",
 		// Global GPU-native model published under full/. fp32 is the default
 		// (byte-identical to the previously flat entry); fp16 is the OpenVINO-GPU /
-		// CUDA / TensorRT build. Regional tiles under regional/ are deferred to a
-		// later generator pass. Each variant's Files is self-contained (model +
+		// CUDA / TensorRT build. Regional tiles under regional/ are appended from the
+		// generated birdnetV30RegionalVariants. Each variant's Files is self-contained (model +
 		// labels + geomodel + taxonomy) because resolveVariantDefaults sets
 		// entry.Files = variant.Files without merging anything.
-		Variants: []CatalogVariant{
+		Variants: slices.Concat([]CatalogVariant{
 			{
 				ID:           "fp32",
 				Precision:    "fp32",
@@ -210,7 +212,7 @@ var EmbeddedCatalog = []CatalogEntry{
 					{RemotePath: "full/birdnet-v3.0-preview3.1-fp16-b1.onnx", LocalName: "birdnet_v3.0_fp16.onnx", Role: RoleModel, SHA256: "18fc932b9ac7478720ac8ca9077694b6ea62fb00675aa488e77b15e722244e67", SizeBytes: 278787557},
 				}, birdnetV30LabelsFile(), geomodelFiles(), taxonomyFiles()),
 			},
-		},
+		}, birdnetV30RegionalVariants()),
 	},
 	{
 		ID:              "perch-v2",
@@ -232,10 +234,10 @@ var EmbeddedCatalog = []CatalogEntry{
 		// byte-identical to the previously flat entry, so existing installs stay
 		// detected with no re-download (ScanInstalled keys on LocalName, not repo or
 		// RemotePath). no-dft-fp32 is the OpenVINO/GPU build; int8-arm is the low-RAM
-		// ARM build. Regional tiles under regional/ are deferred to a later generator
-		// pass. Each variant's Files is self-contained (model + labels + geomodel +
+		// ARM build. Regional tiles under regional/ are appended from the generated
+		// perchV2RegionalVariants. Each variant's Files is self-contained (model + labels + geomodel +
 		// taxonomy) because resolveVariantDefaults does not merge companions.
-		Variants: []CatalogVariant{
+		Variants: slices.Concat([]CatalogVariant{
 			{
 				ID:           "fp32",
 				Precision:    "fp32",
@@ -281,7 +283,7 @@ var EmbeddedCatalog = []CatalogEntry{
 					{RemotePath: "full/perch_v2_int8_arm.onnx", LocalName: "perch_v2_int8_arm.onnx", Role: RoleModel, SHA256: "ff32ca8c57954a86e6023a915d018dc7573cfc5567dd7314899d1c947cc6d5c5", SizeBytes: 130856164},
 				}, perchV2LabelsFile(), geomodelFiles(), taxonomyFiles()),
 			},
-		},
+		}, perchV2RegionalVariants()),
 	},
 	{
 		ID:              "bsg-finland",

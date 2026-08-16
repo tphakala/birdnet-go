@@ -41,7 +41,10 @@ func TestGetModelCatalog_EmitsVariants(t *testing.T) {
 		}
 	}
 	require.NotNil(t, perch, "perch-v2 must be present in the visible catalog")
-	require.Len(t, perch.Variants, 3, "perch-v2 must expose all three global variants")
+	// perch-v2 exposes its 3 global variants plus the generated regional tiles.
+	// The exact regional count is asserted in the classifier package; here we only
+	// require the globals plus at least one regional variant reaching the API.
+	require.GreaterOrEqual(t, len(perch.Variants), 3, "perch-v2 must expose at least its three global variants")
 
 	byID := make(map[string]CatalogVariantResponse, len(perch.Variants))
 	defaults := 0
@@ -54,6 +57,8 @@ func TestGetModelCatalog_EmitsVariants(t *testing.T) {
 	}
 	assert.Contains(t, byID, "fp32")
 	assert.Contains(t, byID, "int8-arm")
+	assert.Contains(t, byID, "int8-arm@nordic", "regional tiles must reach the catalog API")
+	assert.False(t, byID["int8-arm@nordic"].Default, "regional tiles must never be the default")
 	assert.True(t, byID["fp32"].Default, "fp32 must be the default variant")
 	assert.Equal(t, 1, defaults, "exactly one variant may be the default")
 }
