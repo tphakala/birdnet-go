@@ -5329,7 +5329,9 @@
         "default": "Predefinito",
         "incompatible": "Non disponibile per il tuo hardware",
         "showAll": "Mostra tutte le varianti ({count})",
-        "latency": "~{ms} ms"
+        "latency": "~{ms} ms",
+        "precisionInfo": "About precision and variants",
+        "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
       },
       "reasons": {
         "backendRecommended": "Eseguito su {backend}, il backend consigliato per il tuo hardware",
@@ -5402,7 +5404,9 @@
         "actionFailed": "Si è verificato un problema con {name}",
         "downloadSourceHint": "Se huggingface.co è bloccato o lento sulla tua rete, imposta un mirror nella sezione Sorgente di download sottostante.",
         "goToDownloadSource": "Vai a Sorgente di download",
-        "dismiss": "Ignora"
+        "dismiss": "Ignora",
+        "details": "Details",
+        "removeRetryHint": "To try again, use the Remove button on the model's card."
       },
       "regionLabel": "Regione",
       "speciesLabel": "Specie",

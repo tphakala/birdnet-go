@@ -5329,7 +5329,9 @@
         "default": "Standard",
         "incompatible": "Inte tillgänglig för din hårdvara",
         "showAll": "Visa alla varianter ({count})",
-        "latency": "~{ms} ms"
+        "latency": "~{ms} ms",
+        "precisionInfo": "About precision and variants",
+        "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
       },
       "reasons": {
         "backendRecommended": "Körs på {backend}, den rekommenderade backend-motorn för din hårdvara",
@@ -5402,7 +5404,9 @@
         "actionFailed": "Det uppstod ett problem med {name}",
         "downloadSourceHint": "Om huggingface.co är blockerat eller långsamt på ditt nätverk kan du ange en spegelsajt i avsnittet Nedladdningskälla nedan.",
         "goToDownloadSource": "Gå till Nedladdningskälla",
-        "dismiss": "Avfärda"
+        "dismiss": "Avfärda",
+        "details": "Details",
+        "removeRetryHint": "To try again, use the Remove button on the model's card."
       },
       "regionLabel": "Region",
       "speciesLabel": "Arter",

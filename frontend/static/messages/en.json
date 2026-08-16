@@ -5329,7 +5329,9 @@
         "default": "Default",
         "incompatible": "Not available for your hardware",
         "showAll": "Show all variants ({count})",
-        "latency": "~{ms} ms"
+        "latency": "~{ms} ms",
+        "precisionInfo": "About precision and variants",
+        "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
       },
       "reasons": {
         "backendRecommended": "Runs on {backend}, the recommended backend for your hardware",
@@ -5340,7 +5342,7 @@
         "ramConstrainedFit": "Quantized build sized for your available memory",
         "benchmarkMeasured": "Fastest on your device in measured benchmarks",
         "variantLegacy": "Superseded by a newer build",
-        "archUnsupported": "Requires a {required} CPU",
+        "archUnsupported": "Requires {required} CPU architecture",
         "backendMissing": "Needs an inference backend your build cannot reach ({required})",
         "ramInsufficient": "Needs at least {requiredMb} MB of memory",
         "hardwareExcluded": "Not supported on your hardware ({token})",
@@ -5402,7 +5404,9 @@
         "actionFailed": "There was a problem with {name}",
         "downloadSourceHint": "If huggingface.co is blocked or slow on your network, set a mirror in the Download Source section below.",
         "goToDownloadSource": "Go to Download Source",
-        "dismiss": "Dismiss"
+        "dismiss": "Dismiss",
+        "details": "Details",
+        "removeRetryHint": "To try again, use the Remove button on the model's card."
       },
       "regionLabel": "Region",
       "speciesLabel": "Species",

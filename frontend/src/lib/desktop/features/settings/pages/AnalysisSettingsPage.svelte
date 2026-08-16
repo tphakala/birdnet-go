@@ -165,6 +165,11 @@
   let downloadProgress = $state<DownloadProgress | null>(null);
   let completionTimer: ReturnType<typeof setTimeout> | undefined;
 
+  // Shared DOM id for the Download Source endpoint input, referenced both by the
+  // input's own id and by scrollToDownloadSource's getElementById lookup, so the
+  // two cannot drift apart.
+  const HUGGINGFACE_ENDPOINT_ID = 'huggingface-endpoint';
+
   let licenseModel = $state<CatalogEntry | null>(null);
   // The variant preselected in the license/install dialog: the server-recommended
   // one by default, overridable by the user. Empty for flat (variant-less) entries.
@@ -959,7 +964,7 @@
     licenseModel = null;
   }
 
-  async function handleInstall() {
+  function handleInstall() {
     if (!licenseModel) return;
     // Never install a variant the recommender flagged incompatible with this host
     // (the button is disabled in this state; this guards a programmatic call too).
@@ -1075,7 +1080,7 @@
     }
   }
 
-  async function handleReinstall(entry: CatalogEntry) {
+  function handleReinstall(entry: CatalogEntry) {
     if (reinstallingId || installingId) return;
     startReinstall(entry.id, entry.name);
   }
@@ -1133,6 +1138,11 @@
   // A remove failure offers no retry (the card's Remove button is right there).
   function retryFailedAction() {
     if (!installError) return;
+    // Defensive in-flight guard, mirroring handleReinstall: installError is only set
+    // when nothing is in flight (each start clears it, every failure resets its id),
+    // so this is currently unreachable, but it keeps the invariant explicit and
+    // survives future refactors that might retry while an action is running.
+    if (installingId || reinstallingId) return;
     const { modelId, modelName, variantId, kind } = installError;
     if (kind === 'install') startInstall(modelId, modelName, variantId);
     else if (kind === 'reinstall') startReinstall(modelId, modelName);
@@ -1146,7 +1156,7 @@
   // is the remedy for a download-reachability failure, and it lives on this same
   // Models tab, just below the gallery.
   function scrollToDownloadSource() {
-    const el = document.getElementById('huggingface-endpoint');
+    const el = document.getElementById(HUGGINGFACE_ENDPOINT_ID);
     el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     el?.focus();
   }
@@ -1573,14 +1583,15 @@
           class="flex items-start gap-3 p-4 rounded-lg mt-4 bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]"
           role="alert"
         >
-          <XCircle class="size-5 shrink-0" />
+          <XCircle class="size-5 shrink-0" aria-hidden="true" />
           <span>{rangeFilterState.error}</span>
           <button
             type="button"
             class="ml-auto inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+            aria-label={t('common.aria.dismissAlert')}
             onclick={() => (rangeFilterState.error = null)}
           >
-            <X class="size-4" />
+            <X class="size-4" aria-hidden="true" />
           </button>
         </div>
       {/if}
@@ -1722,14 +1733,31 @@
               <p class="font-medium text-[var(--color-base-content)]">
                 {t('analysis.gallery.errors.actionFailed', { name: installError.modelName })}
               </p>
-              <p class="mt-0.5 break-words text-[var(--color-base-content)]/80">
-                {installError.message}
-              </p>
               {#if installError.network}
-                <p class="mt-2 text-[var(--color-base-content)]/80">
+                <p class="mt-1 text-[var(--color-base-content)]/80">
                   {t('analysis.gallery.errors.downloadSourceHint')}
                 </p>
+              {:else if installError.kind === 'remove'}
+                <!-- A remove failure has no in-banner Retry (removes are not
+                     re-run from here); point the user back to the card's own
+                     Remove button so the recovery path is never left implicit. -->
+                <p class="mt-1 text-[var(--color-base-content)]/80">
+                  {t('analysis.gallery.errors.removeRetryHint')}
+                </p>
               {/if}
+              <!-- Raw backend/SSE/ApiError text is often long and technical; lead
+                   with the plain-English title (and hint where classifiable) and
+                   keep the raw message one disclosure click away. -->
+              <details class="mt-1">
+                <summary
+                  class="cursor-pointer text-[var(--color-base-content)]/70 hover:text-[var(--color-base-content)]"
+                >
+                  {t('analysis.gallery.errors.details')}
+                </summary>
+                <p class="mt-1 break-words text-[var(--color-base-content)]/80">
+                  {installError.message}
+                </p>
+              </details>
             </div>
             <button
               type="button"
@@ -1801,7 +1829,7 @@
           keeps compiling it the way the browser does.
         -->
         <TextInput
-          id="huggingface-endpoint"
+          id={HUGGINGFACE_ENDPOINT_ID}
           type="url"
           pattern="[Hh][Tt][Tt][Pp][Ss]?:\/\/[^\/?#@]+(\/[^?#]*)?"
           value={birdnet?.huggingFaceEndpoint ?? ''}
@@ -1822,6 +1850,27 @@
 {/snippet}
 
 <!-- ── Gallery: Installed Tab ────────────────────────────────────────── -->
+<!-- Shared catalog-load-error banner, rendered in both gallery tabs. A single
+     definition keeps the two tabs' error UI (markup, retry action, a11y) from
+     drifting, and its decorative icons carry aria-hidden. -->
+{#snippet catalogErrorBanner()}
+  <div
+    class="flex items-center gap-3 rounded-lg border border-[var(--color-error)]/30 bg-[var(--color-error)]/10 px-4 py-3 text-sm"
+    role="alert"
+  >
+    <AlertTriangle class="size-5 shrink-0 text-[var(--color-error)]" aria-hidden="true" />
+    <span class="text-[var(--color-base-content)]">{catalogError}</span>
+    <button
+      type="button"
+      onclick={loadCatalog}
+      class="ml-auto flex items-center gap-1.5 rounded-md bg-[var(--color-base-200)] px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] transition-colors"
+    >
+      <RefreshCw class="size-3.5" aria-hidden="true" />
+      {t('analysis.gallery.retry')}
+    </button>
+  </div>
+{/snippet}
+
 {#snippet installedTabContent()}
   <div class="space-y-4">
     {#if loading}
@@ -1832,20 +1881,7 @@
         >
       </div>
     {:else if catalogError}
-      <div
-        class="flex items-center gap-3 rounded-lg border border-[var(--color-error)]/30 bg-[var(--color-error)]/10 px-4 py-3 text-sm"
-        role="alert"
-      >
-        <AlertTriangle class="size-5 shrink-0 text-[var(--color-error)]" />
-        <span class="text-[var(--color-base-content)]">{catalogError}</span>
-        <button
-          onclick={loadCatalog}
-          class="ml-auto flex items-center gap-1.5 rounded-md bg-[var(--color-base-200)] px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] transition-colors"
-        >
-          <RefreshCw class="size-3.5" />
-          {t('analysis.gallery.retry')}
-        </button>
-      </div>
+      {@render catalogErrorBanner()}
     {:else}
       <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         <!-- Built-in BirdNET model (always present) -->
@@ -1962,11 +1998,16 @@
             <!-- Incompatible warning for installed models -->
             {#if !entry.compatible}
               <div
-                class="mt-3 flex items-start gap-2 rounded-lg bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-400"
+                class="mt-3 flex items-start gap-2 rounded-lg bg-[var(--color-error)]/10 p-3 text-sm"
                 role="status"
               >
-                <XCircle class="h-4 w-4 shrink-0 mt-0.5" />
-                <span>{entryIncompatibleText(entry.incompatibleReason)}</span>
+                <XCircle
+                  class="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-error)]"
+                  aria-hidden="true"
+                />
+                <span class="text-[var(--color-base-content)]"
+                  >{entryIncompatibleText(entry.incompatibleReason)}</span
+                >
               </div>
             {/if}
             <!-- Metadata grid -->
@@ -2147,11 +2188,16 @@
     <!-- Incompatible warning banner -->
     {#if !entry.compatible}
       <div
-        class="mt-3 flex items-start gap-2 rounded-lg bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400"
+        class="mt-3 flex items-start gap-2 rounded-lg bg-[var(--color-warning)]/10 p-3 text-sm"
         role="status"
       >
-        <TriangleAlert class="h-4 w-4 shrink-0 mt-0.5" />
-        <span>{entryIncompatibleText(entry.incompatibleReason)}</span>
+        <TriangleAlert
+          class="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-warning)]"
+          aria-hidden="true"
+        />
+        <span class="text-[var(--color-base-content)]"
+          >{entryIncompatibleText(entry.incompatibleReason)}</span
+        >
       </div>
     {/if}
 
@@ -2230,20 +2276,7 @@
         >
       </div>
     {:else if catalogError}
-      <div
-        class="flex items-center gap-3 rounded-lg border border-[var(--color-error)]/30 bg-[var(--color-error)]/10 px-4 py-3 text-sm"
-        role="alert"
-      >
-        <AlertTriangle class="size-5 shrink-0 text-[var(--color-error)]" />
-        <span class="text-[var(--color-base-content)]">{catalogError}</span>
-        <button
-          onclick={loadCatalog}
-          class="ml-auto flex items-center gap-1.5 rounded-md bg-[var(--color-base-200)] px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] transition-colors"
-        >
-          <RefreshCw class="size-3.5" />
-          {t('analysis.gallery.retry')}
-        </button>
-      </div>
+      {@render catalogErrorBanner()}
     {:else}
       <!-- Acoustic Classifiers section -->
       {#if availableWildlife.length > 0 || availableBirds.length > 0 || availableBats.length > 0}
@@ -2415,13 +2448,26 @@
             onSelect={id => (selectedVariantId = id)}
             idPrefix="license-variant"
           />
+          <!-- Plain-language help for the precision jargon (FP32/FP16/INT8) and the
+               Default-vs-Recommended distinction, for the non-technical audience. A
+               native <details> is keyboard- and touch-accessible, unlike a
+               hover-only tooltip. -->
+          <details class="mt-2 text-xs text-[var(--color-base-content)]/70">
+            <summary class="cursor-pointer hover:text-[var(--color-base-content)]">
+              {t('analysis.gallery.variants.precisionInfo')}
+            </summary>
+            <p class="mt-1">{t('analysis.gallery.variants.precisionHelp')}</p>
+          </details>
         {/if}
 
         {#if !licenseModel.commercialUse}
           <div
             class="flex items-start gap-2 rounded-lg border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 px-3 py-2.5 text-sm"
           >
-            <ShieldAlert class="mt-0.5 size-4 shrink-0 text-[var(--color-warning)]" />
+            <ShieldAlert
+              class="mt-0.5 size-4 shrink-0 text-[var(--color-warning)]"
+              aria-hidden="true"
+            />
             <p class="text-[var(--color-base-content)]">
               {t('analysis.gallery.license.nonCommercialWarning')}
             </p>
@@ -2467,7 +2513,7 @@
     <div class="w-full max-w-md p-6">
       <div class="flex items-start gap-3">
         <div class="shrink-0 rounded-full bg-[var(--color-error)]/10 p-2">
-          <AlertTriangle class="size-5 text-[var(--color-error)]" />
+          <AlertTriangle class="size-5 text-[var(--color-error)]" aria-hidden="true" />
         </div>
         <div>
           <h3
@@ -2565,14 +2611,15 @@
           class="flex items-start gap-3 p-4 rounded-lg mb-4 bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]"
           role="alert"
         >
-          <XCircle class="size-5 shrink-0" />
+          <XCircle class="size-5 shrink-0" aria-hidden="true" />
           <span>{rangeFilterState.error}</span>
           <button
             type="button"
             class="ml-auto inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+            aria-label={t('common.aria.dismissAlert')}
             onclick={() => (rangeFilterState.error = null)}
           >
-            <X class="size-4" />
+            <X class="size-4" aria-hidden="true" />
           </button>
         </div>
       {/if}

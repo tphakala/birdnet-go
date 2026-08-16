@@ -5329,7 +5329,9 @@
         "default": "Predvolené",
         "incompatible": "Nie je k dispozícii pre váš hardvér",
         "showAll": "Zobraziť všetky varianty ({count})",
-        "latency": "~{ms} ms"
+        "latency": "~{ms} ms",
+        "precisionInfo": "About precision and variants",
+        "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
       },
       "reasons": {
         "backendRecommended": "Beží na {backend}, čo je odporúčaný backend pre váš hardvér",
@@ -5402,7 +5404,9 @@
         "actionFailed": "Vyskytol sa problém s {name}",
         "downloadSourceHint": "Ak je huggingface.co vo vašej sieti zablokované alebo pomalé, nastavte zrkadlový server v sekcii Zdroj sťahovania nižšie.",
         "goToDownloadSource": "Prejsť na Zdroj sťahovania",
-        "dismiss": "Zavrieť"
+        "dismiss": "Zavrieť",
+        "details": "Details",
+        "removeRetryHint": "To try again, use the Remove button on the model's card."
       },
       "regionLabel": "Región",
       "speciesLabel": "Druhy",
