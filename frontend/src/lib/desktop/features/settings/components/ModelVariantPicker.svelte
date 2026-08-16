@@ -287,9 +287,13 @@
   </div>
 
   {#if disclosureStep}
+    <!-- The disclosure button only renders while more variants remain hidden (it
+         unmounts once everything is shown), so it always reveals collapsed
+         content: aria-expanded is a constant "false". -->
     <button
       type="button"
       class="btn btn-ghost btn-xs mt-2"
+      aria-expanded="false"
       onclick={() => (disclosure = disclosureStep.target)}
     >
       {disclosureStep.region

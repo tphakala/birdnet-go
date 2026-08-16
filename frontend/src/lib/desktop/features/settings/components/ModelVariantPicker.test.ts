@@ -62,6 +62,8 @@ describe('ModelVariantPicker', () => {
     const toggle = getByRole('button');
     expect(toggle.textContent).toContain('analysis.gallery.variants.showAll');
     expect(toggle.textContent).not.toContain('showAllRegions');
+    // The disclosure button reveals collapsed content, so it exposes aria-expanded.
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('reveals all variants when show-all is clicked', async () => {
