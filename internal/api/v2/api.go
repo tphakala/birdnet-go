@@ -577,9 +577,9 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	c.Group.Use(c.LoggingMiddleware())      // Use custom structured logging middleware
 	c.Group.Use(c.PrivateModeAuth)          // Gate all API endpoints behind auth when PrivateMode is enabled
 
-	// NOTE: CSRF token is provided by the /app/config endpoint using middleware.EnsureCSRFToken()
-	// which handles Echo v4.15.0's Sec-Fetch-Site optimization that may skip token generation
-	// for same-origin requests. Global CSRF middleware in server.go handles validation.
+	// NOTE: CSRF token is provided by the /app/config endpoint using middleware.EnsureCSRFToken().
+	// The global CSRF middleware in server.go strips Sec-Fetch-Site: same-origin/none so Echo
+	// always runs its token path and validates state-changing requests (GHSA-9fhj-f35q-w532).
 
 	// Initialize start time for uptime tracking
 	now := time.Now()
