@@ -72,6 +72,27 @@ type ModelManager struct {
 	// atomic pointer makes concurrent set and notify safe (the setter is
 	// exported, so a caller could re-register a callback while loads/unloads run).
 	topologyChangedCb atomic.Pointer[func()]
+
+	// endpointResolver, when set, orders the HuggingFace endpoint chain per file
+	// and remembers the host that worked, so downloads fail over from a blocked
+	// canonical host to the mirror. It is injected at startup; a nil resolver
+	// preserves the single-endpoint behavior, so callers that never inject one
+	// keep downloading from exactly one host. The atomic pointer makes the
+	// exported setter safe against concurrent installs.
+	endpointResolver atomic.Pointer[EndpointResolver]
+}
+
+// EndpointResolver orders the HuggingFace endpoint chain to try for a download
+// and records the host that served it, enabling automatic mirror failover.
+// *conf.HFEndpointResolver implements it; the interface keeps this package
+// decoupled from that concrete type and lets tests drive the failover loop.
+type EndpointResolver interface {
+	// OrderedEndpoints returns the base URLs to try, most-preferred first, for
+	// the given settings override.
+	OrderedEndpoints(configured string) []string
+	// NoteWorking records the endpoint that just served a request so later calls
+	// prefer it.
+	NoteWorking(endpoint string)
 }
 
 // InstalledModel represents a model that has been downloaded and is available.
@@ -1501,19 +1522,21 @@ func (mm *ModelManager) downloadVariantFiles(ctx context.Context, entry *Catalog
 		return nil, "", "", "", pfErr
 	}
 
-	// Resolve the HuggingFace host once per install so every file in the same
-	// install comes from the same mirror. Skipped when baseURL is set, because
-	// that path bypasses repo construction entirely.
-	var endpoint string
+	// Resolve the endpoint override once per install, for logging and for the
+	// per-file failover chain. Skipped when baseURL is set, because that path
+	// bypasses repo construction entirely.
+	var configured string
 	if baseURL == "" {
-		endpoint = mm.huggingFaceEndpoint()
-		// A non-default host is worth a log line: it can come from the
+		configured = mm.configuredHuggingFaceEndpoint()
+		// A non-default primary host is worth a log line: it can come from the
 		// HF_ENDPOINT environment variable, which the settings UI cannot show,
-		// so this is the only record of where the files actually came from.
-		if endpoint != conf.DefaultHuggingFaceEndpoint {
+		// so this is the only record of where the files actually came from. The
+		// automatic mirror fallback is not "non-default" and is logged per file
+		// only when it actually engages (see downloadModelFile).
+		if primary := mm.huggingFaceEndpoint(); primary != conf.DefaultHuggingFaceEndpoint {
 			log.Info("Downloading model files from a non-default HuggingFace host",
 				logger.String("catalog_id", entry.ID),
-				logger.String("endpoint", endpoint))
+				logger.String("endpoint", primary))
 		}
 	}
 
@@ -1538,17 +1561,11 @@ func (mm *ModelManager) downloadVariantFiles(ctx context.Context, entry *Catalog
 			continue
 		}
 
-		// Build download URL. Per-file HuggingFaceRepo overrides the entry-level repo,
-		// allowing companion files (e.g., geomodel) to live in a separate repository.
-		var url string
-		if baseURL != "" {
-			url = baseURL + "/" + f.RemotePath
-		} else {
-			repo := entry.HuggingFaceRepo
-			if f.HuggingFaceRepo != "" {
-				repo = f.HuggingFaceRepo
-			}
-			url = buildHuggingFaceURL(endpoint, repo, f.RemotePath)
+		// Per-file HuggingFaceRepo overrides the entry-level repo, allowing
+		// companion files (e.g., geomodel) to live in a separate repository.
+		repo := entry.HuggingFaceRepo
+		if f.HuggingFaceRepo != "" {
+			repo = f.HuggingFaceRepo
 		}
 
 		fileIndex++
@@ -1564,10 +1581,18 @@ func (mm *ModelManager) downloadVariantFiles(ctx context.Context, entry *Catalog
 		}
 		mm.mu.Unlock()
 
-		if dlErr := mm.downloadFile(ctx, entry.ID, url, destPath, f.SHA256, completedBytes); dlErr != nil {
+		var dlErr error
+		if baseURL != "" {
+			// Explicit base URL (test injection): no repo construction, no failover.
+			dlErr = mm.downloadFile(ctx, entry.ID, baseURL+"/"+f.RemotePath, destPath, f.SHA256, completedBytes)
+		} else {
+			dlErr = mm.downloadModelFile(ctx, entry.ID, repo, f.RemotePath, destPath, f.SHA256, completedBytes, configured)
+		}
+		if dlErr != nil {
 			log.Error("Failed to download file",
 				logger.String("catalog_id", entry.ID),
-				logger.String("url", url),
+				logger.String("repo", repo),
+				logger.String("remote_path", f.RemotePath),
 				logger.Error(dlErr))
 			mm.markFailed(entry.ID, dlErr, progress)
 			if cleanupOnFailure {
@@ -1945,6 +1970,66 @@ var downloadHTTPClient = &http.Client{
 	Timeout: 30 * time.Minute,
 }
 
+// endpointAttemptError wraps a download failure with whether it warrants trying
+// the next endpoint in the chain. A reachability failure (unreachable host,
+// reset, timeout) or a gateway status (502/503/504) is retryable; a definite
+// response such as 404, a checksum mismatch, or a local filesystem error is
+// not, because failing over would only mask a real error. downloadFile returns
+// this for its network failure sites; every other failure is a plain error,
+// which shouldFailover treats as non-retryable.
+type endpointAttemptError struct {
+	retryable bool
+	err       error
+}
+
+func (e *endpointAttemptError) Error() string { return e.err.Error() }
+func (e *endpointAttemptError) Unwrap() error { return e.err }
+
+// shouldFailover reports whether err came from a reachability failure that a
+// different endpoint might not have.
+func shouldFailover(err error) bool {
+	var ae *endpointAttemptError
+	return errors.As(err, &ae) && ae.retryable
+}
+
+// downloadModelFile downloads one catalog file, trying each endpoint in the
+// resolver's ordered chain in turn. It fails over to the next endpoint only on
+// a reachability failure (never on a definite HTTP status such as 404), and on
+// success records the working endpoint so later files in the same install skip
+// a blocked host. The per-file SHA256 in downloadFile makes a host switch safe:
+// the file is verified against the manifest checksum whichever host served it.
+//
+// The endpoint chain is resolved per file, not once per install, so a file that
+// established the mirror as sticky lets every subsequent file start there
+// instead of re-paying the blocked host's connect timeout.
+func (mm *ModelManager) downloadModelFile(ctx context.Context, catalogID, repo, remotePath, destPath, expectedSHA256 string, completedBytes int64, configured string) error {
+	endpoints := mm.orderedDownloadEndpoints(configured)
+	for i, endpoint := range endpoints {
+		url := buildHuggingFaceURL(endpoint, repo, remotePath)
+		err := mm.downloadFile(ctx, catalogID, url, destPath, expectedSHA256, completedBytes)
+		if err == nil {
+			mm.noteWorkingEndpoint(endpoint)
+			return nil
+		}
+		// Surface the error (no failover) on the last endpoint or when the
+		// failure is not a reachability problem another host could avoid.
+		if i == len(endpoints)-1 || !shouldFailover(err) {
+			return err
+		}
+		GetLogger().Warn("HuggingFace host unreachable, trying next endpoint",
+			logger.String("catalog_id", catalogID),
+			logger.String("failed_endpoint", endpoint),
+			logger.String("next_endpoint", endpoints[i+1]),
+			logger.Error(err))
+	}
+	// orderedDownloadEndpoints always returns at least one endpoint, so the loop
+	// returns before here; this only guards a future empty-chain regression.
+	return errors.Newf("no HuggingFace endpoint available for %s", repo).
+		Component("classifier.model_manager").
+		Category(errors.CategoryValidation).
+		Build()
+}
+
 // downloadFile downloads a file from url to destPath, verifying the SHA256
 // checksum. The catalogID is used to update shared download state for SSE
 // polling. completedBytes is the cumulative size of previously downloaded
@@ -1991,21 +2076,33 @@ func (mm *ModelManager) downloadFile(ctx context.Context, catalogID, url, destPa
 	}
 	resp, err := downloadHTTPClient.Do(req)
 	if err != nil {
-		return errors.Newf("HTTP request failed for %s: %v", url, err).
-			Component("classifier.model_manager").
-			Category(errors.CategoryNetwork).
-			Context("url", url).
-			Build()
+		// A transport failure (unreachable host, reset, timeout) is retryable on
+		// the next endpoint; a cancelled context is not (IsUnreachable handles the
+		// distinction).
+		return &endpointAttemptError{
+			retryable: conf.IsUnreachable(err),
+			err: errors.Newf("HTTP request failed for %s: %v", url, err).
+				Component("classifier.model_manager").
+				Category(errors.CategoryNetwork).
+				Context("url", url).
+				Build(),
+		}
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.Newf("HTTP %d for %s", resp.StatusCode, url).
-			Component("classifier.model_manager").
-			Category(errors.CategoryNetwork).
-			Context("url", url).
-			Context("status", fmt.Sprintf("%d", resp.StatusCode)).
-			Build()
+		// A gateway status (502/503/504) means the origin is down and a mirror
+		// may still serve the file, so it is retryable; any other status (404,
+		// 403, 500, ...) means the host answered and failover would mask it.
+		return &endpointAttemptError{
+			retryable: conf.IsGatewayStatus(resp.StatusCode),
+			err: errors.Newf("HTTP %d for %s", resp.StatusCode, url).
+				Component("classifier.model_manager").
+				Category(errors.CategoryNetwork).
+				Context("url", url).
+				Context("status", fmt.Sprintf("%d", resp.StatusCode)).
+				Build(),
+		}
 	}
 
 	var hasher hash.Hash
@@ -2050,11 +2147,16 @@ func (mm *ModelManager) downloadFile(ctx context.Context, catalogID, url, destPa
 			break
 		}
 		if readErr != nil {
-			return errors.Newf("read error downloading %s: %v", url, readErr).
-				Component("classifier.model_manager").
-				Category(errors.CategoryNetwork).
-				Context("url", url).
-				Build()
+			// A connection dropped mid-stream (a common Great-Firewall symptom) is
+			// retryable on the next endpoint.
+			return &endpointAttemptError{
+				retryable: conf.IsUnreachable(readErr),
+				err: errors.Newf("read error downloading %s: %v", url, readErr).
+					Component("classifier.model_manager").
+					Category(errors.CategoryNetwork).
+					Context("url", url).
+					Build(),
+			}
 		}
 	}
 
@@ -2094,22 +2196,67 @@ func (mm *ModelManager) downloadFile(ctx context.Context, catalogID, url, destPa
 	return nil
 }
 
+// huggingFaceResolveMainPath is the HuggingFace file-resolve path segment for a
+// repository's main revision, sitting between the repo id and the file path.
+const huggingFaceResolveMainPath = "/resolve/main/"
+
 // buildHuggingFaceURL constructs the download URL for a file in a HuggingFace
-// repo. The endpoint is the resolved host (see huggingFaceEndpoint) and must
-// not end in a slash.
+// repo. The endpoint is one host from the resolved download chain (see
+// orderedDownloadEndpoints / downloadModelFile) and must not end in a slash.
 func buildHuggingFaceURL(endpoint, repo, filePath string) string {
-	return endpoint + "/" + repo + "/resolve/main/" + filePath
+	return endpoint + "/" + repo + huggingFaceResolveMainPath + filePath
 }
 
-// huggingFaceEndpoint resolves the HuggingFace host for this fetch. It reads
-// the live settings on every call rather than caching, so a mirror configured
-// through the UI takes effect without a restart.
+// huggingFaceEndpoint resolves the single primary HuggingFace host from the
+// current settings override. Downloads themselves use the failover chain
+// (orderedDownloadEndpoints); this is used for the non-default-host log line
+// and as the unit-tested seam for settings/HF_ENDPOINT resolution and
+// credential redaction. It reads the live settings on every call rather than
+// caching, so a mirror configured through the UI takes effect without a restart.
 func (mm *ModelManager) huggingFaceEndpoint() string {
-	var configured string
-	if current := conf.CurrentOrFallback(mm.settings); current != nil {
-		configured = current.BirdNET.HuggingFaceEndpoint
+	return conf.ResolveHuggingFaceEndpoint(mm.configuredHuggingFaceEndpoint())
+}
+
+// SetEndpointResolver injects the HuggingFace endpoint resolver used for mirror
+// failover. It is wired once at startup; passing nil disables failover and
+// restores single-endpoint downloads.
+func (mm *ModelManager) SetEndpointResolver(r EndpointResolver) {
+	if r == nil {
+		mm.endpointResolver.Store(nil)
+		return
 	}
-	return conf.ResolveHuggingFaceEndpoint(configured)
+	mm.endpointResolver.Store(&r)
+}
+
+// configuredHuggingFaceEndpoint returns the raw endpoint override from settings
+// (settings field only; the HF_ENDPOINT fallback is applied by the conf
+// resolver). It is read live so a settings change hot-reloads on the next
+// install.
+func (mm *ModelManager) configuredHuggingFaceEndpoint() string {
+	if current := conf.CurrentOrFallback(mm.settings); current != nil {
+		return current.BirdNET.HuggingFaceEndpoint
+	}
+	return ""
+}
+
+// orderedDownloadEndpoints returns the endpoint chain to try for one file,
+// most-preferred first. With a resolver injected this is the failover chain
+// (canonical then mirror, sticky endpoint first); without one it is the single
+// resolved endpoint, preserving the pre-failover behavior exactly.
+func (mm *ModelManager) orderedDownloadEndpoints(configured string) []string {
+	if p := mm.endpointResolver.Load(); p != nil {
+		return (*p).OrderedEndpoints(configured)
+	}
+	return []string{conf.ResolveHuggingFaceEndpoint(configured)}
+}
+
+// noteWorkingEndpoint records the endpoint that just served a file, so the next
+// file in the same install and later installs start from it instead of
+// re-probing a blocked host. It is a no-op without a resolver.
+func (mm *ModelManager) noteWorkingEndpoint(endpoint string) {
+	if p := mm.endpointResolver.Load(); p != nil {
+		(*p).NoteWorking(endpoint)
+	}
 }
 
 // verifySHA256 checks whether the file at path matches the expected hex-encoded

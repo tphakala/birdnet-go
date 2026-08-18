@@ -145,6 +145,21 @@ func (a *BirdNETAnalyzer) initModelManager(bn *classifier.Orchestrator) {
 	}
 
 	a.modelManager = classifier.NewModelManager(modelsDir, bn, a.settings)
+
+	// Inject the HuggingFace endpoint resolver so model downloads fail over from
+	// a blocked canonical host (e.g. behind the Great Firewall) to the mirror.
+	// It persists the working host under the config directory so the preference
+	// survives a restart; an unresolved config dir keeps failover in memory only.
+	// Construction reads at most one small local file and does no network I/O, so
+	// it is safe here on the startup path.
+	configDir, err := conf.ResolveConfigDir()
+	if err != nil {
+		log.Warn("could not resolve config directory; HuggingFace mirror failover will not persist across restarts",
+			logger.String("service", birdNETAnalyzerName),
+			logger.Error(err))
+	}
+	a.modelManager.SetEndpointResolver(conf.NewHFEndpointResolver(configDir))
+
 	a.modelManager.ScanInstalled()
 
 	log.Info("model manager initialized",
