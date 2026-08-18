@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/classifier/region"
+	"github.com/tphakala/birdnet-go/internal/hwprofile"
 )
 
 // regionalTilesPerFamily is how many region-sliced variants the generator emits
@@ -96,7 +97,7 @@ func TestEmbeddedCatalog_RegionalVariants(t *testing.T) {
 					assert.Containsf(t, v.Requirements.Excludes, "openvino-gpu-intel-gen12", "fp16 variant %q must exclude the Iris Xe gen12 miscompile", v.ID)
 				}
 				if strings.HasPrefix(v.ID, "int8-arm@") {
-					assert.Equalf(t, []string{"aarch64"}, v.Requirements.Arch, "int8-arm variant %q must require aarch64", v.ID)
+					assert.Equalf(t, []string{hwprofile.CapAArch64}, v.Requirements.Arch, "int8-arm variant %q must require aarch64", v.ID)
 				}
 			}
 			assert.Equalf(t, regionalTilesPerFamily, regional, "%s must expose %d regional tiles", entryID, regionalTilesPerFamily)

@@ -196,6 +196,33 @@ func TestDeviceMatches(t *testing.T) {
 	}
 }
 
+// TestIsGPUBackend pins the gpuBackendTokens membership that gates the fp16 GPU
+// size lever. The lever is otherwise exercised only through openvino-gpu, so
+// cuda and tensorrt membership is untested (no current build emits those
+// tokens); this direct table catches a future edit that drops one of the three
+// GPU tokens from the set, or adds a CPU token to it.
+func TestIsGPUBackend(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		backend string
+		want    bool
+	}{
+		{backendCUDA, true},
+		{backendTensorRT, true},
+		{hwprofile.CapOpenVINOGPU, true},
+		{hwprofile.CapONNXRuntimeCPU, false},
+		{hwprofile.CapOpenVINOCPU, false},
+		{hwprofile.CapTFLite, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.backend, func(t *testing.T) {
+			t.Parallel()
+			assert.Equalf(t, tt.want, isGPUBackend(tt.backend), "isGPUBackend(%q)", tt.backend)
+		})
+	}
+}
+
 func TestRank_X86BenchmarkPrefixMatch(t *testing.T) {
 	t.Parallel()
 

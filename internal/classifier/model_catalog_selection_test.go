@@ -8,6 +8,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/recommend"
+	"github.com/tphakala/birdnet-go/internal/hwprofile"
 )
 
 // mib is one mebibyte, matching the recommender's MinRAMMB-to-bytes conversion.
@@ -78,7 +79,7 @@ func TestRecommend_RegionalTiles(t *testing.T) {
 			// region +100, backend.recommended +40, and low-ram+int8 ram.constrained_fit
 			// +25 = 165, versus no-dft-fp32's region +100 + backend.supported +10 = 110.
 			lowRAM := 300 * mib
-			gotPerch := recommendedVariantID(&perch, []string{"aarch64", "onnxruntime-cpu", "low-ram"}, lowRAM, slug)
+			gotPerch := recommendedVariantID(&perch, []string{hwprofile.CapAArch64, hwprofile.CapONNXRuntimeCPU, hwprofile.CapLowRAM}, lowRAM, slug)
 			assert.Equalf(t, "int8-arm@"+slug, gotPerch, "low-RAM aarch64 host in %q must get the regional int8-arm slice", slug)
 			assert.Equalf(t, "regional/"+slug+"/perch_v2_"+slug+"_int8_arm.onnx", modelRemotePath(t, &perch, gotPerch),
 				"recommended perch variant must own the manifest low-ram selection path")
@@ -87,7 +88,7 @@ func TestRecommend_RegionalTiles(t *testing.T) {
 			// slice (region.matched +100 + backend.recommended +40 = 140) over the
 			// region's fp16 slice (+100 + backend.supported +10 = 110) and over the
 			// global model (which loses the fallback bonus once a slice matches).
-			gotV30 := recommendedVariantID(&v30, []string{"x86-64", "onnxruntime-cpu"}, 8*1024*mib, slug)
+			gotV30 := recommendedVariantID(&v30, []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU}, 8*1024*mib, slug)
 			assert.Equalf(t, "fp32@"+slug, gotV30, "CPU host in %q must get the regional fp32 slice", slug)
 		})
 	}
@@ -96,7 +97,7 @@ func TestRecommend_RegionalTiles(t *testing.T) {
 	// the global variant wins on its fallback bonus.
 	t.Run("global-host-picks-global", func(t *testing.T) {
 		t.Parallel()
-		caps := []string{"x86-64", "onnxruntime-cpu"}
+		caps := []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU}
 		high := 8 * 1024 * mib
 
 		gotV30 := recommendedVariantID(&v30, caps, high, "")
@@ -125,13 +126,13 @@ func TestRecommend_V30GlobalSelection(t *testing.T) {
 		caps     []string
 		wantPath string // manifest selection value
 	}{
-		{"x86-64/onnxruntime", []string{"x86-64", "onnxruntime-cpu"}, "full/birdnet-v3.0-preview3.1-fp32-b1.onnx"},
-		{"x86-64/openvino-cpu", []string{"x86-64", "onnxruntime-cpu", "openvino-cpu"}, "full/birdnet-v3.0-preview3.1-fp32-b1.onnx"},
-		{"x86-64/openvino-gpu", []string{"x86-64", "onnxruntime-cpu", "openvino-cpu", "openvino-gpu"}, "full/birdnet-v3.0-preview3.1-fp16-b1.onnx"},
-		{"aarch64-a76/openvino", []string{"aarch64", "aarch64-a76", "onnxruntime-cpu", "openvino-cpu"}, "full/birdnet-v3.0-preview3.1-fp32-b1.onnx"},
-		{"aarch64/onnxruntime", []string{"aarch64", "onnxruntime-cpu"}, "full/birdnet-v3.0-preview3.1-fp32-b1.onnx"},
-		{"cuda", []string{"x86-64", "onnxruntime-cpu", "cuda"}, "full/birdnet-v3.0-preview3.1-fp16-b1.onnx"},
-		{"tensorrt", []string{"x86-64", "onnxruntime-cpu", "cuda", "tensorrt"}, "full/birdnet-v3.0-preview3.1-fp16-b1.onnx"},
+		{"x86-64/onnxruntime", []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU}, "full/birdnet-v3.0-preview3.1-fp32-b1.onnx"},
+		{"x86-64/openvino-cpu", []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU, hwprofile.CapOpenVINOCPU}, "full/birdnet-v3.0-preview3.1-fp32-b1.onnx"},
+		{"x86-64/openvino-gpu", []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU, hwprofile.CapOpenVINOCPU, hwprofile.CapOpenVINOGPU}, "full/birdnet-v3.0-preview3.1-fp16-b1.onnx"},
+		{"aarch64-a76/openvino", []string{hwprofile.CapAArch64, hwprofile.CapAArch64A76, hwprofile.CapONNXRuntimeCPU, hwprofile.CapOpenVINOCPU}, "full/birdnet-v3.0-preview3.1-fp32-b1.onnx"},
+		{"aarch64/onnxruntime", []string{hwprofile.CapAArch64, hwprofile.CapONNXRuntimeCPU}, "full/birdnet-v3.0-preview3.1-fp32-b1.onnx"},
+		{"cuda", []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU, "cuda"}, "full/birdnet-v3.0-preview3.1-fp16-b1.onnx"},
+		{"tensorrt", []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU, "cuda", "tensorrt"}, "full/birdnet-v3.0-preview3.1-fp16-b1.onnx"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
