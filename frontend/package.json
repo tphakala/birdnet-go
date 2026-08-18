@@ -84,7 +84,7 @@
     ]
   },
   "devDependencies": {
-    "@ast-grep/cli": "^0.44.1",
+    "@ast-grep/cli": "^0.45.1",
     "@axe-core/playwright": "^4.11.3",
     "@eslint/js": "^10.0.1",
     "@formatjs/icu-messageformat-parser": "^3.5.11",
@@ -108,7 +108,7 @@
     "eslint-plugin-security": "^4.0.1",
     "eslint-plugin-svelte": "^3.19.0",
     "husky": "^9.1.7",
-    "jscpd": "^5.0.11",
+    "jscpd": "^5.0.15",
     "jsdom": "^29.1.1",
     "lint-staged": "^17.0.8",
     "madge": "^8.0.0",
@@ -136,7 +136,7 @@
     "@xterm/xterm": "^6.0.0",
     "d3": "^7.9.0",
     "d3-time-format": "^4.1.0",
-    "hls.js": "^1.6.16",
+    "hls.js": "^1.7.0",
     "maplibre-gl": "^5.24.0",
     "svelte-dnd-action": "^0.9.76"
   },
