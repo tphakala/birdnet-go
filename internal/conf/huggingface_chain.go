@@ -43,6 +43,14 @@ const (
 	// stays pinned to the mirror after the canonical host recovers.
 	hfStickyRevalidateInterval = 30 * time.Minute
 
+	// stickyPersistCadence bounds how stale the persisted sticky freshness may
+	// get relative to actual use. NoteWorking persists on an endpoint change and
+	// otherwise at most once per cadence, so continued use of the same host keeps
+	// the on-disk UpdatedAt current without rewriting the file on every file in
+	// an install. It is well under hfStickyRevalidateInterval so a restart
+	// shortly after a successful download does not re-probe a blocked host.
+	stickyPersistCadence = 5 * time.Minute
+
 	// remoteCatalogStateDir is the subdirectory of the config directory that
 	// holds remote-catalog state files. The sticky-endpoint file lives here; a
 	// later phase adds the remote catalog cache and its refresh state under the
@@ -125,11 +133,12 @@ func IsGatewayStatus(status int) bool {
 // The sticky endpoint is persisted so the preference survives a restart. All
 // methods are safe for concurrent use.
 type HFEndpointResolver struct {
-	mu        sync.Mutex
-	sticky    string
-	stickyAt  time.Time
-	now       func() time.Time
-	statePath string // empty disables persistence (in-memory only)
+	mu          sync.Mutex
+	sticky      string
+	stickyAt    time.Time
+	lastSavedAt time.Time // when the sticky state was last persisted
+	now         func() time.Time
+	statePath   string // empty disables persistence (in-memory only)
 }
 
 // hfEndpointState is the on-disk shape of the sticky endpoint.
@@ -193,12 +202,21 @@ func (r *HFEndpointResolver) NoteWorking(endpoint string) {
 	changed := r.sticky != endpoint
 	r.sticky = endpoint
 	r.stickyAt = r.now()
+	// Persist on an endpoint change, and otherwise at most once per cadence, so
+	// continued success on the same host keeps the persisted freshness current.
+	// Persisting only on change would freeze the on-disk UpdatedAt at the first
+	// mirror success, so a restart more than the revalidate interval after that
+	// first success would re-probe the blocked canonical host even though the
+	// mirror was used seconds ago. Files within one install complete well inside
+	// the cadence, so this still writes at most once per install.
+	needSave := changed || r.stickyAt.Sub(r.lastSavedAt) >= stickyPersistCadence
+	if needSave {
+		r.lastSavedAt = r.stickyAt
+	}
 	state := hfEndpointState{Endpoint: r.sticky, UpdatedAt: r.stickyAt}
 	r.mu.Unlock()
 
-	// Persist only when the endpoint changed, to avoid rewriting the file on
-	// every downloaded file within one install.
-	if changed {
+	if needSave {
 		r.save(state)
 	}
 }
@@ -219,6 +237,7 @@ func (r *HFEndpointResolver) load() {
 	if normalized, err := normalizeHuggingFaceEndpoint(state.Endpoint); err == nil {
 		r.sticky = normalized
 		r.stickyAt = state.UpdatedAt
+		r.lastSavedAt = state.UpdatedAt
 	}
 }
 

@@ -169,6 +169,37 @@ func TestHFEndpointResolver_StickyPersistsAcrossRestart(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestHFEndpointResolver_SameEndpointUseRefreshesPersistedFreshness(t *testing.T) {
+	t.Setenv(HuggingFaceEndpointEnvVar, "")
+	dir := t.TempDir()
+	base := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
+
+	// First install fails over to the mirror and persists {mirror, base}.
+	r1 := NewHFEndpointResolver(dir)
+	r1.now = func() time.Time { return base }
+	r1.NoteWorking(FallbackHuggingFaceMirror)
+
+	// A later install keeps using the mirror (unchanged endpoint) past the
+	// persist cadence, so the persisted freshness is refreshed to that time.
+	laterUse := base.Add(25 * time.Minute) // > stickyPersistCadence
+	r1.now = func() time.Time { return laterUse }
+	r1.NoteWorking(FallbackHuggingFaceMirror)
+
+	// Restart shortly after that later use. The original {mirror, base} record
+	// would be stale by now (restart-base > revalidate interval) and re-probe,
+	// so the mirror staying preferred proves the same-endpoint use re-persisted
+	// freshness.
+	restart := laterUse.Add(10 * time.Minute)
+	require.Greater(t, restart.Sub(base), hfStickyRevalidateInterval,
+		"the first persisted record must be stale at restart for this test to prove the refresh")
+	require.Less(t, restart.Sub(laterUse), hfStickyRevalidateInterval,
+		"the refreshed record must still be fresh at restart")
+
+	r2 := NewHFEndpointResolver(dir)
+	r2.now = func() time.Time { return restart }
+	assert.Equal(t, []string{FallbackHuggingFaceMirror, DefaultHuggingFaceEndpoint}, r2.OrderedEndpoints(""))
+}
+
 func TestHFEndpointResolver_EmptyConfigDirIsInMemoryOnly(t *testing.T) {
 	t.Setenv(HuggingFaceEndpointEnvVar, "")
 	r := NewHFEndpointResolver("")

@@ -2196,11 +2196,15 @@ func (mm *ModelManager) downloadFile(ctx context.Context, catalogID, url, destPa
 	return nil
 }
 
+// huggingFaceResolveMainPath is the HuggingFace file-resolve path segment for a
+// repository's main revision, sitting between the repo id and the file path.
+const huggingFaceResolveMainPath = "/resolve/main/"
+
 // buildHuggingFaceURL constructs the download URL for a file in a HuggingFace
 // repo. The endpoint is one host from the resolved download chain (see
 // orderedDownloadEndpoints / downloadModelFile) and must not end in a slash.
 func buildHuggingFaceURL(endpoint, repo, filePath string) string {
-	return endpoint + "/" + repo + "/resolve/main/" + filePath
+	return endpoint + "/" + repo + huggingFaceResolveMainPath + filePath
 }
 
 // huggingFaceEndpoint resolves the single primary HuggingFace host from the
