@@ -140,9 +140,37 @@ func TestDetectionHandlers_RecordTimestamp(t *testing.T) {
 		s.Realtime.PrivacyFilter.Enabled = true
 		s.Realtime.PrivacyFilter.Confidence = 0.05
 	}
+	enablePrivacyCustomLow := func(s *conf.Settings) {
+		s.Realtime.PrivacyFilter.Enabled = true
+		s.Realtime.PrivacyFilter.Confidence = 0.05
+		s.Realtime.Species.Config = map[string]conf.SpeciesConfig{
+			"speech": {Threshold: 0.01},
+		}
+	}
+	enablePrivacyCustomHigh := func(s *conf.Settings) {
+		s.Realtime.PrivacyFilter.Enabled = true
+		s.Realtime.PrivacyFilter.Confidence = 0.05
+		s.Realtime.Species.Config = map[string]conf.SpeciesConfig{
+			"speech": {Threshold: 0.50},
+		}
+	}
 	enableDog := func(s *conf.Settings) {
 		s.Realtime.DogBarkFilter.Enabled = true
 		s.Realtime.DogBarkFilter.Confidence = 0.05
+	}
+	enableDogCustomLow := func(s *conf.Settings) {
+		s.Realtime.DogBarkFilter.Enabled = true
+		s.Realtime.DogBarkFilter.Confidence = 0.05
+		s.Realtime.Species.Config = map[string]conf.SpeciesConfig{
+			"bark": {Threshold: 0.01},
+		}
+	}
+	enableDogCustomHigh := func(s *conf.Settings) {
+		s.Realtime.DogBarkFilter.Enabled = true
+		s.Realtime.DogBarkFilter.Confidence = 0.05
+		s.Realtime.Species.Config = map[string]conf.SpeciesConfig{
+			"bark": {Threshold: 0.50},
+		}
 	}
 
 	tests := []struct {
@@ -158,10 +186,14 @@ func TestDetectionHandlers_RecordTimestamp(t *testing.T) {
 		{"privacy records localized BirdNET human", "Human vocal_Mensch Stimme", 0.9, enablePrivacy, (*Processor).handleHumanDetection, true, true},
 		{"privacy disabled does not record", "Speech", 0.9, func(_ *conf.Settings) {}, (*Processor).handleHumanDetection, true, false},
 		{"privacy below threshold does not record", "Speech", 0.01, enablePrivacy, (*Processor).handleHumanDetection, true, false},
+		{"privacy custom species threshold lowers threshold", "Speech", 0.03, enablePrivacyCustomLow, (*Processor).handleHumanDetection, true, true},
+		{"privacy custom species threshold raises threshold", "Speech", 0.10, enablePrivacyCustomHigh, (*Processor).handleHumanDetection, true, false},
 		{"dog records Perch bark", "Bark", 0.9, enableDog, (*Processor).handleDogDetection, false, true},
 		{"dog records localized BirdNET dog", "Dog_Hund", 0.9, enableDog, (*Processor).handleDogDetection, false, true},
 		{"dog disabled does not record", "Bark", 0.9, func(_ *conf.Settings) {}, (*Processor).handleDogDetection, false, false},
 		{"dog below threshold does not record", "Bark", 0.01, enableDog, (*Processor).handleDogDetection, false, false},
+		{"dog custom species threshold lowers threshold", "Bark", 0.03, enableDogCustomLow, (*Processor).handleDogDetection, false, true},
+		{"dog custom species threshold raises threshold", "Bark", 0.10, enableDogCustomHigh, (*Processor).handleDogDetection, false, false},
 	}
 
 	for _, tt := range tests {

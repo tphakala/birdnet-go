@@ -1296,41 +1296,69 @@ func (p *Processor) syncSpeciesTrackerIfNeeded() {
 	}
 }
 
+// handleFilterDetection handles filtering logic for special sound categories (e.g. dog barks, human vocalizations).
+//
+//nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
+func (p *Processor) handleFilterDetection(
+	settings *conf.Settings,
+	item classifier.Results,
+	result datastore.Results,
+	enabled bool,
+	defaultConfidence float32,
+	isMatch func(string) bool,
+	logMsg string,
+	operation string,
+	targetMap map[string]time.Time,
+) {
+	if enabled && isMatch(result.Species) {
+		threshold := defaultConfidence
+		scientificName, commonName := classifier.SplitSpeciesName(result.Species)
+		if config, exists := lookupSpeciesConfig(settings.Realtime.Species.Config, commonName, scientificName); exists {
+			threshold = float32(config.Threshold)
+		} else if config, exists := lookupSpeciesConfig(settings.Realtime.Species.Config, result.Species, ""); exists {
+			threshold = float32(config.Threshold)
+		}
+		if result.Confidence > threshold {
+			GetLogger().Info(logMsg,
+				logger.Float32("confidence", result.Confidence),
+				logger.Float32("threshold", threshold),
+				logger.String("source", p.getDisplayNameForSource(item.Source.ID)),
+				logger.String("operation", operation))
+			p.detectionMutex.Lock()
+			targetMap[item.Source.ID] = item.StartTime
+			p.detectionMutex.Unlock()
+		}
+	}
+}
+
 // handleDogDetection handles the detection of dog barks and updates the last detection timestamp.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
 func (p *Processor) handleDogDetection(settings *conf.Settings, item classifier.Results, result datastore.Results) {
-	if settings.Realtime.DogBarkFilter.Enabled && isDogDetection(result.Species) &&
-		result.Confidence > settings.Realtime.DogBarkFilter.Confidence {
-		GetLogger().Info("dog detection filtered",
-			logger.Float32("confidence", result.Confidence),
-			logger.Float32("threshold", float32(settings.Realtime.DogBarkFilter.Confidence)),
-			logger.String("source", p.getDisplayNameForSource(item.Source.ID)),
-			logger.String("operation", "dog_bark_filter"))
-		p.detectionMutex.Lock()
-		p.LastDogDetection[item.Source.ID] = item.StartTime
-		p.detectionMutex.Unlock()
-	}
+	p.handleFilterDetection(
+		settings, item, result,
+		settings.Realtime.DogBarkFilter.Enabled,
+		settings.Realtime.DogBarkFilter.Confidence,
+		isDogDetection,
+		"dog detection filtered",
+		"dog_bark_filter",
+		p.LastDogDetection,
+	)
 }
 
 // handleHumanDetection handles the detection of human vocalizations and updates the last detection timestamp.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
 func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifier.Results, result datastore.Results) {
-	// only check this if privacy filter is enabled
-	if settings.Realtime.PrivacyFilter.Enabled && isHumanVocalization(result.Species) &&
-		result.Confidence > settings.Realtime.PrivacyFilter.Confidence {
-		GetLogger().Info("human detection filtered",
-			logger.Float32("confidence", result.Confidence),
-			logger.Float32("threshold", float32(settings.Realtime.PrivacyFilter.Confidence)),
-			logger.String("source", p.getDisplayNameForSource(item.Source.ID)),
-			logger.String("operation", "privacy_filter"))
-		// put human detection timestamp into LastHumanDetection map. This is used to discard
-		// bird detections if a human vocalization is detected after the first detection
-		p.detectionMutex.Lock()
-		p.LastHumanDetection[item.Source.ID] = item.StartTime
-		p.detectionMutex.Unlock()
-	}
+	p.handleFilterDetection(
+		settings, item, result,
+		settings.Realtime.PrivacyFilter.Enabled,
+		settings.Realtime.PrivacyFilter.Confidence,
+		isHumanVocalization,
+		"human detection filtered",
+		"privacy_filter",
+		p.LastHumanDetection,
+	)
 }
 
 // getBaseConfidenceThreshold retrieves the confidence threshold for a species, using custom or global thresholds.
