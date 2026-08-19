@@ -1115,9 +1115,69 @@ func handleGenericSection(sectionPtr any, data json.RawMessage, sectionName stri
 		return fmt.Errorf("failed to normalize species config keys: %w", err)
 	}
 
+	// Realtime.Species.Confirmed is analytics-only and managed exclusively via
+	// /api/v2/detections/confirm (see getBlockedFieldMap). The generic merge below
+	// does NOT enforce the blocked-field map — that enforcement only runs in the PUT
+	// flow via updateAllowedFieldsRecursivelyWithTracking — so snapshot Confirmed here
+	// and restore it after the merge to keep it immutable through the settings PATCH
+	// path. Without this, a PATCH carrying an explicit "confirmed" value would clobber
+	// the confirmed list.
+	var savedConfirmed []string
+	confirmedTracked := true
+	switch s := sectionPtr.(type) {
+	case *conf.SpeciesSettings:
+		savedConfirmed = s.Confirmed
+	case *conf.RealtimeSettings:
+		savedConfirmed = s.Species.Confirmed
+	default:
+		confirmedTracked = false
+	}
+
 	// Use mergeJSONIntoStruct to preserve fields not included in the update
 	if err := mergeJSONIntoStruct(normalizedData, sectionPtr); err != nil {
 		return fmt.Errorf("failed to merge settings for section %s: %w", sectionName, err)
+	}
+
+	if confirmedTracked {
+		switch s := sectionPtr.(type) {
+		case *conf.SpeciesSettings:
+			if !slices.Equal(s.Confirmed, savedConfirmed) {
+				*skippedFields = append(*skippedFields, "Realtime.Species.Confirmed")
+			}
+			s.Confirmed = savedConfirmed
+		case *conf.RealtimeSettings:
+			if !slices.Equal(s.Species.Confirmed, savedConfirmed) {
+				*skippedFields = append(*skippedFields, "Realtime.Species.Confirmed")
+			}
+			s.Species.Confirmed = savedConfirmed
+		}
+	}
+
+	// Apply field-level permissions if needed
+	// Note: getBlockedFieldMap uses capitalized section names (e.g., "BirdNET", "Realtime")
+	// We need to map our lowercase section names to the expected capitalized format
+	capitalizedSectionName := ""
+	switch sectionName {
+	case SettingsSectionBirdnet:
+		capitalizedSectionName = "BirdNET"
+	case SettingsSectionRealtime:
+		capitalizedSectionName = "Realtime"
+	case SettingsSectionWebserver:
+		capitalizedSectionName = "WebServer"
+	default:
+		// For other sections, capitalize first letter
+		if sectionName != "" {
+			capitalizedSectionName = strings.ToUpper(sectionName[:1]) + sectionName[1:]
+		}
+	}
+
+	blockedFieldsMap := getBlockedFieldMap()
+	if blockedFields, exists := blockedFieldsMap[capitalizedSectionName]; exists {
+		if _, ok := blockedFields.(map[string]any); ok {
+			// For now, just note that we have blocked fields
+			// The actual blocking happens in updateAllowedFieldsRecursivelyWithTracking
+			*skippedFields = append(*skippedFields, fmt.Sprintf("Section %s has field-level restrictions", sectionName))
+		}
 	}
 
 	// Blocked fields are NOT enforced here. This function only merges; the merge
@@ -2191,6 +2251,12 @@ func getBlockedFieldMap() map[string]any {
 		// Realtime section - block runtime fields
 		"Realtime": map[string]any{
 			"Audio": getAudioBlockedFields(),
+			// Species.Confirmed is analytics-only and managed exclusively via
+			// /api/v2/detections/confirm. Block it so a Settings save (which omits
+			// it) cannot clobber the confirmed list.
+			"Species": map[string]any{
+				"Confirmed": true,
+			},
 		},
 
 		// All other fields are allowed by default
