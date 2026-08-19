@@ -5340,6 +5340,7 @@
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
       },
       "actionInProgress": "Attendez la fin de l'installation, de la réinstallation ou de la suppression du modèle en cours",
+      "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "S'exécute sur {backend}, le backend recommandé pour votre matériel",
         "backendSupported": "S'exécute sur {backend}",

@@ -12,7 +12,7 @@
    * (a filtering stage is never called "all"), and a context line names the region
    * the middle stage scopes to, so the list is never a silently filtered subset.
    */
-  import { untrack } from 'svelte';
+  import { untrack, tick } from 'svelte';
   import type { CatalogVariant, VariantReason } from '$lib/types/models';
   import { t } from '$lib/i18n';
   import { formatBytes, formatNumber } from '$lib/utils/formatters';
@@ -74,6 +74,10 @@
   // toggles null between opens), so capturing the mount-time recommendation state
   // is intentional. untrack makes that explicit and avoids a reactive dependency.
   let disclosure = $state<Disclosure>(untrack(() => (hasRecommended ? 'collapsed' : 'region')));
+  // Bound to the root fieldset so a disclosure reveal can move keyboard focus into
+  // the newly shown tiles instead of letting it fall to <body> when the button
+  // unmounts (see revealNext).
+  let fieldsetEl: HTMLElement | undefined;
 
   // The 'region' stage: always-relevant options, plus every global (region-less)
   // build, plus the active region's tiles. Other regions are excluded unless one
@@ -87,11 +91,16 @@
     variants.filter(v => !inAlways(v) && !!v.region && v.region !== activeRegionSlug)
   );
 
+  // The always-relevant options as a set, computed once. $derived (not a plain
+  // const) because inAlways closes over reactive props. Reused by the collapsed
+  // stage and by the disclosure-step reveal counts below.
+  const alwaysVariants = $derived(variants.filter(inAlways));
+
   // The first (or only) group of tiles rendered for the current stage. In the
   // 'all' stage this is still the region-stage set; otherStageVariants render
   // after it under their own heading.
   const visibleVariants = $derived(
-    disclosure === 'collapsed' ? variants.filter(inAlways) : regionStageVariants
+    disclosure === 'collapsed' ? alwaysVariants : regionStageVariants
   );
 
   // The disclosure button for the current stage, or null when everything is shown.
@@ -104,7 +113,7 @@
     region?: string;
   }
   const disclosureStep = $derived.by<DisclosureStep | null>(() => {
-    const alwaysCount = variants.filter(inAlways).length;
+    const alwaysCount = alwaysVariants.length;
     if (disclosure === 'collapsed') {
       const allReveal = variants.length - alwaysCount;
       if (allReveal <= 0) return null;
@@ -151,6 +160,30 @@
   function blockedReasonText(variant: CatalogVariant): string {
     const blocker = variant.blockers?.[0];
     return blocker ? reasonText(blocker) : t('analysis.gallery.variants.incompatible');
+  }
+
+  // Advance to the next disclosure stage. When the stage that unmounts the
+  // disclosure button is reached ('all'), move keyboard focus to the first
+  // newly revealed tile, so focus does not fall to <body> when the button
+  // disappears. Snapshot the radio ids first, then diff after the reveal.
+  function revealNext(step: DisclosureStep) {
+    if (!fieldsetEl) {
+      disclosure = step.target;
+      return;
+    }
+    const radioSelector = 'input[type="radio"]';
+    const before = new Set(
+      Array.from(fieldsetEl.querySelectorAll<HTMLInputElement>(radioSelector)).map(el => el.id)
+    );
+    const unmounts = step.target === 'all';
+    disclosure = step.target;
+    if (!unmounts) return;
+    void tick().then(() => {
+      const revealed = Array.from(
+        fieldsetEl?.querySelectorAll<HTMLInputElement>(radioSelector) ?? []
+      );
+      revealed.find(el => !before.has(el.id))?.focus();
+    });
   }
 </script>
 
@@ -254,7 +287,7 @@
   </label>
 {/snippet}
 
-<fieldset class="border border-base-300 rounded-lg p-3">
+<fieldset bind:this={fieldsetEl} class="border border-base-300 rounded-lg p-3">
   <legend class="text-sm font-medium px-1">{t('analysis.gallery.variants.title')}</legend>
 
   <!-- Region context: name the region the list is scoped to, so a user always
@@ -277,12 +310,14 @@
     {/each}
 
     {#if disclosure === 'all' && otherStageVariants.length > 0}
-      <p class="text-xs font-medium text-base-content/60 mt-1">
-        {t('analysis.gallery.variants.otherRegions')}
-      </p>
-      {#each otherStageVariants as variant (variant.id)}
-        {@render variantTile(variant)}
-      {/each}
+      <div role="group" aria-labelledby="{idPrefix}-other-regions" class="flex flex-col gap-2 mt-1">
+        <p id="{idPrefix}-other-regions" class="text-xs font-medium text-base-content/60">
+          {t('analysis.gallery.variants.otherRegions')}
+        </p>
+        {#each otherStageVariants as variant (variant.id)}
+          {@render variantTile(variant)}
+        {/each}
+      </div>
     {/if}
   </div>
 
@@ -294,7 +329,7 @@
       type="button"
       class="btn btn-ghost btn-xs mt-2"
       aria-expanded="false"
-      onclick={() => (disclosure = disclosureStep.target)}
+      onclick={() => revealNext(disclosureStep)}
     >
       {disclosureStep.region
         ? t(disclosureStep.labelKey, { count: disclosureStep.count, region: disclosureStep.region })

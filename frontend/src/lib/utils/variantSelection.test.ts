@@ -5,6 +5,7 @@ import {
   variantLabel,
   translateReason,
   topReasons,
+  normalizeRegionMode,
 } from './variantSelection';
 import type { CatalogEntry, CatalogVariant, VariantReason } from '$lib/types/models';
 
@@ -242,5 +243,22 @@ describe('topReasons', () => {
     expect(
       topReasons([reason('backend.recommended'), reason('region.matched'), reason('extra.one')])
     ).toEqual(['Best for your hardware', 'Matched to your region']);
+  });
+});
+
+describe('normalizeRegionMode', () => {
+  it('collapses empty string, null and undefined to the automatic mode', () => {
+    // '', null and undefined all mean "automatic" (the Go ModelRegion omitempty
+    // field), so they must normalize identically or the settings dirty-check would
+    // flag a logical no-op as an edit.
+    expect(normalizeRegionMode('')).toBe('auto');
+    expect(normalizeRegionMode(undefined)).toBe('auto');
+    expect(normalizeRegionMode(null)).toBe('auto');
+  });
+
+  it('passes a concrete region mode through unchanged', () => {
+    expect(normalizeRegionMode('auto')).toBe('auto');
+    expect(normalizeRegionMode('global')).toBe('global');
+    expect(normalizeRegionMode('nordic')).toBe('nordic');
   });
 });

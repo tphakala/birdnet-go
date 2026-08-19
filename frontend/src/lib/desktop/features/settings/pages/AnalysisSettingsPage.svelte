@@ -75,7 +75,11 @@
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { toastActions } from '$lib/stores/toast';
   import { formatBytes, formatNumber } from '$lib/utils/formatters';
-  import { pickPreselectedVariant, translateReason } from '$lib/utils/variantSelection';
+  import {
+    pickPreselectedVariant,
+    translateReason,
+    normalizeRegionMode,
+  } from '$lib/utils/variantSelection';
   import { safeArrayAccess } from '$lib/utils/security';
   import { loggers } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
@@ -179,6 +183,12 @@
     installingId !== null || reinstallingId !== null || deletingId !== null
   );
 
+  // Shared DOM id for the "actions paused" status line rendered while any gallery
+  // action is in flight. Every cross-action-disabled button points its
+  // aria-describedby here so a keyboard/screen-reader user hears why it is
+  // blocked; the line is rendered exactly when a button references it.
+  const GALLERY_ACTION_STATUS_ID = 'gallery-action-status';
+
   // Model regions, for localized region names in variant labels and the
   // region-aware picker. Fetched once on mount; a failure degrades to raw slugs.
   let regionsData = $state<ModelRegionsResponse | null>(null);
@@ -237,7 +247,7 @@
   // instantly, before any save. Note: until a save the server-computed
   // recommended flags still reflect the SAVED region, so the recommended variant
   // may lag the live selection; the effect below re-fetches on save to reconcile.
-  const liveModelRegion = $derived(birdnet?.modelRegion ? birdnet.modelRegion : 'auto');
+  const liveModelRegion = $derived(normalizeRegionMode(birdnet?.modelRegion));
   const activeRegionSlug = $derived.by<string>(() => {
     if (!regionsData) return '';
     if (liveModelRegion === 'global') return '';
@@ -252,7 +262,7 @@
   const savedModelRegion = $derived.by<string | null>(() => {
     const b = store.originalData.birdnet;
     if (!b) return null; // settings not loaded yet
-    return b.modelRegion ? b.modelRegion : 'auto';
+    return normalizeRegionMode(b.modelRegion);
   });
 
   // Re-fetch the catalog when the SAVED region changes mid-session (a save), so
@@ -1176,6 +1186,7 @@
       await uninstallModel(modelId);
       invalidateModels();
       await loadCatalog();
+      toastActions.success(t('analysis.gallery.removeSuccess', { name: modelName }));
     } catch (e) {
       const message = e instanceof Error ? e.message : t('analysis.gallery.errors.removeFailed');
       // A remove failure never involves a download, so it is never network-shaped.
@@ -1822,8 +1833,8 @@
       title={t('analysis.gallery.title')}
       description={t('analysis.gallery.description')}
       defaultOpen={true}
-      originalData={{ modelRegion: store.originalData.birdnet?.modelRegion ?? 'auto' }}
-      currentData={{ modelRegion: birdnet?.modelRegion ?? 'auto' }}
+      originalData={{ modelRegion: normalizeRegionMode(store.originalData.birdnet?.modelRegion) }}
+      currentData={{ modelRegion: normalizeRegionMode(birdnet?.modelRegion) }}
     >
       <ModelRegionSelector disabled={store.isLoading || store.isSaving} />
 
@@ -1900,6 +1911,20 @@
             </div>
           {/if}
         </div>
+      {/if}
+
+      {#if galleryActionInFlight}
+        <!-- One shared, live status line naming why the other cards' actions are
+             blocked. Touch users get no tooltip and aria-disabled buttons carry no
+             native title semantics, so this line (referenced via aria-describedby)
+             is how the reason reaches keyboard, screen-reader and tablet users. -->
+        <p
+          id={GALLERY_ACTION_STATUS_ID}
+          role="status"
+          class="mb-3 text-xs text-[var(--color-base-content)]/70"
+        >
+          {t('analysis.gallery.actionInProgress')}
+        </p>
       {/if}
 
       <SettingsTabs tabs={galleryTabs} bind:activeTab={galleryTab} showActions={false} />
@@ -2027,6 +2052,12 @@
           {@const isDeleting = deletingId === entry.id}
           {@const isReinstalling = reinstallingId === entry.id}
           {@const reinstallProgress = isReinstalling ? downloadProgress : null}
+          <!-- "Paused" = another gallery action is running, so THIS button is
+               cross-disabled (vs its own in-progress spinner). aria-disabled keeps
+               it tab-focusable to read the reason; native disabled stays for the
+               button's own running state. -->
+          {@const reinstallPaused = galleryActionInFlight && !isReinstalling}
+          {@const removePaused = galleryActionInFlight && !isDeleting}
           {@const logo = getModelLogo(entry.id)}
           <div
             class="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-4"
@@ -2170,12 +2201,24 @@
             <div class="mt-3 flex items-center justify-end gap-2">
               <button
                 type="button"
-                onclick={() => handleReinstall(entry)}
-                disabled={galleryActionInFlight}
-                title={galleryActionInFlight && !isReinstalling
-                  ? t('analysis.gallery.actionInProgress')
-                  : undefined}
-                class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--color-base-content)]/80 hover:bg-[var(--color-base-300)] transition-colors disabled:opacity-50"
+                onclick={e => {
+                  if (reinstallPaused) {
+                    e.preventDefault();
+                    return;
+                  }
+                  handleReinstall(entry);
+                }}
+                disabled={isReinstalling}
+                aria-disabled={reinstallPaused ? 'true' : undefined}
+                aria-describedby={reinstallPaused ? GALLERY_ACTION_STATUS_ID : undefined}
+                title={reinstallPaused ? t('analysis.gallery.actionInProgress') : undefined}
+                class={cn(
+                  'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--color-base-content)]/80 transition-colors',
+                  isReinstalling || reinstallPaused
+                    ? 'opacity-50'
+                    : 'hover:bg-[var(--color-base-300)]',
+                  reinstallPaused && 'cursor-not-allowed'
+                )}
                 aria-label="{t('analysis.gallery.reinstall')} {entry.name}"
               >
                 {#if isReinstalling}
@@ -2188,12 +2231,22 @@
               </button>
               <button
                 type="button"
-                onclick={() => openRemoveDialog(entry)}
-                disabled={galleryActionInFlight}
-                title={galleryActionInFlight && !isDeleting
-                  ? t('analysis.gallery.actionInProgress')
-                  : undefined}
-                class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors disabled:opacity-50"
+                onclick={e => {
+                  if (removePaused) {
+                    e.preventDefault();
+                    return;
+                  }
+                  openRemoveDialog(entry);
+                }}
+                disabled={isDeleting}
+                aria-disabled={removePaused ? 'true' : undefined}
+                aria-describedby={removePaused ? GALLERY_ACTION_STATUS_ID : undefined}
+                title={removePaused ? t('analysis.gallery.actionInProgress') : undefined}
+                class={cn(
+                  'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--color-error)] transition-colors',
+                  isDeleting || removePaused ? 'opacity-50' : 'hover:bg-[var(--color-error)]/10',
+                  removePaused && 'cursor-not-allowed'
+                )}
                 aria-label="{t('analysis.gallery.remove')} {entry.name}"
               >
                 {#if isDeleting}
@@ -2221,6 +2274,11 @@
 {#snippet modelCard(entry: CatalogEntry)}
   {@const isInstalling = installingId === entry.id}
   {@const progress = isInstalling ? downloadProgress : null}
+  <!-- Paused only when this Install would otherwise be available: another action
+       is running, this one is not, and the entry is compatible. Incompatible
+       entries keep their permanent native-disabled state (explained by the banner
+       above), never a transient "action in progress" reason. -->
+  {@const installPaused = galleryActionInFlight && !isInstalling && entry.compatible}
   {@const logo = getModelLogo(entry.id)}
   <div
     class={cn(
@@ -2365,12 +2423,24 @@
     <div class="mt-auto flex items-center justify-end pt-3">
       <button
         type="button"
-        onclick={() => openLicenseDialog(entry)}
-        disabled={!entry.compatible || galleryActionInFlight}
-        title={galleryActionInFlight && !isInstalling
-          ? t('analysis.gallery.actionInProgress')
-          : undefined}
-        class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors disabled:opacity-50"
+        onclick={e => {
+          if (installPaused) {
+            e.preventDefault();
+            return;
+          }
+          openLicenseDialog(entry);
+        }}
+        disabled={!entry.compatible || isInstalling}
+        aria-disabled={installPaused ? 'true' : undefined}
+        aria-describedby={installPaused ? GALLERY_ACTION_STATUS_ID : undefined}
+        title={installPaused ? t('analysis.gallery.actionInProgress') : undefined}
+        class={cn(
+          'inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary-content)] transition-colors',
+          !entry.compatible || isInstalling || installPaused
+            ? 'opacity-50'
+            : 'hover:bg-[var(--color-primary)]/80',
+          installPaused && 'cursor-not-allowed'
+        )}
         aria-label="{t('analysis.gallery.install')} {entry.name}"
       >
         {#if isInstalling}

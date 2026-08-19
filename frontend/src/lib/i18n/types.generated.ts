@@ -3895,6 +3895,7 @@ export type TranslationKey =
   | 'analysis.gallery.variants.precisionInfo'
   | 'analysis.gallery.variants.precisionHelp'
   | 'analysis.gallery.actionInProgress'
+  | 'analysis.gallery.removeSuccess' // params: name
   | 'analysis.gallery.reasons.backendRecommended' // params: backend
   | 'analysis.gallery.reasons.backendSupported' // params: backend
   | 'analysis.gallery.reasons.regionMatched' // params: region
@@ -4499,6 +4500,7 @@ export type TranslationParams = {
   'analysis.gallery.variants.showAllRegions': { count: string | number };
   'analysis.gallery.variants.regionContext': { region: string | number };
   'analysis.gallery.variants.latency': { ms: string | number };
+  'analysis.gallery.removeSuccess': { name: string | number };
   'analysis.gallery.reasons.backendRecommended': { backend: string | number };
   'analysis.gallery.reasons.backendSupported': { backend: string | number };
   'analysis.gallery.reasons.regionMatched': { region: string | number };
