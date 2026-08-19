@@ -125,3 +125,24 @@ export function variantLabel(
   const regionDisplay = regionNames?.get(variant.region) ?? variant.region;
   return `${base} (${regionDisplay})`;
 }
+
+/**
+ * The canonical "automatic" region mode. An empty string, null, and undefined
+ * all mean automatic in the gallery, mirroring the Go `ModelRegion` field's
+ * `omitempty` (an unset region is omitted from JSON entirely).
+ */
+export const DEFAULT_REGION_MODE = 'auto';
+
+/**
+ * Normalize a stored region mode to its canonical form: '', null and undefined
+ * all collapse to 'auto', while a concrete slug or 'global' passes through
+ * unchanged. Centralizing this keeps the live/saved region derivations and the
+ * settings dirty-check from drifting apart (comparing a raw '' against a
+ * user-selected 'auto' would otherwise flag a logical no-op as an edit).
+ */
+export function normalizeRegionMode(value: string | undefined | null): string {
+  // Intentional falsy check: '' is a valid "automatic" sentinel too, not just
+  // null/undefined, so it must collapse to DEFAULT_REGION_MODE as well.
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- '' also means automatic
+  return value || DEFAULT_REGION_MODE;
+}

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/svelte';
 import type { CatalogEntry } from '$lib/types/models';
 
@@ -83,6 +83,7 @@ vi.mock('$lib/utils/api', async () => {
 import AnalysisSettingsPage from './AnalysisSettingsPage.svelte';
 import * as modelsApi from '$lib/utils/modelsApi';
 import { settingsStore } from '$lib/stores/settings';
+import { toastActions } from '$lib/stores/toast';
 
 // A network-shaped download failure (matches isNetworkDownloadError's real regex).
 const NETWORK_ERROR = 'HTTP request failed for https://huggingface.co/model: connection refused';
@@ -117,18 +118,22 @@ async function gotoAvailableTab(): Promise<void> {
 
 const installButtonName = /analysis\.gallery\.install.*Test Bird Model/;
 
+// jsdom does not implement <dialog> showModal/close; polyfill them once so the
+// license and remove dialogs' open/close paths do not throw. The prototype patch
+// is idempotent, so a single file-scope beforeAll covers both describe blocks.
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
+    this.open = false;
+  };
+});
+
 describe('AnalysisSettingsPage model gallery error handling', () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
-    // jsdom does not implement <dialog> showModal/close; polyfill so the license
-    // dialog open/close path does not throw (its content renders on licenseModel).
-    HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
-      this.open = true;
-    };
-    HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
-      this.open = false;
-    };
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [birdEntry()] });
     vi.mocked(modelsApi.fetchInstalled).mockResolvedValue([]);
     vi.mocked(modelsApi.fetchModelRegions).mockRejectedValue(new Error('no regions in test'));
@@ -179,12 +184,6 @@ describe('AnalysisSettingsPage model gallery in-flight guard and region refetch'
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
-    HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
-      this.open = true;
-    };
-    HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
-      this.open = false;
-    };
     // Reset the saved region so each test starts from the 'auto' baseline
     // (undefined modelRegion resolves to 'auto' in the page).
     settingsStore.update(s => ({
@@ -198,7 +197,7 @@ describe('AnalysisSettingsPage model gallery in-flight guard and region refetch'
     vi.mocked(modelsApi.fetchModelRegions).mockRejectedValue(new Error('no regions in test'));
   });
 
-  it('disables install on another card while a reinstall is in flight (shared in-flight guard)', async () => {
+  it('cross-disables another card while a reinstall is in flight, keeping the reason reachable', async () => {
     // One installed model (has a Reinstall control) and one available (has Install).
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
       catalog: [birdEntry({ id: 'inst', name: 'Installed Model', installed: true }), birdEntry()],
@@ -209,19 +208,47 @@ describe('AnalysisSettingsPage model gallery in-flight guard and region refetch'
     render(AnalysisSettingsPage);
     await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
 
-    // Start a reinstall from the installed sub-tab (the default gallery sub-tab).
+    // Positive control: before any action starts, the Available card's Install is
+    // enabled and carries no aria-disabled (so the assertions below prove a change).
+    await fireEvent.click(
+      await screen.findByRole('tab', { name: /analysis\.gallery\.tabs\.available/ })
+    );
+    const installBefore = await screen.findByRole('button', { name: installButtonName });
+    expect(installBefore).toBeEnabled();
+    expect(installBefore).not.toHaveAttribute('aria-disabled');
+
+    // Back to Installed and start a reinstall that never resolves.
+    await fireEvent.click(
+      await screen.findByRole('tab', { name: /analysis\.gallery\.tabs\.installed/ })
+    );
     await fireEvent.click(
       await screen.findByRole('button', {
         name: /analysis\.gallery\.reinstall.*Installed Model/,
       })
     );
 
-    // Switch to Available: the Install button must be disabled while the reinstall runs.
+    // On Available, Install is cross-disabled via aria-disabled (NOT native
+    // disabled, so it stays tab-focusable), points at the shared status line, and
+    // that live line explains why actions are paused.
     await fireEvent.click(
       await screen.findByRole('tab', { name: /analysis\.gallery\.tabs\.available/ })
     );
     const installBtn = await screen.findByRole('button', { name: installButtonName });
-    await waitFor(() => expect(installBtn).toBeDisabled());
+    await waitFor(() => expect(installBtn).toHaveAttribute('aria-disabled', 'true'));
+    expect(installBtn).toBeEnabled();
+    expect(installBtn).toHaveAttribute('aria-describedby', 'gallery-action-status');
+    const status = document.getElementById('gallery-action-status');
+    expect(status).not.toBeNull();
+    expect(status?.textContent).toContain('analysis.gallery.actionInProgress');
+
+    // Behavioral proof, not just the ARIA attributes: clicking the cross-disabled
+    // Install must NOT open the license dialog. If the onclick guard
+    // (e.preventDefault(); return) regressed to native-clickable, openLicenseDialog
+    // would fire and the accept-and-install button would appear.
+    await fireEvent.click(installBtn);
+    expect(
+      screen.queryByRole('button', { name: /analysis\.gallery\.license\.acceptAndInstall/ })
+    ).toBeNull();
   });
 
   it('re-fetches the catalog when the saved model region changes, but not on unrelated saves', async () => {
@@ -254,5 +281,44 @@ describe('AnalysisSettingsPage model gallery in-flight guard and region refetch'
     await Promise.resolve();
     await Promise.resolve();
     expect(modelsApi.fetchCatalog).toHaveBeenCalledTimes(2);
+
+    // Positive control: the region effect is still live after the unrelated save,
+    // so a further region change must trigger a third fetch (the no-op above did
+    // not tear the subscription down).
+    settingsStore.update(s => ({
+      ...s,
+      originalData: {
+        ...s.originalData,
+        birdnet: { ...s.originalData.birdnet, modelRegion: 'iberia' },
+      },
+    }));
+    await waitFor(() => expect(modelsApi.fetchCatalog).toHaveBeenCalledTimes(3));
+  });
+
+  it('shows a success toast after a model is removed', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ id: 'inst', name: 'Installed Model', installed: true })],
+    });
+    vi.mocked(modelsApi.uninstallModel).mockResolvedValue(undefined);
+
+    render(AnalysisSettingsPage);
+    // Installed is the default gallery sub-tab, so the card Remove is reachable directly.
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.remove.*Installed Model/ })
+    );
+
+    // Confirm in the dialog. Its Remove button carries no model-name suffix, so an
+    // exact-string name matches only it, not the card's aria-labelled button.
+    await fireEvent.click(screen.getByRole('button', { name: 'analysis.gallery.remove' }));
+
+    await waitFor(() => expect(modelsApi.uninstallModel).toHaveBeenCalledWith('inst'));
+    // The toast fires only after the post-remove catalog reload resolves, so wait
+    // for it rather than asserting synchronously on the uninstall call.
+    await waitFor(() =>
+      expect(toastActions.success).toHaveBeenCalledWith(
+        expect.stringContaining('analysis.gallery.removeSuccess')
+      )
+    );
   });
 });

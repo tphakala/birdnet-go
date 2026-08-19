@@ -17,6 +17,7 @@
   import { t, getLocale } from '$lib/i18n';
   import { fetchModelRegions, fetchRegionCoverageMap } from '$lib/utils/modelsApi';
   import { localizedCountryNames } from '$lib/utils/countryNames';
+  import { normalizeRegionMode } from '$lib/utils/variantSelection';
   import { loggers } from '$lib/utils/logger';
   import { birdnetSettings, settingsActions } from '$lib/stores/settings';
   import type { ModelRegionsResponse, RegionOption } from '$lib/types/models';
@@ -52,12 +53,9 @@
 
   onMount(load);
 
-  // '' and absent both mean automatic (mirrors the Go omitempty field).
-  function normalizeMode(value: string | undefined): string {
-    return value ? value : 'auto';
-  }
-
-  const selected = $derived(normalizeMode($birdnetSettings?.modelRegion));
+  // '' and absent both mean automatic (mirrors the Go omitempty field); see
+  // normalizeRegionMode.
+  const selected = $derived(normalizeRegionMode($birdnetSettings?.modelRegion));
   const regions = $derived<RegionOption[]>(data?.regions ?? []);
   const isPinnedSlug = $derived(selected !== 'auto' && selected !== 'global');
   const regionsVisible = $derived(showRegions || isPinnedSlug);

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent, cleanup } from '@testing-library/svelte';
+import { render, fireEvent, cleanup, waitFor } from '@testing-library/svelte';
 import ModelVariantPicker from './ModelVariantPicker.svelte';
 import type { CatalogVariant } from '$lib/types/models';
 
@@ -341,19 +341,23 @@ describe('ModelVariantPicker', () => {
         idPrefix: 'r1',
       },
     });
-    // Collapsed: only the recommended variant.
+    // Collapsed: only the recommended variant, and the "Other regions" heading is
+    // not shown yet (it belongs to the final stage only).
     expect(radios(container)).toHaveLength(1);
+    expect(container.textContent).not.toContain('analysis.gallery.variants.otherRegions');
     // A context line states which region is scoping the list.
     expect(container.textContent).toContain('analysis.gallery.variants.regionContext');
     // The first disclosure button is region-scoped, not "show all".
     expect(getByRole('button').textContent).toContain('analysis.gallery.variants.showRegion');
 
-    // Region stage: globals + the nordic tiles, but NOT iberia.
+    // Region stage: globals + the nordic tiles, but NOT iberia, and still no
+    // "Other regions" heading until the final stage.
     await fireEvent.click(getByRole('button'));
     expect(radioByValue(container, 'fp32')).not.toBeNull();
     expect(radioByValue(container, 'fp16@nordic')).not.toBeNull();
     expect(radioByValue(container, 'fp32@nordic')).not.toBeNull();
     expect(radioByValue(container, 'fp16@iberia')).toBeNull();
+    expect(container.textContent).not.toContain('analysis.gallery.variants.otherRegions');
 
     // The next button reveals every remaining region under an "Other regions"
     // heading, and only now is a button labeled to include all regions.
@@ -392,5 +396,49 @@ describe('ModelVariantPicker', () => {
       },
     });
     expect(container.textContent).toContain('analysis.gallery.variants.regionContextNone');
+  });
+
+  it('wraps the other-region tiles in a labelled group in the all stage', async () => {
+    const { container, getByRole } = render(ModelVariantPicker, {
+      props: {
+        variants: regionalVariants,
+        selectedVariantId: 'fp16',
+        onSelect: vi.fn(),
+        activeRegionSlug: 'nordic',
+        regionNames,
+        idPrefix: 'r5',
+      },
+    });
+    await fireEvent.click(getByRole('button')); // region stage
+    await fireEvent.click(getByRole('button')); // all stage
+    // The other-region tiles form a semantic group whose accessible name comes
+    // from the "Other regions" heading, so a screen reader announces the boundary.
+    const group = container.querySelector('[role="group"]');
+    expect(group).not.toBeNull();
+    expect(group?.getAttribute('aria-labelledby')).toBe('r5-other-regions');
+    const label = document.getElementById('r5-other-regions');
+    expect(label).not.toBeNull();
+    expect(label?.textContent).toContain('analysis.gallery.variants.otherRegions');
+  });
+
+  it('moves focus to the first newly revealed tile when the final stage unmounts the toggle', async () => {
+    const { container, getByRole } = render(ModelVariantPicker, {
+      props: {
+        variants: regionalVariants,
+        selectedVariantId: 'fp16',
+        onSelect: vi.fn(),
+        activeRegionSlug: 'nordic',
+        regionNames,
+        idPrefix: 'r6',
+      },
+    });
+    // collapsed -> region keeps the button mounted (focus stays); region -> all
+    // unmounts it, so focus is moved to the first tile that stage reveals (the
+    // first other-region tile, iberia) instead of falling to <body>.
+    await fireEvent.click(getByRole('button')); // region stage
+    await fireEvent.click(getByRole('button')); // all stage (button unmounts)
+    await waitFor(() =>
+      expect(document.activeElement).toBe(radioByValue(container, 'fp16@iberia'))
+    );
   });
 });
