@@ -478,21 +478,28 @@ func speciesHasGeomodelCoverage(targetSci string, geomodelLabels, classifierLabe
 	return false
 }
 
-// findSpeciesScore returns the occurrence score for targetSci from a probable-species
-// list. It matches on the exact scientific name across the whole list before trying any
-// alias, for the reason resolveSpeciesLabel documents: the alias map merges pairs the
-// classifier ships as separate species, and an alias-first match would report one bird's
-// occurrence probability for the other. As there, the separation holds only while both
-// members are in the list; the probable-species list carries only species above today's
-// threshold, so one member being absent is the common case.
-func findSpeciesScore(targetSci string, speciesScores []classifier.SpeciesScore) (float64, bool) {
+// findNativeSpeciesScore returns the native occurrence score for targetSci from a
+// probable-species list, ignoring force-added score-1.0 override rows. It matches on
+// the exact scientific name across the whole list before trying any alias, for the
+// reason resolveSpeciesLabel documents: the alias map merges pairs the classifier
+// ships as separate species, and an alias-first match would report one bird's
+// occurrence probability for the other. As there, the separation holds only while
+// both members are in the list; the probable-species list carries only species above
+// today's threshold, so one member being absent is the common case.
+func findNativeSpeciesScore(targetSci string, speciesScores []classifier.SpeciesScore) (float64, bool) {
 	for _, ss := range speciesScores {
+		if ss.IsSyntheticOverride {
+			continue
+		}
 		if strings.EqualFold(detection.ExtractScientificName(ss.Label), targetSci) {
 			return ss.Score, true
 		}
 	}
 	canonicalTarget := openfauna.CanonicalName(targetSci)
 	for _, ss := range speciesScores {
+		if ss.IsSyntheticOverride {
+			continue
+		}
 		if labelMatchesSpecies(ss.Label, canonicalTarget) {
 			return ss.Score, true
 		}
@@ -509,13 +516,9 @@ func findSpeciesScore(targetSci string, speciesScores []classifier.SpeciesScore)
 // rarity reported "very rare" for a species the geomodel has no data on, and made the
 // badge depend on whether an unrelated toggle was enabled.
 //
-// This does NOT cover the other synthetic score. addUserOverrideSpeciesScores injects
-// force-included species at 1.0, but resolveOverrideLabels resolves an override against
-// the geomodel labels first, so a force-included species the geomodel knows is inside the
-// coverage vocabulary and still reads as "very common" off that injected 1.0. Only an
-// override for a species outside the geomodel's vocabulary reaches the unknown path here.
-// Distinguishing a real score from an injected one needs the range filter to tag
-// synthetic entries; membership in a vocabulary cannot express it.
+// addUserOverrideSpeciesScores also injects force-included species at 1.0. Those
+// rows carry synthetic provenance and are ignored here, so rarity remains based on
+// the native geomodel probability rather than the inclusion sentinel.
 //
 // A covered species present in the list is scored directly; one that is covered but
 // absent is below today's threshold and therefore genuinely very rare.
@@ -524,7 +527,7 @@ func computeRarity(targetSci string, speciesScores []classifier.SpeciesScore, ge
 		return 0.0, RarityUnknown
 	}
 
-	if score, found := findSpeciesScore(targetSci, speciesScores); found {
+	if score, found := findNativeSpeciesScore(targetSci, speciesScores); found {
 		return score, calculateRarityStatus(score)
 	}
 
