@@ -5364,7 +5364,6 @@
       "loading": "Cargando modelos...",
       "retry": "Reintentar",
       "builtIn": "Integrado",
-      "builtInDescription": "Clasificador de especies de aves integrado del equipo BirdNET.",
       "species": "{count} especies",
       "install": "Instalar",
       "installing": "Instalando...",

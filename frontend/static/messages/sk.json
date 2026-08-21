@@ -5364,7 +5364,6 @@
       "loading": "Načítavajú sa modely...",
       "retry": "Skúsiť znova",
       "builtIn": "Vstavaný",
-      "builtInDescription": "Vstavaný klasifikátor vtáčích druhov od tímu BirdNET.",
       "species": "{count} druhov",
       "install": "Inštalovať",
       "installing": "Inštaluje sa...",

@@ -3915,7 +3915,6 @@ export type TranslationKey =
   | 'analysis.gallery.loading'
   | 'analysis.gallery.retry'
   | 'analysis.gallery.builtIn'
-  | 'analysis.gallery.builtInDescription'
   | 'analysis.gallery.species' // params: count
   | 'analysis.gallery.install'
   | 'analysis.gallery.installing'

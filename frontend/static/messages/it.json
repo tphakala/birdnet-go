@@ -5364,7 +5364,6 @@
       "loading": "Caricamento modelli...",
       "retry": "Riprova",
       "builtIn": "Integrato",
-      "builtInDescription": "Classificatore di specie di uccelli integrato dal team BirdNET.",
       "species": "{count} specie",
       "install": "Installa",
       "installing": "Installazione...",

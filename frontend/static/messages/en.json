@@ -5364,7 +5364,6 @@
       "loading": "Loading models...",
       "retry": "Retry",
       "builtIn": "Built-in",
-      "builtInDescription": "Built-in bird species classifier by the BirdNET team.",
       "species": "{count} species",
       "install": "Install",
       "installing": "Installing...",

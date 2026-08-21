@@ -5364,7 +5364,6 @@
       "loading": "Ladataan malleja...",
       "retry": "Yritä uudelleen",
       "builtIn": "Sisäänrakennettu",
-      "builtInDescription": "BirdNET-tiimin sisäänrakennettu lintulajien luokittelija.",
       "species": "{count} lajia",
       "install": "Asenna",
       "installing": "Asennetaan...",

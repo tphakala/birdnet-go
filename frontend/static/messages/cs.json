@@ -5364,7 +5364,6 @@
       "loading": "Načítání modelů…",
       "retry": "Zkusit znovu",
       "builtIn": "Vestavěný",
-      "builtInDescription": "Vestavěný klasifikátor ptačích druhů od týmu BirdNET.",
       "species": "{count} druhů",
       "install": "Nainstalovat",
       "installing": "Instaluji…",

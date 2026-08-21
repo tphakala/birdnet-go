@@ -5364,7 +5364,6 @@
       "loading": "Chargement des modèles...",
       "retry": "Réessayer",
       "builtIn": "Intégré",
-      "builtInDescription": "Classificateur d'espèces d'oiseaux intégré par l'équipe BirdNET.",
       "species": "{count} espèces",
       "install": "Installer",
       "installing": "Installation...",

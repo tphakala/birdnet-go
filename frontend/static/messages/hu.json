@@ -5364,7 +5364,6 @@
       "loading": "Modellek betöltése...",
       "retry": "Újra",
       "builtIn": "Beépített",
-      "builtInDescription": "A BirdNET csapat beépített madárfaj-osztályozója.",
       "species": "{count} faj",
       "install": "Telepítés",
       "installing": "Telepítés...",

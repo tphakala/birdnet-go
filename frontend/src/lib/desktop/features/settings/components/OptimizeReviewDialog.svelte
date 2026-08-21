@@ -46,6 +46,13 @@
   // imperatively via showModal()/close(), never re-rendered from this reference.
   let dialogEl: HTMLDialogElement | null = null;
 
+  // Id of the live status line that explains why Apply is blocked while another
+  // gallery action runs. Apply/Apply-all reference it via aria-describedby and stay
+  // tab-focusable (aria-disabled, not native disabled) so the reason is reachable by
+  // keyboard and screen readers, and visible on touch devices where a title tooltip
+  // never appears (see frontend/CLAUDE.md "No Ambiguous Disabled States").
+  const IN_FLIGHT_STATUS_ID = 'optimize-inflight-status';
+
   // Reflect the `open` prop onto the native dialog. showModal()/close() are
   // idempotent, so re-running on unrelated prop changes is harmless.
   $effect(() => {
@@ -79,7 +86,7 @@
       <button
         type="button"
         onclick={onClose}
-        aria-label={t('analysis.gallery.errors.dismiss')}
+        aria-label={t('common.close')}
         class="inline-flex items-center justify-center rounded-md p-1.5 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
       >
         <X class="size-4" />
@@ -89,6 +96,19 @@
     <p class="mt-2 text-sm text-[var(--color-base-content)]/70">
       {t('analysis.gallery.optimize.licenseNote')}
     </p>
+
+    <!-- Live reason line: why Apply is blocked while another gallery action runs.
+         Referenced by the Apply/Apply-all buttons' aria-describedby, so the reason
+         reaches keyboard, screen-reader and touch users (no hover tooltip needed). -->
+    {#if inFlight}
+      <p
+        id={IN_FLIGHT_STATUS_ID}
+        role="status"
+        class="mt-2 text-xs text-[var(--color-base-content)]/70"
+      >
+        {t('analysis.gallery.actionInProgress')}
+      </p>
+    {/if}
 
     {#if offers.length === 0}
       <p class="mt-4 text-sm text-[var(--color-base-content)]/80">
@@ -103,6 +123,7 @@
           {@const fromLabel = offer.from
             ? variantLabel(offer.from, regionNames)
             : (offer.entry.installedVariantId ?? '')}
+          {@const toLabel = variantLabel(offer.to, regionNames)}
           <li
             class="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-3"
           >
@@ -115,7 +136,7 @@
                   class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-[var(--color-base-content)]/80"
                   aria-label={t('analysis.gallery.optimize.fromTo', {
                     from: fromLabel,
-                    to: variantLabel(offer.to, regionNames),
+                    to: toLabel,
                   })}
                 >
                   <span>{fromLabel}</span>
@@ -127,9 +148,7 @@
                     </span>
                   {/if}
                   <ArrowRight class="size-3.5 shrink-0" aria-hidden="true" />
-                  <span class="font-medium text-[var(--color-base-content)]"
-                    >{variantLabel(offer.to, regionNames)}</span
-                  >
+                  <span class="font-medium text-[var(--color-base-content)]">{toLabel}</span>
                   <span
                     class="inline-flex items-center gap-0.5 rounded-full bg-[var(--color-primary)]/15 px-1.5 py-0.5 text-[var(--color-primary)]"
                   >
@@ -169,10 +188,17 @@
                     {/if}
                     <button
                       type="button"
-                      onclick={() => onApply(offer)}
-                      disabled={inFlight}
+                      onclick={e => {
+                        if (inFlight) {
+                          e.preventDefault();
+                          return;
+                        }
+                        onApply(offer);
+                      }}
+                      aria-disabled={inFlight ? 'true' : undefined}
+                      aria-describedby={inFlight ? IN_FLIGHT_STATUS_ID : undefined}
                       title={inFlight ? t('analysis.gallery.actionInProgress') : undefined}
-                      class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary-content)] transition-colors hover:bg-[var(--color-primary)]/80 disabled:cursor-not-allowed disabled:opacity-50"
+                      class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary-content)] transition-colors hover:bg-[var(--color-primary)]/80 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
                     >
                       {failed ? t('analysis.gallery.retry') : t('analysis.gallery.optimize.apply')}
                     </button>
@@ -183,6 +209,16 @@
           </li>
         {/each}
       </ul>
+
+      <!-- Plain-language help for the precision jargon (FP32/FP16/INT8) shown in the
+           from -> to summary, mirroring the license dialog's disclosure. A native
+           <details> is keyboard- and touch-accessible, unlike a hover tooltip. -->
+      <details class="mt-3 text-xs text-[var(--color-base-content)]/70">
+        <summary class="cursor-pointer hover:text-[var(--color-base-content)]">
+          {t('analysis.gallery.variants.precisionInfo')}
+        </summary>
+        <p class="mt-1">{t('analysis.gallery.variants.precisionHelp')}</p>
+      </details>
     {/if}
 
     <div class="mt-6 flex justify-end gap-3">
@@ -196,10 +232,17 @@
       {#if pending.length > 1}
         <button
           type="button"
-          onclick={onApplyAll}
-          disabled={inFlight}
+          onclick={e => {
+            if (inFlight) {
+              e.preventDefault();
+              return;
+            }
+            onApplyAll();
+          }}
+          aria-disabled={inFlight ? 'true' : undefined}
+          aria-describedby={inFlight ? IN_FLIGHT_STATUS_ID : undefined}
           title={inFlight ? t('analysis.gallery.actionInProgress') : undefined}
-          class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+          class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
         >
           <Sparkles class="size-4" />
           {t('analysis.gallery.optimize.applyAll')}

@@ -5364,7 +5364,6 @@
       "loading": "Modellen laden...",
       "retry": "Opnieuw proberen",
       "builtIn": "Ingebouwd",
-      "builtInDescription": "Ingebouwde vogelsoortclassificator van het BirdNET-team.",
       "species": "{count} soorten",
       "install": "Installeren",
       "installing": "Installeren...",

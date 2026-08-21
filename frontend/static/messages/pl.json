@@ -5364,7 +5364,6 @@
       "loading": "Ładowanie modeli...",
       "retry": "Ponów",
       "builtIn": "Wbudowany",
-      "builtInDescription": "Wbudowany klasyfikator gatunków ptaków zespołu BirdNET.",
       "species": "{count} gatunków",
       "install": "Zainstaluj",
       "installing": "Instalowanie...",

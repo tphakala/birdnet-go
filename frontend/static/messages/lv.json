@@ -5364,7 +5364,6 @@
       "loading": "Ielādē modeļus...",
       "retry": "Mēģināt vēlreiz",
       "builtIn": "Iebūvēts",
-      "builtInDescription": "BirdNET komandas iebūvēts putnu sugu klasifikators.",
       "species": "{count} sugas",
       "install": "Instalēt",
       "installing": "Instalē...",

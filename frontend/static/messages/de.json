@@ -5364,7 +5364,6 @@
       "loading": "Modelle werden geladen...",
       "retry": "Wiederholen",
       "builtIn": "Integriert",
-      "builtInDescription": "Integrierter Vogelartenklassifikator des BirdNET-Teams.",
       "species": "{count} Arten",
       "install": "Installieren",
       "installing": "Wird installiert...",

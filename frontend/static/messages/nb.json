@@ -5364,7 +5364,6 @@
       "loading": "Laster modeller...",
       "retry": "Prøv igjen",
       "builtIn": "Innebygd",
-      "builtInDescription": "Innebygd fuglearts-klassifikator fra BirdNET-teamet.",
       "species": "{count} arter",
       "install": "Installer",
       "installing": "Installerer...",

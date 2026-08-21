@@ -405,7 +405,7 @@
   function applyNextInQueue() {
     while (applyAllQueue.length > 0) {
       const nextId = applyAllQueue[0];
-      const offer = offers.find(o => o.entry.id === nextId);
+      const offer = offerByEntry.get(nextId);
       if (offer && !appliedOptimizeIds.has(nextId)) {
         optimizeApplyingId = nextId;
         startInstall(offer.entry.id, offer.entry.name, offer.to.id);
@@ -2936,12 +2936,14 @@
 
       <div class="mt-6 flex justify-end gap-3">
         <button
+          type="button"
           onclick={closeRemoveDialog}
           class="rounded-lg border border-[var(--color-base-300)] px-4 py-2 text-sm font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] transition-colors"
         >
           {t('common.cancel')}
         </button>
         <button
+          type="button"
           onclick={handleUninstall}
           class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-error)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-error)]/80 transition-colors"
         >

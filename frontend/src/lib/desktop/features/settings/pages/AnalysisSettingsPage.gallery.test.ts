@@ -430,7 +430,9 @@ describe('AnalysisSettingsPage model gallery optimize + permanent card', () => {
       screen.queryByRole('button', { name: /analysis\.gallery\.reinstall.*BirdNET v2\.4/ })
     ).toBeNull();
 
-    // The built-in badge is shown (also used as the baseline hardware chip).
-    expect(screen.getAllByText('analysis.gallery.builtIn').length).toBeGreaterThan(0);
+    // The built-in label appears at least twice on the permanent card: the footer
+    // built-in badge and the baseline hardware chip. (The review dialog, also in the
+    // DOM, renders it again for the offer's from-variant, so assert a lower bound.)
+    expect(screen.getAllByText('analysis.gallery.builtIn').length).toBeGreaterThanOrEqual(2);
   });
 });
