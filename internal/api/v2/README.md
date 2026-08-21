@@ -180,6 +180,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/spectrogram/:id/generate`          | `GenerateSpectrogramByID` | ❌   | Trigger spectrogram generation     |
 | GET    | `/spectrogram/:id/status`            | `GetSpectrogramStatus`   | ❌   | Get spectrogram generation status  |
 | POST   | `/audio/:id/clip`                    | `ExtractAudioClipByID`   | ✅   | Extract audio clip from time range |
+| POST   | `/audio/:id/audible-bats`            | `AudibleBatsByID`        | ✅   | Time-expand bat clip into audible range |
 
 **Pending species image (`503 + Retry-After`).** The image endpoints never contact an
 image provider on the request goroutine: a cold species can take minutes to resolve

@@ -12,11 +12,14 @@
   - onFilterChange: (value: number) => void - Callback when filter changes
   - onSpeedChange: (value: number) => void - Callback when speed changes
   - disabled?: boolean - Whether the button is disabled (e.g., AudioContext not available)
+  - closeSignal?: number - Bump this to force-close an open popup (e.g. a sibling
+    Audible Bats popup just opened); mirrors AudibleBatsButton
 -->
 <script lang="ts">
   import { Volume2 } from '@lucide/svelte';
   import { dropdown } from '$lib/utils/transitions';
   import { computeAnchorPosition, applyAnchorPosition } from '$lib/utils/anchorPosition';
+  import { useCloseSignal } from '$lib/utils/useCloseSignal.svelte';
   import { t } from '$lib/i18n';
   import { SPEED_OPTIONS, DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
 
@@ -29,6 +32,7 @@
     onSpeedChange: (_value: number) => void;
     defaultGainValue?: number;
     disabled?: boolean;
+    closeSignal?: number;
     onMenuOpen?: () => void;
     onMenuClose?: () => void;
   }
@@ -42,6 +46,7 @@
     onSpeedChange,
     defaultGainValue = 0,
     disabled = false,
+    closeSignal = 0,
     onMenuOpen,
     onMenuClose,
   }: Props = $props();
@@ -133,6 +138,18 @@
     onFilterChange(FILTER_HP_MIN_FREQ);
     onSpeedChange(DEFAULT_PLAYBACK_SPEED);
   }
+
+  // Force-close when the parent bumps closeSignal (e.g. the sibling Audible
+  // Bats popup was just opened) so only one popup is ever visible at once.
+  useCloseSignal(
+    () => closeSignal,
+    () => {
+      if (showSettings) {
+        showSettings = false;
+        onMenuClose?.();
+      }
+    }
+  );
 
   $effect(() => {
     if (showSettings) {
@@ -319,6 +336,13 @@
   .settings-menu {
     position: fixed;
     min-width: 14rem;
+
+    /* Caps the box itself so it can never exceed the viewport on narrow/short
+       screens, independent of the JS position clamp in anchorPosition.ts (which
+       only clamps the left/top offset, not the box's own dimensions). */
+    max-width: calc(100vw - 1rem);
+    max-height: calc(100vh - 1rem);
+    overflow-y: auto;
     padding: 0.75rem;
     background-color: rgb(30 41 59 / 0.95);
     border: 1px solid rgb(51 65 85);
