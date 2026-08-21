@@ -616,10 +616,22 @@ func TestVariantNeedsONNX(t *testing.T) {
 	assert.True(t, VariantNeedsONNX(&v24, "fp32-dfttrunc"), "the FP32 DFT build is ONNX-only")
 	assert.True(t, VariantNeedsONNX(&v24, "int8-arm-dfttrunc"), "the INT8 DFT build is ONNX-only")
 
-	// A flat ONNX entry (unknown variant id) falls back to the entry-level flag.
+	// A known ONNX variant resolves through the variant branch.
 	perch, ok := GetCatalogEntry("perch-v2")
 	require.True(t, ok)
 	assert.True(t, VariantNeedsONNX(&perch, "fp32"), "perch fp32 is an ONNX variant")
+
+	// An unknown variant id falls back to the entry-level RequiresONNX flag.
+	assert.True(t, VariantNeedsONNX(&perch, "no-such-variant"),
+		"an unknown variant id on an ONNX entry falls back to the entry flag")
+	assert.False(t, VariantNeedsONNX(&v24, "no-such-variant"),
+		"an unknown variant id on v2.4 falls back to its false entry flag")
+
+	// A flat entry (no variants) uses the entry-level flag directly.
+	bsg, ok := GetCatalogEntry("bsg-finland")
+	require.True(t, ok)
+	require.Empty(t, bsg.Variants, "bsg-finland is a flat entry")
+	assert.True(t, VariantNeedsONNX(&bsg, ""), "a flat ONNX entry needs ORT")
 }
 
 // TestIsPermanentEntry verifies the permanent-entry predicate.

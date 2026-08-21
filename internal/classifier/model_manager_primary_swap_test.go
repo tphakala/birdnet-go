@@ -13,6 +13,19 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
 
+// isolateTestConfig points conf.ConfigPath at a throwaway file under t.TempDir()
+// and restores the original in cleanup. Without it, applyConfigForPrimarySwap ->
+// conf.SaveSettings resolves the default user config path and overwrites the
+// developer's real ~/.config/birdnet-go/config.yaml during the test run.
+func isolateTestConfig(t *testing.T) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte{}, 0o600))
+	orig := conf.ConfigPath
+	conf.ConfigPath = path
+	t.Cleanup(func() { conf.ConfigPath = orig })
+}
+
 // permanentSwapEntry builds a synthetic permanent (BirdNET v2.4-style) catalog
 // entry with a file-less BuiltIn baseline and one downloadable DFT-truncated
 // variant served by a local test server. It mirrors the real birdnet-v2.4 shape
@@ -77,6 +90,7 @@ func TestModelManager_ScanInstalled_PermanentBaseline(t *testing.T) {
 
 	origSettings := conf.GetSettings()
 	t.Cleanup(func() { conf.StoreSettings(origSettings) })
+	isolateTestConfig(t)
 
 	cases := []struct {
 		name        string
@@ -130,6 +144,7 @@ func TestModelManager_PrimarySwap_BaselineToDFT(t *testing.T) {
 
 	origSettings := conf.GetSettings()
 	t.Cleanup(func() { conf.StoreSettings(origSettings) })
+	isolateTestConfig(t)
 
 	settings := conftest.GetTestSettings()
 	settings.BirdNET.LabelPath = "/custom/labels.txt" // must survive the swap
@@ -160,6 +175,7 @@ func TestModelManager_PrimarySwap_DFTToBaseline(t *testing.T) {
 
 	origSettings := conf.GetSettings()
 	t.Cleanup(func() { conf.StoreSettings(origSettings) })
+	isolateTestConfig(t)
 
 	settings := conftest.GetTestSettings()
 	conf.StoreSettings(settings)
@@ -195,6 +211,7 @@ func TestModelManager_PrimarySwap_SameVariantIsNoOp(t *testing.T) {
 
 	origSettings := conf.GetSettings()
 	t.Cleanup(func() { conf.StoreSettings(origSettings) })
+	isolateTestConfig(t)
 
 	settings := conftest.GetTestSettings()
 	conf.StoreSettings(settings)
@@ -220,6 +237,7 @@ func TestModelManager_PrimarySwap_RollbackOnReloadFailure(t *testing.T) {
 
 	origSettings := conf.GetSettings()
 	t.Cleanup(func() { conf.StoreSettings(origSettings) })
+	isolateTestConfig(t)
 
 	settings := conftest.GetTestSettings()
 	conf.StoreSettings(settings)
