@@ -80,6 +80,8 @@
     pickPreselectedVariant,
     translateReason,
     normalizeRegionMode,
+    DEFAULT_REGION_MODE,
+    GLOBAL_REGION_MODE,
     optimizeOffers,
     variantHardwareLabel,
     type OptimizeOffer,
@@ -256,8 +258,8 @@
   const liveModelRegion = $derived(normalizeRegionMode(birdnet?.modelRegion));
   const activeRegionSlug = $derived.by<string>(() => {
     if (!regionsData) return '';
-    if (liveModelRegion === 'global') return '';
-    if (liveModelRegion === 'auto')
+    if (liveModelRegion === GLOBAL_REGION_MODE) return '';
+    if (liveModelRegion === DEFAULT_REGION_MODE)
       return regionsData.locationConfigured ? regionsData.resolved.slug : '';
     return regionNameMap.has(liveModelRegion) ? liveModelRegion : '';
   });

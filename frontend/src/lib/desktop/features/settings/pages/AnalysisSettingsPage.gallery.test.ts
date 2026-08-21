@@ -84,6 +84,7 @@ import AnalysisSettingsPage from './AnalysisSettingsPage.svelte';
 import * as modelsApi from '$lib/utils/modelsApi';
 import { settingsStore } from '$lib/stores/settings';
 import { toastActions } from '$lib/stores/toast';
+import { t } from '$lib/i18n';
 
 // A network-shaped download failure (matches isNetworkDownloadError's real regex).
 const NETWORK_ERROR = 'HTTP request failed for https://huggingface.co/model: connection refused';
@@ -320,6 +321,10 @@ describe('AnalysisSettingsPage model gallery in-flight guard and region refetch'
         expect.stringContaining('analysis.gallery.removeSuccess')
       )
     );
+    // The i18n mock echoes the key and strips params, so the toast string alone
+    // cannot prove the model name is interpolated. Assert on the t() call itself
+    // that the {name} param is passed through, closing that gap (#1566).
+    expect(t).toHaveBeenCalledWith('analysis.gallery.removeSuccess', { name: 'Installed Model' });
   });
 });
 
