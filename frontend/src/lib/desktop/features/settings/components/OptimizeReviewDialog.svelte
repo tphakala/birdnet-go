@@ -100,6 +100,9 @@
           {@const applying = applyingId === offer.entry.id}
           {@const applied = appliedIds.has(offer.entry.id)}
           {@const failed = failedIds.has(offer.entry.id)}
+          {@const fromLabel = offer.from
+            ? variantLabel(offer.from, regionNames)
+            : (offer.entry.installedVariantId ?? '')}
           <li
             class="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-3"
           >
@@ -111,16 +114,18 @@
                 <div
                   class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-[var(--color-base-content)]/80"
                   aria-label={t('analysis.gallery.optimize.fromTo', {
-                    from: variantLabel(offer.from, regionNames),
+                    from: fromLabel,
                     to: variantLabel(offer.to, regionNames),
                   })}
                 >
-                  <span>{variantLabel(offer.from, regionNames)}</span>
-                  <span
-                    class="inline-flex items-center gap-0.5 rounded-full bg-[var(--color-base-300)] px-1.5 py-0.5"
-                  >
-                    {variantHardwareLabel(offer.from)}
-                  </span>
+                  <span>{fromLabel}</span>
+                  {#if offer.from}
+                    <span
+                      class="inline-flex items-center gap-0.5 rounded-full bg-[var(--color-base-300)] px-1.5 py-0.5"
+                    >
+                      {variantHardwareLabel(offer.from)}
+                    </span>
+                  {/if}
                   <ArrowRight class="size-3.5 shrink-0" aria-hidden="true" />
                   <span class="font-medium text-[var(--color-base-content)]"
                     >{variantLabel(offer.to, regionNames)}</span

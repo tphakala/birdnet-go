@@ -155,16 +155,17 @@ function chosenBackendToken(variant: CatalogVariant): string | undefined {
  * baseline is its own class. Otherwise the chosen backend token decides: a CUDA or
  * TensorRT path is a discrete GPU, an OpenVINO GPU path is an Intel GPU. When no
  * backend token is available (an unauthenticated request carries no reasons), the
- * variant id/precision is the fallback: an "arm" descriptor or INT8 precision marks
- * an ARM CPU build, everything else is a generic CPU.
+ * variant id is the fallback: an "arm" descriptor marks an ARM CPU build, everything
+ * else is a generic CPU. Precision alone is NOT used: an INT8 build is not
+ * necessarily ARM (a future x86 INT8 variant would be mislabeled), so only the
+ * explicit "arm" token in the id classifies as ARM.
  */
 export function variantHardwareClass(variant: CatalogVariant): VariantHardwareClass {
   if (variant.builtIn) return 'builtIn';
   const backend = chosenBackendToken(variant);
   if (backend === 'cuda' || backend === 'tensorrt') return 'gpu';
   if (backend === 'openvino-gpu') return 'intelGpu';
-  const id = variant.id.toLowerCase();
-  if (id.includes('arm') || variant.precision?.toLowerCase() === 'int8') return 'armCpu';
+  if (variant.id.toLowerCase().includes('arm')) return 'armCpu';
   return 'cpu';
 }
 
@@ -187,7 +188,13 @@ export function variantHardwareLabel(variant: CatalogVariant): string {
  */
 export interface OptimizeOffer {
   entry: CatalogEntry;
-  from: CatalogVariant;
+  /**
+   * The installed variant being replaced, or null when the installed variant id is
+   * no longer in the catalog (a build deprecated and dropped). The offer still
+   * surfaces in that case, precisely so the user can move off the dead variant; only
+   * the "from" label is unavailable.
+   */
+  from: CatalogVariant | null;
   to: CatalogVariant;
   reasons: string[];
 }
@@ -211,8 +218,10 @@ export function optimizeOffers(catalog: CatalogEntry[]): OptimizeOffer[] {
     if (!installedId || !recommendedId || installedId === recommendedId) continue;
 
     const to = variants.find(v => v.id === recommendedId);
-    const from = variants.find(v => v.id === installedId);
-    if (!to || !from || !to.compatible) continue;
+    if (!to?.compatible) continue;
+    // `from` may be absent when the installed variant was dropped from the catalog;
+    // the offer still stands (move off the dead variant onto the recommendation).
+    const from = variants.find(v => v.id === installedId) ?? null;
 
     offers.push({ entry, from, to, reasons: topReasons(to.reasons) });
   }

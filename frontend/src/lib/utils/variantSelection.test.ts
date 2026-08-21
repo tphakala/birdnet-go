@@ -244,15 +244,14 @@ describe('variantHardwareClass', () => {
     expect(variantHardwareClass(v)).toBe('gpu');
   });
 
-  it('falls back to the id/precision when no backend reason is present', () => {
-    // An unauthenticated request carries no reasons: an "arm" id or int8 precision
-    // marks an ARM CPU build, everything else a generic CPU.
+  it('falls back to the id when no backend reason is present, using only the arm token', () => {
+    // An unauthenticated request carries no reasons: an "arm" id marks an ARM CPU
+    // build, everything else a generic CPU. Precision alone is NOT used: an INT8 id
+    // without "arm" (e.g. a future x86 INT8 build) must not be mislabeled ARM.
     expect(variantHardwareClass(variant({ id: 'int8-arm-dfttrunc', precision: 'int8' }))).toBe(
       'armCpu'
     );
-    expect(variantHardwareClass(variant({ id: 'int8-something', precision: 'int8' }))).toBe(
-      'armCpu'
-    );
+    expect(variantHardwareClass(variant({ id: 'int8-x86', precision: 'int8' }))).toBe('cpu');
     expect(variantHardwareClass(variant({ id: 'fp32-dfttrunc', precision: 'fp32' }))).toBe('cpu');
   });
 });
@@ -304,7 +303,7 @@ describe('optimizeOffers', () => {
     const offers = optimizeOffers([v24Entry()]);
     expect(offers).toHaveLength(1);
     expect(offers[0].entry.id).toBe('birdnet-v2.4');
-    expect(offers[0].from.id).toBe('builtin');
+    expect(offers[0].from?.id).toBe('builtin');
     expect(offers[0].to.id).toBe('fp32-dfttrunc');
     expect(offers[0].reasons.length).toBeGreaterThan(0);
   });
@@ -334,6 +333,17 @@ describe('optimizeOffers', () => {
   it('makes no offer for an entry that is not installed', () => {
     const e = v24Entry({ installed: false });
     expect(optimizeOffers([e])).toHaveLength(0);
+  });
+
+  it('still offers a swap when the installed variant was dropped from the catalog', () => {
+    // The installed variant id no longer matches any catalog variant (deprecated and
+    // removed): the offer must still surface so the user moves off the dead variant,
+    // with a null `from` (its label is unavailable).
+    const e = v24Entry({ installedVariantId: 'legacy-gone' });
+    const offers = optimizeOffers([e]);
+    expect(offers).toHaveLength(1);
+    expect(offers[0].from).toBeNull();
+    expect(offers[0].to.id).toBe('fp32-dfttrunc');
   });
 });
 
