@@ -96,7 +96,7 @@ func TestModelRegistry_BirdNETSpec(t *testing.T) {
 	info := ModelRegistry["BirdNET_V2.4"]
 	assert.Equal(t, 48000, info.Spec.SampleRate)
 	assert.Equal(t, 3*time.Second, info.Spec.ClipLength)
-	assert.Equal(t, 6523, info.NumSpecies)
+	assert.Equal(t, 6522, info.NumSpecies)
 	assert.Contains(t, info.ConfigAliases, "birdnet")
 }
 

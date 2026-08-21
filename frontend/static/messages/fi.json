@@ -5438,6 +5438,7 @@
         "badgeTitle": "Laitteistollesi on saatavilla nopeampi versio",
         "swap": "Optimoi",
         "dialogTitle": "Optimoi mallisi",
+        "installedBuild": "Installed build",
         "fromTo": "{from} -> {to}",
         "apply": "Käytä",
         "applyAll": "Käytä kaikkia",

@@ -5438,6 +5438,7 @@
         "badgeTitle": "Ett snabbare bygge är tillgängligt för din hårdvara",
         "swap": "Optimera",
         "dialogTitle": "Optimera dina modeller",
+        "installedBuild": "Installed build",
         "fromTo": "{from} till {to}",
         "apply": "Tillämpa",
         "applyAll": "Tillämpa alla",

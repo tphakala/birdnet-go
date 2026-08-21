@@ -5438,6 +5438,7 @@
         "badgeTitle": "Für Ihre Hardware ist ein schnellerer Build verfügbar",
         "swap": "Optimieren",
         "dialogTitle": "Modelle optimieren",
+        "installedBuild": "Installed build",
         "fromTo": "{from} zu {to}",
         "apply": "Anwenden",
         "applyAll": "Alle anwenden",

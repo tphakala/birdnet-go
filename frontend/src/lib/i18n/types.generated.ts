@@ -3974,6 +3974,7 @@ export type TranslationKey =
   | 'analysis.gallery.optimize.badgeTitle'
   | 'analysis.gallery.optimize.swap'
   | 'analysis.gallery.optimize.dialogTitle'
+  | 'analysis.gallery.optimize.installedBuild'
   | 'analysis.gallery.optimize.fromTo' // params: from, to
   | 'analysis.gallery.optimize.apply'
   | 'analysis.gallery.optimize.applyAll'

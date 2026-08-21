@@ -5438,6 +5438,7 @@
         "badgeTitle": "Une version plus rapide est disponible pour votre matériel",
         "swap": "Optimiser",
         "dialogTitle": "Optimiser vos modèles",
+        "installedBuild": "Installed build",
         "fromTo": "{from} vers {to}",
         "apply": "Appliquer",
         "applyAll": "Tout appliquer",

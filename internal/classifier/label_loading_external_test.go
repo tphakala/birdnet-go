@@ -80,14 +80,17 @@ func TestLoadExternalLabels_MissingPathReportsExpandedPath(t *testing.T) {
 }
 
 // TestLoadLabels_RefreshesModelInfoNumSpecies verifies loadLabels refreshes the
-// cached ModelInfo.NumSpecies to the actual loaded label count, so a stale stock
-// count seeded from the registry template (e.g. 6523 for BirdNET v2.4 vs the real
-// 6522) is corrected, and leaves it untouched when loading fails. This keeps
-// o.ModelInfo / PrimaryModelInfo() reporting the live count.
+// cached ModelInfo.NumSpecies to the actual loaded label count, so a stock count
+// seeded from the registry template that no longer matches the loaded labels (a
+// custom or regionally-sliced label file) is corrected, and leaves it untouched
+// when loading fails. This keeps o.ModelInfo / PrimaryModelInfo() reporting the
+// live count.
 func TestLoadLabels_RefreshesModelInfoNumSpecies(t *testing.T) {
 	t.Parallel()
 
-	const staleStockCount = 6523
+	// An arbitrary stale count that differs from the loaded label files below, so
+	// the refresh is observable. It is deliberately not the real registry figure.
+	const staleStockCount = 9999
 
 	t.Run("refreshes to the loaded label count", func(t *testing.T) {
 		t.Parallel()
@@ -96,7 +99,7 @@ func TestLoadLabels_RefreshesModelInfoNumSpecies(t *testing.T) {
 		require.NoError(t, os.WriteFile(labelPath, []byte(twoLabelFile), 0o644))
 
 		bn := newExternalLabelBirdNET(labelPath)
-		bn.ModelInfo.NumSpecies = staleStockCount // as the registry template would seed it
+		bn.ModelInfo.NumSpecies = staleStockCount // a template count that differs from the loaded labels
 
 		require.NoError(t, bn.loadLabels())
 		require.Len(t, bn.Settings.BirdNET.Labels, 2)

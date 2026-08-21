@@ -632,6 +632,21 @@ func TestVariantNeedsONNX(t *testing.T) {
 	require.True(t, ok)
 	require.Empty(t, bsg.Variants, "bsg-finland is a flat entry")
 	assert.True(t, VariantNeedsONNX(&bsg, ""), "a flat ONNX entry needs ORT")
+
+	// A TFLite backend bypasses ORT only when it is actually Supported. A remote
+	// manifest may list "tflite" with Supported:false for an unavailable backend
+	// (the Perch manifests do), and key presence alone must not skip the requirement.
+	synthetic := CatalogEntry{
+		ID: "synthetic-tflite",
+		Variants: []CatalogVariant{
+			{ID: "tflite-ok", Backends: map[string]BackendSupport{"tflite": {Supported: true}}},
+			{ID: "tflite-unsupported", Backends: map[string]BackendSupport{"tflite": {Supported: false}}},
+			{ID: "onnx-only", Backends: map[string]BackendSupport{"onnxruntime-cpu": {Supported: true}}},
+		},
+	}
+	assert.False(t, VariantNeedsONNX(&synthetic, "tflite-ok"), "a supported TFLite backend avoids ORT")
+	assert.True(t, VariantNeedsONNX(&synthetic, "tflite-unsupported"), "an unsupported TFLite entry must not bypass ORT")
+	assert.True(t, VariantNeedsONNX(&synthetic, "onnx-only"), "a variant with only ONNX backends needs ORT")
 }
 
 // TestIsPermanentEntry verifies the permanent-entry predicate.

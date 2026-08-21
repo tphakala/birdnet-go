@@ -5438,6 +5438,7 @@
         "badgeTitle": "Pre váš hardvér je k dispozícii rýchlejšie zostavenie",
         "swap": "Optimalizovať",
         "dialogTitle": "Optimalizovať vaše modely",
+        "installedBuild": "Installed build",
         "fromTo": "{from} na {to}",
         "apply": "Použiť",
         "applyAll": "Použiť všetko",

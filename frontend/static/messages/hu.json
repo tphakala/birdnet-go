@@ -5438,6 +5438,7 @@
         "badgeTitle": "Egy gyorsabb verzió érhető el a hardveredhez",
         "swap": "Optimalizálás",
         "dialogTitle": "Modellek optimalizálása",
+        "installedBuild": "Installed build",
         "fromTo": "{from} -> {to}",
         "apply": "Alkalmazás",
         "applyAll": "Összes alkalmazása",
