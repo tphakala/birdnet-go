@@ -5364,7 +5364,6 @@
       "loading": "Modelle werden geladen...",
       "retry": "Wiederholen",
       "builtIn": "Integriert",
-      "builtInDescription": "Integrierter Vogelartenklassifikator des BirdNET-Teams.",
       "species": "{count} Arten",
       "install": "Installieren",
       "installing": "Wird installiert...",
@@ -5423,7 +5422,31 @@
       "reinstalling": "Wird neu installiert...",
       "reinstallComplete": "Dateien erfolgreich überprüft",
       "geomodelBadge": "Enthält BirdNET v3.0 Geomodell",
-      "entryIncompatible": "Dieses Modell ist auf diesem System nicht verfügbar."
+      "entryIncompatible": "Dieses Modell ist auf diesem System nicht verfügbar.",
+      "regionGlobal": "Global",
+      "hardwareLabel": "Hardware",
+      "hardware": {
+        "gpu": "GPU",
+        "intelGpu": "Intel GPU",
+        "armCpu": "ARM CPU",
+        "cpu": "CPU"
+      },
+      "optimize": {
+        "bannerTitle": "{count, plural, one {# Modell kann auf Ihrer Hardware schneller ausgeführt werden} other {# Modelle können auf Ihrer Hardware schneller ausgeführt werden}}",
+        "review": "Überprüfen",
+        "dismiss": "Verwerfen",
+        "badgeTitle": "Für Ihre Hardware ist ein schnellerer Build verfügbar",
+        "swap": "Optimieren",
+        "dialogTitle": "Modelle optimieren",
+        "fromTo": "{from} zu {to}",
+        "apply": "Anwenden",
+        "applyAll": "Alle anwenden",
+        "applying": "Wird angewendet...",
+        "applied": "Angewendet",
+        "applyFailed": "Fehler beim Anwenden",
+        "upToDate": "Alle Ihre Modelle sind für diese Hardware bereits optimiert.",
+        "licenseNote": "Der Wechsel erfolgt innerhalb desselben Modells, daher ändert sich die Lizenz nicht."
+      }
     },
     "bird": {
       "title": "Vogelerkennung",

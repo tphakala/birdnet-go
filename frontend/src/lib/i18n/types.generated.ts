@@ -3915,7 +3915,6 @@ export type TranslationKey =
   | 'analysis.gallery.loading'
   | 'analysis.gallery.retry'
   | 'analysis.gallery.builtIn'
-  | 'analysis.gallery.builtInDescription'
   | 'analysis.gallery.species' // params: count
   | 'analysis.gallery.install'
   | 'analysis.gallery.installing'
@@ -3963,6 +3962,26 @@ export type TranslationKey =
   | 'analysis.gallery.reinstallComplete'
   | 'analysis.gallery.geomodelBadge'
   | 'analysis.gallery.entryIncompatible'
+  | 'analysis.gallery.regionGlobal'
+  | 'analysis.gallery.hardwareLabel'
+  | 'analysis.gallery.hardware.gpu'
+  | 'analysis.gallery.hardware.intelGpu'
+  | 'analysis.gallery.hardware.armCpu'
+  | 'analysis.gallery.hardware.cpu'
+  | 'analysis.gallery.optimize.bannerTitle' // params: count
+  | 'analysis.gallery.optimize.review'
+  | 'analysis.gallery.optimize.dismiss'
+  | 'analysis.gallery.optimize.badgeTitle'
+  | 'analysis.gallery.optimize.swap'
+  | 'analysis.gallery.optimize.dialogTitle'
+  | 'analysis.gallery.optimize.fromTo' // params: from, to
+  | 'analysis.gallery.optimize.apply'
+  | 'analysis.gallery.optimize.applyAll'
+  | 'analysis.gallery.optimize.applying'
+  | 'analysis.gallery.optimize.applied'
+  | 'analysis.gallery.optimize.applyFailed'
+  | 'analysis.gallery.optimize.upToDate'
+  | 'analysis.gallery.optimize.licenseNote'
   | 'analysis.bird.title'
   | 'analysis.bird.description'
   | 'analysis.bat.title'
@@ -4511,6 +4530,8 @@ export type TranslationParams = {
   'analysis.gallery.species': { count: string | number };
   'analysis.gallery.removeDialog.title': { name: string | number };
   'analysis.gallery.errors.actionFailed': { name: string | number };
+  'analysis.gallery.optimize.bannerTitle': { count: string | number };
+  'analysis.gallery.optimize.fromTo': { from: string | number; to: string | number };
 };
 
 /**

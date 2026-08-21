@@ -5364,7 +5364,6 @@
       "loading": "Ladataan malleja...",
       "retry": "Yritä uudelleen",
       "builtIn": "Sisäänrakennettu",
-      "builtInDescription": "BirdNET-tiimin sisäänrakennettu lintulajien luokittelija.",
       "species": "{count} lajia",
       "install": "Asenna",
       "installing": "Asennetaan...",
@@ -5423,7 +5422,31 @@
       "reinstalling": "Asennetaan uudelleen...",
       "reinstallComplete": "Tiedostot tarkistettu onnistuneesti",
       "geomodelBadge": "Sisältää BirdNET v3.0 -geomallin",
-      "entryIncompatible": "Tämä malli ei ole saatavilla tässä järjestelmässä."
+      "entryIncompatible": "Tämä malli ei ole saatavilla tässä järjestelmässä.",
+      "regionGlobal": "Globaali",
+      "hardwareLabel": "Laitteisto",
+      "hardware": {
+        "gpu": "GPU",
+        "intelGpu": "Intel GPU",
+        "armCpu": "ARM CPU",
+        "cpu": "CPU"
+      },
+      "optimize": {
+        "bannerTitle": "{count, plural, one {# malli voi toimia nopeammin laitteistollasi} other {# mallia voi toimia nopeammin laitteistollasi}}",
+        "review": "Tarkista",
+        "dismiss": "Hylkää",
+        "badgeTitle": "Laitteistollesi on saatavilla nopeampi versio",
+        "swap": "Optimoi",
+        "dialogTitle": "Optimoi mallisi",
+        "fromTo": "{from} -> {to}",
+        "apply": "Käytä",
+        "applyAll": "Käytä kaikkia",
+        "applying": "Käytetään...",
+        "applied": "Käytetty",
+        "applyFailed": "Käyttö epäonnistui",
+        "upToDate": "Kaikki mallisi on jo optimoitu tälle laitteistolle.",
+        "licenseNote": "Vaihto tapahtuu saman mallin sisällä, joten sen lisenssi ei muutu."
+      }
     },
     "bird": {
       "title": "Lintuhavainnot",

@@ -5364,7 +5364,6 @@
       "loading": "Indlæser modeller...",
       "retry": "Prøv igen",
       "builtIn": "Indbygget",
-      "builtInDescription": "Indbygget fuglearts-klassifikator fra BirdNET-teamet.",
       "species": "{count} arter",
       "install": "Installer",
       "installing": "Installerer...",
@@ -5423,7 +5422,31 @@
       "reinstalling": "Geninstallerer...",
       "reinstallComplete": "Filer verificeret succesfuldt",
       "geomodelBadge": "Inkluderer BirdNET v3.0 geomodel",
-      "entryIncompatible": "Denne model er ikke tilgængelig på dette system."
+      "entryIncompatible": "Denne model er ikke tilgængelig på dette system.",
+      "regionGlobal": "Global",
+      "hardwareLabel": "Hardware",
+      "hardware": {
+        "gpu": "GPU",
+        "intelGpu": "Intel GPU",
+        "armCpu": "ARM CPU",
+        "cpu": "CPU"
+      },
+      "optimize": {
+        "bannerTitle": "{count, plural, one {# model kan køre hurtigere på din hardware} other {# modeller kan køre hurtigere på din hardware}}",
+        "review": "Gennemgå",
+        "dismiss": "Afvis",
+        "badgeTitle": "Et hurtigere build er tilgængeligt til din hardware",
+        "swap": "Optimer",
+        "dialogTitle": "Optimer dine modeller",
+        "fromTo": "{from} til {to}",
+        "apply": "Anvend",
+        "applyAll": "Anvend alle",
+        "applying": "Anvender...",
+        "applied": "Anvendt",
+        "applyFailed": "Kunne ikke anvende",
+        "upToDate": "Alle dine modeller er allerede optimeret til denne hardware.",
+        "licenseNote": "Udskiftning forbliver inden for den samme model, så licensen ændres ikke."
+      }
     },
     "bird": {
       "title": "Fugleregistrering",

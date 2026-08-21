@@ -109,6 +109,10 @@ type CatalogEntryResponse struct {
 	IncompatibleReason string `json:"incompatibleReason,omitempty"`
 	TotalSizeBytes     int64  `json:"totalSizeBytes"`
 	HasGeomodel        bool   `json:"hasGeomodel"`
+	// Permanent marks the built-in BirdNET v2.4 classifier: always installed, never
+	// uninstallable, only its variant may be swapped. The gallery renders a built-in
+	// badge instead of Remove/Reinstall for it.
+	Permanent bool `json:"permanent,omitempty"`
 	// InstalledVariantID is the id of the currently installed variant, or "" when
 	// the model is not installed or is a flat (pre-variant) entry.
 	InstalledVariantID string `json:"installedVariantId,omitempty"`
@@ -124,14 +128,17 @@ type CatalogEntryResponse struct {
 // CatalogVariantResponse describes one selectable hardware or regional variant of
 // a catalog entry for the gallery UI.
 type CatalogVariantResponse struct {
-	ID                string `json:"id"`
-	Region            string `json:"region,omitempty"`
-	Precision         string `json:"precision,omitempty"`
-	SpeciesCount      int    `json:"speciesCount"`
-	Default           bool   `json:"default"`
-	Installed         bool   `json:"installed"`
-	SizeBytes         int64  `json:"sizeBytes"`
-	HeadlineLatencyMs int    `json:"headlineLatencyMs,omitempty"`
+	ID           string `json:"id"`
+	Region       string `json:"region,omitempty"`
+	Precision    string `json:"precision,omitempty"`
+	SpeciesCount int    `json:"speciesCount"`
+	Default      bool   `json:"default"`
+	Installed    bool   `json:"installed"`
+	// BuiltIn marks the embedded baseline variant (the built-in BirdNET v2.4 model).
+	// It carries no downloadable files; the gallery labels it and shows no size.
+	BuiltIn           bool  `json:"builtIn,omitempty"`
+	SizeBytes         int64 `json:"sizeBytes"`
+	HeadlineLatencyMs int   `json:"headlineLatencyMs,omitempty"`
 	// Compatible reports whether this variant can run on the host. It defaults to
 	// true (no hardware evaluation performed) so a client that did not receive
 	// recommendations does not render every variant as incompatible.
@@ -281,6 +288,7 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 			IncompatibleReason:   incompatibleReason,
 			TotalSizeBytes:       totalSize,
 			HasGeomodel:          classifier.HasGeomodelFiles(entry),
+			Permanent:            classifier.IsPermanentEntry(entry),
 			InstalledVariantID:   installedVariantID,
 			RecommendedVariantID: recommendedVariant[entry.ID],
 			Variants:             buildVariantResponses(entry, installed, installedVariantID, recsByVariant[entry.ID]),
@@ -348,6 +356,7 @@ func buildVariantResponses(entry *classifier.CatalogEntry, installed bool, insta
 			SpeciesCount:      v.SpeciesCount,
 			Default:           v.Default,
 			Installed:         isInstalledVariant,
+			BuiltIn:           v.BuiltIn,
 			SizeBytes:         sizeBytes,
 			HeadlineLatencyMs: headlineLatencyMs,
 			// Neutral default: without a recommendation the variant is not claimed
@@ -466,10 +475,10 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "unknown catalog ID: "+catalogID, http.StatusNotFound)
 	}
 
-	// Hidden entries are foundation-only: excluded from the gallery and not meant
-	// to be installed by ID. Some (the DFT-truncated BirdNET v2.4 variants) carry
-	// the permanent registry ID, which Uninstall then refuses, so an inadvertent
-	// install would leave an unremovable, unused model on disk. Reject them here.
+	// Hidden entries are foundation-only: excluded from the gallery and not meant to
+	// be installed by ID. The permanent BirdNET v2.4 entry is intentionally NOT
+	// hidden: it is always installed, and an install request against it is a
+	// within-model variant swap routed to InstallOrReplace -> replacePrimaryVariant.
 	if entry.Hidden {
 		return c.HandleError(ctx, nil, "catalog entry "+catalogID+" is not available for installation", http.StatusNotFound)
 	}
@@ -495,8 +504,13 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "unknown variant "+req.VariantID+" for model "+catalogID, http.StatusBadRequest)
 	}
 
-	// Reject installation of ONNX-dependent models when ORT is unavailable.
-	if entry.RequiresONNX {
+	// Reject installation of ONNX-dependent models when ORT is unavailable. The gate
+	// is variant-scoped: an entry may be ORT-free overall (e.g. BirdNET v2.4, whose
+	// BuiltIn baseline runs on the embedded TFLite model) yet expose ONNX-only
+	// variants (the DFT-truncated builds). VariantNeedsONNX refines the entry-level
+	// flag so swapping to the embedded baseline is never blocked, while selecting an
+	// ONNX build still requires the runtime.
+	if entry.RequiresONNX || classifier.VariantNeedsONNX(&entry, req.VariantID) {
 		ortStatus := inference.CheckORTAvailability(c.CurrentSettings().BirdNET.ONNXRuntimePath)
 		if !ortStatus.Available {
 			return c.HandleError(ctx, nil,
@@ -553,6 +567,14 @@ func (c *Handler) ReinstallModel(ctx echo.Context) error {
 	// Hidden entries are foundation-only and not installable by ID (see InstallModel).
 	if entry.Hidden {
 		return c.HandleError(ctx, nil, "catalog entry "+catalogID+" is not available for installation", http.StatusNotFound)
+	}
+
+	// The permanent BirdNET v2.4 entry is now visible (so its variant can be
+	// swapped), but reinstall has no meaning for it: the BuiltIn baseline has no
+	// downloadable files, and a DFT variant is (re)acquired by swapping to it via
+	// InstallOrReplace. Refuse reinstall explicitly rather than let it fall through.
+	if classifier.IsPermanentEntry(&entry) {
+		return c.HandleError(ctx, nil, "the built-in "+entry.Name+" model cannot be reinstalled", http.StatusConflict)
 	}
 
 	if c.ModelManager == nil {

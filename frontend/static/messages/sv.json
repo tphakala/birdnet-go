@@ -5364,7 +5364,6 @@
       "loading": "Laddar modeller...",
       "retry": "Försök igen",
       "builtIn": "Inbyggd",
-      "builtInDescription": "Inbyggd fågelartsklassificerare från BirdNET-teamet.",
       "species": "{count} arter",
       "install": "Installera",
       "installing": "Installerar...",
@@ -5423,7 +5422,31 @@
       "reinstalling": "Installerar om...",
       "reinstallComplete": "Filer verifierade",
       "geomodelBadge": "Inkluderar BirdNET v3.0 geomodell",
-      "entryIncompatible": "Den här modellen är inte tillgänglig på detta system."
+      "entryIncompatible": "Den här modellen är inte tillgänglig på detta system.",
+      "regionGlobal": "Global",
+      "hardwareLabel": "Hårdvara",
+      "hardware": {
+        "gpu": "GPU",
+        "intelGpu": "Intel GPU",
+        "armCpu": "ARM CPU",
+        "cpu": "CPU"
+      },
+      "optimize": {
+        "bannerTitle": "{count, plural, one {# modell kan köras snabbare på din hårdvara} other {# modeller kan köras snabbare på din hårdvara}}",
+        "review": "Granska",
+        "dismiss": "Avfärda",
+        "badgeTitle": "Ett snabbare bygge är tillgängligt för din hårdvara",
+        "swap": "Optimera",
+        "dialogTitle": "Optimera dina modeller",
+        "fromTo": "{from} till {to}",
+        "apply": "Tillämpa",
+        "applyAll": "Tillämpa alla",
+        "applying": "Tillämpar...",
+        "applied": "Tillämpad",
+        "applyFailed": "Kunde inte tillämpa",
+        "upToDate": "Alla dina modeller är redan optimerade för denna hårdvara.",
+        "licenseNote": "Bytet sker inom samma modell, så dess licens ändras inte."
+      }
     },
     "bird": {
       "title": "Fågeldetektering",

@@ -322,3 +322,117 @@ describe('AnalysisSettingsPage model gallery in-flight guard and region refetch'
     );
   });
 });
+
+describe('AnalysisSettingsPage model gallery optimize + permanent card', () => {
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    settingsStore.update(s => ({
+      ...s,
+      originalData: {
+        ...s.originalData,
+        birdnet: { ...s.originalData.birdnet, modelRegion: undefined },
+      },
+    }));
+    vi.mocked(modelsApi.fetchInstalled).mockResolvedValue([]);
+    vi.mocked(modelsApi.fetchModelRegions).mockRejectedValue(new Error('no regions in test'));
+  });
+
+  // A permanent BirdNET v2.4 entry installed on its BuiltIn baseline, with a faster
+  // DFT build recommended for this host (so it carries an optimize offer).
+  function v24Installed(overrides: Partial<CatalogEntry> = {}): CatalogEntry {
+    return birdEntry({
+      id: 'birdnet-v2.4',
+      name: 'BirdNET v2.4',
+      installed: true,
+      permanent: true,
+      installedVariantId: 'builtin',
+      recommendedVariantId: 'fp32-dfttrunc',
+      variants: [
+        {
+          id: 'builtin',
+          builtIn: true,
+          default: true,
+          installed: true,
+          speciesCount: 6522,
+          sizeBytes: 0,
+          compatible: true,
+          recommended: false,
+        },
+        {
+          id: 'fp32-dfttrunc',
+          precision: 'fp32',
+          default: false,
+          installed: false,
+          speciesCount: 6522,
+          sizeBytes: 54_000_000,
+          compatible: true,
+          recommended: true,
+          reasons: [{ code: 'backend.recommended', args: { backend: 'onnxruntime-cpu' } }],
+        },
+      ],
+      ...overrides,
+    });
+  }
+
+  it('shows the optimize banner when an installed model has a better variant, and dismisses it', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [v24Installed()] });
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+
+    // The banner is visible with the Review action.
+    expect(await screen.findByText('analysis.gallery.optimize.bannerTitle')).toBeInTheDocument();
+    const review = await screen.findByRole('button', {
+      name: /analysis\.gallery\.optimize\.review/,
+    });
+
+    // Review opens the dialog.
+    await fireEvent.click(review);
+    expect(await screen.findByText('analysis.gallery.optimize.dialogTitle')).toBeInTheDocument();
+
+    // Dismiss hides the banner for the session.
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.optimize\.dismiss/ })
+    );
+    await waitFor(() =>
+      expect(screen.queryByText('analysis.gallery.optimize.bannerTitle')).toBeNull()
+    );
+  });
+
+  it('shows no optimize banner when the installed variant is already the recommended one', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [v24Installed({ installedVariantId: 'fp32-dfttrunc' })],
+    });
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    // Give the card grid time to render, then assert the banner never appears.
+    await screen.findByRole('tab', { name: /analysis\.gallery\.tabs\.installed/ });
+    expect(screen.queryByText('analysis.gallery.optimize.bannerTitle')).toBeNull();
+  });
+
+  it('renders the permanent card with a built-in badge, no Remove/Reinstall, and an Optimize action', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [v24Installed()] });
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+
+    // The Optimize (swap) action is present on the permanent card.
+    expect(
+      await screen.findByRole('button', {
+        name: /analysis\.gallery\.optimize\.swap.*BirdNET v2\.4/,
+      })
+    ).toBeInTheDocument();
+
+    // The permanent model cannot be removed or reinstalled from its card.
+    expect(
+      screen.queryByRole('button', { name: /analysis\.gallery\.remove.*BirdNET v2\.4/ })
+    ).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: /analysis\.gallery\.reinstall.*BirdNET v2\.4/ })
+    ).toBeNull();
+
+    // The built-in label appears at least twice on the permanent card: the footer
+    // built-in badge and the baseline hardware chip. (The review dialog, also in the
+    // DOM, renders it again for the offer's from-variant, so assert a lower bound.)
+    expect(screen.getAllByText('analysis.gallery.builtIn').length).toBeGreaterThanOrEqual(2);
+  });
+});

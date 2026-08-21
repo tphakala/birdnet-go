@@ -5364,7 +5364,6 @@
       "loading": "Modellen laden...",
       "retry": "Opnieuw proberen",
       "builtIn": "Ingebouwd",
-      "builtInDescription": "Ingebouwde vogelsoortclassificator van het BirdNET-team.",
       "species": "{count} soorten",
       "install": "Installeren",
       "installing": "Installeren...",
@@ -5423,7 +5422,31 @@
       "reinstalling": "Opnieuw installeren...",
       "reinstallComplete": "Bestanden succesvol geverifieerd",
       "geomodelBadge": "Bevat BirdNET v3.0 geomodel",
-      "entryIncompatible": "Dit model is niet beschikbaar op dit systeem."
+      "entryIncompatible": "Dit model is niet beschikbaar op dit systeem.",
+      "regionGlobal": "Globaal",
+      "hardwareLabel": "Hardware",
+      "hardware": {
+        "gpu": "GPU",
+        "intelGpu": "Intel GPU",
+        "armCpu": "ARM CPU",
+        "cpu": "CPU"
+      },
+      "optimize": {
+        "bannerTitle": "{count, plural, one {# model kan sneller werken op jouw hardware} other {# modellen kunnen sneller werken op jouw hardware}}",
+        "review": "Controleren",
+        "dismiss": "Afwijzen",
+        "badgeTitle": "Er is een snellere build beschikbaar voor jouw hardware",
+        "swap": "Optimaliseren",
+        "dialogTitle": "Optimaliseer jouw modellen",
+        "fromTo": "{from} naar {to}",
+        "apply": "Toepassen",
+        "applyAll": "Alles toepassen",
+        "applying": "Toepassen...",
+        "applied": "Toegepast",
+        "applyFailed": "Toepassen mislukt",
+        "upToDate": "Al jouw modellen zijn al geoptimaliseerd voor deze hardware.",
+        "licenseNote": "Het wisselen blijft binnen hetzelfde model, dus de licentie verandert niet."
+      }
     },
     "bird": {
       "title": "Vogeldetectie",

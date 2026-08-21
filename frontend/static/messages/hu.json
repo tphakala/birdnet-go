@@ -5364,7 +5364,6 @@
       "loading": "Modellek betöltése...",
       "retry": "Újra",
       "builtIn": "Beépített",
-      "builtInDescription": "A BirdNET csapat beépített madárfaj-osztályozója.",
       "species": "{count} faj",
       "install": "Telepítés",
       "installing": "Telepítés...",
@@ -5423,7 +5422,31 @@
       "reinstalling": "Újratelepítés...",
       "reinstallComplete": "Fájlok sikeresen ellenőrizve",
       "geomodelBadge": "Tartalmazza a BirdNET v3.0 geomodellt",
-      "entryIncompatible": "Ez a modell nem érhető el ezen a rendszeren."
+      "entryIncompatible": "Ez a modell nem érhető el ezen a rendszeren.",
+      "regionGlobal": "Globális",
+      "hardwareLabel": "Hardver",
+      "hardware": {
+        "gpu": "GPU",
+        "intelGpu": "Intel GPU",
+        "armCpu": "ARM CPU",
+        "cpu": "CPU"
+      },
+      "optimize": {
+        "bannerTitle": "{count, plural, one {# modell gyorsabban futhat a hardvereden} other {# modell gyorsabban futhat a hardvereden}}",
+        "review": "Áttekintés",
+        "dismiss": "Elutasítás",
+        "badgeTitle": "Egy gyorsabb verzió érhető el a hardveredhez",
+        "swap": "Optimalizálás",
+        "dialogTitle": "Modellek optimalizálása",
+        "fromTo": "{from} -> {to}",
+        "apply": "Alkalmazás",
+        "applyAll": "Összes alkalmazása",
+        "applying": "Alkalmazás...",
+        "applied": "Alkalmazva",
+        "applyFailed": "Nem sikerült alkalmazni",
+        "upToDate": "Minden modelled optimalizálva van erre a hardverre.",
+        "licenseNote": "A csere ugyanazon a modellen belül marad, így a licence nem változik."
+      }
     },
     "bird": {
       "title": "Madárészlelés",

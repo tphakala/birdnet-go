@@ -103,6 +103,9 @@ export function variantLabel(
   variant: CatalogVariant,
   regionNames?: ReadonlyMap<string, string>
 ): string {
+  // The embedded baseline carries no precision or descriptive id ("builtin"), so
+  // give it its own localized label rather than showing the raw id.
+  if (variant.builtIn) return t('analysis.gallery.builtIn');
   const precision = variant.precision?.toUpperCase() ?? '';
   // Derive the non-precision descriptor from the id. Strip any "@region" suffix
   // first (the region is appended separately) so a regional id like
@@ -124,6 +127,105 @@ export function variantLabel(
   // it is not.
   const regionDisplay = regionNames?.get(variant.region) ?? variant.region;
   return `${base} (${regionDisplay})`;
+}
+
+/**
+ * A friendly hardware class for a variant, used to render a hardware chip on the
+ * gallery card. 'builtIn' is the embedded baseline; the rest describe the execution
+ * target the variant is recommended for on this host.
+ */
+export type VariantHardwareClass = 'builtIn' | 'gpu' | 'intelGpu' | 'armCpu' | 'cpu';
+
+/**
+ * The recommended (or otherwise chosen) execution backend token for a variant,
+ * taken from its recommendation reasons. Prefers the `backend.recommended` reason,
+ * then any reason carrying a `backend` arg. Returns undefined when the request was
+ * not eligible for recommendations (no reasons), so callers fall back to id parsing.
+ */
+function chosenBackendToken(variant: CatalogVariant): string | undefined {
+  const reasons = variant.reasons ?? [];
+  const recommended = reasons.find(r => r.code === 'backend.recommended' && r.args?.backend);
+  if (recommended?.args?.backend) return recommended.args.backend;
+  const anyBackend = reasons.find(r => r.args?.backend);
+  return anyBackend?.args?.backend;
+}
+
+/**
+ * Derive a friendly hardware class for a variant entirely client-side. The BuiltIn
+ * baseline is its own class. Otherwise the chosen backend token decides: a CUDA or
+ * TensorRT path is a discrete GPU, an OpenVINO GPU path is an Intel GPU. When no
+ * backend token is available (an unauthenticated request carries no reasons), the
+ * variant id is the fallback: an "arm" descriptor marks an ARM CPU build, everything
+ * else is a generic CPU. Precision alone is NOT used: an INT8 build is not
+ * necessarily ARM (a future x86 INT8 variant would be mislabeled), so only the
+ * explicit "arm" token in the id classifies as ARM.
+ */
+export function variantHardwareClass(variant: CatalogVariant): VariantHardwareClass {
+  if (variant.builtIn) return 'builtIn';
+  const backend = chosenBackendToken(variant);
+  if (backend === 'cuda' || backend === 'tensorrt') return 'gpu';
+  if (backend === 'openvino-gpu') return 'intelGpu';
+  if (variant.id.toLowerCase().includes('arm')) return 'armCpu';
+  return 'cpu';
+}
+
+/**
+ * Localized hardware chip label for a variant. The BuiltIn baseline uses the
+ * built-in label; every other class maps to `analysis.gallery.hardware.<class>`.
+ */
+export function variantHardwareLabel(variant: CatalogVariant): string {
+  const cls = variantHardwareClass(variant);
+  if (cls === 'builtIn') return t('analysis.gallery.builtIn');
+  return t(`analysis.gallery.hardware.${cls}`);
+}
+
+/**
+ * A within-model "optimize" offer: an installed model whose recommended variant for
+ * this host differs from the installed one and is compatible. `from` is the
+ * installed variant, `to` the recommended one, and `reasons` the localized headline
+ * reasons for the recommendation. Offers are always same-model (a better build of a
+ * model the user already has), never cross-model.
+ */
+export interface OptimizeOffer {
+  entry: CatalogEntry;
+  /**
+   * The installed variant being replaced, or null when the installed variant id is
+   * no longer in the catalog (a build deprecated and dropped). The offer still
+   * surfaces in that case, precisely so the user can move off the dead variant; only
+   * the "from" label is unavailable.
+   */
+  from: CatalogVariant | null;
+  to: CatalogVariant;
+  reasons: string[];
+}
+
+/**
+ * Derive the within-model optimize offers from the catalog, entirely client-side.
+ * An entry qualifies when it is installed, carries variants, its installed variant
+ * differs from the host-recommended variant, and that recommended variant is
+ * compatible and present in the list. The permanent BirdNET v2.4 model participates
+ * like any other installed model (its BuiltIn baseline is the installed variant when
+ * no DFT build is active).
+ */
+export function optimizeOffers(catalog: CatalogEntry[]): OptimizeOffer[] {
+  const offers: OptimizeOffer[] = [];
+  for (const entry of catalog) {
+    const variants = entry.variants ?? [];
+    if (variants.length === 0 || !entry.installed) continue;
+
+    const installedId = entry.installedVariantId;
+    const recommendedId = entry.recommendedVariantId;
+    if (!installedId || !recommendedId || installedId === recommendedId) continue;
+
+    const to = variants.find(v => v.id === recommendedId);
+    if (!to?.compatible) continue;
+    // `from` may be absent when the installed variant was dropped from the catalog;
+    // the offer still stands (move off the dead variant onto the recommendation).
+    const from = variants.find(v => v.id === installedId) ?? null;
+
+    offers.push({ entry, from, to, reasons: topReasons(to.reasons) });
+  }
+  return offers;
 }
 
 /**

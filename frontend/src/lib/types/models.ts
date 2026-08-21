@@ -27,6 +27,8 @@ export interface CatalogVariant {
   speciesCount: number;
   default: boolean;
   installed: boolean;
+  /** True for the embedded baseline variant (the built-in BirdNET v2.4 model); it carries no downloadable files. */
+  builtIn?: boolean;
   sizeBytes: number;
   headlineLatencyMs?: number;
   compatible: boolean;
@@ -53,6 +55,8 @@ export interface CatalogEntry {
   incompatibleReason?: string;
   totalSizeBytes: number;
   hasGeomodel: boolean;
+  /** True for the permanent built-in BirdNET v2.4 model: always installed, never uninstallable, only its variant may be swapped. */
+  permanent?: boolean;
   /** Selectable hardware/regional variants, absent for flat single-variant entries. */
   variants?: CatalogVariant[];
   /** The id of the currently installed variant, or absent when not installed or flat. */

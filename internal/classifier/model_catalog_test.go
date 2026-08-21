@@ -217,6 +217,14 @@ func TestEmbeddedCatalog_HasFilesWithModelRole(t *testing.T) {
 		// time. Every variant must ship files including a model-role file.
 		if len(entry.Variants) > 0 {
 			for _, v := range entry.Variants {
+				// BuiltIn baseline variants (the embedded primary model) carry no
+				// files: there is nothing to download and ScanInstalled reports them
+				// installed unconditionally. Every other variant must ship a
+				// model-role file.
+				if v.BuiltIn {
+					assert.Emptyf(t, v.Files, "catalog entry %q built-in variant %q must declare no files", entry.ID, v.ID)
+					continue
+				}
 				require.NotEmptyf(t, v.Files, "catalog entry %q variant %q has no files", entry.ID, v.ID)
 				assert.Truef(t, hasModelRoleFile(v.Files),
 					"catalog entry %q variant %q has no file with role \"model\"", entry.ID, v.ID)
@@ -268,8 +276,10 @@ func TestCatalogByCategory(t *testing.T) {
 
 	grouped := CatalogByCategory()
 
-	// Should have wildlife, bat, and geomodel categories (bird entries are currently hidden)
+	// Should have wildlife, bird, bat, and geomodel categories. The only visible bird
+	// entry is birdnet-v2.4 (bsg-finland stays hidden).
 	require.Contains(t, grouped, CategoryWildlife)
+	require.Contains(t, grouped, CategoryBird)
 	require.Contains(t, grouped, CategoryBat)
 	require.Contains(t, grouped, CategoryGeomodel)
 
@@ -284,9 +294,13 @@ func TestCatalogByCategory(t *testing.T) {
 		assert.Equal(t, CategoryGeomodel, entry.Category)
 	}
 
+	for _, entry := range grouped[CategoryBird] {
+		assert.Equal(t, CategoryBird, entry.Category)
+	}
+
 	// Verify expected counts
 	assert.Len(t, grouped[CategoryWildlife], 2, "expected 2 visible wildlife catalog entries (perch-v2, birdnet-v3.0)")
-	assert.Empty(t, grouped[CategoryBird], "expected 0 visible bird catalog entries")
+	assert.Len(t, grouped[CategoryBird], 1, "expected 1 visible bird catalog entry (birdnet-v2.4)")
 	assert.Len(t, grouped[CategoryGeomodel], 1, "expected 1 visible geomodel catalog entry")
 	assert.Len(t, grouped[CategoryBat], 11, "expected 11 bat catalog entries")
 }
@@ -363,8 +377,15 @@ func TestVisibleCatalog_ExcludesHiddenEntries(t *testing.T) {
 	require.True(t, ok)
 	assert.True(t, bsg.Hidden)
 
-	// The collapsed BirdNET v2.4 entry is a hidden foundation entry.
-	hiddenFoundation := []string{"birdnet-v2.4"}
+	// The BirdNET v2.4 entry is now visible (un-hidden): it is wired into its own
+	// variant set (embedded BuiltIn baseline + DFT-truncated builds) so the gallery
+	// can offer an in-place optimize swap. bsg-finland remains the only hidden
+	// foundation entry.
+	birdnetV24, ok := GetCatalogEntry("birdnet-v2.4")
+	require.True(t, ok)
+	assert.False(t, birdnetV24.Hidden, "birdnet-v2.4 must be visible")
+
+	hiddenFoundation := []string{"bsg-finland"}
 	for _, id := range hiddenFoundation {
 		entry, ok := GetCatalogEntry(id)
 		require.True(t, ok, "expected to find hidden catalog entry %q", id)
@@ -378,11 +399,11 @@ func TestVisibleCatalog_ExcludesHiddenEntries(t *testing.T) {
 			"hidden entry %q must be excluded from the visible catalog", visible[i].ID)
 	}
 
-	// Visible count should be total minus the 2 hidden entries
-	// (bsg-finland and the collapsed BirdNET v2.4 foundation entry).
-	// The hardcoded count is an intentional tripwire: a new hidden entry must
-	// update it, forcing a conscious check that the exclusion is intended.
-	assert.Len(t, visible, len(EmbeddedCatalog)-2)
+	// Visible count should be total minus the 1 hidden entry (bsg-finland; the
+	// BirdNET v2.4 entry is now visible). The hardcoded count is an intentional
+	// tripwire: a new hidden entry must update it, forcing a conscious check that the
+	// exclusion is intended.
+	assert.Len(t, visible, len(EmbeddedCatalog)-1)
 }
 
 func TestGetCatalogEntry_BSGFinland(t *testing.T) {
@@ -508,32 +529,44 @@ func TestEmbeddedCatalog_BirdNETv24Variants(t *testing.T) {
 	entry, ok := GetCatalogEntry("birdnet-v2.4")
 	require.True(t, ok, "expected to find catalog entry birdnet-v2.4")
 	assert.Equal(t, CategoryBird, entry.Category, "birdnet-v2.4 must be a bird model")
-	assert.True(t, entry.Hidden, "birdnet-v2.4 must be hidden (no primary-variant selector yet)")
-	assert.True(t, entry.RequiresONNX, "birdnet-v2.4 must require ONNX")
+	assert.False(t, entry.Hidden, "birdnet-v2.4 must be visible (wired into its variant set)")
+	assert.False(t, entry.RequiresONNX, "birdnet-v2.4 ORT need is per-variant, not entry-level")
 	assert.Equal(t, permanentRegistryID, entry.RegistryID,
 		"birdnet-v2.4 must map to the permanent BirdNET v2.4 registry ID")
 	assert.Equal(t, "tphakala/BirdNET-v2.4", entry.HuggingFaceRepo, "birdnet-v2.4 repo")
+	assert.Equal(t, birdnetV24SpeciesCount, entry.SpeciesCount,
+		"birdnet-v2.4 must report the embedded label count")
 
 	cases := []struct {
-		variantID  string
-		remotePath string
-		sha256     string
-		sizeBytes  int64
-		isDefault  bool
+		variantID    string
+		builtIn      bool
+		remotePath   string
+		sha256       string
+		sizeBytes    int64
+		isDefault    bool
+		speciesCount int
 	}{
 		{
-			variantID:  "fp32-dfttrunc",
-			remotePath: "BirdNET_v2.4_fp32_dfttrunc.onnx",
-			sha256:     "3b72e88b3ad0c310a41adabccf8cf75b1a05daeeb40884ebd38038c91d0e423d",
-			sizeBytes:  54068648,
-			isDefault:  true,
+			variantID:    "builtin",
+			builtIn:      true,
+			isDefault:    true,
+			speciesCount: birdnetV24SpeciesCount,
 		},
 		{
-			variantID:  "int8-arm-dfttrunc",
-			remotePath: "BirdNET_v2.4_int8_arm_dfttrunc.onnx",
-			sha256:     "7550498ba996064feca12005ff4133eb1d35741c4061376e7a987d8227518893",
-			sizeBytes:  38727042,
-			isDefault:  false,
+			variantID:    "fp32-dfttrunc",
+			remotePath:   "BirdNET_v2.4_fp32_dfttrunc.onnx",
+			sha256:       "3b72e88b3ad0c310a41adabccf8cf75b1a05daeeb40884ebd38038c91d0e423d",
+			sizeBytes:    54068648,
+			isDefault:    false,
+			speciesCount: birdnetV24SpeciesCount,
+		},
+		{
+			variantID:    "int8-arm-dfttrunc",
+			remotePath:   "BirdNET_v2.4_int8_arm_dfttrunc.onnx",
+			sha256:       "7550498ba996064feca12005ff4133eb1d35741c4061376e7a987d8227518893",
+			sizeBytes:    38727042,
+			isDefault:    false,
+			speciesCount: birdnetV24SpeciesCount,
 		},
 	}
 	require.Lenf(t, entry.Variants, len(cases), "birdnet-v2.4 must have exactly %d variants", len(cases))
@@ -542,10 +575,21 @@ func TestEmbeddedCatalog_BirdNETv24Variants(t *testing.T) {
 	for i, tc := range cases {
 		v := entry.Variants[i]
 		assert.Equalf(t, tc.variantID, v.ID, "variant %d id", i)
+		assert.Equalf(t, tc.builtIn, v.BuiltIn, "variant %q BuiltIn flag", tc.variantID)
 		assert.Equalf(t, tc.isDefault, v.Default, "variant %q default flag", tc.variantID)
 		assert.Falsef(t, v.Legacy, "variant %q must not be Legacy", tc.variantID)
+		assert.Equalf(t, tc.speciesCount, v.SpeciesCount, "variant %q species count", tc.variantID)
 		if v.Default {
 			defaults++
+		}
+		if tc.builtIn {
+			assert.Emptyf(t, v.Files, "variant %q (built-in) must carry no files", tc.variantID)
+			// The built-in baseline must NOT recommend an ONNX backend: a 0-byte size
+			// tie-break would otherwise let it beat a real DFT build and suppress the
+			// optimize offer. It advertises tflite as the recommended path.
+			assert.Truef(t, v.Backends["tflite"].Recommended, "built-in variant must recommend tflite")
+			assert.Falsef(t, v.Backends["onnxruntime-cpu"].Recommended, "built-in variant must not recommend ORT")
+			continue
 		}
 		require.Lenf(t, v.Files, 1, "variant %q must have exactly one (model) file", tc.variantID)
 		f := v.Files[0]
@@ -556,6 +600,52 @@ func TestEmbeddedCatalog_BirdNETv24Variants(t *testing.T) {
 		assert.Equalf(t, tc.sizeBytes, f.SizeBytes, "variant %q size", tc.variantID)
 	}
 	assert.Equal(t, 1, defaults, "birdnet-v2.4 must have exactly one Default variant")
+}
+
+// TestVariantNeedsONNX covers the per-variant ORT gate: the BuiltIn baseline runs
+// on the embedded TFLite model (no ORT), the DFT-truncated builds are ONNX-only, and
+// an empty id resolves to the default (baseline) variant.
+func TestVariantNeedsONNX(t *testing.T) {
+	t.Parallel()
+
+	v24, ok := GetCatalogEntry("birdnet-v2.4")
+	require.True(t, ok)
+
+	assert.False(t, VariantNeedsONNX(&v24, "builtin"), "the embedded baseline runs on TFLite, no ORT")
+	assert.False(t, VariantNeedsONNX(&v24, ""), "empty id resolves to the default (baseline), no ORT")
+	assert.True(t, VariantNeedsONNX(&v24, "fp32-dfttrunc"), "the FP32 DFT build is ONNX-only")
+	assert.True(t, VariantNeedsONNX(&v24, "int8-arm-dfttrunc"), "the INT8 DFT build is ONNX-only")
+
+	// A known ONNX variant resolves through the variant branch.
+	perch, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok)
+	assert.True(t, VariantNeedsONNX(&perch, "fp32"), "perch fp32 is an ONNX variant")
+
+	// An unknown variant id falls back to the entry-level RequiresONNX flag.
+	assert.True(t, VariantNeedsONNX(&perch, "no-such-variant"),
+		"an unknown variant id on an ONNX entry falls back to the entry flag")
+	assert.False(t, VariantNeedsONNX(&v24, "no-such-variant"),
+		"an unknown variant id on v2.4 falls back to its false entry flag")
+
+	// A flat entry (no variants) uses the entry-level flag directly.
+	bsg, ok := GetCatalogEntry("bsg-finland")
+	require.True(t, ok)
+	require.Empty(t, bsg.Variants, "bsg-finland is a flat entry")
+	assert.True(t, VariantNeedsONNX(&bsg, ""), "a flat ONNX entry needs ORT")
+}
+
+// TestIsPermanentEntry verifies the permanent-entry predicate.
+func TestIsPermanentEntry(t *testing.T) {
+	t.Parallel()
+
+	v24, ok := GetCatalogEntry("birdnet-v2.4")
+	require.True(t, ok)
+	assert.True(t, IsPermanentEntry(&v24), "birdnet-v2.4 is the permanent entry")
+
+	perch, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok)
+	assert.False(t, IsPermanentEntry(&perch), "perch-v2 is not permanent")
+	assert.False(t, IsPermanentEntry(nil), "nil is not permanent")
 }
 
 // TestEmbeddedCatalog_GlobalVariantResolution verifies the multi-variant global
@@ -673,6 +763,12 @@ func TestEmbeddedCatalog_VariantFilesSelfContained(t *testing.T) {
 		require.NotEmptyf(t, entry.Variants, "entry %q expected to carry variants", entry.ID)
 		for j := range entry.Variants {
 			v := &entry.Variants[j]
+			// The BuiltIn baseline (embedded primary model) carries no files by
+			// design; it is not a downloadable, self-contained variant.
+			if v.BuiltIn {
+				assert.Emptyf(t, v.Files, "%s/%s built-in variant must carry no files", entry.ID, v.ID)
+				continue
+			}
 			roles := fileRoles(v.Files)
 			assert.Truef(t, roles[RoleModel], "%s/%s must carry a model file", entry.ID, v.ID)
 			if wantCompanions {

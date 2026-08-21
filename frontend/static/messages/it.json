@@ -5364,7 +5364,6 @@
       "loading": "Caricamento modelli...",
       "retry": "Riprova",
       "builtIn": "Integrato",
-      "builtInDescription": "Classificatore di specie di uccelli integrato dal team BirdNET.",
       "species": "{count} specie",
       "install": "Installa",
       "installing": "Installazione...",
@@ -5423,7 +5422,31 @@
       "reinstalling": "Reinstallazione...",
       "reinstallComplete": "File verificati con successo",
       "geomodelBadge": "Include il geomodel BirdNET v3.0",
-      "entryIncompatible": "Questo modello non è disponibile su questo sistema."
+      "entryIncompatible": "Questo modello non è disponibile su questo sistema.",
+      "regionGlobal": "Globale",
+      "hardwareLabel": "Hardware",
+      "hardware": {
+        "gpu": "GPU",
+        "intelGpu": "Intel GPU",
+        "armCpu": "ARM CPU",
+        "cpu": "CPU"
+      },
+      "optimize": {
+        "bannerTitle": "{count, plural, one {# modello può funzionare più velocemente sul tuo hardware} other {# modelli possono funzionare più velocemente sul tuo hardware}}",
+        "review": "Controlla",
+        "dismiss": "Ignora",
+        "badgeTitle": "È disponibile una versione più veloce per il tuo hardware",
+        "swap": "Ottimizza",
+        "dialogTitle": "Ottimizza i tuoi modelli",
+        "fromTo": "{from} a {to}",
+        "apply": "Applica",
+        "applyAll": "Applica tutti",
+        "applying": "Applicazione...",
+        "applied": "Applicato",
+        "applyFailed": "Applicazione non riuscita",
+        "upToDate": "Tutti i tuoi modelli sono già ottimizzati per questo hardware.",
+        "licenseNote": "La sostituzione rimane all'interno dello stesso modello, quindi la sua licenza non cambia."
+      }
     },
     "bird": {
       "title": "Rilevamento uccelli",

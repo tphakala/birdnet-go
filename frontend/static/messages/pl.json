@@ -5364,7 +5364,6 @@
       "loading": "Ładowanie modeli...",
       "retry": "Ponów",
       "builtIn": "Wbudowany",
-      "builtInDescription": "Wbudowany klasyfikator gatunków ptaków zespołu BirdNET.",
       "species": "{count} gatunków",
       "install": "Zainstaluj",
       "installing": "Instalowanie...",
@@ -5423,7 +5422,31 @@
       "reinstalling": "Ponowna instalacja...",
       "reinstallComplete": "Pliki zweryfikowane pomyślnie",
       "geomodelBadge": "Zawiera BirdNET v3.0 geomodel",
-      "entryIncompatible": "Ten model nie jest dostępny w tym systemie."
+      "entryIncompatible": "Ten model nie jest dostępny w tym systemie.",
+      "regionGlobal": "Globalny",
+      "hardwareLabel": "Sprzęt",
+      "hardware": {
+        "gpu": "GPU",
+        "intelGpu": "Intel GPU",
+        "armCpu": "ARM CPU",
+        "cpu": "CPU"
+      },
+      "optimize": {
+        "bannerTitle": "{count, plural, one {# model może działać szybciej na twoim sprzęcie} few {# modele mogą działać szybciej na twoim sprzęcie} many {# modeli może działać szybciej na twoim sprzęcie} other {# modeli może działać szybciej na twoim sprzęcie}}",
+        "review": "Przejrzyj",
+        "dismiss": "Odrzuć",
+        "badgeTitle": "Dla twojego sprzętu dostępna jest szybsza wersja",
+        "swap": "Optymalizuj",
+        "dialogTitle": "Zoptymalizuj swoje modele",
+        "fromTo": "{from} na {to}",
+        "apply": "Zastosuj",
+        "applyAll": "Zastosuj wszystko",
+        "applying": "Stosowanie...",
+        "applied": "Zastosowano",
+        "applyFailed": "Nie udało się zastosować",
+        "upToDate": "Wszystkie twoje modele są już zoptymalizowane pod kątem tego sprzętu.",
+        "licenseNote": "Zamiana odbywa się w ramach tego samego modelu, więc jego licencja nie ulega zmianie."
+      }
     },
     "bird": {
       "title": "Wykrywanie ptaków",

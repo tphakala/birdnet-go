@@ -5364,7 +5364,6 @@
       "loading": "Ielādē modeļus...",
       "retry": "Mēģināt vēlreiz",
       "builtIn": "Iebūvēts",
-      "builtInDescription": "BirdNET komandas iebūvēts putnu sugu klasifikators.",
       "species": "{count} sugas",
       "install": "Instalēt",
       "installing": "Instalē...",
@@ -5423,7 +5422,31 @@
       "reinstalling": "Pārinstalē...",
       "reinstallComplete": "Faili veiksmīgi pārbaudīti",
       "geomodelBadge": "Ietver BirdNET v3.0 ģeomodelis",
-      "entryIncompatible": "Šis modelis nav pieejams šajā sistēmā."
+      "entryIncompatible": "Šis modelis nav pieejams šajā sistēmā.",
+      "regionGlobal": "Globāls",
+      "hardwareLabel": "Aparatūra",
+      "hardware": {
+        "gpu": "GPU",
+        "intelGpu": "Intel GPU",
+        "armCpu": "ARM CPU",
+        "cpu": "CPU"
+      },
+      "optimize": {
+        "bannerTitle": "{count, plural, zero {# modeļu var darboties ātrāk jūsu aparatūrā} one {# modelis var darboties ātrāk jūsu aparatūrā} other {# modeļi var darboties ātrāk jūsu aparatūrā}}",
+        "review": "Pārskatīt",
+        "dismiss": "Noraidīt",
+        "badgeTitle": "Jūsu aparatūrai ir pieejama ātrāka versija",
+        "swap": "Optimizēt",
+        "dialogTitle": "Optimizējiet savus modeļus",
+        "fromTo": "{from} uz {to}",
+        "apply": "Lietot",
+        "applyAll": "Lietot visu",
+        "applying": "Lieto...",
+        "applied": "Lietots",
+        "applyFailed": "Neizdevās lietot",
+        "upToDate": "Visi jūsu modeļi jau ir optimizēti šai aparatūrai.",
+        "licenseNote": "Aizstāšana notiek viena modeļa ietvaros, tāpēc tā licence nemainās."
+      }
     },
     "bird": {
       "title": "Putnu noteikšana",

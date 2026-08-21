@@ -5364,7 +5364,6 @@
       "loading": "Načítání modelů…",
       "retry": "Zkusit znovu",
       "builtIn": "Vestavěný",
-      "builtInDescription": "Vestavěný klasifikátor ptačích druhů od týmu BirdNET.",
       "species": "{count} druhů",
       "install": "Nainstalovat",
       "installing": "Instaluji…",
@@ -5423,7 +5422,31 @@
       "reinstalling": "Přeinstalování…",
       "reinstallComplete": "Soubory úspěšně ověřeny",
       "geomodelBadge": "Obsahuje BirdNET v3.0 geomodel",
-      "entryIncompatible": "Tento model není v tomto systému k dispozici."
+      "entryIncompatible": "Tento model není v tomto systému k dispozici.",
+      "regionGlobal": "Globální",
+      "hardwareLabel": "Hardware",
+      "hardware": {
+        "gpu": "GPU",
+        "intelGpu": "Intel GPU",
+        "armCpu": "ARM CPU",
+        "cpu": "CPU"
+      },
+      "optimize": {
+        "bannerTitle": "{count, plural, one {# model může běžet rychleji na vašem hardwaru} few {# modely mohou běžet rychleji na vašem hardwaru} many {# modelů může běžet rychleji na vašem hardwaru} other {# modelů může běžet rychleji na vašem hardwaru}}",
+        "review": "Zkontrolovat",
+        "dismiss": "Zavřít",
+        "badgeTitle": "Pro váš hardware je k dispozici rychlejší sestavení",
+        "swap": "Optimalizovat",
+        "dialogTitle": "Optimalizovat modely",
+        "fromTo": "{from} na {to}",
+        "apply": "Použít",
+        "applyAll": "Použít vše",
+        "applying": "Aplikování...",
+        "applied": "Použito",
+        "applyFailed": "Použití se nezdařilo",
+        "upToDate": "Všechny vaše modely jsou již pro tento hardware optimalizovány.",
+        "licenseNote": "Záměna probíhá v rámci stejného modelu, takže se jeho licence nemění."
+      }
     },
     "bird": {
       "title": "Detekce ptáků",

@@ -348,6 +348,41 @@ func modelAndLabelsFiles(files []CatalogFile) (modelFile, labelsFile string) {
 // remaining variants in catalog order. ok is false when no variant's model file
 // is present on disk.
 func scanVariantEntry(entry *CatalogEntry, subdir, modelBasenameHint string) (InstalledModel, bool) {
+	// Permanent entry with a BuiltIn baseline (BirdNET v2.4): the model is ALWAYS
+	// installed, but which variant is active is decided by the settings hint alone,
+	// NOT by which files happen to be on disk. A non-empty hint that matches a
+	// DFT-truncated variant's file (present on disk) selects it; anything else
+	// resolves to the BuiltIn baseline with an empty ModelPath. This inverts the
+	// usual "any file present -> that variant" fall-through: a stale DFT file left on
+	// disk after the user reverted to the baseline (BirdNET.ModelPath cleared) must
+	// NOT be reported as the active variant, because the primary loader opens the
+	// embedded model, not that file.
+	if builtin := builtInVariant(entry); builtin != nil {
+		if modelBasenameHint != "" {
+			for i := range entry.Variants {
+				v := &entry.Variants[i]
+				if v.BuiltIn {
+					continue
+				}
+				mf, _ := modelAndLabelsFiles(v.Files)
+				if mf == modelBasenameHint {
+					if im, ok := installedFromVariant(entry, v, subdir); ok {
+						return im, true
+					}
+					break
+				}
+			}
+		}
+		// Baseline: always installed, no model path (the embedded model is used).
+		return InstalledModel{
+			CatalogID:   entry.ID,
+			VariantID:   builtin.ID,
+			ModelPath:   "",
+			InstalledAt: time.Now(),
+			Version:     entry.Version,
+		}, true
+	}
+
 	// Prefer the variant whose model file matches the persisted settings path.
 	// After a crashed replace both variants' files can be present on disk; the
 	// settings path is what the loader (buildPerch/buildBirdNETV3) actually opens,
@@ -393,6 +428,11 @@ func installedModelBasenameHint(settings *conf.Settings, registryID string) stri
 	}
 	var p string
 	switch registryID {
+	case permanentRegistryID:
+		// The permanent BirdNET v2.4 classifier: its selected DFT-truncated file
+		// (if any) is recorded in BirdNET.ModelPath. An empty path means the
+		// embedded BuiltIn baseline is active.
+		p = settings.BirdNET.ModelPath
 	case RegistryIDBirdNETV3:
 		p = settings.BirdNETV3.ModelPath
 	case RegistryIDPerchV2:
@@ -655,6 +695,14 @@ func (mm *ModelManager) loadInstalledModels(log logger.Logger, installedIDs []st
 	for _, catalogID := range installedIDs {
 		entry, found := GetCatalogEntry(catalogID)
 		if !found || entry.RegistryID == "" {
+			continue
+		}
+		// The permanent BirdNET v2.4 classifier is the primary model, resolved at
+		// startup by NewBirdNET, not loaded through the orchestrator's secondary
+		// loaders. It has no ModelLoaders entry, so calling LoadModel would only log
+		// a spurious "failed to load" warning. Skip it: it is always "installed" but
+		// never hot-loaded here.
+		if entry.RegistryID == permanentRegistryID {
 			continue
 		}
 		if mm.orchestrator.IsModelLoaded(entry.RegistryID) {
@@ -1172,6 +1220,30 @@ func (mm *ModelManager) InstallOrReplace(ctx context.Context, entry *CatalogEntr
 			Build()
 	}
 	current, installed := mm.installed[entry.ID]
+
+	// Permanent primary model (BirdNET v2.4): always "installed", and its variant is
+	// swapped through the dedicated primary-reload path, never the generic
+	// orchestrator unload/load. If ScanInstalled has not run yet, treat the current
+	// state as the embedded BuiltIn baseline so the swap still has a rollback target.
+	if IsPermanentEntry(entry) {
+		if !installed {
+			current = InstalledModel{CatalogID: entry.ID, Version: entry.Version}
+			if b := builtInVariant(entry); b != nil {
+				current.VariantID = b.ID
+			}
+		}
+		if current.VariantID == target {
+			mm.mu.Unlock()
+			return nil
+		}
+		mm.downloading[entry.ID] = &DownloadState{
+			CatalogID: entry.ID,
+			Status:    StatusDownloading,
+		}
+		mm.mu.Unlock()
+		return mm.replacePrimaryVariant(ctx, entry, &current, target, baseURL, progress)
+	}
+
 	if installed && current.VariantID == target {
 		// Idempotent: the requested variant is already the installed one.
 		mm.mu.Unlock()
@@ -1350,6 +1422,153 @@ func (mm *ModelManager) rollbackVariantSwitch(log logger.Logger, entry *CatalogE
 		mm.removeDownloading(entry.ID)
 	})
 	return switchErr
+}
+
+// replacePrimaryVariant swaps the permanent primary classifier (BirdNET v2.4)
+// between its embedded BuiltIn baseline and a DFT-truncated ONNX build, in place,
+// without a pipeline restart. It mirrors replaceVariant's download-before-delete and
+// rollback discipline, but the primary cannot be orchestrator-unloaded/loaded, so it
+// activates through the dedicated primary-reload path
+// (Orchestrator.ReloadPrimaryForVariantSwap). The target's files (none for the
+// BuiltIn baseline) are fetched first while the old model keeps running, then
+// BirdNET.ModelPath is set (or cleared for the baseline) and the primary is reloaded.
+// A reload failure restores the previous variant's config and record; the running
+// model was already kept alive by reloadModelInternal's transactional rollback, so a
+// failed swap never strands the classifier. The caller must have registered entry.ID
+// in mm.downloading; replacePrimaryVariant clears it (or schedules cleanup on
+// failure) before returning.
+func (mm *ModelManager) replacePrimaryVariant(ctx context.Context, entry *CatalogEntry, old *InstalledModel, newVariantID, baseURL string, progress chan<- DownloadState) error {
+	log := GetLogger()
+
+	targetIsBuiltIn := false
+	if v := resolveVariant(entry, newVariantID); v != nil {
+		targetIsBuiltIn = v.BuiltIn
+	}
+
+	// 1. Acquire the new variant's model file. The BuiltIn baseline is embedded, so
+	//    there is nothing to download; a DFT build is fetched (the old model keeps
+	//    running) and removed on a failed switch.
+	newModelPath := ""
+	if !targetIsBuiltIn {
+		_, modelPath, _, _, err := mm.downloadVariantFiles(ctx, entry, newVariantID, baseURL, progress, true)
+		if err != nil {
+			// downloadVariantFiles already marked the state failed; retain it briefly
+			// for SSE pollers, then clear. The old variant is untouched and running.
+			time.AfterFunc(failedStateRetention, func() {
+				mm.removeDownloading(entry.ID)
+			})
+			return err
+		}
+		newModelPath = modelPath
+	}
+
+	// 2. Swap the install record to the new variant. entry.ID stays in
+	//    mm.downloading (cleared in step 6) so a concurrent ScanInstalled treats the
+	//    switch as in-flight until the superseded files are removed.
+	mm.mu.Lock()
+	mm.installed[entry.ID] = InstalledModel{
+		CatalogID:   entry.ID,
+		VariantID:   newVariantID,
+		ModelPath:   newModelPath,
+		InstalledAt: time.Now(),
+		Version:     entry.Version,
+	}
+	mm.mu.Unlock()
+
+	// 3. Persist BirdNET.ModelPath (set for a DFT build, cleared for the baseline)
+	//    BEFORE reloading, so the primary loader resolves the new file and a
+	//    crash/restart before step 4 still resolves the new variant.
+	mm.applyConfigForPrimarySwap(newModelPath)
+
+	// 4. Activate the new variant by reloading the primary in place. A reload failure
+	//    rolls back (the running model was already kept alive transactionally).
+	if mm.orchestrator != nil {
+		if reloadErr := mm.orchestrator.ReloadPrimaryForVariantSwap(); reloadErr != nil {
+			return mm.rollbackPrimaryVariantSwap(log, entry, old, newVariantID, reloadErr, progress)
+		}
+		mm.notifyTopologyChanged()
+	}
+
+	// 5. Remove the OLD variant's superseded files. Safe for builtin ids: the
+	//    BuiltIn baseline carries no files, so nothing is targeted when the old
+	//    variant was the baseline, and its files are removed when the old variant was
+	//    a DFT build superseded by the baseline.
+	mm.removeSupersededVariantFiles(log, entry, old.VariantID, newVariantID)
+
+	// 6. The switch is complete: clear the in-flight marker and report success.
+	mm.removeDownloading(entry.ID)
+	sendProgress(progress, entry.ID, StatusComplete)
+
+	log.Info("Primary model variant switched",
+		logger.String("catalog_id", entry.ID),
+		logger.String("from_variant", old.VariantID),
+		logger.String("to_variant", newVariantID),
+		logger.String("model_path", newModelPath))
+
+	return nil
+}
+
+// rollbackPrimaryVariantSwap restores the previously-active primary variant after a
+// failed reload of the new one. reloadModelInternal already kept the previous model
+// serving via its transactional rollback, so this only re-records the old variant,
+// re-persists its config, and removes the new variant's now-unused files; it does
+// NOT reload again (that would put a working model at risk for no gain). It reports
+// the swap as failed over the progress stream. The caller must have registered
+// entry.ID in mm.downloading; rollbackPrimaryVariantSwap schedules its cleanup.
+func (mm *ModelManager) rollbackPrimaryVariantSwap(log logger.Logger, entry *CatalogEntry, old *InstalledModel, newVariantID string, cause error, progress chan<- DownloadState) error {
+	log.Warn("New primary variant failed to reload; rolled back to the previous variant",
+		logger.String("catalog_id", entry.ID),
+		logger.String("failed_variant", newVariantID),
+		logger.String("restored_variant", old.VariantID),
+		logger.Error(cause))
+
+	// Restore the install record and re-persist the old variant's config (step 3
+	// wrote the new path). The running model is already the old one.
+	mm.mu.Lock()
+	mm.installed[entry.ID] = *old
+	mm.mu.Unlock()
+	mm.applyConfigForPrimarySwap(old.ModelPath)
+
+	// The new variant is unusable on this host: remove its downloaded files (none for
+	// the BuiltIn baseline) so disk state matches the restored record.
+	mm.removeSupersededVariantFiles(log, entry, newVariantID, old.VariantID)
+
+	switchErr := errors.Newf("switched %s to variant %q but it failed to load; restored previous variant %q", entry.ID, newVariantID, old.VariantID).
+		Component("classifier.model_manager").
+		Category(errors.CategoryModelInit).
+		Context("catalog_id", entry.ID).
+		Context("failed_variant", newVariantID).
+		Context("restored_variant", old.VariantID).
+		Context("reload_error", cause.Error()).
+		Build()
+	mm.markFailed(entry.ID, switchErr, progress)
+	time.AfterFunc(failedStateRetention, func() {
+		mm.removeDownloading(entry.ID)
+	})
+	return switchErr
+}
+
+// applyConfigForPrimarySwap persists the primary classifier's selected model file
+// path for a within-model BirdNET v2.4 variant swap: it sets BirdNET.ModelPath to
+// the new DFT-truncated file, or clears it (empty modelPath) to revert to the
+// embedded BuiltIn baseline. It never touches BirdNET.LabelPath: the v2.4 label set
+// is embedded and identical across variants, so a swap must not disturb a
+// user-configured custom label path. Uses clone-mutate-publish + SaveSettings so the
+// change survives restarts and is visible to concurrent readers.
+func (mm *ModelManager) applyConfigForPrimarySwap(modelPath string) {
+	if mm.settings == nil {
+		return
+	}
+	mm.settingsMu.Lock()
+	defer mm.settingsMu.Unlock()
+
+	updated := conf.CloneSettings(conf.GetSettings())
+	updated.BirdNET.ModelPath = modelPath
+	conf.StoreSettings(updated)
+	if err := conf.SaveSettings(); err != nil {
+		GetLogger().Warn("Failed to persist settings after primary variant swap",
+			logger.Error(err))
+	}
 }
 
 // removeSupersededVariantFiles deletes the old variant's files that the new
