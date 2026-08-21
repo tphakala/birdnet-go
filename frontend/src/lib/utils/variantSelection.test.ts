@@ -6,6 +6,9 @@ import {
   translateReason,
   topReasons,
   normalizeRegionMode,
+  variantHardwareClass,
+  variantHardwareLabel,
+  optimizeOffers,
 } from './variantSelection';
 import type { CatalogEntry, CatalogVariant, VariantReason } from '$lib/types/models';
 
@@ -195,6 +198,142 @@ describe('variantLabel', () => {
     expect(variantLabel(variant({ id: 'fp32@nordic', precision: 'fp32', region: 'nordic' }))).toBe(
       'FP32 (nordic)'
     );
+  });
+
+  it('returns the localized built-in label for a BuiltIn variant, not the raw id', () => {
+    expect(variantLabel(variant({ id: 'builtin', builtIn: true }))).toBe(
+      'analysis.gallery.builtIn'
+    );
+  });
+});
+
+describe('variantHardwareClass', () => {
+  it('classifies the BuiltIn baseline as built-in', () => {
+    expect(variantHardwareClass(variant({ id: 'builtin', builtIn: true }))).toBe('builtIn');
+  });
+
+  it('maps cuda/tensorrt backends to a discrete GPU', () => {
+    const cuda = variant({
+      id: 'fp32',
+      reasons: [{ code: 'backend.recommended', args: { backend: 'cuda' } }],
+    });
+    const trt = variant({
+      id: 'fp32',
+      reasons: [{ code: 'backend.recommended', args: { backend: 'tensorrt' } }],
+    });
+    expect(variantHardwareClass(cuda)).toBe('gpu');
+    expect(variantHardwareClass(trt)).toBe('gpu');
+  });
+
+  it('maps the openvino-gpu backend to an Intel GPU', () => {
+    const ov = variant({
+      id: 'fp32',
+      reasons: [{ code: 'backend.recommended', args: { backend: 'openvino-gpu' } }],
+    });
+    expect(variantHardwareClass(ov)).toBe('intelGpu');
+  });
+
+  it('prefers the recommended backend reason over any other backend reason', () => {
+    const v = variant({
+      id: 'fp32',
+      reasons: [
+        { code: 'backend.available', args: { backend: 'onnxruntime-cpu' } },
+        { code: 'backend.recommended', args: { backend: 'cuda' } },
+      ],
+    });
+    expect(variantHardwareClass(v)).toBe('gpu');
+  });
+
+  it('falls back to the id/precision when no backend reason is present', () => {
+    // An unauthenticated request carries no reasons: an "arm" id or int8 precision
+    // marks an ARM CPU build, everything else a generic CPU.
+    expect(variantHardwareClass(variant({ id: 'int8-arm-dfttrunc', precision: 'int8' }))).toBe(
+      'armCpu'
+    );
+    expect(variantHardwareClass(variant({ id: 'int8-something', precision: 'int8' }))).toBe(
+      'armCpu'
+    );
+    expect(variantHardwareClass(variant({ id: 'fp32-dfttrunc', precision: 'fp32' }))).toBe('cpu');
+  });
+});
+
+describe('variantHardwareLabel', () => {
+  it('uses the built-in label for the baseline and the hardware key otherwise', () => {
+    expect(variantHardwareLabel(variant({ id: 'builtin', builtIn: true }))).toBe(
+      'analysis.gallery.builtIn'
+    );
+    expect(
+      variantHardwareLabel(
+        variant({
+          id: 'fp32',
+          reasons: [{ code: 'backend.recommended', args: { backend: 'cuda' } }],
+        })
+      )
+    ).toBe('analysis.gallery.hardware.gpu');
+    expect(variantHardwareLabel(variant({ id: 'fp32-dfttrunc', precision: 'fp32' }))).toBe(
+      'analysis.gallery.hardware.cpu'
+    );
+  });
+});
+
+describe('optimizeOffers', () => {
+  // A permanent-style entry: installed on its BuiltIn baseline, with a faster DFT
+  // build recommended for this host.
+  function v24Entry(overrides: Partial<CatalogEntry> = {}): CatalogEntry {
+    return entry({
+      id: 'birdnet-v2.4',
+      installed: true,
+      permanent: true,
+      installedVariantId: 'builtin',
+      recommendedVariantId: 'fp32-dfttrunc',
+      variants: [
+        variant({ id: 'builtin', builtIn: true, default: true, installed: true }),
+        variant({
+          id: 'fp32-dfttrunc',
+          precision: 'fp32',
+          compatible: true,
+          recommended: true,
+          reasons: [{ code: 'backend.recommended', args: { backend: 'onnxruntime-cpu' } }],
+        }),
+      ],
+      ...overrides,
+    });
+  }
+
+  it('offers a swap when the recommended variant differs from the installed one', () => {
+    const offers = optimizeOffers([v24Entry()]);
+    expect(offers).toHaveLength(1);
+    expect(offers[0].entry.id).toBe('birdnet-v2.4');
+    expect(offers[0].from.id).toBe('builtin');
+    expect(offers[0].to.id).toBe('fp32-dfttrunc');
+    expect(offers[0].reasons.length).toBeGreaterThan(0);
+  });
+
+  it('makes no offer when the installed variant is already the recommended one', () => {
+    const e = v24Entry({ installedVariantId: 'fp32-dfttrunc' });
+    expect(optimizeOffers([e])).toHaveLength(0);
+  });
+
+  it('makes no offer when the recommended variant is incompatible', () => {
+    const e = v24Entry();
+    const rec = e.variants?.find(v => v.id === 'fp32-dfttrunc');
+    if (rec) rec.compatible = false;
+    expect(optimizeOffers([e])).toHaveLength(0);
+  });
+
+  it('makes no offer for a flat (variant-less) entry', () => {
+    const flat = entry({ id: 'geo', installed: true, recommendedVariantId: undefined });
+    expect(optimizeOffers([flat])).toHaveLength(0);
+  });
+
+  it('makes no offer when there is no recommendation (e.g. an unauthenticated request)', () => {
+    const e = v24Entry({ recommendedVariantId: undefined });
+    expect(optimizeOffers([e])).toHaveLength(0);
+  });
+
+  it('makes no offer for an entry that is not installed', () => {
+    const e = v24Entry({ installed: false });
+    expect(optimizeOffers([e])).toHaveLength(0);
   });
 });
 

@@ -5423,7 +5423,31 @@
       "reinstalling": "Ponowna instalacja...",
       "reinstallComplete": "Pliki zweryfikowane pomyślnie",
       "geomodelBadge": "Zawiera BirdNET v3.0 geomodel",
-      "entryIncompatible": "Ten model nie jest dostępny w tym systemie."
+      "entryIncompatible": "Ten model nie jest dostępny w tym systemie.",
+      "regionGlobal": "Global",
+      "hardwareLabel": "Hardware",
+      "hardware": {
+        "gpu": "GPU",
+        "intelGpu": "Intel GPU",
+        "armCpu": "ARM CPU",
+        "cpu": "CPU"
+      },
+      "optimize": {
+        "bannerTitle": "{count, plural, one {# model can run faster on your hardware} other {# models can run faster on your hardware}}",
+        "review": "Review",
+        "dismiss": "Dismiss",
+        "badgeTitle": "A faster build is available for your hardware",
+        "swap": "Optimize",
+        "dialogTitle": "Optimize your models",
+        "fromTo": "{from} to {to}",
+        "apply": "Apply",
+        "applyAll": "Apply all",
+        "applying": "Applying...",
+        "applied": "Applied",
+        "applyFailed": "Failed to apply",
+        "upToDate": "All your models are already optimized for this hardware.",
+        "licenseNote": "Swapping stays within the same model, so its license does not change."
+      }
     },
     "bird": {
       "title": "Wykrywanie ptaków",
