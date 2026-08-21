@@ -24,6 +24,12 @@ const (
 // known statically. It matches the embedded label file's expected line count.
 const birdnetV24SpeciesCount = 6522
 
+// catalogBackendTFLite is the backend token used as a key in CatalogVariant.Backends
+// for the TensorFlow Lite backend, matching the tokens in the embedded catalog data
+// and the remote manifests. It equals hwprofile.CapTFLite but is kept local so the
+// catalog's backend-token lookups do not couple to the hardware-capability package.
+const catalogBackendTFLite = "tflite"
+
 // CatalogFile role constants.
 const (
 	RoleModel          = "model"
@@ -792,10 +798,13 @@ func VariantNeedsONNX(entry *CatalogEntry, variantID string) bool {
 	if v.BuiltIn {
 		return false
 	}
-	// Backends is keyed by backend token; "tflite" matches the literal tokens used
-	// throughout this file's catalog data and the remote manifest. A variant that
-	// advertises TFLite support can run without the ONNX Runtime.
-	if _, ok := v.Backends["tflite"]; ok {
+	// Backends is keyed by backend token; catalogBackendTFLite matches the literal
+	// tokens used throughout this file's catalog data and the remote manifest. A
+	// variant only avoids the ONNX Runtime when it declares TFLite as an actually
+	// SUPPORTED backend: a manifest may list "tflite" with Supported:false (the
+	// Perch manifests do exactly this for unavailable backends), and key presence
+	// alone would then wrongly skip the ORT requirement.
+	if support, ok := v.Backends[catalogBackendTFLite]; ok && support.Supported {
 		return false
 	}
 	return true

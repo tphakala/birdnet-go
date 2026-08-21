@@ -673,8 +673,9 @@ func (bn *BirdNET) loadLabels() error {
 	// ModelInfo is seeded from the registry template, whose NumSpecies is the stock
 	// catalog figure (6522 for BirdNET v2.4) and can differ from the real loaded
 	// labels for a custom or regionally-sliced label file. loadLabels is the single
-	// place the label set changes, so refreshing here keeps o.ModelInfo / PrimaryModelInfo()
-	// reporting the live count. bn.NumSpecies() already reads len(labels) directly.
+	// place the label set changes, so refreshing here keeps bn.ModelInfo (and thus the
+	// orchestrator's PrimaryModelInfo()) reporting the live count. bn.NumSpecies()
+	// already reads len(labels) directly.
 	bn.ModelInfo.NumSpecies = len(bn.Settings.BirdNET.Labels)
 	return nil
 }
