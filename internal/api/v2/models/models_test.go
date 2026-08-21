@@ -36,16 +36,13 @@ func TestModelsRouteRegistration(t *testing.T) {
 }
 
 // TestInstallModel_RejectsHiddenEntries verifies that hidden, foundation-only
-// catalog entries (the collapsed BirdNET v2.4 DFT-truncated entry) cannot be
-// installed or reinstalled by ID. It carries the permanent registry ID, which
-// Uninstall refuses, so allowing an install-by-ID would leave an unremovable,
-// unused model.
+// catalog entries (e.g. bsg-finland) cannot be installed or reinstalled by ID.
 func TestInstallModel_RejectsHiddenEntries(t *testing.T) {
 	core := apitest.NewCore(t)
 	h := New(core, nil)
 	e := echo.New()
 
-	hiddenIDs := []string{"birdnet-v2.4"}
+	hiddenIDs := []string{"bsg-finland"}
 	for _, id := range hiddenIDs {
 		t.Run(id, func(t *testing.T) {
 			// Install must be rejected with 404 before touching the model manager.
@@ -69,4 +66,22 @@ func TestInstallModel_RejectsHiddenEntries(t *testing.T) {
 			assert.Contains(t, rec.Body.String(), "not available for installation")
 		})
 	}
+}
+
+// TestReinstallModel_RejectsPermanentEntry verifies that the permanent, now-visible
+// BirdNET v2.4 entry cannot be reinstalled: its BuiltIn baseline has no downloadable
+// files, and a DFT variant is acquired by swapping to it via install, not reinstall.
+func TestReinstallModel_RejectsPermanentEntry(t *testing.T) {
+	core := apitest.NewCore(t)
+	h := New(core, nil)
+	e := echo.New()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/models/reinstall/birdnet-v2.4", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetParamNames("id")
+	ctx.SetParamValues("birdnet-v2.4")
+	require.NoError(t, h.ReinstallModel(ctx))
+	assert.Equal(t, http.StatusConflict, rec.Code, "reinstall of the permanent v2.4 entry must be refused")
+	assert.Contains(t, rec.Body.String(), "cannot be reinstalled")
 }

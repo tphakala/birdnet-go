@@ -1180,6 +1180,27 @@ func (o *Orchestrator) RunFilterProcess(dateStr string, week float32) {
 // Acquires the per-model lock before reload to prevent concurrent inference,
 // then the write lock to re-key the models map.
 func (o *Orchestrator) ReloadModel() error {
+	return o.reloadPrimaryModel(func(primary *BirdNET) error { return primary.ReloadModel() })
+}
+
+// ReloadPrimaryForVariantSwap reloads the primary classifier in place for a
+// within-model variant swap (the gallery "optimize" flow for the permanent BirdNET
+// v2.4 model), accepting a changed or cleared model file path that ReloadModel would
+// refuse as a model-identity change. It shares reloadPrimaryModel's locking and
+// shared-state re-sync, differing only in delegating to BirdNET.reloadForVariantSwap
+// (allowPathChange=true). The model ID is invariant across a v2.4 variant swap, so
+// the re-key is a no-op in practice. Transactional rollback to the previous model
+// lives in reloadModelInternal, so a failed swap leaves the previous variant serving.
+func (o *Orchestrator) ReloadPrimaryForVariantSwap() error {
+	return o.reloadPrimaryModel(func(primary *BirdNET) error { return primary.reloadForVariantSwap() })
+}
+
+// reloadPrimaryModel performs the shared locking, per-instance reload, shared-state
+// re-sync, and models-map re-key for a primary-model reload. It delegates the actual
+// per-instance reload to reload(primary); ReloadModel passes BirdNET.ReloadModel (a
+// settings reload, path change refused) and ReloadPrimaryForVariantSwap passes
+// BirdNET.reloadForVariantSwap (an in-place variant swap, path change accepted).
+func (o *Orchestrator) reloadPrimaryModel(reload func(primary *BirdNET) error) error {
 	// Step 1: acquire per-model lock to prevent concurrent inference during reload.
 	o.mu.RLock()
 	primary := o.primary
@@ -1208,7 +1229,7 @@ func (o *Orchestrator) ReloadModel() error {
 	func() {
 		entry.mu.Lock()
 		defer entry.mu.Unlock()
-		reloadErr = primary.ReloadModel()
+		reloadErr = reload(primary)
 	}()
 	if reloadErr != nil {
 		return reloadErr

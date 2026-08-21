@@ -103,6 +103,101 @@ func TestGetModelCatalog_MarksRecommendedVariant(t *testing.T) {
 	assert.Equal(t, 1, recommended)
 }
 
+// TestGetModelCatalog_BirdNETv24RecommendedVariant covers the permanent BirdNET
+// v2.4 entry now that it is visible and carries a BuiltIn baseline plus two
+// DFT-truncated builds. The recommended variant per host class drives whether the
+// gallery offers an in-place optimize swap: when the host's recommended variant is
+// the installed one there is no offer, and the BuiltIn baseline must not win the
+// backend/size tie-break on an ORT-capable host (its ONNX backend is not marked
+// recommended precisely so a real DFT build beats it there).
+func TestGetModelCatalog_BirdNETv24RecommendedVariant(t *testing.T) {
+	// aarch64 host with the ONNX Runtime and low RAM (1 GB): passes the 250 MB
+	// variant floor but is tagged low-ram, and the arch-specific INT8 build applies.
+	aarch64LowRAMONNX := hwprofile.Profile{
+		Arch:          "arm64",
+		TotalRAMBytes: 1 * 1024 * 1024 * 1024,
+		Backends:      hwprofile.Backends{ONNX: hwprofile.BackendStatus{Available: true}},
+	}
+	// amd64 host with only TFLite linked (no ONNX Runtime): the DFT builds are ONNX
+	// and blocked, so the embedded BuiltIn baseline is the only runnable variant.
+	amd64TFLiteOnly := hwprofile.Profile{
+		Arch:          "amd64",
+		TotalRAMBytes: 16 * 1024 * 1024 * 1024,
+		Backends:      hwprofile.Backends{TFLite: hwprofile.BackendStatus{Available: true}},
+	}
+	// amd64 host with OpenVINO including a GPU device: the FP32 DFT build runs on
+	// OpenVINO, the INT8 build is aarch64-only, and the baseline has no OpenVINO path.
+	amd64OpenVINOGPU := hwprofile.Profile{
+		Arch:          "amd64",
+		TotalRAMBytes: 16 * 1024 * 1024 * 1024,
+		Backends: hwprofile.Backends{
+			OpenVINO: hwprofile.OpenVINOStatus{Supported: true, Devices: []string{"GPU"}},
+		},
+	}
+
+	cases := []struct {
+		name    string
+		profile hwprofile.Profile
+		want    string
+	}{
+		{"amd64+ONNX -> fp32-dfttrunc", amd64ONNXProfile(), "fp32-dfttrunc"},
+		{"tflite-only -> builtin baseline", amd64TFLiteOnly, "builtin"},
+		{"aarch64 low-RAM ONNX -> int8-arm-dfttrunc", aarch64LowRAMONNX, "int8-arm-dfttrunc"},
+		{"amd64 openvino-gpu -> fp32-dfttrunc", amd64OpenVINOGPU, "fp32-dfttrunc"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			core := apitest.NewCore(t)
+			h := New(core, nil)
+			profile := tc.profile
+			h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile { return profile }
+
+			v24 := findEntry(catalogRequest(t, h), "birdnet-v2.4")
+			require.NotNil(t, v24, "birdnet-v2.4 must be visible in the catalog")
+			assert.True(t, v24.Permanent, "birdnet-v2.4 must be marked permanent")
+			assert.Equal(t, tc.want, v24.RecommendedVariantID, "recommended v2.4 variant for %s", tc.name)
+
+			// Exactly one recommended variant, and it is the one named.
+			recommended := 0
+			for _, v := range v24.Variants {
+				if v.Recommended {
+					recommended++
+					assert.Equal(t, tc.want, v.ID)
+				}
+			}
+			assert.Equal(t, 1, recommended, "exactly one recommended v2.4 variant")
+
+			// The built-in baseline variant is always present and flagged BuiltIn.
+			builtin := findVariant(v24, "builtin")
+			require.NotNil(t, builtin, "the built-in baseline variant must always be listed")
+			assert.True(t, builtin.BuiltIn, "baseline variant must carry the BuiltIn flag")
+			assert.Zero(t, builtin.SizeBytes, "the built-in baseline has no downloadable size")
+		})
+	}
+}
+
+// TestGetModelCatalog_BirdNETv24BuiltinInstalledNoOffer verifies that on a
+// TFLite-only host the recommended variant is the BuiltIn baseline, so a host
+// running the baseline sees installedVariantId == recommendedVariantId (the
+// client-side optimize offer is then suppressed).
+func TestGetModelCatalog_BirdNETv24BuiltinInstalledNoOffer(t *testing.T) {
+	core := apitest.NewCore(t)
+	h := New(core, nil)
+	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile {
+		return hwprofile.Profile{
+			Arch:          "amd64",
+			TotalRAMBytes: 16 * 1024 * 1024 * 1024,
+			Backends:      hwprofile.Backends{TFLite: hwprofile.BackendStatus{Available: true}},
+		}
+	}
+
+	v24 := findEntry(catalogRequest(t, h), "birdnet-v2.4")
+	require.NotNil(t, v24)
+	assert.Equal(t, "builtin", v24.RecommendedVariantID,
+		"on a TFLite-only host the baseline is recommended, so a baseline install is already optimal")
+}
+
 func TestGetModelCatalog_BlockedVariantCarriesBlockers(t *testing.T) {
 	core := apitest.NewCore(t)
 	h := New(core, nil)

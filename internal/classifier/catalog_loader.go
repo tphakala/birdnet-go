@@ -238,6 +238,7 @@ func validateCatalogEntryFiles(entry *CatalogEntry) error {
 		return err
 	}
 	seenVariants := make(map[string]struct{}, len(entry.Variants))
+	builtInCount := 0
 	for i := range entry.Variants {
 		v := &entry.Variants[i]
 		if v.ID == "" {
@@ -253,6 +254,30 @@ func validateCatalogEntryFiles(entry *CatalogEntry) error {
 				Build()
 		}
 		seenVariants[v.ID] = struct{}{}
+
+		// BuiltIn baseline variants (the embedded primary model) are exempt from the
+		// no-files and model-role checks below: they carry no files because there is
+		// nothing to download, and ScanInstalled reports them installed
+		// unconditionally rather than by a model file on disk. Enforce instead that a
+		// BuiltIn variant carries NO files (its files would never be used) and that at
+		// most one variant per entry is BuiltIn.
+		if v.BuiltIn {
+			builtInCount++
+			if builtInCount > 1 {
+				return errors.Newf("catalog entry %q declares more than one built-in variant; at most one is allowed", entry.ID).
+					Component("classifier.catalog_loader").
+					Category(errors.CategoryValidation).
+					Build()
+			}
+			if len(v.Files) > 0 {
+				return errors.Newf("catalog entry %q built-in variant %q must declare no files", entry.ID, v.ID).
+					Component("classifier.catalog_loader").
+					Category(errors.CategoryValidation).
+					Build()
+			}
+			continue
+		}
+
 		if len(v.Files) == 0 {
 			return errors.Newf("catalog entry %q variant %q declares no files", entry.ID, v.ID).
 				Component("classifier.catalog_loader").

@@ -65,11 +65,18 @@ func TestModelManager_ScanInstalled(t *testing.T) {
 
 	assert.True(t, mm.IsInstalled(entry.ID), "expected %s to be detected as installed", entry.ID)
 
-	installed := mm.ListInstalled()
-	require.Len(t, installed, 1)
-	assert.Equal(t, entry.ID, installed[0].CatalogID)
-	assert.Equal(t, modelPath, installed[0].ModelPath)
-	assert.Equal(t, entry.Version, installed[0].Version)
+	// The permanent BirdNET v2.4 baseline is always reported installed, so the bat
+	// model is looked up by id rather than by position.
+	im := installedByID(t, mm, entry.ID)
+	assert.Equal(t, entry.ID, im.CatalogID)
+	assert.Equal(t, modelPath, im.ModelPath)
+	assert.Equal(t, entry.Version, im.Version)
+
+	// The built-in v2.4 primary classifier is always installed (embedded baseline).
+	assert.True(t, mm.IsInstalled("birdnet-v2.4"), "built-in BirdNET v2.4 must always be installed")
+	v24 := installedByID(t, mm, "birdnet-v2.4")
+	assert.Equal(t, "builtin", v24.VariantID, "v2.4 baseline variant id")
+	assert.Empty(t, v24.ModelPath, "v2.4 baseline has no model path (embedded)")
 }
 
 // variantByID returns the variant with the given id from entry, failing the
@@ -628,26 +635,21 @@ func TestModelManager_ListInstalled(t *testing.T) {
 func TestModelManager_UninstallRejectsPermanent(t *testing.T) {
 	t.Parallel()
 
+	// The permanent BirdNET v2.4 entry is now a real, visible catalog entry whose
+	// BuiltIn baseline is always installed. Uninstall must still refuse it: only its
+	// variant may be swapped, never removed.
+	entry, ok := GetCatalogEntry("birdnet-v2.4")
+	require.True(t, ok, "birdnet-v2.4 must be present in the catalog")
+	require.Equal(t, permanentRegistryID, entry.RegistryID, "birdnet-v2.4 must carry the permanent registry id")
+
 	mm := NewModelManager(t.TempDir(), nil, nil)
+	mm.ScanInstalled()
+	require.True(t, mm.IsInstalled("birdnet-v2.4"), "the built-in baseline must always be installed")
 
-	// Find a catalog entry whose RegistryID maps to BirdNET_V2.4.
-	var permanentID string
-	for _, entry := range EmbeddedCatalog {
-		if entry.RegistryID == permanentRegistryID {
-			permanentID = entry.ID
-			break
-		}
-	}
-
-	// If no catalog entry maps to BirdNET_V2.4, the test is not applicable
-	// (the permanent model is embedded, not downloadable). Skip gracefully.
-	if permanentID == "" {
-		t.Skip("no catalog entry maps to permanentRegistryID; nothing to test")
-	}
-
-	err := mm.Uninstall(permanentID)
+	err := mm.Uninstall("birdnet-v2.4")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot uninstall")
+	assert.True(t, mm.IsInstalled("birdnet-v2.4"), "the permanent model must remain installed after a refused uninstall")
 }
 
 func TestModelManager_UninstallNotInstalled(t *testing.T) {

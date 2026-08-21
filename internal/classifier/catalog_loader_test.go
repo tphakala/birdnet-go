@@ -239,6 +239,34 @@ func TestValidateCatalog_Variants(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "built-in baseline with no files is valid",
+			entry: CatalogEntry{ID: "v", Variants: []CatalogVariant{
+				{ID: "builtin", BuiltIn: true, Default: true},
+				{ID: "fp32", Files: []CatalogFile{validFile}},
+			}},
+		},
+		{
+			name: "built-in baseline may be the only variant",
+			entry: CatalogEntry{ID: "v", Variants: []CatalogVariant{
+				{ID: "builtin", BuiltIn: true, Default: true},
+			}},
+		},
+		{
+			name: "built-in variant carrying files is rejected",
+			entry: CatalogEntry{ID: "v", Variants: []CatalogVariant{
+				{ID: "builtin", BuiltIn: true, Files: []CatalogFile{validFile}},
+			}},
+			wantErr: true,
+		},
+		{
+			name: "more than one built-in variant is rejected",
+			entry: CatalogEntry{ID: "v", Variants: []CatalogVariant{
+				{ID: "builtin", BuiltIn: true, Default: true},
+				{ID: "builtin2", BuiltIn: true},
+			}},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
