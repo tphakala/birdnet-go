@@ -2211,12 +2211,16 @@ func newDownloadTransport() http.RoundTripper {
 	return tr
 }
 
+// downloadTotalTimeout is the overall budget for a single model-file download,
+// deliberately generous so a large file on a slow connection can complete.
+const downloadTotalTimeout = 30 * time.Minute
+
 // downloadHTTPClient is used for model file downloads with a generous total
 // timeout to accommodate large files on slow connections. Its transport adds a
 // ResponseHeaderTimeout (see downloadResponseHeaderTimeout) so a host that
 // connects then stalls fails over promptly instead of holding the whole budget.
 var downloadHTTPClient = &http.Client{
-	Timeout:   30 * time.Minute,
+	Timeout:   downloadTotalTimeout,
 	Transport: newDownloadTransport(),
 }
 
