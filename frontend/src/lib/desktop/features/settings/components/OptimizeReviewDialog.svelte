@@ -9,7 +9,7 @@
   import type { OptimizeOffer } from '$lib/utils/variantSelection';
   import { variantLabel, variantHardwareLabel } from '$lib/utils/variantSelection';
   import { t } from '$lib/i18n';
-  import { ArrowRight, Check, Loader2, Sparkles, X } from '@lucide/svelte';
+  import { ArrowRight, Check, Loader2, Sparkles, TriangleAlert, X } from '@lucide/svelte';
 
   interface Props {
     /** Whether the dialog is open. The parent controls it; native closes call onClose. */
@@ -22,6 +22,8 @@
     applyingId: string | null;
     /** Entry ids applied in this session (marked done in the list). */
     appliedIds: Set<string>;
+    /** Entry ids whose apply failed this session (marked failed, re-appliable). */
+    failedIds: Set<string>;
     onApply: (_offer: OptimizeOffer) => void;
     onApplyAll: () => void;
     onClose: () => void;
@@ -34,6 +36,7 @@
     inFlight,
     applyingId,
     appliedIds,
+    failedIds,
     onApply,
     onApplyAll,
     onClose,
@@ -96,6 +99,7 @@
         {#each offers as offer (offer.entry.id)}
           {@const applying = applyingId === offer.entry.id}
           {@const applied = appliedIds.has(offer.entry.id)}
+          {@const failed = failedIds.has(offer.entry.id)}
           <li
             class="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-3"
           >
@@ -106,6 +110,10 @@
                 </p>
                 <div
                   class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-[var(--color-base-content)]/80"
+                  aria-label={t('analysis.gallery.optimize.fromTo', {
+                    from: variantLabel(offer.from, regionNames),
+                    to: variantLabel(offer.to, regionNames),
+                  })}
                 >
                   <span>{variantLabel(offer.from, regionNames)}</span>
                   <span
@@ -145,15 +153,25 @@
                     {t('analysis.gallery.optimize.applying')}
                   </span>
                 {:else}
-                  <button
-                    type="button"
-                    onclick={() => onApply(offer)}
-                    disabled={inFlight}
-                    title={inFlight ? t('analysis.gallery.actionInProgress') : undefined}
-                    class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary-content)] transition-colors hover:bg-[var(--color-primary)]/80 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {t('analysis.gallery.optimize.apply')}
-                  </button>
+                  <div class="flex flex-col items-end gap-1">
+                    {#if failed}
+                      <span
+                        class="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-error)]"
+                      >
+                        <TriangleAlert class="size-3.5" />
+                        {t('analysis.gallery.optimize.applyFailed')}
+                      </span>
+                    {/if}
+                    <button
+                      type="button"
+                      onclick={() => onApply(offer)}
+                      disabled={inFlight}
+                      title={inFlight ? t('analysis.gallery.actionInProgress') : undefined}
+                      class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary-content)] transition-colors hover:bg-[var(--color-primary)]/80 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {failed ? t('analysis.gallery.retry') : t('analysis.gallery.optimize.apply')}
+                    </button>
+                  </div>
                 {/if}
               </div>
             </div>

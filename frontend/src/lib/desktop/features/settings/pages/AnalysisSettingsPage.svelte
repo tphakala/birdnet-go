@@ -364,6 +364,9 @@
   // consent is needed beyond the review dialog itself.
   let optimizeReviewOpen = $state(false);
   let appliedOptimizeIds = $state(new Set<string>());
+  // Entry ids whose optimize swap failed this session (drives the dialog's per-row
+  // failed marker); the shared installError banner carries the detail.
+  let failedOptimizeIds = $state(new Set<string>());
   // The entry id whose optimize swap is in flight (drives the dialog's per-row
   // spinner) and the sequential apply-all queue of entry ids still to apply.
   let optimizeApplyingId = $state<string | null>(null);
@@ -379,9 +382,15 @@
     optimizeReviewOpen = false;
   }
 
-  // Apply one offer: start the within-model swap to its recommended variant.
+  // Apply one offer: start the within-model swap to its recommended variant. Clear
+  // any prior failed marker for it so a retry shows progress, not the stale failure.
   function applyOffer(offer: OptimizeOffer) {
     if (galleryActionInFlight) return;
+    if (failedOptimizeIds.has(offer.entry.id)) {
+      const next = new Set(failedOptimizeIds);
+      next.delete(offer.entry.id);
+      failedOptimizeIds = next;
+    }
     optimizeApplyingId = offer.entry.id;
     startInstall(offer.entry.id, offer.entry.name, offer.to.id);
   }
@@ -416,7 +425,8 @@
       const done = lastInstallingId;
       optimizeApplyingId = null;
       const failed = installError?.modelId === done;
-      if (!failed) appliedOptimizeIds = new Set(appliedOptimizeIds).add(done);
+      if (failed) failedOptimizeIds = new Set(failedOptimizeIds).add(done);
+      else appliedOptimizeIds = new Set(appliedOptimizeIds).add(done);
       if (applyAllQueue[0] === done) {
         applyAllQueue = applyAllQueue.slice(1);
         applyNextInQueue();
@@ -2951,6 +2961,7 @@
   inFlight={galleryActionInFlight}
   applyingId={optimizeApplyingId}
   appliedIds={appliedOptimizeIds}
+  failedIds={failedOptimizeIds}
   onApply={applyOffer}
   onApplyAll={applyAllOffers}
   onClose={closeOptimizeReview}

@@ -5424,7 +5424,7 @@
       "reinstallComplete": "Bestanden succesvol geverifieerd",
       "geomodelBadge": "Bevat BirdNET v3.0 geomodel",
       "entryIncompatible": "Dit model is niet beschikbaar op dit systeem.",
-      "regionGlobal": "Global",
+      "regionGlobal": "Globaal",
       "hardwareLabel": "Hardware",
       "hardware": {
         "gpu": "GPU",
@@ -5433,20 +5433,20 @@
         "cpu": "CPU"
       },
       "optimize": {
-        "bannerTitle": "{count, plural, one {# model can run faster on your hardware} other {# models can run faster on your hardware}}",
-        "review": "Review",
-        "dismiss": "Dismiss",
-        "badgeTitle": "A faster build is available for your hardware",
-        "swap": "Optimize",
-        "dialogTitle": "Optimize your models",
-        "fromTo": "{from} to {to}",
-        "apply": "Apply",
-        "applyAll": "Apply all",
-        "applying": "Applying...",
-        "applied": "Applied",
-        "applyFailed": "Failed to apply",
-        "upToDate": "All your models are already optimized for this hardware.",
-        "licenseNote": "Swapping stays within the same model, so its license does not change."
+        "bannerTitle": "{count, plural, one {# model kan sneller werken op jouw hardware} other {# modellen kunnen sneller werken op jouw hardware}}",
+        "review": "Controleren",
+        "dismiss": "Afwijzen",
+        "badgeTitle": "Er is een snellere build beschikbaar voor jouw hardware",
+        "swap": "Optimaliseren",
+        "dialogTitle": "Optimaliseer jouw modellen",
+        "fromTo": "{from} naar {to}",
+        "apply": "Toepassen",
+        "applyAll": "Alles toepassen",
+        "applying": "Toepassen...",
+        "applied": "Toegepast",
+        "applyFailed": "Toepassen mislukt",
+        "upToDate": "Al jouw modellen zijn al geoptimaliseerd voor deze hardware.",
+        "licenseNote": "Het wisselen blijft binnen hetzelfde model, dus de licentie verandert niet."
       }
     },
     "bird": {

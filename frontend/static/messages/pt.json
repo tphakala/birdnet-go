@@ -5433,20 +5433,20 @@
         "cpu": "CPU"
       },
       "optimize": {
-        "bannerTitle": "{count, plural, one {# model can run faster on your hardware} other {# models can run faster on your hardware}}",
-        "review": "Review",
-        "dismiss": "Dismiss",
-        "badgeTitle": "A faster build is available for your hardware",
-        "swap": "Optimize",
-        "dialogTitle": "Optimize your models",
-        "fromTo": "{from} to {to}",
-        "apply": "Apply",
-        "applyAll": "Apply all",
-        "applying": "Applying...",
-        "applied": "Applied",
-        "applyFailed": "Failed to apply",
-        "upToDate": "All your models are already optimized for this hardware.",
-        "licenseNote": "Swapping stays within the same model, so its license does not change."
+        "bannerTitle": "{count, plural, one {# modelo pode funcionar mais rápido no seu hardware} other {# modelos podem funcionar mais rápido no seu hardware}}",
+        "review": "Revisar",
+        "dismiss": "Descartar",
+        "badgeTitle": "Está disponível uma versão mais rápida para o seu hardware",
+        "swap": "Otimizar",
+        "dialogTitle": "Otimizar os seus modelos",
+        "fromTo": "{from} para {to}",
+        "apply": "Aplicar",
+        "applyAll": "Aplicar tudo",
+        "applying": "A aplicar...",
+        "applied": "Aplicado",
+        "applyFailed": "Falha ao aplicar",
+        "upToDate": "Todos os seus modelos já estão otimizados para este hardware.",
+        "licenseNote": "A troca permanece dentro do mesmo modelo, pelo que a sua licença não é alterada."
       }
     },
     "bird": {

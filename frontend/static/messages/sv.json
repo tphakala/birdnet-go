@@ -5425,7 +5425,7 @@
       "geomodelBadge": "Inkluderar BirdNET v3.0 geomodell",
       "entryIncompatible": "Den här modellen är inte tillgänglig på detta system.",
       "regionGlobal": "Global",
-      "hardwareLabel": "Hardware",
+      "hardwareLabel": "Hårdvara",
       "hardware": {
         "gpu": "GPU",
         "intelGpu": "Intel GPU",
@@ -5433,20 +5433,20 @@
         "cpu": "CPU"
       },
       "optimize": {
-        "bannerTitle": "{count, plural, one {# model can run faster on your hardware} other {# models can run faster on your hardware}}",
-        "review": "Review",
-        "dismiss": "Dismiss",
-        "badgeTitle": "A faster build is available for your hardware",
-        "swap": "Optimize",
-        "dialogTitle": "Optimize your models",
-        "fromTo": "{from} to {to}",
-        "apply": "Apply",
-        "applyAll": "Apply all",
-        "applying": "Applying...",
-        "applied": "Applied",
-        "applyFailed": "Failed to apply",
-        "upToDate": "All your models are already optimized for this hardware.",
-        "licenseNote": "Swapping stays within the same model, so its license does not change."
+        "bannerTitle": "{count, plural, one {# modell kan köras snabbare på din hårdvara} other {# modeller kan köras snabbare på din hårdvara}}",
+        "review": "Granska",
+        "dismiss": "Avfärda",
+        "badgeTitle": "Ett snabbare bygge är tillgängligt för din hårdvara",
+        "swap": "Optimera",
+        "dialogTitle": "Optimera dina modeller",
+        "fromTo": "{from} till {to}",
+        "apply": "Tillämpa",
+        "applyAll": "Tillämpa alla",
+        "applying": "Tillämpar...",
+        "applied": "Tillämpad",
+        "applyFailed": "Kunde inte tillämpa",
+        "upToDate": "Alla dina modeller är redan optimerade för denna hårdvara.",
+        "licenseNote": "Bytet sker inom samma modell, så dess licens ändras inte."
       }
     },
     "bird": {

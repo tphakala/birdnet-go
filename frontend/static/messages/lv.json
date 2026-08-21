@@ -5424,8 +5424,8 @@
       "reinstallComplete": "Faili veiksmīgi pārbaudīti",
       "geomodelBadge": "Ietver BirdNET v3.0 ģeomodelis",
       "entryIncompatible": "Šis modelis nav pieejams šajā sistēmā.",
-      "regionGlobal": "Global",
-      "hardwareLabel": "Hardware",
+      "regionGlobal": "Globāls",
+      "hardwareLabel": "Aparatūra",
       "hardware": {
         "gpu": "GPU",
         "intelGpu": "Intel GPU",
@@ -5433,20 +5433,20 @@
         "cpu": "CPU"
       },
       "optimize": {
-        "bannerTitle": "{count, plural, one {# model can run faster on your hardware} other {# models can run faster on your hardware}}",
-        "review": "Review",
-        "dismiss": "Dismiss",
-        "badgeTitle": "A faster build is available for your hardware",
-        "swap": "Optimize",
-        "dialogTitle": "Optimize your models",
-        "fromTo": "{from} to {to}",
-        "apply": "Apply",
-        "applyAll": "Apply all",
-        "applying": "Applying...",
-        "applied": "Applied",
-        "applyFailed": "Failed to apply",
-        "upToDate": "All your models are already optimized for this hardware.",
-        "licenseNote": "Swapping stays within the same model, so its license does not change."
+        "bannerTitle": "{count, plural, zero {# modeļu var darboties ātrāk jūsu aparatūrā} one {# modelis var darboties ātrāk jūsu aparatūrā} other {# modeļi var darboties ātrāk jūsu aparatūrā}}",
+        "review": "Pārskatīt",
+        "dismiss": "Noraidīt",
+        "badgeTitle": "Jūsu aparatūrai ir pieejama ātrāka versija",
+        "swap": "Optimizēt",
+        "dialogTitle": "Optimizējiet savus modeļus",
+        "fromTo": "{from} uz {to}",
+        "apply": "Lietot",
+        "applyAll": "Lietot visu",
+        "applying": "Lieto...",
+        "applied": "Lietots",
+        "applyFailed": "Neizdevās lietot",
+        "upToDate": "Visi jūsu modeļi jau ir optimizēti šai aparatūrai.",
+        "licenseNote": "Aizstāšana notiek viena modeļa ietvaros, tāpēc tā licence nemainās."
       }
     },
     "bird": {

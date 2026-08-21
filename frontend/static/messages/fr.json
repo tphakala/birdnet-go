@@ -5425,7 +5425,7 @@
       "geomodelBadge": "Inclut le BirdNET v3.0 geomodel",
       "entryIncompatible": "Ce modèle n'est pas disponible sur ce système.",
       "regionGlobal": "Global",
-      "hardwareLabel": "Hardware",
+      "hardwareLabel": "Matériel",
       "hardware": {
         "gpu": "GPU",
         "intelGpu": "Intel GPU",
@@ -5433,20 +5433,20 @@
         "cpu": "CPU"
       },
       "optimize": {
-        "bannerTitle": "{count, plural, one {# model can run faster on your hardware} other {# models can run faster on your hardware}}",
-        "review": "Review",
-        "dismiss": "Dismiss",
-        "badgeTitle": "A faster build is available for your hardware",
-        "swap": "Optimize",
-        "dialogTitle": "Optimize your models",
-        "fromTo": "{from} to {to}",
-        "apply": "Apply",
-        "applyAll": "Apply all",
-        "applying": "Applying...",
-        "applied": "Applied",
-        "applyFailed": "Failed to apply",
-        "upToDate": "All your models are already optimized for this hardware.",
-        "licenseNote": "Swapping stays within the same model, so its license does not change."
+        "bannerTitle": "{count, plural, one {# modèle peut fonctionner plus rapidement sur votre matériel} other {# modèles peuvent fonctionner plus rapidement sur votre matériel}}",
+        "review": "Examiner",
+        "dismiss": "Ignorer",
+        "badgeTitle": "Une version plus rapide est disponible pour votre matériel",
+        "swap": "Optimiser",
+        "dialogTitle": "Optimiser vos modèles",
+        "fromTo": "{from} vers {to}",
+        "apply": "Appliquer",
+        "applyAll": "Tout appliquer",
+        "applying": "Application...",
+        "applied": "Appliqué",
+        "applyFailed": "Échec de l'application",
+        "upToDate": "Tous vos modèles sont déjà optimisés pour ce matériel.",
+        "licenseNote": "Le changement reste au sein du même modèle, sa licence ne change donc pas."
       }
     },
     "bird": {
