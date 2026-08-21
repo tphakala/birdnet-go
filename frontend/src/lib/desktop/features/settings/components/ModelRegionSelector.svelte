@@ -17,7 +17,11 @@
   import { t, getLocale } from '$lib/i18n';
   import { fetchModelRegions, fetchRegionCoverageMap } from '$lib/utils/modelsApi';
   import { localizedCountryNames } from '$lib/utils/countryNames';
-  import { normalizeRegionMode } from '$lib/utils/variantSelection';
+  import {
+    normalizeRegionMode,
+    DEFAULT_REGION_MODE,
+    GLOBAL_REGION_MODE,
+  } from '$lib/utils/variantSelection';
   import { loggers } from '$lib/utils/logger';
   import { birdnetSettings, settingsActions } from '$lib/stores/settings';
   import type { ModelRegionsResponse, RegionOption } from '$lib/types/models';
@@ -57,7 +61,9 @@
   // normalizeRegionMode.
   const selected = $derived(normalizeRegionMode($birdnetSettings?.modelRegion));
   const regions = $derived<RegionOption[]>(data?.regions ?? []);
-  const isPinnedSlug = $derived(selected !== 'auto' && selected !== 'global');
+  const isPinnedSlug = $derived(
+    selected !== DEFAULT_REGION_MODE && selected !== GLOBAL_REGION_MODE
+  );
   const regionsVisible = $derived(showRegions || isPinnedSlug);
 
   function knownSlug(slug: string): boolean {
@@ -118,7 +124,7 @@
     const lc = data.locationConfigured;
     const sel = selected;
 
-    if (sel === 'auto') {
+    if (sel === DEFAULT_REGION_MODE) {
       if (!lc) return { state: 'noLocation', args: {}, warn: true, pins: [], offerAuto: false };
       if (r.slug === '')
         return { state: 'outsideCoverage', args: {}, warn: false, pins: [], offerAuto: false };
@@ -141,7 +147,7 @@
       };
     }
 
-    if (sel === 'global') {
+    if (sel === GLOBAL_REGION_MODE) {
       return { state: 'global', args: {}, warn: false, pins: [], offerAuto: false };
     }
 
@@ -175,8 +181,8 @@
   // slug. Global, no-location, outside-coverage, and unknown pins have no map.
   const activeSlug = $derived.by<string>(() => {
     if (!data) return '';
-    if (selected === 'global') return '';
-    if (selected === 'auto') return data.locationConfigured ? data.resolved.slug : '';
+    if (selected === GLOBAL_REGION_MODE) return '';
+    if (selected === DEFAULT_REGION_MODE) return data.locationConfigured ? data.resolved.slug : '';
     return knownSlug(selected) ? selected : '';
   });
 
@@ -298,7 +304,7 @@
       <label
         for="model-region-auto"
         class="flex items-start gap-3 rounded-md border p-2 transition-colors
-          {selected === 'auto' ? 'border-primary bg-primary/5' : 'border-base-300'}
+          {selected === DEFAULT_REGION_MODE ? 'border-primary bg-primary/5' : 'border-base-300'}
           {disabled ? '' : 'cursor-pointer hover:bg-base-200'}"
       >
         <input
@@ -307,9 +313,9 @@
           class="radio radio-sm radio-primary mt-0.5"
           name="model-region"
           value="auto"
-          checked={selected === 'auto'}
+          checked={selected === DEFAULT_REGION_MODE}
           {disabled}
-          onchange={() => select('auto')}
+          onchange={() => select(DEFAULT_REGION_MODE)}
         />
         <div class="flex flex-col gap-0.5 min-w-0">
           <span class="font-medium flex items-center gap-1.5">
@@ -326,7 +332,7 @@
       <label
         for="model-region-global"
         class="flex items-start gap-3 rounded-md border p-2 transition-colors
-          {selected === 'global' ? 'border-primary bg-primary/5' : 'border-base-300'}
+          {selected === GLOBAL_REGION_MODE ? 'border-primary bg-primary/5' : 'border-base-300'}
           {disabled ? '' : 'cursor-pointer hover:bg-base-200'}"
       >
         <input
@@ -335,9 +341,9 @@
           class="radio radio-sm radio-primary mt-0.5"
           name="model-region"
           value="global"
-          checked={selected === 'global'}
+          checked={selected === GLOBAL_REGION_MODE}
           {disabled}
-          onchange={() => select('global')}
+          onchange={() => select(GLOBAL_REGION_MODE)}
         />
         <div class="flex flex-col gap-0.5 min-w-0">
           <span class="font-medium flex items-center gap-1.5">
@@ -424,7 +430,12 @@
         {/if}
         {#if whyLine.offerAuto}
           <div>
-            <button type="button" class="btn btn-xs" {disabled} onclick={() => select('auto')}>
+            <button
+              type="button"
+              class="btn btn-xs"
+              {disabled}
+              onclick={() => select(DEFAULT_REGION_MODE)}
+            >
               {t('analysis.gallery.region.switchToAuto')}
             </button>
           </div>

@@ -2189,10 +2189,39 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 // sent to the progress channel during a download.
 const progressInterval = 1 << 20 // 1 MiB
 
-// downloadHTTPClient is used for model file downloads with a generous timeout
-// to accommodate large files on slow connections.
+// downloadResponseHeaderTimeout bounds how long a connected host may take to
+// send response headers before the download fails over to the next endpoint. It
+// guards the slowloris / partial-block tail case where a host completes TCP+TLS
+// then stalls: without it, such a host would hold the full 30-minute total
+// budget before failover. The response body remains bounded only by the total
+// Timeout, which is deliberately generous for large model files.
+const downloadResponseHeaderTimeout = 30 * time.Second
+
+// newDownloadTransport clones http.DefaultTransport and sets a
+// ResponseHeaderTimeout so a stalled host does not defer mirror failover.
+func newDownloadTransport() http.RoundTripper {
+	base, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		// DefaultTransport is *http.Transport in practice; if that ever changes,
+		// keep the default rather than losing connection pooling and proxy support.
+		return http.DefaultTransport
+	}
+	tr := base.Clone()
+	tr.ResponseHeaderTimeout = downloadResponseHeaderTimeout
+	return tr
+}
+
+// downloadTotalTimeout is the overall budget for a single model-file download,
+// deliberately generous so a large file on a slow connection can complete.
+const downloadTotalTimeout = 30 * time.Minute
+
+// downloadHTTPClient is used for model file downloads with a generous total
+// timeout to accommodate large files on slow connections. Its transport adds a
+// ResponseHeaderTimeout (see downloadResponseHeaderTimeout) so a host that
+// connects then stalls fails over promptly instead of holding the whole budget.
 var downloadHTTPClient = &http.Client{
-	Timeout: 30 * time.Minute,
+	Timeout:   downloadTotalTimeout,
+	Transport: newDownloadTransport(),
 }
 
 // endpointAttemptError wraps a download failure with whether it warrants trying

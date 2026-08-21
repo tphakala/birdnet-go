@@ -85,17 +85,34 @@ func TestDownloadModelFile_FailsOverOnUnreachableHost(t *testing.T) {
 
 func TestDownloadModelFile_FailsOverOnGatewayStatus(t *testing.T) {
 	t.Parallel()
-	body := []byte("model-bytes")
-	badURL, badHits := countingServer(t, http.StatusServiceUnavailable, nil)
-	mirrorURL, mirrorHits := countingServer(t, http.StatusOK, body)
-	mm, resolver := newFailoverManager(t, []string{badURL, mirrorURL})
-	dest := filepath.Join(t.TempDir(), "model.onnx")
+	// Every gateway status (502/503/504) means the origin is down while the host
+	// itself answered, so a mirror may still serve the file. Drive each one end to
+	// end through downloadModelFile, not just IsGatewayStatus, so the whole
+	// failover path is proven for all three, not only the 503 case.
+	statuses := []struct {
+		name   string
+		status int
+	}{
+		{"502 bad gateway", http.StatusBadGateway},
+		{"503 service unavailable", http.StatusServiceUnavailable},
+		{"504 gateway timeout", http.StatusGatewayTimeout},
+	}
+	for _, tc := range statuses {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			body := []byte("model-bytes")
+			badURL, badHits := countingServer(t, tc.status, nil)
+			mirrorURL, mirrorHits := countingServer(t, http.StatusOK, body)
+			mm, resolver := newFailoverManager(t, []string{badURL, mirrorURL})
+			dest := filepath.Join(t.TempDir(), "model.onnx")
 
-	err := mm.downloadModelFile(t.Context(), "m", "owner/repo", "model.onnx", dest, sha256Hex(body), 0, "")
-	require.NoError(t, err)
-	assert.Equal(t, int64(1), badHits.Load())
-	assert.Equal(t, int64(1), mirrorHits.Load())
-	assert.Equal(t, []string{mirrorURL}, resolver.working())
+			err := mm.downloadModelFile(t.Context(), "m", "owner/repo", "model.onnx", dest, sha256Hex(body), 0, "")
+			require.NoError(t, err)
+			assert.Equal(t, int64(1), badHits.Load())
+			assert.Equal(t, int64(1), mirrorHits.Load())
+			assert.Equal(t, []string{mirrorURL}, resolver.working())
+		})
+	}
 }
 
 func TestDownloadModelFile_DoesNotFailOverOn404(t *testing.T) {

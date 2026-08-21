@@ -236,6 +236,14 @@ export function optimizeOffers(catalog: CatalogEntry[]): OptimizeOffer[] {
 export const DEFAULT_REGION_MODE = 'auto';
 
 /**
+ * The explicit "global" region mode: force the location-independent global
+ * variant regardless of the configured location. Distinct from
+ * DEFAULT_REGION_MODE ('auto', which resolves from the location) and from a
+ * concrete region slug. Mirrors the Go `ModelRegionGlobal` sentinel.
+ */
+export const GLOBAL_REGION_MODE = 'global';
+
+/**
  * Normalize a stored region mode to its canonical form: '', null and undefined
  * all collapse to 'auto', while a concrete slug or 'global' passes through
  * unchanged. Centralizing this keeps the live/saved region derivations and the

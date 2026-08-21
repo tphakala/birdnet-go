@@ -21,7 +21,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -78,11 +77,7 @@ const (
 // Every element is normalized without a trailing slash, so callers can append
 // "/" + path. This never performs network I/O.
 func ResolveHuggingFaceEndpointChain(configured string) []string {
-	raw := strings.TrimSpace(configured)
-	if raw == "" {
-		raw = strings.TrimSpace(os.Getenv(HuggingFaceEndpointEnvVar))
-	}
-	if raw != "" {
+	if raw, _, hasValue := huggingFaceOverrideSource(configured); hasValue {
 		if endpoint, err := normalizeHuggingFaceEndpoint(raw); err == nil {
 			return []string{endpoint}
 		}
@@ -268,10 +263,14 @@ func (r *HFEndpointResolver) save(state hfEndpointState) {
 	if _, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
 		_ = os.Remove(tmpPath)
+		GetLogger().Debug("could not write HuggingFace endpoint state temp file",
+			logger.String("path", tmpPath), logger.Error(err))
 		return
 	}
 	if err := tmp.Close(); err != nil {
 		_ = os.Remove(tmpPath)
+		GetLogger().Debug("could not close HuggingFace endpoint state temp file",
+			logger.String("path", tmpPath), logger.Error(err))
 		return
 	}
 	if err := os.Rename(tmpPath, r.statePath); err != nil {
