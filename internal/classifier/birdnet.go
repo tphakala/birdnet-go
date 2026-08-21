@@ -671,9 +671,9 @@ func (bn *BirdNET) loadLabels() error {
 
 	// Refresh the cached ModelInfo.NumSpecies to the actually-loaded label count.
 	// ModelInfo is seeded from the registry template, whose NumSpecies is the stock
-	// catalog figure (e.g. 6523 for BirdNET v2.4) and can differ from the real label
-	// file (6522) or a custom/sliced label file. loadLabels is the single place the
-	// label set changes, so refreshing here keeps o.ModelInfo / PrimaryModelInfo()
+	// catalog figure (6522 for BirdNET v2.4) and can differ from the real loaded
+	// labels for a custom or regionally-sliced label file. loadLabels is the single
+	// place the label set changes, so refreshing here keeps o.ModelInfo / PrimaryModelInfo()
 	// reporting the live count. bn.NumSpecies() already reads len(labels) directly.
 	bn.ModelInfo.NumSpecies = len(bn.Settings.BirdNET.Labels)
 	return nil
@@ -1307,6 +1307,18 @@ func (bn *BirdNET) reloadForVariantSwap() error {
 	return err
 }
 
+// stockPrimaryModelInfo resolves the identity of the stock (non-custom) primary
+// classifier: the Tier-4 default (arm64 prefers the INT8-ARM ONNX model when it is
+// present, otherwise the embedded BirdNET v2.4 TFLite) with the arm64 v2.4->INT8
+// ONNX remap applied. reloadModelInternal's cleared-path branch uses it. It mirrors
+// NewBirdNET's Tier-4 resolution (defaultClassifierModelInfo, then the arm64 remap
+// that NewBirdNET applies across all tiers); NewBirdNET does not call it because that
+// remap is shared across all its tiers, so keep the two in sync by hand.
+func stockPrimaryModelInfo() ModelInfo {
+	info := defaultClassifierModelInfo(runtime.GOARCH, findModelPathInStandardPaths)
+	return remapV24ToONNXOnARM64(&info, runtime.GOARCH, tfliteBackendAvailable, findModelPathInStandardPaths)
+}
+
 // reloadModelInternal reloads the primary classifier in place under bn.mu, with
 // transactional rollback to the previously-serving model on any failure. When
 // allowPathChange is false (the settings-reload path, ReloadModel), a change of the
@@ -1431,12 +1443,10 @@ func (bn *BirdNET) reloadModelInternal(allowPathChange bool) error {
 		bn.ModelInfo = newInfo
 	case allowPathChange:
 		// Variant-swap path with a CLEARED BirdNET.ModelPath: the user reverted to
-		// the embedded BuiltIn baseline. Re-resolve the stock classifier identity
-		// (mirrors NewBirdNET Tier 4 + the arm64 v2.4->ONNX remap) so the in-place
-		// reload rebuilds the embedded model rather than keeping the old CustomPath.
-		newInfo := defaultClassifierModelInfo(runtime.GOARCH, findModelPathInStandardPaths)
-		newInfo = remapV24ToONNXOnARM64(&newInfo, runtime.GOARCH, tfliteBackendAvailable, findModelPathInStandardPaths)
-		bn.ModelInfo = newInfo
+		// the embedded BuiltIn baseline. Re-resolve the stock classifier identity so
+		// the in-place reload rebuilds the embedded model rather than keeping the old
+		// CustomPath. stockPrimaryModelInfo mirrors NewBirdNET's Tier-4 resolution.
+		bn.ModelInfo = stockPrimaryModelInfo()
 	}
 
 	// Reload taxonomy data if needed

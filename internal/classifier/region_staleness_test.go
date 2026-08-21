@@ -262,10 +262,12 @@ func TestRegionDisplayName(t *testing.T) {
 }
 
 func TestNotifyRegionStaleness_NilChangesAndNilServiceSafe(t *testing.T) {
-	// Pin the precondition: this test only proves the nil-service path is safe when
-	// the process-global service is actually nil. It runs before EmitsPerChange
-	// (which initializes the singleton) in source order; assert it rather than rely
-	// on ordering so a -shuffle run fails loudly instead of passing vacuously.
+	// Force the process-global service to its uninitialized state so this test is
+	// order-independent under -shuffle: EmitsPerChange initializes the singleton via
+	// a sync.Once that otherwise stays fired for the rest of the run. Reset on
+	// cleanup too, so this test never leaks its uninitialized state onto a later one.
+	notification.ResetForTest()
+	t.Cleanup(notification.ResetForTest)
 	require.Nil(t, notification.GetService(), "nil-service test requires an uninitialized notification service")
 
 	assert.NotPanics(t, func() { NotifyRegionStaleness(nil) })
@@ -281,6 +283,13 @@ func TestNotifyRegionStaleness_NilChangesAndNilServiceSafe(t *testing.T) {
 // it filters emitted notifications by the region title key to stay robust to any
 // other notifications present.
 func TestNotifyRegionStaleness_EmitsPerChange(t *testing.T) {
+	// Reset first so Initialize constructs a fresh service even if a prior test under
+	// -shuffle already fired the singleton's sync.Once, and reset again on cleanup so
+	// the initialized singleton never leaks into other tests. Cleanups run LIFO, so
+	// svc.Stop (registered later) runs before ResetForTest: the goroutine is stopped
+	// before the instance is cleared.
+	notification.ResetForTest()
+	t.Cleanup(notification.ResetForTest)
 	notification.Initialize(notification.DefaultServiceConfig())
 	svc := notification.GetService()
 	require.NotNil(t, svc)

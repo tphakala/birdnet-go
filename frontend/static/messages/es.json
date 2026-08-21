@@ -5438,6 +5438,7 @@
         "badgeTitle": "Hay una compilación más rápida disponible para tu hardware",
         "swap": "Optimizar",
         "dialogTitle": "Optimizar tus modelos",
+        "installedBuild": "Installed build",
         "fromTo": "{from} a {to}",
         "apply": "Aplicar",
         "applyAll": "Aplicar todo",

@@ -5438,6 +5438,7 @@
         "badgeTitle": "Er is een snellere build beschikbaar voor jouw hardware",
         "swap": "Optimaliseren",
         "dialogTitle": "Optimaliseer jouw modellen",
+        "installedBuild": "Installed build",
         "fromTo": "{from} naar {to}",
         "apply": "Toepassen",
         "applyAll": "Alles toepassen",

@@ -5438,6 +5438,7 @@
         "badgeTitle": "Et hurtigere build er tilgængeligt til din hardware",
         "swap": "Optimer",
         "dialogTitle": "Optimer dine modeller",
+        "installedBuild": "Installed build",
         "fromTo": "{from} til {to}",
         "apply": "Anvend",
         "applyAll": "Anvend alle",

@@ -5438,6 +5438,7 @@
         "badgeTitle": "Pro váš hardware je k dispozici rychlejší sestavení",
         "swap": "Optimalizovat",
         "dialogTitle": "Optimalizovat modely",
+        "installedBuild": "Installed build",
         "fromTo": "{from} na {to}",
         "apply": "Použít",
         "applyAll": "Použít vše",

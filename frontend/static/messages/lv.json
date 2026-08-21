@@ -5438,6 +5438,7 @@
         "badgeTitle": "Jūsu aparatūrai ir pieejama ātrāka versija",
         "swap": "Optimizēt",
         "dialogTitle": "Optimizējiet savus modeļus",
+        "installedBuild": "Installed build",
         "fromTo": "{from} uz {to}",
         "apply": "Lietot",
         "applyAll": "Lietot visu",

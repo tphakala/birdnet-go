@@ -2182,7 +2182,7 @@
     <div class="text-[var(--color-base-content)]/80">{displayRegionName(dv)}</div>
     <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.speciesLabel')}</div>
     <div class="text-[var(--color-base-content)]/80">
-      {t('analysis.gallery.species', { count: dv?.speciesCount || entry.speciesCount })}
+      {t('analysis.gallery.species', { count: dv?.speciesCount ?? entry.speciesCount })}
     </div>
     <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.hardwareLabel')}</div>
     <div>

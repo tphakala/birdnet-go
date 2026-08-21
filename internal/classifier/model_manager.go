@@ -358,20 +358,12 @@ func scanVariantEntry(entry *CatalogEntry, subdir, modelBasenameHint string) (In
 	// NOT be reported as the active variant, because the primary loader opens the
 	// embedded model, not that file.
 	if builtin := builtInVariant(entry); builtin != nil {
-		if modelBasenameHint != "" {
-			for i := range entry.Variants {
-				v := &entry.Variants[i]
-				if v.BuiltIn {
-					continue
-				}
-				mf, _ := modelAndLabelsFiles(v.Files)
-				if mf == modelBasenameHint {
-					if im, ok := installedFromVariant(entry, v, subdir); ok {
-						return im, true
-					}
-					break
-				}
-			}
+		// A non-empty hint that matches a DFT-truncated variant's file selects it;
+		// anything else (including an empty hint, or a stale DFT file whose variant
+		// the hint no longer points at) resolves to the baseline below. The BuiltIn
+		// baseline itself never matches: it carries no model file.
+		if im, ok := variantByModelHint(entry, subdir, modelBasenameHint); ok {
+			return im, true
 		}
 		// Baseline: always installed, no model path (the embedded model is used).
 		return InstalledModel{
@@ -388,17 +380,8 @@ func scanVariantEntry(entry *CatalogEntry, subdir, modelBasenameHint string) (In
 	// settings path is what the loader (buildPerch/buildBirdNETV3) actually opens,
 	// so aligning the detected variant to it keeps the reported install consistent
 	// with what runs, rather than silently reporting the default.
-	if modelBasenameHint != "" {
-		for i := range entry.Variants {
-			v := &entry.Variants[i]
-			mf, _ := modelAndLabelsFiles(v.Files)
-			if mf == modelBasenameHint {
-				if im, ok := installedFromVariant(entry, v, subdir); ok {
-					return im, true
-				}
-				break
-			}
-		}
+	if im, ok := variantByModelHint(entry, subdir, modelBasenameHint); ok {
+		return im, true
 	}
 	def := defaultVariant(entry)
 	if def != nil {
@@ -413,6 +396,29 @@ func scanVariantEntry(entry *CatalogEntry, subdir, modelBasenameHint string) (In
 		}
 		if im, ok := installedFromVariant(entry, v, subdir); ok {
 			return im, true
+		}
+	}
+	return InstalledModel{}, false
+}
+
+// variantByModelHint returns the InstalledModel for the variant of entry whose
+// model file basename matches modelBasenameHint and exists on disk under subdir.
+// ok is false when the hint is empty, no variant's model file matches it, or the
+// matched variant's model file is absent. A BuiltIn baseline never matches: it
+// carries no model file, so its basename is "" and cannot equal a non-empty hint.
+// It is the shared tie-break behind both scanVariantEntry paths (the BuiltIn
+// baseline branch and the general multi-variant branch).
+func variantByModelHint(entry *CatalogEntry, subdir, modelBasenameHint string) (InstalledModel, bool) {
+	if modelBasenameHint == "" {
+		return InstalledModel{}, false
+	}
+	for i := range entry.Variants {
+		v := &entry.Variants[i]
+		mf, _ := modelAndLabelsFiles(v.Files)
+		if mf == modelBasenameHint {
+			// First (and, since basenames are unique, only) hint match wins; if its
+			// file is absent, ok is false and the caller falls through to the default.
+			return installedFromVariant(entry, v, subdir)
 		}
 	}
 	return InstalledModel{}, false

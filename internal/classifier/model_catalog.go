@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/hwprofile"
 )
 
 // Catalog category constants.
@@ -793,7 +792,10 @@ func VariantNeedsONNX(entry *CatalogEntry, variantID string) bool {
 	if v.BuiltIn {
 		return false
 	}
-	if _, ok := v.Backends[hwprofile.CapTFLite]; ok {
+	// Backends is keyed by backend token; "tflite" matches the literal tokens used
+	// throughout this file's catalog data and the remote manifest. A variant that
+	// advertises TFLite support can run without the ONNX Runtime.
+	if _, ok := v.Backends["tflite"]; ok {
 		return false
 	}
 	return true
