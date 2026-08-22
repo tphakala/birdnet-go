@@ -9,6 +9,7 @@ import {
   variantHardwareClass,
   variantHardwareLabel,
   optimizeOffers,
+  CHANNEL_STABLE,
 } from './variantSelection';
 import type { CatalogEntry, CatalogVariant, VariantReason } from '$lib/types/models';
 
@@ -58,7 +59,7 @@ function entry(overrides: Partial<CatalogEntry>): CatalogEntry {
     region: '',
     speciesCount: 0,
     version: '1',
-    channel: 'stable',
+    channel: CHANNEL_STABLE,
     installed: false,
     compatible: true,
     totalSizeBytes: 0,

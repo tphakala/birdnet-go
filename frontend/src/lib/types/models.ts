@@ -37,7 +37,7 @@ export interface CatalogVariant {
   blockers?: VariantReason[];
   /**
    * Coarse hardware-target token for the plain-language chip (never raw precision):
-   * one of 'gpuNvidia' | 'gpuIntel' | 'amd64Cpu' | 'arm64Cpu' | 'cpu' | 'builtIn'.
+   * one of 'gpuNvidia' | 'gpuIntel' | 'amd64Cpu' | 'arm64Cpu' | 'armCpu' | 'cpu' | 'builtIn'.
    * Computed server-side from the host arch and chosen backend; absent on an older
    * server, in which case the client derives a coarser class from the id.
    */

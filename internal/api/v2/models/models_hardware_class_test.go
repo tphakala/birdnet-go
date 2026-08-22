@@ -15,7 +15,7 @@ import (
 func backendRecommendedReason(backend string) recommend.Reason {
 	return recommend.Reason{
 		Code: recommend.ReasonBackendRecommended,
-		Args: map[string]string{"backend": backend},
+		Args: map[string]string{recommend.ReasonArgBackend: backend},
 	}
 }
 
@@ -179,15 +179,15 @@ func TestRecommendedBackendToken(t *testing.T) {
 
 	// Prefers the explicit backend.recommended reason over any other backend-bearing one.
 	assert.Equal(t, backendCUDA, recommendedBackendToken([]recommend.Reason{
-		{Code: "backend.supported", Args: map[string]string{"backend": backendOpenVINOGPU}},
-		{Code: recommend.ReasonBackendRecommended, Args: map[string]string{"backend": backendCUDA}},
+		{Code: recommend.ReasonBackendSupported, Args: map[string]string{recommend.ReasonArgBackend: backendOpenVINOGPU}},
+		{Code: recommend.ReasonBackendRecommended, Args: map[string]string{recommend.ReasonArgBackend: backendCUDA}},
 	}), "the backend.recommended reason wins over a plain backend-bearing reason")
 
 	// Falls back to the first reason carrying a backend arg when no backend.recommended
 	// reason is present (the fallback accumulator path).
 	assert.Equal(t, backendOpenVINOGPU, recommendedBackendToken([]recommend.Reason{
 		{Code: "region.matched", Args: map[string]string{"region": "nordic"}},
-		{Code: "backend.supported", Args: map[string]string{"backend": backendOpenVINOGPU}},
+		{Code: recommend.ReasonBackendSupported, Args: map[string]string{recommend.ReasonArgBackend: backendOpenVINOGPU}},
 	}), "falls back to the first backend-bearing reason")
 
 	// No backend-bearing reason yields the empty token (the intrinsic path then decides).

@@ -159,8 +159,8 @@ type CatalogVariantResponse struct {
 	Blockers []VariantReasonResponse `json:"blockers,omitempty"`
 	// HardwareClass is a coarse, localizable token naming the hardware this variant
 	// targets, for the gallery's plain-language chip (never raw precision like
-	// "fp16"). One of: "gpuNvidia", "gpuIntel", "amd64Cpu", "arm64Cpu", "cpu",
-	// "builtIn". The frontend maps it to analysis.gallery.hardware.<token>.
+	// "fp16"). One of: "gpuNvidia", "gpuIntel", "amd64Cpu", "arm64Cpu", "armCpu",
+	// "cpu", "builtIn". The frontend maps it to analysis.gallery.hardware.<token>.
 	// The CPU tokens are made architecture-explicit from the host arch when the
 	// request is eligible for recommendations; otherwise the intrinsic "cpu"/"gpu"
 	// class (from the variant's own recommended backends) is emitted.
@@ -493,7 +493,7 @@ const (
 func recommendedBackendToken(reasons []recommend.Reason) string {
 	fallback := ""
 	for i := range reasons {
-		b := reasons[i].Args["backend"]
+		b := reasons[i].Args[recommend.ReasonArgBackend]
 		if b == "" {
 			continue
 		}

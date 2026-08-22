@@ -250,6 +250,13 @@ export function optimizeOffers(catalog: CatalogEntry[]): OptimizeOffer[] {
 export const CHANNEL_PREVIEW = 'preview';
 
 /**
+ * The catalog release channel marking a stable (GA) build, the default an entry
+ * without an explicit channel resolves to. Mirrors the Go `classifier.ChannelStable`
+ * constant.
+ */
+export const CHANNEL_STABLE = 'stable';
+
+/**
  * The canonical "automatic" region mode. An empty string, null, and undefined
  * all mean automatic in the gallery, mirroring the Go `ModelRegion` field's
  * `omitempty` (an unset region is omitted from JSON entirely).
