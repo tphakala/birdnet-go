@@ -5339,6 +5339,9 @@
         "regionContext": "Reģionālie varianti parādīti reģionam {region}, iestatīti ar modeļa reģiona izvēli augstāk",
         "regionContextNone": "Ir pieejami reģionālie varianti. Izvēlieties reģionu modeļa reģiona izvēlē augstāk vai rādiet visus variantus.",
         "otherRegions": "Citi reģioni",
+        "filterPlaceholder": "Filtrēt reģionus",
+        "filterAria": "Filtrēt reģioniem pielāgotās versijas",
+        "filterNoMatch": "Neviens reģions neatbilst \"{query}\"",
         "latency": "~{ms} ms",
         "precisionInfo": "About precision and variants",
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
@@ -5426,13 +5429,23 @@
       "reinstalling": "Pārinstalē...",
       "reinstallComplete": "Faili veiksmīgi pārbaudīti",
       "geomodelBadge": "Ietver BirdNET v3.0 ģeomodelis",
+      "preview": {
+        "badge": "Priekšskatījums",
+        "buildLabel": "{version} · {build}",
+        "cardNotice": "Izstrādātāja priekšskatījums, nav galīgais laidiens. Šī ir agrīna versija testēšanai; rezultāti var mainīties pirms stabilās versijas.",
+        "dialogNotice": "Jūs instalējat izstrādātāja priekšskatījumu ({build}). Piemērots izmēģināšanai, taču vēl nav ieteicams kā jūsu vienīgais klasifikators."
+      },
       "entryIncompatible": "Šis modelis nav pieejams šajā sistēmā.",
       "regionGlobal": "Globāls",
       "hardwareLabel": "Aparatūra",
       "hardware": {
         "gpu": "GPU",
+        "gpuNvidia": "GPU (NVIDIA)",
+        "gpuIntel": "GPU (Intel)",
         "intelGpu": "Intel GPU",
         "armCpu": "ARM CPU",
+        "amd64Cpu": "AMD64 CPU",
+        "arm64Cpu": "ARM64 CPU",
         "cpu": "CPU"
       },
       "optimize": {

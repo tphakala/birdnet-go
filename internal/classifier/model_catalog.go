@@ -41,6 +41,14 @@ const (
 	RoleTaxonomy       = "taxonomy"
 )
 
+// Model release channels. An empty CatalogEntry.Channel means a stable (GA)
+// release; ChannelPreview marks a developer-preview build the gallery labels as
+// not the final GA build.
+const (
+	ChannelStable  = "stable"
+	ChannelPreview = "preview"
+)
+
 // CatalogEntry describes a downloadable model available in the model gallery.
 //
 // The snake_case JSON tags define the on-disk schema for the user-editable
@@ -49,16 +57,24 @@ const (
 // serialize this struct directly; it maps to a separate camelCase response
 // type (see internal/api/v2/models.go), so these tags do not affect the API.
 type CatalogEntry struct {
-	ID              string        `json:"id"`                // unique catalog identifier (e.g., "battybirdnet-eu")
-	Name            string        `json:"name"`              // user-facing display name
-	Description     string        `json:"description"`       // short description of the model
-	Author          string        `json:"author"`            // model author or organization
-	License         string        `json:"license"`           // license identifier (e.g., "Apache-2.0")
-	CommercialUse   bool          `json:"commercial_use"`    // whether commercial use is permitted
-	Category        string        `json:"category"`          // "wildlife", "bird", "bat", or "geomodel"
-	Region          string        `json:"region"`            // geographic region, or empty for global models
-	SpeciesCount    int           `json:"species_count"`     // number of species the model can identify
-	Version         string        `json:"version"`           // model version string
+	ID            string `json:"id"`             // unique catalog identifier (e.g., "battybirdnet-eu")
+	Name          string `json:"name"`           // user-facing display name
+	Description   string `json:"description"`    // short description of the model
+	Author        string `json:"author"`         // model author or organization
+	License       string `json:"license"`        // license identifier (e.g., "Apache-2.0")
+	CommercialUse bool   `json:"commercial_use"` // whether commercial use is permitted
+	Category      string `json:"category"`       // "wildlife", "bird", "bat", or "geomodel"
+	Region        string `json:"region"`         // geographic region, or empty for global models
+	SpeciesCount  int    `json:"species_count"`  // number of species the model can identify
+	Version       string `json:"version"`        // model version string
+	// Channel marks a non-stable release. "" (or "stable") is the normal GA build;
+	// "preview" marks a developer-preview build the gallery flags as not the GA
+	// build. omitempty keeps every stable entry's on-disk JSON byte-identical, so
+	// adding this field does not shift catalogChecksum or force a schema-version bump.
+	Channel string `json:"channel,omitempty"`
+	// BuildLabel is a human-facing build tag shown next to Version for a non-stable
+	// channel (e.g. "preview3.1"). Empty for stable releases. omitempty as above.
+	BuildLabel      string        `json:"build_label,omitempty"`
 	GeomodelVersion string        `json:"geomodel_version"`  // geomodel range filter version (e.g., "v3"); empty if no geomodel
 	RegistryID      string        `json:"registry_id"`       // maps to a ModelRegistry key; empty if loader not yet implemented
 	Hidden          bool          `json:"hidden"`            // if true, entry is excluded from the gallery UI
@@ -159,16 +175,21 @@ var EmbeddedCatalog = []CatalogEntry{
 	// backend loader is fully functional and v3.0 can also be enabled via config
 	// (models.enabled + birdnetv3 model/label paths).
 	{
-		ID:              "birdnet-v3.0",
-		Name:            "BirdNET v3.0",
-		Description:     "Developer preview of the BirdNET v3.0 global wildlife classifier (11,560 species, birds and other fauna; scientific and common names). Not the GA build.",
-		Author:          "Cornell Lab of Ornithology & Chemnitz University of Technology",
-		License:         "CC-BY-SA-4.0",
-		CommercialUse:   true,
-		Category:        CategoryWildlife,
-		Region:          "",
-		SpeciesCount:    11560,
-		Version:         "3.0",
+		ID:            "birdnet-v3.0",
+		Name:          "BirdNET v3.0",
+		Description:   "Developer preview of the BirdNET v3.0 global wildlife classifier (11,560 species, birds and other fauna; scientific and common names). Not the GA build.",
+		Author:        "Cornell Lab of Ornithology & Chemnitz University of Technology",
+		License:       "CC-BY-SA-4.0",
+		CommercialUse: true,
+		Category:      CategoryWildlife,
+		Region:        "",
+		SpeciesCount:  11560,
+		Version:       "3.0",
+		// Developer-preview build: the gallery shows a PREVIEW badge and a not-GA
+		// notice, and surfaces this tag (which otherwise lives only inside the
+		// preview3.1 file paths below) so users know it is not the final release.
+		Channel:         ChannelPreview,
+		BuildLabel:      "preview3.1",
 		GeomodelVersion: "v3",
 		RegistryID:      RegistryIDBirdNETV3,
 		Hidden:          false,

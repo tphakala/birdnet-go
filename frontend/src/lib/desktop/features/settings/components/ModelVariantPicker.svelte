@@ -13,10 +13,16 @@
    * the middle stage scopes to, so the list is never a silently filtered subset.
    */
   import { untrack, tick } from 'svelte';
+  import { ChevronDown, Search } from '@lucide/svelte';
   import type { CatalogVariant, VariantReason } from '$lib/types/models';
   import { t } from '$lib/i18n';
   import { formatBytes, formatNumber } from '$lib/utils/formatters';
-  import { translateReason, topReasons, variantLabel } from '$lib/utils/variantSelection';
+  import {
+    translateReason,
+    topReasons,
+    variantLabel,
+    variantHardwareLabel,
+  } from '$lib/utils/variantSelection';
 
   interface Props {
     variants: CatalogVariant[];
@@ -78,6 +84,27 @@
   // the newly shown tiles instead of letting it fall to <body> when the button
   // unmounts (see revealNext).
   let fieldsetEl: HTMLElement | undefined;
+  // Free-text filter for the "other regions" list in the 'all' stage, so a user can
+  // jump straight to a region instead of scrolling the full ~70-tile set. Bound to
+  // the search input revealed with that stage.
+  let otherRegionQuery = $state('');
+  let regionSearchEl = $state<HTMLInputElement | undefined>(undefined);
+  // The scrollable "other regions" grid, so ArrowDown from the search box can move
+  // focus into the filtered tiles. Without this bridge a keyboard user is stranded:
+  // the radio group uses native roving tabindex, so the only tabbable radio is the
+  // checked one (which sits above the search box), and Tab from the search skips the
+  // filtered tiles (they are tabindex=-1) straight out of the fieldset.
+  let otherRegionsGridEl = $state<HTMLElement | undefined>(undefined);
+
+  // Move focus from the region filter into the first filtered tile on ArrowDown.
+  function focusFirstFilteredTile(e: KeyboardEvent): void {
+    if (e.key !== 'ArrowDown') return;
+    const first = otherRegionsGridEl?.querySelector<HTMLInputElement>('input[type="radio"]');
+    if (first) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
 
   // The 'region' stage: always-relevant options, plus every global (region-less)
   // build, plus the active region's tiles. Other regions are excluded unless one
@@ -90,6 +117,17 @@
   const otherStageVariants = $derived(
     variants.filter(v => !inAlways(v) && !!v.region && v.region !== activeRegionSlug)
   );
+  // The 'other regions' tiles narrowed by the free-text filter, matched against the
+  // localized region name and the raw slug. An empty query shows them all.
+  const filteredOtherVariants = $derived.by(() => {
+    const q = otherRegionQuery.trim().toLowerCase();
+    if (!q) return otherStageVariants;
+    return otherStageVariants.filter(v => {
+      const slug = v.region ?? '';
+      const name = (regionNames?.get(slug) ?? slug).toLowerCase();
+      return name.includes(q) || slug.toLowerCase().includes(q);
+    });
+  });
 
   // The always-relevant options as a set, computed once. $derived (not a plain
   // const) because inAlways closes over reactive props. Reused by the collapsed
@@ -179,6 +217,14 @@
     disclosure = step.target;
     if (!unmounts) return;
     void tick().then(() => {
+      // The 'all' stage reveals the region filter box: move focus there so a
+      // keyboard user lands on the search field instead of skipping past it into
+      // the tiles. Fall back to the first newly revealed tile if no box rendered
+      // (no other-region tiles hidden).
+      if (regionSearchEl) {
+        regionSearchEl.focus();
+        return;
+      }
       const revealed = Array.from(
         fieldsetEl?.querySelectorAll<HTMLInputElement>(radioSelector) ?? []
       );
@@ -235,7 +281,10 @@
 
     <div class="flex flex-col gap-1 min-w-0 flex-1">
       <div class="flex flex-wrap items-center gap-2">
-        <span class="font-medium">{variantLabel(variant, regionNames)}</span>
+        <!-- Primary label is the plain hardware target (e.g. "AMD64 CPU", "GPU
+             (NVIDIA)"), never raw precision. The precision/descriptor/region reads
+             as muted technical detail on the line below. -->
+        <span class="font-medium">{variantHardwareLabel(variant)}</span>
         {#if variant.recommended}
           <span class="badge badge-primary badge-sm"
             >{t('analysis.gallery.variants.recommended')}</span
@@ -250,6 +299,9 @@
       </div>
 
       <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-base-content/70">
+        {#if !variant.builtIn}
+          <span>{variantLabel(variant, regionNames)}</span>
+        {/if}
         <span>{formatBytes(variant.sizeBytes)}</span>
         {#if variant.speciesCount > 0}
           <span
@@ -310,30 +362,67 @@
     {/each}
 
     {#if disclosure === 'all' && otherStageVariants.length > 0}
-      <div role="group" aria-labelledby="{idPrefix}-other-regions" class="flex flex-col gap-2 mt-1">
-        <p id="{idPrefix}-other-regions" class="text-xs font-medium text-base-content/60">
-          {t('analysis.gallery.variants.otherRegions')}
-        </p>
-        {#each otherStageVariants as variant (variant.id)}
-          {@render variantTile(variant)}
-        {/each}
+      <div role="group" aria-labelledby="{idPrefix}-other-regions" class="mt-1 flex flex-col gap-2">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <p id="{idPrefix}-other-regions" class="text-xs font-medium text-base-content/60">
+            {t('analysis.gallery.variants.otherRegions')}
+          </p>
+          <label class="relative">
+            <Search
+              class="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-base-content/50"
+              aria-hidden="true"
+            />
+            <input
+              bind:this={regionSearchEl}
+              bind:value={otherRegionQuery}
+              onkeydown={focusFirstFilteredTile}
+              type="text"
+              class="input input-sm input-bordered w-44 pl-7"
+              placeholder={t('analysis.gallery.variants.filterPlaceholder')}
+              aria-label={t('analysis.gallery.variants.filterAria')}
+            />
+          </label>
+        </div>
+        <!-- Height-capped and scrollable so the full ~70-tile set never blows out
+             the dialog; two columns on wider dialogs use the space. -->
+        {#if filteredOtherVariants.length > 0}
+          <div
+            bind:this={otherRegionsGridEl}
+            class="grid max-h-64 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2"
+          >
+            {#each filteredOtherVariants as variant (variant.id)}
+              {@render variantTile(variant)}
+            {/each}
+          </div>
+        {:else}
+          <p class="py-4 text-center text-xs text-base-content/60" role="status">
+            {t('analysis.gallery.variants.filterNoMatch', { query: otherRegionQuery })}
+          </p>
+        {/if}
       </div>
     {/if}
   </div>
 
   {#if disclosureStep}
-    <!-- The disclosure button only renders while more variants remain hidden (it
-         unmounts once everything is shown), so it always reveals collapsed
-         content: aria-expanded is a constant "false". -->
+    <!-- Prominent, full-width disclosure so the "show more variants" control is easy
+         to spot. It only renders while more variants remain hidden (it unmounts once
+         everything is shown), so it always reveals collapsed content: aria-expanded
+         is a constant "false". -->
     <button
       type="button"
-      class="btn btn-ghost btn-xs mt-2"
+      class="btn btn-outline btn-block mt-3 justify-between font-medium"
       aria-expanded="false"
       onclick={() => revealNext(disclosureStep)}
     >
-      {disclosureStep.region
-        ? t(disclosureStep.labelKey, { count: disclosureStep.count, region: disclosureStep.region })
-        : t(disclosureStep.labelKey, { count: disclosureStep.count })}
+      <span>
+        {disclosureStep.region
+          ? t(disclosureStep.labelKey, {
+              count: disclosureStep.count,
+              region: disclosureStep.region,
+            })
+          : t(disclosureStep.labelKey, { count: disclosureStep.count })}
+      </span>
+      <ChevronDown class="h-4 w-4" aria-hidden="true" />
     </button>
   {/if}
 </fieldset>

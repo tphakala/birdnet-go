@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/svelte';
 import type { CatalogEntry } from '$lib/types/models';
+import { CHANNEL_STABLE } from '$lib/utils/variantSelection';
 
 // Page-level coverage for the model-gallery install-error split:
 // a failed install must NOT blank the grid (installError is a separate banner from
@@ -101,6 +102,7 @@ function birdEntry(overrides: Partial<CatalogEntry> = {}): CatalogEntry {
     region: '',
     speciesCount: 100,
     version: '1.0',
+    channel: CHANNEL_STABLE,
     installed: false,
     compatible: true,
     totalSizeBytes: 1_000_000,

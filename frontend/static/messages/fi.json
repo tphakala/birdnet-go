@@ -5339,6 +5339,9 @@
         "regionContext": "Alueelliset variantit näytetään alueelle {region}, määritetty yllä olevalla mallialueen valinnalla",
         "regionContextNone": "Alueellisia variantteja on saatavilla. Valitse alue yllä olevasta mallialueen valinnasta tai näytä kaikki variantit.",
         "otherRegions": "Muut alueet",
+        "filterPlaceholder": "Suodata alueita",
+        "filterAria": "Suodata aluekohtaisia versioita",
+        "filterNoMatch": "Mikään alue ei vastaa hakua \"{query}\"",
         "latency": "~{ms} ms",
         "precisionInfo": "About precision and variants",
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
@@ -5426,13 +5429,23 @@
       "reinstalling": "Asennetaan uudelleen...",
       "reinstallComplete": "Tiedostot tarkistettu onnistuneesti",
       "geomodelBadge": "Sisältää BirdNET v3.0 -geomallin",
+      "preview": {
+        "badge": "Esiversio",
+        "buildLabel": "{version} · {build}",
+        "cardNotice": "Kehittäjien esiversio, ei lopullinen julkaisu. Tämä on varhainen versio testausta varten; tulokset voivat muuttua ennen vakaata versiota.",
+        "dialogNotice": "Olet asentamassa kehittäjien esiversiota ({build}). Se soveltuu kokeiluun, mutta sitä ei vielä suositella ainoaksi luokittelijaksi."
+      },
       "entryIncompatible": "Tämä malli ei ole saatavilla tässä järjestelmässä.",
       "regionGlobal": "Globaali",
       "hardwareLabel": "Laitteisto",
       "hardware": {
         "gpu": "GPU",
+        "gpuNvidia": "GPU (NVIDIA)",
+        "gpuIntel": "GPU (Intel)",
         "intelGpu": "Intel GPU",
         "armCpu": "ARM CPU",
+        "amd64Cpu": "AMD64 CPU",
+        "arm64Cpu": "ARM64 CPU",
         "cpu": "CPU"
       },
       "optimize": {

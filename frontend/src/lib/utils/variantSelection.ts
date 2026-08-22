@@ -130,9 +130,15 @@ export function variantLabel(
 }
 
 /**
- * A friendly hardware class for a variant, used to render a hardware chip on the
- * gallery card. 'builtIn' is the embedded baseline; the rest describe the execution
- * target the variant is recommended for on this host.
+ * A friendly hardware class for a variant, used as the CLIENT-SIDE FALLBACK when the
+ * server omits its authoritative hardwareClass token (an older server). 'builtIn' is
+ * the embedded baseline; the rest describe the execution target the variant is
+ * recommended for on this host.
+ *
+ * NOTE: this client vocabulary ('gpu'/'intelGpu'/'armCpu') intentionally differs from
+ * the server's ('gpuNvidia'/'gpuIntel'/'arm64Cpu'); both sets have keys under
+ * `analysis.gallery.hardware.*` and both must be kept. Do NOT delete the client-vocab
+ * keys as "unused": they are the labels for the old-server fallback path below.
  */
 export type VariantHardwareClass = 'builtIn' | 'gpu' | 'intelGpu' | 'armCpu' | 'cpu';
 
@@ -170,11 +176,19 @@ export function variantHardwareClass(variant: CatalogVariant): VariantHardwareCl
 }
 
 /**
- * Localized hardware chip label for a variant. The BuiltIn baseline uses the
- * built-in label; every other class maps to `analysis.gallery.hardware.<class>`.
+ * Localized hardware chip label for a variant, the plain-language answer to "which
+ * hardware is this build for" that replaces raw precision (FP16/FP32) as the primary
+ * label. Prefers the server-computed `hardwareClass` token, which is authoritative
+ * because it is derived from the live host architecture and the chosen backend (so a
+ * CPU build reads "AMD64 CPU" or "ARM64 CPU" as appropriate); falls back to the
+ * coarser client-side class when an older server omits the token. Either token maps
+ * to `analysis.gallery.hardware.<token>`, except the built-in baseline.
  */
 export function variantHardwareLabel(variant: CatalogVariant): string {
-  const cls = variantHardwareClass(variant);
+  // The server omits hardwareClass (omitempty) rather than sending "", so nullish
+  // coalescing is the correct fallback: only an absent token falls through to the
+  // coarser client-side class.
+  const cls = variant.hardwareClass ?? variantHardwareClass(variant);
   if (cls === 'builtIn') return t('analysis.gallery.builtIn');
   return t(`analysis.gallery.hardware.${cls}`);
 }
@@ -227,6 +241,20 @@ export function optimizeOffers(catalog: CatalogEntry[]): OptimizeOffer[] {
   }
   return offers;
 }
+
+/**
+ * The catalog release channel marking a developer-preview (not-GA) build. The gallery
+ * flags an entry on this channel with a PREVIEW badge and a not-GA notice. Mirrors the
+ * Go `classifier.ChannelPreview` constant.
+ */
+export const CHANNEL_PREVIEW = 'preview';
+
+/**
+ * The catalog release channel marking a stable (GA) build, the default an entry
+ * without an explicit channel resolves to. Mirrors the Go `classifier.ChannelStable`
+ * constant.
+ */
+export const CHANNEL_STABLE = 'stable';
 
 /**
  * The canonical "automatic" region mode. An empty string, null, and undefined

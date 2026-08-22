@@ -81,6 +81,12 @@ const (
 	benchmarkMinMembers = 2
 )
 
+// ReasonArgBackend is the Args key naming the backend a backend.* reason refers to
+// (e.g. {ReasonArgBackend: "openvino-gpu"}). Consumers read the chosen backend from
+// this key; keeping it a shared constant stops the producer and its consumers
+// drifting on the literal.
+const ReasonArgBackend = "backend"
+
 // Reason codes. Structured codes, never English sentences: the frontend maps
 // each to an i18n key, so no user-facing wording lives in the backend.
 const (
@@ -374,7 +380,7 @@ func evaluateVariant(catalogID string, v *classifier.CatalogVariant, in *Input, 
 		}
 	} else if term.applies {
 		score += term.score
-		reasons = append(reasons, Reason{Code: term.code, Args: map[string]string{"backend": term.backend}})
+		reasons = append(reasons, Reason{Code: term.code, Args: map[string]string{ReasonArgBackend: term.backend}})
 		backendRank = preferenceRank(term.backend)
 		gpuRecommended = term.code == ReasonBackendRecommended && isGPUBackend(term.backend)
 	}

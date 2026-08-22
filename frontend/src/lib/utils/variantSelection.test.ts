@@ -9,6 +9,7 @@ import {
   variantHardwareClass,
   variantHardwareLabel,
   optimizeOffers,
+  CHANNEL_STABLE,
 } from './variantSelection';
 import type { CatalogEntry, CatalogVariant, VariantReason } from '$lib/types/models';
 
@@ -58,6 +59,7 @@ function entry(overrides: Partial<CatalogEntry>): CatalogEntry {
     region: '',
     speciesCount: 0,
     version: '1',
+    channel: CHANNEL_STABLE,
     installed: false,
     compatible: true,
     totalSizeBytes: 0,
@@ -271,6 +273,29 @@ describe('variantHardwareLabel', () => {
     ).toBe('analysis.gallery.hardware.gpu');
     expect(variantHardwareLabel(variant({ id: 'fp32-dfttrunc', precision: 'fp32' }))).toBe(
       'analysis.gallery.hardware.cpu'
+    );
+  });
+
+  it('prefers the server-computed hardwareClass token over the client-derived class', () => {
+    // The id/reasons would derive a generic cpu, but the arch-explicit server token wins.
+    expect(variantHardwareLabel(variant({ id: 'fp32', hardwareClass: 'amd64Cpu' }))).toBe(
+      'analysis.gallery.hardware.amd64Cpu'
+    );
+    // Server token wins even when the reasons point at a GPU backend.
+    expect(
+      variantHardwareLabel(
+        variant({
+          id: 'fp16',
+          hardwareClass: 'arm64Cpu',
+          reasons: [{ code: 'backend.recommended', args: { backend: 'cuda' } }],
+        })
+      )
+    ).toBe('analysis.gallery.hardware.arm64Cpu');
+  });
+
+  it('falls back to the client-derived class when the server omits the token', () => {
+    expect(variantHardwareLabel(variant({ id: 'int8-arm', precision: 'int8' }))).toBe(
+      'analysis.gallery.hardware.armCpu'
     );
   });
 });

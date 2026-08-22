@@ -1,7 +1,7 @@
 // Type definitions for the model gallery API.
 //
 // These types mirror the Go structs in internal/classifier/model_manager.go
-// and the API response types in internal/api/v2/models.go.
+// and the API response types in internal/api/v2/models/models.go.
 
 /**
  * A structured, localizable reason for a variant's recommendation or
@@ -35,6 +35,13 @@ export interface CatalogVariant {
   recommended: boolean;
   reasons?: VariantReason[];
   blockers?: VariantReason[];
+  /**
+   * Coarse hardware-target token for the plain-language chip (never raw precision):
+   * one of 'gpuNvidia' | 'gpuIntel' | 'amd64Cpu' | 'arm64Cpu' | 'armCpu' | 'cpu' | 'builtIn'.
+   * Computed server-side from the host arch and chosen backend; absent on an older
+   * server, in which case the client derives a coarser class from the id.
+   */
+  hardwareClass?: string;
 }
 
 /** A model entry in the catalog, enriched with install/compat status. */
@@ -49,6 +56,10 @@ export interface CatalogEntry {
   region: string;
   speciesCount: number;
   version: string;
+  /** Release channel: 'stable' for a GA build, 'preview' for a developer preview the gallery flags as not-GA. Always present. */
+  channel: string;
+  /** Human-facing build tag shown next to the version for a non-stable channel (e.g. 'preview3.1'); absent for stable releases. */
+  buildLabel?: string;
   upstreamUrl?: string;
   installed: boolean;
   compatible: boolean;

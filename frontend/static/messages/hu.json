@@ -5339,6 +5339,9 @@
         "regionContext": "Megjelenített regionális változatok ehhez: {region}, a fenti modellrégió-választás alapján",
         "regionContextNone": "Elérhetők regionális változatok. Válassz egy régiót a fenti modellrégió-választásban, vagy jelenítsd meg az összes változatot.",
         "otherRegions": "Egyéb régiók",
+        "filterPlaceholder": "Régiók szűrése",
+        "filterAria": "Régióra szabott buildek szűrése",
+        "filterNoMatch": "Egyetlen régió sem felel meg ennek: \"{query}\"",
         "latency": "~{ms} ms",
         "precisionInfo": "About precision and variants",
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
@@ -5426,13 +5429,23 @@
       "reinstalling": "Újratelepítés...",
       "reinstallComplete": "Fájlok sikeresen ellenőrizve",
       "geomodelBadge": "Tartalmazza a BirdNET v3.0 geomodellt",
+      "preview": {
+        "badge": "Előzetes",
+        "buildLabel": "{version} · {build}",
+        "cardNotice": "Fejlesztői előzetes, nem végleges kiadás. Ez egy korai tesztverzió; az eredmények a stabil verzió előtt még változhatnak.",
+        "dialogNotice": "Fejlesztői előzetest ({build}) készülsz telepíteni. Kipróbálásra jó, de egyelőre nem ajánlott egyedüli osztályozóként használni."
+      },
       "entryIncompatible": "Ez a modell nem érhető el ezen a rendszeren.",
       "regionGlobal": "Globális",
       "hardwareLabel": "Hardver",
       "hardware": {
         "gpu": "GPU",
+        "gpuNvidia": "GPU (NVIDIA)",
+        "gpuIntel": "GPU (Intel)",
         "intelGpu": "Intel GPU",
         "armCpu": "ARM CPU",
+        "amd64Cpu": "AMD64 CPU",
+        "arm64Cpu": "ARM64 CPU",
         "cpu": "CPU"
       },
       "optimize": {
