@@ -789,7 +789,19 @@ export type TranslationKey =
   | 'detections.metadata.status'
   | 'detections.metadata.locked'
   | 'detections.history.title'
-  | 'detections.history.comingSoon'
+  | 'detections.history.firstHeard'
+  | 'detections.history.lastHeard'
+  | 'detections.history.totalDetections'
+  | 'detections.history.dailyWindow' // params: date
+  | 'detections.history.recentTitle'
+  | 'detections.history.viewAll' // params: count
+  | 'detections.history.noOthers'
+  | 'detections.history.loading'
+  | 'detections.history.loadError'
+  | 'detections.history.unavailable'
+  | 'detections.history.aria.sparkline' // params: date
+  | 'detections.history.aria.recentList'
+  | 'detections.history.aria.openDetection' // params: timestamp
   | 'detections.notes.title'
   | 'detections.notes.noComments'
   | 'detections.aria.loading'
@@ -4274,6 +4286,10 @@ export type TranslationParams = {
   'detections.selection.bulkPartial': { processed: string | number; skipped: string | number };
   'detections.selection.tooManyDetections': { count: string | number };
   'detections.row.viewDetails': { species: string | number };
+  'detections.history.dailyWindow': { date: string | number };
+  'detections.history.viewAll': { count: string | number };
+  'detections.history.aria.sparkline': { date: string | number };
+  'detections.history.aria.openDetection': { timestamp: string | number };
   'detections.aria.loaded': { species: string | number };
   'detections.aria.error': { error: string | number };
   'detections.aria.loadingResults': { count: string | number };
