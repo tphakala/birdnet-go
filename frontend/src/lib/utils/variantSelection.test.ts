@@ -10,6 +10,7 @@ import {
   variantHardwareLabel,
   optimizeOffers,
   CHANNEL_STABLE,
+  HARDWARE_CLASS,
 } from './variantSelection';
 import type { CatalogEntry, CatalogVariant, VariantReason } from '$lib/types/models';
 
@@ -223,8 +224,8 @@ describe('variantHardwareClass', () => {
       id: 'fp32',
       reasons: [{ code: 'backend.recommended', args: { backend: 'tensorrt' } }],
     });
-    expect(variantHardwareClass(cuda)).toBe('gpuNvidia');
-    expect(variantHardwareClass(trt)).toBe('gpuNvidia');
+    expect(variantHardwareClass(cuda)).toBe(HARDWARE_CLASS.gpuNvidia);
+    expect(variantHardwareClass(trt)).toBe(HARDWARE_CLASS.gpuNvidia);
   });
 
   it('maps the openvino-gpu backend to an Intel GPU', () => {
@@ -232,7 +233,7 @@ describe('variantHardwareClass', () => {
       id: 'fp32',
       reasons: [{ code: 'backend.recommended', args: { backend: 'openvino-gpu' } }],
     });
-    expect(variantHardwareClass(ov)).toBe('gpuIntel');
+    expect(variantHardwareClass(ov)).toBe(HARDWARE_CLASS.gpuIntel);
   });
 
   it('prefers the recommended backend reason over any other backend reason', () => {
@@ -243,7 +244,7 @@ describe('variantHardwareClass', () => {
         { code: 'backend.recommended', args: { backend: 'cuda' } },
       ],
     });
-    expect(variantHardwareClass(v)).toBe('gpuNvidia');
+    expect(variantHardwareClass(v)).toBe(HARDWARE_CLASS.gpuNvidia);
   });
 
   it('falls back to the id when no backend reason is present, using only the arm token', () => {
@@ -251,10 +252,14 @@ describe('variantHardwareClass', () => {
     // build, everything else a generic CPU. Precision alone is NOT used: an INT8 id
     // without "arm" (e.g. a future x86 INT8 build) must not be mislabeled ARM.
     expect(variantHardwareClass(variant({ id: 'int8-arm-dfttrunc', precision: 'int8' }))).toBe(
-      'armCpu'
+      HARDWARE_CLASS.armCpu
     );
-    expect(variantHardwareClass(variant({ id: 'int8-x86', precision: 'int8' }))).toBe('cpu');
-    expect(variantHardwareClass(variant({ id: 'fp32-dfttrunc', precision: 'fp32' }))).toBe('cpu');
+    expect(variantHardwareClass(variant({ id: 'int8-x86', precision: 'int8' }))).toBe(
+      HARDWARE_CLASS.cpu
+    );
+    expect(variantHardwareClass(variant({ id: 'fp32-dfttrunc', precision: 'fp32' }))).toBe(
+      HARDWARE_CLASS.cpu
+    );
   });
 });
 
@@ -270,16 +275,16 @@ describe('variantHardwareLabel', () => {
           reasons: [{ code: 'backend.recommended', args: { backend: 'cuda' } }],
         })
       )
-    ).toBe('analysis.gallery.hardware.gpuNvidia');
+    ).toBe(`analysis.gallery.hardware.${HARDWARE_CLASS.gpuNvidia}`);
     expect(variantHardwareLabel(variant({ id: 'fp32-dfttrunc', precision: 'fp32' }))).toBe(
-      'analysis.gallery.hardware.cpu'
+      `analysis.gallery.hardware.${HARDWARE_CLASS.cpu}`
     );
   });
 
   it('prefers the server-computed hardwareClass token over the client-derived class', () => {
     // The id/reasons would derive a generic cpu, but the arch-explicit server token wins.
     expect(variantHardwareLabel(variant({ id: 'fp32', hardwareClass: 'amd64Cpu' }))).toBe(
-      'analysis.gallery.hardware.amd64Cpu'
+      `analysis.gallery.hardware.${HARDWARE_CLASS.amd64Cpu}`
     );
     // Server token wins even when the reasons point at a GPU backend.
     expect(
@@ -290,12 +295,12 @@ describe('variantHardwareLabel', () => {
           reasons: [{ code: 'backend.recommended', args: { backend: 'cuda' } }],
         })
       )
-    ).toBe('analysis.gallery.hardware.arm64Cpu');
+    ).toBe(`analysis.gallery.hardware.${HARDWARE_CLASS.arm64Cpu}`);
   });
 
   it('falls back to the client-derived class when the server omits the token', () => {
     expect(variantHardwareLabel(variant({ id: 'int8-arm', precision: 'int8' }))).toBe(
-      'analysis.gallery.hardware.armCpu'
+      `analysis.gallery.hardware.${HARDWARE_CLASS.armCpu}`
     );
   });
 });
