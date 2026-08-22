@@ -160,7 +160,7 @@ type labelChecksum struct {
 const (
 	labelsSidecar     = "gen/manifests/labels-checksums.json"
 	outputFile        = "model_catalog_regional_gen.go"
-	expectedRegions   = 39
+	expectedRegions   = 40
 	variantsPerRegion = 2 // each region ships two precision variants
 	regionalPerFam    = expectedRegions * variantsPerRegion
 )

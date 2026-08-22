@@ -3,16 +3,6 @@
   "repo": "tphakala/Perch-v2-Models",
   "family": "perch",
   "updated": "2026-07-24",
-  "family_meta": {
-    "display_name": "Google Perch v2",
-    "description": "Google Perch v2 multi-taxa classifier with approximately 14,795 species including birds, insects, amphibians, and mammals (scientific names only)",
-    "author": "Google Research",
-    "license": "Apache-2.0",
-    "commercial_use": true,
-    "upstream_url": "https://www.kaggle.com/models/google/bird-vocalization-classifier/tensorFlow2/perch_v2",
-    "species_count": 14795
-  },
-  "requirements_note": "requirements.min_ram_mb is a conservative, high-biased RAM floor: measured peak RSS + 15% where a benchmark exists, else a size-derived estimate biased high (a too-low floor risks OOM; a too-high floor only over-excludes on the smallest devices). Measured values will replace the estimates over time.",
   "naming": "legacy names, frozen; new files follow <family>-<upstream>[-<region>]-<variant>-b<build>.<ext>",
   "selection": {
     "x86-64/onnxruntime": "full/perch_v2_no_dft_fp32.onnx",
@@ -829,6 +819,114 @@
       "indices": "regional/british-isles/perch_v2_british-isles_indices.txt",
       "requirements": {
         "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/canada-alaska/perch_v2_canada-alaska_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "canada-alaska",
+      "labels": "regional/canada-alaska/perch_v2_canada-alaska_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "4a7f3f9946ece497f906621f0383f589cf878595ea938099163ab71e069c2cf5",
+      "size_bytes": 46538169,
+      "superseded_by": null,
+      "indices": "regional/canada-alaska/perch_v2_canada-alaska_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/canada-alaska/perch_v2_canada-alaska_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "canada-alaska",
+      "labels": "regional/canada-alaska/perch_v2_canada-alaska_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "d0cb954c79fd6d1c130c4979c8aec72be09b22b3e7fd6056fbbde5d8ff869ebb",
+      "size_bytes": 72990960,
+      "superseded_by": null,
+      "indices": "regional/canada-alaska/perch_v2_canada-alaska_indices.txt",
+      "requirements": {
+        "min_ram_mb": 300
       }
     },
     {
@@ -4395,5 +4493,15 @@
         "min_ram_mb": 300
       }
     }
-  ]
+  ],
+  "family_meta": {
+    "display_name": "Google Perch v2",
+    "description": "Google Perch v2 multi-taxa classifier with approximately 14,795 species including birds, insects, amphibians, and mammals (scientific names only)",
+    "author": "Google Research",
+    "license": "Apache-2.0",
+    "commercial_use": true,
+    "upstream_url": "https://www.kaggle.com/models/google/bird-vocalization-classifier/tensorFlow2/perch_v2",
+    "species_count": 14795
+  },
+  "requirements_note": "requirements.min_ram_mb is a conservative, high-biased RAM floor: measured peak RSS + 15% where a benchmark exists, else a size-derived estimate biased high (a too-low floor risks OOM; a too-high floor only over-excludes on the smallest devices). Measured values will replace the estimates over time."
 }

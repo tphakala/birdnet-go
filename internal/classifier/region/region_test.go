@@ -9,7 +9,7 @@ import (
 )
 
 // expectedTileCount is the number of regional tiles each family publishes.
-const expectedTileCount = 39
+const expectedTileCount = 40
 
 // TestTablesLoad confirms both embedded snapshots parse, validate, and describe
 // the two expected families.

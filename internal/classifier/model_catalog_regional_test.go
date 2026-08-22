@@ -12,8 +12,8 @@ import (
 )
 
 // regionalTilesPerFamily is how many region-sliced variants the generator emits
-// per family: 39 region slugs, each with two precision builds.
-const regionalTilesPerFamily = 78
+// per family: 40 region slugs, each with two precision builds.
+const regionalTilesPerFamily = 80
 
 // allowedRegionalPrecisions is the set of normalized precisions a regional
 // variant may carry. "int8-arm" is normalized to "int8" at generation time so

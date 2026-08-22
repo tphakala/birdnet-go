@@ -6769,6 +6769,172 @@
           "openvino-gpu-intel-gen12"
         ]
       }
+    },
+    {
+      "path": "regional/canada-alaska/birdnet-v3.0-preview3.1-canada-alaska-fp32-b1.onnx",
+      "family": "birdnet",
+      "upstream_version": "3.0-preview3.1",
+      "upstream_source": "https://zenodo.org/records/20703646",
+      "build": 1,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": "canada-alaska",
+      "classes": 738,
+      "labels": "regional/canada-alaska/birdnet-v3.0-preview3.1-canada-alaska-labels-b1.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "outputs": [
+        {
+          "name": "predictions",
+          "shape": [
+            "batch",
+            738
+          ],
+          "activation": "sigmoid",
+          "multi_label": true
+        },
+        {
+          "name": "embeddings",
+          "shape": [
+            "batch",
+            1280
+          ]
+        }
+      ],
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": true
+        }
+      },
+      "graph": {
+        "gpu_native": true,
+        "has_stft_op": false,
+        "dynamic_batch": true,
+        "notes": "in-graph ONNX STFT replaced by an equivalent Conv1d; every op has a CUDA/OpenVINO kernel"
+      },
+      "benchmarks": [],
+      "sha256": "ab32a0b1662591e1190d4033055f58ff209bd933c60e7b7ef78e9500b78ffd4e",
+      "size_bytes": 146966587,
+      "legacy": false,
+      "superseded_by": null,
+      "indices": "regional/canada-alaska/birdnet-v3.0-preview3.1-canada-alaska-indices-b1.txt",
+      "validation": {
+        "max_abs_diff_vs_global": 3.129243850708008e-07,
+        "numerically_identical_on_kept_classes": true
+      },
+      "requirements": {
+        "min_ram_mb": 350
+      }
+    },
+    {
+      "path": "regional/canada-alaska/birdnet-v3.0-preview3.1-canada-alaska-fp16-b1.onnx",
+      "family": "birdnet",
+      "upstream_version": "3.0-preview3.1",
+      "upstream_source": "https://zenodo.org/records/20703646",
+      "build": 1,
+      "variant": "fp16",
+      "precision": "fp16",
+      "region": "canada-alaska",
+      "classes": 738,
+      "labels": "regional/canada-alaska/birdnet-v3.0-preview3.1-canada-alaska-labels-b1.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "outputs": [
+        {
+          "name": "predictions",
+          "shape": [
+            "batch",
+            738
+          ],
+          "activation": "sigmoid",
+          "multi_label": true
+        },
+        {
+          "name": "embeddings",
+          "shape": [
+            "batch",
+            1280
+          ]
+        }
+      ],
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false,
+          "note": "ONNX Runtime upconverts FP16 on CPU; slower than FP32 and not a RAM saving"
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": true
+        }
+      },
+      "graph": {
+        "gpu_native": true,
+        "has_stft_op": false,
+        "dynamic_batch": true,
+        "notes": "in-graph ONNX STFT replaced by an equivalent Conv1d; every op has a CUDA/OpenVINO kernel"
+      },
+      "benchmarks": [],
+      "sha256": "4c7277dc189757e7bb38f1478f03c3a4917160c2055a5f0ad9e9cf85aa7afde6",
+      "size_bytes": 73859859,
+      "legacy": false,
+      "superseded_by": null,
+      "indices": "regional/canada-alaska/birdnet-v3.0-preview3.1-canada-alaska-indices-b1.txt",
+      "validation": {
+        "max_abs_diff_vs_global": 3.129243850708008e-07,
+        "numerically_identical_on_kept_classes": true
+      },
+      "requirements": {
+        "min_ram_mb": 400,
+        "excludes": [
+          "openvino-gpu-intel-gen12"
+        ]
+      }
     }
   ]
 }

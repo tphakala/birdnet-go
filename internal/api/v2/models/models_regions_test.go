@@ -17,7 +17,7 @@ import (
 
 // expectedRegionCount is the number of tiles each family publishes; the dropdown
 // union carries exactly this many because families share a slug set.
-const expectedRegionCount = 39
+const expectedRegionCount = 40
 
 // getRegions calls GetModelRegions directly and decodes the response.
 func getRegions(t *testing.T, mutate func(*conf.Settings)) ModelRegionsResponse {

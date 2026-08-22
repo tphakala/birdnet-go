@@ -4,7 +4,7 @@ package classifier
 
 import "slices"
 
-// birdnetV30RegionalVariants returns the 78 region-sliced variants of the birdnet-v3.0 model,
+// birdnetV30RegionalVariants returns the 80 region-sliced variants of the birdnet-v3.0 model,
 // generated from BirdNET-v3.0-Models.models.json.
 func birdnetV30RegionalVariants() []CatalogVariant {
 	return []CatalogVariant{
@@ -222,6 +222,42 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/british-isles/birdnet-v3.0-preview3.1-british-isles-fp32-b1.onnx", LocalName: "birdnet_v3.0_british-isles_fp32.onnx", Role: RoleModel, SHA256: "6816af2076ea79ae4f2c4a22ec005e7e4c9011971c65533d68e3b7a9c3037adb", SizeBytes: 140181055},
 				{RemotePath: "regional/british-isles/birdnet-v3.0-preview3.1-british-isles-labels-b1.txt", LocalName: "birdnet_v3.0_british-isles_labels.txt", Role: RoleLabels, SHA256: "a3d9873909bb502c3964ca4f39d86068abeb323f45369d2206242410010bfe86", SizeBytes: 19328},
+			}, geomodelFiles(), taxonomyFiles()),
+		},
+		{
+			ID:           "fp16@canada-alaska",
+			Region:       "canada-alaska",
+			Precision:    "fp16",
+			SpeciesCount: 738,
+			Requirements: VariantRequirements{MinRAMMB: 400, Excludes: []string{"openvino-gpu-intel-gen12"}},
+			Backends: map[string]BackendSupport{
+				"cuda":            {Supported: true, Recommended: true},
+				"onnxruntime-cpu": {Supported: true},
+				"openvino-cpu":    {Supported: true},
+				"openvino-gpu":    {Supported: true, Recommended: true},
+				"tensorrt":        {Supported: true, Recommended: true},
+			},
+			Files: slices.Concat([]CatalogFile{
+				{RemotePath: "regional/canada-alaska/birdnet-v3.0-preview3.1-canada-alaska-fp16-b1.onnx", LocalName: "birdnet_v3.0_canada-alaska_fp16.onnx", Role: RoleModel, SHA256: "4c7277dc189757e7bb38f1478f03c3a4917160c2055a5f0ad9e9cf85aa7afde6", SizeBytes: 73859859},
+				{RemotePath: "regional/canada-alaska/birdnet-v3.0-preview3.1-canada-alaska-labels-b1.txt", LocalName: "birdnet_v3.0_canada-alaska_labels.txt", Role: RoleLabels, SHA256: "cfeedb34ac7dba1a6398029228d2a8188418397dd05a4e2707320df868214c1d", SizeBytes: 13854},
+			}, geomodelFiles(), taxonomyFiles()),
+		},
+		{
+			ID:           "fp32@canada-alaska",
+			Region:       "canada-alaska",
+			Precision:    "fp32",
+			SpeciesCount: 738,
+			Requirements: VariantRequirements{MinRAMMB: 350},
+			Backends: map[string]BackendSupport{
+				"cuda":            {Supported: true, Recommended: true},
+				"onnxruntime-cpu": {Supported: true, Recommended: true},
+				"openvino-cpu":    {Supported: true, Recommended: true},
+				"openvino-gpu":    {Supported: true},
+				"tensorrt":        {Supported: true, Recommended: true},
+			},
+			Files: slices.Concat([]CatalogFile{
+				{RemotePath: "regional/canada-alaska/birdnet-v3.0-preview3.1-canada-alaska-fp32-b1.onnx", LocalName: "birdnet_v3.0_canada-alaska_fp32.onnx", Role: RoleModel, SHA256: "ab32a0b1662591e1190d4033055f58ff209bd933c60e7b7ef78e9500b78ffd4e", SizeBytes: 146966587},
+				{RemotePath: "regional/canada-alaska/birdnet-v3.0-preview3.1-canada-alaska-labels-b1.txt", LocalName: "birdnet_v3.0_canada-alaska_labels.txt", Role: RoleLabels, SHA256: "cfeedb34ac7dba1a6398029228d2a8188418397dd05a4e2707320df868214c1d", SizeBytes: 13854},
 			}, geomodelFiles(), taxonomyFiles()),
 		},
 		{
@@ -1425,7 +1461,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 	}
 }
 
-// perchV2RegionalVariants returns the 78 region-sliced variants of the perch-v2 model,
+// perchV2RegionalVariants returns the 80 region-sliced variants of the perch-v2 model,
 // generated from Perch-v2-Models.models.json.
 func perchV2RegionalVariants() []CatalogVariant {
 	return []CatalogVariant{
@@ -1619,6 +1655,38 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/british-isles/perch_v2_british-isles_no_dft_fp32.onnx", LocalName: "perch_v2_british-isles_no_dft.onnx", Role: RoleModel, SHA256: "1281cece7d01319c6b010eb13b7ea5cbe8c1fcf4f15d6ad3e2ccd1bd1b2c53c1", SizeBytes: 68416104},
 				{RemotePath: "regional/british-isles/perch_v2_british-isles_labels.txt", LocalName: "perch_v2_british-isles_labels.txt", Role: RoleLabels, SHA256: "ff4bff5fd55271fa062413ce33f686c3d54e269423890eeba6605a1ef7955f2a", SizeBytes: 12955},
+			}, geomodelFiles(), taxonomyFiles()),
+		},
+		{
+			ID:           "int8-arm@canada-alaska",
+			Region:       "canada-alaska",
+			Precision:    "int8",
+			SpeciesCount: 962,
+			Requirements: VariantRequirements{Arch: []string{"aarch64"}, MinRAMMB: 250},
+			Backends: map[string]BackendSupport{
+				"onnxruntime-cpu": {Supported: true, Recommended: true},
+			},
+			Files: slices.Concat([]CatalogFile{
+				{RemotePath: "regional/canada-alaska/perch_v2_canada-alaska_int8_arm.onnx", LocalName: "perch_v2_canada-alaska_int8_arm.onnx", Role: RoleModel, SHA256: "4a7f3f9946ece497f906621f0383f589cf878595ea938099163ab71e069c2cf5", SizeBytes: 46538169},
+				{RemotePath: "regional/canada-alaska/perch_v2_canada-alaska_labels.txt", LocalName: "perch_v2_canada-alaska_labels.txt", Role: RoleLabels, SHA256: "2ff39da0058af4522081661e1cef1dbe985729a6a708c67d09ee5a91c29a67f0", SizeBytes: 16870},
+			}, geomodelFiles(), taxonomyFiles()),
+		},
+		{
+			ID:           "no-dft-fp32@canada-alaska",
+			Region:       "canada-alaska",
+			Precision:    "fp32",
+			SpeciesCount: 962,
+			Requirements: VariantRequirements{MinRAMMB: 300},
+			Backends: map[string]BackendSupport{
+				"cuda":            {Supported: true, Recommended: true},
+				"onnxruntime-cpu": {Supported: true},
+				"openvino-cpu":    {Supported: true, Recommended: true},
+				"openvino-gpu":    {Supported: true, Recommended: true},
+				"tensorrt":        {Supported: true},
+			},
+			Files: slices.Concat([]CatalogFile{
+				{RemotePath: "regional/canada-alaska/perch_v2_canada-alaska_no_dft_fp32.onnx", LocalName: "perch_v2_canada-alaska_no_dft.onnx", Role: RoleModel, SHA256: "d0cb954c79fd6d1c130c4979c8aec72be09b22b3e7fd6056fbbde5d8ff869ebb", SizeBytes: 72990960},
+				{RemotePath: "regional/canada-alaska/perch_v2_canada-alaska_labels.txt", LocalName: "perch_v2_canada-alaska_labels.txt", Role: RoleLabels, SHA256: "2ff39da0058af4522081661e1cef1dbe985729a6a708c67d09ee5a91c29a67f0", SizeBytes: 16870},
 			}, geomodelFiles(), taxonomyFiles()),
 		},
 		{

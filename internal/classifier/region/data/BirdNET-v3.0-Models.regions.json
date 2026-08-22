@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "repo": "tphakala/BirdNET-v3.0-Models",
-  "updated": "2026-08-15",
+  "updated": "2026-08-22",
   "regions": {
     "nordic": {
       "name": "Nordic",
@@ -852,6 +852,34 @@
       },
       "classes": 802,
       "map": "regional/north-america-west/coverage.svg"
+    },
+    "canada-alaska": {
+      "name": "Canada Alaska",
+      "group": "north-america",
+      "group_display": "North America",
+      "realm": "nearctic",
+      "tier": 10,
+      "bboxes": [
+        [
+          49.0,
+          71.0,
+          -168.0,
+          -52.0
+        ]
+      ],
+      "centroid": [
+        60.0,
+        -110.0
+      ],
+      "countries": {
+        "core": [
+          "CA",
+          "US"
+        ],
+        "partial": []
+      },
+      "classes": 738,
+      "map": "regional/canada-alaska/coverage.svg"
     },
     "amazonia": {
       "name": "Amazonia",

@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// goldenTiers is the authoritative slug-to-tier banding of all 39 tiles. It is a
+// goldenTiers is the authoritative slug-to-tier banding of all 40 tiles. It is a
 // literal snapshot of the shipped geometry: any reband, rename, addition, or
 // removal in a refreshed regions.json changes this comparison and fails CI, so a
 // tier change is never silent. When a refresh legitimately changes the geometry,
@@ -19,6 +19,7 @@ var goldenTiers = map[string]int{
 	"azores":                TierLocal,
 	"baltics":               TierRegional,
 	"british-isles":         TierRegional,
+	"canada-alaska":         TierContinental,
 	"canary-islands":        TierLocal,
 	"cape-verde":            TierLocal,
 	"central-europe":        TierRegional,
