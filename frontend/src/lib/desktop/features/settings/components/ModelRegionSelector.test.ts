@@ -7,6 +7,28 @@ import * as modelsApi from '$lib/utils/modelsApi';
 import type { ModelRegionsResponse, RegionResolution } from '$lib/types/models';
 
 vi.mock('$lib/utils/modelsApi');
+// Deterministic country localization so the search-by-country assertions do not
+// depend on the runtime Intl.DisplayNames / ICU data available in CI.
+vi.mock('$lib/utils/countryNames', () => ({
+  localizedCountryNames: (codes: string[] | null | undefined) => {
+    const names: Record<string, string> = {
+      ES: 'Spain',
+      PT: 'Portugal',
+      FR: 'France',
+      FI: 'Finland',
+      SE: 'Sweden',
+      NO: 'Norway',
+      DK: 'Denmark',
+      IS: 'Iceland',
+      EE: 'Estonia',
+      CO: 'Colombia',
+      EC: 'Ecuador',
+      PE: 'Peru',
+      RE: 'Réunion',
+    };
+    return (codes ?? []).map(c => names[c] ?? c);
+  },
+}));
 
 function response(overrides: Partial<ModelRegionsResponse> = {}): ModelRegionsResponse {
   return {
