@@ -223,8 +223,8 @@ describe('variantHardwareClass', () => {
       id: 'fp32',
       reasons: [{ code: 'backend.recommended', args: { backend: 'tensorrt' } }],
     });
-    expect(variantHardwareClass(cuda)).toBe('gpu');
-    expect(variantHardwareClass(trt)).toBe('gpu');
+    expect(variantHardwareClass(cuda)).toBe('gpuNvidia');
+    expect(variantHardwareClass(trt)).toBe('gpuNvidia');
   });
 
   it('maps the openvino-gpu backend to an Intel GPU', () => {
@@ -232,7 +232,7 @@ describe('variantHardwareClass', () => {
       id: 'fp32',
       reasons: [{ code: 'backend.recommended', args: { backend: 'openvino-gpu' } }],
     });
-    expect(variantHardwareClass(ov)).toBe('intelGpu');
+    expect(variantHardwareClass(ov)).toBe('gpuIntel');
   });
 
   it('prefers the recommended backend reason over any other backend reason', () => {
@@ -243,7 +243,7 @@ describe('variantHardwareClass', () => {
         { code: 'backend.recommended', args: { backend: 'cuda' } },
       ],
     });
-    expect(variantHardwareClass(v)).toBe('gpu');
+    expect(variantHardwareClass(v)).toBe('gpuNvidia');
   });
 
   it('falls back to the id when no backend reason is present, using only the arm token', () => {
@@ -270,7 +270,7 @@ describe('variantHardwareLabel', () => {
           reasons: [{ code: 'backend.recommended', args: { backend: 'cuda' } }],
         })
       )
-    ).toBe('analysis.gallery.hardware.gpu');
+    ).toBe('analysis.gallery.hardware.gpuNvidia');
     expect(variantHardwareLabel(variant({ id: 'fp32-dfttrunc', precision: 'fp32' }))).toBe(
       'analysis.gallery.hardware.cpu'
     );

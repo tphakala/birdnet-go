@@ -135,12 +135,14 @@ export function variantLabel(
  * the embedded baseline; the rest describe the execution target the variant is
  * recommended for on this host.
  *
- * NOTE: this client vocabulary ('gpu'/'intelGpu'/'armCpu') intentionally differs from
- * the server's ('gpuNvidia'/'gpuIntel'/'arm64Cpu'); both sets have keys under
- * `analysis.gallery.hardware.*` and both must be kept. Do NOT delete the client-vocab
- * keys as "unused": they are the labels for the old-server fallback path below.
+ * NOTE: this client vocabulary is a SUBSET of the server's authoritative tokens
+ * (`internal/api/v2/models/models.go` variantHardwareClass): the coarse client
+ * fallback cannot make the CPU arch explicit, so it never emits amd64Cpu/arm64Cpu,
+ * but every token it does emit ('gpuNvidia'/'gpuIntel'/'armCpu'/'cpu'/'builtIn') is a
+ * server token. Both paths therefore resolve `analysis.gallery.hardware.<token>` from
+ * the same key set, so keep the client returns aligned with the server vocabulary.
  */
-export type VariantHardwareClass = 'builtIn' | 'gpu' | 'intelGpu' | 'armCpu' | 'cpu';
+export type VariantHardwareClass = 'builtIn' | 'gpuNvidia' | 'gpuIntel' | 'armCpu' | 'cpu';
 
 /**
  * The recommended (or otherwise chosen) execution backend token for a variant,
@@ -169,8 +171,8 @@ function chosenBackendToken(variant: CatalogVariant): string | undefined {
 export function variantHardwareClass(variant: CatalogVariant): VariantHardwareClass {
   if (variant.builtIn) return 'builtIn';
   const backend = chosenBackendToken(variant);
-  if (backend === 'cuda' || backend === 'tensorrt') return 'gpu';
-  if (backend === 'openvino-gpu') return 'intelGpu';
+  if (backend === 'cuda' || backend === 'tensorrt') return 'gpuNvidia';
+  if (backend === 'openvino-gpu') return 'gpuIntel';
   if (variant.id.toLowerCase().includes('arm')) return 'armCpu';
   return 'cpu';
 }
