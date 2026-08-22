@@ -186,12 +186,12 @@ func TestRecommendedBackendToken(t *testing.T) {
 	// Falls back to the first reason carrying a backend arg when no backend.recommended
 	// reason is present (the fallback accumulator path).
 	assert.Equal(t, backendOpenVINOGPU, recommendedBackendToken([]recommend.Reason{
-		{Code: "region.matched", Args: map[string]string{"region": "nordic"}},
+		{Code: recommend.ReasonRegionMatched, Args: map[string]string{"region": "nordic"}},
 		{Code: recommend.ReasonBackendSupported, Args: map[string]string{recommend.ReasonArgBackend: backendOpenVINOGPU}},
 	}), "falls back to the first backend-bearing reason")
 
 	// No backend-bearing reason yields the empty token (the intrinsic path then decides).
 	assert.Empty(t, recommendedBackendToken([]recommend.Reason{
-		{Code: "region.matched", Args: map[string]string{"region": "nordic"}},
+		{Code: recommend.ReasonRegionMatched, Args: map[string]string{"region": "nordic"}},
 	}))
 }
