@@ -101,6 +101,7 @@ function birdEntry(overrides: Partial<CatalogEntry> = {}): CatalogEntry {
     region: '',
     speciesCount: 100,
     version: '1.0',
+    channel: 'stable',
     installed: false,
     compatible: true,
     totalSizeBytes: 1_000_000,

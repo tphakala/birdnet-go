@@ -5339,6 +5339,9 @@
         "regionContext": "Regionale varianten getoond voor {region}, ingesteld door de modelregioselectie hierboven",
         "regionContextNone": "Er zijn regionale varianten beschikbaar. Kies een regio in de modelregioselectie hierboven, of toon alle varianten.",
         "otherRegions": "Andere regio's",
+        "filterPlaceholder": "Regio's filteren",
+        "filterAria": "Filter op regio afgestemde versies",
+        "filterNoMatch": "Geen regio's komen overeen met \"{query}\"",
         "latency": "~{ms} ms",
         "precisionInfo": "About precision and variants",
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
@@ -5426,13 +5429,23 @@
       "reinstalling": "Opnieuw installeren...",
       "reinstallComplete": "Bestanden succesvol geverifieerd",
       "geomodelBadge": "Bevat BirdNET v3.0 geomodel",
+      "preview": {
+        "badge": "Voorvertoning",
+        "buildLabel": "{version} · {build}",
+        "cardNotice": "Voorvertoning voor ontwikkelaars, niet de definitieve versie. Dit is een vroege versie om te testen; resultaten kunnen veranderen voor de stabiele versie.",
+        "dialogNotice": "Je installeert een voorvertoning voor ontwikkelaars ({build}). Handig om uit te proberen, maar nog niet aanbevolen als je enige classificator."
+      },
       "entryIncompatible": "Dit model is niet beschikbaar op dit systeem.",
       "regionGlobal": "Globaal",
       "hardwareLabel": "Hardware",
       "hardware": {
         "gpu": "GPU",
+        "gpuNvidia": "GPU (NVIDIA)",
+        "gpuIntel": "GPU (Intel)",
         "intelGpu": "Intel GPU",
         "armCpu": "ARM CPU",
+        "amd64Cpu": "AMD64 CPU",
+        "arm64Cpu": "ARM64 CPU",
         "cpu": "CPU"
       },
       "optimize": {

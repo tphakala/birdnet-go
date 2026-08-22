@@ -5339,6 +5339,9 @@
         "regionContext": "Zobrazené regionálne varianty pre {region}, nastavené výberom regiónu modelu vyššie",
         "regionContextNone": "K dispozícii sú regionálne varianty. Vyberte región vo výbere regiónu modelu vyššie alebo zobrazte všetky varianty.",
         "otherRegions": "Ostatné regióny",
+        "filterPlaceholder": "Filtrovať regióny",
+        "filterAria": "Filtrovať verzie prispôsobené regiónom",
+        "filterNoMatch": "Žiadne regióny nezodpovedajú \"{query}\"",
         "latency": "~{ms} ms",
         "precisionInfo": "About precision and variants",
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
@@ -5426,13 +5429,23 @@
       "reinstalling": "Preinštalovanie...",
       "reinstallComplete": "Súbory úspešne overené",
       "geomodelBadge": "Obsahuje BirdNET v3.0 geomodel",
+      "preview": {
+        "badge": "Náhľad",
+        "buildLabel": "{version} · {build}",
+        "cardNotice": "Vývojársky náhľad, nejde o finálnu verziu. Ide o rané zostavenie na testovanie; výsledky sa pred stabilnou verziou môžu zmeniť.",
+        "dialogNotice": "Inštalujete vývojársky náhľad ({build}). Je vhodný na vyskúšanie, ale zatiaľ sa neodporúča ako váš jediný klasifikátor."
+      },
       "entryIncompatible": "Tento model nie je v tomto systéme k dispozícii.",
       "regionGlobal": "Globálny",
       "hardwareLabel": "Hardvér",
       "hardware": {
         "gpu": "GPU",
+        "gpuNvidia": "GPU (NVIDIA)",
+        "gpuIntel": "GPU (Intel)",
         "intelGpu": "Intel GPU",
         "armCpu": "ARM CPU",
+        "amd64Cpu": "AMD64 CPU",
+        "arm64Cpu": "ARM64 CPU",
         "cpu": "CPU"
       },
       "optimize": {

@@ -127,15 +127,16 @@ func TestBuildVariantResponses_LegacyHiddenUnlessInstalled(t *testing.T) {
 	}
 
 	// Not installed: the legacy variant is hidden, none is marked installed.
-	notInstalled := buildVariantResponses(entry, false, "", nil)
+	notInstalled := buildVariantResponses(entry, false, "", nil, "")
 	assert.Contains(t, ids(notInstalled), "cur")
 	assert.NotContains(t, ids(notInstalled), "old", "a legacy variant is hidden when not installed")
 	for _, v := range notInstalled {
 		assert.False(t, v.Installed)
+		assert.NotEmpty(t, v.HardwareClass, "buildVariantResponses must populate a hardware-class token on every variant")
 	}
 
 	// The legacy variant is the installed one: it stays visible and is flagged.
-	withLegacy := buildVariantResponses(entry, true, "old", nil)
+	withLegacy := buildVariantResponses(entry, true, "old", nil, "")
 	assert.Contains(t, ids(withLegacy), "old", "a legacy variant stays visible when it is installed")
 	for _, v := range withLegacy {
 		switch v.ID {

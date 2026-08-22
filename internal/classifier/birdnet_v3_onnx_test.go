@@ -130,6 +130,20 @@ func TestBirdNETV3_CatalogEntry(t *testing.T) {
 	assert.False(t, entry.Hidden, "v3.0 is visible in the gallery (public HF repo, pinned checksums, RAM-floor gated)")
 	assert.True(t, entry.RequiresONNX)
 
+	// v3.0 ships as a developer preview: the gallery flags it as not the GA build
+	// and surfaces the build tag (which otherwise lives only in the file paths).
+	assert.Equal(t, ChannelPreview, entry.Channel, "v3.0 is a developer-preview release")
+	assert.Equal(t, "preview3.1", entry.BuildLabel, "v3.0 surfaces its preview build tag")
+
+	// A stable (GA) sibling must leave Channel/BuildLabel empty, so its on-disk JSON
+	// stays byte-identical and adding these omitempty fields does not shift the
+	// stable entry's contribution to catalogChecksum (the invariant model_catalog.go
+	// documents). Guards against a stray Channel: "stable" being added to a GA entry.
+	perch, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok, "perch-v2 catalog entry must exist")
+	assert.Empty(t, perch.Channel, "a stable entry must not set Channel (omitempty byte-identity)")
+	assert.Empty(t, perch.BuildLabel, "a stable entry must not set BuildLabel")
+
 	roles := map[string]int{}
 	for _, f := range entry.Files {
 		roles[f.Role]++

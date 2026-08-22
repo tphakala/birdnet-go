@@ -421,7 +421,7 @@ describe('ModelVariantPicker', () => {
     expect(label?.textContent).toContain('analysis.gallery.variants.otherRegions');
   });
 
-  it('moves focus to the first newly revealed tile when the final stage unmounts the toggle', async () => {
+  it('moves focus to the region filter when the final stage reveals it', async () => {
     const { container, getByRole } = render(ModelVariantPicker, {
       props: {
         variants: regionalVariants,
@@ -433,10 +433,37 @@ describe('ModelVariantPicker', () => {
       },
     });
     // collapsed -> region keeps the button mounted (focus stays); region -> all
-    // unmounts it, so focus is moved to the first tile that stage reveals (the
-    // first other-region tile, iberia) instead of falling to <body>.
+    // reveals the "other regions" panel with its filter box, so focus moves to that
+    // search input (a keyboard user filters first, then ArrowDowns into the tiles)
+    // instead of falling to <body> when the toggle unmounts.
     await fireEvent.click(getByRole('button')); // region stage
     await fireEvent.click(getByRole('button')); // all stage (button unmounts)
+    const search = container.querySelector('input[type="text"]');
+    expect(search).not.toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(search));
+  });
+
+  it('bridges keyboard focus from the region filter into the first tile on ArrowDown', async () => {
+    const { container, getByRole } = render(ModelVariantPicker, {
+      props: {
+        variants: regionalVariants,
+        selectedVariantId: 'fp16',
+        onSelect: vi.fn(),
+        activeRegionSlug: 'nordic',
+        regionNames,
+        idPrefix: 'r7',
+      },
+    });
+    await fireEvent.click(getByRole('button')); // region stage
+    await fireEvent.click(getByRole('button')); // all stage
+    const search = container.querySelector('input[type="text"]');
+    expect(search).not.toBeNull();
+    // The native radio group uses roving tabindex, so Tab from the search would skip
+    // the tiles; ArrowDown must bridge focus into the first other-region tile.
+    if (search instanceof HTMLInputElement) {
+      search.focus();
+      await fireEvent.keyDown(search, { key: 'ArrowDown' });
+    }
     await waitFor(() =>
       expect(document.activeElement).toBe(radioByValue(container, 'fp16@iberia'))
     );

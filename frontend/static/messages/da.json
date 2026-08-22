@@ -5339,6 +5339,9 @@
         "regionContext": "Regionale varianter vises for {region}, angivet af valget af modelregion ovenfor",
         "regionContextNone": "Regionale varianter er tilgængelige. Vælg en region i valget af modelregion ovenfor, eller vis alle varianter.",
         "otherRegions": "Andre regioner",
+        "filterPlaceholder": "Filtrer regioner",
+        "filterAria": "Filtrer regionstilpassede versioner",
+        "filterNoMatch": "Ingen regioner matcher \"{query}\"",
         "latency": "~{ms} ms",
         "precisionInfo": "About precision and variants",
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
@@ -5426,13 +5429,23 @@
       "reinstalling": "Geninstallerer...",
       "reinstallComplete": "Filer verificeret succesfuldt",
       "geomodelBadge": "Inkluderer BirdNET v3.0 geomodel",
+      "preview": {
+        "badge": "Forhåndsvisning",
+        "buildLabel": "{version} · {build}",
+        "cardNotice": "Forhåndsvisning til udviklere, ikke den endelige udgivelse. Dette er en tidlig version til test; resultaterne kan ændre sig inden den stabile version.",
+        "dialogNotice": "Du er ved at installere en forhåndsvisning til udviklere ({build}). Den er fin til at afprøve, men anbefales endnu ikke som din eneste klassifikator."
+      },
       "entryIncompatible": "Denne model er ikke tilgængelig på dette system.",
       "regionGlobal": "Global",
       "hardwareLabel": "Hardware",
       "hardware": {
         "gpu": "GPU",
+        "gpuNvidia": "GPU (NVIDIA)",
+        "gpuIntel": "GPU (Intel)",
         "intelGpu": "Intel GPU",
         "armCpu": "ARM CPU",
+        "amd64Cpu": "AMD64 CPU",
+        "arm64Cpu": "ARM64 CPU",
         "cpu": "CPU"
       },
       "optimize": {

@@ -84,6 +84,7 @@
     GLOBAL_REGION_MODE,
     optimizeOffers,
     variantHardwareLabel,
+    CHANNEL_PREVIEW,
     type OptimizeOffer,
   } from '$lib/utils/variantSelection';
   import OptimizeReviewDialog from '$lib/desktop/features/settings/components/OptimizeReviewDialog.svelte';
@@ -2260,7 +2261,26 @@
                 </div>
               {/if}
               <div class="min-w-0 flex-1">
-                <h4 class="text-sm font-semibold text-[var(--color-base-content)]">{entry.name}</h4>
+                <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <h4 class="text-sm font-semibold text-[var(--color-base-content)]">
+                    {entry.name}
+                  </h4>
+                  {#if entry.channel === CHANNEL_PREVIEW}
+                    <span
+                      class="inline-flex items-center rounded-full bg-[var(--color-warning)]/15 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-[var(--color-warning)]"
+                    >
+                      {t('analysis.gallery.preview.badge')}
+                    </span>
+                  {/if}
+                  {#if entry.buildLabel}
+                    <span class="font-mono text-xs text-[var(--color-base-content)]/70">
+                      {t('analysis.gallery.preview.buildLabel', {
+                        version: entry.version,
+                        build: entry.buildLabel,
+                      })}
+                    </span>
+                  {/if}
+                </div>
                 <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/80">
                   {entry.description}
                 </p>
@@ -2526,9 +2546,26 @@
         </div>
       {/if}
       <div class="min-w-0 flex-1">
-        <h4 class="text-sm font-semibold text-[var(--color-base-content)]">
-          {entry.name}
-        </h4>
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <h4 class="text-sm font-semibold text-[var(--color-base-content)]">
+            {entry.name}
+          </h4>
+          {#if entry.channel === CHANNEL_PREVIEW}
+            <span
+              class="inline-flex items-center rounded-full bg-[var(--color-warning)]/15 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-[var(--color-warning)]"
+            >
+              {t('analysis.gallery.preview.badge')}
+            </span>
+          {/if}
+          {#if entry.buildLabel}
+            <span class="font-mono text-xs text-[var(--color-base-content)]/70">
+              {t('analysis.gallery.preview.buildLabel', {
+                version: entry.version,
+                build: entry.buildLabel,
+              })}
+            </span>
+          {/if}
+        </div>
         <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/80">
           {entry.description}
         </p>
@@ -2546,6 +2583,23 @@
         {/if}
       </div>
     </div>
+
+    <!-- Developer-preview notice: v3.0 and any future preview build are flagged as
+         not the final GA release so users know what they are installing. -->
+    {#if entry.channel === CHANNEL_PREVIEW}
+      <div
+        class="mt-3 flex items-start gap-2 rounded-lg bg-[var(--color-warning)]/10 p-3 text-xs"
+        role="note"
+      >
+        <TriangleAlert
+          class="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-warning)]"
+          aria-hidden="true"
+        />
+        <span class="text-[var(--color-base-content)]"
+          >{t('analysis.gallery.preview.cardNotice')}</span
+        >
+      </div>
+    {/if}
 
     <!-- Progress bar (shown during install, not for companion entries) -->
     {#if progress}
@@ -2769,7 +2823,7 @@
 <!-- License Acceptance Dialog -->
 <dialog
   bind:this={licenseDialogRef}
-  class="m-auto w-full max-w-md rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)] p-0 shadow-xl backdrop:bg-black/50"
+  class="m-auto w-full max-w-3xl rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)] p-0 shadow-xl backdrop:bg-black/50"
   aria-labelledby="license-dialog-title"
 >
   {#if licenseModel}
@@ -2777,6 +2831,22 @@
       <h3 id="license-dialog-title" class="text-lg font-semibold text-[var(--color-base-content)]">
         {t('analysis.gallery.license.title')}
       </h3>
+      {#if licenseModel.channel === CHANNEL_PREVIEW}
+        <div
+          class="mt-4 flex items-start gap-2 rounded-lg bg-[var(--color-warning)]/10 p-3 text-sm"
+          role="note"
+        >
+          <TriangleAlert
+            class="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-warning)]"
+            aria-hidden="true"
+          />
+          <span class="text-[var(--color-base-content)]">
+            {t('analysis.gallery.preview.dialogNotice', {
+              build: licenseModel.buildLabel ?? licenseModel.version,
+            })}
+          </span>
+        </div>
+      {/if}
       <div class="mt-4 space-y-3">
         <table
           class="w-full overflow-hidden rounded-lg border-separate border-spacing-0 bg-[var(--color-base-200)] text-sm"

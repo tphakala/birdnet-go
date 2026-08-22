@@ -3895,6 +3895,9 @@ export type TranslationKey =
   | 'analysis.gallery.variants.regionContext' // params: region
   | 'analysis.gallery.variants.regionContextNone'
   | 'analysis.gallery.variants.otherRegions'
+  | 'analysis.gallery.variants.filterPlaceholder'
+  | 'analysis.gallery.variants.filterAria'
+  | 'analysis.gallery.variants.filterNoMatch' // params: query
   | 'analysis.gallery.variants.latency' // params: ms
   | 'analysis.gallery.variants.precisionInfo'
   | 'analysis.gallery.variants.precisionHelp'
@@ -3965,12 +3968,20 @@ export type TranslationKey =
   | 'analysis.gallery.reinstalling'
   | 'analysis.gallery.reinstallComplete'
   | 'analysis.gallery.geomodelBadge'
+  | 'analysis.gallery.preview.badge'
+  | 'analysis.gallery.preview.buildLabel' // params: version, build
+  | 'analysis.gallery.preview.cardNotice'
+  | 'analysis.gallery.preview.dialogNotice' // params: build
   | 'analysis.gallery.entryIncompatible'
   | 'analysis.gallery.regionGlobal'
   | 'analysis.gallery.hardwareLabel'
   | 'analysis.gallery.hardware.gpu'
+  | 'analysis.gallery.hardware.gpuNvidia'
+  | 'analysis.gallery.hardware.gpuIntel'
   | 'analysis.gallery.hardware.intelGpu'
   | 'analysis.gallery.hardware.armCpu'
+  | 'analysis.gallery.hardware.amd64Cpu'
+  | 'analysis.gallery.hardware.arm64Cpu'
   | 'analysis.gallery.hardware.cpu'
   | 'analysis.gallery.optimize.bannerTitle' // params: count
   | 'analysis.gallery.optimize.review'
@@ -4522,6 +4533,7 @@ export type TranslationParams = {
   'analysis.gallery.variants.showHardware': { count: string | number };
   'analysis.gallery.variants.showAllRegions': { count: string | number };
   'analysis.gallery.variants.regionContext': { region: string | number };
+  'analysis.gallery.variants.filterNoMatch': { query: string | number };
   'analysis.gallery.variants.latency': { ms: string | number };
   'analysis.gallery.removeSuccess': { name: string | number };
   'analysis.gallery.reasons.backendRecommended': { backend: string | number };
@@ -4534,6 +4546,8 @@ export type TranslationParams = {
   'analysis.gallery.species': { count: string | number };
   'analysis.gallery.removeDialog.title': { name: string | number };
   'analysis.gallery.errors.actionFailed': { name: string | number };
+  'analysis.gallery.preview.buildLabel': { version: string | number; build: string | number };
+  'analysis.gallery.preview.dialogNotice': { build: string | number };
   'analysis.gallery.optimize.bannerTitle': { count: string | number };
   'analysis.gallery.optimize.fromTo': { from: string | number; to: string | number };
 };
