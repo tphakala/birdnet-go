@@ -414,8 +414,11 @@
                 if (!disabled) select(GLOBAL_REGION_MODE);
               }}
             />
+            <!-- Center the icon with flex, NOT the `grid` class: a global
+                 `.drawer-content .grid { width: 100% }` rule would otherwise stretch
+                 this fixed-size box to full width and push the text out of the card. -->
             <span
-              class="flex-none grid place-items-center h-12 w-16 rounded-md bg-primary/10 text-primary"
+              class="flex-none flex items-center justify-center h-12 w-16 rounded-md bg-primary/10 text-primary"
               aria-hidden="true"
             >
               <Globe class="h-7 w-7" />

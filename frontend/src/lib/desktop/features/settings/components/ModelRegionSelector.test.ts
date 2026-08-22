@@ -188,6 +188,21 @@ describe('ModelRegionSelector', () => {
     expect(container.textContent).toContain('analysis.gallery.region.worldwideResourceNote');
   });
 
+  it('the Worldwide icon box avoids the grid class so the global .drawer-content .grid rule cannot stretch it', async () => {
+    // Regression guard: a global `.drawer-content .grid { width: 100% }` rule
+    // stretched a `grid`-classed fixed-size box to full width, pushing the card
+    // text outside the card. The icon wrapper must center with flex, not `grid`.
+    const { container } = await renderLoaded();
+    await fireEvent.click(radioByValue(container, 'manual') as HTMLInputElement);
+    const label = (radioByValue(container, 'global') as HTMLInputElement).closest(
+      'label'
+    ) as HTMLElement;
+    const iconWrap = label.querySelector('span[aria-hidden="true"]') as HTMLElement;
+    expect(iconWrap).not.toBeNull();
+    expect(iconWrap.classList.contains('grid')).toBe(false);
+    expect(iconWrap.classList.contains('flex')).toBe(true);
+  });
+
   it('selecting a region card saves that region slug', async () => {
     const { container } = await renderLoaded();
     await fireEvent.click(radioByValue(container, 'manual') as HTMLInputElement);
