@@ -3855,21 +3855,25 @@ export type TranslationKey =
   | 'analysis.gallery.region.title'
   | 'analysis.gallery.region.modeAuto'
   | 'analysis.gallery.region.modeAutoHint'
-  | 'analysis.gallery.region.modeGlobal'
-  | 'analysis.gallery.region.modeGlobalHint'
-  | 'analysis.gallery.region.pinLabel'
-  | 'analysis.gallery.region.pinnedBadge'
+  | 'analysis.gallery.region.modeManual'
+  | 'analysis.gallery.region.modeManualHint'
+  | 'analysis.gallery.region.worldwideTitle'
+  | 'analysis.gallery.region.worldwideSubtitle'
+  | 'analysis.gallery.region.worldwideResourceNote'
+  | 'analysis.gallery.region.selectedBadge'
+  | 'analysis.gallery.region.orSpecificRegion'
+  | 'analysis.gallery.region.search'
+  | 'analysis.gallery.region.searchNoResults' // params: query
+  | 'analysis.gallery.region.manualPrompt'
+  | 'analysis.gallery.region.countriesOverflow' // params: count
+  | 'analysis.gallery.region.coreCoverage'
+  | 'analysis.gallery.region.partialCoverage'
   | 'analysis.gallery.region.pinAction' // params: region
   | 'analysis.gallery.region.switchToAuto'
   | 'analysis.gallery.region.loading'
   | 'analysis.gallery.region.loadFailed'
-  | 'analysis.gallery.region.mapLoading'
   | 'analysis.gallery.region.mapUnavailable'
   | 'analysis.gallery.region.mapAria' // params: region
-  | 'analysis.gallery.region.countriesCore' // params: countries
-  | 'analysis.gallery.region.countriesPartial' // params: countries
-  | 'analysis.gallery.region.countriesMore' // params: count
-  | 'analysis.gallery.region.countriesLess'
   | 'analysis.gallery.region.why.noLocation'
   | 'analysis.gallery.region.why.outsideCoverage'
   | 'analysis.gallery.region.why.ambiguous' // params: region, runnerUp
@@ -4504,11 +4508,10 @@ export type TranslationParams = {
     version: string | number;
     species: string | number;
   };
+  'analysis.gallery.region.searchNoResults': { query: string | number };
+  'analysis.gallery.region.countriesOverflow': { count: string | number };
   'analysis.gallery.region.pinAction': { region: string | number };
   'analysis.gallery.region.mapAria': { region: string | number };
-  'analysis.gallery.region.countriesCore': { countries: string | number };
-  'analysis.gallery.region.countriesPartial': { countries: string | number };
-  'analysis.gallery.region.countriesMore': { count: string | number };
   'analysis.gallery.region.why.ambiguous': { region: string | number; runnerUp: string | number };
   'analysis.gallery.region.why.resolved': { region: string | number };
   'analysis.gallery.region.why.pinned': { region: string | number };
