@@ -101,6 +101,13 @@ type BirdNET struct {
 	// ModelName, ModelVersion, Spec) and the inference span read it lock-free without
 	// blocking on an in-flight native call holding bn.mu (issue #3336).
 	identity atomic.Pointer[modelIdentity]
+	// reloadInitFn, when non-nil, replaces the model-initialization step of
+	// reloadModelInternal (the bn.initializeModel call). It is nil in production, so
+	// the real backend is loaded. Tests set it to install a fake backend and then
+	// return an error, exercising the transactional rollback AFTER a new backend has
+	// been installed (teardown of the failed backend, restore of the previous one and
+	// the runtime triplet / modelVersion) without needing a native model.
+	reloadInitFn func() error
 	// mu guards the inference backends (classifier, rangeFilter, rangeFilterFellBack).
 	// Inference holds mu for the full duration of the native call, not just the field
 	// read: the backends are not goroutine-safe and reload/Delete Close() them under
@@ -1477,8 +1484,13 @@ func (bn *BirdNET) reloadModelInternal(allowPathChange bool) error {
 	}
 	bn.Debug("Labels loaded successfully")
 
-	// Initialize new model
-	if err := bn.initializeModel(); err != nil {
+	// Initialize new model. reloadInitFn is a test seam (nil in production, so the
+	// real initializeModel runs); see the field comment on BirdNET.
+	initializeModel := bn.initializeModel
+	if bn.reloadInitFn != nil {
+		initializeModel = bn.reloadInitFn
+	}
+	if err := initializeModel(); err != nil {
 		rollback()
 		return errors.New(err).
 			Component("birdnet").

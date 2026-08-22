@@ -130,17 +130,30 @@ export function variantLabel(
 }
 
 /**
- * A friendly hardware class for a variant, used as the CLIENT-SIDE FALLBACK when the
- * server omits its authoritative hardwareClass token (an older server). 'builtIn' is
- * the embedded baseline; the rest describe the execution target the variant is
- * recommended for on this host.
- *
- * NOTE: this client vocabulary ('gpu'/'intelGpu'/'armCpu') intentionally differs from
- * the server's ('gpuNvidia'/'gpuIntel'/'arm64Cpu'); both sets have keys under
- * `analysis.gallery.hardware.*` and both must be kept. Do NOT delete the client-vocab
- * keys as "unused": they are the labels for the old-server fallback path below.
+ * The hardware-class token vocabulary, kept in lockstep with the server's
+ * authoritative set (`internal/api/v2/models/models.go` variantHardwareClass) and
+ * used as the `analysis.gallery.hardware.<token>` i18n key suffix. Centralized so the
+ * mapper, the label resolver, and their tests reference one source of truth rather
+ * than repeating the raw token strings. `builtIn` is the embedded baseline.
  */
-export type VariantHardwareClass = 'builtIn' | 'gpu' | 'intelGpu' | 'armCpu' | 'cpu';
+export const HARDWARE_CLASS = {
+  builtIn: 'builtIn',
+  gpuNvidia: 'gpuNvidia',
+  gpuIntel: 'gpuIntel',
+  amd64Cpu: 'amd64Cpu',
+  arm64Cpu: 'arm64Cpu',
+  armCpu: 'armCpu',
+  cpu: 'cpu',
+} as const;
+
+/**
+ * A hardware-class token: either server-emitted (any of HARDWARE_CLASS) or from the
+ * client-side fallback below. The fallback emits only the subset it can derive from
+ * the request: it cannot make the CPU arch explicit, so it never returns
+ * amd64Cpu/arm64Cpu. Both paths resolve the same `analysis.gallery.hardware.<token>`
+ * key set.
+ */
+export type VariantHardwareClass = (typeof HARDWARE_CLASS)[keyof typeof HARDWARE_CLASS];
 
 /**
  * The recommended (or otherwise chosen) execution backend token for a variant,
@@ -167,12 +180,12 @@ function chosenBackendToken(variant: CatalogVariant): string | undefined {
  * explicit "arm" token in the id classifies as ARM.
  */
 export function variantHardwareClass(variant: CatalogVariant): VariantHardwareClass {
-  if (variant.builtIn) return 'builtIn';
+  if (variant.builtIn) return HARDWARE_CLASS.builtIn;
   const backend = chosenBackendToken(variant);
-  if (backend === 'cuda' || backend === 'tensorrt') return 'gpu';
-  if (backend === 'openvino-gpu') return 'intelGpu';
-  if (variant.id.toLowerCase().includes('arm')) return 'armCpu';
-  return 'cpu';
+  if (backend === 'cuda' || backend === 'tensorrt') return HARDWARE_CLASS.gpuNvidia;
+  if (backend === 'openvino-gpu') return HARDWARE_CLASS.gpuIntel;
+  if (variant.id.toLowerCase().includes('arm')) return HARDWARE_CLASS.armCpu;
+  return HARDWARE_CLASS.cpu;
 }
 
 /**
@@ -189,7 +202,7 @@ export function variantHardwareLabel(variant: CatalogVariant): string {
   // coalescing is the correct fallback: only an absent token falls through to the
   // coarser client-side class.
   const cls = variant.hardwareClass ?? variantHardwareClass(variant);
-  if (cls === 'builtIn') return t('analysis.gallery.builtIn');
+  if (cls === HARDWARE_CLASS.builtIn) return t('analysis.gallery.builtIn');
   return t(`analysis.gallery.hardware.${cls}`);
 }
 

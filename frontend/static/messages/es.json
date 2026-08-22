@@ -5439,10 +5439,8 @@
       "regionGlobal": "Global",
       "hardwareLabel": "Hardware",
       "hardware": {
-        "gpu": "GPU",
         "gpuNvidia": "GPU (NVIDIA)",
         "gpuIntel": "GPU (Intel)",
-        "intelGpu": "Intel GPU",
         "armCpu": "ARM CPU",
         "amd64Cpu": "AMD64 CPU",
         "arm64Cpu": "ARM64 CPU",
