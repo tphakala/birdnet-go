@@ -186,28 +186,35 @@ func checkViperReachable(t reflect.Type, path string, visited map[reflect.Type]b
 		fieldPath := fmt.Sprintf("%s.%s", path, f.Name)
 
 		yamlKey, _, _ := strings.Cut(f.Tag.Get("yaml"), ",")
-		mapstructureTag := f.Tag.Get("mapstructure")
+		mapstructureTag, hasMapstructure := f.Tag.Lookup("mapstructure")
+		mapstructureKey, _, _ := strings.Cut(mapstructureTag, ",")
 
 		// A field with no yaml tag is loaded and saved under the same lowercased
 		// field name, so it is inherently reachable. A yaml:"-" field is runtime
 		// only and never loaded. Neither can be dropped by the mismatch this guards.
 		if yamlKey != "" && yamlKey != "-" {
+			// Work out the key viper decodes this field under and compare it to the
+			// yaml save key, since that is the exact contract: what SaveSettings
+			// writes must be what Load reads back. mapstructure matches its key
+			// (the part before any options) case-insensitively; an empty key,
+			// including mapstructure:",squash", falls back to the Go field name,
+			// which is also viper's behavior with no tag at all. mapstructure:"-"
+			// excludes the field from decoding entirely.
 			switch {
-			case mapstructureTag == "-":
-				// The key is written to yaml on save but mapstructure:"-" tells
-				// viper to skip it on decode, so it never loads back: the same
-				// save-but-not-load asymmetry, made explicit.
+			case hasMapstructure && mapstructureKey == "-":
 				*unreachable = append(*unreachable,
 					fmt.Sprintf("%s (yaml:%q is saved but mapstructure:%q skips it on load)",
 						fieldPath, yamlKey, "-"))
-			case mapstructureTag == "" && !strings.EqualFold(f.Name, yamlKey):
-				// No mapstructure tag, and the field name does not case-fold to the
-				// yaml key, so viper matches neither. (A non-empty mapstructure tag,
-				// including ",squash" for embedded structs, tells viper how to match
-				// and is treated as reachable.)
-				*unreachable = append(*unreachable,
-					fmt.Sprintf("%s (yaml:%q does not case-fold to field name and has no mapstructure tag)",
-						fieldPath, yamlKey))
+			default:
+				decodeKey := mapstructureKey
+				if decodeKey == "" {
+					decodeKey = f.Name
+				}
+				if !strings.EqualFold(decodeKey, yamlKey) {
+					*unreachable = append(*unreachable,
+						fmt.Sprintf("%s (yaml:%q is saved but viper decodes it under %q; add or fix the mapstructure tag)",
+							fieldPath, yamlKey, decodeKey))
+				}
 			}
 		}
 
