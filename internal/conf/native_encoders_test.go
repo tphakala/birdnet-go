@@ -29,7 +29,7 @@ func TestNativeAACEncoderEnabled(t *testing.T) {
 	}
 }
 
-func TestNativeOpusEncoderEnabled(t *testing.T) {
+func TestNativeHLSEncoderEnabled(t *testing.T) {
 	tests := []struct {
 		name  string
 		value string
@@ -42,22 +42,23 @@ func TestNativeOpusEncoderEnabled(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv(EnvNativeOpusEncoder, tt.value)
-			assert.Equal(t, tt.want, NativeOpusEncoderEnabled())
+			t.Setenv(EnvNativeHLSEncoder, tt.value)
+			assert.Equal(t, tt.want, NativeHLSEncoderEnabled())
 		})
 	}
 }
 
-// The two gates are independent so one codec can be promoted to native while
-// the other stays on FFmpeg.
+// The remaining gates are independent so one path can be promoted to native
+// while the other stays on FFmpeg. (Opus is no longer gated: go-opus is the
+// unconditional default.)
 func TestGatesAreIndependent(t *testing.T) {
 	t.Setenv(EnvNativeAACEncoder, "native")
-	t.Setenv(EnvNativeOpusEncoder, "")
+	t.Setenv(EnvNativeHLSEncoder, "")
 	assert.True(t, NativeAACEncoderEnabled())
-	assert.False(t, NativeOpusEncoderEnabled())
+	assert.False(t, NativeHLSEncoderEnabled())
 
 	t.Setenv(EnvNativeAACEncoder, "")
-	t.Setenv(EnvNativeOpusEncoder, "native")
+	t.Setenv(EnvNativeHLSEncoder, "native")
 	assert.False(t, NativeAACEncoderEnabled())
-	assert.True(t, NativeOpusEncoderEnabled())
+	assert.True(t, NativeHLSEncoderEnabled())
 }
