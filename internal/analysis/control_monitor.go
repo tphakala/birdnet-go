@@ -343,8 +343,6 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleRebuildExtendedCapture()
 	case "reconfigure_audio_sources":
 		cm.handleReconfigureAudioSources()
-	case "recalculate_dynamic_thresholds":
-		cm.handleRecalculateDynamicThresholds()
 	case "reconfigure_dynamic_thresholds":
 		cm.handleReconfigureDynamicThresholds()
 	case schedule.SignalReconfigureQuietHours:
@@ -1020,16 +1018,6 @@ func (cm *ControlMonitor) handleReconfigureAudioSources() {
 	// Source reassignment changes the inference topology; notify the metrics SSE stream.
 	if cm.apiController != nil {
 		cm.apiController.BroadcastInferenceTopologyChanged()
-	}
-}
-
-// handleRecalculateDynamicThresholds recalculates all dynamic threshold CurrentValue entries
-// when the global BirdNET.Threshold changes. The stored absolute values are recomputed
-// from each species' current level/tier and the new base threshold.
-func (cm *ControlMonitor) handleRecalculateDynamicThresholds() {
-	if cm.proc != nil {
-		cm.proc.RecalculateDynamicThresholds()
-		emitHotReload("dynamic_thresholds")
 	}
 }
 

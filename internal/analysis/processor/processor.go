@@ -1037,7 +1037,7 @@ func (p *Processor) shouldFilterDetection(settings *conf.Settings, result datast
 		// Use lookupSpeciesConfig to support both common name and scientific name lookups
 		config, exists := lookupSpeciesConfig(settings.Realtime.Species.Config, commonName, scientificName)
 		isCustomThreshold := exists && config.Threshold > 0
-		confidenceThreshold = p.getAdjustedConfidenceThreshold(modelID, speciesLowercase, baseThreshold, isCustomThreshold)
+		confidenceThreshold = p.getAdjustedConfidenceThreshold(speciesLowercase, baseThreshold, isCustomThreshold)
 	} else {
 		confidenceThreshold = baseThreshold
 	}
@@ -1586,7 +1586,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 	for modelID, contrib := range item.ModelContributions {
 		baseThreshold := float64(p.getBaseConfidenceThreshold(settings, speciesName, scientificName, modelID))
 		if contrib.MaxConfidence >= baseThreshold {
-			p.LearnFromApprovedDetection(modelID, speciesName, scientificName, float32(contrib.MaxConfidence))
+			p.LearnFromApprovedDetection(speciesName, scientificName, float32(contrib.MaxConfidence), float32(baseThreshold))
 		}
 	}
 

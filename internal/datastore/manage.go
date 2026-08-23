@@ -328,6 +328,14 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, dbName string) error 
 			logger.Error(err))
 	}
 
+	// Consolidate per-model dynamic thresholds to per-species before AutoMigrate
+	// creates the new unique(species_name) index, so it finds no duplicates. Runs
+	// after the reconciler (which leaves the composite index alone, being a superset
+	// of the new declared index) and is a no-op on fresh or already-migrated DBs.
+	if err := migrateDynamicThresholdsToPerSpecies(db, migrationLogger); err != nil {
+		return err
+	}
+
 	// Validate and fix schema if needed
 	if err := validateAndFixSchema(db, dbType, dbName, debug, migrationLogger); err != nil {
 		return err

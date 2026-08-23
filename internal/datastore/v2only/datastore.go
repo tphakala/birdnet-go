@@ -3547,17 +3547,6 @@ func thresholdScientificName(t *entities.DynamicThreshold) string {
 	return ""
 }
 
-// labelModelName constructs the classifier-style model ID ("Name_VVersion") from a
-// label's associated AIModel, used for both threshold records and threshold events.
-// Requires the caller's query to preload Label.Model; falls back to the default
-// BirdNET model identifier when the label or model is absent.
-func labelModelName(l *entities.Label) string {
-	if l != nil && l.Model != nil && l.Model.Name != "" {
-		return l.Model.Name + "_V" + l.Model.Version
-	}
-	return detection.DefaultModelName + "_V" + detection.DefaultModelVersion
-}
-
 // resolveCommonName maps a scientific name to its common name using the
 // pre-built name maps. Falls back to the scientific name if no mapping exists.
 // Handles legacy concatenated "ScientificName_CommonName" format by extracting
@@ -3644,10 +3633,9 @@ func (ds *Datastore) SaveDynamicThreshold(threshold *datastore.DynamicThreshold)
 	return ds.threshold.SaveDynamicThreshold(ctx, v2Threshold)
 }
 
-// GetDynamicThreshold retrieves a dynamic threshold by scientific name and model.
-// Note: modelName is accepted for interface compatibility but not used in the v2 schema
-// because v2 thresholds are scoped through LabelID (which is already per-model).
-func (ds *Datastore) GetDynamicThreshold(speciesName, _ string) (*datastore.DynamicThreshold, error) {
+// GetDynamicThreshold retrieves a dynamic threshold by species name.
+// Thresholds are tracked per species; the v2 schema scopes them through LabelID.
+func (ds *Datastore) GetDynamicThreshold(speciesName string) (*datastore.DynamicThreshold, error) {
 	if ds.threshold == nil {
 		return nil, fmt.Errorf("threshold repository not configured")
 	}
@@ -3681,7 +3669,6 @@ func (ds *Datastore) GetDynamicThreshold(speciesName, _ string) (*datastore.Dyna
 		ID:             t.ID,
 		SpeciesName:    strings.ToLower(ds.resolveCommonName(scientificName)),
 		ScientificName: scientificName,
-		ModelName:      labelModelName(t.Label),
 		Level:          t.Level,
 		CurrentValue:   t.CurrentValue,
 		BaseThreshold:  t.BaseThreshold,
@@ -3717,7 +3704,6 @@ func (ds *Datastore) GetAllDynamicThresholds(limit ...int) ([]datastore.DynamicT
 			ID:             t.ID,
 			SpeciesName:    strings.ToLower(ds.resolveCommonName(scientificName)),
 			ScientificName: scientificName,
-			ModelName:      labelModelName(t.Label),
 			Level:          t.Level,
 			CurrentValue:   t.CurrentValue,
 			BaseThreshold:  t.BaseThreshold,
@@ -3952,7 +3938,6 @@ func (ds *Datastore) GetThresholdEvents(speciesName string, limit int) ([]datast
 		result = append(result, datastore.ThresholdEvent{
 			ID:            e.ID,
 			SpeciesName:   eventSpeciesName(e),
-			ModelName:     labelModelName(e.Label),
 			PreviousLevel: e.PreviousLevel,
 			NewLevel:      e.NewLevel,
 			PreviousValue: e.PreviousValue,
@@ -3985,7 +3970,6 @@ func (ds *Datastore) GetRecentThresholdEvents(limit int) ([]datastore.ThresholdE
 		result = append(result, datastore.ThresholdEvent{
 			ID:            e.ID,
 			SpeciesName:   eventSpeciesName(e),
-			ModelName:     labelModelName(e.Label),
 			PreviousLevel: e.PreviousLevel,
 			NewLevel:      e.NewLevel,
 			PreviousValue: e.PreviousValue,
