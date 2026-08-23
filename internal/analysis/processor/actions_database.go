@@ -807,11 +807,12 @@ func (a *SaveAudioAction) logExportFailure(enc *clipEncoding, exportFormat strin
 // is ever invoked.
 //
 // WAV and FLAC are always native (the WAV writer and go-flac); FFmpeg is never
-// used for them. AAC and Opus have native encoders too, but they are opt-in
-// while they earn field confidence, so they reach go-aac/go-m4a and go-opus only
-// when the matching gate in internal/conf is set and the encoder accepts the
-// clip's shape. Everything else, and every non-gated AAC or Opus clip, goes to
-// FFmpeg.
+// used for them. Opus is native by default (go-opus); FFmpeg encodes it only as a
+// fallback for a clip go-opus cannot carry. AAC has a native encoder too, but it
+// is opt-in while it earns field confidence, so it reaches go-aac/go-m4a only
+// when the gate in internal/conf is set and the encoder accepts the clip's shape.
+// Everything else, a non-gated AAC clip, and an Opus clip go-opus cannot carry go
+// to FFmpeg.
 func selectEncoder(exportFormat string, exportRate int) string {
 	switch exportFormat {
 	case ffmpeg.FormatWAV:
