@@ -1162,11 +1162,13 @@ func logStrandedFormatFallback(requestedFormat string, rate int) {
 	})
 }
 
-// logNativeEncoderSkipped records that an opted-in native encoder could not
-// carry this clip, so an operator who set the env flag and sees FFmpeg in the
-// encoder field has a reason rather than a mystery. The reason comes from the
-// encoder's own Supports error, so the log names the offending value instead of
-// dumping all three.
+// logNativeEncoderSkipped records that a native encoder could not carry this
+// clip, so an operator who sees FFmpeg or WAV in the encoder field has a reason
+// rather than a mystery. Which fallback actually runs depends on FFmpeg
+// availability (decided by the caller: FFmpeg when present, WAV when stranded),
+// so the message names both rather than asserting FFmpeg unconditionally. The
+// reason comes from the encoder's own Supports error, so the log names the
+// offending value instead of dumping all three.
 //
 // Guarded per (format, rate): the rate is what the encoder usually rejects, and
 // it varies per capture source, so a once-per-format guard would report only
@@ -1174,7 +1176,7 @@ func logStrandedFormatFallback(requestedFormat string, rate int) {
 // because the format is part of the key.
 func logNativeEncoderSkipped(format string, rate int, reason error) {
 	nativeEncoderSkipLogged.do(formatRateKey(format, rate), func() {
-		GetLogger().Warn("Native encoder requested but the clip format is unsupported; using FFmpeg for this format",
+		GetLogger().Warn("Native encoder cannot carry this clip; falling back to FFmpeg when available, otherwise WAV",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("format", format),
 			logger.Int("sample_rate", rate),
