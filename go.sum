@@ -286,12 +286,12 @@ github.com/tphakala/go-aac v0.4.0 h1:2p83Kkn75vdl5ZvmJ/CHt0ffl19TD55rIs1/XKbXuII
 github.com/tphakala/go-aac v0.4.0/go.mod h1:7a85ZW9l+npCaAKnYUZ6W+sO5AiwTCAmB8RqCmRTnZY=
 github.com/tphakala/go-audio-resampler v1.7.0 h1:Nqr1zNRlow28EjlQKS/SSmhqSa6qHRZRydrPXNkiKTo=
 github.com/tphakala/go-audio-resampler v1.7.0/go.mod h1:h/j0tsie+Jv7qVEytRZ4KrxfO//zxO3RAbesX+1ZEo4=
-github.com/tphakala/go-flac v1.0.0 h1:vE+ndo6Isty1XV6UQBKDugvniGbM4o4RgObxDEW1ALk=
-github.com/tphakala/go-flac v1.0.0/go.mod h1:9MM9hnsIryw1BbD/e3iZgKMx3s34VCMlxzhSIP8gpEA=
+github.com/tphakala/go-flac v1.1.0 h1:dyVNPFW+MVLzPvw1n3dEvBHPtKUMbQ5PHWvW/pxQMv0=
+github.com/tphakala/go-flac v1.1.0/go.mod h1:9MM9hnsIryw1BbD/e3iZgKMx3s34VCMlxzhSIP8gpEA=
 github.com/tphakala/go-m4a v0.3.0 h1:pnfvtJMwjQycNn/15+opRkBKgIYg8AwAgtHLtFeOMRw=
 github.com/tphakala/go-m4a v0.3.0/go.mod h1:rdndAPEUkChO/MvNkh/rtzfMLy7+t7HmXOlsbJ+SlBM=
-github.com/tphakala/go-opus v1.0.0 h1:TEpg8ULmrnsFYV6JRH49wsYF4ivpiUfbweHkfxn/1GU=
-github.com/tphakala/go-opus v1.0.0/go.mod h1:57hQHipntY2+xK7sycF4CYVSXDLW3V+AiX77iOJlojQ=
+github.com/tphakala/go-opus v1.1.0 h1:SbXQjwI/ZYy6wPXd0fafLTurkUbAhBpaYnvXYtn8uIo=
+github.com/tphakala/go-opus v1.1.0/go.mod h1:57hQHipntY2+xK7sycF4CYVSXDLW3V+AiX77iOJlojQ=
 github.com/tphakala/go-tflite v0.2.2-0.20260514101223-29408e53fff7 h1:fJtEs8rODoFDk8HDRwvNxIYEgsUUrEAvqPdllxF0cmg=
 github.com/tphakala/go-tflite v0.2.2-0.20260514101223-29408e53fff7/go.mod h1:xCgggryHiQ3nD0Sy0oCZESPWmzThLKKB28Vky5m6HCo=
 github.com/tphakala/go-wav v1.0.0 h1:uPJYJUotRdBGhnQT9dYMNCbad8C32bSGA/v9VdpNLhI=
