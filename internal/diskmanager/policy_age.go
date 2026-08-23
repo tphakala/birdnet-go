@@ -183,7 +183,22 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 	// Always emit the per-run summary, independent of the disk-usage lookup below,
 	// so the outcome of every file (deleted, locked, min-clips-blocked, not old
 	// enough, or errored) is visible even when the final usage check fails.
-	logCleanupSummary("age", stats, time.Since(startTime))
+	// The age policy has no usage target, so usageBefore/usageThreshold are not
+	// applicable; usageAfter is reported when the final lookup succeeded.
+	usageAfter := unknownUsagePercent
+	if diskErr == nil {
+		usageAfter = int(diskUsage)
+	}
+	logCleanupSummary(&cleanupSummary{
+		policy:           "age",
+		stats:            stats,
+		duration:         time.Since(startTime),
+		keepSpectrograms: keepSpectrograms,
+		maxDeletions:     maxDeletions,
+		usageBefore:      unknownUsagePercent,
+		usageAfter:       usageAfter,
+		usageThreshold:   unknownUsagePercent,
+	})
 
 	if diskErr != nil {
 		// Combine errors if getting disk usage failed after the loop
@@ -265,9 +280,19 @@ func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]
 			return deletedCount, deletedNames, stats, nil // Indicate interruption, but not necessarily an error from the loop itself
 		default:
 			if deletedCount >= maxDeletions {
+				// Only flag the run as rate-limited if at least one unvisited
+				// file is still old enough to delete. files is sorted oldest
+				// first, so if the next file is newer than the cutoff, every
+				// remaining file is too and the cap did not actually cut age
+				// work short (avoids a spurious WARN when eligible-count happens
+				// to equal maxDeletions).
+				if files[i].Timestamp.Unix() < retentionCutoffUnix {
+					stats.CapHit = true
+				}
 				log.Debug("Reached maximum number of deletions for age-based cleanup",
 					logger.String("policy", "age"),
-					logger.Int("max_deletions", maxDeletions))
+					logger.Int("max_deletions", maxDeletions),
+					logger.Bool("cap_hit", stats.CapHit))
 				return deletedCount, deletedNames, stats, nil
 			}
 
@@ -286,6 +311,7 @@ func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]
 			switch {
 			case deleted:
 				stats.Deleted++
+				stats.BytesFreed += file.Size
 				speciesTotalCount[file.Species]--
 				if speciesTotalCount[file.Species] < 0 {
 					speciesTotalCount[file.Species] = 0

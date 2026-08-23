@@ -29,7 +29,7 @@ const (
 // createGormLogger configures and returns a new GORM logger instance.
 func createGormLogger() gormlogger.Interface {
 	// Use our custom GORM logger with metrics support
-	return NewGormLogger(DefaultSlowQueryThreshold, gormlogger.Warn, nil)
+	return NewGormLogger(DefaultSlowQueryThreshold, gormlogger.Warn, nil, "")
 }
 
 // getSQLiteIndexInfo executes PRAGMA index_info for a given SQLite index name,

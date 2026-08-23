@@ -246,10 +246,10 @@ func (s *SQLiteStore) Open() (retErr error) {
 	var gormLogger gormlogger.Interface
 	if s.Settings.Debug {
 		// Use debug log level with lower slow threshold
-		gormLogger = NewGormLogger(500*time.Millisecond, gormlogger.Info, s.metrics)
+		gormLogger = NewGormLogger(500*time.Millisecond, gormlogger.Info, s.metrics, "sqlite")
 	} else {
 		// Use default settings with metrics
-		gormLogger = NewGormLogger(500*time.Millisecond, gormlogger.Warn, s.metrics)
+		gormLogger = NewGormLogger(500*time.Millisecond, gormlogger.Warn, s.metrics, "sqlite")
 	}
 
 	// Build DSN with pragmas as query parameters so they apply to every
