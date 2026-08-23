@@ -1753,14 +1753,12 @@ type ImportConfig struct {
 
 // BackupConfig contains backup-related configuration
 type BackupConfig struct {
-	Enabled        bool                   `yaml:"enabled" json:"enabled"`                                               // Global flag to enable or disable the entire backup system. If false, no backups (manual or scheduled) will occur.
-	Debug          bool                   `yaml:"debug" json:"debug"`                                                   // If true, enables detailed debug logging for backup operations.
-	Encryption     bool                   `yaml:"encryption" json:"encryption"`                                         // If true, enables encryption for backup archives. Requires EncryptionKey to be set.
-	EncryptionKey  string                 `yaml:"encryption_key" json:"encryptionKey" mapstructure:"encryption_key"`    // Base64-encoded encryption key used for AES-256-GCM encryption of backup archives. Must be kept secret and safe.
-	SanitizeConfig bool                   `yaml:"sanitize_config" json:"sanitizeConfig" mapstructure:"sanitize_config"` // If true, sensitive information (like passwords, API keys) will be removed from the configuration file copy that is included in the backup archive.
-	Retention      BackupRetention        `yaml:"retention" json:"retention"`                                           // Defines policies for how long and how many backups are kept.
-	Targets        []BackupTarget         `yaml:"targets" json:"targets"`                                               // A list of configured backup targets (destinations) where backup archives will be stored.
-	Schedules      []BackupScheduleConfig `yaml:"schedules" json:"schedules"`                                           // A list of schedules (e.g., daily, weekly) that define when automatic backups should run.
+	Enabled    bool                   `yaml:"enabled" json:"enabled"`       // Global flag to enable or disable the entire backup system. If false, no backups (manual or scheduled) will occur.
+	Debug      bool                   `yaml:"debug" json:"debug"`           // If true, enables detailed debug logging for backup operations.
+	Encryption bool                   `yaml:"encryption" json:"encryption"` // If true, enables encryption for backup archives. The AES-256-GCM key is generated and managed automatically in encryption.key in the config directory; there is no key to configure.
+	Retention  BackupRetention        `yaml:"retention" json:"retention"`   // Defines policies for how long and how many backups are kept.
+	Targets    []BackupTarget         `yaml:"targets" json:"targets"`       // A list of configured backup targets (destinations) where backup archives will be stored.
+	Schedules  []BackupScheduleConfig `yaml:"schedules" json:"schedules"`   // A list of schedules (e.g., daily, weekly) that define when automatic backups should run.
 
 	// OperationTimeouts defines timeouts for various backup operations
 	OperationTimeouts struct {

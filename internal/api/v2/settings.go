@@ -1813,9 +1813,6 @@ func sanitizeSettingsForAPI(s *conf.Settings) *conf.Settings {
 	// --- eBird API key ---
 	sanitized.Realtime.EBird.APIKey = redact(s.Realtime.EBird.APIKey)
 
-	// --- Backup secrets ---
-	sanitized.Backup.EncryptionKey = redact(s.Backup.EncryptionKey)
-
 	// Backup targets may contain FTP/SFTP/S3 credentials in their Settings map.
 	// Copy the slice and redact known secret keys.
 	if len(s.Backup.Targets) > 0 {
@@ -1927,10 +1924,7 @@ func restoreRedactedSecrets(current, incoming *conf.Settings) error {
 	// eBird
 	restore(&current.Realtime.EBird.APIKey, &incoming.Realtime.EBird.APIKey)
 
-	// Backup
-	restore(&current.Backup.EncryptionKey, &incoming.Backup.EncryptionKey)
-
-	// Backup target secrets — match by Type to handle reordering
+	// Backup target secrets, match by Type to handle reordering
 	for i := range incoming.Backup.Targets {
 		if incoming.Backup.Targets[i].Settings == nil {
 			continue
@@ -2018,7 +2012,6 @@ func validateNoRedactedSentinels(s *conf.Settings) error {
 	check(s.Realtime.Weather.OpenWeather.APIKey, "realtime.weather.openWeather.apiKey")
 	check(s.Realtime.Weather.Wunderground.APIKey, "realtime.weather.wunderground.apiKey")
 	check(s.Realtime.EBird.APIKey, "realtime.ebird.apiKey")
-	check(s.Backup.EncryptionKey, "backup.encryptionKey")
 
 	// Array-based OAuth providers
 	for i := range s.Security.OAuthProviders {
@@ -2086,7 +2079,6 @@ func clearRedactedSentinels(s *conf.Settings) {
 	clearField(&s.Realtime.Weather.OpenWeather.APIKey)
 	clearField(&s.Realtime.Weather.Wunderground.APIKey)
 	clearField(&s.Realtime.EBird.APIKey)
-	clearField(&s.Backup.EncryptionKey)
 
 	for i := range s.Security.OAuthProviders {
 		clearField(&s.Security.OAuthProviders[i].ClientSecret)

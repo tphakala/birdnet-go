@@ -126,26 +126,27 @@ func TestAllSettingsYAMLKeysReachableByViper(t *testing.T) {
 
 	require.Empty(t, unreachable,
 		"found %d field(s) whose yaml key viper cannot decode on load;\n"+
-			"add a mapstructure: tag matching the yaml key (see BackupConfig.EncryptionKey)",
+			"add a mapstructure: tag matching the yaml key (see HomeAssistantSettings.DiscoveryPrefix)",
 		len(unreachable))
 }
 
 // TestViperDecodesBackupMapstructureKeys is the behavioral anchor for
 // TestAllSettingsYAMLKeysReachableByViper. That test models mapstructure's
 // key-matching rule by reflection; this one drives the real viper.Unmarshal path
-// (the same DecodeHook Load uses) over a snake_case config and asserts the two
-// fields the reflection guard protects actually load. It pins the hand-rolled
-// model against actual loader semantics for these keys, so the model cannot
-// silently drift. Without the mapstructure tags added in config.go, viper drops
-// these snake_case keys and both assertions fail.
-func TestViperDecodesBackupMapstructureKeys(t *testing.T) {
+// (the same DecodeHook Load uses) over a snake_case config and asserts a field
+// whose yaml key does not case-fold to its Go field name actually loads. It pins
+// the hand-rolled model against actual loader semantics, so the model cannot
+// silently drift. discovery_prefix (realtime.mqtt.homeassistant) is a good anchor
+// because it carries both a snake_case yaml key and an explicit mapstructure tag;
+// without that tag viper would drop the key and the assertion would fail.
+func TestViperDecodesMapstructureKeys(t *testing.T) {
 	t.Parallel()
 
 	const yamlCfg = `
-backup:
-  encryption: true
-  encryption_key: "c2VjcmV0LWtleQ=="
-  sanitize_config: true
+realtime:
+  mqtt:
+    homeassistant:
+      discovery_prefix: "test-prefix"
 `
 	v := viper.New()
 	v.SetConfigType("yaml")
@@ -154,10 +155,8 @@ backup:
 	var settings Settings
 	require.NoError(t, v.Unmarshal(&settings, viper.DecodeHook(DurationDecodeHook())))
 
-	assert.Equal(t, "c2VjcmV0LWtleQ==", settings.Backup.EncryptionKey,
-		"backup.encryption_key must decode through its mapstructure tag")
-	assert.True(t, settings.Backup.SanitizeConfig,
-		"backup.sanitize_config must decode through its mapstructure tag")
+	assert.Equal(t, "test-prefix", settings.Realtime.MQTT.HomeAssistant.DiscoveryPrefix,
+		"realtime.mqtt.homeassistant.discovery_prefix must decode through its mapstructure tag")
 }
 
 // checkViperReachable walks a struct type and records any field whose yaml key

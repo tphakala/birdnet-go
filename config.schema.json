@@ -150,15 +150,7 @@
         },
         "encryption": {
           "type": "boolean",
-          "description": "If true, enables encryption for backup archives. Requires EncryptionKey to be set."
-        },
-        "encryption_key": {
-          "type": "string",
-          "description": "Base64-encoded encryption key used for AES-256-GCM encryption of backup archives. Must be kept secret and safe."
-        },
-        "sanitize_config": {
-          "type": "boolean",
-          "description": "If true, sensitive information (like passwords, API keys) will be removed from the configuration file copy that is included in the backup archive."
+          "description": "If true, enables encryption for backup archives. The AES-256-GCM key is generated and managed automatically in encryption.key in the config directory; there is no key to configure."
         },
         "retention": {
           "$ref": "#/$defs/BackupRetention",
