@@ -106,6 +106,54 @@ function hasNoDiagnosticValue(hint: Sentry.EventHint): boolean {
 }
 
 /**
+ * URL scheme prefixes that identify a stack frame as injected browser-extension
+ * or otherwise cross-origin-masked code rather than our own app bundle. Safari
+ * rewrites extension and cross-origin script URLs to `webkit-masked-url://`;
+ * Chromium and Firefox expose their extension origins directly.
+ */
+const EXTENSION_FRAME_PREFIXES = [
+  'webkit-masked-url:',
+  'chrome-extension:',
+  'moz-extension:',
+  'safari-extension:',
+  'safari-web-extension:',
+];
+
+/** Does this stack-frame filename/path belong to injected extension code? */
+function isExtensionFrame(location: string | undefined): boolean {
+  if (!location) return false;
+  return EXTENSION_FRAME_PREFIXES.some(prefix => location.startsWith(prefix));
+}
+
+/**
+ * Check whether an error originates entirely from a browser extension. Safari
+ * extensions (and other injected content scripts) run in the page context, so
+ * their unhandled rejections are captured by our global handlers even though
+ * they are not our code. When every stack frame is extension-injected, the
+ * event carries no signal about BirdNET-Go and is dropped (Sentry
+ * BIRDNET-GO-2EM: `shouldBeEnabled` at `webkit-masked-url://hidden/`).
+ */
+function isBrowserExtensionError(event: Sentry.ErrorEvent): boolean {
+  const values = event.exception?.values;
+  if (!values || values.length === 0) return false;
+
+  let sawFrame = false;
+  for (const value of values) {
+    const frames = value.stacktrace?.frames;
+    if (!frames) continue;
+    for (const frame of frames) {
+      sawFrame = true;
+      // Any frame from our own bundle means this is not pure extension noise.
+      if (!isExtensionFrame(frame.filename) && !isExtensionFrame(frame.abs_path)) {
+        return false;
+      }
+    }
+  }
+
+  return sawFrame;
+}
+
+/**
  * Initialize Sentry with privacy filtering.
  * Called once from appState.svelte.ts when telemetry is enabled.
  */
@@ -259,6 +307,10 @@ function beforeSend(event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry.Er
 
   // Drop events with no diagnostic value (empty/generic messages, browser noise)
   if (hasNoDiagnosticValue(hint)) return null;
+
+  // Drop errors thrown entirely by injected browser-extension code (Safari
+  // masks these as webkit-masked-url); they are not BirdNET-Go bugs.
+  if (isBrowserExtensionError(event)) return null;
 
   // 1. Strip user data (Sentry auto-collects IP)
   delete event.user;

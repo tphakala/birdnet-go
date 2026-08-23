@@ -201,6 +201,75 @@ describe('beforeSend privacy filtering', () => {
     expect(result).toBeNull();
   });
 
+  it('drops errors whose frames are all Safari extension (webkit-masked-url)', () => {
+    const event = {
+      type: undefined,
+      exception: {
+        values: [
+          {
+            type: 'TypeError',
+            stacktrace: {
+              frames: [
+                { function: 'shouldBeEnabled', filename: 'webkit-masked-url://hidden/' },
+                { function: 'updateState', filename: 'webkit-masked-url://hidden/' },
+              ],
+            },
+          },
+        ],
+      },
+    } as Sentry.ErrorEvent;
+    const result = beforeSend?.(event, {} as Sentry.EventHint);
+    expect(result).toBeNull();
+  });
+
+  it('drops errors from chrome-extension frames', () => {
+    const event = {
+      type: undefined,
+      exception: {
+        values: [
+          {
+            type: 'Error',
+            stacktrace: {
+              frames: [{ function: 'inject', filename: 'chrome-extension://abcdef/content.js' }],
+            },
+          },
+        ],
+      },
+    } as Sentry.ErrorEvent;
+    const result = beforeSend?.(event, {} as Sentry.EventHint);
+    expect(result).toBeNull();
+  });
+
+  it('keeps errors that have at least one app frame among extension frames', () => {
+    const event = {
+      type: undefined,
+      exception: {
+        values: [
+          {
+            type: 'TypeError',
+            stacktrace: {
+              frames: [
+                { function: 'extThing', filename: 'webkit-masked-url://hidden/' },
+                { function: 'renderDashboard', filename: '/ui/assets/index-abc123.js' },
+              ],
+            },
+          },
+        ],
+      },
+    } as Sentry.ErrorEvent;
+    const result = beforeSend?.(event, {} as Sentry.EventHint);
+    expect(result).not.toBeNull();
+  });
+
+  it('keeps errors that carry no stack frames', () => {
+    const event = {
+      type: undefined,
+      exception: { values: [{ type: 'Error', value: 'real app error' }] },
+    } as Sentry.ErrorEvent;
+    const result = beforeSend?.(event, {} as Sentry.EventHint);
+    expect(result).not.toBeNull();
+  });
+
   it('drops ResizeObserver loop errors', () => {
     const error = new Error('ResizeObserver loop completed with undelivered notifications');
     const event = { type: undefined } as Sentry.ErrorEvent;
