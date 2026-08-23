@@ -579,11 +579,15 @@ type CleanupResult struct {
 // reproduce, e.g. GitHub #3892 and #4059 where zero deletions had no visible
 // explanation in the default log output.
 //
-// The buckets do not necessarily sum to Scanned: a run can stop early (usage
-// threshold satisfied, max-deletions-per-run reached, or a quit signal), and
-// files never reached by the loop are counted in none of the buckets below.
+// The buckets need not sum to Scanned, and the exact semantics differ per
+// policy. The age policy sets Scanned to the total candidate count up front, so
+// files past an early stop (max-deletions-per-run reached or a quit signal) are
+// counted in Scanned but in none of the outcome buckets. The usage policy
+// increments Scanned only for files it actually examines, and on an early stop
+// once disk usage drops below the threshold it tallies the unexamined remainder
+// into NotEligible, so for the usage policy the buckets do sum to Scanned.
 type cleanupStats struct {
-	Scanned         int // total eligible files considered for cleanup this run
+	Scanned         int // age: total candidate files this run. usage: files actually examined before an early stop
 	Deleted         int // files actually deleted
 	LockedSkipped   int // skipped because the clip is locked/protected
 	MinClipsBlocked int // skipped because deletion would violate the minimum-clips-per-species guard

@@ -611,13 +611,18 @@ func TestProcessAgeBasedDeletionLoopStats(t *testing.T) {
 		retentionCutoffUnix := time.Now().Add(-168 * time.Hour).Unix() // 7 days
 
 		// Sorted oldest-first, matching the order AgeBasedCleanup produces
-		// before calling this loop.
-		lockedFile := makeAgeTestFile(t, testDir, "locked_species", 300*time.Hour, true)
+		// before calling this loop. Each skip bucket gets a DISTINCT count
+		// (locked=2, min-clips=1, not-old-enough=3) so that a mislabel swapping
+		// two of the tally arms cannot leave the asserted struct unchanged.
+		lockedA := makeAgeTestFile(t, testDir, "locked_a", 300*time.Hour, true)
+		lockedB := makeAgeTestFile(t, testDir, "locked_b", 280*time.Hour, true)
 		oldestOfA := makeAgeTestFile(t, testDir, "species_a", 200*time.Hour, false)
 		newerOfA := makeAgeTestFile(t, testDir, "species_a", 190*time.Hour, false)
-		tooNew := makeAgeTestFile(t, testDir, "species_d", 1*time.Hour, false)
+		tooNew1 := makeAgeTestFile(t, testDir, "species_d", 3*time.Hour, false)
+		tooNew2 := makeAgeTestFile(t, testDir, "species_d", 2*time.Hour, false)
+		tooNew3 := makeAgeTestFile(t, testDir, "species_d", 1*time.Hour, false)
 
-		files := []FileInfo{lockedFile, oldestOfA, newerOfA, tooNew}
+		files := []FileInfo{lockedA, lockedB, oldestOfA, newerOfA, tooNew1, tooNew2, tooNew3}
 		speciesTotalCount := buildSpeciesTotalCountMap(files)
 
 		quitChan := make(chan struct{})
@@ -630,18 +635,19 @@ func TestProcessAgeBasedDeletionLoopStats(t *testing.T) {
 		assert.Equal(t, []string{oldestOfA.Path}, deletedNames)
 
 		assert.Equal(t, cleanupStats{
-			Scanned:         4,
+			Scanned:         7,
 			Deleted:         1,
-			LockedSkipped:   1,
+			LockedSkipped:   2,
 			MinClipsBlocked: 1,
-			NotEligible:     1,
+			NotEligible:     3,
 			Errors:          0,
 		}, stats)
 
 		assert.NoFileExists(t, oldestOfA.Path, "oldest species_a file should be deleted")
 		assert.FileExists(t, newerOfA.Path, "second species_a file should be kept (min clips)")
-		assert.FileExists(t, lockedFile.Path, "locked file should be kept")
-		assert.FileExists(t, tooNew.Path, "too-new file should be kept")
+		assert.FileExists(t, lockedA.Path, "locked file A should be kept")
+		assert.FileExists(t, lockedB.Path, "locked file B should be kept")
+		assert.FileExists(t, tooNew1.Path, "too-new file should be kept")
 	})
 
 	t.Run("deletion error is tallied without stopping the loop", func(t *testing.T) {
