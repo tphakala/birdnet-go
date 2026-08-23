@@ -724,8 +724,12 @@ func (bn *BirdNET) loadEmbeddedLabels() error {
 
 	data := result.Data
 
-	// Read the labels line by line
+	// Read the labels line by line. Grow the scan buffer past bufio's default
+	// 64 KiB line cap: a label file with an overlong line or no line breaks at
+	// all otherwise fails with "bufio.Scanner: token too long" (Sentry
+	// BIRDNET-GO-2FF).
 	scanner := bufio.NewScanner(bytes.NewReader(data))
+	scanner.Buffer(make([]byte, 0, labelScannerInitialBufBytes), labelScannerMaxLineBytes)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line != "" {
@@ -835,6 +839,8 @@ func (bn *BirdNET) logMissingTaxonomyCodes() {
 
 func (bn *BirdNET) loadLabelsFromText(file *os.File) error {
 	scanner := bufio.NewScanner(file)
+	// Grow past bufio's default 64 KiB line cap; see loadLabels for rationale.
+	scanner.Buffer(make([]byte, 0, labelScannerInitialBufBytes), labelScannerMaxLineBytes)
 	for scanner.Scan() {
 		bn.Settings.BirdNET.Labels = append(bn.Settings.BirdNET.Labels, strings.TrimSpace(scanner.Text()))
 	}

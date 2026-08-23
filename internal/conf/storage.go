@@ -123,6 +123,14 @@ func Load() (*Settings, error) {
 		persistMigration(settings, "stream enabled defaults")
 	}
 
+	// Canonicalize catalog-style model IDs (e.g. "perch-v2" -> "perch_v2") so a
+	// hand-edited config persists a single canonical spelling and model
+	// install/uninstall bookkeeping stays consistent. Runs before validation so
+	// the normalized IDs are what gets checked.
+	if settings.MigrateModelIDAliases() {
+		persistMigration(settings, "model ID aliases")
+	}
+
 	// Validate multi-model configuration
 	if err := settings.applyModelValidation(); err != nil {
 		return nil, err

@@ -73,6 +73,12 @@ var ValidAudioModels = map[string]bool{
 	ModelIDPerchV2:   true,
 	ModelIDBat:       true,
 	ModelIDBSG:       true,
+	// Catalog-style aliases (see consts.go) so a source model set to the
+	// hyphenated catalog ID validates rather than failing startup.
+	ModelIDBirdNETCatalog:   true,
+	ModelIDBirdNETV3Catalog: true,
+	ModelIDPerchV2Catalog:   true,
+	ModelIDBSGCatalog:       true,
 }
 
 // ValidationError is the set of fatal validation findings produced by

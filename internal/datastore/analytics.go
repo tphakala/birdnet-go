@@ -249,8 +249,8 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 			COUNT(*) as count,
 			MIN(%s) as first_seen,
 			MAX(%s) as last_seen,
-			AVG(notes.confidence) as avg_confidence,
-			MAX(notes.confidence) as max_confidence
+			COALESCE(AVG(notes.confidence), 0) as avg_confidence,
+			COALESCE(MAX(notes.confidence), 0) as max_confidence
 		FROM notes
 		LEFT JOIN note_reviews ON notes.id = note_reviews.note_id
 	`, dateTimeFormat, dateTimeFormat)
