@@ -1,6 +1,7 @@
 package classifier
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -42,4 +43,23 @@ func TestParsePerchLabels_HeaderOnly(t *testing.T) {
 	labels, err := ParsePerchLabels([]byte("inat2024_fsd50k\n"))
 	require.NoError(t, err)
 	assert.Empty(t, labels)
+}
+
+// TestParsePerchLabels_LongLine guards against the default bufio.Scanner 64 KiB
+// token cap: a label file with a line longer than that (or effectively no line
+// breaks) previously failed with "bufio.Scanner: token too long" (Sentry
+// BIRDNET-GO-2FF). The scanner buffer is grown to labelScannerMaxLineBytes so a
+// single line up to 1 MiB parses without error.
+func TestParsePerchLabels_LongLine(t *testing.T) {
+	t.Parallel()
+
+	// A label line comfortably larger than bufio's default 64 KiB cap.
+	longLabel := strings.Repeat("A", 70*1024)
+	input := "inat2024_fsd50k\n" + longLabel + "\nAcanthis flammea\n"
+
+	labels, err := ParsePerchLabels([]byte(input))
+	require.NoError(t, err, "scanner buffer must accommodate lines beyond the 64 KiB default")
+	require.Len(t, labels, 2)
+	assert.Equal(t, longLabel, labels[0])
+	assert.Equal(t, "Acanthis flammea", labels[1])
 }
