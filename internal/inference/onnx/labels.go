@@ -46,8 +46,15 @@ func loadLabelsFromBytes(data []byte, ext string) ([]string, error) {
 // (Sentry BIRDNET-GO-2FF). Defined locally because the onnx package must not
 // import the classifier package where the sibling constants live.
 const (
-	labelScannerInitialBufBytes = 64 * 1024   // initial scan buffer (64 KiB)
-	labelScannerMaxLineBytes    = 1024 * 1024 // max label line length (1 MiB)
+	// maxLabelLineBytes is the largest label line we support (1 MiB).
+	maxLabelLineBytes           = 1024 * 1024
+	labelScannerInitialBufBytes = 64 * 1024 // initial scan buffer (64 KiB)
+	// labelScannerMaxLineBytes is the bufio.Scanner token cap, maxLabelLineBytes
+	// + 2 because Scanner needs its max strictly greater than the longest token
+	// (it must read past the line, or hit EOF, to terminate it): a line of
+	// exactly maxLabelLineBytes, with or without a CR/LF terminator, otherwise
+	// fails with "bufio.Scanner: token too long".
+	labelScannerMaxLineBytes = maxLabelLineBytes + 2
 )
 
 func loadLabelsText(data []byte) ([]string, error) {

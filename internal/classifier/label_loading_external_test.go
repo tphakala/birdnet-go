@@ -56,7 +56,7 @@ func TestLoadExternalLabels_LiteralPath(t *testing.T) {
 func TestLoadExternalLabels_LongLine(t *testing.T) {
 	t.Parallel()
 
-	longLabel := strings.Repeat("A", 70*1024) // past the 64 KiB default
+	longLabel := strings.Repeat("A", longLabelTestBytes) // past the 64 KiB default
 	dir := t.TempDir()
 	labelPath := filepath.Join(dir, "labels.txt")
 	require.NoError(t, os.WriteFile(labelPath, []byte(longLabel+"\nParus major_Great Tit\n"), 0o644))
