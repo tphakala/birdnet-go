@@ -572,6 +572,44 @@ type CleanupResult struct {
 	DiskUtilization int   // Current disk utilization percentage after cleanup
 }
 
+// cleanupStats accumulates per-run, per-file outcome counts for a cleanup pass.
+// It is purely observational: nothing here changes deletion behavior. It exists
+// so a cleanup run that deletes nothing can be diagnosed from an INFO-level log
+// line (or a support dump) without asking the user to enable Debug logging and
+// reproduce, e.g. GitHub #3892 and #4059 where zero deletions had no visible
+// explanation in the default log output.
+//
+// The buckets need not sum to Scanned, and the exact semantics differ per
+// policy. The age policy sets Scanned to the total candidate count up front, so
+// files past an early stop (max-deletions-per-run reached or a quit signal) are
+// counted in Scanned but in none of the outcome buckets. The usage policy
+// increments Scanned only for files it actually examines, and on an early stop
+// once disk usage drops below the threshold it tallies the unexamined remainder
+// into NotEligible, so for the usage policy the buckets do sum to Scanned.
+type cleanupStats struct {
+	Scanned         int // age: total candidate files this run. usage: files actually examined before an early stop
+	Deleted         int // files actually deleted
+	LockedSkipped   int // skipped because the clip is locked/protected
+	MinClipsBlocked int // skipped because deletion would violate the minimum-clips-per-species guard
+	NotEligible     int // age: not old enough. usage: usage already below threshold when reached
+	Errors          int // deletion attempts that failed
+}
+
+// logCleanupSummary emits a single INFO-level line summarizing a completed
+// cleanup run, so the guard (if any) that prevented deletion is visible
+// without enabling Debug logging.
+func logCleanupSummary(policy string, stats cleanupStats, duration time.Duration) {
+	GetLogger().Info("cleanup run summary",
+		logger.String("policy", policy),
+		logger.Int("files_scanned", stats.Scanned),
+		logger.Int("files_deleted", stats.Deleted),
+		logger.Int("locked_skipped", stats.LockedSkipped),
+		logger.Int("min_clips_blocked", stats.MinClipsBlocked),
+		logger.Int("not_eligible", stats.NotEligible),
+		logger.Int("errors", stats.Errors),
+		logger.Duration("duration", duration))
+}
+
 // CloseLogger is a no-op for backwards compatibility.
 // The central logger manages its own lifecycle.
 func CloseLogger() error {
