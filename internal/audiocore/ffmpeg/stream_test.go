@@ -154,6 +154,18 @@ func (s *Stream) getTotalBytesReceivedForTest() int64 {
 	return s.totalBytesReceived
 }
 
+func (s *Stream) getRestartCountForTest() int {
+	s.restartCountMu.Lock()
+	defer s.restartCountMu.Unlock()
+	return s.restartCount
+}
+
+func (s *Stream) setRestartCountForTest(count int) {
+	s.restartCountMu.Lock()
+	defer s.restartCountMu.Unlock()
+	s.restartCount = count
+}
+
 func (s *Stream) getStreamCreatedAtForTest() time.Time {
 	s.streamCreatedAtMu.RLock()
 	defer s.streamCreatedAtMu.RUnlock()
@@ -728,14 +740,20 @@ func TestStream_ConditionalFailureReset(t *testing.T) {
 
 	stream := newTestStream(t)
 
-	// Set up: failures, process start time, and bytes.
+	// Set up: failures, restart count, process start time, and bytes.
 	stream.setConsecutiveFailures(5)
+	stream.setRestartCountForTest(4)
 	stream.setProcessStartTimeForTest(time.Now().Add(-circuitBreakerMinStabilityTime - time.Second))
 	stream.setTotalBytesReceivedForTest(circuitBreakerMinStabilityBytes + 1)
 
 	stream.conditionalFailureReset(stream.getTotalBytesReceivedForTest())
 
 	assert.Equal(t, 0, stream.getConsecutiveFailures(), "Failures should be reset after stable operation")
+	// The restart count drives the escalating restart backoff. It must be reset
+	// alongside the circuit breaker after sustained stable operation, otherwise
+	// widely-spaced transient stalls keep escalating the backoff even though each
+	// fault recovered cleanly (issue #4080).
+	assert.Equal(t, 0, stream.getRestartCountForTest(), "Restart count should be reset after stable operation")
 }
 
 func TestStream_ConditionalFailureReset_NotEnoughTime(t *testing.T) {
@@ -744,12 +762,14 @@ func TestStream_ConditionalFailureReset_NotEnoughTime(t *testing.T) {
 	stream := newTestStream(t)
 
 	stream.setConsecutiveFailures(5)
+	stream.setRestartCountForTest(4)
 	stream.setProcessStartTimeForTest(time.Now().Add(-5 * time.Second))
 	stream.setTotalBytesReceivedForTest(circuitBreakerMinStabilityBytes + 1)
 
 	stream.conditionalFailureReset(stream.getTotalBytesReceivedForTest())
 
 	assert.Equal(t, 5, stream.getConsecutiveFailures(), "Failures should NOT be reset without enough runtime")
+	assert.Equal(t, 4, stream.getRestartCountForTest(), "Restart count should NOT be reset without enough runtime")
 }
 
 func TestStream_ConditionalFailureReset_NotEnoughBytes(t *testing.T) {
@@ -758,12 +778,107 @@ func TestStream_ConditionalFailureReset_NotEnoughBytes(t *testing.T) {
 	stream := newTestStream(t)
 
 	stream.setConsecutiveFailures(5)
+	stream.setRestartCountForTest(4)
 	stream.setProcessStartTimeForTest(time.Now().Add(-circuitBreakerMinStabilityTime - time.Second))
 	stream.setTotalBytesReceivedForTest(100)
 
 	stream.conditionalFailureReset(100)
 
 	assert.Equal(t, 5, stream.getConsecutiveFailures(), "Failures should NOT be reset without enough bytes")
+	assert.Equal(t, 4, stream.getRestartCountForTest(), "Restart count should NOT be reset without enough bytes")
+}
+
+// TestStream_ConditionalFailureReset_RestartCount is the focused regression for
+// issue #4080: the restart backoff escalates across widely-spaced transient
+// stalls because the circuit breaker's failure counter is reset on stable
+// recovery while the restart count that drives the backoff duration is not.
+// conditionalFailureReset must clear the restart count under the same stability
+// gate, and independently of whether the circuit breaker still has failures to
+// clear (the circuit-breaker cooldown and normal process exits can drive
+// consecutiveFailures to zero while the restart count stays high).
+func TestStream_ConditionalFailureReset_RestartCount(t *testing.T) {
+	t.Parallel()
+
+	const stableAge = -circuitBreakerMinStabilityTime - time.Second
+	const unstableAge = -5 * time.Second
+
+	tests := []struct {
+		name                 string
+		processStartAge      time.Duration
+		processStartZero     bool
+		totalBytes           int64
+		initialRestartCount  int
+		initialFailures      int
+		wantRestartCount     int
+		wantConsecutiveFails int
+	}{
+		{
+			name:                 "stable operation resets restart count and failures",
+			processStartAge:      stableAge,
+			totalBytes:           circuitBreakerMinStabilityBytes + 1,
+			initialRestartCount:  4,
+			initialFailures:      3,
+			wantRestartCount:     0,
+			wantConsecutiveFails: 0,
+		},
+		{
+			name:                 "stable operation resets restart count even when failures already zero",
+			processStartAge:      stableAge,
+			totalBytes:           circuitBreakerMinStabilityBytes + 1,
+			initialRestartCount:  4,
+			initialFailures:      0,
+			wantRestartCount:     0,
+			wantConsecutiveFails: 0,
+		},
+		{
+			name:                 "not enough runtime leaves restart count untouched",
+			processStartAge:      unstableAge,
+			totalBytes:           circuitBreakerMinStabilityBytes + 1,
+			initialRestartCount:  4,
+			initialFailures:      3,
+			wantRestartCount:     4,
+			wantConsecutiveFails: 3,
+		},
+		{
+			name:                 "not enough bytes leaves restart count untouched",
+			processStartAge:      stableAge,
+			totalBytes:           circuitBreakerMinStabilityBytes - 1,
+			initialRestartCount:  4,
+			initialFailures:      3,
+			wantRestartCount:     4,
+			wantConsecutiveFails: 3,
+		},
+		{
+			name:                 "zero process start time is a no-op",
+			processStartZero:     true,
+			totalBytes:           circuitBreakerMinStabilityBytes + 1,
+			initialRestartCount:  4,
+			initialFailures:      3,
+			wantRestartCount:     4,
+			wantConsecutiveFails: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			stream := newTestStream(t)
+
+			stream.setConsecutiveFailures(tt.initialFailures)
+			stream.setRestartCountForTest(tt.initialRestartCount)
+			if tt.processStartZero {
+				stream.setProcessStartTimeForTest(time.Time{})
+			} else {
+				stream.setProcessStartTimeForTest(time.Now().Add(tt.processStartAge))
+			}
+			stream.setTotalBytesReceivedForTest(tt.totalBytes)
+
+			stream.conditionalFailureReset(tt.totalBytes)
+
+			assert.Equal(t, tt.wantRestartCount, stream.getRestartCountForTest(), "restart count")
+			assert.Equal(t, tt.wantConsecutiveFails, stream.getConsecutiveFailures(), "consecutive failures")
+		})
+	}
 }
 
 func TestValidateTimeout(t *testing.T) {
