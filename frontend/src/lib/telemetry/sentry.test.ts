@@ -240,6 +240,26 @@ describe('beforeSend privacy filtering', () => {
     expect(result).toBeNull();
   });
 
+  it('drops errors from every recognized extension scheme', () => {
+    const prefixes = [
+      'webkit-masked-url://hidden/',
+      'chrome-extension://abcdef/content.js',
+      'moz-extension://uuid/inject.js',
+      'safari-extension://com.example/script.js',
+      'safari-web-extension://UUID/content.js',
+    ];
+    for (const filename of prefixes) {
+      const event = {
+        type: undefined,
+        exception: {
+          values: [{ type: 'Error', stacktrace: { frames: [{ function: 'x', filename }] } }],
+        },
+      } as Sentry.ErrorEvent;
+      const result = beforeSend?.(event, {} as Sentry.EventHint);
+      expect(result, `expected ${filename} to be dropped`).toBeNull();
+    }
+  });
+
   it('keeps errors that have at least one app frame among extension frames', () => {
     const event = {
       type: undefined,

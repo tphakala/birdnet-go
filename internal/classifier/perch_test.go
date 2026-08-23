@@ -40,7 +40,7 @@ func TestParsePerchLabels_EmptyInput(t *testing.T) {
 func TestParsePerchLabels_HeaderOnly(t *testing.T) {
 	t.Parallel()
 
-	labels, err := ParsePerchLabels([]byte("inat2024_fsd50k\n"))
+	labels, err := ParsePerchLabels([]byte(perchDatasetMarker + "\n"))
 	require.NoError(t, err)
 	assert.Empty(t, labels)
 }
@@ -55,7 +55,7 @@ func TestParsePerchLabels_LongLine(t *testing.T) {
 
 	// A label line comfortably larger than bufio's default 64 KiB cap.
 	longLabel := strings.Repeat("A", 70*1024)
-	input := "inat2024_fsd50k\n" + longLabel + "\nAcanthis flammea\n"
+	input := perchDatasetMarker + "\n" + longLabel + "\nAcanthis flammea\n"
 
 	labels, err := ParsePerchLabels([]byte(input))
 	require.NoError(t, err, "scanner buffer must accommodate lines beyond the 64 KiB default")

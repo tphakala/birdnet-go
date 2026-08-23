@@ -144,9 +144,10 @@ var ModelRegistry = map[string]ModelInfo{
 		Description:      "Global model with 6522 species",
 		Spec:             ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
 		// The primary alias (index 0) is the canonical form ConfigAliasForRegistry
-		// writes back; the hyphenated "birdnet-v2.4" mirrors the model catalog entry
-		// ID so a config that carries the catalog-style ID still validates and resolves.
-		ConfigAliases:    []string{conf.ModelIDBirdNET, "birdnet-v2.4"},
+		// writes back; the hyphenated catalog form (conf.ModelID*Catalog) mirrors the
+		// model catalog entry ID so a config that carries the catalog-style ID still
+		// validates and resolves. conf.MigrateModelIDAliases canonicalizes it on load.
+		ConfigAliases: []string{conf.ModelIDBirdNET, conf.ModelIDBirdNETCatalog},
 		SupportedLocales: []string{"af", "ar", "bg", "ca", "cs", "da", "de", "el", "en-uk", "en-us", "es",
 			"et", "fi", "fr", "he", "hr", "hu", "id", "is", "it", "ja", "ko", "lt", "lv", "ml", "nl",
 			"no", "pl", "pt", "pt-br", "pt-pt", "ro", "ru", "sk", "sl", "sr", "sv", "th", "tr", "uk", "zh"},
@@ -162,9 +163,9 @@ var ModelRegistry = map[string]ModelInfo{
 		DetectionVersion: "3.0",
 		Description:      "BirdNET v3.0 model (32kHz, 5s clips, embeddings)", // NumSpecies omitted: determined at runtime from label file
 		Spec:             ModelSpec{SampleRate: 32000, ClipLength: 5 * time.Second},
-		// Hyphenated "birdnet-v3.0" mirrors the catalog entry ID; the underscore
-		// primary stays canonical for write-back. See BirdNET v2.4 entry above.
-		ConfigAliases:    []string{conf.ModelIDBirdNETV3, "birdnet-v3.0"},
+		// Catalog form mirrors the catalog entry ID; the underscore primary stays
+		// canonical for write-back. See BirdNET v2.4 entry above.
+		ConfigAliases: []string{conf.ModelIDBirdNETV3, conf.ModelIDBirdNETV3Catalog},
 		SupportedLocales: []string{"af", "ar", "bg", "ca", "cs", "da", "de", "el", "en-uk", "en-us", "es",
 			"et", "fi", "fr", "he", "hr", "hu", "id", "is", "it", "ja", "ko", "lt", "lv", "ml", "nl",
 			"no", "pl", "pt", "pt-br", "pt-pt", "ro", "ru", "sk", "sl", "sr", "sv", "th", "tr", "uk", "zh"},
@@ -178,11 +179,11 @@ var ModelRegistry = map[string]ModelInfo{
 		DetectionVersion: "V2",
 		Description:      "Perch v2 multi-taxa model with ~14,795 species including birds, insects, amphibians, and mammals (scientific names only)",
 		Spec:             ModelSpec{SampleRate: 32000, ClipLength: 5 * time.Second},
-		// Hyphenated "perch-v2" mirrors the catalog entry ID; the underscore primary
-		// stays canonical for write-back. Reported via Sentry (BIRDNET-GO-2FZ), where
-		// a config carried "perch-v2" and was rejected as an unknown model ID.
-		ConfigAliases:    []string{conf.ModelIDPerchV2, "perch-v2"},
-		NumSpecies:       14795,
+		// Catalog form mirrors the catalog entry ID; the underscore primary stays
+		// canonical for write-back. Reported via Sentry (BIRDNET-GO-2FZ), where a
+		// config carried "perch-v2" and was rejected as an unknown model ID.
+		ConfigAliases: []string{conf.ModelIDPerchV2, conf.ModelIDPerchV2Catalog},
+		NumSpecies:    14795,
 	},
 	RegistryIDBat: {
 		ID:               RegistryIDBat,
@@ -202,7 +203,9 @@ var ModelRegistry = map[string]ModelInfo{
 		DetectionVersion: "4.4",
 		Description:      "Regional bird classifier optimized for Finnish bird species",
 		Spec:             ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
-		ConfigAliases:    []string{conf.ModelIDBSG},
+		// Catalog form "bsg-finland" mirrors the catalog entry ID; "bsg" stays
+		// canonical for write-back. See BirdNET v2.4 entry above.
+		ConfigAliases: []string{conf.ModelIDBSG, conf.ModelIDBSGCatalog},
 	},
 }
 

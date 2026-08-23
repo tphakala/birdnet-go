@@ -40,9 +40,20 @@ func loadLabelsFromBytes(data []byte, ext string) ([]string, error) {
 	}
 }
 
+// Label scanner buffer sizes. A label line is short ("SciName_CommonName"),
+// but the buffer is grown past bufio's default 64 KiB token cap so an overlong
+// or newline-free label file does not fail with "bufio.Scanner: token too long"
+// (Sentry BIRDNET-GO-2FF). Defined locally because the onnx package must not
+// import the classifier package where the sibling constants live.
+const (
+	labelScannerInitialBufBytes = 64 * 1024   // initial scan buffer (64 KiB)
+	labelScannerMaxLineBytes    = 1024 * 1024 // max label line length (1 MiB)
+)
+
 func loadLabelsText(data []byte) ([]string, error) {
 	var labels []string
 	scanner := bufio.NewScanner(bytes.NewReader(data))
+	scanner.Buffer(make([]byte, 0, labelScannerInitialBufBytes), labelScannerMaxLineBytes)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line != "" {

@@ -132,6 +132,16 @@ function isExtensionFrame(location: string | undefined): boolean {
  * they are not our code. When every stack frame is extension-injected, the
  * event carries no signal about BirdNET-Go and is dropped (Sentry
  * BIRDNET-GO-2EM: `shouldBeEnabled` at `webkit-masked-url://hidden/`).
+ *
+ * This assumes the app bundle is served same-origin, which is the standard
+ * deployment: Safari's `webkit-masked-url:` masking then applies only to
+ * extension and cross-origin scripts, so real BirdNET-Go frames keep their
+ * `/ui/assets/...` paths and short-circuit the drop. A non-standard deployment
+ * serving assets cross-origin without `Timing-Allow-Origin` would let Safari
+ * mask app frames too, so a genuine error could be dropped; that is an accepted
+ * loss of telemetry visibility, not a user-facing regression. Requiring an
+ * explicit `*-extension:` frame instead would fail to drop the reported case,
+ * whose frames are all `webkit-masked-url:`.
  */
 function isBrowserExtensionError(event: Sentry.ErrorEvent): boolean {
   const values = event.exception?.values;

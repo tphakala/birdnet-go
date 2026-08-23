@@ -78,6 +78,7 @@ var ValidAudioModels = map[string]bool{
 	ModelIDBirdNETCatalog:   true,
 	ModelIDBirdNETV3Catalog: true,
 	ModelIDPerchV2Catalog:   true,
+	ModelIDBSGCatalog:       true,
 }
 
 // ValidationError is the set of fatal validation findings produced by

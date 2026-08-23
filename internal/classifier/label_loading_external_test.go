@@ -3,6 +3,7 @@ package classifier
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,6 +47,25 @@ func TestLoadExternalLabels_LiteralPath(t *testing.T) {
 	bn := newExternalLabelBirdNET(labelPath)
 	require.NoError(t, bn.loadLabels())
 	assert.Equal(t, twoLabelsExpected, bn.Settings.BirdNET.Labels)
+}
+
+// TestLoadExternalLabels_LongLine guards loadLabelsFromText against the default
+// bufio.Scanner 64 KiB token cap: an external label file with a line longer than
+// that previously failed with "bufio.Scanner: token too long" (Sentry
+// BIRDNET-GO-2FF). The grown scanner buffer must parse it without error.
+func TestLoadExternalLabels_LongLine(t *testing.T) {
+	t.Parallel()
+
+	longLabel := strings.Repeat("A", 70*1024) // past the 64 KiB default
+	dir := t.TempDir()
+	labelPath := filepath.Join(dir, "labels.txt")
+	require.NoError(t, os.WriteFile(labelPath, []byte(longLabel+"\nParus major_Great Tit\n"), 0o644))
+
+	bn := newExternalLabelBirdNET(labelPath)
+	require.NoError(t, bn.loadLabels(), "scanner buffer must accommodate lines beyond the 64 KiB default")
+	require.Len(t, bn.Settings.BirdNET.Labels, 2)
+	assert.Equal(t, longLabel, bn.Settings.BirdNET.Labels[0])
+	assert.Equal(t, "Parus major_Great Tit", bn.Settings.BirdNET.Labels[1])
 }
 
 // TestLoadExternalLabels_ExpandsEnvVar verifies that loadExternalLabels expands

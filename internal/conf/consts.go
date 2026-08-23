@@ -20,6 +20,7 @@ const (
 	ModelIDBirdNETCatalog   = "birdnet-v2.4"
 	ModelIDBirdNETV3Catalog = "birdnet-v3.0"
 	ModelIDPerchV2Catalog   = "perch-v2"
+	ModelIDBSGCatalog       = "bsg-finland"
 
 	SampleRate     = 48000 // Sample rate of the audio fed to BirdNET Analyzer
 	BitDepth       = 16    // Bit depth of the audio fed to BirdNET Analyzer
