@@ -127,6 +127,29 @@ func TestValidateModelConfig_SkipSourceRefsAtEarlyLoading(t *testing.T) {
 	assert.Empty(t, warnings, "source reference checks should be skipped when checkSourceRefs is false")
 }
 
+func TestApplyModelValidation_AcceptsCatalogAliases(t *testing.T) {
+	t.Parallel()
+
+	// A config carrying the hyphenated catalog-style model IDs must validate on
+	// the early-load path without an "unknown model ID" warning. Regression for
+	// Sentry BIRDNET-GO-2FZ.
+	settings := &Settings{}
+	settings.Models.Enabled = []string{"birdnet", "perch-v2", "birdnet-v3.0", "birdnet-v2.4"}
+
+	err := settings.applyModelValidation()
+	require.NoError(t, err)
+	assert.Empty(t, settings.ValidationWarnings, "catalog-style model IDs should not warn")
+}
+
+func TestValidAudioModels_AcceptsCatalogAliases(t *testing.T) {
+	t.Parallel()
+
+	// A per-source model set to a hyphenated catalog ID must not fail startup.
+	assert.True(t, ValidAudioModels["perch-v2"])
+	assert.True(t, ValidAudioModels["birdnet-v3.0"])
+	assert.True(t, ValidAudioModels["birdnet-v2.4"])
+}
+
 func TestBirdNETConfig_VersionField(t *testing.T) {
 	t.Parallel()
 	settings := &Settings{}
