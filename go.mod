@@ -8,8 +8,6 @@ require (
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/gen2brain/malgo v0.11.26
 	github.com/getsentry/sentry-go v0.48.0
-	github.com/go-audio/audio v1.0.0
-	github.com/go-audio/wav v1.1.0
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/google/uuid v1.6.0
 	github.com/invopop/jsonschema v0.14.0
@@ -40,6 +38,7 @@ require (
 	github.com/tphakala/go-m4a v0.3.0
 	github.com/tphakala/go-opus v1.0.0
 	github.com/tphakala/go-tflite v0.2.2-0.20260514101223-29408e53fff7
+	github.com/tphakala/go-wav v1.0.0
 	github.com/tphakala/simd v1.9.0
 	github.com/yalue/onnxruntime_go v1.30.1
 	go.uber.org/goleak v1.3.0
@@ -130,7 +129,6 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
-	github.com/go-audio/riff v1.0.0 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/gorilla/mux v1.8.1 // indirect

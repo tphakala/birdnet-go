@@ -65,12 +65,6 @@ github.com/fsnotify/fsnotify v1.10.1 h1:b0/UzAf9yR5rhf3RPm9gf3ehBPpf0oZKIjtpKrx5
 github.com/fsnotify/fsnotify v1.10.1/go.mod h1:TLheqan6HD6GBK6PrDWyDPBaEV8LspOxvPSjC+bVfgo=
 github.com/getsentry/sentry-go v0.48.0 h1:FRZNr7Uk1C86ev1bSJmYlUkL9oyivQA6YOcdYfaaMmY=
 github.com/getsentry/sentry-go v0.48.0/go.mod h1:E5UkA5wp1qR2+MDydNYlVeUiNN2xEdjYMidkgf0Qoss=
-github.com/go-audio/audio v1.0.0 h1:zS9vebldgbQqktK4H0lUqWrG8P0NxCJVqcj7ZpNnwd4=
-github.com/go-audio/audio v1.0.0/go.mod h1:6uAu0+H2lHkwdGsAY+j2wHPNPpPoeg5AaEFh9FlA+Zs=
-github.com/go-audio/riff v1.0.0 h1:d8iCGbDvox9BfLagY94fBynxSPHO80LmZCaOsmKxokA=
-github.com/go-audio/riff v1.0.0/go.mod h1:l3cQwc85y79NQFCRB7TiPoNiaijp6q8Z0Uv38rVG498=
-github.com/go-audio/wav v1.1.0 h1:jQgLtbqBzY7G+BM8fXF7AHUk1uHUviWS4X39d5rsL2g=
-github.com/go-audio/wav v1.1.0/go.mod h1:mpe9qfwbScEbkd8uybLuIpTgHyrISw/OTuvjUW2iGtE=
 github.com/go-chi/chi/v5 v5.3.2 h1:5YQkICvTCSZ25hoRsyJazN0scjzKGiu4VAUc7H1o1nY=
 github.com/go-chi/chi/v5 v5.3.2/go.mod h1:R+tYY2hNuVUUjxoPtqUdgBqevM9s9njzkTLutVsOCto=
 github.com/go-errors/errors v1.5.1 h1:ZwEMSLRCapFLflTpT7NKaAc7ukJ8ZPEjzlxt8rPN8bk=
@@ -300,6 +294,8 @@ github.com/tphakala/go-opus v1.0.0 h1:TEpg8ULmrnsFYV6JRH49wsYF4ivpiUfbweHkfxn/1G
 github.com/tphakala/go-opus v1.0.0/go.mod h1:57hQHipntY2+xK7sycF4CYVSXDLW3V+AiX77iOJlojQ=
 github.com/tphakala/go-tflite v0.2.2-0.20260514101223-29408e53fff7 h1:fJtEs8rODoFDk8HDRwvNxIYEgsUUrEAvqPdllxF0cmg=
 github.com/tphakala/go-tflite v0.2.2-0.20260514101223-29408e53fff7/go.mod h1:xCgggryHiQ3nD0Sy0oCZESPWmzThLKKB28Vky5m6HCo=
+github.com/tphakala/go-wav v1.0.0 h1:uPJYJUotRdBGhnQT9dYMNCbad8C32bSGA/v9VdpNLhI=
+github.com/tphakala/go-wav v1.0.0/go.mod h1:uHyG52/VxaMf7e3AxS/lJ+DDZoADPuIlxsij1iWUi/U=
 github.com/tphakala/goth v0.0.0-20260315123917-08c3db6a364a h1:BBvsu7Mes8McH6ikyagnU9y2N8hjoDxvDNCl162hwdA=
 github.com/tphakala/goth v0.0.0-20260315123917-08c3db6a364a/go.mod h1:fht+y3WzLavlVj4eN6u+/lmoQ4lOcsL6blDhBckFLPE=
 github.com/tphakala/malgo v0.11.25-birdnet.1 h1:QwqenAMHWxLPcWDVEfRyqbYHPvMpr0IoNLHFcTG9YO0=
