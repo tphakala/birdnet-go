@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
 // fallbackTestTime is a fixed timestamp so the generated clip names are
@@ -103,7 +104,7 @@ func TestResampleKeyDistinguishesRatePairs(t *testing.T) {
 // enabled with a target audionorm cannot accept, which is the branch that used
 // to emit on every single detection of an affected install.
 func TestNormalizeSkipLogsOncePerFormat(t *testing.T) {
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	resetExportLogGuards(t)
 
 	a := newExportLogAction(t, t.TempDir(), "clip.mp3", "mp3")
@@ -139,7 +140,7 @@ func TestNormalizeSkipLogsOncePerFormat(t *testing.T) {
 //
 // This also covers the measurement-failure arm, which had no execution at all.
 func TestNormalizeSkipReasonsAreNotConflated(t *testing.T) {
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	resetExportLogGuards(t)
 
 	const format = "mp3"
@@ -187,7 +188,7 @@ func TestNormalizeSkipReasonsAreNotConflated(t *testing.T) {
 // guard, detection_id would name only the first detection to trip a standing
 // misconfiguration, reading as if the problem belonged to that one clip.
 func TestNormalizeSkipLineOmitsDetectionID(t *testing.T) {
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	resetExportLogGuards(t)
 
 	a := newExportLogAction(t, t.TempDir(), "clip.mp3", "mp3")
@@ -218,7 +219,7 @@ func TestNormalizeSkipLineOmitsDetectionID(t *testing.T) {
 // dropping the .do() wrapper (back to the per-detection flood this change
 // exists to stop) would not be caught by anything.
 func TestResampleFailureLogsOncePerRatePair(t *testing.T) {
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	resetExportLogGuards(t)
 
 	a := newExportLogAction(t, t.TempDir(), "clip.mp3", "mp3")
@@ -254,7 +255,7 @@ func TestResampleFailureLogsOncePerRatePair(t *testing.T) {
 func TestNormalizedReportsWhetherMeasurementRan(t *testing.T) {
 	// Captured only to keep the guarded WARNs out of the test output; this test
 	// asserts the returned flag, not the log.
-	captureExportLogs(t)
+	logtest.CaptureBuffer(t)
 	resetExportLogGuards(t)
 
 	// Normalization off: the static gain is used, so nothing was measured.
@@ -280,7 +281,7 @@ func TestNormalizedReportsWhetherMeasurementRan(t *testing.T) {
 // the UI, so a process-wide sync.Once let the first bad value silence every
 // later, different one.
 func TestClipPathFallbackWarnsPerExportType(t *testing.T) {
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	resetBuildClipPathFallbackOnce()
 	t.Cleanup(resetBuildClipPathFallbackOnce)
 
@@ -307,7 +308,7 @@ func TestClipPathFallbackWarnsPerExportType(t *testing.T) {
 // outright, which is the export log where naming the bird matters most. It
 // carried detection_id and clip_name only.
 func TestNoPCMSkipLineNamesSpecies(t *testing.T) {
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 
 	a := newExportLogAction(t, t.TempDir(), "clip.mp3", "mp3")
 	a.pcmData = nil
@@ -328,7 +329,7 @@ func TestNoPCMSkipLineNamesSpecies(t *testing.T) {
 // topic that did not generalise. The topic derives from the hot-reloadable
 // Realtime.MQTT.Topic setting.
 func TestMQTTNotReadyWarnsPerTopic(t *testing.T) {
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 
 	p := &Processor{}
 	for range 3 {

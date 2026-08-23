@@ -11,6 +11,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/formatutil"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
@@ -640,25 +641,6 @@ func (s *cleanupSummary) usageStillOverTarget() bool {
 	return s.usageThreshold > 0 && s.usageAfter != unknownUsagePercent && s.usageAfter >= s.usageThreshold
 }
 
-// humanizeBytes renders a byte count as a short human-readable string (e.g.
-// "150 MB") for the cleanup summary, so a support dump shows freed space at a
-// glance without the reader converting raw bytes. Raw bytes are logged too.
-func humanizeBytes(b int64) string {
-	const unit = 1024
-	if b < unit {
-		return fmt.Sprintf("%d B", b)
-	}
-	// exp cannot exceed 5 ('E') for any int64, but bound the loop explicitly so
-	// the prefix index can never go out of range regardless of input.
-	const prefixes = "KMGTPE"
-	div, exp := int64(unit), 0
-	for n := b / unit; n >= unit && exp < len(prefixes)-1; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), prefixes[exp])
-}
-
 // appendUsageFields adds the disk-usage percentage fields to a log field slice,
 // skipping any that were not measured or do not apply (unknownUsagePercent /
 // non-positive threshold), so neither the INFO summary nor a WARN logs a
@@ -691,7 +673,7 @@ func logCleanupSummary(s *cleanupSummary) {
 		logger.Int("files_scanned", s.stats.Scanned),
 		logger.Int("files_deleted", s.stats.Deleted),
 		logger.Int64("bytes_freed", s.stats.BytesFreed),
-		logger.String("bytes_freed_human", humanizeBytes(s.stats.BytesFreed)),
+		logger.String("bytes_freed_human", formatutil.Bytes(s.stats.BytesFreed)),
 		logger.Int("locked_skipped", s.stats.LockedSkipped),
 		logger.Int("min_clips_blocked", s.stats.MinClipsBlocked),
 		logger.Int("not_eligible", s.stats.NotEligible),
