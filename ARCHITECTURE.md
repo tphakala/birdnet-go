@@ -588,7 +588,7 @@ Audio Source → Capture → Buffer → Analyze → Detect → Store → Notify
 FFmpeg is used for:
 
 - **RTSP Stream Ingestion**: Capturing audio from IP cameras and network streams
-- **Audio Format Conversion**: PCM to MP3 at the audio export/save stage, and to AAC and Opus while their native encoders remain opt-in. WAV and FLAC are always encoded natively.
+- **Audio Format Conversion**: PCM to MP3 at the audio export/save stage, and to AAC while its native encoder remains opt-in. WAV, FLAC, and Opus are encoded natively (FFmpeg encodes Opus only as a fallback for the rare clip shapes go-opus cannot carry).
 - **On-demand Clip Transcoding**: Re-encoding already-saved clips for the web player (the v2 media API), which is the only remaining user of the `loudnorm` filter
 - **Gain Application**: `volume` filter for dB boost/cut. On the clip export path the value it applies is the EBU R128 gain measured in Go by `internal/audiocore/audionorm`; FFmpeg no longer measures or normalises loudness there.
 

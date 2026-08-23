@@ -372,7 +372,6 @@ func TestExecute_SuccessLogCarriesBitrateForLossyFormats(t *testing.T) {
 // actively misleading. Opus caps at 256 kbps, so a 320k configuration is the
 // case that tells the two apart.
 func TestExecute_SuccessLogCarriesClampedBitrate(t *testing.T) {
-	t.Setenv(conf.EnvNativeOpusEncoder, "native")
 	resetNativeSkipOnce()
 	logs := captureExportLogs(t)
 	dir := t.TempDir()
@@ -726,7 +725,6 @@ func TestResolveExportParams_BatDowngradeLogsEachDistinctCondition(t *testing.T)
 // way. It used to be the opposite of its sibling on both counts: WARN on every
 // single clip forever, against Info exactly once.
 func TestResolveExportParams_StrandedFallbackIsWarnedOncePerCondition(t *testing.T) {
-	t.Setenv(conf.EnvNativeOpusEncoder, "native")
 	resetNativeSkipOnce()
 	resetStrandedFormatOnce()
 	logs := captureExportLogs(t)
@@ -757,7 +755,6 @@ func TestResolveExportParams_StrandedFallbackIsWarnedOncePerCondition(t *testing
 // still explains itself. Without this, a bare sync.Once would pass the
 // once-per-condition test above identically.
 func TestResolveExportParams_StrandedFallbackLogsEachDistinctCondition(t *testing.T) {
-	t.Setenv(conf.EnvNativeOpusEncoder, "native")
 	t.Setenv(conf.EnvNativeAACEncoder, "native")
 	resetNativeSkipOnce()
 	resetStrandedFormatOnce()
@@ -786,39 +783,37 @@ func TestResolveExportParams_StrandedFallbackLogsEachDistinctCondition(t *testin
 }
 
 // selectEncoder is the whole routing table, extracted so a failed export can
-// name its encoder. The gated formats are covered from both sides: with the gate
-// off, AAC and Opus must still resolve to FFmpeg, which is what every install
-// that has not opted in does on every clip. Asserting nativeAACSelected directly
-// (as the gate tests do) checks the predicate but not the routing built on it.
+// name its encoder. AAC is covered from both sides: with the gate off it must
+// still resolve to FFmpeg, which is what every install that has not opted in does
+// on every clip. Opus is no longer gated: go-opus is its unconditional default.
+// Asserting nativeAACSelected directly (as the gate tests do) checks the
+// predicate but not the routing built on it.
 func TestSelectEncoder_RoutingTable(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		aacGate    string
-		opusGate   string
 		format     string
 		rate       int
 		wantEncode string
 	}{
-		{"wav is always native", "", "", ffmpeg.FormatWAV, conf.SampleRate, clipenc.NativeWAV},
-		{"flac is always native", "", "", ffmpeg.FormatFLAC, conf.SampleRate, clipenc.NativeFLAC},
-		{"wav ignores the gates", "native", "native", ffmpeg.FormatWAV, conf.SampleRate, clipenc.NativeWAV},
-		{"flac ignores the gates", "native", "native", ffmpeg.FormatFLAC, conf.SampleRate, clipenc.NativeFLAC},
-		{"aac without the gate stays on ffmpeg", "", "", ffmpeg.FormatAAC, conf.SampleRate, clipenc.FFmpeg},
-		{"opus without the gate stays on ffmpeg", "", "", ffmpeg.FormatOpus, conf.SampleRate, clipenc.FFmpeg},
-		{"aac with the gate goes native", "native", "", ffmpeg.FormatAAC, conf.SampleRate, clipenc.NativeAAC},
-		{"opus with the gate goes native", "", "native", ffmpeg.FormatOpus, conf.SampleRate, clipenc.NativeOpus},
-		// Gated on, but the encoder cannot carry the clip's rate: FFmpeg takes it
-		// rather than the export failing outright.
-		{"aac falls back when the rate is unsupported", "native", "", ffmpeg.FormatAAC, 22050, clipenc.FFmpeg},
-		{"opus falls back when the rate is unsupported", "", "native", ffmpeg.FormatOpus, 22050, clipenc.FFmpeg},
-		// Neither gate touches the formats FFmpeg owns outright.
-		{"mp3 is always ffmpeg", "native", "native", ffmpeg.FormatMP3, conf.SampleRate, clipenc.FFmpeg},
-		{"alac is always ffmpeg", "native", "native", ffmpeg.FormatALAC, conf.SampleRate, clipenc.FFmpeg},
+		{"wav is always native", "", ffmpeg.FormatWAV, conf.SampleRate, clipenc.NativeWAV},
+		{"flac is always native", "", ffmpeg.FormatFLAC, conf.SampleRate, clipenc.NativeFLAC},
+		{"wav ignores the aac gate", "native", ffmpeg.FormatWAV, conf.SampleRate, clipenc.NativeWAV},
+		{"flac ignores the aac gate", "native", ffmpeg.FormatFLAC, conf.SampleRate, clipenc.NativeFLAC},
+		{"aac without the gate stays on ffmpeg", "", ffmpeg.FormatAAC, conf.SampleRate, clipenc.FFmpeg},
+		{"opus is native by default", "", ffmpeg.FormatOpus, conf.SampleRate, clipenc.NativeOpus},
+		{"aac with the gate goes native", "native", ffmpeg.FormatAAC, conf.SampleRate, clipenc.NativeAAC},
+		// The encoder cannot carry the clip's rate: FFmpeg takes it rather than the
+		// export failing outright.
+		{"aac falls back when the rate is unsupported", "native", ffmpeg.FormatAAC, 22050, clipenc.FFmpeg},
+		{"opus falls back when the rate is unsupported", "", ffmpeg.FormatOpus, 22050, clipenc.FFmpeg},
+		// The AAC gate never touches the formats FFmpeg owns outright.
+		{"mp3 is always ffmpeg", "native", ffmpeg.FormatMP3, conf.SampleRate, clipenc.FFmpeg},
+		{"alac is always ffmpeg", "native", ffmpeg.FormatALAC, conf.SampleRate, clipenc.FFmpeg},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			// Not parallel: t.Setenv, and the skip warning uses a package-level Once.
 			t.Setenv(conf.EnvNativeAACEncoder, tc.aacGate)
-			t.Setenv(conf.EnvNativeOpusEncoder, tc.opusGate)
 			resetNativeSkipOnce()
 
 			assert.Equal(t, tc.wantEncode, selectEncoder(tc.format, tc.rate))

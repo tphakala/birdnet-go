@@ -98,7 +98,7 @@ Pre-compiled BirdNET-Go executables are also available at https://github.com/tph
 BirdNET-Go has minimal external dependencies, but requires a few specific tools for certain features:
 
 - **TensorFlow Lite C library**: Required for the core audio analysis functionality
-- **FFmpeg**: Required for RTSP stream capture, the HLS live stream feature in the web interface, on-demand clip transcoding in the web interface, and audio export to MP3. WAV and FLAC are encoded natively and do not need FFmpeg. AAC and Opus export uses FFmpeg by default, but native encoders for both are available as an opt-in preview via the `BIRDNET_AAC_ENCODER=native` and `BIRDNET_OPUS_ENCODER=native` environment variables. The HLS live stream also runs through FFmpeg by default; setting `BIRDNET_HLS_ENCODER=native` switches it to a pure-Go encoder and muxer, as an opt-in preview. Loudness normalization of saved clips is done natively for every format and no longer needs FFmpeg.
+- **FFmpeg**: Required for RTSP stream capture, the HLS live stream feature in the web interface, on-demand clip transcoding in the web interface, and audio export to MP3. WAV, FLAC and Opus are encoded natively and do not need FFmpeg. AAC export uses FFmpeg by default, but a native encoder is available as an opt-in preview via the `BIRDNET_AAC_ENCODER=native` environment variable. The HLS live stream also runs through FFmpeg by default; setting `BIRDNET_HLS_ENCODER=native` switches it to a pure-Go encoder and muxer, as an opt-in preview. Loudness normalization of saved clips is done natively for every format and no longer needs FFmpeg.
 
   With `BIRDNET_HLS_ENCODER=native` the live stream is encoded in-process and served from memory, so nothing is written to the HLS directory. Note two differences from the FFmpeg path while the preview is in place: the output sample rate is fixed at 48 kHz, so `webserver.livestream.samplerate` has no effect (a warning is logged if it is set to anything else), and `webserver.livestream.ffmpegloglevel` no longer applies since there is no FFmpeg process to configure.
 
@@ -2126,7 +2126,7 @@ Discord is one of the most popular notification targets. Here's how to set it up
 2. Go to **Server Settings** → **Integrations** → **Webhooks**
 3. Click **New Webhook**
 4. Choose the channel where you want notifications to appear
-5. Copy the webhook URL — it looks like: `https://discord.com/api/webhooks/1234567890/abcDEFghiJKLmnoPQRstu`
+5. Copy the webhook URL. It looks like: `https://discord.com/api/webhooks/1234567890/abcDEFghiJKLmnoPQRstu`
 
 **Step 2: Convert to Shoutrrr URL Format**
 

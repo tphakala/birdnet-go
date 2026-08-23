@@ -260,7 +260,7 @@ func (s *StreamConfig) validateURLScheme() error {
 
 // ApplyStreamDefaults sets default transport for RTSP/RTMP streams that have an empty
 // transport field. This handles the case where users write the new streams: YAML format
-// directly without specifying per-stream transport — the global RTSPSettings.Transport
+// directly without specifying per-stream transport; the global RTSPSettings.Transport
 // (defaulting to "tcp") is propagated to each applicable stream.
 func (r *RTSPSettings) ApplyStreamDefaults() {
 	globalTransport := r.Transport
@@ -422,23 +422,22 @@ func (s *AudioSettings) applyFfmpegFormatFallback() {
 // exportFormatNeedsFFmpeg reports whether a clip export format can only be
 // produced by shelling out to FFmpeg.
 //
-// WAV and FLAC always have a native encoder. AAC and Opus have one too, but it
-// is opt-in while it earns field confidence, so for them the answer depends on
-// the runtime gate: without the gate the export really does need FFmpeg, and
-// with it the format is native and must NOT be downgraded to WAV. Getting this
-// wrong is silent, because the downgrade happens during config validation and
-// the operator only sees WAV files appear where they asked for .m4a or .opus.
+// WAV, FLAC and Opus always have a native encoder, so they never need FFmpeg and
+// must NOT be downgraded to WAV when it is missing. AAC has one too, but it is
+// opt-in while it earns field confidence, so for it the answer depends on the
+// runtime gate: without the gate the export really does need FFmpeg, and with it
+// the format is native and must NOT be downgraded. Getting this wrong is silent,
+// because the downgrade happens during config validation and the operator only
+// sees WAV files appear where they asked for .m4a.
 //
-// REMOVAL: when the native AAC and Opus encoders become the default, the two
-// gate calls go away and this collapses to "only MP3 needs FFmpeg".
+// REMOVAL: when the native AAC encoder becomes the default too, the remaining
+// gate call goes away and this collapses to "only MP3 needs FFmpeg".
 func exportFormatNeedsFFmpeg(exportType string) bool {
 	switch exportType {
-	case AudioExportTypeWAV, AudioExportTypeFLAC:
+	case AudioExportTypeWAV, AudioExportTypeFLAC, AudioExportTypeOPUS:
 		return false
 	case AudioExportTypeAAC:
 		return !NativeAACEncoderEnabled()
-	case AudioExportTypeOPUS:
-		return !NativeOpusEncoderEnabled()
 	default:
 		return true
 	}

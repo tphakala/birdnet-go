@@ -825,7 +825,8 @@ func selectEncoder(exportFormat string, exportRate int) string {
 		}
 		return clipenc.FFmpeg
 	case ffmpeg.FormatOpus:
-		// Opt-in; see internal/conf/native_encoders.go for the gate and its removal.
+		// go-opus is the default Opus encoder; FFmpeg is only a fallback for a
+		// clip go-opus cannot carry (see nativeOpusSelected).
 		if nativeOpusSelected(exportRate) {
 			return clipenc.NativeOpus
 		}
@@ -1012,11 +1013,13 @@ func nativeAACSelected(exportRate int) bool {
 	return true
 }
 
-// nativeOpusSelected is the Opus counterpart of nativeAACSelected.
+// nativeOpusSelected reports whether this clip should take the native Opus path.
+// go-opus is the default Opus encoder, so there is no gate to check: the only
+// question is whether go-opus accepts the clip's rate, depth and channel count.
+// A clip it cannot carry (e.g. a non-48kHz rate left behind by a failed resample)
+// falls back to FFmpeg with a warning, or to WAV when no FFmpeg is present (see
+// strandedWithoutEncoder).
 func nativeOpusSelected(exportRate int) bool {
-	if !conf.NativeOpusEncoderEnabled() {
-		return false
-	}
 	if err := opus.Supports(exportRate, conf.BitDepth, conf.NumChannels); err != nil {
 		logNativeEncoderSkipped(ffmpeg.FormatOpus, exportRate, err)
 		return false
@@ -1487,19 +1490,22 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 	return rate, format, path
 }
 
-// strandedWithoutEncoder reports whether this clip has no encoder left: the
-// operator opted a lossy format into its native encoder, so config validation
-// did not downgrade the format to WAV despite FFmpeg being absent, but the
-// native encoder turns out not to accept this clip's shape.
+// strandedWithoutEncoder reports whether this clip has no encoder left: config
+// validation did not downgrade the format to WAV despite FFmpeg being absent, but
+// the native encoder turns out not to accept this clip's shape. For Opus that is
+// always possible (go-opus is the default, so validation never downgrades .opus);
+// for AAC it only applies once the operator has opted that format into its native
+// encoder.
 //
 // Without this the export would call FFmpeg with an empty binary path and the
 // recording would be lost. Resolving it here rather than at the encode step
 // matters because the clip path still gets its extension corrected, so the file
 // on disk and the name recorded in the database cannot disagree.
 //
-// REMOVAL: this goes away with the gate. Once the native encoders are the
-// default, config validation stops downgrading these formats at all and the
-// question becomes a plain "can the native encoder carry it".
+// REMOVAL: the AAC branch goes away with the AAC gate. Once the native AAC
+// encoder is the default too, config validation stops downgrading it at all and
+// the question becomes a plain "can the native encoder carry it", as it already
+// is for Opus.
 func (a *SaveAudioAction) strandedWithoutEncoder(rate int, format string) bool {
 	if a.Settings.Realtime.Audio.FfmpegPath != "" {
 		return false // FFmpeg can still take it
@@ -1508,7 +1514,10 @@ func (a *SaveAudioAction) strandedWithoutEncoder(rate int, format string) bool {
 	case ffmpeg.FormatAAC:
 		return conf.NativeAACEncoderEnabled() && !nativeAACSelected(rate)
 	case ffmpeg.FormatOpus:
-		return conf.NativeOpusEncoderEnabled() && !nativeOpusSelected(rate)
+		// go-opus is the default, so config validation never downgrades .opus to
+		// WAV: if go-opus cannot carry this clip and there is no FFmpeg, it is
+		// stranded and must be downgraded here.
+		return !nativeOpusSelected(rate)
 	default:
 		// Every other format either has an unconditional native encoder (WAV,
 		// FLAC) or was already downgraded to WAV by config validation when
