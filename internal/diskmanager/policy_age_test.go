@@ -641,6 +641,7 @@ func TestProcessAgeBasedDeletionLoopStats(t *testing.T) {
 			MinClipsBlocked: 1,
 			NotEligible:     3,
 			Errors:          0,
+			BytesFreed:      5, // one 5-byte file deleted
 		}, stats)
 
 		assert.NoFileExists(t, oldestOfA.Path, "oldest species_a file should be deleted")
@@ -687,6 +688,65 @@ func TestProcessAgeBasedDeletionLoopStats(t *testing.T) {
 			MinClipsBlocked: 0,
 			NotEligible:     0,
 			Errors:          1,
+			BytesFreed:      5, // the one surviving file (5 bytes) deleted; the ghost errored
 		}, stats)
+	})
+
+	t.Run("deletion cap sets CapHit with candidates remaining", func(t *testing.T) {
+		t.Parallel()
+		testDir := t.TempDir()
+		retentionCutoffUnix := time.Now().Add(-168 * time.Hour).Unix() // 7 days
+
+		// Three eligible old files, but a per-run cap of 2. The loop deletes 2
+		// and then, with a third candidate still to examine, hits the cap and
+		// must flag the run as rate-limited (GitHub #4059 signal).
+		f1 := makeAgeTestFile(t, testDir, "species_a", 300*time.Hour, false)
+		f2 := makeAgeTestFile(t, testDir, "species_a", 290*time.Hour, false)
+		f3 := makeAgeTestFile(t, testDir, "species_a", 280*time.Hour, false)
+		files := []FileInfo{f1, f2, f3}
+		speciesTotalCount := buildSpeciesTotalCountMap(files)
+
+		quitChan := make(chan struct{})
+		const (
+			minClipsPerSpecies = 0
+			maxDeletions       = 2
+		)
+		deletedCount, deletedNames, stats, loopErr := processAgeBasedDeletionLoop(
+			files, speciesTotalCount, minClipsPerSpecies, maxDeletions, false, quitChan, retentionCutoffUnix)
+
+		require.NoError(t, loopErr)
+		assert.Equal(t, 2, deletedCount, "only maxDeletions files should be deleted")
+		assert.Len(t, deletedNames, 2)
+		assert.True(t, stats.CapHit, "hitting the per-run cap with a candidate remaining must set CapHit")
+		assert.Equal(t, int64(10), stats.BytesFreed, "two 5-byte files deleted")
+		assert.Equal(t, 2, stats.Deleted)
+	})
+
+	t.Run("BytesFreed counts audio only, not the deleted spectrogram", func(t *testing.T) {
+		t.Parallel()
+		testDir := t.TempDir()
+		retentionCutoffUnix := time.Now().Add(-168 * time.Hour).Unix()
+
+		// One deletable audio file (5 bytes) with a companion spectrogram PNG
+		// that is much larger. With keepSpectrograms=false the PNG is deleted
+		// too, but BytesFreed intentionally accounts for the audio size only
+		// (the loop never stats the PNG), so the assertion documents that
+		// contract and guards against a future change that assumes byte parity.
+		audio := makeAgeTestFile(t, testDir, "sp_audio", 200*time.Hour, false)
+		pngPath := strings.TrimSuffix(audio.Path, filepath.Ext(audio.Path)) + ".png"
+		require.NoError(t, os.WriteFile(pngPath, make([]byte, 1000), 0o644)) //nolint:gosec // G306: test file
+
+		files := []FileInfo{audio}
+		speciesTotalCount := buildSpeciesTotalCountMap(files)
+		quitChan := make(chan struct{})
+		const minClipsPerSpecies = 0
+		deletedCount, _, stats, loopErr := processAgeBasedDeletionLoop(
+			files, speciesTotalCount, minClipsPerSpecies, maxDeletionsPerRun, false /* keepSpectrograms */, quitChan, retentionCutoffUnix)
+
+		require.NoError(t, loopErr)
+		assert.Equal(t, 1, deletedCount)
+		assert.NoFileExists(t, audio.Path, "audio file should be deleted")
+		assert.NoFileExists(t, pngPath, "spectrogram should also be deleted when keepSpectrograms is false")
+		assert.Equal(t, int64(5), stats.BytesFreed, "BytesFreed counts the 5-byte audio file, not the 1000-byte PNG")
 	})
 }

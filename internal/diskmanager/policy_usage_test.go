@@ -1107,6 +1107,7 @@ func TestProcessUsageDeletionLoopStats(t *testing.T) {
 			MinClipsBlocked: 0,
 			NotEligible:     2,
 			Errors:          0,
+			BytesFreed:      150, // the one deleted file's size
 		}, stats)
 	})
 
@@ -1135,6 +1136,8 @@ func TestProcessUsageDeletionLoopStats(t *testing.T) {
 			MinClipsBlocked: 0,
 			NotEligible:     0, // file2 was never evaluated; a rate limit is not "not eligible"
 			Errors:          0,
+			BytesFreed:      10,   // the one deleted file's size
+			CapHit:          true, // stopped at maxDeletions (1) with file2 still remaining
 		}, stats)
 	})
 
@@ -1165,6 +1168,7 @@ func TestProcessUsageDeletionLoopStats(t *testing.T) {
 			MinClipsBlocked: 2, // sp_min (always) and the second sp_del file (after the first is deleted)
 			NotEligible:     0,
 			Errors:          0,
+			BytesFreed:      10, // the one deleted file's size
 		}, stats)
 	})
 

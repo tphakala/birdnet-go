@@ -155,8 +155,19 @@ func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 
 	// Always emit the per-run summary so the outcome of every file (deleted,
 	// locked, min-clips-blocked, usage already satisfied, or errored) is
-	// visible without enabling Debug logging.
-	logCleanupSummary("usage", stats, duration)
+	// visible without enabling Debug logging. Usage before/after and the target
+	// threshold drive the WARN that fires when a run cannot bring the disk back
+	// under target (GitHub #4059, #3892).
+	logCleanupSummary(&cleanupSummary{
+		policy:           "usage",
+		stats:            stats,
+		duration:         duration,
+		keepSpectrograms: keepSpectrograms,
+		maxDeletions:     maxDeletionsPerRun,
+		usageBefore:      initialUsagePercent,
+		usageAfter:       finalUsagePercent,
+		usageThreshold:   usageThreshold,
+	})
 	if loopErr != nil {
 		GetLogger().Error("Usage-based cleanup run completed with errors",
 			logger.String("policy", "usage"),
@@ -260,6 +271,12 @@ func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map
 				if stopReason == usageStopBelowThreshold {
 					stats.NotEligible += len(files) - i
 				}
+				if stopReason == usageStopMaxDeletions {
+					// Rate-limited: reached the per-run deletion cap before usage
+					// fell under target and before examining all files. Flag it
+					// for the summary WARN.
+					stats.CapHit = true
+				}
 				return deletedCount, deletedNames, lastKnownGoodUsagePercent, stats, loopErr
 			}
 
@@ -279,6 +296,7 @@ func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map
 			switch outcome {
 			case usageOutcomeDeleted:
 				stats.Deleted++
+				stats.BytesFreed += file.Size
 				estimatedUsedBytes = updateUsageStateAfterDeletion(file, speciesMonthCount, estimatedUsedBytes, params.diskInfo.TotalBytes)
 				deletedNames = append(deletedNames, file.Path)
 				deletedCount++

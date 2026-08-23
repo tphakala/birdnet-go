@@ -587,27 +587,148 @@ type CleanupResult struct {
 // once disk usage drops below the threshold it tallies the unexamined remainder
 // into NotEligible, so for the usage policy the buckets do sum to Scanned.
 type cleanupStats struct {
-	Scanned         int // age: total candidate files this run. usage: files actually examined before an early stop
-	Deleted         int // files actually deleted
-	LockedSkipped   int // skipped because the clip is locked/protected
-	MinClipsBlocked int // skipped because deletion would violate the minimum-clips-per-species guard
-	NotEligible     int // age: not old enough. usage: usage already below threshold when reached
-	Errors          int // deletion attempts that failed
+	Scanned         int   // age: total candidate files this run. usage: files actually examined before an early stop
+	Deleted         int   // files actually deleted
+	LockedSkipped   int   // skipped because the clip is locked/protected
+	MinClipsBlocked int   // skipped because deletion would violate the minimum-clips-per-species guard
+	NotEligible     int   // age: not old enough. usage: usage already below threshold when reached
+	Errors          int   // deletion attempts that failed
+	BytesFreed      int64 // total size of the audio files actually deleted this run
+	// CapHit reports that the run deleted the maximum allowed this cycle
+	// (maxDeletionsPerRun) and stopped with deletable work still remaining, i.e.
+	// it was rate-limited rather than reaching the end of the work. It is the
+	// signal that distinguishes "nothing left to delete" from "hit the per-run
+	// limit, come back next cycle" on high-volume installs (GitHub #4059), and
+	// it is what justifies the WARN in logCleanupSummary. The age loop guards on
+	// age eligibility of the next unvisited file before setting it (files are
+	// sorted oldest-first); the usage loop sets it only on a genuine
+	// max-deletions stop, never when usage already fell below target.
+	CapHit bool
+}
+
+// unknownUsagePercent marks a disk-usage percentage that could not be measured
+// (the usage lookup failed) or that does not apply to a policy. It keeps those
+// fields out of the summary line rather than logging a misleading 0%.
+const unknownUsagePercent = -1
+
+// cleanupSummary bundles everything logCleanupSummary needs to describe one
+// completed cleanup run. It is purely observational; none of these fields feed
+// back into deletion behavior.
+type cleanupSummary struct {
+	policy           string
+	stats            cleanupStats
+	duration         time.Duration
+	keepSpectrograms bool // when true, .png spectrograms are left on disk beside deleted audio (GitHub #4059)
+	maxDeletions     int  // the per-run deletion cap that produced stats.CapHit
+	usageBefore      int  // disk usage % at run start; unknownUsagePercent if not measured/applicable
+	usageAfter       int  // disk usage % at run end; unknownUsagePercent if not measured
+	usageThreshold   int  // target usage %; <= 0 means not applicable (age policy)
+}
+
+// hitDeletionCap reports that the run was rate-limited by the per-run deletion
+// cap while candidate files remained. This is the primary WARN condition.
+func (s *cleanupSummary) hitDeletionCap() bool { return s.stats.CapHit }
+
+// usageStillOverTarget reports that a usage-based run finished with the disk
+// still at or above its configured target, despite not hitting the cap. It is
+// only meaningful for the usage policy (usageThreshold > 0) and when the final
+// usage was actually measured.
+func (s *cleanupSummary) usageStillOverTarget() bool {
+	return s.usageThreshold > 0 && s.usageAfter != unknownUsagePercent && s.usageAfter >= s.usageThreshold
+}
+
+// humanizeBytes renders a byte count as a short human-readable string (e.g.
+// "150 MB") for the cleanup summary, so a support dump shows freed space at a
+// glance without the reader converting raw bytes. Raw bytes are logged too.
+func humanizeBytes(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	// exp cannot exceed 5 ('E') for any int64, but bound the loop explicitly so
+	// the prefix index can never go out of range regardless of input.
+	const prefixes = "KMGTPE"
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit && exp < len(prefixes)-1; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), prefixes[exp])
+}
+
+// appendUsageFields adds the disk-usage percentage fields to a log field slice,
+// skipping any that were not measured or do not apply (unknownUsagePercent /
+// non-positive threshold), so neither the INFO summary nor a WARN logs a
+// misleading -1 for a policy that has no usage target (e.g. the age policy).
+func appendUsageFields(fields []logger.Field, s *cleanupSummary) []logger.Field {
+	if s.usageBefore != unknownUsagePercent {
+		fields = append(fields, logger.Int("usage_before_pct", s.usageBefore))
+	}
+	if s.usageAfter != unknownUsagePercent {
+		fields = append(fields, logger.Int("usage_after_pct", s.usageAfter))
+	}
+	if s.usageThreshold > 0 {
+		fields = append(fields, logger.Int("usage_threshold_pct", s.usageThreshold))
+	}
+	return fields
 }
 
 // logCleanupSummary emits a single INFO-level line summarizing a completed
-// cleanup run, so the guard (if any) that prevented deletion is visible
-// without enabling Debug logging.
-func logCleanupSummary(policy string, stats cleanupStats, duration time.Duration) {
-	GetLogger().Info("cleanup run summary",
-		logger.String("policy", policy),
-		logger.Int("files_scanned", stats.Scanned),
-		logger.Int("files_deleted", stats.Deleted),
-		logger.Int("locked_skipped", stats.LockedSkipped),
-		logger.Int("min_clips_blocked", stats.MinClipsBlocked),
-		logger.Int("not_eligible", stats.NotEligible),
-		logger.Int("errors", stats.Errors),
-		logger.Duration("duration", duration))
+// cleanup run, so the guard (if any) that prevented deletion is visible without
+// enabling Debug logging. When the run was rate-limited by the per-run deletion
+// cap, or when a usage-based run finished with the disk still at or above the
+// configured target, it additionally emits a WARN so the "cleanup ran but disk
+// stays full" condition (GitHub #4059, #3892) is loud in default logs and in a
+// support dump rather than requiring a live Debug reproduction.
+func logCleanupSummary(s *cleanupSummary) {
+	log := GetLogger()
+
+	fields := []logger.Field{
+		logger.String("policy", s.policy),
+		logger.Int("files_scanned", s.stats.Scanned),
+		logger.Int("files_deleted", s.stats.Deleted),
+		logger.Int64("bytes_freed", s.stats.BytesFreed),
+		logger.String("bytes_freed_human", humanizeBytes(s.stats.BytesFreed)),
+		logger.Int("locked_skipped", s.stats.LockedSkipped),
+		logger.Int("min_clips_blocked", s.stats.MinClipsBlocked),
+		logger.Int("not_eligible", s.stats.NotEligible),
+		logger.Int("errors", s.stats.Errors),
+		logger.Bool("keep_spectrograms", s.keepSpectrograms),
+		logger.Bool("cap_hit", s.stats.CapHit),
+		logger.Int("max_deletions", s.maxDeletions),
+		logger.Duration("duration", s.duration),
+	}
+	log.Info("cleanup run summary", appendUsageFields(fields, s)...)
+
+	switch {
+	case s.hitDeletionCap():
+		// The run deleted up to the cap with deletable work still remaining. On
+		// a busy install the disk can keep filling faster than a single capped
+		// run drains it; surfacing this is what turns #4059 from "auto-delete
+		// does nothing" into an explained, actionable state.
+		warnFields := []logger.Field{
+			logger.String("policy", s.policy),
+			logger.Int("files_deleted", s.stats.Deleted),
+			logger.Int("max_deletions", s.maxDeletions),
+			logger.Bool("keep_spectrograms", s.keepSpectrograms),
+		}
+		log.Warn("retention cleanup reached the per-run deletion limit with deletable clips remaining; if clips keep accumulating, disk may not reach target until later runs",
+			appendUsageFields(warnFields, s)...)
+	case s.usageStillOverTarget():
+		// Usage-based run finished without hitting the cap, yet the disk is
+		// still at or above target. Something other than the rate limit is
+		// preventing deletions (all remaining clips locked, min-clips guard,
+		// or spectrograms retained under keep_spectrograms).
+		warnFields := []logger.Field{
+			logger.String("policy", s.policy),
+			logger.Int("files_deleted", s.stats.Deleted),
+			logger.Int("locked_skipped", s.stats.LockedSkipped),
+			logger.Int("min_clips_blocked", s.stats.MinClipsBlocked),
+			logger.Bool("keep_spectrograms", s.keepSpectrograms),
+		}
+		log.Warn("usage-based cleanup finished with disk still at or above the configured target",
+			appendUsageFields(warnFields, s)...)
+	}
 }
 
 // CloseLogger is a no-op for backwards compatibility.
