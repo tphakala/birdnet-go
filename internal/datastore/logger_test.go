@@ -1,16 +1,13 @@
 package datastore
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 	gormlogger "gorm.io/gorm/logger"
 )
 
@@ -32,21 +29,8 @@ func TestGormLogger_Trace_ContextCancellation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Not parallel: swaps the process-global logger for the duration.
-			var buf bytes.Buffer
-			handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
-			cfg := &logger.LoggingConfig{
-				DefaultLevel: "debug",
-				Console:      &logger.ConsoleOutput{Enabled: false},
-				FileOutput:   &logger.FileOutput{Enabled: false},
-			}
-			cl, err := logger.NewCentralLogger(cfg, handler)
-			require.NoError(t, err, "failed to create test logger")
-
-			// Restore the global logger after the subtest.
-			oldGlobal := logger.Global()
-			logger.SetGlobal(cl)
-			t.Cleanup(func() { logger.SetGlobal(oldGlobal) })
+			// Not parallel: logtest.CaptureBuffer swaps the process-global logger.
+			buf := logtest.CaptureBuffer(t)
 
 			gLogger := NewGormLogger(200*time.Millisecond, gormlogger.Info, nil, "sqlite")
 
@@ -85,7 +69,7 @@ func TestGormLogger_Trace_ErrorContext(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Not parallel: captureDatastoreLogs swaps the process-global logger.
+			// Not parallel: logtest.Capture swaps the process-global logger.
 			gLogger := NewGormLogger(200*time.Millisecond, gormlogger.Info, nil, tt.dialect)
 
 			fc := func() (sql string, rowsAffected int64) {
@@ -94,7 +78,7 @@ func TestGormLogger_Trace_ErrorContext(t *testing.T) {
 			// A plain syntax-style error, not a cancellation or ErrRecordNotFound,
 			// takes the "Database query failed" branch.
 			queryErr := fmt.Errorf("Error 1064 (42000): syntax error near ')'")
-			out := captureDatastoreLogs(t, func() {
+			out := logtest.Capture(t, func() {
 				gLogger.Trace(t.Context(), time.Now(), fc, queryErr)
 			})
 			assert.Contains(t, out, "Database query failed", "a real query fault must log at error level")
