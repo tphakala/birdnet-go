@@ -97,10 +97,13 @@ func TestHourlyDistributionUnparseableTimeSelfCheck(t *testing.T) {
 		seedHourlyDetection(t, ds, "08:30:00")
 		seedHourlyDetection(t, ds, "21:15:00")
 
+		var results []HourlyDistributionData
 		out := captureDatastoreLogs(t, func() {
-			_, err := ds.GetHourlyDistribution(t.Context(), "", "", "")
+			var err error
+			results, err = ds.GetHourlyDistribution(t.Context(), "", "", "")
 			require.NoError(t, err)
 		})
+		require.NotEmpty(t, results, "well-formed times must produce buckets, so the check actually runs")
 		assert.NotContains(t, out, hourlyUnparseableMsg,
 			"well-formed times must not warn")
 	})

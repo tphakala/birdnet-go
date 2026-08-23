@@ -120,7 +120,12 @@ func TestLogCleanupSummaryWarnEmission(t *testing.T) {
 		out := captureCleanupLogs(t, func() { logCleanupSummary(s) })
 		assert.Contains(t, out, "level=WARN", "a capped run must escalate to WARN")
 		assert.Contains(t, out, "per-run deletion limit")
-		assert.NotContains(t, out, "-1", "the -1 usage sentinel must not appear for the age policy")
+		// The age policy has no usage measurement or target, so none of the
+		// usage_*_pct fields (which would carry the -1 sentinel) must be logged.
+		// Assert the keys are absent rather than the bare "-1" substring, which
+		// also occurs in the slog timestamp on many dates/timezones.
+		assert.NotContains(t, out, "usage_before_pct", "age policy has no usage measurement to log")
+		assert.NotContains(t, out, "usage_after_pct", "age policy has no usage measurement to log")
 		assert.NotContains(t, out, "usage_threshold_pct", "age policy has no usage target to log")
 	})
 

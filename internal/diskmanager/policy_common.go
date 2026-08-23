@@ -595,14 +595,17 @@ type cleanupStats struct {
 	Errors          int   // deletion attempts that failed
 	BytesFreed      int64 // total size of the audio files actually deleted this run
 	// CapHit reports that the run deleted the maximum allowed this cycle
-	// (maxDeletionsPerRun) and stopped with deletable work still remaining, i.e.
+	// (maxDeletionsPerRun) and stopped with candidate work still remaining, i.e.
 	// it was rate-limited rather than reaching the end of the work. It is the
 	// signal that distinguishes "nothing left to delete" from "hit the per-run
 	// limit, come back next cycle" on high-volume installs (GitHub #4059), and
 	// it is what justifies the WARN in logCleanupSummary. The age loop guards on
 	// age eligibility of the next unvisited file before setting it (files are
 	// sorted oldest-first); the usage loop sets it only on a genuine
-	// max-deletions stop, never when usage already fell below target.
+	// max-deletions stop, never when usage already fell below target. A remaining
+	// candidate can still be individually locked or min-clips-blocked, so CapHit
+	// means "the cap cut the run short", not "more clips are guaranteed
+	// deletable"; the WARN wording is phrased accordingly.
 	CapHit bool
 }
 
@@ -700,6 +703,9 @@ func logCleanupSummary(s *cleanupSummary) {
 	}
 	log.Info("cleanup run summary", appendUsageFields(fields, s)...)
 
+	// At most one WARN fires. Cap-hit takes precedence over still-over-target
+	// because it names a concrete, actionable cause (the per-run limit), whereas
+	// over-target is the more general symptom a cap-hit already explains.
 	switch {
 	case s.hitDeletionCap():
 		// The run deleted up to the cap with deletable work still remaining. On
@@ -712,7 +718,7 @@ func logCleanupSummary(s *cleanupSummary) {
 			logger.Int("max_deletions", s.maxDeletions),
 			logger.Bool("keep_spectrograms", s.keepSpectrograms),
 		}
-		log.Warn("retention cleanup reached the per-run deletion limit with deletable clips remaining; if clips keep accumulating, disk may not reach target until later runs",
+		log.Warn("retention cleanup reached the per-run deletion limit and stopped before examining all candidates; if clips keep accumulating, disk may not reach target until later runs",
 			appendUsageFields(warnFields, s)...)
 	case s.usageStillOverTarget():
 		// Usage-based run finished without hitting the cap, yet the disk is

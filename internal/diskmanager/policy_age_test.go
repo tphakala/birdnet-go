@@ -722,6 +722,36 @@ func TestProcessAgeBasedDeletionLoopStats(t *testing.T) {
 		assert.Equal(t, 2, stats.Deleted)
 	})
 
+	t.Run("deletion cap does not set CapHit when the remaining file is too new", func(t *testing.T) {
+		t.Parallel()
+		testDir := t.TempDir()
+		retentionCutoffUnix := time.Now().Add(-168 * time.Hour).Unix() // 7 days
+
+		// Two deletable old files and one too-new file, with a cap of 2. The
+		// loop deletes both old files, then hits the cap at the third (newer
+		// than the cutoff). Because files are sorted oldest-first, that newer
+		// file means no age-eligible work remains, so CapHit must stay false:
+		// this exercises the guard that avoids a spurious cap WARN when the
+		// eligible count happens to equal maxDeletions.
+		old1 := makeAgeTestFile(t, testDir, "species_a", 300*time.Hour, false)
+		old2 := makeAgeTestFile(t, testDir, "species_a", 290*time.Hour, false)
+		tooNew := makeAgeTestFile(t, testDir, "species_a", 1*time.Hour, false)
+		files := []FileInfo{old1, old2, tooNew}
+		speciesTotalCount := buildSpeciesTotalCountMap(files)
+
+		quitChan := make(chan struct{})
+		const (
+			minClipsPerSpecies = 0
+			maxDeletions       = 2
+		)
+		deletedCount, _, stats, loopErr := processAgeBasedDeletionLoop(
+			files, speciesTotalCount, minClipsPerSpecies, maxDeletions, false, quitChan, retentionCutoffUnix)
+
+		require.NoError(t, loopErr)
+		assert.Equal(t, 2, deletedCount, "both old files deleted, cap reached")
+		assert.False(t, stats.CapHit, "the remaining file is too new, so the cap did not cut eligible work short")
+	})
+
 	t.Run("BytesFreed counts audio only, not the deleted spectrogram", func(t *testing.T) {
 		t.Parallel()
 		testDir := t.TempDir()
