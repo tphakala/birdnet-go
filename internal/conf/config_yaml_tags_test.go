@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -95,6 +96,144 @@ func checkType(t reflect.Type, path string, visited map[reflect.Type]bool, missi
 		}
 
 		recurseInto(f.Type, fieldPath, visited, missing)
+	}
+}
+
+// TestAllSettingsYAMLKeysReachableByViper verifies that every field in the
+// Settings tree carrying a yaml: key can actually be decoded by viper on load.
+// conf.Load calls viper.Unmarshal with no TagName, so mapstructure matches on the
+// mapstructure: tag when present, otherwise on the Go field name compared
+// case-insensitively against the config key. The yaml: tag does NOT participate in
+// loading. A field whose yaml key does not case-fold to its Go field name (e.g. a
+// snake_case key like encryption_key) and carries no mapstructure: tag is silently
+// dropped on load, even though SaveSettings writes it correctly through the yaml
+// tag, so the value appears to persist and then quietly resets on the next load.
+//
+// This is the load-side sibling of TestAllSettingsStructsHaveYAMLTags, which only
+// guards the save side. It is checked for every field in the hierarchy, not just
+// leaves: an intermediate struct/slice/map field that is unreachable drops its
+// whole block.
+func TestAllSettingsYAMLKeysReachableByViper(t *testing.T) {
+	t.Parallel()
+
+	var unreachable []string
+	visited := make(map[reflect.Type]bool)
+	checkViperReachable(reflect.TypeFor[Settings](), "Settings", visited, &unreachable)
+
+	for _, u := range unreachable {
+		t.Logf("yaml key unreachable by viper: %s", u)
+	}
+
+	require.Empty(t, unreachable,
+		"found %d field(s) whose yaml key viper cannot decode on load;\n"+
+			"add a mapstructure: tag matching the yaml key (see BackupConfig.EncryptionKey)",
+		len(unreachable))
+}
+
+// TestViperDecodesBackupMapstructureKeys is the behavioral anchor for
+// TestAllSettingsYAMLKeysReachableByViper. That test models mapstructure's
+// key-matching rule by reflection; this one drives the real viper.Unmarshal path
+// (the same DecodeHook Load uses) over a snake_case config and asserts the two
+// fields the reflection guard protects actually load. It pins the hand-rolled
+// model against actual loader semantics for these keys, so the model cannot
+// silently drift. Without the mapstructure tags added in config.go, viper drops
+// these snake_case keys and both assertions fail.
+func TestViperDecodesBackupMapstructureKeys(t *testing.T) {
+	t.Parallel()
+
+	const yamlCfg = `
+backup:
+  encryption: true
+  encryption_key: "c2VjcmV0LWtleQ=="
+  sanitize_config: true
+`
+	v := viper.New()
+	v.SetConfigType("yaml")
+	require.NoError(t, v.ReadConfig(strings.NewReader(yamlCfg)))
+
+	var settings Settings
+	require.NoError(t, v.Unmarshal(&settings, viper.DecodeHook(DurationDecodeHook())))
+
+	assert.Equal(t, "c2VjcmV0LWtleQ==", settings.Backup.EncryptionKey,
+		"backup.encryption_key must decode through its mapstructure tag")
+	assert.True(t, settings.Backup.SanitizeConfig,
+		"backup.sanitize_config must decode through its mapstructure tag")
+}
+
+// checkViperReachable walks a struct type and records any field whose yaml key
+// cannot be matched by mapstructure during viper.Unmarshal. See
+// TestAllSettingsYAMLKeysReachableByViper for the invariant.
+func checkViperReachable(t reflect.Type, path string, visited map[reflect.Type]bool, unreachable *[]string) {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct || visited[t] {
+		return
+	}
+	visited[t] = true
+
+	// Only recurse into project-owned or anonymous (inline) structs; stdlib and
+	// third-party types (e.g. time.Time) are decoded by their own hooks.
+	if t.PkgPath() != "" && !strings.HasPrefix(t.PkgPath(), projectModulePath) {
+		return
+	}
+
+	for f := range t.Fields() {
+		if !f.IsExported() {
+			continue
+		}
+
+		fieldPath := fmt.Sprintf("%s.%s", path, f.Name)
+
+		yamlKey, _, _ := strings.Cut(f.Tag.Get("yaml"), ",")
+		mapstructureTag := f.Tag.Get("mapstructure")
+
+		// A field with no yaml tag is loaded and saved under the same lowercased
+		// field name, so it is inherently reachable. A yaml:"-" field is runtime
+		// only and never loaded. Neither can be dropped by the mismatch this guards.
+		if yamlKey != "" && yamlKey != "-" {
+			switch {
+			case mapstructureTag == "-":
+				// The key is written to yaml on save but mapstructure:"-" tells
+				// viper to skip it on decode, so it never loads back: the same
+				// save-but-not-load asymmetry, made explicit.
+				*unreachable = append(*unreachable,
+					fmt.Sprintf("%s (yaml:%q is saved but mapstructure:%q skips it on load)",
+						fieldPath, yamlKey, "-"))
+			case mapstructureTag == "" && !strings.EqualFold(f.Name, yamlKey):
+				// No mapstructure tag, and the field name does not case-fold to the
+				// yaml key, so viper matches neither. (A non-empty mapstructure tag,
+				// including ",squash" for embedded structs, tells viper how to match
+				// and is treated as reachable.)
+				*unreachable = append(*unreachable,
+					fmt.Sprintf("%s (yaml:%q does not case-fold to field name and has no mapstructure tag)",
+						fieldPath, yamlKey))
+			}
+		}
+
+		reachRecurse(f.Type, fieldPath, visited, unreachable)
+	}
+}
+
+// reachRecurse resolves the element type for pointers, slices, and maps, then
+// walks nested structs for viper reachability.
+func reachRecurse(ft reflect.Type, path string, visited map[reflect.Type]bool, unreachable *[]string) {
+	for ft.Kind() == reflect.Pointer {
+		ft = ft.Elem()
+	}
+
+	switch ft.Kind() {
+	case reflect.Struct:
+		checkViperReachable(ft, path, visited, unreachable)
+	case reflect.Slice, reflect.Array:
+		// Recurse into the element type rather than checking only for a struct, so
+		// nested containers ([][]T, []map[string]T) are unwrapped too. reachRecurse
+		// strips pointers at its head, so []*T is still handled.
+		reachRecurse(ft.Elem(), path+"[]", visited, unreachable)
+	case reflect.Map:
+		reachRecurse(ft.Elem(), path+"[value]", visited, unreachable)
+	default:
+		// Scalar types need no recursion.
 	}
 }
 
