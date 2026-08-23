@@ -203,6 +203,34 @@ func TestLegacyTailReconciledInV2(t *testing.T) {
 
 		assert.True(t, legacyTailReconciledInV2(legacyDB, v2DB, 10, "notes", "detections", "", testStartupLogger()))
 	})
+
+	// MySQL uses ONE database handle for both the legacy notes and the prefixed
+	// v2_detections table (unlike SQLite, which uses two separate files). These
+	// cases exercise that single-handle, prefixed-table shape so the MySQL
+	// promotion path is not left untested.
+	t.Run("MySQL single-handle shape: full tail present is reconciled", func(t *testing.T) {
+		dir := t.TempDir()
+		db := openTempIDTable(t, filepath.Join(dir, "mysql.db"), "notes", seq(1, 15))
+		require.NoError(t, db.Exec("CREATE TABLE v2_detections (id INTEGER PRIMARY KEY)").Error)
+		for _, id := range seq(1, 15) {
+			require.NoError(t, db.Exec("INSERT INTO v2_detections (id) VALUES (?)", id).Error)
+		}
+		require.NoError(t, db.Exec("CREATE TABLE migration_dirty_ids (detection_id INTEGER PRIMARY KEY, created_at INTEGER)").Error)
+
+		assert.True(t, legacyTailReconciledInV2(db, db, 10, "notes", "v2_detections", "migration_dirty_ids", testStartupLogger()))
+	})
+
+	t.Run("MySQL single-handle shape: missing tail record defers", func(t *testing.T) {
+		dir := t.TempDir()
+		db := openTempIDTable(t, filepath.Join(dir, "mysql.db"), "notes", seq(1, 15))
+		require.NoError(t, db.Exec("CREATE TABLE v2_detections (id INTEGER PRIMARY KEY)").Error)
+		for _, id := range seq(1, 13) { // ids 14 and 15 never reached v2
+			require.NoError(t, db.Exec("INSERT INTO v2_detections (id) VALUES (?)", id).Error)
+		}
+		require.NoError(t, db.Exec("CREATE TABLE migration_dirty_ids (detection_id INTEGER PRIMARY KEY, created_at INTEGER)").Error)
+
+		assert.False(t, legacyTailReconciledInV2(db, db, 10, "notes", "v2_detections", "migration_dirty_ids", testStartupLogger()))
+	})
 }
 
 // sqliteSettings builds SQLite-enabled settings pointing at the given legacy path.
