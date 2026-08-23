@@ -123,6 +123,25 @@ func TestMigrateDynamicThresholdsToPerSpecies_Consolidates(t *testing.T) {
 		base, base, base, base).Error, "duplicate species insert must violate the unique index")
 }
 
+func TestMigrateDynamicThresholdsToPerSpecies_NormalizesSingleMixedCaseRow(t *testing.T) {
+	t.Parallel()
+	db := openSQLiteTestDB(t)
+	createLegacyDynamicThresholdTable(t, db)
+
+	// A lone legacy row with a mixed-case species name (no other row for the taxon).
+	insertLegacyRow(t, db, "American Crow", "BirdNET_V2.4", 2, 3, 3, time.Now().Add(time.Hour))
+
+	require.NoError(t, migrateDynamicThresholdsToPerSpecies(db, GetLogger()))
+	require.NoError(t, db.AutoMigrate(&DynamicThreshold{}))
+
+	var all []DynamicThreshold
+	require.NoError(t, db.Find(&all).Error)
+	require.Len(t, all, 1)
+	assert.Equal(t, "american crow", all[0].SpeciesName,
+		"a single mixed-case legacy row must be lowercased so it matches processor lookups")
+	assert.Equal(t, 2, all[0].Level, "learned state is preserved during normalization")
+}
+
 func TestMigrateDynamicThresholdsToPerSpecies_Idempotent(t *testing.T) {
 	t.Parallel()
 	db := openSQLiteTestDB(t)

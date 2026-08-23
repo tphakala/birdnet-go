@@ -120,9 +120,20 @@ func consolidateDynamicThresholdRows(db *gorm.DB, log logger.Logger) error {
 
 	consolidated := 0
 	err := db.Transaction(func(tx *gorm.DB) error {
-		for _, group := range groups {
+		for key, group := range groups {
 			if len(group) == 1 {
-				continue // already a single row for this species
+				// Single row: normalize its species_name to the lowercase key if it
+				// differs, so the new case-sensitive unique(species_name) index and the
+				// processor's lowercase lookups agree (a mixed-case legacy row would
+				// otherwise let a later lowercase insert create a duplicate).
+				if group[0].SpeciesName != key {
+					if err := tx.Model(&legacyDynamicThresholdRow{}).
+						Where("id = ?", group[0].ID).
+						Update("species_name", key).Error; err != nil {
+						return err
+					}
+				}
+				continue
 			}
 			winner := consolidateDynamicThresholdGroup(group)
 
