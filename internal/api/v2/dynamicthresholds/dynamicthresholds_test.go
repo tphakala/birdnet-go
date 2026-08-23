@@ -25,11 +25,10 @@ func TestGetMergedThresholdData_NoDuplicates(t *testing.T) {
 	now := time.Now()
 	expires := now.Add(24 * time.Hour)
 
-	// Database returns Title Case species name with ModelName (as resolveCommonName does)
+	// Database returns Title Case species name (as resolveCommonName does)
 	mockDS.EXPECT().GetAllDynamicThresholds().Return([]datastore.DynamicThreshold{
 		{
 			SpeciesName:    "Tawny Owl",
-			ModelName:      "BirdNET",
 			ScientificName: "Strix aluco",
 			Level:          1,
 			CurrentValue:   0.45,
@@ -39,15 +38,15 @@ func TestGetMergedThresholdData_NoDuplicates(t *testing.T) {
 		},
 	}, nil)
 
-	// Processor memory stores with composite key "modelID:speciesLowercase"
+	// Processor memory stores with species key
 	proc := &processor.Processor{
 		Settings: &conf.Settings{
 			BirdNET: conf.BirdNETConfig{Threshold: 0.6},
 		},
 		DynamicThresholds: map[string]*processor.DynamicThreshold{
-			"BirdNET:tawny owl": {
+			"tawny owl": {
 				Level:          2,
-				CurrentValue:   0.3,
+				BaseThreshold:  0.6,
 				Timer:          expires,
 				HighConfCount:  2,
 				ValidHours:     24,
@@ -97,9 +96,9 @@ func TestGetMergedThresholdData_MemoryOnlySpecies(t *testing.T) {
 			BirdNET: conf.BirdNETConfig{Threshold: 0.6},
 		},
 		DynamicThresholds: map[string]*processor.DynamicThreshold{
-			"BirdNET:eurasian blue tit": {
+			"eurasian blue tit": {
 				Level:          1,
-				CurrentValue:   0.45,
+				BaseThreshold:  0.6,
 				Timer:          expires,
 				HighConfCount:  1,
 				ValidHours:     24,
@@ -134,7 +133,6 @@ func TestGetMergedThresholdData_DatabaseOnlySpecies(t *testing.T) {
 	mockDS.EXPECT().GetAllDynamicThresholds().Return([]datastore.DynamicThreshold{
 		{
 			SpeciesName:    "Common Blackbird",
-			ModelName:      "BirdNET",
 			ScientificName: "Turdus merula",
 			Level:          1,
 			CurrentValue:   0.45,
@@ -186,7 +184,7 @@ func TestGetDynamicThreshold_NotFoundStatus(t *testing.T) {
 			Component("datastore").
 			Category(errors.CategoryNotFound).
 			Build()
-		mockDS.EXPECT().GetDynamicThreshold(species, "").Return(nil, notFound)
+		mockDS.EXPECT().GetDynamicThreshold(species).Return(nil, notFound)
 
 		rec := serveGetDynamicThreshold(t, e, handler, species)
 		assert.Equal(t, http.StatusNotFound, rec.Code,
@@ -198,7 +196,7 @@ func TestGetDynamicThreshold_NotFoundStatus(t *testing.T) {
 		// The pre-fix v2only behavior: a bare, unclassified sentinel. The handler
 		// cannot tell it is a benign not-found, so it falls through to 500. This is
 		// the #1068 bug, pinned so a future unwrapped return is caught at the handler.
-		mockDS.EXPECT().GetDynamicThreshold(species, "").
+		mockDS.EXPECT().GetDynamicThreshold(species).
 			Return(nil, errors.NewStd("dynamic threshold not found"))
 
 		rec := serveGetDynamicThreshold(t, e, handler, species)

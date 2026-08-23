@@ -2452,7 +2452,6 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"BirdNET", "reload_birdnet", birdnetSettingsChanged, "Reloading BirdNET model with new settings...", notification.MsgSettingsReloadingBirdnet, ToastTypeInfo, toastDurationLong},
 	{"Range filter", "rebuild_range_filter", rangeFilterSettingsChanged, "Rebuilding species range filter...", notification.MsgSettingsRebuildingRangeFilter, ToastTypeInfo, toastDurationMedium},
 	{"Species interval", "update_detection_intervals", intervalSettingsChanged, "Updating detection intervals...", notification.MsgSettingsUpdatingIntervals, ToastTypeInfo, toastDurationShort},
-	{"Base threshold", "recalculate_dynamic_thresholds", baseThresholdChanged, "Recalculating dynamic thresholds...", notification.MsgSettingsRecalculatingThresholds, ToastTypeInfo, toastDurationShort},
 	{"Dynamic thresholds", "reconfigure_dynamic_thresholds", dynamicThresholdEnabledChanged, "Reconfiguring dynamic thresholds...", notification.MsgSettingsReconfiguringDynamicThresholds, ToastTypeInfo, toastDurationMedium},
 	{"MQTT", "reconfigure_mqtt", mqttSettingsChanged, "Reconfiguring MQTT connection...", notification.MsgSettingsReconfiguringMqtt, ToastTypeInfo, toastDurationMedium},
 	{"BirdWeather", "reconfigure_birdweather", birdWeatherSettingsChanged, "Reconfiguring BirdWeather integration...", notification.MsgSettingsReconfiguringBirdweather, ToastTypeInfo, toastDurationMedium},
@@ -2667,21 +2666,6 @@ func birdnetSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	}
 
 	return false
-}
-
-// baseThresholdChanged checks if any model-global confidence base threshold has
-// changed. When one does, dynamic threshold CurrentValue entries must be
-// recalculated since they store absolute values derived from the base threshold.
-// This covers the primary BirdNET threshold, the Bat threshold, and the Perch v2
-// and BirdNET v3.0 override toggles and values, which all feed
-// modelGlobalConfidenceThreshold.
-func baseThresholdChanged(oldSettings, currentSettings *conf.Settings) bool {
-	return oldSettings.BirdNET.Threshold != currentSettings.BirdNET.Threshold ||
-		oldSettings.Bat.Threshold != currentSettings.Bat.Threshold ||
-		oldSettings.Perch.OverrideThreshold != currentSettings.Perch.OverrideThreshold ||
-		oldSettings.Perch.Threshold != currentSettings.Perch.Threshold ||
-		oldSettings.BirdNETV3.OverrideThreshold != currentSettings.BirdNETV3.OverrideThreshold ||
-		oldSettings.BirdNETV3.Threshold != currentSettings.BirdNETV3.Threshold
 }
 
 // dynamicThresholdEnabledChanged checks if the DynamicThreshold.Enabled flag was toggled.
