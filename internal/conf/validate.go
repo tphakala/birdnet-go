@@ -279,9 +279,93 @@ func ValidateSettings(settings *Settings) error {
 		ve.Errors = append(ve.Errors, err.Error())
 	}
 
+	// Validate diagnostics profiling sampling rates. Negative rates are inert at
+	// runtime (ResolvedBlockRate/ResolvedMutexFraction clamp <= 0 to off), but a
+	// negative persisted to config.yaml misrepresents what is active, so the API
+	// write paths reject it. On Load, normalizeProfiling has already zeroed a
+	// negative before this runs, so a config file never trips this.
+	if err := validateProfilingSettings(&settings.Diagnostics.Profiling); err != nil {
+		ve.Errors = append(ve.Errors, err.Error())
+	}
+
+	// Validate per-model confidence thresholds (bat, perch, birdnetv3). An
+	// out-of-range threshold changes detection gating (>= 1 drops everything,
+	// <= 0 drops nothing), so it is rejected on every write path and on load. The
+	// frontend already constrains these to 0.01-0.99; this closes the raw-API gap.
+	if err := validateModelThresholds(settings); err != nil {
+		ve.Errors = append(ve.Errors, err.Error())
+	}
+
 	// If there are any errors, return the ValidationError
 	if len(ve.Errors) > 0 {
 		return ve
+	}
+	return nil
+}
+
+// minModelThreshold and maxModelThreshold bound the per-model confidence
+// thresholds. The inclusive 0..1 range and the NaN/Inf rejection match the
+// species-config threshold check in validateSpeciesConfig (validate_realtime.go)
+// and the BirdNET/RangeFilter threshold checks in validate_services.go, which is
+// the same reason checkRange guards NaN: a NaN comparison is always false and
+// would otherwise slip past the bounds test. defaultModelThreshold is what an
+// out-of-range value is reset to on load (see normalizeModelThresholds).
+const (
+	minModelThreshold     = 0.0
+	maxModelThreshold     = 1.0
+	defaultModelThreshold = 0.5
+)
+
+// validateProfilingSettings rejects negative pprof sampling rates. The values are
+// clamped to "off" at the point of use, but a negative in config.yaml is
+// misleading, so the settings API refuses to persist one. Positive-but-large
+// values are deliberately allowed: the point-of-use clamp bounds them, and an
+// operator may legitimately want a coarse-but-expensive rate.
+func validateProfilingSettings(p *ProfilingConfig) error {
+	if p == nil {
+		return nil
+	}
+	if p.BlockRate < 0 {
+		return errors.Newf("diagnostics.profiling.blockRate must be >= 0 (0 disables), got %d", p.BlockRate).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "profiling-block-rate").
+			Build()
+	}
+	if p.MutexFraction < 0 {
+		return errors.Newf("diagnostics.profiling.mutexFraction must be >= 0 (0 disables), got %d", p.MutexFraction).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "profiling-mutex-fraction").
+			Build()
+	}
+	return nil
+}
+
+// validateModelThresholds checks the per-model confidence thresholds are within
+// the inclusive 0..1 range. Validated unconditionally, even when a model's
+// OverrideThreshold is false, so an out-of-range value cannot lie dormant in
+// config.yaml and bite when the override is later enabled. NaN and Inf are
+// rejected explicitly: a NaN comparison is always false, so without the guard a
+// NaN threshold (reachable from a hand-edited config.yaml, since YAML decodes
+// .nan/.inf to float64) would pass the bounds test and silently gate out every
+// detection. On the Load path normalizeModelThresholds has already reset such a
+// value to the default before this runs; on the API path this rejects it.
+func validateModelThresholds(settings *Settings) error {
+	checks := []struct {
+		name  string
+		value float64
+	}{
+		{"bat.threshold", settings.Bat.Threshold},
+		{"perch.threshold", settings.Perch.Threshold},
+		{"birdnetv3.threshold", settings.BirdNETV3.Threshold},
+	}
+	for _, c := range checks {
+		if math.IsNaN(c.value) || math.IsInf(c.value, 0) || c.value < minModelThreshold || c.value > maxModelThreshold {
+			return errors.Newf("%s must be between %.2f and %.2f, got %v",
+				c.name, minModelThreshold, maxModelThreshold, c.value).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "model-threshold").
+				Build()
+		}
 	}
 	return nil
 }
