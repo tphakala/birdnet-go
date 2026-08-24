@@ -247,7 +247,7 @@ export interface InferenceVAD {
   threshold: number;
   /** "embedded", "path", or absent when unloaded. Never the on-disk path. */
   modelSource?: string;
-  /** Active windowing strategy ("recurrent" or "segment-batched"); absent when unloaded. */
+  /** Active windowing strategy ("sequence"); absent when unloaded. */
   strategy?: string;
   /** Input sample rate the loaded detector scored at; absent when unloaded. */
   sampleRate?: number;

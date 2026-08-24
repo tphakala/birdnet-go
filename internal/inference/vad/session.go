@@ -4,79 +4,127 @@ import (
 	ort "github.com/yalue/onnxruntime_go"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/inference"
 )
 
-// Silero VAD tensor contract (upstream v5/v6.2.1, verified with ORT 1.27):
+// Silero VAD sequence-model tensor contract (the official
+// examples/onnx_sequence export of upstream snakers4/silero-vad, folded to
+// 16 kHz; verified with ORT 1.x):
 //
-//	inputs:  input [B, modelInputSamples] float32 (mono PCM in [-1,1])
-//	         state [2, B, stateWidth] float32 (LSTM state; zeros to start)
-//	         sr    int64 scalar (16000 or 8000)
-//	outputs: output [B, 1] float32 (speech probability in [0,1])
-//	         stateN [2, B, stateWidth] float32 (state to carry into the next call)
+//	inputs:  input [sequenceLength, modelInputSamples] float32 (mono PCM in [-1,1])
+//	         h [1, 1, stateWidth] float32 (LSTM hidden state; zeros to start)
+//	         c [1, 1, stateWidth] float32 (LSTM cell state; zeros to start)
+//	outputs: speech_probs [sequenceLength] float32 (one speech probability per hop)
+//	         hn [1, 1, stateWidth] float32 (hidden state to carry into the next call)
+//	         cn [1, 1, stateWidth] float32 (cell state to carry into the next call)
 //
-// Silero processes 512-sample hops at 16 kHz but each model call is fed 64
-// samples of context from the previous hop PREPENDED to the 512 new samples,
-// so the model input width is 576. Feeding a bare 512-sample window (without
-// the context) is silently accepted by ONNX Runtime but makes the model emit
-// near-zero probabilities for real speech. Both the LSTM state and the 64-sample
-// context are threaded across hops.
+// There is no sr input (the 16 kHz rate is folded into the export), and the
+// frame model's combined [2, 1, stateWidth] state is split into h and c. Each
+// input row is 64 samples of context from the previous hop PREPENDED to 512 new
+// samples, exactly as the frame model expected; feeding bare 512-sample windows
+// makes the model emit near-zero probabilities for real speech. One Run
+// processes the whole stacked sequence with full internal recurrence (no seams),
+// bit-exact to threading the hops one at a time through the upstream recurrent
+// frame model.
 const (
 	// windowSamples is the hop: new 16 kHz samples consumed per VAD frame (32 ms).
 	windowSamples = 512
 	// contextSamples is the count of previous-hop samples prepended as context.
 	contextSamples = 64
-	// modelInputSamples is the model's actual input width (context + window).
+	// modelInputSamples is the model's actual input row width (context + window).
 	modelInputSamples = contextSamples + windowSamples
-	// stateDepth is the leading dimension of the LSTM state tensor.
-	stateDepth = 2
-	// stateWidth is the trailing dimension of the LSTM state tensor.
+	// stateWidth is the trailing dimension of each LSTM state tensor (h and c).
 	stateWidth = 128
 	// sampleRate16k is the only sample rate this package feeds the model.
 	sampleRate16k = 16000
+	// StrategySequence names the windowing strategy for logging and the dashboard.
+	// The model architecture is fixed to the sequence export, so this is constant.
+	StrategySequence = "sequence"
 )
 
 // Input/output tensor names, in the order the session binds them.
 var (
-	vadInputNames  = []string{"input", "state", "sr"}
-	vadOutputNames = []string{"output", "stateN"}
+	vadInputNames  = []string{"input", "h", "c"}
+	vadOutputNames = []string{"speech_probs", "hn", "cn"}
 )
 
-// session wraps a Silero VAD ONNX Runtime session for a fixed batch size.
-//
-// It pre-allocates every input and output tensor once and reuses them across
-// run calls, so steady-state inference performs no per-call heap allocation.
-// The backing buffers for the input and state tensors are mutated in place
-// between runs. A session is NOT safe for concurrent use.
-type session struct {
-	sess  *ort.DynamicAdvancedSession
-	batch int
+// hcStateShape is the fixed ONNX shape of each LSTM state tensor (h and c):
+// one layer, batch 1, stateWidth values.
+func hcStateShape() ort.Shape { return ort.NewShape(1, 1, stateWidth) }
 
-	// Reused input buffers (wrapped by the input tensors, mutated per run).
-	inputBuf []float32 // len = batch * frameSamples
-	stateBuf []float32 // len = stateDepth * batch * stateWidth
-
-	inputTensor *ort.Tensor[float32]
-	stateTensor *ort.Tensor[float32]
-	srScalar    *ort.Scalar[int64]
-
-	probTensor  *ort.Tensor[float32] // output [batch, 1]
-	stateOutput *ort.Tensor[float32] // output [stateDepth, batch, stateWidth]
-
-	inputs  []ort.Value
-	outputs []ort.Value
+// SpeechSession is a loaded Silero VAD sequence-model ONNX session. One session
+// is shared across every per-source Streamer and the stateless Detector: the
+// LSTM state is passed in and out of Run per call, so the session itself carries
+// no source-specific state and a single ONNX session (and its ORT thread pool)
+// serves all sources. It is NOT safe for concurrent use; the caller must
+// serialise Run and Close (the processor gate holds one mutex across both).
+type SpeechSession interface {
+	// Run scores len(frames)/modelInputSamples stacked hops in one model call.
+	// frames is row-major [n, modelInputSamples] (each row [context|window] as
+	// built by stackFrames); hIn and cIn are the LSTM state (each stateWidth
+	// values, zeros to start a stream). It returns one probability per hop
+	// (len n) and the LSTM states to carry into the next call (each stateWidth).
+	// All three returned slices alias reused session buffers and are only valid
+	// until the next Run or Close; callers that carry state must copy them out.
+	Run(frames, hIn, cIn []float32) (probs, hOut, cOut []float32, err error)
+	// Close releases the ONNX session and its tensors. Idempotent.
+	Close() error
+	// Strategy returns the windowing strategy name for logging and the dashboard.
+	Strategy() string
 }
 
-// newSession creates a Silero VAD session for the given batch size. The model
-// is loaded from modelData when it is non-empty, otherwise from modelPath.
-// The ONNX Runtime library must already be initialised (inference.InitONNXRuntime).
-func newSession(modelPath string, modelData []byte, batch int, sessionOptsFn func(*ort.SessionOptions)) (s *session, err error) {
-	if batch < 1 {
-		return nil, errors.Newf("vad: batch size must be >= 1, got %d", batch).
+// session wraps a Silero VAD sequence-model ONNX Runtime session.
+//
+// The fixed-shape h and c input tensors are allocated once and reused across Run
+// calls (their backing buffers are mutated in place), keeping the LSTM state
+// path zero-alloc. The input tensor's sequence dimension is dynamic, so it is
+// created per Run directly over the caller's flat frames slice (no data copy;
+// one small tensor-object allocation per Run, roughly once per second per
+// source, negligible next to the inference it dispatches, matching the
+// resampling path's stated philosophy). Outputs are auto-allocated by ONNX
+// Runtime (nil entries passed to DynamicAdvancedSession.Run; verified against
+// yalue/onnxruntime_go v1.30.1, whose RunWithOptions replaces each nil entry
+// with a Go-managed tensor that this session copies out of and destroys before
+// returning). A session is NOT safe for concurrent use.
+type session struct {
+	sess *ort.DynamicAdvancedSession
+
+	// Reused input buffers backing the h/c tensors (mutated per run).
+	hBuf []float32 // len = stateWidth
+	cBuf []float32 // len = stateWidth
+
+	hTensor *ort.Tensor[float32] // input h [1, 1, stateWidth], reused
+	cTensor *ort.Tensor[float32] // input c [1, 1, stateWidth], reused
+
+	// Reused output copy buffers returned (aliased) by Run.
+	probsBuf []float32 // grown to the largest sequence length seen
+	hOutBuf  []float32 // len = stateWidth
+	cOutBuf  []float32 // len = stateWidth
+}
+
+// NewSession initialises the ONNX Runtime library if needed and loads the Silero
+// VAD sequence model from cfg (ModelData in memory takes precedence over
+// ModelPath). The returned session is shared across Streamers and Detectors.
+//
+//nolint:gocritic // hugeParam: Config is a public constructor argument; value semantics are intentional.
+func NewSession(cfg Config) (SpeechSession, error) {
+	if cfg.ModelPath == "" && len(cfg.ModelData) == 0 {
+		return nil, ErrModelPathRequired
+	}
+	if err := inference.InitONNXRuntime(cfg.LibraryPath); err != nil {
+		return nil, errors.New(err).
 			Component("inference/vad").
-			Category(errors.CategoryValidation).
+			Category(errors.CategoryModelInit).
+			Context("stage", "ort_init").
 			Build()
 	}
+	return newSession(cfg.ModelPath, cfg.ModelData, nil)
+}
 
+// newSession creates a Silero VAD sequence session. The model is loaded from
+// modelData when it is non-empty, otherwise from modelPath. The ONNX Runtime
+// library must already be initialised (inference.InitONNXRuntime).
+func newSession(modelPath string, modelData []byte, sessionOptsFn func(*ort.SessionOptions)) (s *session, err error) {
 	sessOpts, err := ort.NewSessionOptions()
 	if err != nil {
 		return nil, errors.New(err).
@@ -120,38 +168,21 @@ func newSession(modelPath string, modelData []byte, batch int, sessionOptsFn fun
 	}()
 
 	s = &session{
-		sess:     ortSess,
-		batch:    batch,
-		inputBuf: make([]float32, batch*modelInputSamples),
-		stateBuf: make([]float32, stateDepth*batch*stateWidth),
+		sess:    ortSess,
+		hBuf:    make([]float32, stateWidth),
+		cBuf:    make([]float32, stateWidth),
+		hOutBuf: make([]float32, stateWidth),
+		cOutBuf: make([]float32, stateWidth),
 	}
 
-	s.inputTensor, err = ort.NewTensor(ort.NewShape(int64(batch), modelInputSamples), s.inputBuf)
+	s.hTensor, err = ort.NewTensor(hcStateShape(), s.hBuf)
 	if err != nil {
-		return nil, s.wrapAllocErr(err, "input")
+		return nil, s.wrapAllocErr(err, "h")
 	}
-	s.stateTensor, err = ort.NewTensor(ort.NewShape(stateDepth, int64(batch), stateWidth), s.stateBuf)
+	s.cTensor, err = ort.NewTensor(hcStateShape(), s.cBuf)
 	if err != nil {
-		return nil, s.wrapAllocErr(err, "state")
+		return nil, s.wrapAllocErr(err, "c")
 	}
-	// sr is a rank-0 scalar (the model declares its dims as []). NewScalar builds
-	// a true rank-0 tensor; the length-1 vector form (NewShape(1)) is rejected by
-	// the model's shape expectations for a scalar input.
-	s.srScalar, err = ort.NewScalar[int64](sampleRate16k)
-	if err != nil {
-		return nil, s.wrapAllocErr(err, "sr")
-	}
-	s.probTensor, err = ort.NewEmptyTensor[float32](ort.NewShape(int64(batch), 1))
-	if err != nil {
-		return nil, s.wrapAllocErr(err, "output")
-	}
-	s.stateOutput, err = ort.NewEmptyTensor[float32](ort.NewShape(stateDepth, int64(batch), stateWidth))
-	if err != nil {
-		return nil, s.wrapAllocErr(err, "stateN")
-	}
-
-	s.inputs = []ort.Value{s.inputTensor, s.stateTensor, s.srScalar}
-	s.outputs = []ort.Value{s.probTensor, s.stateOutput}
 	return s, nil
 }
 
@@ -165,43 +196,87 @@ func (s *session) wrapAllocErr(err error, tensor string) error {
 		Build()
 }
 
-// run performs one inference step for all batch lanes.
-//
-// input must hold batch*frameSamples float32 samples (lane-major) and stateIn
-// must hold stateDepth*batch*stateWidth float32 values. run copies both into
-// the session's reused input buffers, executes the model, and returns the
-// per-lane probabilities (len batch) and the next state (len stateDepth*batch*
-// stateWidth). Both returned slices alias internal buffers and are only valid
-// until the next call to run or close.
-func (s *session) run(input, stateIn []float32) (probs, stateOut []float32, err error) {
+// Strategy implements SpeechSession.
+func (s *session) Strategy() string { return StrategySequence }
+
+// Run implements SpeechSession; see the interface doc for the contract.
+func (s *session) Run(frames, hIn, cIn []float32) (probs, hOut, cOut []float32, err error) {
 	if s.sess == nil {
-		return nil, nil, ErrSessionClosed
+		return nil, nil, nil, ErrSessionClosed
 	}
-	if len(input) != len(s.inputBuf) {
-		return nil, nil, errors.Newf("vad: input length %d, want %d", len(input), len(s.inputBuf)).
+	if len(frames) == 0 || len(frames)%modelInputSamples != 0 {
+		return nil, nil, nil, errors.Newf("vad: frames length %d, want a positive multiple of %d", len(frames), modelInputSamples).
 			Component("inference/vad").Category(errors.CategoryValidation).Build()
 	}
-	if len(stateIn) != len(s.stateBuf) {
-		return nil, nil, errors.Newf("vad: state length %d, want %d", len(stateIn), len(s.stateBuf)).
+	if len(hIn) != stateWidth || len(cIn) != stateWidth {
+		return nil, nil, nil, errors.Newf("vad: state lengths h=%d c=%d, want %d", len(hIn), len(cIn), stateWidth).
 			Component("inference/vad").Category(errors.CategoryValidation).Build()
 	}
+	n := len(frames) / modelInputSamples
 
-	copy(s.inputBuf, input)
-	copy(s.stateBuf, stateIn)
+	copy(s.hBuf, hIn)
+	copy(s.cBuf, cIn)
 
-	if err = s.sess.Run(s.inputs, s.outputs); err != nil {
-		return nil, nil, errors.New(err).
+	// The sequence dimension is dynamic, so the input tensor is created per Run
+	// over the caller's flat slice (NewTensor wraps the Go slice; no data copy).
+	inputTensor, err := ort.NewTensor(ort.NewShape(int64(n), modelInputSamples), frames)
+	if err != nil {
+		return nil, nil, nil, errors.New(err).
+			Component("inference/vad").Category(errors.CategoryModelLoad).
+			Context("tensor", "input").Build()
+	}
+	defer func() { _ = inputTensor.Destroy() }()
+
+	// nil entries ask ONNX Runtime to allocate the outputs; Run replaces them
+	// with Go-managed tensors that must be destroyed after copying out. The defer
+	// is registered BEFORE Run so a partially-allocated output set cannot leak on
+	// an inference error.
+	outputs := make([]ort.Value, len(vadOutputNames))
+	defer destroyValues(outputs)
+	if err = s.sess.Run([]ort.Value{inputTensor, s.hTensor, s.cTensor}, outputs); err != nil {
+		return nil, nil, nil, errors.New(err).
 			Component("inference/vad").
 			Category(errors.CategoryModelLoad).
 			Context("operation", "vad_inference").
 			Build()
 	}
 
-	return s.probTensor.GetData(), s.stateOutput.GetData(), nil
+	probsT, ok1 := outputs[0].(*ort.Tensor[float32])
+	hnT, ok2 := outputs[1].(*ort.Tensor[float32])
+	cnT, ok3 := outputs[2].(*ort.Tensor[float32])
+	if !ok1 || !ok2 || !ok3 {
+		return nil, nil, nil, errors.Newf("vad: unexpected output tensor types (probs=%T hn=%T cn=%T)", outputs[0], outputs[1], outputs[2]).
+			Component("inference/vad").Category(errors.CategoryModelLoad).Build()
+	}
+	got := probsT.GetData()
+	hn := hnT.GetData()
+	cn := cnT.GetData()
+	if len(got) != n || len(hn) != stateWidth || len(cn) != stateWidth {
+		return nil, nil, nil, errors.Newf("vad: output shapes probs=%d hn=%d cn=%d, want %d/%d/%d", len(got), len(hn), len(cn), n, stateWidth, stateWidth).
+			Component("inference/vad").Category(errors.CategoryModelLoad).Build()
+	}
+
+	if cap(s.probsBuf) < n {
+		s.probsBuf = make([]float32, n)
+	}
+	s.probsBuf = s.probsBuf[:n]
+	copy(s.probsBuf, got)
+	copy(s.hOutBuf, hn)
+	copy(s.cOutBuf, cn)
+	return s.probsBuf, s.hOutBuf, s.cOutBuf, nil
 }
 
-// close releases the ONNX session and all tensors. It is idempotent.
-func (s *session) close() error {
+// destroyValues destroys every non-nil ORT value in vals.
+func destroyValues(vals []ort.Value) {
+	for _, v := range vals {
+		if v != nil {
+			_ = v.Destroy()
+		}
+	}
+}
+
+// Close implements SpeechSession. It is idempotent.
+func (s *session) Close() error {
 	if s == nil {
 		return nil
 	}
@@ -214,26 +289,15 @@ func (s *session) close() error {
 	return nil
 }
 
-// destroyTensors destroys any allocated tensors and nils the references.
+// destroyTensors destroys the reused h/c input tensors and nils the references.
+// Per-Run tensors (input and auto-allocated outputs) are destroyed in Run.
 func (s *session) destroyTensors() {
-	if s.inputTensor != nil {
-		_ = s.inputTensor.Destroy()
-		s.inputTensor = nil
+	if s.hTensor != nil {
+		_ = s.hTensor.Destroy()
+		s.hTensor = nil
 	}
-	if s.stateTensor != nil {
-		_ = s.stateTensor.Destroy()
-		s.stateTensor = nil
-	}
-	if s.srScalar != nil {
-		_ = s.srScalar.Destroy()
-		s.srScalar = nil
-	}
-	if s.probTensor != nil {
-		_ = s.probTensor.Destroy()
-		s.probTensor = nil
-	}
-	if s.stateOutput != nil {
-		_ = s.stateOutput.Destroy()
-		s.stateOutput = nil
+	if s.cTensor != nil {
+		_ = s.cTensor.Destroy()
+		s.cTensor = nil
 	}
 }

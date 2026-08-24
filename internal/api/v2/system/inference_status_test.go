@@ -270,7 +270,7 @@ func TestVADStatusInfo_JSONContract(t *testing.T) {
 		Loaded:      true,
 		Threshold:   0.35,
 		ModelSource: "embedded",
-		Strategy:    "recurrent",
+		Strategy:    "sequence",
 		SampleRate:  48000,
 		Stats: VADStatsInfo{
 			Invocations: 42,
@@ -288,7 +288,7 @@ func TestVADStatusInfo_JSONContract(t *testing.T) {
 	require.NoError(t, err)
 	for _, key := range []string{
 		`"enabled":true`, `"available":true`, `"loaded":true`, `"threshold":0.35`,
-		`"modelSource":"embedded"`, `"strategy":"recurrent"`, `"sampleRate":48000`,
+		`"modelSource":"embedded"`, `"strategy":"sequence"`, `"sampleRate":48000`,
 		`"invocations":42`, `"avgMs":2.5`, `"maxMs":9.1`, `"speechHits":3`,
 		`"lastSpeechAtUnix":1700000000`, `"lastSpeechProbability":0.87`,
 		`"recentHits":[`, `"atUnix":1700000000`, `"probability":0.87`, `"source":"Front Yard"`,

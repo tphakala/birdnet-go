@@ -254,7 +254,7 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.privacyfilter.confidence` | number | confidence threshold for label-based human detection |
 | `realtime.privacyfilter.vad.enabled` | boolean | true to enable the VAD speech gate (opt-in, default false) |
 | `realtime.privacyfilter.vad.threshold` | number | speech-probability gate in (0,1]; default 0.35 |
-| `realtime.privacyfilter.vad.modelpath` | string | optional override for the embedded silero .onnx; empty uses the embedded model |
+| `realtime.privacyfilter.vad.modelpath` | string | optional override for the embedded silero .onnx; must be a sequence-export model (inputs input/h/c), not the stock upstream frame model; empty uses the embedded model |
 | `realtime.dogbarkfilter.debug` | boolean | true to enable debug mode |
 | `realtime.dogbarkfilter.enabled` | boolean | true to enable dog bark filter |
 | `realtime.dogbarkfilter.confidence` | number | confidence threshold for dog bark detection |

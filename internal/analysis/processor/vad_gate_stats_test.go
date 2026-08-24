@@ -95,11 +95,11 @@ func TestVADGate_RecentHitsCappedNewestFirst(t *testing.T) {
 func TestVADGate_StatusReflectsSnapshot(t *testing.T) {
 	t.Parallel()
 	g := &vadGate{}
-	g.snapshot.Store(&vadConfigSnapshot{strategy: "recurrent", source: "embedded", sampleRate: 48000})
+	g.snapshot.Store(&vadConfigSnapshot{strategy: "sequence", source: "embedded", sampleRate: 48000})
 
 	st := g.status()
 	assert.True(t, st.Loaded)
-	assert.Equal(t, "recurrent", st.Strategy)
+	assert.Equal(t, "sequence", st.Strategy)
 	assert.Equal(t, "embedded", st.Source)
 	assert.Equal(t, 48000, st.SampleRate)
 

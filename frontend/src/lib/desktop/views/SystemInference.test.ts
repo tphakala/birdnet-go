@@ -282,7 +282,7 @@ describe('SystemInference', () => {
       loaded: true,
       threshold: 0.35,
       modelSource: 'embedded',
-      strategy: 'recurrent',
+      strategy: 'sequence',
       sampleRate: 48000,
       stats: { invocations: 90211, avgMs: 2.4, maxMs: 9.1, speechHits: 9042 },
       lastSpeechAtUnix: 1750000000,
