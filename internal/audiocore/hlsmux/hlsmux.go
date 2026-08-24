@@ -40,6 +40,13 @@ const (
 	MinSegmentDuration = 100 * time.Millisecond
 	MaxSegmentDuration = 60 * time.Second
 
+	// MinSampleRate and MaxSampleRate bound what a caller may specify for HLS
+	// audio streaming. 8000 Hz covers standard speech/telephony rates, while
+	// 384000 Hz (384 kHz) covers ultra-high sample rates, preventing integer
+	// overflow in target-sample calculations.
+	MinSampleRate = 8000
+	MaxSampleRate = 384000
+
 	// DefaultWindowSize is how many media segments the playlist advertises.
 	// It must stay above hls.js's liveSyncDurationCount, which is why the
 	// FFmpeg path settled on six as well.
@@ -76,7 +83,8 @@ type Config struct {
 	// Codec supplies the encoder and the container description. Required.
 	Codec Codec
 
-	// SampleRate is the output sample rate in Hz. Required.
+	// SampleRate is the output sample rate in Hz. Required. Must be between
+	// MinSampleRate and MaxSampleRate.
 	//
 	// Callers should pin this to 48000 rather than following the source: the
 	// audio router already inserts a resampler whenever a source's rate
@@ -426,8 +434,10 @@ func (c *Config) validate() error {
 	switch {
 	case !c.Codec.valid():
 		return validationErr("hlsmux: codec is not set")
-	case c.SampleRate <= 0:
-		return validationErr("hlsmux: sample rate must be positive, got %d", c.SampleRate)
+	case c.SampleRate < MinSampleRate:
+		return validationErr("hlsmux: sample rate %d is below the minimum of %d Hz", c.SampleRate, MinSampleRate)
+	case c.SampleRate > MaxSampleRate:
+		return validationErr("hlsmux: sample rate %d exceeds the maximum of %d Hz", c.SampleRate, MaxSampleRate)
 	case c.Channels != 1 && c.Channels != 2:
 		return validationErr("hlsmux: channel count must be 1 or 2, got %d", c.Channels)
 	case c.BitrateKbps < 0:
