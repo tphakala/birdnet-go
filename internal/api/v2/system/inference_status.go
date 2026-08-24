@@ -59,7 +59,7 @@ type VADStatusInfo struct {
 	Threshold float64 `json:"threshold"`
 	// ModelSource is "embedded", "path" or "" (unloaded); never the on-disk path.
 	ModelSource string `json:"modelSource,omitempty"`
-	// Strategy is the active windowing strategy ("recurrent" or "segment-batched"),
+	// Strategy is the active windowing strategy ("sequence"),
 	// empty when unloaded.
 	Strategy string `json:"strategy,omitempty"`
 	// SampleRate is the input sample rate the loaded detector scored at, 0 when

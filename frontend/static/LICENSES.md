@@ -10,7 +10,9 @@ https://creativecommons.org/licenses/by-nc-sa/4.0/
 ### snakers4/silero-vad
 
 Silero VAD model (silero_vad.onnx), embedded in the binary and used by the
-privacy-filter speech gate. Unmodified, byte-identical to upstream.
+privacy-filter speech gate. Built from the upstream examples/onnx_sequence
+export at 16 kHz (opset 16), which runs a whole hop sequence in one call and is
+bit-exact to the upstream recurrent frame model.
 
 License: https://github.com/snakers4/silero-vad/blob/master/LICENSE
 Source: MIT
