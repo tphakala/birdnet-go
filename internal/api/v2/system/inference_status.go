@@ -44,7 +44,7 @@ type InferenceStatusResponse struct {
 }
 
 // VADStatusInfo reports the privacy-filter Silero VAD speech gate for the
-// inference dashboard. Stats are lifetime totals that survive detector reloads.
+// inference dashboard. Stats are lifetime totals that survive session reloads.
 type VADStatusInfo struct {
 	// Enabled is the configured VAD gate toggle (realtime.privacyfilter.vad.enabled).
 	Enabled bool `json:"enabled"`
@@ -52,7 +52,7 @@ type VADStatusInfo struct {
 	// present, or a modelpath override is set). When false the gate is inert even
 	// if Enabled is true (e.g. a noembed build with no modelpath).
 	Available bool `json:"available"`
-	// Loaded is true when a detector is currently held (loaded and scoring). It is
+	// Loaded is true when a session is currently held (loaded and scoring). It is
 	// set on a successful load and cleared on unload or an inference error.
 	Loaded bool `json:"loaded"`
 	// Threshold is the configured speech-probability gate threshold.
@@ -62,7 +62,7 @@ type VADStatusInfo struct {
 	// Strategy is the active windowing strategy ("sequence"),
 	// empty when unloaded.
 	Strategy string `json:"strategy,omitempty"`
-	// SampleRate is the input sample rate the loaded detector scored at, 0 when
+	// SampleRate is the input sample rate the loaded session scored at, 0 when
 	// unloaded.
 	SampleRate int `json:"sampleRate,omitempty"`
 	// Stats holds lifetime inference counters for the gate.

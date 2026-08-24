@@ -46,6 +46,12 @@ var (
 	ErrModelPathRequired = errors.NewStd("vad: model path is required")
 )
 
+// zeroLSTMState is a shared read-only zero LSTM state for the stateless one-shot
+// Detector path. Run copies hIn/cIn into its own buffers and never mutates them,
+// so a single shared array is safe to pass on every call, avoiding a per-call
+// allocation.
+var zeroLSTMState [stateWidth]float32
+
 // EmbeddedModelData returns the embedded Silero VAD model bytes, or nil if the
 // binary was built without embedded models (-tags noembed).
 func EmbeddedModelData() []byte { return embeddedModel }
@@ -125,10 +131,10 @@ func (d *detector) SpeechProbability(pcm []byte, sampleRate int) (float32, error
 	}
 
 	frames := stackFrames(samples, nil)
-	// Fresh zeroed LSTM state for a stateless one-shot; the same zero slice backs
-	// both h and c because Run copies each into its own buffer.
-	zero := make([]float32, stateWidth)
-	probs, _, _, err := d.sess.Run(frames, zero, zero)
+	// Zeroed LSTM state for a stateless one-shot. The same shared zero array backs
+	// both h and c on every call because Run only reads hIn/cIn (copying each into
+	// its own buffer), never mutating them.
+	probs, _, _, err := d.sess.Run(frames, zeroLSTMState[:], zeroLSTMState[:])
 	if err != nil {
 		return 0, err
 	}

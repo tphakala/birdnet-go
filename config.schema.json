@@ -2672,7 +2672,7 @@
         },
         "modelpath": {
           "type": "string",
-          "description": "optional override for the embedded silero .onnx; empty uses the embedded model"
+          "description": "optional override for the embedded silero .onnx; must be a sequence-export model (inputs input/h/c), not the stock upstream frame model; empty uses the embedded model"
         }
       },
       "additionalProperties": false,

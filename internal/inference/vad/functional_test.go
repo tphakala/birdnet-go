@@ -206,11 +206,15 @@ func noisePCM16(durationSec, sampleRate int, seed uint64) []byte {
 	return buf
 }
 
-// TestVAD_StreamingCoverageParity is the privacy gate for the streaming change:
-// on a real speech clip, the streaming path (fresh 0.5 s slices, 1 s flush
-// cadence, state carried) must detect speech at least as strongly as the old
-// behaviour of independently scoring full 3 s chunks. A recall loss here means
-// the optimisation weakened the privacy filter and MUST NOT ship.
+// TestVAD_StreamingCoverageParity is the privacy gate for the streaming change.
+// On a real speech clip it verifies two properties against the old behaviour of
+// independently scoring full 3 s chunks: (1) peak parity, the streaming path
+// reaches at least the same peak confidence and scores sustained real speech
+// high; and (2) coverage parity, the streaming path spends at least as large a
+// fraction of the clip above the gate threshold as the full-chunk path, so it
+// does not drop speech the old path caught. A recall loss on either MUST NOT
+// ship. (Per-window time-aligned correspondence over a labelled corpus is the
+// dedicated birdsong/speech FP harness, tracked separately.)
 func TestVAD_StreamingCoverageParity(t *testing.T) {
 	modelPath, libPath := modelPathFromEnv(t)
 	rawPath := os.Getenv("VAD_TEST_SPEECH_RAW")
@@ -223,16 +227,28 @@ func TestVAD_StreamingCoverageParity(t *testing.T) {
 		t.Skipf("speech fixture too short: %d bytes, need %d", len(pcm), parityChunkBytes)
 	}
 
-	baseMax := maxFullChunkProb(t, modelPath, libPath, pcm)
-	streamMax := maxStreamingProb(t, modelPath, libPath, pcm)
-	t.Logf("full-chunk max=%.4f streaming max=%.4f", baseMax, streamMax)
+	cfg := Config{ModelPath: modelPath, LibraryPath: libPath}
+	baseProbs := fullChunkProbs(t, cfg, pcm)
+	streamProbs := streamingProbs(t, cfg, pcm)
+	baseMax := maxOf(baseProbs)
+	streamMax := maxOf(streamProbs)
+	baseCover := fractionAtOrAbove(baseProbs, parityThreshold)
+	streamCover := fractionAtOrAbove(streamProbs, parityThreshold)
+	t.Logf("full-chunk max=%.4f cover=%.3f | streaming max=%.4f cover=%.3f",
+		baseMax, baseCover, streamMax, streamCover)
 
 	require.GreaterOrEqual(t, baseMax, float32(parityThreshold),
 		"sanity: the full-chunk path must detect speech in the speech fixture")
+	require.Positive(t, baseCover, "sanity: the full-chunk path must flag some of the clip")
+	// Peak parity.
 	assert.GreaterOrEqual(t, streamMax, float32(parityThreshold),
-		"PRIVACY REGRESSION: streaming must detect speech wherever the full-chunk path does")
+		"PRIVACY REGRESSION: streaming must reach the gate threshold wherever the full-chunk path does")
 	assert.Greater(t, streamMax, float32(0.8),
 		"streaming should score sustained real speech high, not just above threshold")
+	// Coverage parity: streaming must flag at least as much of the clip as the
+	// full-chunk path (no net recall loss).
+	assert.GreaterOrEqual(t, streamCover, baseCover,
+		"PRIVACY REGRESSION: streaming flags less of the clip than the full-chunk path")
 }
 
 // TestVAD_StreamingNoiseFPParity: speech-free noise must not trip the gate on
@@ -241,42 +257,66 @@ func TestVAD_StreamingNoiseFPParity(t *testing.T) {
 	modelPath, libPath := modelPathFromEnv(t)
 	pcm := noisePCM16(10, sampleRate16k, 42)
 
-	baseMax := maxFullChunkProb(t, modelPath, libPath, pcm)
-	streamMax := maxStreamingProb(t, modelPath, libPath, pcm)
+	cfg := Config{ModelPath: modelPath, LibraryPath: libPath}
+	baseMax := maxOf(fullChunkProbs(t, cfg, pcm))
+	streamMax := maxOf(streamingProbs(t, cfg, pcm))
 	t.Logf("noise: full-chunk max=%.4f streaming max=%.4f", baseMax, streamMax)
 
 	assert.Less(t, baseMax, float32(parityThreshold), "noise must not trip the full-chunk path")
 	assert.Less(t, streamMax, float32(parityThreshold), "noise must not trip the streaming path")
 }
 
-// maxFullChunkProb scores pcm as independent full 3 s chunks every 0.5 s (the
-// old gate behaviour) and returns the maximum aggregate probability.
-func maxFullChunkProb(t *testing.T, modelPath, libPath string, pcm []byte) float32 {
+// maxOf returns the maximum of probs (0 for empty).
+func maxOf(probs []float32) float32 {
+	var m float32
+	for _, p := range probs {
+		m = max(m, p)
+	}
+	return m
+}
+
+// fractionAtOrAbove returns the fraction of probs at or above threshold (0 for empty).
+func fractionAtOrAbove(probs []float32, threshold float64) float64 {
+	if len(probs) == 0 {
+		return 0
+	}
+	n := 0
+	for _, p := range probs {
+		if float64(p) >= threshold {
+			n++
+		}
+	}
+	return float64(n) / float64(len(probs))
+}
+
+// fullChunkProbs scores pcm as independent full 3 s chunks every 0.5 s (the old
+// gate behaviour) and returns every per-chunk aggregate probability.
+func fullChunkProbs(t *testing.T, cfg Config, pcm []byte) []float32 {
 	t.Helper()
-	d, err := New(Config{ModelPath: modelPath, LibraryPath: libPath})
+	d, err := New(cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, d.Close()) })
 
-	var maxProb float32
+	probs := make([]float32, 0, len(pcm)/parityStepBytes+1)
 	for off := 0; off+parityChunkBytes <= len(pcm); off += parityStepBytes {
 		p, err := d.SpeechProbability(pcm[off:off+parityChunkBytes], sampleRate16k)
 		require.NoError(t, err)
-		maxProb = max(maxProb, p)
+		probs = append(probs, p)
 	}
-	return maxProb
+	return probs
 }
 
-// maxStreamingProb feeds pcm through a Streamer exactly as the gate does: 0.5 s
-// of fresh audio per step, a Flush every parityFlushEvery steps against one
-// shared session, and returns the maximum aggregate probability seen.
-func maxStreamingProb(t *testing.T, modelPath, libPath string, pcm []byte) float32 {
+// streamingProbs feeds pcm through a Streamer exactly as the gate does: 0.5 s of
+// fresh audio per step, a Flush every parityFlushEvery steps against one shared
+// session, and returns every per-flush aggregate probability.
+func streamingProbs(t *testing.T, cfg Config, pcm []byte) []float32 {
 	t.Helper()
-	sess, err := NewSession(Config{ModelPath: modelPath, LibraryPath: libPath})
+	sess, err := NewSession(cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, sess.Close()) })
 	st := NewStreamer(0)
 
-	var maxProb float32
+	probs := make([]float32, 0, len(pcm)/parityStepBytes/parityFlushEvery+1)
 	steps := 0
 	for off := 0; off+parityStepBytes <= len(pcm); off += parityStepBytes {
 		require.NoError(t, st.Append(pcm[off:off+parityStepBytes], sampleRate16k))
@@ -287,10 +327,10 @@ func maxStreamingProb(t *testing.T, modelPath, libPath string, pcm []byte) float
 		p, ok, _, err := st.Flush(sess)
 		require.NoError(t, err)
 		if ok {
-			maxProb = max(maxProb, p)
+			probs = append(probs, p)
 		}
 	}
-	return maxProb
+	return probs
 }
 
 // BenchmarkVADStreamer1s measures the steady-state streaming cost of one second
@@ -320,4 +360,38 @@ func BenchmarkVADStreamer1s(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+// TestVAD_EmbeddedStreamingParity is a CI-runnable check that needs no external
+// fixture: it drives the embedded sequence model with a synthetic voiced signal
+// (whose syllable modulation the model scores as speech) and asserts that the
+// streaming path detects the same speech peak as the full-chunk path on real
+// ONNX Runtime. It skips on a noembed build or when ONNX Runtime is unavailable,
+// so it exercises the real streamer+model tensor plumbing wherever CI has ORT
+// linked while the stub-session unit tests pin the bookkeeping everywhere else.
+// The stronger time-resolved coverage parity lives in TestVAD_StreamingCoverageParity
+// (real speech clip, run locally), since a synthetic signal's amplitude envelope
+// makes a per-decision coverage fraction cadence-sensitive rather than meaningful.
+func TestVAD_EmbeddedStreamingParity(t *testing.T) {
+	if !HasEmbeddedModel() {
+		t.Skip("no embedded model in this build")
+	}
+	cfg := Config{ModelData: EmbeddedModelData(), LibraryPath: os.Getenv("VAD_TEST_ORT_LIB")}
+	probe, err := New(cfg)
+	if err != nil {
+		t.Skipf("ONNX Runtime unavailable; skipping embedded streaming parity: %v", err)
+	}
+	require.NoError(t, probe.Close())
+
+	pcm := speechLikePCM16(6, sampleRate16k)
+	baseMax := maxOf(fullChunkProbs(t, cfg, pcm))
+	streamMax := maxOf(streamingProbs(t, cfg, pcm))
+	t.Logf("embedded: full-chunk max=%.4f streaming max=%.4f", baseMax, streamMax)
+
+	require.GreaterOrEqual(t, baseMax, float32(parityThreshold),
+		"the synthetic voiced signal must register as speech on the embedded model")
+	assert.GreaterOrEqual(t, streamMax, float32(parityThreshold),
+		"PRIVACY REGRESSION: streaming must detect the speech the full-chunk path detects")
+	assert.InDelta(t, baseMax, streamMax, 0.15,
+		"streaming must reach a comparable peak confidence to the full-chunk path")
 }
