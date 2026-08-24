@@ -1539,7 +1539,11 @@
         },
         "confidence": {
           "type": "number",
-          "description": "confidence threshold for human detection"
+          "description": "confidence threshold for label-based human detection"
+        },
+        "vad": {
+          "$ref": "#/$defs/VADSettings",
+          "description": "dedicated Silero VAD speech gate that augments the label-based filter"
         }
       },
       "additionalProperties": false,
@@ -2655,6 +2659,25 @@
       "additionalProperties": false,
       "type": "object",
       "description": "UltrasonicFilterConfig controls the post-detection ultrasonic validation filter for bat detections."
+    },
+    "VADSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable the VAD speech gate (opt-in, default false)"
+        },
+        "threshold": {
+          "type": "number",
+          "description": "speech-probability gate in (0,1]; default 0.35"
+        },
+        "modelpath": {
+          "type": "string",
+          "description": "optional override for the embedded silero .onnx; empty uses the embedded model"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "VADSettings configures the Silero voice-activity-detection gate that augments the label-based privacy filter."
     },
     "VideoEmbedConfig": {
       "properties": {

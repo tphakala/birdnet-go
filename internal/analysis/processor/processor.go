@@ -82,6 +82,7 @@ type Processor struct {
 	pendingMutex           sync.RWMutex // RWMutex to protect access to pendingDetections (RLock for snapshots)
 	dogDetectionMutex      sync.Mutex
 	detectionMutex         sync.RWMutex // Mutex to protect LastDogDetection and LastHumanDetection maps
+	vadGate                *vadGate     // Lazily-loaded Silero VAD speech gate for the privacy filter
 	controlChan            chan string
 	JobQueue               *jobqueue.JobQueue // Queue for managing job retries
 	workerCancel           context.CancelFunc // Function to cancel worker goroutines
@@ -505,6 +506,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchest
 		Metrics:            metrics,
 		LastDogDetection:   make(map[string]time.Time),
 		LastHumanDetection: make(map[string]time.Time),
+		vadGate:            newVADGate(),
 		DynamicThresholds:  make(map[string]*DynamicThreshold),
 		pendingResets:      make(map[string]struct{}),
 		pendingDetections:  make(map[string]PendingDetection),
@@ -681,6 +683,12 @@ func (p *Processor) processDetections(item classifier.Results) {
 	// Capture a settings snapshot once so every decision in this cycle
 	// uses a consistent, hot-reloadable view of the configuration.
 	settings := p.currentSettings()
+
+	// Run the dedicated Silero VAD speech gate before per-result processing. It
+	// scores the raw chunk independently of what the bird model ranked and, on a
+	// speech hit, records it in LastHumanDetection so the privacy filter discards
+	// this window's detections regardless of the top-K label truncation.
+	p.runVADGate(settings, &item)
 
 	// Detection window sets wait time before a detection is considered final and is flushed.
 	// This represents the duration to wait from NOW (detection creation time) before flushing,
@@ -2578,6 +2586,13 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 	// Stop the spectrogram pre-renderer
 	if p.preRenderer != nil {
 		p.preRenderer.Stop()
+	}
+
+	// Release the Silero VAD detector (privacy filter). The gate mutex makes this
+	// block until any in-flight inference completes before the ONNX session is
+	// freed, so it must run after the results-consumer workers are cancelled.
+	if p.vadGate != nil {
+		p.vadGate.close()
 	}
 
 	// Stop the job queue — use remaining context budget, not a hardcoded 30 seconds.
