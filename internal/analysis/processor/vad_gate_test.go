@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference/vad"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
 // fakeDetector is a vad.Detector test double with scripted output.
@@ -71,7 +72,7 @@ func TestVADGate_LazyLoadAndReuse(t *testing.T) {
 
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 	// First call loads and scores.
-	prob, ran, err := g.score(&vad.Config{}, "k", []byte{0, 0}, "s1", base, 48000)
+	prob, ran, _, err := g.score(&vad.Config{}, "k", []byte{0, 0}, "s1", base, 48000)
 	require.NoError(t, err)
 	assert.True(t, ran)
 	assert.InDelta(t, 0.9, prob, 1e-6)
@@ -79,7 +80,7 @@ func TestVADGate_LazyLoadAndReuse(t *testing.T) {
 	assert.Equal(t, 1, det.calls)
 
 	// A later chunk (past the throttle) reuses the same detector.
-	_, ran, err = g.score(&vad.Config{}, "k", []byte{0, 0}, "s1", base.Add(2*time.Second), 48000)
+	_, ran, _, err = g.score(&vad.Config{}, "k", []byte{0, 0}, "s1", base.Add(2*time.Second), 48000)
 	require.NoError(t, err)
 	assert.True(t, ran)
 	assert.Equal(t, 1, builds, "detector must not be rebuilt")
@@ -92,18 +93,18 @@ func TestVADGate_ThrottlesPerSource(t *testing.T) {
 	g := &vadGate{newDetector: factory(det, nil, nil), lastRun: map[string]time.Time{}}
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 
-	_, ran, err := g.score(&vad.Config{}, "k", []byte{0, 0}, "s1", base, 48000)
+	_, ran, _, err := g.score(&vad.Config{}, "k", []byte{0, 0}, "s1", base, 48000)
 	require.NoError(t, err)
 	assert.True(t, ran)
 
 	// Within the throttle window: skipped, detector not called again.
-	_, ran, err = g.score(&vad.Config{}, "k", []byte{0, 0}, "s1", base.Add(500*time.Millisecond), 48000)
+	_, ran, _, err = g.score(&vad.Config{}, "k", []byte{0, 0}, "s1", base.Add(500*time.Millisecond), 48000)
 	require.NoError(t, err)
 	assert.False(t, ran)
 	assert.Equal(t, 1, det.calls)
 
 	// A different source is scored independently.
-	_, ran, err = g.score(&vad.Config{}, "k", []byte{0, 0}, "s2", base.Add(500*time.Millisecond), 48000)
+	_, ran, _, err = g.score(&vad.Config{}, "k", []byte{0, 0}, "s2", base.Add(500*time.Millisecond), 48000)
 	require.NoError(t, err)
 	assert.True(t, ran)
 	assert.Equal(t, 2, det.calls)
@@ -126,9 +127,9 @@ func TestVADGate_ReloadOnModelPathChange(t *testing.T) {
 	}
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 
-	_, _, err := g.score(&vad.Config{}, "a", []byte{0, 0}, "s1", base, 48000)
+	_, _, _, err := g.score(&vad.Config{}, "a", []byte{0, 0}, "s1", base, 48000)
 	require.NoError(t, err)
-	_, _, err = g.score(&vad.Config{}, "b", []byte{0, 0}, "s1", base.Add(2*time.Second), 48000)
+	_, _, _, err = g.score(&vad.Config{}, "b", []byte{0, 0}, "s1", base.Add(2*time.Second), 48000)
 	require.NoError(t, err)
 
 	assert.Equal(t, 2, builds, "changing model path must rebuild")
@@ -141,12 +142,12 @@ func TestVADGate_EmptyPathUnloads(t *testing.T) {
 	g := &vadGate{newDetector: factory(det, nil, nil), lastRun: map[string]time.Time{}}
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 
-	_, ran, err := g.score(&vad.Config{}, "k", []byte{0, 0}, "s1", base, 48000)
+	_, ran, _, err := g.score(&vad.Config{}, "k", []byte{0, 0}, "s1", base, 48000)
 	require.NoError(t, err)
 	assert.True(t, ran)
 
 	// Empty path (uninstalled): detector dropped, no scoring.
-	_, ran, err = g.score(&vad.Config{}, "", []byte{0, 0}, "s1", base.Add(2*time.Second), 48000)
+	_, ran, _, err = g.score(&vad.Config{}, "", []byte{0, 0}, "s1", base.Add(2*time.Second), 48000)
 	require.NoError(t, err)
 	assert.False(t, ran)
 	assert.True(t, det.closed, "detector must be closed when the model path is cleared")
@@ -161,13 +162,13 @@ func TestVADGate_LoadFailureBacksOff(t *testing.T) {
 	}
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 
-	_, ran, err := g.score(&vad.Config{}, "k", []byte{0, 0}, "s1", base, 48000)
+	_, ran, _, err := g.score(&vad.Config{}, "k", []byte{0, 0}, "s1", base, 48000)
 	require.Error(t, err)
 	assert.False(t, ran)
 	assert.Equal(t, 1, builds)
 
 	// Immediately after a failure, a different source does not re-attempt (backoff).
-	_, ran, err = g.score(&vad.Config{}, "k", []byte{0, 0}, "s2", base.Add(2*time.Second), 48000)
+	_, ran, _, err = g.score(&vad.Config{}, "k", []byte{0, 0}, "s2", base.Add(2*time.Second), 48000)
 	require.NoError(t, err)
 	assert.False(t, ran)
 	assert.Equal(t, 1, builds, "load must not be retried within the backoff window")
@@ -184,14 +185,14 @@ func TestVADGate_InferenceErrorBacksOff(t *testing.T) {
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 
 	// First chunk loads, scores, and inference errors -> detector dropped + backoff.
-	_, ran, err := g.score(&vad.Config{}, "k", []byte{0, 0}, "s1", base, 48000)
+	_, ran, _, err := g.score(&vad.Config{}, "k", []byte{0, 0}, "s1", base, 48000)
 	require.Error(t, err)
 	assert.False(t, ran)
 	assert.Equal(t, 1, det.calls)
 	assert.True(t, det.closed, "detector must be dropped on inference failure")
 
 	// A later chunk within the backoff must NOT re-run inference or rebuild.
-	_, ran, err = g.score(&vad.Config{}, "k", []byte{0, 0}, "s2", base.Add(2*time.Second), 48000)
+	_, ran, _, err = g.score(&vad.Config{}, "k", []byte{0, 0}, "s2", base.Add(2*time.Second), 48000)
 	require.NoError(t, err)
 	assert.False(t, ran, "inference failure must back off, not retry every chunk")
 	assert.Equal(t, 1, det.calls, "no re-inference within the backoff window")
@@ -221,7 +222,7 @@ func TestRunVADGate_SpeechWritesLastHumanDetection(t *testing.T) {
 	t.Parallel()
 	det := &fakeDetector{prob: 0.9} // above threshold
 	p := &Processor{
-		LastHumanDetection: map[string]time.Time{},
+		LastHumanDetection: map[string]HumanDetection{},
 		vadGate:            &vadGate{newDetector: factory(det, nil, nil), lastRun: map[string]time.Time{}},
 	}
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
@@ -231,14 +232,15 @@ func TestRunVADGate_SpeechWritesLastHumanDetection(t *testing.T) {
 
 	got, ok := p.LastHumanDetection["src1"]
 	require.True(t, ok, "speech hit must record LastHumanDetection")
-	assert.Equal(t, base, got)
+	assert.Equal(t, base, got.Time)
+	assert.Equal(t, metrics.TriggerVAD, got.Trigger, "VAD path must tag the trigger")
 }
 
 func TestRunVADGate_BelowThresholdDoesNotWrite(t *testing.T) {
 	t.Parallel()
 	det := &fakeDetector{prob: 0.1} // below threshold
 	p := &Processor{
-		LastHumanDetection: map[string]time.Time{},
+		LastHumanDetection: map[string]HumanDetection{},
 		vadGate:            &vadGate{newDetector: factory(det, nil, nil), lastRun: map[string]time.Time{}},
 	}
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
@@ -258,7 +260,7 @@ func TestRunVADGate_AtThresholdWrites(t *testing.T) {
 	// is unambiguous and this genuinely pins the >= (not >) comparison.
 	det := &fakeDetector{prob: 0.5}
 	p := &Processor{
-		LastHumanDetection: map[string]time.Time{},
+		LastHumanDetection: map[string]HumanDetection{},
 		vadGate:            &vadGate{newDetector: factory(det, nil, nil), lastRun: map[string]time.Time{}},
 	}
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
@@ -267,7 +269,7 @@ func TestRunVADGate_AtThresholdWrites(t *testing.T) {
 
 	got, ok := p.LastHumanDetection["src1"]
 	require.True(t, ok, "prob == threshold must record a human detection (>= comparison)")
-	assert.Equal(t, base, got)
+	assert.Equal(t, base, got.Time)
 }
 
 func TestRunVADGate_DisabledIsInert(t *testing.T) {
@@ -275,7 +277,7 @@ func TestRunVADGate_DisabledIsInert(t *testing.T) {
 	det := &fakeDetector{prob: 0.99}
 	builds := 0
 	p := &Processor{
-		LastHumanDetection: map[string]time.Time{},
+		LastHumanDetection: map[string]HumanDetection{},
 		vadGate:            &vadGate{newDetector: factory(det, nil, &builds), lastRun: map[string]time.Time{}},
 	}
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
@@ -290,7 +292,7 @@ func TestRunVADGate_SkipsBatAndEmptyPCM(t *testing.T) {
 	t.Parallel()
 	det := &fakeDetector{prob: 0.99}
 	p := &Processor{
-		LastHumanDetection: map[string]time.Time{},
+		LastHumanDetection: map[string]HumanDetection{},
 		vadGate:            &vadGate{newDetector: factory(det, nil, nil), lastRun: map[string]time.Time{}},
 	}
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
@@ -354,13 +356,13 @@ func TestVADGate_ConfigChangeClearsBackoff(t *testing.T) {
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 
 	// First source fails to load -> enters 30s backoff.
-	_, ran, err := g.score(&vad.Config{}, "path:/bad.onnx", []byte{0, 0}, "s1", base, 48000)
+	_, ran, _, err := g.score(&vad.Config{}, "path:/bad.onnx", []byte{0, 0}, "s1", base, 48000)
 	require.Error(t, err)
 	assert.False(t, ran)
 
 	// Immediately switching to a corrected source must load NOW, not wait out
 	// the previous source's backoff.
-	_, ran, err = g.score(&vad.Config{}, "path:/good.onnx", []byte{0, 0}, "s1", base.Add(2*time.Second), 48000)
+	_, ran, _, err = g.score(&vad.Config{}, "path:/good.onnx", []byte{0, 0}, "s1", base.Add(2*time.Second), 48000)
 	require.NoError(t, err)
 	assert.True(t, ran, "a corrected model source must be retried immediately")
 	assert.Equal(t, 2, builds)
@@ -376,17 +378,17 @@ func TestVADGate_OutOfOrderDoesNotRegressThrottle(t *testing.T) {
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 
 	// Advance the throttle to base+2s.
-	_, ran, _ := g.score(&vad.Config{}, "k", []byte{0, 0}, "s1", base.Add(2*time.Second), 48000)
+	_, ran, _, _ := g.score(&vad.Config{}, "k", []byte{0, 0}, "s1", base.Add(2*time.Second), 48000)
 	require.True(t, ran)
 	assert.Equal(t, 1, det.calls)
 
 	// An out-of-order older chunk runs once but must NOT regress lastRun.
-	_, ran, _ = g.score(&vad.Config{}, "k", []byte{0, 0}, "s1", base.Add(500*time.Millisecond), 48000)
+	_, ran, _, _ = g.score(&vad.Config{}, "k", []byte{0, 0}, "s1", base.Add(500*time.Millisecond), 48000)
 	require.True(t, ran)
 	assert.Equal(t, 2, det.calls)
 
 	// A chunk within the throttle of the (un-regressed) base+2s must be skipped.
-	_, ran, _ = g.score(&vad.Config{}, "k", []byte{0, 0}, "s1", base.Add(2300*time.Millisecond), 48000)
+	_, ran, _, _ = g.score(&vad.Config{}, "k", []byte{0, 0}, "s1", base.Add(2300*time.Millisecond), 48000)
 	assert.False(t, ran, "throttle must still key off the newest start time, not the out-of-order one")
 	assert.Equal(t, 2, det.calls)
 }

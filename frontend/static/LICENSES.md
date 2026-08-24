@@ -5,6 +5,16 @@
 Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
 https://creativecommons.org/licenses/by-nc-sa/4.0/
 
+## Bundled Models
+
+### snakers4/silero-vad
+
+Silero VAD model (silero_vad.onnx), embedded in the binary and used by the
+privacy-filter speech gate. Unmodified, byte-identical to upstream.
+
+License: https://github.com/snakers4/silero-vad/blob/master/LICENSE
+Source: MIT
+
 ## Dependencies
 
 ### cloud.google.com/go/auth
