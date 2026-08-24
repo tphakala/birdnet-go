@@ -173,6 +173,31 @@ func TestVADGate_LoadFailureBacksOff(t *testing.T) {
 	assert.Equal(t, 1, builds, "load must not be retried within the backoff window")
 }
 
+// TestVADGate_InferenceErrorBacksOff proves a repeated inference failure drops
+// the detector and enters the failure backoff instead of re-running inference
+// (and logging) on every chunk (Sentry review finding).
+func TestVADGate_InferenceErrorBacksOff(t *testing.T) {
+	t.Parallel()
+	det := &fakeDetector{prob: 0.9, err: errors.NewStd("inference boom")}
+	builds := 0
+	g := &vadGate{newDetector: factory(det, nil, &builds), lastRun: map[string]time.Time{}}
+	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
+
+	// First chunk loads, scores, and inference errors -> detector dropped + backoff.
+	_, ran, err := g.score(&vad.Config{}, "k", []byte{0, 0}, "s1", base, 48000)
+	require.Error(t, err)
+	assert.False(t, ran)
+	assert.Equal(t, 1, det.calls)
+	assert.True(t, det.closed, "detector must be dropped on inference failure")
+
+	// A later chunk within the backoff must NOT re-run inference or rebuild.
+	_, ran, err = g.score(&vad.Config{}, "k", []byte{0, 0}, "s2", base.Add(2*time.Second), 48000)
+	require.NoError(t, err)
+	assert.False(t, ran, "inference failure must back off, not retry every chunk")
+	assert.Equal(t, 1, det.calls, "no re-inference within the backoff window")
+	assert.Equal(t, 1, builds, "no rebuild within the backoff window")
+}
+
 // makeVADItem builds a minimal results item for the given source and chunk.
 func makeVADItem(modelID, source string, start time.Time, pcmLen int) *classifier.Results {
 	return &classifier.Results{

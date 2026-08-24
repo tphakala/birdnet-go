@@ -112,6 +112,13 @@ func (g *vadGate) score(cfg *vad.Config, cacheKey string, pcm []byte, sourceID s
 
 	prob, err = g.det.SpeechProbability(pcm, sampleRate)
 	if err != nil {
+		// An inference failure likely reflects a bad session state. Drop the
+		// detector and enter the same failure backoff as a failed load, so
+		// repeated failures do not re-run inference (and log a warning) on every
+		// chunk; the detector is rebuilt once the backoff elapses.
+		g.closeLocked()
+		g.failed = true
+		g.lastAttempt = time.Now()
 		return 0, false, err
 	}
 	// Advance the throttle timestamp only forward, so an out-of-order (earlier)
