@@ -8,11 +8,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/inference"
 )
 
-// These tests exercise the real Silero VAD ONNX model through ONNX Runtime.
-// They are skipped unless VAD_TEST_MODEL points at an installed silero .onnx
-// file. VAD_TEST_ORT_LIB may optionally override the ONNX Runtime library path.
+// These tests exercise the real Silero VAD sequence ONNX model through ONNX
+// Runtime. They are skipped unless VAD_TEST_MODEL points at an installed
+// sequence-export silero .onnx file (inputs input/h/c, outputs
+// speech_probs/hn/cn; the stock upstream frame model will NOT load).
+// VAD_TEST_ORT_LIB may optionally override the ONNX Runtime library path.
 //
 //	VAD_TEST_MODEL=/path/to/silero_vad.onnx go test -run TestVAD ./internal/inference/vad/
 //	VAD_TEST_MODEL=/path/to/silero_vad.onnx go test -bench VAD -benchmem ./internal/inference/vad/
@@ -49,6 +53,35 @@ func speechLikePCM16(durationSec, sampleRate int) []byte {
 	return buf
 }
 
+// TestVAD_SequenceSessionIO exercises the raw session contract: a stacked
+// [n, 576] silence input with zeroed h/c must yield n probabilities and
+// stateWidth-sized carry states, at two different sequence lengths (the
+// sequence dimension is dynamic per Run).
+func TestVAD_SequenceSessionIO(t *testing.T) {
+	modelPath, libPath := modelPathFromEnv(t)
+	require.NoError(t, inference.InitONNXRuntime(libPath))
+
+	s, err := newSession(modelPath, nil, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, s.Close()) })
+
+	h := make([]float32, stateWidth)
+	c := make([]float32, stateWidth)
+	for _, n := range []int{5, 94} {
+		frames := make([]float32, n*modelInputSamples)
+		probs, hOut, cOut, err := s.Run(frames, h, c)
+		require.NoError(t, err, "n=%d", n)
+		require.Len(t, probs, n)
+		require.Len(t, hOut, stateWidth)
+		require.Len(t, cOut, stateWidth)
+		for i, p := range probs {
+			assert.GreaterOrEqual(t, p, float32(0), "prob %d in range", i)
+			assert.LessOrEqual(t, p, float32(1), "prob %d in range", i)
+			assert.Less(t, p, float32(0.5), "silence hop %d must not look like speech", i)
+		}
+	}
+}
+
 // TestVAD_EmbeddedModelLoads exercises the production default path: loading the
 // model embedded in the binary via the in-memory bytes API. It skips when the
 // build has no embedded model (-tags noembed) or when ONNX Runtime is not
@@ -80,39 +113,26 @@ func TestVAD_SilenceIsLow(t *testing.T) {
 	assert.Less(t, prob, float32(0.2), "silence should score low, got %v", prob)
 }
 
-func TestVAD_StrategiesRunAndAgree(t *testing.T) {
+// TestVAD_SpeechLikeResponds asserts the model reacts to structured voiced
+// content fed through the resampling path (48 kHz input), proving the tensor
+// plumbing carries real signal, not just zeros.
+func TestVAD_SpeechLikeResponds(t *testing.T) {
 	modelPath, libPath := modelPathFromEnv(t)
 
-	pcm := speechLikePCM16(3, 48000) // native 48 kHz chunk, resampled internally
-
-	recur, err := New(Config{ModelPath: modelPath, LibraryPath: libPath, Strategy: StrategyRecurrent})
+	d, err := New(Config{ModelPath: modelPath, LibraryPath: libPath})
 	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, recur.Close()) })
-	assert.Equal(t, "recurrent", recur.Strategy())
+	t.Cleanup(func() { assert.NoError(t, d.Close()) })
+	assert.Equal(t, StrategySequence, d.Strategy())
 
-	seg, err := New(Config{ModelPath: modelPath, LibraryPath: libPath, Strategy: StrategySegmentBatched})
+	prob, err := d.SpeechProbability(speechLikePCM16(3, 48000), 48000)
 	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, seg.Close()) })
-	assert.Equal(t, "segment-batched", seg.Strategy())
-
-	pRecur, err := recur.SpeechProbability(pcm, 48000)
-	require.NoError(t, err)
-	pSeg, err := seg.SpeechProbability(pcm, 48000)
-	require.NoError(t, err)
-
-	t.Logf("recurrent=%.4f segment-batched=%.4f", pRecur, pSeg)
-	// Both must produce valid probabilities.
-	assert.GreaterOrEqual(t, pRecur, float32(0))
-	assert.LessOrEqual(t, pRecur, float32(1))
-	assert.GreaterOrEqual(t, pSeg, float32(0))
-	assert.LessOrEqual(t, pSeg, float32(1))
-	// And they must broadly agree on a signal with content spanning the whole
-	// chunk (segment-batched only diverges at seams / short bursts, absent here).
-	assert.InDelta(t, pRecur, pSeg, 0.2, "recurrent and segment-batched should broadly agree on a full-chunk signal")
+	t.Logf("speech-like probability = %.4f", prob)
+	assert.GreaterOrEqual(t, prob, float32(0))
+	assert.LessOrEqual(t, prob, float32(1))
 }
 
 // TestVAD_RealSpeechIsHigh is a positive control: it feeds a real 16 kHz mono
-// speech clip (raw PCM16) and asserts both strategies score it high. Set
+// speech clip (raw PCM16) and asserts the sequence path scores it high. Set
 // VAD_TEST_SPEECH_RAW to a raw PCM16 mono 16 kHz file to enable it. This proves
 // the tensor plumbing produces meaningful probabilities, not just near-zero
 // output that would also pass the silence test.
@@ -125,29 +145,25 @@ func TestVAD_RealSpeechIsHigh(t *testing.T) {
 	pcm, err := os.ReadFile(rawPath) //nolint:gosec // G304: test fixture path from env
 	require.NoError(t, err)
 
-	for _, kind := range []struct {
-		name string
-		k    StrategyKind
-	}{{"recurrent", StrategyRecurrent}, {"segment-batched", StrategySegmentBatched}} {
-		t.Run(kind.name, func(t *testing.T) {
-			d, err := New(Config{ModelPath: modelPath, LibraryPath: libPath, Strategy: kind.k})
-			require.NoError(t, err)
-			t.Cleanup(func() { assert.NoError(t, d.Close()) })
+	d, err := New(Config{ModelPath: modelPath, LibraryPath: libPath})
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, d.Close()) })
 
-			prob, err := d.SpeechProbability(pcm, sampleRate16k)
-			require.NoError(t, err)
-			t.Logf("%s speech probability = %.4f", kind.name, prob)
-			assert.Greater(t, prob, float32(0.8), "real speech should score high")
-		})
-	}
+	prob, err := d.SpeechProbability(pcm, sampleRate16k)
+	require.NoError(t, err)
+	t.Logf("sequence speech probability = %.4f", prob)
+	assert.Greater(t, prob, float32(0.8), "real speech should score high")
 }
 
-func benchStrategy(b *testing.B, kind StrategyKind, durationSec int) {
+func BenchmarkVADSequence3s(b *testing.B) { benchSequence(b, 3) }
+func BenchmarkVADSequence5s(b *testing.B) { benchSequence(b, 5) }
+
+func benchSequence(b *testing.B, durationSec int) {
 	b.Helper()
 	modelPath, libPath := modelPathFromEnv(b)
 	pcm := speechLikePCM16(durationSec, 48000)
 
-	d, err := New(Config{ModelPath: modelPath, LibraryPath: libPath, Strategy: kind})
+	d, err := New(Config{ModelPath: modelPath, LibraryPath: libPath})
 	require.NoError(b, err)
 	b.Cleanup(func() { assert.NoError(b, d.Close()) })
 
@@ -163,8 +179,3 @@ func benchStrategy(b *testing.B, kind StrategyKind, durationSec int) {
 		}
 	}
 }
-
-func BenchmarkVADRecurrent3s(b *testing.B)      { benchStrategy(b, StrategyRecurrent, 3) }
-func BenchmarkVADSegmentBatched3s(b *testing.B) { benchStrategy(b, StrategySegmentBatched, 3) }
-func BenchmarkVADRecurrent5s(b *testing.B)      { benchStrategy(b, StrategyRecurrent, 5) }
-func BenchmarkVADSegmentBatched5s(b *testing.B) { benchStrategy(b, StrategySegmentBatched, 5) }

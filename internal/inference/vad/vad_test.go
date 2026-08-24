@@ -95,3 +95,16 @@ func TestNew_RequiresModelPath(t *testing.T) {
 	_, err := New(Config{})
 	require.ErrorIs(t, err, ErrModelPathRequired)
 }
+
+func TestSessionRun_Closed(t *testing.T) {
+	t.Parallel()
+	s := &session{}
+	_, _, _, err := s.Run(make([]float32, modelInputSamples), make([]float32, stateWidth), make([]float32, stateWidth))
+	require.ErrorIs(t, err, ErrSessionClosed)
+}
+
+func TestDetectorStrategyName(t *testing.T) {
+	t.Parallel()
+	d := &detector{}
+	assert.Equal(t, StrategySequence, d.Strategy())
+}
