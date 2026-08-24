@@ -11,16 +11,20 @@ import (
 func TestVADSourceLabel(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
+		name     string
 		cacheKey string
 		want     string
 	}{
-		{"embedded", "embedded"},
-		{"path:/models/silero_vad.onnx", "path"},
-		{"path:relative.onnx", "path"},
-		{"", ""},
+		{"embedded", "embedded", "embedded"},
+		{"absolute path", "path:/models/silero_vad.onnx", "path"},
+		{"relative path", "path:relative.onnx", "path"},
+		{"empty", "", ""},
 	}
 	for _, tt := range tests {
-		assert.Equal(t, tt.want, vadSourceLabel(tt.cacheKey), "cacheKey %q", tt.cacheKey)
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, vadSourceLabel(tt.cacheKey))
+		})
 	}
 }
 

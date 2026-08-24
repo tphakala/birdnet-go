@@ -214,8 +214,11 @@ func (p *Processor) runVADGate(settings *conf.Settings, item *classifier.Results
 
 	cfg, cacheKey := resolveVADModel(&pf.VAD, settings.BirdNET.ONNXRuntimePath)
 	if cacheKey == "" {
-		// Enabled but no model resolves (a noembed build with no modelpath set):
-		// warn once so the misconfiguration is visible rather than silently inert.
+		// Enabled but no model resolves (a noembed build with no modelpath set, or
+		// a modelpath that was cleared after a detector had loaded). Unload any
+		// held detector so a removed model source does not leak its ONNX session,
+		// then warn once so the misconfiguration is visible rather than silently inert.
+		p.vadGate.close()
 		if p.vadGate.warnedNoModel.CompareAndSwap(false, true) {
 			GetLogger().Warn("privacy VAD enabled but no model available; speech gate inert",
 				logger.String("hint", "set realtime.privacyfilter.vad.modelpath or use a build with the embedded model"),

@@ -274,7 +274,7 @@ describe('SystemInference', () => {
     expect(container.textContent).not.toContain('system.inference.vad.section');
   });
 
-  it('renders the VAD panel with loaded state, strategy, source and stats', async () => {
+  it('renders the VAD panel with active state, stats and recent-speech feed', async () => {
     const snapshot = makeSnapshot([makeModel()]);
     snapshot.vad = {
       enabled: true,
