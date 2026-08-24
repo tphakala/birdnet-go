@@ -7,13 +7,14 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference/vad"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
 const (
-	// vadLoadBackoff throttles retries after a failed VAD detector load so a
+	// vadLoadBackoff throttles retries after a failed VAD session load so a
 	// missing model or absent ONNX Runtime library logs at most once per
 	// interval instead of once per chunk.
 	vadLoadBackoff = 30 * time.Second
@@ -26,6 +27,14 @@ const (
 	// vadBytesPerSample is the size of one 16-bit PCM sample in the analysis
 	// chunks the gate receives.
 	vadBytesPerSample = 2
+	// vadResetGap is how much a chunk's start-time delta must exceed the chunk
+	// duration before the gate treats it as a genuine discontinuity (dropped audio
+	// or a source restart) and resets the streamer. Chunk start times are
+	// wall-clock and poll-quantized (~100 ms), not sample-derived, so a tolerance
+	// well above that scheduling jitter keeps a contiguous boundary at the default
+	// zero overlap (delta ~= chunkDur) from being mistaken for a gap and thrashing
+	// the LSTM state every chunk.
+	vadResetGap = time.Second
 	// vadMinThreshold and vadMaxThreshold clamp a misconfigured gate threshold.
 	vadMinThreshold = 0.01
 	vadMaxThreshold = 1.0
@@ -34,10 +43,10 @@ const (
 	vadHitCap = 10
 )
 
-// vadGate lazily owns the Silero VAD detector used by the privacy filter.
+// vadGate lazily owns the shared Silero VAD session and the per-source streamers used by the privacy filter.
 //
 // All access is from the single results-consumer goroutine plus Shutdown. The
-// mutex is held across the ENTIRE inference call (not just the detector-pointer
+// mutex is held across the ENTIRE inference call (not just the session-pointer
 // read) so a concurrent Shutdown cannot free the native ONNX session while
 // inference is in flight, which would crash the ORT runtime.
 type vadGate struct {
@@ -64,7 +73,7 @@ type vadGate struct {
 
 	// Observability counters. These are lifetime totals for the dashboard and
 	// are read lock-free from the API goroutine, so they are atomics rather than
-	// mu-guarded fields; they are never reset when the detector unloads (a source
+	// mu-guarded fields; they are never reset when the session unloads (a source
 	// change or a feature toggle), mirroring Prometheus counter semantics.
 	invocations    atomic.Int64
 	totalUs        atomic.Int64
@@ -72,11 +81,11 @@ type vadGate struct {
 	speechHits     atomic.Int64
 	lastSpeechUnix atomic.Int64
 	lastProbBits   atomic.Uint32 // math.Float32bits of the last speech-hit probability
-	// snapshot describes the currently loaded detector (nil when unloaded), so the
+	// snapshot describes the currently loaded session (nil when unloaded), so the
 	// dashboard can report strategy/source/sample-rate without taking g.mu.
 	snapshot atomic.Pointer[vadConfigSnapshot]
 	// warnedNoModel makes the "enabled but no model available" log one-shot; it is
-	// reset to false when a detector loads so a later misconfiguration warns again.
+	// reset to false when the session loads so a later misconfiguration warns again.
 	warnedNoModel atomic.Bool
 	// recentHits is a newest-first ring of the last vadHitCap speech hits for the
 	// dashboard's history feed. Guarded by histMu (a dedicated lock, not g.mu) so a
@@ -144,13 +153,17 @@ func (g *vadGate) closeAllLocked() {
 	clear(g.streams)
 }
 
-// score scores one chunk with the detector built from cfg, lazily loading (or
-// reloading when cacheKey changes) the detector. cacheKey identifies the model
-// source (e.g. "embedded" or "path:<file>"); an empty cacheKey means no model is
-// available. It returns the speech probability and ran=true only when a fresh
-// inference was performed; ran=false means the call was throttled, no model is
-// available, or a load is in its failure backoff window. A non-nil error
-// indicates a detector load or inference failure.
+// score scores one chunk against the shared session built from cfg, lazily
+// loading (or reloading when cacheKey changes) that session and the per-source
+// streamer. cacheKey identifies the model source (e.g. "embedded" or
+// "path:<file>"); an empty cacheKey means no model is available. It returns the
+// speech probability and ran=true only when a fresh inference was performed;
+// ran=false means no model is available, a load is in its failure backoff
+// window, the chunk was buffered without a flush this interval (the throttle
+// cadence), it was an out-of-order or duplicate chunk, or the flush had no
+// complete hop yet. A non-nil error indicates a session load or inference
+// failure (an inference failure tears the session down; a per-source data error
+// drops only that streamer).
 func (g *vadGate) score(cfg *vad.Config, cacheKey string, pcm []byte, sourceID string, startTime time.Time, sampleRate int) (prob float32, ran bool, dur time.Duration, err error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -202,9 +215,19 @@ func (g *vadGate) score(cfg *vad.Config, cacheKey string, pcm []byte, sourceID s
 	if appendErr := entry.s.Append(freshPCM, sampleRate); appendErr != nil {
 		return 0, false, 0, appendErr
 	}
+	// Advance the accepted-chunk timestamp only after Append succeeds, so a failed
+	// Append does not leave lastStart pointing past audio that was never buffered
+	// (which would make the next chunk's fresh-tail slice drop real audio).
+	entry.lastStart = startTime
 
 	// Flush (a decision) at most once per throttle span per source; between
 	// flushes fresh audio is only buffered.
+	//
+	// Note: fresh audio Appended within the throttle window stays buffered until
+	// the next flush (~1 s), which scores it. If a source stops entirely right
+	// after a throttled chunk, the last sub-second of buffered audio is not
+	// scored; that bounded stream-end tail is the accepted cost of pacing ONNX
+	// dispatch to ~1 call/s/source on constrained hosts.
 	if entry.hasFlushed && startTime.Sub(entry.lastFlush) < vadSourceThrottle {
 		return 0, false, 0, nil
 	}
@@ -213,13 +236,21 @@ func (g *vadGate) score(cfg *vad.Config, cacheKey string, pcm []byte, sourceID s
 	prob, ok, _, flushErr := entry.s.Flush(g.sess)
 	dur = time.Since(start)
 	if flushErr != nil {
-		// An inference failure likely reflects a bad session state. Drop the
-		// session and every streamer and enter the same failure backoff as a
-		// failed load, so repeated failures do not re-run inference (and log a
-		// warning) on every chunk; the session is rebuilt once the backoff elapses.
-		g.closeAllLocked()
-		g.failed = true
-		g.lastAttempt = time.Now()
+		if isInferenceError(flushErr) {
+			// An ONNX inference failure likely reflects a bad session state. Drop the
+			// shared session and every streamer and enter the failure backoff so
+			// repeated failures do not re-run inference (and log a warning) on every
+			// chunk; the session is rebuilt once the backoff elapses.
+			g.closeAllLocked()
+			g.failed = true
+			g.lastAttempt = time.Now()
+		} else {
+			// A per-source data or resampling error: the shared session is healthy,
+			// so drop only this source's streamer (discarding its bad buffer) and
+			// keep serving every other source rather than tearing the gate down.
+			entry.s.Reset()
+			delete(g.streams, sourceID)
+		}
 		return 0, false, 0, flushErr
 	}
 	if !ok {
@@ -243,19 +274,18 @@ func (g *vadGate) prepareSourceStream(sourceID string, pcm []byte, startTime tim
 	if !ok {
 		entry = &sourceStream{s: g.newStreamer(), sampleRate: sampleRate}
 		g.streams[sourceID] = entry
-		entry.lastStart = startTime
 		return entry, pcm, false
 	}
 
 	chunkDur := pcmChunkDuration(len(pcm), sampleRate)
 	delta := startTime.Sub(entry.lastStart)
 	switch {
-	case sampleRate != entry.sampleRate, delta > chunkDur:
-		// Discontinuity: a sample-rate change, or a gap larger than one chunk
-		// (a restart or dropped audio). Reset the LSTM state and aggregation and
-		// treat the whole chunk as fresh. A perfectly contiguous chunk has
-		// delta == chunkDur and falls through to the default case with state
-		// preserved, so no straddling speech is split.
+	case sampleRate != entry.sampleRate, delta > chunkDur+vadResetGap:
+		// Discontinuity: a sample-rate change, or a gap well beyond one chunk (a
+		// restart or dropped audio). Reset the LSTM state and aggregation and treat
+		// the whole chunk as fresh. The vadResetGap tolerance above chunkDur absorbs
+		// the wall-clock jitter in the chunk start times, so a contiguous boundary
+		// at the default zero overlap (delta ~= chunkDur) is not mistaken for a gap.
 		entry.s.Reset()
 		entry.sampleRate = sampleRate
 		entry.hasFlushed = false
@@ -265,11 +295,12 @@ func (g *vadGate) prepareSourceStream(sourceID string, pcm []byte, startTime tim
 		// earlier chunk arrived, so there is nothing new to score.
 		return entry, nil, true
 	default:
-		// Overlap: only the tail past the previous chunk's start is new audio.
-		freshBytes := freshTailBytes(delta, sampleRate, len(pcm))
-		freshPCM = pcm[len(pcm)-freshBytes:]
+		// Overlap or a contiguous boundary: only the tail past the previous chunk's
+		// start is new audio. freshTailBytes rounds to whole samples and clamps to
+		// the whole chunk, so a contiguous chunk (delta ~= chunkDur) yields the
+		// whole chunk with no dropped leading sample and preserves the LSTM state.
+		freshPCM = pcm[len(pcm)-freshTailBytes(delta, sampleRate, len(pcm)):]
 	}
-	entry.lastStart = startTime
 	return entry, freshPCM, false
 }
 
@@ -286,12 +317,27 @@ func pcmChunkDuration(pcmLen, sampleRate int) time.Duration {
 // freshTailBytes converts the start-time delta between two overlapping chunks
 // into the byte length of the newest (non-overlapped) tail of the current chunk,
 // clamped to [0, pcmLen] and aligned to whole PCM samples.
+// isInferenceError reports whether err is an ONNX inference/model failure (which
+// warrants tearing down and rebuilding the shared session) rather than a
+// per-source data or resampling error (which leaves the session healthy). The
+// VAD session wraps its Run failures with CategoryModelLoad; resampling and
+// validation failures carry other categories.
+func isInferenceError(err error) bool {
+	var ee *errors.EnhancedError
+	if errors.As(err, &ee) {
+		return ee.GetCategory() == string(errors.CategoryModelLoad)
+	}
+	return false
+}
+
 func freshTailBytes(delta time.Duration, sampleRate, pcmLen int) int {
-	freshSamples := int(delta * time.Duration(sampleRate) / time.Second) //nolint:durationcheck // intentional: converts a duration at a Hz rate into a sample count
-	freshBytes := freshSamples * vadBytesPerSample
-	if freshBytes < 0 {
+	if delta <= 0 {
 		return 0
 	}
+	// Round to the nearest whole sample so a contiguous chunk (delta ~= chunkDur)
+	// maps to the whole chunk rather than truncating a leading sample off it.
+	freshSamples := int((delta*time.Duration(sampleRate) + time.Second/2) / time.Second) //nolint:durationcheck // intentional: converts a duration at a Hz rate into a rounded sample count
+	freshBytes := freshSamples * vadBytesPerSample
 	if freshBytes > pcmLen {
 		return pcmLen
 	}
@@ -326,8 +372,8 @@ func (p *Processor) runVADGate(settings *conf.Settings, item *classifier.Results
 	cfg, cacheKey := resolveVADModel(&pf.VAD, settings.BirdNET.ONNXRuntimePath)
 	if cacheKey == "" {
 		// Enabled but no model resolves (a noembed build with no modelpath set, or
-		// a modelpath that was cleared after a detector had loaded). Unload any
-		// held detector so a removed model source does not leak its ONNX session,
+		// a modelpath that was cleared after the session had loaded). Unload any
+		// held session so a removed model source does not leak its ONNX session,
 		// then warn once so the misconfiguration is visible rather than silently inert.
 		p.vadGate.close()
 		if p.vadGate.warnedNoModel.CompareAndSwap(false, true) {
@@ -390,7 +436,7 @@ func (p *Processor) runVADGate(settings *conf.Settings, item *classifier.Results
 
 // resolveVADModel selects the VAD model source. An explicit ModelPath override
 // takes precedence; otherwise the model embedded in the binary is used. It
-// returns the detector config and a stable cache key ("path:<file>" or
+// returns the session config and a stable cache key ("path:<file>" or
 // "embedded") used to detect a source change; an empty key means no model is
 // available (a noembed build with no configured path).
 func resolveVADModel(cfg *conf.VADSettings, libraryPath string) (detCfg vad.Config, cacheKey string) {

@@ -179,8 +179,9 @@ func TestVADGate_ContiguousChunksDoNotReset(t *testing.T) {
 	assert.Zero(t, st.resets, "a contiguous chunk must NOT reset the streamer state")
 }
 
-// TestVADGate_GapResetsStreamer: a gap larger than one chunk is a discontinuity
-// that resets the streamer and treats the whole chunk as fresh.
+// TestVADGate_GapResetsStreamer: a gap well beyond one chunk (past the jitter
+// tolerance) is a discontinuity that resets the streamer and treats the whole
+// chunk as fresh.
 func TestVADGate_GapResetsStreamer(t *testing.T) {
 	t.Parallel()
 	st := &fakeStreamer{prob: 0.1, flushOK: true}
@@ -190,12 +191,35 @@ func TestVADGate_GapResetsStreamer(t *testing.T) {
 
 	_, _, _, err := g.score(&vad.Config{}, "k", pcm, "s1", base, testVADRate)
 	require.NoError(t, err)
-	// 4 s later (> 3 s chunk): a coverage gap.
-	_, _, _, err = g.score(&vad.Config{}, "k", pcm, "s1", base.Add(4*time.Second), testVADRate)
+	// 6 s later (>> 3 s chunk + 1 s tolerance): a genuine coverage gap.
+	_, _, _, err = g.score(&vad.Config{}, "k", pcm, "s1", base.Add(6*time.Second), testVADRate)
 	require.NoError(t, err)
 
-	assert.Equal(t, 1, st.resets, "a gap larger than one chunk must reset the streamer")
+	assert.Equal(t, 1, st.resets, "a gap well beyond one chunk must reset the streamer")
 	assert.Equal(t, []int{testVADChunkBytes, testVADChunkBytes}, st.appends)
+}
+
+// TestVADGate_JitterWithinToleranceDoesNotReset guards against wall-clock jitter
+// pushing a contiguous chunk's start-time delta just past chunkDur: a delta
+// within the vadResetGap tolerance must be treated as a whole fresh chunk with
+// the LSTM state preserved, not a discontinuity (Agent 6 finding).
+func TestVADGate_JitterWithinToleranceDoesNotReset(t *testing.T) {
+	t.Parallel()
+	st := &fakeStreamer{prob: 0.1, flushOK: true}
+	g := newTestGate(st, &fakeSession{}, nil)
+	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
+	pcm := make([]byte, testVADChunkBytes) // 3 s
+
+	_, _, _, err := g.score(&vad.Config{}, "k", pcm, "s1", base, testVADRate)
+	require.NoError(t, err)
+	// 3.3 s later: a contiguous overlap=0 boundary jittered 0.3 s past chunkDur,
+	// still inside the 1 s tolerance.
+	_, _, _, err = g.score(&vad.Config{}, "k", pcm, "s1", base.Add(3300*time.Millisecond), testVADRate)
+	require.NoError(t, err)
+
+	assert.Zero(t, st.resets, "jitter within tolerance must not reset the streamer")
+	assert.Equal(t, []int{testVADChunkBytes, testVADChunkBytes}, st.appends,
+		"an over-chunk delta clamps to the whole chunk, no dropped sample")
 }
 
 // TestVADGate_SampleRateChangeResets: a source changing sample rate is a
@@ -368,7 +392,8 @@ func TestVADGate_LoadFailureBacksOff(t *testing.T) {
 func TestVADGate_FlushErrorBacksOff(t *testing.T) {
 	t.Parallel()
 	sess := &fakeSession{}
-	st := &fakeStreamer{flushErr: errors.NewStd("inference boom")}
+	infErr := errors.Newf("inference boom").Component("test").Category(errors.CategoryModelLoad).Build()
+	st := &fakeStreamer{flushErr: infErr}
 	builds := 0
 	g := newTestGate(st, sess, &builds)
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
@@ -376,7 +401,7 @@ func TestVADGate_FlushErrorBacksOff(t *testing.T) {
 	_, ran, _, err := g.score(&vad.Config{}, "k", make([]byte, testVADChunkBytes), "s1", base, testVADRate)
 	require.Error(t, err)
 	assert.False(t, ran)
-	assert.True(t, sess.closed, "the session must be dropped on a flush failure")
+	assert.True(t, sess.closed, "an ONNX inference failure must drop the shared session")
 	assert.Empty(t, g.streams)
 
 	// A later chunk within the backoff must NOT rebuild or flush.
@@ -384,6 +409,36 @@ func TestVADGate_FlushErrorBacksOff(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, ran, "flush failure must back off, not retry every chunk")
 	assert.Equal(t, 1, builds, "no rebuild within the backoff window")
+}
+
+// TestVADGate_DataErrorDropsStreamerNotSession proves a per-source data or
+// resampling error (a non-inference category) drops only that source's streamer
+// and keeps the shared session serving every other source, rather than tearing
+// the whole gate down and entering a global backoff.
+func TestVADGate_DataErrorDropsStreamerNotSession(t *testing.T) {
+	t.Parallel()
+	sess := &fakeSession{}
+	dataErr := errors.Newf("bad pcm").Component("test").Category(errors.CategoryValidation).Build()
+	st := &fakeStreamer{flushErr: dataErr}
+	builds := 0
+	g := newTestGate(st, sess, &builds)
+	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
+
+	_, ran, _, err := g.score(&vad.Config{}, "k", make([]byte, testVADChunkBytes), "s1", base, testVADRate)
+	require.Error(t, err)
+	assert.False(t, ran)
+	assert.False(t, sess.closed, "a data error must NOT tear down the shared session")
+	assert.Equal(t, 1, st.resets, "the offending streamer is reset")
+	_, held := g.streams["s1"]
+	assert.False(t, held, "the offending source's streamer is dropped")
+
+	// The session stays healthy: another source scores immediately, no backoff.
+	st2 := &fakeStreamer{prob: 0.9, flushOK: true}
+	g.newStreamer = func() vad.Streamer { return st2 }
+	_, ran, _, err = g.score(&vad.Config{}, "k", make([]byte, testVADChunkBytes), "s2", base.Add(2*time.Second), testVADRate)
+	require.NoError(t, err)
+	assert.True(t, ran, "the shared session stays healthy for other sources")
+	assert.Equal(t, 1, builds, "the session is not rebuilt (no teardown occurred)")
 }
 
 // TestVADGate_ConfigChangeClearsBackoff proves that correcting the model source
@@ -569,6 +624,8 @@ func TestFreshTailBytes(t *testing.T) {
 		{name: "full chunk when delta equals chunk", delta: 3 * time.Second, rate: 48000, pcmLen: testVADChunkBytes, want: testVADChunkBytes},
 		{name: "clamped to pcm length", delta: 10 * time.Second, rate: 48000, pcmLen: testVADChunkBytes, want: testVADChunkBytes},
 		{name: "zero delta is zero", delta: 0, rate: 48000, pcmLen: testVADChunkBytes, want: 0},
+		{name: "negative delta clamps to zero", delta: -time.Second, rate: 48000, pcmLen: testVADChunkBytes, want: 0},
+		{name: "rounds to nearest sample not truncated", delta: 46439909 * time.Nanosecond, rate: 44100, pcmLen: 4096, want: 4096},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
