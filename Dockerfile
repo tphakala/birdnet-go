@@ -226,7 +226,11 @@ RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
 
 # ONNX Runtime (used by all arches; arm64 relies on it exclusively). onnxruntime
 # is dlopened at runtime, never linked at compile, so it is provisioned here in
-# the base rather than in the `build` stage. Installed root-owned under /usr/lib.
+# the base rather than in the `build` stage. `tar --no-same-owner` extracts the
+# archive as root (GNU tar as root otherwise restores the archive's stored UIDs),
+# so the libraries land root-owned under /usr/lib and a non-root runtime process
+# sharing an unrelated UID cannot overwrite them. The same flag is used for the
+# TFLite and OpenVINO extractions below for the same reason.
 ARG ONNXRUNTIME_VERSION
 RUN set -eu; \
     ONNX_ARCH=$(case "${TARGETPLATFORM}" in \
@@ -238,7 +242,7 @@ RUN set -eu; \
     curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-${ONNX_ARCH}-${ONNXRUNTIME_VERSION}.tgz" \
         -o /tmp/onnxruntime.tgz; \
     mkdir -p /tmp/onnxruntime; \
-    tar -xzf /tmp/onnxruntime.tgz -C /tmp/onnxruntime --strip-components=1; \
+    tar --no-same-owner -xzf /tmp/onnxruntime.tgz -C /tmp/onnxruntime --strip-components=1; \
     cp -a /tmp/onnxruntime/lib/libonnxruntime*.so* /usr/lib/; \
     rm -rf /tmp/onnxruntime /tmp/onnxruntime.tgz
 
@@ -259,7 +263,7 @@ RUN set -eu; \
     TF_VER="${TFLITE_VERSION#v}"; \
     echo "Downloading TFLite C library ${TFLITE_VERSION} for ${TFA}"; \
     wget -q "https://github.com/tphakala/tflite_c/releases/download/${TFLITE_VERSION}/tflite_c_${TFLITE_VERSION}_${TFA}.tar.gz" -O /tmp/tflite.tar.gz; \
-    tar -xzf /tmp/tflite.tar.gz -C /tmp; \
+    tar --no-same-owner -xzf /tmp/tflite.tar.gz -C /tmp; \
     cp -a "/tmp/libtensorflowlite_c.so.${TF_VER}" /usr/lib/; \
     ln -sf "libtensorflowlite_c.so.${TF_VER}" /usr/lib/libtensorflowlite_c.so; \
     test -e /usr/lib/libtensorflowlite_c.so; \
@@ -289,7 +293,7 @@ RUN set -eu; \
     curl -fsSL "${OV_URL}" -o /tmp/openvino.tgz; \
     echo "${OV_SHA256}  /tmp/openvino.tgz" | sha256sum -c -; \
     mkdir -p /tmp/ov; \
-    tar -xzf /tmp/openvino.tgz -C /tmp/ov --strip-components=1 \
+    tar --no-same-owner -xzf /tmp/openvino.tgz -C /tmp/ov --strip-components=1 \
         "${OV_BASE}/runtime/lib/${OV_LIBDIR}" \
         "${OV_BASE}/runtime/3rdparty/tbb/lib"; \
     OV_SRC="/tmp/ov/runtime/lib/${OV_LIBDIR}"; \
@@ -389,10 +393,17 @@ FROM models-${TARGETARCH} AS models
 # ============================================================================
 FROM ${BASE_IMAGE} AS final
 
-# Copy the arch-selected stock models. --chmod=644 makes files world-readable and
-# the layer reproducible (a pure COPY, no non-deterministic RUN); COPY creates
-# /models as 0755 (world-traversable), matching what the entrypoint expects.
-COPY --from=models --chown=root:root --chmod=644 / /models/
+# Copy the arch-selected stock models, then normalize permissions explicitly.
+# Do NOT use `COPY --chmod` here: when the source is a stage root, BuildKit applies
+# the mode to the destination directory itself, so `--chmod=644` leaves /models
+# non-traversable (0644) and a non-root runtime user gets "permission denied"
+# opening a model (Buildah instead keeps the dir 0755, so the two builders
+# disagree and a local Buildah test passes while CI/BuildKit fails). The explicit
+# chmod guarantees a traversable dir (0755) and world-readable files (0644) on
+# every builder. The single arch set is still copied once, so the ~116 MB
+# duplicate model layer stays gone.
+COPY --from=models --chown=root:root / /models/
+RUN chmod 0755 /models && find /models -mindepth 1 -type f -exec chmod 0644 {} +
 
 # Include reset_auth tool and startup scripts from the build stage.
 COPY --from=build --chmod=755 /home/dev-user/src/BirdNET-Go/reset_auth.sh /usr/bin/
