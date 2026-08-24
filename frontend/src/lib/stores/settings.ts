@@ -354,6 +354,16 @@ export interface PrivacyFilterSettings {
   enabled: boolean;
   confidence: number;
   debug: boolean;
+  // Dedicated Silero VAD speech gate. Backend-managed (toggled via config/API,
+  // modelPath set by the model gallery install); no dedicated UI yet. Declared
+  // here so a settings save round-trip preserves it rather than stripping it.
+  vad?: PrivacyFilterVadSettings;
+}
+
+export interface PrivacyFilterVadSettings {
+  enabled: boolean;
+  threshold: number;
+  modelPath: string;
 }
 
 export interface PrivacyFilter {

@@ -503,9 +503,21 @@ type OpenWeatherSettings struct {
 
 // PrivacyFilterSettings contains settings for the privacy filter.
 type PrivacyFilterSettings struct {
-	Debug      bool    `yaml:"debug" json:"debug"`           // true to enable debug mode
-	Enabled    bool    `yaml:"enabled" json:"enabled"`       // true to enable privacy filter
-	Confidence float32 `yaml:"confidence" json:"confidence"` // confidence threshold for human detection
+	Debug      bool        `yaml:"debug" json:"debug"`           // true to enable debug mode
+	Enabled    bool        `yaml:"enabled" json:"enabled"`       // true to enable privacy filter
+	Confidence float32     `yaml:"confidence" json:"confidence"` // confidence threshold for label-based human detection
+	VAD        VADSettings `yaml:"vad" json:"vad"`               // dedicated Silero VAD speech gate that augments the label-based filter
+}
+
+// VADSettings configures the Silero voice-activity-detection gate that augments
+// the label-based privacy filter. It detects speech PRESENCE only (not content
+// or speaker identity) and is opt-in. The Silero VAD model is embedded in the
+// binary, so no download is needed; it requires an ONNX Runtime library and is
+// inactive without one.
+type VADSettings struct {
+	Enabled   bool    `yaml:"enabled" json:"enabled"`     // true to enable the VAD speech gate (opt-in, default false)
+	Threshold float64 `yaml:"threshold" json:"threshold"` // speech-probability gate in (0,1]; default 0.35
+	ModelPath string  `yaml:"modelpath" json:"modelPath"` // optional override for the embedded silero .onnx; empty uses the embedded model
 }
 
 // DogBarkFilterSettings contains settings for the dog bark filter.
