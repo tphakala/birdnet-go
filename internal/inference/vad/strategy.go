@@ -12,16 +12,6 @@ type strategy interface {
 	batch() int
 }
 
-// numFrames returns how many windowSamples-sized hops cover n samples, counting
-// a final partial hop (zero-padded) so trailing audio is not dropped. Returns 0
-// for n <= 0.
-func numFrames(n int) int {
-	if n <= 0 {
-		return 0
-	}
-	return (n + windowSamples - 1) / windowSamples
-}
-
 // recurrentStrategy runs hops sequentially at batch size 1, threading both the
 // LSTM state and the 64-sample context from each hop to the next exactly as
 // Silero intends. It is the safest, most faithful strategy and the default.
@@ -31,7 +21,7 @@ func (recurrentStrategy) name() string { return "recurrent" }
 func (recurrentStrategy) batch() int   { return 1 }
 
 func (recurrentStrategy) run(s *session, samples []float32) ([]float32, error) {
-	frames := numFrames(len(samples))
+	frames := frameCount(len(samples))
 	if frames == 0 {
 		return nil, nil
 	}
@@ -82,7 +72,7 @@ func (st segmentBatchedStrategy) name() string { return "segment-batched" }
 func (st segmentBatchedStrategy) batch() int   { return st.segments }
 
 func (st segmentBatchedStrategy) run(s *session, samples []float32) ([]float32, error) {
-	total := numFrames(len(samples))
+	total := frameCount(len(samples))
 	if total == 0 {
 		return nil, nil
 	}

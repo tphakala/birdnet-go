@@ -36,29 +36,6 @@ func TestAggregate(t *testing.T) {
 	}
 }
 
-func TestNumFrames(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name    string
-		samples int
-		want    int
-	}{
-		{name: "zero", samples: 0, want: 0},
-		{name: "negative", samples: -10, want: 0},
-		{name: "exact one frame", samples: windowSamples, want: 1},
-		{name: "one sample rounds up to one frame", samples: 1, want: 1},
-		{name: "partial tail rounds up", samples: windowSamples + 1, want: 2},
-		{name: "3s at 16k is 94 frames", samples: 48000, want: 94},
-		{name: "5s at 16k is 157 frames", samples: 80000, want: 157},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tt.want, numFrames(tt.samples))
-		})
-	}
-}
-
 // makeSinePCM16 builds sampleCount samples of a sine wave as 16-bit LE PCM bytes.
 func makeSinePCM16(t *testing.T, sampleCount, sampleRate int, freqHz float64) []byte {
 	t.Helper()
