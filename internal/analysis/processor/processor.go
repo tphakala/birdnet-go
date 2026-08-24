@@ -31,6 +31,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/openfauna"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/securefs"
@@ -65,14 +66,14 @@ type Processor struct {
 	mqttNotReadyWarnLogged onceByKey    // Emits the "client not ready" warning at most once per topic to avoid flood
 	BirdImageCache         *imageprovider.BirdImageCache
 	EventTracker           *EventTracker
-	eventTrackerMu         sync.RWMutex            // Mutex to protect EventTracker access
-	NewSpeciesTracker      *species.SpeciesTracker // Tracks new species detections
-	speciesTrackerMu       sync.RWMutex            // Mutex to protect NewSpeciesTracker access
-	lastSyncAttempt        time.Time               // Last time sync was attempted
-	syncMutex              sync.Mutex              // Mutex to protect sync operations
-	syncInProgress         atomic.Bool             // Flag to prevent overlapping syncs
-	LastDogDetection       map[string]time.Time    // keep track of dog barks per audio source
-	LastHumanDetection     map[string]time.Time    // keep track of human vocal per audio source
+	eventTrackerMu         sync.RWMutex              // Mutex to protect EventTracker access
+	NewSpeciesTracker      *species.SpeciesTracker   // Tracks new species detections
+	speciesTrackerMu       sync.RWMutex              // Mutex to protect NewSpeciesTracker access
+	lastSyncAttempt        time.Time                 // Last time sync was attempted
+	syncMutex              sync.Mutex                // Mutex to protect sync operations
+	syncInProgress         atomic.Bool               // Flag to prevent overlapping syncs
+	LastDogDetection       map[string]time.Time      // keep track of dog barks per audio source
+	LastHumanDetection     map[string]HumanDetection // keep track of human vocal per audio source, with the trigger that flagged it
 	Metrics                *observability.Metrics
 	DynamicThresholds      map[string]*DynamicThreshold
 	thresholdsMutex        sync.RWMutex        // Mutex to protect access to DynamicThresholds
@@ -482,7 +483,7 @@ func (p *Processor) initDynamicThresholds(settings *conf.Settings) {
 // New creates a new Processor with the given dependencies.
 // The parentLog parameter should be the analysis package logger, which will be used to create
 // a child logger with ".processor" suffix for hierarchical logging (e.g., "analysis.processor").
-func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchestrator, metrics *observability.Metrics, birdImageCache *imageprovider.BirdImageCache, parentLog logger.Logger) *Processor {
+func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchestrator, obsMetrics *observability.Metrics, birdImageCache *imageprovider.BirdImageCache, parentLog logger.Logger) *Processor {
 	// Create child logger from parent for hierarchical logging
 	var procLog logger.Logger
 	if parentLog != nil {
@@ -503,9 +504,9 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchest
 			time.Duration(settings.Realtime.Interval)*time.Second,
 			settings.Realtime.Species.Config,
 		),
-		Metrics:            metrics,
+		Metrics:            obsMetrics,
 		LastDogDetection:   make(map[string]time.Time),
-		LastHumanDetection: make(map[string]time.Time),
+		LastHumanDetection: make(map[string]HumanDetection),
 		vadGate:            newVADGate(),
 		DynamicThresholds:  make(map[string]*DynamicThreshold),
 		pendingResets:      make(map[string]struct{}),
@@ -1336,7 +1337,7 @@ func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifie
 		// put human detection timestamp into LastHumanDetection map. This is used to discard
 		// bird detections if a human vocalization is detected after the first detection
 		p.detectionMutex.Lock()
-		p.LastHumanDetection[item.Source.ID] = item.StartTime
+		p.LastHumanDetection[item.Source.ID] = HumanDetection{Time: item.StartTime, Trigger: metrics.TriggerLabel}
 		p.detectionMutex.Unlock()
 	}
 }
@@ -1511,14 +1512,26 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 		// started. Using !Before (>=) rather than After (>) so a human and a bird
 		// sharing the exact same audio chunk (equal timestamps) still trips the
 		// privacy filter instead of leaking the detection.
-		if exists && !lastHumanDetection.Before(item.FirstDetected) {
+		if exists && !lastHumanDetection.Time.Before(item.FirstDetected) {
 			// Add structured logging for privacy filter
 			GetLogger().Debug("Detection discarded by privacy filter",
 				logger.String("species", item.Detection.Result.Species.CommonName),
 				logger.Time("detection_time", item.FirstDetected),
-				logger.Time("last_human_detection", lastHumanDetection),
+				logger.Time("last_human_detection", lastHumanDetection.Time),
+				logger.String("trigger", lastHumanDetection.Trigger),
 				logger.String("source", p.getDisplayNameForSource(item.Source)),
 				logger.String("operation", "privacy_filter"))
+			// Attribute the discard to the trigger that flagged the human voice
+			// (label match vs VAD speech gate), when telemetry is enabled.
+			if settings.Realtime.Telemetry.Enabled && p.Metrics != nil {
+				trigger := lastHumanDetection.Trigger
+				if trigger == "" {
+					// Defensive: both writers set a trigger, but never emit a
+					// bogus empty label if a future path forgets to.
+					trigger = metrics.TriggerLabel
+				}
+				p.Metrics.PrivacyFilter.RecordDiscard(trigger)
+			}
 			return true, "privacy filter"
 		}
 	}

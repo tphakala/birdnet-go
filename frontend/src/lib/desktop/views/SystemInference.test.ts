@@ -260,6 +260,102 @@ describe('SystemInference', () => {
     expect(text).toContain('Front Yard');
   });
 
+  // These tests run against the i18n stub in src/test/setup.ts, which returns the
+  // key for any unmapped string, so assertions target the rendered key names
+  // (system.inference.vad.*) plus the data values, not the English text.
+  it('hides the VAD panel when the snapshot carries no vad block', async () => {
+    installApi(makeSnapshot([makeModel()]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('BirdNET GLOBAL 6K');
+    });
+    expect(container.textContent).not.toContain('system.inference.vad.section');
+  });
+
+  it('renders the VAD panel with active state, stats and recent-speech feed', async () => {
+    const snapshot = makeSnapshot([makeModel()]);
+    snapshot.vad = {
+      enabled: true,
+      available: true,
+      loaded: true,
+      threshold: 0.35,
+      modelSource: 'embedded',
+      strategy: 'recurrent',
+      sampleRate: 48000,
+      stats: { invocations: 90211, avgMs: 2.4, maxMs: 9.1, speechHits: 9042 },
+      lastSpeechAtUnix: 1750000000,
+      lastSpeechProbability: 0.82,
+      recentHits: [
+        { atUnix: 1750000000, probability: 0.87, source: 'Front Yard' },
+        { atUnix: 1749999500, probability: 0.91, source: 'Back Yard' },
+      ],
+    };
+    installApi(snapshot);
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('system.inference.vad.section');
+    });
+    const text = container.textContent;
+    expect(text).toContain('system.inference.vad.title'); // card name (like a model name)
+    expect(text).toContain('system.inference.vad.active'); // active indicator
+    expect(text).toContain('0.35'); // threshold value
+    // Distinctive thousands-separated values that formatNumber produces and that
+    // appear nowhere else in the container (the co-rendered model card uses 12,034
+    // / 47.2 / 130), so these isolate the VAD invocations and speech-hits cells.
+    expect(text).toContain('90,211'); // invocations value
+    expect(text).toContain('9,042'); // speech hits value
+    // Recent-speech history feed: the source names and probabilities render.
+    expect(text).toContain('system.inference.vad.recentTitle');
+    expect(text).toContain('Front Yard');
+    expect(text).toContain('Back Yard');
+    expect(text).toContain('87%'); // hit probability rounded to a percentage
+  });
+
+  it('shows the empty recent-speech state when there are no hits', async () => {
+    const snapshot = makeSnapshot([makeModel()]);
+    snapshot.vad = {
+      enabled: true,
+      available: true,
+      loaded: true,
+      threshold: 0.35,
+      stats: { invocations: 42, avgMs: 2.4, maxMs: 9.1, speechHits: 0 },
+      recentHits: [],
+    };
+    installApi(snapshot);
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('system.inference.vad.section');
+    });
+    expect(container.textContent).toContain('system.inference.vad.recentEmpty');
+  });
+
+  it('shows the disabled VAD state without stale descriptors', async () => {
+    const snapshot = makeSnapshot([makeModel()]);
+    snapshot.vad = {
+      enabled: false,
+      available: true,
+      loaded: false,
+      threshold: 0.35,
+      stats: { invocations: 0, avgMs: 0, maxMs: 0, speechHits: 0 },
+    };
+    installApi(snapshot);
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('system.inference.vad.section');
+    });
+    const text = container.textContent;
+    expect(text).toContain('system.inference.vad.disabled');
+    expect(text).not.toContain('system.inference.vad.active'); // not the active state
+  });
+
   it('shows the not-measured label when approxRssBytes is absent', async () => {
     // Drop the memory measurement: ramDisplay falls back to the not-measured label.
     const model = makeModel({ memory: { approximate: true } });

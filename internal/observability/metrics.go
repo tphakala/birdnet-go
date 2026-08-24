@@ -28,6 +28,7 @@ type Metrics struct {
 	SoundLevel    *metrics.SoundLevelMetrics
 	HTTP          *metrics.HTTPMetrics
 	Notification  *metrics.NotificationMetrics
+	PrivacyFilter *metrics.PrivacyFilterMetrics
 }
 
 // NewMetrics creates a new instance of Metrics, initializing all metric collectors.
@@ -90,6 +91,11 @@ func NewMetrics() (*Metrics, error) {
 		return nil, fmt.Errorf("failed to create Notification metrics: %w", err)
 	}
 
+	privacyFilterMetrics, err := metrics.NewPrivacyFilterMetrics(registry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create PrivacyFilter metrics: %w", err)
+	}
+
 	m := &Metrics{
 		registry:      registry,
 		MQTT:          mqttMetrics,
@@ -103,6 +109,7 @@ func NewMetrics() (*Metrics, error) {
 		SoundLevel:    soundLevelMetrics,
 		HTTP:          httpMetrics,
 		Notification:  notificationMetrics,
+		PrivacyFilter: privacyFilterMetrics,
 	}
 
 	// Initialize tracing with metrics
