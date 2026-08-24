@@ -314,9 +314,6 @@ func pcmChunkDuration(pcmLen, sampleRate int) time.Duration {
 	return time.Duration(samples) * time.Second / time.Duration(sampleRate) //nolint:durationcheck // intentional: converts a sample count at a Hz rate into a duration
 }
 
-// freshTailBytes converts the start-time delta between two overlapping chunks
-// into the byte length of the newest (non-overlapped) tail of the current chunk,
-// clamped to [0, pcmLen] and aligned to whole PCM samples.
 // isInferenceError reports whether err is an ONNX inference/model failure (which
 // warrants tearing down and rebuilding the shared session) rather than a
 // per-source data or resampling error (which leaves the session healthy). The
@@ -330,6 +327,9 @@ func isInferenceError(err error) bool {
 	return false
 }
 
+// freshTailBytes converts the start-time delta between two overlapping chunks
+// into the byte length of the newest (non-overlapped) tail of the current chunk,
+// clamped to [0, pcmLen] and aligned to whole PCM samples.
 func freshTailBytes(delta time.Duration, sampleRate, pcmLen int) int {
 	if delta <= 0 {
 		return 0

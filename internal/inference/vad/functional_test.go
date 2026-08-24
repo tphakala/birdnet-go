@@ -2,6 +2,7 @@ package vad
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math"
 	"math/rand/v2"
 	"os"
@@ -69,17 +70,19 @@ func TestVAD_SequenceSessionIO(t *testing.T) {
 	h := make([]float32, stateWidth)
 	c := make([]float32, stateWidth)
 	for _, n := range []int{5, 94} {
-		frames := make([]float32, n*modelInputSamples)
-		probs, hOut, cOut, err := s.Run(frames, h, c)
-		require.NoError(t, err, "n=%d", n)
-		require.Len(t, probs, n)
-		require.Len(t, hOut, stateWidth)
-		require.Len(t, cOut, stateWidth)
-		for i, p := range probs {
-			assert.GreaterOrEqual(t, p, float32(0), "prob %d in range", i)
-			assert.LessOrEqual(t, p, float32(1), "prob %d in range", i)
-			assert.Less(t, p, float32(0.5), "silence hop %d must not look like speech", i)
-		}
+		t.Run(fmt.Sprintf("seqlen=%d", n), func(t *testing.T) {
+			frames := make([]float32, n*modelInputSamples)
+			probs, hOut, cOut, err := s.Run(frames, h, c)
+			require.NoError(t, err)
+			require.Len(t, probs, n)
+			require.Len(t, hOut, stateWidth)
+			require.Len(t, cOut, stateWidth)
+			for i, p := range probs {
+				assert.GreaterOrEqual(t, p, float32(0), "prob %d in range", i)
+				assert.LessOrEqual(t, p, float32(1), "prob %d in range", i)
+				assert.Less(t, p, float32(0.5), "silence hop %d must not look like speech", i)
+			}
+		})
 	}
 }
 
@@ -128,8 +131,9 @@ func TestVAD_SpeechLikeResponds(t *testing.T) {
 	prob, err := d.SpeechProbability(speechLikePCM16(3, 48000), 48000)
 	require.NoError(t, err)
 	t.Logf("speech-like probability = %.4f", prob)
-	assert.GreaterOrEqual(t, prob, float32(0))
 	assert.LessOrEqual(t, prob, float32(1))
+	assert.GreaterOrEqual(t, prob, float32(parityThreshold),
+		"speech-like input fed through the 48 kHz resampling path must reach the gate threshold")
 }
 
 // TestVAD_RealSpeechIsHigh is a positive control: it feeds a real 16 kHz mono
