@@ -108,6 +108,17 @@ type Config struct {
 
 	// DisableCompression disables transparent gzip compression (default: false)
 	DisableCompression bool
+
+	// BlockLinkLocalAndMetadata installs an SSRF guard on the dialer that
+	// refuses connections to link-local addresses (including the
+	// 169.254.169.254 cloud metadata endpoint), the unspecified address, and
+	// known cloud metadata IPs. Loopback and private RFC1918 ranges stay
+	// reachable so on-LAN targets keep working. See ssrf.go for the policy.
+	//
+	// Enabling this also disables environment-proxy support for the client, so
+	// a configured HTTP(S)_PROXY cannot resolve the destination on the client's
+	// behalf and bypass the guard.
+	BlockLinkLocalAndMetadata bool
 }
 
 // DefaultConfig returns a Config with sensible production defaults.
@@ -162,13 +173,28 @@ func New(cfg *Config) *Client {
 		}
 	}
 
+	// Base dialer with tuned dial timeout and keep-alive.
+	baseDialer := &net.Dialer{
+		Timeout:   defaultDialTimeout,
+		KeepAlive: defaultDialKeepAlive,
+	}
+	dialContext := baseDialer.DialContext
+	proxy := http.ProxyFromEnvironment
+	if c.BlockLinkLocalAndMetadata {
+		dialContext = newGuardedDialContext(baseDialer)
+		// Disable environment proxies while the guard is active. A configured
+		// proxy would defeat the guard: the transport dials the proxy and lets
+		// it resolve the destination, so the target IP never reaches the guard
+		// (and with a loopback/private proxy the guard would reject the proxy
+		// itself). This mirrors the imageprovider SSRF client. Non-guarded
+		// clients keep normal ProxyFromEnvironment support.
+		proxy = nil
+	}
+
 	// Create transport with tuned settings
 	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   defaultDialTimeout,
-			KeepAlive: defaultDialKeepAlive,
-		}).DialContext,
+		Proxy:                 proxy,
+		DialContext:           dialContext,
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          c.MaxIdleConns,
 		MaxIdleConnsPerHost:   c.MaxIdleConnsPerHost,

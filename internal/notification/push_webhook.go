@@ -51,9 +51,6 @@ const (
 	// defaultWebhookTimeout is the default timeout for webhook HTTP requests
 	defaultWebhookTimeout = 30 * time.Second
 
-	// maxErrorBodySize limits error response body reading to prevent memory issues
-	maxErrorBodySize = 1024
-
 	// Webhook authentication type constants
 	authTypeNone   = "none"
 	authTypeBearer = "bearer"
@@ -224,6 +221,10 @@ func NewWebhookProvider(name string, enabled bool, endpoints []WebhookEndpoint, 
 	cfg := httpclient.DefaultConfig()
 	cfg.UserAgent = "BirdNET-Go-Webhook/1.0"
 	cfg.DefaultTimeout = defaultWebhookTimeout
+	// Refuse link-local and cloud metadata targets (e.g. 169.254.169.254) at
+	// dial time. RFC1918 and loopback stay reachable so on-LAN webhook targets
+	// keep working. See httpclient/ssrf.go.
+	cfg.BlockLinkLocalAndMetadata = true
 	wp.client = httpclient.New(&cfg)
 
 	return wp, nil
@@ -550,9 +551,13 @@ func (w *WebhookProvider) sendToEndpoint(ctx context.Context, endpoint *WebhookE
 
 	// Check response status
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		// Read error response body for better diagnostics
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodySize))
-		httpErr := errors.Newf("webhook returned status %d: %s", resp.StatusCode, string(body)).Component("notification").Category(errors.CategoryNetwork).Context("status_code", resp.StatusCode).Build()
+		// Deliberately do NOT read or log the response body. A webhook URL is
+		// operator-configured and can point at an internal service, so echoing
+		// the upstream body into the error (which reaches logs and telemetry)
+		// would leak that service's response. The status code is enough to
+		// diagnose a delivery failure. The deferred drain above still empties
+		// the body so the connection can be reused.
+		httpErr := errors.Newf("webhook returned status %d", resp.StatusCode).Component("notification").Category(errors.CategoryNetwork).Context("status_code", resp.StatusCode).Build()
 
 		// Report telemetry for HTTP errors
 		if w.telemetry != nil {
