@@ -3097,7 +3097,7 @@
         "vadEnable": "Ativar Proteção de Privacidade (Silero VAD)",
         "vadHelp": "Executa um modelo neural dedicado de deteção de voz juntamente com o classificador para uma filtragem de voz robusta. Consome recursos de sistema adicionais (aprox. 20-30 MB de RAM e inferência de CPU por segmento).",
         "vadThresholdLabel": "Limiar de Proteção de Privacidade",
-        "vadThresholdHelp": "Limiar de sensibilidade para o detetor de atividade de voz (predefinido 0.35). Valores mais baixos tornam o filtro mais sensível a voz baixa ou distante."
+        "vadThresholdHelp": "Limiar de sensibilidade para o detetor de atividade de voz (predefinido 0,35). Valores mais baixos tornam o filtro mais sensível a voz baixa ou distante."
       },
       "falsePositivePrevention": {
         "title": "Prevenção de falsos positivos",

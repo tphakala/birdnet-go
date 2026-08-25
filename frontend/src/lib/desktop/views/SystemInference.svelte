@@ -841,6 +841,7 @@
         </h3>
         <div
           class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col gap-3"
+          data-testid="vad-card"
         >
           <!-- Header mirrors the model cards: icon + name + backend badge, with a
                runtime-state indicator pinned right (same idiom as the model card's
@@ -888,7 +889,12 @@
             <span class="text-muted">
               {t('system.inference.sampleRate')}:
               <span class="font-mono tabular-nums text-base-content">
-                16 {t('system.inference.unitKhz')}
+                {#if vad.sampleRate != null}
+                  {sampleRateKhz(vad.sampleRate)}
+                  {t('system.inference.unitKhz')}
+                {:else}
+                  -
+                {/if}
               </span>
             </span>
             <span class="text-muted">
