@@ -3096,7 +3096,7 @@
         "confidenceHelp": "Ustaw poziom pewności dla detekcji głosu ludzkiego, niższa wartość sprawia, że filtr jest bardziej czuły",
         "vadEnable": "Włącz Ochronę Prywatności (Silero VAD)",
         "vadHelp": "Uruchamia dedykowany model neuronowy do wykrywania mowy obok klasyfikatora w celu niezawodnego filtrowania głosu. Zużywa dodatkowe zasoby systemowe (ok. 20-30 MB pamięci RAM oraz inferencję procesora na segment).",
-        "vadThresholdLabel": "Próg wykrywania mowy",
+        "vadThresholdLabel": "Próg Ochrony Prywatności",
         "vadThresholdHelp": "Próg czułości detektora aktywności głosowej (domyślnie 0.35). Niższe wartości sprawiają, że filtr jest bardziej czuły na cichą lub odległą mowę."
       },
       "falsePositivePrevention": {

@@ -3096,7 +3096,7 @@
         "confidenceHelp": "Legen Sie das Konfidenzniveau für die Erkennung menschlicher Stimmen fest, niedrigere Werte machen den Filter empfindlicher",
         "vadEnable": "Privatsphären-Schutz aktivieren (Silero VAD)",
         "vadHelp": "Führt ein dediziertes neuronales Spracherkennungsmodell parallel zum Klassifikator für zuverlässige Sprachfilterung aus. Verbraucht zusätzliche Systemressourcen (ca. 20-30 MB RAM und CPU-Inferenz pro Segment).",
-        "vadThresholdLabel": "Schwellenwert für Spracherkennung",
+        "vadThresholdLabel": "Schwellenwert für Privatsphären-Schutz",
         "vadThresholdHelp": "Empfindlichkeitsschwellenwert für die Sprachaktivitätserkennung (Standard 0.35). Niedrigere Werte machen den Filter empfindlicher für leise oder entfernte Sprache."
       },
       "falsePositivePrevention": {

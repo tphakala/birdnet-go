@@ -3096,7 +3096,7 @@
         "confidenceHelp": "Imposta livello confidenza per rilevamento voce umana, valore più basso rende filtro più sensibile",
         "vadEnable": "Attiva Protezione Privacy (Silero VAD)",
         "vadHelp": "Esegue un modello neurale dedicato di rilevamento vocale accanto al classificatore per un filtraggio vocale affidabile. Consuma risorse di sistema aggiuntive (circa 20-30 MB di RAM e inferenza CPU per segmento).",
-        "vadThresholdLabel": "Soglia di rilevamento vocale",
+        "vadThresholdLabel": "Soglia Protezione Privacy",
         "vadThresholdHelp": "Soglia di sensibilità per il rilevatore di attività vocale (predefinito 0.35). Valori inferiori rendono il filtro più sensibile a voci flebili o distanti."
       },
       "falsePositivePrevention": {

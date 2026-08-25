@@ -44,7 +44,7 @@
   interface SpeciesListResponse {
     species?: Array<{ label: string; commonName?: string; scientificName?: string }>;
   }
-  import { Filter } from '@lucide/svelte';
+  import { Filter, Shield } from '@lucide/svelte';
   import { loggers } from '$lib/utils/logger';
   import { normalizeForLookup } from '$lib/utils/speciesNames';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
@@ -337,10 +337,19 @@
               >
                 <Checkbox
                   checked={settings.privacy.vad.enabled}
-                  label={t('settings.filters.privacyFiltering.vadEnable')}
                   disabled={!settings.privacy.enabled || store.isLoading || store.isSaving}
                   onchange={enabled => updateVADEnabled(enabled)}
-                />
+                >
+                  <span
+                    class="inline-flex items-center gap-1.5 text-sm text-[var(--color-base-content)]"
+                  >
+                    <Shield
+                      class="size-4 text-[var(--color-primary)] shrink-0"
+                      aria-hidden="true"
+                    />
+                    <span>{t('settings.filters.privacyFiltering.vadEnable')}</span>
+                  </span>
+                </Checkbox>
                 <p class="text-xs text-muted pl-6 leading-relaxed">
                   {t('settings.filters.privacyFiltering.vadHelp')}
                 </p>

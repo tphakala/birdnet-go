@@ -3096,7 +3096,7 @@
         "confidenceHelp": "Indstil konfidensniveauet for detektering af menneskelige stemmer. Lavere værdier gør filteret mere følsomt",
         "vadEnable": "Aktivér Privatlivsbeskyttelse (Silero VAD)",
         "vadHelp": "Kører en dedikeret neural taledetekteringsmodel sammen med klassifikatoren for robust talefiltrering. Forbruger yderligere systemressourcer (ca. 20-30 MB RAM og CPU-inferens pr. segment).",
-        "vadThresholdLabel": "Tærskel for taledetektering",
+        "vadThresholdLabel": "Tærskel for privatlivsbeskyttelse",
         "vadThresholdHelp": "Følsomhedstærskel for taleaktivitetsdetektoren (standard 0.35). Lavere værdier gør filtret mere følsomt over for svag eller fjern tale."
       },
       "falsePositivePrevention": {

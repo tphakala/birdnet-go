@@ -3096,7 +3096,7 @@
         "confidenceHelp": "Iestatiet ticamības līmeni cilvēku balss noteikšanai, zemāka vērtība padara filtru jutīgāku",
         "vadEnable": "Iespējot Privātuma Aizsardzību (Silero VAD)",
         "vadHelp": "Darbojas ar atsevišķu neironu runas noteikšanas modeli blakus klasifikatoram uzticamai balss filtrēšanai. Patērē papildu sistēmas resursus (aptuveni 20-30 MB RAM un CPU inferenci uz segmentu).",
-        "vadThresholdLabel": "Runas noteikšanas slieksnis",
+        "vadThresholdLabel": "Privātuma Aizsardzības slieksnis",
         "vadThresholdHelp": "Jutības slieksnis balss aktivitātes detektoram (noklusējums 0.35). Zemākas vērtības padara filtru jutīgāku pret klusu vai attālu runu."
       },
       "falsePositivePrevention": {
