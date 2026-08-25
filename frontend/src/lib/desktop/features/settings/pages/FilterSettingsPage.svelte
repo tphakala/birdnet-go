@@ -44,7 +44,7 @@
   interface SpeciesListResponse {
     species?: Array<{ label: string; commonName?: string; scientificName?: string }>;
   }
-  import { Filter, Shield } from '@lucide/svelte';
+  import { Filter, ShieldCheck } from '@lucide/svelte';
   import { loggers } from '$lib/utils/logger';
   import { normalizeForLookup } from '$lib/utils/speciesNames';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
@@ -343,10 +343,7 @@
                   <span
                     class="inline-flex items-center gap-1.5 text-sm text-[var(--color-base-content)]"
                   >
-                    <Shield
-                      class="size-4 text-[var(--color-primary)] shrink-0"
-                      aria-hidden="true"
-                    />
+                    <ShieldCheck class="w-4 h-4 shrink-0 text-muted" aria-hidden="true" />
                     <span>{t('settings.filters.privacyFiltering.vadEnable')}</span>
                   </span>
                 </Checkbox>

@@ -23,6 +23,8 @@ import type {
   WebhookAuthConfig,
   PushFilterConfig,
   FalsePositiveFilterSettings,
+  PrivacyFilterSettings,
+  PrivacyFilterVadSettings,
 } from '$lib/stores/settings';
 import { AUDIO_GAIN_MIN_DB, AUDIO_GAIN_MAX_DB } from '$lib/stores/settings';
 
@@ -790,6 +792,42 @@ export function coerceNotificationSettings(
 }
 
 /**
+ * Coerce privacy filter settings
+ */
+export function coercePrivacyFilterSettings(
+  data?: Partial<PrivacyFilterSettings> & UnknownSettings
+): PrivacyFilterSettings {
+  const defaults: PrivacyFilterSettings = {
+    enabled: false,
+    confidence: 0.05,
+    debug: false,
+    vad: {
+      enabled: false,
+      threshold: 0.35,
+      modelPath: '',
+    },
+  };
+
+  if (!data || typeof data !== 'object') {
+    return defaults;
+  }
+
+  const rawVad = data.vad as Record<string, unknown> | undefined;
+  const vad: PrivacyFilterVadSettings = {
+    enabled: coerceBoolean(rawVad?.enabled, false),
+    threshold: coerceNumber(rawVad?.threshold, 0.01, 1.0, 0.35),
+    modelPath: coerceString(rawVad?.modelPath, ''),
+  };
+
+  return {
+    enabled: coerceBoolean(data.enabled, defaults.enabled),
+    confidence: coerceNumber(data.confidence, 0.0, 1.0, defaults.confidence),
+    debug: coerceBoolean(data.debug, defaults.debug),
+    vad,
+  };
+}
+
+/**
  * Main coercion function for all settings
  */
 export function coerceSettings(section: string, data: UnknownSettings): UnknownSettings {
@@ -821,6 +859,12 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
       if (Object.prototype.hasOwnProperty.call(data, 'falsePositiveFilter')) {
         coercedRealtime.falsePositiveFilter = coerceFalsePositiveFilterSettings(
           data.falsePositiveFilter as PartialFalsePositiveFilterSettings
+        );
+      }
+
+      if (Object.prototype.hasOwnProperty.call(data, 'privacyFilter')) {
+        coercedRealtime.privacyFilter = coercePrivacyFilterSettings(
+          data.privacyFilter as Partial<PrivacyFilterSettings> & UnknownSettings
         );
       }
 
