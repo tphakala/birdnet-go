@@ -283,7 +283,7 @@ describe('SystemInference', () => {
       threshold: 0.35,
       modelSource: 'embedded',
       strategy: 'sequence',
-      sampleRate: 48000,
+      sampleRate: 16000,
       stats: { invocations: 90211, avgMs: 2.4, maxMs: 9.1, speechHits: 9042 },
       lastSpeechAtUnix: 1750000000,
       lastSpeechProbability: 0.82,
@@ -299,20 +299,29 @@ describe('SystemInference', () => {
     await waitFor(() => {
       expect(container.textContent).toContain('system.inference.vad.section');
     });
-    const text = container.textContent;
-    expect(text).toContain('system.inference.vad.title'); // card name (like a model name)
-    expect(text).toContain('system.inference.vad.active'); // active indicator
-    expect(text).toContain('0.35'); // threshold value
-    // Distinctive thousands-separated values that formatNumber produces and that
-    // appear nowhere else in the container (the co-rendered model card uses 12,034
-    // / 47.2 / 130), so these isolate the VAD invocations and speech-hits cells.
-    expect(text).toContain('90,211'); // invocations value
-    expect(text).toContain('9,042'); // speech hits value
+    // Scope every VAD assertion to the VAD card. Page-wide text also contains the
+    // co-rendered model card and the hardware fixture, which carry their own CPU,
+    // sample-rate, invocation and latency labels; asserting against the whole
+    // container would let this test keep passing after the VAD markup regresses.
+    const vadCard = container.querySelector('[data-testid="vad-card"]');
+    expect(vadCard).not.toBeNull();
+    const vadText = vadCard?.textContent ?? '';
+    expect(vadText).toContain('system.inference.vad.title'); // card name (like a model name)
+    expect(vadText).toContain('system.inference.vad.active'); // active indicator
+    expect(vadText).toContain('CPU'); // device badge
+    expect(vadText).toContain('system.inference.sampleRate'); // spec line sample rate
+    expect(vadText).toContain('16'); // sampleRateKhz(16000) => "16"
+    expect(vadText).toContain('0.35'); // threshold value
+    expect(vadText).toContain('system.inference.invocations'); // stats line segments analysed
+    expect(vadText).toContain('system.inference.avgLatency'); // stats line avg latency
+    expect(vadText).toContain('system.inference.maxLatency'); // stats line max latency
+    expect(vadText).toContain('90,211'); // invocations value
+    expect(vadText).toContain('9,042'); // speech hits value
     // Recent-speech history feed: the source names and probabilities render.
-    expect(text).toContain('system.inference.vad.recentTitle');
-    expect(text).toContain('Front Yard');
-    expect(text).toContain('Back Yard');
-    expect(text).toContain('87%'); // hit probability rounded to a percentage
+    expect(vadText).toContain('system.inference.vad.recentTitle');
+    expect(vadText).toContain('Front Yard');
+    expect(vadText).toContain('Back Yard');
+    expect(vadText).toContain('87%'); // hit probability rounded to a percentage
   });
 
   it('shows the empty recent-speech state when there are no hits', async () => {

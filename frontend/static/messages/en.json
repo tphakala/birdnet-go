@@ -1709,10 +1709,7 @@
         "unavailableHelp": "No speech-detection model is available in this build. Set a VAD model path in the privacy-filter settings, or use a build with the embedded model.",
         "description": "Silero VAD is a specialized acoustic model that detects human speech. It powers the privacy filter, discarding audio when speech is present so voices are kept out of your recordings.",
         "threshold": "Threshold",
-        "invocations": "Inferences",
         "speechHits": "Speech hits",
-        "avgInference": "Avg inference",
-        "maxInference": "Peak inference",
         "recentTitle": "Recent speech",
         "recentEmpty": "No speech detected yet",
         "colWhen": "When",
@@ -3096,7 +3093,11 @@
         "enable": "Enable Privacy Filtering",
         "disabled": "Privacy filtering is disabled",
         "confidenceLabel": "Confidence Threshold for Human Detection",
-        "confidenceHelp": "Set the confidence level for human voice detection, lower value makes filter more sensitive"
+        "confidenceHelp": "Set the confidence level for human voice detection, lower value makes filter more sensitive",
+        "vadEnable": "Enable Privacy Guard (Silero VAD)",
+        "vadHelp": "Runs a dedicated neural speech-detection model alongside the classifier for robust voice filtering. Consumes additional system resources (approx. 20-30 MB RAM and CPU inference per segment).",
+        "vadThresholdLabel": "Privacy Guard Threshold",
+        "vadThresholdHelp": "Sensitivity threshold for the Privacy Guard voice activity detector (default 0.35). Lower values make the filter more sensitive to quiet or distant speech."
       },
       "falsePositivePrevention": {
         "title": "False Positive Prevention",

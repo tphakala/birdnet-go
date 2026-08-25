@@ -1709,10 +1709,7 @@
         "unavailableHelp": "Aucun modèle de détection vocale n'est disponible dans cette version. Définissez un chemin de modèle VAD dans les paramètres du filtre de confidentialité, ou utilisez une version avec le modèle intégré.",
         "description": "Silero VAD est un modèle acoustique spécialisé qui détecte la voix humaine. Il alimente le filtre de confidentialité, rejetant l'audio lorsque de la parole est présente afin que les voix soient exclues de vos enregistrements.",
         "threshold": "Seuil",
-        "invocations": "Inférences",
         "speechHits": "Détections vocales",
-        "avgInference": "Inférence moy.",
-        "maxInference": "Inférence max.",
         "recentTitle": "Voix récente",
         "recentEmpty": "Aucune voix détectée pour le moment",
         "colWhen": "Quand",
@@ -3096,7 +3093,11 @@
         "enable": "Activer le filtrage de confidentialité",
         "disabled": "Le filtrage de confidentialité est désactivé",
         "confidenceLabel": "Seuil de confiance pour la détection humaine",
-        "confidenceHelp": "Définir le niveau de confiance pour la détection de voix humaine, une valeur plus faible rend le filtre plus sensible"
+        "confidenceHelp": "Définir le niveau de confiance pour la détection de voix humaine, une valeur plus faible rend le filtre plus sensible",
+        "vadEnable": "Activer la protection de confidentialité (Silero VAD)",
+        "vadHelp": "Exécute un modèle neuronal dédié de détection de la parole aux côtés du classificateur pour un filtrage vocal robuste. Consomme des ressources système supplémentaires (environ 20-30 Mo de RAM et de l'inférence CPU par segment).",
+        "vadThresholdLabel": "Seuil de protection de confidentialité",
+        "vadThresholdHelp": "Seuil de sensibilité pour le détecteur d'activité vocale (0,35 par défaut). Des valeurs plus faibles rendent le filtre plus sensible aux voix faibles ou éloignées."
       },
       "falsePositivePrevention": {
         "title": "Prévention des faux positifs",

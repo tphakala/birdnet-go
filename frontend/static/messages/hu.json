@@ -1709,10 +1709,7 @@
         "unavailableHelp": "Ebben a verzióban nem érhető el beszédfelismerő modell. Állítson be egy VAD modell útvonalat az adatvédelmi szűrő beállításaiban, vagy használjon beágyazott modellt tartalmazó verziót.",
         "description": "A Silero VAD egy speciális akusztikai modell, amely érzékeli az emberi beszédet. Ez hajtja a privátszféra-szűrőt, eldobva a hangot beszéd jelenlétekor, hogy a hangok ne kerüljenek bele a felvételekbe.",
         "threshold": "Küszöbérték",
-        "invocations": "Inferenciák",
         "speechHits": "Beszédtalálatok",
-        "avgInference": "Átlagos inferencia",
-        "maxInference": "Csúcs inferencia",
         "recentTitle": "Legutóbbi beszéd",
         "recentEmpty": "Még nem érzékelt beszédet",
         "colWhen": "Időpont",
@@ -3096,7 +3093,11 @@
         "enable": "Adatvédelmi szűrés engedélyezése",
         "disabled": "Az adatvédelmi szűrés le van tiltva",
         "confidenceLabel": "Megbízhatósági küszöbérték az emberi detektáláshoz",
-        "confidenceHelp": "Állítsa be az emberi hang detektálás megbízhatósági szintjét, az alacsonyabb érték érzékenyebbé teszi a szűrőt"
+        "confidenceHelp": "Állítsa be az emberi hang detektálás megbízhatósági szintjét, az alacsonyabb érték érzékenyebbé teszi a szűrőt",
+        "vadEnable": "Adatvédelmi Őr engedélyezése (Silero VAD)",
+        "vadHelp": "Egy külön neurális beszédérzékelő modellt futtat az osztályozó mellett a megbízható hangszűrés érdekében. További rendszererőforrásokat használ (kb. 20-30 MB RAM és CPU-inferencia szegmensenként).",
+        "vadThresholdLabel": "Adatvédelmi Őr küszöbértéke",
+        "vadThresholdHelp": "A hangaktivitás-érzékelő érzékenységi küszöbértéke (alapértelmezett 0.35). Alacsonyabb értékek esetén a szűrő érzékenyebb a halk vagy távoli beszédre."
       },
       "falsePositivePrevention": {
         "title": "Hamis pozitív megelőzés",

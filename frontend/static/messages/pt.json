@@ -1709,10 +1709,7 @@
         "unavailableHelp": "Nenhum modelo de deteção de voz disponível nesta versão. Defina o caminho do modelo VAD nas definições do filtro de privacidade, ou use uma versão com o modelo integrado.",
         "description": "Silero VAD é um modelo acústico especializado que detecta a fala humana. Alimenta o filtro de privacidade, descartando o áudio quando a fala está presente para que as vozes fiquem fora das suas gravações.",
         "threshold": "Limiar",
-        "invocations": "Inferências",
         "speechHits": "Deteções de voz",
-        "avgInference": "Inferência média",
-        "maxInference": "Inferência pico",
         "recentTitle": "Fala recente",
         "recentEmpty": "Nenhuma fala detectada ainda",
         "colWhen": "Quando",
@@ -3096,7 +3093,11 @@
         "enable": "Ativar filtragem de privacidade",
         "disabled": "Filtragem de privacidade está desativada",
         "confidenceLabel": "Limiar de confiança para detecção humana",
-        "confidenceHelp": "Defina o nível de confiança para detecção de voz humana, valores mais baixos tornam o filtro mais sensível"
+        "confidenceHelp": "Defina o nível de confiança para detecção de voz humana, valores mais baixos tornam o filtro mais sensível",
+        "vadEnable": "Ativar Proteção de Privacidade (Silero VAD)",
+        "vadHelp": "Executa um modelo neural dedicado de deteção de voz juntamente com o classificador para uma filtragem de voz robusta. Consome recursos de sistema adicionais (aprox. 20-30 MB de RAM e inferência de CPU por segmento).",
+        "vadThresholdLabel": "Limiar de Proteção de Privacidade",
+        "vadThresholdHelp": "Limiar de sensibilidade para o detetor de atividade de voz (predefinido 0,35). Valores mais baixos tornam o filtro mais sensível a voz baixa ou distante."
       },
       "falsePositivePrevention": {
         "title": "Prevenção de falsos positivos",

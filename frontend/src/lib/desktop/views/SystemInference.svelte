@@ -841,6 +841,7 @@
         </h3>
         <div
           class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col gap-3"
+          data-testid="vad-card"
         >
           <!-- Header mirrors the model cards: icon + name + backend badge, with a
                runtime-state indicator pinned right (same idiom as the model card's
@@ -849,6 +850,7 @@
             <ShieldCheck class="w-4 h-4 shrink-0 text-muted" aria-hidden="true" />
             <span class="text-sm font-semibold truncate">{t('system.inference.vad.title')}</span>
             <Badge variant="primary" size="sm" text="ONNX" />
+            <Badge variant="info" size="sm" text="CPU" />
             <span
               class="ml-auto flex items-center gap-1.5"
               role="status"
@@ -882,20 +884,51 @@
                and why it is here. -->
           <p class="text-xs text-muted leading-snug">{t('system.inference.vad.description')}</p>
 
-          <!-- Stats line mirrors the model card's stats line: text-xs muted
-               "label: value" spans with mono values, wrapping. -->
+          <!-- Spec line mirrors the model card's spec line: sample rate + threshold. -->
           <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+            <span class="text-muted">
+              {t('system.inference.sampleRate')}:
+              <span class="font-mono tabular-nums text-base-content">
+                {#if vad.sampleRate != null}
+                  {sampleRateKhz(vad.sampleRate)}
+                  {t('system.inference.unitKhz')}
+                {:else}
+                  -
+                {/if}
+              </span>
+            </span>
             <span class="text-muted">
               {t('system.inference.vad.threshold')}:
               <span class="font-mono tabular-nums text-base-content"
                 >{vad.threshold.toFixed(2)}</span
               >
             </span>
+          </div>
+
+          <!-- Stats line mirrors the model card's stats line: text-xs muted
+               "label: value" spans with mono values, wrapping. -->
+          <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
             <span class="text-muted">
-              {t('system.inference.vad.invocations')}:
+              {t('system.inference.invocations')}:
               <span class="font-mono tabular-nums text-base-content"
                 >{formatNumber(vad.stats.invocations)}</span
               >
+            </span>
+            <span class="text-muted">
+              {t('system.inference.avgLatency')}:
+              <span class="font-mono tabular-nums text-base-content">
+                {vad.stats.invocations > 0
+                  ? `${vad.stats.avgMs.toFixed(1)} ${t('system.inference.unitMs')}`
+                  : '-'}
+              </span>
+            </span>
+            <span class="text-muted">
+              {t('system.inference.maxLatency')}:
+              <span class="font-mono tabular-nums text-base-content">
+                {vad.stats.invocations > 0
+                  ? `${vad.stats.maxMs.toFixed(1)} ${t('system.inference.unitMs')}`
+                  : '-'}
+              </span>
             </span>
             <span class="text-muted">
               {t('system.inference.vad.speechHits')}:
@@ -903,20 +936,6 @@
                 >{formatNumber(vad.stats.speechHits)}</span
               >
             </span>
-            {#if vad.stats.invocations > 0}
-              <span class="text-muted">
-                {t('system.inference.vad.avgInference')}:
-                <span class="font-mono tabular-nums text-base-content"
-                  >{vad.stats.avgMs.toFixed(1)} {t('system.inference.unitMs')}</span
-                >
-              </span>
-              <span class="text-muted">
-                {t('system.inference.vad.maxInference')}:
-                <span class="font-mono tabular-nums text-base-content"
-                  >{vad.stats.maxMs.toFixed(1)} {t('system.inference.unitMs')}</span
-                >
-              </span>
-            {/if}
           </div>
 
           <!-- Recent-speech history: a newest-first feed of recent gate hits,

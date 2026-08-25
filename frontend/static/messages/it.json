@@ -1709,10 +1709,7 @@
         "unavailableHelp": "Nessun modello di rilevamento vocale disponibile in questa build. Imposta un percorso per il modello VAD nelle impostazioni del filtro privacy o usa una build con il modello integrato.",
         "description": "Silero VAD è un modello acustico specializzato che rileva la voce umana. Alimenta il filtro per la privacy, scartando l'audio quando è presente la voce in modo da escluderla dalle registrazioni.",
         "threshold": "Soglia",
-        "invocations": "Inferenze",
         "speechHits": "Rilevamenti vocali",
-        "avgInference": "Inferenza media",
-        "maxInference": "Inferenza picco",
         "recentTitle": "Voce recente",
         "recentEmpty": "Nessuna voce ancora rilevata",
         "colWhen": "Quando",
@@ -3096,7 +3093,11 @@
         "enable": "Abilita Filtro Privacy",
         "disabled": "Filtro privacy disabilitato",
         "confidenceLabel": "Soglia Confidenza per Rilevamento Umano",
-        "confidenceHelp": "Imposta livello confidenza per rilevamento voce umana, valore più basso rende filtro più sensibile"
+        "confidenceHelp": "Imposta livello confidenza per rilevamento voce umana, valore più basso rende filtro più sensibile",
+        "vadEnable": "Attiva Protezione Privacy (Silero VAD)",
+        "vadHelp": "Esegue un modello neurale dedicato di rilevamento vocale accanto al classificatore per un filtraggio vocale affidabile. Consuma risorse di sistema aggiuntive (circa 20-30 MB di RAM e inferenza CPU per segmento).",
+        "vadThresholdLabel": "Soglia Protezione Privacy",
+        "vadThresholdHelp": "Soglia di sensibilità per il rilevatore di attività vocale (predefinito 0.35). Valori inferiori rendono il filtro più sensibile a voci flebili o distanti."
       },
       "falsePositivePrevention": {
         "title": "Prevenzione Falsi Positivi",

@@ -1709,10 +1709,7 @@
         "unavailableHelp": "Ingen taldetekteringsmodell är tillgänglig i detta bygge. Ange en sökväg till en VAD-modell i sekretessfilterinställningarna, eller använd ett bygge med inbäddad modell.",
         "description": "Silero VAD är en specialiserad akustisk modell som upptäcker mänskligt tal. Den driver integritetsfiltret och kasserar ljud när tal är närvarande så att röster hålls borta från dina inspelningar.",
         "threshold": "Tröskelvärde",
-        "invocations": "Inferenser",
         "speechHits": "Talträffar",
-        "avgInference": "Snittinferens",
-        "maxInference": "Max. inferens",
         "recentTitle": "Senaste talet",
         "recentEmpty": "Inget tal upptäckt ännu",
         "colWhen": "Tidpunkt",
@@ -3096,7 +3093,11 @@
         "enable": "Aktivera integritetsfiltrering",
         "disabled": "Integritetsfiltrering är inaktiverad",
         "confidenceLabel": "Konfidenströskelvärde för mänsklig detektering",
-        "confidenceHelp": "Ange konfidensnivå för detektering av mänsklig röst, lägre värde gör filtret känsligare"
+        "confidenceHelp": "Ange konfidensnivå för detektering av mänsklig röst, lägre värde gör filtret känsligare",
+        "vadEnable": "Aktivera Integritetsskydd (Silero VAD)",
+        "vadHelp": "Kör en dedikerad neural talidentifieringsmodell jämte klassificeraren för robust röstfiltrering. Förbrukar ytterligare systemresurser (ca 20-30 MB RAM och CPU-inferens per segment).",
+        "vadThresholdLabel": "Tröskelvärde för Integritetsskydd",
+        "vadThresholdHelp": "Känslighetströskel för talaktivitetsdetektorn (standard 0.35). Lägre värden gör filtret känsligare för tyst eller avlägset tal."
       },
       "falsePositivePrevention": {
         "title": "Förebyggande av falska positiva",

@@ -1709,10 +1709,7 @@
         "unavailableHelp": "V tomto zostavení nie je k dispozícii žiadny model detekcie reči. Nastavte cestu k modelu VAD v nastaveniach filtra súkromia, alebo použite zostavenie so vstavaným modelom.",
         "description": "Silero VAD je špecializovaný akustický model, ktorý deteguje ľudskú reč. Poháňa filter súkromia a zahadzuje zvuk, keď je prítomná reč, takže hlasy sa neukladajú do vašich nahrávok.",
         "threshold": "Prah",
-        "invocations": "Inferencie",
         "speechHits": "Zásahy reči",
-        "avgInference": "Priem. inferencia",
-        "maxInference": "Max. inferencia",
         "recentTitle": "Nedávna reč",
         "recentEmpty": "Zatiaľ nebola detegovaná žiadna reč",
         "colWhen": "Čas",
@@ -3096,7 +3093,11 @@
         "enable": "Povoliť filtrovanie súkromia",
         "disabled": "Filtrovanie súkromia je vypnuté",
         "confidenceLabel": "Prah istoty pre detekciu ľudí",
-        "confidenceHelp": "Nastavte úroveň istoty pre detekciu ľudského hlasu, nižšia hodnota robí filter citlivejším"
+        "confidenceHelp": "Nastavte úroveň istoty pre detekciu ľudského hlasu, nižšia hodnota robí filter citlivejším",
+        "vadEnable": "Povoliť Ochranu Súkromia (Silero VAD)",
+        "vadHelp": "Spúšťa vyhradený neurónový model detekcie reči popri klasifikátore pre spoľahlivé filtrovanie hlasu. Spotrebováva ďalšie systémové prostriedky (cca 20-30 MB RAM a inferenciu procesora na segment).",
+        "vadThresholdLabel": "Prah Ochrany Súkromia",
+        "vadThresholdHelp": "Prah citlivosti pre detektor hlasovej aktivity (predvolené 0.35). Nižšie hodnoty robia filter citlivejším na tichú alebo vzdialenú reč."
       },
       "falsePositivePrevention": {
         "title": "Prevencia falošne pozitívnych výsledkov",

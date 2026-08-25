@@ -1003,8 +1003,13 @@ function createEmptySettings(): SettingsFormData {
       },
       privacyFilter: {
         enabled: false,
-        confidence: 0.5,
+        confidence: 0.05,
         debug: false,
+        vad: {
+          enabled: false,
+          threshold: 0.35,
+          modelPath: '',
+        },
       },
       dogBarkFilter: {
         enabled: false,

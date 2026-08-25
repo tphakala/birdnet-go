@@ -1709,10 +1709,7 @@
         "unavailableHelp": "Ingen taledeteksjonsmodell er tilgjengelig i dette bygget. Angi en filbane for VAD-modellen i innstillingene for personvernfilteret, eller bruk et bygg med innebygd modell.",
         "description": "Silero VAD er en spesialisert akustisk modell som oppdager menneskelig tale. Den driver personvernfilteret og kasserer lyd når tale er til stede, slik at stemmer holdes utenfor opptakene dine.",
         "threshold": "Terskel",
-        "invocations": "Inferenser",
         "speechHits": "Taletreff",
-        "avgInference": "Snittinferens",
-        "maxInference": "Maks. inferens",
         "recentTitle": "Nylig tale",
         "recentEmpty": "Ingen tale oppdaget ennå",
         "colWhen": "Tidspunkt",
@@ -3096,7 +3093,11 @@
         "enable": "Aktiver personvernfiltrering",
         "disabled": "Personvernfiltrering er deaktivert",
         "confidenceLabel": "Sikkerhetsterskel for menneskelig stemmedeteksjon",
-        "confidenceHelp": "Angi sikkerhetsnivå for menneskelig stemmedeteksjon. Lavere verdi gjør filteret mer følsomt"
+        "confidenceHelp": "Angi sikkerhetsnivå for menneskelig stemmedeteksjon. Lavere verdi gjør filteret mer følsomt",
+        "vadEnable": "Aktiver personvernbeskyttelse (Silero VAD)",
+        "vadHelp": "Kjører en dedikert nevral taledeteksjonsmodell ved siden av klassifisereren for robust talefiltrering. Forbruker ekstra systemressurser (ca. 20-30 MB RAM og CPU-inferens per segment).",
+        "vadThresholdLabel": "Terskel for personvernbeskyttelse",
+        "vadThresholdHelp": "Følsomhetsterskel for taleaktivitetsdetektoren (standard 0,35). Lavere verdier gjør filteret mer følsomt for lav eller fjern tale."
       },
       "falsePositivePrevention": {
         "title": "Forebygging av falske positive",

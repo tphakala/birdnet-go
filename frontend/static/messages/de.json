@@ -1709,10 +1709,7 @@
         "unavailableHelp": "In diesem Build ist kein Spracherkennungsmodell verfügbar. Legen Sie in den Privatsphäre-Filter-Einstellungen einen Pfad zum VAD-Modell fest oder verwenden Sie einen Build mit eingebettetem Modell.",
         "description": "Silero VAD ist ein spezialisiertes akustisches Modell, das menschliche Sprache erkennt. Es steuert den Privatsphäre-Filter und verwirft Audio, wenn Sprache vorhanden ist, damit Stimmen aus Ihren Aufnahmen herausgehalten werden.",
         "threshold": "Schwellenwert",
-        "invocations": "Inferenzen",
         "speechHits": "Sprach-Treffer",
-        "avgInference": "Ø Inferenz",
-        "maxInference": "Max. Inferenz",
         "recentTitle": "Kürzliche Sprache",
         "recentEmpty": "Noch keine Sprache erkannt",
         "colWhen": "Zeitpunkt",
@@ -3096,7 +3093,11 @@
         "enable": "Datenschutzfilterung aktivieren",
         "disabled": "Datenschutzfilterung ist deaktiviert",
         "confidenceLabel": "Konfidenzschwelle für Menschenerkennung",
-        "confidenceHelp": "Legen Sie das Konfidenzniveau für die Erkennung menschlicher Stimmen fest, niedrigere Werte machen den Filter empfindlicher"
+        "confidenceHelp": "Legen Sie das Konfidenzniveau für die Erkennung menschlicher Stimmen fest, niedrigere Werte machen den Filter empfindlicher",
+        "vadEnable": "Privatsphären-Schutz aktivieren (Silero VAD)",
+        "vadHelp": "Führt ein dediziertes neuronales Spracherkennungsmodell parallel zum Klassifikator für zuverlässige Sprachfilterung aus. Verbraucht zusätzliche Systemressourcen (ca. 20-30 MB RAM und CPU-Inferenz pro Segment).",
+        "vadThresholdLabel": "Schwellenwert für Privatsphären-Schutz",
+        "vadThresholdHelp": "Empfindlichkeitsschwellenwert für die Sprachaktivitätserkennung (Standard 0,35). Niedrigere Werte machen den Filter empfindlicher für leise oder entfernte Sprache."
       },
       "falsePositivePrevention": {
         "title": "Falsch-Positiv-Prävention",

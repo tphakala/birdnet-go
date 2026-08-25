@@ -1709,10 +1709,7 @@
         "unavailableHelp": "Tässä versiossa ei ole käytettävissä puheentunnistusmallia. Määritä VAD-mallin polku yksityisyyssuodattimen asetuksissa, tai käytä versiota, jossa on sisäänrakennettu malli.",
         "description": "Silero VAD on erikoistunut akustinen malli, joka tunnistaa ihmispuheen. Se ohjaa yksityisyyssuodatinta ja hylkää äänen puhetta havaittaessa, jotta äänet pysyvät poissa tallenteistasi.",
         "threshold": "Kynnysarvo",
-        "invocations": "Päättelyt",
         "speechHits": "Puheosumat",
-        "avgInference": "Kesk. päättely",
-        "maxInference": "Huippupäättely",
         "recentTitle": "Viimeisin puhe",
         "recentEmpty": "Puhetta ei ole vielä havaittu",
         "colWhen": "Aika",
@@ -3096,7 +3093,11 @@
         "enable": "Ota yksityisyyssuodatus käyttöön",
         "disabled": "Yksityisyyssuodatus on poistettu käytöstä",
         "confidenceLabel": "Luottamuskynnys ihmisen tunnistukseen",
-        "confidenceHelp": "Aseta luottamustaso ihmisäänen tunnistukseen, matalampi arvo tekee suodattimesta herkemmän"
+        "confidenceHelp": "Aseta luottamustaso ihmisäänen tunnistukseen, matalampi arvo tekee suodattimesta herkemmän",
+        "vadEnable": "Ota käyttöön Yksityisyyssuoja (Silero VAD)",
+        "vadHelp": "Käyttää erillistä neuroverkkomallia ihmispuheen tunnistamiseen luokittelijan rinnalla. Kuluttaa ylimääräisiä järjestelmäresursseja (n. 20-30 Mt RAM-muistia ja suoritinpäättelyä per segmentti).",
+        "vadThresholdLabel": "Yksityisyyssuojan kynnysarvo",
+        "vadThresholdHelp": "Yksityisyyssuojan puheentunnistimen herkkyyskynnys (oletus 0.35). Pienempi arvo tekee suodattimesta herkemmän hiljaiselle tai kaukaiselle puheelle."
       },
       "falsePositivePrevention": {
         "title": "Väärien positiivisten ehkäisy",
