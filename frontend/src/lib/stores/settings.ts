@@ -431,7 +431,7 @@ export interface MQTTSettings {
   retain?: boolean;
   tls: {
     enabled: boolean;
-    skipVerify: boolean;
+    insecureSkipVerify: boolean;
   };
   homeAssistant?: HomeAssistantSettings;
 }
@@ -1047,7 +1047,7 @@ function createEmptySettings(): SettingsFormData {
         retain: false,
         tls: {
           enabled: false,
-          skipVerify: false,
+          insecureSkipVerify: false,
         },
         homeAssistant: {
           enabled: false,
