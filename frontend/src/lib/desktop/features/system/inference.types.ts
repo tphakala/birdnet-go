@@ -249,7 +249,7 @@ export interface InferenceVAD {
   modelSource?: string;
   /** Active windowing strategy ("sequence"); absent when unloaded. */
   strategy?: string;
-  /** Input sample rate the loaded detector scored at; absent when unloaded. */
+  /** Native sample rate of the loaded Silero VAD model (16 kHz); absent when unloaded. */
   sampleRate?: number;
   stats: InferenceVADStats;
   /** Unix seconds of the most recent speech hit; absent when none since start. */

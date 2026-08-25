@@ -62,8 +62,8 @@ type VADStatusInfo struct {
 	// Strategy is the active windowing strategy ("sequence"),
 	// empty when unloaded.
 	Strategy string `json:"strategy,omitempty"`
-	// SampleRate is the input sample rate the loaded session scored at, 0 when
-	// unloaded.
+	// SampleRate is the native sample rate of the loaded Silero VAD model (16 kHz),
+	// 0 when unloaded.
 	SampleRate int `json:"sampleRate,omitempty"`
 	// Stats holds lifetime inference counters for the gate.
 	Stats VADStatsInfo `json:"stats"`

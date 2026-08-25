@@ -198,13 +198,13 @@ func (g *vadGate) score(cfg *vad.Config, cacheKey string, pcm []byte, sourceID s
 		g.snapshot.Store(&vadConfigSnapshot{
 			strategy:   sess.Strategy(),
 			source:     vadSourceLabel(cacheKey),
-			sampleRate: sampleRate,
+			sampleRate: vad.SampleRate,
 		})
 		g.warnedNoModel.Store(false)
 		GetLogger().Info("privacy VAD model loaded",
 			logger.String("strategy", sess.Strategy()),
 			logger.String("source", vadSourceLabel(cacheKey)),
-			logger.Int("sample_rate", sampleRate),
+			logger.Int("sample_rate", vad.SampleRate),
 			logger.String("operation", "privacy_filter_vad"))
 	}
 

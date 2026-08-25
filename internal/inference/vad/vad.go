@@ -32,6 +32,9 @@ import (
 
 // Defaults for detector and streamer configuration.
 const (
+	// SampleRate is the native sample rate of the Silero VAD model (16 kHz).
+	SampleRate = sampleRate16k
+
 	// defaultMinConsecutiveFrames is how many consecutive 32 ms frames must stay
 	// above a level for that level to count, suppressing single-frame transients
 	// (~96 ms of sustained speech).

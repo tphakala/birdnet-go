@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/inference/vad"
 )
 
 func TestVADSourceLabel(t *testing.T) {
@@ -95,13 +97,13 @@ func TestVADGate_RecentHitsCappedNewestFirst(t *testing.T) {
 func TestVADGate_StatusReflectsSnapshot(t *testing.T) {
 	t.Parallel()
 	g := &vadGate{}
-	g.snapshot.Store(&vadConfigSnapshot{strategy: "sequence", source: "embedded", sampleRate: 48000})
+	g.snapshot.Store(&vadConfigSnapshot{strategy: "sequence", source: "embedded", sampleRate: vad.SampleRate})
 
 	st := g.status()
 	assert.True(t, st.Loaded)
 	assert.Equal(t, "sequence", st.Strategy)
 	assert.Equal(t, "embedded", st.Source)
-	assert.Equal(t, 48000, st.SampleRate)
+	assert.Equal(t, 16000, st.SampleRate)
 
 	// Unload clears the snapshot but lifetime counters survive.
 	g.recordInference(time.Millisecond)
