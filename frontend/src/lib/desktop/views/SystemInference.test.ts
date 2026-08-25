@@ -302,7 +302,13 @@ describe('SystemInference', () => {
     const text = container.textContent;
     expect(text).toContain('system.inference.vad.title'); // card name (like a model name)
     expect(text).toContain('system.inference.vad.active'); // active indicator
+    expect(text).toContain('CPU'); // device badge
+    expect(text).toContain('system.inference.sampleRate'); // spec line sample rate
+    expect(text).toContain('16'); // 16 kHz spec value
     expect(text).toContain('0.35'); // threshold value
+    expect(text).toContain('system.inference.invocations'); // stats line segments analysed
+    expect(text).toContain('system.inference.avgLatency'); // stats line avg latency
+    expect(text).toContain('system.inference.maxLatency'); // stats line max latency
     // Distinctive thousands-separated values that formatNumber produces and that
     // appear nowhere else in the container (the co-rendered model card uses 12,034
     // / 47.2 / 130), so these isolate the VAD invocations and speech-hits cells.
