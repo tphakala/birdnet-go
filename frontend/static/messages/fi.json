@@ -3093,7 +3093,11 @@
         "enable": "Ota yksityisyyssuodatus käyttöön",
         "disabled": "Yksityisyyssuodatus on poistettu käytöstä",
         "confidenceLabel": "Luottamuskynnys ihmisen tunnistukseen",
-        "confidenceHelp": "Aseta luottamustaso ihmisäänen tunnistukseen, matalampi arvo tekee suodattimesta herkemmän"
+        "confidenceHelp": "Aseta luottamustaso ihmisäänen tunnistukseen, matalampi arvo tekee suodattimesta herkemmän",
+        "vadEnable": "Ota käyttöön Yksityisyyssuoja (Silero VAD)",
+        "vadHelp": "Käyttää erillistä neuroverkkomallia ihmispuheen tunnistamiseen luokittelijan rinnalla. Kuluttaa ylimääräisiä järjestelmäresursseja (n. 20-30 Mt RAM-muistia ja suoritinpäättelyä per segmentti).",
+        "vadThresholdLabel": "Puheentunnistuksen kynnysarvo",
+        "vadThresholdHelp": "Yksityisyyssuojan puheentunnistimen herkkyyskynnys (oletus 0.35). Pienempi arvo tekee suodattimesta herkemmän hiljaiselle tai kaukaiselle puheelle."
       },
       "falsePositivePrevention": {
         "title": "Väärien positiivisten ehkäisy",

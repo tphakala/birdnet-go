@@ -3093,7 +3093,11 @@
         "enable": "Aktivera integritetsfiltrering",
         "disabled": "Integritetsfiltrering är inaktiverad",
         "confidenceLabel": "Konfidenströskelvärde för mänsklig detektering",
-        "confidenceHelp": "Ange konfidensnivå för detektering av mänsklig röst, lägre värde gör filtret känsligare"
+        "confidenceHelp": "Ange konfidensnivå för detektering av mänsklig röst, lägre värde gör filtret känsligare",
+        "vadEnable": "Aktivera Integritetsskydd (Silero VAD)",
+        "vadHelp": "Kör en dedikerad neural talidentifieringsmodell jämte klassificeraren för robust röstfiltrering. Förbrukar ytterligare systemresurser (ca 20-30 MB RAM och CPU-inferens per segment).",
+        "vadThresholdLabel": "Tröskelvärde för talidentifiering",
+        "vadThresholdHelp": "Känslighetströskel för talaktivitetsdetektorn (standard 0.35). Lägre värden gör filtret känsligare för tyst eller avlägset tal."
       },
       "falsePositivePrevention": {
         "title": "Förebyggande av falska positiva",

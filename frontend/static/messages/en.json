@@ -3093,7 +3093,11 @@
         "enable": "Enable Privacy Filtering",
         "disabled": "Privacy filtering is disabled",
         "confidenceLabel": "Confidence Threshold for Human Detection",
-        "confidenceHelp": "Set the confidence level for human voice detection, lower value makes filter more sensitive"
+        "confidenceHelp": "Set the confidence level for human voice detection, lower value makes filter more sensitive",
+        "vadEnable": "Enable Privacy Guard (Silero VAD)",
+        "vadHelp": "Runs a dedicated neural speech-detection model alongside the classifier for robust voice filtering. Consumes additional system resources (approx. 20-30 MB RAM and CPU inference per segment).",
+        "vadThresholdLabel": "Speech Detection Threshold",
+        "vadThresholdHelp": "Sensitivity threshold for the Privacy Guard voice activity detector (default 0.35). Lower values make the filter more sensitive to quiet or distant speech."
       },
       "falsePositivePrevention": {
         "title": "False Positive Prevention",

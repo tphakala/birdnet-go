@@ -3093,7 +3093,11 @@
         "enable": "Adatvédelmi szűrés engedélyezése",
         "disabled": "Az adatvédelmi szűrés le van tiltva",
         "confidenceLabel": "Megbízhatósági küszöbérték az emberi detektáláshoz",
-        "confidenceHelp": "Állítsa be az emberi hang detektálás megbízhatósági szintjét, az alacsonyabb érték érzékenyebbé teszi a szűrőt"
+        "confidenceHelp": "Állítsa be az emberi hang detektálás megbízhatósági szintjét, az alacsonyabb érték érzékenyebbé teszi a szűrőt",
+        "vadEnable": "Adatvédelmi Őr engedélyezése (Silero VAD)",
+        "vadHelp": "Egy külön neurális beszédérzékelő modellt futtat az osztályozó mellett a megbízható hangszűrés érdekében. További rendszererőforrásokat használ (kb. 20-30 MB RAM és CPU-inferencia szegmensenként).",
+        "vadThresholdLabel": "Beszédfelismerési küszöbérték",
+        "vadThresholdHelp": "A hangaktivitás-érzékelő érzékenységi küszöbértéke (alapértelmezett 0.35). Alacsonyabb értékek esetén a szűrő érzékenyebb a halk vagy távoli beszédre."
       },
       "falsePositivePrevention": {
         "title": "Hamis pozitív megelőzés",

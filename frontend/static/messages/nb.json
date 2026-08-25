@@ -3093,7 +3093,11 @@
         "enable": "Aktiver personvernfiltrering",
         "disabled": "Personvernfiltrering er deaktivert",
         "confidenceLabel": "Sikkerhetsterskel for menneskelig stemmedeteksjon",
-        "confidenceHelp": "Angi sikkerhetsnivå for menneskelig stemmedeteksjon. Lavere verdi gjør filteret mer følsomt"
+        "confidenceHelp": "Angi sikkerhetsnivå for menneskelig stemmedeteksjon. Lavere verdi gjør filteret mer følsomt",
+        "vadEnable": "Aktiver personvernbeskyttelse (Silero VAD)",
+        "vadHelp": "Kjører en dedikert nevral taledeteksjonsmodell ved siden av klassifisereren for robust talefiltrering. Forbruker ekstra systemressurser (ca. 20-30 MB RAM og CPU-inferens per segment).",
+        "vadThresholdLabel": "Terskel for taledeteksjon",
+        "vadThresholdHelp": "Følsomhetsterskel for taleaktivitetsdetektoren (standard 0.35). Lavere verdier gjør filteret mer følsomt for lav eller fjern tale."
       },
       "falsePositivePrevention": {
         "title": "Forebygging av falske positive",

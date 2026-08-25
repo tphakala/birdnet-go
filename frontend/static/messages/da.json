@@ -3093,7 +3093,11 @@
         "enable": "Aktivér privatlivsfiltrering",
         "disabled": "Privatlivsfiltrering er deaktiveret",
         "confidenceLabel": "Konfidenstærskel for menneskelig detektion",
-        "confidenceHelp": "Indstil konfidensniveauet for detektering af menneskelige stemmer. Lavere værdier gør filteret mere følsomt"
+        "confidenceHelp": "Indstil konfidensniveauet for detektering af menneskelige stemmer. Lavere værdier gør filteret mere følsomt",
+        "vadEnable": "Aktivér Privatlivsbeskyttelse (Silero VAD)",
+        "vadHelp": "Kører en dedikeret neural taledetekteringsmodel sammen med klassifikatoren for robust talefiltrering. Forbruger yderligere systemressourcer (ca. 20-30 MB RAM og CPU-inferens pr. segment).",
+        "vadThresholdLabel": "Tærskel for taledetektering",
+        "vadThresholdHelp": "Følsomhedstærskel for taleaktivitetsdetektoren (standard 0.35). Lavere værdier gør filtret mere følsomt over for svag eller fjern tale."
       },
       "falsePositivePrevention": {
         "title": "Forebyggelse af falske positiver",

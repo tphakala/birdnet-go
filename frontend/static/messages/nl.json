@@ -3093,7 +3093,11 @@
         "enable": "Schakel Privacy Filteren in",
         "disabled": "Privacy filteren is uitgeschakeld",
         "confidenceLabel": "Betrouwbaarheids Drempelwaarde voor Menselijke Detectie",
-        "confidenceHelp": "Stel het betrouwbaarheidsniveau in voor menselijke stem detectie, lagere waarde maakt filter gevoeliger"
+        "confidenceHelp": "Stel het betrouwbaarheidsniveau in voor menselijke stem detectie, lagere waarde maakt filter gevoeliger",
+        "vadEnable": "Privacybescherming inschakelen (Silero VAD)",
+        "vadHelp": "Voert een specifiek neuraal spraakdetectiemodel uit naast de classificator voor betrouwbare spraakfiltering. Verbruikt extra systeembronnen (ongeveer 20-30 MB RAM en CPU-inferentie per segment).",
+        "vadThresholdLabel": "Drempelwaarde voor spraakdetectie",
+        "vadThresholdHelp": "Gevoeligheidsdrempel voor de spraakactiviteitsdetector (standaard 0.35). Lagere waarden maken het filter gevoeliger voor zachte of verre spraak."
       },
       "falsePositivePrevention": {
         "title": "Vals Positief Preventie",
