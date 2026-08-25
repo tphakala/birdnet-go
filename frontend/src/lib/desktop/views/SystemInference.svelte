@@ -1048,19 +1048,26 @@
                   </span>
                 {:else}
                   <span
-                    class="ml-auto flex items-center gap-1"
+                    class="ml-auto flex items-center gap-1.5"
                     role="status"
                     aria-label={isActive
+                      ? t('system.inference.activityActive')
+                      : t('system.inference.activityIdle')}
+                    title={isActive
                       ? t('system.inference.activityActive')
                       : t('system.inference.activityIdle')}
                   >
                     {#if isActive}
                       <Activity
-                        class="w-3 h-3 text-green-500 animate-pulse motion-reduce:animate-none"
+                        class="w-3 h-3 shrink-0 text-green-500 animate-pulse motion-reduce:animate-none"
                         aria-hidden="true"
                       />
+                      <span class="text-xs text-green-600 dark:text-green-400"
+                        >{t('system.inference.active')}</span
+                      >
                     {:else}
-                      <Minus class="w-3 h-3 text-base-content/30" aria-hidden="true" />
+                      <Minus class="w-3 h-3 shrink-0 text-base-content/30" aria-hidden="true" />
+                      <span class="text-xs text-muted">{t('system.inference.activityIdle')}</span>
                     {/if}
                   </span>
                 {/if}

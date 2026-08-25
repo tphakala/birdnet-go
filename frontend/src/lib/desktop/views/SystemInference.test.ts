@@ -806,9 +806,10 @@ describe('SystemInference', () => {
     await waitFor(() => {
       expect(container.textContent).toContain(model.name);
     });
-    // When the last throughput value > 0, the activity indicator shows "active"
+    // When the last throughput value > 0, the activity indicator shows "active" with label
     const activeEl = container.querySelector('[aria-label="system.inference.activityActive"]');
     expect(activeEl).not.toBeNull();
+    expect(activeEl?.textContent).toContain('system.inference.active');
     // The idle indicator must NOT be rendered at the same time (regression guard)
     const idleEl = container.querySelector('[aria-label="system.inference.activityIdle"]');
     expect(idleEl).toBeNull();
@@ -839,9 +840,10 @@ describe('SystemInference', () => {
     await waitFor(() => {
       expect(container.textContent).toContain(model.name);
     });
-    // When the last throughput value == 0, the activity indicator shows "idle"
+    // When the last throughput value == 0, the activity indicator shows "idle" with label
     const idleEl = container.querySelector('[aria-label="system.inference.activityIdle"]');
     expect(idleEl).not.toBeNull();
+    expect(idleEl?.textContent).toContain('system.inference.activityIdle');
     // The active indicator must NOT be rendered at the same time (regression guard)
     const activeEl = container.querySelector('[aria-label="system.inference.activityActive"]');
     expect(activeEl).toBeNull();
