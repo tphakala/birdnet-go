@@ -115,11 +115,9 @@ type Config struct {
 	// known cloud metadata IPs. Loopback and private RFC1918 ranges stay
 	// reachable so on-LAN targets keep working. See ssrf.go for the policy.
 	//
-	// Note: when an outbound HTTP(S) proxy is configured via the environment,
-	// the transport dials the proxy and lets it resolve the target, so the
-	// guard validates the proxy address rather than the final destination. This
-	// is a deliberate trade-off to preserve proxy support for the common case;
-	// the guard is defense in depth, not the only control.
+	// Enabling this also disables environment-proxy support for the client, so
+	// a configured HTTP(S)_PROXY cannot resolve the destination on the client's
+	// behalf and bypass the guard.
 	BlockLinkLocalAndMetadata bool
 }
 
@@ -181,13 +179,21 @@ func New(cfg *Config) *Client {
 		KeepAlive: defaultDialKeepAlive,
 	}
 	dialContext := baseDialer.DialContext
+	proxy := http.ProxyFromEnvironment
 	if c.BlockLinkLocalAndMetadata {
 		dialContext = newGuardedDialContext(baseDialer)
+		// Disable environment proxies while the guard is active. A configured
+		// proxy would defeat the guard: the transport dials the proxy and lets
+		// it resolve the destination, so the target IP never reaches the guard
+		// (and with a loopback/private proxy the guard would reject the proxy
+		// itself). This mirrors the imageprovider SSRF client. Non-guarded
+		// clients keep normal ProxyFromEnvironment support.
+		proxy = nil
 	}
 
 	// Create transport with tuned settings
 	transport := &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
+		Proxy:                 proxy,
 		DialContext:           dialContext,
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          c.MaxIdleConns,

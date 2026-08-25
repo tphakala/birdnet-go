@@ -32,9 +32,10 @@ func TestIsBlockedTargetIP(t *testing.T) {
 		{"unspecified v6", "::", true},
 
 		// Blocked: link-local metadata smuggled through IPv6 transition ranges.
-		{"nat64 metadata", "64:ff9b::a9fe:a9fe", true}, // embeds 169.254.169.254
-		{"6to4 metadata", "2002:a9fe:a9fe::", true},    // embeds 169.254.169.254
-		{"teredo metadata", "2001::5601:5601", true},   // client IPv4 inverts to 169.254.169.254
+		{"nat64 metadata", "64:ff9b::a9fe:a9fe", true},    // embeds 169.254.169.254
+		{"6to4 metadata", "2002:a9fe:a9fe::", true},       // embeds 169.254.169.254
+		{"teredo metadata", "2001::5601:5601", true},      // client IPv4 inverts to 169.254.169.254
+		{"ipv4-compatible metadata", "::a9fe:a9fe", true}, // deprecated ::a.b.c.d embeds 169.254.169.254
 
 		// Allowed: loopback and private ranges (on-LAN webhook targets).
 		{"loopback v4", "127.0.0.1", false},
@@ -44,7 +45,8 @@ func TestIsBlockedTargetIP(t *testing.T) {
 		{"rfc1918 172.16.x", "172.16.5.4", false},
 		{"cgnat non-metadata", "100.64.0.1", false},
 		{"ula non-metadata", "fd12:3456:789a::1", false},
-		{"nat64 public", "64:ff9b::808:808", false}, // embeds 8.8.8.8, allowed
+		{"nat64 public", "64:ff9b::808:808", false},    // embeds 8.8.8.8, allowed
+		{"ipv4-compatible public", "::808:808", false}, // ::8.8.8.8, allowed
 		{"public v4", "8.8.8.8", false},
 		{"public v6", "2606:4700:4700::1111", false},
 	}
@@ -121,6 +123,30 @@ func TestGuardedClientBlocksRedirectToMetadata(t *testing.T) {
 	}
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrBlockedTarget), "expected ErrBlockedTarget on redirect, got %v", err)
+}
+
+// TestGuardedClientIgnoresProxyForMetadata confirms a configured environment
+// proxy cannot be used to bypass the guard: enabling the guard disables proxy
+// support, so a metadata request is still blocked at dial time rather than
+// tunneled through the proxy. Not parallel: it sets a process env var.
+func TestGuardedClientIgnoresProxyForMetadata(t *testing.T) {
+	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1/")
+	t.Setenv("HTTP_PROXY", "http://127.0.0.1:1/")
+
+	cfg := DefaultConfig()
+	cfg.BlockLinkLocalAndMetadata = true
+	cfg.DefaultTimeout = 2 * time.Second
+	client := New(&cfg)
+	t.Cleanup(client.Close)
+
+	// Uses https so a live proxy would be reached via CONNECT; with the guard
+	// enabled the proxy is disabled and the metadata IP is blocked directly.
+	resp, err := client.Get(t.Context(), "https://169.254.169.254/latest/meta-data/")
+	if resp != nil {
+		t.Cleanup(func() { _ = resp.Body.Close() })
+	}
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrBlockedTarget), "expected ErrBlockedTarget with proxy set, got %v", err)
 }
 
 // TestUnguardedClientDoesNotUseGuard confirms the guard is opt-in: without the

@@ -101,6 +101,11 @@ func embeddedTransitionIPv4(ip netip.Addr) (netip.Addr, bool) {
 	case teredoPrefix.Contains(ip):
 		// Teredo: the client IPv4 is the last 4 bytes, bit-inverted.
 		return netip.AddrFrom4([4]byte{^b[12], ^b[13], ^b[14], ^b[15]}), true
+	case [12]byte(b[:12]) == [12]byte{} && !ip.IsUnspecified() && !ip.IsLoopback():
+		// ::a.b.c.d IPv4-compatible IPv6 (deprecated, RFC 4291). The leading 12
+		// bytes are zero and the last 4 carry the IPv4 address. ::ffff:a.b.c.d
+		// was already folded by Unmap, and ::/:: 1 are excluded above.
+		return netip.AddrFrom4([4]byte{b[12], b[13], b[14], b[15]}), true
 	}
 	return netip.Addr{}, false
 }
@@ -130,6 +135,19 @@ func newGuardedDialContext(base *net.Dialer) func(ctx context.Context, network, 
 			addrSlice, ok := netip.AddrFromSlice(ips[i].IP)
 			if !ok {
 				continue
+			}
+			// Honor a family-specific network so an address of the wrong family
+			// is skipped rather than handed to the base dialer as a doomed dial.
+			// http.Transport uses "tcp" today, so this is normally a no-op.
+			switch network {
+			case "tcp4":
+				if !addrSlice.Unmap().Is4() {
+					continue
+				}
+			case "tcp6":
+				if addrSlice.Unmap().Is4() {
+					continue
+				}
 			}
 			if isBlockedTargetIP(addrSlice) {
 				lastErr = fmt.Errorf("%w: %s", ErrBlockedTarget, ips[i].IP.String())
