@@ -734,7 +734,7 @@
                 >{t('system.inference.capabilitiesHelp')}</span
               >
               <div class="flex flex-wrap items-center gap-2">
-                {#each snapshot.hardware.capabilities as capability (capability)}
+                {#each snapshot.hardware.capabilities as capability}
                   <Badge variant="neutral" size="sm" text={capability} />
                 {/each}
               </div>
@@ -786,7 +786,7 @@
               {/if}
               {#if openvino.supported && openvino.devices && openvino.devices.length > 0}
                 <span class="text-xs text-muted">{t('system.inference.devices')}:</span>
-                {#each openvino.devices as device (device)}
+                {#each openvino.devices as device}
                   <Badge variant="neutral" size="sm" text={device} />
                 {/each}
               {/if}
@@ -959,7 +959,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  {#each vad.recentHits as hit (`${hit.atUnix}-${hit.source}`)}
+                  {#each vad.recentHits as hit}
                     <tr class="border-t border-[var(--border-100)]">
                       <td
                         class="py-0.5 font-mono tabular-nums text-base-content whitespace-nowrap"
@@ -1213,7 +1213,7 @@
                       </tr>
                     </thead>
                     <tbody>
-                      {#each rows as d (`${d.scientificName || d.species}-${d.atUnix}`)}
+                      {#each rows as d}
                         {@const coNames = coDetectingModels(model.id, d)}
                         <tr class="border-t border-[var(--border-100)]">
                           <td class="py-0.5 pr-2 text-base-content">
@@ -1313,7 +1313,7 @@
                   <span class="text-xs text-muted">{t('system.inference.noSources')}</span>
                 {:else}
                   <div class="flex flex-wrap gap-1.5">
-                    {#each model.sources as source (source.id)}
+                    {#each model.sources as source}
                       <Badge variant="ghost" size="sm">
                         {source.name}{#if source.type}
                           <span class="text-muted ml-1">({source.type})</span>

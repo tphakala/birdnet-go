@@ -324,6 +324,31 @@ describe('SystemInference', () => {
     expect(vadText).toContain('87%'); // hit probability rounded to a percentage
   });
 
+  it('renders multiple VAD hits with identical timestamps and sources without crashing', async () => {
+    const snapshot = makeSnapshot([makeModel()]);
+    snapshot.vad = {
+      enabled: true,
+      available: true,
+      loaded: true,
+      threshold: 0.35,
+      stats: { invocations: 10, avgMs: 2.0, maxMs: 5.0, speechHits: 2 },
+      recentHits: [
+        { atUnix: 1750000000, probability: 0.85, source: 'SoundCard' },
+        { atUnix: 1750000000, probability: 0.88, source: 'SoundCard' },
+      ],
+    };
+    installApi(snapshot);
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('system.inference.vad.section');
+    });
+    const vadCard = container.querySelector('[data-testid="vad-card"]');
+    expect(vadCard).not.toBeNull();
+    expect(vadCard?.textContent).toContain('SoundCard');
+  });
+
   it('shows the empty recent-speech state when there are no hits', async () => {
     const snapshot = makeSnapshot([makeModel()]);
     snapshot.vad = {
@@ -618,6 +643,36 @@ describe('SystemInference', () => {
     expect(text).toContain('81%');
     expect(text).toContain('77%');
     expect(text).not.toContain('×');
+  });
+
+  it('renders multiple detections with identical species and timestamps without crashing', async () => {
+    const now = 1750000000;
+    const model = makeModel({
+      recentDetections: [
+        {
+          species: 'European Robin',
+          scientificName: 'Erithacus rubecula',
+          confidence: 0.81,
+          atUnix: now,
+          inRange: true,
+        },
+        {
+          species: 'European Robin',
+          scientificName: 'Erithacus rubecula',
+          confidence: 0.77,
+          atUnix: now,
+          inRange: true,
+        },
+      ],
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(2);
   });
 
   it('lists other models that detected the same species within tolerance (Also column)', async () => {
@@ -1136,5 +1191,37 @@ describe('SystemInference', () => {
       expect(card?.textContent).toContain(HARDWARE_HEADING_KEY);
       expect(card?.querySelector('dl')).not.toBeNull();
     });
+
+    it('renders duplicate capability tokens without crashing', async () => {
+      installApi(
+        makeSnapshot([makeModel({})], {
+          capabilities: ['low-ram', 'low-ram'],
+        })
+      );
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain(ADVANCED_KEY);
+      });
+      expect(container.textContent).toContain('low-ram');
+    });
+  });
+
+  it('renders model sources with duplicate identifiers without crashing', async () => {
+    const model = makeModel({
+      sources: [
+        { id: 'mic', name: 'Microphone', type: 'soundcard', fallback: false },
+        { id: 'mic', name: 'Microphone', type: 'soundcard', fallback: false },
+      ],
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    expect(container.textContent).toContain('Microphone');
   });
 });
