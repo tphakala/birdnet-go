@@ -409,6 +409,7 @@ func init() {
 	RegisterComponent("notification", "notification")
 	RegisterComponent("securefs", "securefs")
 	RegisterComponent("secrets", "secrets")
+	RegisterComponent("httpclient", "httpclient")
 	RegisterComponent("monitor", "monitor")
 	RegisterComponent("app", "app")
 	RegisterComponent("api", "api")

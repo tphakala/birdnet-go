@@ -108,6 +108,19 @@ type Config struct {
 
 	// DisableCompression disables transparent gzip compression (default: false)
 	DisableCompression bool
+
+	// BlockLinkLocalAndMetadata installs an SSRF guard on the dialer that
+	// refuses connections to link-local addresses (including the
+	// 169.254.169.254 cloud metadata endpoint), the unspecified address, and
+	// known cloud metadata IPs. Loopback and private RFC1918 ranges stay
+	// reachable so on-LAN targets keep working. See ssrf.go for the policy.
+	//
+	// Note: when an outbound HTTP(S) proxy is configured via the environment,
+	// the transport dials the proxy and lets it resolve the target, so the
+	// guard validates the proxy address rather than the final destination. This
+	// is a deliberate trade-off to preserve proxy support for the common case;
+	// the guard is defense in depth, not the only control.
+	BlockLinkLocalAndMetadata bool
 }
 
 // DefaultConfig returns a Config with sensible production defaults.
@@ -162,13 +175,20 @@ func New(cfg *Config) *Client {
 		}
 	}
 
+	// Base dialer with tuned dial timeout and keep-alive.
+	baseDialer := &net.Dialer{
+		Timeout:   defaultDialTimeout,
+		KeepAlive: defaultDialKeepAlive,
+	}
+	dialContext := baseDialer.DialContext
+	if c.BlockLinkLocalAndMetadata {
+		dialContext = newGuardedDialContext(baseDialer)
+	}
+
 	// Create transport with tuned settings
 	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   defaultDialTimeout,
-			KeepAlive: defaultDialKeepAlive,
-		}).DialContext,
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           dialContext,
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          c.MaxIdleConns,
 		MaxIdleConnsPerHost:   c.MaxIdleConnsPerHost,
