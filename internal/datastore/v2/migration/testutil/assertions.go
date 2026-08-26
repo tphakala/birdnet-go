@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -202,19 +203,16 @@ func AssertHourlyWeatherMatches(t *testing.T, legacy *datastore.HourlyWeather, v
 }
 
 // AssertDynamicThresholdMatches verifies that a V2 DynamicThreshold matches a legacy DynamicThreshold.
-// The v2 DynamicThreshold should have its Label preloaded for species name comparison.
+// Thresholds are keyed per species (lowercase common name), model-independent (#4195).
 func AssertDynamicThresholdMatches(t *testing.T, legacy *datastore.DynamicThreshold, v2 *entities.DynamicThreshold) {
 	t.Helper()
 
 	require.NotNil(t, legacy, "legacy threshold should not be nil")
 	require.NotNil(t, v2, "v2 threshold should not be nil")
 
-	// Compare scientific name via label relationship
-	if v2.Label != nil && v2.Label.ScientificName != "" {
-		assert.Equal(t, legacy.ScientificName, v2.Label.ScientificName, "scientific_name should match (via label)")
-	} else {
-		assert.NotZero(t, v2.LabelID, "label_id should be set if Label not preloaded")
-	}
+	// Species (lowercase common name) is the identity key.
+	assert.Equal(t, strings.ToLower(legacy.SpeciesName), v2.SpeciesName, "species_name should match")
+	assert.Equal(t, legacy.ScientificName, v2.ScientificName, "scientific_name should match")
 	assert.Equal(t, legacy.Level, v2.Level, "level should match")
 	assert.InDelta(t, legacy.CurrentValue, v2.CurrentValue, floatDelta, "current_value should match")
 	assert.InDelta(t, legacy.BaseThreshold, v2.BaseThreshold, floatDelta, "base_threshold should match")
@@ -229,17 +227,14 @@ func AssertDynamicThresholdMatches(t *testing.T, legacy *datastore.DynamicThresh
 }
 
 // AssertThresholdEventMatches verifies that a V2 ThresholdEvent matches a legacy ThresholdEvent.
-// Note: The legacy ThresholdEvent.SpeciesName is the common name (lowercase), while the V2 event
-// is linked to a label containing the scientific name. These are different by design - the species
-// relationship is verified implicitly through the parent DynamicThreshold migration.
+// Both are keyed by species (lowercase common name), model-independent (#4195).
 func AssertThresholdEventMatches(t *testing.T, legacy *datastore.ThresholdEvent, v2 *entities.ThresholdEvent) {
 	t.Helper()
 
 	require.NotNil(t, legacy, "legacy threshold event should not be nil")
 	require.NotNil(t, v2, "v2 threshold event should not be nil")
 
-	// Verify label relationship exists (species matching is verified at parent threshold level)
-	assert.NotZero(t, v2.LabelID, "label_id should be set")
+	assert.Equal(t, strings.ToLower(legacy.SpeciesName), v2.SpeciesName, "species_name should match")
 	assert.Equal(t, legacy.PreviousLevel, v2.PreviousLevel, "previous_level should match")
 	assert.Equal(t, legacy.NewLevel, v2.NewLevel, "new_level should match")
 	assert.InDelta(t, legacy.PreviousValue, v2.PreviousValue, floatDelta, "previous_value should match")

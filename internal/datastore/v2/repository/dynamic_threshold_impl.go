@@ -11,11 +11,30 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// thresholdConflictColumns lists the columns the batch/single upsert overwrites on
+// a species_name conflict. It deliberately EXCLUDES species_name (the conflict key),
+// first_created (set once on INSERT, never trampled) and created_at (GORM autoCreateTime),
+// so periodic re-flushes preserve the true creation timestamp. See #4195.
+var thresholdConflictColumns = []string{
+	"scientific_name",
+	"level",
+	"current_value",
+	"base_threshold",
+	"high_conf_count",
+	"valid_hours",
+	"expires_at",
+	"last_triggered",
+	"trigger_count",
+	"updated_at",
+}
+
 // dynamicThresholdRepository implements DynamicThresholdRepository.
+//
+// Thresholds and events are keyed per species (lowercase common name) and are
+// model-independent (#4173, #4195); there is no label/model foreign key.
 type dynamicThresholdRepository struct {
 	db          *gorm.DB
 	metrics     *datastore.Metrics
-	labelRepo   LabelRepository
 	useV2Prefix bool
 	isMySQL     bool // For API consistency; currently unused here (used by detection_impl.go for dialect-specific SQL)
 }
@@ -24,14 +43,12 @@ type dynamicThresholdRepository struct {
 // Parameters:
 //   - db: GORM database connection
 //   - metrics: optional DatastoreMetrics for retry observability (nil-safe)
-//   - labelRepo: LabelRepository for resolving species names to label IDs
 //   - useV2Prefix: true to use v2_ table prefix (MySQL migration mode)
 //   - isMySQL: true for MySQL dialect (affects date/time SQL expressions)
-func NewDynamicThresholdRepository(db *gorm.DB, metrics *datastore.Metrics, labelRepo LabelRepository, useV2Prefix, isMySQL bool) DynamicThresholdRepository {
+func NewDynamicThresholdRepository(db *gorm.DB, metrics *datastore.Metrics, useV2Prefix, isMySQL bool) DynamicThresholdRepository {
 	return &dynamicThresholdRepository{
 		db:          db,
 		metrics:     metrics,
-		labelRepo:   labelRepo,
 		useV2Prefix: useV2Prefix,
 		isMySQL:     isMySQL,
 	}
@@ -51,52 +68,26 @@ func (r *dynamicThresholdRepository) eventTable() string {
 	return tableThresholdEvents
 }
 
-// ensureLabelRepo returns an error if labelRepo is nil.
-// This guards against misconfiguration that would cause nil pointer panics.
-func (r *dynamicThresholdRepository) ensureLabelRepo() error {
-	if r.labelRepo == nil {
-		return errors.NewStd("label repository not configured for threshold repository")
-	}
-	return nil
-}
-
-// SaveDynamicThreshold saves or updates a dynamic threshold (upsert).
-// The threshold.LabelID must be set by the caller.
+// SaveDynamicThreshold saves or updates a dynamic threshold (upsert on species_name).
 func (r *dynamicThresholdRepository) SaveDynamicThreshold(ctx context.Context, threshold *entities.DynamicThreshold) error {
-	if threshold.LabelID == 0 {
-		return errors.NewStd("dynamic threshold LabelID must be set before saving")
+	if threshold.SpeciesName == "" {
+		return errors.NewStd("dynamic threshold SpeciesName must be set before saving")
 	}
 	return datastore.RetryOnLock(ctx, "v2_save_dynamic_threshold", func() error {
 		return r.db.WithContext(ctx).Table(r.thresholdTable()).
 			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "label_id"}},
-				UpdateAll: true,
+				Columns:   []clause.Column{{Name: "species_name"}},
+				DoUpdates: clause.AssignmentColumns(thresholdConflictColumns),
 			}).
 			Create(threshold).Error
 	}, r.metrics)
 }
 
-// GetDynamicThreshold retrieves a threshold by species name (scientific name).
-// Internally resolves the species name to label IDs (cross-model) for the lookup.
-// Returns the first matching threshold if multiple models have thresholds for this species.
+// GetDynamicThreshold retrieves a threshold by species name (lowercase common name).
 func (r *dynamicThresholdRepository) GetDynamicThreshold(ctx context.Context, speciesName string) (*entities.DynamicThreshold, error) {
-	if err := r.ensureLabelRepo(); err != nil {
-		return nil, err
-	}
-	// Resolve species name to label IDs (cross-model lookup)
-	labelIDs, err := r.labelRepo.GetLabelIDsByScientificName(ctx, speciesName)
-	if err != nil {
-		return nil, err
-	}
-	if len(labelIDs) == 0 {
-		return nil, ErrDynamicThresholdNotFound
-	}
-
 	var threshold entities.DynamicThreshold
-	err = r.db.WithContext(ctx).Table(r.thresholdTable()).
-		Preload("Label.Model").
-		Preload("Label").
-		Where("label_id IN ?", labelIDs).
+	err := r.db.WithContext(ctx).Table(r.thresholdTable()).
+		Where("species_name = ?", speciesName).
 		First(&threshold).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrDynamicThresholdNotFound
@@ -104,7 +95,6 @@ func (r *dynamicThresholdRepository) GetDynamicThreshold(ctx context.Context, sp
 	if err != nil {
 		return nil, err
 	}
-
 	return &threshold, nil
 }
 
@@ -112,9 +102,7 @@ func (r *dynamicThresholdRepository) GetDynamicThreshold(ctx context.Context, sp
 func (r *dynamicThresholdRepository) GetAllDynamicThresholds(ctx context.Context, limit ...int) ([]entities.DynamicThreshold, error) {
 	var thresholds []entities.DynamicThreshold
 	query := r.db.WithContext(ctx).Table(r.thresholdTable()).
-		Preload("Label.Model").
-		Preload("Label").
-		Order("label_id ASC")
+		Order("species_name ASC")
 	if len(limit) > 0 && limit[0] > 0 {
 		query = query.Limit(limit[0])
 	}
@@ -122,25 +110,12 @@ func (r *dynamicThresholdRepository) GetAllDynamicThresholds(ctx context.Context
 	return thresholds, err
 }
 
-// DeleteDynamicThreshold deletes thresholds by species name (scientific name).
-// Deletes across all models that have thresholds for this species.
+// DeleteDynamicThreshold deletes a threshold by species name (lowercase common name).
 func (r *dynamicThresholdRepository) DeleteDynamicThreshold(ctx context.Context, speciesName string) error {
-	if err := r.ensureLabelRepo(); err != nil {
-		return err
-	}
-	// Resolve species name to label IDs (cross-model lookup)
-	labelIDs, err := r.labelRepo.GetLabelIDsByScientificName(ctx, speciesName)
-	if err != nil {
-		return err
-	}
-	if len(labelIDs) == 0 {
-		return ErrDynamicThresholdNotFound
-	}
-
 	var rowsAffected int64
-	err = datastore.RetryOnLock(ctx, "v2_delete_dynamic_threshold", func() error {
+	err := datastore.RetryOnLock(ctx, "v2_delete_dynamic_threshold", func() error {
 		result := r.db.WithContext(ctx).Table(r.thresholdTable()).
-			Where("label_id IN ?", labelIDs).
+			Where("species_name = ?", speciesName).
 			Delete(&entities.DynamicThreshold{})
 		if result.Error != nil {
 			return result.Error
@@ -173,25 +148,12 @@ func (r *dynamicThresholdRepository) DeleteExpiredDynamicThresholds(ctx context.
 	return rowsAffected, err
 }
 
-// UpdateDynamicThresholdExpiry updates the expiry time for thresholds.
-// Updates across all models that have thresholds for this species.
+// UpdateDynamicThresholdExpiry updates the expiry time for a threshold by species name.
 func (r *dynamicThresholdRepository) UpdateDynamicThresholdExpiry(ctx context.Context, speciesName string, expiresAt time.Time) error {
-	if err := r.ensureLabelRepo(); err != nil {
-		return err
-	}
-	// Resolve species name to label IDs (cross-model lookup)
-	labelIDs, err := r.labelRepo.GetLabelIDsByScientificName(ctx, speciesName)
-	if err != nil {
-		return err
-	}
-	if len(labelIDs) == 0 {
-		return ErrDynamicThresholdNotFound
-	}
-
 	var rowsAffected int64
-	err = datastore.RetryOnLock(ctx, "v2_update_dynamic_threshold_expiry", func() error {
+	err := datastore.RetryOnLock(ctx, "v2_update_dynamic_threshold_expiry", func() error {
 		result := r.db.WithContext(ctx).Table(r.thresholdTable()).
-			Where("label_id IN ?", labelIDs).
+			Where("species_name = ?", speciesName).
 			Update("expires_at", expiresAt)
 		if result.Error != nil {
 			return result.Error
@@ -208,23 +170,22 @@ func (r *dynamicThresholdRepository) UpdateDynamicThresholdExpiry(ctx context.Co
 	return nil
 }
 
-// BatchSaveDynamicThresholds saves multiple thresholds in a batch (upsert).
-// All thresholds must have LabelID set.
+// BatchSaveDynamicThresholds saves multiple thresholds in a batch (upsert on species_name).
 func (r *dynamicThresholdRepository) BatchSaveDynamicThresholds(ctx context.Context, thresholds []entities.DynamicThreshold) error {
 	if len(thresholds) == 0 {
 		return nil
 	}
-	// Validate all have LabelID set
+	// Validate all have SpeciesName set (the identity key must be non-empty).
 	for i := range thresholds {
-		if thresholds[i].LabelID == 0 {
-			return errors.NewStd("all thresholds must have LabelID set before batch save")
+		if thresholds[i].SpeciesName == "" {
+			return errors.NewStd("all thresholds must have SpeciesName set before batch save")
 		}
 	}
 	return datastore.RetryOnLock(ctx, "v2_batch_save_dynamic_thresholds", func() error {
 		return r.db.WithContext(ctx).Table(r.thresholdTable()).
 			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "label_id"}},
-				UpdateAll: true,
+				Columns:   []clause.Column{{Name: "species_name"}},
+				DoUpdates: clause.AssignmentColumns(thresholdConflictColumns),
 			}).
 			CreateInBatches(thresholds, 100).Error
 	}, r.metrics)
@@ -289,51 +250,23 @@ func (r *dynamicThresholdRepository) GetDynamicThresholdStats(ctx context.Contex
 }
 
 // SaveThresholdEvent saves a threshold event.
-// The event.LabelID must be set by the caller.
 func (r *dynamicThresholdRepository) SaveThresholdEvent(ctx context.Context, event *entities.ThresholdEvent) error {
-	if event.LabelID == 0 {
-		return errors.NewStd("threshold event LabelID must be set before saving")
+	if event.SpeciesName == "" {
+		return errors.NewStd("threshold event SpeciesName must be set before saving")
 	}
 	return datastore.RetryOnLock(ctx, "v2_save_threshold_event", func() error {
 		return r.db.WithContext(ctx).Table(r.eventTable()).Create(event).Error
 	}, r.metrics)
 }
 
-// GetThresholdEvents retrieves events for a species (by scientific name).
-// Retrieves events across all models that have events for this species.
+// GetThresholdEvents retrieves events for a species (lowercase common name).
 func (r *dynamicThresholdRepository) GetThresholdEvents(ctx context.Context, speciesName string, limit int) ([]entities.ThresholdEvent, error) {
-	if err := r.ensureLabelRepo(); err != nil {
-		return nil, err
-	}
-	// Resolve species name to label IDs (cross-model lookup)
-	labelIDs, err := r.labelRepo.GetLabelIDsByScientificName(ctx, speciesName)
-	if err != nil {
-		return nil, err
-	}
-	if len(labelIDs) == 0 {
-		return []entities.ThresholdEvent{}, nil
-	}
-
 	var events []entities.ThresholdEvent
+	// id DESC is a unique tiebreaker so events sharing a created_at truncate
+	// deterministically under the limit (coarse clocks collide at high rates).
 	query := r.db.WithContext(ctx).Table(r.eventTable()).
-		Preload("Label.Model").
-		Preload("Label").
-		Where("label_id IN ?", labelIDs).
-		Order("created_at DESC")
-	if limit > 0 {
-		query = query.Limit(limit)
-	}
-	err = query.Find(&events).Error
-	return events, err
-}
-
-// GetRecentThresholdEvents retrieves the most recent events across all species.
-func (r *dynamicThresholdRepository) GetRecentThresholdEvents(ctx context.Context, limit int) ([]entities.ThresholdEvent, error) {
-	var events []entities.ThresholdEvent
-	query := r.db.WithContext(ctx).Table(r.eventTable()).
-		Preload("Label.Model").
-		Preload("Label").
-		Order("created_at DESC")
+		Where("species_name = ?", speciesName).
+		Order("created_at DESC, id DESC")
 	if limit > 0 {
 		query = query.Limit(limit)
 	}
@@ -341,24 +274,25 @@ func (r *dynamicThresholdRepository) GetRecentThresholdEvents(ctx context.Contex
 	return events, err
 }
 
-// DeleteThresholdEvents deletes all events for a species (by scientific name).
-// Deletes events across all models that have events for this species.
-func (r *dynamicThresholdRepository) DeleteThresholdEvents(ctx context.Context, speciesName string) error {
-	if err := r.ensureLabelRepo(); err != nil {
-		return err
+// GetRecentThresholdEvents retrieves the most recent events across all species.
+func (r *dynamicThresholdRepository) GetRecentThresholdEvents(ctx context.Context, limit int) ([]entities.ThresholdEvent, error) {
+	var events []entities.ThresholdEvent
+	// id DESC is a unique tiebreaker so events sharing a created_at truncate
+	// deterministically under the limit.
+	query := r.db.WithContext(ctx).Table(r.eventTable()).
+		Order("created_at DESC, id DESC")
+	if limit > 0 {
+		query = query.Limit(limit)
 	}
-	// Resolve species name to label IDs (cross-model lookup)
-	labelIDs, err := r.labelRepo.GetLabelIDsByScientificName(ctx, speciesName)
-	if err != nil {
-		return err
-	}
-	if len(labelIDs) == 0 {
-		return nil // Nothing to delete
-	}
+	err := query.Find(&events).Error
+	return events, err
+}
 
+// DeleteThresholdEvents deletes all events for a species (lowercase common name).
+func (r *dynamicThresholdRepository) DeleteThresholdEvents(ctx context.Context, speciesName string) error {
 	return datastore.RetryOnLock(ctx, "v2_delete_threshold_events", func() error {
 		return r.db.WithContext(ctx).Table(r.eventTable()).
-			Where("label_id IN ?", labelIDs).
+			Where("species_name = ?", speciesName).
 			Delete(&entities.ThresholdEvent{}).Error
 	}, r.metrics)
 }
