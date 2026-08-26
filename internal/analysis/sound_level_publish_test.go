@@ -1577,6 +1577,10 @@ func (m *mockMQTTClient) RegisterOnConnectHandler(handler mqtt.OnConnectHandler)
 	// Not needed for our tests
 }
 
+func (m *mockMQTTClient) StartReconnectLoop() {
+	// Not needed for our tests
+}
+
 // createMockProcessor creates a processor suitable for testing with minimal config
 func createMockProcessor(publishFunc func(ctx context.Context, topic, payload string) error) *processor.Processor {
 	settings := &conf.Settings{

@@ -1,0 +1,4507 @@
+{
+  "schema": 2,
+  "repo": "tphakala/Perch-v2-Models",
+  "family": "perch",
+  "updated": "2026-07-24",
+  "naming": "legacy names, frozen; new files follow <family>-<upstream>[-<region>]-<variant>-b<build>.<ext>",
+  "selection": {
+    "x86-64/onnxruntime": "full/perch_v2_no_dft_fp32.onnx",
+    "x86-64/openvino-cpu": "full/perch_v2_no_dft_fp32.onnx",
+    "aarch64-a76/openvino": "full/perch_v2_no_dft_fp32.onnx",
+    "aarch64/onnxruntime": "full/perch_v2_int8_arm.onnx",
+    "cuda": "full/perch_v2_no_dft_fp32.onnx",
+    "low-ram": "regional/<region>/perch_v2_<region>_int8_arm.onnx"
+  },
+  "notes": "Regional slices are bit-exact to the full model on the species they keep. The int8-arm builds were quantized from the with-DFT graph and are ONNX Runtime only (verified to fail on OpenVINO); use no_dft_fp32 for OpenVINO and GPU. Perch confidence is a softmax, so slicing shifts scores: recalibrate thresholds per region.",
+  "models": [
+    {
+      "path": "full/perch_v2_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": null,
+      "labels": "full/perch_v2_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "bf0c8467a924cb074663970ca4a0ab1e143602121930209657d0dff5d5cefa1f",
+      "size_bytes": 409148616,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 700
+      }
+    },
+    {
+      "path": "full/perch_v2_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": null,
+      "labels": "full/perch_v2_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "ff32ca8c57954a86e6023a915d018dc7573cfc5567dd7314899d1c947cc6d5c5",
+      "size_bytes": 130856164,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 350
+      }
+    },
+    {
+      "path": "full/perch_v2_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": null,
+      "labels": "full/perch_v2_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "4dcf71c18a147198545944bb5149697e89e3ad2e16637fa8f0edf6d13035a017",
+      "size_bytes": 413350933,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 750
+      }
+    },
+    {
+      "path": "regional/amazonia/perch_v2_amazonia_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "amazonia",
+      "labels": "regional/amazonia/perch_v2_amazonia_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "b437370c33478d18cddb2bd0e5ca448b92c8daaa7248b62cca18dd48dc76416b",
+      "size_bytes": 61492034,
+      "superseded_by": null,
+      "indices": "regional/amazonia/perch_v2_amazonia_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/amazonia/perch_v2_amazonia_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "amazonia",
+      "labels": "regional/amazonia/perch_v2_amazonia_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "c09d8e946dc8393a78af9d4c81bc42f79bb6a6f0eff2c973385fff675005571e",
+      "size_bytes": 132660858,
+      "superseded_by": null,
+      "indices": "regional/amazonia/perch_v2_amazonia_indices.txt",
+      "requirements": {
+        "min_ram_mb": 350
+      }
+    },
+    {
+      "path": "regional/andes/perch_v2_andes_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "andes",
+      "labels": "regional/andes/perch_v2_andes_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "b991348630b1513f704be6742fa0d83858b3bebaad4a35c1b293417f3fd0316b",
+      "size_bytes": 62398142,
+      "superseded_by": null,
+      "indices": "regional/andes/perch_v2_andes_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/andes/perch_v2_andes_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "andes",
+      "labels": "regional/andes/perch_v2_andes_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "b187ce10356600dedbdb46d1803b9d1999fef59b603cbf3335bb106c55e824c8",
+      "size_bytes": 136276470,
+      "superseded_by": null,
+      "indices": "regional/andes/perch_v2_andes_indices.txt",
+      "requirements": {
+        "min_ram_mb": 350
+      }
+    },
+    {
+      "path": "regional/australia-east/perch_v2_australia-east_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "australia-east",
+      "labels": "regional/australia-east/perch_v2_australia-east_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "5ea3d89a79ec077ab45bdc0f5995998f1a866b6c034fccab1d8ba35382bc7a7e",
+      "size_bytes": 46439545,
+      "superseded_by": null,
+      "indices": "regional/australia-east/perch_v2_australia-east_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/australia-east/perch_v2_australia-east_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "australia-east",
+      "labels": "regional/australia-east/perch_v2_australia-east_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "c6133316df9f1509705468524d9857629e6abf452b7d573319d93c3dba623ef5",
+      "size_bytes": 72597424,
+      "superseded_by": null,
+      "indices": "regional/australia-east/perch_v2_australia-east_indices.txt",
+      "requirements": {
+        "min_ram_mb": 300
+      }
+    },
+    {
+      "path": "regional/azores/perch_v2_azores_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "azores",
+      "labels": "regional/azores/perch_v2_azores_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "952c8408ab8eae9069c8e35fc714a30d07dc504e70c49e8e580a3cb89f6ebb10",
+      "size_bytes": 43234264,
+      "superseded_by": null,
+      "indices": "regional/azores/perch_v2_azores_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/azores/perch_v2_azores_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "azores",
+      "labels": "regional/azores/perch_v2_azores_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "de0651c03fc0874741b5bdd02595056684da2a14612357852e85715232531018",
+      "size_bytes": 59807504,
+      "superseded_by": null,
+      "indices": "regional/azores/perch_v2_azores_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/baltics/perch_v2_baltics_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "baltics",
+      "labels": "regional/baltics/perch_v2_baltics_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "dbeee9d02760f04efc50d6cb1198fc91c5c183149249dc3b17e451f9d7ec0b0a",
+      "size_bytes": 44645820,
+      "superseded_by": null,
+      "indices": "regional/baltics/perch_v2_baltics_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/baltics/perch_v2_baltics_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "baltics",
+      "labels": "regional/baltics/perch_v2_baltics_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "959841211a94971025ddd3c6ecdd6b0d23a87a60645befc80127d51ba560c855",
+      "size_bytes": 65439988,
+      "superseded_by": null,
+      "indices": "regional/baltics/perch_v2_baltics_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/british-isles/perch_v2_british-isles_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "british-isles",
+      "labels": "regional/british-isles/perch_v2_british-isles_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "03d4f63413299473397f57f829e14504e54978a9a95de83bf9d9cbc96cc063b1",
+      "size_bytes": 45391664,
+      "superseded_by": null,
+      "indices": "regional/british-isles/perch_v2_british-isles_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/british-isles/perch_v2_british-isles_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "british-isles",
+      "labels": "regional/british-isles/perch_v2_british-isles_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "1281cece7d01319c6b010eb13b7ea5cbe8c1fcf4f15d6ad3e2ccd1bd1b2c53c1",
+      "size_bytes": 68416104,
+      "superseded_by": null,
+      "indices": "regional/british-isles/perch_v2_british-isles_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/canada-alaska/perch_v2_canada-alaska_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "canada-alaska",
+      "labels": "regional/canada-alaska/perch_v2_canada-alaska_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "4a7f3f9946ece497f906621f0383f589cf878595ea938099163ab71e069c2cf5",
+      "size_bytes": 46538169,
+      "superseded_by": null,
+      "indices": "regional/canada-alaska/perch_v2_canada-alaska_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/canada-alaska/perch_v2_canada-alaska_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "canada-alaska",
+      "labels": "regional/canada-alaska/perch_v2_canada-alaska_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "d0cb954c79fd6d1c130c4979c8aec72be09b22b3e7fd6056fbbde5d8ff869ebb",
+      "size_bytes": 72990960,
+      "superseded_by": null,
+      "indices": "regional/canada-alaska/perch_v2_canada-alaska_indices.txt",
+      "requirements": {
+        "min_ram_mb": 300
+      }
+    },
+    {
+      "path": "regional/canary-islands/perch_v2_canary-islands_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "canary-islands",
+      "labels": "regional/canary-islands/perch_v2_canary-islands_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "4db63a7b969324604280a1f915a4f9339791f1dd051d2dd78b04187dbfb73fd4",
+      "size_bytes": 44294472,
+      "superseded_by": null,
+      "indices": "regional/canary-islands/perch_v2_canary-islands_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/canary-islands/perch_v2_canary-islands_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "canary-islands",
+      "labels": "regional/canary-islands/perch_v2_canary-islands_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "08938826166b4277fc8f948da1f273ace306b2369f65bb184cb2e1c54315f298",
+      "size_bytes": 64038016,
+      "superseded_by": null,
+      "indices": "regional/canary-islands/perch_v2_canary-islands_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/cape-verde/perch_v2_cape-verde_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "cape-verde",
+      "labels": "regional/cape-verde/perch_v2_cape-verde_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "03e10868fcdc90eb0b5215f202f0d3184a7e9c60814866a9385b92ca3317541a",
+      "size_bytes": 42741144,
+      "superseded_by": null,
+      "indices": "regional/cape-verde/perch_v2_cape-verde_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/cape-verde/perch_v2_cape-verde_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "cape-verde",
+      "labels": "regional/cape-verde/perch_v2_cape-verde_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "bbddef61153b0e9a05639d221cb022878055622b892cc52b38af97592a765425",
+      "size_bytes": 57839824,
+      "superseded_by": null,
+      "indices": "regional/cape-verde/perch_v2_cape-verde_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/central-europe/perch_v2_central-europe_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "central-europe",
+      "labels": "regional/central-europe/perch_v2_central-europe_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "a5b7da4d147679b3ef0f2cde39bc4cacabfa7a9c462fed7adac4935c8781813e",
+      "size_bytes": 45989572,
+      "superseded_by": null,
+      "indices": "regional/central-europe/perch_v2_central-europe_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/central-europe/perch_v2_central-europe_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "central-europe",
+      "labels": "regional/central-europe/perch_v2_central-europe_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "8f2e40a11c89812fa61ea8d6faa1d6710ee3b6ae9a8292bc3f9429df1af6f4c3",
+      "size_bytes": 70801916,
+      "superseded_by": null,
+      "indices": "regional/central-europe/perch_v2_central-europe_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/china-north-central/perch_v2_china-north-central_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "china-north-central",
+      "labels": "regional/china-north-central/perch_v2_china-north-central_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "dae3b0d45eb698662a2d544f53de20d53e5db71e11e4296547dd12526a8cb3b8",
+      "size_bytes": 46624464,
+      "superseded_by": null,
+      "indices": "regional/china-north-central/perch_v2_china-north-central_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/china-north-central/perch_v2_china-north-central_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "china-north-central",
+      "labels": "regional/china-north-central/perch_v2_china-north-central_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "adb89e88eb8d670cee4d6596388931267a63f861ae01c7147b19cd187f1af9ba",
+      "size_bytes": 73335304,
+      "superseded_by": null,
+      "indices": "regional/china-north-central/perch_v2_china-north-central_indices.txt",
+      "requirements": {
+        "min_ram_mb": 300
+      }
+    },
+    {
+      "path": "regional/china-northeast/perch_v2_china-northeast_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "china-northeast",
+      "labels": "regional/china-northeast/perch_v2_china-northeast_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "169c07f6004f8e5473170c8823ad2e84746c509115e0279425b8520972993d34",
+      "size_bytes": 46014228,
+      "superseded_by": null,
+      "indices": "regional/china-northeast/perch_v2_china-northeast_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/china-northeast/perch_v2_china-northeast_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "china-northeast",
+      "labels": "regional/china-northeast/perch_v2_china-northeast_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "139385aadb17dcd0e0724a047c8e99c73bc516680fbed8d659297c80798c890b",
+      "size_bytes": 70900300,
+      "superseded_by": null,
+      "indices": "regional/china-northeast/perch_v2_china-northeast_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/china-southeast/perch_v2_china-southeast_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "china-southeast",
+      "labels": "regional/china-southeast/perch_v2_china-southeast_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "be17c31fae6974213a9f7ae525f27b4c65fa42a29f4e676b0773b7145464dca0",
+      "size_bytes": 49071575,
+      "superseded_by": null,
+      "indices": "regional/china-southeast/perch_v2_china-southeast_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/china-southeast/perch_v2_china-southeast_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "china-southeast",
+      "labels": "regional/china-southeast/perch_v2_china-southeast_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "a9c4acf8b47b44ac3858d8afa12d5d1dec8278315e410dd75d53c2ad1e2ce854",
+      "size_bytes": 83099918,
+      "superseded_by": null,
+      "indices": "regional/china-southeast/perch_v2_china-southeast_indices.txt",
+      "requirements": {
+        "min_ram_mb": 300
+      }
+    },
+    {
+      "path": "regional/china-southwest/perch_v2_china-southwest_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "china-southwest",
+      "labels": "regional/china-southwest/perch_v2_china-southwest_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "d214093463cc3fbf8c9dccbedd9c26e87575c87ed3839b19b3fda02085c4341d",
+      "size_bytes": 49293479,
+      "superseded_by": null,
+      "indices": "regional/china-southwest/perch_v2_china-southwest_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/china-southwest/perch_v2_china-southwest_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "china-southwest",
+      "labels": "regional/china-southwest/perch_v2_china-southwest_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "11292464054e8c2b6b7d309a6518fe8c81f43b19f98e151b0ef3cbd21261ed0f",
+      "size_bytes": 83985374,
+      "superseded_by": null,
+      "indices": "regional/china-southwest/perch_v2_china-southwest_indices.txt",
+      "requirements": {
+        "min_ram_mb": 300
+      }
+    },
+    {
+      "path": "regional/eastern-brazil/perch_v2_eastern-brazil_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "eastern-brazil",
+      "labels": "regional/eastern-brazil/perch_v2_eastern-brazil_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "34736f02b138a64f9aef1e5bcffbe5d8bd6a9a5cb4226a052b9d2ff000c89cbc",
+      "size_bytes": 54070578,
+      "superseded_by": null,
+      "indices": "regional/eastern-brazil/perch_v2_eastern-brazil_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/eastern-brazil/perch_v2_eastern-brazil_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "eastern-brazil",
+      "labels": "regional/eastern-brazil/perch_v2_eastern-brazil_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "89008391609eb31f5ece4d66fbea557f4b1bdde09ff3d79994302062812901ed",
+      "size_bytes": 103047274,
+      "superseded_by": null,
+      "indices": "regional/eastern-brazil/perch_v2_eastern-brazil_indices.txt",
+      "requirements": {
+        "min_ram_mb": 300
+      }
+    },
+    {
+      "path": "regional/eastern-europe/perch_v2_eastern-europe_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "eastern-europe",
+      "labels": "regional/eastern-europe/perch_v2_eastern-europe_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "5c06c2639b2080f84d93896f1528ebb20962ff19986c09908bd498c41ebaa007",
+      "size_bytes": 45163596,
+      "superseded_by": null,
+      "indices": "regional/eastern-europe/perch_v2_eastern-europe_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/eastern-europe/perch_v2_eastern-europe_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "eastern-europe",
+      "labels": "regional/eastern-europe/perch_v2_eastern-europe_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "d8a93f1ef28e26fddeda80833d865463656713471714c1f4cbf92dfb191e6b9b",
+      "size_bytes": 67506052,
+      "superseded_by": null,
+      "indices": "regional/eastern-europe/perch_v2_eastern-europe_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/galapagos/perch_v2_galapagos_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "galapagos",
+      "labels": "regional/galapagos/perch_v2_galapagos_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "67ef0140c533e3e3658fe5d317ab64558d7d15353f1679650053397e91fbec73",
+      "size_bytes": 42679502,
+      "superseded_by": null,
+      "indices": "regional/galapagos/perch_v2_galapagos_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/galapagos/perch_v2_galapagos_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "galapagos",
+      "labels": "regional/galapagos/perch_v2_galapagos_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "f80b3b91be5a589358609718acfa0d202c86d2b95c49cadb2d4f46e63ad8bff1",
+      "size_bytes": 57593864,
+      "superseded_by": null,
+      "indices": "regional/galapagos/perch_v2_galapagos_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/hawaii/perch_v2_hawaii_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "hawaii",
+      "labels": "regional/hawaii/perch_v2_hawaii_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "f14cf802633c1e1ff4f1d71046faf49763211352901fd49038b8365d4fd60403",
+      "size_bytes": 43554792,
+      "superseded_by": null,
+      "indices": "regional/hawaii/perch_v2_hawaii_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/hawaii/perch_v2_hawaii_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "hawaii",
+      "labels": "regional/hawaii/perch_v2_hawaii_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "c39a3654096e705f1c8888cac2e9f431c8dee1b92b543680b81eede29deb66df",
+      "size_bytes": 61086496,
+      "superseded_by": null,
+      "indices": "regional/hawaii/perch_v2_hawaii_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/himalaya/perch_v2_himalaya_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "himalaya",
+      "labels": "regional/himalaya/perch_v2_himalaya_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "3024a89395052e971f6f3dc14525020c174d964f53ebd43a5ad72cc8cf37da00",
+      "size_bytes": 49281151,
+      "superseded_by": null,
+      "indices": "regional/himalaya/perch_v2_himalaya_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/himalaya/perch_v2_himalaya_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "himalaya",
+      "labels": "regional/himalaya/perch_v2_himalaya_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "d30ee51f106712694f11940336a82621810789dd1237bcfed977d9095a102486",
+      "size_bytes": 83936182,
+      "superseded_by": null,
+      "indices": "regional/himalaya/perch_v2_himalaya_indices.txt",
+      "requirements": {
+        "min_ram_mb": 300
+      }
+    },
+    {
+      "path": "regional/iberia/perch_v2_iberia_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "iberia",
+      "labels": "regional/iberia/perch_v2_iberia_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "02e6756a3de2f661b7e612e1487800a3d8ac67dd1d10e21f3269547f4ecb21a5",
+      "size_bytes": 45884784,
+      "superseded_by": null,
+      "indices": "regional/iberia/perch_v2_iberia_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/iberia/perch_v2_iberia_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "iberia",
+      "labels": "regional/iberia/perch_v2_iberia_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "0a1f5717b91ceac3bd48378cecbbad1946cdfd3ad0ff72e2fe608c561198a638",
+      "size_bytes": 70383784,
+      "superseded_by": null,
+      "indices": "regional/iberia/perch_v2_iberia_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/iceland/perch_v2_iceland_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "iceland",
+      "labels": "regional/iceland/perch_v2_iceland_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "6757c6aba4a4eb26ac9ccc6cb195ee298be00a35c0d2beb5aed06b57b3bf82a4",
+      "size_bytes": 44251324,
+      "superseded_by": null,
+      "indices": "regional/iceland/perch_v2_iceland_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/iceland/perch_v2_iceland_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "iceland",
+      "labels": "regional/iceland/perch_v2_iceland_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "d6c41558e362a69e9e7dba65ad900cf53becf8420d9302b1f164a1f45876fd45",
+      "size_bytes": 63865844,
+      "superseded_by": null,
+      "indices": "regional/iceland/perch_v2_iceland_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/indo-gangetic/perch_v2_indo-gangetic_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "indo-gangetic",
+      "labels": "regional/indo-gangetic/perch_v2_indo-gangetic_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "3391d6be6c98637847be9936aa00b00a01dc66bf5d6ee2419690f4321374afeb",
+      "size_bytes": 49274987,
+      "superseded_by": null,
+      "indices": "regional/indo-gangetic/perch_v2_indo-gangetic_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/indo-gangetic/perch_v2_indo-gangetic_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "indo-gangetic",
+      "labels": "regional/indo-gangetic/perch_v2_indo-gangetic_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "e5a397ccfb8e803095147c239c5ee716065e3d8e5322b108f372dbde885d955f",
+      "size_bytes": 83911586,
+      "superseded_by": null,
+      "indices": "regional/indo-gangetic/perch_v2_indo-gangetic_indices.txt",
+      "requirements": {
+        "min_ram_mb": 300
+      }
+    },
+    {
+      "path": "regional/japan/perch_v2_japan_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "japan",
+      "labels": "regional/japan/perch_v2_japan_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "5839117a9311d7ecf4772a262c8f5b2887debc7d13192d66f7d8d910990bcdeb",
+      "size_bytes": 45533436,
+      "superseded_by": null,
+      "indices": "regional/japan/perch_v2_japan_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/japan/perch_v2_japan_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "japan",
+      "labels": "regional/japan/perch_v2_japan_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "740778772ace4d8d6889ec7b890073518e915b457ee66180fc09cad1caf329f7",
+      "size_bytes": 68981812,
+      "superseded_by": null,
+      "indices": "regional/japan/perch_v2_japan_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/madeira/perch_v2_madeira_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "madeira",
+      "labels": "regional/madeira/perch_v2_madeira_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "598e826eacc21a3cea1a27c8aec1eca733e308517c63c0a24bd81222cc7ab138",
+      "size_bytes": 43437676,
+      "superseded_by": null,
+      "indices": "regional/madeira/perch_v2_madeira_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/madeira/perch_v2_madeira_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "madeira",
+      "labels": "regional/madeira/perch_v2_madeira_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "3b7f918d84f711485a6258b08dcfd216c727b99d7717b9b935d20a2e80a49ae2",
+      "size_bytes": 60619172,
+      "superseded_by": null,
+      "indices": "regional/madeira/perch_v2_madeira_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/mauritius/perch_v2_mauritius_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "mauritius",
+      "labels": "regional/mauritius/perch_v2_mauritius_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "0993bce471bfed702c56e808d8a1b8014b8e25a6905f9f79e0b5dbf2f27846e8",
+      "size_bytes": 42285006,
+      "superseded_by": null,
+      "indices": "regional/mauritius/perch_v2_mauritius_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/mauritius/perch_v2_mauritius_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "mauritius",
+      "labels": "regional/mauritius/perch_v2_mauritius_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "03381abc5b75d2fb49c2f60fafa9c80e1f0e0ac0d9657b5842695f09baf1f4ca",
+      "size_bytes": 56019720,
+      "superseded_by": null,
+      "indices": "regional/mauritius/perch_v2_mauritius_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/new-caledonia/perch_v2_new-caledonia_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "new-caledonia",
+      "labels": "regional/new-caledonia/perch_v2_new-caledonia_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "01787c1a20d7b0ebe1d1ec3e1c28803c97ab45fa2490f6ed8c5c338dde8b0751",
+      "size_bytes": 42932228,
+      "superseded_by": null,
+      "indices": "regional/new-caledonia/perch_v2_new-caledonia_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/new-caledonia/perch_v2_new-caledonia_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "new-caledonia",
+      "labels": "regional/new-caledonia/perch_v2_new-caledonia_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "c103abcf0699889a17464ba5276ee270688cbf3daf9e125bc4ce63301ea588c0",
+      "size_bytes": 58602300,
+      "superseded_by": null,
+      "indices": "regional/new-caledonia/perch_v2_new-caledonia_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/new-zealand/perch_v2_new-zealand_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "new-zealand",
+      "labels": "regional/new-zealand/perch_v2_new-zealand_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "ebf3c3a7021c2f2c4ab53d1cd2caaf3f92e798483f7f86000e19f7f362e1ded5",
+      "size_bytes": 43604104,
+      "superseded_by": null,
+      "indices": "regional/new-zealand/perch_v2_new-zealand_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/new-zealand/perch_v2_new-zealand_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "new-zealand",
+      "labels": "regional/new-zealand/perch_v2_new-zealand_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "a82854470d31363d410b1744ccec6c7c5d97c44d5041622e2c31acebfe0f2403",
+      "size_bytes": 61283264,
+      "superseded_by": null,
+      "indices": "regional/new-zealand/perch_v2_new-zealand_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/nordic/perch_v2_nordic_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "nordic",
+      "labels": "regional/nordic/perch_v2_nordic_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "1048a9a73aaa9838a68927148768dfcb46a9a765ac3a97cf62030f4a45d3b3bb",
+      "size_bytes": 44541032,
+      "superseded_by": null,
+      "indices": "regional/nordic/perch_v2_nordic_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/nordic/perch_v2_nordic_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "nordic",
+      "labels": "regional/nordic/perch_v2_nordic_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "14649846088e6156eb0b1d40d2e90362fcf60d466f9543b8834cdf0c78a15081",
+      "size_bytes": 65021856,
+      "superseded_by": null,
+      "indices": "regional/nordic/perch_v2_nordic_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/north-america-east/perch_v2_north-america-east_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "north-america-east",
+      "labels": "regional/north-america-east/perch_v2_north-america-east_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "5a64e006e1617ac22bc3e1d35012435d8b8db2e9b8b3e8d3298c3d04827abaa0",
+      "size_bytes": 46766237,
+      "superseded_by": null,
+      "indices": "regional/north-america-east/perch_v2_north-america-east_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/north-america-east/perch_v2_north-america-east_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "north-america-east",
+      "labels": "regional/north-america-east/perch_v2_north-america-east_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "80d640c44e0775a7ef68967e5d9f073970d918486c7686ac4a14c77f3bab5d71",
+      "size_bytes": 73901012,
+      "superseded_by": null,
+      "indices": "regional/north-america-east/perch_v2_north-america-east_indices.txt",
+      "requirements": {
+        "min_ram_mb": 300
+      }
+    },
+    {
+      "path": "regional/north-america-west/perch_v2_north-america-west_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "north-america-west",
+      "labels": "regional/north-america-west/perch_v2_north-america-west_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "deabb5e7192a110838356021d2ac78f3800e25783f61b99e6fdcd491db910915",
+      "size_bytes": 46784729,
+      "superseded_by": null,
+      "indices": "regional/north-america-west/perch_v2_north-america-west_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/north-america-west/perch_v2_north-america-west_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "north-america-west",
+      "labels": "regional/north-america-west/perch_v2_north-america-west_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "50899fc74072a58d2da28c180e15d32282fef270982c21d67a04ebcd3f0b65f2",
+      "size_bytes": 73974800,
+      "superseded_by": null,
+      "indices": "regional/north-america-west/perch_v2_north-america-west_indices.txt",
+      "requirements": {
+        "min_ram_mb": 300
+      }
+    },
+    {
+      "path": "regional/reunion/perch_v2_reunion_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "reunion",
+      "labels": "regional/reunion/perch_v2_reunion_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "2a9888cac580e55ec41771e5d27aae9c8a5766434569aa727264d5238525a4b5",
+      "size_bytes": 42297334,
+      "superseded_by": null,
+      "indices": "regional/reunion/perch_v2_reunion_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/reunion/perch_v2_reunion_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "reunion",
+      "labels": "regional/reunion/perch_v2_reunion_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "cc0c2a3f511fb981a28a5d1d3515b5f98e7e42215a1bb6b32cfec1790b087857",
+      "size_bytes": 56068912,
+      "superseded_by": null,
+      "indices": "regional/reunion/perch_v2_reunion_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/sao-tome-principe/perch_v2_sao-tome-principe_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "sao-tome-principe",
+      "labels": "regional/sao-tome-principe/perch_v2_sao-tome-principe_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "a9cd8bbe8ff608c97e38098349451766dd02f16acc7e9422a216c831970de99c",
+      "size_bytes": 42605534,
+      "superseded_by": null,
+      "indices": "regional/sao-tome-principe/perch_v2_sao-tome-principe_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/sao-tome-principe/perch_v2_sao-tome-principe_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "sao-tome-principe",
+      "labels": "regional/sao-tome-principe/perch_v2_sao-tome-principe_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "e01153e0900fc9c1d971310ee25c7a0b9a0e6c4462670f43651cadc3cca4793d",
+      "size_bytes": 57298712,
+      "superseded_by": null,
+      "indices": "regional/sao-tome-principe/perch_v2_sao-tome-principe_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/seychelles/perch_v2_seychelles_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "seychelles",
+      "labels": "regional/seychelles/perch_v2_seychelles_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "543a734df159e86c50f112d83d7bdb9cb6143442ac540ed1796725adb0b9b843",
+      "size_bytes": 42568550,
+      "superseded_by": null,
+      "indices": "regional/seychelles/perch_v2_seychelles_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/seychelles/perch_v2_seychelles_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "seychelles",
+      "labels": "regional/seychelles/perch_v2_seychelles_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "c50ea0af5c068ae34cde58f3fa342ffefee498a1d3a1ba357b5487a5786861d3",
+      "size_bytes": 57151136,
+      "superseded_by": null,
+      "indices": "regional/seychelles/perch_v2_seychelles_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/south-asia-peninsular/perch_v2_south-asia-peninsular_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "south-asia-peninsular",
+      "labels": "regional/south-asia-peninsular/perch_v2_south-asia-peninsular_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "a84c872c56ddb5d5a76f6abb0c27926807b9da336de526c8bb91194c1c5bf4b9",
+      "size_bytes": 46026556,
+      "superseded_by": null,
+      "indices": "regional/south-asia-peninsular/perch_v2_south-asia-peninsular_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/south-asia-peninsular/perch_v2_south-asia-peninsular_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "south-asia-peninsular",
+      "labels": "regional/south-asia-peninsular/perch_v2_south-asia-peninsular_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "1ab0884a4986dadbeb74a906a8f33568b2856d014f02fc4cf9175ef8e20a2390",
+      "size_bytes": 70949492,
+      "superseded_by": null,
+      "indices": "regional/south-asia-peninsular/perch_v2_south-asia-peninsular_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/southern-africa/perch_v2_southern-africa_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "southern-africa",
+      "labels": "regional/southern-africa/perch_v2_southern-africa_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "d2e6ae6d660d717a53f93d3cacfae2c851c907f8c873e99739181017e7e39a73",
+      "size_bytes": 46784728,
+      "superseded_by": null,
+      "indices": "regional/southern-africa/perch_v2_southern-africa_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/southern-africa/perch_v2_southern-africa_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "southern-africa",
+      "labels": "regional/southern-africa/perch_v2_southern-africa_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "4053c167196575495dbf34cb56914d64600ee19b54153931182f4c613983930e",
+      "size_bytes": 73974800,
+      "superseded_by": null,
+      "indices": "regional/southern-africa/perch_v2_southern-africa_indices.txt",
+      "requirements": {
+        "min_ram_mb": 300
+      }
+    },
+    {
+      "path": "regional/southern-cone/perch_v2_southern-cone_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "southern-cone",
+      "labels": "regional/southern-cone/perch_v2_southern-cone_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "e8584ffa2c7cd23e8a6dc9af2f85a2af6b02b9fe181555abb6c3f9143e353c22",
+      "size_bytes": 52042622,
+      "superseded_by": null,
+      "indices": "regional/southern-cone/perch_v2_southern-cone_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/southern-cone/perch_v2_southern-cone_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "southern-cone",
+      "labels": "regional/southern-cone/perch_v2_southern-cone_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "d6f782b9ea06c80a78b58f928b9276c92eedb4fbb2a8a2d596cf835b7722606b",
+      "size_bytes": 94955190,
+      "superseded_by": null,
+      "indices": "regional/southern-cone/perch_v2_southern-cone_indices.txt",
+      "requirements": {
+        "min_ram_mb": 300
+      }
+    },
+    {
+      "path": "regional/southern-europe/perch_v2_southern-europe_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "southern-europe",
+      "labels": "regional/southern-europe/perch_v2_southern-europe_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "6957554e294967aa26d72f332f62b68e8a6aa08ed6766791a28f0b4ff10d880c",
+      "size_bytes": 45779996,
+      "superseded_by": null,
+      "indices": "regional/southern-europe/perch_v2_southern-europe_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/southern-europe/perch_v2_southern-europe_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "southern-europe",
+      "labels": "regional/southern-europe/perch_v2_southern-europe_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "9ba9cd864529efc506941c366c50e7dbf3f3a173adb3dce244e3a6e940ef9045",
+      "size_bytes": 69965652,
+      "superseded_by": null,
+      "indices": "regional/southern-europe/perch_v2_southern-europe_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/svalbard/perch_v2_svalbard_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "svalbard",
+      "labels": "regional/svalbard/perch_v2_svalbard_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "eb98b17da3822b356b3b53d152e8a087a4bb6d9cf58e72fcd1ecc7190cf3819d",
+      "size_bytes": 43567120,
+      "superseded_by": null,
+      "indices": "regional/svalbard/perch_v2_svalbard_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/svalbard/perch_v2_svalbard_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "svalbard",
+      "labels": "regional/svalbard/perch_v2_svalbard_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "01d30871ccf82c9f7a73aa3e5d7bbf61a6337fe8dd7584ebaa001cca30b7b563",
+      "size_bytes": 61135688,
+      "superseded_by": null,
+      "indices": "regional/svalbard/perch_v2_svalbard_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/tibet/perch_v2_tibet_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "tibet",
+      "labels": "regional/tibet/perch_v2_tibet_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "78daa7110aa3dec88aa2d5cb1587c7af7c59ce3c70f4c74fc8cdd8ff98c053d9",
+      "size_bytes": 49281151,
+      "superseded_by": null,
+      "indices": "regional/tibet/perch_v2_tibet_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/tibet/perch_v2_tibet_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "tibet",
+      "labels": "regional/tibet/perch_v2_tibet_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "d309474cdebccbd49c5d8c785e75058900060665e0ac624f9c7c67ab9ec3fb6e",
+      "size_bytes": 83936182,
+      "superseded_by": null,
+      "indices": "regional/tibet/perch_v2_tibet_indices.txt",
+      "requirements": {
+        "min_ram_mb": 300
+      }
+    },
+    {
+      "path": "regional/western-palearctic/perch_v2_western-palearctic_int8_arm.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8-arm",
+      "precision": "int8-arm",
+      "region": "western-palearctic",
+      "labels": "regional/western-palearctic/perch_v2_western-palearctic_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "openvino-gpu": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "cuda": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        },
+        "tensorrt": {
+          "supported": false,
+          "recommended": false,
+          "note": "contains an in-graph DFT op that OpenVINO cannot translate; verified to fail compilation on OpenVINO CPU"
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "5417cf33b6d7a195810e63c825e9108e73c30889a12da72130616297255c4154",
+      "size_bytes": 50464638,
+      "superseded_by": null,
+      "indices": "regional/western-palearctic/perch_v2_western-palearctic_indices.txt",
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "regional/western-palearctic/perch_v2_western-palearctic_no_dft_fp32.onnx",
+      "family": "perch",
+      "upstream_version": "2",
+      "upstream_source": "https://www.kaggle.com/models/google/bird-vocalization-classifier/",
+      "build": 1,
+      "legacy": true,
+      "variant": "no-dft-fp32",
+      "precision": "fp32",
+      "region": "western-palearctic",
+      "labels": "regional/western-palearctic/perch_v2_western-palearctic_labels.txt",
+      "input": {
+        "sample_rate": 32000,
+        "window_seconds": 5,
+        "samples": 160000,
+        "shape": [
+          "batch",
+          160000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": true
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "d3c329afbc2b614f17002dea45282698df879d3fb714cd070ab74cf4d7a13b67",
+      "size_bytes": 88658614,
+      "superseded_by": null,
+      "indices": "regional/western-palearctic/perch_v2_western-palearctic_indices.txt",
+      "requirements": {
+        "min_ram_mb": 300
+      }
+    }
+  ],
+  "family_meta": {
+    "display_name": "Google Perch v2",
+    "description": "Google Perch v2 multi-taxa classifier with approximately 14,795 species including birds, insects, amphibians, and mammals (scientific names only)",
+    "author": "Google Research",
+    "license": "Apache-2.0",
+    "commercial_use": true,
+    "upstream_url": "https://www.kaggle.com/models/google/bird-vocalization-classifier/tensorFlow2/perch_v2",
+    "species_count": 14795
+  },
+  "requirements_note": "requirements.min_ram_mb is a conservative, high-biased RAM floor: measured peak RSS + 15% where a benchmark exists, else a size-derived estimate biased high (a too-low floor risks OOM; a too-high floor only over-excludes on the smallest devices). Measured values will replace the estimates over time."
+}

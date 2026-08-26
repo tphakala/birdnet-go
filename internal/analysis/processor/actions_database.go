@@ -218,7 +218,7 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 	}
 
 	// After successful save, publish detection event to the event bus.
-	a.publishDetectionEvent(isNewSpecies, daysSinceFirstSeen, novelty)
+	a.publishDetectionEvent(ctx, isNewSpecies, daysSinceFirstSeen, novelty)
 
 	// NOTE: Audio export is intentionally NOT performed here.
 	// It runs as a separate action (SaveAudioAction) outside the CompositeAction
@@ -314,8 +314,26 @@ func (a *DatabaseAction) populateEventMetadata(detectionEvent events.DetectionEv
 		}
 	}
 
-	if a.processor != nil && a.processor.BirdImageCache != nil {
-		if birdImage, err := a.processor.BirdImageCache.Get(a.Result.Species.ScientificName); err == nil && birdImage.URL != "" {
+	// Cached-only lookup. The previous BirdImageCache.Get here was a synchronous,
+	// uncancellable provider fetch inside the CompositeAction whose 30s timeout this
+	// file's own note (see the audio-export comment above) records as the reason slow
+	// work was moved out of it. A cold species could take minutes.
+	//
+	// The URL stays the provider's upstream address rather than becoming a media-proxy
+	// URL. This metadata reaches notification templates as bg_image_url and ends up in
+	// Discord rich embeds and webhook payloads, and those are fetched server-side by
+	// the notification service, from outside the user's network. A BirdNET-Go URL is
+	// unreachable from there for the typical home-LAN install, whether it is
+	// root-relative or an absolute one built from a private host. The provider URL is a
+	// public CDN address and is the only form that renders. Tracked separately.
+	// Shared with the SSE and MQTT actions of the same CompositeAction through the
+	// detection context, so one detection costs one lookup rather than three. The
+	// helper also schedules the prefetch when nothing is cached yet, so that this
+	// notification carries no image but the next detection of the species can.
+	if a.processor != nil {
+		birdImage := getBirdImageFromCache(a.DetectionCtx, a.processor.BirdImageCache,
+			a.Result.Species.ScientificName, a.Result.Species.CommonName, a.CorrelationID)
+		if birdImage.URL != "" {
 			metadata["image_url"] = birdImage.URL
 		}
 	}
@@ -345,10 +363,48 @@ func (a *DatabaseAction) recordNotificationSent(notificationTime time.Time) {
 	}
 }
 
+// newSpeciesImageWait bounds how long a new-species notification will wait for its
+// image to resolve. It is short relative to the enclosing CompositeAction's 30s
+// timeout, so a throttled provider degrades to a notification without an image
+// rather than putting the whole Database -> SSE -> MQTT chain at risk.
+const newSpeciesImageWait = 3 * time.Second
+
+// warmSpeciesImage resolves this detection's species image, waiting at most
+// newSpeciesImageWait, so that the caller's subsequent GetCached lookup can succeed.
+//
+// This is the one image lookup that is still allowed to wait, and only for a new
+// species. Every other path in this file and its siblings is cached-only, because a
+// cold species can otherwise occupy the provider chain for minutes. A new species is
+// rare by construction (once per species, ever) and is precisely the detection whose
+// notification an image matters most for.
+func (a *DatabaseAction) warmSpeciesImage(ctx context.Context) {
+	if a.processor == nil || a.processor.BirdImageCache == nil {
+		return
+	}
+	scientificName := a.Result.Species.ScientificName
+	if scientificName == "" {
+		return
+	}
+	if _, found, _ := a.processor.BirdImageCache.GetCached(scientificName); found {
+		return
+	}
+
+	waitCtx, cancel := context.WithTimeout(ctx, newSpeciesImageWait)
+	defer cancel()
+	if _, err := a.processor.BirdImageCache.GetWithContext(waitCtx, scientificName); err != nil {
+		GetLogger().Debug("New species image did not resolve within the notification wait",
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("detection_id", a.CorrelationID),
+			logger.String("scientific_name", scientificName),
+			logger.Duration("waited", newSpeciesImageWait),
+			logger.Error(err))
+	}
+}
+
 // publishDetectionEvent publishes a detection event to the event bus.
 // All detections are published so that alert rules on detection.occurred can fire.
 // New species detections additionally go through suppression and notification recording.
-func (a *DatabaseAction) publishDetectionEvent(isNewSpecies bool, daysSinceFirstSeen int, novelty species.NoveltyStatus) {
+func (a *DatabaseAction) publishDetectionEvent(ctx context.Context, isNewSpecies bool, daysSinceFirstSeen int, novelty species.NoveltyStatus) {
 	if !events.IsInitialized() {
 		return
 	}
@@ -361,6 +417,15 @@ func (a *DatabaseAction) publishDetectionEvent(isNewSpecies bool, daysSinceFirst
 	if isNewSpecies {
 		suppress, notificationTime := a.shouldSuppressNewSpeciesNotification()
 		if !suppress {
+			// A new species is, by definition, absent from the image cache: the
+			// startup warm-up only covers previously detected species. Without a
+			// brief wait here the notification for the one detection users most
+			// want an image for would never carry one. Bounded so that a slow or
+			// throttled provider cannot push the surrounding CompositeAction
+			// towards its 30s timeout, and only on this branch: ordinary
+			// detections stay entirely off the provider path.
+			a.warmSpeciesImage(ctx)
+
 			detectionEvent := a.createDetectionEvent(true, daysSinceFirstSeen)
 			if detectionEvent != nil {
 				a.populateEventMetadata(detectionEvent, novelty)
@@ -742,11 +807,12 @@ func (a *SaveAudioAction) logExportFailure(enc *clipEncoding, exportFormat strin
 // is ever invoked.
 //
 // WAV and FLAC are always native (the WAV writer and go-flac); FFmpeg is never
-// used for them. AAC and Opus have native encoders too, but they are opt-in
-// while they earn field confidence, so they reach go-aac/go-m4a and go-opus only
-// when the matching gate in internal/conf is set and the encoder accepts the
-// clip's shape. Everything else, and every non-gated AAC or Opus clip, goes to
-// FFmpeg.
+// used for them. Opus is native by default (go-opus); FFmpeg encodes it only as a
+// fallback for a clip go-opus cannot carry. AAC has a native encoder too, but it
+// is opt-in while it earns field confidence, so it reaches go-aac/go-m4a only
+// when the gate in internal/conf is set and the encoder accepts the clip's shape.
+// Everything else, a non-gated AAC clip, and an Opus clip go-opus cannot carry go
+// to FFmpeg.
 func selectEncoder(exportFormat string, exportRate int) string {
 	switch exportFormat {
 	case ffmpeg.FormatWAV:
@@ -760,7 +826,8 @@ func selectEncoder(exportFormat string, exportRate int) string {
 		}
 		return clipenc.FFmpeg
 	case ffmpeg.FormatOpus:
-		// Opt-in; see internal/conf/native_encoders.go for the gate and its removal.
+		// go-opus is the default Opus encoder; FFmpeg is only a fallback for a
+		// clip go-opus cannot carry (see nativeOpusSelected).
 		if nativeOpusSelected(exportRate) {
 			return clipenc.NativeOpus
 		}
@@ -947,11 +1014,13 @@ func nativeAACSelected(exportRate int) bool {
 	return true
 }
 
-// nativeOpusSelected is the Opus counterpart of nativeAACSelected.
+// nativeOpusSelected reports whether this clip should take the native Opus path.
+// go-opus is the default Opus encoder, so there is no gate to check: the only
+// question is whether go-opus accepts the clip's rate, depth and channel count.
+// A clip it cannot carry (e.g. a non-48kHz rate left behind by a failed resample)
+// falls back to FFmpeg with a warning, or to WAV when no FFmpeg is present (see
+// strandedWithoutEncoder).
 func nativeOpusSelected(exportRate int) bool {
-	if !conf.NativeOpusEncoderEnabled() {
-		return false
-	}
 	if err := opus.Supports(exportRate, conf.BitDepth, conf.NumChannels); err != nil {
 		logNativeEncoderSkipped(ffmpeg.FormatOpus, exportRate, err)
 		return false
@@ -1094,11 +1163,13 @@ func logStrandedFormatFallback(requestedFormat string, rate int) {
 	})
 }
 
-// logNativeEncoderSkipped records that an opted-in native encoder could not
-// carry this clip, so an operator who set the env flag and sees FFmpeg in the
-// encoder field has a reason rather than a mystery. The reason comes from the
-// encoder's own Supports error, so the log names the offending value instead of
-// dumping all three.
+// logNativeEncoderSkipped records that a native encoder could not carry this
+// clip, so an operator who sees FFmpeg or WAV in the encoder field has a reason
+// rather than a mystery. Which fallback actually runs depends on FFmpeg
+// availability (decided by the caller: FFmpeg when present, WAV when stranded),
+// so the message names both rather than asserting FFmpeg unconditionally. The
+// reason comes from the encoder's own Supports error, so the log names the
+// offending value instead of dumping all three.
 //
 // Guarded per (format, rate): the rate is what the encoder usually rejects, and
 // it varies per capture source, so a once-per-format guard would report only
@@ -1106,7 +1177,7 @@ func logStrandedFormatFallback(requestedFormat string, rate int) {
 // because the format is part of the key.
 func logNativeEncoderSkipped(format string, rate int, reason error) {
 	nativeEncoderSkipLogged.do(formatRateKey(format, rate), func() {
-		GetLogger().Warn("Native encoder requested but the clip format is unsupported; using FFmpeg for this format",
+		GetLogger().Warn("Native encoder cannot carry this clip; falling back to FFmpeg when available, otherwise WAV",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("format", format),
 			logger.Int("sample_rate", rate),
@@ -1422,19 +1493,22 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 	return rate, format, path
 }
 
-// strandedWithoutEncoder reports whether this clip has no encoder left: the
-// operator opted a lossy format into its native encoder, so config validation
-// did not downgrade the format to WAV despite FFmpeg being absent, but the
-// native encoder turns out not to accept this clip's shape.
+// strandedWithoutEncoder reports whether this clip has no encoder left: config
+// validation did not downgrade the format to WAV despite FFmpeg being absent, but
+// the native encoder turns out not to accept this clip's shape. For Opus that is
+// always possible (go-opus is the default, so validation never downgrades .opus);
+// for AAC it only applies once the operator has opted that format into its native
+// encoder.
 //
 // Without this the export would call FFmpeg with an empty binary path and the
 // recording would be lost. Resolving it here rather than at the encode step
 // matters because the clip path still gets its extension corrected, so the file
 // on disk and the name recorded in the database cannot disagree.
 //
-// REMOVAL: this goes away with the gate. Once the native encoders are the
-// default, config validation stops downgrading these formats at all and the
-// question becomes a plain "can the native encoder carry it".
+// REMOVAL: the AAC branch goes away with the AAC gate. Once the native AAC
+// encoder is the default too, config validation stops downgrading it at all and
+// the question becomes a plain "can the native encoder carry it", as it already
+// is for Opus.
 func (a *SaveAudioAction) strandedWithoutEncoder(rate int, format string) bool {
 	if a.Settings.Realtime.Audio.FfmpegPath != "" {
 		return false // FFmpeg can still take it
@@ -1443,7 +1517,10 @@ func (a *SaveAudioAction) strandedWithoutEncoder(rate int, format string) bool {
 	case ffmpeg.FormatAAC:
 		return conf.NativeAACEncoderEnabled() && !nativeAACSelected(rate)
 	case ffmpeg.FormatOpus:
-		return conf.NativeOpusEncoderEnabled() && !nativeOpusSelected(rate)
+		// go-opus is the default, so config validation never downgrades .opus to
+		// WAV: if go-opus cannot carry this clip and there is no FFmpeg, it is
+		// stranded and must be downgraded here.
+		return !nativeOpusSelected(rate)
 	default:
 		// Every other format either has an unconditional native encoder (WAV,
 		// FLAC) or was already downgraded to WAV by config validation when

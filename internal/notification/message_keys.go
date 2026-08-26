@@ -35,11 +35,11 @@ const (
 	MsgSettingsUpdatingIntervals              = "notifications.content.settings.updatingIntervals"
 	MsgSettingsReconfiguringMqtt              = "notifications.content.settings.reconfiguringMqtt"
 	MsgSettingsReconfiguringBirdweather       = "notifications.content.settings.reconfiguringBirdweather"
+	MsgSettingsReconfiguringEbird             = "notifications.content.settings.reconfiguringEbird"
 	MsgSettingsReconfiguringStreams           = "notifications.content.settings.reconfiguringStreams"
 	MsgSettingsReconfiguringTelemetry         = "notifications.content.settings.reconfiguringTelemetry"
 	MsgSettingsReconfiguringSpeciesTracking   = "notifications.content.settings.reconfiguringSpeciesTracking"
 	MsgSettingsReconfiguringPushNotifications = "notifications.content.settings.reconfiguringPushNotifications"
-	MsgSettingsRecalculatingThresholds        = "notifications.content.settings.recalculatingThresholds"
 	MsgSettingsReconfiguringDynamicThresholds = "notifications.content.settings.reconfiguringDynamicThresholds"
 	MsgSettingsWebserverRestart               = "notifications.content.settings.webserverRestartRequired"
 	MsgSettingsOauthRestart                   = "notifications.content.settings.oauthRestartRequired"
@@ -171,4 +171,10 @@ const (
 	// ONNX Runtime availability notifications
 	MsgORTUnavailableTitle   = "notifications.content.ort.unavailableTitle"
 	MsgORTUnavailableMessage = "notifications.content.ort.unavailableMessage"
+
+	// Model region staleness notifications (coordinate change makes an installed
+	// regional model variant stale; recommend-only, never auto-switches a model)
+	MsgModelRegionStaleTitle         = "notifications.content.region.staleTitle"
+	MsgModelRegionStaleMessage       = "notifications.content.region.staleMessage"
+	MsgModelRegionStaleGlobalMessage = "notifications.content.region.staleGlobalMessage"
 )

@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -46,9 +45,47 @@ var (
 	// loggedUnknownLicenses tracks unknown license codes to avoid repeated warnings.
 	loggedUnknownLicenses sync.Map
 
-	// aviCommonsVersionSuffix matches a trailing version number like " 3.0" or " 4"
-	// on license display names (e.g. "CC BY 3.0"). Compiled once at package load.
-	aviCommonsVersionSuffix = regexp.MustCompile(`\s+\d+(\.\d+)?$`)
+	// aviCommonsVersionToken matches a Creative Commons version number.
+	aviCommonsVersionToken = regexp.MustCompile(`^\d+(\.\d+)?$`)
+
+	// aviCommonsPortToken matches a jurisdiction port suffix, the "de" of
+	// "CC BY-NC 3.0-de".
+	aviCommonsPortToken = regexp.MustCompile(`^[a-z]{2,3}$`)
+
+	// aviCommonsKnownVersions are the unported versions Creative Commons actually
+	// published. A license string carrying anything else names no real license,
+	// so its version is dropped rather than turned into a deed URL that 404s.
+	//
+	// 2.1 is absent deliberately: it exists only as jurisdiction ports (AU, JP,
+	// ES, CA), so an unported 2.1 deed URL does not resolve.
+	aviCommonsKnownVersions = map[string]bool{
+		"1.0": true, "2.0": true, "2.5": true, "3.0": true, "4.0": true,
+	}
+
+	// aviCommonsPortedVersions are the versions Creative Commons ported to
+	// jurisdictions. Porting ended with 3.0: the 4.0 suite was written to be
+	// international and was never ported, so "CC BY 4.0 DE" names a license that
+	// does not exist. The URL is not the tell, because creativecommons.org
+	// answers ".../by/4.0/de/" with a 301 to the German TRANSLATION of the
+	// international deed rather than a 404; it is the display name that would be
+	// false. A port on an unported version is therefore dropped.
+	// 2.1 is absent for the same reason it is absent above: it is checked only
+	// after aviCommonsKnownVersions has already accepted the version, so an
+	// entry here would be unreachable.
+	aviCommonsPortedVersions = map[string]bool{
+		"1.0": true, "2.0": true, "2.5": true, "3.0": true,
+	}
+
+	// aviCommonsLicenseFamilies maps a normalized license family to its display
+	// prefix and the path segment of its deed URL.
+	aviCommonsLicenseFamilies = map[string]struct{ display, slug string }{
+		"cc-by":       {"CC BY", "by"},
+		"cc-by-sa":    {"CC BY-SA", "by-sa"},
+		"cc-by-nd":    {"CC BY-ND", "by-nd"},
+		"cc-by-nc":    {"CC BY-NC", "by-nc"},
+		"cc-by-nc-sa": {"CC BY-NC-SA", "by-nc-sa"},
+		"cc-by-nc-nd": {"CC BY-NC-ND", "by-nc-nd"},
+	}
 )
 
 // NewAviCommonsProvider creates a new provider instance using data from the provided filesystem.
@@ -220,56 +257,66 @@ func (p *AviCommonsProvider) Fetch(scientificName string) (BirdImage, error) {
 	}, nil
 }
 
-// normalizeAviCommonsLicense converts raw license strings from the Avicommons
-// dataset into canonical slug form so the lookup switch works for both legacy
-// slug codes ("cc-by-nc") and display-name variants like "CC BY 3.0" or
-// "CC BY-NC-SA 4.0" observed in production data.
+// parseAviCommonsLicense splits a raw Avicommons license string into its
+// license family, version and jurisdiction port.
 //
-// The normalization pipeline is:
-//  1. Trim surrounding whitespace.
-//  2. Lowercase the whole string for case-insensitive matching.
-//  3. Strip any trailing version suffix (e.g. " 3.0", " 4").
-//  4. Replace remaining inner whitespace with hyphens.
+// The dataset mixes versionless slugs with display names, and 22 entries use
+// jurisdiction-ported codes. Examples:
 //
-// Examples:
+//	"cc-by-nc"        -> "cc-by-nc", "",    ""
+//	"CC BY 3.0"       -> "cc-by",    "3.0", ""
+//	"CC BY-NC 3.0-de" -> "cc-by-nc", "3.0", "de"
+//	"CC0 2.0"         -> "cc0",      "2.0", ""
 //
-//	"CC BY 3.0"       -> "cc-by"
-//	"CC BY-NC-SA 4.0" -> "cc-by-nc-sa"
-//	"CC0 3.0"         -> "cc0"
-//	"cc-by-nc"        -> "cc-by-nc" (unchanged)
-func normalizeAviCommonsLicense(code string) string {
-	normalized := strings.ToLower(strings.TrimSpace(code))
-	normalized = aviCommonsVersionSuffix.ReplaceAllString(normalized, "")
-	normalized = strings.TrimSpace(normalized)
-	// Collapse any internal whitespace runs to a single hyphen so
-	// "cc by  nc" becomes "cc-by-nc" rather than "cc-by--nc".
-	normalized = strings.Join(strings.Fields(normalized), "-")
-	return normalized
+// The version used to be stripped and thrown away, which is what made every
+// entry whose code ended in a version render as 4.0, with a link to legal text
+// that does not govern it. The 22 ported codes did not even get that far: the
+// trailing "-de" moved the version off the end of the string and defeated the
+// strip, so they fell through to the unknown branch and rendered the raw code
+// with no license URL at all.
+func parseAviCommonsLicense(code string) (family, version, port string) {
+	// Fold whitespace to hyphens so "CC BY-NC 3.0-de" and "cc-by-nc-3.0-de"
+	// tokenize identically.
+	tokens := strings.Split(strings.Join(strings.Fields(strings.ToLower(code)), "-"), "-")
+	for len(tokens) > 0 && tokens[len(tokens)-1] == "" {
+		tokens = tokens[:len(tokens)-1]
+	}
+	if len(tokens) == 0 {
+		return "", "", ""
+	}
+
+	// A port is only a port when a version precedes it. Without that guard the
+	// "nd" of "cc-by-nd" would be read as a jurisdiction.
+	last := len(tokens) - 1
+	if last >= 1 && aviCommonsPortToken.MatchString(tokens[last]) && aviCommonsVersionToken.MatchString(tokens[last-1]) {
+		port = tokens[last]
+		tokens = tokens[:last]
+		last--
+	}
+	if last >= 1 && aviCommonsVersionToken.MatchString(tokens[last]) {
+		version = tokens[last]
+		tokens = tokens[:last]
+	}
+
+	return strings.Join(tokens, "-"), version, port
 }
 
 // mapAviCommonsLicense converts Avicommons license codes to display names and
-// canonical URLs. Both slug-style codes (e.g. "cc-by-nc") and display-name
-// variants (e.g. "CC BY-NC 4.0") are accepted — see normalizeAviCommonsLicense.
-// Unknown codes return the raw input as the name with an empty URL and log a
-// one-shot warning so the Sentry noise in bug reports stays bounded.
+// deed URLs, preserving the version and jurisdiction the dataset actually
+// carries. Unknown families return the raw input as the name with an empty URL
+// and log a one-shot warning so the Sentry noise in bug reports stays bounded.
 func mapAviCommonsLicense(code string) (name, url string) {
-	// No logging needed here as it's a pure function
-	switch normalizeAviCommonsLicense(code) {
-	case "cc-by":
-		return "CC BY 4.0", "https://creativecommons.org/licenses/by/4.0/"
-	case "cc-by-sa":
-		return "CC BY-SA 4.0", "https://creativecommons.org/licenses/by-sa/4.0/"
-	case "cc-by-nd":
-		return "CC BY-ND 4.0", "https://creativecommons.org/licenses/by-nd/4.0/"
-	case "cc-by-nc":
-		return "CC BY-NC 4.0", "https://creativecommons.org/licenses/by-nc/4.0/"
-	case "cc-by-nc-sa":
-		return "CC BY-NC-SA 4.0", "https://creativecommons.org/licenses/by-nc-sa/4.0/"
-	case "cc-by-nc-nd":
-		return "CC BY-NC-ND 4.0", "https://creativecommons.org/licenses/by-nc-nd/4.0/"
-	case "cc0":
+	family, version, port := parseAviCommonsLicense(code)
+
+	// CC0 was published once, as 1.0, and was never ported to a jurisdiction.
+	// The versions and ports some entries carry ("CC0 2.5-au") therefore name no
+	// real license, and the 1.0 deed is the only truthful answer for all of them.
+	if family == "cc0" {
 		return "CC0 1.0 Universal", "https://creativecommons.org/publicdomain/zero/1.0/"
-	default:
+	}
+
+	licenseFamily, known := aviCommonsLicenseFamilies[family]
+	if !known {
 		// Log only once per unknown code
 		if _, loaded := loggedUnknownLicenses.LoadOrStore(code, true); !loaded {
 			GetLogger().Warn("Unknown Avicommons license code encountered",
@@ -278,14 +325,35 @@ func mapAviCommonsLicense(code string) (name, url string) {
 		}
 		return code, ""
 	}
+
+	if !aviCommonsKnownVersions[version] {
+		// The family is recognizable but the version is not one Creative Commons
+		// published, so it is dropped rather than turned into a deed URL that
+		// does not resolve. The version-neutral license page is still correct.
+		if version != "" {
+			if _, loaded := loggedUnknownLicenses.LoadOrStore(code, true); !loaded {
+				GetLogger().Warn("Unrecognized Creative Commons version in Avicommons license code",
+					logger.String("license_code", code),
+					logger.String("action", "omitting_version"))
+			}
+		}
+		return licenseFamily.display, "https://creativecommons.org/licenses/" + licenseFamily.slug + "/"
+	}
+
+	name = licenseFamily.display + " " + version
+	url = "https://creativecommons.org/licenses/" + licenseFamily.slug + "/" + version + "/"
+	if port != "" && aviCommonsPortedVersions[version] {
+		name += " " + strings.ToUpper(port)
+		url += port + "/"
+	}
+	return name, url
 }
 
 // CreateAviCommonsCache creates a new BirdImageCache with the AviCommons image provider.
 func CreateAviCommonsCache(dataFs fs.FS, metrics *observability.Metrics, store datastore.Interface) (*BirdImageCache, error) {
 	log := GetLogger().With(logger.String("provider", aviCommonsProviderName))
 	log.Info("Creating AviCommons cache")
-	settings := conf.Setting()
-	debug := settings.Realtime.Dashboard.Thumbnails.Debug
+	debug := thumbnailSettings().Debug
 
 	// Create the AviCommons provider using the embedded file system
 	provider, err := NewAviCommonsProvider(dataFs, debug)

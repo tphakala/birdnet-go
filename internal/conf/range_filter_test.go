@@ -151,7 +151,7 @@ func TestShouldUpdateRangeFilterToday_PublishesNewSnapshot(t *testing.T) {
 
 	published := GetSettings()
 	require.NotSame(t, original, published, "Must publish a new snapshot, not mutate original")
-	assert.False(t, published.BirdNET.RangeFilter.LastUpdated.Before(time.Now().Truncate(24*time.Hour)),
+	assert.False(t, published.BirdNET.RangeFilter.LastUpdated.Before(LocalNoon(time.Now())),
 		"Published snapshot should have LastUpdated >= today")
 	assert.Equal(t, []string{"Original Species"}, published.BirdNET.RangeFilter.Species,
 		"Species list should be preserved in the published snapshot")

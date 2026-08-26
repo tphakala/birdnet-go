@@ -181,8 +181,23 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | GET    | `/media/species-image/info`          | `GetSpeciesImageInfo`    | ❌   | Get species image attribution      |
 | GET    | `/media/image/:scientific_name`      | `ServeSpeciesImageProxy` | ❌   | Serve cached bird image (proxy)    |
 | GET    | `/media/bird-image/:scientific_name` | `ServeSpeciesImageProxy` | ❌   | Alias for image proxy endpoint     |
+| GET    | `/audio/:id`                         | `ServeAudioByID`         | ❌   | Serve detection audio clip by ID   |
+| GET    | `/spectrogram/:id`                   | `ServeSpectrogramByID`   | ❌   | Serve detection spectrogram by ID  |
+| POST   | `/spectrogram/:id/generate`          | `GenerateSpectrogramByID` | ❌   | Trigger spectrogram generation     |
 | GET    | `/spectrogram/:id/status`            | `GetSpectrogramStatus`   | ❌   | Get spectrogram generation status  |
 | POST   | `/audio/:id/clip`                    | `ExtractAudioClipByID`   | ✅   | Extract audio clip from time range |
+
+**Pending species image (`503 + Retry-After`).** The image endpoints never contact an
+image provider on the request goroutine: a cold species can take minutes to resolve
+through the provider chain, and thirty queued thumbnail requests also exhaust a
+browser's per-host connection budget, which is what made the whole UI appear frozen. A
+species whose image is not cached yet therefore answers **503** with `Retry-After: 5`
+and `Cache-Control: no-store`, and a background fetch is scheduled; a species that is
+known to have no image answers **404** with a long `max-age`. The two cache directives
+are load-bearing: an `<img>` error event exposes no status code, so the browser's own
+HTTP cache is what lets a client retry cheaply (the 404 is served from cache with no
+network hop, the 503 reaches the server). The proxy is a hard boundary and never
+redirects a client to the upstream image host.
 
 **Pending clip handling (`503 + Retry-After`).** A detection's DB record and SSE
 broadcast are emitted before its audio clip is written, and with Extended Capture the
@@ -245,17 +260,11 @@ The `GET /settings/dashboard` endpoint is intentionally public so that unauthent
 
 **Restart-required signal:** `PUT /settings` and `PATCH /settings/:section` responses include `restart_required` (bool) and `restart_reasons` (string[]), reflecting the global restart state also served by `GET /system/restart-status`. Settings bound once at startup that cannot hot-reload set this flag: web server / TLS settings, database (`output`), logging, and TLS certificate operations. `restart_reasons` carries i18n message keys (e.g. `restart.reasons.database`), not English text; the SPA resolves them via the translation catalog. The flag is sticky (it clears when the process actually restarts) and is not cleared by reverting the change.
 
-**Blocked fields:** a set of fields can never be written through the settings API, on either write path. `PUT /settings` skips them during its field walk; `PATCH /settings/:section` merges the request and then restores them from the pre-update snapshot. Sending such a field is not an error: the rest of the request is applied normally and only the blocked values are reverted.
+**Blocked fields:** a set of fields can never be written through the settings API, on either write path. Both `PUT /settings` and `PATCH /settings/:section` merge the request into the current settings and then restore the blocked fields from the pre-update snapshot. Sending such a field is not an error: the rest of the request is applied normally and only the blocked values are reverted.
 
 The set covers generated credentials (`Security.SessionSecret`, `Security.BasicAuth.ClientID`/`ClientSecret`, `Diagnostics.Profiling.Token`), the session and OAuth2 lifetimes (`Security.SessionDuration`, `Security.BasicAuth.AuthCodeExp`/`AccessTokenExp`), the server-validated ffmpeg/sox tool paths and the sox format list (`Realtime.Audio.FfmpegPath`/`SoxPath`/`SoxAudioTypes`), the range-filter model selection (`BirdNET.RangeFilter.Model`), and runtime state the process populates for itself (`Version`, `BuildDate`, `SystemID`, `ValidationWarnings`, `Input`, `BirdNET.Labels`, `BirdNET.RangeFilter.Species`/`LastUpdated`). Note that several of these are ordinary `config.yaml` keys: they are settable by editing the config file, just not through the API.
 
-The two verbs report differently under the same `skippedFields` response key, so do not treat a non-empty list from `PUT` as a rejection:
-
-| | `PATCH /settings/:section` | `PUT /settings` |
-| --- | --- | --- |
-| Contents | only the paths whose value the request actually changed, sorted (every blocked field is reverted regardless; the list is the subset that differed) | every blocked path the walk passed, plus every `yaml:"-"` field as `<path> (runtime-only)` |
-| Depends on the request | yes | no |
-| Empty when nothing was rejected | yes (`[]`) | never (a no-op request returns ~25 entries) |
+Both verbs report identically under the `skippedFields` response key: it lists only the blocked paths whose value the request actually changed, sorted (every blocked field is reverted regardless; the list is the subset that differed), and it is an empty array (`[]`) when nothing was reverted. Do not treat a non-empty list as a request failure. Because the frontend sends the whole settings object on every save, a `PUT` that carries the blanked `Security.BasicAuth.ClientID`/`ClientSecret` reports those two whenever BasicAuth is configured; that is expected and the rest of the save still applies.
 
 **Quiet Hours** (`settings_audio.go`): The `realtime` settings section includes quiet hours configuration for both individual RTSP streams (`realtime.rtsp.streams[].quietHours`) and the sound card (`realtime.audio.quietHours`). Each `QuietHoursConfig` supports:
 
@@ -545,6 +554,8 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 | ------ | ------------------------------ | ----------------------- | ---- | ----------------------------------------------------- |
 | GET    | `/models`                      | `ListModels`            | ❌   | List available classifier models                      |
 | GET    | `/models/catalog`              | `GetModelCatalog`       | ❌   | Model gallery catalog with install status             |
+| GET    | `/models/regions`              | `GetModelRegions`       | ✅   | Region selector data: selectable regions, the auto-resolved region for the configured coordinates, and per-family resolution (auth-gated; never echoes raw coordinates) |
+| GET    | `/models/regions/:slug/map`    | `GetRegionCoverageMap`  | ❌   | Embedded SVG coverage map for a region slug (public static asset; strong ETag, honors If-None-Match; 404 when no map exists for the slug) |
 | GET    | `/models/installed`            | `GetInstalledModels`    | ❌   | List downloaded models                                |
 | POST   | `/models/install/:id`          | `InstallModel`          | ✅   | Download and install a catalog model                  |
 | POST   | `/models/reinstall/:id`        | `ReinstallModel`        | ✅   | Re-download missing/corrupt files for installed model |
@@ -626,7 +637,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 - ✅ = Authentication required
 - ✅ publicLiveAudio = Authentication required unless `PublicAccess.LiveAudio` is enabled (dynamic per-request check)
 - 🔑 token = Token-based access - the crypto-random `stream_token` returned by `/start` acts as the credential
-- ❌ = No authentication required
+- ❌ = No authentication required in normal mode. When `Security.PrivateMode` is enabled these routes still require authentication: the whole API is gated by `PrivateModeAuth`, except the bootstrap/auth/live-audio entries in `isPrivateModeExempt`.
 - ⚡ = Rate limited
 - 🔒 = Admin only (subset of authenticated)
 

@@ -412,6 +412,7 @@
         "updatingIntervals": "Päivitetään havaintovälejä...",
         "reconfiguringMqtt": "Päivitetään MQTT-yhteyttä...",
         "reconfiguringBirdweather": "Päivitetään BirdWeather-integraatiota...",
+        "reconfiguringEbird": "Updating eBird integration...",
         "reconfiguringStreams": "Päivitetään äänistriimejä...",
         "reconfiguringTelemetry": "Päivitetään telemetria-asetuksia...",
         "reconfiguringPushNotifications": "Määritetään push-ilmoitusten tarjoajia uudelleen...",
@@ -456,6 +457,11 @@
       "ort": {
         "unavailableTitle": "ONNX Runtime ei ole käytettävissä",
         "unavailableMessage": "ONNX Runtime {requiredVersion} vaaditaan mallille {modelName}, mutta sitä ei löytynyt. Katso asennusohje: {installGuideURL}"
+      },
+      "region": {
+        "staleTitle": "Mallialue saattaa olla vanhentunut",
+        "staleMessage": "{modelName} on asennettu alueelle {oldRegion}, mutta uusi sijaintisi vastaa aluetta {newRegion}. Voit vaihtaa varianttia Asetusten malligalleriasta.",
+        "staleGlobalMessage": "{modelName} on asennettu alueelle {oldRegion}, mutta uusi sijaintisi on sen kattavuusalueen ulkopuolella. Voit vaihtaa globaaliin varianttiin Asetusten malligalleriasta."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -623,6 +629,7 @@
       "categoryYear": "Uusi tänä vuonna",
       "categorySeason": "Uusi tällä kaudella",
       "categorySeasonNamed": "Uusi tällä {season}",
+      "categoryInfrequent": "Harvoin havaittu",
       "maxConfidenceShort": "Maks {confidence} %",
       "detections": "{count, plural, one {# havainto} other {# havaintoa}}",
       "lastSeen": "Viimeksi: {days, plural, =0 {tänään} one {# päivä sitten} other {# päivää sitten}}"
@@ -657,7 +664,8 @@
         "viewSixHourly": "Näytä kaikki havainnot välillä {startHour}.00-{endHour}.00",
         "hourlyDetections": "{count} havaintoa klo {hour}.00 - Klikkaa nähdäksesi",
         "biHourlyDetections": "{count} havaintoa välillä {startHour}.00-{endHour}.00 - Klikkaa nähdäksesi",
-        "sixHourlyDetections": "{count} havaintoa välillä {startHour}.00-{endHour}.00 - Klikkaa nähdäksesi"
+        "sixHourlyDetections": "{count} havaintoa välillä {startHour}.00-{endHour}.00 - Klikkaa nähdäksesi",
+        "infrequent": "Harvoin havaittu - palasi {days, plural, one {# päivän} other {# päivän}} poissaolon jälkeen"
       },
       "loading": {
         "preparing": "Valmistellaan tietoja...",
@@ -1688,6 +1696,26 @@
       "title": "Tekoälymallit & Inferenssi",
       "loading": "Ladataan inferenssin tilaa",
       "error": "Inferenssin tilaa ei voitu ladata",
+      "vad": {
+        "section": "Yksityisyyssuoja",
+        "title": "Silero VAD",
+        "active": "Aktiivinen",
+        "activeHelp": "Puheentunnistusmalli on ladattu ja analysoi ääntä.",
+        "idle": "Valmiustilassa",
+        "idleHelp": "Käytössä ja valmiina; malli ladataan, kun ensimmäinen äänipätkä analysoidaan.",
+        "disabled": "Poistettu käytöstä",
+        "disabledHelp": "Yksityisyyssuoja on kytketty pois päältä yksityisyyssuodattimen asetuksista.",
+        "unavailable": "Ei mallia",
+        "unavailableHelp": "Tässä versiossa ei ole käytettävissä puheentunnistusmallia. Määritä VAD-mallin polku yksityisyyssuodattimen asetuksissa, tai käytä versiota, jossa on sisäänrakennettu malli.",
+        "description": "Silero VAD on erikoistunut akustinen malli, joka tunnistaa ihmispuheen. Se ohjaa yksityisyyssuodatinta ja hylkää äänen puhetta havaittaessa, jotta äänet pysyvät poissa tallenteistasi.",
+        "threshold": "Kynnysarvo",
+        "speechHits": "Puheosumat",
+        "recentTitle": "Viimeisin puhe",
+        "recentEmpty": "Puhetta ei ole vielä havaittu",
+        "colWhen": "Aika",
+        "colProbability": "Todennäköisyys",
+        "colSource": "Lähde"
+      },
       "sectionHardware": "Laitteisto",
       "sectionBackends": "Inferenssin Taustajärjestelmät",
       "sectionModels": "Mallit",
@@ -1698,6 +1726,9 @@
       "fp16": "FP16",
       "fp16Supported": "FP16 tuettu",
       "fp16Unsupported": "FP16 ei tuettu",
+      "advanced": "Lisätiedot",
+      "capabilities": "Ominaisuudet",
+      "capabilitiesHelp": "Laitteistotunnisteet, joita käytetään tämän laitteen sovittamiseen saatavilla oleviin malliversioihin.",
       "backendTflite": "TensorFlow Lite",
       "backendOnnx": "ONNX Runtime",
       "backendOpenvino": "OpenVINO",
@@ -1715,8 +1746,6 @@
       "gpu": "Näytönohjain",
       "gpuReachable": "Tavoitettavissa",
       "gpuNotReachable": "Ei tavoitettavissa",
-      "capabilities": "Ominaisuudet",
-      "capabilitiesHelp": "Laitteiston tunnisteet, joita käytetään vertaamaan konetta saatavilla oleviin malleihin.",
       "gpuReasonRenderNodeUnavailable": "Palvelin ei näe näytönohjaimen laitesolmua. Dockerissa yhdistä /dev/dri säiliöön; natiiviasennuksessa tarkista, että grafiikka-ajuri on ladattu.",
       "gpuReasonRenderNodePermission": "Näytönohjaimen laitesolmua ei voi avata. BirdNET-Go -tilin on kuuluttava laitteen ryhmään (yleensä 'render') tai säiliölle on annettu laite -v parametrilla --device sijaan, jolloin käyttöoikeutta ei ole.",
       "gpuReasonNoRuntime": "BirdNET-Go nopeuttaa toistaiseksi inferenssiä vain Intelin näytönohjaimilla, joten tätä korttia ei käytetä.",
@@ -2768,7 +2797,8 @@
           "detectionPath": "Suhteellinen polku havaintoon (esim. \"/ui/detections/1234\")",
           "detectionUrl": "Täydellinen URL havaintoon",
           "imageUrl": "Linkki lajikuvaan",
-          "daysSinceFirstSeen": "Päivien lukumäärä ensimmäisestä havainnosta"
+          "daysSinceFirstSeen": "Päivien lukumäärä ensimmäisestä havainnosta",
+          "daysSinceLastSeen": "Päivien määrä viimeisestä havainnosta"
         }
       },
       "testNotification": {
@@ -3084,7 +3114,11 @@
         "enable": "Ota yksityisyyssuodatus käyttöön",
         "disabled": "Yksityisyyssuodatus on poistettu käytöstä",
         "confidenceLabel": "Luottamuskynnys ihmisen tunnistukseen",
-        "confidenceHelp": "Aseta luottamustaso ihmisäänen tunnistukseen, matalampi arvo tekee suodattimesta herkemmän"
+        "confidenceHelp": "Aseta luottamustaso ihmisäänen tunnistukseen, matalampi arvo tekee suodattimesta herkemmän",
+        "vadEnable": "Ota käyttöön Yksityisyyssuoja (Silero VAD)",
+        "vadHelp": "Käyttää erillistä neuroverkkomallia ihmispuheen tunnistamiseen luokittelijan rinnalla. Kuluttaa ylimääräisiä järjestelmäresursseja (n. 20-30 Mt RAM-muistia ja suoritinpäättelyä per segmentti).",
+        "vadThresholdLabel": "Yksityisyyssuojan kynnysarvo",
+        "vadThresholdHelp": "Yksityisyyssuojan puheentunnistimen herkkyyskynnys (oletus 0.35). Pienempi arvo tekee suodattimesta herkemmän hiljaiselle tai kaukaiselle puheelle."
       },
       "falsePositivePrevention": {
         "title": "Väärien positiivisten ehkäisy",
@@ -4291,6 +4325,18 @@
             "hemisphereNote": "Kausien päivämäärät määritetään automaattisesti leveysasteesi perusteella. Pohjoisella pallonpuoliskolla käytetään tavallisia vuodenaikoja, eteläisellä pallonpuoliskolla siirrettyjä päivämääriä ja päiväntasaajan alueilla sade-/kuivakausia."
           }
         },
+        "infrequent": {
+          "title": "Harvoin havaittujen lajien seuranta",
+          "description": "Merkitsee lajit, jotka palaavat pitkän poissaolon jälkeen (harvinaiset palaajat)",
+          "enabled": {
+            "label": "Ota harvoin havaittujen lajien seuranta käyttöön",
+            "helpText": "Seuraa ja ilmoita, kun laji havaitaan uudelleen pitkän poissaolon jälkeen"
+          },
+          "absenceDays": {
+            "label": "Poissaolokynnys (päivää)",
+            "helpText": "Vähimmäismäärä päiviä viimeisestä havainnosta ennen kuin palaava laji merkitään harvoin havaituksi (1-365)"
+          }
+        },
         "months": {
           "january": "Tammikuu",
           "february": "Helmikuu",
@@ -4488,6 +4534,7 @@
           "stream_disconnected": "Striimi katkaistu",
           "stream_error": "Striimivirhe",
           "detection_new_species": "Uusi laji havaittu",
+          "detection_infrequent_species": "Harvinainen palaava laji havaittu",
           "detection_occurred": "Havainto tehty",
           "application_started": "Sovellus käynnistetty",
           "application_stopped": "Sovellus pysäytetty",
@@ -4537,6 +4584,10 @@
         "newSpecies": {
           "name": "Uusi laji havaittu",
           "description": "Ilmoittaa kun laji havaitaan ensimmäistä kertaa"
+        },
+        "infrequentSpecies": {
+          "name": "Harvinainen palaava laji havaittu",
+          "description": "Ilmoittaa, kun laji palaa pitkän poissaolon jälkeen"
         },
         "streamDisconnected": {
           "name": "Äänistriimi katkennut",
@@ -5232,6 +5283,20 @@
       "locale": {
         "label": "Lajien kieli",
         "helpText": "Kieli, jolla lajien yleisnimistö näytetään käyttöliittymässä."
+      },
+      "secondaryThresholdOverride": {
+        "label": "Override confidence threshold",
+        "helpText": "When enabled, this model uses its own confidence threshold below. When disabled, it follows the main BirdNET confidence threshold."
+      },
+      "secondaryThreshold": {
+        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
+        "followsBirdnet": "Enable the override above to set a custom value. This model currently follows the main BirdNET confidence threshold."
+      },
+      "perchThreshold": {
+        "label": "Perch v2 Confidence Threshold"
+      },
+      "birdnetv3Threshold": {
+        "label": "BirdNET v3.0 Confidence Threshold"
       }
     },
     "rangeFilter": {
@@ -5271,6 +5336,79 @@
     "gallery": {
       "title": "Malligalleria",
       "description": "Hallitse lintu- ja lepakkotunnistuksen luokittelumalleja.",
+      "region": {
+        "title": "Mallialue",
+        "modeAuto": "Automaattinen",
+        "modeAutoHint": "Valitse paras alueellinen variantti aseman sijainnin perusteella",
+        "modeManual": "Manual region select",
+        "modeManualHint": "Choose a region yourself, or the worldwide model",
+        "worldwideTitle": "Worldwide",
+        "worldwideSubtitle": "Every region, all species",
+        "worldwideResourceNote": "Largest model, uses the most RAM and CPU",
+        "selectedBadge": "Selected",
+        "orSpecificRegion": "Or a specific region",
+        "search": "Search regions or countries",
+        "searchNoResults": "No regions match \"{query}\"",
+        "manualPrompt": "Choose a region below, or the worldwide model.",
+        "countriesOverflow": "+{count}",
+        "coreCoverage": "Core coverage:",
+        "partialCoverage": "Partial coverage:",
+        "pinAction": "Kiinnitä {region}",
+        "switchToAuto": "Vaihda automaattiseen",
+        "loading": "Ladataan alueita...",
+        "loadFailed": "Aluetietojen lataaminen epäonnistui",
+        "mapUnavailable": "Kattavuuskartta ei ole saatavilla",
+        "mapAria": "Alueen {region} kattavuuskartta",
+        "why": {
+          "noLocation": "Automaattinen valinta vaatii aseman sijainnin. Aseta se Pääasetuksissa; siihen asti käytetään globaalia mallia.",
+          "outsideCoverage": "Sijaintisi on kaikkien alueellisten mallien kattavuusalueen ulkopuolella, joten käytetään globaalia mallia.",
+          "ambiguous": "Sijaintisi on lähellä alueiden {region} ja {runnerUp} välistä rajaa. Automaattinen valinta käyttää aluetta {region}; tee valinnasta nimenomainen kiinnittämällä jompikumpi.",
+          "resolved": "Sijaintisi perusteella tunnistettu alue: {region}.",
+          "global": "Globaalia mallia käytetään aina aseman sijainnista riippumatta.",
+          "pinned": "Kiinnitetty alueeseen {region}. Aseman sijainti ei vaikuta mallin valintaan.",
+          "pinnedMismatch": "Sijaintisi vastaa tällä hetkellä aluetta {resolved}.",
+          "pinnedUnknown": "Kiinnitetty alue \"{region}\" ei ole saatavilla nykyisessä malliluettelossa. Malliperheet käyttävät varavaihtoehtona sijaintiasi tai globaalia mallia."
+        }
+      },
+      "variants": {
+        "title": "Mallivariantti",
+        "recommended": "Suositeltu",
+        "recommendedForHardware": "Paras laitteistollesi",
+        "installed": "Asennettu",
+        "default": "Oletus",
+        "incompatible": "Ei saatavilla laitteistollesi",
+        "showAll": "Näytä kaikki variantit ({count})",
+        "showRegion": "Näytä alueen {region} ja laitteistosi variantit ({count})",
+        "showHardware": "Näytä laitteistovariantit ({count})",
+        "showAllRegions": "Näytä kaikki variantit mukaan lukien muut alueet ({count})",
+        "regionContext": "Alueelliset variantit näytetään alueelle {region}, määritetty yllä olevalla mallialueen valinnalla",
+        "regionContextNone": "Alueellisia variantteja on saatavilla. Valitse alue yllä olevasta mallialueen valinnasta tai näytä kaikki variantit.",
+        "otherRegions": "Muut alueet",
+        "filterPlaceholder": "Suodata alueita",
+        "filterAria": "Suodata aluekohtaisia versioita",
+        "filterNoMatch": "Mikään alue ei vastaa hakua \"{query}\"",
+        "latency": "~{ms} ms",
+        "precisionInfo": "About precision and variants",
+        "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
+      },
+      "actionInProgress": "Odota, että nykyisen mallin asennus, uudelleenasennus tai poisto valmistuu",
+      "removeSuccess": "Removed {name}",
+      "reasons": {
+        "backendRecommended": "Käyttää taustajärjestelmää {backend}, joka on suositeltu laitteistollesi",
+        "backendSupported": "Käyttää taustajärjestelmää {backend}",
+        "regionMatched": "Sovitettu alueellesi ({region})",
+        "regionGlobalFallback": "Globaali malli sijainnillesi",
+        "precisionFp16Native": "Puolitarkkuusmalli (fp16), optimoitu suorittimellesi",
+        "precisionFp16GpuPreferred": "Puolitarkkuusmalli: puolet pienempi latauskoko, toimii GPU:llasi",
+        "ramConstrainedFit": "Kvantisoitu malli, mitoitettu käytettävissä olevalle muistillesi",
+        "benchmarkMeasured": "Laitteesi nopein suorituskykytestien perusteella",
+        "variantLegacy": "Korvattu uudemmalla versiolla",
+        "archUnsupported": "Vaatii {required}-suorittimen",
+        "backendMissing": "Vaatii inferenssin taustajärjestelmän, joka ei ole käytettävissä ({required})",
+        "ramInsufficient": "Vaatii vähintään {requiredMb} MB muistia",
+        "hardwareExcluded": "Ei tue laitteistoasi ({token})",
+        "backendOnnxUnavailable": "Vaatii ONNX Runtimen, joka ei ole käytettävissä tässä järjestelmässä. Docker-kuvat ja julkaisupaketit sisältävät sen; katso ONNX Runtimen asennusohje."
+      },
       "tabs": {
         "installed": "Asennetut",
         "available": "Saatavilla"
@@ -5278,7 +5416,6 @@
       "loading": "Ladataan malleja...",
       "retry": "Yritä uudelleen",
       "builtIn": "Sisäänrakennettu",
-      "builtInDescription": "BirdNET-tiimin sisäänrakennettu lintulajien luokittelija.",
       "species": "{count} lajia",
       "install": "Asenna",
       "installing": "Asennetaan...",
@@ -5323,7 +5460,13 @@
       "errors": {
         "catalogLoadFailed": "Malliluettelon lataaminen epäonnistui",
         "installFailed": "Mallin asennuksen käynnistäminen epäonnistui",
-        "removeFailed": "Mallin poistaminen epäonnistui"
+        "removeFailed": "Mallin poistaminen epäonnistui",
+        "actionFailed": "Kohteen {name} kanssa ilmeni ongelma",
+        "downloadSourceHint": "Jos huggingface.co on estetty tai hidas verkossasi, aseta peilipalvelin alla olevaan Latauslähde-osioon.",
+        "goToDownloadSource": "Siirry Latauslähteeseen",
+        "dismiss": "Sulje",
+        "details": "Details",
+        "removeRetryHint": "To try again, use the Remove button on the model's card."
       },
       "regionLabel": "Alue",
       "speciesLabel": "Lajit",
@@ -5331,9 +5474,40 @@
       "reinstalling": "Asennetaan uudelleen...",
       "reinstallComplete": "Tiedostot tarkistettu onnistuneesti",
       "geomodelBadge": "Sisältää BirdNET v3.0 -geomallin",
-      "onnxRuntimeRequired": "Vaatii ONNX Runtimen, joka ei ole käytettävissä tässä järjestelmässä.",
-      "onnxRuntimeMissing": "ONNX Runtime ei ole käytettävissä. Tätä mallia ei voi suorittaa.",
-      "unavailable": "Ei käytettävissä"
+      "preview": {
+        "badge": "Esiversio",
+        "buildLabel": "{version} · {build}",
+        "cardNotice": "Kehittäjien esiversio, ei lopullinen julkaisu. Tämä on varhainen versio testausta varten; tulokset voivat muuttua ennen vakaata versiota.",
+        "dialogNotice": "Olet asentamassa kehittäjien esiversiota ({build}). Se soveltuu kokeiluun, mutta sitä ei vielä suositella ainoaksi luokittelijaksi."
+      },
+      "entryIncompatible": "Tämä malli ei ole saatavilla tässä järjestelmässä.",
+      "regionGlobal": "Globaali",
+      "hardwareLabel": "Laitteisto",
+      "hardware": {
+        "gpuNvidia": "GPU (NVIDIA)",
+        "gpuIntel": "GPU (Intel)",
+        "armCpu": "ARM CPU",
+        "amd64Cpu": "AMD64 CPU",
+        "arm64Cpu": "ARM64 CPU",
+        "cpu": "CPU"
+      },
+      "optimize": {
+        "bannerTitle": "{count, plural, one {# malli voi toimia nopeammin laitteistollasi} other {# mallia voi toimia nopeammin laitteistollasi}}",
+        "review": "Tarkista",
+        "dismiss": "Hylkää",
+        "badgeTitle": "Laitteistollesi on saatavilla nopeampi versio",
+        "swap": "Optimoi",
+        "dialogTitle": "Optimoi mallisi",
+        "installedBuild": "Installed build",
+        "fromTo": "{from} -> {to}",
+        "apply": "Käytä",
+        "applyAll": "Käytä kaikkia",
+        "applying": "Käytetään...",
+        "applied": "Käytetty",
+        "applyFailed": "Käyttö epäonnistui",
+        "upToDate": "Kaikki mallisi on jo optimoitu tälle laitteistolle.",
+        "licenseNote": "Vaihto tapahtuu saman mallin sisällä, joten sen lisenssi ei muutu."
+      }
     },
     "bird": {
       "title": "Lintuhavainnot",
@@ -5345,6 +5519,14 @@
     },
     "dynamicThreshold": {
       "birdOnlyNote": "Dynaaminen kynnys koskee vain lintuluokittimia."
+    },
+    "perch": {
+      "title": "Perch v2 Detection",
+      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+    },
+    "birdnetv3": {
+      "title": "BirdNET v3.0 Detection",
+      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
     }
   },
   "restart": {

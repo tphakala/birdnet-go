@@ -223,16 +223,17 @@ type TimeOfDayResponse struct {
 
 // detectionQueryParams holds all query parameters for detection requests
 type detectionQueryParams struct {
-	Date       string
-	Hour       string
-	Duration   int
-	Species    string
-	Search     string
-	StartDate  string
-	EndDate    string
-	NumResults int
-	Offset     int
-	QueryType  string
+	Date             string
+	Hour             string
+	Duration         int
+	Species          string
+	Search           string
+	SearchScientific []string
+	StartDate        string
+	EndDate          string
+	NumResults       int
+	Offset           int
+	QueryType        string
 	// Advanced filter parameters
 	Confidence string
 	TimeOfDay  string
@@ -249,8 +250,8 @@ type detectionQueryParams struct {
 // advancedSearchCacheKey generates a deterministic cache key for advanced search queries.
 // Includes all filter parameters to avoid cache collisions.
 func (p *detectionQueryParams) advancedSearchCacheKey() string {
-	return fmt.Sprintf("adv_search:%s:%d:%d:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%d",
-		p.Search, p.NumResults, p.Offset,
+	return fmt.Sprintf("adv_search:%s:%s:%d:%d:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%d",
+		p.Search, strings.Join(p.SearchScientific, "\x00"), p.NumResults, p.Offset,
 		p.Confidence, p.TimeOfDay, p.HourRange,
 		p.Verified, p.Location, p.Locked,
 		p.Species, p.Date, p.StartDate+":"+p.EndDate,
@@ -619,14 +620,19 @@ func (p *detectionQueryParams) needsAdvancedRouting() bool {
 
 // getDetectionsByQueryType retrieves detections based on the query type
 func (c *Handler) getDetectionsByQueryType(params *detectionQueryParams) ([]datastore.Note, int64, error) {
-	// Resolve locale common names to scientific names before routing so every
-	// query type benefits without per-case duplication.
+	// Species filtering is exact, so an unambiguous common name can be replaced
+	// with its scientific name directly.
 	if resolved, hit := c.resolveSpeciesToScientific(params.Species); hit {
 		params.Species = resolved
 	}
-	if resolved, hit := c.resolveSpeciesToScientific(params.Search); hit {
-		params.Search = resolved
-	}
+
+	// Free-text search is different: an exact common name can also be a substring
+	// of another species (Barn Owl / American Barn Owl). Keep the raw text and add
+	// every active-locale common-name substring match as an OR-ed scientific-name
+	// alternative. Replacing the raw term with one exact resolution would silently
+	// narrow the result set.
+	params.Search = strings.TrimSpace(params.Search)
+	params.SearchScientific = c.resolveCommonNameSubstrings(params.Search)
 
 	switch params.QueryType {
 	case queryTypeHourly:
@@ -643,7 +649,7 @@ func (c *Handler) getDetectionsByQueryType(params *detectionQueryParams) ([]data
 		if params.needsAdvancedRouting() {
 			return c.getSearchDetectionsAdvanced(params)
 		}
-		return c.getSearchDetections(params.Search, params.NumResults, params.Offset)
+		return c.getSearchDetections(params.Search, params.SearchScientific, params.NumResults, params.Offset)
 	default:
 		if params.needsAdvancedRouting() {
 			return c.getSearchDetectionsAdvanced(params)
@@ -1052,10 +1058,11 @@ func (c *Handler) getSearchDetectionsAdvanced(params *detectionQueryParams) ([]d
 // buildAdvancedSearchFilters constructs search filters from query parameters
 func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams) datastore.AdvancedSearchFilters {
 	filters := datastore.AdvancedSearchFilters{
-		TextQuery:     params.Search,
-		Limit:         params.NumResults,
-		Offset:        params.Offset,
-		SortAscending: false,
+		TextQuery:         params.Search,
+		SpeciesScientific: params.SearchScientific,
+		Limit:             params.NumResults,
+		Offset:            params.Offset,
+		SortAscending:     false,
 	}
 
 	// Apply confidence filter using shared helper
@@ -1119,10 +1126,11 @@ func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams) datas
 	return filters
 }
 
-// getSearchDetections handles search query type logic
-func (c *Handler) getSearchDetections(search string, numResults, offset int) ([]datastore.Note, int64, error) {
+// getSearchDetections returns cached or datastore results for raw text, unioning
+// any resolved scientific-name alternatives through advanced search.
+func (c *Handler) getSearchDetections(search string, scientific []string, numResults, offset int) ([]datastore.Note, int64, error) {
 	// Generate a cache key based on parameters
-	cacheKey := fmt.Sprintf("search:%s:%d:%d", search, numResults, offset)
+	cacheKey := fmt.Sprintf("search:%s:%s:%d:%d", search, strings.Join(scientific, "\x00"), numResults, offset)
 
 	// Check if data is in cache
 	if cachedData, found := c.DetectionCache.Get(cacheKey); found {
@@ -1133,8 +1141,23 @@ func (c *Handler) getSearchDetections(search string, numResults, offset int) ([]
 		return cachedResult.Notes, cachedResult.Total, nil
 	}
 
-	// If not in cache, query the database
-	notes, totalCount, err := c.DS.SearchNotes(search, false, numResults, offset)
+	// If the active common-name map found scientific alternatives, use the
+	// advanced datastore path that can OR them with the raw text. Otherwise retain
+	// the lightweight legacy call for ordinary scientific/unknown text queries.
+	var notes []datastore.Note
+	var totalCount int64
+	var err error
+	if len(scientific) > 0 {
+		notes, totalCount, err = c.DS.SearchNotesAdvanced(&datastore.AdvancedSearchFilters{
+			TextQuery:         search,
+			SpeciesScientific: scientific,
+			Limit:             numResults,
+			Offset:            offset,
+			SortBy:            datastore.SortBySearchDefault,
+		})
+	} else {
+		notes, totalCount, err = c.DS.SearchNotes(search, false, numResults, offset)
+	}
 	if err != nil {
 		c.LogErrorIfEnabled("Failed to search notes",
 			logger.String("query", search),

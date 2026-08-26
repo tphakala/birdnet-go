@@ -206,6 +206,61 @@ tasks:
     status:
       - '[ -f "{{.AVICOMMONS_JSON_FILE}}" ]'
 
+  sync-region-snapshots:
+    desc: Refresh the embedded region snapshots and coverage maps from a sibling acoustic-models checkout
+    vars:
+      ACOUSTIC_MODELS_DIR: '{{.ACOUSTIC_MODELS_DIR | default "../acoustic-models"}}'
+      REGION_DATA_DIR: internal/classifier/region/data
+      MAPS_DIR: internal/classifier/region/data/maps
+    cmds:
+      - |
+        SRC="{{.ACOUSTIC_MODELS_DIR}}/models/manifests"
+        if [ ! -d "$SRC" ]; then
+          echo "acoustic-models manifests not found at $SRC" >&2
+          echo "Set ACOUSTIC_MODELS_DIR to your acoustic-models checkout." >&2
+          exit 1
+        fi
+        for f in Perch-v2-Models.regions.json BirdNET-v3.0-Models.regions.json; do
+          cp "$SRC/$f" "{{.REGION_DATA_DIR}}/$f"
+          echo "synced $f"
+        done
+        echo "Refreshed region snapshots. If tiers changed, update golden_tier_test.go."
+      - |
+        # Sync per-region coverage maps (SVG). The geometry is model-family-agnostic,
+        # so a tile's coverage.svg is byte-identical across families; we embed ONE set
+        # keyed by slug and cmp each primary map against its twin to enforce that
+        # invariant loudly (a future upstream divergence must fail here, not silently).
+        AM="{{.ACOUSTIC_MODELS_DIR}}"
+        PRIMARY="$AM/models/birdnet-v3.0-regional"
+        TWIN="$AM/models/perch-v2-regional"
+        if [ ! -d "$PRIMARY" ] || [ ! -d "$TWIN" ]; then
+          echo "regional model tree not found for both model families ($PRIMARY, $TWIN)" >&2
+          exit 1
+        fi
+        mkdir -p "{{.MAPS_DIR}}"
+        rm -f "{{.MAPS_DIR}}"/*.svg
+        count=0
+        for d in "$PRIMARY"/*/; do
+          slug="$(basename "$d")"
+          src="$d/coverage.svg"
+          [ -f "$src" ] || continue
+          twin="$TWIN/$slug/coverage.svg"
+          # The twin must exist AND be byte-identical: the slug-keyed embed serves
+          # one map per slug for both families, so a missing or divergent twin
+          # would silently break that invariant.
+          if [ ! -f "$twin" ]; then
+            echo "coverage.svg for '$slug' is missing from the Perch family; both families must ship it" >&2
+            exit 1
+          fi
+          if ! cmp -s "$src" "$twin"; then
+            echo "coverage.svg for '$slug' differs between families; the slug-keyed embed assumes they are identical" >&2
+            exit 1
+          fi
+          cp "$src" "{{.MAPS_DIR}}/$slug.svg"
+          count=$((count + 1))
+        done
+        echo "synced $count coverage maps"
+
   generate-species-dict:
     desc: Regenerate per-locale species dictionaries from the OpenFauna dataset
     cmds:

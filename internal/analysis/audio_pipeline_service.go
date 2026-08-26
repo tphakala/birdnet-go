@@ -350,14 +350,15 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 			logger.String("operation", "rtsp_monitoring_setup"))
 	}
 
-	// Start clip cleanup monitor.
-	// Uses conf.Setting() instead of local settings for hot-reload support:
-	// retention policy can be changed at runtime via the web UI.
-	if conf.Setting().Realtime.Audio.Export.Retention.Policy != policyNone {
-		p.wg.Go(func() {
-			clipCleanupMonitor(p.done, dataStore)
-		})
-	}
+	// Start clip cleanup monitor unconditionally. It re-reads the retention
+	// policy every iteration (see the policyNone check inside the loop) so
+	// enabling retention via the web UI after startup takes effect without a
+	// restart, matching every other hot-reloadable setting here. Gating the
+	// goroutine itself on the startup-time policy would strand a config change
+	// from "none" to "age"/"usage" until the process restarts.
+	p.wg.Go(func() {
+		clipCleanupMonitor(p.done, dataStore)
+	})
 
 	// Start clip reconcile monitor. Runs unconditionally (regardless of retention
 	// policy and regardless of whether audio export is enabled) because orphaned
@@ -1725,6 +1726,14 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 			currentSettings := conf.Setting()
 			exportCfg := currentSettings.Realtime.Audio.Export
 			currentPolicy := exportCfg.Retention.Policy
+
+			// Re-checked every iteration (not just at Start()) so toggling
+			// retention off/on via the web UI takes effect without a restart.
+			if currentPolicy == policyNone {
+				log.Debug("skipping clip cleanup: retention policy is none",
+					logger.String("operation", "clip_cleanup_skip"))
+				continue
+			}
 
 			if strings.TrimSpace(exportCfg.Path) == "" {
 				log.Debug("skipping clip cleanup: export path not configured",

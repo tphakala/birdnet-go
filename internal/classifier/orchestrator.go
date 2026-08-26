@@ -455,23 +455,38 @@ func (o *Orchestrator) resolveInstalledPaths(registryID string) (modelPath, labe
 			continue
 		}
 		subdir := filepath.Join(o.modelsDir, entry.ID)
-		var mp, lp, ep string
-		for _, f := range entry.Files {
-			switch f.Role {
-			case RoleModel:
-				mp = filepath.Join(subdir, f.LocalName)
-			case RoleLabels:
-				lp = filepath.Join(subdir, f.LocalName)
-			case RoleEmbeddings:
-				ep = filepath.Join(o.modelsDir, "shared", f.LocalName)
+
+		// A variant entry's resolved Files name the DEFAULT variant, which is not
+		// the file on disk when a non-default variant is installed. Probe each
+		// variant's own files and return the one whose model file exists (a
+		// completed switch leaves exactly one), so a non-default install still
+		// resolves here when settings carry no path. Flat entries probe entry.Files.
+		fileSets := [][]CatalogFile{entry.Files}
+		if len(entry.Variants) > 0 {
+			fileSets = make([][]CatalogFile, 0, len(entry.Variants))
+			for j := range entry.Variants {
+				fileSets = append(fileSets, entry.Variants[j].Files)
 			}
 		}
-		if mp != "" {
-			if _, err := os.Stat(mp); err == nil {
-				log.Debug("resolved model paths from gallery",
-					logger.String("registry_id", registryID),
-					logger.String("model_path", mp))
-				return mp, lp, ep
+		for _, files := range fileSets {
+			var mp, lp, ep string
+			for _, f := range files {
+				switch f.Role {
+				case RoleModel:
+					mp = filepath.Join(subdir, f.LocalName)
+				case RoleLabels:
+					lp = filepath.Join(subdir, f.LocalName)
+				case RoleEmbeddings:
+					ep = filepath.Join(o.modelsDir, "shared", f.LocalName)
+				}
+			}
+			if mp != "" {
+				if _, err := os.Stat(mp); err == nil {
+					log.Debug("resolved model paths from gallery",
+						logger.String("registry_id", registryID),
+						logger.String("model_path", mp))
+					return mp, lp, ep
+				}
 			}
 		}
 	}
@@ -1165,6 +1180,27 @@ func (o *Orchestrator) RunFilterProcess(dateStr string, week float32) {
 // Acquires the per-model lock before reload to prevent concurrent inference,
 // then the write lock to re-key the models map.
 func (o *Orchestrator) ReloadModel() error {
+	return o.reloadPrimaryModel(func(primary *BirdNET) error { return primary.ReloadModel() })
+}
+
+// ReloadPrimaryForVariantSwap reloads the primary classifier in place for a
+// within-model variant swap (the gallery "optimize" flow for the permanent BirdNET
+// v2.4 model), accepting a changed or cleared model file path that ReloadModel would
+// refuse as a model-identity change. It shares reloadPrimaryModel's locking and
+// shared-state re-sync, differing only in delegating to BirdNET.reloadForVariantSwap
+// (allowPathChange=true). The model ID is invariant across a v2.4 variant swap, so
+// the re-key is a no-op in practice. Transactional rollback to the previous model
+// lives in reloadModelInternal, so a failed swap leaves the previous variant serving.
+func (o *Orchestrator) ReloadPrimaryForVariantSwap() error {
+	return o.reloadPrimaryModel(func(primary *BirdNET) error { return primary.reloadForVariantSwap() })
+}
+
+// reloadPrimaryModel performs the shared locking, per-instance reload, shared-state
+// re-sync, and models-map re-key for a primary-model reload. It delegates the actual
+// per-instance reload to reload(primary); ReloadModel passes BirdNET.ReloadModel (a
+// settings reload, path change refused) and ReloadPrimaryForVariantSwap passes
+// BirdNET.reloadForVariantSwap (an in-place variant swap, path change accepted).
+func (o *Orchestrator) reloadPrimaryModel(reload func(primary *BirdNET) error) error {
 	// Step 1: acquire per-model lock to prevent concurrent inference during reload.
 	o.mu.RLock()
 	primary := o.primary
@@ -1193,7 +1229,7 @@ func (o *Orchestrator) ReloadModel() error {
 	func() {
 		entry.mu.Lock()
 		defer entry.mu.Unlock()
-		reloadErr = primary.ReloadModel()
+		reloadErr = reload(primary)
 	}()
 	if reloadErr != nil {
 		return reloadErr

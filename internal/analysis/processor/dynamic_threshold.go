@@ -23,61 +23,59 @@ const (
 	changeReasonExpiry         = "expiry"          // Threshold reset due to timer expiration
 )
 
-// defaultModelID is the model identity used when no explicit model ID is provided.
-const defaultModelID = "BirdNET"
-
-// dynamicThresholdKey creates a composite key for scoping thresholds per model.
-// The key format is "modelID:speciesLowercase".
-func dynamicThresholdKey(modelID, speciesLowercase string) string {
-	if modelID == "" {
-		modelID = defaultModelID
-	}
-	return modelID + ":" + speciesLowercase
-}
-
-// splitDynamicThresholdKey splits a composite key back into modelID and species name.
-// Returns (modelID, speciesName). If the key has no separator, returns (defaultModelID, key).
-func splitDynamicThresholdKey(key string) (modelID, speciesName string) {
-	parts := strings.SplitN(key, ":", 2)
-	if len(parts) == 2 {
-		return parts[0], parts[1]
-	}
-	return defaultModelID, key
-}
-
 // DynamicThreshold represents the dynamic threshold configuration for a species.
+//
+// Tracking is per species, not per model: the learned state (Level, HighConfCount,
+// Timer) means "this species is confirmed present at this location", which is
+// model-independent. Any model's approved high-confidence detection advances the
+// shared level. The applied threshold is computed live at read time from the
+// caller's model-specific base and the shared level (see getAdjustedConfidenceThreshold),
+// so no absolute value is stored.
 type DynamicThreshold struct {
-	Level          int
-	CurrentValue   float64
-	Timer          time.Time
-	HighConfCount  int
-	ValidHours     int
+	Level         int
+	Timer         time.Time
+	HighConfCount int
+	ValidHours    int
+	// BaseThreshold is the model-global base of the model that last learned this
+	// species. It is display/persistence metadata only and is NEVER used to compute
+	// the applied threshold; that always uses the caller's live per-model base.
+	BaseThreshold  float64
 	ScientificName string
 	LastLearnedAt  time.Time // Tracks when the last threshold learning event occurred to prevent multiple learnings within a single detection window
 }
 
+// effectiveDynamicThreshold computes the applied threshold from a model-specific
+// base and the species' shared learned level, clamped to the configured minimum.
+// At level 0 the multiplier is 1.0, so this returns base (clamped), preserving the
+// no-adjustment default.
+func effectiveDynamicThreshold(base float64, level int, minThreshold float64) float64 {
+	value := base * levelMultiplier(level)
+	if value < minThreshold {
+		value = minThreshold
+	}
+	return value
+}
+
 // addSpeciesToDynamicThresholds adds a species to the dynamic thresholds map if it doesn't already exist.
-func (p *Processor) addSpeciesToDynamicThresholds(modelID, speciesLowercase, scientificName string, baseThreshold float32) {
+func (p *Processor) addSpeciesToDynamicThresholds(speciesLowercase, scientificName string, baseThreshold float32) {
 	settings := p.currentSettings()
 
 	// Lock the mutex to ensure thread-safe access to the DynamicThresholds map
 	p.thresholdsMutex.Lock()
 	defer p.thresholdsMutex.Unlock()
 
-	key := dynamicThresholdKey(modelID, speciesLowercase)
-
 	// Check if the species already has a dynamic threshold
-	existing, exists := p.DynamicThresholds[key]
+	existing, exists := p.DynamicThresholds[speciesLowercase]
 
 	// If it doesn't exist, initialize it
 	if !exists {
 		if settings.Realtime.DynamicThreshold.Debug {
 			log := GetLogger()
-			log.Debug("Initializing dynamic threshold", logger.String("species", speciesLowercase), logger.String("model_id", modelID))
+			log.Debug("Initializing dynamic threshold", logger.String("species", speciesLowercase))
 		}
-		p.DynamicThresholds[key] = &DynamicThreshold{
+		p.DynamicThresholds[speciesLowercase] = &DynamicThreshold{
 			Level:          0,
-			CurrentValue:   float64(baseThreshold),
+			BaseThreshold:  float64(baseThreshold),
 			Timer:          time.Now(),
 			HighConfCount:  0,
 			ValidHours:     settings.Realtime.DynamicThreshold.ValidHours,
@@ -94,22 +92,21 @@ func (p *Processor) addSpeciesToDynamicThresholds(modelID, speciesLowercase, sci
 // in LearnFromApprovedDetection() when a detection is approved.
 // Note: This function may reset expired thresholds as a side effect.
 // If isCustomThreshold is true (species has a user-configured threshold), the function returns it unchanged.
-func (p *Processor) getAdjustedConfidenceThreshold(modelID, speciesLowercase string, baseThreshold float32, isCustomThreshold bool) float32 {
+func (p *Processor) getAdjustedConfidenceThreshold(speciesLowercase string, baseThreshold float32, isCustomThreshold bool) float32 {
 	// If this is a custom user-configured threshold, respect it and don't apply dynamic adjustments.
 	if isCustomThreshold {
 		return baseThreshold
 	}
 
 	settings := p.currentSettings()
+	minThreshold := settings.Realtime.DynamicThreshold.Min
 
 	// Lock the mutex to ensure thread-safe access to the DynamicThresholds map
 	p.thresholdsMutex.Lock()
 	defer p.thresholdsMutex.Unlock()
 
-	key := dynamicThresholdKey(modelID, speciesLowercase)
-
 	// Get the dynamic threshold for the species
-	dt, exists := p.DynamicThresholds[key]
+	dt, exists := p.DynamicThresholds[speciesLowercase]
 
 	// If it doesn't exist, return the base threshold
 	if !exists {
@@ -121,43 +118,37 @@ func (p *Processor) getAdjustedConfidenceThreshold(modelID, speciesLowercase str
 	// Check for expired thresholds and reset if needed
 	// Guard ensures we only reset if not already at base state (prevents redundant work)
 	if now.After(dt.Timer) && (dt.Level > 0 || dt.HighConfCount > 0) {
-		// Track previous state for event recording
+		// Track previous state for event recording. The applied value is derived, so
+		// reconstruct the pre-reset value from this caller's base and the old level.
 		previousLevel := dt.Level
-		previousValue := dt.CurrentValue
+		previousValue := effectiveDynamicThreshold(float64(baseThreshold), previousLevel, minThreshold)
 
 		dt.Level = 0
-		dt.CurrentValue = float64(baseThreshold)
 		dt.HighConfCount = 0
 		dt.LastLearnedAt = time.Time{}
+		dt.BaseThreshold = float64(baseThreshold)
 
 		if previousLevel != 0 {
-			p.recordThresholdEvent(speciesLowercase, dt.ScientificName, modelID, previousLevel, 0, previousValue, dt.CurrentValue, changeReasonExpiry, 0)
+			resetValue := effectiveDynamicThreshold(float64(baseThreshold), 0, minThreshold)
+			p.recordThresholdEvent(speciesLowercase, dt.ScientificName, previousLevel, 0, previousValue, resetValue, changeReasonExpiry, 0)
 		}
 	}
 
-	// Apply minimum threshold enforcement
-	if dt.CurrentValue < settings.Realtime.DynamicThreshold.Min {
-		dt.CurrentValue = settings.Realtime.DynamicThreshold.Min
-	}
-
-	return float32(dt.CurrentValue)
+	// Compute the applied threshold live from this model's base and the shared level.
+	return float32(effectiveDynamicThreshold(float64(baseThreshold), dt.Level, minThreshold))
 }
 
 // recordThresholdEvent saves a threshold change event to the database (BG-59)
 // scientificName is required for v2only datastore to correctly resolve the Label FK.
 // See issue #1907 for context on why both names are needed.
-func (p *Processor) recordThresholdEvent(speciesName, scientificName, modelName string, previousLevel, newLevel int, previousValue, newValue float64, changeReason string, confidence float64) {
+func (p *Processor) recordThresholdEvent(speciesName, scientificName string, previousLevel, newLevel int, previousValue, newValue float64, changeReason string, confidence float64) {
 	if p.Ds == nil {
 		return
-	}
-	if modelName == "" {
-		modelName = defaultModelID
 	}
 
 	event := &datastore.ThresholdEvent{
 		SpeciesName:    speciesName,
 		ScientificName: scientificName, // Used by v2only for correct label resolution (#1907)
-		ModelName:      modelName,
 		PreviousLevel:  previousLevel,
 		NewLevel:       newLevel,
 		PreviousValue:  previousValue,
@@ -185,7 +176,10 @@ func (p *Processor) recordThresholdEvent(speciesName, scientificName, modelName 
 // approved high-confidence detection. This should only be called when a detection has
 // been confirmed (approved), not when first detected. This ensures that false positives
 // (discarded detections) do not trigger threshold learning.
-func (p *Processor) LearnFromApprovedDetection(modelID, speciesLowercase, scientificName string, confidence float32) {
+// baseThreshold is the model-specific base for the model that produced this
+// detection (already computed by the caller); it is recorded as display metadata
+// and used to compute the recorded event value, never to key the entry.
+func (p *Processor) LearnFromApprovedDetection(speciesLowercase, scientificName string, confidence, baseThreshold float32) {
 	settings := p.currentSettings()
 	if !settings.Realtime.DynamicThreshold.Enabled {
 		return
@@ -202,9 +196,6 @@ func (p *Processor) LearnFromApprovedDetection(modelID, speciesLowercase, scient
 		return
 	}
 
-	// Use global threshold as base (species has no custom threshold)
-	baseThreshold := float32(settings.BirdNET.Threshold)
-
 	// Calculate learning cooldown based on detection window duration
 	// This prevents multiple threshold learnings within a single detection event
 	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
@@ -216,31 +207,39 @@ func (p *Processor) LearnFromApprovedDetection(modelID, speciesLowercase, scient
 	}
 
 	// Ensure species exists in threshold map (reuses existing initialization logic)
-	p.addSpeciesToDynamicThresholds(modelID, speciesLowercase, scientificName, baseThreshold)
+	p.addSpeciesToDynamicThresholds(speciesLowercase, scientificName, baseThreshold)
 
 	p.thresholdsMutex.Lock()
 	defer p.thresholdsMutex.Unlock()
 
-	key := dynamicThresholdKey(modelID, speciesLowercase)
-	dt := p.DynamicThresholds[key]
+	dt := p.DynamicThresholds[speciesLowercase]
 	if dt == nil {
 		// Species was removed concurrently (e.g., via ResetDynamicThreshold)
 		// Skip learning for this edge case
 		return
 	}
 
+	minThreshold := settings.Realtime.DynamicThreshold.Min
 	now := time.Now()
 	previousLevel := dt.Level
-	previousValue := dt.CurrentValue
+	previousValue := effectiveDynamicThreshold(dt.BaseThreshold, previousLevel, minThreshold)
 
 	// Always extend the timer when we see an approved high-confidence detection
 	dt.Timer = now.Add(time.Duration(dt.ValidHours) * time.Hour)
 
-	// Only learn if enough time has passed since last learning
-	// This ensures learnings happen across different detection events, not within a single window
+	// Only learn if enough time has passed since last learning.
+	// This ensures learnings happen across different detection events, not within a
+	// single window. It also collapses the multiple contributing models of one
+	// approval (processApprovedDetection loops over them) into a single level
+	// increment: the first model sets LastLearnedAt, the rest only extend the timer.
 	if !dt.LastLearnedAt.IsZero() && now.Sub(dt.LastLearnedAt) < learningCooldown {
 		return
 	}
+
+	// Record the model-specific base of the model that actually learned (display
+	// metadata). Set inside the learn block, after the cooldown gate, so the
+	// contributing models skipped by the cooldown do not overwrite it nondeterministically.
+	dt.BaseThreshold = float64(baseThreshold)
 
 	dt.HighConfCount++
 	dt.LastLearnedAt = now
@@ -255,17 +254,13 @@ func (p *Processor) LearnFromApprovedDetection(modelID, speciesLowercase, scient
 		// Level 3 is the maximum reduction; any count >= 3 stays at this level
 		dt.Level = 3
 	}
-	dt.CurrentValue = float64(baseThreshold) * levelMultiplier(dt.Level)
 
-	// Apply minimum threshold clamp
-	if dt.CurrentValue < settings.Realtime.DynamicThreshold.Min {
-		dt.CurrentValue = settings.Realtime.DynamicThreshold.Min
-	}
+	newValue := effectiveDynamicThreshold(dt.BaseThreshold, dt.Level, minThreshold)
 
 	// Record event if level changed
 	if dt.Level != previousLevel {
-		p.recordThresholdEvent(speciesLowercase, dt.ScientificName, modelID, previousLevel, dt.Level,
-			previousValue, dt.CurrentValue, changeReasonHighConfidence, float64(confidence))
+		p.recordThresholdEvent(speciesLowercase, dt.ScientificName, previousLevel, dt.Level,
+			previousValue, newValue, changeReasonHighConfidence, float64(confidence))
 	}
 
 	if settings.Realtime.DynamicThreshold.Debug {
@@ -274,7 +269,7 @@ func (p *Processor) LearnFromApprovedDetection(modelID, speciesLowercase, scient
 			logger.String("species", speciesLowercase),
 			logger.Float32("confidence", confidence),
 			logger.Int("level", dt.Level),
-			logger.Float64("threshold", dt.CurrentValue))
+			logger.Float64("threshold", newValue))
 	}
 }
 
@@ -286,11 +281,11 @@ func (p *Processor) updateDynamicThreshold(modelID, commonName string, confidenc
 		p.thresholdsMutex.Lock()
 		defer p.thresholdsMutex.Unlock()
 
-		key := dynamicThresholdKey(modelID, commonName)
-
-		// Check if the species already has a dynamic threshold
+		// Check if the species already has a dynamic threshold. The entry is keyed
+		// per species; modelID still selects the model-specific base to compare the
+		// detection confidence against before extending the timer.
 		// Note: scientific name not available in this context, but common name lookup is sufficient
-		if dt, exists := p.DynamicThresholds[key]; exists && confidence > float64(p.getBaseConfidenceThreshold(settings, commonName, "", modelID)) {
+		if dt, exists := p.DynamicThresholds[commonName]; exists && confidence > float64(p.getBaseConfidenceThreshold(settings, commonName, "", modelID)) {
 			// Update the timer to extend the threshold's validity
 			// Note: dt is a pointer, so this directly mutates the struct in the map
 			dt.Timer = time.Now().Add(time.Duration(dt.ValidHours) * time.Hour)
@@ -363,15 +358,10 @@ func (p *Processor) ResetDynamicThreshold(speciesName string) error {
 	// memory clear and DB delete. See drainPendingResets for the pattern.
 	p.thresholdsMutex.Lock()
 
-	// Remove all model-scoped entries for this species from the in-memory map.
-	// Record only the species name (not composite key) in pendingResets since
-	// DeleteDynamicThreshold operates on species name and deletes across all models.
-	for key := range p.DynamicThresholds {
-		_, keySpecies := splitDynamicThresholdKey(key)
-		if keySpecies == speciesName {
-			delete(p.DynamicThresholds, key)
-		}
-	}
+	// Remove the species entry from the in-memory map. Entries are keyed per
+	// species, so a single delete clears it; DeleteDynamicThreshold likewise
+	// operates on the species name.
+	delete(p.DynamicThresholds, speciesName)
 	if p.pendingResets != nil {
 		p.pendingResets[speciesName] = struct{}{}
 	}
@@ -453,18 +443,19 @@ func (p *Processor) GetDynamicThresholdData() []DynamicThresholdData {
 	p.thresholdsMutex.RLock()
 	defer p.thresholdsMutex.RUnlock()
 
+	// Snapshot settings once so the derived values reflect a single consistent view.
+	settings := p.currentSettings()
+	minThreshold := settings.Realtime.DynamicThreshold.Min
 	data := make([]DynamicThresholdData, 0, len(p.DynamicThresholds))
 	now := time.Now()
 
-	for compositeKey, dt := range p.DynamicThresholds {
-		// Extract model name and species name from composite key "modelID:species"
-		modelName, speciesName := splitDynamicThresholdKey(compositeKey)
+	for speciesName, dt := range p.DynamicThresholds {
 		data = append(data, DynamicThresholdData{
 			SpeciesName:    speciesName,
 			ScientificName: dt.ScientificName,
-			ModelName:      modelName,
 			Level:          dt.Level,
-			CurrentValue:   dt.CurrentValue,
+			CurrentValue:   effectiveDynamicThreshold(dt.BaseThreshold, dt.Level, minThreshold),
+			BaseThreshold:  dt.BaseThreshold,
 			HighConfCount:  dt.HighConfCount,
 			ExpiresAt:      dt.Timer,
 			IsActive:       dt.Timer.After(now),
@@ -478,17 +469,17 @@ func (p *Processor) GetDynamicThresholdData() []DynamicThresholdData {
 type DynamicThresholdData struct {
 	SpeciesName    string    `json:"speciesName"`
 	ScientificName string    `json:"scientificName"`
-	ModelName      string    `json:"modelName"`
 	Level          int       `json:"level"`
-	CurrentValue   float64   `json:"currentValue"`
+	CurrentValue   float64   `json:"currentValue"`  // derived from BaseThreshold and Level at read time
+	BaseThreshold  float64   `json:"baseThreshold"` // model-global base of the model that last learned (display only)
 	HighConfCount  int       `json:"highConfCount"`
 	ExpiresAt      time.Time `json:"expiresAt"`
 	IsActive       bool      `json:"isActive"`
 }
 
 // levelMultiplier returns the threshold multiplier for a given level.
-// This centralizes the level-to-multiplier mapping used by both LearnFromApprovedDetection
-// and RecalculateDynamicThresholds to avoid duplication.
+// This centralizes the level-to-multiplier mapping used by LearnFromApprovedDetection
+// and effectiveDynamicThreshold to avoid duplication.
 func levelMultiplier(level int) float64 {
 	switch level {
 	case 1:
@@ -499,52 +490,5 @@ func levelMultiplier(level int) float64 {
 		return thresholdLevel3Multiplier
 	default:
 		return 1.0 // Level 0 = no reduction
-	}
-}
-
-// RecalculateDynamicThresholds recomputes all CurrentValue entries based on the current
-// BirdNET.Threshold. This must be called when the global base threshold changes so that
-// stored absolute values remain consistent with each species' level/tier.
-// Species with custom per-species thresholds are not present in the dynamic thresholds
-// map (they are filtered out in LearnFromApprovedDetection), so no special handling is needed.
-func (p *Processor) RecalculateDynamicThresholds() {
-	log := GetLogger()
-	settings := p.currentSettings()
-	newBase := float64(settings.BirdNET.Threshold)
-	minThreshold := settings.Realtime.DynamicThreshold.Min
-
-	p.thresholdsMutex.Lock()
-	defer p.thresholdsMutex.Unlock()
-
-	recalculated := 0
-	for species, dt := range p.DynamicThresholds {
-		oldValue := dt.CurrentValue
-		newValue := newBase * levelMultiplier(dt.Level)
-
-		// Apply minimum threshold clamp
-		if newValue < minThreshold {
-			newValue = minThreshold
-		}
-
-		if oldValue != newValue {
-			dt.CurrentValue = newValue
-			recalculated++
-
-			if settings.Realtime.DynamicThreshold.Debug {
-				log.Debug("Recalculated dynamic threshold for new base",
-					logger.String("species", species),
-					logger.Int("level", dt.Level),
-					logger.Float64("old_value", oldValue),
-					logger.Float64("new_value", newValue),
-					logger.Float64("new_base", newBase))
-			}
-		}
-	}
-
-	if recalculated > 0 {
-		log.Info("Recalculated dynamic thresholds for new base threshold",
-			logger.Int("recalculated", recalculated),
-			logger.Int("total", len(p.DynamicThresholds)),
-			logger.Float64("new_base", newBase))
 	}
 }

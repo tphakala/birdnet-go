@@ -82,6 +82,7 @@ func setDefaultConfig() {
 	viper.SetDefault("birdnet.longitude", 0.000)
 	viper.SetDefault("birdnet.modelpath", "")
 	viper.SetDefault("birdnet.labelpath", "")
+	viper.SetDefault("birdnet.modelregion", ModelRegionAuto)
 	viper.SetDefault("birdnet.usexnnpack", true)
 	viper.SetDefault("taxonomysynonyms", map[string]string{})
 
@@ -90,8 +91,15 @@ func setDefaultConfig() {
 	viper.SetDefault("birdnet.rangefilter.model", RangeFilterModelLatest)
 	viper.SetDefault("birdnet.rangefilter.threshold", 0.01)
 
-	// Perch model configuration
+	// Perch model configuration.
+	// OverrideThreshold defaults false so Perch follows birdnet.threshold until the
+	// user opts in; Threshold is the value used once the override is enabled.
+	viper.SetDefault("perch.overridethreshold", false)
 	viper.SetDefault("perch.threshold", 0.5)
+
+	// BirdNET v3.0 model configuration (same override semantics as Perch).
+	viper.SetDefault("birdnetv3.overridethreshold", false)
+	viper.SetDefault("birdnetv3.threshold", 0.5)
 
 	// Bat detection configuration
 	viper.SetDefault("bat.threshold", 0.5)
@@ -166,7 +174,7 @@ func setDefaultConfig() {
 
 	// Dashboard thumbnails configuration
 	viper.SetDefault("realtime.dashboard.thumbnails.debug", false)
-	viper.SetDefault("realtime.dashboard.thumbnails.summary", false)
+	viper.SetDefault("realtime.dashboard.thumbnails.summary", true)
 	viper.SetDefault("realtime.dashboard.thumbnails.recent", true)
 	viper.SetDefault("realtime.dashboard.thumbnails.imageprovider", "avicommons")
 	viper.SetDefault("realtime.dashboard.thumbnails.fallbackpolicy", "none")
@@ -291,6 +299,9 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.privacyfilter.enabled", true)
 	viper.SetDefault("realtime.privacyfilter.debug", false)
 	viper.SetDefault("realtime.privacyfilter.confidence", 0.05)
+	viper.SetDefault("realtime.privacyfilter.vad.enabled", false)
+	viper.SetDefault("realtime.privacyfilter.vad.threshold", 0.35)
+	viper.SetDefault("realtime.privacyfilter.vad.modelpath", "")
 
 	// Dog bark filter configuration
 	viper.SetDefault("realtime.dogbarkfilter.enabled", false)
@@ -329,6 +340,10 @@ func setDefaultConfig() {
 	// Seasonal tracking defaults
 	viper.SetDefault("realtime.speciestracking.seasonaltracking.enabled", true)
 	viper.SetDefault("realtime.speciestracking.seasonaltracking.windowdays", DefaultSeasonalTrackingWindowDays)
+
+	// Infrequent tracking defaults (opt-in, unlike yearly/seasonal tracking)
+	viper.SetDefault("realtime.speciestracking.infrequenttracking.enabled", false)
+	viper.SetDefault("realtime.speciestracking.infrequenttracking.absencedays", 14)
 
 	// Default seasons (Northern Hemisphere)
 	viper.SetDefault("realtime.speciestracking.seasonaltracking.seasons.spring.startmonth", 3)

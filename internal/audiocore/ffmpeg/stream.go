@@ -2103,8 +2103,9 @@ func (s *Stream) maybeEngageAudioOnlyFallback() bool {
 	return true
 }
 
-// conditionalFailureReset resets failures only after the process has proven
-// stable operation with substantial data reception.
+// conditionalFailureReset resets the circuit breaker failure counter and the
+// restart-backoff counter only after the process has proven stable operation
+// with substantial data reception.
 func (s *Stream) conditionalFailureReset(totalBytesReceived int64) {
 	s.cmdMu.Lock()
 	processStartTime := s.processStartTime
@@ -2131,6 +2132,42 @@ func (s *Stream) conditionalFailureReset(totalBytesReceived int64) {
 				logger.String("operation", "conditional_failure_reset"))
 		} else {
 			s.circuitMu.Unlock()
+		}
+
+		// Reset the restart count that drives the escalating restart backoff, under
+		// the same stability gate as the circuit-breaker reset above. Without this,
+		// a series of widely-spaced transient stalls keeps escalating the backoff
+		// (5s, 10s, 20s, 40s, ...) even though each fault recovered cleanly in
+		// between, which then keeps the source down long enough to trip the
+		// liveness/silence watchdog (issue #4080). Storm protection is preserved:
+		// a genuine reconnect storm never sustains the required stable window, so
+		// its restart count keeps climbing.
+		//
+		// restartCountMu is acquired separately from circuitMu, never nested, to
+		// match the sequential (non-nested) locking used elsewhere (Restart, the
+		// silence-timeout reset, the audio-only fallback) and avoid any
+		// lock-ordering hazard. It is reset independently of consecutiveFailures
+		// because other paths can drive consecutiveFailures to zero while leaving
+		// the restart count high: the circuit-breaker cooldown (isCircuitOpen /
+		// circuitCooldownRemaining) zeroes consecutiveFailures without touching
+		// restartCount, and a normal process exit calls resetFailures (zeroing
+		// consecutiveFailures) and then still runs handleRestartBackoff (which
+		// increments restartCount).
+		s.restartCountMu.Lock()
+		if s.restartCount > 0 {
+			previousRestarts := s.restartCount
+			s.restartCount = 0
+			s.restartCountMu.Unlock()
+
+			getStreamLogger().Info("resetting restart count after successful stable operation",
+				logger.String("url", s.config.safeURL()),
+				logger.Float64("runtime_seconds", timeSinceStart.Seconds()),
+				logger.Int64("total_bytes", totalBytesReceived),
+				logger.Int("previous_restarts", previousRestarts),
+				logger.String("component", "ffmpeg-stream"),
+				logger.String("operation", "conditional_failure_reset"))
+		} else {
+			s.restartCountMu.Unlock()
 		}
 	}
 }

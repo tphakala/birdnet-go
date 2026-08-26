@@ -262,8 +262,8 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 			COUNT(*) as count,
 			MIN(%s) as first_seen,
 			MAX(%s) as last_seen,
-			AVG(notes.confidence) as avg_confidence,
-			MAX(notes.confidence) as max_confidence
+			COALESCE(AVG(notes.confidence), 0) as avg_confidence,
+			COALESCE(MAX(notes.confidence), 0) as max_confidence
 		FROM notes
 		LEFT JOIN note_reviews ON notes.id = note_reviews.note_id
 	`, dateTimeFormat, dateTimeFormat)
@@ -475,27 +475,41 @@ func (ds *DataStore) GetSpeciesNoteIDs(ctx context.Context, scientificName strin
 	return result, nil
 }
 
+// applyHourlyAnalyticsFilters applies the WHERE filters shared by the hourly
+// analytics aggregation and its unparseable-time self-check: exclude detections
+// marked as false positive, an optional exact-date match, and an optional
+// species match on scientific or common name. Unlike the hourly-distribution
+// filters, the date match here is an exact single day, not a range. Keeping
+// both callers on one helper means the self-check counts exactly the rows the
+// aggregation groups.
+func (ds *DataStore) applyHourlyAnalyticsFilters(q *gorm.DB, date, species string) *gorm.DB {
+	q = q.Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", string(entities.VerificationFalsePositive))
+
+	if date != "" {
+		q = q.Where("notes.date = ?", date)
+	}
+
+	if species != "" {
+		q = q.Where("notes.scientific_name = ? OR notes.common_name = ?", species, species)
+	}
+
+	return q
+}
+
 // GetHourlyAnalyticsData retrieves detection counts grouped by hour
 func (ds *DataStore) GetHourlyAnalyticsData(ctx context.Context, date, species string) ([]HourlyAnalyticsData, error) {
 	var analytics []HourlyAnalyticsData
 	hourFormat := ds.GetHourFormat()
 
-	// Base query - exclude detections marked as false_positive
-	query := ds.DB.WithContext(ctx).Table("notes").
-		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
+	// Base query - exclude false positives plus the optional date/species
+	// filters - grouped by the dialect-specific hour expression.
+	query := ds.applyHourlyAnalyticsFilters(
+		ds.DB.WithContext(ctx).Table("notes").
+			Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id"),
+		date, species).
 		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourFormat)).
-		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", string(entities.VerificationFalsePositive)).
 		Group(hourFormat).
 		Order("hour")
-
-	// Apply filters
-	if date != "" {
-		query = query.Where("notes.date = ?", date)
-	}
-
-	if species != "" {
-		query = query.Where("notes.scientific_name = ? OR notes.common_name = ?", species, species)
-	}
 
 	// Execute query
 	if err := query.Scan(&analytics).Error; err != nil {
@@ -506,6 +520,19 @@ func (ds *DataStore) GetHourlyAnalyticsData(ctx context.Context, date, species s
 			Context("date", date).
 			Context("species", species).
 			Build()
+	}
+
+	// Same unparseable-time invariant as GetHourlyDistribution (GitHub #3388):
+	// detections with a malformed time column collapse into the hour-0 bucket
+	// and silently hollow out this by-hour aggregation. Only run the extra COUNT
+	// when an hour-0 bucket is present, since NULL hours scan into Hour == 0.
+	if hasHourZeroBucket(analytics, func(r HourlyAnalyticsData) int { return r.Hour }) {
+		ds.warnIfHoursUnparseable(ctx, "get_hourly_analytics_data", hourFormat,
+			func(q *gorm.DB) *gorm.DB {
+				return ds.applyHourlyAnalyticsFilters(q, date, species)
+			},
+			logger.String("date", date),
+			logger.String("species", species))
 	}
 
 	return analytics, nil
@@ -786,38 +813,19 @@ func (ds *DataStore) GetHourlyDistribution(ctx context.Context, startDate, endDa
 		}
 	}
 
-	// Prepare the SQL query - exclude detections marked as false_positive
-	query := ds.DB.WithContext(ctx).Table("notes").
-		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
-		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", string(entities.VerificationFalsePositive))
-
 	// Extract hour from the time field using database-specific hour format
 	hourExpr := ds.GetHourFormat()
-	query = query.Select(fmt.Sprintf("%s AS hour, COUNT(*) AS count", hourExpr))
 
-	// Apply date range filter conditionally
-	switch {
-	case startDate != "" && endDate != "":
-		query = query.Where("notes.date BETWEEN ? AND ?", startDate, endDate)
-	case startDate != "":
-		query = query.Where("notes.date >= ?", startDate)
-	case endDate != "":
-		query = query.Where("notes.date <= ?", endDate)
-		// No date filter if both are empty
-	}
-
-	// Apply species filter if provided
-	if species != "" {
-		// Try to match on either common_name or scientific_name
-		query = query.Where("notes.common_name = ? OR notes.scientific_name = ?",
-			species, species)
-	}
-
-	// Group by hour
-	query = query.Group(hourExpr)
-
-	// Order by hour
-	query = query.Order("hour ASC")
+	// Build the filtered query (exclude false positives, optional date range and
+	// species) via the shared helper, then group by hour. The same helper feeds
+	// the emptiness self-check below, so the two filter sets cannot drift.
+	query := ds.applyHourlyDistributionFilters(
+		ds.DB.WithContext(ctx).Table("notes").
+			Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id"),
+		startDate, endDate, species).
+		Select(fmt.Sprintf("%s AS hour, COUNT(*) AS count", hourExpr)).
+		Group(hourExpr).
+		Order("hour ASC")
 
 	// Execute the query
 	var results []HourlyDistributionData
@@ -832,7 +840,112 @@ func (ds *DataStore) GetHourlyDistribution(ctx context.Context, startDate, endDa
 			Build()
 	}
 
+	// Invariant self-check for GitHub #3388 ("Detection Patterns by Time of Day"
+	// flat at zero despite data). The failure is not an empty result: GROUP BY
+	// always yields at least one bucket per matching row. It is that detections
+	// with an unparseable time column make the hour expression evaluate to NULL,
+	// so they collapse into the hour-0 bucket and the by-hour chart degenerates.
+	// Only run the extra COUNT when an hour-0 bucket is actually present: NULL
+	// hours scan into Hour == 0, so their absence proves there is nothing to
+	// find, and a healthy install with no midnight detections pays nothing.
+	if hasHourZeroBucket(results, func(r HourlyDistributionData) int { return r.Hour }) {
+		ds.warnIfHoursUnparseable(ctx, "get_hourly_distribution", hourExpr,
+			func(q *gorm.DB) *gorm.DB {
+				return ds.applyHourlyDistributionFilters(q, startDate, endDate, species)
+			},
+			logger.String("start_date", startDate),
+			logger.String("end_date", endDate),
+			logger.String("species", species))
+	}
+
 	return results, nil
+}
+
+// applyHourlyDistributionFilters applies the WHERE filters shared by the hourly
+// distribution aggregation and its emptiness self-check: exclude detections
+// marked as false positive, an optional inclusive date range, and an optional
+// species match on common or scientific name. Keeping both callers on one
+// helper means the self-check counts exactly the rows the aggregation groups.
+func (ds *DataStore) applyHourlyDistributionFilters(q *gorm.DB, startDate, endDate, species string) *gorm.DB {
+	q = q.Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", string(entities.VerificationFalsePositive))
+
+	switch {
+	case startDate != "" && endDate != "":
+		q = q.Where("notes.date BETWEEN ? AND ?", startDate, endDate)
+	case startDate != "":
+		q = q.Where("notes.date >= ?", startDate)
+	case endDate != "":
+		q = q.Where("notes.date <= ?", endDate)
+		// No date filter if both are empty
+	}
+
+	if species != "" {
+		q = q.Where("notes.common_name = ? OR notes.scientific_name = ?", species, species)
+	}
+
+	return q
+}
+
+// warnIfHoursUnparseable counts matching detections whose hour could not be
+// extracted (the hour expression evaluates to NULL, e.g. an empty or malformed
+// time column) and emits a WARN when any exist. Those rows collapse into a
+// single bogus bucket and hollow out the by-hour chart (GitHub #3388); the WARN
+// puts the evidence and the count into default logs / a support dump without a
+// live reproduction.
+//
+// It is shared by the two by-hour aggregations (GetHourlyDistribution and its
+// sibling GetHourlyAnalyticsData). The caller passes the operation name, the
+// hour expression, and applyFilters: a closure that applies the SAME WHERE
+// filters its aggregation used, so the count matches exactly the rows that were
+// grouped and the two filter sets cannot drift. extraFields carry the
+// operation-specific context (date range, species) onto the WARN.
+//
+// hourExpr is an internal constant from GetHourFormat (not user input), so
+// interpolating it into the predicate is safe. A count error is logged at debug
+// and swallowed: this diagnostic path must never mask the (successful) primary
+// result.
+func (ds *DataStore) warnIfHoursUnparseable(ctx context.Context, operation, hourExpr string, applyFilters func(*gorm.DB) *gorm.DB, extraFields ...logger.Field) {
+	if hourExpr == "" {
+		return // unsupported dialect; GetHourFormat already returns empty
+	}
+	var unparseable int64
+	countQuery := applyFilters(
+		ds.DB.WithContext(ctx).Table("notes").
+			Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id")).
+		Where(fmt.Sprintf("%s IS NULL", hourExpr))
+	if err := countQuery.Count(&unparseable).Error; err != nil {
+		GetLogger().Debug("hourly self-check count failed",
+			logger.String("operation", operation),
+			logger.Error(err))
+		return
+	}
+	if unparseable == 0 {
+		return
+	}
+	fields := make([]logger.Field, 0, 3+len(extraFields))
+	fields = append(fields,
+		logger.String("operation", operation),
+		logger.String("hour_expr", hourExpr),
+		logger.Int64("unparseable_time_rows", unparseable))
+	fields = append(fields, extraFields...)
+	GetLogger().Warn("detections have an unparseable time and were excluded from the by-hour chart; the time column may be malformed (GitHub #3388)", fields...)
+}
+
+// hasHourZeroBucket reports whether any aggregated row landed in the hour-0
+// bucket. Detections whose time is unparseable make the hour expression
+// evaluate to SQL NULL, which scans into the Go int Hour field as 0, so every
+// unparseable-time row collapses into the hour-0 bucket. When no hour-0 bucket
+// is present the unparseable-time self-check can be skipped entirely (its extra
+// COUNT would provably find nothing). A legitimate midnight detection also
+// lands in hour 0, so this is a necessary-but-not-sufficient gate: presence
+// means "run the check", absence means "provably none".
+func hasHourZeroBucket[T any](rows []T, hourOf func(T) int) bool {
+	for i := range rows {
+		if hourOf(rows[i]) == 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // GetSpeciesFirstDetectionInPeriod finds the first detection of each species within a specific date range.

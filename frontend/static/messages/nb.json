@@ -412,6 +412,7 @@
         "updatingIntervals": "Oppdaterer registreringsintervaller...",
         "reconfiguringMqtt": "Oppdaterer MQTT-tilkobling...",
         "reconfiguringBirdweather": "Oppdaterer BirdWeather-integrasjon...",
+        "reconfiguringEbird": "Updating eBird integration...",
         "reconfiguringStreams": "Oppdaterer lydstrømmer...",
         "reconfiguringTelemetry": "Oppdaterer telemetriinnstillinger...",
         "reconfiguringPushNotifications": "Konfigurerer push-varselleverandører på nytt...",
@@ -456,6 +457,11 @@
       "ort": {
         "unavailableTitle": "ONNX Runtime ikke tilgjengelig",
         "unavailableMessage": "ONNX Runtime {requiredVersion} kreves for {modelName}, men ble ikke funnet. Se installasjonsveiledningen: {installGuideURL}"
+      },
+      "region": {
+        "staleTitle": "Modellregionen kan være utdatert",
+        "staleMessage": "{modelName} er installert for {oldRegion}, men den nye posisjonen din tilsvarer {newRegion}. Du kan bytte varianter fra modellgalleriet i Innstillinger.",
+        "staleGlobalMessage": "{modelName} er installert for {oldRegion}, men den nye posisjonen din er utenfor dekningsområdet. Du kan bytte til den globale varianten fra modellgalleriet i Innstillinger."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -623,6 +629,7 @@
       "categoryYear": "Nye i år",
       "categorySeason": "Nye denne sesongen",
       "categorySeasonNamed": "Nye i {season}",
+      "categoryInfrequent": "Sjelden",
       "maxConfidenceShort": "Maks {confidence}%",
       "detections": "{count, plural, one {# deteksjon} other {# deteksjoner}}",
       "lastSeen": "Sist: {days, plural, =0 {i dag} one {# dag siden} other {# dager siden}}"
@@ -657,7 +664,8 @@
         "viewSixHourly": "Vis alle registreringer for {startHour}:00-{endHour}:00",
         "hourlyDetections": "{count} registreringer kl. {hour}:00 - Klikk for å se",
         "biHourlyDetections": "{count} registreringer fra {startHour}:00-{endHour}:00 - Klikk for å se",
-        "sixHourlyDetections": "{count} registreringer fra {startHour}:00-{endHour}:00 - Klikk for å se"
+        "sixHourlyDetections": "{count} registreringer fra {startHour}:00-{endHour}:00 - Klikk for å se",
+        "infrequent": "Sjelden - tilbake etter {days, plural, one {# dags} other {# dagers}} fravær"
       },
       "loading": {
         "preparing": "Forbereder data...",
@@ -1688,6 +1696,26 @@
       "title": "AI-modeller & Inferens",
       "loading": "Laster inn inferensstatus",
       "error": "Kunne ikke laste inn inferensstatus",
+      "vad": {
+        "section": "Personvernbeskyttelse",
+        "title": "Silero VAD",
+        "active": "Aktiv",
+        "activeHelp": "Taledeteksjonsmodellen er lastet og analyserer lyd.",
+        "idle": "Inaktiv",
+        "idleHelp": "Aktivert og klar; modellen lastes inn når den første lydbiten analyseres.",
+        "disabled": "Deaktivert",
+        "disabledHelp": "Personvernbeskyttelse er slått av i innstillingene for personvernfilteret.",
+        "unavailable": "Ingen modell",
+        "unavailableHelp": "Ingen taledeteksjonsmodell er tilgjengelig i dette bygget. Angi en filbane for VAD-modellen i innstillingene for personvernfilteret, eller bruk et bygg med innebygd modell.",
+        "description": "Silero VAD er en spesialisert akustisk modell som oppdager menneskelig tale. Den driver personvernfilteret og kasserer lyd når tale er til stede, slik at stemmer holdes utenfor opptakene dine.",
+        "threshold": "Terskel",
+        "speechHits": "Taletreff",
+        "recentTitle": "Nylig tale",
+        "recentEmpty": "Ingen tale oppdaget ennå",
+        "colWhen": "Tidspunkt",
+        "colProbability": "Sannsynlighet",
+        "colSource": "Kilde"
+      },
       "sectionHardware": "Maskinvare",
       "sectionBackends": "Inferens-backends",
       "sectionModels": "Modeller",
@@ -1698,6 +1726,9 @@
       "fp16": "FP16",
       "fp16Supported": "FP16 støttes",
       "fp16Unsupported": "FP16 støttes ikke",
+      "advanced": "Avansert",
+      "capabilities": "Egenskaper",
+      "capabilitiesHelp": "Maskinvare-tags som brukes til å matche denne maskinen mot tilgjengelige modellbygg.",
       "backendTflite": "TensorFlow Lite",
       "backendOnnx": "ONNX Runtime",
       "backendOpenvino": "OpenVINO",
@@ -1715,8 +1746,6 @@
       "gpu": "Grafikk",
       "gpuReachable": "Tilgjengelig",
       "gpuNotReachable": "Ikke tilgjengelig",
-      "capabilities": "Egenskaper",
-      "capabilitiesHelp": "Maskinvare-tags brukt til å matche denne maskinen mot tilgjengelige modeller.",
       "gpuReasonRenderNodeUnavailable": "Ingen GPU-enhetsnode er synlig for serveren.",
       "gpuReasonRenderNodePermission": "GPU-enhetsnoden kan ikke åpnes.",
       "gpuReasonNoRuntime": "BirdNET-Go akselererer for tiden bare inferens på Intel-grafikk, så dette kortet vil ikke bli brukt.",
@@ -2768,7 +2797,8 @@
           "detectionPath": "Relativ sti til registrering (f.eks. «/ui/detections/1234»)",
           "detectionUrl": "Full URL til registrering i grensesnittet",
           "imageUrl": "Lenke til artsbilde",
-          "daysSinceFirstSeen": "Antall dager siden første registrering"
+          "daysSinceFirstSeen": "Antall dager siden første registrering",
+          "daysSinceLastSeen": "Antall dager siden siste observasjon"
         }
       },
       "testNotification": {
@@ -3084,7 +3114,11 @@
         "enable": "Aktiver personvernfiltrering",
         "disabled": "Personvernfiltrering er deaktivert",
         "confidenceLabel": "Sikkerhetsterskel for menneskelig stemmedeteksjon",
-        "confidenceHelp": "Angi sikkerhetsnivå for menneskelig stemmedeteksjon. Lavere verdi gjør filteret mer følsomt"
+        "confidenceHelp": "Angi sikkerhetsnivå for menneskelig stemmedeteksjon. Lavere verdi gjør filteret mer følsomt",
+        "vadEnable": "Aktiver personvernbeskyttelse (Silero VAD)",
+        "vadHelp": "Kjører en dedikert nevral taledeteksjonsmodell ved siden av klassifisereren for robust talefiltrering. Forbruker ekstra systemressurser (ca. 20-30 MB RAM og CPU-inferens per segment).",
+        "vadThresholdLabel": "Terskel for personvernbeskyttelse",
+        "vadThresholdHelp": "Følsomhetsterskel for taleaktivitetsdetektoren (standard 0,35). Lavere verdier gjør filteret mer følsomt for lav eller fjern tale."
       },
       "falsePositivePrevention": {
         "title": "Forebygging av falske positive",
@@ -4291,6 +4325,18 @@
             "hemisphereNote": "Sesongdatoer konfigureres automatisk basert på breddegrad. Den nordlige halvkule bruker standardsesonger, den sørlige halvkule har forskjøvede datoer, og ekvatoriale regioner bruker regn-/tørketider."
           }
         },
+        "infrequent": {
+          "title": "Sporing av sjeldne arter",
+          "description": "Marker arter som kommer tilbake etter langt fravær (sjeldne tilbakevendende besøkende)",
+          "enabled": {
+            "label": "Aktiver sporing av sjeldne arter",
+            "helpText": "Spor og varsle når en art registreres igjen etter langt fravær"
+          },
+          "absenceDays": {
+            "label": "Fraværsterskel (dager)",
+            "helpText": "Minste antall dager siden siste registrering før en art som kommer tilbake markeres som 'sjelden' (1-365)"
+          }
+        },
         "months": {
           "january": "Januar",
           "february": "Februar",
@@ -4488,6 +4534,7 @@
           "stream_disconnected": "Strøm frakoblet",
           "stream_error": "Strømfeil",
           "detection_new_species": "Ny art registrert",
+          "detection_infrequent_species": "Sjelden art registrert",
           "detection_occurred": "Registrering utført",
           "application_started": "Applikasjon startet",
           "application_stopped": "Applikasjon stoppet",
@@ -4537,6 +4584,10 @@
         "newSpecies": {
           "name": "Ny art registrert",
           "description": "Varsler når en art registreres for første gang"
+        },
+        "infrequentSpecies": {
+          "name": "Sjelden art registrert",
+          "description": "Varsler når en art kommer tilbake etter langt fravær"
         },
         "streamDisconnected": {
           "name": "Lydstrøm frakoblet",
@@ -5232,6 +5283,20 @@
       "locale": {
         "label": "Artsspråk",
         "helpText": "Språk brukt for artsnavnene i grensesnittet."
+      },
+      "secondaryThresholdOverride": {
+        "label": "Override confidence threshold",
+        "helpText": "When enabled, this model uses its own confidence threshold below. When disabled, it follows the main BirdNET confidence threshold."
+      },
+      "secondaryThreshold": {
+        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
+        "followsBirdnet": "Enable the override above to set a custom value. This model currently follows the main BirdNET confidence threshold."
+      },
+      "perchThreshold": {
+        "label": "Perch v2 Confidence Threshold"
+      },
+      "birdnetv3Threshold": {
+        "label": "BirdNET v3.0 Confidence Threshold"
       }
     },
     "rangeFilter": {
@@ -5271,6 +5336,79 @@
     "gallery": {
       "title": "Modellgalleri",
       "description": "Administrer klassifikatormodeller for fugle- og flaggermusdeteksjon.",
+      "region": {
+        "title": "Modellregion",
+        "modeAuto": "Automatisk",
+        "modeAutoHint": "Velg den beste regionale varianten fra stasjonsposisjonen",
+        "modeManual": "Manual region select",
+        "modeManualHint": "Choose a region yourself, or the worldwide model",
+        "worldwideTitle": "Worldwide",
+        "worldwideSubtitle": "Every region, all species",
+        "worldwideResourceNote": "Largest model, uses the most RAM and CPU",
+        "selectedBadge": "Selected",
+        "orSpecificRegion": "Or a specific region",
+        "search": "Search regions or countries",
+        "searchNoResults": "No regions match \"{query}\"",
+        "manualPrompt": "Choose a region below, or the worldwide model.",
+        "countriesOverflow": "+{count}",
+        "coreCoverage": "Core coverage:",
+        "partialCoverage": "Partial coverage:",
+        "pinAction": "Fest {region}",
+        "switchToAuto": "Bytt til automatisk",
+        "loading": "Laster regioner...",
+        "loadFailed": "Innlasting av regiondata mislyktes",
+        "mapUnavailable": "Dekningskart utilgjengelig",
+        "mapAria": "Dekningskart for {region}",
+        "why": {
+          "noLocation": "Automatisk valg krever en stasjonsposisjon. Angi den i Hovedinnstillinger; den globale modellen brukes inntil da.",
+          "outsideCoverage": "Posisjonen din er utenfor dekningsområdet til alle regionale modeller, så den globale modellen brukes.",
+          "ambiguous": "Posisjonen din er nær grensen mellom {region} og {runnerUp}. Automatisk valg bruker {region}; fest en av dem for å gjøre valget eksplisitt.",
+          "resolved": "Gjenkjent region fra posisjonen din: {region}.",
+          "global": "Den globale modellen brukes alltid, uavhengig av stasjonsposisjonen.",
+          "pinned": "Festet til {region}. Stasjonsposisjonen påvirker ikke modellvalget.",
+          "pinnedMismatch": "Posisjonen din tilsvarer for øyeblikket {resolved}.",
+          "pinnedUnknown": "Den festede regionen \"{region}\" er ikke tilgjengelig i den gjeldende modellkatalogen. Modellfamilier faller tilbake på posisjonen din eller den globale modellen."
+        }
+      },
+      "variants": {
+        "title": "Modellvariant",
+        "recommended": "Anbefalt",
+        "recommendedForHardware": "Best for din maskinvare",
+        "installed": "Installert",
+        "default": "Standard",
+        "incompatible": "Ikke tilgjengelig for maskinvaren din",
+        "showAll": "Vis alle varianter ({count})",
+        "showRegion": "Vis varianter for {region} og din maskinvare ({count})",
+        "showHardware": "Vis maskinvarevarianter ({count})",
+        "showAllRegions": "Vis alle varianter, inkludert andre regioner ({count})",
+        "regionContext": "Regionale varianter vises for {region}, angitt av valget av modellregion ovenfor",
+        "regionContextNone": "Regionale varianter er tilgjengelige. Velg en region i modellregionvalget ovenfor, eller vis alle varianter.",
+        "otherRegions": "Andre regioner",
+        "filterPlaceholder": "Filtrer regioner",
+        "filterAria": "Filtrer regiontilpassede bygg",
+        "filterNoMatch": "Ingen regioner matcher \"{query}\"",
+        "latency": "~{ms} ms",
+        "precisionInfo": "About precision and variants",
+        "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
+      },
+      "actionInProgress": "Vent til den pågående installasjonen, reinstallasjonen eller fjerningen av modellen er ferdig",
+      "removeSuccess": "Removed {name}",
+      "reasons": {
+        "backendRecommended": "Kjører på {backend}, som er den anbefalte backenden for din maskinvare",
+        "backendSupported": "Kjører på {backend}",
+        "regionMatched": "Tilpasset din region ({region})",
+        "regionGlobalFallback": "Global modell for din posisjon",
+        "precisionFp16Native": "Halvpresisjonsversjon tilpasset din CPU",
+        "precisionFp16GpuPreferred": "Halvpresisjonsversjon: halvparten så stor nedlasting, kjører på din GPU",
+        "ramConstrainedFit": "Kvantisert versjon tilpasset ditt tilgjengelige minne",
+        "benchmarkMeasured": "Raskest på din enhet i utførte ytelsestester",
+        "variantLegacy": "Erstattet av en nyere versjon",
+        "archUnsupported": "Krever en {required} CPU",
+        "backendMissing": "Krever en inference-backend som versjonen din ikke når ({required})",
+        "ramInsufficient": "Krever minst {requiredMb} MB minne",
+        "hardwareExcluded": "Støttes ikke på din maskinvare ({token})",
+        "backendOnnxUnavailable": "Krever ONNX Runtime, som ikke er tilgjengelig på dette systemet. Docker-images og utgivelsesarkiver inkluderer det; se installasjonsveiledningen for ONNX Runtime."
+      },
       "tabs": {
         "installed": "Installert",
         "available": "Tilgjengelig"
@@ -5278,7 +5416,6 @@
       "loading": "Laster modeller...",
       "retry": "Prøv igjen",
       "builtIn": "Innebygd",
-      "builtInDescription": "Innebygd fuglearts-klassifikator fra BirdNET-teamet.",
       "species": "{count} arter",
       "install": "Installer",
       "installing": "Installerer...",
@@ -5323,7 +5460,13 @@
       "errors": {
         "catalogLoadFailed": "Innlasting av modellkatalog mislyktes",
         "installFailed": "Oppstart av modellinstallasjon mislyktes",
-        "removeFailed": "Fjerning av modell mislyktes"
+        "removeFailed": "Fjerning av modell mislyktes",
+        "actionFailed": "Det oppsto et problem med {name}",
+        "downloadSourceHint": "Hvis huggingface.co er blokkert eller tregt på nettverket ditt, kan du angi en speilserver i seksjonen Nedlastingskilde nedenfor.",
+        "goToDownloadSource": "Gå til Nedlastingskilde",
+        "dismiss": "Avvis",
+        "details": "Details",
+        "removeRetryHint": "To try again, use the Remove button on the model's card."
       },
       "regionLabel": "Region",
       "speciesLabel": "Arter",
@@ -5331,9 +5474,40 @@
       "reinstalling": "Reinstallerer...",
       "reinstallComplete": "Filer verifisert",
       "geomodelBadge": "Inkluderer BirdNET v3.0 geomodell",
-      "onnxRuntimeRequired": "Krever ONNX Runtime som ikke er tilgjengelig på dette systemet.",
-      "onnxRuntimeMissing": "ONNX Runtime er ikke tilgjengelig. Denne modellen kan ikke kjøres.",
-      "unavailable": "Ikke tilgjengelig"
+      "preview": {
+        "badge": "Forhåndsvisning",
+        "buildLabel": "{version} · {build}",
+        "cardNotice": "Forhåndsvisning for utviklere, ikke den endelige utgivelsen. Dette er et tidlig bygg for testing; resultatene kan endre seg før den stabile versjonen.",
+        "dialogNotice": "Du installerer en forhåndsvisning for utviklere ({build}). Fin til å prøve ut, men anbefales ikke som din eneste klassifikator ennå."
+      },
+      "entryIncompatible": "Denne modellen er ikke tilgjengelig på dette systemet.",
+      "regionGlobal": "Global",
+      "hardwareLabel": "Maskinvare",
+      "hardware": {
+        "gpuNvidia": "GPU (NVIDIA)",
+        "gpuIntel": "GPU (Intel)",
+        "armCpu": "ARM CPU",
+        "amd64Cpu": "AMD64 CPU",
+        "arm64Cpu": "ARM64 CPU",
+        "cpu": "CPU"
+      },
+      "optimize": {
+        "bannerTitle": "{count, plural, one {# modell kan kjøre raskere på maskinvaren din} other {# modeller kan kjøre raskere på maskinvaren din}}",
+        "review": "Gjennomgå",
+        "dismiss": "Avvis",
+        "badgeTitle": "Et raskere bygg er tilgjengelig for maskinvaren din",
+        "swap": "Optimer",
+        "dialogTitle": "Optimer modellene dine",
+        "installedBuild": "Installed build",
+        "fromTo": "{from} til {to}",
+        "apply": "Bruk",
+        "applyAll": "Bruk alle",
+        "applying": "Bruker...",
+        "applied": "Brukt",
+        "applyFailed": "Kunne ikke bruke",
+        "upToDate": "Alle modellene dine er allerede optimert for denne maskinvaren.",
+        "licenseNote": "Byttet skjer innenfor samme modell, så lisensen endres ikke."
+      }
     },
     "bird": {
       "title": "Fugledeteksjon",
@@ -5345,6 +5519,14 @@
     },
     "dynamicThreshold": {
       "birdOnlyNote": "Dynamisk terskel gjelder kun for fugleklassifikatorer."
+    },
+    "perch": {
+      "title": "Perch v2 Detection",
+      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+    },
+    "birdnetv3": {
+      "title": "BirdNET v3.0 Detection",
+      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
     }
   },
   "restart": {

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -45,10 +46,29 @@ type SQLiteStore struct {
 	walCheckpointOnce sync.Once
 }
 
+// defaultSQLitePath mirrors the viper default set in conf/defaults.go
+// ("output.sqlite.path"). It is used as a fallback when the configured path is
+// blank, since that default only applies at fresh config bootstrap and can be
+// overwritten with an empty string by a later settings save.
+const defaultSQLitePath = "birdnet.db"
+
 func validateSQLiteConfig() error {
 	// Add validation logic for SQLite configuration
 	// Return an error if the configuration is invalid
 	return nil
+}
+
+// resolveSQLitePath returns the configured SQLite database path, falling back to
+// defaultSQLitePath when the configured value is blank. A blank path would
+// otherwise flow into buildSQLiteDSN and produce a bare "?<pragmas>" DSN; the
+// SQLite driver treats everything before the "?" as the filename, so it would
+// create/open a file literally named after the pragma query string in the
+// working directory instead of the intended database.
+func resolveSQLitePath(configured string) string {
+	if strings.TrimSpace(configured) == "" {
+		return defaultSQLitePath
+	}
+	return configured
 }
 
 // getDiskSpace returns available disk space for the given path using diskmanager
@@ -188,8 +208,13 @@ func (s *SQLiteStore) createBackup(dbPath string) error {
 
 // Open initializes the SQLite database connection
 func (s *SQLiteStore) Open() (retErr error) {
-	// Get database path from settings
-	dbPath := s.Settings.Output.SQLite.Path
+	// Get database path from settings, guarding against a blank value that
+	// would otherwise produce a malformed DSN and open a bogus file.
+	dbPath := resolveSQLitePath(s.Settings.Output.SQLite.Path)
+	if dbPath != s.Settings.Output.SQLite.Path {
+		GetLogger().Warn("Configured SQLite path is empty; falling back to default",
+			logger.String("default_path", dbPath))
+	}
 
 	// Initialize telemetry integration
 	telemetryEnabled := s.Settings != nil && s.Settings.Sentry.Enabled
@@ -221,10 +246,10 @@ func (s *SQLiteStore) Open() (retErr error) {
 	var gormLogger gormlogger.Interface
 	if s.Settings.Debug {
 		// Use debug log level with lower slow threshold
-		gormLogger = NewGormLogger(500*time.Millisecond, gormlogger.Info, s.metrics)
+		gormLogger = NewGormLogger(500*time.Millisecond, gormlogger.Info, s.metrics, "sqlite")
 	} else {
 		// Use default settings with metrics
-		gormLogger = NewGormLogger(500*time.Millisecond, gormlogger.Warn, s.metrics)
+		gormLogger = NewGormLogger(500*time.Millisecond, gormlogger.Warn, s.metrics, "sqlite")
 	}
 
 	// Build DSN with pragmas as query parameters so they apply to every
@@ -615,12 +640,16 @@ func (s *SQLiteStore) UpdateNote(id string, updates map[string]any) error {
 	return s.DB.Model(&Note{}).Where("id = ?", id).Updates(updates).Error
 }
 
-// GetDBPath returns the database file path for telemetry integration
+// GetDBPath returns the database file path for telemetry integration. It
+// resolves a blank configured path to the same default Open() falls back to, so
+// callers never see an empty path while the connection actually runs against the
+// default database.
 func (s *SQLiteStore) GetDBPath() string {
-	if s.Settings != nil && s.Settings.Output.SQLite.Path != "" {
-		return s.Settings.Output.SQLite.Path
+	var configured string
+	if s.Settings != nil {
+		configured = s.Settings.Output.SQLite.Path
 	}
-	return ""
+	return resolveSQLitePath(configured)
 }
 
 // CheckpointWAL forces a checkpoint of the Write-Ahead Log to ensure all changes are written to the main database file.

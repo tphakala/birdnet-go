@@ -68,20 +68,29 @@ func (p *Processor) loadDynamicThresholdsFromDB() error {
 			if settings.Realtime.DynamicThreshold.Debug {
 				GetLogger().Debug("Skipping expired threshold",
 					logger.String("species", dbThreshold.SpeciesName),
-					logger.String("model", dbThreshold.ModelName),
 					logger.Time("expires_at", dbThreshold.ExpiresAt),
 					logger.String("operation", "load_dynamic_thresholds"))
 			}
 			continue
 		}
 
-		// Reconstruct composite key from DB fields
-		key := dynamicThresholdKey(dbThreshold.ModelName, strings.ToLower(dbThreshold.SpeciesName))
+		// Thresholds are keyed per species (lowercase common name).
+		key := strings.ToLower(dbThreshold.SpeciesName)
+
+		// Defensive merge: the DB should hold one row per species after migration,
+		// but if a stray duplicate slips through, keep the more-advanced state
+		// (higher level; tie broken by the later expiry) rather than clobbering.
+		if existing, ok := p.DynamicThresholds[key]; ok {
+			if dbThreshold.Level < existing.Level ||
+				(dbThreshold.Level == existing.Level && !dbThreshold.ExpiresAt.After(existing.Timer)) {
+				continue
+			}
+		}
 
 		// Convert database model to in-memory representation
 		p.DynamicThresholds[key] = &DynamicThreshold{
 			Level:          dbThreshold.Level,
-			CurrentValue:   dbThreshold.CurrentValue,
+			BaseThreshold:  dbThreshold.BaseThreshold,
 			Timer:          dbThreshold.ExpiresAt,
 			HighConfCount:  dbThreshold.HighConfCount,
 			ValidHours:     dbThreshold.ValidHours,
@@ -92,9 +101,8 @@ func (p *Processor) loadDynamicThresholdsFromDB() error {
 		if settings.Realtime.DynamicThreshold.Debug {
 			GetLogger().Debug("Loaded dynamic threshold",
 				logger.String("species", dbThreshold.SpeciesName),
-				logger.String("model", dbThreshold.ModelName),
 				logger.Int("threshold_level", dbThreshold.Level),
-				logger.Float64("current_value", dbThreshold.CurrentValue),
+				logger.Float64("base_threshold", dbThreshold.BaseThreshold),
 				logger.Time("expires_at", dbThreshold.ExpiresAt),
 				logger.String("operation", "load_dynamic_thresholds"))
 		}
@@ -123,29 +131,26 @@ func (p *Processor) convertThresholdsForPersistence(settings *conf.Settings) (db
 	dbThresholds = make([]datastore.DynamicThreshold, 0, len(p.DynamicThresholds))
 	expiredSpecies = make([]string, 0)
 
-	for compositeKey, threshold := range p.DynamicThresholds {
+	minThreshold := settings.Realtime.DynamicThreshold.Min
+
+	for speciesName, threshold := range p.DynamicThresholds {
 		if now.After(threshold.Timer) {
-			expiredSpecies = append(expiredSpecies, compositeKey)
+			expiredSpecies = append(expiredSpecies, speciesName)
 			if settings.Realtime.DynamicThreshold.Debug {
 				GetLogger().Debug("Found expired threshold during persistence",
-					logger.String("key", compositeKey),
+					logger.String("species", speciesName),
 					logger.Time("expires_at", threshold.Timer),
 					logger.String("operation", "persist_dynamic_thresholds"))
 			}
 			continue
 		}
 
-		// Extract model name and species name from composite key
-		modelName, speciesName := splitDynamicThresholdKey(compositeKey)
-
-		baseThreshold := p.getBaseConfidenceThreshold(settings, speciesName, "", modelName)
 		dbThresholds = append(dbThresholds, datastore.DynamicThreshold{
 			SpeciesName:    speciesName,
-			ModelName:      modelName,
 			ScientificName: threshold.ScientificName,
 			Level:          threshold.Level,
-			CurrentValue:   threshold.CurrentValue,
-			BaseThreshold:  float64(baseThreshold),
+			CurrentValue:   effectiveDynamicThreshold(threshold.BaseThreshold, threshold.Level, minThreshold),
+			BaseThreshold:  threshold.BaseThreshold,
 			HighConfCount:  threshold.HighConfCount,
 			ValidHours:     threshold.ValidHours,
 			ExpiresAt:      threshold.Timer,

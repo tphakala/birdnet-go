@@ -35,14 +35,12 @@ func newProfilingTestController(t *testing.T) *Controller {
 // The mint now runs at each settings publish point, so a runtime enable
 // produces a usable credential in the same save.
 func TestEnsureProfilingTokenForSave_MintsOnRuntimeEnable(t *testing.T) {
-	c := newProfilingTestController(t)
-
 	updated := &conf.Settings{}
 	updated.Diagnostics.Profiling.Enabled = true
 	require.Empty(t, updated.Diagnostics.Profiling.Token,
 		"setup must start from the enabled-but-tokenless state")
 
-	c.ensureProfilingTokenForSave(updated)
+	ensureProfilingTokenForSave(updated)
 
 	assert.NotEmpty(t, updated.Diagnostics.Profiling.Token,
 		"enabling profiling at runtime must mint a token, not defer it to a restart")
@@ -71,12 +69,10 @@ func TestEnsureProfilingTokenForSave_NoOpCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := newProfilingTestController(t)
-
 			updated := &conf.Settings{}
 			tt.mutate(updated)
 
-			c.ensureProfilingTokenForSave(updated)
+			ensureProfilingTokenForSave(updated)
 
 			assert.Empty(t, updated.Diagnostics.Profiling.Token,
 				"no token should be minted for this configuration")
@@ -146,13 +142,11 @@ func TestPatchDiagnosticsCannotSetProfilingToken(t *testing.T) {
 func TestEnsureProfilingTokenForSave_KeepsExistingToken(t *testing.T) {
 	const existing = "an-already-issued-profiling-token"
 
-	c := newProfilingTestController(t)
-
 	updated := &conf.Settings{}
 	updated.Diagnostics.Profiling.Enabled = true
 	updated.Diagnostics.Profiling.Token = existing
 
-	c.ensureProfilingTokenForSave(updated)
+	ensureProfilingTokenForSave(updated)
 
 	assert.Equal(t, existing, updated.Diagnostics.Profiling.Token,
 		"an existing token must survive unrelated settings saves")
@@ -337,7 +331,7 @@ func TestRestoreProfilingRatesUndoesAFailedSave(t *testing.T) {
 		"setup: the rate must be applied before the rollback is exercised")
 
 	// Now the disk write fails and the handler republishes the old snapshot.
-	c.restoreProfilingRates(current)
+	restoreProfilingRates(current)
 
 	assert.Zero(t, runtime.SetMutexProfileFraction(-1),
 		"a rolled-back save must leave the runtime matching the config that survived, not the one that failed to persist")

@@ -412,6 +412,7 @@
         "updatingIntervals": "Aktualizácia intervalov detekcie...",
         "reconfiguringMqtt": "Aktualizácia MQTT pripojenia...",
         "reconfiguringBirdweather": "Aktualizácia integrácie BirdWeather...",
+        "reconfiguringEbird": "Updating eBird integration...",
         "reconfiguringStreams": "Aktualizácia audio streamov...",
         "reconfiguringTelemetry": "Aktualizácia nastavení telemetrie...",
         "reconfiguringPushNotifications": "Rekonfigurácia poskytovateľov push notifikácií...",
@@ -456,6 +457,11 @@
       "ort": {
         "unavailableTitle": "ONNX Runtime nie je k dispozícii",
         "unavailableMessage": "ONNX Runtime {requiredVersion} je vyžadovaný pre {modelName}, ale nebol nájdený. Pozrite si príručku inštalácie: {installGuideURL}"
+      },
+      "region": {
+        "staleTitle": "Región modelu môže byť zastaraný",
+        "staleMessage": "{modelName} je nainštalovaný pre {oldRegion}, ale vaša nová poloha zodpovedá {newRegion}. Varianty môžete zmeniť v galérii modelov v Nastaveniach.",
+        "staleGlobalMessage": "{modelName} je nainštalovaný pre {oldRegion}, ale vaša nová poloha je mimo jeho pokrytia. Na globálny variant môžete prepnúť v galérii modelov v Nastaveniach."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -623,6 +629,7 @@
       "categoryYear": "Nový tento rok",
       "categorySeason": "Nový túto sezónu",
       "categorySeasonNamed": "Nový túto {season}",
+      "categoryInfrequent": "Zriedka pozorované",
       "maxConfidenceShort": "Max {confidence} %",
       "detections": "{count, plural, one {# detekcia} few {# detekcie} other {# detekcií}}",
       "lastSeen": "Naposledy: {days, plural, =0 {dnes} one {pred # dňom} few {pred # dňami} other {pred # dňami}}"
@@ -657,7 +664,8 @@
         "viewSixHourly": "Zobraziť všetky detekcie pre {startHour}:00-{endHour}:00",
         "hourlyDetections": "{count} detekcií o {hour}:00 - Kliknutím zobrazíte",
         "biHourlyDetections": "{count} detekcií od {startHour}:00 do {endHour}:00 - Kliknutím zobrazíte",
-        "sixHourlyDetections": "{count} detekcií od {startHour}:00 do {endHour}:00 - Kliknutím zobrazíte"
+        "sixHourlyDetections": "{count} detekcií od {startHour}:00 do {endHour}:00 - Kliknutím zobrazíte",
+        "infrequent": "Zriedka pozorované - návrat po {days, plural, one {# dni} other {# dňoch}} neprítomnosti"
       },
       "loading": {
         "preparing": "Pripravujú sa dáta...",
@@ -1688,6 +1696,26 @@
       "title": "Modely AI a inferencia",
       "loading": "Načítanie stavu inferencie",
       "error": "Nepodarilo sa načítať stav inferencie",
+      "vad": {
+        "section": "Ochrana súkromia",
+        "title": "Silero VAD",
+        "active": "Aktívny",
+        "activeHelp": "Model detekcie reči je načítaný a vyhodnocuje zvuk.",
+        "idle": "Nečinný",
+        "idleHelp": "Povolené a pripravené; model sa načíta pri vyhodnocovaní prvého úseku zvuku.",
+        "disabled": "Zakázané",
+        "disabledHelp": "Ochrana súkromia je vypnutá v nastaveniach filtra súkromia.",
+        "unavailable": "Žiadny model",
+        "unavailableHelp": "V tomto zostavení nie je k dispozícii žiadny model detekcie reči. Nastavte cestu k modelu VAD v nastaveniach filtra súkromia, alebo použite zostavenie so vstavaným modelom.",
+        "description": "Silero VAD je špecializovaný akustický model, ktorý deteguje ľudskú reč. Poháňa filter súkromia a zahadzuje zvuk, keď je prítomná reč, takže hlasy sa neukladajú do vašich nahrávok.",
+        "threshold": "Prah",
+        "speechHits": "Zásahy reči",
+        "recentTitle": "Nedávna reč",
+        "recentEmpty": "Zatiaľ nebola detegovaná žiadna reč",
+        "colWhen": "Čas",
+        "colProbability": "Pravdepodobnosť",
+        "colSource": "Zdroj"
+      },
       "sectionHardware": "Hardvér",
       "sectionBackends": "Backendy pre inferenciu",
       "sectionModels": "Modely",
@@ -1698,6 +1726,9 @@
       "fp16": "FP16",
       "fp16Supported": "FP16 podporované",
       "fp16Unsupported": "FP16 nepodporované",
+      "advanced": "Pokročilé",
+      "capabilities": "Schopnosti",
+      "capabilitiesHelp": "Hardvérové značky používané na priradenie tohto počítača k dostupným zostaveniam modelov.",
       "backendTflite": "TensorFlow Lite",
       "backendOnnx": "ONNX Runtime",
       "backendOpenvino": "OpenVINO",
@@ -1715,8 +1746,6 @@
       "gpu": "Grafická karta",
       "gpuReachable": "Dostupná",
       "gpuNotReachable": "Nedostupná",
-      "capabilities": "Schopnosti",
-      "capabilitiesHelp": "Hardvérové značky slúžiace na priradenie tohto stroja k dostupným modelom.",
       "gpuReasonRenderNodeUnavailable": "Server nevidí uzol grafického zariadenia. V Dockeri namapujte /dev/dri do kontajnera; pri natívnej inštalácii skontrolujte ovládač.",
       "gpuReasonRenderNodePermission": "Uzol zariadenia GPU nie je možné otvoriť. Užívateľ BirdNET-Go potrebuje prístup k skupine zariadenia, zvyčajne 'render'.",
       "gpuReasonNoRuntime": "BirdNET-Go aktuálne urýchľuje inferenciu len na grafike Intel, takže táto karta sa nevyužije.",
@@ -2768,7 +2797,8 @@
           "detectionPath": "Relatívna cesta k detekcii (napr. \"/ui/detections/1234\")",
           "detectionUrl": "Úplná URL adresa detekcie",
           "imageUrl": "Odkaz na obrázok druhu",
-          "daysSinceFirstSeen": "Počet dní od prvej detekcie"
+          "daysSinceFirstSeen": "Počet dní od prvej detekcie",
+          "daysSinceLastSeen": "Počet dní od poslednej detekcie"
         }
       },
       "testNotification": {
@@ -3084,7 +3114,11 @@
         "enable": "Povoliť filtrovanie súkromia",
         "disabled": "Filtrovanie súkromia je vypnuté",
         "confidenceLabel": "Prah istoty pre detekciu ľudí",
-        "confidenceHelp": "Nastavte úroveň istoty pre detekciu ľudského hlasu, nižšia hodnota robí filter citlivejším"
+        "confidenceHelp": "Nastavte úroveň istoty pre detekciu ľudského hlasu, nižšia hodnota robí filter citlivejším",
+        "vadEnable": "Povoliť Ochranu Súkromia (Silero VAD)",
+        "vadHelp": "Spúšťa vyhradený neurónový model detekcie reči popri klasifikátore pre spoľahlivé filtrovanie hlasu. Spotrebováva ďalšie systémové prostriedky (cca 20-30 MB RAM a inferenciu procesora na segment).",
+        "vadThresholdLabel": "Prah Ochrany Súkromia",
+        "vadThresholdHelp": "Prah citlivosti pre detektor hlasovej aktivity (predvolené 0.35). Nižšie hodnoty robia filter citlivejším na tichú alebo vzdialenú reč."
       },
       "falsePositivePrevention": {
         "title": "Prevencia falošne pozitívnych výsledkov",
@@ -4291,6 +4325,18 @@
             "hemisphereNote": "Dátumy sezón sú automaticky konfigurované na základe vašej zemepisnej šírky. Severná hemisféra používa štandardné sezóny, južná hemisféra má posunuté dátumy a rovníkové oblasti používajú obdobia dažďov/sucha."
           }
         },
+        "infrequent": {
+          "title": "Sledovanie zriedka pozorovaných druhov",
+          "description": "Označí druhy, ktoré sa vracajú po dlhej neprítomnosti (vzácni navrátilci)",
+          "enabled": {
+            "label": "Povoliť sledovanie zriedka pozorovaných druhov",
+            "helpText": "Sledovať a upozorniť, keď je druh znova detegovaný po dlhej neprítomnosti"
+          },
+          "absenceDays": {
+            "label": "Prah neprítomnosti (dni)",
+            "helpText": "Minimálny počet dní od poslednej detekcie, kým sa vracajúci druh označí ako 'zriedka pozorovaný' (1-365)"
+          }
+        },
         "months": {
           "january": "Január",
           "february": "Február",
@@ -4488,6 +4534,7 @@
           "stream_disconnected": "Stream odpojený",
           "stream_error": "Chyba streamu",
           "detection_new_species": "Nový druh detegovaný",
+          "detection_infrequent_species": "Detegovaný zriedka pozorovaný druh",
           "detection_occurred": "Detekcia vykonaná",
           "application_started": "Aplikácia spustená",
           "application_stopped": "Aplikácia zastavená",
@@ -4537,6 +4584,10 @@
         "newSpecies": {
           "name": "Nový druh zistený",
           "description": "Upozorní, keď je druh zistený prvýkrát"
+        },
+        "infrequentSpecies": {
+          "name": "Detegovaný zriedka pozorovaný druh",
+          "description": "Upozorní, keď sa druh vráti po dlhej neprítomnosti"
         },
         "streamDisconnected": {
           "name": "Audio stream odpojený",
@@ -5232,6 +5283,20 @@
       "locale": {
         "label": "Jazyk druhov",
         "helpText": "Jazyk používaný pre bežné názvy druhov v rozhraní."
+      },
+      "secondaryThresholdOverride": {
+        "label": "Override confidence threshold",
+        "helpText": "When enabled, this model uses its own confidence threshold below. When disabled, it follows the main BirdNET confidence threshold."
+      },
+      "secondaryThreshold": {
+        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
+        "followsBirdnet": "Enable the override above to set a custom value. This model currently follows the main BirdNET confidence threshold."
+      },
+      "perchThreshold": {
+        "label": "Perch v2 Confidence Threshold"
+      },
+      "birdnetv3Threshold": {
+        "label": "BirdNET v3.0 Confidence Threshold"
       }
     },
     "rangeFilter": {
@@ -5271,6 +5336,79 @@
     "gallery": {
       "title": "Galéria modelov",
       "description": "Správa klasifikačných modelov pre detekciu vtákov a netopierov.",
+      "region": {
+        "title": "Región modelu",
+        "modeAuto": "Automaticky",
+        "modeAutoHint": "Vybrať najlepší regionálny variant podľa polohy stanice",
+        "modeManual": "Manual region select",
+        "modeManualHint": "Choose a region yourself, or the worldwide model",
+        "worldwideTitle": "Worldwide",
+        "worldwideSubtitle": "Every region, all species",
+        "worldwideResourceNote": "Largest model, uses the most RAM and CPU",
+        "selectedBadge": "Selected",
+        "orSpecificRegion": "Or a specific region",
+        "search": "Search regions or countries",
+        "searchNoResults": "No regions match \"{query}\"",
+        "manualPrompt": "Choose a region below, or the worldwide model.",
+        "countriesOverflow": "+{count}",
+        "coreCoverage": "Core coverage:",
+        "partialCoverage": "Partial coverage:",
+        "pinAction": "Pripnúť {region}",
+        "switchToAuto": "Prepnúť na automatický",
+        "loading": "Načítavajú sa regióny...",
+        "loadFailed": "Nepodarilo sa načítať údaje o regióne",
+        "mapUnavailable": "Mapa pokrytia nie je k dispozícii",
+        "mapAria": "Mapa pokrytia regiónu {region}",
+        "why": {
+          "noLocation": "Automatický výber vyžaduje polohu stanice. Nastavte ju v Hlavných nastaveniach; dovtedy sa používa globálny model.",
+          "outsideCoverage": "Vaša poloha je mimo pokrytia všetkých regionálnych modelov, preto sa používa globálny model.",
+          "ambiguous": "Vaša poloha je blízko hranice medzi {region} a {runnerUp}. Automatický výber používa {region}; pripnite ktorýkoľvek z nich na jednoznačnú voľbu.",
+          "resolved": "Zistený región z vašej polohy: {region}.",
+          "global": "Globálny model sa používa vždy bez ohľadu na polohu stanice.",
+          "pinned": "Pripnuté k {region}. Poloha stanice nemá vplyv na výber modelu.",
+          "pinnedMismatch": "Vaša poloha v súčasnosti zodpovedá {resolved}.",
+          "pinnedUnknown": "Pripnutý región \"{region}\" nie je dostupný v aktuálnom katalógu modelov. Rodiny modelov prejdú na vašu polohu alebo globálny model."
+        }
+      },
+      "variants": {
+        "title": "Variant modelu",
+        "recommended": "Odporúčané",
+        "recommendedForHardware": "Najlepšie pre váš hardvér",
+        "installed": "Nainštalovaný",
+        "default": "Predvolené",
+        "incompatible": "Nie je k dispozícii pre váš hardvér",
+        "showAll": "Zobraziť všetky varianty ({count})",
+        "showRegion": "Zobraziť varianty pre {region} a váš hardvér ({count})",
+        "showHardware": "Zobraziť hardvérové varianty ({count})",
+        "showAllRegions": "Zobraziť všetky varianty vrátane ostatných regiónov ({count})",
+        "regionContext": "Zobrazené regionálne varianty pre {region}, nastavené výberom regiónu modelu vyššie",
+        "regionContextNone": "K dispozícii sú regionálne varianty. Vyberte región vo výbere regiónu modelu vyššie alebo zobrazte všetky varianty.",
+        "otherRegions": "Ostatné regióny",
+        "filterPlaceholder": "Filtrovať regióny",
+        "filterAria": "Filtrovať verzie prispôsobené regiónom",
+        "filterNoMatch": "Žiadne regióny nezodpovedajú \"{query}\"",
+        "latency": "~{ms} ms",
+        "precisionInfo": "About precision and variants",
+        "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
+      },
+      "actionInProgress": "Počkajte na dokončenie prebiehajúcej inštalácie, preinštalovania alebo odstránenia modelu",
+      "removeSuccess": "Removed {name}",
+      "reasons": {
+        "backendRecommended": "Beží na {backend}, čo je odporúčaný backend pre váš hardvér",
+        "backendSupported": "Beží na {backend}",
+        "regionMatched": "Prispôsobené vášmu regiónu ({region})",
+        "regionGlobalFallback": "Globálny model pre vašu polohu",
+        "precisionFp16Native": "Verzia s polovičnou presnosťou zodpovedajúca vášmu procesoru",
+        "precisionFp16GpuPreferred": "Verzia s polovičnou presnosťou: polovičná veľkosť sťahovania, beží na vašom GPU",
+        "ramConstrainedFit": "Kvantizovaná verzia optimalizovaná pre vašu dostupnú pamäť",
+        "benchmarkMeasured": "Najrýchlejší na vašom zariadení podľa meraní výkonu",
+        "variantLegacy": "Nahradené novšou verziou",
+        "archUnsupported": "Vyžaduje procesor {required}",
+        "backendMissing": "Vyžaduje inferenčný backend, ktorý nie je dostupný ({required})",
+        "ramInsufficient": "Vyžaduje aspoň {requiredMb} MB pamäte",
+        "hardwareExcluded": "Nepodporované na vašom hardvéri ({token})",
+        "backendOnnxUnavailable": "Vyžaduje ONNX Runtime, ktorý nie je v tomto systéme k dispozícii. Obrazy Docker a archívy vydaní ho obsahujú; pozrite si návod na inštaláciu ONNX Runtime."
+      },
       "tabs": {
         "installed": "Nainštalované",
         "available": "Dostupné"
@@ -5278,7 +5416,6 @@
       "loading": "Načítavajú sa modely...",
       "retry": "Skúsiť znova",
       "builtIn": "Vstavaný",
-      "builtInDescription": "Vstavaný klasifikátor vtáčích druhov od tímu BirdNET.",
       "species": "{count} druhov",
       "install": "Inštalovať",
       "installing": "Inštaluje sa...",
@@ -5323,7 +5460,13 @@
       "errors": {
         "catalogLoadFailed": "Nepodarilo sa načítať katalóg modelov",
         "installFailed": "Nepodarilo sa spustiť inštaláciu modelu",
-        "removeFailed": "Nepodarilo sa odstrániť model"
+        "removeFailed": "Nepodarilo sa odstrániť model",
+        "actionFailed": "Vyskytol sa problém s {name}",
+        "downloadSourceHint": "Ak je huggingface.co vo vašej sieti zablokované alebo pomalé, nastavte zrkadlový server v sekcii Zdroj sťahovania nižšie.",
+        "goToDownloadSource": "Prejsť na Zdroj sťahovania",
+        "dismiss": "Zavrieť",
+        "details": "Details",
+        "removeRetryHint": "To try again, use the Remove button on the model's card."
       },
       "regionLabel": "Región",
       "speciesLabel": "Druhy",
@@ -5331,9 +5474,40 @@
       "reinstalling": "Preinštalovanie...",
       "reinstallComplete": "Súbory úspešne overené",
       "geomodelBadge": "Obsahuje BirdNET v3.0 geomodel",
-      "onnxRuntimeRequired": "Vyžaduje ONNX Runtime, ktorý nie je v tomto systéme k dispozícii.",
-      "onnxRuntimeMissing": "ONNX Runtime nie je k dispozícii. Tento model nie je možné spustiť.",
-      "unavailable": "Nedostupné"
+      "preview": {
+        "badge": "Náhľad",
+        "buildLabel": "{version} · {build}",
+        "cardNotice": "Vývojársky náhľad, nejde o finálnu verziu. Ide o rané zostavenie na testovanie; výsledky sa pred stabilnou verziou môžu zmeniť.",
+        "dialogNotice": "Inštalujete vývojársky náhľad ({build}). Je vhodný na vyskúšanie, ale zatiaľ sa neodporúča ako váš jediný klasifikátor."
+      },
+      "entryIncompatible": "Tento model nie je v tomto systéme k dispozícii.",
+      "regionGlobal": "Globálny",
+      "hardwareLabel": "Hardvér",
+      "hardware": {
+        "gpuNvidia": "GPU (NVIDIA)",
+        "gpuIntel": "GPU (Intel)",
+        "armCpu": "ARM CPU",
+        "amd64Cpu": "AMD64 CPU",
+        "arm64Cpu": "ARM64 CPU",
+        "cpu": "CPU"
+      },
+      "optimize": {
+        "bannerTitle": "{count, plural, one {# model môže bežať rýchlejšie na vašom hardvéri} few {# modely môžu bežať rýchlejšie na vašom hardvéri} many {# modelov môže bežať rýchlejšie na vašom hardvéri} other {# modelov môže bežať rýchlejšie na vašom hardvéri}}",
+        "review": "Skontrolovať",
+        "dismiss": "Zrušiť",
+        "badgeTitle": "Pre váš hardvér je k dispozícii rýchlejšie zostavenie",
+        "swap": "Optimalizovať",
+        "dialogTitle": "Optimalizovať vaše modely",
+        "installedBuild": "Installed build",
+        "fromTo": "{from} na {to}",
+        "apply": "Použiť",
+        "applyAll": "Použiť všetko",
+        "applying": "Aplikuje sa...",
+        "applied": "Použité",
+        "applyFailed": "Použitie sa nepodarilo",
+        "upToDate": "Všetky vaše modely sú už pre tento hardvér optimalizované.",
+        "licenseNote": "Výmena prebieha v rámci rovnakého modelu, takže sa jeho licencia nemení."
+      }
     },
     "bird": {
       "title": "Detekcia vtákov",
@@ -5345,6 +5519,14 @@
     },
     "dynamicThreshold": {
       "birdOnlyNote": "Dynamický prah sa vzťahuje len na klasifikátory vtákov."
+    },
+    "perch": {
+      "title": "Perch v2 Detection",
+      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+    },
+    "birdnetv3": {
+      "title": "BirdNET v3.0 Detection",
+      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
     }
   },
   "restart": {

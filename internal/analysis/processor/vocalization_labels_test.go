@@ -172,7 +172,7 @@ func TestDetectionHandlers_RecordTimestamp(t *testing.T) {
 			tt.enable(settings)
 
 			p := &Processor{
-				LastHumanDetection: make(map[string]time.Time),
+				LastHumanDetection: make(map[string]HumanDetection),
 				LastDogDetection:   make(map[string]time.Time),
 			}
 			item := classifier.Results{StartTime: start}
@@ -181,17 +181,24 @@ func TestDetectionHandlers_RecordTimestamp(t *testing.T) {
 
 			tt.record(p, settings, item, result)
 
-			target, other := p.LastHumanDetection, p.LastDogDetection
-			if !tt.isHuman {
-				target, other = p.LastDogDetection, p.LastHumanDetection
+			// The two maps carry different value types (human entries also record
+			// the trigger), so assert each branch against its own map rather than a
+			// shared target/other alias.
+			if tt.isHuman {
+				got, ok := p.LastHumanDetection[source]
+				assert.Equal(t, tt.wantStored, ok, "unexpected record state in human map")
+				if tt.wantStored {
+					assert.Equal(t, start, got.Time)
+				}
+				assert.Empty(t, p.LastDogDetection, "human handler must not write the dog map")
+			} else {
+				got, ok := p.LastDogDetection[source]
+				assert.Equal(t, tt.wantStored, ok, "unexpected record state in dog map")
+				if tt.wantStored {
+					assert.Equal(t, start, got)
+				}
+				assert.Empty(t, p.LastHumanDetection, "dog handler must not write the human map")
 			}
-
-			got, ok := target[source]
-			assert.Equal(t, tt.wantStored, ok, "unexpected record state in target map")
-			if tt.wantStored {
-				assert.Equal(t, start, got)
-			}
-			assert.Empty(t, other, "handler must not write the other filter's map")
 		})
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -72,6 +73,17 @@ type contextKey string
 // backgroundOperationKey is the context key for background operations
 const backgroundOperationKey contextKey = "background"
 
+// isBackgroundContext reports whether ctx was created by the background refresh path.
+// The key has an unexported named type, so this is the only correct way to read it:
+// context.Value compares key dynamic types, and an untyped string never matches.
+func isBackgroundContext(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	bg, ok := ctx.Value(backgroundOperationKey).(bool)
+	return ok && bg
+}
+
 // isRealError checks if an error is a genuine error (not a cache miss)
 func isRealError(err error) bool {
 	return err != nil && !errors.Is(err, ErrCacheMiss)
@@ -87,6 +99,102 @@ type ImageProvider interface {
 // This allows providers to be registered for UI discovery while being operationally inactive.
 type ProviderStatusChecker interface {
 	ShouldRefreshCache() bool
+}
+
+// contextFetcher is implemented by providers that accept a context. It is not part of
+// ImageProvider because that interface is the stable extension point for third-party
+// providers; this is an optional capability probed at call time.
+type contextFetcher interface {
+	FetchWithContext(ctx context.Context, scientificName string) (BirdImage, error)
+}
+
+// thumbnailSettings returns the dashboard thumbnail configuration, or its zero
+// value when settings are unavailable.
+//
+// conf.Setting() returns nil when the configuration fails to load, and a hot
+// reload can publish nil, so every read in this package has to tolerate it.
+// Several sites dereferenced the result directly, which panics on a path that
+// is reachable from any non-main entry point.
+func thumbnailSettings() conf.Thumbnails {
+	settings := conf.Setting()
+	if settings == nil {
+		return conf.Thumbnails{}
+	}
+	return settings.Realtime.Dashboard.Thumbnails
+}
+
+// normalizedFallbackPolicy reads the configured fallback policy, trimmed and
+// lowercased, so that "All" or a stray trailing space is not read as "off".
+func normalizedFallbackPolicy() string {
+	return normalizeProviderName(thumbnailSettings().FallbackPolicy)
+}
+
+// normalizeProviderName folds a configured provider name for comparison.
+func normalizeProviderName(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
+}
+
+// normalizedImageProvider reads the configured image provider, folded.
+//
+// It exists for the same reason as normalizedFallbackPolicy: the fetch gate and
+// the refresh gate must agree about which provider is configured, and they
+// previously each folded the field their own way. The refresh gate has to stay
+// a subset of the fetch gate, and two independent normalizations are how that
+// relationship silently breaks.
+func normalizedImageProvider() string {
+	return normalizeProviderName(thumbnailSettings().ImageProvider)
+}
+
+// fetchFromProvider calls the provider's context-aware Fetch when it has one and falls
+// back to the context-free Fetch otherwise. Without this, a cancelled caller still
+// waits out the provider's full retry and rate-limit budget.
+//
+// A provider that only implements the context-free Fetch cannot be interrupted, so its
+// call runs on its own goroutine and the caller abandons it when ctx is done. That
+// goroutine may outlive the caller, but the alternative is worse: every waiter,
+// including Close's WaitGroup and one of the bounded prefetch slots, would be held for
+// as long as a third-party provider chooses to block. The abandoned result is dropped
+// via a buffered channel so the goroutine always completes rather than parking on an
+// unread send.
+func fetchFromProvider(ctx context.Context, provider ImageProvider, scientificName string) (BirdImage, error) {
+	if ctxProvider, ok := provider.(contextFetcher); ok {
+		return ctxProvider.FetchWithContext(ctx, scientificName)
+	}
+
+	type fetchOutcome struct {
+		img BirdImage
+		err error
+	}
+	done := make(chan fetchOutcome, 1)
+	go func() {
+		// This goroutine can outlive its caller, so a panic here has no request
+		// handler above it to recover: it would take the process down. The
+		// startup warm-up installs the same guard around this call.
+		defer func() {
+			if r := recover(); r != nil {
+				GetLogger().Error("Recovered from a panic in an image provider fetch",
+					logger.String("scientific_name", scientificName),
+					logger.Any("panic", r))
+				done <- fetchOutcome{err: errors.Newf("image provider panicked: %v", r).
+					Component("imageprovider").
+					Category(errors.CategoryImageProvider).
+					Context("scientific_name", scientificName).
+					Build()}
+			}
+		}()
+		img, err := provider.Fetch(scientificName)
+		done <- fetchOutcome{img: img, err: err}
+	}()
+
+	select {
+	case outcome := <-done:
+		return outcome.img, outcome.err
+	case <-ctx.Done():
+		GetLogger().Debug("Abandoning a context-free provider fetch after cancellation",
+			logger.String("scientific_name", scientificName),
+			logger.Error(ctx.Err()))
+		return BirdImage{}, ctx.Err()
+	}
 }
 
 // BirdImage represents a cached bird image with its metadata and attribution information
@@ -149,9 +257,13 @@ type BirdImageCache struct {
 	// (and the refresh path short-circuits too) without touching the DB, so the cache continues
 	// to serve fresh fetches from the provider instead of generating an
 	// unbounded stream of Sentry events (Forgejo #762, BIRDNET-GO-ZR/ZS).
-	dbCorrupted  atomic.Bool
-	wg           sync.WaitGroup                        // Tracks in-flight DB and background operations
-	Initializing sync.Map                              // Track which species are being initialized
+	dbCorrupted atomic.Bool
+	wg          sync.WaitGroup // Tracks in-flight DB and background operations
+	// initializing holds the per-species initialization lock (see initLock). It is
+	// unexported because its value is a synchronization primitive whose type is an
+	// implementation detail: exporting it invited an unchecked type assertion on a map
+	// any caller could write a different type into.
+	initializing sync.Map
 	registry     atomic.Pointer[ImageProviderRegistry] // Use atomic pointer
 	// exhaustedSpecies tracks species whose primary + fallback providers have
 	// all returned "not found" within the current TTL window. It maps a
@@ -160,6 +272,47 @@ type BirdImageCache struct {
 	// "Human vocal" that no image provider will ever resolve, eliminating
 	// repeated SQLite reads on every detection cycle.
 	exhaustedSpecies sync.Map
+	// bgCtx is the parent context for every fetch this cache runs on its own
+	// goroutines. It is deliberately detached from any request context: a
+	// prefetch scheduled by an HTTP handler must outlive the response, which a
+	// derived request context would not. bgCancel runs first in Close() so
+	// wg.Wait() cannot block for the full prefetchTimeout.
+	bgCtx    context.Context
+	bgCancel context.CancelFunc
+	// prefetching deduplicates in-flight background prefetches by scientific
+	// name, so a dashboard asking for thirty uncached thumbnails schedules at
+	// most one fetch per species rather than one per request.
+	prefetching sync.Map
+	// recentAttempts maps a scientific name to the time.Time its last background
+	// resolution failed. It is the backoff the retry contract needs: the proxy
+	// answers 503 + Retry-After and the client polls, so without it every poll
+	// scheduled a fresh goroutine and a fresh provider attempt, and the retry
+	// rate was set by the client rather than by us.
+	recentAttempts sync.Map
+	// dbAbsent maps a scientific name to the time.Time a database read last found
+	// no row for it at all. It exists to keep the same client polling from
+	// costing one SQLite SELECT per poll for a species nothing is known about.
+	//
+	// Deliberately recorded only on that exact observation, and not on "a
+	// resolution is in progress": a species with a stale but perfectly servable
+	// row also has a refresh in flight, and suppressing its database read would
+	// answer 503 for an image we hold.
+	dbAbsent sync.Map
+	// recentAttemptsCount and dbAbsentCount count insertions since each map was
+	// last cleared, so the maps can be bounded without per-entry accounting.
+	// See maxMarkerEntries for why a bound is needed at all.
+	recentAttemptsCount atomic.Int64
+	dbAbsentCount       atomic.Int64
+	// prefetchQueued counts registered prefetches (queued plus running) so an
+	// unbounded species list cannot spawn an unbounded number of goroutines.
+	prefetchQueued atomic.Int64
+	// refreshQueued does the same for background refreshes of entries that were
+	// served from cache. See maxQueuedRefreshes for why it is a separate budget.
+	refreshQueued atomic.Int64
+	// prefetchSem bounds how many prefetches contact a provider at once. The
+	// providers are themselves rate limited, so a small number is enough to keep
+	// the pipeline busy without piling up connections.
+	prefetchSem chan struct{}
 }
 
 // GetFileCache returns the file cache instance, or nil if not configured.
@@ -172,10 +325,21 @@ func (c *BirdImageCache) GetProviderName() string {
 	return c.providerName
 }
 
+// proxyImagePathPrefix is the route prefix ProxyImageURL builds on.
+const proxyImagePathPrefix = "/api/v2/media/image/"
+
 // ProxyImageURL generates the proxy URL for serving a cached bird image.
+//
+// An empty or whitespace-only name yields an empty string rather than
+// "/api/v2/media/image/", which matches no route and which the handler answers with
+// 400. Guarding at this single choke point covers every producer, several of which
+// emit the URL unconditionally and have no name check of their own.
 func ProxyImageURL(scientificName string) string {
-	encoded := url.PathEscape(scientificName)
-	return fmt.Sprintf("/api/v2/media/image/%s", encoded)
+	trimmed := strings.TrimSpace(scientificName)
+	if trimmed == "" {
+		return ""
+	}
+	return proxyImagePathPrefix + url.PathEscape(trimmed)
 }
 
 // GetLogger returns the package logger for the imageprovider module
@@ -207,12 +371,29 @@ const (
 	negativeEntryMarker = "__NOT_FOUND__"           // Special URL marker for negative cache entries
 
 	// Configuration constants
-	fallbackPolicyAll = "all" // Fallback policy to allow all providers
+	fallbackPolicyAll = "all"  // Fallback policy to allow all providers
+	providerAuto      = "auto" // Image provider setting meaning "pick one"
 
 	// Performance threshold constants
 	dbCacheLookupSlowThreshold = 50 * time.Millisecond  // Threshold for slow DB cache lookups
 	providerFetchSlowThreshold = 100 * time.Millisecond // Threshold for slow provider fetch operations
 	totalFetchSlowThreshold    = 200 * time.Millisecond // Threshold for slow total fetch operations
+
+	// Background prefetch constants.
+	//
+	// prefetchTimeout bounds one background species fetch. It is generous
+	// because the worst realistic case is three MediaWiki calls behind a
+	// process-global 1 req/s limiter, each retried with backoff; the point of
+	// the bound is that a fetch cannot live forever, not that it be quick.
+	prefetchTimeout = 3 * time.Minute
+	// maxConcurrentPrefetches bounds provider concurrency. The Wikipedia
+	// provider serializes on a 1 req/s global limiter regardless, so a larger
+	// number would only park more goroutines on the same lock.
+	maxConcurrentPrefetches = 4
+	// maxQueuedPrefetches caps registered-but-unfinished prefetches. It is a
+	// backstop against a pathological caller (a page listing thousands of
+	// species), not an expected limit.
+	maxQueuedPrefetches = 256
 )
 
 // fallbackProviders defines the ordered list of providers to try when the primary provider fails.
@@ -478,6 +659,45 @@ func (c *BirdImageCache) processStaleEntriesInBatches(staleEntries []string) {
 	}
 }
 
+// maxQueuedRefreshes bounds background refreshes of entries that were served
+// from cache.
+//
+// Refreshes do not pass through the prefetch semaphore, so without a bound a
+// dashboard rendering many stale species spawns one goroutine per species, each
+// parked on the provider's global rate limiter. The bound is separate from
+// maxQueuedPrefetches rather than shared with it so a burst of refreshes cannot
+// starve the prefetches that resolve species nothing is known about, which are
+// what a user is actually waiting on.
+const maxQueuedRefreshes = 64
+
+// scheduleRefresh registers a background refresh for a species already served
+// from cache, deduplicated against any prefetch already in flight. The dedup
+// entry and the queue slot are both rolled back if the goroutine could not be
+// started, so a species is never left marked as refreshing when nothing is.
+//
+// Declining is safe: the entry was served, and the hourly sweep and the next
+// request both remain able to refresh it.
+func (c *BirdImageCache) scheduleRefresh(scientificName string) {
+	if _, alreadyQueued := c.prefetching.LoadOrStore(scientificName, struct{}{}); alreadyQueued {
+		return
+	}
+	if c.refreshQueued.Add(1) > maxQueuedRefreshes {
+		c.refreshQueued.Add(-1)
+		c.prefetching.Delete(scientificName)
+		return
+	}
+	if !c.tryGo(func() {
+		defer func() {
+			c.refreshQueued.Add(-1)
+			c.prefetching.Delete(scientificName)
+		}()
+		c.refreshEntry(scientificName)
+	}) {
+		c.refreshQueued.Add(-1)
+		c.prefetching.Delete(scientificName)
+	}
+}
+
 // refreshEntry refreshes a single cache entry
 func (c *BirdImageCache) refreshEntry(scientificName string) {
 	log := GetLogger().With(
@@ -502,20 +722,10 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 	// Fetch new image with background context to use more restrictive rate limiting
 	log.Debug("Fetching new image data from provider (background refresh)")
 
-	// Check if provider supports context-aware fetching
-	var birdImage BirdImage
-	var err error
-
-	if ctxProvider, ok := provider.(interface {
-		FetchWithContext(ctx context.Context, scientificName string) (BirdImage, error)
-	}); ok {
-		// Use background context for refresh operations
-		ctx := context.WithValue(context.Background(), backgroundOperationKey, true)
-		birdImage, err = ctxProvider.FetchWithContext(ctx, scientificName)
-	} else {
-		// Fallback to regular fetch
-		birdImage, err = provider.Fetch(scientificName)
-	}
+	// Refreshes are marked as background operations so the provider applies its
+	// more conservative background rate limiter on top of the global one.
+	ctx := context.WithValue(c.backgroundContext(), backgroundOperationKey, true)
+	birdImage, err := fetchFromProvider(ctx, provider, scientificName)
 
 	if err != nil {
 		// Check if it's already an enhanced error, if not enhance it
@@ -611,8 +821,7 @@ func (c *BirdImageCache) tryRefreshFallback(scientificName string) (BirdImage, b
 		logger.String("provider", c.providerName),
 		logger.String("scientific_name", scientificName))
 
-	settings := conf.Setting()
-	if settings.Realtime.Dashboard.Thumbnails.FallbackPolicy != fallbackPolicyAll {
+	if normalizedFallbackPolicy() != fallbackPolicyAll {
 		return BirdImage{}, false
 	}
 
@@ -654,7 +863,7 @@ func (c *BirdImageCache) tryRefreshFallback(scientificName string) (BirdImage, b
 	// Tier 2: Fetch from fallback providers via network (only if DB had nothing valid)
 	log.Debug("Background refresh: no valid fallback in DB, trying network fetch")
 	triedProviders := map[string]bool{c.providerName: true}
-	return c.tryFallbackProviders(scientificName, triedProviders)
+	return c.tryFallbackProviders(c.backgroundContext(), scientificName, triedProviders)
 }
 
 // Close stops the cache refresh routine, waits for in-flight DB operations to
@@ -677,6 +886,13 @@ func (c *BirdImageCache) Close() error {
 	}
 	c.closed.Store(true)
 	c.closeMu.Unlock()
+
+	// Cancel background fetches before waiting on the WaitGroup. A prefetch may be
+	// parked on the provider's rate limiter for minutes; without this, Close would
+	// block for the full prefetchTimeout.
+	if c.bgCancel != nil {
+		c.bgCancel()
+	}
 
 	if c.quit != nil {
 		log.Debug("Closing quit channel")
@@ -709,7 +925,6 @@ func (c *BirdImageCache) tryGo(fn func()) bool {
 func InitCache(providerName string, e ImageProvider, t *observability.Metrics, store datastore.Interface) *BirdImageCache {
 	log := GetLogger().With(logger.String("provider", providerName))
 	log.Info("Initializing image cache")
-	settings := conf.Setting()
 
 	quit := make(chan struct{})
 
@@ -718,13 +933,18 @@ func InitCache(providerName string, e ImageProvider, t *observability.Metrics, s
 		imageProviderMetrics = t.ImageProvider
 	}
 
+	bgCtx, bgCancel := context.WithCancel(context.Background())
+
 	cache := &BirdImageCache{
 		providerName: providerName, // Set provider name
 		metrics:      imageProviderMetrics,
-		debug:        settings.Realtime.Dashboard.Thumbnails.Debug, // Keep for potential checks
+		debug:        thumbnailSettings().Debug, // Keep for potential checks
 		store:        store,
 		fileCache:    NewImageFileCache(imageCacheDir),
 		quit:         quit,
+		bgCtx:        bgCtx,
+		bgCancel:     bgCancel,
+		prefetchSem:  make(chan struct{}, maxConcurrentPrefetches),
 	}
 
 	// Store the provider using atomic pointer
@@ -1031,14 +1251,24 @@ func (c *BirdImageCache) checkCachedEntryAfterLock(scientificName string, log lo
 		return BirdImage{}, false, false, nil
 	}
 
+	cutoff := time.Now().Add(-imgPtr.GetTTL())
+	expired := imgPtr.CachedAt.Before(cutoff)
+
 	if !imgPtr.IsNegativeEntry() {
+		// A stale positive entry is still served, exactly as a stale DB row is;
+		// the caller schedules the refresh that re-derives it. Deleting it here
+		// instead would make every request for a species older than the TTL pay
+		// a fresh SQLite read, because the DB row is the same age and gets
+		// promoted back into memory with the same timestamp, so the next lookup
+		// expires it again. That loop never converges while the provider is
+		// unreachable, and on a store-less or corruption-latched cache it would
+		// discard the only copy of the image the process has.
 		log.Debug("Initialization check: found in memory cache after acquiring lock")
 		return *imgPtr, true, false, nil
 	}
 
 	// Handle negative entry
-	cutoff := time.Now().Add(-imgPtr.GetTTL())
-	if imgPtr.CachedAt.Before(cutoff) {
+	if expired {
 		log.Debug("Negative cache entry expired, removing from memory")
 		c.dataMap.Delete(scientificName)
 		return BirdImage{}, false, false, nil
@@ -1048,23 +1278,19 @@ func (c *BirdImageCache) checkCachedEntryAfterLock(scientificName string, log lo
 	return BirdImage{}, true, true, imageNotFoundFor(scientificName, c.providerName, "negative_cache_hit")
 }
 
-// tryInitialize ensures only one goroutine initializes a species image using mutexes.
-// It returns the image, a boolean indicating if it was found in cache (true) or fetched (false), and an error.
-func (c *BirdImageCache) tryInitialize(scientificName string) (BirdImage, bool, error) {
+// tryInitialize ensures only one goroutine initializes a species image using a
+// per-species lock. It returns the image, a boolean indicating if it was found in
+// cache (true) or fetched (false), and an error.
+func (c *BirdImageCache) tryInitialize(ctx context.Context, scientificName string) (BirdImage, bool, error) {
 	log := GetLogger().With(
 		logger.String("provider", c.providerName),
 		logger.String("scientific_name", scientificName))
 
-	muInterface, _ := c.Initializing.LoadOrStore(scientificName, &sync.Mutex{})
-	mu := muInterface.(*sync.Mutex)
-	mu.Lock()
-	// Do not delete the mutex from the map on unlock. A goroutine that has already
-	// run LoadOrStore but not yet acquired the lock holds a reference to this
-	// mutex; deleting it lets a later goroutine LoadOrStore a fresh mutex and fetch
-	// concurrently with that waiter, defeating the single-initialization guarantee.
-	// The map is bounded by the number of distinct species ever queried, so the
-	// retained mutexes are a negligible, fixed cost.
-	defer mu.Unlock()
+	release, err := c.acquireInitLock(ctx, scientificName)
+	if err != nil {
+		return BirdImage{}, false, err
+	}
+	defer release()
 
 	log.Debug("Acquired initialization lock")
 
@@ -1074,8 +1300,58 @@ func (c *BirdImageCache) tryInitialize(scientificName string) (BirdImage, bool, 
 	}
 
 	log.Debug("Not in cache after lock, proceeding to fetch/store")
-	img, err = c.fetchAndStore(scientificName)
+	img, err = c.fetchAndStore(ctx, scientificName)
 	return img, false, err
+}
+
+// initLock returns the per-species initialization lock, creating it on first use.
+//
+// A buffered channel is used rather than a sync.Mutex so that waiting for the lock
+// can be abandoned when the caller's context is cancelled. Without that, a request
+// arriving while another goroutine holds the lock inherits the holder's full,
+// uncancellable fetch duration.
+//
+// Do not delete the entry from the map on release. A goroutine that has already run
+// LoadOrStore but not yet acquired the lock holds a reference to this channel;
+// deleting it lets a later goroutine LoadOrStore a fresh one and fetch concurrently
+// with that waiter, defeating the single-initialization guarantee. The map is bounded
+// by the number of distinct species ever queried, so the retained channels are a
+// negligible, fixed cost.
+func (c *BirdImageCache) initLock(scientificName string) chan struct{} {
+	// Load before LoadOrStore. The channel is an argument, so LoadOrStore evaluates
+	// make() on every call even when the entry already exists, allocating a channel
+	// that is immediately garbage. Measured at 128 B / 2 allocs / ~96ns per call
+	// versus 0 B / 0 allocs / ~10ns for the Load-first form, on a path that now runs
+	// once per thumbnail request. LoadOrStore still resolves the create race.
+	if val, ok := c.initializing.Load(scientificName); ok {
+		return val.(chan struct{})
+	}
+	val, _ := c.initializing.LoadOrStore(scientificName, make(chan struct{}, 1))
+	return val.(chan struct{})
+}
+
+// acquireInitLock blocks until the per-species initialization lock is held or ctx is
+// done. The returned function releases the lock and must be called exactly once.
+func (c *BirdImageCache) acquireInitLock(ctx context.Context, scientificName string) (release func(), err error) {
+	lock := c.initLock(scientificName)
+	select {
+	case lock <- struct{}{}:
+		return func() { <-lock }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// tryAcquireInitLock acquires the per-species initialization lock without blocking.
+// A failed acquisition means another goroutine is already fetching this species.
+func (c *BirdImageCache) tryAcquireInitLock(scientificName string) (release func(), ok bool) {
+	lock := c.initLock(scientificName)
+	select {
+	case lock <- struct{}{}:
+		return func() { <-lock }, true
+	default:
+		return nil, false
+	}
 }
 
 // logInitializeError logs the initialization error if it's not ErrImageNotFound.
@@ -1100,9 +1376,8 @@ func (c *BirdImageCache) logInitializeError(err error, scientificName string, lo
 
 // tryFallbackOnGetError attempts to get the image from fallback providers on error.
 // Returns (image, found).
-func (c *BirdImageCache) tryFallbackOnGetError(err error, scientificName string, log logger.Logger) (BirdImage, bool) {
-	settings := conf.Setting()
-	if settings.Realtime.Dashboard.Thumbnails.FallbackPolicy != fallbackPolicyAll {
+func (c *BirdImageCache) tryFallbackOnGetError(ctx context.Context, err error, scientificName string, log logger.Logger) (BirdImage, bool) {
+	if normalizedFallbackPolicy() != fallbackPolicyAll {
 		log.Debug("Primary provider failed but fallback policy is 'none'",
 			logger.Error(err))
 		return BirdImage{}, false
@@ -1116,7 +1391,7 @@ func (c *BirdImageCache) tryFallbackOnGetError(err error, scientificName string,
 	triedProviders := map[string]bool{c.providerName: true}
 	log.Debug("Primary provider failed, attempting fallback (policy: all)",
 		logger.Error(err))
-	fallbackImg, found := c.tryFallbackProviders(scientificName, triedProviders)
+	fallbackImg, found := c.tryFallbackProviders(ctx, scientificName, triedProviders)
 	if found {
 		log.Debug("Image found via fallback provider",
 			logger.String("fallback_provider", fallbackImg.SourceProvider))
@@ -1127,7 +1402,18 @@ func (c *BirdImageCache) tryFallbackOnGetError(err error, scientificName string,
 }
 
 // Get retrieves a bird image from the cache, fetching if necessary.
+//
+// Get can block for as long as the provider chain takes, which for a cold species is
+// bounded only by the provider's own retry and rate-limit budget. Do NOT call it from
+// an HTTP handler or from inside a lock; use GetCached plus PrefetchAsync there.
 func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
+	return c.GetWithContext(context.Background(), scientificName)
+}
+
+// GetWithContext is Get with cancellation. The context bounds the wait for the
+// per-species initialization lock and is passed to providers that implement
+// FetchWithContext.
+func (c *BirdImageCache) GetWithContext(ctx context.Context, scientificName string) (BirdImage, error) {
 	if scientificName == "" {
 		return BirdImage{}, imageNotFoundFor("", c.providerName, "get_empty_name")
 	}
@@ -1137,7 +1423,7 @@ func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 		logger.String("scientific_name", scientificName))
 	log.Debug("Get image request received")
 
-	img, foundInCache, err := c.tryInitialize(scientificName)
+	img, foundInCache, err := c.tryInitialize(ctx, scientificName)
 	if err != nil {
 		c.logInitializeError(err, scientificName, log)
 		// If every provider has already been exhausted for this species
@@ -1157,7 +1443,7 @@ func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 			log.Debug("Species already exhausted by all providers, skipping fallback chain")
 			return c.synthesizeExhaustedResponse(scientificName)
 		}
-		if fallbackImg, found := c.tryFallbackOnGetError(err, scientificName, log); found {
+		if fallbackImg, found := c.tryFallbackOnGetError(ctx, err, scientificName, log); found {
 			return fallbackImg, nil
 		}
 		return BirdImage{}, err
@@ -1175,8 +1461,356 @@ func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 	return img, nil
 }
 
+// backgroundContext returns the cache's detached parent context for work that must
+// outlive any request. A cache assembled outside InitCache (only tests do this) has
+// none, so fall back to a plain background context rather than panicking.
+func (c *BirdImageCache) backgroundContext() context.Context {
+	if c.bgCtx == nil {
+		return context.Background()
+	}
+	return c.bgCtx
+}
+
+// GetCached resolves a species image without ever contacting a provider, so it is
+// safe on an HTTP request goroutine and inside a lock.
+//
+// It reports one of three states:
+//   - found=true, negative=false: img is a usable image (memory or DB cache).
+//   - negative=true: the species is known to have no image for now. Callers should
+//     answer "not found" rather than schedule work.
+//   - found=false, negative=false: nothing is cached. Callers should answer "try
+//     again shortly" and schedule PrefetchAsync.
+//
+// A species another goroutine is currently fetching reports not-cached rather than
+// waiting for that fetch, which is the whole point: waiting is what blocked the
+// request path.
+func (c *BirdImageCache) GetCached(scientificName string) (img BirdImage, found, negative bool) {
+	img, found, negative = c.getCachedLocal(scientificName)
+	if found || !negative {
+		return img, found, negative
+	}
+
+	// This cache says "no image". Under fallbackpolicy: all that is not the final
+	// answer, because the blocking path this replaces consulted the other registered
+	// providers on exactly this outcome (Get -> tryFallbackOnGetError). Reporting the
+	// primary's negative entry as definitive would answer 404 with a 24h browser
+	// cache for every species the primary lacks but a fallback has, permanently
+	// hiding images the user enabled fallbacks to get.
+	if normalizedFallbackPolicy() != fallbackPolicyAll {
+		return img, found, negative
+	}
+	registry := c.GetRegistry()
+	if registry == nil {
+		return img, found, negative
+	}
+
+	var fallbackImg BirdImage
+	var fallbackFound bool
+	registry.RangeProviders(func(name string, other *BirdImageCache) bool {
+		if other == nil || name == c.providerName {
+			return true
+		}
+		// getCachedLocal, not GetCached: the sweep must not recurse back into
+		// another cache's own fallback sweep.
+		if otherImg, otherFound, _ := other.getCachedLocal(scientificName); otherFound {
+			fallbackImg, fallbackFound = otherImg, true
+			return false
+		}
+		return true
+	})
+	if fallbackFound {
+		return fallbackImg, true, false
+	}
+
+	// No fallback has it cached either. Only an exhausted marker, recorded once the
+	// whole chain has actually run to completion, makes "no image" definitive.
+	// Otherwise report indeterminate so the caller schedules a prefetch, which runs
+	// the full chain including the fallbacks.
+	if c.isSpeciesExhausted(scientificName) {
+		return BirdImage{}, false, true
+	}
+	return BirdImage{}, false, false
+}
+
+// getCachedLocal resolves a species image from THIS cache's memory and DB only. It
+// never contacts a provider and never consults another registered provider.
+func (c *BirdImageCache) getCachedLocal(scientificName string) (img BirdImage, found, negative bool) {
+	if scientificName == "" {
+		return BirdImage{}, false, false
+	}
+
+	release, ok := c.tryAcquireInitLock(scientificName)
+	if !ok {
+		// A fetch is in flight. Report not-cached without scheduling anything: the
+		// in-flight fetch will populate the cache.
+		return BirdImage{}, false, false
+	}
+	defer release()
+
+	// Built here rather than at the top of the function: the early returns above are
+	// the common case once the cache is warm, and logger.With concatenates its fields
+	// eagerly with no level gate, so constructing it up front cost more than the rest
+	// of the lookup on a path that now runs once per thumbnail request.
+	log := GetLogger().With(
+		logger.String("provider", c.providerName),
+		logger.String("scientific_name", scientificName))
+
+	// checkCachedEntryAfterLock's third result is shouldReturnError, which today is
+	// true only for a valid negative entry. Named for what this function does with it.
+	memImg, foundInMemory, isNegativeEntry, _ := c.checkCachedEntryAfterLock(scientificName, log)
+	switch {
+	case isNegativeEntry:
+		return BirdImage{}, false, true
+	case foundInMemory:
+		// Serving a stale entry without scheduling its refresh would leave a
+		// wrong image resident for the process lifetime, which is the whole
+		// condition the memory TTL exists to end. Both sibling sites that serve
+		// a stale positive pair it with this same scheduling.
+		if isCacheEntryStale(memImg.CachedAt, false) {
+			log.Debug("Serving a stale memory cache entry and refreshing it in the background",
+				logger.Time("cached_at", memImg.CachedAt))
+			c.scheduleRefresh(scientificName)
+		}
+		return memImg, true, false
+	}
+
+	// Nothing in memory, and a read a moment ago found no row either. Under the
+	// 503 + Retry-After contract the client polls, so without this every poll for
+	// a species nothing is known about costs its own SQLite SELECT: on a cold
+	// dashboard with ~20 unresolved species, several per second on a 1-core Pi.
+	//
+	// The exhausted marker is re-checked here rather than skipped with the read.
+	// It is the one verdict the shortcut can lose: it is consulted inside the
+	// no-row branch below, so bypassing that branch would turn a definitive "no
+	// image" (404, cacheable) into "not resolved yet" (503 + a scheduled
+	// prefetch) for the marker's lifetime, and would skip GetCached's fallback
+	// sweep, which runs only on a negative verdict.
+	if c.dbKnownAbsent(scientificName) {
+		if c.isSpeciesExhausted(scientificName) {
+			return BirdImage{}, false, true
+		}
+		return BirdImage{}, false, false
+	}
+
+	dbImage, dbErr := c.loadFromDBCache(scientificName)
+	if isRealError(dbErr) {
+		// Do not fold a DB fault into "no image": that answer is cached by the
+		// browser for a day. Report indeterminate so the caller says "try again"
+		// instead, and make the fault visible rather than silently degrading every
+		// thumbnail request.
+		log.Warn("Error reading the image DB cache, reporting the species as unresolved",
+			logger.Error(dbErr))
+		return BirdImage{}, false, false
+	}
+	if dbImage == nil {
+		// Remember the miss so the client's polling does not repeat this read
+		// every few seconds. Only a genuine "the database answered, and it holds
+		// no row" counts: loadFromDBCache also reports a miss when it did not
+		// consult the database at all (shutting down, corruption latched, no
+		// store configured), and recording those would assert an observation
+		// that never happened and would re-arm the marker on every lookup.
+		if c.dbWasConsulted() {
+			c.recordDBAbsent(scientificName)
+		}
+
+		// Nothing is known yet. The exhausted marker is consulted only here, AFTER
+		// memory and the DB: it records that every provider failed within the TTL
+		// window, and it must never pre-empt a live cache entry for the species.
+		if c.isSpeciesExhausted(scientificName) {
+			return BirdImage{}, false, true
+		}
+		return BirdImage{}, false, false
+	}
+
+	// A row exists, so any earlier "no row" observation is stale.
+	c.dbAbsent.Delete(scientificName)
+
+	if dbImage.IsNegativeEntry() {
+		// An expired negative entry is not an answer; let the caller re-fetch.
+		if !isNonAvianClass(scientificName) && isCacheEntryStale(dbImage.CachedAt, true) {
+			return BirdImage{}, false, false
+		}
+		c.dataMap.Store(scientificName, dbImage)
+		return BirdImage{}, false, true
+	}
+
+	if dbImage.URL == "" {
+		return BirdImage{}, false, false
+	}
+
+	// Mirrors handleDBCacheHit: a memory miss served from the DB is a cache miss.
+	// Without this the metric would read zero, since GetCached is now the only
+	// lookup on the request, SSE and MQTT paths.
+	if c.metrics != nil {
+		c.metrics.IncrementCacheMisses()
+	}
+
+	// Promote to memory so subsequent lookups skip the DB. Stored BEFORE spawning the
+	// refresh below: the go statement is a happens-before edge, so the refresh's own
+	// store is guaranteed to land after this one and cannot be clobbered back to
+	// stale. Same ordering, and same reason, as handleDBCacheHit.
+	c.dataMap.Store(scientificName, dbImage)
+
+	// A stale entry is still served, but it must also be refreshed, exactly as the
+	// blocking path did. Callers see found=true and therefore schedule nothing
+	// themselves, so without this a stale image would only ever be corrected by the
+	// hourly sweep.
+	if isCacheEntryStale(dbImage.CachedAt, false) {
+		log.Debug("Serving a stale DB cache entry and refreshing it in the background",
+			logger.Time("cached_at", dbImage.CachedAt))
+		c.scheduleRefresh(scientificName)
+	}
+
+	return *dbImage, true, false
+}
+
+// PrefetchAsync resolves a species image on a background goroutine and, on success,
+// makes sure its bytes are on disk. It never blocks the caller and is deduplicated by
+// species, so thirty concurrent requests for the same cold species schedule one fetch.
+//
+// It returns true when a prefetch is now in flight for the species (whether scheduled
+// by this call or already running).
+func (c *BirdImageCache) PrefetchAsync(scientificName string) bool {
+	if scientificName == "" {
+		return false
+	}
+	if c.closed.Load() {
+		return false
+	}
+	// A cache assembled outside InitCache (only tests do this) has neither the
+	// bounding semaphore nor the cancellable parent context, so a prefetch there
+	// would be unbounded and un-stoppable. Decline rather than degrade.
+	if c.prefetchSem == nil || c.bgCtx == nil {
+		return false
+	}
+	// The previous attempt failed too recently to be worth repeating. Without
+	// this the client's retry schedule became the provider retry schedule, since
+	// nothing but a not-found answer was ever recorded.
+	if c.recentlyAttempted(scientificName) {
+		return false
+	}
+
+	// Reserve a queue slot BEFORE claiming the dedup entry. Claiming first would let a
+	// second caller be told "already queued" by the very registration that is about to
+	// be rolled back for exceeding the cap, so the species would be reported as in
+	// flight while nothing ran.
+	if c.prefetchQueued.Add(1) > maxQueuedPrefetches {
+		c.prefetchQueued.Add(-1)
+		GetLogger().Debug("Prefetch queue is full, dropping request",
+			logger.String("provider", c.providerName),
+			logger.String("scientific_name", scientificName),
+			logger.Int("max_queued", maxQueuedPrefetches))
+		return false
+	}
+
+	if _, alreadyQueued := c.prefetching.LoadOrStore(scientificName, struct{}{}); alreadyQueued {
+		c.prefetchQueued.Add(-1)
+		return true
+	}
+
+	// Only now, past both early returns, is the logger worth building: it is captured
+	// by the goroutine below and used for the whole prefetch.
+	log := GetLogger().With(
+		logger.String("provider", c.providerName),
+		logger.String("scientific_name", scientificName))
+
+	scheduled := c.tryGo(func() {
+		defer func() {
+			c.prefetchQueued.Add(-1)
+			c.prefetching.Delete(scientificName)
+		}()
+		c.runPrefetch(scientificName, log)
+	})
+	if !scheduled {
+		c.prefetchQueued.Add(-1)
+		c.prefetching.Delete(scientificName)
+		return false
+	}
+	return true
+}
+
+// runPrefetch performs one background species resolution. It runs on a goroutine
+// tracked by the cache WaitGroup, so every wait it performs must be cancellable via
+// bgCtx or Close would hang.
+func (c *BirdImageCache) runPrefetch(scientificName string, log logger.Logger) {
+	// A provider panic on this goroutine has no handler above it to recover.
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error("Recovered from a panic during a background image prefetch",
+				logger.Any("panic", r))
+		}
+	}()
+
+	bg := c.backgroundContext()
+	if c.prefetchSem != nil {
+		select {
+		case c.prefetchSem <- struct{}{}:
+			defer func() { <-c.prefetchSem }()
+		case <-bg.Done():
+			return
+		}
+	}
+
+	// Another goroutine is already fetching this species (a foreground Get, or the
+	// hourly refresh sweep). GetCached reports "not cached" while that lock is held,
+	// so the handler schedules a prefetch that would otherwise sit on one of the few
+	// slots for the whole prefetchTimeout waiting for work that is already underway.
+	if release, ok := c.tryAcquireInitLock(scientificName); ok {
+		release()
+	} else {
+		log.Debug("Skipping prefetch: a fetch for this species is already in flight")
+		return
+	}
+
+	// The timeout starts here rather than at scheduling time so a request queued
+	// behind the semaphore is not charged for its wait.
+	ctx, cancel := context.WithTimeout(bg, prefetchTimeout)
+	defer cancel()
+
+	img, err := c.GetWithContext(ctx, scientificName)
+	if err != nil {
+		// A not-found answer is already durable in the negative cache; anything
+		// else is a failed attempt and needs its own short backoff, or the next
+		// client poll schedules an identical attempt immediately.
+		//
+		// Cancellation, and only cancellation, is exempt: ctx is bgCtx plus
+		// prefetchTimeout, so a Canceled means this cache is shutting down and
+		// recording it would back the species off for the first 30 seconds of
+		// the next run. A DeadlineExceeded is the opposite case - the provider
+		// chain took longer than prefetchTimeout, which is a hung or throttled
+		// upstream and precisely what the backoff is for.
+		if !errors.Is(ctx.Err(), context.Canceled) && !errors.Is(err, ErrImageNotFound) {
+			c.recordFailedAttempt(scientificName)
+		}
+		log.Debug("Background image prefetch did not resolve", logger.Error(err))
+		return
+	}
+	c.clearResolutionMarkers(scientificName)
+	if img.URL == "" || img.IsNegativeEntry() || c.fileCache == nil {
+		return
+	}
+
+	provider := img.SourceProvider
+	if provider == "" {
+		provider = c.providerName
+	}
+
+	// storeSuccessfulFetch already downloads the bytes for a freshly fetched image,
+	// so only download here when the file is actually missing or stale. Without this
+	// check a cache hit in GetWithContext would re-download on every prefetch.
+	if path, _, fresh, getErr := c.fileCache.Get(provider, scientificName); getErr == nil && path != "" && fresh {
+		return
+	}
+
+	if _, _, dlErr := c.fileCache.DownloadAndStore(ctx, provider, scientificName, img.URL); dlErr != nil {
+		log.Info("Background image prefetch failed to download image bytes", logger.Error(dlErr))
+		return
+	}
+	log.Debug("Background image prefetch completed")
+}
+
 // fetchAndStore tries to load from DB, then fetches from the provider if necessary, and stores the result.
-func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error) {
+func (c *BirdImageCache) fetchAndStore(ctx context.Context, scientificName string) (BirdImage, error) {
 	fetchStart := time.Now()
 	log := GetLogger().With(
 		logger.String("provider", c.providerName),
@@ -1203,7 +1837,7 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 	}
 
 	// 2. Not in DB or DB load failed, fetch from the actual provider
-	return c.fetchSingleFromProvider(scientificName, fetchStart)
+	return c.fetchSingleFromProvider(ctx, scientificName, fetchStart)
 }
 
 // getDBCacheError returns the appropriate error for a DB cache result.
@@ -1237,9 +1871,7 @@ func (c *BirdImageCache) handleDBCacheHit(scientificName string, dbImage *BirdIm
 	if isCacheEntryStale(dbImage.CachedAt, false) {
 		log.Debug("DB cache entry is stale, returning stale data and triggering background refresh",
 			logger.Time("cached_at", dbImage.CachedAt))
-		c.tryGo(func() {
-			c.refreshEntry(scientificName)
-		})
+		c.scheduleRefresh(scientificName)
 	} else {
 		log.Debug("Image loaded from DB cache")
 	}
@@ -1270,7 +1902,7 @@ func (c *BirdImageCache) handleNegativeDBEntry(scientificName string, dbImage *B
 }
 
 // fetchSingleFromProvider fetches an image from the provider when not found in cache.
-func (c *BirdImageCache) fetchSingleFromProvider(scientificName string, fetchStart time.Time) (BirdImage, error) {
+func (c *BirdImageCache) fetchSingleFromProvider(ctx context.Context, scientificName string, fetchStart time.Time) (BirdImage, error) {
 	log := GetLogger().With(
 		logger.String("provider", c.providerName),
 		logger.String("scientific_name", scientificName))
@@ -1282,7 +1914,7 @@ func (c *BirdImageCache) fetchSingleFromProvider(scientificName string, fetchSta
 	}
 
 	providerStart := time.Now()
-	fetchedImage, fetchErr := provider.Fetch(scientificName)
+	fetchedImage, fetchErr := fetchFromProvider(ctx, provider, scientificName)
 	providerDuration := time.Since(providerStart)
 
 	c.logSlowOperation("Provider fetch", scientificName, providerDuration, providerFetchSlowThreshold)
@@ -1358,21 +1990,14 @@ func (c *BirdImageCache) enhanceFetchError(fetchErr error, scientificName string
 		if _, hasName := enhancedErr.Context["scientific_name"]; hasName {
 			return enhancedErr
 		}
-		// Missing context — wrap in a new error preserving the original category
-		// to avoid changing CategoryNetwork to CategoryImageFetch (which would
-		// cause false positives in errors.Is(err, ErrImageNotFound))
-		return errors.New(fetchErr).
-			Component("imageprovider").
-			Category(enhancedErr.Category).
-			Context("provider", c.providerName).
-			Context("scientific_name", scientificName).
-			Context("operation", "provider_fetch").
-			Build()
 	}
-	// Plain error — wrap with full context
+
+	// Wrap with full context, preserving whatever category the cause carries so
+	// a CategoryNetwork throttle is not re-tagged as CategoryImageFetch (which
+	// would cause false positives in errors.Is(err, ErrImageNotFound)).
 	return errors.New(fetchErr).
 		Component("imageprovider").
-		Category(errors.CategoryImageFetch).
+		Category(causeCategory(fetchErr, errors.CategoryImageFetch)).
 		Context("provider", c.providerName).
 		Context("scientific_name", scientificName).
 		Context("operation", "provider_fetch").
@@ -1448,7 +2073,7 @@ func (c *BirdImageCache) downloadImageToFileCache(scientificName string, img *Bi
 		provider = c.providerName
 	}
 
-	if _, _, err := c.fileCache.DownloadAndStore(context.Background(), provider, scientificName, img.URL); err != nil {
+	if _, _, err := c.fileCache.DownloadAndStore(c.backgroundContext(), provider, scientificName, img.URL); err != nil {
 		// File cache populates lazily; the image is already in the in-memory and
 		// DB caches, so a download failure here just means the proxy will refetch
 		// on the next request. Logged at info to keep the diagnostics health
@@ -1525,6 +2150,110 @@ func (c *BirdImageCache) isSpeciesExhausted(scientificName string) bool {
 	return true
 }
 
+// recentAttemptTTL bounds how often a species whose last background resolution
+// failed is attempted again, and how long a database miss for it is trusted.
+//
+// It is deliberately much shorter than negativeCacheTTL: a negative entry means
+// "the providers answered, and the answer is no image", which is durable, while
+// these markers mean "the attempt failed" and "there was no row a moment ago",
+// which are both usually transient.
+const recentAttemptTTL = 30 * time.Second
+
+// markerLive reports whether a marker map holds a timestamp for this species
+// that is still within recentAttemptTTL, expiring it lazily if not.
+func markerLive(markers *sync.Map, scientificName string) bool {
+	if scientificName == "" {
+		return false
+	}
+	v, ok := markers.Load(scientificName)
+	if !ok {
+		return false
+	}
+	stamp, ok := v.(time.Time)
+	if !ok {
+		// Defensive: unexpected type, drop the bogus entry.
+		markers.Delete(scientificName)
+		return false
+	}
+	if time.Since(stamp) > recentAttemptTTL {
+		markers.Delete(scientificName) // lazy expiration
+		return false
+	}
+	return true
+}
+
+// maxMarkerEntries bounds each marker map.
+//
+// The keys are scientific names supplied by the caller: the media endpoints
+// hand the client's string straight to GetCached and PrefetchAsync, so the key
+// space is request traffic rather than the model's label set, and a marker map
+// with only lazy expiry would grow at request rate. Measured at ~150 B per
+// distinct name, an unbounded map reaches ~100 MB in 250k distinct requests,
+// which a 512 MB target does not survive.
+//
+// Both markers are pure optimizations: declining to record one, or dropping the
+// whole set, only costs a database read or an earlier retry. So the bound is
+// enforced by clearing rather than by evicting, which needs no per-entry
+// accounting and cannot itself become a source of error.
+const maxMarkerEntries = 8192
+
+// recordMarker stamps a marker map, clearing it whole once the insertion count
+// since the last clear passes the bound.
+//
+// count is not the live size: deletions do not decrement it, and concurrent
+// callers can both trip the bound and clear. So the map is kept near the bound
+// rather than strictly under it, which is all that is needed here, since both
+// markers are optimizations whose loss costs one database read.
+func recordMarker(markers *sync.Map, count *atomic.Int64, scientificName string) {
+	if scientificName == "" {
+		return
+	}
+	if count.Add(1) > maxMarkerEntries {
+		markers.Clear()
+		count.Store(1)
+	}
+	markers.Store(scientificName, time.Now())
+}
+
+// recordFailedAttempt notes that a background resolution for this species just
+// failed, so the next attempt is deferred by recentAttemptTTL.
+func (c *BirdImageCache) recordFailedAttempt(scientificName string) {
+	recordMarker(&c.recentAttempts, &c.recentAttemptsCount, scientificName)
+}
+
+// clearResolutionMarkers drops both short-lived markers after a resolution
+// succeeds, so neither the prefetch backoff nor the database-miss shortcut
+// outlives the condition it was recorded for.
+func (c *BirdImageCache) clearResolutionMarkers(scientificName string) {
+	c.recentAttempts.Delete(scientificName)
+	c.dbAbsent.Delete(scientificName)
+}
+
+// recentlyAttempted reports whether a background resolution for this species
+// failed within the backoff window.
+func (c *BirdImageCache) recentlyAttempted(scientificName string) bool {
+	return markerLive(&c.recentAttempts, scientificName)
+}
+
+// dbWasConsulted reports whether a database read could actually have reached the
+// store. loadFromDBCache reports the same ErrCacheMiss whether the row is
+// genuinely absent or the read never happened, and only the former is an
+// observation about the species.
+func (c *BirdImageCache) dbWasConsulted() bool {
+	return c.store != nil && !c.closed.Load() && !c.dbCorrupted.Load()
+}
+
+// recordDBAbsent notes that a database read found no row for this species.
+func (c *BirdImageCache) recordDBAbsent(scientificName string) {
+	recordMarker(&c.dbAbsent, &c.dbAbsentCount, scientificName)
+}
+
+// dbKnownAbsent reports whether a recent database read found no row for this
+// species, so the request path can answer "unresolved" without repeating it.
+func (c *BirdImageCache) dbKnownAbsent(scientificName string) bool {
+	return markerLive(&c.dbAbsent, scientificName)
+}
+
 // synthesizeExhaustedResponse returns the short-circuit response used when a
 // species is already known to be exhausted. It mirrors the value returned by
 // the primary-provider negative path so callers do not need to distinguish
@@ -1534,7 +2263,7 @@ func (c *BirdImageCache) synthesizeExhaustedResponse(scientificName string) (Bir
 }
 
 // tryFallbackProviders attempts to get the image from other registered providers.
-func (c *BirdImageCache) tryFallbackProviders(scientificName string, triedProviders map[string]bool) (BirdImage, bool) {
+func (c *BirdImageCache) tryFallbackProviders(ctx context.Context, scientificName string, triedProviders map[string]bool) (BirdImage, bool) {
 	log := GetLogger().With(logger.String("scientific_name", scientificName))
 	log.Debug("Trying fallback providers")
 	registry := c.GetRegistry()
@@ -1574,7 +2303,7 @@ func (c *BirdImageCache) tryFallbackProviders(scientificName string, triedProvid
 
 		// Instead of calling Get (which would recursively try fallbacks), use fetchAndStore directly
 		// to avoid the fallback chain and potential infinite loop
-		img, err := cache.fetchAndStore(scientificName)
+		img, err := cache.fetchAndStore(ctx, scientificName)
 		if err != nil {
 			if errors.Is(err, ErrImageNotFound) {
 				log.Info("Fallback provider has no image",
@@ -1616,14 +2345,17 @@ func (c *BirdImageCache) tryFallbackProviders(scientificName string, triedProvid
 		//
 		// CORRECTNESS GATE: only record exhaustion when at least one
 		// fallback was actually tried AND every failure was an
-		// ErrImageNotFound. The caller (Get -> tryFallbackOnGetError) only
-		// invokes this function after the primary returned
-		// ErrImageNotFound, so by construction every observed error in
-		// this run is "not found" when allFallbacksNotFound is true.
-		// Without this gate, a transient outage on a fallback (network
-		// timeout, DB error, provider init failure) would mask the
-		// species for the full TTL window, hiding real issues and
-		// suppressing legitimate retries.
+		// ErrImageNotFound.
+		//
+		// The gate cannot be relaxed on the premise that the primary already
+		// returned ErrImageNotFound: Get calls tryFallbackOnGetError for any
+		// primary error, not only a not-found one. Only the sole consumer's own
+		// additional check keeps that premise true today, so the gate is what
+		// actually guarantees it here.
+		//
+		// Without it, a transient outage on a fallback (network timeout, DB
+		// error, provider init failure) would mask the species for the full TTL
+		// window, hiding real issues and suppressing legitimate retries.
 		if anyFallbackTried && allFallbacksNotFound {
 			c.recordSpeciesExhausted(scientificName)
 		}
@@ -1645,9 +2377,12 @@ func (img *BirdImage) EstimateSize() int {
 	return size
 }
 
-// MemoryUsage estimates the total memory usage of the cache maps.
-// Includes both the per-species image data map and the exhausted-species
-// short-circuit map so cache metrics reflect the full footprint.
+// MemoryUsage estimates the total memory usage of the cache's per-species maps:
+// the image data map plus the three timestamp maps (exhausted species, and the
+// two short-lived resolution markers).
+//
+// The in-flight bookkeeping maps (initializing, prefetching) are not counted;
+// they hold only entries for work currently in progress.
 func (c *BirdImageCache) MemoryUsage() int {
 	totalSize := 0
 	c.dataMap.Range(func(key, value any) bool {
@@ -1659,16 +2394,18 @@ func (c *BirdImageCache) MemoryUsage() int {
 		}
 		return true
 	})
-	c.exhaustedSpecies.Range(func(key, value any) bool {
-		if scientificName, ok := key.(string); ok {
-			totalSize += len(scientificName)
-		}
-		// Each entry stores a time.Time (24 bytes on 64-bit). Use a constant
-		// here to avoid an unsafe.Sizeof import for one constant value.
-		const timeStructBytes = 24
-		totalSize += timeStructBytes
-		return true
-	})
+	// Each timestamp map entry stores a time.Time (24 bytes on 64-bit). Use a
+	// constant here to avoid an unsafe.Sizeof import for one constant value.
+	const timeStructBytes = 24
+	for _, markers := range []*sync.Map{&c.exhaustedSpecies, &c.recentAttempts, &c.dbAbsent} {
+		markers.Range(func(key, value any) bool {
+			if scientificName, ok := key.(string); ok {
+				totalSize += len(scientificName)
+			}
+			totalSize += timeStructBytes
+			return true
+		})
+	}
 	return totalSize
 }
 

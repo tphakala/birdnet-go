@@ -412,6 +412,7 @@
         "updatingIntervals": "Detektálási intervallumok frissítése...",
         "reconfiguringMqtt": "MQTT kapcsolat frissítése...",
         "reconfiguringBirdweather": "BirdWeather integráció frissítése...",
+        "reconfiguringEbird": "Updating eBird integration...",
         "reconfiguringStreams": "Hang streamek frissítése...",
         "reconfiguringTelemetry": "Telemetria beállítások frissítése...",
         "reconfiguringPushNotifications": "Push értesítési szolgáltatók újrakonfigurálása...",
@@ -456,6 +457,11 @@
       "ort": {
         "unavailableTitle": "Az ONNX Runtime nem elérhető",
         "unavailableMessage": "Az ONNX Runtime {requiredVersion} szükséges a(z) {modelName} modellhez, de nem található. Lásd a telepítési útmutatót: {installGuideURL}"
+      },
+      "region": {
+        "staleTitle": "A modellrégió elavult lehet",
+        "staleMessage": "A(z) {modelName} a(z) {oldRegion} régióhoz van telepítve, de az új helyszíne a következőnek felel meg: {newRegion}. Változatot a Beállítások modellgalériájában válthat.",
+        "staleGlobalMessage": "A(z) {modelName} a(z) {oldRegion} régióhoz van telepítve, de az új helyszíne kívül esik a lefedettségén. A globális változatra a Beállítások modellgalériájában válthat."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -623,6 +629,7 @@
       "categoryYear": "Idén új",
       "categorySeason": "Ebben az évszakban új",
       "categorySeasonNamed": "Ebben a(z) {season} évszakban új",
+      "categoryInfrequent": "Ritkán észlelt",
       "maxConfidenceShort": "Max. {confidence}%",
       "detections": "{count, plural, one {# észlelés} other {# észlelés}}",
       "lastSeen": "Utoljára: {days, plural, =0 {ma} one {# napja} other {# napja}}"
@@ -657,7 +664,8 @@
         "viewSixHourly": "Összes detektálás megtekintése {startHour}:00-{endHour}:00-kor",
         "hourlyDetections": "{count} detektálás {hour}:00-kor - Kattintson a megtekintéshez",
         "biHourlyDetections": "{count} detektálás {startHour}:00-{endHour}:00-kor - Kattintson a megtekintéshez",
-        "sixHourlyDetections": "{count} detektálás {startHour}:00-{endHour}:00-kor - Kattintson a megtekintéshez"
+        "sixHourlyDetections": "{count} detektálás {startHour}:00-{endHour}:00-kor - Kattintson a megtekintéshez",
+        "infrequent": "Ritkán észlelt - {days, plural, one {# nap} other {# nap}} távollét után visszatért"
       },
       "loading": {
         "preparing": "Adatok előkészítése...",
@@ -1688,6 +1696,26 @@
       "title": "AI Modellek és Következtetés",
       "loading": "Következtetési állapot betöltése",
       "error": "Következtetési állapot betöltése sikertelen",
+      "vad": {
+        "section": "Adatvédelmi őr",
+        "title": "Silero VAD",
+        "active": "Aktív",
+        "activeHelp": "A beszédfelismerő modell betöltve, és értékeli a hangot.",
+        "idle": "Tétlen",
+        "idleHelp": "Engedélyezve és készen áll; a modell az első hangrészlet értékelésekor töltődik be.",
+        "disabled": "Letiltva",
+        "disabledHelp": "Az Adatvédelmi Őr ki van kapcsolva az adatvédelmi szűrő beállításaiban.",
+        "unavailable": "Nincs modell",
+        "unavailableHelp": "Ebben a verzióban nem érhető el beszédfelismerő modell. Állítson be egy VAD modell útvonalat az adatvédelmi szűrő beállításaiban, vagy használjon beágyazott modellt tartalmazó verziót.",
+        "description": "A Silero VAD egy speciális akusztikai modell, amely érzékeli az emberi beszédet. Ez hajtja a privátszféra-szűrőt, eldobva a hangot beszéd jelenlétekor, hogy a hangok ne kerüljenek bele a felvételekbe.",
+        "threshold": "Küszöbérték",
+        "speechHits": "Beszédtalálatok",
+        "recentTitle": "Legutóbbi beszéd",
+        "recentEmpty": "Még nem érzékelt beszédet",
+        "colWhen": "Időpont",
+        "colProbability": "Valószínűség",
+        "colSource": "Forrás"
+      },
       "sectionHardware": "Hardver",
       "sectionBackends": "Következtetési Hátterek",
       "sectionModels": "Modellek",
@@ -1698,6 +1726,9 @@
       "fp16": "FP16",
       "fp16Supported": "FP16 támogatott",
       "fp16Unsupported": "FP16 nem támogatott",
+      "advanced": "Speciális",
+      "capabilities": "Képességek",
+      "capabilitiesHelp": "Hardvercímkék, amelyek a gép és az elérhető modellverziók párosítására szolgálnak.",
       "backendTflite": "TensorFlow Lite",
       "backendOnnx": "ONNX Runtime",
       "backendOpenvino": "OpenVINO",
@@ -1715,8 +1746,6 @@
       "gpu": "Grafikus kártya",
       "gpuReachable": "Elérhető",
       "gpuNotReachable": "Nem elérhető",
-      "capabilities": "Képességek",
-      "capabilitiesHelp": "Hardver címkék a megfelelő modellek kiválasztásához.",
       "gpuReasonRenderNodeUnavailable": "A GPU render csomópont nem elérhető a szerver számára.",
       "gpuReasonRenderNodePermission": "A GPU eszközt nem sikerült megnyitni. Jogosultsági probléma.",
       "gpuReasonNoRuntime": "A BirdNET-Go jelenleg csak Intel grafikát támogat a gyorsításra, ez a kártya nem lesz használva.",
@@ -2768,7 +2797,8 @@
           "detectionPath": "Relatív útvonal a detektáláshoz (pl., \"/ui/detections/1234\")",
           "detectionUrl": "Teljes URL a detektáláshoz a felületen",
           "imageUrl": "Link a faj képéhez",
-          "daysSinceFirstSeen": "Napok száma az első detektálás óta"
+          "daysSinceFirstSeen": "Napok száma az első detektálás óta",
+          "daysSinceLastSeen": "Az utolsó észlelés óta eltelt napok száma"
         }
       },
       "testNotification": {
@@ -3084,7 +3114,11 @@
         "enable": "Adatvédelmi szűrés engedélyezése",
         "disabled": "Az adatvédelmi szűrés le van tiltva",
         "confidenceLabel": "Megbízhatósági küszöbérték az emberi detektáláshoz",
-        "confidenceHelp": "Állítsa be az emberi hang detektálás megbízhatósági szintjét, az alacsonyabb érték érzékenyebbé teszi a szűrőt"
+        "confidenceHelp": "Állítsa be az emberi hang detektálás megbízhatósági szintjét, az alacsonyabb érték érzékenyebbé teszi a szűrőt",
+        "vadEnable": "Adatvédelmi Őr engedélyezése (Silero VAD)",
+        "vadHelp": "Egy külön neurális beszédérzékelő modellt futtat az osztályozó mellett a megbízható hangszűrés érdekében. További rendszererőforrásokat használ (kb. 20-30 MB RAM és CPU-inferencia szegmensenként).",
+        "vadThresholdLabel": "Adatvédelmi Őr küszöbértéke",
+        "vadThresholdHelp": "A hangaktivitás-érzékelő érzékenységi küszöbértéke (alapértelmezett 0.35). Alacsonyabb értékek esetén a szűrő érzékenyebb a halk vagy távoli beszédre."
       },
       "falsePositivePrevention": {
         "title": "Hamis pozitív megelőzés",
@@ -4291,6 +4325,18 @@
             "hemisphereNote": "Az évszak dátumok automatikusan az Ön szélessége alapján kerülnek konfigurálásra. Az északi félgömb a szabványos évszakokat, a déli félgömb eltolódott dátumokat, az egyenlítői régiók pedig esős/száraz évszakokat használnak."
           }
         },
+        "infrequent": {
+          "title": "Ritkán észlelt fajok követése",
+          "description": "Hosszú távollét után visszatérő fajok megjelölése (ritka visszatérő látogatók)",
+          "enabled": {
+            "label": "Ritkán észlelt fajok követésének engedélyezése",
+            "helpText": "Követés és értesítés, amikor egy fajt hosszú távollét után újra észlelnek"
+          },
+          "absenceDays": {
+            "label": "Távolléti küszöb (nap)",
+            "helpText": "Az utolsó észlelés óta eltelt minimális napok száma, mielőtt egy visszatérő faj 'ritkán észlelt' jelölést kap (1-365)"
+          }
+        },
         "months": {
           "january": "Január",
           "february": "Február",
@@ -4488,6 +4534,7 @@
           "stream_disconnected": "Stream leválasztva",
           "stream_error": "Stream hiba",
           "detection_new_species": "Új faj detektálva",
+          "detection_infrequent_species": "Ritkán észlelt faj észlelve",
           "detection_occurred": "Detektálás történt",
           "application_started": "Alkalmazás indítva",
           "application_stopped": "Alkalmazás leállítva",
@@ -4537,6 +4584,10 @@
         "newSpecies": {
           "name": "Új faj detektálva",
           "description": "Értesít, amikor egy faj először kerül detektálásra"
+        },
+        "infrequentSpecies": {
+          "name": "Ritkán észlelt faj észlelve",
+          "description": "Értesít, amikor egy faj hosszú távollét után visszatér"
         },
         "streamDisconnected": {
           "name": "Hang stream leválasztva",
@@ -5232,6 +5283,20 @@
       "locale": {
         "label": "Fajok nyelve",
         "helpText": "A fajok köznapi neveihez használt nyelv a felületen."
+      },
+      "secondaryThresholdOverride": {
+        "label": "Override confidence threshold",
+        "helpText": "When enabled, this model uses its own confidence threshold below. When disabled, it follows the main BirdNET confidence threshold."
+      },
+      "secondaryThreshold": {
+        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
+        "followsBirdnet": "Enable the override above to set a custom value. This model currently follows the main BirdNET confidence threshold."
+      },
+      "perchThreshold": {
+        "label": "Perch v2 Confidence Threshold"
+      },
+      "birdnetv3Threshold": {
+        "label": "BirdNET v3.0 Confidence Threshold"
       }
     },
     "rangeFilter": {
@@ -5271,6 +5336,79 @@
     "gallery": {
       "title": "Modellgaléria",
       "description": "Osztályozó modellek kezelése madár- és denevérdetektáláshoz.",
+      "region": {
+        "title": "Modellrégió",
+        "modeAuto": "Automatikus",
+        "modeAutoHint": "A legjobb regionális változat kiválasztása az állomás helyszíne alapján",
+        "modeManual": "Manual region select",
+        "modeManualHint": "Choose a region yourself, or the worldwide model",
+        "worldwideTitle": "Worldwide",
+        "worldwideSubtitle": "Every region, all species",
+        "worldwideResourceNote": "Largest model, uses the most RAM and CPU",
+        "selectedBadge": "Selected",
+        "orSpecificRegion": "Or a specific region",
+        "search": "Search regions or countries",
+        "searchNoResults": "No regions match \"{query}\"",
+        "manualPrompt": "Choose a region below, or the worldwide model.",
+        "countriesOverflow": "+{count}",
+        "coreCoverage": "Core coverage:",
+        "partialCoverage": "Partial coverage:",
+        "pinAction": "{region} rögzítése",
+        "switchToAuto": "Váltás automatikusra",
+        "loading": "Régiók betöltése...",
+        "loadFailed": "Nem sikerült betölteni a régióadatokat",
+        "mapUnavailable": "A lefedettségi térkép nem érhető el",
+        "mapAria": "{region} lefedettségi térképe",
+        "why": {
+          "noLocation": "Az automatikus kiválasztáshoz állomáshelyszín szükséges. Adja meg a Fő beállításokban; addig a globális modell kerül használatra.",
+          "outsideCoverage": "Az Ön helyszíne kívül esik az összes regionális modell lefedettségén, ezért a globális modell kerül használatra.",
+          "ambiguous": "Az Ön helyszíne {region} és {runnerUp} határának közelében található. Az automatikus kiválasztás a(z) {region} régiót használja; rögzítse valamelyiket a választás egyértelműsítéséhez.",
+          "resolved": "Helyszíne alapján észlelt régió: {region}.",
+          "global": "Mindig a globális modell van használatban, függetlenül az állomás helyszínétől.",
+          "pinned": "Rögzítve a következőhöz: {region}. Az állomás helyszíne nem befolyásolja a modellválasztást.",
+          "pinnedMismatch": "Helyszíne jelenleg a következőre oldódik fel: {resolved}.",
+          "pinnedUnknown": "A rögzített \"{region}\" régió nem érhető el a jelenlegi modellkatalógusban. A modellcsaládok visszatérnek a helyszínéhez vagy a globális modellhez."
+        }
+      },
+      "variants": {
+        "title": "Modellváltozat",
+        "recommended": "Ajánlott",
+        "recommendedForHardware": "A legjobb a hardveredhez",
+        "installed": "Telepítve",
+        "default": "Alapértelmezett",
+        "incompatible": "Nem érhető el az Ön hardveréhez",
+        "showAll": "Összes változat mutatása ({count})",
+        "showRegion": "Változatok mutatása a(z) {region} régióhoz és a hardveredhez ({count})",
+        "showHardware": "Hardverváltozatok mutatása ({count})",
+        "showAllRegions": "Összes változat mutatása, beleértve a többi régiót ({count})",
+        "regionContext": "Megjelenített regionális változatok ehhez: {region}, a fenti modellrégió-választás alapján",
+        "regionContextNone": "Elérhetők regionális változatok. Válassz egy régiót a fenti modellrégió-választásban, vagy jelenítsd meg az összes változatot.",
+        "otherRegions": "Egyéb régiók",
+        "filterPlaceholder": "Régiók szűrése",
+        "filterAria": "Régióra szabott buildek szűrése",
+        "filterNoMatch": "Egyetlen régió sem felel meg ennek: \"{query}\"",
+        "latency": "~{ms} ms",
+        "precisionInfo": "About precision and variants",
+        "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
+      },
+      "actionInProgress": "Várd meg a modell jelenlegi telepítésének, újratelepítésének vagy eltávolításának befejezését",
+      "removeSuccess": "Removed {name}",
+      "reasons": {
+        "backendRecommended": "Ezen fut: {backend}, amely a hardveredhez ajánlott backend",
+        "backendSupported": "Ezen fut: {backend}",
+        "regionMatched": "A régiódhoz igazítva ({region})",
+        "regionGlobalFallback": "Globális modell a tartózkodási helyedhez",
+        "precisionFp16Native": "A CPU-hoz igazított félpontosságú (fp16) build",
+        "precisionFp16GpuPreferred": "Félpontosságú build: fele akkora letöltés, a GPU-don fut",
+        "ramConstrainedFit": "A rendelkezésre álló memóriához méretezett kvantált build",
+        "benchmarkMeasured": "Mérések alapján a leggyorsabb az eszközödön",
+        "variantLegacy": "Egy újabb build váltotta fel",
+        "archUnsupported": "Egy {required} CPU szükséges hozzá",
+        "backendMissing": "Olyan következtetési backendet igényel, amelyet a build nem ér el ({required})",
+        "ramInsufficient": "Legalább {requiredMb} MB memória szükséges",
+        "hardwareExcluded": "Nem támogatott a hardvereden ({token})",
+        "backendOnnxUnavailable": "ONNX Runtime szükséges, amely nem érhető el ezen a rendszeren. A Docker-lemezképek és a kiadási csomagok tartalmazzák; lásd az ONNX Runtime telepítési útmutatóját."
+      },
       "tabs": {
         "installed": "Telepített",
         "available": "Elérhető"
@@ -5278,7 +5416,6 @@
       "loading": "Modellek betöltése...",
       "retry": "Újra",
       "builtIn": "Beépített",
-      "builtInDescription": "A BirdNET csapat beépített madárfaj-osztályozója.",
       "species": "{count} faj",
       "install": "Telepítés",
       "installing": "Telepítés...",
@@ -5323,7 +5460,13 @@
       "errors": {
         "catalogLoadFailed": "Nem sikerült betölteni a modellkatalógust",
         "installFailed": "Nem sikerült elindítani a modell telepítését",
-        "removeFailed": "Nem sikerült eltávolítani a modellt"
+        "removeFailed": "Nem sikerült eltávolítani a modellt",
+        "actionFailed": "Probléma történt a következővel: {name}",
+        "downloadSourceHint": "Ha a huggingface.co blokkolva van vagy lassú a hálózatán, állítson be egy tükörszervert az alábbi Letöltési forrás szakaszban.",
+        "goToDownloadSource": "Ugrás a Letöltési forráshoz",
+        "dismiss": "Bezárás",
+        "details": "Details",
+        "removeRetryHint": "To try again, use the Remove button on the model's card."
       },
       "regionLabel": "Régió",
       "speciesLabel": "Fajok",
@@ -5331,9 +5474,40 @@
       "reinstalling": "Újratelepítés...",
       "reinstallComplete": "Fájlok sikeresen ellenőrizve",
       "geomodelBadge": "Tartalmazza a BirdNET v3.0 geomodellt",
-      "onnxRuntimeRequired": "ONNX Runtime szükséges, amely nem elérhető ezen a rendszeren.",
-      "onnxRuntimeMissing": "Az ONNX Runtime nem elérhető. Ez a modell nem futtatható.",
-      "unavailable": "Nem elérhető"
+      "preview": {
+        "badge": "Előzetes",
+        "buildLabel": "{version} · {build}",
+        "cardNotice": "Fejlesztői előzetes, nem végleges kiadás. Ez egy korai tesztverzió; az eredmények a stabil verzió előtt még változhatnak.",
+        "dialogNotice": "Fejlesztői előzetest ({build}) készülsz telepíteni. Kipróbálásra jó, de egyelőre nem ajánlott egyedüli osztályozóként használni."
+      },
+      "entryIncompatible": "Ez a modell nem érhető el ezen a rendszeren.",
+      "regionGlobal": "Globális",
+      "hardwareLabel": "Hardver",
+      "hardware": {
+        "gpuNvidia": "GPU (NVIDIA)",
+        "gpuIntel": "GPU (Intel)",
+        "armCpu": "ARM CPU",
+        "amd64Cpu": "AMD64 CPU",
+        "arm64Cpu": "ARM64 CPU",
+        "cpu": "CPU"
+      },
+      "optimize": {
+        "bannerTitle": "{count, plural, one {# modell gyorsabban futhat a hardvereden} other {# modell gyorsabban futhat a hardvereden}}",
+        "review": "Áttekintés",
+        "dismiss": "Elutasítás",
+        "badgeTitle": "Egy gyorsabb verzió érhető el a hardveredhez",
+        "swap": "Optimalizálás",
+        "dialogTitle": "Modellek optimalizálása",
+        "installedBuild": "Installed build",
+        "fromTo": "{from} -> {to}",
+        "apply": "Alkalmazás",
+        "applyAll": "Összes alkalmazása",
+        "applying": "Alkalmazás...",
+        "applied": "Alkalmazva",
+        "applyFailed": "Nem sikerült alkalmazni",
+        "upToDate": "Minden modelled optimalizálva van erre a hardverre.",
+        "licenseNote": "A csere ugyanazon a modellen belül marad, így a licence nem változik."
+      }
     },
     "bird": {
       "title": "Madárészlelés",
@@ -5345,6 +5519,14 @@
     },
     "dynamicThreshold": {
       "birdOnlyNote": "A dinamikus küszöb csak a madárosztályozókra vonatkozik."
+    },
+    "perch": {
+      "title": "Perch v2 Detection",
+      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+    },
+    "birdnetv3": {
+      "title": "BirdNET v3.0 Detection",
+      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
     }
   },
   "restart": {

@@ -1,0 +1,402 @@
+{
+  "tphakala/BirdNET-v3.0-Models|regional/amazonia/birdnet-v3.0-preview3.1-amazonia-labels-b1.txt": {
+    "sha256": "d41569fd0a4c847339f923265a39c34e4069b522dc6261e1a8df9cb49c66ca76",
+    "size_bytes": 32275,
+    "lines": 809
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/andes/birdnet-v3.0-preview3.1-andes-labels-b1.txt": {
+    "sha256": "181fedd7b183cf6c9aa03b90cb344c2d6097767c97041dc200d8af080989d632",
+    "size_bytes": 32124,
+    "lines": 809
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/australia-east/birdnet-v3.0-preview3.1-australia-east-labels-b1.txt": {
+    "sha256": "15b410825662d5375e2c82d3d3e35ddebe5c39ad6357bf021e9c87a70b03de3f",
+    "size_bytes": 26783,
+    "lines": 708
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/azores/birdnet-v3.0-preview3.1-azores-labels-b1.txt": {
+    "sha256": "f2e17ba806cfb39479c025aa2c451b24a5e3cb0e91059b58cc7c8f1bdff96379",
+    "size_bytes": 7552,
+    "lines": 224
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/baltics/birdnet-v3.0-preview3.1-baltics-labels-b1.txt": {
+    "sha256": "88af53f955717097f37e3d70b0b33fe29b72340697f8d20400dc851bbbc511c1",
+    "size_bytes": 14920,
+    "lines": 438
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/british-isles/birdnet-v3.0-preview3.1-british-isles-labels-b1.txt": {
+    "sha256": "a3d9873909bb502c3964ca4f39d86068abeb323f45369d2206242410010bfe86",
+    "size_bytes": 19328,
+    "lines": 559
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/canada-alaska/birdnet-v3.0-preview3.1-canada-alaska-labels-b1.txt": {
+    "sha256": "cfeedb34ac7dba1a6398029228d2a8188418397dd05a4e2707320df868214c1d",
+    "size_bytes": 13854,
+    "lines": 738
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/canary-islands/birdnet-v3.0-preview3.1-canary-islands-labels-b1.txt": {
+    "sha256": "07daabee7f9ad44b93bbdcec679ee3d2202eee41c00a0feddd7bbc70a48f440b",
+    "size_bytes": 13543,
+    "lines": 388
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/cape-verde/birdnet-v3.0-preview3.1-cape-verde-labels-b1.txt": {
+    "sha256": "94d98ccc9b9fad51835fc0d1da69f899cc04a5919fd7ac4015fa4c5050922fbb",
+    "size_bytes": 5122,
+    "lines": 143
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/central-europe/birdnet-v3.0-preview3.1-central-europe-labels-b1.txt": {
+    "sha256": "e64919cbbbd13ad9ca5efe2ea03a098ad56b827b0578a703051738d0c892596a",
+    "size_bytes": 22527,
+    "lines": 644
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/china-north-central/birdnet-v3.0-preview3.1-china-north-central-labels-b1.txt": {
+    "sha256": "3adbf2172b798082b9cdccaf4aaebed74f3c49df146f6778408314cdbb670d52",
+    "size_bytes": 28192,
+    "lines": 752
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/china-northeast/birdnet-v3.0-preview3.1-china-northeast-labels-b1.txt": {
+    "sha256": "f5a8ea91d28b2d98937e8c542e67bac5ef4a472390c87790cd3d93213fb574f0",
+    "size_bytes": 23690,
+    "lines": 650
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/china-southeast/birdnet-v3.0-preview3.1-china-southeast-labels-b1.txt": {
+    "sha256": "e78174684a403c57e730c3696df609e99fc6b7ab39e530dd9ded9f65ca88df60",
+    "size_bytes": 30955,
+    "lines": 808
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/china-southwest/birdnet-v3.0-preview3.1-china-southwest-labels-b1.txt": {
+    "sha256": "96219a5a02b54ef5a0542aaec4a39afd586521f44ab887bfd7df97ae3fa1388f",
+    "size_bytes": 32104,
+    "lines": 816
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/eastern-brazil/birdnet-v3.0-preview3.1-eastern-brazil-labels-b1.txt": {
+    "sha256": "ce9a20f287bb6c0cbaf52ac5f28df02d5e0c17e335020687a40c0987c921844e",
+    "size_bytes": 32664,
+    "lines": 812
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/eastern-europe/birdnet-v3.0-preview3.1-eastern-europe-labels-b1.txt": {
+    "sha256": "393c21dc9868ef6ae582c76f525044134476f214ae6aae9c845356a8c4337898",
+    "size_bytes": 18100,
+    "lines": 518
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/galapagos/birdnet-v3.0-preview3.1-galapagos-labels-b1.txt": {
+    "sha256": "38c3e85ee20065453d708b067a3de5c2ff64ff570b19d155641dbcba3a44cd41",
+    "size_bytes": 4818,
+    "lines": 136
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/hawaii/birdnet-v3.0-preview3.1-hawaii-labels-b1.txt": {
+    "sha256": "3279fb4b3b5e4ba4d12e0d3b6c212c5d70eb9d135eb04e51b585ede318346fc2",
+    "size_bytes": 9439,
+    "lines": 272
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/himalaya/birdnet-v3.0-preview3.1-himalaya-labels-b1.txt": {
+    "sha256": "5c7b56877022eada1eb57f5f0069ad5f1d8cef3042efdb254ad00606bc06802c",
+    "size_bytes": 31141,
+    "lines": 812
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/iberia/birdnet-v3.0-preview3.1-iberia-labels-b1.txt": {
+    "sha256": "82d0ca3d9dba1dfd2cb1d2d5c0343b52bcbca8df007ac21fc76ae522fa7ad034",
+    "size_bytes": 22027,
+    "lines": 627
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/iceland/birdnet-v3.0-preview3.1-iceland-labels-b1.txt": {
+    "sha256": "581c65f8dea9e3f069a79b2afd426b6a04dc2fd4d74b063771d8f8a6718b35a9",
+    "size_bytes": 13259,
+    "lines": 391
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/indo-gangetic/birdnet-v3.0-preview3.1-indo-gangetic-labels-b1.txt": {
+    "sha256": "127b2a4865b93320dc702c4566dcd9c673ea59751bcd0f8de3941446bd156f3a",
+    "size_bytes": 31248,
+    "lines": 814
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/japan/birdnet-v3.0-preview3.1-japan-labels-b1.txt": {
+    "sha256": "73cec4e0b03f0726efe54f5706482b6b9b88af4789d10ce8275831fd802f25d1",
+    "size_bytes": 21087,
+    "lines": 577
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/madeira/birdnet-v3.0-preview3.1-madeira-labels-b1.txt": {
+    "sha256": "3928b68428185381cc798ea519f2031fba34ba135119e5f6d66fb59066ea50db",
+    "size_bytes": 8721,
+    "lines": 255
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/mauritius/birdnet-v3.0-preview3.1-mauritius-labels-b1.txt": {
+    "sha256": "49cee32d57754bf939392bfadb66a0d96a8b07c12289a4d7292777c57d1ab445",
+    "size_bytes": 2556,
+    "lines": 72
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/new-caledonia/birdnet-v3.0-preview3.1-new-caledonia-labels-b1.txt": {
+    "sha256": "8ba9af0dc9b05a65950788869cbaf51558da424b557e9dc7c9e13cdef6445e5f",
+    "size_bytes": 6249,
+    "lines": 168
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/new-zealand/birdnet-v3.0-preview3.1-new-zealand-labels-b1.txt": {
+    "sha256": "43ee1873405b3ebcee781e84c452add4764e033aaf2d36e02464575eefa66a63",
+    "size_bytes": 9539,
+    "lines": 266
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/nordic/birdnet-v3.0-preview3.1-nordic-labels-b1.txt": {
+    "sha256": "a72e25c14bf7480b9e88ca7f23aedf7dfb60415f2dbc4feed6db2ea73eb6bb33",
+    "size_bytes": 14330,
+    "lines": 422
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/north-america-east/birdnet-v3.0-preview3.1-north-america-east-labels-b1.txt": {
+    "sha256": "85b6357d5b29f7bc43c9db8682f07dfa70851a859fa9b229a8897d458662b195",
+    "size_bytes": 29428,
+    "lines": 800
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/north-america-west/birdnet-v3.0-preview3.1-north-america-west-labels-b1.txt": {
+    "sha256": "a15b31fe8c15000e382ebc1fa7f07795ddfe8afbc1960b782be3f8832f28ffaa",
+    "size_bytes": 29310,
+    "lines": 802
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/reunion/birdnet-v3.0-preview3.1-reunion-labels-b1.txt": {
+    "sha256": "3a77cf322d658c0ceae4862d07825ac81007c2d0efda518aa6a304de500f1373",
+    "size_bytes": 2592,
+    "lines": 73
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/sao-tome-principe/birdnet-v3.0-preview3.1-sao-tome-principe-labels-b1.txt": {
+    "sha256": "514a713e208140ed2b9d1828f27e747c374c17a4036b98346b8dc490ee3dc95d",
+    "size_bytes": 3868,
+    "lines": 110
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/seychelles/birdnet-v3.0-preview3.1-seychelles-labels-b1.txt": {
+    "sha256": "b7c6b287f78bfe86d7a1668590acb9239a84ed4998e4066c8b3db01b9b53584e",
+    "size_bytes": 3996,
+    "lines": 115
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/south-asia-peninsular/birdnet-v3.0-preview3.1-south-asia-peninsular-labels-b1.txt": {
+    "sha256": "73685f85e77cc6da5bcd3393c10c03c5bcbd7a6d3bd02d05c12bae8cabd5b57a",
+    "size_bytes": 24116,
+    "lines": 644
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/southern-africa/birdnet-v3.0-preview3.1-southern-africa-labels-b1.txt": {
+    "sha256": "b97af077f7c74f34b2d35c476ff78968daef4da475917cebde41e7c6fb9bfd76",
+    "size_bytes": 30596,
+    "lines": 802
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/southern-cone/birdnet-v3.0-preview3.1-southern-cone-labels-b1.txt": {
+    "sha256": "5e7821cc1de892511bce5d70fdc68f4c753b2bd95777f20c8e2713302f7c64b3",
+    "size_bytes": 32072,
+    "lines": 807
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/southern-europe/birdnet-v3.0-preview3.1-southern-europe-labels-b1.txt": {
+    "sha256": "de97243787c36c96cea608c0d2867fce49e9aa1df4cb9db46023321f4a79a6f6",
+    "size_bytes": 21752,
+    "lines": 616
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/svalbard/birdnet-v3.0-preview3.1-svalbard-labels-b1.txt": {
+    "sha256": "68c09eee7ec017c77cea971fcb9020f0e34632c5f5f30fa98aec9464451723ae",
+    "size_bytes": 9269,
+    "lines": 280
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/tibet/birdnet-v3.0-preview3.1-tibet-labels-b1.txt": {
+    "sha256": "fdd8e4865a418cdf0173d0f0f81e4c65e3fa5e464be2d0dba6b0bfa21bbe5f87",
+    "size_bytes": 30993,
+    "lines": 811
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/western-palearctic/birdnet-v3.0-preview3.1-western-palearctic-labels-b1.txt": {
+    "sha256": "10a2fb277ce4dc981f6a68ac11bd073ff3c9e28f2c929c1bcf0ecb553aa56ff3",
+    "size_bytes": 28565,
+    "lines": 801
+  },
+  "tphakala/Perch-v2-Models|regional/amazonia/perch_v2_amazonia_labels.txt": {
+    "sha256": "cd2dd3763bcc9b0ce23f444714ac7d0134bc4420e158ca5285afa29c957a2303",
+    "size_bytes": 68249,
+    "lines": 3388
+  },
+  "tphakala/Perch-v2-Models|regional/andes/perch_v2_andes_labels.txt": {
+    "sha256": "49473b50116a9df66a785fb8dd47d8d2cc17fe7235160cdf3d41c04436290d89",
+    "size_bytes": 71180,
+    "lines": 3535
+  },
+  "tphakala/Perch-v2-Models|regional/australia-east/perch_v2_australia-east_labels.txt": {
+    "sha256": "53d4d6e75dbc168d40289314bade69666081f51a3be0cd956ecee3f4738a89b8",
+    "size_bytes": 17304,
+    "lines": 946
+  },
+  "tphakala/Perch-v2-Models|regional/azores/perch_v2_azores_labels.txt": {
+    "sha256": "e257c47585cf32cd9b288945a7778354c03d3cbe5ae57cc6b5bbe527b9b393a5",
+    "size_bytes": 6559,
+    "lines": 426
+  },
+  "tphakala/Perch-v2-Models|regional/baltics/perch_v2_baltics_labels.txt": {
+    "sha256": "26503d5cde0bb41f0da3964d8de3f5c5094f41d5a5dd19e4d5e5c0cbefdb8745",
+    "size_bytes": 10617,
+    "lines": 655
+  },
+  "tphakala/Perch-v2-Models|regional/british-isles/perch_v2_british-isles_labels.txt": {
+    "sha256": "ff4bff5fd55271fa062413ce33f686c3d54e269423890eeba6605a1ef7955f2a",
+    "size_bytes": 12955,
+    "lines": 776
+  },
+  "tphakala/Perch-v2-Models|regional/canada-alaska/perch_v2_canada-alaska_labels.txt": {
+    "sha256": "2ff39da0058af4522081661e1cef1dbe985729a6a708c67d09ee5a91c29a67f0",
+    "size_bytes": 16870,
+    "lines": 962
+  },
+  "tphakala/Perch-v2-Models|regional/canary-islands/perch_v2_canary-islands_labels.txt": {
+    "sha256": "b25ebc0c0e20f6eae828274e8f1c25162aaf07f8d49da073a72b70caa15f9f25",
+    "size_bytes": 9753,
+    "lines": 598
+  },
+  "tphakala/Perch-v2-Models|regional/cape-verde/perch_v2_cape-verde_labels.txt": {
+    "sha256": "7cb7ca2d60aa9c2dc80eca532ff85387fc62d8e6b7ca00d062565438a73eaeaf",
+    "size_bytes": 5263,
+    "lines": 346
+  },
+  "tphakala/Perch-v2-Models|regional/central-europe/perch_v2_central-europe_labels.txt": {
+    "sha256": "ac7c30b45b85404bc67830e8341e53ea47ad0d899a30789454c072abc6828072",
+    "size_bytes": 14787,
+    "lines": 873
+  },
+  "tphakala/Perch-v2-Models|regional/china-north-central/perch_v2_china-north-central_labels.txt": {
+    "sha256": "80eecb6579f4f7534422c21460dc481fc213e69b80c6e994ef361fa9c969281b",
+    "size_bytes": 17447,
+    "lines": 976
+  },
+  "tphakala/Perch-v2-Models|regional/china-northeast/perch_v2_china-northeast_labels.txt": {
+    "sha256": "2cbd9b12a2f23f0813b3eadaeb367612b4ad70960612229b648c37912687ebfb",
+    "size_bytes": 15253,
+    "lines": 877
+  },
+  "tphakala/Perch-v2-Models|regional/china-southeast/perch_v2_china-southeast_labels.txt": {
+    "sha256": "4d850c34ee5f3a7704e9a8cd60b2e88a504e6d63e2b7d5d311f9191c5f5b10f4",
+    "size_bytes": 25436,
+    "lines": 1373
+  },
+  "tphakala/Perch-v2-Models|regional/china-southwest/perch_v2_china-southwest_labels.txt": {
+    "sha256": "7adcce5853a92ba1bbe5ee05ffdb75bbad9d0d1604349beef19151e6731cc750",
+    "size_bytes": 26299,
+    "lines": 1409
+  },
+  "tphakala/Perch-v2-Models|regional/eastern-brazil/perch_v2_eastern-brazil_labels.txt": {
+    "sha256": "84ebe24f0f0fd8efd4339bc5a5260fe8779fcd06b575aa5fe58eb62186bbdc7b",
+    "size_bytes": 43185,
+    "lines": 2184
+  },
+  "tphakala/Perch-v2-Models|regional/eastern-europe/perch_v2_eastern-europe_labels.txt": {
+    "sha256": "88e92e524bf2a7875026fcfb4db40efd7d0bd74f2dc72157ce0cc76be5a620a1",
+    "size_bytes": 12294,
+    "lines": 739
+  },
+  "tphakala/Perch-v2-Models|regional/galapagos/perch_v2_galapagos_labels.txt": {
+    "sha256": "72af08800a5640949dbce00bb2ccb8190c32f8aab3f3584d4e3fefd583ededae",
+    "size_bytes": 5068,
+    "lines": 336
+  },
+  "tphakala/Perch-v2-Models|regional/hawaii/perch_v2_hawaii_labels.txt": {
+    "sha256": "049c0a97c16f458119e734d11daf60a456cb6edd693a4eb3c507911eaded46a6",
+    "size_bytes": 7694,
+    "lines": 478
+  },
+  "tphakala/Perch-v2-Models|regional/himalaya/perch_v2_himalaya_labels.txt": {
+    "sha256": "4790bca0d3e41872cb00b7bd0ce0427cda5e4d02c1d837c25c6437c596875206",
+    "size_bytes": 26124,
+    "lines": 1407
+  },
+  "tphakala/Perch-v2-Models|regional/iberia/perch_v2_iberia_labels.txt": {
+    "sha256": "2e735ca086bfff35a2e6f308d476c324431003c98ac93e0a07373f5e3da058bd",
+    "size_bytes": 14490,
+    "lines": 856
+  },
+  "tphakala/Perch-v2-Models|regional/iceland/perch_v2_iceland_labels.txt": {
+    "sha256": "4766fd47a89f837b4e46df8c27f5e4755e291311917ceb319420fbe2aa60f793",
+    "size_bytes": 9560,
+    "lines": 591
+  },
+  "tphakala/Perch-v2-Models|regional/indo-gangetic/perch_v2_indo-gangetic_labels.txt": {
+    "sha256": "5e87bec2ac06853a9d00d7bee48bdb648beb487acd0ed6e88279f3fce4b353be",
+    "size_bytes": 26076,
+    "lines": 1406
+  },
+  "tphakala/Perch-v2-Models|regional/japan/perch_v2_japan_labels.txt": {
+    "sha256": "feb134cc8734fc521e4a91682a464336b3c72f31174cb9e027b52ba80142bf8d",
+    "size_bytes": 13791,
+    "lines": 799
+  },
+  "tphakala/Perch-v2-Models|regional/madeira/perch_v2_madeira_labels.txt": {
+    "sha256": "ad1620ef0f51c8186f8a156f90f20114b494be71aedd61f4609b8bb0fd35c8a5",
+    "size_bytes": 7176,
+    "lines": 459
+  },
+  "tphakala/Perch-v2-Models|regional/mauritius/perch_v2_mauritius_labels.txt": {
+    "sha256": "a45703c5091d0b2b4eab83b69a7ea47286565faf9879a735f19a98db56a0b33e",
+    "size_bytes": 3888,
+    "lines": 272
+  },
+  "tphakala/Perch-v2-Models|regional/new-caledonia/perch_v2_new-caledonia_labels.txt": {
+    "sha256": "b565e7e9c0fd031ba84e8ea1555975a7e50293994c8f90679eb2c89e11f782c8",
+    "size_bytes": 5962,
+    "lines": 377
+  },
+  "tphakala/Perch-v2-Models|regional/new-zealand/perch_v2_new-zealand_labels.txt": {
+    "sha256": "c7c3636e1d56dd4602a18f3b97d60b649790593dbbcdd22f1de218caaf4f2355",
+    "size_bytes": 8006,
+    "lines": 486
+  },
+  "tphakala/Perch-v2-Models|regional/nordic/perch_v2_nordic_labels.txt": {
+    "sha256": "4de466ccab9c0abb50ffd24fb0262ad2bba1cf811dfce6d6c34699d17682a5d8",
+    "size_bytes": 10348,
+    "lines": 638
+  },
+  "tphakala/Perch-v2-Models|regional/north-america-east/perch_v2_north-america-east_labels.txt": {
+    "sha256": "fc43269a24c11481b4bccd1564e80a9b1974f704601fa520ef467374fe71d71f",
+    "size_bytes": 17860,
+    "lines": 999
+  },
+  "tphakala/Perch-v2-Models|regional/north-america-west/perch_v2_north-america-west_labels.txt": {
+    "sha256": "9176dd2e04e07614f85fc14b35d572ad060d0c4632f818210bbec681700b2838",
+    "size_bytes": 17852,
+    "lines": 1002
+  },
+  "tphakala/Perch-v2-Models|regional/reunion/perch_v2_reunion_labels.txt": {
+    "sha256": "efc819b560679d3fccf6af5fe8b3c0678fdddc48a6778f5d5d95f2efbd698ab6",
+    "size_bytes": 3937,
+    "lines": 274
+  },
+  "tphakala/Perch-v2-Models|regional/sao-tome-principe/perch_v2_sao-tome-principe_labels.txt": {
+    "sha256": "4e7ae7e54da68b2dd801acb3e7eb1aedb1eb4d07f55810ea0ff2facb770ff42e",
+    "size_bytes": 4792,
+    "lines": 324
+  },
+  "tphakala/Perch-v2-Models|regional/seychelles/perch_v2_seychelles_labels.txt": {
+    "sha256": "99ab268c4adce3de6d3a8b92004b55eec605054dc6a0480485314cc376903ead",
+    "size_bytes": 4710,
+    "lines": 318
+  },
+  "tphakala/Perch-v2-Models|regional/south-asia-peninsular/perch_v2_south-asia-peninsular_labels.txt": {
+    "sha256": "29b5c2a26ff857f7958710e1b047966e5c943943238dbffd182eda00967f7aa9",
+    "size_bytes": 15505,
+    "lines": 879
+  },
+  "tphakala/Perch-v2-Models|regional/southern-africa/perch_v2_southern-africa_labels.txt": {
+    "sha256": "0d8f8ed51cf7a474350a38d57a2737c950d21044d87a6e0ced843d43e9fc56d5",
+    "size_bytes": 18157,
+    "lines": 1002
+  },
+  "tphakala/Perch-v2-Models|regional/southern-cone/perch_v2_southern-cone_labels.txt": {
+    "sha256": "2c2ba9ec2e4bda2cd81661fc4e9cb90c6ae7286b3ae83be4c44b62b551d37870",
+    "size_bytes": 36197,
+    "lines": 1855
+  },
+  "tphakala/Perch-v2-Models|regional/southern-europe/perch_v2_southern-europe_labels.txt": {
+    "sha256": "0469015312dc9a34effd398e72c28b8dcd6da8bf8d783d4d14a5e39172578344",
+    "size_bytes": 14163,
+    "lines": 839
+  },
+  "tphakala/Perch-v2-Models|regional/svalbard/perch_v2_svalbard_labels.txt": {
+    "sha256": "0ec05815ecc36859dc06b8b0f3c9d592245834bba8cbe27ebb545767519554b2",
+    "size_bytes": 7451,
+    "lines": 480
+  },
+  "tphakala/Perch-v2-Models|regional/tibet/perch_v2_tibet_labels.txt": {
+    "sha256": "41ab36a976dfea277181801d1329940201d777390a3269138cabe0fc6edb460b",
+    "size_bytes": 26056,
+    "lines": 1407
+  },
+  "tphakala/Perch-v2-Models|regional/western-palearctic/perch_v2_western-palearctic_labels.txt": {
+    "sha256": "4e63079981649c4bffda95d1254c3c22689ade06dd2bc55ce08b14d03d8360b1",
+    "size_bytes": 28913,
+    "lines": 1599
+  }
+}

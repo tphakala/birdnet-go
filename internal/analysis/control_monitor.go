@@ -33,6 +33,11 @@ const (
 	signalReconfigureRTSPHealth       = "reconfigure_rtsp_health"
 	signalReconfigureMonitoring       = "reconfigure_monitoring"
 	signalReconfigureLivestream       = "reconfigure_livestream"
+
+	// mqttReconfigureConnectTimeout bounds the initial connect attempt made when
+	// MQTT settings are saved. Exceeding it is not fatal: the client keeps
+	// retrying in the background via its reconnect loop.
+	mqttReconfigureConnectTimeout = 30 * time.Second
 )
 
 // ControlMonitor handles control signals for realtime analysis mode
@@ -322,6 +327,8 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleReconfigureStreams()
 	case "reconfigure_birdweather":
 		cm.handleReconfigureBirdWeather()
+	case "reconfigure_ebird":
+		cm.handleReconfigureEBird()
 	case "update_detection_intervals":
 		cm.handleUpdateDetectionIntervals()
 	case "reconfigure_sound_level":
@@ -336,8 +343,6 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleRebuildExtendedCapture()
 	case "reconfigure_audio_sources":
 		cm.handleReconfigureAudioSources()
-	case "recalculate_dynamic_thresholds":
-		cm.handleRecalculateDynamicThresholds()
 	case "reconfigure_dynamic_thresholds":
 		cm.handleReconfigureDynamicThresholds()
 	case schedule.SignalReconfigureQuietHours:
@@ -509,20 +514,27 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 		// so the OnConnect handler fires on the initial connection
 		cm.proc.RegisterHomeAssistantDiscovery(newClient, settings)
 
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		if err := newClient.Connect(ctx); err != nil {
-			cancel()
-			GetLogger().Error("Failed to connect to MQTT broker", logger.Error(err))
-			cm.notifyError("Failed to connect to MQTT broker", err)
-			return
-		}
+		ctx, cancel := context.WithTimeout(context.Background(), mqttReconfigureConnectTimeout)
+		connectErr := newClient.Connect(ctx)
 		cancel()
+
+		// A failed connect does not invalidate the new configuration: retain the
+		// client and let its reconnect loop keep trying, so saving settings while
+		// the broker happens to be down does not leave MQTT dead until restart.
+		if connectErr != nil {
+			GetLogger().Warn("Failed to connect to MQTT broker, retrying in background",
+				logger.Error(connectErr))
+			newClient.StartReconnectLoop()
+		}
 
 		// Safely set the new client
 		cm.proc.SetMQTTClient(newClient)
 
-		GetLogger().Info("MQTT connection configured successfully")
-		cm.notifySuccess("MQTT connection configured successfully")
+		if connectErr != nil {
+			cm.notifySuccess("MQTT reconfigured, broker unreachable: retrying in background")
+		} else {
+			cm.notifySuccess("MQTT connection configured successfully")
+		}
 	} else {
 		GetLogger().Info("MQTT connection disabled")
 		cm.notifySuccess("MQTT connection disabled")
@@ -592,6 +604,40 @@ func (cm *ControlMonitor) handleReconfigureBirdWeather() {
 	}
 
 	emitHotReload("birdweather")
+}
+
+// handleReconfigureEBird rebuilds the eBird API client from the current settings.
+// The client lives on the API controller (apicore.Core), not the processor, so
+// this delegates to the controller's thread-safe ReconfigureEBird, which reads
+// settings live and atomically swaps the client that request handlers read.
+func (cm *ControlMonitor) handleReconfigureEBird() {
+	GetLogger().Info("Reconfiguring eBird integration")
+
+	if cm.apiController == nil {
+		GetLogger().Error("API controller not available for eBird reconfiguration")
+		cm.notifyError("Failed to reconfigure eBird", errors.Newf("API controller not available").
+			Component("analysis").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "reconfigure_ebird").
+			Build())
+		return
+	}
+
+	// Report the actual outcome, mirroring handleReconfigureBirdWeather, rather
+	// than reporting success unconditionally. ReconfigureEBird returns nil when
+	// eBird is disabled or misconfigured (e.g. enabled with no API key), in which
+	// case buildEBirdClient has already surfaced the specific reason.
+	if cm.apiController.ReconfigureEBird() != nil {
+		GetLogger().Info("eBird integration configured successfully")
+		cm.notifySuccess("eBird integration configured successfully")
+	} else if s := conf.Setting(); s != nil && s.Realtime.EBird.Enabled {
+		GetLogger().Warn("eBird enabled but not configured; see prior notification")
+	} else {
+		GetLogger().Info("eBird integration disabled")
+		cm.notifySuccess("eBird integration disabled")
+	}
+
+	emitHotReload("ebird")
 }
 
 // handleUpdateDetectionIntervals updates event tracking intervals for species
@@ -972,16 +1018,6 @@ func (cm *ControlMonitor) handleReconfigureAudioSources() {
 	// Source reassignment changes the inference topology; notify the metrics SSE stream.
 	if cm.apiController != nil {
 		cm.apiController.BroadcastInferenceTopologyChanged()
-	}
-}
-
-// handleRecalculateDynamicThresholds recalculates all dynamic threshold CurrentValue entries
-// when the global BirdNET.Threshold changes. The stored absolute values are recomputed
-// from each species' current level/tier and the new base threshold.
-func (cm *ControlMonitor) handleRecalculateDynamicThresholds() {
-	if cm.proc != nil {
-		cm.proc.RecalculateDynamicThresholds()
-		emitHotReload("dynamic_thresholds")
 	}
 }
 

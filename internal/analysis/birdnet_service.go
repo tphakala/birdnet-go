@@ -36,11 +36,18 @@ func (a *BirdNETAnalyzer) Name() string {
 // Start initializes the BirdNET interpreter and builds the species range filter.
 // Model initialization failures are non-retryable (missing files, insufficient resources).
 func (a *BirdNETAnalyzer) Start(_ context.Context) error {
+	// Resolve the config directory once and thread it through: both the catalog
+	// load and the model manager's endpoint-resolver persistence live under it,
+	// and ResolveConfigDir does filesystem work, so resolving it a single time
+	// avoids a duplicate probe. It returns "" on error; each consumer logs the
+	// consequence with the shared error.
+	configDir, configDirErr := conf.ResolveConfigDir()
+
 	// Load the user-editable model catalog before constructing the orchestrator
 	// so every catalog consumer (range-filter setup, the gallery API, the
 	// installed-model scan) sees the same active catalog. Non-fatal: any failure
 	// falls back to the built-in embedded catalog.
-	a.loadModelCatalog()
+	a.loadModelCatalog(configDir, configDirErr)
 
 	bn, err := classifier.NewOrchestrator(a.settings)
 	if err != nil {
@@ -68,7 +75,7 @@ func (a *BirdNETAnalyzer) Start(_ context.Context) error {
 
 	// Initialize ModelManager for the model gallery. Failure is non-fatal
 	// because the gallery is an optional feature; core detection still works.
-	a.initModelManager(bn)
+	a.initModelManager(bn, configDir, configDirErr)
 
 	return nil
 }
@@ -117,14 +124,13 @@ func (a *BirdNETAnalyzer) ModelManager() *classifier.ModelManager {
 // (conf.Settings.ResolveModelsDir); both coincide on a default install but can
 // differ for a system (/etc) or --config install. Failure is non-fatal: the
 // built-in embedded catalog is used and startup continues.
-func (a *BirdNETAnalyzer) loadModelCatalog() {
+func (a *BirdNETAnalyzer) loadModelCatalog(configDir string, resolveErr error) {
 	log := GetLogger()
 
-	configDir, err := conf.ResolveConfigDir()
-	if err != nil {
+	if resolveErr != nil {
 		log.Warn("could not resolve config directory; using built-in model catalog",
 			logger.String("service", birdNETAnalyzerName),
-			logger.Error(err))
+			logger.Error(resolveErr))
 		return
 	}
 	if err := classifier.LoadCatalog(configDir); err != nil {
@@ -134,7 +140,7 @@ func (a *BirdNETAnalyzer) loadModelCatalog() {
 	}
 }
 
-func (a *BirdNETAnalyzer) initModelManager(bn *classifier.Orchestrator) {
+func (a *BirdNETAnalyzer) initModelManager(bn *classifier.Orchestrator, configDir string, resolveErr error) {
 	log := GetLogger()
 
 	modelsDir, ok := a.settings.ResolveModelsDir()
@@ -145,6 +151,20 @@ func (a *BirdNETAnalyzer) initModelManager(bn *classifier.Orchestrator) {
 	}
 
 	a.modelManager = classifier.NewModelManager(modelsDir, bn, a.settings)
+
+	// Inject the HuggingFace endpoint resolver so model downloads fail over from
+	// a blocked canonical host (e.g. behind the Great Firewall) to the mirror.
+	// It persists the working host under the config directory (resolved once in
+	// Start) so the preference survives a restart; an unresolved config dir keeps
+	// failover in memory only. Construction reads at most one small local file and
+	// does no network I/O, so it is safe here on the startup path.
+	if resolveErr != nil {
+		log.Warn("could not resolve config directory; HuggingFace mirror failover will not persist across restarts",
+			logger.String("service", birdNETAnalyzerName),
+			logger.Error(resolveErr))
+	}
+	a.modelManager.SetEndpointResolver(conf.NewHFEndpointResolver(configDir))
+
 	a.modelManager.ScanInstalled()
 
 	log.Info("model manager initialized",

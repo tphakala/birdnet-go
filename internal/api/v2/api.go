@@ -439,15 +439,16 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		c.getSettingsOrFallback, c.publishAndSaveSettings, c.handleSettingsChanges)
 	// The detections handler needs the same facade settings-save machinery as the
 	// integrations/TLS handlers (the review/ignore exclude-list mutation persists
-	// settings) plus three more facade-owned function dependencies whose subsystems
+	// settings) plus four more facade-owned function dependencies whose subsystems
 	// are not extracted yet: the auth check (isClientAuthenticated) and the cached
-	// name-map accessors (loadCommonNameMap/loadCommonToScientificMap). c is fully
+	// name-map accessors (display, folded-search, and exact-resolution maps). c is fully
 	// constructed here and these deps are stable for its lifetime; the method values
 	// read their backing fields at call time (so the post-option authService is
 	// observed), so this is wired before the functional options loop.
 	c.detections = detections.New(c.Core, &c.settingsMutex,
 		c.getSettingsOrFallback, c.publishAndSaveSettings, c.handleSettingsChanges,
-		c.isClientAuthenticated, c.loadCommonNameMap, c.loadCommonToScientificMap)
+		c.isClientAuthenticated, c.loadCommonNameMap, c.loadFoldedCommonNameMap,
+		c.loadCommonToScientificMap)
 	// The analytics handler is injected the same facade-owned dependencies as
 	// detections: the auth check (isClientAuthenticated, read per request so the
 	// public /analytics/sources response anonymizes source names) and the cached
@@ -467,9 +468,6 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// (c.media.ServeSpeciesImageProxy). They are passed as bound method values; c
 	// is fully constructed here, so the method values are stable for its lifetime.
 	c.species = species.New(c.Core, c.loadCommonNameMap, c.media.ServeSpeciesImageProxy)
-	// The models handler needs only the shared core (ModelManager and the
-	// settings/error/log/goroutine helpers all promote from it).
-	c.models = models.New(c.Core)
 	// The support handler needs only the shared core (settings, datastore, V2
 	// manager, and the error/log/goroutine helpers all promote from it).
 	c.support = support.New(c.Core)
@@ -549,6 +547,15 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// channel is wired later via SetAudioLevelChan.
 	c.audio = audioapi.New(c.Core, c.authService)
 
+	// Construct the models domain handler AFTER the functional options are applied
+	// so it captures the post-option authService. The catalog endpoint uses it to
+	// gate the hardware-derived recommendation fields to authenticated (or
+	// auth-not-required) requests, so an anonymous caller on an auth-enabled
+	// instance does not learn the host's hardware profile. authService never
+	// changes after this point, so capturing it here is behaviorally identical to
+	// a per-request read; every other models dependency promotes from c.Core.
+	c.models = models.New(c.Core, c.authService)
+
 	// Log auth configuration status
 	log := GetLogger()
 	if c.AuthMiddleware != nil {
@@ -570,9 +577,9 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	c.Group.Use(c.LoggingMiddleware())      // Use custom structured logging middleware
 	c.Group.Use(c.PrivateModeAuth)          // Gate all API endpoints behind auth when PrivateMode is enabled
 
-	// NOTE: CSRF token is provided by the /app/config endpoint using middleware.EnsureCSRFToken()
-	// which handles Echo v4.15.0's Sec-Fetch-Site optimization that may skip token generation
-	// for same-origin requests. Global CSRF middleware in server.go handles validation.
+	// NOTE: CSRF token is provided by the /app/config endpoint using middleware.EnsureCSRFToken().
+	// The global CSRF middleware in server.go strips Sec-Fetch-Site: same-origin/none so Echo
+	// always runs its token path and validates state-changing requests (GHSA-9fhj-f35q-w532).
 
 	// Initialize start time for uptime tracking
 	now := time.Now()

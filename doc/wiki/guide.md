@@ -98,7 +98,7 @@ Pre-compiled BirdNET-Go executables are also available at https://github.com/tph
 BirdNET-Go has minimal external dependencies, but requires a few specific tools for certain features:
 
 - **TensorFlow Lite C library**: Required for the core audio analysis functionality
-- **FFmpeg**: Required for RTSP stream capture, the HLS live stream feature in the web interface, on-demand clip transcoding in the web interface, and audio export to MP3. WAV and FLAC are encoded natively and do not need FFmpeg. AAC and Opus export uses FFmpeg by default, but native encoders for both are available as an opt-in preview via the `BIRDNET_AAC_ENCODER=native` and `BIRDNET_OPUS_ENCODER=native` environment variables. The HLS live stream also runs through FFmpeg by default; setting `BIRDNET_HLS_ENCODER=native` switches it to a pure-Go encoder and muxer, as an opt-in preview. Loudness normalization of saved clips is done natively for every format and no longer needs FFmpeg.
+- **FFmpeg**: Required for RTSP stream capture, the HLS live stream feature in the web interface, on-demand clip transcoding in the web interface, and audio export to MP3. WAV, FLAC and Opus are encoded natively and do not need FFmpeg. AAC export uses FFmpeg by default, but a native encoder is available as an opt-in preview via the `BIRDNET_AAC_ENCODER=native` environment variable. The HLS live stream also runs through FFmpeg by default; setting `BIRDNET_HLS_ENCODER=native` switches it to a pure-Go encoder and muxer, as an opt-in preview. Loudness normalization of saved clips is done natively for every format and no longer needs FFmpeg.
 
   With `BIRDNET_HLS_ENCODER=native` the live stream is encoded in-process and served from memory, so nothing is written to the HLS directory. Note two differences from the FFmpeg path while the preview is in place: the output sample rate is fixed at 48 kHz, so `webserver.livestream.samplerate` has no effect (a warning is logged if it is set to anything else), and `webserver.livestream.ffmpegloglevel` no longer applies since there is no FFmpeg process to configure.
 
@@ -2126,7 +2126,7 @@ Discord is one of the most popular notification targets. Here's how to set it up
 2. Go to **Server Settings** → **Integrations** → **Webhooks**
 3. Click **New Webhook**
 4. Choose the channel where you want notifications to appear
-5. Copy the webhook URL — it looks like: `https://discord.com/api/webhooks/1234567890/abcDEFghiJKLmnoPQRstu`
+5. Copy the webhook URL. It looks like: `https://discord.com/api/webhooks/1234567890/abcDEFghiJKLmnoPQRstu`
 
 **Step 2: Convert to Shoutrrr URL Format**
 
@@ -3069,7 +3069,7 @@ Sent when a new bird detection occurs and passes all filters.
   "longitude": 24.9384,
   "clipName": "eurasian_blackbird_87p_20240115T083045Z.wav",
   "birdImage": {
-    "url": "https://example.com/bird-image.jpg",
+    "url": "/api/v2/media/image/Turdus%20merula",
     "attribution": "Image by Photographer Name",
     "license": "CC BY-SA 4.0",
     "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
@@ -3078,6 +3078,13 @@ Sent when a new bird detection occurs and passes all filters.
   "eventType": "new_detection"
 }
 ```
+
+`birdImage.url` is a path on this BirdNET-Go instance, not an address on the image
+provider. It is always present, so it is not a signal that an image exists: the server
+resolves species images in the background, and the endpoint answers `503` while a fetch
+is still in flight and `404` for a species that has no image. Resolve it against your
+BirdNET-Go base URL and handle both statuses, retrying a `503` after the `Retry-After`
+it advertises.
 
 #### 3. Heartbeat Event
 
@@ -3121,8 +3128,11 @@ Perfect for web dashboards or browser-based applications:
     <div id="detections"></div>
 
     <script>
+      // birdImage.url is a path on the BirdNET-Go instance, so it has to be resolved
+      // against the same base URL the stream itself came from.
+      const BIRDNET_BASE_URL = "http://localhost:8080";
       const eventSource = new EventSource(
-        "http://localhost:8080/api/v2/detections/stream",
+        `${BIRDNET_BASE_URL}/api/v2/detections/stream`,
       );
       const detectionsDiv = document.getElementById("detections");
 
@@ -3143,7 +3153,7 @@ Perfect for web dashboards or browser-based applications:
                  <p>Confidence: ${(detection.confidence * 100).toFixed(1)}%</p>
                  <p>Time: ${detection.time}</p>
                  <p>Source: ${detection.source}</p>
-                 ${detection.birdImage?.url ? `<img src="${detection.birdImage.url}" alt="${detection.commonName}" style="max-width: 200px;">` : ""}
+                 ${detection.birdImage?.url ? `<img src="${BIRDNET_BASE_URL}${detection.birdImage.url}" alt="${detection.commonName}" style="max-width: 200px;" onerror="this.style.display='none'">` : ""}
              `;
 
         // Add to top of list

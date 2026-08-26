@@ -11,7 +11,6 @@
   import { api } from '$lib/utils/api';
   import { getLogger } from '$lib/utils/logger';
   import { resetDateToToday } from '$lib/utils/datePersistence';
-  import { clearGuestLayout } from '$lib/stores/guestDashboardLayout';
   import {
     Settings,
     Sun,
@@ -42,10 +41,10 @@
   let buttonRef = $state<HTMLButtonElement | null>(null);
   let dropdownRef = $state<HTMLDivElement | null>(null);
 
-  // Admin check: user is authenticated or security is disabled
+  // Admin check: user is authenticated or security is disabled. Dashboard
+  // customization is admin-only: guests view the owner's published dashboard
+  // read-only and never see the edit/reset controls (see issue #4112).
   let isAdmin = $derived(!securityEnabled || accessAllowed);
-  // Guest: security enabled but user is not authenticated
-  let isGuest = $derived(securityEnabled && !accessAllowed);
 
   // Initialize theme and scheme (migrated from ThemeToggle)
   onMount(() => {
@@ -92,14 +91,6 @@
   }
 
   async function confirmResetDashboard() {
-    if (isGuest) {
-      // Guest users: clear localStorage layout so it falls back to the server public config
-      clearGuestLayout();
-      showResetConfirm = false;
-      navigation.navigate('/ui/dashboard');
-      return;
-    }
-
     try {
       await api.patch('/api/v2/settings/dashboard', { layout: DEFAULT_LAYOUT });
     } catch (error) {
@@ -211,8 +202,8 @@
           <span>{t('navigation.theme')}</span>
         </button>
 
-        <!-- Edit Dashboard (available for authenticated users and guests) -->
-        {#if isAdmin || isGuest}
+        <!-- Edit Dashboard (authenticated users only; guests view read-only) -->
+        {#if isAdmin}
           <button
             onclick={handleEditDashboard}
             class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-normal text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"

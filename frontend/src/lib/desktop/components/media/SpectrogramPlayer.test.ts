@@ -7,10 +7,21 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { writable } from 'svelte/store';
 import { createComponentTestFactory, screen, fireEvent } from '../../../../test/render-helpers';
+import { useAudioPlayback } from '$lib/utils/useAudioPlayback.svelte';
 import SpectrogramPlayer from './SpectrogramPlayer.svelte';
 
 // --- Mock state that tests can mutate before each render ---
+
+const mockDashboardSettings = writable<{ defaultAudioGain?: number }>({ defaultAudioGain: 0 });
+
+vi.mock('$lib/stores/settings', () => ({
+  dashboardSettings: {
+    subscribe: (fn: (val: { defaultAudioGain?: number }) => void) =>
+      mockDashboardSettings.subscribe(fn),
+  },
+}));
 
 let mockAudioState = {
   isPlaying: false,
@@ -149,6 +160,9 @@ describe('SpectrogramPlayer', () => {
       reset: vi.fn(),
       cleanup: vi.fn(),
     };
+
+    // Reset settings mock state
+    mockDashboardSettings.set({ defaultAudioGain: 0 });
   });
 
   afterEach(() => {
@@ -364,5 +378,42 @@ describe('SpectrogramPlayer', () => {
     const group = screen.getByRole('group');
     expect(group).toBeInTheDocument();
     expect(group).toHaveAttribute('aria-label', 'media.audio.player');
+  });
+
+  // ---------------------------------------------------------------
+  // 8. Initializes useAudioPlayback with defaultGainDb from dashboardSettings
+  // ---------------------------------------------------------------
+  it('passes defaultGainDb from dashboardSettings to useAudioPlayback', () => {
+    mockDashboardSettings.set({ defaultAudioGain: 12 });
+
+    spectrogramTest.render({
+      audioUrl: '/api/v2/audio/test-123',
+      detectionId: 'test-123',
+    });
+
+    expect(useAudioPlayback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        audioUrl: '/api/v2/audio/test-123',
+        detectionId: 'test-123',
+        defaultGainDb: 12,
+      })
+    );
+  });
+
+  it('falls back to 0 dB when defaultAudioGain is not configured in dashboardSettings', () => {
+    mockDashboardSettings.set({});
+
+    spectrogramTest.render({
+      audioUrl: '/api/v2/audio/test-123',
+      detectionId: 'test-123',
+    });
+
+    expect(useAudioPlayback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        audioUrl: '/api/v2/audio/test-123',
+        detectionId: 'test-123',
+        defaultGainDb: 0,
+      })
+    );
   });
 });

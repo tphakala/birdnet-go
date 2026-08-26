@@ -433,11 +433,12 @@ func TestModelInfos_ReportsLiveSpeciesCount(t *testing.T) {
 	t.Run("primary model overrides stale template count", func(t *testing.T) {
 		t.Parallel()
 		const customPrimarySpecies = 500
+		const staleTemplateSpecies = 9999
 		const id = "BirdNET_V2.4"
-		// o.ModelInfo carries a stale template count (6523); the loaded instance
-		// reports a custom label file with 500 species.
+		// o.ModelInfo carries an arbitrary stale template count; the loaded instance
+		// reports a custom label file with 500 species that must override it.
 		o := &Orchestrator{
-			ModelInfo: ModelInfo{ID: id, Name: "BirdNET v2.4", NumSpecies: 6523},
+			ModelInfo: ModelInfo{ID: id, Name: "BirdNET v2.4", NumSpecies: staleTemplateSpecies},
 			models: map[string]*modelEntry{
 				id: {instance: &mockModelInstance{id: id, numSpecies: customPrimarySpecies}},
 			},

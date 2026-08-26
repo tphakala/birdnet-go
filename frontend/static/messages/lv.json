@@ -412,6 +412,7 @@
         "updatingIntervals": "Atjaunina noteikšanas intervālus...",
         "reconfiguringMqtt": "Atjaunina MQTT savienojumu...",
         "reconfiguringBirdweather": "Atjaunina BirdWeather integrāciju...",
+        "reconfiguringEbird": "Updating eBird integration...",
         "reconfiguringStreams": "Atjaunina audio straumes...",
         "reconfiguringTelemetry": "Atjaunina telemetrijas iestatījumus...",
         "reconfiguringPushNotifications": "Pārkonfigurē push paziņojumu pakalpojumu sniedzējus...",
@@ -456,6 +457,11 @@
       "ort": {
         "unavailableTitle": "ONNX Runtime nav pieejams",
         "unavailableMessage": "ONNX Runtime {requiredVersion} ir nepieciešams modelim {modelName}, bet netika atrasts. Skatiet instalēšanas rokasgrāmatu: {installGuideURL}"
+      },
+      "region": {
+        "staleTitle": "Modeļa reģions var būt novecojis",
+        "staleMessage": "{modelName} ir instalēts reģionam {oldRegion}, bet jūsu jaunā atrašanās vieta atbilst {newRegion}. Varat pārslēgt variantus no modeļu galerijas sadaļā Iestatījumi.",
+        "staleGlobalMessage": "{modelName} ir instalēts reģionam {oldRegion}, bet jūsu jaunā atrašanās vieta ir ārpus tā pārklājuma. Varat pārslēgties uz globālo variantu no modeļu galerijas sadaļā Iestatījumi."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -623,6 +629,7 @@
       "categoryYear": "Jauna šogad",
       "categorySeason": "Jauna šosezon",
       "categorySeasonNamed": "Jauna šajā {season}",
+      "categoryInfrequent": "Reti novērota",
       "maxConfidenceShort": "Maks {confidence} %",
       "detections": "{count, plural, zero {# noteikšanu} one {# noteikšana} other {# noteikšanas}}",
       "lastSeen": "Pēdējoreiz: {days, plural, =0 {šodien} one {pirms # dienas} other {pirms # dienām}}"
@@ -657,7 +664,8 @@
         "viewSixHourly": "Skatīt visas atklāšanas no {startHour}:00 līdz {endHour}:00",
         "hourlyDetections": "{count} atklāšanas plkst. {hour}:00 - noklikšķiniet, lai skatītu",
         "biHourlyDetections": "{count} atklāšanas no {startHour}:00 līdz {endHour}:00 - noklikšķiniet, lai skatītu",
-        "sixHourlyDetections": "{count} atklāšanas no {startHour}:00 līdz {endHour}:00 - noklikšķiniet, lai skatītu"
+        "sixHourlyDetections": "{count} atklāšanas no {startHour}:00 līdz {endHour}:00 - noklikšķiniet, lai skatītu",
+        "infrequent": "Reti novērota - atgriezās pēc {days, plural, zero {# dienu} one {# dienas} other {# dienām}} prombūtnes"
       },
       "loading": {
         "preparing": "Sagatavo datus...",
@@ -1688,6 +1696,26 @@
       "title": "MI Modeļi un Secinājumi",
       "loading": "Ielādē secinājumu statusu",
       "error": "Neizdevās ielādēt secinājumu statusu",
+      "vad": {
+        "section": "Privātuma aizsardzība",
+        "title": "Silero VAD",
+        "active": "Aktīvs",
+        "activeHelp": "Runas noteikšanas modelis ir ielādēts un novērtē audio.",
+        "idle": "Dīkstāve",
+        "idleHelp": "Iespējots un gatavs; modelis tiek ielādēts, kad tiek novērtēts pirmais audio fragments.",
+        "disabled": "Atspējots",
+        "disabledHelp": "Privātuma aizsardzība ir izslēgta privātuma filtra iestatījumos.",
+        "unavailable": "Nav modeļa",
+        "unavailableHelp": "Šajā būvējumā nav pieejams runas noteikšanas modelis. Iestatiet VAD modeļa ceļu privātuma filtra iestatījumos vai izmantojiet būvējumu ar iegultu modeli.",
+        "description": "Silero VAD ir specializēts akustiskais modelis, kas nosaka cilvēka runu. Tas darbina privātuma filtru, izmetot audio, kad ir klāt runa, lai balsis netiktu saglabātas jūsu ierakstos.",
+        "threshold": "Slieksnis",
+        "speechHits": "Runas atklājumi",
+        "recentTitle": "Nesenā runa",
+        "recentEmpty": "Runa vēl nav konstatēta",
+        "colWhen": "Laiks",
+        "colProbability": "Varbūtība",
+        "colSource": "Avots"
+      },
       "sectionHardware": "Aparatūra",
       "sectionBackends": "Secinājumu Aizmugursistēmas",
       "sectionModels": "Modeļi",
@@ -1698,6 +1726,9 @@
       "fp16": "FP16",
       "fp16Supported": "FP16 atbalstīts",
       "fp16Unsupported": "FP16 netiek atbalstīts",
+      "advanced": "Papildu",
+      "capabilities": "Iespējas",
+      "capabilitiesHelp": "Aparatūras tagi, ko izmanto, lai saskaņotu šo datoru ar pieejamajiem modeļu būvējumiem.",
       "backendTflite": "TensorFlow Lite",
       "backendOnnx": "ONNX Runtime",
       "backendOpenvino": "OpenVINO",
@@ -1715,8 +1746,6 @@
       "gpu": "Grafikas karte",
       "gpuReachable": "Sasniedzams",
       "gpuNotReachable": "Nav sasniedzams",
-      "capabilities": "Spējas",
-      "capabilitiesHelp": "Aparatūras atzīmes izmanto modelim piemērota risinājuma izvēlei.",
       "gpuReasonRenderNodeUnavailable": "GPU mezgls serverim nav pieejams. Dockerā pievieno /dev/dri.",
       "gpuReasonRenderNodePermission": "Nav atļaujas piekļūt GPU mezglam. Kontam nepieciešama piekļuve 'render' grupai.",
       "gpuReasonNoRuntime": "BirdNET-Go pašlaik izmanto tikai Intel grafikas kartes paātrināšanai.",
@@ -2768,7 +2797,8 @@
           "detectionPath": "Relatīvais ceļš uz noteikšanu (piem., \"/ui/detections/1234\")",
           "detectionUrl": "Pilns URL uz noteikšanu saskarnē",
           "imageUrl": "Saite uz sugas attēlu",
-          "daysSinceFirstSeen": "Dienu skaits kopš pirmās noteikšanas"
+          "daysSinceFirstSeen": "Dienu skaits kopš pirmās noteikšanas",
+          "daysSinceLastSeen": "Dienu skaits kopš pēdējās noteikšanas"
         }
       },
       "testNotification": {
@@ -3084,7 +3114,11 @@
         "enable": "Iespējot privātuma filtrēšanu",
         "disabled": "Privātuma filtrēšana ir atspējota",
         "confidenceLabel": "Ticamības slieksnis cilvēku noteikšanai",
-        "confidenceHelp": "Iestatiet ticamības līmeni cilvēku balss noteikšanai, zemāka vērtība padara filtru jutīgāku"
+        "confidenceHelp": "Iestatiet ticamības līmeni cilvēku balss noteikšanai, zemāka vērtība padara filtru jutīgāku",
+        "vadEnable": "Iespējot Privātuma Aizsardzību (Silero VAD)",
+        "vadHelp": "Darbojas ar atsevišķu neironu runas noteikšanas modeli blakus klasifikatoram uzticamai balss filtrēšanai. Patērē papildu sistēmas resursus (aptuveni 20-30 MB RAM un CPU inferenci uz segmentu).",
+        "vadThresholdLabel": "Privātuma Aizsardzības slieksnis",
+        "vadThresholdHelp": "Jutības slieksnis balss aktivitātes detektoram (noklusējums 0,35). Zemākas vērtības padara filtru jutīgāku pret klusu vai attālu runu."
       },
       "falsePositivePrevention": {
         "title": "Viltus pozitīvo novēršana",
@@ -4291,6 +4325,18 @@
             "hemisphereNote": "Sezonu datumi tiek automātiski konfigurēti, pamatojoties uz jūsu ģeogrāfisko platumu. Ziemeļu puslode izmanto standarta sezonas, dienvidu puslodei ir nobīdīti datumi, un ekvatoriālajos reģionos tiek izmantotas lietainās/sausās sezonas."
           }
         },
+        "infrequent": {
+          "title": "Reti novērotu sugu izsekošana",
+          "description": "Atzīmē sugas, kas atgriežas pēc ilgas prombūtnes (reti atgriezušies viesi)",
+          "enabled": {
+            "label": "Iespējot reti novērotu sugu izsekošanu",
+            "helpText": "Izsekot un paziņot, kad suga pēc ilgas prombūtnes tiek noteikta atkārtoti"
+          },
+          "absenceDays": {
+            "label": "Prombūtnes slieksnis (dienas)",
+            "helpText": "Minimālais dienu skaits kopš pēdējās noteikšanas, pirms atgriezusies suga tiek atzīmēta kā 'reti novērota' (1-365)"
+          }
+        },
         "months": {
           "january": "Janvāris",
           "february": "Februāris",
@@ -4488,6 +4534,7 @@
           "stream_disconnected": "Straume atvienota",
           "stream_error": "Straumes kļūda",
           "detection_new_species": "Jauna suga noteikta",
+          "detection_infrequent_species": "Noteikta reti novērota suga",
           "detection_occurred": "Noteikšana notikusi",
           "application_started": "Lietojumprogramma palaista",
           "application_stopped": "Lietojumprogramma apturēta",
@@ -4537,6 +4584,10 @@
         "newSpecies": {
           "name": "Jauna suga noteikta",
           "description": "Paziņo, kad suga tiek noteikta pirmo reizi"
+        },
+        "infrequentSpecies": {
+          "name": "Noteikta reti novērota suga",
+          "description": "Paziņo, kad suga atgriežas pēc ilgas prombūtnes"
         },
         "streamDisconnected": {
           "name": "Audio straume atvienota",
@@ -5232,6 +5283,20 @@
       "locale": {
         "label": "Sugu valoda",
         "helpText": "Valoda, kas tiek izmantota sugu nosaukumiem interfeisā."
+      },
+      "secondaryThresholdOverride": {
+        "label": "Override confidence threshold",
+        "helpText": "When enabled, this model uses its own confidence threshold below. When disabled, it follows the main BirdNET confidence threshold."
+      },
+      "secondaryThreshold": {
+        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
+        "followsBirdnet": "Enable the override above to set a custom value. This model currently follows the main BirdNET confidence threshold."
+      },
+      "perchThreshold": {
+        "label": "Perch v2 Confidence Threshold"
+      },
+      "birdnetv3Threshold": {
+        "label": "BirdNET v3.0 Confidence Threshold"
       }
     },
     "rangeFilter": {
@@ -5271,6 +5336,79 @@
     "gallery": {
       "title": "Modeļu galerija",
       "description": "Pārvaldiet klasifikācijas modeļus putnu un sikspārņu noteikšanai.",
+      "region": {
+        "title": "Modeļa reģions",
+        "modeAuto": "Automātiski",
+        "modeAutoHint": "Izvēlēties labāko reģionālo variantu pēc stacijas atrašanās vietas",
+        "modeManual": "Manual region select",
+        "modeManualHint": "Choose a region yourself, or the worldwide model",
+        "worldwideTitle": "Worldwide",
+        "worldwideSubtitle": "Every region, all species",
+        "worldwideResourceNote": "Largest model, uses the most RAM and CPU",
+        "selectedBadge": "Selected",
+        "orSpecificRegion": "Or a specific region",
+        "search": "Search regions or countries",
+        "searchNoResults": "No regions match \"{query}\"",
+        "manualPrompt": "Choose a region below, or the worldwide model.",
+        "countriesOverflow": "+{count}",
+        "coreCoverage": "Core coverage:",
+        "partialCoverage": "Partial coverage:",
+        "pinAction": "Piespraust {region}",
+        "switchToAuto": "Pārslēgties uz automātisko",
+        "loading": "Ielādē reģionus...",
+        "loadFailed": "Neizdevās ielādēt reģiona datus",
+        "mapUnavailable": "Pārklājuma karte nav pieejama",
+        "mapAria": "{region} pārklājuma karte",
+        "why": {
+          "noLocation": "Automātiskajai atlasei nepieciešama stacijas atrašanās vieta. Iestatiet to Galvenajos iestatījumos; līdz tam tiek izmantots globālais modelis.",
+          "outsideCoverage": "Jūsu atrašanās vieta ir ārpus visu reģionālo modeļu pārklājuma, tāpēc tiek izmantots globālais modelis.",
+          "ambiguous": "Jūsu atrašanās vieta ir tuvu robežai starp {region} un {runnerUp}. Automātiskā atlase izmanto {region}; piespraudiet kādu no tiem, lai izvēle būtu skaidra.",
+          "resolved": "Noteiktais reģions pēc jūsu atrašanās vietas: {region}.",
+          "global": "Vienmēr tiek izmantots globālais modelis neatkarīgi no stacijas atrašanās vietas.",
+          "pinned": "Piesprausts reģionam {region}. Stacijas atrašanās vieta neietekmē modeļa atlasi.",
+          "pinnedMismatch": "Jūsu atrašanās vieta pašlaik atbilst {resolved}.",
+          "pinnedUnknown": "Piespraustais reģions \"{region}\" nav pieejams pašreizējā modeļu katalogā. Modeļu saimes atgriežas pie jūsu atrašanās vietas vai globālā modeļa."
+        }
+      },
+      "variants": {
+        "title": "Modeļa variants",
+        "recommended": "Ieteicams",
+        "recommendedForHardware": "Labākais jūsu aparatūrai",
+        "installed": "Instalēts",
+        "default": "Noklusējuma",
+        "incompatible": "Nav pieejams jūsu aparatūrai",
+        "showAll": "Rādīt visus variantus ({count})",
+        "showRegion": "Rādīt variantus reģionam {region} un jūsu aparatūrai ({count})",
+        "showHardware": "Rādīt aparatūras variantus ({count})",
+        "showAllRegions": "Rādīt visus variantus, ieskaitot citus reģionus ({count})",
+        "regionContext": "Reģionālie varianti parādīti reģionam {region}, iestatīti ar modeļa reģiona izvēli augstāk",
+        "regionContextNone": "Ir pieejami reģionālie varianti. Izvēlieties reģionu modeļa reģiona izvēlē augstāk vai rādiet visus variantus.",
+        "otherRegions": "Citi reģioni",
+        "filterPlaceholder": "Filtrēt reģionus",
+        "filterAria": "Filtrēt reģioniem pielāgotās versijas",
+        "filterNoMatch": "Neviens reģions neatbilst \"{query}\"",
+        "latency": "~{ms} ms",
+        "precisionInfo": "About precision and variants",
+        "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
+      },
+      "actionInProgress": "Pagaidiet, līdz beidzas pašreizējā modeļa instalēšana, pārinstalēšana vai noņemšana",
+      "removeSuccess": "Removed {name}",
+      "reasons": {
+        "backendRecommended": "Darbojas ar {backend}, kas ir ieteicamā aizmugursistēma jūsu aparatūrai",
+        "backendSupported": "Darbojas ar {backend}",
+        "regionMatched": "Pielāgots jūsu reģionam ({region})",
+        "regionGlobalFallback": "Globālais modelis jūsu atrašanās vietai",
+        "precisionFp16Native": "Pusprecizitātes versija, kas pielāgota jūsu procesoram",
+        "precisionFp16GpuPreferred": "Pusprecizitātes versija: uz pusi mazāka lejupielāde, darbojas jūsu GPU",
+        "ramConstrainedFit": "Kvantizēta versija, kas pielāgota jūsu pieejamajai atmiņai",
+        "benchmarkMeasured": "Ātrākais jūsu ierīcē saskaņā ar veiktspējas testiem",
+        "variantLegacy": "Aizstāts ar jaunāku versiju",
+        "archUnsupported": "Nepieciešams {required} procesors",
+        "backendMissing": "Nepieciešama inferences aizmugursistēma, ko jūsu versija nevar sasniegt ({required})",
+        "ramInsufficient": "Nepieciešami vismaz {requiredMb} MB atmiņas",
+        "hardwareExcluded": "Nav atbalstīts jūsu aparatūrā ({token})",
+        "backendOnnxUnavailable": "Nepieciešams ONNX Runtime, kas šajā sistēmā nav pieejams. Docker attēli un laidiena arhīvi to iekļauj; skatiet ONNX Runtime instalēšanas pamācību."
+      },
       "tabs": {
         "installed": "Instalētie",
         "available": "Pieejamie"
@@ -5278,7 +5416,6 @@
       "loading": "Ielādē modeļus...",
       "retry": "Mēģināt vēlreiz",
       "builtIn": "Iebūvēts",
-      "builtInDescription": "BirdNET komandas iebūvēts putnu sugu klasifikators.",
       "species": "{count} sugas",
       "install": "Instalēt",
       "installing": "Instalē...",
@@ -5323,7 +5460,13 @@
       "errors": {
         "catalogLoadFailed": "Neizdevās ielādēt modeļu katalogu",
         "installFailed": "Neizdevās sākt modeļa instalēšanu",
-        "removeFailed": "Neizdevās noņemt modeli"
+        "removeFailed": "Neizdevās noņemt modeli",
+        "actionFailed": "Radās problēma ar {name}",
+        "downloadSourceHint": "Ja jūsu tīklā huggingface.co ir bloķēts vai lēns, iestatiet spoguļvietni zemāk esošajā sadaļā Lejupielādes avots.",
+        "goToDownloadSource": "Doties uz Lejupielādes avots",
+        "dismiss": "Noraidīt",
+        "details": "Details",
+        "removeRetryHint": "To try again, use the Remove button on the model's card."
       },
       "regionLabel": "Reģions",
       "speciesLabel": "Sugas",
@@ -5331,9 +5474,40 @@
       "reinstalling": "Pārinstalē...",
       "reinstallComplete": "Faili veiksmīgi pārbaudīti",
       "geomodelBadge": "Ietver BirdNET v3.0 ģeomodelis",
-      "onnxRuntimeRequired": "Nepieciešams ONNX Runtime, kas šajā sistēmā nav pieejams.",
-      "onnxRuntimeMissing": "ONNX Runtime nav pieejams. Šo modeli nevar palaist.",
-      "unavailable": "Nav pieejams"
+      "preview": {
+        "badge": "Priekšskatījums",
+        "buildLabel": "{version} · {build}",
+        "cardNotice": "Izstrādātāja priekšskatījums, nav galīgais laidiens. Šī ir agrīna versija testēšanai; rezultāti var mainīties pirms stabilās versijas.",
+        "dialogNotice": "Jūs instalējat izstrādātāja priekšskatījumu ({build}). Piemērots izmēģināšanai, taču vēl nav ieteicams kā jūsu vienīgais klasifikators."
+      },
+      "entryIncompatible": "Šis modelis nav pieejams šajā sistēmā.",
+      "regionGlobal": "Globāls",
+      "hardwareLabel": "Aparatūra",
+      "hardware": {
+        "gpuNvidia": "GPU (NVIDIA)",
+        "gpuIntel": "GPU (Intel)",
+        "armCpu": "ARM CPU",
+        "amd64Cpu": "AMD64 CPU",
+        "arm64Cpu": "ARM64 CPU",
+        "cpu": "CPU"
+      },
+      "optimize": {
+        "bannerTitle": "{count, plural, zero {# modeļu var darboties ātrāk jūsu aparatūrā} one {# modelis var darboties ātrāk jūsu aparatūrā} other {# modeļi var darboties ātrāk jūsu aparatūrā}}",
+        "review": "Pārskatīt",
+        "dismiss": "Noraidīt",
+        "badgeTitle": "Jūsu aparatūrai ir pieejama ātrāka versija",
+        "swap": "Optimizēt",
+        "dialogTitle": "Optimizējiet savus modeļus",
+        "installedBuild": "Installed build",
+        "fromTo": "{from} uz {to}",
+        "apply": "Lietot",
+        "applyAll": "Lietot visu",
+        "applying": "Lieto...",
+        "applied": "Lietots",
+        "applyFailed": "Neizdevās lietot",
+        "upToDate": "Visi jūsu modeļi jau ir optimizēti šai aparatūrai.",
+        "licenseNote": "Aizstāšana notiek viena modeļa ietvaros, tāpēc tā licence nemainās."
+      }
     },
     "bird": {
       "title": "Putnu noteikšana",
@@ -5345,6 +5519,14 @@
     },
     "dynamicThreshold": {
       "birdOnlyNote": "Dinamiskais slieksnis attiecas tikai uz putnu klasifikatoriem."
+    },
+    "perch": {
+      "title": "Perch v2 Detection",
+      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+    },
+    "birdnetv3": {
+      "title": "BirdNET v3.0 Detection",
+      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
     }
   },
   "restart": {

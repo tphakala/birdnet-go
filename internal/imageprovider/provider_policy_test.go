@@ -1,6 +1,7 @@
 package imageprovider_test
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -120,24 +121,25 @@ func TestFallbackPolicyEnforcement(t *testing.T) {
 			primaryCache.SetRegistry(registry)
 
 			// Test Get method
-			_, err := primaryCache.Get("Parus major")
+			img, err := primaryCache.Get("Parus major")
 
+			// Whether the fallback provider was actually consulted is the user-visible
+			// symptom (a thumbnail appears or it does not). Asserting only on the
+			// returned error let a policy that silently skipped fallback pass, and the
+			// "all" branch was vacuous: err == nil || isImageNotFoundError(err) is
+			// satisfied by nearly any outcome.
 			if tt.expectFallback {
-				// With fallback enabled, the primary provider fails but fallback should work
-				// So we should get a result (no error or specific not found error)
-				assert.True(t, err == nil || isImageNotFoundError(err),
-					"Expected success or not found error with fallback enabled, got: %v", err)
+				require.NoError(t, err, "fallback provider should have satisfied the request")
+				assert.Equal(t, 1, fallbackProvider.getFetchCount(),
+					"fallback provider must be consulted when policy is %q", tt.fallbackPolicy)
+				assert.NotEmpty(t, img.URL, "fallback should have produced an image URL")
 			} else {
-				// Without fallback, we should get an error from the primary provider
-				assert.Error(t, err, "Expected error when primary provider fails and fallback is disabled")
+				require.Error(t, err, "Expected error when primary provider fails and fallback is disabled")
+				assert.Equal(t, 0, fallbackProvider.getFetchCount(),
+					"fallback provider must NOT be consulted when policy is %q", tt.fallbackPolicy)
 			}
 		})
 	}
-}
-
-// isImageNotFoundError checks if an error is an image not found error
-func isImageNotFoundError(err error) bool {
-	return err != nil && err.Error() == "image not found by provider"
 }
 
 // mockStoreWithTracking extends mockStore to track which providers had their DB
@@ -186,7 +188,7 @@ func TestRefreshEntryFallbackToDBCache(t *testing.T) {
 	require.NoError(t, store.SaveImageCache(&datastore.ImageCache{
 		ScientificName: species,
 		ProviderName:   providerAvicommons,
-		URL:            "http://old.example.com/redpoll.jpg",
+		URL:            "http://127.0.0.1/redpoll.jpg",
 		AuthorName:     "Old Author",
 		LicenseName:    "CC BY-SA 4.0",
 		CachedAt:       staleTime,
@@ -196,7 +198,7 @@ func TestRefreshEntryFallbackToDBCache(t *testing.T) {
 	require.NoError(t, store.SaveImageCache(&datastore.ImageCache{
 		ScientificName: species,
 		ProviderName:   providerWikimedia,
-		URL:            "https://upload.wikimedia.org/Carduelis_flammea_CT6.jpg",
+		URL:            "https://127.0.0.1/Carduelis_flammea_CT6.jpg",
 		AuthorName:     "Cephas",
 		LicenseName:    "CC BY-SA 3.0",
 		LicenseURL:     "https://creativecommons.org/licenses/by-sa/3.0/",
@@ -223,7 +225,7 @@ func TestRefreshEntryFallbackToDBCache(t *testing.T) {
 	// The Get itself returns stale data immediately.
 	img, err := primaryCache.Get(species)
 	require.NoError(t, err, "Get should return stale data without error")
-	assert.Equal(t, "http://old.example.com/redpoll.jpg", img.URL, "Should return stale data initially")
+	assert.Equal(t, "http://127.0.0.1/redpoll.jpg", img.URL, "Should return stale data initially")
 
 	// Poll for the background refresh to land the DB write, which is the actual
 	// observable the assertions below check. The refresh goroutine updates the
@@ -238,14 +240,14 @@ func TestRefreshEntryFallbackToDBCache(t *testing.T) {
 			ProviderName:   providerAvicommons,
 		})
 		return err == nil && dbEntry != nil &&
-			dbEntry.URL == "https://upload.wikimedia.org/Carduelis_flammea_CT6.jpg" &&
+			dbEntry.URL == "https://127.0.0.1/Carduelis_flammea_CT6.jpg" &&
 			dbEntry.CachedAt.After(staleTime)
 	}, 5*time.Second, 50*time.Millisecond, "Background refresh should persist wikimedia fallback URL to DB")
 
 	// Verify full attribution after refresh
 	img2, err := primaryCache.Get(species)
 	require.NoError(t, err, "Get after refresh should succeed")
-	assert.Equal(t, "https://upload.wikimedia.org/Carduelis_flammea_CT6.jpg", img2.URL,
+	assert.Equal(t, "https://127.0.0.1/Carduelis_flammea_CT6.jpg", img2.URL,
 		"Should have fallback wikimedia URL after refresh")
 	assert.Equal(t, "Cephas", img2.AuthorName, "Should preserve wikimedia attribution")
 	assert.Equal(t, "CC BY-SA 3.0", img2.LicenseName, "Should preserve wikimedia license")
@@ -256,7 +258,7 @@ func TestRefreshEntryFallbackToDBCache(t *testing.T) {
 		ProviderName:   providerAvicommons,
 	})
 	require.NoError(t, err, "DB should have updated avicommons entry")
-	assert.Equal(t, "https://upload.wikimedia.org/Carduelis_flammea_CT6.jpg", dbEntry.URL,
+	assert.Equal(t, "https://127.0.0.1/Carduelis_flammea_CT6.jpg", dbEntry.URL,
 		"DB entry under avicommons should have wikimedia URL")
 	assert.True(t, dbEntry.CachedAt.After(staleTime),
 		"DB entry should have fresh timestamp")
@@ -278,7 +280,7 @@ func TestRefreshEntryFallbackPolicyNone(t *testing.T) {
 	require.NoError(t, store.SaveImageCache(&datastore.ImageCache{
 		ScientificName: species,
 		ProviderName:   providerAvicommons,
-		URL:            "http://old.example.com/redpoll.jpg",
+		URL:            "http://127.0.0.1/redpoll.jpg",
 		CachedAt:       time.Now().Add(-31 * 24 * time.Hour),
 	}))
 
@@ -286,7 +288,7 @@ func TestRefreshEntryFallbackPolicyNone(t *testing.T) {
 	require.NoError(t, store.SaveImageCache(&datastore.ImageCache{
 		ScientificName: species,
 		ProviderName:   providerWikimedia,
-		URL:            "https://upload.wikimedia.org/Carduelis_flammea_CT6.jpg",
+		URL:            "https://127.0.0.1/Carduelis_flammea_CT6.jpg",
 		AuthorName:     "Cephas",
 		CachedAt:       time.Now().Add(-5 * 24 * time.Hour),
 	}))
@@ -308,24 +310,41 @@ func TestRefreshEntryFallbackPolicyNone(t *testing.T) {
 	_, err := primaryCache.Get(species)
 	require.NoError(t, err)
 
-	// Wait for background refresh goroutine to complete. Since policy is "none",
-	// no observable state change occurs (no fallback, no DB update), so we must
-	// use a fixed wait. 2s is generous for CI where the goroutine does minimal work.
-	time.Sleep(2 * time.Second)
+	// Wait for the background refresh to actually consult the primary provider. This
+	// replaces a fixed 2s sleep: the primary provider's call counter is the observable
+	// signal that the refresh ran, so there is a defined point at which "the fallback
+	// was not used" becomes a meaningful assertion rather than a race.
+	require.Eventually(t, func() bool {
+		return primaryProvider.getFetchCount() > 0
+	}, backgroundFetchWaitTimeout, 20*time.Millisecond, "background refresh never reached the primary provider")
 
-	// After refresh with policy "none", primary cache should NOT have wikimedia image
+	// After refresh with policy "none", primary cache must NOT have the wikimedia image.
+	// The assertion is unconditional: previously it sat inside `if err == nil`, so any
+	// error made the whole test vacuous. img.URL is empty when err is non-nil, which
+	// still satisfies the inequality, so no branch is needed.
 	img, err := primaryCache.Get(species)
-
-	// The image should still be the old stale one (or a negative entry)
-	if err == nil {
-		assert.NotEqual(t, "https://upload.wikimedia.org/Carduelis_flammea_CT6.jpg", img.URL,
-			"Should NOT use wikimedia fallback when policy is 'none'")
+	if err != nil {
+		require.ErrorIs(t, err, imageprovider.ErrImageNotFound,
+			"only a not-found error is acceptable here")
 	}
+	assert.NotEqual(t, "https://127.0.0.1/Carduelis_flammea_CT6.jpg", img.URL,
+		"Should NOT use wikimedia fallback when policy is 'none'")
+	assert.Zero(t, fallbackProvider.getFetchCount(),
+		"wikimedia fallback provider must not be consulted when policy is 'none'")
 }
 
-// mockNotFoundProvider always returns ErrImageNotFound
-type mockNotFoundProvider struct{}
+// mockNotFoundProvider always returns ErrImageNotFound. It counts calls so tests can
+// wait for a background refresh to reach the primary provider instead of sleeping for
+// a fixed interval.
+type mockNotFoundProvider struct {
+	fetchCount atomic.Int64
+}
 
 func (m *mockNotFoundProvider) Fetch(_ string) (imageprovider.BirdImage, error) {
+	m.fetchCount.Add(1)
 	return imageprovider.BirdImage{}, imageprovider.ErrImageNotFound
+}
+
+func (m *mockNotFoundProvider) getFetchCount() int64 {
+	return m.fetchCount.Load()
 }

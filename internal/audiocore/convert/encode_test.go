@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
+	wavpcm "github.com/tphakala/go-wav/pcm"
 )
 
 // TestSavePCMDataToWAV_ConcurrentSamePathNoCorruption reproduces the WAV
@@ -68,14 +69,16 @@ func TestSavePCMDataToWAV_ConcurrentSamePathNoCorruption(t *testing.T) {
 	}
 }
 
-// makePCM16Bytes generates a simple mono 16-bit PCM byte slice from int16 samples.
+// makePCM16Bytes generates a mono 16-bit PCM byte slice from int16 samples. It
+// delegates to makePCMBytes so there is a single little-endian PCM encoder in
+// the tests.
 func makePCM16Bytes(t *testing.T, samples []int16) []byte {
 	t.Helper()
-	buf := make([]byte, len(samples)*2)
+	widened := make([]int32, len(samples))
 	for i, s := range samples {
-		binary.LittleEndian.PutUint16(buf[i*2:], uint16(s)) //nolint:gosec // G115: intentional int16→uint16 bit reinterpretation for PCM audio
+		widened[i] = int32(s)
 	}
-	return buf
+	return makePCMBytes(t, 16, widened)
 }
 
 // TestSavePCMDataToWAV verifies that known PCM data is written as a valid WAV file
@@ -157,11 +160,21 @@ func TestSavePCMDataToWAV(t *testing.T) {
 
 	t.Run("misaligned PCM data returns error", func(t *testing.T) {
 		t.Parallel()
-		dir := t.TempDir()
-		// 3 bytes is not divisible by 2 (16-bit samples = 2 bytes each)
-		err := convert.SavePCMDataToWAV(filepath.Join(dir, "out.wav"), []byte{0x01, 0x02, 0x03}, 48000, 16)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "not aligned")
+		// Each byte count is not a whole number of samples at its bit depth.
+		cases := []struct {
+			bitDepth int
+			nbytes   int
+		}{
+			{16, 3}, // not a multiple of 2
+			{24, 4}, // not a multiple of 3
+			{32, 5}, // not a multiple of 4
+		}
+		for _, c := range cases {
+			dir := t.TempDir()
+			err := convert.SavePCMDataToWAV(filepath.Join(dir, "out.wav"), make([]byte, c.nbytes), 48000, c.bitDepth)
+			require.Errorf(t, err, "%d-bit %d-byte input must be rejected", c.bitDepth, c.nbytes)
+			assert.Contains(t, err.Error(), "not aligned")
+		}
 	})
 
 	t.Run("non-positive sample rate returns error, not a panic", func(t *testing.T) {
@@ -203,4 +216,83 @@ func TestSavePCMDataToWAV(t *testing.T) {
 		sampleRate := binary.LittleEndian.Uint32(data[24:28])
 		assert.Equal(t, uint32(44100), sampleRate, "sample rate should be 44100 Hz")
 	})
+}
+
+// makePCMBytes builds a mono little-endian signed integer PCM byte slice of the
+// given bit depth from the provided sample values.
+func makePCMBytes(t *testing.T, bitDepth int, samples []int32) []byte {
+	t.Helper()
+	bytesPerSample := bitDepth / 8
+	buf := make([]byte, len(samples)*bytesPerSample)
+	for i, s := range samples {
+		u := uint32(s) //nolint:gosec // G115: intentional signed→unsigned bit reinterpretation for PCM audio
+		off := i * bytesPerSample
+		for b := range bytesPerSample {
+			buf[off+b] = byte(u >> (8 * b)) // little-endian
+		}
+	}
+	return buf
+}
+
+// TestSavePCMDataToWAV_HigherBitDepths verifies that 24- and 32-bit mono PCM is
+// written and reads back byte-for-byte through the go-wav decoder. These depths
+// use WAVE_FORMAT_EXTENSIBLE, so the round-trip is verified via the decoder
+// rather than fixed canonical header offsets.
+func TestSavePCMDataToWAV_HigherBitDepths(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		bitDepth int
+		samples  []int32
+	}{
+		{"24-bit mono", 24, []int32{0, 1, -1, 8388607, -8388608, 12345, -12345}},
+		{"32-bit mono", 32, []int32{0, 1, -1, 2147483647, -2147483648, 999999, -999999}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			pcmData := makePCMBytes(t, tc.bitDepth, tc.samples)
+
+			dir := t.TempDir()
+			filePath := filepath.Join(dir, "out.wav")
+			require.NoError(t, convert.SavePCMDataToWAV(filePath, pcmData, 48000, tc.bitDepth))
+
+			data, err := os.ReadFile(filePath)
+			require.NoError(t, err)
+
+			// Assert the format tag independently of the go-wav decoder: 24/32-bit
+			// integer PCM must be written as WAVE_FORMAT_EXTENSIBLE (0xFFFE). This
+			// catches an encoder-side header bug that a symmetric decoder bug would
+			// otherwise round-trip clean past the assertions below.
+			require.GreaterOrEqual(t, len(data), 22, "file must hold at least the fmt tag")
+			audioFmt := binary.LittleEndian.Uint16(data[20:22])
+			assert.Equal(t, uint16(0xFFFE), audioFmt, "24/32-bit PCM should use WAVE_FORMAT_EXTENSIBLE")
+
+			info, decoded, err := wavpcm.DecodeInterleaved(data)
+			require.NoError(t, err)
+			assert.Equal(t, 48000, info.SampleRate, "sample rate round-trips")
+			assert.Equal(t, tc.bitDepth, info.BitDepth, "bit depth round-trips")
+			assert.Equal(t, 1, info.Channels, "channel count round-trips")
+			assert.Equal(t, pcmData, decoded, "PCM payload round-trips byte-for-byte")
+		})
+	}
+}
+
+// TestSavePCMDataToWAV_UnsupportedBitDepth verifies that depths outside the
+// supported {16, 24, 32} integer set are rejected before any file is created.
+func TestSavePCMDataToWAV_UnsupportedBitDepth(t *testing.T) {
+	t.Parallel()
+	for _, bd := range []int{8, 12, 64} {
+		dir := t.TempDir()
+		filePath := filepath.Join(dir, "out.wav")
+		// One frame's worth of bytes, so alignment is not the reason it fails.
+		pcm := make([]byte, bd/8)
+		err := convert.SavePCMDataToWAV(filePath, pcm, 48000, bd)
+		require.Errorf(t, err, "bit depth %d must be rejected", bd)
+		assert.Contains(t, err.Error(), "unsupported bit depth")
+		_, statErr := os.Stat(filePath)
+		assert.Truef(t, os.IsNotExist(statErr), "no file should be created for unsupported depth %d", bd)
+	}
 }

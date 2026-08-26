@@ -31,6 +31,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/openfauna"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/securefs"
@@ -65,14 +66,14 @@ type Processor struct {
 	mqttNotReadyWarnLogged onceByKey    // Emits the "client not ready" warning at most once per topic to avoid flood
 	BirdImageCache         *imageprovider.BirdImageCache
 	EventTracker           *EventTracker
-	eventTrackerMu         sync.RWMutex            // Mutex to protect EventTracker access
-	NewSpeciesTracker      *species.SpeciesTracker // Tracks new species detections
-	speciesTrackerMu       sync.RWMutex            // Mutex to protect NewSpeciesTracker access
-	lastSyncAttempt        time.Time               // Last time sync was attempted
-	syncMutex              sync.Mutex              // Mutex to protect sync operations
-	syncInProgress         atomic.Bool             // Flag to prevent overlapping syncs
-	LastDogDetection       map[string]time.Time    // keep track of dog barks per audio source
-	LastHumanDetection     map[string]time.Time    // keep track of human vocal per audio source
+	eventTrackerMu         sync.RWMutex              // Mutex to protect EventTracker access
+	NewSpeciesTracker      *species.SpeciesTracker   // Tracks new species detections
+	speciesTrackerMu       sync.RWMutex              // Mutex to protect NewSpeciesTracker access
+	lastSyncAttempt        time.Time                 // Last time sync was attempted
+	syncMutex              sync.Mutex                // Mutex to protect sync operations
+	syncInProgress         atomic.Bool               // Flag to prevent overlapping syncs
+	LastDogDetection       map[string]time.Time      // keep track of dog barks per audio source
+	LastHumanDetection     map[string]HumanDetection // keep track of human vocal per audio source, with the trigger that flagged it
 	Metrics                *observability.Metrics
 	DynamicThresholds      map[string]*DynamicThreshold
 	thresholdsMutex        sync.RWMutex        // Mutex to protect access to DynamicThresholds
@@ -82,6 +83,7 @@ type Processor struct {
 	pendingMutex           sync.RWMutex // RWMutex to protect access to pendingDetections (RLock for snapshots)
 	dogDetectionMutex      sync.Mutex
 	detectionMutex         sync.RWMutex // Mutex to protect LastDogDetection and LastHumanDetection maps
+	vadGate                *vadGate     // Lazily-loaded Silero VAD speech gate for the privacy filter
 	controlChan            chan string
 	JobQueue               *jobqueue.JobQueue // Queue for managing job retries
 	workerCancel           context.CancelFunc // Function to cancel worker goroutines
@@ -481,7 +483,7 @@ func (p *Processor) initDynamicThresholds(settings *conf.Settings) {
 // New creates a new Processor with the given dependencies.
 // The parentLog parameter should be the analysis package logger, which will be used to create
 // a child logger with ".processor" suffix for hierarchical logging (e.g., "analysis.processor").
-func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchestrator, metrics *observability.Metrics, birdImageCache *imageprovider.BirdImageCache, parentLog logger.Logger) *Processor {
+func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchestrator, obsMetrics *observability.Metrics, birdImageCache *imageprovider.BirdImageCache, parentLog logger.Logger) *Processor {
 	// Create child logger from parent for hierarchical logging
 	var procLog logger.Logger
 	if parentLog != nil {
@@ -502,9 +504,10 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchest
 			time.Duration(settings.Realtime.Interval)*time.Second,
 			settings.Realtime.Species.Config,
 		),
-		Metrics:            metrics,
+		Metrics:            obsMetrics,
 		LastDogDetection:   make(map[string]time.Time),
-		LastHumanDetection: make(map[string]time.Time),
+		LastHumanDetection: make(map[string]HumanDetection),
+		vadGate:            newVADGate(),
 		DynamicThresholds:  make(map[string]*DynamicThreshold),
 		pendingResets:      make(map[string]struct{}),
 		pendingDetections:  make(map[string]PendingDetection),
@@ -682,6 +685,12 @@ func (p *Processor) processDetections(item classifier.Results) {
 	// uses a consistent, hot-reloadable view of the configuration.
 	settings := p.currentSettings()
 
+	// Run the dedicated Silero VAD speech gate before per-result processing. It
+	// scores the raw chunk independently of what the bird model ranked and, on a
+	// speech hit, records it in LastHumanDetection so the privacy filter discards
+	// this window's detections regardless of the top-K label truncation.
+	p.runVADGate(settings, &item)
+
 	// Detection window sets wait time before a detection is considered final and is flushed.
 	// This represents the duration to wait from NOW (detection creation time) before flushing,
 	// allowing overlapping analyses to accumulate confirmations for false positive filtering.
@@ -706,10 +715,7 @@ func (p *Processor) processDetections(item classifier.Results) {
 				maxConf = r.Confidence
 			}
 		}
-		threshold := float32(settings.BirdNET.Threshold)
-		if item.ModelID == classifier.RegistryIDBat {
-			threshold = float32(settings.Bat.Threshold)
-		}
+		threshold := modelGlobalConfidenceThreshold(settings, item.ModelID)
 		p.pipelineStats.RecordInference(item.Source.ID, item.ModelID, len(item.Results), len(detectionResults), maxConf, threshold)
 	}
 
@@ -1040,7 +1046,7 @@ func (p *Processor) shouldFilterDetection(settings *conf.Settings, result datast
 		// Use lookupSpeciesConfig to support both common name and scientific name lookups
 		config, exists := lookupSpeciesConfig(settings.Realtime.Species.Config, commonName, scientificName)
 		isCustomThreshold := exists && config.Threshold > 0
-		confidenceThreshold = p.getAdjustedConfidenceThreshold(modelID, speciesLowercase, baseThreshold, isCustomThreshold)
+		confidenceThreshold = p.getAdjustedConfidenceThreshold(speciesLowercase, baseThreshold, isCustomThreshold)
 	} else {
 		confidenceThreshold = baseThreshold
 	}
@@ -1183,7 +1189,7 @@ func (p *Processor) createDetectionResult(settings *conf.Settings,
 		Confidence:     math.Round(confidence*100) / 100,
 		Latitude:       settings.BirdNET.Latitude,
 		Longitude:      settings.BirdNET.Longitude,
-		Threshold:      settings.BirdNET.Threshold,
+		Threshold:      float64(modelGlobalConfidenceThreshold(settings, modelID)),
 		Sensitivity:    settings.BirdNET.Sensitivity,
 		ClipName:       clipName,
 		ProcessingTime: elapsedTime,
@@ -1331,15 +1337,15 @@ func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifie
 		// put human detection timestamp into LastHumanDetection map. This is used to discard
 		// bird detections if a human vocalization is detected after the first detection
 		p.detectionMutex.Lock()
-		p.LastHumanDetection[item.Source.ID] = item.StartTime
+		p.LastHumanDetection[item.Source.ID] = HumanDetection{Time: item.StartTime, Trigger: metrics.TriggerLabel}
 		p.detectionMutex.Unlock()
 	}
 }
 
 // getBaseConfidenceThreshold retrieves the confidence threshold for a species, using custom or global thresholds.
 // It supports lookup by both common name and scientific name for consistency with include/exclude matching.
-// The modelID parameter selects which global threshold to use when no per-species config exists:
-// bat models use settings.Bat.Threshold, all others use settings.BirdNET.Threshold.
+// The modelID parameter selects which global threshold to use when no per-species config exists;
+// see modelGlobalConfidenceThreshold for the per-model selection rules.
 func (p *Processor) getBaseConfidenceThreshold(settings *conf.Settings, commonName, scientificName, modelID string) float32 {
 	// Check if species has a custom threshold using both common and scientific name lookup
 	if config, exists := lookupSpeciesConfig(settings.Realtime.Species.Config, commonName, scientificName); exists {
@@ -1353,9 +1359,28 @@ func (p *Processor) getBaseConfidenceThreshold(settings *conf.Settings, commonNa
 		return float32(config.Threshold)
 	}
 
-	// Fall back to model-specific global threshold
-	if modelID == classifier.RegistryIDBat {
+	// Fall back to the model-specific global threshold.
+	return modelGlobalConfidenceThreshold(settings, modelID)
+}
+
+// modelGlobalConfidenceThreshold returns the global confidence threshold applied
+// to a model's detections when the species has no custom per-species threshold.
+// The Bat model always uses its own threshold. Perch v2 and BirdNET v3.0 use
+// their own threshold only when their OverrideThreshold toggle is enabled;
+// otherwise, and for every other model (including the primary BirdNET), the
+// primary BirdNET threshold applies.
+func modelGlobalConfidenceThreshold(settings *conf.Settings, modelID string) float32 {
+	switch modelID {
+	case classifier.RegistryIDBat:
 		return float32(settings.Bat.Threshold)
+	case classifier.RegistryIDPerchV2:
+		if settings.Perch.OverrideThreshold {
+			return float32(settings.Perch.Threshold)
+		}
+	case classifier.RegistryIDBirdNETV3:
+		if settings.BirdNETV3.OverrideThreshold {
+			return float32(settings.BirdNETV3.Threshold)
+		}
 	}
 	return float32(settings.BirdNET.Threshold)
 }
@@ -1487,14 +1512,26 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 		// started. Using !Before (>=) rather than After (>) so a human and a bird
 		// sharing the exact same audio chunk (equal timestamps) still trips the
 		// privacy filter instead of leaking the detection.
-		if exists && !lastHumanDetection.Before(item.FirstDetected) {
+		if exists && !lastHumanDetection.Time.Before(item.FirstDetected) {
 			// Add structured logging for privacy filter
 			GetLogger().Debug("Detection discarded by privacy filter",
 				logger.String("species", item.Detection.Result.Species.CommonName),
 				logger.Time("detection_time", item.FirstDetected),
-				logger.Time("last_human_detection", lastHumanDetection),
+				logger.Time("last_human_detection", lastHumanDetection.Time),
+				logger.String("trigger", lastHumanDetection.Trigger),
 				logger.String("source", p.getDisplayNameForSource(item.Source)),
 				logger.String("operation", "privacy_filter"))
+			// Attribute the discard to the trigger that flagged the human voice
+			// (label match vs VAD speech gate), when telemetry is enabled.
+			if settings.Realtime.Telemetry.Enabled && p.Metrics != nil {
+				trigger := lastHumanDetection.Trigger
+				if trigger == "" {
+					// Defensive: both writers set a trigger, but never emit a
+					// bogus empty label if a future path forgets to.
+					trigger = metrics.TriggerLabel
+				}
+				p.Metrics.PrivacyFilter.RecordDiscard(trigger)
+			}
 			return true, "privacy filter"
 		}
 	}
@@ -1570,7 +1607,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 	for modelID, contrib := range item.ModelContributions {
 		baseThreshold := float64(p.getBaseConfidenceThreshold(settings, speciesName, scientificName, modelID))
 		if contrib.MaxConfidence >= baseThreshold {
-			p.LearnFromApprovedDetection(modelID, speciesName, scientificName, float32(contrib.MaxConfidence))
+			p.LearnFromApprovedDetection(speciesName, scientificName, float32(contrib.MaxConfidence), float32(baseThreshold))
 		}
 	}
 
@@ -2564,6 +2601,13 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 		p.preRenderer.Stop()
 	}
 
+	// Release the Silero VAD detector (privacy filter). The gate mutex makes this
+	// block until any in-flight inference completes before the ONNX session is
+	// freed, so it must run after the results-consumer workers are cancelled.
+	if p.vadGate != nil {
+		p.vadGate.close()
+	}
+
 	// Stop the job queue — use remaining context budget, not a hardcoded 30 seconds.
 	// Always send the stop signal even if the deadline has passed (remaining <= 0)
 	// so the queue's workers are notified and don't keep running after DB close.
@@ -2584,6 +2628,17 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 			logger.String("operation", "job_queue_shutdown"))
 	}
 
+	// Disconnect MQTT before the expired-context bail-out below. Not gated on
+	// IsConnected(): a client whose initial connect failed is retained with its
+	// reconnect loop armed, and Disconnect is what cancels that loop, so skipping
+	// it would leave the timer running past shutdown. Disconnect already handles
+	// the not-connected case, and for a client that never connected it does no
+	// blocking work at all — otherwise it is bounded by ShutdownDisconnectTimeout.
+	mqttClient := p.GetMQTTClient()
+	if mqttClient != nil {
+		mqttClient.Disconnect()
+	}
+
 	// Skip remaining cleanup if context is already expired — these are
 	// nice-to-have disconnects, not critical for data integrity.
 	// Context expiration is expected, not an error condition for the caller.
@@ -2595,12 +2650,6 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 
 	// Disconnect BirdWeather client
 	p.DisconnectBwClient()
-
-	// Disconnect MQTT client if connected
-	mqttClient := p.GetMQTTClient()
-	if mqttClient != nil && mqttClient.IsConnected() {
-		mqttClient.Disconnect()
-	}
 
 	// Close the species tracker to release resources
 	p.speciesTrackerMu.RLock()

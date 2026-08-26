@@ -354,6 +354,7 @@ export type TranslationKey =
   | 'notifications.content.settings.updatingIntervals'
   | 'notifications.content.settings.reconfiguringMqtt'
   | 'notifications.content.settings.reconfiguringBirdweather'
+  | 'notifications.content.settings.reconfiguringEbird'
   | 'notifications.content.settings.reconfiguringStreams'
   | 'notifications.content.settings.reconfiguringTelemetry'
   | 'notifications.content.settings.reconfiguringPushNotifications'
@@ -390,6 +391,9 @@ export type TranslationKey =
   | 'notifications.content.buffer.overloadMessage' // params: dropRate, sourceName
   | 'notifications.content.ort.unavailableTitle'
   | 'notifications.content.ort.unavailableMessage' // params: requiredVersion, modelName, installGuideURL
+  | 'notifications.content.region.staleTitle'
+  | 'notifications.content.region.staleMessage' // params: modelName, oldRegion, newRegion
+  | 'notifications.content.region.staleGlobalMessage' // params: modelName, oldRegion
   | 'notifications.content.alert.firedTitle' // params: rule_name
   | 'notifications.content.alert.metricExceeded' // params: value, threshold
   | 'notifications.content.alert.detectionOccurred' // params: species_name, confidence
@@ -510,6 +514,7 @@ export type TranslationKey =
   | 'dashboard.newSpeciesHighlights.categoryYear'
   | 'dashboard.newSpeciesHighlights.categorySeason'
   | 'dashboard.newSpeciesHighlights.categorySeasonNamed' // params: season
+  | 'dashboard.newSpeciesHighlights.categoryInfrequent'
   | 'dashboard.newSpeciesHighlights.maxConfidenceShort' // params: confidence
   | 'dashboard.newSpeciesHighlights.detections' // params: count
   | 'dashboard.newSpeciesHighlights.lastSeen' // params: days
@@ -532,6 +537,7 @@ export type TranslationKey =
   | 'dashboard.dailySummary.tooltips.hourlyDetections' // params: count, hour
   | 'dashboard.dailySummary.tooltips.biHourlyDetections' // params: count, startHour, endHour
   | 'dashboard.dailySummary.tooltips.sixHourlyDetections' // params: count, startHour, endHour
+  | 'dashboard.dailySummary.tooltips.infrequent' // params: days
   | 'dashboard.dailySummary.loading.preparing'
   | 'dashboard.dailySummary.loading.fetching'
   | 'dashboard.dailySummary.loading.error'
@@ -1291,6 +1297,24 @@ export type TranslationKey =
   | 'system.inference.title'
   | 'system.inference.loading'
   | 'system.inference.error'
+  | 'system.inference.vad.section'
+  | 'system.inference.vad.title'
+  | 'system.inference.vad.active'
+  | 'system.inference.vad.activeHelp'
+  | 'system.inference.vad.idle'
+  | 'system.inference.vad.idleHelp'
+  | 'system.inference.vad.disabled'
+  | 'system.inference.vad.disabledHelp'
+  | 'system.inference.vad.unavailable'
+  | 'system.inference.vad.unavailableHelp'
+  | 'system.inference.vad.description'
+  | 'system.inference.vad.threshold'
+  | 'system.inference.vad.speechHits'
+  | 'system.inference.vad.recentTitle'
+  | 'system.inference.vad.recentEmpty'
+  | 'system.inference.vad.colWhen'
+  | 'system.inference.vad.colProbability'
+  | 'system.inference.vad.colSource'
   | 'system.inference.sectionHardware'
   | 'system.inference.sectionBackends'
   | 'system.inference.sectionModels'
@@ -1301,6 +1325,9 @@ export type TranslationKey =
   | 'system.inference.fp16'
   | 'system.inference.fp16Supported'
   | 'system.inference.fp16Unsupported'
+  | 'system.inference.advanced'
+  | 'system.inference.capabilities'
+  | 'system.inference.capabilitiesHelp'
   | 'system.inference.backendTflite'
   | 'system.inference.backendOnnx'
   | 'system.inference.backendOpenvino'
@@ -1318,8 +1345,6 @@ export type TranslationKey =
   | 'system.inference.gpu'
   | 'system.inference.gpuReachable'
   | 'system.inference.gpuNotReachable'
-  | 'system.inference.capabilities'
-  | 'system.inference.capabilitiesHelp'
   | 'system.inference.gpuReasonRenderNodeUnavailable'
   | 'system.inference.gpuReasonRenderNodePermission'
   | 'system.inference.gpuReasonNoRuntime'
@@ -2058,6 +2083,7 @@ export type TranslationKey =
   | 'settings.notifications.templates.fields.detectionUrl'
   | 'settings.notifications.templates.fields.imageUrl'
   | 'settings.notifications.templates.fields.daysSinceFirstSeen'
+  | 'settings.notifications.templates.fields.daysSinceLastSeen'
   | 'settings.notifications.testNotification.title'
   | 'settings.notifications.testNotification.description'
   | 'settings.notifications.testNotification.whatHappens'
@@ -2257,6 +2283,10 @@ export type TranslationKey =
   | 'settings.filters.privacyFiltering.disabled'
   | 'settings.filters.privacyFiltering.confidenceLabel'
   | 'settings.filters.privacyFiltering.confidenceHelp'
+  | 'settings.filters.privacyFiltering.vadEnable'
+  | 'settings.filters.privacyFiltering.vadHelp'
+  | 'settings.filters.privacyFiltering.vadThresholdLabel'
+  | 'settings.filters.privacyFiltering.vadThresholdHelp'
   | 'settings.filters.falsePositivePrevention.title'
   | 'settings.filters.falsePositivePrevention.description'
   | 'settings.filters.falsePositivePrevention.enableDogBark'
@@ -3135,6 +3165,12 @@ export type TranslationKey =
   | 'settings.species.tracking.seasonal.seasons.startMonth'
   | 'settings.species.tracking.seasonal.seasons.startDay'
   | 'settings.species.tracking.seasonal.seasons.hemisphereNote'
+  | 'settings.species.tracking.infrequent.title'
+  | 'settings.species.tracking.infrequent.description'
+  | 'settings.species.tracking.infrequent.enabled.label'
+  | 'settings.species.tracking.infrequent.enabled.helpText'
+  | 'settings.species.tracking.infrequent.absenceDays.label'
+  | 'settings.species.tracking.infrequent.absenceDays.helpText'
   | 'settings.species.tracking.months.january'
   | 'settings.species.tracking.months.february'
   | 'settings.species.tracking.months.march'
@@ -3293,6 +3329,7 @@ export type TranslationKey =
   | 'settings.alerts.schema.events.stream_disconnected'
   | 'settings.alerts.schema.events.stream_error'
   | 'settings.alerts.schema.events.detection_new_species'
+  | 'settings.alerts.schema.events.detection_infrequent_species'
   | 'settings.alerts.schema.events.detection_occurred'
   | 'settings.alerts.schema.events.application_started'
   | 'settings.alerts.schema.events.application_stopped'
@@ -3332,6 +3369,8 @@ export type TranslationKey =
   | 'settings.alerts.v2RequiredLink'
   | 'settings.alerts.builtInRules.newSpecies.name'
   | 'settings.alerts.builtInRules.newSpecies.description'
+  | 'settings.alerts.builtInRules.infrequentSpecies.name'
+  | 'settings.alerts.builtInRules.infrequentSpecies.description'
   | 'settings.alerts.builtInRules.streamDisconnected.name'
   | 'settings.alerts.builtInRules.streamDisconnected.description'
   | 'settings.alerts.builtInRules.streamError.name'
@@ -3822,6 +3861,12 @@ export type TranslationKey =
   | 'analysis.detection.batFalsePositiveFilter.warningOff'
   | 'analysis.detection.locale.label'
   | 'analysis.detection.locale.helpText'
+  | 'analysis.detection.secondaryThresholdOverride.label'
+  | 'analysis.detection.secondaryThresholdOverride.helpText'
+  | 'analysis.detection.secondaryThreshold.helpText'
+  | 'analysis.detection.secondaryThreshold.followsBirdnet'
+  | 'analysis.detection.perchThreshold.label'
+  | 'analysis.detection.birdnetv3Threshold.label'
   | 'analysis.rangeFilter.birdOnlyNote'
   | 'analysis.rangeFilter.status.title'
   | 'analysis.rangeFilter.status.geomodelInfo' // params: version, species
@@ -3846,12 +3891,76 @@ export type TranslationKey =
   | 'analysis.downloadSource.endpoint.validationMessage'
   | 'analysis.gallery.title'
   | 'analysis.gallery.description'
+  | 'analysis.gallery.region.title'
+  | 'analysis.gallery.region.modeAuto'
+  | 'analysis.gallery.region.modeAutoHint'
+  | 'analysis.gallery.region.modeManual'
+  | 'analysis.gallery.region.modeManualHint'
+  | 'analysis.gallery.region.worldwideTitle'
+  | 'analysis.gallery.region.worldwideSubtitle'
+  | 'analysis.gallery.region.worldwideResourceNote'
+  | 'analysis.gallery.region.selectedBadge'
+  | 'analysis.gallery.region.orSpecificRegion'
+  | 'analysis.gallery.region.search'
+  | 'analysis.gallery.region.searchNoResults' // params: query
+  | 'analysis.gallery.region.manualPrompt'
+  | 'analysis.gallery.region.countriesOverflow' // params: count
+  | 'analysis.gallery.region.coreCoverage'
+  | 'analysis.gallery.region.partialCoverage'
+  | 'analysis.gallery.region.pinAction' // params: region
+  | 'analysis.gallery.region.switchToAuto'
+  | 'analysis.gallery.region.loading'
+  | 'analysis.gallery.region.loadFailed'
+  | 'analysis.gallery.region.mapUnavailable'
+  | 'analysis.gallery.region.mapAria' // params: region
+  | 'analysis.gallery.region.why.noLocation'
+  | 'analysis.gallery.region.why.outsideCoverage'
+  | 'analysis.gallery.region.why.ambiguous' // params: region, runnerUp
+  | 'analysis.gallery.region.why.resolved' // params: region
+  | 'analysis.gallery.region.why.global'
+  | 'analysis.gallery.region.why.pinned' // params: region
+  | 'analysis.gallery.region.why.pinnedMismatch' // params: resolved
+  | 'analysis.gallery.region.why.pinnedUnknown' // params: region
+  | 'analysis.gallery.variants.title'
+  | 'analysis.gallery.variants.recommended'
+  | 'analysis.gallery.variants.recommendedForHardware'
+  | 'analysis.gallery.variants.installed'
+  | 'analysis.gallery.variants.default'
+  | 'analysis.gallery.variants.incompatible'
+  | 'analysis.gallery.variants.showAll' // params: count
+  | 'analysis.gallery.variants.showRegion' // params: region, count
+  | 'analysis.gallery.variants.showHardware' // params: count
+  | 'analysis.gallery.variants.showAllRegions' // params: count
+  | 'analysis.gallery.variants.regionContext' // params: region
+  | 'analysis.gallery.variants.regionContextNone'
+  | 'analysis.gallery.variants.otherRegions'
+  | 'analysis.gallery.variants.filterPlaceholder'
+  | 'analysis.gallery.variants.filterAria'
+  | 'analysis.gallery.variants.filterNoMatch' // params: query
+  | 'analysis.gallery.variants.latency' // params: ms
+  | 'analysis.gallery.variants.precisionInfo'
+  | 'analysis.gallery.variants.precisionHelp'
+  | 'analysis.gallery.actionInProgress'
+  | 'analysis.gallery.removeSuccess' // params: name
+  | 'analysis.gallery.reasons.backendRecommended' // params: backend
+  | 'analysis.gallery.reasons.backendSupported' // params: backend
+  | 'analysis.gallery.reasons.regionMatched' // params: region
+  | 'analysis.gallery.reasons.regionGlobalFallback'
+  | 'analysis.gallery.reasons.precisionFp16Native'
+  | 'analysis.gallery.reasons.precisionFp16GpuPreferred'
+  | 'analysis.gallery.reasons.ramConstrainedFit'
+  | 'analysis.gallery.reasons.benchmarkMeasured'
+  | 'analysis.gallery.reasons.variantLegacy'
+  | 'analysis.gallery.reasons.archUnsupported' // params: required
+  | 'analysis.gallery.reasons.backendMissing' // params: required
+  | 'analysis.gallery.reasons.ramInsufficient' // params: requiredMb
+  | 'analysis.gallery.reasons.hardwareExcluded' // params: token
+  | 'analysis.gallery.reasons.backendOnnxUnavailable'
   | 'analysis.gallery.tabs.installed'
   | 'analysis.gallery.tabs.available'
   | 'analysis.gallery.loading'
   | 'analysis.gallery.retry'
   | 'analysis.gallery.builtIn'
-  | 'analysis.gallery.builtInDescription'
   | 'analysis.gallery.species' // params: count
   | 'analysis.gallery.install'
   | 'analysis.gallery.installing'
@@ -3886,20 +3995,55 @@ export type TranslationKey =
   | 'analysis.gallery.errors.catalogLoadFailed'
   | 'analysis.gallery.errors.installFailed'
   | 'analysis.gallery.errors.removeFailed'
+  | 'analysis.gallery.errors.actionFailed' // params: name
+  | 'analysis.gallery.errors.downloadSourceHint'
+  | 'analysis.gallery.errors.goToDownloadSource'
+  | 'analysis.gallery.errors.dismiss'
+  | 'analysis.gallery.errors.details'
+  | 'analysis.gallery.errors.removeRetryHint'
   | 'analysis.gallery.regionLabel'
   | 'analysis.gallery.speciesLabel'
   | 'analysis.gallery.reinstall'
   | 'analysis.gallery.reinstalling'
   | 'analysis.gallery.reinstallComplete'
   | 'analysis.gallery.geomodelBadge'
-  | 'analysis.gallery.onnxRuntimeRequired'
-  | 'analysis.gallery.onnxRuntimeMissing'
-  | 'analysis.gallery.unavailable'
+  | 'analysis.gallery.preview.badge'
+  | 'analysis.gallery.preview.buildLabel' // params: version, build
+  | 'analysis.gallery.preview.cardNotice'
+  | 'analysis.gallery.preview.dialogNotice' // params: build
+  | 'analysis.gallery.entryIncompatible'
+  | 'analysis.gallery.regionGlobal'
+  | 'analysis.gallery.hardwareLabel'
+  | 'analysis.gallery.hardware.gpuNvidia'
+  | 'analysis.gallery.hardware.gpuIntel'
+  | 'analysis.gallery.hardware.armCpu'
+  | 'analysis.gallery.hardware.amd64Cpu'
+  | 'analysis.gallery.hardware.arm64Cpu'
+  | 'analysis.gallery.hardware.cpu'
+  | 'analysis.gallery.optimize.bannerTitle' // params: count
+  | 'analysis.gallery.optimize.review'
+  | 'analysis.gallery.optimize.dismiss'
+  | 'analysis.gallery.optimize.badgeTitle'
+  | 'analysis.gallery.optimize.swap'
+  | 'analysis.gallery.optimize.dialogTitle'
+  | 'analysis.gallery.optimize.installedBuild'
+  | 'analysis.gallery.optimize.fromTo' // params: from, to
+  | 'analysis.gallery.optimize.apply'
+  | 'analysis.gallery.optimize.applyAll'
+  | 'analysis.gallery.optimize.applying'
+  | 'analysis.gallery.optimize.applied'
+  | 'analysis.gallery.optimize.applyFailed'
+  | 'analysis.gallery.optimize.upToDate'
+  | 'analysis.gallery.optimize.licenseNote'
   | 'analysis.bird.title'
   | 'analysis.bird.description'
   | 'analysis.bat.title'
   | 'analysis.bat.description'
   | 'analysis.dynamicThreshold.birdOnlyNote'
+  | 'analysis.perch.title'
+  | 'analysis.perch.description'
+  | 'analysis.birdnetv3.title'
+  | 'analysis.birdnetv3.description'
   | 'restart.applicationRestart'
   | 'restart.containerRestart'
   | 'restart.confirmTitle'
@@ -4068,6 +4212,15 @@ export type TranslationParams = {
     modelName: string | number;
     installGuideURL: string | number;
   };
+  'notifications.content.region.staleMessage': {
+    modelName: string | number;
+    oldRegion: string | number;
+    newRegion: string | number;
+  };
+  'notifications.content.region.staleGlobalMessage': {
+    modelName: string | number;
+    oldRegion: string | number;
+  };
   'notifications.content.alert.firedTitle': { rule_name: string | number };
   'notifications.content.alert.metricExceeded': {
     value: string | number;
@@ -4116,6 +4269,7 @@ export type TranslationParams = {
     startHour: string | number;
     endHour: string | number;
   };
+  'dashboard.dailySummary.tooltips.infrequent': { days: string | number };
   'dashboard.recentDetections.modals.showSpecies': { species: string | number };
   'dashboard.recentDetections.modals.ignoreSpecies': { species: string | number };
   'dashboard.recentDetections.modals.showSpeciesConfirm': { species: string | number };
@@ -4407,8 +4561,37 @@ export type TranslationParams = {
     version: string | number;
     species: string | number;
   };
+  'analysis.gallery.region.searchNoResults': { query: string | number };
+  'analysis.gallery.region.countriesOverflow': { count: string | number };
+  'analysis.gallery.region.pinAction': { region: string | number };
+  'analysis.gallery.region.mapAria': { region: string | number };
+  'analysis.gallery.region.why.ambiguous': { region: string | number; runnerUp: string | number };
+  'analysis.gallery.region.why.resolved': { region: string | number };
+  'analysis.gallery.region.why.pinned': { region: string | number };
+  'analysis.gallery.region.why.pinnedMismatch': { resolved: string | number };
+  'analysis.gallery.region.why.pinnedUnknown': { region: string | number };
+  'analysis.gallery.variants.showAll': { count: string | number };
+  'analysis.gallery.variants.showRegion': { region: string | number; count: string | number };
+  'analysis.gallery.variants.showHardware': { count: string | number };
+  'analysis.gallery.variants.showAllRegions': { count: string | number };
+  'analysis.gallery.variants.regionContext': { region: string | number };
+  'analysis.gallery.variants.filterNoMatch': { query: string | number };
+  'analysis.gallery.variants.latency': { ms: string | number };
+  'analysis.gallery.removeSuccess': { name: string | number };
+  'analysis.gallery.reasons.backendRecommended': { backend: string | number };
+  'analysis.gallery.reasons.backendSupported': { backend: string | number };
+  'analysis.gallery.reasons.regionMatched': { region: string | number };
+  'analysis.gallery.reasons.archUnsupported': { required: string | number };
+  'analysis.gallery.reasons.backendMissing': { required: string | number };
+  'analysis.gallery.reasons.ramInsufficient': { requiredMb: string | number };
+  'analysis.gallery.reasons.hardwareExcluded': { token: string | number };
   'analysis.gallery.species': { count: string | number };
   'analysis.gallery.removeDialog.title': { name: string | number };
+  'analysis.gallery.errors.actionFailed': { name: string | number };
+  'analysis.gallery.preview.buildLabel': { version: string | number; build: string | number };
+  'analysis.gallery.preview.dialogNotice': { build: string | number };
+  'analysis.gallery.optimize.bannerTitle': { count: string | number };
+  'analysis.gallery.optimize.fromTo': { from: string | number; to: string | number };
 };
 
 /**

@@ -184,6 +184,137 @@ func TestLoadCatalog_ValidationFailureFallsBack(t *testing.T) {
 	}
 }
 
+func TestValidateCatalog_Variants(t *testing.T) {
+	t.Parallel()
+
+	validFile := CatalogFile{RemotePath: "m.onnx", LocalName: "m.onnx", Role: RoleModel}
+	tests := []struct {
+		name    string
+		entry   CatalogEntry
+		wantErr bool
+	}{
+		{
+			name:  "variant entry with empty top-level Files is valid",
+			entry: CatalogEntry{ID: "v", Variants: []CatalogVariant{{ID: "fp32", Files: []CatalogFile{validFile}}}},
+		},
+		{
+			name:    "neither files nor variants",
+			entry:   CatalogEntry{ID: "empty"},
+			wantErr: true,
+		},
+		{
+			name:    "variant declares no files",
+			entry:   CatalogEntry{ID: "v", Variants: []CatalogVariant{{ID: "fp32"}}},
+			wantErr: true,
+		},
+		{
+			name:    "variant has empty id",
+			entry:   CatalogEntry{ID: "v", Variants: []CatalogVariant{{Files: []CatalogFile{validFile}}}},
+			wantErr: true,
+		},
+		{
+			name: "duplicate variant id",
+			entry: CatalogEntry{ID: "v", Variants: []CatalogVariant{
+				{ID: "x", Files: []CatalogFile{validFile}},
+				{ID: "x", Files: []CatalogFile{validFile}},
+			}},
+			wantErr: true,
+		},
+		{
+			name:    "variant file missing role",
+			entry:   CatalogEntry{ID: "v", Variants: []CatalogVariant{{ID: "fp32", Files: []CatalogFile{{RemotePath: "m", LocalName: "m"}}}}},
+			wantErr: true,
+		},
+		{
+			name:    "variant without a model-role file",
+			entry:   CatalogEntry{ID: "v", Variants: []CatalogVariant{{ID: "fp32", Files: []CatalogFile{{RemotePath: "l.txt", LocalName: "l.txt", Role: RoleLabels}}}}},
+			wantErr: true,
+		},
+		{
+			name: "both top-level files and variants",
+			entry: CatalogEntry{
+				ID:       "both",
+				Files:    []CatalogFile{validFile},
+				Variants: []CatalogVariant{{ID: "fp32", Files: []CatalogFile{validFile}}},
+			},
+			wantErr: true,
+		},
+		{
+			name: "built-in baseline with no files is valid",
+			entry: CatalogEntry{ID: "v", Variants: []CatalogVariant{
+				{ID: "builtin", BuiltIn: true, Default: true},
+				{ID: "fp32", Files: []CatalogFile{validFile}},
+			}},
+		},
+		{
+			name: "built-in baseline may be the only variant",
+			entry: CatalogEntry{ID: "v", Variants: []CatalogVariant{
+				{ID: "builtin", BuiltIn: true, Default: true},
+			}},
+		},
+		{
+			name: "built-in variant carrying files is rejected",
+			entry: CatalogEntry{ID: "v", Variants: []CatalogVariant{
+				{ID: "builtin", BuiltIn: true, Files: []CatalogFile{validFile}},
+			}},
+			wantErr: true,
+		},
+		{
+			name: "more than one built-in variant is rejected",
+			entry: CatalogEntry{ID: "v", Variants: []CatalogVariant{
+				{ID: "builtin", BuiltIn: true, Default: true},
+				{ID: "builtin2", BuiltIn: true},
+			}},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateCatalog([]CatalogEntry{tt.entry})
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestLoadCatalog_ResolvesVariantEntryFromFile(t *testing.T) {
+	resetActiveCatalog(t)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, catalogFileName)
+
+	checksum, err := catalogChecksum(EmbeddedCatalog)
+	require.NoError(t, err)
+
+	// A user added a variant entry but left the seed checksum (baseline matches the
+	// current binary), so the file loads as-is. Its Files must resolve at runtime.
+	variantEntry := CatalogEntry{
+		ID: "variant-model", Name: "Variant Model", Category: CategoryBird, Version: "1",
+		Variants: []CatalogVariant{
+			{ID: "int8", Files: []CatalogFile{{RemotePath: "m_int8.onnx", LocalName: "m_int8.onnx", Role: RoleModel}}},
+			{ID: "fp32", Default: true, Files: []CatalogFile{{RemotePath: "m_fp32.onnx", LocalName: "m_fp32.onnx", Role: RoleModel}}},
+		},
+	}
+	entries := append(slices.Clone(EmbeddedCatalog), variantEntry)
+	writeManifest(t, path, catalogManifest{
+		SchemaVersion:   catalogSchemaVersion,
+		CatalogChecksum: checksum,
+		Entries:         entries,
+	})
+
+	require.NoError(t, LoadCatalog(dir))
+
+	got, found := GetCatalogEntry("variant-model")
+	require.True(t, found, "variant entry must load and validate")
+	require.Len(t, got.Files, 1)
+	assert.Equal(t, "m_fp32.onnx", got.Files[0].LocalName, "Files must resolve to the default variant")
+	assert.Len(t, got.Variants, 2, "Variants preserved for the gallery and install path")
+}
+
 func TestLoadCatalog_RefreshesPristineFileOnChangedEmbedded(t *testing.T) {
 	resetActiveCatalog(t)
 
