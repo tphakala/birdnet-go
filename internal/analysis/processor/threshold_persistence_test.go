@@ -899,6 +899,7 @@ func TestDrainPendingResetsRequeuesOnFailure(t *testing.T) {
 // FirstCreated/LastTriggered from the in-memory struct instead of stamping the flush time,
 // falls back to now for zero values, and skips empty-species keys without aborting.
 func TestConvertThresholdsForPersistence_PreservesTimestamps(t *testing.T) {
+	t.Parallel()
 	p := createTestProcessor()
 	settings := p.currentSettings()
 
@@ -916,15 +917,16 @@ func TestConvertThresholdsForPersistence_PreservesTimestamps(t *testing.T) {
 		FirstCreated:   firstCreated,
 		LastTriggered:  lastTriggered,
 	}
-	// An empty-key entry must be skipped, not persisted, and must not abort the batch.
+	// An empty-key entry must not be persisted, must not abort the batch, and must be
+	// routed into the eviction path so it cannot linger in memory forever.
 	p.DynamicThresholds[""] = &DynamicThreshold{
 		Level: 1, Timer: future, ValidHours: 48, FirstCreated: firstCreated, LastTriggered: lastTriggered,
 	}
 
 	dbThresholds, expired := p.convertThresholdsForPersistence(settings)
 
-	require.Empty(t, expired)
-	require.Len(t, dbThresholds, 1, "empty-key entry must be skipped")
+	require.Len(t, dbThresholds, 1, "empty-key entry must not be persisted")
+	assert.Equal(t, []string{""}, expired, "empty-key entry must be routed to eviction")
 	got := dbThresholds[0]
 	assert.Equal(t, "american crow", got.SpeciesName)
 	// The flush time is now; the real values are hours in the past, so a regression that
@@ -936,6 +938,7 @@ func TestConvertThresholdsForPersistence_PreservesTimestamps(t *testing.T) {
 // TestConvertThresholdsForPersistence_ZeroTimestampFallback verifies that an in-memory
 // entry with zero FirstCreated/LastTriggered falls back to now (never persisted as zero).
 func TestConvertThresholdsForPersistence_ZeroTimestampFallback(t *testing.T) {
+	t.Parallel()
 	p := createTestProcessor()
 	p.DynamicThresholds["blue jay"] = &DynamicThreshold{
 		Level: 1, BaseThreshold: 0.7, Timer: time.Now().Add(24 * time.Hour), ValidHours: 48,

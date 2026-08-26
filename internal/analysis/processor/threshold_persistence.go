@@ -137,10 +137,13 @@ func (p *Processor) convertThresholdsForPersistence(settings *conf.Settings) (db
 
 	for speciesName, threshold := range p.DynamicThresholds {
 		// The species (lowercase common name) is the persistence key. An empty key
-		// cannot be stored; skip it rather than aborting the whole batch (#4195).
+		// cannot be stored; route it into the eviction path instead of only skipping,
+		// so a stray entry cannot linger in memory forever unpersisted. This is defense
+		// in depth: addSpeciesToDynamicThresholds already rejects empty keys (#4195).
 		if speciesName == "" {
-			GetLogger().Warn("Skipping dynamic threshold with empty species key during persistence",
+			GetLogger().Warn("Evicting dynamic threshold with empty species key during persistence",
 				logger.String("operation", "persist_dynamic_thresholds"))
+			expiredSpecies = append(expiredSpecies, speciesName)
 			continue
 		}
 
