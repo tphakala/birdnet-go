@@ -194,7 +194,7 @@ func (ctx *TestContext) setupV2DB(t *testing.T, tmpDir string) {
 	ctx.SourceRepo = repository.NewAudioSourceRepository(db, nil, false, false)
 	ctx.WeatherRepo = repository.NewWeatherRepository(db, nil, false, false)
 	ctx.ImageCacheRepo = repository.NewImageCacheRepository(db, nil, ctx.LabelRepo, false, false)
-	ctx.ThresholdRepo = repository.NewDynamicThresholdRepository(db, nil, ctx.LabelRepo, false, false)
+	ctx.ThresholdRepo = repository.NewDynamicThresholdRepository(db, nil, false, false)
 	ctx.NotificationRepo = repository.NewNotificationHistoryRepository(db, nil, ctx.LabelRepo, false, false)
 
 	// Populate lookup tables for V2 normalized schema

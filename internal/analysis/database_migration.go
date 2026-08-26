@@ -85,7 +85,7 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 	// Create repositories for auxiliary data migration
 	weatherRepo := repository.NewWeatherRepository(v2DB, nil, cfg.useV2Prefix, isMySQL)
 	imageCacheRepo := repository.NewImageCacheRepository(v2DB, nil, labelRepo, cfg.useV2Prefix, isMySQL)
-	thresholdRepo := repository.NewDynamicThresholdRepository(v2DB, nil, labelRepo, cfg.useV2Prefix, isMySQL)
+	thresholdRepo := repository.NewDynamicThresholdRepository(v2DB, nil, cfg.useV2Prefix, isMySQL)
 	notificationRepo := repository.NewNotificationHistoryRepository(v2DB, nil, labelRepo, cfg.useV2Prefix, isMySQL)
 
 	// Create the legacy detection repository
@@ -500,7 +500,7 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 	sourceRepo := repository.NewAudioSourceRepository(v2DB, nil, useV2Prefix, isMySQL)
 	weatherRepo := repository.NewWeatherRepository(v2DB, nil, useV2Prefix, isMySQL)
 	imageCacheRepo := repository.NewImageCacheRepository(v2DB, nil, labelRepo, useV2Prefix, isMySQL)
-	thresholdRepo := repository.NewDynamicThresholdRepository(v2DB, nil, labelRepo, useV2Prefix, isMySQL)
+	thresholdRepo := repository.NewDynamicThresholdRepository(v2DB, nil, useV2Prefix, isMySQL)
 	notificationRepo := repository.NewNotificationHistoryRepository(v2DB, nil, labelRepo, useV2Prefix, isMySQL)
 	appEventRepo := repository.NewAppEventRepository(v2DB, nil, useV2Prefix, isMySQL)
 
@@ -525,7 +525,7 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 		AppEvent:       appEventRepo,
 		Logger:         log,
 		Timezone:       time.Local,
-		Labels:         settings.BirdNET.Labels, // For GetThresholdEvents workaround (#1907)
+		Labels:         settings.BirdNET.Labels, // For common<->scientific name-map resolution
 		SpeciesCodeMap: scientificIndex,
 	})
 	if err != nil {

@@ -42,6 +42,13 @@ type DynamicThreshold struct {
 	BaseThreshold  float64
 	ScientificName string
 	LastLearnedAt  time.Time // Tracks when the last threshold learning event occurred to prevent multiple learnings within a single detection window
+	// FirstCreated records when this species threshold was first initialized. Persisted
+	// once and never overwritten on re-flush, so it reflects true creation time (#4195).
+	FirstCreated time.Time
+	// LastTriggered records the last time an approved high-confidence detection reinforced
+	// this threshold; initialized to the creation time. Persisted so the stored value
+	// reflects a real trigger rather than the periodic flush time (#4195).
+	LastTriggered time.Time
 }
 
 // effectiveDynamicThreshold computes the applied threshold from a model-specific
@@ -58,6 +65,13 @@ func effectiveDynamicThreshold(base float64, level int, minThreshold float64) fl
 
 // addSpeciesToDynamicThresholds adds a species to the dynamic thresholds map if it doesn't already exist.
 func (p *Processor) addSpeciesToDynamicThresholds(speciesLowercase, scientificName string, baseThreshold float32) {
+	// The species (lowercase common name) is the identity key, in memory and when
+	// persisted (#4195). Never admit an empty key: it cannot be persisted and would
+	// simulate learning for a phantom species that silently consumes memory.
+	if speciesLowercase == "" {
+		return
+	}
+
 	settings := p.currentSettings()
 
 	// Lock the mutex to ensure thread-safe access to the DynamicThresholds map
@@ -73,13 +87,16 @@ func (p *Processor) addSpeciesToDynamicThresholds(speciesLowercase, scientificNa
 			log := GetLogger()
 			log.Debug("Initializing dynamic threshold", logger.String("species", speciesLowercase))
 		}
+		now := time.Now()
 		p.DynamicThresholds[speciesLowercase] = &DynamicThreshold{
 			Level:          0,
 			BaseThreshold:  float64(baseThreshold),
-			Timer:          time.Now(),
+			Timer:          now,
 			HighConfCount:  0,
 			ValidHours:     settings.Realtime.DynamicThreshold.ValidHours,
 			ScientificName: scientificName,
+			FirstCreated:   now,
+			LastTriggered:  now,
 		}
 	} else if existing.ScientificName == "" && scientificName != "" {
 		// Update scientific name if it was missing
@@ -138,9 +155,9 @@ func (p *Processor) getAdjustedConfidenceThreshold(speciesLowercase string, base
 	return float32(effectiveDynamicThreshold(float64(baseThreshold), dt.Level, minThreshold))
 }
 
-// recordThresholdEvent saves a threshold change event to the database (BG-59)
-// scientificName is required for v2only datastore to correctly resolve the Label FK.
-// See issue #1907 for context on why both names are needed.
+// recordThresholdEvent saves a threshold change event to the database (BG-59).
+// Events are keyed by species (lowercase common name); scientificName is stored as
+// display metadata only, not used to resolve any model/label (#4195).
 func (p *Processor) recordThresholdEvent(speciesName, scientificName string, previousLevel, newLevel int, previousValue, newValue float64, changeReason string, confidence float64) {
 	if p.Ds == nil {
 		return
@@ -148,7 +165,7 @@ func (p *Processor) recordThresholdEvent(speciesName, scientificName string, pre
 
 	event := &datastore.ThresholdEvent{
 		SpeciesName:    speciesName,
-		ScientificName: scientificName, // Used by v2only for correct label resolution (#1907)
+		ScientificName: scientificName, // display metadata only (#4195)
 		PreviousLevel:  previousLevel,
 		NewLevel:       newLevel,
 		PreviousValue:  previousValue,
@@ -243,6 +260,7 @@ func (p *Processor) LearnFromApprovedDetection(speciesLowercase, scientificName 
 
 	dt.HighConfCount++
 	dt.LastLearnedAt = now
+	dt.LastTriggered = now // real trigger time, persisted instead of the flush time (#4195)
 
 	// Adjust the dynamic threshold based on the number of high-confidence detections
 	switch dt.HighConfCount {
@@ -284,8 +302,10 @@ func (p *Processor) updateDynamicThreshold(modelID, commonName string, confidenc
 		// Check if the species already has a dynamic threshold. The entry is keyed
 		// per species; modelID still selects the model-specific base to compare the
 		// detection confidence against before extending the timer.
-		// Note: scientific name not available in this context, but common name lookup is sufficient
-		if dt, exists := p.DynamicThresholds[commonName]; exists && confidence > float64(p.getBaseConfidenceThreshold(settings, commonName, "", modelID)) {
+		// Note: scientific name not available in this context, but common name lookup is sufficient.
+		// Lowercase the key to match how entries are stored (addSpeciesToDynamicThresholds);
+		// otherwise a title-cased common name misses and the timer is never extended.
+		if dt, exists := p.DynamicThresholds[strings.ToLower(commonName)]; exists && confidence > float64(p.getBaseConfidenceThreshold(settings, commonName, "", modelID)) {
 			// Update the timer to extend the threshold's validity
 			// Note: dt is a pointer, so this directly mutates the struct in the map
 			dt.Timer = time.Now().Add(time.Duration(dt.ValidHours) * time.Hour)
@@ -458,6 +478,9 @@ func (p *Processor) GetDynamicThresholdData() []DynamicThresholdData {
 			BaseThreshold:  dt.BaseThreshold,
 			HighConfCount:  dt.HighConfCount,
 			ExpiresAt:      dt.Timer,
+			FirstCreated:   dt.FirstCreated,
+			LastTriggered:  dt.LastTriggered,
+			TriggerCount:   dt.HighConfCount,
 			IsActive:       dt.Timer.After(now),
 		})
 	}
@@ -474,6 +497,9 @@ type DynamicThresholdData struct {
 	BaseThreshold  float64   `json:"baseThreshold"` // model-global base of the model that last learned (display only)
 	HighConfCount  int       `json:"highConfCount"`
 	ExpiresAt      time.Time `json:"expiresAt"`
+	FirstCreated   time.Time `json:"firstCreated"`  // real creation time (#4195)
+	LastTriggered  time.Time `json:"lastTriggered"` // real last-trigger time (#4195)
+	TriggerCount   int       `json:"triggerCount"`
 	IsActive       bool      `json:"isActive"`
 }
 

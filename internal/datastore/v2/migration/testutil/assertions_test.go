@@ -255,7 +255,7 @@ func TestAssertDynamicThresholdMatches_Success(t *testing.T) {
 
 	legacy := &datastore.DynamicThreshold{
 		ID:             1,
-		SpeciesName:    "american robin",
+		SpeciesName:    "American Robin", // mixed-case so the helper's ToLower is load-bearing
 		ScientificName: testSpeciesTurdus,
 		Level:          1,
 		CurrentValue:   0.75,
@@ -268,20 +268,19 @@ func TestAssertDynamicThresholdMatches_Success(t *testing.T) {
 		TriggerCount:   10,
 	}
 
-	sciName := testSpeciesTurdus
 	v2 := &entities.DynamicThreshold{
-		ID:            100, // V2 ID can differ
-		LabelID:       1,
-		Level:         1,
-		CurrentValue:  0.75,
-		BaseThreshold: 0.65,
-		HighConfCount: 5,
-		ValidHours:    24,
-		ExpiresAt:     expiresAt,
-		LastTriggered: now,
-		FirstCreated:  now.Add(-7 * 24 * time.Hour),
-		TriggerCount:  10,
-		Label:         &entities.Label{ID: 1, ScientificName: sciName},
+		ID:             100, // V2 ID can differ
+		SpeciesName:    "american robin",
+		ScientificName: testSpeciesTurdus,
+		Level:          1,
+		CurrentValue:   0.75,
+		BaseThreshold:  0.65,
+		HighConfCount:  5,
+		ValidHours:     24,
+		ExpiresAt:      expiresAt,
+		LastTriggered:  now,
+		FirstCreated:   now.Add(-7 * 24 * time.Hour),
+		TriggerCount:   10,
 	}
 
 	AssertDynamicThresholdMatches(t, legacy, v2)
@@ -450,4 +449,31 @@ func TestAssertDetectionMatches_ConfidenceMismatch(t *testing.T) {
 
 	AssertDetectionMatches(mockT, legacy, v2)
 	assert.True(t, mockT.Failed(), "should fail on confidence mismatch")
+}
+
+func TestAssertThresholdEventMatches_Success(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	legacy := &datastore.ThresholdEvent{
+		SpeciesName:   "American Robin", // mixed-case so the helper's ToLower is load-bearing
+		PreviousLevel: 0,
+		NewLevel:      1,
+		PreviousValue: 0.8,
+		NewValue:      0.6,
+		ChangeReason:  "high_confidence",
+		Confidence:    0.95,
+		CreatedAt:     now,
+	}
+	v2 := &entities.ThresholdEvent{
+		ID:            100,
+		SpeciesName:   "american robin",
+		PreviousLevel: 0,
+		NewLevel:      1,
+		PreviousValue: 0.8,
+		NewValue:      0.6,
+		ChangeReason:  "high_confidence",
+		Confidence:    0.95,
+		CreatedAt:     now,
+	}
+	AssertThresholdEventMatches(t, legacy, v2)
 }
