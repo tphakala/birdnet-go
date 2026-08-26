@@ -550,13 +550,13 @@ export function coerceMQTTSettings(settings: PartialMQTTSettings): PartialMQTTSe
     const tls = settings.tls as UnknownSettings;
     coerced.tls = {
       enabled: coerceBoolean(tls.enabled, false),
-      skipVerify: coerceBoolean(tls.skipVerify, false),
+      insecureSkipVerify: coerceBoolean(tls.insecureSkipVerify ?? tls.skipVerify, false),
     };
   } else {
     // Provide default TLS settings if missing
     coerced.tls = {
       enabled: false,
-      skipVerify: false,
+      insecureSkipVerify: false,
     };
   }
 
