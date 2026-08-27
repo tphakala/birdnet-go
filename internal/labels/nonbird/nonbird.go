@@ -28,11 +28,20 @@ const (
 // init() and never modified after that.
 var firstTokenSet map[string]struct{}
 
+// humanLabelsByLength groups the human sound classes in classes by label length.
+// IsHumanVocalization uses the buckets for allocation-free, case-insensitive matching
+// while the classifier scans a full prediction set for labels that must survive top-K.
+var humanLabelsByLength map[int][]string
+
 func init() {
 	firstTokenSet = make(map[string]struct{})
-	for k := range classes {
+	humanLabelsByLength = make(map[int][]string)
+	for k, category := range classes {
 		if before, _, found := strings.Cut(k, "_"); found {
 			firstTokenSet[before] = struct{}{}
+		}
+		if category == CategoryHuman {
+			humanLabelsByLength[len(k)] = append(humanLabelsByLength[len(k)], k)
 		}
 	}
 }
@@ -53,6 +62,43 @@ func Categories() []Category {
 func CategoryOf(rawLabel string) (Category, bool) {
 	cat, ok := classes[strings.ToLower(rawLabel)]
 	return cat, ok
+}
+
+// IsHumanVocalization reports whether a full raw model label represents a human
+// sound that should engage the privacy filter. It covers BirdNET's locale-stable
+// "Human " label prefix, Perch's human AudioSet/FSD50K classes, and the Perch
+// iNaturalist human taxon. Matching is case-insensitive.
+func IsHumanVocalization(rawLabel string) bool {
+	if hasFoldedPrefix(rawLabel, "human ") {
+		return true
+	}
+	if strings.EqualFold(rawLabel, "homo sapiens") {
+		return true
+	}
+	for _, label := range humanLabelsByLength[len(rawLabel)] {
+		if strings.EqualFold(rawLabel, label) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsDogDetection reports whether a full raw model label represents a domestic
+// dog sound that should engage the dog-bark filter. It covers BirdNET's
+// locale-stable "Dog_" prefix and Perch's dog sound classes and domestic dog
+// taxon. Wild canids remain excluded. Matching is case-insensitive.
+func IsDogDetection(rawLabel string) bool {
+	if hasFoldedPrefix(rawLabel, "dog_") {
+		return true
+	}
+	return strings.EqualFold(rawLabel, "dog") ||
+		strings.EqualFold(rawLabel, "bark") ||
+		strings.EqualFold(rawLabel, "growling") ||
+		strings.EqualFold(rawLabel, "canis familiaris")
+}
+
+func hasFoldedPrefix(value, prefix string) bool {
+	return len(value) >= len(prefix) && strings.EqualFold(value[:len(prefix)], prefix)
 }
 
 // IsNonSpeciesLabel reports whether rawLabel is a known non-bird sound class

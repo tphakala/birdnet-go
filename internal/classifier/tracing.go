@@ -57,7 +57,8 @@ const (
 	errTypeBatClassification   = "bat_classification"
 )
 
-// defaultTopKResults is the number of top predictions every model returns.
+// defaultTopKResults is the baseline number of top predictions every model returns.
+// Labels required by downstream privacy and dog-bark filters are retained in addition.
 const defaultTopKResults = 10
 
 // TracingSpan represents a traced operation with minimal overhead.

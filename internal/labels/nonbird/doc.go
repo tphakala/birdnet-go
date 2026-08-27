@@ -1,7 +1,7 @@
 // Package nonbird is the single source of truth for the non-bird, non-species
 // sound-event classes emitted by the Google Perch v2 (FSD50K/AudioSet) model.
 //
-// It holds 198 categorized classes and exposes two lookup paths:
+// It holds 198 categorized classes and exposes three lookup paths:
 //
 //   - Full-label lookup via [CategoryOf] and [IsNonSpeciesLabel]: matches the
 //     complete raw model label (e.g. "power_tool", "human_voice") exactly.
@@ -10,10 +10,13 @@
 //     (e.g. "Power" from "power_tool", "Engine" from "engine"). This is the
 //     lookup the image provider uses because the pipeline delivers only the
 //     first token to it.
+//   - Filter lookup via [IsHumanVocalization] and [IsDogDetection]: recognizes
+//     the full labels that must remain visible to the privacy and dog-bark filters,
+//     including locale-stable BirdNET prefixes and Perch sound classes or taxa.
 //
 // The static classes map in classes.go is the committed, hand-categorized
-// source of truth. The firstTokenSet is derived from it automatically in
-// init() so it can never drift from the data.
+// source of truth. Derived lookup indexes are built from it automatically in
+// init() so they cannot drift from the data.
 //
 // # Regenerating the candidate list
 //

@@ -780,6 +780,38 @@ func TestGetTopKResults(t *testing.T) {
 	}
 }
 
+func TestGetTopKResults_PreservesFilterLabelsBeyondLimit(t *testing.T) {
+	t.Parallel()
+
+	input := make([]datastore.Results, 0, defaultTopKResults+5)
+	for i := range defaultTopKResults {
+		input = append(input, datastore.Results{
+			Species:    fmt.Sprintf("Bird %d", i+1),
+			Confidence: 0.99 - float32(i)*0.05,
+		})
+	}
+	input = append(input,
+		datastore.Results{Species: "Human vocal_Mensch Stimme", Confidence: 0.09},
+		datastore.Results{Species: "Speech", Confidence: 0.08},
+		datastore.Results{Species: "Dog_Hund", Confidence: 0.07},
+		datastore.Results{Species: "Bark", Confidence: 0.06},
+		datastore.Results{Species: "Turdus merula", Confidence: 0.05},
+	)
+
+	results := getTopKResults(input, defaultTopKResults)
+
+	require.Len(t, results, defaultTopKResults+4)
+	assert.Equal(t, "Human vocal_Mensch Stimme", results[defaultTopKResults].Species)
+	assert.Equal(t, "Speech", results[defaultTopKResults+1].Species)
+	assert.Equal(t, "Dog_Hund", results[defaultTopKResults+2].Species)
+	assert.Equal(t, "Bark", results[defaultTopKResults+3].Species)
+
+	for i := range input {
+		input[i].Species = "OVERWRITTEN"
+	}
+	assert.Equal(t, "Human vocal_Mensch Stimme", results[defaultTopKResults].Species)
+}
+
 // TestGetTopKResults_ReturnsCopyNotAlias verifies getTopKResults returns a
 // freshly-allocated slice that does not share a backing array with the input
 // buffer. This is the guarantee that closes the data race: the

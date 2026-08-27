@@ -203,9 +203,8 @@ func TestDetectionHandlers_RecordTimestamp(t *testing.T) {
 	}
 }
 
-// TestPerchHumanLabelsParityWithNonbird verifies that every key previously in
-// perchHumanLabels (except "homo sapiens", which is the iNaturalist taxon
-// preserved in perchHumanExtraLabels) is classified as CategoryHuman by the
+// TestPerchHumanLabelsParityWithNonbird verifies that every AudioSet/FSD50K key
+// previously handled by the processor is classified as CategoryHuman by the
 // shared nonbird package. A failure here means a coverage regression: a label
 // that used to engage the privacy filter would silently stop doing so.
 func TestPerchHumanLabelsParityWithNonbird(t *testing.T) {
@@ -213,7 +212,7 @@ func TestPerchHumanLabelsParityWithNonbird(t *testing.T) {
 
 	// The complete former perchHumanLabels key set (37 entries minus "homo sapiens").
 	// "homo sapiens" is excluded: it is an iNaturalist taxon, not an AudioSet/FSD50K
-	// sound class, so nonbird does not include it. It lives in perchHumanExtraLabels.
+	// sound class, and IsHumanVocalization handles it directly.
 	oldAudioSetKeys := []string{
 		"speech",
 		"speech_synthesizer",

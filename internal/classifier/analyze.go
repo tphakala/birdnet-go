@@ -9,6 +9,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
 )
 
 // Filter structure is used for filtering predictions based on certain criteria.
@@ -95,7 +96,7 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 		return nil, err
 	}
 
-	// Use optimized top-k algorithm instead of full sort + trim
+	// Select the top predictions while retaining labels required by downstream filters.
 	topResults := getTopKResults(results, defaultTopKResults)
 
 	// Log prediction timing for performance monitoring
@@ -105,7 +106,7 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 	// Record metrics. Finish() records the single success because the span is not errored.
 	recordPredictionSuccess(span, len(topResults), start)
 
-	// Return the top 10 results
+	// Return the ranked results.
 	return topResults, nil
 }
 
@@ -215,8 +216,8 @@ func trimResultsToMax(results []datastore.Results, maxResults int) []datastore.R
 	return results
 }
 
-// getTopKResults returns the top k results without fully sorting the array.
-// Uses a partial sort algorithm that's more efficient than sorting all results.
+// getTopKResults returns the top k results plus any lower-ranked labels required
+// by the privacy or dog-bark filters. It avoids fully sorting the input array.
 func getTopKResults(results []datastore.Results, k int) []datastore.Results {
 	if len(results) == 0 || k <= 0 {
 		return []datastore.Results{}
@@ -235,21 +236,41 @@ func getTopKResults(results []datastore.Results, k int) []datastore.Results {
 		sortResults(results[:k])
 	}
 
+	// A human or dog label can score below the top-k boundary while still exceeding
+	// its filter's configured threshold. Preserve those labels so the processor can
+	// evaluate the filters instead of losing the signal during ranking. Compact the
+	// retained tail in place so the returned copy can still use one exact allocation.
+	retained := n
+	for i := n; i < len(results); i++ {
+		if shouldPreserveFilterLabel(results[i].Species) {
+			results[retained], results[i] = results[i], results[retained]
+			retained++
+		}
+	}
+
 	// Return a freshly-allocated copy so the result never aliases the caller's
 	// backing array. BirdNET.Predict passes a reused per-instance scratch buffer
 	// (bn.resultsBuffer) that the next inference window overwrites in place via
 	// pairLabelsAndConfidenceReuse; without this copy a top-K slice already handed
 	// to classifier.ResultsQueue would be mutated concurrently with the queue
 	// consumer reading it, an unsynchronized read/write data race that can corrupt
-	// queued detections. The Bat and Perch Predict paths pass
-	// freshly-allocated slices, so the copy is redundant-but-harmless there; doing
-	// it unconditionally keeps the ownership contract uniform for every model. n
-	// is small (defaultTopKResults = 10), so the copy is cheap and the upstream
-	// large-buffer reuse optimization stays intact: bn.resultsBuffer remains
-	// internal scratch that never escapes.
-	out := make([]datastore.Results, n)
-	copy(out, results[:n])
+	// queued detections. The Bat and Perch Predict paths pass freshly-allocated
+	// slices, so the copy is redundant-but-harmless there; doing it unconditionally
+	// keeps the ownership contract uniform for every model. The copied set is
+	// normally small, and the upstream large-buffer reuse optimization stays intact:
+	// bn.resultsBuffer remains internal scratch that never escapes.
+	out := make([]datastore.Results, retained)
+	copy(out, results[:retained])
+
+	// The top-k prefix is already sorted. Every retained tail result ranks at or
+	// below that prefix, so sorting only the retained tail preserves the full
+	// descending-order contract.
+	sortResults(out[n:])
 	return out
+}
+
+func shouldPreserveFilterLabel(rawLabel string) bool {
+	return nonbird.IsHumanVocalization(rawLabel) || nonbird.IsDogDetection(rawLabel)
 }
 
 // partialSort performs a partial sort to move the top k elements to the front.
