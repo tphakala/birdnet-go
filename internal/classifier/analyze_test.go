@@ -800,11 +800,18 @@ func TestGetTopKResults_PreservesFilterLabelsBeyondLimit(t *testing.T) {
 
 	results := getTopKResults(input, defaultTopKResults)
 
-	require.Len(t, results, defaultTopKResults+4)
+	require.Len(t, results, defaultTopKResults+2)
 	assert.Equal(t, "Human vocal_Mensch Stimme", results[defaultTopKResults].Species)
-	assert.Equal(t, "Speech", results[defaultTopKResults+1].Species)
-	assert.Equal(t, "Dog_Hund", results[defaultTopKResults+2].Species)
-	assert.Equal(t, "Bark", results[defaultTopKResults+3].Species)
+	assert.Equal(t, "Dog_Hund", results[defaultTopKResults+1].Species)
+
+	topResults, filterSignals := SplitFilterSignals(results)
+	require.Len(t, topResults, defaultTopKResults)
+	assert.Equal(t, len(topResults), cap(topResults))
+	require.Len(t, filterSignals, 2)
+	assert.Equal(t, "Human vocal_Mensch Stimme", filterSignals[0].Species)
+	assert.Equal(t, "Dog_Hund", filterSignals[1].Species)
+	assert.NotContains(t, results, datastore.Results{Species: "Speech", Confidence: 0.08})
+	assert.NotContains(t, results, datastore.Results{Species: "Bark", Confidence: 0.06})
 
 	for i := range input {
 		input[i].Species = "OVERWRITTEN"

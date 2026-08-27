@@ -309,10 +309,15 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 			Build()
 	}
 
+	// Keep lower-ranked human/dog labels available to the filters without mixing
+	// them into the normal top-ranked results used by metrics, diagnostics, and
+	// additional-prediction persistence.
+	topResults, filterSignals := classifier.SplitFilterSignals(results)
+
 	log.Debug("ProcessData inference complete",
 		logger.String("source", source),
 		logger.String("model_id", modelID),
-		logger.Int("result_count", len(results)),
+		logger.Int("result_count", len(topResults)),
 		logger.Duration("inference_duration", inferenceDuration),
 		logger.Int("sample_bytes", len(data)))
 
@@ -321,14 +326,14 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 
 	// Record result count metric
 	if pm != nil {
-		pm.RecordBirdNETResults(source, len(results))
+		pm.RecordBirdNETResults(source, len(topResults))
 	}
 
 	// DEBUG print all BirdNET results
 	if conf.Setting().BirdNET.Debug {
 		debugThreshold := float32(0) // set to 0 for now, maybe add a config option later
 		hasHighConfidenceResults := false
-		for _, result := range results {
+		for _, result := range topResults {
 			if result.Confidence > debugThreshold {
 				hasHighConfidenceResults = true
 				break
@@ -338,7 +343,7 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 		if hasHighConfidenceResults {
 			log.Debug("birdnet results",
 				logger.String("source", source))
-			for _, result := range results {
+			for _, result := range topResults {
 				if result.Confidence > debugThreshold {
 					log.Debug("birdnet result",
 						logger.Float64("confidence", float64(result.Confidence)),
@@ -394,7 +399,8 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 		AudioCapturedAt: audioCapturedAt,
 		ElapsedTime:     elapsedTime,
 		PCMdata:         pcmCopy,
-		Results:         results,
+		Results:         topResults,
+		FilterSignals:   filterSignals,
 		Source:          audioSource,
 		ModelID:         modelID,
 	}
@@ -407,7 +413,7 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 		log.Debug("ProcessData queued results",
 			logger.String("source", source),
 			logger.String("model_id", modelID),
-			logger.Int("result_count", len(results)))
+			logger.Int("result_count", len(topResults)))
 		if pm != nil {
 			pm.RecordAudioQueueOperation(source, "enqueue", "success")
 		}

@@ -203,6 +203,47 @@ func TestDetectionHandlers_RecordTimestamp(t *testing.T) {
 	}
 }
 
+func TestFilterSignalsTriggerFiltersWithoutBecomingAdditionalResults(t *testing.T) {
+	t.Parallel()
+
+	const source = "src1"
+	start := time.Date(2026, 6, 19, 8, 0, 0, 0, time.UTC)
+	settings := &conf.Settings{}
+	settings.Realtime.PrivacyFilter.Enabled = true
+	settings.Realtime.PrivacyFilter.Confidence = 0.05
+	settings.Realtime.DogBarkFilter.Enabled = true
+	settings.Realtime.DogBarkFilter.Confidence = 0.05
+
+	p := &Processor{
+		LastHumanDetection: make(map[string]HumanDetection),
+		LastDogDetection:   make(map[string]time.Time),
+	}
+	item := classifier.Results{
+		StartTime: start,
+		Results: []datastore.Results{
+			{Species: "Turdus merula_Common blackbird", Confidence: 0.9},
+			{Species: "Parus major_Great tit", Confidence: 0.8},
+		},
+		FilterSignals: []datastore.Results{
+			{Species: "Speech", Confidence: 0.09},
+			{Species: "Bark", Confidence: 0.08},
+		},
+	}
+	item.Source.ID = source
+
+	p.processFilterSignals(settings, &item)
+
+	human, ok := p.LastHumanDetection[source]
+	require.True(t, ok)
+	assert.Equal(t, start, human.Time)
+	assert.Equal(t, start, p.LastDogDetection[source])
+
+	additional := convertToAdditionalResults(item.Results, "Turdus merula")
+	require.Len(t, additional, 1)
+	assert.Equal(t, "Parus major", additional[0].Species.ScientificName)
+	assert.Equal(t, "Parus major_Great tit", additional[0].RawLabel)
+}
+
 // TestPerchHumanLabelsParityWithNonbird verifies that every AudioSet/FSD50K key
 // previously handled by the processor is classified as CategoryHuman by the
 // shared nonbird package. A failure here means a coverage regression: a label

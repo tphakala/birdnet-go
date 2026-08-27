@@ -216,8 +216,9 @@ func trimResultsToMax(results []datastore.Results, maxResults int) []datastore.R
 	return results
 }
 
-// getTopKResults returns the top k results plus any lower-ranked labels required
-// by the privacy or dog-bark filters. It avoids fully sorting the input array.
+// getTopKResults returns the top k results plus the strongest lower-ranked label
+// for each filter family not already represented in the top k. It avoids fully
+// sorting the input array.
 func getTopKResults(results []datastore.Results, k int) []datastore.Results {
 	if len(results) == 0 || k <= 0 {
 		return []datastore.Results{}
@@ -237,15 +238,36 @@ func getTopKResults(results []datastore.Results, k int) []datastore.Results {
 	}
 
 	// A human or dog label can score below the top-k boundary while still exceeding
-	// its filter's configured threshold. Preserve those labels so the processor can
-	// evaluate the filters instead of losing the signal during ranking. Compact the
-	// retained tail in place so the returned copy can still use one exact allocation.
-	retained := n
+	// its filter's configured threshold. One strongest signal per family is enough:
+	// both filters compare every matching label against one family-wide threshold.
+	// If the top-k prefix already contains that family, every tail score is less than
+	// or equal to the retained score and cannot change the filter decision.
+	hasHuman, hasDog := false, false
+	for i := range n {
+		hasHuman = hasHuman || nonbird.IsHumanVocalization(results[i].Species)
+		hasDog = hasDog || nonbird.IsDogDetection(results[i].Species)
+	}
+
+	var bestHuman, bestDog datastore.Results
+	haveHuman, haveDog := false, false
 	for i := n; i < len(results); i++ {
-		if shouldPreserveFilterLabel(results[i].Species) {
-			results[retained], results[i] = results[i], results[retained]
-			retained++
+		candidate := results[i]
+		if !hasHuman && nonbird.IsHumanVocalization(candidate.Species) &&
+			(!haveHuman || candidate.Confidence > bestHuman.Confidence) {
+			bestHuman, haveHuman = candidate, true
 		}
+		if !hasDog && nonbird.IsDogDetection(candidate.Species) &&
+			(!haveDog || candidate.Confidence > bestDog.Confidence) {
+			bestDog, haveDog = candidate, true
+		}
+	}
+
+	retained := n
+	if haveHuman {
+		retained++
+	}
+	if haveDog {
+		retained++
 	}
 
 	// Return a freshly-allocated copy so the result never aliases the caller's
@@ -260,7 +282,15 @@ func getTopKResults(results []datastore.Results, k int) []datastore.Results {
 	// normally small, and the upstream large-buffer reuse optimization stays intact:
 	// bn.resultsBuffer remains internal scratch that never escapes.
 	out := make([]datastore.Results, retained)
-	copy(out, results[:retained])
+	copy(out, results[:n])
+	next := n
+	if haveHuman {
+		out[next] = bestHuman
+		next++
+	}
+	if haveDog {
+		out[next] = bestDog
+	}
 
 	// The top-k prefix is already sorted. Every retained tail result ranks at or
 	// below that prefix, so sorting only the retained tail preserves the full
@@ -269,8 +299,15 @@ func getTopKResults(results []datastore.Results, k int) []datastore.Results {
 	return out
 }
 
-func shouldPreserveFilterLabel(rawLabel string) bool {
-	return nonbird.IsHumanVocalization(rawLabel) || nonbird.IsDogDetection(rawLabel)
+// SplitFilterSignals separates the normal top-k prediction set from the extra
+// lower-ranked signals retained solely for the privacy and dog-bark filters.
+// Model Predict implementations return the two slices as one ownership-safe
+// allocation; the analysis queue splits it before persistence processing.
+func SplitFilterSignals(results []datastore.Results) (topResults, filterSignals []datastore.Results) {
+	n := min(defaultTopKResults, len(results))
+	// Cap the top slice at its length so an append by a future queue consumer
+	// cannot overwrite the adjacent filter-signal tail.
+	return results[:n:n], results[n:]
 }
 
 // partialSort performs a partial sort to move the top k elements to the front.
