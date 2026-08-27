@@ -376,3 +376,56 @@ func TestInstalledModelBasenameHint(t *testing.T) {
 	assert.Empty(t, installedModelBasenameHint(s, RegistryIDBirdNETV3), "a family with no recorded path yields no hint")
 	assert.Empty(t, installedModelBasenameHint(nil, RegistryIDPerchV2), "nil settings yields no hint")
 }
+
+// TestOrchestrator_BuildSecondaryModels_MissingConfiguredPathFallback verifies that
+// buildPerch, buildBirdNETV3, and buildBat fall back to resolving installed models
+// on disk when their configured model or label paths point to non-existent files.
+func TestOrchestrator_BuildSecondaryModels_MissingConfiguredPathFallback(t *testing.T) {
+	t.Parallel()
+
+	o := &Orchestrator{}
+	modelsDir := t.TempDir()
+	o.SetModelsDir(modelsDir)
+
+	settings := &conf.Settings{}
+	settings.Perch.ModelPath = "/nonexistent/path/to/perch_v2.onnx"
+	settings.Perch.LabelPath = "/nonexistent/path/to/perch_v2_labels.txt"
+	settings.BirdNETV3.ModelPath = "/nonexistent/path/to/birdnet_v3.onnx"
+	settings.BirdNETV3.LabelPath = "/nonexistent/path/to/birdnet_v3_labels.txt"
+	settings.Bat.ClassifierModel = "/nonexistent/path/to/bat_classifier.onnx"
+	settings.Bat.LabelPath = "/nonexistent/path/to/bat_labels.txt"
+	settings.Bat.EmbeddingModel = "/nonexistent/path/to/bat_embeddings.onnx"
+
+	// When configured paths do not exist and no models are installed on disk,
+	// the builders should fail with "not installed or configured" error.
+	_, err := o.buildPerch(settings, 1)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Perch v2 model files not installed or configured")
+
+	_, err = o.buildBirdNETV3(settings, 1)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "BirdNET v3.0 model files not installed or configured")
+
+	_, err = o.buildBat(settings, 1)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bat model files not installed or configured")
+
+	// Now install a variant for Perch on disk.
+	perchEntry, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok)
+	int8ModelPath := writeVariantModelFile(t, modelsDir, &perchEntry, "int8-arm")
+	labelsPath := filepath.Join(modelsDir, perchEntry.ID, "perch_v2_labels.txt")
+	require.NoError(t, os.WriteFile(labelsPath, []byte("Species1\n"), 0o600))
+
+	// resolveInstalledPaths should find the installed model on disk.
+	resolvedModel, resolvedLabels, _ := o.resolveInstalledPaths(RegistryIDPerchV2)
+	assert.Equal(t, int8ModelPath, resolvedModel)
+	assert.Equal(t, labelsPath, resolvedLabels)
+
+	// With the variant on disk, buildPerch falls back to the resolved paths
+	// rather than failing with "not installed or configured".
+	_, err = o.buildPerch(settings, 1)
+	if err != nil {
+		assert.NotContains(t, err.Error(), "Perch v2 model files not installed or configured")
+	}
+}

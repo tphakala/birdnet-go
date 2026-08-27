@@ -2,6 +2,8 @@
 package classifier
 
 import (
+	"os"
+
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -19,12 +21,25 @@ func (o *Orchestrator) buildBirdNETV3(settings *conf.Settings, threads int) (*Bi
 	modelPath := settings.BirdNETV3.ModelPath
 	labelPath := settings.BirdNETV3.LabelPath
 
-	if modelPath == "" || labelPath == "" {
+	modelExists := false
+	if modelPath != "" {
+		if _, err := os.Stat(modelPath); err == nil {
+			modelExists = true
+		}
+	}
+	labelExists := false
+	if labelPath != "" {
+		if _, err := os.Stat(labelPath); err == nil {
+			labelExists = true
+		}
+	}
+
+	if !modelExists || !labelExists {
 		m, l, _ := o.resolveInstalledPaths(RegistryIDBirdNETV3)
-		if modelPath == "" {
+		if !modelExists {
 			modelPath = m
 		}
-		if labelPath == "" {
+		if !labelExists {
 			labelPath = l
 		}
 	}

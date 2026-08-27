@@ -1,6 +1,8 @@
 package classifier
 
 import (
+	"os"
+
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -19,15 +21,34 @@ func (o *Orchestrator) buildBat(settings *conf.Settings, threads int) (*Bat, err
 	labelPath := settings.Bat.LabelPath
 	embeddingModel := settings.Bat.EmbeddingModel
 
-	if classifierModel == "" || labelPath == "" || embeddingModel == "" {
+	classifierExists := false
+	if classifierModel != "" {
+		if _, err := os.Stat(classifierModel); err == nil {
+			classifierExists = true
+		}
+	}
+	labelExists := false
+	if labelPath != "" {
+		if _, err := os.Stat(labelPath); err == nil {
+			labelExists = true
+		}
+	}
+	embeddingExists := false
+	if embeddingModel != "" {
+		if _, err := os.Stat(embeddingModel); err == nil {
+			embeddingExists = true
+		}
+	}
+
+	if !classifierExists || !labelExists || !embeddingExists {
 		m, l, e := o.resolveInstalledPaths(RegistryIDBat)
-		if classifierModel == "" {
+		if !classifierExists {
 			classifierModel = m
 		}
-		if labelPath == "" {
+		if !labelExists {
 			labelPath = l
 		}
-		if embeddingModel == "" {
+		if !embeddingExists {
 			embeddingModel = e
 		}
 	}
