@@ -436,15 +436,16 @@ func emitPathSubstitutedNotification(pc *pendingPathCorrection) {
 		modelName = info.Name
 	}
 
-	// Three substitutions reach here and they are NOT interchangeable to a user
-	// trying to fix their install, so each gets its own wording. The case is
-	// derived from the pending record rather than carried as a separate field, so
-	// there is no fourth piece of state that can drift out of step with the two
-	// that already decide the behaviour.
+	// Substitutions reaching here are NOT interchangeable to a user trying to fix
+	// their install, so each gets its own wording. The unreadable case is carried as
+	// an explicit flag rather than derived: "not repairable" has more than one
+	// cause, and deriving from it told a user whose file was absent to go and check
+	// its permissions.
 	//
-	//   repairable, non-empty resolved: the file is CONFIRMED absent and an
-	//     installed model replaced it, but the configured path is user-owned so the
-	//     repair was abandoned. "Was not found" is exactly right.
+	//   default, non-empty resolved: the file is CONFIRMED absent and an installed
+	//     model replaced it, but config was left alone, either because the
+	//     configured path is user-owned or because it is not written in the form it
+	//     resolves to. "Was not found" is exactly right for all of those.
 	//   unreadable: the file could not be READ (a permissions change, an I/O error,
 	//     a half-mounted volume). Telling this user it "was not found" sends them
 	//     looking in the wrong place. Keyed on an explicit flag, because "not

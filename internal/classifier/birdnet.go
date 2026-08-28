@@ -1563,13 +1563,17 @@ func (bn *BirdNET) reloadModelInternal(allowPathChange bool) error {
 		// loudly rather than silently swapping models) while the running detector is
 		// untouched. The variant-swap path is excluded because there a cleared path
 		// IS the intended revert, handled by the next case.
+		// Captured BEFORE rollback(): rollback restores bn.Settings to the previous
+		// snapshot, so reading the path after it would name the OLD configured file
+		// and assert that a healthy path is unusable.
+		configuredPath := bn.Settings.BirdNET.ModelPath
 		rollback()
-		return errors.Newf("configured birdnet model file %q is no longer usable and no installed variant can replace it: requires orchestrator restart", bn.Settings.BirdNET.ModelPath).
+		return errors.Newf("configured birdnet model file %q is no longer usable and no installed variant can replace it: requires orchestrator restart", configuredPath).
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
 			Context("operation", "reload_model").
 			Context("current_model_path", bn.ModelInfo.CustomPath).
-			Context("configured_model_path", bn.Settings.BirdNET.ModelPath).
+			Context("configured_model_path", configuredPath).
 			Build()
 	case allowPathChange:
 		// Variant-swap path with a CLEARED BirdNET.ModelPath: the user reverted to

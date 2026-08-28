@@ -566,36 +566,55 @@ func (o *Orchestrator) resolvePrimaryModelPath(configured string) pathResolution
 // be loaded on this host.
 //
 // The BuiltIn baseline declares no files, so resolveInstalledPaths can only ever
-// return a DFT-truncated ONNX build for this family. Recovering onto one where
-// ONNX Runtime is unavailable would turn a recoverable stale path into a hard
-// startup failure, which is precisely the outcome this recovery exists to
-// prevent: initializeModel has no TFLite fallback once usesONNXBackend is true.
-// Reporting false makes the caller fall through to the built-in baseline, which
-// always loads.
+// return a DFT-truncated ONNX build for this family. Recovering onto one that
+// cannot load would turn a recoverable stale path into a hard startup failure,
+// which is precisely the outcome this recovery exists to prevent. Reporting false
+// makes the caller fall through to the built-in baseline, which always loads.
 //
-// CheckORTAvailability is used rather than checkORTOrFail because this is a
-// probe, not a load: checkORTOrFail logs and raises a user notification, which
-// would be wrong for a path we are choosing NOT to take.
+// "Can load" is deliberately NOT "ONNX Runtime is available". initializeModel
+// tries OPENVINO FIRST for the v2.4 identity and only falls through to ONNX
+// Runtime when OpenVINO declines, so an openvino-tagged build on an A76/Pi5 or an
+// Intel iGPU runs these variants with no ORT installed at all. Gating on ORT alone
+// would refuse a variant that would have loaded, silently dropping such a host to
+// the embedded model and telling the user no installed model was available, which
+// is false.
+//
+// CheckORTAvailability is used rather than checkORTOrFail because this is a probe,
+// not a load: checkORTOrFail logs and raises a user notification, which would be
+// wrong for a path we are choosing NOT to take.
 func (o *Orchestrator) primaryVariantUsable(modelPath string) bool {
 	if !isONNXModel(modelPath) {
 		return true
 	}
+
 	// An empty configured runtime path is the normal "use the system default"
 	// value, so a missing settings snapshot degrades to that rather than to a
-	// refusal: returning false here would disable the whole recovery for any
-	// caller that has not published settings yet.
-	var ortPath string
-	if settings := o.currentSettings(); settings != nil {
-		ortPath = settings.BirdNET.ONNXRuntimePath
+	// refusal.
+	settings := o.currentSettings()
+	if settings == nil {
+		settings = &conf.Settings{}
 	}
+
+	// OpenVINO first, mirroring initializeModel's own order.
+	if _, ok, _ := openVINOPlanFor(
+		settings.BirdNET.Backend,
+		settings.BirdNET.OpenVINODevice,
+		DefaultModelVersion,
+		settings.BirdNET.OpenVINOPath,
+		birdnetLogitsOutputIndex,
+	); ok {
+		return true
+	}
+
 	available := o.ortAvailable
 	if available == nil {
 		available = func(path string) bool { return inference.CheckORTAvailability(path).Available }
 	}
-	if available(ortPath) {
+	if available(settings.BirdNET.ONNXRuntimePath) {
 		return true
 	}
-	GetLogger().Warn("installed primary variant needs ONNX Runtime, which is unavailable; using the built-in model instead",
+
+	GetLogger().Warn("installed primary variant cannot load on this host (no OpenVINO plan and no ONNX Runtime); using the built-in model instead",
 		logger.String("model_path", modelPath))
 	return false
 }

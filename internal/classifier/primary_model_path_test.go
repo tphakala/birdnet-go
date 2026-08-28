@@ -608,3 +608,93 @@ func TestReloadModelInternal_VanishedRunningModelIsRefused(t *testing.T) {
 	assert.Contains(t, err.Error(), "requires orchestrator restart",
 		"loading the baseline under an identity naming the vanished file would misattribute every detection")
 }
+
+// TestPrimaryRegistryID covers the family gate that decides whether the recovery
+// runs at all. Deleting that gate lets a stale BirdNET v3.0 primary path be
+// "recovered" onto a v2.4 model file: a 32 kHz/5 s identity pinned to a
+// 48 kHz/3 s model with a different label set.
+func TestPrimaryRegistryID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		version string
+		want    string
+		recover bool
+	}{
+		{"empty version is the default v2.4 family", "", permanentRegistryID, true},
+		{"explicit 2.4", "2.4", permanentRegistryID, true},
+		{"3.0 is a different family", "3.0", RegistryIDBirdNETV3, false},
+		{"an unknown version resolves to nothing", "9.9", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			settings := &conf.Settings{}
+			settings.BirdNET.Version = tt.version
+
+			got := primaryRegistryID(settings)
+			assert.Equal(t, tt.want, got)
+
+			// The gate as NewOrchestrator applies it, not just the helper: a nil
+			// resolver is what stops a non-v2.4 primary from being recovered onto a
+			// v2.4 model file, and what keeps the hard-wired permanentRegistryID
+			// correction label from ever being attached to another family.
+			o := &Orchestrator{}
+			resolver := o.primaryPathResolverFor(settings)
+			if tt.recover {
+				assert.NotNil(t, resolver, "the v2.4 family must get the recovery")
+			} else {
+				assert.Nil(t, resolver,
+					"only the v2.4 family may use a recovery whose target and correction label are both hard-wired to it")
+			}
+		})
+	}
+}
+
+// TestEmitPathSubstitutedNotification_UnreadableIsNotDerivedFromRepairable pins
+// the distinction the explicit unreadable flag exists for. Both records below are
+// NOT repairable; only one of them describes a file that is present. Selecting the
+// wording from repairable alone tells the user of an ABSENT file to go and check
+// its permissions.
+func TestEmitPathSubstitutedNotification_UnreadableIsNotDerivedFromRepairable(t *testing.T) {
+	// Not parallel: mutates the global notification service.
+	notification.ResetForTest()
+	t.Cleanup(notification.ResetForTest)
+	notification.Initialize(notification.DefaultServiceConfig())
+	svc := notification.GetService()
+	require.NotNil(t, svc)
+	t.Cleanup(svc.Stop)
+
+	// Present but unreadable: EACCES on a NAS mount.
+	emitPathSubstitutedNotification(&pendingPathCorrection{
+		registryID: RegistryIDPerchV2,
+		resolved:   modelFileSet{model: "/models/perch-v2/perch_v2.onnx"},
+		repairable: false,
+		unreadable: true,
+	})
+
+	// Confirmed ABSENT, and declined for rewriting because the configured path is
+	// written with a variable. Same repairable value, different truth.
+	emitPathSubstitutedNotification(&pendingPathCorrection{
+		registryID: permanentRegistryID,
+		resolved:   modelFileSet{model: "/models/birdnet-v2.4/recovered.onnx"},
+		repairable: false,
+		unreadable: false,
+	})
+
+	list, err := svc.List(nil)
+	require.NoError(t, err)
+	var unreadable, notFound int
+	for _, n := range list {
+		switch n.MessageKey {
+		case notification.MsgModelPathUnreadableMessage:
+			unreadable++
+		case notification.MsgModelPathSubstitutedMessage:
+			notFound++
+		}
+	}
+	assert.Equal(t, 1, unreadable, "only the present-but-unreadable file may say it could not be read")
+	assert.Equal(t, 1, notFound,
+		"an absent file must say it was not found, or the user checks permissions on a file that does not exist")
+}

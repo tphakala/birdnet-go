@@ -226,17 +226,14 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// A nil resolver is the pre-recovery behaviour: the configured path is used
 	// verbatim, so any other family is left exactly as it was.
 	//
-	// o.resolvePrimaryModelPath is safe to hand over now: o.modelsDir was assigned
-	// above, and the resolver reads nothing else off o. NewBirdNET calls it once at
+	// o.resolvePrimaryModelPath is safe to hand over now. It reads o.modelsDir
+	// (assigned above), o.ortAvailable (nil in production) and o.currentSettings(),
+	// which falls back to the o.Settings the struct literal above already set. All
+	// three are populated before this point. NewBirdNET calls it once at
 	// construction and keeps it for its hot-reload path, so both resolve the same
 	// way. Passing the bound method rather than a precomputed value is what keeps
 	// the reload from re-deriving the identity off the raw configured string.
-	var resolvePrimary primaryPathResolver
-	if primaryRegistryID(settings) == permanentRegistryID {
-		resolvePrimary = o.resolvePrimaryModelPath
-	}
-
-	bn, err := NewBirdNET(settings, nil, resolvePrimary)
+	bn, err := NewBirdNET(settings, nil, o.primaryPathResolverFor(settings))
 	if err != nil {
 		return nil, err
 	}
@@ -300,6 +297,19 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	}
 
 	return o, nil
+}
+
+// primaryPathResolverFor returns the stale-path resolver to hand to NewBirdNET,
+// or nil when the primary slot is not the BirdNET v2.4 family.
+//
+// Extracted from NewOrchestrator so the decision is reachable without building a
+// real model: inline, the only way to observe it was to construct an Orchestrator,
+// so removing the family check broke no test.
+func (o *Orchestrator) primaryPathResolverFor(settings *conf.Settings) primaryPathResolver {
+	if primaryRegistryID(settings) != permanentRegistryID {
+		return nil
+	}
+	return o.resolvePrimaryModelPath
 }
 
 // primaryRegistryID reports which model family occupies the primary classifier
