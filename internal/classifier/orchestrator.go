@@ -2194,6 +2194,15 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 	// so this reads the same as the sibling drain in LoadModel; on the happy path
 	// it still runs exactly where it did, immediately before the return.
 	//
+	// Note what "every exit path" would mean if this function ever gained an error
+	// return: the drain would then also rewrite config.yaml on a startup that goes
+	// on to fail, where the previous placement skipped it. It has exactly one
+	// return today, so that case does not arise, but anyone adding an early error
+	// return here should decide whether a failed startup may still repair the
+	// configuration. The paths written are consistent with what was actually
+	// loaded either way, since a correction is only queued after a successful
+	// build.
+	//
 	// Warm-ups are drained per-iteration INSIDE the loop below, so they still
 	// complete before this does: the config write must not land inside the window
 	// a per-model RSS delta measures (see runPendingWarmups). That ordering is why
