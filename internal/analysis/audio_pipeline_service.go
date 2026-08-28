@@ -965,7 +965,8 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 		// Resolve per-source model targets. Fall back to primary if the
 		// source has no configured models or none could be resolved.
 		modelInfos, skippedModels := resolveModelTargets(sourceModelMap[sid], allModelInfos)
-		if len(modelInfos) == 0 {
+		usedPrimaryFallback := len(modelInfos) == 0
+		if usedPrimaryFallback {
 			modelInfos = primaryTargets
 		}
 
@@ -1038,7 +1039,17 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 		if !bufferRouteOK {
 			registered = nil
 		}
-		reportUnregisteredModels(modelMgr, sourceName, skippedModels, modelInfos, registered)
+		// Report only models the configuration actually assigns. When the source
+		// resolved to no loaded target and fell back to the primary, the user
+		// assigned nothing here, so naming the built-in primary as "assigned to this
+		// source" would be false, and it points the user at a gallery entry that
+		// offers no action for a permanent model. Genuinely assigned but unresolvable
+		// models still reach the user through skippedModels.
+		assigned := modelInfos
+		if usedPrimaryFallback {
+			assigned = nil
+		}
+		reportUnregisteredModels(modelMgr, sourceName, skippedModels, assigned, registered)
 
 		if !consumerOK {
 			// The buffer consumer never came up; skip wiring the audio-level route,
@@ -1690,6 +1701,24 @@ func resolveModelTargets(configModelIDs []string, loadedModels map[string]classi
 // did register, so nothing looks broken, and the only trace is a warning in a
 // log file. Users have lost a model for days this way (GitHub #4201, #4204).
 func reportUnregisteredModels(mm *classifier.ModelManager, sourceName string, skipped []string, resolved []classifier.ModelInfo, allocated map[string]bool) {
+	notRegistered := unregisteredModelNames(mm, skipped, resolved, allocated)
+	if len(notRegistered) > 0 {
+		notifyModelsNotRegistered(sourceName, notRegistered)
+	}
+}
+
+// unregisteredModelNames returns the display names of models that will not
+// analyze this source, so the caller can tell the user which ones are affected.
+//
+// A model mid-download is omitted deliberately: a reinstall briefly leaves the
+// model unregistered, and naming it there would report a genuine outage for what
+// is a transient and self-resolving state, and would arm the renotify window
+// against the real failure that might follow.
+//
+// Split out from reportUnregisteredModels so the selection is testable without a
+// notification service: notifyModelsNotRegistered returns early when none is
+// registered, which would otherwise make the decision unobservable.
+func unregisteredModelNames(mm *classifier.ModelManager, skipped []string, resolved []classifier.ModelInfo, allocated map[string]bool) []string {
 	notRegistered := make([]string, 0, len(skipped)+len(resolved))
 	for _, s := range skipped {
 		if modelIsDownloading(mm, s) {
@@ -1706,9 +1735,7 @@ func reportUnregisteredModels(mm *classifier.ModelManager, sourceName string, sk
 		}
 		notRegistered = append(notRegistered, modelDisplayName(resolved[i].ID))
 	}
-	if len(notRegistered) > 0 {
-		notifyModelsNotRegistered(sourceName, notRegistered)
-	}
+	return notRegistered
 }
 
 // modelDisplayName resolves a config ID or registry ID to the user-facing model

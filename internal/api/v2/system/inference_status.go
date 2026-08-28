@@ -755,7 +755,15 @@ func buildSourceAttachments(settings *conf.Settings, models []classifier.ModelIn
 		// above), not replaced by a primary-fallback row the runtime never creates.
 		// Keying the fallback on resolvedToLoaded restores parity with the pipeline.
 		if !resolvedToLoaded && primaryID != "" {
-			out[primaryID] = append(out[primaryID], ModelSourceInfo{ID: name, Name: name, Type: sourceType, Fallback: true})
+			// The fallback row describes the primary model that actually analyzes this
+			// source, so it carries the same liveness verdict as a resolved row. A
+			// primary whose own analysis buffer is absent is not analyzing either, and
+			// reporting it as healthy is the "looks running while analyzing nothing"
+			// state this endpoint exists to remove.
+			out[primaryID] = append(out[primaryID], ModelSourceInfo{
+				ID: name, Name: name, Type: sourceType, Fallback: true,
+				NotRunning: haveLive && !live[primaryID],
+			})
 		}
 	}
 

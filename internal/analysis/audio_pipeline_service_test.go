@@ -252,3 +252,45 @@ func TestResolveModelTargets_ReportsSkippedModels(t *testing.T) {
 		assert.Empty(t, skipped)
 	})
 }
+
+// TestUnregisteredModelNames_PrimaryFallbackIsNotReportedAsAssigned pins the
+// rule that only models the configuration actually assigns are named to the
+// user. When a source resolves to no loaded target, registerConsumersForSources
+// falls back to the primary model; the user assigned nothing there, so naming
+// the built-in primary as "assigned to this audio source" would be false and
+// would point the user at a gallery entry offering no action for a permanent
+// model. Caught on PR review by two independent reviewers.
+func TestUnregisteredModelNames_PrimaryFallbackIsNotReportedAsAssigned(t *testing.T) {
+	t.Parallel()
+
+	primary := []classifier.ModelInfo{{ID: "BirdNET_V2.4"}}
+
+	t.Run("a primary-fallback set is passed as nil and reports nothing", func(t *testing.T) {
+		t.Parallel()
+		// The call site passes assigned=nil when usedPrimaryFallback is true.
+		got := unregisteredModelNames(nil, nil, nil, nil)
+		assert.Empty(t, got, "a source that assigns no model must produce no report")
+	})
+
+	t.Run("an explicitly assigned model that did not register is reported", func(t *testing.T) {
+		t.Parallel()
+		got := unregisteredModelNames(nil, nil, primary, nil)
+		require.Len(t, got, 1, "an assigned but unallocated model must be reported")
+		assert.Equal(t, modelDisplayName("BirdNET_V2.4"), got[0])
+	})
+
+	t.Run("an allocated model is not reported", func(t *testing.T) {
+		t.Parallel()
+		got := unregisteredModelNames(nil, nil, primary, map[string]bool{"BirdNET_V2.4": true})
+		assert.Empty(t, got, "a model with an analysis buffer is analyzing and must not be reported")
+	})
+
+	t.Run("config-assigned but unresolvable models are still reported", func(t *testing.T) {
+		t.Parallel()
+		// skipped carries models the configuration names but that never resolved,
+		// which stay reportable even when the resolved set came from the fallback.
+		got := unregisteredModelNames(nil, []string{"perch_v2"}, nil, nil)
+		require.Len(t, got, 1)
+		assert.Equal(t, modelDisplayName("perch_v2"), got[0])
+	})
+}

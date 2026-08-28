@@ -468,8 +468,8 @@
         "reconciledMessage": "Os caminhos de ficheiro configurados para {modelName} estavam desatualizados e foram reparados para corresponder ao modelo instalado em {modelPath}.",
         "substitutedTitle": "Ficheiro de modelo configurado para {modelName} não encontrado",
         "substitutedMessage": "O ficheiro de modelo configurado para {modelName} não foi encontrado no disco, pelo que o modelo instalado em {modelPath} está a ser utilizado em vez disso. A sua configuração não foi alterada.",
-        "notRegisteredTitle": "O modelo não está a analisar {sourceName}",
-        "notRegisteredMessage": "{models} está atribuído à fonte de áudio \"{sourceName}\", mas atualmente não está a receber áudio, pelo que não está a produzir deteções. Abra a galeria de modelos nas Configurações para verificar o seu estado."
+        "notRegisteredTitle": "Nenhum modelo está a analisar {sourceName}",
+        "notRegisteredMessage": "Nenhum áudio está a chegar a {models} na fonte de áudio \"{sourceName}\", pelo que não são produzidas deteções. Abra a galeria de modelos nas Configurações para verificar o estado."
       },
       "alert": {
         "firedTitle": "{rule_name}",

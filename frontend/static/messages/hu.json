@@ -468,8 +468,8 @@
         "reconciledMessage": "A(z) {modelName} beállított fájlelérési útjai elavultak voltak, és javításra kerültek, hogy megfeleljenek a(z) {modelPath} helyen telepített modellnek.",
         "substitutedTitle": "A(z) {modelName} modellhez beállított modellfájl nem található",
         "substitutedMessage": "A(z) {modelName} modellhez beállított modellfájl nem található a lemezen, ezért helyette a(z) {modelPath} helyen telepített modell van használatban. A konfigurációja változatlan maradt.",
-        "notRegisteredTitle": "A modell nem elemzi a következőt: {sourceName}",
-        "notRegisteredMessage": "A(z) {models} hozzá van rendelve a(z) \"{sourceName}\" hangforráshoz, de jelenleg nem kap hangot, így nem készít detektálásokat. Nyissa meg a modellgalériát a Beállításokban az állapotának ellenőrzéséhez."
+        "notRegisteredTitle": "Egyetlen modell sem elemzi a következőt: {sourceName}",
+        "notRegisteredMessage": "Nem jut el hang a(z) {models} számára a(z) \"{sourceName}\" hangforráson, így nem jönnek létre detektálások. Nyissa meg a modellgalériát a Beállításokban az állapot ellenőrzéséhez."
       },
       "alert": {
         "firedTitle": "{rule_name}",

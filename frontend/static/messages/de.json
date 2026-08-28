@@ -468,8 +468,8 @@
         "reconciledMessage": "Die konfigurierten Dateipfade für {modelName} waren veraltet und wurden repariert, um mit dem installierten Modell unter {modelPath} übereinzustimmen.",
         "substitutedTitle": "Konfigurierte Modelldatei für {modelName} wurde nicht gefunden",
         "substitutedMessage": "Die für {modelName} konfigurierte Modelldatei wurde nicht auf dem Datenträger gefunden, daher wird stattdessen das installierte Modell unter {modelPath} verwendet. Ihre Konfiguration wurde nicht verändert.",
-        "notRegisteredTitle": "Modell analysiert {sourceName} nicht",
-        "notRegisteredMessage": "{models} ist der Audioquelle \"{sourceName}\" zugewiesen, empfängt derzeit jedoch kein Audio und erzeugt daher keine Erkennungen. Öffnen Sie die Modellgalerie unter Einstellungen, um den Status zu überprüfen."
+        "notRegisteredTitle": "Kein Modell analysiert {sourceName}",
+        "notRegisteredMessage": "Kein Audio erreicht {models} an der Audioquelle \"{sourceName}\", sodass keine Erkennungen erzeugt werden. Öffnen Sie die Modellgalerie unter Einstellungen, um den Status zu überprüfen."
       },
       "alert": {
         "firedTitle": "{rule_name}",

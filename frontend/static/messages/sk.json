@@ -468,8 +468,8 @@
         "reconciledMessage": "Nakonfigurované cesty k súborom pre {modelName} boli zastarané a boli opravené tak, aby zodpovedali nainštalovanému modelu v {modelPath}.",
         "substitutedTitle": "Nakonfigurovaný súbor modelu pre {modelName} sa nenašiel",
         "substitutedMessage": "Súbor modelu nakonfigurovaný pre {modelName} sa na disku nenašiel, preto sa namiesto neho používa nainštalovaný model v {modelPath}. Vaša konfigurácia zostala nezmenená.",
-        "notRegisteredTitle": "Model neanalyzuje {sourceName}",
-        "notRegisteredMessage": "{models} je priradený k zvukovému zdroju \"{sourceName}\", ale momentálne neprijíma zvuk, takže nevytvára detekcie. Otvorte galériu modelov v Nastaveniach a skontrolujte jeho stav."
+        "notRegisteredTitle": "Žiadny model neanalyzuje {sourceName}",
+        "notRegisteredMessage": "K {models} na zvukovom zdroji \"{sourceName}\" sa nedostáva žiadny zvuk, takže sa nevytvárajú žiadne detekcie. Otvorte galériu modelov v Nastaveniach a skontrolujte stav."
       },
       "alert": {
         "firedTitle": "{rule_name}",

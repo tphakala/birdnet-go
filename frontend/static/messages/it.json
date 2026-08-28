@@ -468,8 +468,8 @@
         "reconciledMessage": "I percorsi dei file configurati per {modelName} erano obsoleti e sono stati riparati per corrispondere al modello installato in {modelPath}.",
         "substitutedTitle": "File del modello configurato per {modelName} non trovato",
         "substitutedMessage": "Il file del modello configurato per {modelName} non è stato trovato sul disco, quindi viene utilizzato il modello installato in {modelPath}. La tua configurazione non è stata modificata.",
-        "notRegisteredTitle": "Il modello non sta analizzando {sourceName}",
-        "notRegisteredMessage": "{models} è assegnato alla sorgente audio \"{sourceName}\" ma al momento non riceve audio, quindi non produce rilevamenti. Apra la galleria dei modelli in Impostazioni per verificarne lo stato."
+        "notRegisteredTitle": "Nessun modello sta analizzando {sourceName}",
+        "notRegisteredMessage": "Nessun audio raggiunge {models} sulla sorgente audio \"{sourceName}\", quindi non vengono prodotti rilevamenti. Apri la galleria dei modelli in Impostazioni per verificare lo stato."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1776,7 +1776,7 @@
       "noSources": "Nessuna sorgente collegata",
       "primaryFallback": "principale (fallback)",
       "sourceNotRunning": "non sta analizzando",
-      "sourceNotRunningTooltip": "Questa sorgente è assegnata al modello nelle impostazioni, ma il suo audio non raggiunge il modello, quindi non produce rilevamenti. Apra la galleria dei modelli in Impostazioni per verificarne lo stato.",
+      "sourceNotRunningTooltip": "Questa sorgente è assegnata al modello nelle impostazioni, ma il suo audio non raggiunge il modello, quindi non produce rilevamenti. Apri la galleria dei modelli in Impostazioni per verificarne lo stato.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",

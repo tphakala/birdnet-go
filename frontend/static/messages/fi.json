@@ -468,8 +468,8 @@
         "reconciledMessage": "Mallille {modelName} määritetyt tiedostopolut olivat vanhentuneet, ja ne korjattiin vastaamaan asennettua mallia sijainnissa {modelPath}.",
         "substitutedTitle": "Mallille {modelName} määritettyä mallitiedostoa ei löytynyt",
         "substitutedMessage": "Mallille {modelName} määritettyä mallitiedostoa ei löytynyt levyltä, joten sen sijaan käytetään asennettua mallia sijainnissa {modelPath}. Asetuksiasi ei muutettu.",
-        "notRegisteredTitle": "Malli ei analysoi kohdetta {sourceName}",
-        "notRegisteredMessage": "{models} on liitetty äänilähteeseen \"{sourceName}\", mutta se ei tällä hetkellä vastaanota ääntä, joten se ei tuota havaintoja. Avaa Asetusten malligalleria tarkistaaksesi sen tilan."
+        "notRegisteredTitle": "Mikään malli ei analysoi kohdetta {sourceName}",
+        "notRegisteredMessage": "Ääni ei tavoita kohdetta {models} äänilähteessä \"{sourceName}\", joten havaintoja ei tuoteta. Avaa Asetusten malligalleria tarkistaaksesi tilan."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1775,8 +1775,8 @@
       "sources": "Äänilähteet",
       "noSources": "Ei liitettyjä lähteitä",
       "primaryFallback": "ensisijainen (vara)",
-      "sourceNotRunning": "ei analysoi",
-      "sourceNotRunningTooltip": "Tämä lähde on liitetty malliin asetuksissa, mutta sen ääni ei saavu mallille, joten se ei tuota havaintoja. Avaa Asetusten malligalleria tarkistaaksesi sen tilan.",
+      "sourceNotRunning": "ei analysoida",
+      "sourceNotRunningTooltip": "Tämä lähde on liitetty malliin asetuksissa, mutta sen ääni ei tavoita mallia, joten se ei tuota havaintoja. Avaa Asetusten malligalleria tarkistaaksesi sen tilan.",
       "notMeasured": "-",
       "unitMs": "ms",
       "unitKhz": "kHz",

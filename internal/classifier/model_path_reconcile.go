@@ -125,8 +125,6 @@ func (o *Orchestrator) applyPathCorrection(pc *pendingPathCorrection) {
 		return
 	}
 
-	updated, changed := o.planPathCorrection(current, pc)
-
 	if pathCorrectionPersistenceDisabled.Load() {
 		// A read-only diagnostic command (benchmark, rangefilter print) is running.
 		// The model already loaded from the runtime fallback, so analysis works; we
@@ -137,6 +135,8 @@ func (o *Orchestrator) applyPathCorrection(pc *pendingPathCorrection) {
 			logger.String("resolved_model_path", pc.resolved.model))
 		return
 	}
+
+	updated, changed := o.planPathCorrection(current, pc)
 
 	if !changed {
 		// planPathCorrection returns a nil snapshot only when it ABANDONED a real

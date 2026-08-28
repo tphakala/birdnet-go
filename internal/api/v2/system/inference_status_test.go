@@ -794,3 +794,72 @@ func TestBuildSourceAttachments_RTSPStream(t *testing.T) {
 	require.Len(t, prim, 1)
 	assert.False(t, prim[0].NotRunning, "BirdNET is genuinely routed for the stream")
 }
+
+// TestBuildSourceAttachments_FallbackRowCarriesLiveness pins that the
+// primary-fallback attachment is subject to the same liveness verdict as an
+// explicitly assigned row. A source that resolves to no loaded target is
+// analyzed by the primary model, so if the primary's own analysis buffer is
+// absent the source is not being analyzed at all. Reporting that row as healthy
+// reproduces the "looks running while analyzing nothing" state this endpoint
+// exists to remove, just on the fallback branch. Caught on PR review.
+func TestBuildSourceAttachments_FallbackRowCarriesLiveness(t *testing.T) {
+	t.Parallel()
+
+	const primaryID = classifier.DefaultModelVersion
+	// Only the primary is loaded, so a source assigning Perch resolves to nothing
+	// and takes the primary-fallback branch.
+	models := []classifier.ModelInfo{{ID: primaryID}}
+
+	settings := &conf.Settings{}
+	settings.Realtime.Audio.Sources = []conf.AudioSourceConfig{
+		{Name: "Front Yard", Models: []string{conf.ModelIDPerchV2}},
+	}
+
+	t.Run("fallback row is marked not running when the primary has no buffer", func(t *testing.T) {
+		t.Parallel()
+
+		// The router knows this source and feeds some other model on it, but not the
+		// primary, so live evidence exists and it says the primary is not fed.
+		running := map[string]map[string]bool{
+			"Front Yard": {"SomeOtherModel": true},
+		}
+
+		got := buildSourceAttachments(settings, models, primaryID, running)
+
+		prim := got[primaryID]
+		require.Len(t, prim, 1)
+		assert.True(t, prim[0].Fallback, "this row is the primary fallback")
+		assert.True(t, prim[0].NotRunning,
+			"the primary analyzes this source, so an absent primary buffer means it is not analyzing")
+	})
+
+	t.Run("fallback row is running when the primary is routed", func(t *testing.T) {
+		t.Parallel()
+
+		running := map[string]map[string]bool{
+			"Front Yard": {primaryID: true},
+		}
+
+		got := buildSourceAttachments(settings, models, primaryID, running)
+
+		prim := got[primaryID]
+		require.Len(t, prim, 1)
+		assert.True(t, prim[0].Fallback)
+		assert.False(t, prim[0].NotRunning,
+			"the primary really is routed for this source")
+	})
+
+	t.Run("fallback row makes no claim without live evidence", func(t *testing.T) {
+		t.Parallel()
+
+		// A nil router map means the pipeline has not reported yet. Absence of
+		// evidence must not be rendered as a failure.
+		got := buildSourceAttachments(settings, models, primaryID, nil)
+
+		prim := got[primaryID]
+		require.Len(t, prim, 1)
+		assert.True(t, prim[0].Fallback)
+		assert.False(t, prim[0].NotRunning,
+			"with no live evidence the row must not assert that the model is failing")
+	})
+}
