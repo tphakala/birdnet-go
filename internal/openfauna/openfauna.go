@@ -818,6 +818,34 @@ func LookupMeta(scientific string) (Meta, bool) {
 	return m.clone(), ok
 }
 
+// decodeMetaRecord decodes one metadata line into a Meta, reporting ok=false when
+// the line cannot be decoded.
+//
+// A decode failure here is PERMANENT, not transient. The embedded dataset is
+// immutable (the same property the lock-free memos rely on), so a record that fails
+// to decode today fails identically on every future call. Callers must therefore
+// treat it as "this name has no usable metadata" and memoize that, rather than
+// surfacing it as a scan error: the scan-error paths deliberately skip memoization
+// so a transient failure isn't cached, which for a permanent one means every later
+// lookup of the name re-scans the whole ~15k-record dataset instead.
+//
+// streamMetadataNames already drops lines whose scientific_name won't decode, so
+// what reaches here is a line with a usable name but a malformed body (for example
+// a taxonomy field that isn't an object).
+func decodeMetaRecord(line []byte) (Meta, bool) {
+	var rec metadataRecord
+	if err := json.Unmarshal(line, &rec); err != nil {
+		return Meta{}, false
+	}
+	return Meta{
+		Class:        rec.Taxonomy.Class,
+		Order:        rec.Taxonomy.Order,
+		Family:       rec.Taxonomy.Family,
+		FamilyCommon: rec.Taxonomy.FamilyCommon,
+		Links:        rec.Links,
+	}, true
+}
+
 // lookupMetaShared is the shared body of LookupMeta and LookupTaxonomy. It returns
 // the memoized Meta AS STORED: the Links map is the shared one, so callers must
 // clone it before returning it outside this package or reading it after any
@@ -841,17 +869,17 @@ func lookupMetaShared(scientific string) (Meta, bool) {
 		if normalizeName(sci) != target {
 			return nil
 		}
-		var rec metadataRecord
-		if err := json.Unmarshal(line, &rec); err != nil {
-			return err
+		m, decoded := decodeMetaRecord(line)
+		if !decoded {
+			// Stop and let the negative memo below absorb it. Returning the decode
+			// error would take the scan-error path, which does not memoize, so every
+			// later lookup of this name would re-scan the entire dataset forever.
+			GetLogger().Error("openfauna metadata record failed to decode",
+				logger.String("scientific", target),
+			)
+			return errStop
 		}
-		found = Meta{
-			Class:        rec.Taxonomy.Class,
-			Order:        rec.Taxonomy.Order,
-			Family:       rec.Taxonomy.Family,
-			FamilyCommon: rec.Taxonomy.FamilyCommon,
-			Links:        rec.Links,
-		}
+		found = m
 		ok = true
 		return errStop
 	}); err != nil && !errors.Is(err, errStop) {
@@ -1046,17 +1074,17 @@ func primeMeta(scientificNames []string) {
 		if _, dup := found[norm]; dup {
 			return nil
 		}
-		var rec metadataRecord
-		if err := json.Unmarshal(line, &rec); err != nil {
-			return err
+		m, decoded := decodeMetaRecord(line)
+		if !decoded {
+			// Skip rather than abort: returning the decode error would abandon the
+			// whole batch, including names already decoded, and memoize none of them.
+			// Leaving this name out of found lets the loop below memoize it as absent.
+			GetLogger().Warn("openfauna metadata record failed to decode during priming",
+				logger.String("scientific", norm),
+			)
+			return nil
 		}
-		found[norm] = Meta{
-			Class:        rec.Taxonomy.Class,
-			Order:        rec.Taxonomy.Order,
-			Family:       rec.Taxonomy.Family,
-			FamilyCommon: rec.Taxonomy.FamilyCommon,
-			Links:        rec.Links,
-		}
+		found[norm] = m
 		if len(found) == len(want) {
 			return errStop
 		}
