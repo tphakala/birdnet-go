@@ -469,7 +469,7 @@
         "substitutedTitle": "Mallille {modelName} määritettyä mallitiedostoa ei löytynyt",
         "substitutedMessage": "Mallille {modelName} määritettyä mallitiedostoa ei löytynyt levyltä, joten sen sijaan käytetään asennettua mallia sijainnissa {modelPath}. Asetuksiasi ei muutettu.",
         "unreadableTitle": "Mallille {modelName} määritettyä mallitiedostoa ei voitu lukea",
-        "unreadableMessage": "Mallille {modelName} määritetty mallitiedosto on olemassa, mutta sitä ei voitu lukea, joten sen sijaan käytetään asennettua mallia sijainnissa {modelPath}. Asetuksiasi ei muutettu. Tarkista tiedoston käyttöoikeudet ja että sen tallennustila on liitetty.",
+        "unreadableMessage": "Mallille {modelName} määritetty mallitiedosto on olemassa, mutta sitä ei voitu lukea, joten sen sijaan käytetään asennettua mallia sijainnissa {modelPath}. Asetuksiasi ei muutettu. Tarkista tiedoston käyttöoikeudet ja se, että sen tallennustila on liitetty.",
         "builtinMessage": "Mallille {modelName} määritettyä mallitiedostoa ei löytynyt levyltä eikä korvaavaa asennettua mallia ole saatavilla, joten sen sijaan käytetään sisäänrakennettua mallia. Asetuksiasi ei muutettu.",
         "notRegisteredTitle": "Mikään malli ei analysoi kohdetta {sourceName}",
         "notRegisteredMessage": "Ääni ei tavoita kohdetta {models} äänilähteessä \"{sourceName}\", joten havaintoja ei tuoteta. Avaa Asetusten malligalleria tarkistaaksesi tilan."

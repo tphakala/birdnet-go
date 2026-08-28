@@ -91,7 +91,12 @@ type Orchestrator struct {
 	inferenceMu sync.Mutex   // serializes inference across all models
 	models      map[string]*modelEntry
 	primary     *BirdNET // direct access to the primary model
-	modelsDir   string   // base directory for gallery-installed models
+	// ortAvailable reports whether ONNX Runtime can be loaded from the given
+	// configured path. Nil in production, where inference.CheckORTAvailability is
+	// used. Tests set it so both sides of the primary recovery's backend gate are
+	// reachable without a real ONNX Runtime on the host.
+	ortAvailable func(configuredPath string) bool
+	modelsDir    string // base directory for gallery-installed models
 
 	// Nighttime scheduling for bat model. Stored as atomic.Pointer so
 	// IsModelActive (called on every monitor tick) reads lock-free.
@@ -116,7 +121,8 @@ type Orchestrator struct {
 	pendingWarmups []pendingWarmup
 
 	// pendingPathCorrections queues configuration repairs recorded by model
-	// loaders while they hold o.mu. Drained by runPendingPathCorrections after
+	// loaders while they hold o.mu, and by NewOrchestrator for the primary before o
+	// is published. Drained by runPendingPathCorrections after
 	// o.mu is released, because the drainer itself takes o.mu to snapshot and
 	// clear this queue, and o.mu is not reentrant; applying one also writes
 	// config.yaml (file I/O). (isGalleryManagedPath, reached from the apply step,
@@ -167,9 +173,11 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// than o.modelsDir is known, so it could only ever see the RAW configured path
 	// and would defeat the stale-path recovery below. NewBirdNET's Tier 2 computes
 	// the identical ModelInfo from the same two settings (and returns the same error
-	// for an unknown version, which this block silently left to Tier 2 anyway), so
-	// passing nil loses nothing and lets the resolution happen once, in the one
-	// place that has the resolved path.
+	// for an unknown version, which this block silently left to Tier 2 anyway). The
+	// two agree on everything except the path, and that difference is the entire
+	// point: Tier 2 sees the RESOLVED path, which is what this block could never
+	// do. Passing nil therefore loses nothing and lets the resolution happen once,
+	// in the one place that has it.
 
 	// Capture host RSS before the primary model allocates its arena. We need o
 	// to exist first (captureRSSBefore records the runtime baseline on first call),
@@ -203,12 +211,32 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 
 	rssBefore := o.captureRSSBefore()
 
+	// Install the stale-path recovery ONLY when the primary slot really is the
+	// BirdNET v2.4 family.
+	//
+	// The slot is family-selectable through birdnet.version, but both the recovery
+	// target (resolveInstalledPaths) and the queued correction label are
+	// permanentRegistryID. A v3.0 primary with a stale path would therefore be
+	// "recovered" onto a v2.4 model file: a 32 kHz/5 s identity pinned to a
+	// 48 kHz/3 s model with a different label set, which fails late with a
+	// label-count mismatch or, were the counts ever to agree, would attribute every
+	// detection to the wrong model. That is exactly the cross-variant pairing
+	// hazard resolveFamilyPaths prevents for the secondaries.
+	//
+	// A nil resolver is the pre-recovery behaviour: the configured path is used
+	// verbatim, so any other family is left exactly as it was.
+	//
 	// o.resolvePrimaryModelPath is safe to hand over now: o.modelsDir was assigned
 	// above, and the resolver reads nothing else off o. NewBirdNET calls it once at
 	// construction and keeps it for its hot-reload path, so both resolve the same
 	// way. Passing the bound method rather than a precomputed value is what keeps
 	// the reload from re-deriving the identity off the raw configured string.
-	bn, err := NewBirdNET(settings, nil, o.resolvePrimaryModelPath)
+	var resolvePrimary primaryPathResolver
+	if primaryRegistryID(settings) == permanentRegistryID {
+		resolvePrimary = o.resolvePrimaryModelPath
+	}
+
+	bn, err := NewBirdNET(settings, nil, resolvePrimary)
 	if err != nil {
 		return nil, err
 	}
@@ -225,9 +253,13 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// Read the resolution NewBirdNET already performed rather than resolving a
 	// second time: a second call would repeat the stat work and, more visibly,
 	// duplicate every recovery log line for a single start.
-	if bn.primaryPath.substituted {
-		o.deferPathCorrection(permanentRegistryID, bn.primaryPath.resolved, bn.primaryPath.repairable)
-	}
+	//
+	// Routed through queuePathCorrection rather than calling deferPathCorrection
+	// directly, so the primary obeys the same queueing rule as the three
+	// secondaries. That rule has already been edited once (it now gates on
+	// substituted rather than repairable); a hand-rolled copy here is the one place
+	// the next such edit would silently miss.
+	o.queuePathCorrection(permanentRegistryID, bn.primaryPath)
 
 	resolver := NewBirdNETLabelResolver(bn.Labels())
 	ofResolver := openfauna.NewResolver()
@@ -270,6 +302,20 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	return o, nil
 }
 
+// primaryRegistryID reports which model family occupies the primary classifier
+// slot. An empty birdnet.version selects the default BirdNET v2.4 family; an
+// unrecognised version returns "" so callers treat it as "not v2.4" rather than
+// guessing (NewBirdNET's Tier 2 reports the unknown version as an error).
+func primaryRegistryID(settings *conf.Settings) string {
+	if settings.BirdNET.Version == "" {
+		return permanentRegistryID
+	}
+	if info, ok := ResolveBirdNETVersion(settings.BirdNET.Version); ok {
+		return info.ID
+	}
+	return ""
+}
+
 // SetModelsDir sets the base directory for gallery-installed models.
 // Called by ModelManager after creation so model loaders can resolve
 // paths from the installed models directory when config paths are empty.
@@ -285,7 +331,8 @@ func (o *Orchestrator) SetModelsDir(dir string) {
 	// makes the field safe. resolveInstalledPaths, resolveSiblingSet and
 	// isGalleryManagedPath all read o.modelsDir with NO lock held: the first two on
 	// the ReloadSecondaryModels path (which releases o.mu before calling the model
-	// builders) and the third on the config-correction drain path. Those reads are
+	// builders) and on the primary's construction and hot-reload path (via
+	// resolvePrimaryModelPath), and the third on the config-correction drain path. Those reads are
 	// safe only because this setter runs at most once, before the pipeline starts.
 	// See resolveSiblingSet for the full rationale and for what making the models
 	// directory dynamic would require.

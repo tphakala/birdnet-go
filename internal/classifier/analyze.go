@@ -32,6 +32,15 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 	settings := bn.currentSettings()
 	start := time.Now()
 
+	// The three ModelContext decorations below deliberately report the CONFIGURED
+	// path (settings.BirdNET.ModelPath), not bn.configuredModelPath(), even though
+	// every load-path site reports the resolved one. After a stale-path recovery
+	// the two differ, so this telemetry names a file the instance is not running.
+	// That is knowingly accepted: the first decoration runs BEFORE bn.mu is taken
+	// below, and bn.primaryPath is written under bn.mu by reloadModelInternal, so
+	// reading the resolved value here would be a data race. Reporting the resolved
+	// path needs a lock-free published copy alongside bn.identity.
+	//
 	// Guard against empty sample slice. Pre-inference rejections are tagged but
 	// not counted as predictions.
 	if len(sample) == 0 || len(sample[0]) == 0 {

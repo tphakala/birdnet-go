@@ -123,7 +123,8 @@ func TestResolveFamilyPaths_ConfiguredSetPresentIsUsedVerbatim(t *testing.T) {
 	res := o.resolveFamilyPaths(RegistryIDPerchV2,
 		modelFileSet{model: model, labels: labels}, false)
 
-	assert.False(t, res.repairable, "a present configured set must not trigger the fallback")
+	assert.False(t, res.substituted, "a present configured set must not be substituted")
+	assert.False(t, res.repairable, "and nothing may be rewritten")
 	assert.Equal(t, model, res.resolved.model)
 	assert.Equal(t, labels, res.resolved.labels)
 	assert.NotEqual(t, installedModel, res.resolved.model,
@@ -151,7 +152,8 @@ func TestResolveFamilyPaths_MissingConfiguredPathFallsBackToInstalled(t *testing
 		labels: "/nonexistent/perch_v2_labels.txt",
 	}, false)
 
-	assert.True(t, res.repairable, "a missing configured path must trigger the fallback")
+	assert.True(t, res.substituted, "a missing configured path must substitute the installed set")
+	assert.True(t, res.repairable, "a CONFIRMED absence may also rewrite config")
 	assert.Equal(t, installedModel, res.resolved.model)
 	assert.Equal(t, installedLabels, res.resolved.labels)
 }
@@ -192,6 +194,7 @@ func TestResolveFamilyPaths_PartiallyMissingSetIsReplacedAsAUnit(t *testing.T) {
 		labels: filepath.Join(strayDir, "missing_labels.txt"), // does not
 	}, false)
 
+	require.True(t, res.substituted)
 	require.True(t, res.repairable)
 	assert.Equal(t, installedModel, res.resolved.model,
 		"the configured model must be discarded with its missing labels, not paired with fallback labels")
@@ -218,6 +221,8 @@ func TestResolveFamilyPaths_NothingInstalledKeepsConfiguredSet(t *testing.T) {
 	}
 	res := o.resolveFamilyPaths(RegistryIDPerchV2, configured, false)
 
+	assert.False(t, res.substituted,
+		"nothing was installed to substitute, so the user is still running what they configured")
 	assert.False(t, res.repairable)
 	assert.Equal(t, configured, res.resolved)
 }
@@ -255,6 +260,7 @@ func TestResolveFamilyPaths_BatEmbeddingsParticipateInAtomicity(t *testing.T) {
 	}
 	res := o.resolveFamilyPaths(RegistryIDBat, configured, true)
 
+	require.True(t, res.substituted, "a missing embedding member substitutes the whole set")
 	require.True(t, res.repairable, "a missing embedding member makes the whole set stale")
 	assert.Equal(t, galleryModel, res.resolved.model,
 		"the classifier moves with the set; it must not be kept while the embeddings are replaced")
@@ -293,6 +299,8 @@ func TestResolveFamilyPaths_EmptyMemberFilledMissingMemberReplaced(t *testing.T)
 			model:  installedModel, // present
 			labels: "",             // empty: the gallery owns it
 		}, false)
+		assert.False(t, res.substituted,
+			"filling an EMPTY member from the gallery is not a substitution: nothing the user chose was replaced")
 		assert.False(t, res.repairable, "an empty member is not stale, so no repair is queued")
 		assert.Equal(t, installedModel, res.resolved.model, "the present configured model is kept")
 		assert.Equal(t, installedLabels, res.resolved.labels, "the empty labels member is filled from the gallery")
@@ -304,6 +312,7 @@ func TestResolveFamilyPaths_EmptyMemberFilledMissingMemberReplaced(t *testing.T)
 			model:  "/nonexistent/perch_v2.onnx",
 			labels: "/nonexistent/perch_v2_labels.txt",
 		}, false)
+		assert.True(t, res.substituted, "a missing non-empty member replaces what the user chose")
 		assert.True(t, res.repairable, "a missing non-empty member is stale and queues a repair")
 		assert.Equal(t, installedModel, res.resolved.model)
 	})
@@ -346,6 +355,7 @@ func TestResolveFamilyPaths_EmptyMemberFilledFromConfiguredVariant(t *testing.T)
 		labels: "",
 	}, false)
 
+	assert.False(t, res.substituted, "an empty member is filled, not substituted")
 	assert.False(t, res.repairable, "an empty member is filled, not a stale fallback")
 	assert.Equal(t, regionalModel, res.resolved.model, "the configured regional model is kept")
 	assert.Equal(t, regionalLabels, res.resolved.labels,
@@ -465,6 +475,11 @@ func TestApplyPathCorrection_UnreadableNotifiesWithoutRewriting(t *testing.T) {
 		registryID: RegistryIDPerchV2,
 		resolved:   modelFileSet{model: installedModel, labels: installedLabels},
 		repairable: false,
+		// Stated explicitly: "not repairable" alone no longer selects the
+		// could-not-be-read wording, because the primary also declines to rewrite a
+		// path whose written form differs from its expanded form, and that file is
+		// absent rather than unreadable.
+		unreadable: true,
 	})
 
 	after, err := os.ReadFile(conf.ConfigPath)
@@ -604,6 +619,7 @@ func TestPathCorrection_QueuedThenDrainedRepairsConfig(t *testing.T) {
 
 	// 1. The resolution reports a repairable fallback onto the installed variant.
 	res := o.resolveFamilyPaths(RegistryIDPerchV2, configured, false)
+	require.True(t, res.substituted, "a confirmed-missing gallery path substitutes the installed set")
 	require.True(t, res.repairable,
 		"a confirmed-missing gallery path must be reported as repairable")
 	require.Equal(t, installedModel, res.resolved.model)

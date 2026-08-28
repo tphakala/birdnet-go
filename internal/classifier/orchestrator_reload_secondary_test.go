@@ -2,6 +2,7 @@ package classifier
 
 import (
 	"context"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -415,18 +416,18 @@ func TestReloadSecondaryModels_PerEntryTripletRebuildsOnlyStale(t *testing.T) {
 	assert.Equal(t, currentTriplet, o.models[testSecondaryID2].backend, "stale entry triplet must advance to current")
 }
 
-// TestReloadSecondaryModels_DiscardsPathResolution pins the discard that keeps a
-// hot reload from rewriting the user's configured model paths.
+// TestReloadSecondaryModels_DiscardsPathResolution pins that the hot-reload path
+// queues no configuration repair.
 //
-// The loaders queue a configuration repair after a successful build; the reload
-// path deliberately calls build* directly and throws the resolution away, so a
-// backend or device swap never touches config.yaml. That discard is load-bearing
-// but is expressed as a bare `_`, which any future edit can flip to a
-// queuePathCorrection call without a single test noticing.
-//
-// The builder assertion is what stops this from passing vacuously: without it a
-// reload that skipped every rebuild would leave the queue empty too, and the
-// test would still pass against a broken discard.
+// Scope, stated precisely because an earlier version of this test overclaimed:
+// it pins ReloadSecondaryModels ITSELF, not the bare `_` inside the three real
+// closures in openvinoCapableSecondaryBuilders. Those closures discard the
+// resolution on their SUCCESS path, which needs a real ONNX model and a real
+// ONNX Runtime, so no unit test can reach it. The builder-ran assertion closes
+// the "no rebuild happened" vacuity mode; it does not close that one.
+// TestBuildPerch_DoesNotQueuePathCorrection below covers the adjacent half that
+// IS reachable: that resolving is separated from queueing, so only a loader can
+// queue.
 func TestReloadSecondaryModels_DiscardsPathResolution(t *testing.T) {
 	setGlobalBackend(t, "openvino", "gpu", "/opt/ov")
 
@@ -449,4 +450,46 @@ func TestReloadSecondaryModels_DiscardsPathResolution(t *testing.T) {
 		"the rebuild must actually run, or an empty queue proves nothing")
 	assert.Empty(t, o.pendingPathCorrections,
 		"a hot reload must never queue a config repair: a backend or device swap is not a stale path")
+}
+
+// TestBuildPerch_DoesNotQueuePathCorrection pins the separation the reload path
+// depends on: build* RESOLVES but never QUEUES, so only a loader can turn a
+// resolution into a config rewrite. Moving queuePathCorrection into buildPerch
+// (the shape that would make ReloadSecondaryModels start rewriting the user's
+// paths on a backend swap) fails here.
+//
+// The build itself is expected to fail: there is no real ONNX model or runtime
+// here. The resolution runs first, which is the part under test.
+func TestBuildPerch_DoesNotQueuePathCorrection(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok)
+
+	modelsDir := filepath.Join(t.TempDir(), "models")
+	installedModel := writeVariantModelFile(t, modelsDir, &entry, "fp32")
+	installedLabels := writeVariantLabelsFile(t, modelsDir, &entry, "fp32")
+
+	o := &Orchestrator{}
+	o.SetModelsDir(modelsDir)
+
+	// A stale gallery-shaped configured set: the resolution substitutes and is
+	// repairable, so anything that queued would queue here.
+	staleDir := filepath.Join(t.TempDir(), "models", entry.ID)
+	settings := &conf.Settings{}
+	settings.Perch.ModelPath = filepath.Join(staleDir, filepath.Base(installedModel))
+	settings.Perch.LabelPath = filepath.Join(staleDir, filepath.Base(installedLabels))
+
+	res := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
+		model:  settings.Perch.ModelPath,
+		labels: settings.Perch.LabelPath,
+	}, false)
+	require.True(t, res.substituted, "fixture must produce a substituting resolution, or the test proves nothing")
+	require.True(t, res.repairable)
+
+	_, _, err := o.buildPerch(settings, 1)
+	require.Error(t, err, "no real ONNX runtime here; the resolution before the failure is the subject")
+
+	assert.Empty(t, o.pendingPathCorrections,
+		"build* must never queue: only a loader may turn a resolution into a config rewrite")
 }

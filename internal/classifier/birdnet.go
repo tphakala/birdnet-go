@@ -180,8 +180,14 @@ func resolvePrimaryOrConfigured(resolve primaryPathResolver, configured string) 
 }
 
 // NewBirdNET initializes a new BirdNET instance with given settings.
-// If modelInfo is non-nil it is used directly (orchestrator path); otherwise
-// the function walks a 4-tier resolution chain: config version > filename > default.
+// If modelInfo is non-nil it is used directly; otherwise the function walks a
+// 4-tier resolution chain: config version > filename > default. Every production
+// caller currently passes nil (NewOrchestrator stopped pre-seeding the identity,
+// so that Tier 2 sees the RESOLVED path), leaving Tier 1 unused for now.
+//
+// resolvePrimary supplies the stale-path recovery for the primary model file. A
+// nil resolver means "use the configured path verbatim", which is the behaviour
+// every caller without an orchestrator keeps.
 func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo, resolvePrimary primaryPathResolver) (*BirdNET, error) {
 	bn := &BirdNET{
 		Settings:       settings,
@@ -1531,6 +1537,40 @@ func (bn *BirdNET) reloadModelInternal(allowPathChange bool) error {
 				Build()
 		}
 		bn.ModelInfo = newInfo
+	case !allowPathChange && bn.primaryPath.substituted &&
+		oldPrimaryPath.resolved.model != "" && bn.primaryPath.resolved.model == "":
+		// The file this instance is RUNNING has gone away: the previous resolution
+		// named a real file, this one resolves to nothing (confirmed absent with no
+		// usable installed variant). A substitution onto a real file has a non-empty
+		// configuredModelPath and is handled by the case above.
+		//
+		// The old-vs-new comparison is what makes this precise, and it is load
+		// bearing. Testing bn.primaryPath.substituted alone would also fire in the
+		// STEADY STATE after a successful startup recovery onto the built-in
+		// baseline: config keeps the stale path (the recovery is deliberately not
+		// repairable there), so every reload re-resolves to the same empty result,
+		// and every settings save would fail forever. That is precisely the
+		// second-order bug the re-resolution above exists to prevent, and it would
+		// hit exactly the users this whole recovery is for.
+		//
+		// Falling through would instead be silent corruption: no case matches,
+		// bn.ModelInfo keeps naming the vanished file, initializeModel loads the
+		// baseline underneath it, and the reload reports success while every
+		// subsequent detection is attributed to a model that is not running.
+		//
+		// Refuse, and let the transactional rollback keep the ALREADY-LOADED model
+		// serving. That preserves the pre-recovery outcome (a settings save fails
+		// loudly rather than silently swapping models) while the running detector is
+		// untouched. The variant-swap path is excluded because there a cleared path
+		// IS the intended revert, handled by the next case.
+		rollback()
+		return errors.Newf("configured birdnet model file %q is no longer usable and no installed variant can replace it: requires orchestrator restart", bn.Settings.BirdNET.ModelPath).
+			Component("birdnet").
+			Category(errors.CategoryModelInit).
+			Context("operation", "reload_model").
+			Context("current_model_path", bn.ModelInfo.CustomPath).
+			Context("configured_model_path", bn.Settings.BirdNET.ModelPath).
+			Build()
 	case allowPathChange:
 		// Variant-swap path with a CLEARED BirdNET.ModelPath: the user reverted to
 		// the embedded BuiltIn baseline. Re-resolve the stock classifier identity so

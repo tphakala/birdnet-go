@@ -470,7 +470,7 @@
         "substitutedMessage": "Die für {modelName} konfigurierte Modelldatei wurde nicht auf dem Datenträger gefunden, daher wird stattdessen das installierte Modell unter {modelPath} verwendet. Ihre Konfiguration wurde nicht verändert.",
         "unreadableTitle": "Konfigurierte Modelldatei für {modelName} konnte nicht gelesen werden",
         "unreadableMessage": "Die für {modelName} konfigurierte Modelldatei ist vorhanden, konnte aber nicht gelesen werden, daher wird stattdessen das installierte Modell unter {modelPath} verwendet. Ihre Konfiguration wurde nicht verändert. Überprüfen Sie die Dateiberechtigungen und ob der Speicher eingebunden ist.",
-        "builtinMessage": "Die für {modelName} konfigurierte Modelldatei wurde nicht auf dem Datenträger gefunden und es ist kein installiertes Modell als Ersatz verfügbar, daher wird stattdessen das eingebaute Modell verwendet. Ihre Konfiguration wurde nicht verändert.",
+        "builtinMessage": "Die für {modelName} konfigurierte Modelldatei wurde nicht auf dem Datenträger gefunden und es ist kein installiertes Modell als Ersatz verfügbar, daher wird stattdessen das integrierte Modell verwendet. Ihre Konfiguration wurde nicht verändert.",
         "notRegisteredTitle": "Kein Modell analysiert {sourceName}",
         "notRegisteredMessage": "Kein Audio erreicht {models} an der Audioquelle \"{sourceName}\", sodass keine Erkennungen erzeugt werden. Öffnen Sie die Modellgalerie unter Einstellungen, um den Status zu überprüfen."
       },

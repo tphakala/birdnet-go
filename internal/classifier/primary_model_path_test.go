@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 // writePrimaryGalleryModel installs a BirdNET v2.4 primary variant's model file
@@ -98,7 +99,7 @@ func TestResolvePrimaryModelPath(t *testing.T) {
 		modelsDir := t.TempDir()
 		installed := writePrimaryGalleryModel(t, modelsDir)
 
-		o := &Orchestrator{}
+		o := &Orchestrator{ortAvailable: func(string) bool { return true }}
 		o.SetModelsDir(modelsDir)
 
 		res := o.resolvePrimaryModelPath(filepath.Join(t.TempDir(), "gone", "primary.onnx"))
@@ -107,6 +108,27 @@ func TestResolvePrimaryModelPath(t *testing.T) {
 			"a confirmed-absent primary path must recover the installed variant instead of failing the load")
 		assert.True(t, res.substituted, "the user is running a model they did not configure")
 		assert.True(t, res.repairable, "a CONFIRMED absence may repair config.yaml")
+	})
+
+	t.Run("recovery is refused when the installed variant's backend is unavailable", func(t *testing.T) {
+		t.Parallel()
+		modelsDir := t.TempDir()
+		writePrimaryGalleryModel(t, modelsDir)
+
+		// Every installed primary variant is an ONNX build, so on a host with no
+		// usable ONNX Runtime, recovering onto one converts a recoverable stale path
+		// into a hard startup failure: initializeModel has no TFLite fallback once
+		// usesONNXBackend is true. That is the very outcome this recovery exists to
+		// prevent, so it must fall through to the built-in baseline instead.
+		o := &Orchestrator{ortAvailable: func(string) bool { return false }}
+		o.SetModelsDir(modelsDir)
+
+		res := o.resolvePrimaryModelPath(filepath.Join(t.TempDir(), "gone", "primary.onnx"))
+
+		assert.Empty(t, res.resolved.model,
+			"without ONNX Runtime the installed variant cannot load, so the built-in baseline must be used")
+		assert.True(t, res.substituted, "the user is still not running the model they configured")
+		assert.False(t, res.repairable, "nothing correct to write, so the user's setting must survive")
 	})
 
 	t.Run("a missing configured path with nothing installed falls back to the built-in model", func(t *testing.T) {
@@ -160,6 +182,28 @@ func TestResolvePrimaryModelPath(t *testing.T) {
 		assert.False(t, res.substituted)
 		assert.False(t, res.repairable)
 	})
+}
+
+// TestResolvePrimaryModelPath_EnvVarPathIsRecoveredButNotRepairable is separate
+// from the table above because t.Setenv cannot run under a parallel parent.
+func TestResolvePrimaryModelPath_EnvVarPathIsRecoveredButNotRepairable(t *testing.T) {
+	modelsDir := t.TempDir()
+	installed := writePrimaryGalleryModel(t, modelsDir)
+
+	// A configured "$VAR/..." that is genuinely missing SHOULD still recover at
+	// runtime, but must never be rewritten: flattening the variable into the
+	// absolute path it expands to today makes the path stop following the variable
+	// on the next container start, which is the exact fragility this recovery
+	// exists to undo.
+	t.Setenv("TEST_GONE_DIR", filepath.Join(t.TempDir(), "gone"))
+	o := &Orchestrator{ortAvailable: func(string) bool { return true }}
+	o.SetModelsDir(modelsDir)
+
+	res := o.resolvePrimaryModelPath("$TEST_GONE_DIR/primary.onnx")
+
+	assert.Equal(t, installed, res.resolved.model, "the runtime substitution still happens")
+	assert.True(t, res.substituted)
+	assert.False(t, res.repairable, "rewriting would flatten the variable into an absolute path")
 }
 
 // TestResolvePrimaryModelPath_ExpandsBeforeStat is separate from the table above
@@ -323,48 +367,126 @@ func TestPlanPathCorrection_PrimaryRepairsModelPathOnly(t *testing.T) {
 		"the primary family is model-only; a user's custom label path must never be rewritten")
 }
 
-// TestIsGalleryManagedPath_RejectsUnexpandedPath covers the guard that keeps the
-// self-heal from flattening a variable out of a configured path. A configured
-// "$HOME/models/<entry>/<file>" matches the gallery layout on base, parent and
-// grandparent, so without the guard the repair would rewrite it to whatever it
-// expands to today, and the path would then stop following HOME on the next
-// container start. That is the exact fragility this self-heal exists to recover
-// from.
-func TestIsGalleryManagedPath_RejectsUnexpandedPath(t *testing.T) {
-	// Not parallel: t.Setenv.
-	entry, ok := GetCatalogEntry("perch-v2")
-	require.True(t, ok)
+// TestQueuePathCorrection_PrimaryFamily covers the queueing RULE the primary
+// shares with the three secondaries, for the resolution shapes only the primary
+// can produce (notably the built-in fallback, whose resolved model is empty).
+//
+// Named for what it tests: it calls queuePathCorrection directly and does NOT
+// exercise NewOrchestrator's call site, which needs a real model to reach. The
+// construction path that feeds it is covered by
+// TestNewBirdNET_RecoversStaleConfiguredPath.
+func TestQueuePathCorrection_PrimaryFamily(t *testing.T) {
+	t.Parallel()
 
-	modelsDir := filepath.Join(t.TempDir(), "models")
-	installed := writeVariantModelFile(t, modelsDir, &entry, "fp32")
+	t.Run("a substituted primary resolution is queued under the primary registry ID", func(t *testing.T) {
+		t.Parallel()
+		o := &Orchestrator{}
+		o.queuePathCorrection(permanentRegistryID, pathResolution{
+			resolved:    modelFileSet{model: "/models/birdnet-v2.4/recovered.onnx"},
+			substituted: true,
+			repairable:  true,
+		})
 
-	o := &Orchestrator{}
-	o.SetModelsDir(modelsDir)
+		require.Len(t, o.pendingPathCorrections, 1)
+		assert.Equal(t, permanentRegistryID, o.pendingPathCorrections[0].registryID,
+			"a correction filed under any other ID would be planned against the wrong settings fields")
+		assert.True(t, o.pendingPathCorrections[0].repairable)
+	})
 
-	require.True(t, o.isGalleryManagedPath(RegistryIDPerchV2, installed),
-		"the plain installed path is the control: it must qualify, or the cases below prove nothing")
+	t.Run("a clean primary resolution queues nothing", func(t *testing.T) {
+		t.Parallel()
+		o := &Orchestrator{}
+		o.queuePathCorrection(permanentRegistryID, pathResolution{
+			resolved: modelFileSet{model: "/models/configured.onnx"},
+		})
+		assert.Empty(t, o.pendingPathCorrections,
+			"a healthy configured primary must never queue a repair or a notification")
+	})
 
-	t.Setenv("TEST_ROOT", filepath.Dir(filepath.Dir(modelsDir)))
-	base := filepath.Base(installed)
+	t.Run("a built-in fallback is queued so the user is told, but is not repairable", func(t *testing.T) {
+		t.Parallel()
+		o := &Orchestrator{}
+		o.queuePathCorrection(permanentRegistryID, pathResolution{substituted: true})
 
-	withEnvVar := filepath.Join("$TEST_ROOT", "models", entry.ID, base)
-	assert.False(t, o.isGalleryManagedPath(RegistryIDPerchV2, withEnvVar),
-		"an env-var path must never be taken over, or the repair flattens the variable")
-
-	withTilde := filepath.Join("~", "models", entry.ID, base)
-	assert.False(t, o.isGalleryManagedPath(RegistryIDPerchV2, withTilde),
-		"a ~-prefixed path must never be taken over for the same reason")
+		require.Len(t, o.pendingPathCorrections, 1,
+			"running the built-in model instead of the configured one must not be silent")
+		assert.Empty(t, o.pendingPathCorrections[0].resolved.model)
+		assert.False(t, o.pendingPathCorrections[0].repairable,
+			"there is no correct path to write, so the user's setting must survive")
+	})
 }
 
-// TestNewBirdNET_RecoversStaleConfiguredPath is the construction-level proof
-// that the recovery actually reaches the model load, not just the resolver.
+// TestApplyPathCorrection_NotificationVariants covers the two message variants
+// that had no test: the built-in fallback body, and the developer-facing
+// unknown-family outcome that must NOT produce a user warning. Both were
+// introduced with this change and both are user-visible (or deliberately not).
+func TestApplyPathCorrection_NotificationVariants(t *testing.T) {
+	// Not parallel: mutates conf globals, conf.ConfigPath and the notification
+	// singleton.
+	redirectConfigFile(t)
+	SetPathCorrectionPersistenceDisabled(false)
+	t.Cleanup(func() { SetPathCorrectionPersistenceDisabled(false) })
+
+	notification.ResetForTest()
+	t.Cleanup(notification.ResetForTest)
+	notification.Initialize(notification.DefaultServiceConfig())
+	svc := notification.GetService()
+	require.NotNil(t, svc)
+	t.Cleanup(svc.Stop)
+
+	stale := &conf.Settings{}
+	stale.BirdNET.ModelPath = "/gone/primary_dft.onnx"
+	origSettings := conf.GetSettings()
+	conf.StoreSettings(stale)
+	t.Cleanup(func() { conf.StoreSettings(origSettings) })
+
+	o := &Orchestrator{}
+	o.SetModelsDir(t.TempDir())
+
+	// Built-in fallback: confirmed absent, nothing installed, so resolved is empty.
+	o.applyPathCorrection(&pendingPathCorrection{
+		registryID: permanentRegistryID,
+		resolved:   modelFileSet{},
+		repairable: false,
+	})
+
+	// Unknown family: a self-heal gap, not a user problem.
+	o.applyPathCorrection(&pendingPathCorrection{
+		registryID: "Not_A_Model",
+		resolved:   modelFileSet{model: "/models/whatever.onnx"},
+		repairable: true,
+	})
+
+	list, err := svc.List(nil)
+	require.NoError(t, err)
+	var builtin, other int
+	for _, n := range list {
+		if n.MessageKey == notification.MsgModelPathBuiltinMessage {
+			builtin++
+			continue
+		}
+		other++
+	}
+	assert.Equal(t, 1, builtin,
+		"the built-in fallback must name the built-in model, not an empty installed path")
+	assert.Zero(t, other,
+		"an unknown registry ID is a developer-facing gap and must never warn the user")
+
+	after, err := os.ReadFile(conf.ConfigPath)
+	require.NoError(t, err)
+	assert.NotContains(t, string(after), "/models/whatever.onnx",
+		"an unknown family must never reach the config write")
+}
+
+// TestNewBirdNET_RecoversStaleConfiguredPath is the construction-level proof that
+// the recovery reaches the model load, not just the resolver.
 //
 // It is the unit-level counterpart of the manual reproduction: with a stale
-// birdnet.modelpath, the previous behaviour was a hard NewBirdNET failure, so
-// the pipeline never started and there was no analysis at all. Every consumer on
-// the load path (identity resolution, backend dispatch, the file open itself)
-// has to agree on the RECOVERED file, so a version of this change that resolved
-// the path but left any one consumer reading the raw setting still fails here.
+// birdnet.modelpath, the previous behaviour was a hard NewBirdNET failure, so the
+// pipeline never started and there was no analysis at all. Every consumer on the
+// load path (identity resolution, backend dispatch, the file open itself) has to
+// agree on the RECOVERED file, so a version of this change that resolved the path
+// but left any one consumer reading the raw setting still fails here.
 func TestNewBirdNET_RecoversStaleConfiguredPath(t *testing.T) {
 	t.Parallel()
 
@@ -406,8 +528,6 @@ func TestNewBirdNET_RecoversStaleConfiguredPath(t *testing.T) {
 		"the identity must describe the file that was actually loaded, or the next reload vetoes itself")
 	assert.NotEqual(t, stale, bn.ModelInfo.CustomPath)
 
-	// The orchestrator reads these to queue the config repair without resolving a
-	// second time.
 	assert.True(t, bn.primaryPath.substituted)
 	assert.True(t, bn.primaryPath.repairable)
 
@@ -416,4 +536,75 @@ func TestNewBirdNET_RecoversStaleConfiguredPath(t *testing.T) {
 	// rangefilter print) from rewriting the user's configuration.
 	assert.Equal(t, stale, settings.BirdNET.ModelPath,
 		"settings.BirdNET.ModelPath must never be mutated in place by the recovery")
+}
+
+// TestReloadModelInternal_BuiltinFallbackSteadyStateReloadsCleanly is the
+// regression test for a defect introduced while fixing this changeset's own
+// review findings, and caught by the report-only review of that fix wave.
+//
+// After a successful startup recovery onto the built-in baseline, config keeps
+// the stale path (that recovery is deliberately not repairable), so EVERY
+// subsequent reload re-resolves to the same substituted-and-empty result. A veto
+// keyed on `substituted` alone therefore failed every settings save forever, for
+// exactly the users the recovery exists to rescue. The veto must key on the
+// resolution having CHANGED from a real file to nothing.
+func TestReloadModelInternal_BuiltinFallbackSteadyStateReloadsCleanly(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Version = ""
+	settings.BirdNET.ModelPath = "/gone/primary_dft.onnx"
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	// The steady state: startup already resolved this away to the baseline, so the
+	// live resolution is ALSO empty. Nothing changed between then and now.
+	bn := &BirdNET{
+		classifier:     &rollbackFakeClassifier{},
+		Settings:       settings,
+		ModelInfo:      stockPrimaryModelInfo(),
+		TaxonomyPath:   filepath.Join(t.TempDir(), "does-not-exist-taxonomy.json"),
+		speciesCache:   make(map[string]*speciesCacheEntry),
+		resolvePrimary: func(string) pathResolution { return pathResolution{substituted: true} },
+	}
+	bn.primaryPath = pathResolution{substituted: true}
+	bn.settingsAtomic.Store(settings)
+	bn.publishIdentity()
+
+	err := bn.reloadModelInternal(false)
+
+	require.Error(t, err, "the reload still fails at the taxonomy step; that is the probe, not the subject")
+	assert.Contains(t, err.Error(), "taxonomy",
+		"the reload must reach the taxonomy step, which proves the identity gate let it through")
+	assert.NotContains(t, err.Error(), "requires orchestrator restart",
+		"a steady-state baseline reload must not be refused, or every settings save fails forever")
+}
+
+// TestReloadModelInternal_VanishedRunningModelIsRefused is the positive half:
+// when the file this instance is RUNNING goes away and nothing can replace it,
+// the reload must be refused rather than silently loading the baseline under an
+// identity that still names the vanished file.
+func TestReloadModelInternal_VanishedRunningModelIsRefused(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Version = ""
+	settings.BirdNET.ModelPath = "/data/custom_v24.tflite"
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	bn := &BirdNET{
+		classifier:     &rollbackFakeClassifier{},
+		Settings:       settings,
+		ModelInfo:      customBirdNETV24ModelInfo("/data/custom_v24.tflite"),
+		TaxonomyPath:   filepath.Join(t.TempDir(), "does-not-exist-taxonomy.json"),
+		speciesCache:   make(map[string]*speciesCacheEntry),
+		resolvePrimary: func(string) pathResolution { return pathResolution{substituted: true} },
+	}
+	// Was running a real custom file; the new resolution finds nothing.
+	bn.primaryPath = pathResolution{resolved: modelFileSet{model: "/data/custom_v24.tflite"}}
+	bn.settingsAtomic.Store(settings)
+	bn.publishIdentity()
+
+	err := bn.reloadModelInternal(false)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires orchestrator restart",
+		"loading the baseline under an identity naming the vanished file would misattribute every detection")
 }

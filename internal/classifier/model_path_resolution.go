@@ -7,6 +7,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -103,6 +104,14 @@ type pathResolution struct {
 	// half-initialised mount) is substituted but NOT repairable, so a transient
 	// failure never rewrites config.yaml permanently.
 	repairable bool
+	// unreadable distinguishes the ONE substitution cause that is not an absence:
+	// the configured file is present but could not be read (a permissions change,
+	// an I/O error, a half-initialised mount). It is carried explicitly rather than
+	// derived from repairable, because "not repairable" has more than one cause:
+	// the primary also declines to repair a path whose written form differs from
+	// its expanded form, and telling that user their file "could not be read" would
+	// send them to check permissions on a file that is simply gone.
+	unreadable bool
 }
 
 // nonEmptyMembersPresence classifies whether every NON-EMPTY required member of
@@ -235,7 +244,7 @@ func (o *Orchestrator) resolveFamilyPaths(registryID string, configured modelFil
 		GetLogger().Debug("recovered the configured variant's companion files",
 			logger.String("registry_id", registryID),
 			logger.String("model_path", sameVariant.model))
-		return pathResolution{resolved: sameVariant, substituted: true, repairable: repairable}
+		return pathResolution{resolved: sameVariant, substituted: true, repairable: repairable, unreadable: presence == presenceIndeterminate}
 	}
 
 	m, l, e := o.resolveInstalledPaths(registryID)
@@ -258,7 +267,7 @@ func (o *Orchestrator) resolveFamilyPaths(registryID string, configured modelFil
 		logger.String("configured_model_path", configured.model),
 		logger.String("resolved_model_path", fallback.model))
 
-	return pathResolution{resolved: fallback, substituted: true, repairable: repairable}
+	return pathResolution{resolved: fallback, substituted: true, repairable: repairable, unreadable: presence == presenceIndeterminate}
 }
 
 // resolveSiblingSet rebuilds a family's complete file set from the variant that
@@ -383,6 +392,65 @@ func declaresModelFile(files []CatalogFile, localName string) bool {
 // entry point, runPendingPathCorrections: that drainer takes o.mu itself to
 // snapshot and clear the queue, and o.mu is not reentrant, so draining under the
 // loaders' write lock self-deadlocks the load. Keep the drain where it is.
+func (o *Orchestrator) isGalleryManagedPath(registryID, path string) bool {
+	if path == "" {
+		return false
+	}
+
+	base := filepath.Base(path)
+	parent := filepath.Base(filepath.Dir(path))
+
+	// Require the grandparent directory to be the models directory itself (its base
+	// name, normally "models"). Matching only base + parent would qualify any path
+	// that merely MIRRORS the gallery layout, e.g. /mnt/nas/perch-v2/perch_v2.onnx:
+	// a NAS or USB mount that is late at boot yields ENOENT (the mountpoint exists
+	// but is empty), which classifies as presenceMissing with repairable=true, so a
+	// user who moved their models to a NAS but left a local gallery copy would have
+	// the NAS path permanently rewritten. Dropping only the models-directory PREFIX
+	// (not its base name) still handles the changed-container-HOME case the issues
+	// report, because base(modelsDir) stays "models" across a HOME change, while a
+	// look-alike under a different grandparent ("nas") is rejected. This matches the
+	// stricter precedent in Settings.MigrateOrphanGeomodelRangeFilter
+	// (internal/conf/range_filter_migration.go), which acts only on exact
+	// gallery-managed paths and never touches custom or hand-edited ones.
+	if o.modelsDir == "" {
+		return false
+	}
+	grandparent := filepath.Base(filepath.Dir(filepath.Dir(path)))
+	if grandparent != filepath.Base(o.modelsDir) {
+		return false
+	}
+
+	catalog := ActiveCatalog()
+	for i := range catalog {
+		entry := &catalog[i]
+		if entry.RegistryID != registryID {
+			continue
+		}
+		// Check the entry's own files and every variant's files as a union: the
+		// stale configured path could name any installed variant's file.
+		fileSets := [][]CatalogFile{entry.Files}
+		for j := range entry.Variants {
+			fileSets = append(fileSets, entry.Variants[j].Files)
+		}
+		for _, files := range fileSets {
+			for _, f := range files {
+				if f.LocalName != base {
+					continue
+				}
+				expectedParent := entry.ID
+				if isSharedRole(f.Role) {
+					expectedParent = "shared"
+				}
+				if parent == expectedParent {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 // primaryPathResolver resolves the configured primary classifier model path to
 // the file the instance should actually load from. It is injected into NewBirdNET
 // rather than called from it because the resolution needs the models directory
@@ -448,15 +516,32 @@ func (o *Orchestrator) resolvePrimaryModelPath(configured string) pathResolution
 		return keep
 	}
 
-	// CONFIRMED absent. Recover to the installed gallery variant when there is one.
-	if installed, _, _ := o.resolveInstalledPaths(permanentRegistryID); installed != "" {
+	// CONFIRMED absent. Recover to the installed gallery variant when there is one
+	// AND that variant can actually run on this host.
+	if installed, _, _ := o.resolveInstalledPaths(permanentRegistryID); installed != "" && o.primaryVariantUsable(installed) {
 		GetLogger().Info("configured primary model path is missing on disk, recovering the installed variant",
 			logger.String("configured_model_path", configured),
 			logger.String("resolved_model_path", installed))
 		return pathResolution{
-			resolved:    modelFileSet{model: installed},
+			resolved: modelFileSet{model: installed},
+			// Repairable only when the configured string is literally what it
+			// resolves to. A configured "$HOME/..." or "~/..." can still match the
+			// gallery layout, and rewriting it would flatten the variable into the
+			// absolute path it happens to expand to today, so the path would stop
+			// following HOME on the next container start. That is the exact
+			// fragility this recovery exists to undo, so the runtime substitution
+			// stands but the config rewrite does not.
+			//
+			// The guard lives here rather than in isGalleryManagedPath because that
+			// helper serves all four families from ONE call site. Putting it there
+			// would change the three secondaries' behaviour, which this change has no
+			// business touching: they would stop repairing a $VAR path and instead
+			// warn about it on every single start, forever. Note the runtime
+			// substitution is identical either way, so refusing the rewrite does not
+			// give those users their own model back; it only trades a one-time repair
+			// for a permanent notification.
 			substituted: true,
-			repairable:  true,
+			repairable:  configured == expanded,
 		}
 	}
 
@@ -477,75 +562,40 @@ func (o *Orchestrator) resolvePrimaryModelPath(configured string) pathResolution
 	return pathResolution{substituted: true}
 }
 
-func (o *Orchestrator) isGalleryManagedPath(registryID, path string) bool {
-	if path == "" {
-		return false
+// primaryVariantUsable reports whether an installed primary variant can actually
+// be loaded on this host.
+//
+// The BuiltIn baseline declares no files, so resolveInstalledPaths can only ever
+// return a DFT-truncated ONNX build for this family. Recovering onto one where
+// ONNX Runtime is unavailable would turn a recoverable stale path into a hard
+// startup failure, which is precisely the outcome this recovery exists to
+// prevent: initializeModel has no TFLite fallback once usesONNXBackend is true.
+// Reporting false makes the caller fall through to the built-in baseline, which
+// always loads.
+//
+// CheckORTAvailability is used rather than checkORTOrFail because this is a
+// probe, not a load: checkORTOrFail logs and raises a user notification, which
+// would be wrong for a path we are choosing NOT to take.
+func (o *Orchestrator) primaryVariantUsable(modelPath string) bool {
+	if !isONNXModel(modelPath) {
+		return true
 	}
-
-	// Never take over a path whose WRITTEN form differs from its expanded form. A
-	// configured "$HOME/models/perch-v2/perch_v2.onnx" or "~/models/..." matches
-	// the gallery layout on base, parent and grandparent, so without this guard the
-	// repair would rewrite it to the absolute path it happens to expand to today.
-	// That silently flattens the variable, and the path then stops following HOME
-	// on the next container start, which is the exact fragility this self-heal
-	// exists to recover from (GitHub #4201, #4204). An expansion error is treated
-	// the same way, since a path that cannot be expanded cannot be reasoned about.
-	// The guard can only PREVENT a rewrite, never cause one: the runtime fallback
-	// still runs and the substituted notification still tells the user.
-	if expanded, err := conf.ExpandTildePath(os.ExpandEnv(path)); err != nil || expanded != path {
-		return false
+	// An empty configured runtime path is the normal "use the system default"
+	// value, so a missing settings snapshot degrades to that rather than to a
+	// refusal: returning false here would disable the whole recovery for any
+	// caller that has not published settings yet.
+	var ortPath string
+	if settings := o.currentSettings(); settings != nil {
+		ortPath = settings.BirdNET.ONNXRuntimePath
 	}
-
-	base := filepath.Base(path)
-	parent := filepath.Base(filepath.Dir(path))
-
-	// Require the grandparent directory to be the models directory itself (its base
-	// name, normally "models"). Matching only base + parent would qualify any path
-	// that merely MIRRORS the gallery layout, e.g. /mnt/nas/perch-v2/perch_v2.onnx:
-	// a NAS or USB mount that is late at boot yields ENOENT (the mountpoint exists
-	// but is empty), which classifies as presenceMissing with repairable=true, so a
-	// user who moved their models to a NAS but left a local gallery copy would have
-	// the NAS path permanently rewritten. Dropping only the models-directory PREFIX
-	// (not its base name) still handles the changed-container-HOME case the issues
-	// report, because base(modelsDir) stays "models" across a HOME change, while a
-	// look-alike under a different grandparent ("nas") is rejected. This matches the
-	// stricter precedent in Settings.MigrateOrphanGeomodelRangeFilter
-	// (internal/conf/range_filter_migration.go), which acts only on exact
-	// gallery-managed paths and never touches custom or hand-edited ones.
-	if o.modelsDir == "" {
-		return false
+	available := o.ortAvailable
+	if available == nil {
+		available = func(path string) bool { return inference.CheckORTAvailability(path).Available }
 	}
-	grandparent := filepath.Base(filepath.Dir(filepath.Dir(path)))
-	if grandparent != filepath.Base(o.modelsDir) {
-		return false
+	if available(ortPath) {
+		return true
 	}
-
-	catalog := ActiveCatalog()
-	for i := range catalog {
-		entry := &catalog[i]
-		if entry.RegistryID != registryID {
-			continue
-		}
-		// Check the entry's own files and every variant's files as a union: the
-		// stale configured path could name any installed variant's file.
-		fileSets := [][]CatalogFile{entry.Files}
-		for j := range entry.Variants {
-			fileSets = append(fileSets, entry.Variants[j].Files)
-		}
-		for _, files := range fileSets {
-			for _, f := range files {
-				if f.LocalName != base {
-					continue
-				}
-				expectedParent := entry.ID
-				if isSharedRole(f.Role) {
-					expectedParent = "shared"
-				}
-				if parent == expectedParent {
-					return true
-				}
-			}
-		}
-	}
+	GetLogger().Warn("installed primary variant needs ONNX Runtime, which is unavailable; using the built-in model instead",
+		logger.String("model_path", modelPath))
 	return false
 }

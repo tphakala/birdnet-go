@@ -32,9 +32,10 @@ func SetPathCorrectionPersistenceDisabled(disabled bool) {
 	pathCorrectionPersistenceDisabled.Store(disabled)
 }
 
-// pendingPathCorrection records that a model was loaded from the gallery
-// fallback rather than from the paths configured in settings, so the stale
-// configuration can be repaired once o.mu is released.
+// pendingPathCorrection records that a model was loaded from a different file set
+// than the one configured (the gallery fallback, or for the primary the built-in
+// baseline), so the user can be told and, where it is safe, the stale
+// configuration repaired once o.mu is released.
 type pendingPathCorrection struct {
 	registryID string
 	resolved   modelFileSet
@@ -44,30 +45,39 @@ type pendingPathCorrection struct {
 	// configuration is left exactly as the user wrote it and only the
 	// substituted notification fires.
 	repairable bool
+	// unreadable carries pathResolution.unreadable so the notification can tell a
+	// present-but-unreadable file apart from an absent one.
+	unreadable bool
 }
 
-// deferPathCorrection queues a configuration repair for a model that loaded via
-// the gallery fallback. Called by the secondary model loaders while they hold
-// o.mu; the repair itself runs in runPendingPathCorrections after the lock is
-// released.
+// deferPathCorrection queues a configuration repair for a model that loaded from
+// a different file set than the one configured. Called by the secondary model
+// loaders while they hold o.mu, and by NewOrchestrator for the primary before the
+// orchestrator is published; the repair itself runs in runPendingPathCorrections
+// after the lock is released.
 //
 // Queued only AFTER the model has built successfully. The constructors open the
 // ONNX session and validate the label count against the model's output tensor,
 // so a set that builds is a set that genuinely belongs together. Queueing before
 // the build could persist paths that turn out to be unusable.
 //
-// Must be called with o.mu held.
-func (o *Orchestrator) deferPathCorrection(registryID string, resolved modelFileSet, repairable bool) {
+// Must be called either with o.mu held, or before o is published (the
+// NewOrchestrator case), since it appends to a slice no other goroutine can yet
+// observe.
+func (o *Orchestrator) deferPathCorrection(registryID string, res pathResolution) {
 	o.pendingPathCorrections = append(o.pendingPathCorrections, pendingPathCorrection{
 		registryID: registryID,
-		resolved:   resolved,
-		repairable: repairable,
+		resolved:   res.resolved,
+		repairable: res.repairable,
+		unreadable: res.unreadable,
 	})
 }
 
-// queuePathCorrection queues the configuration repair when the build resolved
-// through the gallery fallback. The loaders call it after a successful build,
-// passing the resolution their builder already computed.
+// queuePathCorrection queues the follow-up when a model resolved to a different
+// file set than the one configured. The secondary loaders call it after a
+// successful build, passing the resolution their builder already computed;
+// NewOrchestrator calls it for the primary, whose substitute may be the built-in
+// baseline rather than a gallery file.
 //
 // The resolution is threaded out of build* rather than recomputed here for two
 // reasons. It avoids resolving the same file set twice per load, and, more
@@ -86,7 +96,8 @@ func (o *Orchestrator) deferPathCorrection(registryID string, resolved modelFile
 // what keeps a backend or device swap from rewriting the user's paths: the
 // reload path simply discards the resolution.
 //
-// Must be called with o.mu held. It only appends to the pending queue, which
+// Must be called either with o.mu held (the loaders) or before o is published
+// (NewOrchestrator, for the primary). It only appends to the pending queue, which
 // does not take o.mu, so it is safe under the loaders' write lock. The settings
 // write itself happens later, in the drainer, after o.mu is released.
 func (o *Orchestrator) queuePathCorrection(registryID string, res pathResolution) {
@@ -99,7 +110,7 @@ func (o *Orchestrator) queuePathCorrection(registryID string, res pathResolution
 	if !res.substituted {
 		return
 	}
-	o.deferPathCorrection(registryID, res.resolved, res.repairable)
+	o.deferPathCorrection(registryID, res)
 }
 
 // runPendingPathCorrections drains the queued configuration repairs, rewriting
@@ -173,13 +184,31 @@ func (o *Orchestrator) applyPathCorrection(pc *pendingPathCorrection) {
 		return
 	case correctionUnknownFamily:
 		// No settings mapping for this registry ID, so there is nothing to plan.
-		// Distinct from correctionSubstituted on purpose: the model did not
-		// substitute anything the user would recognise, it is the SELF-HEAL that has
-		// a gap, so this is a developer-facing log and never a user-facing warning.
+		// Distinct from correctionSubstituted on purpose: a substitution did happen,
+		// but the thing at fault is the SELF-HEAL (no settings mapping for this
+		// family), not the user's configuration, so this is a developer-facing log
+		// and never a user-facing warning.
 		GetLogger().Warn("no settings mapping for model family; skipping path correction",
 			logger.String("registry_id", pc.registryID))
 		return
 	case correctionRewrite:
+		// Fall through to the write below.
+	default:
+		// Not reachable today. Guarded anyway because the write below is the only
+		// destructive action in this file: an outcome nobody enumerated must never
+		// reach it by falling out of the switch.
+		GetLogger().Warn("unrecognised path-correction outcome; not writing configuration",
+			logger.String("registry_id", pc.registryID),
+			logger.Int("outcome", int(outcome)))
+		return
+	}
+
+	if updated == nil {
+		// Defensive: correctionRewrite always carries a snapshot. StoreSettings(nil)
+		// would publish a nil settings pointer process-wide.
+		GetLogger().Warn("path-correction rewrite produced no settings snapshot; skipping write",
+			logger.String("registry_id", pc.registryID))
+		return
 	}
 
 	conf.StoreSettings(updated)
@@ -199,17 +228,23 @@ func (o *Orchestrator) applyPathCorrection(pc *pendingPathCorrection) {
 // correctionOutcome is what applyPathCorrection should DO with a planned
 // correction. It replaces an earlier (updated *conf.Settings, changed bool) pair
 // in which a nil snapshot meant two different things (an abandoned user-owned
-// correction, and an unknown registry ID) that shared one user-facing signal, so
-// adding a loader for a family with no settings mapping would have emitted a
-// warning about a model file that was never missing.
+// correction, and an unknown registry ID) that shared one user-facing signal.
+// That collision became reachable once the queue gate widened from repairable to
+// substituted: adding a loader for a family with no settings mapping would then
+// emit a user-facing warning for what is really a gap in the self-heal.
 type correctionOutcome int
 
 const (
+	// correctionNoop: the configuration already matches what was built. Stay quiet.
+	//
+	// Deliberately the ZERO value. The alternative, correctionRewrite first, makes
+	// "write the user's config.yaml" the outcome you get from a forgotten
+	// assignment or a naked return on the named result below, which is the one
+	// outcome that must never happen by accident.
+	correctionNoop correctionOutcome = iota
 	// correctionRewrite: the returned snapshot carries repaired paths and should be
 	// stored, persisted, and reported with the reconciled notification.
-	correctionRewrite correctionOutcome = iota
-	// correctionNoop: the configuration already matches what was built. Stay quiet.
-	correctionNoop
+	correctionRewrite
 	// correctionSubstituted: the model is running a substitute, and config must be
 	// left alone (the path is user-owned, or the read failure was not a confirmed
 	// absence). Emit the substituted notification; write nothing.
@@ -410,9 +445,10 @@ func emitPathSubstitutedNotification(pc *pendingPathCorrection) {
 	//   repairable, non-empty resolved: the file is CONFIRMED absent and an
 	//     installed model replaced it, but the configured path is user-owned so the
 	//     repair was abandoned. "Was not found" is exactly right.
-	//   not repairable, non-empty resolved: the file could not be READ (a
-	//     permissions change, an I/O error, a half-mounted volume). Telling this
-	//     user it "was not found" sends them looking in the wrong place.
+	//   unreadable: the file could not be READ (a permissions change, an I/O error,
+	//     a half-mounted volume). Telling this user it "was not found" sends them
+	//     looking in the wrong place. Keyed on an explicit flag, because "not
+	//     repairable" alone also covers a path we simply decline to rewrite.
 	//   empty resolved: the primary classifier's configured file is absent and
 	//     nothing is installed to replace it, so the BUILT-IN model is running.
 	//     There is no installed path to name.
@@ -428,7 +464,7 @@ func emitPathSubstitutedNotification(pc *pendingPathCorrection) {
 			"available to replace it, so the built-in model is being used instead. Your configuration was "+
 			"left unchanged.", modelName)
 		bodyKey = notification.MsgModelPathBuiltinMessage
-	case !pc.repairable:
+	case pc.unreadable:
 		title = fmt.Sprintf("Configured model file for %s could not be read", modelName)
 		titleKey = notification.MsgModelPathUnreadableTitle
 		body = fmt.Sprintf("The model file configured for %s exists but could not be read, so the installed "+
