@@ -463,6 +463,14 @@
         "staleMessage": "{modelName} is installed for {oldRegion}, but your new location resolves to {newRegion}. You can switch variants from the model gallery in Settings.",
         "staleGlobalMessage": "{modelName} is installed for {oldRegion}, but your new location is outside its coverage. You can switch to the global variant from the model gallery in Settings."
       },
+      "modelPath": {
+        "reconciledTitle": "Model file paths repaired for {modelName}",
+        "reconciledMessage": "Configured file paths for {modelName} were out of date and have been repaired to match the installed model at {modelPath}.",
+        "substitutedTitle": "Configured model file for {modelName} was not found",
+        "substitutedMessage": "The model file configured for {modelName} was not found on disk, so the installed model at {modelPath} is being used instead. Your configuration was left unchanged.",
+        "notRegisteredTitle": "No model is analyzing {sourceName}",
+        "notRegisteredMessage": "No audio is reaching {models} on audio source \"{sourceName}\", so no detections are produced. Open the model gallery in Settings to check status."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Current value: {value}% (threshold: {threshold}%)",
@@ -1767,6 +1775,8 @@
       "sources": "Audio sources",
       "noSources": "No sources attached",
       "primaryFallback": "primary (fallback)",
+      "sourceNotRunning": "not analyzing",
+      "sourceNotRunningTooltip": "This source is assigned to the model in settings, but its audio is not reaching the model, so it produces no detections. Open the model gallery in Settings to check its status.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",

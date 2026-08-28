@@ -114,6 +114,16 @@ type Orchestrator struct {
 	// instead of stalling PredictModel on o.mu. Appended only
 	// under o.mu.Lock(); snapshotted and cleared under o.mu by the drainer.
 	pendingWarmups []pendingWarmup
+
+	// pendingPathCorrections queues configuration repairs recorded by model
+	// loaders while they hold o.mu. Drained by runPendingPathCorrections after
+	// o.mu is released, because the drainer itself takes o.mu to snapshot and
+	// clear this queue, and o.mu is not reentrant; applying one also writes
+	// config.yaml (file I/O). (isGalleryManagedPath, reached from the apply step,
+	// takes NO orchestrator lock; the drainer's own snapshot-and-clear is what
+	// requires the deferral.) Appended only under o.mu.Lock(); snapshotted and
+	// cleared under o.mu by the drainer.
+	pendingPathCorrections []pendingPathCorrection
 }
 
 // pendingWarmup defers a freshly-registered model's warm-up + RSS measurement
@@ -171,6 +181,28 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 		models:   map[string]*modelEntry{},
 		modelRSS: make(map[string]int64),
 	}
+
+	// Resolve the gallery models directory up front, before loadAdditionalModels
+	// runs below. ModelManager also sets it (via SetModelsDir) but is constructed
+	// only after this constructor returns, so without this the secondary loaders
+	// see an empty o.modelsDir on their very first attempt and resolveInstalledPaths
+	// cannot find an installed model. That made the fallback for a missing
+	// configured path structurally impossible at startup (GitHub #4201, #4204).
+	// Assigned directly rather than through SetModelsDir. SetModelsDir would run
+	// registerTaxonomyResolver, which appends a taxonomy resolver to
+	// o.nameResolvers, but the constructor overwrites that slice wholesale a few
+	// lines below (o.nameResolvers = []NameResolver{ofResolver, resolver}), so the
+	// registration would just be discarded. Its primary.SetModelsDir propagation is
+	// also skipped here, since o.primary is not set yet. No lock is needed for this
+	// write: o is not published until the constructor returns, so no other goroutine
+	// can observe it. On the analysis startup path ModelManager later calls
+	// SetModelsDir, which redoes both the resolver wiring and the primary
+	// propagation; cmd/benchmark and cmd/rangefilter construct an Orchestrator and
+	// never call SetModelsDir.
+	if modelsDir, ok := settings.ResolveModelsDir(); ok {
+		o.modelsDir = modelsDir
+	}
+
 	rssBefore := o.captureRSSBefore()
 
 	bn, err := NewBirdNET(settings, primaryInfo)
@@ -1623,12 +1655,21 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 			Build()
 	}
 
+	// Drain any queued configuration repair after o.mu is released: loaders queue
+	// it under o.mu, and applying it writes config.yaml, so it must run outside the
+	// lock. Registered BEFORE the warm-up drain so that, defers being LIFO, it runs
+	// AFTER the warm-ups. The config write must not land inside the window the
+	// per-model RSS delta measures (see runPendingWarmups), matching the drain
+	// order in loadAdditionalModels (warm-ups first, config write after).
+	defer o.runPendingPathCorrections()
+
 	// Drain the deferred warm-up after o.mu is released, on every return path.
 	// Loaders queue the warm-up via deferWarmup while holding o.mu; running it
 	// here (outside o.mu, via the serialized inference path) is what keeps a
 	// runtime install from stalling live inference. Deferring it
 	// (rather than calling it only on success) guarantees a loader that queues a
 	// warm-up and then fails cannot orphan an entry in the queue for a later load.
+	// Registered LAST so it runs FIRST (LIFO).
 	defer o.runPendingWarmups()
 
 	// Build and register the model under o.mu (loaders write directly to
@@ -2092,6 +2133,14 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 		// before the next model allocates its arena.
 		o.runPendingWarmups()
 	}
+
+	// Drain the queued configuration repairs AFTER the loop. Each pending family
+	// still does its own config.yaml write (there is no coalescing here); draining
+	// outside the loop keeps those writes out of the per-model RSS measurement
+	// window, the same reason the warm-up drain above runs where it does. Unlike
+	// the warm-up drain, the config write has no per-model RSS measurement of its
+	// own to keep accurate, so it does not need to run inside the loop.
+	o.runPendingPathCorrections()
 
 	return nil
 }

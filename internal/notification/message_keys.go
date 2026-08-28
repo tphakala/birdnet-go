@@ -177,4 +177,22 @@ const (
 	MsgModelRegionStaleTitle         = "notifications.content.region.staleTitle"
 	MsgModelRegionStaleMessage       = "notifications.content.region.staleMessage"
 	MsgModelRegionStaleGlobalMessage = "notifications.content.region.staleGlobalMessage"
+
+	// Model path reconciliation notifications (a configured model file path
+	// pointed at a file that no longer exists and was repaired to the installed
+	// gallery model)
+	MsgModelPathReconciledTitle   = "notifications.content.modelPath.reconciledTitle"
+	MsgModelPathReconciledMessage = "notifications.content.modelPath.reconciledMessage"
+
+	// Model path substitution notifications (a configured model file path pointed
+	// at a file that no longer exists; the installed gallery model was used at
+	// runtime instead, but the configuration was deliberately left unchanged
+	// because the path is user-owned)
+	MsgModelPathSubstitutedTitle   = "notifications.content.modelPath.substitutedTitle"
+	MsgModelPathSubstitutedMessage = "notifications.content.modelPath.substitutedMessage"
+
+	// Model registration notifications (a model assigned to an audio source is
+	// not receiving audio, so it produces no detections)
+	MsgModelNotRegisteredTitle   = "notifications.content.modelPath.notRegisteredTitle"
+	MsgModelNotRegisteredMessage = "notifications.content.modelPath.notRegisteredMessage"
 )

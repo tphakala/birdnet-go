@@ -463,6 +463,14 @@
         "staleMessage": "{modelName} ir instalēts reģionam {oldRegion}, bet jūsu jaunā atrašanās vieta atbilst {newRegion}. Varat pārslēgt variantus no modeļu galerijas sadaļā Iestatījumi.",
         "staleGlobalMessage": "{modelName} ir instalēts reģionam {oldRegion}, bet jūsu jaunā atrašanās vieta ir ārpus tā pārklājuma. Varat pārslēgties uz globālo variantu no modeļu galerijas sadaļā Iestatījumi."
       },
+      "modelPath": {
+        "reconciledTitle": "Modeļa {modelName} failu ceļi salaboti",
+        "reconciledMessage": "Konfigurētie failu ceļi modelim {modelName} bija novecojuši un tika salaboti, lai atbilstu instalētajam modelim vietā {modelPath}.",
+        "substitutedTitle": "Konfigurētais {modelName} modeļa fails netika atrasts",
+        "substitutedMessage": "Modelim {modelName} konfigurētais faila ceļš netika atrasts diskā, tāpēc tā vietā tiek izmantots instalētais modelis {modelPath}. Jūsu konfigurācija netika mainīta.",
+        "notRegisteredTitle": "Neviens modelis neanalizē {sourceName}",
+        "notRegisteredMessage": "Audio nesasniedz {models} audio avotā \"{sourceName}\", tāpēc noteikšanas netiek veiktas. Atveriet modeļu galeriju sadaļā Iestatījumi, lai pārbaudītu statusu."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Pašreizējā vērtība: {value}% (slieksnis: {threshold}%)",
@@ -1767,6 +1775,8 @@
       "sources": "Audio avoti",
       "noSources": "Nav pievienotu avotu",
       "primaryFallback": "primārais (rezerves)",
+      "sourceNotRunning": "neanalizē",
+      "sourceNotRunningTooltip": "Šis avots ir piešķirts modelim iestatījumos, bet tā audio nesasniedz modeli, tāpēc tas neveic noteikšanas. Atveriet modeļu galeriju sadaļā Iestatījumi, lai pārbaudītu tā statusu.",
       "notMeasured": "n/p",
       "unitMs": "ms",
       "unitKhz": "kHz",

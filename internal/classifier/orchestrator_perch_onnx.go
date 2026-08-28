@@ -16,18 +16,12 @@ import (
 // The settings snapshot is passed in (rather than read inside) so the caller
 // builds with the exact settings it gated the reload decision on.
 func (o *Orchestrator) buildPerch(settings *conf.Settings, threads int) (*Perch, error) {
-	modelPath := settings.Perch.ModelPath
-	labelPath := settings.Perch.LabelPath
-
-	if modelPath == "" || labelPath == "" {
-		m, l, _ := o.resolveInstalledPaths(RegistryIDPerchV2)
-		if modelPath == "" {
-			modelPath = m
-		}
-		if labelPath == "" {
-			labelPath = l
-		}
-	}
+	paths, _ := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
+		model:  settings.Perch.ModelPath,
+		labels: settings.Perch.LabelPath,
+	}, false)
+	modelPath := paths.model
+	labelPath := paths.labels
 
 	if modelPath == "" || labelPath == "" {
 		return nil, errors.Newf("Perch v2 model files not installed or configured").
@@ -82,6 +76,13 @@ func (o *Orchestrator) loadPerch(threads int) error {
 		instance: perch,
 		backend:  secondaryTripletFor(settings),
 	}
+	// Queue a config repair when the model loaded from the gallery fallback
+	// because the configured path was stale. Drained after o.mu is released.
+	o.queuePathCorrectionIfFallback(RegistryIDPerchV2, modelFileSet{
+		model:  settings.Perch.ModelPath,
+		labels: settings.Perch.LabelPath,
+	}, false)
+
 	// Defer the warm-up + RSS measurement until the caller releases o.mu, so the
 	// warm-up inference runs via the serialized inference path instead of stalling
 	// live inference on o.mu. The entry is registered above first

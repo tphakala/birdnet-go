@@ -15,6 +15,13 @@ func PrintCommand(settings *conf.Settings) *cobra.Command {
 		Use:   "print",
 		Short: "Print BirdNET range filter results",
 		Run: func(cmd *cobra.Command, args []string) {
+			// This is a read-only diagnostic: never rewrite the user's config.yaml if
+			// a configured model path turns out to be stale. Must be set BEFORE
+			// NewOrchestrator, because the first path-correction drain runs inside
+			// construction. The runtime fallback still resolves stale paths so the
+			// filter can run.
+			classifier.SetPathCorrectionPersistenceDisabled(true)
+
 			bn, err := classifier.NewOrchestrator(settings)
 			if err != nil {
 				fmt.Printf("Error initializing BirdNET: %v\n", err)

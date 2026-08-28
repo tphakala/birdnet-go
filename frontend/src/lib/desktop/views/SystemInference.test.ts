@@ -260,6 +260,139 @@ describe('SystemInference', () => {
     expect(text).toContain('Front Yard');
   });
 
+  // The "not analyzing" source chip. The i18n stub returns the key for unmapped
+  // strings, so assertions target the key names. The Badge component renders a
+  // <span>; its error+outline variant is identified by the CSS custom property
+  // classes, and its help text is an sr-only span referenced by aria-describedby.
+  describe('not-analyzing source chip', () => {
+    /** The Badge outer spans that carry the not-running help association. */
+    function notRunningBadges(container: HTMLElement): HTMLSpanElement[] {
+      return Array.from(
+        container.querySelectorAll<HTMLSpanElement>('span[aria-describedby^="source-not-running-"]')
+      );
+    }
+
+    it('renders the not-analyzing label and error styling when notRunning is true', async () => {
+      const model = makeModel({
+        sources: [
+          { id: 'mic1', name: 'Front Yard', type: 'soundcard', fallback: false, notRunning: true },
+        ],
+      });
+      installApi(makeSnapshot([model]));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('Front Yard');
+      });
+
+      expect(container.textContent).toContain('system.inference.sourceNotRunning');
+
+      const badges = notRunningBadges(container);
+      expect(badges).toHaveLength(1);
+      const badge = badges[0];
+      // error + outline variant classes from Badge.svelte.
+      expect(badge.className).toContain('text-[var(--color-error)]');
+      expect(badge.className).toContain('border-[var(--color-error)]');
+      expect(badge.getAttribute('title')).toBe('system.inference.sourceNotRunningTooltip');
+    });
+
+    it('omits the not-analyzing label and error styling when notRunning is ABSENT (omitempty contract)', async () => {
+      // notRunning is omitted entirely, mirroring Go's json:"notRunning,omitempty".
+      const model = makeModel({
+        sources: [{ id: 'mic1', name: 'Front Yard', type: 'soundcard', fallback: false }],
+      });
+      installApi(makeSnapshot([model]));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('Front Yard');
+      });
+
+      // No label and no tooltip anywhere (the label key is also a prefix of the
+      // tooltip key, so a single absence assertion covers both).
+      expect(container.textContent).not.toContain('system.inference.sourceNotRunning');
+      expect(notRunningBadges(container)).toHaveLength(0);
+    });
+
+    it('behaves like the absent case when notRunning is false', async () => {
+      const model = makeModel({
+        sources: [
+          { id: 'mic1', name: 'Front Yard', type: 'soundcard', fallback: false, notRunning: false },
+        ],
+      });
+      installApi(makeSnapshot([model]));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('Front Yard');
+      });
+
+      expect(container.textContent).not.toContain('system.inference.sourceNotRunning');
+      expect(notRunningBadges(container)).toHaveLength(0);
+    });
+
+    it('associates aria-describedby with a real element that carries the tooltip text', async () => {
+      const model = makeModel({
+        sources: [
+          { id: 'mic1', name: 'Front Yard', type: 'soundcard', fallback: false, notRunning: true },
+        ],
+      });
+      installApi(makeSnapshot([model]));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('Front Yard');
+      });
+
+      const badge = notRunningBadges(container)[0];
+      const helpId = badge.getAttribute('aria-describedby');
+      expect(helpId).toBeTruthy();
+      const help = container.querySelector(`[id="${helpId}"]`);
+      expect(help).not.toBeNull();
+      expect(help?.textContent).toContain('system.inference.sourceNotRunningTooltip');
+    });
+
+    it('renders the label once and generates unique help ids when only one of several sources is not running', async () => {
+      const model = makeModel({
+        sources: [
+          { id: 'a', name: 'Front Yard', type: 'soundcard', fallback: false },
+          { id: 'b', name: 'Back Yard', type: 'rtsp', fallback: false, notRunning: true },
+          { id: 'c', name: 'Garage', type: 'soundcard', fallback: false },
+        ],
+      });
+      installApi(makeSnapshot([model]));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('Back Yard');
+      });
+
+      // Exactly one source is flagged, so exactly one badge carries the association
+      // and one help element exists.
+      const badges = notRunningBadges(container);
+      expect(badges).toHaveLength(1);
+
+      const helpSpans = Array.from(
+        container.querySelectorAll<HTMLElement>('span[id^="source-not-running-"]')
+      );
+      const ids = helpSpans.map(s => s.id);
+      expect(ids).toHaveLength(1);
+      // Guards the duplicate-id family behind issue #4190: every generated id is unique.
+      expect(new Set(ids).size).toBe(ids.length);
+
+      // Every aria-describedby resolves to an element that actually exists.
+      for (const badge of badges) {
+        const helpId = badge.getAttribute('aria-describedby');
+        expect(container.querySelector(`[id="${helpId}"]`)).not.toBeNull();
+      }
+    });
+  });
+
   // These tests run against the i18n stub in src/test/setup.ts, which returns the
   // key for any unmapped string, so assertions target the rendered key names
   // (system.inference.vad.*) plus the data values, not the English text.

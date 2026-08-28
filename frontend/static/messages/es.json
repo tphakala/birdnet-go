@@ -463,6 +463,14 @@
         "staleMessage": "{modelName} está instalado para {oldRegion}, pero su nueva ubicación corresponde a {newRegion}. Puede cambiar de variante desde la galería de modelos en Configuración.",
         "staleGlobalMessage": "{modelName} está instalado para {oldRegion}, pero su nueva ubicación está fuera de su cobertura. Puede cambiar a la variante global desde la galería de modelos en Configuración."
       },
+      "modelPath": {
+        "reconciledTitle": "Rutas de archivo del modelo reparadas para {modelName}",
+        "reconciledMessage": "Las rutas de archivo configuradas para {modelName} estaban desactualizadas y se han reparado para coincidir con el modelo instalado en {modelPath}.",
+        "substitutedTitle": "No se encontró el archivo de modelo configurado para {modelName}",
+        "substitutedMessage": "El archivo de modelo configurado para {modelName} no se encontró en el disco, por lo que en su lugar se está usando el modelo instalado en {modelPath}. Su configuración no se modificó.",
+        "notRegisteredTitle": "Ningún modelo está analizando {sourceName}",
+        "notRegisteredMessage": "No llega audio a {models} en la fuente de audio \"{sourceName}\", por lo que no se generan detecciones. Abra la galería de modelos en Configuración para comprobar el estado."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valor actual: {value}% (umbral: {threshold}%)",
@@ -1767,6 +1775,8 @@
       "sources": "Fuentes de audio",
       "noSources": "No hay fuentes conectadas",
       "primaryFallback": "principal (respaldo)",
+      "sourceNotRunning": "no está analizando",
+      "sourceNotRunningTooltip": "Esta fuente está asignada al modelo en la configuración, pero su audio no llega al modelo, por lo que no genera detecciones. Abra la galería de modelos en Configuración para comprobar su estado.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",

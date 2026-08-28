@@ -463,6 +463,14 @@
         "staleMessage": "{modelName} är installerad för {oldRegion}, men din nya plats motsvarar {newRegion}. Du kan byta varianter från modellgalleriet i Inställningar.",
         "staleGlobalMessage": "{modelName} är installerad för {oldRegion}, men din nya plats är utanför dess täckning. Du kan byta till den globala varianten från modellgalleriet i Inställningar."
       },
+      "modelPath": {
+        "reconciledTitle": "Modellens filsökvägar reparerade för {modelName}",
+        "reconciledMessage": "De konfigurerade filsökvägarna för {modelName} var inaktuella och har reparerats för att matcha den installerade modellen på {modelPath}.",
+        "substitutedTitle": "Den konfigurerade modellfilen för {modelName} hittades inte",
+        "substitutedMessage": "Modellfilen som konfigurerats för {modelName} hittades inte på disken, så den installerade modellen på {modelPath} används i stället. Din konfiguration lämnades oförändrad.",
+        "notRegisteredTitle": "Ingen modell analyserar {sourceName}",
+        "notRegisteredMessage": "Inget ljud når {models} på ljudkällan \"{sourceName}\", så det produceras inga detektioner. Öppna modellgalleriet i Inställningar för att kontrollera status."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Nuvarande värde: {value}% (tröskel: {threshold}%)",
@@ -1767,6 +1775,8 @@
       "sources": "Ljudkällor",
       "noSources": "Inga källor anslutna",
       "primaryFallback": "primär (reserv)",
+      "sourceNotRunning": "analyserar inte",
+      "sourceNotRunningTooltip": "Denna källa är tilldelad modellen i inställningarna, men dess ljud når inte modellen, så den producerar inga detektioner. Öppna modellgalleriet i Inställningar för att kontrollera dess status.",
       "notMeasured": "-",
       "unitMs": "ms",
       "unitKhz": "kHz",
