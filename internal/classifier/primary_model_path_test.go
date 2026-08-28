@@ -165,9 +165,6 @@ func TestResolvePrimaryModelPath(t *testing.T) {
 		// refused a variant that would have loaded, dropping such a host to the
 		// embedded model while telling the user no installed model was available.
 		//
-		// Only meaningful where OpenVINO is compiled in; in the default build
-		// openVINOPlanFor short-circuits on a compile-time false, so the leg under
-		// test is unreachable and the recovery correctly declines.
 		o := &Orchestrator{
 			ortAvailable: func(string) bool { return false },
 			ovLoadable:   func(string) bool { return true },
@@ -176,9 +173,26 @@ func TestResolvePrimaryModelPath(t *testing.T) {
 
 		res := o.resolvePrimaryModelPath(filepath.Join(t.TempDir(), "gone", "primary.onnx"))
 
-		if !openvinoBackendAvailable {
+		// Branch on whether a plan is actually OBTAINABLE here, not on the build tag.
+		// The tag is necessary but not sufficient: openVINOPlanFor also needs a
+		// usable device, so an openvino build on a plain amd64 runner or an ARMv8.0
+		// core yields no plan. Gating on the tag alone would make this test pass on
+		// this developer's machine and fail on those hosts, which is precisely the
+		// inversion that shipped in the round it replaced.
+		settings := o.currentSettings()
+		if settings == nil {
+			settings = &conf.Settings{}
+		}
+		_, planOK, _ := openVINOPlanFor(
+			settings.BirdNET.Backend,
+			settings.BirdNET.OpenVINODevice,
+			DefaultModelVersion,
+			settings.BirdNET.OpenVINOPath,
+			birdnetLogitsOutputIndex,
+		)
+		if !planOK {
 			assert.Empty(t, res.resolved.model,
-				"without the openvino build tag there is no OpenVINO leg to take")
+				"with no obtainable OpenVINO plan there is no OpenVINO leg to take")
 			return
 		}
 		assert.Equal(t, installed, res.resolved.model,

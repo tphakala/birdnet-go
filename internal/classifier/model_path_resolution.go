@@ -392,15 +392,6 @@ func declaresModelFile(files []CatalogFile, localName string) bool {
 // entry point, runPendingPathCorrections: that drainer takes o.mu itself to
 // snapshot and clear the queue, and o.mu is not reentrant, so draining under the
 // loaders' write lock self-deadlocks the load. Keep the drain where it is.
-// openVINOLoads reports whether the OpenVINO runtime can actually be opened.
-// Split out for the ovLoadable test seam; see Orchestrator.ovLoadable.
-func (o *Orchestrator) openVINOLoads(libraryPath string) bool {
-	if o.ovLoadable != nil {
-		return o.ovLoadable(libraryPath)
-	}
-	return inference.InitOpenVINO(libraryPath) == nil
-}
-
 func (o *Orchestrator) isGalleryManagedPath(registryID, path string) bool {
 	if path == "" {
 		return false
@@ -635,4 +626,13 @@ func (o *Orchestrator) primaryVariantUsable(modelPath string) bool {
 	GetLogger().Warn("installed primary variant cannot load on this host (no OpenVINO plan and no ONNX Runtime); using the built-in model instead",
 		logger.String("model_path", modelPath))
 	return false
+}
+
+// openVINOLoads reports whether the OpenVINO runtime can actually be opened.
+// Split out for the ovLoadable test seam; see Orchestrator.ovLoadable.
+func (o *Orchestrator) openVINOLoads(libraryPath string) bool {
+	if o.ovLoadable != nil {
+		return o.ovLoadable(libraryPath)
+	}
+	return inference.InitOpenVINO(libraryPath) == nil
 }
