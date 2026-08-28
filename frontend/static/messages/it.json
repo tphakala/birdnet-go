@@ -468,6 +468,9 @@
         "reconciledMessage": "I percorsi dei file configurati per {modelName} erano obsoleti e sono stati riparati per corrispondere al modello installato in {modelPath}.",
         "substitutedTitle": "File del modello configurato per {modelName} non trovato",
         "substitutedMessage": "Il file del modello configurato per {modelName} non è stato trovato sul disco, quindi viene utilizzato il modello installato in {modelPath}. La tua configurazione non è stata modificata.",
+        "unreadableTitle": "Impossibile leggere il file del modello configurato per {modelName}",
+        "unreadableMessage": "Il file del modello configurato per {modelName} esiste ma non è stato possibile leggerlo, quindi viene utilizzato il modello installato in {modelPath}. La tua configurazione non è stata modificata. Controlla i permessi del file e che il suo spazio di archiviazione sia montato.",
+        "builtinMessage": "Il file del modello configurato per {modelName} non è stato trovato sul disco e nessun modello installato è disponibile per sostituirlo, quindi viene utilizzato il modello integrato. La tua configurazione non è stata modificata.",
         "notRegisteredTitle": "Nessun modello sta analizzando {sourceName}",
         "notRegisteredMessage": "Nessun audio raggiunge {models} sulla sorgente audio \"{sourceName}\", quindi non vengono prodotti rilevamenti. Apri la galleria dei modelli in Impostazioni per verificare lo stato."
       },

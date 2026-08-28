@@ -551,7 +551,9 @@ func TestNewBirdNET_LocaleNormalization(t *testing.T) {
 			settings.BirdNET.Version = "2.4"
 			settings.BirdNET.ModelPath = testV24TFLiteModelPath
 
-			bn, err := NewBirdNET(settings, nil)
+			// nil resolver: no orchestrator here, so the configured path is used
+			// verbatim, which is exactly the pre-recovery behaviour this test asserts.
+			bn, err := NewBirdNET(settings, nil, nil)
 			if bn != nil {
 				t.Cleanup(bn.Delete)
 			}

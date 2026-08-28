@@ -468,6 +468,9 @@
         "reconciledMessage": "A(z) {modelName} beállított fájlelérési útjai elavultak voltak, és javításra kerültek, hogy megfeleljenek a(z) {modelPath} helyen telepített modellnek.",
         "substitutedTitle": "A(z) {modelName} modellhez beállított modellfájl nem található",
         "substitutedMessage": "A(z) {modelName} modellhez beállított modellfájl nem található a lemezen, ezért helyette a(z) {modelPath} helyen telepített modell van használatban. A konfigurációja változatlan maradt.",
+        "unreadableTitle": "A(z) {modelName} modellhez beállított modellfájlt nem sikerült beolvasni",
+        "unreadableMessage": "A(z) {modelName} modellhez beállított modellfájl létezik, de nem sikerült beolvasni, ezért helyette a(z) {modelPath} helyen telepített modell van használatban. A konfigurációja változatlan maradt. Ellenőrizze a fájl jogosultságait és azt, hogy a tárolója csatolva van-e.",
+        "builtinMessage": "A(z) {modelName} modellhez beállított modellfájl nem található a lemezen, és nem érhető el telepített modell a helyettesítésére, ezért helyette a beépített modell van használatban. A konfigurációja változatlan maradt.",
         "notRegisteredTitle": "Egyetlen modell sem elemzi a következőt: {sourceName}",
         "notRegisteredMessage": "Nem jut el hang a(z) {models} számára a(z) \"{sourceName}\" hangforráson, így nem jönnek létre detektálások. Nyissa meg a modellgalériát a Beállításokban az állapot ellenőrzéséhez."
       },

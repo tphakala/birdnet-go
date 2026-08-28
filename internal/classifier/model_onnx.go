@@ -13,12 +13,14 @@ import (
 
 // onnxModelPath resolves the ONNX classifier model file: the explicit config
 // model path when set, otherwise ModelInfo.CustomPath (set by the arm64 default
-// resolver, defaultClassifierModelInfo). Returns "" when neither is set. Keeping
+// resolver, defaultClassifierModelInfo). The first value is the RESOLVED
+// configured path (see BirdNET.configuredModelPath), not the raw setting.
+// Returns "" when neither is set. Keeping
 // the default in CustomPath avoids mutating settings.BirdNET.ModelPath, which
 // would make the default indistinguishable from a user override.
 func (bn *BirdNET) onnxModelPath() string {
-	if bn.Settings.BirdNET.ModelPath != "" {
-		return bn.Settings.BirdNET.ModelPath
+	if p := bn.configuredModelPath(); p != "" {
+		return p
 	}
 	return bn.ModelInfo.CustomPath
 }

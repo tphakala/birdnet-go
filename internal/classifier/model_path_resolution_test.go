@@ -120,13 +120,14 @@ func TestResolveFamilyPaths_ConfiguredSetPresentIsUsedVerbatim(t *testing.T) {
 	o := &Orchestrator{}
 	o.SetModelsDir(modelsDir)
 
-	got, usedFallback := o.resolveFamilyPaths(RegistryIDPerchV2,
+	res := o.resolveFamilyPaths(RegistryIDPerchV2,
 		modelFileSet{model: model, labels: labels}, false)
 
-	assert.False(t, usedFallback, "a present configured set must not trigger the fallback")
-	assert.Equal(t, model, got.model)
-	assert.Equal(t, labels, got.labels)
-	assert.NotEqual(t, installedModel, got.model,
+	assert.False(t, res.substituted, "a present configured set must not be substituted")
+	assert.False(t, res.repairable, "and nothing may be rewritten")
+	assert.Equal(t, model, res.resolved.model)
+	assert.Equal(t, labels, res.resolved.labels)
+	assert.NotEqual(t, installedModel, res.resolved.model,
 		"the configured custom model must be used verbatim, not the installed gallery variant")
 }
 
@@ -146,14 +147,15 @@ func TestResolveFamilyPaths_MissingConfiguredPathFallsBackToInstalled(t *testing
 	o := &Orchestrator{}
 	o.SetModelsDir(modelsDir)
 
-	got, usedFallback := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
+	res := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
 		model:  "/nonexistent/perch_v2.onnx",
 		labels: "/nonexistent/perch_v2_labels.txt",
 	}, false)
 
-	assert.True(t, usedFallback, "a missing configured path must trigger the fallback")
-	assert.Equal(t, installedModel, got.model)
-	assert.Equal(t, installedLabels, got.labels)
+	assert.True(t, res.substituted, "a missing configured path must substitute the installed set")
+	assert.True(t, res.repairable, "a CONFIRMED absence may also rewrite config")
+	assert.Equal(t, installedModel, res.resolved.model)
+	assert.Equal(t, installedLabels, res.resolved.labels)
 }
 
 // TestResolveFamilyPaths_PartiallyMissingSetIsReplacedAsAUnit checks that when a
@@ -187,16 +189,17 @@ func TestResolveFamilyPaths_PartiallyMissingSetIsReplacedAsAUnit(t *testing.T) {
 	o := &Orchestrator{}
 	o.SetModelsDir(modelsDir)
 
-	got, usedFallback := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
+	res := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
 		model:  strayModel,                                    // exists
 		labels: filepath.Join(strayDir, "missing_labels.txt"), // does not
 	}, false)
 
-	require.True(t, usedFallback)
-	assert.Equal(t, installedModel, got.model,
+	require.True(t, res.substituted)
+	require.True(t, res.repairable)
+	assert.Equal(t, installedModel, res.resolved.model,
 		"the configured model must be discarded with its missing labels, not paired with fallback labels")
-	assert.Equal(t, installedLabels, got.labels)
-	assert.NotEqual(t, strayModel, got.model,
+	assert.Equal(t, installedLabels, res.resolved.labels)
+	assert.NotEqual(t, strayModel, res.resolved.model,
 		"pairing a configured model with fallback labels from another variant mislabels detections")
 }
 
@@ -216,10 +219,12 @@ func TestResolveFamilyPaths_NothingInstalledKeepsConfiguredSet(t *testing.T) {
 		model:  "/nonexistent/perch_v2.onnx",
 		labels: "/nonexistent/perch_v2_labels.txt",
 	}
-	got, usedFallback := o.resolveFamilyPaths(RegistryIDPerchV2, configured, false)
+	res := o.resolveFamilyPaths(RegistryIDPerchV2, configured, false)
 
-	assert.False(t, usedFallback)
-	assert.Equal(t, configured, got)
+	assert.False(t, res.substituted,
+		"nothing was installed to substitute, so the user is still running what they configured")
+	assert.False(t, res.repairable)
+	assert.Equal(t, configured, res.resolved)
 }
 
 // TestResolveFamilyPaths_BatEmbeddingsParticipateInAtomicity asserts the bat
@@ -253,14 +258,15 @@ func TestResolveFamilyPaths_BatEmbeddingsParticipateInAtomicity(t *testing.T) {
 		labels:     labels,
 		embeddings: filepath.Join(dir, "missing_embeddings.onnx"),
 	}
-	got, usedFallback := o.resolveFamilyPaths(RegistryIDBat, configured, true)
+	res := o.resolveFamilyPaths(RegistryIDBat, configured, true)
 
-	require.True(t, usedFallback, "a missing embedding member makes the whole set stale")
-	assert.Equal(t, galleryModel, got.model,
+	require.True(t, res.substituted, "a missing embedding member substitutes the whole set")
+	require.True(t, res.repairable, "a missing embedding member makes the whole set stale")
+	assert.Equal(t, galleryModel, res.resolved.model,
 		"the classifier moves with the set; it must not be kept while the embeddings are replaced")
-	assert.Equal(t, galleryLabels, got.labels)
-	assert.Equal(t, galleryEmb, got.embeddings)
-	assert.NotEqual(t, model, got.model,
+	assert.Equal(t, galleryLabels, res.resolved.labels)
+	assert.Equal(t, galleryEmb, res.resolved.embeddings)
+	assert.NotEqual(t, model, res.resolved.model,
 		"keeping the configured classifier while replacing the embeddings would mismatch the set")
 
 	// The invariants the atomicity rests on.
@@ -289,23 +295,26 @@ func TestResolveFamilyPaths_EmptyMemberFilledMissingMemberReplaced(t *testing.T)
 
 	t.Run("empty member is filled from the gallery without a repair", func(t *testing.T) {
 		t.Parallel()
-		got, usedFallback := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
+		res := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
 			model:  installedModel, // present
 			labels: "",             // empty: the gallery owns it
 		}, false)
-		assert.False(t, usedFallback, "an empty member is not stale, so no repair is queued")
-		assert.Equal(t, installedModel, got.model, "the present configured model is kept")
-		assert.Equal(t, installedLabels, got.labels, "the empty labels member is filled from the gallery")
+		assert.False(t, res.substituted,
+			"filling an EMPTY member from the gallery is not a substitution: nothing the user chose was replaced")
+		assert.False(t, res.repairable, "an empty member is not stale, so no repair is queued")
+		assert.Equal(t, installedModel, res.resolved.model, "the present configured model is kept")
+		assert.Equal(t, installedLabels, res.resolved.labels, "the empty labels member is filled from the gallery")
 	})
 
 	t.Run("a missing non-empty member replaces the set with a repair", func(t *testing.T) {
 		t.Parallel()
-		got, usedFallback := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
+		res := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
 			model:  "/nonexistent/perch_v2.onnx",
 			labels: "/nonexistent/perch_v2_labels.txt",
 		}, false)
-		assert.True(t, usedFallback, "a missing non-empty member is stale and queues a repair")
-		assert.Equal(t, installedModel, got.model)
+		assert.True(t, res.substituted, "a missing non-empty member replaces what the user chose")
+		assert.True(t, res.repairable, "a missing non-empty member is stale and queues a repair")
+		assert.Equal(t, installedModel, res.resolved.model)
 	})
 }
 
@@ -341,16 +350,17 @@ func TestResolveFamilyPaths_EmptyMemberFilledFromConfiguredVariant(t *testing.T)
 	// Configured model present (regional), labels empty: presenceComplete, so the
 	// empty labels member is filled. It must be filled from the regional model's
 	// own variant.
-	got, usedFallback := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
+	res := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
 		model:  regionalModel,
 		labels: "",
 	}, false)
 
-	assert.False(t, usedFallback, "an empty member is filled, not a stale fallback")
-	assert.Equal(t, regionalModel, got.model, "the configured regional model is kept")
-	assert.Equal(t, regionalLabels, got.labels,
+	assert.False(t, res.substituted, "an empty member is filled, not substituted")
+	assert.False(t, res.repairable, "an empty member is filled, not a stale fallback")
+	assert.Equal(t, regionalModel, res.resolved.model, "the configured regional model is kept")
+	assert.Equal(t, regionalLabels, res.resolved.labels,
 		"empty labels must be filled from the SAME variant the configured model names")
-	assert.NotEqual(t, globalLabels, got.labels,
+	assert.NotEqual(t, globalLabels, res.resolved.labels,
 		"filling from the catalog-first global variant would mislabel the regional model")
 }
 
@@ -392,17 +402,110 @@ func TestResolveFamilyPaths_IndeterminateFallsBackWithoutRepair(t *testing.T) {
 	o := &Orchestrator{}
 	o.SetModelsDir(modelsDir)
 
-	got, usedFallback := o.resolveFamilyPaths(RegistryIDPerchV2, indeterminate, false)
+	res := o.resolveFamilyPaths(RegistryIDPerchV2, indeterminate, false)
 
-	assert.False(t, usedFallback,
+	assert.False(t, res.repairable,
 		"an unreadable path is indeterminate: fall back at runtime but do NOT rewrite config")
-	assert.Equal(t, installedModel, got.model,
+	assert.Equal(t, installedModel, res.resolved.model,
 		"the model still resolves to the installed gallery model so analysis can run")
-	assert.Equal(t, installedLabels, got.labels)
+	assert.Equal(t, installedLabels, res.resolved.labels)
 
-	o.queuePathCorrection(RegistryIDPerchV2, pathResolution{resolved: got, usedFallback: usedFallback})
-	assert.Empty(t, o.pendingPathCorrections,
-		"an indeterminate path must not queue a config repair")
+	// The user IS running a model they did not choose, so the substitution has to
+	// be reported even though the configuration must not be rewritten. Before
+	// these two flags were separated, an indeterminate resolution queued nothing,
+	// so applyPathCorrection was never reached and neither notification fired: the
+	// only trace was a single Debug line, and a user whose model sat on a NAS
+	// mount that started returning EACCES ran a different model indefinitely.
+	assert.True(t, res.substituted,
+		"an unreadable configured path still substitutes a different model, and that must not be silent")
+
+	o.queuePathCorrection(RegistryIDPerchV2, res)
+	assert.Len(t, o.pendingPathCorrections, 1,
+		"the substitution must be queued so the drain can notify, even though it may not repair")
+	assert.False(t, o.pendingPathCorrections[0].repairable,
+		"the queued correction must carry the do-not-rewrite verdict to the drain")
+}
+
+// TestApplyPathCorrection_UnreadableNotifiesWithoutRewriting is the other half of
+// the indeterminate case: the drain must tell the user AND leave config.yaml
+// byte-for-byte as they wrote it. Rewriting here would make a transient
+// permissions or mount failure permanent, and staying silent is the failure that
+// cost a reporter days of lost detections.
+func TestApplyPathCorrection_UnreadableNotifiesWithoutRewriting(t *testing.T) {
+	// Not parallel: mutates the conf global settings, conf.ConfigPath, the
+	// process-level persistence switch and the global notification service.
+	redirectConfigFile(t)
+
+	SetPathCorrectionPersistenceDisabled(false)
+	t.Cleanup(func() { SetPathCorrectionPersistenceDisabled(false) })
+
+	notification.ResetForTest()
+	t.Cleanup(notification.ResetForTest)
+	notification.Initialize(notification.DefaultServiceConfig())
+	svc := notification.GetService()
+	require.NotNil(t, svc)
+	t.Cleanup(svc.Stop)
+
+	entry, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok)
+
+	modelsDir := filepath.Join(t.TempDir(), "models")
+	installedModel := writeVariantModelFile(t, modelsDir, &entry, "fp32")
+	installedLabels := writeVariantLabelsFile(t, modelsDir, &entry, "fp32")
+
+	o := &Orchestrator{}
+	o.SetModelsDir(modelsDir)
+
+	// A gallery-managed configured path, so the ONLY thing standing between this
+	// and a rewrite is the repairable verdict. Using a user-owned path instead
+	// would let the pre-existing user-owned veto carry the test and the new guard
+	// could be deleted with the suite still green.
+	staleDir := filepath.Join(t.TempDir(), "models", entry.ID)
+	stale := &conf.Settings{}
+	stale.Perch.ModelPath = filepath.Join(staleDir, filepath.Base(installedModel))
+	stale.Perch.LabelPath = filepath.Join(staleDir, filepath.Base(installedLabels))
+	origSettings := conf.GetSettings()
+	conf.StoreSettings(stale)
+	t.Cleanup(func() { conf.StoreSettings(origSettings) })
+
+	before, err := os.ReadFile(conf.ConfigPath)
+	require.NoError(t, err)
+
+	o.applyPathCorrection(&pendingPathCorrection{
+		registryID: RegistryIDPerchV2,
+		resolved:   modelFileSet{model: installedModel, labels: installedLabels},
+		repairable: false,
+		// Stated explicitly: "not repairable" alone no longer selects the
+		// could-not-be-read wording, because the primary also declines to rewrite a
+		// path whose written form differs from its expanded form, and that file is
+		// absent rather than unreadable.
+		unreadable: true,
+	})
+
+	after, err := os.ReadFile(conf.ConfigPath)
+	require.NoError(t, err)
+	assert.Equal(t, string(before), string(after),
+		"an unreadable configured path must never be persisted over, or a transient failure becomes permanent")
+
+	published := conf.GetSettings()
+	assert.Equal(t, stale.Perch.ModelPath, published.Perch.ModelPath,
+		"the published snapshot must keep the user's configured path too")
+
+	list, err := svc.List(nil)
+	require.NoError(t, err)
+	var unreadable, reconciled bool
+	for _, n := range list {
+		switch n.TitleKey {
+		case notification.MsgModelPathUnreadableTitle:
+			unreadable = true
+		case notification.MsgModelPathReconciledTitle:
+			reconciled = true
+		}
+	}
+	assert.True(t, unreadable,
+		"the user must be told they are running a substitute; telling them it was 'not found' would send them looking in the wrong place")
+	assert.False(t, reconciled,
+		"nothing was repaired, so the reconciled notification must not fire")
 }
 
 // TestQueuePathCorrection_HealthySetQueuesNothing is the negative for
@@ -435,12 +538,12 @@ func TestQueuePathCorrection_HealthySetQueuesNothing(t *testing.T) {
 	// CONFIRMED-missing member, so a healthy set queues nothing down several
 	// different code paths; without this the test cannot tell the healthy-set
 	// early return from a fallback that happened to keep repairable false.
-	got, usedFallback := o.resolveFamilyPaths(RegistryIDPerchV2, configured, false)
-	assert.False(t, usedFallback)
-	assert.Equal(t, configured, got,
+	res := o.resolveFamilyPaths(RegistryIDPerchV2, configured, false)
+	assert.False(t, res.repairable)
+	assert.Equal(t, configured, res.resolved,
 		"a healthy configured set must be returned verbatim, never swapped for the installed gallery variant")
 
-	o.queuePathCorrection(RegistryIDPerchV2, pathResolution{resolved: got, usedFallback: usedFallback})
+	o.queuePathCorrection(RegistryIDPerchV2, res)
 
 	assert.Empty(t, o.pendingPathCorrections,
 		"a healthy, fully-present configured set must not queue a config repair")
@@ -515,18 +618,19 @@ func TestPathCorrection_QueuedThenDrainedRepairsConfig(t *testing.T) {
 	t.Cleanup(func() { conf.StoreSettings(origSettings) })
 
 	// 1. The resolution reports a repairable fallback onto the installed variant.
-	resolved, usedFallback := o.resolveFamilyPaths(RegistryIDPerchV2, configured, false)
-	require.True(t, usedFallback,
+	res := o.resolveFamilyPaths(RegistryIDPerchV2, configured, false)
+	require.True(t, res.substituted, "a confirmed-missing gallery path substitutes the installed set")
+	require.True(t, res.repairable,
 		"a confirmed-missing gallery path must be reported as repairable")
-	require.Equal(t, installedModel, resolved.model)
-	require.Equal(t, installedLabels, resolved.labels)
+	require.Equal(t, installedModel, res.resolved.model)
+	require.Equal(t, installedLabels, res.resolved.labels)
 
 	// 2. Queueing records it. A queuePathCorrection that never queues fails here.
-	o.queuePathCorrection(RegistryIDPerchV2, pathResolution{resolved: resolved, usedFallback: usedFallback})
+	o.queuePathCorrection(RegistryIDPerchV2, res)
 	require.Len(t, o.pendingPathCorrections, 1,
 		"a repairable fallback must queue exactly one correction")
 	assert.Equal(t, RegistryIDPerchV2, o.pendingPathCorrections[0].registryID)
-	assert.Equal(t, resolved, o.pendingPathCorrections[0].resolved,
+	assert.Equal(t, res.resolved, o.pendingPathCorrections[0].resolved,
 		"the queued correction must carry the set the model was actually built from")
 
 	// 3. Draining applies it. A runPendingPathCorrections that snapshots and
@@ -619,12 +723,14 @@ func TestRunPendingPathCorrections_DrainsEveryQueuedFamily(t *testing.T) {
 	// Queue Perch first, Bat second. A drain that applies only pending[0] would
 	// repair Perch and leave the whole Bat set stale.
 	o.queuePathCorrection(RegistryIDPerchV2, pathResolution{
-		resolved:     modelFileSet{model: installedPerchModel, labels: installedPerchLabels},
-		usedFallback: true,
+		resolved:    modelFileSet{model: installedPerchModel, labels: installedPerchLabels},
+		substituted: true,
+		repairable:  true,
 	})
 	o.queuePathCorrection(RegistryIDBat, pathResolution{
-		resolved:     modelFileSet{model: batModel, labels: batLabels, embeddings: batEmb},
-		usedFallback: true,
+		resolved:    modelFileSet{model: batModel, labels: batLabels, embeddings: batEmb},
+		substituted: true,
+		repairable:  true,
 	})
 	require.Len(t, o.pendingPathCorrections, 2, "both families must be queued")
 
@@ -761,12 +867,13 @@ func TestPlanPathCorrection(t *testing.T) {
 		current.Perch.ModelPath = stalePath
 		current.Perch.LabelPath = staleLabels
 
-		updated, changed := o.planPathCorrection(current, &pendingPathCorrection{
+		updated, outcome := o.planPathCorrection(current, &pendingPathCorrection{
 			registryID: RegistryIDPerchV2,
 			resolved:   modelFileSet{model: newModel, labels: newLabels},
+			repairable: true,
 		})
 
-		require.True(t, changed)
+		assert.Equal(t, correctionRewrite, outcome)
 		assert.Equal(t, newModel, updated.Perch.ModelPath)
 		assert.Equal(t, newLabels, updated.Perch.LabelPath,
 			"the stale labels path must be repaired too, not only the model path")
@@ -785,12 +892,13 @@ func TestPlanPathCorrection(t *testing.T) {
 		current.Perch.ModelPath = "/srv/my-models/my_own_perch.onnx"
 		current.Perch.LabelPath = "/srv/my-models/my_own_labels.txt"
 
-		_, changed := o.planPathCorrection(current, &pendingPathCorrection{
+		_, outcome := o.planPathCorrection(current, &pendingPathCorrection{
 			registryID: RegistryIDPerchV2,
 			resolved:   modelFileSet{model: newModel, labels: newLabels},
+			repairable: true,
 		})
 
-		assert.False(t, changed,
+		assert.Equal(t, correctionSubstituted, outcome,
 			"a custom model path must never be taken over: it may simply be on a volume that is not mounted yet")
 	})
 
@@ -802,12 +910,13 @@ func TestPlanPathCorrection(t *testing.T) {
 
 		current := &conf.Settings{} // both paths empty: the gallery already owns them
 
-		_, changed := o.planPathCorrection(current, &pendingPathCorrection{
+		_, outcome := o.planPathCorrection(current, &pendingPathCorrection{
 			registryID: RegistryIDPerchV2,
 			resolved:   modelFileSet{model: newModel, labels: newLabels},
+			repairable: true,
 		})
 
-		assert.False(t, changed,
+		assert.Equal(t, correctionNoop, outcome,
 			"an empty path already resolves through the gallery; writing an absolute path back would only go stale again")
 	})
 
@@ -830,16 +939,17 @@ func TestPlanPathCorrection(t *testing.T) {
 		current.Bat.LabelPath = filepath.Join(modelsDir, batEntry.ID, labelsRoleLocalName(t, batEntry.Files))
 		current.Bat.EmbeddingModel = filepath.Join(modelsDir, "shared", embeddingsRoleLocalName(t, batEntry.Files))
 
-		updated, changed := o.planPathCorrection(current, &pendingPathCorrection{
+		updated, outcome := o.planPathCorrection(current, &pendingPathCorrection{
 			registryID: RegistryIDBat,
 			resolved: modelFileSet{
 				model:      "/models/bat/classifier.onnx",
 				labels:     "/models/bat/labels.txt",
 				embeddings: "/models/shared/embeddings.onnx",
 			},
+			repairable: true,
 		})
 
-		require.True(t, changed)
+		assert.Equal(t, correctionRewrite, outcome)
 		assert.Equal(t, "/models/bat/classifier.onnx", updated.Bat.ClassifierModel)
 		assert.Equal(t, "/models/bat/labels.txt", updated.Bat.LabelPath)
 		assert.Equal(t, "/models/shared/embeddings.onnx", updated.Bat.EmbeddingModel,
@@ -863,12 +973,13 @@ func TestPlanPathCorrection(t *testing.T) {
 
 		newV3Model := "/models/birdnet-v3.0/other.onnx"
 		newV3Labels := "/models/birdnet-v3.0/other_labels.txt"
-		updated, changed := o.planPathCorrection(current, &pendingPathCorrection{
+		updated, outcome := o.planPathCorrection(current, &pendingPathCorrection{
 			registryID: RegistryIDBirdNETV3,
 			resolved:   modelFileSet{model: newV3Model, labels: newV3Labels},
+			repairable: true,
 		})
 
-		require.True(t, changed)
+		assert.Equal(t, correctionRewrite, outcome)
 		assert.Equal(t, newV3Model, updated.BirdNETV3.ModelPath)
 		assert.Equal(t, newV3Labels, updated.BirdNETV3.LabelPath)
 	})
@@ -882,12 +993,13 @@ func TestPlanPathCorrection(t *testing.T) {
 		current := &conf.Settings{}
 		current.Perch.ModelPath = "/models/perch-v2/perch_v2.onnx"
 
-		updated, changed := o.planPathCorrection(current, &pendingPathCorrection{
+		updated, outcome := o.planPathCorrection(current, &pendingPathCorrection{
 			registryID: "Not_A_Model",
 			resolved:   modelFileSet{model: newModel, labels: newLabels},
+			repairable: true,
 		})
 
-		assert.False(t, changed)
+		assert.Equal(t, correctionUnknownFamily, outcome)
 		assert.Nil(t, updated,
 			"an unknown registry returns nil, never the live published snapshot")
 	})
@@ -907,12 +1019,13 @@ func TestPlanPathCorrection(t *testing.T) {
 		current.Perch.ModelPath = "/home/birdnet/.config/birdnet-go/models/perch-v2/" + galleryName
 		current.Perch.LabelPath = "/srv/my-models/my_own_labels.txt"
 
-		updated, changed := o.planPathCorrection(current, &pendingPathCorrection{
+		updated, outcome := o.planPathCorrection(current, &pendingPathCorrection{
 			registryID: RegistryIDPerchV2,
 			resolved:   modelFileSet{model: newModel, labels: newLabels},
+			repairable: true,
 		})
 
-		assert.False(t, changed,
+		assert.Equal(t, correctionSubstituted, outcome,
 			"a user-owned field must veto the whole correction, not just its own field")
 		assert.Nil(t, updated,
 			"an abandoned correction returns nil so the gallery-managed model is never written")
@@ -926,7 +1039,7 @@ func TestPlanPathCorrection(t *testing.T) {
 
 		// Gallery-managed paths that ALREADY equal the resolved set. There is nothing
 		// to change: the no-op guard must skip a field whose value already matches,
-		// so the plan reports changed==false rather than "rewriting" a field to the
+		// so the plan reports outcome==correctionNoop rather than "rewriting" a field to the
 		// value it already holds.
 		samePath := "/home/birdnet/.config/birdnet-go/models/perch-v2/" + galleryName
 		sameLabels := "/home/birdnet/.config/birdnet-go/models/perch-v2/" + galleryLabelsName
@@ -934,12 +1047,13 @@ func TestPlanPathCorrection(t *testing.T) {
 		current.Perch.ModelPath = samePath
 		current.Perch.LabelPath = sameLabels
 
-		_, changed := o.planPathCorrection(current, &pendingPathCorrection{
+		_, outcome := o.planPathCorrection(current, &pendingPathCorrection{
 			registryID: RegistryIDPerchV2,
 			resolved:   modelFileSet{model: samePath, labels: sameLabels},
+			repairable: true,
 		})
 
-		assert.False(t, changed,
+		assert.Equal(t, correctionNoop, outcome,
 			"a configured path already equal to the resolved value is not a change")
 	})
 }
@@ -977,6 +1091,7 @@ func TestApplyPathCorrection_PersistsRepairedPaths(t *testing.T) {
 	o.applyPathCorrection(&pendingPathCorrection{
 		registryID: RegistryIDPerchV2,
 		resolved:   modelFileSet{model: newModel, labels: newLabels},
+		repairable: true,
 	})
 
 	// The published snapshot carries the repaired paths.
@@ -998,7 +1113,7 @@ func TestApplyPathCorrection_PersistsRepairedPaths(t *testing.T) {
 // TestApplyPathCorrection_NoWriteWhenNothingChanged pins the redundant-write
 // short-circuit: when planPathCorrection reports no change (the configured paths
 // already equal the resolved set), applyPathCorrection must NOT publish a new
-// snapshot and must NOT persist config.yaml. Without the `if !changed { return }`
+// snapshot and must NOT persist config.yaml. Without the `switch outcome`
 // guard the whole package stays green while a StoreSettings + SaveSettings runs
 // on a plan that changed nothing.
 func TestApplyPathCorrection_NoWriteWhenNothingChanged(t *testing.T) {
@@ -1015,7 +1130,7 @@ func TestApplyPathCorrection_NoWriteWhenNothingChanged(t *testing.T) {
 	o.SetModelsDir(modelsDir)
 
 	// Gallery-managed paths published as current, and the resolved set is the SAME:
-	// there is nothing to repair, so planPathCorrection reports changed==false.
+	// there is nothing to repair, so planPathCorrection reports outcome==correctionNoop.
 	same := &conf.Settings{}
 	same.Perch.ModelPath = filepath.Join(modelsDir, "perch-v2", galleryName)
 	same.Perch.LabelPath = filepath.Join(modelsDir, "perch-v2", galleryLabelsName)
@@ -1030,6 +1145,7 @@ func TestApplyPathCorrection_NoWriteWhenNothingChanged(t *testing.T) {
 	o.applyPathCorrection(&pendingPathCorrection{
 		registryID: RegistryIDPerchV2,
 		resolved:   modelFileSet{model: same.Perch.ModelPath, labels: same.Perch.LabelPath},
+		repairable: true,
 	})
 
 	assert.Same(t, same, conf.GetSettings(),
@@ -1076,14 +1192,14 @@ func TestApplyPathCorrection_PersistenceDisabledSkipsWrite(t *testing.T) {
 
 	// The runtime fallback still resolves the missing path to the installed model,
 	// independent of persistence.
-	resolved, usedFallback := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
+	res := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
 		model:  stale.Perch.ModelPath,
 		labels: stale.Perch.LabelPath,
 	}, false)
-	require.True(t, usedFallback, "a confirmed-missing configured path must still fall back")
-	assert.Equal(t, installedModel, resolved.model,
+	require.True(t, res.repairable, "a confirmed-missing configured path must still fall back")
+	assert.Equal(t, installedModel, res.resolved.model,
 		"the fallback still resolves the model so analysis can run")
-	assert.Equal(t, installedLabels, resolved.labels)
+	assert.Equal(t, installedLabels, res.resolved.labels)
 
 	origSettings := conf.GetSettings()
 	conf.StoreSettings(stale)
@@ -1094,7 +1210,8 @@ func TestApplyPathCorrection_PersistenceDisabledSkipsWrite(t *testing.T) {
 
 	o.applyPathCorrection(&pendingPathCorrection{
 		registryID: RegistryIDPerchV2,
-		resolved:   resolved,
+		resolved:   res.resolved,
+		repairable: true,
 	})
 
 	assert.Same(t, stale, conf.GetSettings(),
@@ -1151,6 +1268,7 @@ func TestApplyPathCorrection_UserOwnedSubstitutionNotifies(t *testing.T) {
 			model:  filepath.Join(modelsDir, "perch-v2", "perch_v2.onnx"),
 			labels: filepath.Join(modelsDir, "perch-v2", "perch_v2_labels.txt"),
 		},
+		repairable: true,
 	})
 
 	list, err := svc.List(nil)
@@ -1213,14 +1331,14 @@ func TestResolveFamilyPaths_KeepsConfiguredVariantWhenOnlyCompanionIsMissing(t *
 	o := &Orchestrator{}
 	o.SetModelsDir(modelsDir)
 
-	got, _ := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
+	res := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
 		model:  configuredModel,
 		labels: filepath.Join(modelsDir, entry.ID, "gone_labels.txt"),
 	}, false)
 
-	assert.Equal(t, configuredModel, got.model,
+	assert.Equal(t, configuredModel, res.resolved.model,
 		"the variant the configuration names must be kept when its own files are recoverable")
-	assert.Equal(t, expectedLabels, got.labels,
+	assert.Equal(t, expectedLabels, res.resolved.labels,
 		"companion files must come from the SAME variant, not from whichever the catalog lists first")
 }
 
@@ -1252,23 +1370,23 @@ func TestResolveFamilyPaths_SafeUnderOrchestratorLock(t *testing.T) {
 		defer o.mu.Unlock()
 
 		// Fallback path: configured file is absent.
-		_, _ = o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
+		_ = o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
 			model:  "/nonexistent/perch_v2.onnx",
 			labels: "/nonexistent/perch_v2_labels.txt",
 		}, false)
 
 		// Sibling-recovery path: configured model present, companion missing.
-		_, _ = o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
+		_ = o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
 			model:  installedModel,
 			labels: filepath.Join(modelsDir, entry.ID, "gone_labels.txt"),
 		}, false)
 
 		// Queueing a correction is also done under the lock.
-		stale, usedFallback := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
+		res := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
 			model:  "/nonexistent/perch_v2.onnx",
 			labels: "/nonexistent/perch_v2_labels.txt",
 		}, false)
-		o.queuePathCorrection(RegistryIDPerchV2, pathResolution{resolved: stale, usedFallback: usedFallback})
+		o.queuePathCorrection(RegistryIDPerchV2, res)
 	}()
 
 	select {

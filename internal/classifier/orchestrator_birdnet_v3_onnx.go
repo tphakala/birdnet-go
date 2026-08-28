@@ -24,13 +24,12 @@ import (
 // The returned resolution is meaningful only when err == nil; every error return
 // yields the zero pathResolution{}.
 func (o *Orchestrator) buildBirdNETV3(settings *conf.Settings, threads int) (*BirdNETV3, pathResolution, error) {
-	resolved, usedFallback := o.resolveFamilyPaths(RegistryIDBirdNETV3, modelFileSet{
+	res := o.resolveFamilyPaths(RegistryIDBirdNETV3, modelFileSet{
 		model:  settings.BirdNETV3.ModelPath,
 		labels: settings.BirdNETV3.LabelPath,
 	}, false)
-	res := pathResolution{resolved: resolved, usedFallback: usedFallback}
-	modelPath := resolved.model
-	labelPath := resolved.labels
+	modelPath := res.resolved.model
+	labelPath := res.resolved.labels
 
 	if modelPath == "" || labelPath == "" {
 		return nil, pathResolution{}, errors.Newf("BirdNET v3.0 model files not installed or configured").

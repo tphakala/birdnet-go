@@ -24,13 +24,12 @@ import (
 // The returned resolution is meaningful only when err == nil; every error return
 // yields the zero pathResolution{}.
 func (o *Orchestrator) buildPerch(settings *conf.Settings, threads int) (*Perch, pathResolution, error) {
-	resolved, usedFallback := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
+	res := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
 		model:  settings.Perch.ModelPath,
 		labels: settings.Perch.LabelPath,
 	}, false)
-	res := pathResolution{resolved: resolved, usedFallback: usedFallback}
-	modelPath := resolved.model
-	labelPath := resolved.labels
+	modelPath := res.resolved.model
+	labelPath := res.resolved.labels
 
 	if modelPath == "" || labelPath == "" {
 		return nil, pathResolution{}, errors.Newf("Perch v2 model files not installed or configured").

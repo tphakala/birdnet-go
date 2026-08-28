@@ -5,7 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -90,10 +92,26 @@ const (
 type pathResolution struct {
 	// resolved is the file set the model was actually built from.
 	resolved modelFileSet
-	// usedFallback reports whether a configured path was CONFIRMED missing and
-	// the gallery set was substituted, i.e. whether the configuration is stale
-	// and may be repaired. See resolveFamilyPaths' second return value.
-	usedFallback bool
+	// substituted reports that the runtime built from a DIFFERENT file set than
+	// the non-empty configured one. Filling an EMPTY configured member from the
+	// gallery is NOT a substitution: leaving a path empty is the supported way to
+	// let the gallery own it, so nothing the user chose was replaced.
+	substituted bool
+	// repairable reports that the substitution came from a CONFIRMED absence
+	// (ErrNotExist), so the stale configuration MAY be rewritten. It is never true
+	// unless substituted is also true. A member that is unreadable for some OTHER
+	// reason (presenceIndeterminate: a permissions failure, an I/O error, a
+	// half-initialised mount) is substituted but NOT repairable, so a transient
+	// failure never rewrites config.yaml permanently.
+	repairable bool
+	// unreadable distinguishes the ONE substitution cause that is not an absence:
+	// the configured file is present but could not be read (a permissions change,
+	// an I/O error, a half-initialised mount). It is carried explicitly rather than
+	// derived from repairable, because "not repairable" has more than one cause:
+	// the primary also declines to repair a path whose written form differs from
+	// its expanded form, and telling that user their file "could not be read" would
+	// send them to check permissions on a file that is simply gone.
+	unreadable bool
 }
 
 // nonEmptyMembersPresence classifies whether every NON-EMPTY required member of
@@ -144,28 +162,31 @@ func (s modelFileSet) nonEmptyMembersPresence(needEmbeddings bool) diskPresence 
 // different species sets, which either fails late with a label-count mismatch
 // or, when the counts happen to agree, silently mislabels every detection.
 //
-// The second return value reports whether the returned set should reconcile the
-// stale configuration (see Orchestrator.deferPathCorrection). It is true only
-// when a configured path was confirmed missing. A configured path that is merely
-// unreadable right now (an external volume that has not finished mounting) still
-// falls back so the model can run, but returns false so the transient state is
-// never persisted to config.yaml.
+// The returned pathResolution carries two independent flags. substituted reports
+// that a NON-EMPTY configured set was replaced at runtime, so the user is running
+// a model they did not choose and must be told; repairable reports that the
+// substitution came from a CONFIRMED absence, so the stale configuration may also
+// be rewritten (see Orchestrator.deferPathCorrection). A configured path that is
+// merely unreadable right now (an external volume that has not finished mounting)
+// still falls back so the model can run, and is reported as substituted, but is
+// NOT repairable, so the transient state is never persisted to config.yaml.
 //
 // A configured path that points at a file which does not exist is the state
 // GitHub issues #4201 and #4204 describe: a gallery variant switch or a change
 // of container HOME leaves settings pointing at a file that is no longer there,
 // and before this fallback the model simply never loaded again.
-func (o *Orchestrator) resolveFamilyPaths(registryID string, configured modelFileSet, needEmbeddings bool) (resolved modelFileSet, usedFallback bool) {
+func (o *Orchestrator) resolveFamilyPaths(registryID string, configured modelFileSet, needEmbeddings bool) pathResolution {
 	presence := configured.nonEmptyMembersPresence(needEmbeddings)
 
 	// An empty configured member is not a stale member: leaving a path empty is
 	// the supported way to let the gallery own it. When every NON-EMPTY
 	// configured member exists on disk, keep the configured set and fill only the
-	// empty members from the gallery (main's behaviour). usedFallback stays false:
-	// nothing configured went stale, so there is nothing to repair.
+	// empty members from the gallery (main's behaviour). Neither flag is set:
+	// nothing configured went stale, so there is nothing to repair and nothing the
+	// user chose was replaced.
 	if presence == presenceComplete {
 		if configured.complete(needEmbeddings) {
-			return configured, false
+			return pathResolution{resolved: configured}
 		}
 		filled := configured
 
@@ -196,7 +217,7 @@ func (o *Orchestrator) resolveFamilyPaths(registryID string, configured modelFil
 		if needEmbeddings && filled.embeddings == "" {
 			filled.embeddings = e
 		}
-		return filled, false
+		return pathResolution{resolved: filled}
 	}
 
 	// A non-empty configured path is missing or unreadable. Only a CONFIRMED
@@ -223,7 +244,7 @@ func (o *Orchestrator) resolveFamilyPaths(registryID string, configured modelFil
 		GetLogger().Debug("recovered the configured variant's companion files",
 			logger.String("registry_id", registryID),
 			logger.String("model_path", sameVariant.model))
-		return sameVariant, repairable
+		return pathResolution{resolved: sameVariant, substituted: true, repairable: repairable, unreadable: presence == presenceIndeterminate}
 	}
 
 	m, l, e := o.resolveInstalledPaths(registryID)
@@ -234,7 +255,7 @@ func (o *Orchestrator) resolveFamilyPaths(registryID string, configured modelFil
 	// a set that is merely unreadable right now (an unmounted volume) is not
 	// replaced by an empty one.
 	if !fallback.complete(needEmbeddings) {
-		return configured, false
+		return pathResolution{resolved: configured}
 	}
 
 	// Debug, not Info: this fires once per build, and the noteworthy outcomes
@@ -246,7 +267,7 @@ func (o *Orchestrator) resolveFamilyPaths(registryID string, configured modelFil
 		logger.String("configured_model_path", configured.model),
 		logger.String("resolved_model_path", fallback.model))
 
-	return fallback, repairable
+	return pathResolution{resolved: fallback, substituted: true, repairable: repairable, unreadable: presence == presenceIndeterminate}
 }
 
 // resolveSiblingSet rebuilds a family's complete file set from the variant that
@@ -428,4 +449,190 @@ func (o *Orchestrator) isGalleryManagedPath(registryID, path string) bool {
 		}
 	}
 	return false
+}
+
+// primaryPathResolver resolves the configured primary classifier model path to
+// the file the instance should actually load from. It is injected into NewBirdNET
+// rather than called from it because the resolution needs the models directory
+// and the catalog, which live on the Orchestrator: NewOrchestrator assigns
+// o.modelsDir before it constructs the primary, while bn.modelsDir is still empty
+// at that point (ModelManager sets it later, via SetModelsDir).
+//
+// A nil resolver means "use the configured path verbatim", which is what every
+// direct construction (tests, and any caller with no orchestrator) keeps.
+type primaryPathResolver func(configured string) pathResolution
+
+// resolvePrimaryModelPath gives the primary BirdNET v2.4 slot the stale-path
+// recovery the three secondary families got for GitHub #4201 and #4204. Without
+// it, a configured primary path that no longer exists (a gallery variant switch,
+// or a container HOME change that invalidates a stored absolute path) makes
+// NewBirdNET fail outright, so there is no analysis at all rather than one
+// missing optional model.
+//
+// The primary is deliberately NOT a modelFileSet family. Its label set is
+// embedded and identical across v2.4 variants, which is why
+// applyConfigForPrimarySwap writes BirdNET.ModelPath alone and documents that it
+// never touches BirdNET.LabelPath: a user-configured custom label path must
+// survive a variant swap. So there is exactly one path to resolve and no
+// cross-variant pairing hazard to protect against.
+func (o *Orchestrator) resolvePrimaryModelPath(configured string) pathResolution {
+	if configured == "" {
+		// No configured path at all: the Tier-4 default (the embedded model, or the
+		// standard-path INT8 ONNX build on arm64). Nothing to resolve, nothing to
+		// repair, and nothing was substituted.
+		return pathResolution{}
+	}
+
+	keep := pathResolution{resolved: modelFileSet{model: configured}}
+
+	// Stat the EXPANDED path: loadModel and initializeONNXModel both expand before
+	// opening, so statting the raw string would classify every configured "$VAR/..."
+	// or "~/..." path as missing and substitute a model out from under the user.
+	expanded, err := conf.ExpandTildePath(os.ExpandEnv(configured))
+	if err != nil {
+		// A path that cannot even be expanded is not one we can reason about. Keep
+		// it and let the existing load error report it.
+		return keep
+	}
+
+	if _, statErr := os.Stat(expanded); statErr == nil {
+		return keep
+	} else if !errors.Is(statErr, fs.ErrNotExist) {
+		// Unreadable for a reason OTHER than absence: a permissions change, an I/O
+		// error, a half-initialised mount. This is the ONE place the primary
+		// deliberately behaves differently from the secondaries, which do fall back
+		// on this signal (see resolveFamilyPaths).
+		//
+		// A secondary that fails to load costs one optional overlay for the session.
+		// Swapping the PRIMARY on an ambiguous signal would silently run the stock
+		// baseline in place of the regional or custom model the user chose, and every
+		// detection written while that lasted would be attributed to the wrong model.
+		// A transient unreadable file is far more likely to clear on its own than a
+		// polluted detection history is to be noticed, so the primary keeps the
+		// configured path and lets the existing load error surface.
+		GetLogger().Warn("configured primary model path is unreadable; keeping it rather than substituting a different model",
+			logger.String("model_path", configured),
+			logger.Error(statErr))
+		return keep
+	}
+
+	// CONFIRMED absent. Recover to the installed gallery variant when there is one
+	// AND that variant can actually run on this host.
+	if installed, _, _ := o.resolveInstalledPaths(permanentRegistryID); installed != "" && o.primaryVariantUsable(installed) {
+		GetLogger().Info("configured primary model path is missing on disk, recovering the installed variant",
+			logger.String("configured_model_path", configured),
+			logger.String("resolved_model_path", installed))
+		return pathResolution{
+			resolved: modelFileSet{model: installed},
+			// Repairable only when the configured string is literally what it
+			// resolves to. A configured "$HOME/..." or "~/..." can still match the
+			// gallery layout, and rewriting it would flatten the variable into the
+			// absolute path it happens to expand to today, so the path would stop
+			// following HOME on the next container start. That is the exact
+			// fragility this recovery exists to undo, so the runtime substitution
+			// stands but the config rewrite does not.
+			//
+			// The guard lives here rather than in isGalleryManagedPath because that
+			// helper serves all four families from ONE call site. Putting it there
+			// would change the three secondaries' behaviour, which this change has no
+			// business touching: they would stop repairing a $VAR path and instead
+			// warn about it on every single start, forever. Note the runtime
+			// substitution is identical either way, so refusing the rewrite does not
+			// give those users their own model back; it only trades a one-time repair
+			// for a permanent notification.
+			substituted: true,
+			repairable:  configured == expanded,
+		}
+	}
+
+	// Nothing installed to recover to. Resolve to EMPTY so the identity tiers
+	// behave exactly as if the user had never configured a path: Tier 3 stops
+	// firing, Tier 4 resolves the default, and remapV24ToONNXOnARM64 (which returns
+	// early on a non-empty CustomPath) is free to remap arm64 to the standard-path
+	// INT8 ONNX model. Before this the primary simply failed to construct and took
+	// the whole pipeline down with it.
+	//
+	// substituted, but NOT repairable: there is no correct path to write. Writing
+	// the empty string would discard the user's own setting, so re-mounting the
+	// volume or reinstalling the variant restores their model on the next start.
+	// The user is told through the built-in variant of the substituted
+	// notification.
+	GetLogger().Warn("configured primary model path is missing and no installed variant is available; using the built-in model",
+		logger.String("configured_model_path", configured))
+	return pathResolution{substituted: true}
+}
+
+// primaryVariantUsable reports whether an installed primary variant can actually
+// be loaded on this host.
+//
+// The BuiltIn baseline declares no files, so resolveInstalledPaths can only ever
+// return a DFT-truncated ONNX build for this family. Recovering onto one that
+// cannot load would turn a recoverable stale path into a hard startup failure,
+// which is precisely the outcome this recovery exists to prevent. Reporting false
+// makes the caller fall through to the built-in baseline, which always loads.
+//
+// "Can load" is deliberately NOT "ONNX Runtime is available". initializeModel
+// tries OPENVINO FIRST for the v2.4 identity and only falls through to ONNX
+// Runtime when OpenVINO declines, so an openvino-tagged build on an A76/Pi5 or an
+// Intel iGPU runs these variants with no ORT installed at all. Gating on ORT alone
+// would refuse a variant that would have loaded, silently dropping such a host to
+// the embedded model and telling the user no installed model was available, which
+// is false.
+//
+// CheckORTAvailability is used rather than checkORTOrFail because the latter logs
+// and raises a user notification, which would be wrong for a path we are choosing
+// NOT to take. Note the OpenVINO leg below is a real load rather than a pure
+// probe: InitOpenVINO memoizes success, and there is no way to answer "would this
+// load" without trying.
+func (o *Orchestrator) primaryVariantUsable(modelPath string) bool {
+	if !isONNXModel(modelPath) {
+		return true
+	}
+
+	// An empty configured runtime path is the normal "use the system default"
+	// value, so a missing settings snapshot degrades to that rather than to a
+	// refusal.
+	settings := o.currentSettings()
+	if settings == nil {
+		settings = &conf.Settings{}
+	}
+
+	// OpenVINO first, mirroring initializeModel's own order. Eligibility alone is
+	// NOT enough: initializeModel also falls through to ONNX Runtime when OpenVINO
+	// is eligible but FAILS TO LOAD, and openVINOPlanFor's CPU branch answers yes
+	// from the CPU's f16 support without ever opening the library. Accepting a
+	// variant on eligibility would therefore hand a host with a broken or missing
+	// OpenVINO library straight to the ONNX path it has no runtime for, which is
+	// the hard startup failure this gate exists to prevent, reached from the other
+	// side. So the plan must be usable AND the library must actually load.
+	if _, ok, _ := openVINOPlanFor(
+		settings.BirdNET.Backend,
+		settings.BirdNET.OpenVINODevice,
+		DefaultModelVersion,
+		settings.BirdNET.OpenVINOPath,
+		birdnetLogitsOutputIndex,
+	); ok && o.openVINOLoads(settings.BirdNET.OpenVINOPath) {
+		return true
+	}
+
+	available := o.ortAvailable
+	if available == nil {
+		available = func(path string) bool { return inference.CheckORTAvailability(path).Available }
+	}
+	if available(settings.BirdNET.ONNXRuntimePath) {
+		return true
+	}
+
+	GetLogger().Warn("installed primary variant cannot load on this host (no OpenVINO plan and no ONNX Runtime); using the built-in model instead",
+		logger.String("model_path", modelPath))
+	return false
+}
+
+// openVINOLoads reports whether the OpenVINO runtime can actually be opened.
+// Split out for the ovLoadable test seam; see Orchestrator.ovLoadable.
+func (o *Orchestrator) openVINOLoads(libraryPath string) bool {
+	if o.ovLoadable != nil {
+		return o.ovLoadable(libraryPath)
+	}
+	return inference.InitOpenVINO(libraryPath) == nil
 }

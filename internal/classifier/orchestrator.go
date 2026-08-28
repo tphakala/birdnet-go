@@ -91,7 +91,17 @@ type Orchestrator struct {
 	inferenceMu sync.Mutex   // serializes inference across all models
 	models      map[string]*modelEntry
 	primary     *BirdNET // direct access to the primary model
-	modelsDir   string   // base directory for gallery-installed models
+	// ortAvailable and ovLoadable report whether each inference backend can
+	// actually load from the given configured path. Both are nil in production,
+	// where inference.CheckORTAvailability and inference.InitOpenVINO are used.
+	// Tests set them so every side of the primary recovery's backend gate is
+	// reachable regardless of what the host happens to have installed; without an
+	// OpenVINO seam the gate's OpenVINO leg is untestable in the default build
+	// (openvinoBackendAvailable is a compile-time false there) AND its ORT-only
+	// test silently inverts on a machine that does have OpenVINO.
+	ortAvailable func(configuredPath string) bool
+	ovLoadable   func(libraryPath string) bool
+	modelsDir    string // base directory for gallery-installed models
 
 	// Nighttime scheduling for bat model. Stored as atomic.Pointer so
 	// IsModelActive (called on every monitor tick) reads lock-free.
@@ -116,7 +126,8 @@ type Orchestrator struct {
 	pendingWarmups []pendingWarmup
 
 	// pendingPathCorrections queues configuration repairs recorded by model
-	// loaders while they hold o.mu. Drained by runPendingPathCorrections after
+	// loaders while they hold o.mu, and by NewOrchestrator for the primary before o
+	// is published. Drained by runPendingPathCorrections after
 	// o.mu is released, because the drainer itself takes o.mu to snapshot and
 	// clear this queue, and o.mu is not reentrant; applying one also writes
 	// config.yaml (file I/O). (isGalleryManagedPath, reached from the apply step,
@@ -161,17 +172,17 @@ func (o *Orchestrator) updateSettings(s *conf.Settings) {
 // and loads any additional models from configuration.
 // This is the primary constructor - callers should use this instead of NewBirdNET.
 func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
-	// Resolve primary model identity from config
-	var primaryInfo *ModelInfo
-	if settings.BirdNET.Version != "" {
-		info, ok := ResolveBirdNETVersion(settings.BirdNET.Version)
-		if ok {
-			if settings.BirdNET.ModelPath != "" {
-				info.CustomPath = settings.BirdNET.ModelPath
-			}
-			primaryInfo = &info
-		}
-	}
+	// The primary model identity is resolved inside NewBirdNET rather than
+	// pre-seeded here. This used to build a *ModelInfo from settings.BirdNET.Version
+	// and settings.BirdNET.ModelPath before o existed, which is strictly earlier
+	// than o.modelsDir is known, so it could only ever see the RAW configured path
+	// and would defeat the stale-path recovery below. NewBirdNET's Tier 2 computes
+	// the identical ModelInfo from the same two settings (and returns the same error
+	// for an unknown version, which this block silently left to Tier 2 anyway). The
+	// two agree on everything except the path, and that difference is the entire
+	// point: Tier 2 sees the RESOLVED path, which is what this block could never
+	// do. Passing nil therefore loses nothing and lets the resolution happen once,
+	// in the one place that has it.
 
 	// Capture host RSS before the primary model allocates its arena. We need o
 	// to exist first (captureRSSBefore records the runtime baseline on first call),
@@ -205,10 +216,52 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 
 	rssBefore := o.captureRSSBefore()
 
-	bn, err := NewBirdNET(settings, primaryInfo)
+	// Install the stale-path recovery ONLY when the primary slot really is the
+	// BirdNET v2.4 family.
+	//
+	// The slot is family-selectable through birdnet.version, but both the recovery
+	// target (resolveInstalledPaths) and the queued correction label are
+	// permanentRegistryID. A v3.0 primary with a stale path would therefore be
+	// "recovered" onto a v2.4 model file: a 32 kHz/5 s identity pinned to a
+	// 48 kHz/3 s model with a different label set, which fails late with a
+	// label-count mismatch or, were the counts ever to agree, would attribute every
+	// detection to the wrong model. That is exactly the cross-variant pairing
+	// hazard resolveFamilyPaths prevents for the secondaries.
+	//
+	// A nil resolver is the pre-recovery behaviour: the configured path is used
+	// verbatim, so any other family is left exactly as it was.
+	//
+	// o.resolvePrimaryModelPath is safe to hand over now. It reads o.modelsDir
+	// (assigned above), o.ortAvailable (nil in production) and o.currentSettings(),
+	// which falls back to the o.Settings the struct literal above already set. All
+	// three are populated before this point. NewBirdNET calls it once at
+	// construction and keeps it for its hot-reload path, so both resolve the same
+	// way. Passing the bound method rather than a precomputed value is what keeps
+	// the reload from re-deriving the identity off the raw configured string.
+	bn, err := NewBirdNET(settings, nil, o.primaryPathResolverFor(settings))
 	if err != nil {
 		return nil, err
 	}
+
+	// Queue the primary's configuration repair, if its configured path was
+	// recovered. Queued here rather than inside NewBirdNET because the queue lives
+	// on the orchestrator, and applied by the existing drain at the end of
+	// loadAdditionalModels below, which runs on every path where NewBirdNET
+	// succeeded. Nothing is queued when the path resolved cleanly.
+	//
+	// No lock is taken: o is not published until this constructor returns, so no
+	// other goroutine can observe the queue. deferPathCorrection documents an
+	// o.mu-held precondition for the loader path; here there is nothing to race.
+	// Read the resolution NewBirdNET already performed rather than resolving a
+	// second time: a second call would repeat the stat work and, more visibly,
+	// duplicate every recovery log line for a single start.
+	//
+	// Routed through queuePathCorrection rather than calling deferPathCorrection
+	// directly, so the primary obeys the same queueing rule as the three
+	// secondaries. That rule has already been edited once (it now gates on
+	// substituted rather than repairable); a hand-rolled copy here is the one place
+	// the next such edit would silently miss.
+	o.queuePathCorrection(permanentRegistryID, bn.primaryPath)
 
 	resolver := NewBirdNETLabelResolver(bn.Labels())
 	ofResolver := openfauna.NewResolver()
@@ -251,6 +304,33 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	return o, nil
 }
 
+// primaryPathResolverFor returns the stale-path resolver to hand to NewBirdNET,
+// or nil when the primary slot is not the BirdNET v2.4 family.
+//
+// Extracted from NewOrchestrator so the decision is reachable without building a
+// real model: inline, the only way to observe it was to construct an Orchestrator,
+// so removing the family check broke no test.
+func (o *Orchestrator) primaryPathResolverFor(settings *conf.Settings) primaryPathResolver {
+	if primaryRegistryID(settings) != permanentRegistryID {
+		return nil
+	}
+	return o.resolvePrimaryModelPath
+}
+
+// primaryRegistryID reports which model family occupies the primary classifier
+// slot. An empty birdnet.version selects the default BirdNET v2.4 family; an
+// unrecognised version returns "" so callers treat it as "not v2.4" rather than
+// guessing (NewBirdNET's Tier 2 reports the unknown version as an error).
+func primaryRegistryID(settings *conf.Settings) string {
+	if settings.BirdNET.Version == "" {
+		return permanentRegistryID
+	}
+	if info, ok := ResolveBirdNETVersion(settings.BirdNET.Version); ok {
+		return info.ID
+	}
+	return ""
+}
+
 // SetModelsDir sets the base directory for gallery-installed models.
 // Called by ModelManager after creation so model loaders can resolve
 // paths from the installed models directory when config paths are empty.
@@ -266,7 +346,8 @@ func (o *Orchestrator) SetModelsDir(dir string) {
 	// makes the field safe. resolveInstalledPaths, resolveSiblingSet and
 	// isGalleryManagedPath all read o.modelsDir with NO lock held: the first two on
 	// the ReloadSecondaryModels path (which releases o.mu before calling the model
-	// builders) and the third on the config-correction drain path. Those reads are
+	// builders) and on the primary's construction and hot-reload path (via
+	// resolvePrimaryModelPath), and the third on the config-correction drain path. Those reads are
 	// safe only because this setter runs at most once, before the pipeline starts.
 	// See resolveSiblingSet for the full rationale and for what making the models
 	// directory dynamic would require.
@@ -532,7 +613,11 @@ func (o *Orchestrator) resolveInstalledPaths(registryID string) (modelPath, labe
 			}
 		}
 	}
-	log.Warn("model in models.enabled but not installed on disk",
+	// Worded for BOTH callers. The secondary loaders reach this for a model listed
+	// in models.enabled, but resolvePrimaryModelPath also calls it for the primary
+	// classifier, which is never in that list, so naming models.enabled here would
+	// put a claim in a support dump that is false for the primary.
+	log.Warn("no installed model found on disk for this model family",
 		logger.String("registry_id", registryID),
 		logger.String("models_dir", o.modelsDir))
 	return "", "", ""
@@ -2104,6 +2189,26 @@ func (o *Orchestrator) computeThreadAllocation(settings *conf.Settings, primaryI
 func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 	log := GetLogger()
 
+	// Drain the queued configuration repairs on every exit path, including a
+	// panic unwinding out of a loader. Deferred rather than called after the loop
+	// so this reads the same as the sibling drain in LoadModel; on the happy path
+	// it still runs exactly where it did, immediately before the return.
+	//
+	// Note what "every exit path" would mean if this function ever gained an error
+	// return: the drain would then also rewrite config.yaml on a startup that goes
+	// on to fail, where the previous placement skipped it. It has exactly one
+	// return today, so that case does not arise, but anyone adding an early error
+	// return here should decide whether a failed startup may still repair the
+	// configuration. The paths written are consistent with what was actually
+	// loaded either way, since a correction is only queued after a successful
+	// build.
+	//
+	// Warm-ups are drained per-iteration INSIDE the loop below, so they still
+	// complete before this does: the config write must not land inside the window
+	// a per-model RSS delta measures (see runPendingWarmups). That ordering is why
+	// LoadModel registers its two drains in the order it does.
+	defer o.runPendingPathCorrections()
+
 	// Read the live published settings snapshot rather than the deprecated
 	// o.Settings pointer, consistent with the per-model loaders (loadPerch/loadBat).
 	settings := o.currentSettings()
@@ -2149,14 +2254,6 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 		// before the next model allocates its arena.
 		o.runPendingWarmups()
 	}
-
-	// Drain the queued configuration repairs AFTER the loop. Each pending family
-	// still does its own config.yaml write (there is no coalescing here); draining
-	// outside the loop keeps those writes out of the per-model RSS measurement
-	// window, the same reason the warm-up drain above runs where it does. Unlike
-	// the warm-up drain, the config write has no per-model RSS measurement of its
-	// own to keep accurate, so it does not need to run inside the loop.
-	o.runPendingPathCorrections()
 
 	return nil
 }

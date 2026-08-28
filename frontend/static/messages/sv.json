@@ -468,6 +468,9 @@
         "reconciledMessage": "De konfigurerade filsökvägarna för {modelName} var inaktuella och har reparerats för att matcha den installerade modellen på {modelPath}.",
         "substitutedTitle": "Den konfigurerade modellfilen för {modelName} hittades inte",
         "substitutedMessage": "Modellfilen som konfigurerats för {modelName} hittades inte på disken, så den installerade modellen på {modelPath} används i stället. Din konfiguration lämnades oförändrad.",
+        "unreadableTitle": "Den konfigurerade modellfilen för {modelName} kunde inte läsas",
+        "unreadableMessage": "Modellfilen som konfigurerats för {modelName} finns men kunde inte läsas, så den installerade modellen på {modelPath} används i stället. Din konfiguration lämnades oförändrad. Kontrollera filens behörigheter och att dess lagring är monterad.",
+        "builtinMessage": "Modellfilen som konfigurerats för {modelName} hittades inte på disken och det finns ingen installerad modell tillgänglig att ersätta den med, så den inbyggda modellen används i stället. Din konfiguration lämnades oförändrad.",
         "notRegisteredTitle": "Ingen modell analyserar {sourceName}",
         "notRegisteredMessage": "Inget ljud når {models} på ljudkällan \"{sourceName}\", så det produceras inga detektioner. Öppna modellgalleriet i Inställningar för att kontrollera status."
       },

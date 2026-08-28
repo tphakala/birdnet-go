@@ -88,6 +88,22 @@ type BirdNET struct {
 	TaxonomyPath        string              // Path to custom taxonomy file, if used
 	modelVersion        string              // Human-readable model version string (per-instance to avoid shared global state)
 	modelsDir           string              // base directory for gallery-installed models (set by Orchestrator)
+	// primaryPath is the outcome of resolving settings.BirdNET.ModelPath for this
+	// instance: which primary classifier model file it actually loads from, and
+	// whether that differs from what the user configured. resolved.model differs
+	// from the configured value only when the configured file is confirmed absent
+	// (an installed variant replaces it, or it resolves to empty so the built-in
+	// baseline runs). Every load-path consumer reads it via configuredModelPath()
+	// so identity resolution, backend dispatch and the actual file open can never
+	// disagree about which file is being loaded.
+	//
+	// settings.BirdNET.ModelPath itself is NEVER mutated; the repair goes through
+	// the orchestrator's correction queue, which reads the substituted/repairable
+	// flags kept here. Written under mu by reloadModelInternal, like ModelInfo.
+	primaryPath pathResolution
+	// resolvePrimary re-resolves primaryPath on a hot reload. Nil outside the
+	// orchestrator path, in which case the configured value is used verbatim.
+	resolvePrimary primaryPathResolver
 	// runtime holds the live device/backend/precision triplet (see runtimeInfo),
 	// published by each initialize*Model path via setRuntimeInfo and restored by the
 	// reload rollback. It is deliberately kept OFF bn.mu: inference holds bn.mu for
@@ -140,17 +156,55 @@ func (bn *BirdNET) updateSettings(s *conf.Settings) {
 	bn.settingsAtomic.Store(s)
 }
 
+// configuredModelPath returns the primary classifier model file this instance
+// actually loads from. Prefer it over reading settings.BirdNET.ModelPath directly
+// anywhere on the load path: after a stale-path recovery the two differ, and a
+// consumer left on the raw value would dispatch a backend, name a model, or open
+// a file that disagrees with the one the instance was built from.
+//
+// settings.BirdNET.ModelPath remains the right thing to read where the question
+// is genuinely "what did the user configure" rather than "what are we running":
+// the settings API's change detection is one such caller.
+func (bn *BirdNET) configuredModelPath() string {
+	return bn.primaryPath.resolved.model
+}
+
+// resolvePrimaryOrConfigured applies a primaryPathResolver, treating a nil
+// resolver as "use the configured path verbatim". Kept as one helper so the
+// construction path and the reload path cannot drift apart on the nil case.
+func resolvePrimaryOrConfigured(resolve primaryPathResolver, configured string) pathResolution {
+	if resolve == nil {
+		return pathResolution{resolved: modelFileSet{model: configured}}
+	}
+	return resolve(configured)
+}
+
 // NewBirdNET initializes a new BirdNET instance with given settings.
-// If modelInfo is non-nil it is used directly (orchestrator path); otherwise
-// the function walks a 4-tier resolution chain: config version > filename > default.
-func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error) {
+// If modelInfo is non-nil it is used directly; otherwise the function walks a
+// 4-tier resolution chain: config version > filename > default. Every production
+// caller currently passes nil (NewOrchestrator stopped pre-seeding the identity,
+// so that Tier 2 sees the RESOLVED path), leaving Tier 1 unused for now.
+//
+// resolvePrimary supplies the stale-path recovery for the primary model file. A
+// nil resolver means "use the configured path verbatim", which is the behaviour
+// every caller without an orchestrator keeps.
+func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo, resolvePrimary primaryPathResolver) (*BirdNET, error) {
 	bn := &BirdNET{
-		Settings:     settings,
-		TaxonomyPath: "", // Default to embedded taxonomy
-		modelVersion: defaultModelVersionString,
-		speciesCache: make(map[string]*speciesCacheEntry),
+		Settings:       settings,
+		TaxonomyPath:   "", // Default to embedded taxonomy
+		modelVersion:   defaultModelVersionString,
+		speciesCache:   make(map[string]*speciesCacheEntry),
+		resolvePrimary: resolvePrimary,
 	}
 	bn.settingsAtomic.Store(settings)
+
+	// Resolve the configured primary model path BEFORE the identity tier switch,
+	// so a stale path is recovered rather than carried into the identity. Resolving
+	// here (not inside a tier) is what makes the "recovered to empty" case behave
+	// exactly as if no path had ever been configured: Tier 3 stops firing, Tier 4
+	// resolves the default, and remapV24ToONNXOnARM64 (which returns early on a
+	// non-empty CustomPath) is free to remap arm64 to the INT8 ONNX build.
+	bn.primaryPath = resolvePrimaryOrConfigured(resolvePrimary, settings.BirdNET.ModelPath)
 
 	// Resolve model identity via the resolution chain
 	var err error
@@ -169,17 +223,17 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 				Build()
 		}
 		bn.ModelInfo = info
-		if settings.BirdNET.ModelPath != "" {
-			bn.ModelInfo.CustomPath = settings.BirdNET.ModelPath
+		if p := bn.configuredModelPath(); p != "" {
+			bn.ModelInfo.CustomPath = p
 		}
-	case settings.BirdNET.ModelPath != "":
+	case bn.configuredModelPath() != "":
 		// Tier 3: explicit model path in the birdnet config section. Any model in
 		// the birdnet slot is a BirdNET v2.4-type classifier, so it inherits the
 		// canonical BirdNET_V2.4 identity regardless of filename (BirdNET v3.0 is
 		// selected via birdnet.version, not by a filename here). Keeping the ID
 		// canonical ensures the per-source model-set join matches the loaded model
 		// so the primary classifier gets a buffer monitor and inference starts.
-		bn.ModelInfo = customBirdNETV24ModelInfo(settings.BirdNET.ModelPath)
+		bn.ModelInfo = customBirdNETV24ModelInfo(bn.configuredModelPath())
 	default:
 		// Tier 4: default classifier. On arm64 (container images ship the
 		// INT8-ARM ONNX model alongside the binary) this resolves to the
@@ -246,7 +300,7 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
 			Context("operation", "load_labels").
-			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			ModelContext(bn.configuredModelPath(), bn.ModelInfo.ID).
 			Context("locale", settings.BirdNET.Locale).
 			Build()
 	}
@@ -256,7 +310,7 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
 			Context("operation", "initialize_model").
-			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			ModelContext(bn.configuredModelPath(), bn.ModelInfo.ID).
 			Build()
 	}
 
@@ -285,7 +339,7 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
 			Context("operation", "validate_model_and_labels").
-			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			ModelContext(bn.configuredModelPath(), bn.ModelInfo.ID).
 			Build()
 	}
 
@@ -310,7 +364,11 @@ func isONNXModel(path string) bool {
 // arm64 INT8 default, whose model path is empty and whose file is carried in
 // ModelInfo.CustomPath).
 func (bn *BirdNET) usesONNXBackend() bool {
-	return isONNXModel(bn.Settings.BirdNET.ModelPath) || bn.ModelInfo.Backend == BackendONNX
+	// The RESOLVED path, not the configured one: this drives backend dispatch, so
+	// it must describe the file initializeONNXModel / initializeTFLiteModel will
+	// actually open. After a recovery those differ, and dispatching on the stale
+	// string could send a recovered .onnx file to the TFLite backend.
+	return isONNXModel(bn.configuredModelPath()) || bn.ModelInfo.Backend == BackendONNX
 }
 
 // initializeModel loads and initializes the primary BirdNET model.
@@ -342,7 +400,7 @@ func (bn *BirdNET) initializeTFLiteModel() error {
 	if err != nil {
 		return errors.New(err).
 			Category(errors.CategoryModelLoad).
-			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			ModelContext(bn.configuredModelPath(), bn.ModelInfo.ID).
 			Timing("model-load", time.Since(start)).
 			Build()
 	}
@@ -361,7 +419,7 @@ func (bn *BirdNET) initializeTFLiteModel() error {
 	if err != nil {
 		return errors.New(err).
 			Category(errors.CategoryModelInit).
-			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			ModelContext(bn.configuredModelPath(), bn.ModelInfo.ID).
 			Context("model_size_mb", len(modelData)/1024/1024).
 			Context("use_xnnpack", bn.Settings.BirdNET.UseXNNPACK).
 			Timing("model-init", time.Since(start)).
@@ -377,8 +435,8 @@ func (bn *BirdNET) initializeTFLiteModel() error {
 	// Update the human-readable model version string for display when a custom
 	// model path is provided. Model identity (ModelInfo.ID) is never modified
 	// here, as it was fully resolved by NewBirdNET's 4-tier resolution chain.
-	if bn.Settings.BirdNET.ModelPath != "" {
-		bn.modelVersion = bn.Settings.BirdNET.ModelPath
+	if p := bn.configuredModelPath(); p != "" {
+		bn.modelVersion = p
 	}
 
 	// Log model initialization details
@@ -814,7 +872,9 @@ func (bn *BirdNET) logMissingTaxonomyCodes() {
 	complete, missing := IsTaxonomyComplete(bn.TaxonomyMap, bn.Settings.BirdNET.Labels)
 	if !complete {
 		// For custom models, provide more detailed information about missing taxonomy codes
-		if bn.Settings.BirdNET.ModelPath != "" || bn.Settings.BirdNET.LabelPath != "" {
+		// The resolved path: after a recovery to the built-in baseline nothing custom
+		// is loaded any more, so calling it a custom model would misdescribe it.
+		if bn.configuredModelPath() != "" || bn.Settings.BirdNET.LabelPath != "" {
 			bn.Debug("Custom model/labels detected: %d species are missing from the taxonomy data", len(missing))
 			bn.Debug("Placeholder taxonomy codes will be generated for these species")
 		} else {
@@ -1201,16 +1261,19 @@ func tryLoadModelFromStandardPaths(modelName, modelType string) (data []byte, pa
 func (bn *BirdNET) loadModel() ([]byte, error) {
 	start := time.Now()
 
-	// If a specific model path is configured, use it
-	if bn.Settings.BirdNET.ModelPath != "" {
-		modelPath := bn.Settings.BirdNET.ModelPath
+	// If a specific model path is configured, use it. configuredModelPath, not the
+	// raw setting: a configured path that was confirmed missing has already been
+	// resolved to the installed variant, or to empty so the branches below load the
+	// standard-path or embedded baseline instead of failing the whole construction.
+	if configuredPath := bn.configuredModelPath(); configuredPath != "" {
+		modelPath := configuredPath
 		// Expand environment variables and ~ prefix
 		modelPath = os.ExpandEnv(modelPath)
 		modelPath, err := conf.ExpandTildePath(modelPath)
 		if err != nil {
 			return nil, errors.New(err).
 				Category(errors.CategoryFileIO).
-				Context("path", bn.Settings.BirdNET.ModelPath).
+				Context("path", configuredPath).
 				Build()
 		}
 
@@ -1261,7 +1324,7 @@ func (bn *BirdNET) validateModelAndLabels() error {
 		return errors.Newf("label count mismatch: model expects %d classes but label file has %d labels",
 			modelOutputSize, labelCount).
 			Category(errors.CategoryValidation).
-			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			ModelContext(bn.configuredModelPath(), bn.ModelInfo.ID).
 			Context("expected_labels", modelOutputSize).
 			Context("actual_labels", labelCount).
 			Context("locale", bn.Settings.BirdNET.Locale).
@@ -1367,6 +1430,21 @@ func (bn *BirdNET) reloadModelInternal(allowPathChange bool) error {
 	// failed attempt instead of the previous (still-serving) model.
 	oldRuntime := bn.runtime.Load()
 	oldModelVersion := bn.modelVersion
+	oldPrimaryPath := bn.primaryPath
+
+	// Re-resolve the configured primary path for THIS reload, exactly as
+	// NewBirdNET does at construction. Without this the identity checks below would
+	// compare a re-derived identity built from the RAW configured string against a
+	// live identity built from the RECOVERED one, and a start that successfully
+	// recovered a stale path would fail its very next settings reload (a locale
+	// change, a threshold edit) with "requires orchestrator restart". A user who hit
+	// the original stale-path bug would get a second, louder bug on their next save.
+	//
+	// The resolution is deterministic, so recovered resolves to recovered both
+	// before and after the correction is persisted, and neither ordering produces a
+	// spurious veto. A genuine user edit to a different existing file still
+	// resolves to itself and is still refused on the settings-reload path.
+	bn.primaryPath = resolvePrimaryOrConfigured(bn.resolvePrimary, bn.Settings.BirdNET.ModelPath)
 
 	rollback := func() {
 		if bn.classifier != nil && bn.classifier != oldClassifier {
@@ -1388,6 +1466,10 @@ func (bn *BirdNET) reloadModelInternal(allowPathChange bool) error {
 		// rather than the failed attempt.
 		bn.runtime.Store(oldRuntime)
 		bn.modelVersion = oldModelVersion
+		// Restore the resolved primary path with the rest of the identity, or a
+		// rolled-back reload would leave the still-serving model described by, and
+		// later reloads comparing against, the failed attempt's path.
+		bn.primaryPath = oldPrimaryPath
 		// Republish the getter-visible identity from the restored ModelInfo /
 		// modelVersion so ModelID/ModelName/ModelVersion/Spec revert too.
 		bn.publishIdentity()
@@ -1407,15 +1489,20 @@ func (bn *BirdNET) reloadModelInternal(allowPathChange bool) error {
 	case bn.Settings.BirdNET.Version != "":
 		newInfo, ok := ResolveBirdNETVersion(bn.Settings.BirdNET.Version)
 		if !ok {
+			// Captured BEFORE rollback(), for the same reason as the case below:
+			// rollback restores bn.Settings to the previous snapshot, so reading the
+			// version afterwards reports the PREVIOUS (valid) version as unknown, or
+			// an empty string when the user had not set one.
+			requestedVersion := bn.Settings.BirdNET.Version
 			rollback()
-			return errors.Newf("unknown BirdNET version: %s", bn.Settings.BirdNET.Version).
+			return errors.Newf("unknown BirdNET version: %s", requestedVersion).
 				Component("birdnet").
 				Category(errors.CategoryModelInit).
 				Context("operation", "reload_model").
-				Context("version", bn.Settings.BirdNET.Version).
+				Context("version", requestedVersion).
 				Build()
 		}
-		newInfo.CustomPath = bn.Settings.BirdNET.ModelPath
+		newInfo.CustomPath = bn.configuredModelPath()
 		// Mirror NewBirdNET (the remap at construction): on arm64 a v2.4 TFLite model
 		// resolved from version:"2.4" is remapped to the INT8 ONNX entry. Without this, a
 		// no-op reload re-resolves to the TFLite entry, and the identity check below
@@ -1436,14 +1523,14 @@ func (bn *BirdNET) reloadModelInternal(allowPathChange bool) error {
 				Build()
 		}
 		bn.ModelInfo = newInfo
-	case bn.Settings.BirdNET.ModelPath != "":
+	case bn.configuredModelPath() != "":
 		// Birdnet-slot model: re-derive the canonical BirdNET_V2.4 identity from
-		// the configured path (mirrors NewBirdNET Tier 3). The ID stays
+		// the resolved path (mirrors NewBirdNET Tier 3). The ID stays
 		// BirdNET_V2.4 across reloads, so only a change of the model file path is
 		// treated as a model change requiring an orchestrator restart; a no-op
 		// reload (e.g. a locale change) stays in-place. On the variant-swap path a
 		// changed path IS the intended swap, so it is accepted in place.
-		newInfo := customBirdNETV24ModelInfo(bn.Settings.BirdNET.ModelPath)
+		newInfo := customBirdNETV24ModelInfo(bn.configuredModelPath())
 		if !allowPathChange && newInfo.CustomPath != bn.ModelInfo.CustomPath {
 			rollback()
 			return errors.Newf("birdnet model file changed from %q to %q: requires orchestrator restart", bn.ModelInfo.CustomPath, newInfo.CustomPath).
@@ -1455,6 +1542,44 @@ func (bn *BirdNET) reloadModelInternal(allowPathChange bool) error {
 				Build()
 		}
 		bn.ModelInfo = newInfo
+	case !allowPathChange && bn.primaryPath.substituted &&
+		oldPrimaryPath.resolved.model != "" && bn.primaryPath.resolved.model == "":
+		// The file this instance is RUNNING has gone away: the previous resolution
+		// named a real file, this one resolves to nothing (confirmed absent with no
+		// usable installed variant). A substitution onto a real file has a non-empty
+		// configuredModelPath and is handled by the case above.
+		//
+		// The old-vs-new comparison is what makes this precise, and it is load
+		// bearing. Testing bn.primaryPath.substituted alone would also fire in the
+		// STEADY STATE after a successful startup recovery onto the built-in
+		// baseline: config keeps the stale path (the recovery is deliberately not
+		// repairable there), so every reload re-resolves to the same empty result,
+		// and every settings save would fail forever. That is precisely the
+		// second-order bug the re-resolution above exists to prevent, and it would
+		// hit exactly the users this whole recovery is for.
+		//
+		// Falling through would instead be silent corruption: no case matches,
+		// bn.ModelInfo keeps naming the vanished file, initializeModel loads the
+		// baseline underneath it, and the reload reports success while every
+		// subsequent detection is attributed to a model that is not running.
+		//
+		// Refuse, and let the transactional rollback keep the ALREADY-LOADED model
+		// serving. That preserves the pre-recovery outcome (a settings save fails
+		// loudly rather than silently swapping models) while the running detector is
+		// untouched. The variant-swap path is excluded because there a cleared path
+		// IS the intended revert, handled by the next case.
+		// Captured BEFORE rollback(): rollback restores bn.Settings to the previous
+		// snapshot, so reading the path after it would name the OLD configured file
+		// and assert that a healthy path is unusable.
+		configuredPath := bn.Settings.BirdNET.ModelPath
+		rollback()
+		return errors.Newf("configured birdnet model file %q is no longer usable and no installed variant can replace it: requires orchestrator restart", configuredPath).
+			Component("birdnet").
+			Category(errors.CategoryModelInit).
+			Context("operation", "reload_model").
+			Context("current_model_path", bn.ModelInfo.CustomPath).
+			Context("configured_model_path", configuredPath).
+			Build()
 	case allowPathChange:
 		// Variant-swap path with a CLEARED BirdNET.ModelPath: the user reverted to
 		// the embedded BuiltIn baseline. Re-resolve the stock classifier identity so
