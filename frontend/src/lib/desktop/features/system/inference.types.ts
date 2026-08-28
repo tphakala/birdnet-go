@@ -132,6 +132,13 @@ export interface ModelSource {
   name: string;
   type?: string;
   fallback?: boolean;
+  /**
+   * True when settings assign this source to the model but the audio router is
+   * not actually feeding it, so the model produces no detections for it. The
+   * status used to report attachment from configuration alone, which showed a
+   * model as running while it analyzed nothing.
+   */
+  notRunning?: boolean;
 }
 
 /** Ring-buffer metric keys used to look up per-model time series. */

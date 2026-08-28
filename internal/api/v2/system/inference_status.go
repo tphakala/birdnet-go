@@ -254,6 +254,14 @@ type ModelSourceInfo struct {
 	Name     string `json:"name"`
 	Type     string `json:"type,omitempty"`
 	Fallback bool   `json:"fallback,omitempty"`
+	// NotRunning marks a source that the configuration assigns to this model but
+	// whose audio does not actually reach it, because the audio router has no
+	// analysis buffer for the pair. That happens when the model failed to load or
+	// its buffer allocation failed, and it used to be invisible: the status
+	// reported the model as attached purely because the config said so, so the UI
+	// showed a model running while it analyzed nothing (GitHub #4201, #4204).
+	// Omitted when the source really is attached.
+	NotRunning bool `json:"notRunning,omitempty"`
 }
 
 // ModelMetricKeys carries the Prometheus-style metric key names for a model's
@@ -494,7 +502,7 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 		loadFailures = orch.LoadFailures()
 	}
 	counters := classifier.GetInferenceCounters().PeekAll()
-	attachments := buildSourceAttachments(settings, infos, primaryID)
+	attachments := buildSourceAttachments(settings, infos, primaryID, c.runningModelsBySource())
 
 	// Compute per-model device, backend, precision, and schedule status from the
 	// live orchestrator. The device/backend/precision triplet is read in one
@@ -697,11 +705,20 @@ func sortInferenceModelsByName(models []InferenceModelStatus) {
 }
 
 // buildSourceAttachments computes, per loaded model registry ID, the audio
-// sources attached to it from configuration. A source whose Models resolve to a
-// loaded model attaches there; a source with no resolvable model falls back to
-// the primary model with Fallback=true. Live registry enrichment (DisplayName,
-// State) is deferred to Phase 2; Phase 1 uses config identity.
-func buildSourceAttachments(settings *conf.Settings, models []classifier.ModelInfo, primaryID string) map[string][]ModelSourceInfo {
+// sources attached to it. A source whose Models resolve to a loaded model
+// attaches there; a source with no resolvable model falls back to the primary
+// model with Fallback=true.
+//
+// running carries the audio router's actual per-source model set, keyed by
+// source display name (see (*Handler).runningModelsBySource). Configuration
+// alone is not evidence that a model analyzes a source: the router fans a
+// source out only to the models it has allocated an analysis buffer for, and a
+// model can be configured, loaded, and still receive nothing. Reporting from
+// config alone is what let the UI show Perch running while it analyzed no audio
+// (GitHub #4201, #4204). When running is nil the audio engine is not available
+// (the pipeline has not started, or this is a test), and the config-derived
+// view is the best answer available, so it is used unmarked.
+func buildSourceAttachments(settings *conf.Settings, models []classifier.ModelInfo, primaryID string, running map[string]map[string]bool) map[string][]ModelSourceInfo {
 	loaded := make(map[string]bool, len(models))
 	for i := range models {
 		loaded[models[i].ID] = true
@@ -712,17 +729,27 @@ func buildSourceAttachments(settings *conf.Settings, models []classifier.ModelIn
 		// A source can feed several models at once. The runtime fans its audio out
 		// to every assigned+loaded model (see analysis.resolveModelTargets), so the
 		// status view must attach the source to all of them, not just the first.
+		live, haveLive := running[name]
 		matched := false
 		for _, cm := range configModels {
 			regID, ok := classifier.ResolveConfigModelID(cm)
 			if !ok || !loaded[regID] {
 				continue
 			}
-			out[regID] = append(out[regID], ModelSourceInfo{ID: name, Name: name, Type: sourceType, Fallback: false})
-			matched = true
+			// Surface the source either way, but say which it is: a model the router
+			// really feeds, or one the config assigns that gets no audio.
+			notRunning := haveLive && !live[regID]
+			out[regID] = append(out[regID], ModelSourceInfo{
+				ID: name, Name: name, Type: sourceType, Fallback: false, NotRunning: notRunning,
+			})
+			if !notRunning {
+				matched = true
+			}
 		}
-		// No assigned model resolved to a loaded one: the primary model analyzes the
-		// source as the runtime fallback, so surface it there with Fallback=true.
+		// Nothing the config assigns is actually analyzing this source: the primary
+		// model picks it up as the runtime fallback (see registerConsumersForSources,
+		// which falls back to the primary when a source resolves to no targets), so
+		// surface it there with Fallback=true.
 		if !matched && primaryID != "" {
 			out[primaryID] = append(out[primaryID], ModelSourceInfo{ID: name, Name: name, Type: sourceType, Fallback: true})
 		}
@@ -735,6 +762,50 @@ func buildSourceAttachments(settings *conf.Settings, models []classifier.ModelIn
 	for i := range settings.Realtime.RTSP.Streams {
 		st := settings.Realtime.RTSP.Streams[i]
 		attach(st.Name, st.Type, st.Models)
+	}
+	return out
+}
+
+// runningModelsBySource reports which models the audio router actually feeds,
+// keyed by source display name then registry model ID.
+//
+// The buffer manager is the ground truth here, not the router's route table:
+// the router holds a single multiplexing BufferConsumer per source and cannot
+// say which models sit behind it, whereas an analysis buffer exists for exactly
+// the (source, model) pairs registerConsumersForSources allocated. That is the
+// same state sourceModelsChanged diffs, so the status view and the pipeline's
+// own reconfigure decision agree on what is running.
+//
+// Returns nil when the audio engine is not wired up (before the pipeline starts,
+// or in tests), which the caller reads as "no live evidence available".
+func (c *Handler) runningModelsBySource() map[string]map[string]bool {
+	if c == nil || c.Core == nil {
+		return nil
+	}
+	eng := c.Engine.Load()
+	if eng == nil {
+		return nil
+	}
+	registry := eng.Registry()
+	bufMgr := eng.BufferManager()
+	if registry == nil || bufMgr == nil {
+		return nil
+	}
+
+	sources := registry.List()
+	out := make(map[string]map[string]bool, len(sources))
+	for _, src := range sources {
+		if src == nil {
+			continue
+		}
+		// Key by DisplayName: it is what the registry carries for both audio
+		// sources and RTSP streams, and it is what the config-side attachment
+		// above uses as the source name.
+		models := make(map[string]bool)
+		for modelID := range bufMgr.AnalysisBuffers(src.ID) {
+			models[modelID] = true
+		}
+		out[src.DisplayName] = models
 	}
 	return out
 }

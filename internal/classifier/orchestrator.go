@@ -114,6 +114,13 @@ type Orchestrator struct {
 	// instead of stalling PredictModel on o.mu. Appended only
 	// under o.mu.Lock(); snapshotted and cleared under o.mu by the drainer.
 	pendingWarmups []pendingWarmup
+
+	// pendingPathCorrections queues configuration repairs recorded by model
+	// loaders while they hold o.mu. Drained by runPendingPathCorrections after
+	// o.mu is released, because applying one writes config.yaml (file I/O) and
+	// consults isGalleryManagedPath, which takes o.mu itself. Appended only under
+	// o.mu.Lock(); snapshotted and cleared under o.mu by the drainer.
+	pendingPathCorrections []pendingPathCorrection
 }
 
 // pendingWarmup defers a freshly-registered model's warm-up + RSS measurement
@@ -171,6 +178,20 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 		models:   map[string]*modelEntry{},
 		modelRSS: make(map[string]int64),
 	}
+
+	// Resolve the gallery models directory up front, before loadAdditionalModels
+	// runs below. ModelManager also sets it (via SetModelsDir) but is constructed
+	// only after this constructor returns, so without this the secondary loaders
+	// see an empty o.modelsDir on their very first attempt and resolveInstalledPaths
+	// cannot find an installed model. That made the fallback for a missing
+	// configured path structurally impossible at startup (GitHub #4201, #4204).
+	// Assigned directly rather than through SetModelsDir: o.primary is not set yet,
+	// so the resolver wiring SetModelsDir performs has nothing to attach to. The
+	// later SetModelsDir call still does that wiring.
+	if modelsDir, ok := settings.ResolveModelsDir(); ok {
+		o.modelsDir = modelsDir
+	}
+
 	rssBefore := o.captureRSSBefore()
 
 	bn, err := NewBirdNET(settings, primaryInfo)
@@ -1631,6 +1652,11 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 	// warm-up and then fails cannot orphan an entry in the queue for a later load.
 	defer o.runPendingWarmups()
 
+	// Drain any queued configuration repair on the same terms: loaders queue it
+	// under o.mu, and applying it writes config.yaml, so it must run after the
+	// lock is released.
+	defer o.runPendingPathCorrections()
+
 	// Build and register the model under o.mu (loaders write directly to
 	// o.models).
 	if err := func() error {
@@ -2091,6 +2117,7 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 		// loop) keeps RSS accounting accurate: this model's RSS-after is measured
 		// before the next model allocates its arena.
 		o.runPendingWarmups()
+		o.runPendingPathCorrections()
 	}
 
 	return nil

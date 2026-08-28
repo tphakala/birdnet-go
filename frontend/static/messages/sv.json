@@ -463,6 +463,12 @@
         "staleMessage": "{modelName} är installerad för {oldRegion}, men din nya plats motsvarar {newRegion}. Du kan byta varianter från modellgalleriet i Inställningar.",
         "staleGlobalMessage": "{modelName} är installerad för {oldRegion}, men din nya plats är utanför dess täckning. Du kan byta till den globala varianten från modellgalleriet i Inställningar."
       },
+      "modelPath": {
+        "reconciledTitle": "Modellens filsökväg reparerad",
+        "reconciledMessage": "Den konfigurerade filsökvägen för {modelName} pekade på en fil som inte längre finns. Den använder nu den installerade modellen på {modelPath}.",
+        "notRegisteredTitle": "Modellen analyserar inte {sourceName}",
+        "notRegisteredMessage": "{models} är tilldelad ljudkällan \"{sourceName}\", men tar inte emot ljud och producerar därför inga detektioner. Modellen är med största sannolikhet inte installerad eller kunde inte laddas. Kontrollera modellgalleriet i Inställningar."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Nuvarande värde: {value}% (tröskel: {threshold}%)",
@@ -1767,6 +1773,8 @@
       "sources": "Ljudkällor",
       "noSources": "Inga källor anslutna",
       "primaryFallback": "primär (reserv)",
+      "sourceNotRunning": "körs inte",
+      "sourceNotRunningTooltip": "Denna källa är tilldelad modellen i inställningarna, men dess ljud når inte modellen, så den producerar inga detektioner.",
       "notMeasured": "-",
       "unitMs": "ms",
       "unitKhz": "kHz",

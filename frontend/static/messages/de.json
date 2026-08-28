@@ -463,6 +463,12 @@
         "staleMessage": "{modelName} ist für {oldRegion} installiert, aber Ihr neuer Standort entspricht {newRegion}. Sie können Varianten in der Modellgalerie unter Einstellungen wechseln.",
         "staleGlobalMessage": "{modelName} ist für {oldRegion} installiert, aber Ihr neuer Standort liegt außerhalb der Abdeckung. Sie können in der Modellgalerie unter Einstellungen zur globalen Variante wechseln."
       },
+      "modelPath": {
+        "reconciledTitle": "Modell-Dateipfad repariert",
+        "reconciledMessage": "Der konfigurierte Dateipfad für {modelName} verwies auf eine Datei, die nicht mehr existiert. Es wird nun das installierte Modell unter {modelPath} verwendet.",
+        "notRegisteredTitle": "Modell analysiert {sourceName} nicht",
+        "notRegisteredMessage": "{models} ist der Audioquelle \"{sourceName}\" zugewiesen, empfängt jedoch kein Audio und erzeugt daher keine Erkennungen. Das Modell ist höchstwahrscheinlich nicht installiert oder konnte nicht geladen werden. Überprüfen Sie die Modellgalerie unter Einstellungen."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktueller Wert: {value}% (Schwellenwert: {threshold}%)",
@@ -1767,6 +1773,8 @@
       "sources": "Audioquellen",
       "noSources": "Keine Quellen verbunden",
       "primaryFallback": "Primär (Fallback)",
+      "sourceNotRunning": "Läuft nicht",
+      "sourceNotRunningTooltip": "Diese Quelle ist dem Modell in den Einstellungen zugewiesen, aber ihre Audiodaten erreichen das Modell nicht, sodass keine Erkennungen erzeugt werden.",
       "notMeasured": "n.v.",
       "unitMs": "ms",
       "unitKhz": "kHz",

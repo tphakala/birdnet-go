@@ -463,6 +463,12 @@
         "staleMessage": "{modelName} ir instalēts reģionam {oldRegion}, bet jūsu jaunā atrašanās vieta atbilst {newRegion}. Varat pārslēgt variantus no modeļu galerijas sadaļā Iestatījumi.",
         "staleGlobalMessage": "{modelName} ir instalēts reģionam {oldRegion}, bet jūsu jaunā atrašanās vieta ir ārpus tā pārklājuma. Varat pārslēgties uz globālo variantu no modeļu galerijas sadaļā Iestatījumi."
       },
+      "modelPath": {
+        "reconciledTitle": "Modeļa faila ceļš salabots",
+        "reconciledMessage": "Konfigurētais faila ceļš modelim {modelName} norādīja uz failu, kas vairs neeksistē. Tagad tiek izmantots instalētais modelis vietā {modelPath}.",
+        "notRegisteredTitle": "Modelis neanalizē {sourceName}",
+        "notRegisteredMessage": "{models} ir piešķirts audio avotam \"{sourceName}\", bet nesaņem audio, tāpēc neveic noteikšanas. Modelis, visticamāk, nav instalēts vai to neizdevās ielādēt. Pārbaudiet modeļu galeriju sadaļā Iestatījumi."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Pašreizējā vērtība: {value}% (slieksnis: {threshold}%)",
@@ -1767,6 +1773,8 @@
       "sources": "Audio avoti",
       "noSources": "Nav pievienotu avotu",
       "primaryFallback": "primārais (rezerves)",
+      "sourceNotRunning": "nedarbojas",
+      "sourceNotRunningTooltip": "Šis avots ir piešķirts modelim iestatījumos, bet tā audio nesasniedz modeli, tāpēc tas neveic noteikšanas.",
       "notMeasured": "n/p",
       "unitMs": "ms",
       "unitKhz": "kHz",

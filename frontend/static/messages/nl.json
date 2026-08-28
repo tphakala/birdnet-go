@@ -463,6 +463,12 @@
         "staleMessage": "{modelName} is geïnstalleerd voor {oldRegion}, maar uw nieuwe locatie komt overeen met {newRegion}. U kunt van variant wisselen via de modellengalerij in Instellingen.",
         "staleGlobalMessage": "{modelName} is geïnstalleerd voor {oldRegion}, maar uw nieuwe locatie valt buiten de dekking. U kunt overschakelen naar de globale variant via de modellengalerij in Instellingen."
       },
+      "modelPath": {
+        "reconciledTitle": "Bestandspad van model hersteld",
+        "reconciledMessage": "Het geconfigureerde bestandspad voor {modelName} verwees naar een bestand dat niet meer bestaat. Er wordt nu gebruikgemaakt van het geïnstalleerde model op {modelPath}.",
+        "notRegisteredTitle": "Model analyseert {sourceName} niet",
+        "notRegisteredMessage": "{models} is toegewezen aan audiobron \"{sourceName}\", maar ontvangt geen audio en produceert daarom geen detecties. Het model is hoogstwaarschijnlijk niet geïnstalleerd of kon niet worden geladen. Controleer de modellengalerij in Instellingen."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Huidige waarde: {value}% (drempelwaarde: {threshold}%)",
@@ -1767,6 +1773,8 @@
       "sources": "Audiobronnen",
       "noSources": "Geen bronnen verbonden",
       "primaryFallback": "primair (fallback)",
+      "sourceNotRunning": "draait niet",
+      "sourceNotRunningTooltip": "Deze bron is in de instellingen toegewezen aan het model, maar de audio bereikt het model niet, waardoor het geen detecties produceert.",
       "notMeasured": "n/b",
       "unitMs": "ms",
       "unitKhz": "kHz",

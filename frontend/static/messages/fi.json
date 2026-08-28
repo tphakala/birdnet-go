@@ -463,6 +463,12 @@
         "staleMessage": "{modelName} on asennettu alueelle {oldRegion}, mutta uusi sijaintisi vastaa aluetta {newRegion}. Voit vaihtaa varianttia Asetusten malligalleriasta.",
         "staleGlobalMessage": "{modelName} on asennettu alueelle {oldRegion}, mutta uusi sijaintisi on sen kattavuusalueen ulkopuolella. Voit vaihtaa globaaliin varianttiin Asetusten malligalleriasta."
       },
+      "modelPath": {
+        "reconciledTitle": "Mallitiedoston polku korjattu",
+        "reconciledMessage": "Mallille {modelName} määritetty tiedostopolku osoitti tiedostoon, jota ei ole enää olemassa. Nyt käytetään asennettua mallia sijainnissa {modelPath}.",
+        "notRegisteredTitle": "Malli ei analysoi kohdetta {sourceName}",
+        "notRegisteredMessage": "{models} on liitetty äänilähteeseen \"{sourceName}\", mutta se ei vastaanota ääntä, joten se ei tuota havaintoja. Mallia ei todennäköisesti ole asennettu tai sen lataaminen epäonnistui. Tarkista Asetusten malligalleria."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Nykyinen arvo: {value}% (raja-arvo: {threshold}%)",
@@ -1767,6 +1773,8 @@
       "sources": "Äänilähteet",
       "noSources": "Ei liitettyjä lähteitä",
       "primaryFallback": "ensisijainen (vara)",
+      "sourceNotRunning": "ei käynnissä",
+      "sourceNotRunningTooltip": "Tämä lähde on liitetty malliin asetuksissa, mutta sen ääni ei saavu mallille, joten se ei tuota havaintoja.",
       "notMeasured": "-",
       "unitMs": "ms",
       "unitKhz": "kHz",

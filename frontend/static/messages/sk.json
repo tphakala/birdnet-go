@@ -463,6 +463,12 @@
         "staleMessage": "{modelName} je nainštalovaný pre {oldRegion}, ale vaša nová poloha zodpovedá {newRegion}. Varianty môžete zmeniť v galérii modelov v Nastaveniach.",
         "staleGlobalMessage": "{modelName} je nainštalovaný pre {oldRegion}, ale vaša nová poloha je mimo jeho pokrytia. Na globálny variant môžete prepnúť v galérii modelov v Nastaveniach."
       },
+      "modelPath": {
+        "reconciledTitle": "Cesta k súboru modelu opravená",
+        "reconciledMessage": "Nakonfigurovaná cesta k súboru pre {modelName} odkazovala na súbor, ktorý už neexistuje. Teraz sa používa nainštalovaný model v {modelPath}.",
+        "notRegisteredTitle": "Model neanalyzuje {sourceName}",
+        "notRegisteredMessage": "{models} je priradený k zvukovému zdroju \"{sourceName}\", ale neprijíma zvuk, takže nevytvára detekcie. Model pravdepodobne nie je nainštalovaný alebo sa ho nepodarilo načítať. Skontrolujte galériu modelov v Nastaveniach."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuálna hodnota: {value}% (prahová hodnota: {threshold}%)",
@@ -1767,6 +1773,8 @@
       "sources": "Zdroje zvuku",
       "noSources": "Žiadne pripojené zdroje",
       "primaryFallback": "primárny (záložný)",
+      "sourceNotRunning": "nebeží",
+      "sourceNotRunningTooltip": "Tento zdroj je v nastaveniach priradený k modelu, ale jeho zvuk sa k modelu nedostáva, takže nevytvára žiadne detekcie.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",

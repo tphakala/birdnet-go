@@ -168,6 +168,13 @@ type Controller struct {
 
 	controlChan chan string
 
+	// topologyReconfigureTimer debounces the audio-source reconfigure triggered
+	// by a model topology change (see OnModelTopologyChanged). A gallery variant
+	// switch fires the callback twice and each reconfigure re-probes every RTSP
+	// stream, so the two are coalesced into one.
+	topologyReconfigureMu    sync.Mutex
+	topologyReconfigureTimer *time.Timer
+
 	// DisableSaveSettings prevents persisting settings changes to disk.
 	// When set to true, all settings modifications remain in memory only.
 	// This is primarily used in testing but can be used in production for read-only mode.
@@ -347,10 +354,11 @@ func WithAudioEngine(e *engine.AudioEngine) Option {
 func WithModelManager(mm *classifier.ModelManager) Option {
 	return func(c *Controller) {
 		c.ModelManager = mm
-		// Wire the topology-changed callback so model add/remove broadcasts over
-		// the metrics SSE stream. The method value binds c; c.MetricsStore is read
-		// lazily at call time, so option ordering is irrelevant.
-		mm.SetTopologyChangedCallback(c.BroadcastInferenceTopologyChanged)
+		// Wire the topology-changed callback so a model add/remove both broadcasts
+		// over the metrics SSE stream AND re-registers the model against running
+		// audio sources. The method value binds c; c.MetricsStore and c.controlChan
+		// are read lazily at call time, so option ordering is irrelevant.
+		mm.SetTopologyChangedCallback(c.OnModelTopologyChanged)
 	}
 }
 

@@ -463,6 +463,12 @@
         "staleMessage": "{modelName} è installato per {oldRegion}, ma la tua nuova posizione corrisponde a {newRegion}. Puoi cambiare variante dalla galleria modelli in Impostazioni.",
         "staleGlobalMessage": "{modelName} è installato per {oldRegion}, ma la tua nuova posizione è al di fuori della sua copertura. Puoi passare alla variante globale dalla galleria modelli in Impostazioni."
       },
+      "modelPath": {
+        "reconciledTitle": "Percorso del file del modello riparato",
+        "reconciledMessage": "Il percorso del file configurato per {modelName} puntava a un file che non esiste più. Ora viene utilizzato il modello installato in {modelPath}.",
+        "notRegisteredTitle": "Il modello non sta analizzando {sourceName}",
+        "notRegisteredMessage": "{models} è assegnato alla sorgente audio \"{sourceName}\" ma non riceve audio, quindi non produce rilevamenti. Molto probabilmente il modello non è installato o non è stato possibile caricarlo. Controlla la galleria modelli in Impostazioni."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valore attuale: {value}% (soglia: {threshold}%)",
@@ -1767,6 +1773,8 @@
       "sources": "Sorgenti audio",
       "noSources": "Nessuna sorgente collegata",
       "primaryFallback": "principale (fallback)",
+      "sourceNotRunning": "non in esecuzione",
+      "sourceNotRunningTooltip": "Questa sorgente è assegnata al modello nelle impostazioni, ma il suo audio non raggiunge il modello, quindi non produce rilevamenti.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",

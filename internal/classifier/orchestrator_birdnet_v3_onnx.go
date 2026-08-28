@@ -16,18 +16,12 @@ import (
 // The settings snapshot is passed in (rather than read inside) so the caller
 // builds with the exact settings it gated the reload decision on.
 func (o *Orchestrator) buildBirdNETV3(settings *conf.Settings, threads int) (*BirdNETV3, error) {
-	modelPath := settings.BirdNETV3.ModelPath
-	labelPath := settings.BirdNETV3.LabelPath
-
-	if modelPath == "" || labelPath == "" {
-		m, l, _ := o.resolveInstalledPaths(RegistryIDBirdNETV3)
-		if modelPath == "" {
-			modelPath = m
-		}
-		if labelPath == "" {
-			labelPath = l
-		}
-	}
+	paths, _ := o.resolveFamilyPaths(RegistryIDBirdNETV3, modelFileSet{
+		model:  settings.BirdNETV3.ModelPath,
+		labels: settings.BirdNETV3.LabelPath,
+	}, false)
+	modelPath := paths.model
+	labelPath := paths.labels
 
 	if modelPath == "" || labelPath == "" {
 		return nil, errors.Newf("BirdNET v3.0 model files not installed or configured").
@@ -86,6 +80,13 @@ func (o *Orchestrator) loadBirdNETV3(threads int) error {
 	// warm-up inference runs via the serialized inference path instead of stalling
 	// live inference on o.mu. The entry is registered above first so the drainer
 	// can find it by key.
+	// Queue a config repair when the model loaded from the gallery fallback
+	// because the configured path was stale. Drained after o.mu is released.
+	o.queuePathCorrectionIfFallback(RegistryIDBirdNETV3, modelFileSet{
+		model:  settings.BirdNETV3.ModelPath,
+		labels: settings.BirdNETV3.LabelPath,
+	}, false)
+
 	o.deferWarmup(model.ModelID(), before)
 
 	// No separate name resolver needed. BirdNET v3.0 labels carry both the

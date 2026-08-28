@@ -463,6 +463,12 @@
         "staleMessage": "{modelName} er installeret for {oldRegion}, men din nye placering svarer til {newRegion}. Du kan skifte varianter fra modelgalleriet i Indstillinger.",
         "staleGlobalMessage": "{modelName} er installeret for {oldRegion}, men din nye placering er uden for dens dækning. Du kan skifte til den globale variant fra modelgalleriet i Indstillinger."
       },
+      "modelPath": {
+        "reconciledTitle": "Modelfilsti repareret",
+        "reconciledMessage": "Den konfigurerede filsti for {modelName} pegede på en fil, der ikke længere eksisterer. Den bruger nu den installerede model på {modelPath}.",
+        "notRegisteredTitle": "Model analyserer ikke {sourceName}",
+        "notRegisteredMessage": "{models} er tildelt lydkilden \"{sourceName}\", men modtager ikke lyd, så den producerer ikke detektioner. Modellen er sandsynligvis ikke installeret eller kunne ikke indlæses. Tjek modelgalleriet i Indstillinger."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuel værdi: {value}% (grænse: {threshold}%)",
@@ -1767,6 +1773,8 @@
       "sources": "Lydkilder",
       "noSources": "Ingen kilder tilsluttet",
       "primaryFallback": "primær (fallback)",
+      "sourceNotRunning": "kører ikke",
+      "sourceNotRunningTooltip": "Denne kilde er tildelt modellen i indstillingerne, men dens lyd når ikke modellen, så den producerer ingen detektioner.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",

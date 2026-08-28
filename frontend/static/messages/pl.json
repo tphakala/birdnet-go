@@ -463,6 +463,12 @@
         "staleMessage": "{modelName} jest zainstalowany dla {oldRegion}, ale Twoja nowa lokalizacja wskazuje na {newRegion}. Możesz zmienić warianty w galerii modeli w Ustawieniach.",
         "staleGlobalMessage": "{modelName} jest zainstalowany dla {oldRegion}, ale Twoja nowa lokalizacja znajduje się poza jego zasięgiem. Możesz przełączyć się na wariant globalny w galerii modeli w Ustawieniach."
       },
+      "modelPath": {
+        "reconciledTitle": "Ścieżka pliku modelu naprawiona",
+        "reconciledMessage": "Skonfigurowana ścieżka pliku dla {modelName} wskazywała na plik, który już nie istnieje. Teraz używany jest zainstalowany model w {modelPath}.",
+        "notRegisteredTitle": "Model nie analizuje {sourceName}",
+        "notRegisteredMessage": "{models} jest przypisany do źródła audio \"{sourceName}\", ale nie odbiera dźwięku, więc nie generuje detekcji. Model najprawdopodobniej nie jest zainstalowany lub nie udało się go załadować. Sprawdź galerię modeli w Ustawieniach."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Bieżąca wartość: {value}% (próg: {threshold}%)",
@@ -1767,6 +1773,8 @@
       "sources": "Źródła audio",
       "noSources": "Brak podłączonych źródeł",
       "primaryFallback": "podstawowy (zapasowy)",
+      "sourceNotRunning": "nie działa",
+      "sourceNotRunningTooltip": "To źródło jest przypisane do modelu w ustawieniach, ale jego dźwięk nie dociera do modelu, więc nie generuje detekcji.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",

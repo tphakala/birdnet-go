@@ -47,7 +47,7 @@ func TestBuildSourceAttachments(t *testing.T) {
 		{Name: "Cam1", Type: "rtsp", Models: []string{"unknown_model"}}, // unresolved: falls back to primary
 	}
 
-	got := buildSourceAttachments(settings, models, primaryID)
+	got := buildSourceAttachments(settings, models, primaryID, nil)
 
 	// Perch_V2 should have exactly Front Yard, attached without fallback.
 	perch := got[classifier.RegistryIDPerchV2]
@@ -84,7 +84,7 @@ func TestBuildSourceAttachments_ResolvesButNotLoaded(t *testing.T) {
 		{Name: "Studio", Models: []string{conf.ModelIDPerchV2}},
 	}
 
-	got := buildSourceAttachments(settings, models, primaryID)
+	got := buildSourceAttachments(settings, models, primaryID, nil)
 
 	// Perch_V2 should have NO attachments (not loaded).
 	perch := got[classifier.RegistryIDPerchV2]
@@ -120,7 +120,7 @@ func TestBuildSourceAttachments_MultiModelSourceAttachesAll(t *testing.T) {
 		{Name: "Äänikortti", Models: []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2, conf.ModelIDBat}},
 	}
 
-	got := buildSourceAttachments(settings, models, primaryID)
+	got := buildSourceAttachments(settings, models, primaryID, nil)
 
 	// Every assigned, loaded model must show the source, none as a fallback.
 	for _, id := range []string{primaryID, classifier.RegistryIDPerchV2, classifier.RegistryIDBat} {
@@ -648,4 +648,89 @@ func TestHardwareInfo_JSONContract(t *testing.T) {
 	for _, key := range []string{"board", "accelerators", "totalRamBytes", "physicalCores", "capabilities"} {
 		assert.NotContains(t, empty, key, "added key %q must be omitted when unset", key)
 	}
+}
+
+// TestBuildSourceAttachments_LiveRouterState verifies that the status view
+// reports what the audio router is actually doing rather than what the config
+// asks for. A model that is loaded and assigned but that receives no audio must
+// be marked NotRunning instead of being presented as running: reporting it as
+// running is what hid the model-loading failure behind GitHub #4201 and #4204
+// for days.
+func TestBuildSourceAttachments_LiveRouterState(t *testing.T) {
+	t.Parallel()
+
+	const primaryID = classifier.DefaultModelVersion
+	models := []classifier.ModelInfo{
+		{ID: primaryID},
+		{ID: classifier.RegistryIDPerchV2},
+	}
+
+	settings := &conf.Settings{}
+	settings.Realtime.Audio.Sources = []conf.AudioSourceConfig{
+		{Name: "Front Yard", Models: []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2}},
+	}
+
+	t.Run("assigned but not routed is marked not running", func(t *testing.T) {
+		t.Parallel()
+
+		// The router feeds only BirdNET, though the config assigns Perch too.
+		running := map[string]map[string]bool{
+			"Front Yard": {primaryID: true},
+		}
+
+		got := buildSourceAttachments(settings, models, primaryID, running)
+
+		perch := got[classifier.RegistryIDPerchV2]
+		require.Len(t, perch, 1)
+		assert.True(t, perch[0].NotRunning,
+			"a model that receives no audio must not be reported as running")
+
+		prim := got[primaryID]
+		require.Len(t, prim, 1)
+		assert.False(t, prim[0].NotRunning, "BirdNET really is routed")
+		assert.False(t, prim[0].Fallback,
+			"BirdNET is genuinely assigned here, so it is not a fallback attachment")
+	})
+
+	t.Run("routed models are reported as running", func(t *testing.T) {
+		t.Parallel()
+
+		running := map[string]map[string]bool{
+			"Front Yard": {primaryID: true, classifier.RegistryIDPerchV2: true},
+		}
+
+		got := buildSourceAttachments(settings, models, primaryID, running)
+
+		perch := got[classifier.RegistryIDPerchV2]
+		require.Len(t, perch, 1)
+		assert.False(t, perch[0].NotRunning)
+	})
+
+	t.Run("no model routed falls back to the primary", func(t *testing.T) {
+		t.Parallel()
+
+		// The source is known to the router but has no analysis buffers at all.
+		running := map[string]map[string]bool{"Front Yard": {}}
+
+		got := buildSourceAttachments(settings, models, primaryID, running)
+
+		// Both assigned models report as not running, and the primary additionally
+		// picks the source up as the runtime fallback, mirroring what
+		// registerConsumersForSources does when a source resolves to no targets.
+		prim := got[primaryID]
+		require.Len(t, prim, 2)
+		assert.True(t, prim[0].NotRunning, "the assigned-but-idle BirdNET entry")
+		assert.True(t, prim[1].Fallback, "the primary fallback entry")
+	})
+
+	t.Run("nil live state keeps the config-derived view unmarked", func(t *testing.T) {
+		t.Parallel()
+
+		got := buildSourceAttachments(settings, models, primaryID, nil)
+
+		perch := got[classifier.RegistryIDPerchV2]
+		require.Len(t, perch, 1)
+		assert.False(t, perch[0].NotRunning,
+			"without live evidence nothing may be claimed to be broken")
+	})
 }

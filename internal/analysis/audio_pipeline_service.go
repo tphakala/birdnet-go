@@ -931,7 +931,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 
 		// Resolve per-source model targets. Fall back to primary if the
 		// source has no configured models or none could be resolved.
-		modelInfos := resolveModelTargets(sourceModelMap[sid], allModelInfos)
+		modelInfos, skippedModels := resolveModelTargets(sourceModelMap[sid], allModelInfos)
 		if len(modelInfos) == 0 {
 			modelInfos = primaryTargets
 		}
@@ -985,6 +985,8 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 			logger.String("models", strings.Join(modelIDs, ", ")),
 			logger.Int("model_count", len(targets)),
 			logger.String("operation", operation))
+
+		reportUnregisteredModels(sourceName, skippedModels, modelInfos, allocatedModels)
 
 		// Use per-source sample rate when available; fall back to global constant.
 		sourceSampleRate := conf.SampleRate
@@ -1609,18 +1611,20 @@ func deallocateStaleAnalysisBuffers(bufMgr *buffer.Manager, sourceID string, des
 }
 
 // resolveModelTargets converts config-level model IDs to ModelTarget entries
-// using the loaded model registry. Unknown or unloaded models are skipped
-// with a warning log.
-func resolveModelTargets(configModelIDs []string, loadedModels map[string]classifier.ModelInfo) []classifier.ModelInfo {
+// using the loaded model registry. Unknown or unloaded models are skipped with a
+// warning log, and reported to the caller through skipped so the omission can be
+// surfaced to the user instead of only reaching a log file.
+func resolveModelTargets(configModelIDs []string, loadedModels map[string]classifier.ModelInfo) (targets []classifier.ModelInfo, skipped []string) {
 	if len(configModelIDs) == 0 {
-		return nil
+		return nil, nil
 	}
-	targets := make([]classifier.ModelInfo, 0, len(configModelIDs))
+	targets = make([]classifier.ModelInfo, 0, len(configModelIDs))
 	for _, configID := range configModelIDs {
 		registryID, known := classifier.ResolveConfigModelID(configID)
 		if !known {
 			GetLogger().Warn("unknown model ID in source config, skipping",
 				logger.String("config_id", configID))
+			skipped = append(skipped, configID)
 			continue
 		}
 		info, loaded := loadedModels[registryID]
@@ -1628,11 +1632,32 @@ func resolveModelTargets(configModelIDs []string, loadedModels map[string]classi
 			GetLogger().Warn("model configured for source but not loaded",
 				logger.String("config_id", configID),
 				logger.String("registry_id", registryID))
+			skipped = append(skipped, configID)
 			continue
 		}
 		targets = append(targets, info)
 	}
-	return targets
+	return targets, skipped
+}
+
+// reportUnregisteredModels raises a user-visible notification for models that a
+// source's configuration assigns but which will not receive its audio, either
+// because they never loaded (skipped) or because their analysis buffer could
+// not be allocated (absent from allocated).
+//
+// The shortfall is otherwise silent: detection keeps working for the models that
+// did register, so nothing looks broken, and the only trace is a warning in a
+// log file. Users have lost a model for days this way (GitHub #4201, #4204).
+func reportUnregisteredModels(sourceName string, skipped []string, resolved []classifier.ModelInfo, allocated map[string]bool) {
+	notRegistered := slices.Clone(skipped)
+	for i := range resolved {
+		if !allocated[resolved[i].ID] {
+			notRegistered = append(notRegistered, resolved[i].ID)
+		}
+	}
+	if len(notRegistered) > 0 {
+		notifyModelsNotRegistered(sourceName, notRegistered)
+	}
 }
 
 // startWeatherPolling initializes and starts the weather polling routine.

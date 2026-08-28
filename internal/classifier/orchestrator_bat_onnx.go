@@ -15,22 +15,14 @@ import (
 // The settings snapshot is passed in (rather than read inside) so the caller builds
 // with the exact settings it gated the reload decision on.
 func (o *Orchestrator) buildBat(settings *conf.Settings, threads int) (*Bat, error) {
-	classifierModel := settings.Bat.ClassifierModel
-	labelPath := settings.Bat.LabelPath
-	embeddingModel := settings.Bat.EmbeddingModel
-
-	if classifierModel == "" || labelPath == "" || embeddingModel == "" {
-		m, l, e := o.resolveInstalledPaths(RegistryIDBat)
-		if classifierModel == "" {
-			classifierModel = m
-		}
-		if labelPath == "" {
-			labelPath = l
-		}
-		if embeddingModel == "" {
-			embeddingModel = e
-		}
-	}
+	paths, _ := o.resolveFamilyPaths(RegistryIDBat, modelFileSet{
+		model:      settings.Bat.ClassifierModel,
+		labels:     settings.Bat.LabelPath,
+		embeddings: settings.Bat.EmbeddingModel,
+	}, true)
+	classifierModel := paths.model
+	labelPath := paths.labels
+	embeddingModel := paths.embeddings
 
 	if classifierModel == "" || labelPath == "" || embeddingModel == "" {
 		return nil, errors.Newf("bat model files not installed or configured").
@@ -92,6 +84,14 @@ func (o *Orchestrator) loadBat(threads int) error {
 	// warm-up inference runs via the serialized inference path instead of stalling
 	// live inference on o.mu. The entry is registered above first
 	// so the drainer can find it by key.
+	// Queue a config repair when the model loaded from the gallery fallback
+	// because the configured path was stale. Drained after o.mu is released.
+	o.queuePathCorrectionIfFallback(RegistryIDBat, modelFileSet{
+		model:      settings.Bat.ClassifierModel,
+		labels:     settings.Bat.LabelPath,
+		embeddings: settings.Bat.EmbeddingModel,
+	}, true)
+
 	o.deferWarmup(bat.ModelID(), before)
 
 	GetLogger().Info("Bat model loaded into Orchestrator",

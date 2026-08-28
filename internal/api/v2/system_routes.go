@@ -2,6 +2,8 @@
 package api
 
 import (
+	"time"
+
 	"github.com/tphakala/birdnet-go/internal/api/v2/system"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
@@ -85,4 +87,68 @@ func (c *Controller) HealthEventBuffer() *observability.HealthEventBuffer {
 		return nil
 	}
 	return c.system.HealthEventBuffer()
+}
+
+// modelTopologyReconfigureDebounce coalesces the audio-source reconfigure that
+// follows a model topology change. A gallery variant switch fires the topology
+// callback twice (once when the old variant unloads, once when the new one
+// loads), and each reconfigure re-probes every enabled RTSP stream with ffprobe,
+// so reacting to both would double that cost for no benefit.
+const modelTopologyReconfigureDebounce = 2 * time.Second
+
+// OnModelTopologyChanged reacts to a model being loaded into or unloaded from
+// the orchestrator at runtime, which happens when the user installs, reinstalls,
+// switches the variant of, or removes a model in the gallery.
+//
+// It does two things. It broadcasts over the metrics SSE stream so open clients
+// re-fetch the inference snapshot, and it asks the audio pipeline to reconcile
+// its per-source model registration.
+//
+// The second half is the fix for GitHub issues #4201 and #4204. Loading a model
+// into the orchestrator does not attach it to anything: the audio router fans a
+// source out to the models registered for it, and that registration is computed
+// only at startup and when settings change. So a model installed from the
+// gallery while the server ran would load, report itself as installed, and then
+// receive no audio at all until the user toggled the model assignment on the
+// source to force a reconfigure. Signalling reconfigure_audio_sources here runs
+// the same diff the settings path uses: sourceModelsChanged compares each
+// source's allocated analysis buffers against the models the config asks for
+// that are actually loaded, so a newly loaded model shows up as a change and
+// the source is re-registered. An unload is handled by the same diff in reverse.
+func (c *Controller) OnModelTopologyChanged() {
+	if c == nil {
+		return
+	}
+	c.BroadcastInferenceTopologyChanged()
+	c.scheduleAudioSourceReconfigure()
+}
+
+// scheduleAudioSourceReconfigure starts or resets the debounce timer that sends
+// the audio-source reconfigure signal, mirroring the debounce the MQTT
+// discovery publisher uses for source-registry churn.
+func (c *Controller) scheduleAudioSourceReconfigure() {
+	c.topologyReconfigureMu.Lock()
+	defer c.topologyReconfigureMu.Unlock()
+
+	if c.topologyReconfigureTimer != nil {
+		c.topologyReconfigureTimer.Stop()
+	}
+	c.topologyReconfigureTimer = time.AfterFunc(modelTopologyReconfigureDebounce, func() {
+		c.sendAudioSourceReconfigure()
+	})
+}
+
+// sendAudioSourceReconfigure delivers the reconfigure signal without blocking.
+// The control channel is buffered and drained by the control monitor; if it is
+// momentarily full, dropping the signal is preferable to stalling the caller,
+// and the log records that a reconfigure was missed.
+func (c *Controller) sendAudioSourceReconfigure() {
+	if c.controlChan == nil {
+		return
+	}
+	select {
+	case c.controlChan <- actionReconfigureAudioSources:
+	default:
+		GetLogger().Warn("control channel full, skipping audio source reconfigure after model topology change")
+	}
 }
