@@ -464,10 +464,10 @@
         "staleGlobalMessage": "{modelName} está instalado para {oldRegion}, pero su nueva ubicación está fuera de su cobertura. Puede cambiar a la variante global desde la galería de modelos en Configuración."
       },
       "modelPath": {
-        "reconciledTitle": "Ruta del archivo del modelo reparada",
-        "reconciledMessage": "La ruta de archivo configurada para {modelName} apuntaba a un archivo que ya no existe. Ahora se utiliza el modelo instalado en {modelPath}.",
+        "reconciledTitle": "Rutas de archivo del modelo reparadas para {modelName}",
+        "reconciledMessage": "Las rutas de archivo configuradas para {modelName} estaban desactualizadas y se han reparado para coincidir con el modelo instalado en {modelPath}.",
         "notRegisteredTitle": "El modelo no está analizando {sourceName}",
-        "notRegisteredMessage": "{models} está asignado a la fuente de audio \"{sourceName}\", pero no está recibiendo audio, por lo que no genera detecciones. Es muy probable que el modelo no esté instalado o no se haya podido cargar. Revisa la galería de modelos en Configuración."
+        "notRegisteredMessage": "{models} está asignado a la fuente de audio \"{sourceName}\", pero actualmente no está recibiendo audio, por lo que no genera detecciones. Abra la galería de modelos en Configuración para comprobar su estado."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1773,8 +1773,8 @@
       "sources": "Fuentes de audio",
       "noSources": "No hay fuentes conectadas",
       "primaryFallback": "principal (respaldo)",
-      "sourceNotRunning": "no está en ejecución",
-      "sourceNotRunningTooltip": "Esta fuente está asignada al modelo en la configuración, pero su audio no llega al modelo, por lo que no genera detecciones.",
+      "sourceNotRunning": "no está analizando",
+      "sourceNotRunningTooltip": "Esta fuente está asignada al modelo en la configuración, pero su audio no llega al modelo, por lo que no genera detecciones. Abra la galería de modelos en Configuración para comprobar su estado.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",

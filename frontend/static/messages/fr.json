@@ -464,10 +464,10 @@
         "staleGlobalMessage": "{modelName} est installé pour {oldRegion}, mais votre nouvel emplacement est en dehors de sa couverture. Vous pouvez passer à la variante globale depuis la galerie de modèles dans les Paramètres."
       },
       "modelPath": {
-        "reconciledTitle": "Chemin du fichier de modèle réparé",
-        "reconciledMessage": "Le chemin de fichier configuré pour {modelName} pointait vers un fichier qui n'existe plus. Le modèle installé à l'emplacement {modelPath} est désormais utilisé.",
+        "reconciledTitle": "Chemins de fichiers du modèle réparés pour {modelName}",
+        "reconciledMessage": "Les chemins de fichiers configurés pour {modelName} étaient obsolètes et ont été réparés pour correspondre au modèle installé à l'emplacement {modelPath}.",
         "notRegisteredTitle": "Le modèle n'analyse pas {sourceName}",
-        "notRegisteredMessage": "{models} est assigné à la source audio \"{sourceName}\" mais ne reçoit pas d'audio, il ne produit donc aucune détection. Le modèle n'est très probablement pas installé ou n'a pas pu être chargé. Consultez la galerie de modèles dans les Paramètres."
+        "notRegisteredMessage": "{models} est assigné à la source audio \"{sourceName}\" mais ne reçoit actuellement pas d'audio, il ne produit donc aucune détection. Ouvrez la galerie de modèles dans les Paramètres pour vérifier son état."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1773,8 +1773,8 @@
       "sources": "Sources audio",
       "noSources": "Aucune source attachée",
       "primaryFallback": "primaire (secours)",
-      "sourceNotRunning": "ne fonctionne pas",
-      "sourceNotRunningTooltip": "Cette source est assignée au modèle dans les paramètres, mais son audio ne parvient pas au modèle, elle ne produit donc aucune détection.",
+      "sourceNotRunning": "n'analyse pas",
+      "sourceNotRunningTooltip": "Cette source est assignée au modèle dans les paramètres, mais son audio ne parvient pas au modèle, elle ne produit donc aucune détection. Ouvrez la galerie de modèles dans les Paramètres pour vérifier son état.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",

@@ -730,27 +730,31 @@ func buildSourceAttachments(settings *conf.Settings, models []classifier.ModelIn
 		// to every assigned+loaded model (see analysis.resolveModelTargets), so the
 		// status view must attach the source to all of them, not just the first.
 		live, haveLive := running[name]
-		matched := false
+		resolvedToLoaded := false
 		for _, cm := range configModels {
 			regID, ok := classifier.ResolveConfigModelID(cm)
 			if !ok || !loaded[regID] {
 				continue
 			}
+			// A configured model that resolves to a loaded model is a target,
+			// regardless of whether it currently has an analysis buffer. This mirrors
+			// the pipeline: resolveModelTargets filters on loaded, so a loaded target
+			// here is exactly what stops registerConsumersForSources from falling back.
+			resolvedToLoaded = true
 			// Surface the source either way, but say which it is: a model the router
 			// really feeds, or one the config assigns that gets no audio.
 			notRunning := haveLive && !live[regID]
 			out[regID] = append(out[regID], ModelSourceInfo{
 				ID: name, Name: name, Type: sourceType, Fallback: false, NotRunning: notRunning,
 			})
-			if !notRunning {
-				matched = true
-			}
 		}
-		// Nothing the config assigns is actually analyzing this source: the primary
-		// model picks it up as the runtime fallback (see registerConsumersForSources,
-		// which falls back to the primary when a source resolves to no targets), so
-		// surface it there with Fallback=true.
-		if !matched && primaryID != "" {
+		// The runtime falls back to the primary model only when a source resolves to
+		// NO loaded target (see registerConsumersForSources). Liveness does not enter
+		// that decision: a configured model that is loaded but currently has no
+		// analysis buffer is still the resolved target (surfaced with NotRunning
+		// above), not replaced by a primary-fallback row the runtime never creates.
+		// Keying the fallback on resolvedToLoaded restores parity with the pipeline.
+		if !resolvedToLoaded && primaryID != "" {
 			out[primaryID] = append(out[primaryID], ModelSourceInfo{ID: name, Name: name, Type: sourceType, Fallback: true})
 		}
 	}
@@ -772,9 +776,24 @@ func buildSourceAttachments(settings *conf.Settings, models []classifier.ModelIn
 // The buffer manager is the ground truth here, not the router's route table:
 // the router holds a single multiplexing BufferConsumer per source and cannot
 // say which models sit behind it, whereas an analysis buffer exists for exactly
-// the (source, model) pairs registerConsumersForSources allocated. That is the
-// same state sourceModelsChanged diffs, so the status view and the pipeline's
-// own reconfigure decision agree on what is running.
+// the (source, model) pairs currently set up to analyze. The invariant: a buffer
+// exists for (source, model) iff that model is configured to analyze that source
+// and is loaded. Buffers are created by bufMgr.AllocateAnalysis (three call
+// sites: the initial per-source registration, a later model-change reconfigure,
+// and the engine's own pre-allocation of the primary model's buffer in
+// AddSource) and removed by deallocateStaleAnalysisBuffers. That is the same
+// state sourceModelsChanged diffs, so the status view and the pipeline's own
+// reconfigure decision agree on what is running.
+//
+// Two source states are reported as "no live evidence" (the key is left absent,
+// so the caller keeps the unmarked config-derived view) rather than as negative:
+//   - A DisplayName shared by more than one registry source. DisplayName is
+//     unique only within audio.sources and within rtsp.streams, never across
+//     them; on a collision a live set cannot be mapped to one config entry, so
+//     the key is dropped rather than risk marking a healthy model not running.
+//   - An empty buffer set. A source is in the registry from AddSource before its
+//     buffers are allocated, so an empty set is INDETERMINATE ("not yet"), not a
+//     claim that the source runs nothing.
 //
 // Returns nil when the audio engine is not wired up (before the pipeline starts,
 // or in tests), which the caller reads as "no live evidence available".
@@ -793,9 +812,24 @@ func (c *Handler) runningModelsBySource() map[string]map[string]bool {
 	}
 
 	sources := registry.List()
+
+	// Count DisplayName occurrences first so a name shared by more than one
+	// registry source can be dropped entirely below (see the doc comment).
+	nameCounts := make(map[string]int, len(sources))
+	for _, src := range sources {
+		if src == nil {
+			continue
+		}
+		nameCounts[src.DisplayName]++
+	}
+
 	out := make(map[string]map[string]bool, len(sources))
 	for _, src := range sources {
 		if src == nil {
+			continue
+		}
+		// Collision: cannot map a live set to a single config entry, so omit it.
+		if nameCounts[src.DisplayName] > 1 {
 			continue
 		}
 		// Key by DisplayName: it is what the registry carries for both audio
@@ -804,6 +838,13 @@ func (c *Handler) runningModelsBySource() map[string]map[string]bool {
 		models := make(map[string]bool)
 		for modelID := range bufMgr.AnalysisBuffers(src.ID) {
 			models[modelID] = true
+		}
+		// An empty buffer set is indeterminate (source registered, buffers not yet
+		// allocated), so omit the source: the caller then reads haveLive=false for
+		// it and keeps the unmarked config-derived view rather than reporting every
+		// assigned model as not running.
+		if len(models) == 0 {
+			continue
 		}
 		out[src.DisplayName] = models
 	}

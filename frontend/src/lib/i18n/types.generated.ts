@@ -394,7 +394,7 @@ export type TranslationKey =
   | 'notifications.content.region.staleTitle'
   | 'notifications.content.region.staleMessage' // params: modelName, oldRegion, newRegion
   | 'notifications.content.region.staleGlobalMessage' // params: modelName, oldRegion
-  | 'notifications.content.modelPath.reconciledTitle'
+  | 'notifications.content.modelPath.reconciledTitle' // params: modelName
   | 'notifications.content.modelPath.reconciledMessage' // params: modelName, modelPath
   | 'notifications.content.modelPath.notRegisteredTitle' // params: sourceName
   | 'notifications.content.modelPath.notRegisteredMessage' // params: models, sourceName
@@ -4210,6 +4210,7 @@ export type TranslationParams = {
     modelName: string | number;
     oldRegion: string | number;
   };
+  'notifications.content.modelPath.reconciledTitle': { modelName: string | number };
   'notifications.content.modelPath.reconciledMessage': {
     modelName: string | number;
     modelPath: string | number;

@@ -171,9 +171,12 @@ type Controller struct {
 	// topologyReconfigureTimer debounces the audio-source reconfigure triggered
 	// by a model topology change (see OnModelTopologyChanged). A gallery variant
 	// switch fires the callback twice and each reconfigure re-probes every RTSP
-	// stream, so the two are coalesced into one.
-	topologyReconfigureMu    sync.Mutex
-	topologyReconfigureTimer *time.Timer
+	// stream, so the two are coalesced into one. topologyReconfigureShutdown is
+	// set under topologyReconfigureMu by Shutdown so a callback that fires during
+	// teardown does not re-arm the timer.
+	topologyReconfigureMu       sync.Mutex
+	topologyReconfigureTimer    *time.Timer
+	topologyReconfigureShutdown bool
 
 	// DisableSaveSettings prevents persisting settings changes to disk.
 	// When set to true, all settings modifications remain in memory only.
@@ -806,6 +809,18 @@ func (c *Controller) Shutdown() {
 	if c.alerts != nil {
 		c.alerts.Shutdown()
 	}
+
+	// Stop the topology-reconfigure debounce timer and mark it shut down so a
+	// model-topology callback that fires during teardown does not re-arm it. Done
+	// under topologyReconfigureMu, the same lock scheduleAudioSourceReconfigure
+	// takes, so the flag and the timer stay consistent.
+	c.topologyReconfigureMu.Lock()
+	c.topologyReconfigureShutdown = true
+	if c.topologyReconfigureTimer != nil {
+		c.topologyReconfigureTimer.Stop()
+		c.topologyReconfigureTimer = nil
+	}
+	c.topologyReconfigureMu.Unlock()
 
 	// Cancel context to stop all goroutines, then wait for them to finish.
 	c.Cancel()

@@ -464,10 +464,10 @@
         "staleGlobalMessage": "{modelName} está instalado para {oldRegion}, mas a sua nova localização está fora da sua cobertura. Pode mudar para a variante global a partir da galeria de modelos nas Configurações."
       },
       "modelPath": {
-        "reconciledTitle": "Caminho do ficheiro do modelo reparado",
-        "reconciledMessage": "O caminho de ficheiro configurado para {modelName} apontava para um ficheiro que já não existe. Agora utiliza o modelo instalado em {modelPath}.",
+        "reconciledTitle": "Caminhos dos ficheiros do modelo reparados para {modelName}",
+        "reconciledMessage": "Os caminhos de ficheiro configurados para {modelName} estavam desatualizados e foram reparados para corresponder ao modelo instalado em {modelPath}.",
         "notRegisteredTitle": "O modelo não está a analisar {sourceName}",
-        "notRegisteredMessage": "{models} está atribuído à fonte de áudio \"{sourceName}\", mas não está a receber áudio, pelo que não está a produzir deteções. O modelo muito provavelmente não está instalado ou falhou ao carregar. Verifique a galeria de modelos nas Configurações."
+        "notRegisteredMessage": "{models} está atribuído à fonte de áudio \"{sourceName}\", mas atualmente não está a receber áudio, pelo que não está a produzir deteções. Abra a galeria de modelos nas Configurações para verificar o seu estado."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1773,8 +1773,8 @@
       "sources": "Fontes de áudio",
       "noSources": "Nenhuma fonte conectada",
       "primaryFallback": "primária (reserva)",
-      "sourceNotRunning": "não está em execução",
-      "sourceNotRunningTooltip": "Esta fonte está atribuída ao modelo nas configurações, mas o seu áudio não está a chegar ao modelo, pelo que não produz deteções.",
+      "sourceNotRunning": "não está a analisar",
+      "sourceNotRunningTooltip": "Esta fonte está atribuída ao modelo nas configurações, mas o seu áudio não está a chegar ao modelo, pelo que não produz deteções. Abra a galeria de modelos nas Configurações para verificar o seu estado.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",

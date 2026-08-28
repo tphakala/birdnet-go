@@ -464,10 +464,10 @@
         "staleGlobalMessage": "{modelName} er installeret for {oldRegion}, men din nye placering er uden for dens dækning. Du kan skifte til den globale variant fra modelgalleriet i Indstillinger."
       },
       "modelPath": {
-        "reconciledTitle": "Modelfilsti repareret",
-        "reconciledMessage": "Den konfigurerede filsti for {modelName} pegede på en fil, der ikke længere eksisterer. Den bruger nu den installerede model på {modelPath}.",
+        "reconciledTitle": "Modelfilstier repareret for {modelName}",
+        "reconciledMessage": "De konfigurerede filstier for {modelName} var forældede og er blevet repareret, så de matcher den installerede model på {modelPath}.",
         "notRegisteredTitle": "Model analyserer ikke {sourceName}",
-        "notRegisteredMessage": "{models} er tildelt lydkilden \"{sourceName}\", men modtager ikke lyd, så den producerer ikke detektioner. Modellen er sandsynligvis ikke installeret eller kunne ikke indlæses. Tjek modelgalleriet i Indstillinger."
+        "notRegisteredMessage": "{models} er tildelt lydkilden \"{sourceName}\", men modtager i øjeblikket ikke lyd, så den producerer ikke detektioner. Åbn modelgalleriet i Indstillinger for at tjekke dens status."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1773,8 +1773,8 @@
       "sources": "Lydkilder",
       "noSources": "Ingen kilder tilsluttet",
       "primaryFallback": "primær (fallback)",
-      "sourceNotRunning": "kører ikke",
-      "sourceNotRunningTooltip": "Denne kilde er tildelt modellen i indstillingerne, men dens lyd når ikke modellen, så den producerer ingen detektioner.",
+      "sourceNotRunning": "analyserer ikke",
+      "sourceNotRunningTooltip": "Denne kilde er tildelt modellen i indstillingerne, men dens lyd når ikke modellen, så den producerer ingen detektioner. Åbn modelgalleriet i Indstillinger for at tjekke dens status.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",

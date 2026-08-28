@@ -464,10 +464,10 @@
         "staleGlobalMessage": "{modelName} ir instalēts reģionam {oldRegion}, bet jūsu jaunā atrašanās vieta ir ārpus tā pārklājuma. Varat pārslēgties uz globālo variantu no modeļu galerijas sadaļā Iestatījumi."
       },
       "modelPath": {
-        "reconciledTitle": "Modeļa faila ceļš salabots",
-        "reconciledMessage": "Konfigurētais faila ceļš modelim {modelName} norādīja uz failu, kas vairs neeksistē. Tagad tiek izmantots instalētais modelis vietā {modelPath}.",
+        "reconciledTitle": "Modeļa {modelName} failu ceļi salaboti",
+        "reconciledMessage": "Konfigurētie failu ceļi modelim {modelName} bija novecojuši un tika salaboti, lai atbilstu instalētajam modelim vietā {modelPath}.",
         "notRegisteredTitle": "Modelis neanalizē {sourceName}",
-        "notRegisteredMessage": "{models} ir piešķirts audio avotam \"{sourceName}\", bet nesaņem audio, tāpēc neveic noteikšanas. Modelis, visticamāk, nav instalēts vai to neizdevās ielādēt. Pārbaudiet modeļu galeriju sadaļā Iestatījumi."
+        "notRegisteredMessage": "{models} ir piešķirts audio avotam \"{sourceName}\", bet pašlaik nesaņem audio, tāpēc neveic noteikšanas. Atveriet modeļu galeriju sadaļā Iestatījumi, lai pārbaudītu tā statusu."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1773,8 +1773,8 @@
       "sources": "Audio avoti",
       "noSources": "Nav pievienotu avotu",
       "primaryFallback": "primārais (rezerves)",
-      "sourceNotRunning": "nedarbojas",
-      "sourceNotRunningTooltip": "Šis avots ir piešķirts modelim iestatījumos, bet tā audio nesasniedz modeli, tāpēc tas neveic noteikšanas.",
+      "sourceNotRunning": "neanalizē",
+      "sourceNotRunningTooltip": "Šis avots ir piešķirts modelim iestatījumos, bet tā audio nesasniedz modeli, tāpēc tas neveic noteikšanas. Atveriet modeļu galeriju sadaļā Iestatījumi, lai pārbaudītu tā statusu.",
       "notMeasured": "n/p",
       "unitMs": "ms",
       "unitKhz": "kHz",

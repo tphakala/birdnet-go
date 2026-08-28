@@ -185,9 +185,17 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// see an empty o.modelsDir on their very first attempt and resolveInstalledPaths
 	// cannot find an installed model. That made the fallback for a missing
 	// configured path structurally impossible at startup (GitHub #4201, #4204).
-	// Assigned directly rather than through SetModelsDir: o.primary is not set yet,
-	// so the resolver wiring SetModelsDir performs has nothing to attach to. The
-	// later SetModelsDir call still does that wiring.
+	// Assigned directly rather than through SetModelsDir. SetModelsDir would run
+	// registerTaxonomyResolver, which appends a taxonomy resolver to
+	// o.nameResolvers, but the constructor overwrites that slice wholesale a few
+	// lines below (o.nameResolvers = []NameResolver{ofResolver, resolver}), so the
+	// registration would just be discarded. Its primary.SetModelsDir propagation is
+	// also skipped here, since o.primary is not set yet. No lock is needed for this
+	// write: o is not published until the constructor returns, so no other goroutine
+	// can observe it. On the analysis startup path ModelManager later calls
+	// SetModelsDir, which redoes both the resolver wiring and the primary
+	// propagation; cmd/benchmark and cmd/rangefilter construct an Orchestrator and
+	// never call SetModelsDir.
 	if modelsDir, ok := settings.ResolveModelsDir(); ok {
 		o.modelsDir = modelsDir
 	}
@@ -1644,18 +1652,22 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 			Build()
 	}
 
+	// Drain any queued configuration repair after o.mu is released: loaders queue
+	// it under o.mu, and applying it writes config.yaml, so it must run outside the
+	// lock. Registered BEFORE the warm-up drain so that, defers being LIFO, it runs
+	// AFTER the warm-ups. The config write must not land inside the window the
+	// per-model RSS delta measures (see runPendingWarmups), matching the drain
+	// order in loadAdditionalModels (warm-ups first, config write after).
+	defer o.runPendingPathCorrections()
+
 	// Drain the deferred warm-up after o.mu is released, on every return path.
 	// Loaders queue the warm-up via deferWarmup while holding o.mu; running it
 	// here (outside o.mu, via the serialized inference path) is what keeps a
 	// runtime install from stalling live inference. Deferring it
 	// (rather than calling it only on success) guarantees a loader that queues a
 	// warm-up and then fails cannot orphan an entry in the queue for a later load.
+	// Registered LAST so it runs FIRST (LIFO).
 	defer o.runPendingWarmups()
-
-	// Drain any queued configuration repair on the same terms: loaders queue it
-	// under o.mu, and applying it writes config.yaml, so it must run after the
-	// lock is released.
-	defer o.runPendingPathCorrections()
 
 	// Build and register the model under o.mu (loaders write directly to
 	// o.models).
@@ -2117,8 +2129,14 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 		// loop) keeps RSS accounting accurate: this model's RSS-after is measured
 		// before the next model allocates its arena.
 		o.runPendingWarmups()
-		o.runPendingPathCorrections()
 	}
+
+	// Drain the queued configuration repairs once, AFTER the loop. Applying one
+	// writes config.yaml, so batching them means three stale families produce a
+	// single write instead of three. Unlike the warm-up drain above, the config
+	// write has no per-model RSS measurement to keep accurate, so it does not need
+	// to run inside the loop.
+	o.runPendingPathCorrections()
 
 	return nil
 }

@@ -895,6 +895,35 @@ func (p *AudioPipelineService) removeAllSoundLevelConsumers(operation string) {
 	}
 }
 
+// wireSourceBufferRoute creates the buffer consumer for a source and adds its
+// route to the audio router. consumerOK is false when NewBufferConsumer fails, in
+// which case the caller skips the source entirely (as it did before this was
+// extracted); routeOK is false when the consumer OR its route could not be built,
+// meaning no model on the source is actually analyzing it. Both failures are
+// logged here. Extracted from registerConsumersForSources purely to keep that
+// function under the cognitive-complexity limit; the behaviour is unchanged.
+func (p *AudioPipelineService) wireSourceBufferRoute(sid, sourceName string, sourceSampleRate int, gainDB float64, targets []ModelTarget, currentSettings *conf.Settings, operation string) (consumerOK, routeOK bool) {
+	log := audiocore.GetLogger()
+	bc, bcErr := NewBufferConsumer(
+		fmt.Sprintf("buffer_%s", sid),
+		p.engine.BufferManager(),
+		sourceSampleRate, conf.BitDepth, 1,
+		targets,
+	)
+	if bcErr != nil {
+		log.Warn("failed to create buffer consumer",
+			logger.String("source_id", sid), logger.Error(bcErr), logger.String("operation", operation))
+		return false, false
+	}
+	bcChain := equalizer.ResolveAndBuildFilterChain(currentSettings, sourceName, sourceSampleRate)
+	if routeErr := p.engine.Router().AddRoute(sid, bc, sourceSampleRate, gainDB, bcChain); routeErr != nil {
+		log.Warn("failed to add buffer route",
+			logger.String("source_id", sid), logger.Error(routeErr), logger.String("operation", operation))
+		return true, false
+	}
+	return true, true
+}
+
 // registerConsumersForSources registers BufferConsumer and AudioLevelConsumer
 // on the AudioRouter for each source ID. The sourceModelMap carries the
 // config-level model IDs for each source so that buffer consumers fan out to
@@ -915,6 +944,10 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 
 	bufMgr := p.engine.BufferManager()
 	currentSettings := conf.Setting()
+
+	// Used to suppress false "not analyzing" alarms for a model that is merely
+	// mid-download or mid-reinstall (see reportUnregisteredModels).
+	modelMgr := p.bnAnalyzer.ModelManager()
 
 	for _, sid := range sourceIDs {
 		// Look up per-source gain from the registry.
@@ -986,29 +1019,31 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 			logger.Int("model_count", len(targets)),
 			logger.String("operation", operation))
 
-		reportUnregisteredModels(sourceName, skippedModels, modelInfos, allocatedModels)
-
 		// Use per-source sample rate when available; fall back to global constant.
 		sourceSampleRate := conf.SampleRate
 		if src != nil && src.SampleRate > 0 {
 			sourceSampleRate = src.SampleRate
 		}
 
-		bc, bcErr := NewBufferConsumer(
-			fmt.Sprintf("buffer_%s", sid),
-			p.engine.BufferManager(),
-			sourceSampleRate, conf.BitDepth, 1,
-			targets,
-		)
-		if bcErr != nil {
-			log.Warn("failed to create buffer consumer",
-				logger.String("source_id", sid), logger.Error(bcErr), logger.String("operation", operation))
-			continue
+		consumerOK, bufferRouteOK := p.wireSourceBufferRoute(
+			sid, sourceName, sourceSampleRate, gainDB, targets, currentSettings, operation)
+
+		// Report models the source assigns but that will not analyze it, AFTER the
+		// buffer consumer and its route are attached, so a consumer- or route-build
+		// failure is included rather than silently missed. When the buffer route did
+		// not come up, no target on this source runs, so report every resolved model;
+		// otherwise report only the ones that did not register (unresolved, or buffer
+		// allocation failed).
+		registered := allocatedModels
+		if !bufferRouteOK {
+			registered = nil
 		}
-		bcChain := equalizer.ResolveAndBuildFilterChain(currentSettings, sourceName, sourceSampleRate)
-		if routeErr := p.engine.Router().AddRoute(sid, bc, sourceSampleRate, gainDB, bcChain); routeErr != nil {
-			log.Warn("failed to add buffer route",
-				logger.String("source_id", sid), logger.Error(routeErr), logger.String("operation", operation))
+		reportUnregisteredModels(modelMgr, sourceName, skippedModels, modelInfos, registered)
+
+		if !consumerOK {
+			// The buffer consumer never came up; skip wiring the audio-level route,
+			// matching the original early-out for this source.
+			continue
 		}
 
 		alc, alcOutCh := NewAudioLevelConsumer("audio_level_"+sid, sourceSampleRate, conf.BitDepth, 1)
@@ -1645,19 +1680,75 @@ func resolveModelTargets(configModelIDs []string, loadedModels map[string]classi
 // because they never loaded (skipped) or because their analysis buffer could
 // not be allocated (absent from allocated).
 //
+// A model with a gallery download or reinstall in flight is intentionally NOT
+// reported: a reinstall unloads the model and only then downloads (minutes) and
+// reloads, so the debounced reconfigure runs while the model is legitimately
+// absent. Reporting it would raise a false "not analyzing" alarm and, worse, arm
+// the suppression window against a genuine failure in the same period.
+//
 // The shortfall is otherwise silent: detection keeps working for the models that
 // did register, so nothing looks broken, and the only trace is a warning in a
 // log file. Users have lost a model for days this way (GitHub #4201, #4204).
-func reportUnregisteredModels(sourceName string, skipped []string, resolved []classifier.ModelInfo, allocated map[string]bool) {
-	notRegistered := slices.Clone(skipped)
-	for i := range resolved {
-		if !allocated[resolved[i].ID] {
-			notRegistered = append(notRegistered, resolved[i].ID)
+func reportUnregisteredModels(mm *classifier.ModelManager, sourceName string, skipped []string, resolved []classifier.ModelInfo, allocated map[string]bool) {
+	notRegistered := make([]string, 0, len(skipped)+len(resolved))
+	for _, s := range skipped {
+		if modelIsDownloading(mm, s) {
+			continue
 		}
+		notRegistered = append(notRegistered, modelDisplayName(s))
+	}
+	for i := range resolved {
+		if allocated[resolved[i].ID] {
+			continue
+		}
+		if modelIsDownloading(mm, resolved[i].ID) {
+			continue
+		}
+		notRegistered = append(notRegistered, modelDisplayName(resolved[i].ID))
 	}
 	if len(notRegistered) > 0 {
 		notifyModelsNotRegistered(sourceName, notRegistered)
 	}
+}
+
+// modelDisplayName resolves a config ID or registry ID to the user-facing model
+// name (the same name the path-reconcile notification uses), so the
+// not-analyzing notification and its suppression key use ONE namespace rather
+// than mixing config IDs (from skipped) with registry IDs (from resolved).
+func modelDisplayName(modelID string) string {
+	registryID, ok := classifier.ResolveConfigModelID(modelID)
+	if !ok {
+		// modelID was not a config alias; treat it as an already-resolved registry ID.
+		registryID = modelID
+	}
+	if info, ok := classifier.ModelRegistry[registryID]; ok && info.Name != "" {
+		return info.Name
+	}
+	return modelID
+}
+
+// modelIsDownloading reports whether the model identified by modelID (a config
+// ID such as "perch_v2", or an already-resolved registry ID) has a gallery
+// download or reinstall in progress. A registry ID can back several catalog
+// entries (regional or hardware variants), and the download map is keyed by the
+// installed entry's catalog ID, so every catalog entry for the registry ID is
+// checked.
+func modelIsDownloading(mm *classifier.ModelManager, modelID string) bool {
+	if mm == nil {
+		return false
+	}
+	registryID, ok := classifier.ResolveConfigModelID(modelID)
+	if !ok {
+		// modelID was not a config alias; treat it as an already-resolved registry ID.
+		registryID = modelID
+	}
+	catalog := classifier.ActiveCatalog()
+	for i := range catalog {
+		if catalog[i].RegistryID == registryID && mm.GetDownloadState(catalog[i].ID) != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // startWeatherPolling initializes and starts the weather polling routine.

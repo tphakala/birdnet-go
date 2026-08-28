@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/system"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
@@ -130,6 +131,13 @@ func (c *Controller) scheduleAudioSourceReconfigure() {
 	c.topologyReconfigureMu.Lock()
 	defer c.topologyReconfigureMu.Unlock()
 
+	// Do not re-arm once the controller is shutting down: Shutdown has already
+	// stopped the timer under this lock, and a fresh timer would fire into a
+	// controller whose context is cancelled and whose control channel is closed.
+	if c.topologyReconfigureShutdown {
+		return
+	}
+
 	if c.topologyReconfigureTimer != nil {
 		c.topologyReconfigureTimer.Stop()
 	}
@@ -138,17 +146,33 @@ func (c *Controller) scheduleAudioSourceReconfigure() {
 	})
 }
 
-// sendAudioSourceReconfigure delivers the reconfigure signal without blocking.
-// The control channel is buffered and drained by the control monitor; if it is
-// momentarily full, dropping the signal is preferable to stalling the caller,
-// and the log records that a reconfigure was missed.
+// sendAudioSourceReconfigure delivers the reconfigure signal to the control
+// monitor. The channel has capacity 1 and the monitor drains it synchronously,
+// so dropping the signal when the channel is momentarily full would lose it
+// permanently and recreate the exact bug this reconfigure exists to fix (a
+// gallery model that loads but never receives audio). The caller is the debounce
+// timer goroutine, so blocking until the monitor drains the channel is harmless.
+// It mirrors the send shape sendReconfigActions uses: a select on the send
+// versus the controller context being cancelled.
+//
+// The deferred recover is load-bearing. On shutdown internal/analysis closes the
+// control channel; the Controller holds a copy of that same (now closed) channel,
+// so the c.controlChan == nil guard never fires (only analysis nils its OWN
+// field). A send on a closed channel is always ready, so select would pick it
+// over the Done case and panic; recover absorbs that during the shutdown window.
 func (c *Controller) sendAudioSourceReconfigure() {
+	defer func() {
+		if r := recover(); r != nil {
+			c.LogWarnIfEnabled("Recovered from send on closed controlChan during audio source reconfigure",
+				logger.Any("panic", r))
+		}
+	}()
+
 	if c.controlChan == nil {
 		return
 	}
 	select {
+	case <-c.Context().Done():
 	case c.controlChan <- actionReconfigureAudioSources:
-	default:
-		GetLogger().Warn("control channel full, skipping audio source reconfigure after model topology change")
 	}
 }

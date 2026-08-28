@@ -706,21 +706,27 @@ func TestBuildSourceAttachments_LiveRouterState(t *testing.T) {
 		assert.False(t, perch[0].NotRunning)
 	})
 
-	t.Run("no model routed falls back to the primary", func(t *testing.T) {
+	t.Run("assigned models loaded but idle do not invent a primary fallback", func(t *testing.T) {
 		t.Parallel()
 
-		// The source is known to the router but has no analysis buffers at all.
+		// The source is known to the router but has no analysis buffers at all, so
+		// both assigned models are idle. Both still resolve to LOADED models, so the
+		// runtime does NOT fall back to the primary: registerConsumersForSources
+		// falls back only when a source resolves to no loaded target. The status
+		// must not invent a fallback row the runtime never creates.
 		running := map[string]map[string]bool{"Front Yard": {}}
 
 		got := buildSourceAttachments(settings, models, primaryID, running)
 
-		// Both assigned models report as not running, and the primary additionally
-		// picks the source up as the runtime fallback, mirroring what
-		// registerConsumersForSources does when a source resolves to no targets.
 		prim := got[primaryID]
-		require.Len(t, prim, 2)
-		assert.True(t, prim[0].NotRunning, "the assigned-but-idle BirdNET entry")
-		assert.True(t, prim[1].Fallback, "the primary fallback entry")
+		require.Len(t, prim, 1, "only the genuine BirdNET assignment, no invented fallback row")
+		assert.True(t, prim[0].NotRunning, "BirdNET is assigned but idle")
+		assert.False(t, prim[0].Fallback,
+			"BirdNET is a genuine assignment here, not a runtime fallback")
+
+		perch := got[classifier.RegistryIDPerchV2]
+		require.Len(t, perch, 1)
+		assert.True(t, perch[0].NotRunning, "Perch is assigned but idle")
 	})
 
 	t.Run("nil live state keeps the config-derived view unmarked", func(t *testing.T) {
@@ -733,4 +739,58 @@ func TestBuildSourceAttachments_LiveRouterState(t *testing.T) {
 		assert.False(t, perch[0].NotRunning,
 			"without live evidence nothing may be claimed to be broken")
 	})
+
+	t.Run("source absent from a non-nil running map stays unmarked", func(t *testing.T) {
+		t.Parallel()
+
+		// running is non-nil but does not contain "Front Yard": the branch a
+		// DisplayName collision or an omitted (empty-buffer) source lands in. Without
+		// live evidence for THIS source, nothing may be marked not running, even
+		// though live evidence exists for a different source.
+		running := map[string]map[string]bool{"A Different Source": {primaryID: true}}
+
+		got := buildSourceAttachments(settings, models, primaryID, running)
+
+		perch := got[classifier.RegistryIDPerchV2]
+		require.Len(t, perch, 1)
+		assert.False(t, perch[0].NotRunning,
+			"a source absent from a non-nil running map has no live evidence")
+
+		prim := got[primaryID]
+		require.Len(t, prim, 1)
+		assert.False(t, prim[0].NotRunning)
+	})
+}
+
+// TestBuildSourceAttachments_RTSPStream covers an RTSP stream source (the
+// reporters run RTSP; only audio.sources were covered before). An assigned model
+// that the router does not feed for the stream is marked NotRunning.
+func TestBuildSourceAttachments_RTSPStream(t *testing.T) {
+	t.Parallel()
+
+	const primaryID = classifier.DefaultModelVersion
+	models := []classifier.ModelInfo{
+		{ID: primaryID},
+		{ID: classifier.RegistryIDPerchV2},
+	}
+
+	settings := &conf.Settings{}
+	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
+		{Name: "Cam1", Type: "rtsp", Models: []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2}},
+	}
+
+	// The router feeds only BirdNET for this stream; Perch is assigned but idle.
+	running := map[string]map[string]bool{"Cam1": {primaryID: true}}
+
+	got := buildSourceAttachments(settings, models, primaryID, running)
+
+	perch := got[classifier.RegistryIDPerchV2]
+	require.Len(t, perch, 1)
+	assert.Equal(t, "Cam1", perch[0].Name)
+	assert.Equal(t, "rtsp", perch[0].Type)
+	assert.True(t, perch[0].NotRunning, "the assigned but unrouted Perch model on the RTSP stream")
+
+	prim := got[primaryID]
+	require.Len(t, prim, 1)
+	assert.False(t, prim[0].NotRunning, "BirdNET is genuinely routed for the stream")
 }

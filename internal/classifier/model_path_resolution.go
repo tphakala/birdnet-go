@@ -1,10 +1,11 @@
 package classifier
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -45,30 +46,118 @@ func (s modelFileSet) allPresentOnDisk(needEmbeddings bool) bool {
 	return true
 }
 
+// diskPresence classifies the on-disk state of a required member set. It
+// separates a member that is confirmed absent (fs.ErrNotExist), which marks the
+// configured set stale and worth repairing, from a member that could not be
+// stat'd for another reason (EACCES, EIO, a stale NFS handle) such as an
+// external volume that has not finished mounting. The latter must not trigger a
+// permanent config rewrite, because the file may well reappear.
+type diskPresence int
+
+const (
+	// presenceComplete means every non-empty required member exists on disk.
+	presenceComplete diskPresence = iota
+	// presenceMissing means at least one non-empty required member is confirmed
+	// absent (fs.ErrNotExist) and no member was indeterminate.
+	presenceMissing
+	// presenceIndeterminate means at least one non-empty required member could
+	// not be stat'd for a reason other than absence. It dominates presenceMissing
+	// so a transient error is never mistaken for a stale path.
+	presenceIndeterminate
+)
+
+// nonEmptyMembersPresence classifies whether every NON-EMPTY required member of
+// the set exists on disk. An empty member is skipped, not treated as missing:
+// leaving a path empty is the supported way to let the gallery own it, so an
+// empty member is not a stale member. This is what distinguishes an empty
+// configured path (fill it from the gallery, keep the rest) from a stale one (a
+// non-empty path that has gone missing, which makes the whole set stale).
+//
+// A member that is unreadable for a reason other than absence yields
+// presenceIndeterminate, which dominates: a single unreadable member classifies
+// the whole set as indeterminate so a slow-to-mount volume is never mistaken for
+// a stale configuration.
+func (s modelFileSet) nonEmptyMembersPresence(needEmbeddings bool) diskPresence {
+	paths := []string{s.model, s.labels}
+	if needEmbeddings {
+		paths = append(paths, s.embeddings)
+	}
+	sawMissing := false
+	for _, p := range paths {
+		if p == "" {
+			continue
+		}
+		if _, err := os.Stat(p); err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				sawMissing = true
+				continue
+			}
+			return presenceIndeterminate
+		}
+	}
+	if sawMissing {
+		return presenceMissing
+	}
+	return presenceComplete
+}
+
 // resolveFamilyPaths decides which file set a secondary model family should be
 // built from, choosing between the paths configured in settings and the variant
 // the model gallery has installed on disk.
 //
-// The configured set is honoured only when it is complete AND every one of its
-// files exists. Otherwise the whole configured set is discarded and the gallery
-// set is used INSTEAD, as a unit. Resolving per file would be wrong: pairing a
-// configured model path from one variant with a fallback label path from
-// another yields a model and a label file that describe different species sets,
-// which either fails late with a label-count mismatch or, when the counts
-// happen to agree, silently mislabels every detection.
+// A configured member left EMPTY is filled from the gallery (the supported way
+// to let the gallery own a path); the other configured members are kept. When a
+// non-empty configured member is CONFIRMED missing on disk, the whole configured
+// set is discarded and the gallery set is used INSTEAD, as a unit. Resolving per
+// file would be wrong: pairing a configured model path from one variant with a
+// fallback label path from another yields a model and a label file that describe
+// different species sets, which either fails late with a label-count mismatch
+// or, when the counts happen to agree, silently mislabels every detection.
 //
-// The second return value reports whether the returned set came from the
-// gallery fallback, so the caller can reconcile the stale configuration once
-// the model has actually loaded (see Orchestrator.deferPathCorrection).
+// The second return value reports whether the returned set should reconcile the
+// stale configuration (see Orchestrator.deferPathCorrection). It is true only
+// when a configured path was confirmed missing. A configured path that is merely
+// unreadable right now (an external volume that has not finished mounting) still
+// falls back so the model can run, but returns false so the transient state is
+// never persisted to config.yaml.
 //
 // A configured path that points at a file which does not exist is the state
 // GitHub issues #4201 and #4204 describe: a gallery variant switch or a change
 // of container HOME leaves settings pointing at a file that is no longer there,
 // and before this fallback the model simply never loaded again.
 func (o *Orchestrator) resolveFamilyPaths(registryID string, configured modelFileSet, needEmbeddings bool) (resolved modelFileSet, usedFallback bool) {
-	if configured.allPresentOnDisk(needEmbeddings) {
-		return configured, false
+	presence := configured.nonEmptyMembersPresence(needEmbeddings)
+
+	// An empty configured member is not a stale member: leaving a path empty is
+	// the supported way to let the gallery own it. When every NON-EMPTY
+	// configured member exists on disk, keep the configured set and fill only the
+	// empty members from the gallery (main's behaviour). usedFallback stays false:
+	// nothing configured went stale, so there is nothing to repair.
+	if presence == presenceComplete {
+		if configured.complete(needEmbeddings) {
+			return configured, false
+		}
+		filled := configured
+		m, l, e := o.resolveInstalledPaths(registryID)
+		if filled.model == "" {
+			filled.model = m
+		}
+		if filled.labels == "" {
+			filled.labels = l
+		}
+		if needEmbeddings && filled.embeddings == "" {
+			filled.embeddings = e
+		}
+		return filled, false
 	}
+
+	// A non-empty configured path is missing or unreadable. Only a CONFIRMED
+	// absence (presenceMissing) marks the set stale and may rewrite config; an
+	// unreadable member (presenceIndeterminate, an external volume slow to mount)
+	// still falls back at runtime so analysis can run, but must NOT persist a
+	// repair, or a transient error rewrites config.yaml permanently. repairable
+	// carries that distinction to both fallback returns below.
+	repairable := presence == presenceMissing
 
 	// Before the generic gallery probe, try to keep the variant the configured
 	// model file names. When only a companion file went missing (a partial
@@ -82,7 +171,7 @@ func (o *Orchestrator) resolveFamilyPaths(registryID string, configured modelFil
 		GetLogger().Debug("recovered the configured variant's companion files",
 			logger.String("registry_id", registryID),
 			logger.String("model_path", sameVariant.model))
-		return sameVariant, true
+		return sameVariant, repairable
 	}
 
 	m, l, e := o.resolveInstalledPaths(registryID)
@@ -106,7 +195,7 @@ func (o *Orchestrator) resolveFamilyPaths(registryID string, configured modelFil
 		logger.String("configured_model_path", configured.model),
 		logger.String("resolved_model_path", fallback.model))
 
-	return fallback, true
+	return fallback, repairable
 }
 
 // resolveSiblingSet rebuilds a family's complete file set from the variant that
@@ -125,6 +214,12 @@ func (o *Orchestrator) resolveSiblingSet(registryID, modelPath string) (set mode
 		return modelFileSet{}, false
 	}
 	if _, err := os.Stat(modelPath); err != nil {
+		// Any stat error skips recovery: without confirming the model file exists
+		// there is nothing to anchor the companion files to. A non-ErrNotExist
+		// error (an unreadable volume) is treated the same as absence here, so a
+		// half-mounted volume never yields a spurious sibling set. Suppressing the
+		// config repair for the merely-unreadable case is the caller's job, via the
+		// presenceIndeterminate classification from nonEmptyMembersPresence.
 		return modelFileSet{}, false
 	}
 
@@ -193,44 +288,53 @@ func declaresModelFile(files []CatalogFile, localName string) bool {
 // mounted yet) is indistinguishable from a stale one at the filesystem level.
 // So repair only what the gallery itself wrote.
 //
-// A path qualifies when it sits under the gallery models directory, or when its
-// basename matches a file name the catalog declares for the family. The second
-// test is what catches the case the issues report: the models directory prefix
-// changed (a different container HOME), so the stale path no longer sits under
-// the current models directory, yet the file name is unmistakably ours.
-// Unlike resolveSiblingSet, this one DOES take o.mu, because it is called only
-// from planPathCorrection, which runs after the loaders have released the lock.
-// Do not call it from a builder or a loader.
+// A path qualifies only when BOTH hold: its basename is a LocalName the catalog
+// entry for registryID declares, AND its parent directory's base name is that
+// entry's ID (or "shared" for a shared-role file such as the embedding
+// extractor). Matching on the parent directory's base name rather than the full
+// models-directory prefix is what catches the case the issues report: the models
+// directory prefix changed (a different container HOME), so the stale path no
+// longer sits under the current models directory, yet it still lives in a
+// gallery-shaped <entry ID>/<local name> layout. A user's own copy that merely
+// shares a catalog file name (for example /mnt/nas/models/perch_v2_labels.txt,
+// whose parent directory is "models", not the entry ID) does NOT qualify.
+//
+// Takes no Orchestrator lock: it reads only its arguments and the ActiveCatalog
+// snapshot (whose accessor takes its own unrelated catalogMu). It is called only
+// from planPathCorrection, after the loaders have released o.mu. It would in
+// fact be safe on a loader path today, but keep it off one: the drainer that
+// reaches it DOES take o.mu, so moving the pair inward reintroduces the
+// self-deadlock this branch already shipped once.
 func (o *Orchestrator) isGalleryManagedPath(registryID, path string) bool {
 	if path == "" {
 		return false
 	}
 
-	o.mu.RLock()
-	modelsDir := o.modelsDir
-	o.mu.RUnlock()
-
-	if modelsDir != "" {
-		if rel, err := filepath.Rel(modelsDir, path); err == nil && !strings.HasPrefix(rel, "..") {
-			return true
-		}
-	}
-
 	base := filepath.Base(path)
+	parent := filepath.Base(filepath.Dir(path))
+
 	catalog := ActiveCatalog()
 	for i := range catalog {
 		entry := &catalog[i]
 		if entry.RegistryID != registryID {
 			continue
 		}
-		for _, f := range entry.Files {
-			if f.LocalName == base {
-				return true
-			}
+		// Check the entry's own files and every variant's files as a union: the
+		// stale configured path could name any installed variant's file.
+		fileSets := [][]CatalogFile{entry.Files}
+		for j := range entry.Variants {
+			fileSets = append(fileSets, entry.Variants[j].Files)
 		}
-		for i := range entry.Variants {
-			for _, f := range entry.Variants[i].Files {
-				if f.LocalName == base {
+		for _, files := range fileSets {
+			for _, f := range files {
+				if f.LocalName != base {
+					continue
+				}
+				expectedParent := entry.ID
+				if isSharedRole(f.Role) {
+					expectedParent = "shared"
+				}
+				if parent == expectedParent {
 					return true
 				}
 			}

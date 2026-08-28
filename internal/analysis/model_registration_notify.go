@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
@@ -45,15 +46,18 @@ func notifyModelsNotRegistered(sourceName string, modelIDs []string) {
 			return
 		}
 	}
-	modelNotRegisteredSeen.Store(key, now)
 
 	notif := notification.NewNotification(
 		notification.TypeWarning,
-		notification.PriorityHigh,
+		notification.PriorityMedium,
 		fmt.Sprintf("Model not analyzing %s", sourceName),
-		fmt.Sprintf("%s is assigned to audio source %q but is not receiving audio, so it is not producing "+
-			"detections. The model is most likely not installed or failed to load. Check the model gallery "+
-			"in Settings.", models, sourceName),
+		// State only what is known: the model is assigned but not currently
+		// receiving audio. The old "most likely not installed or failed to load"
+		// was wrong for the allocation-failure branch, and worse in the
+		// primary-fallback case where it could tell the user the built-in BirdNET
+		// model is not installed.
+		fmt.Sprintf("%s is assigned to audio source %q but is not currently receiving audio, so it is not "+
+			"producing detections. Open the model gallery in Settings to check its status.", models, sourceName),
 	).
 		WithComponent("analysis.audio_pipeline").
 		WithTitleKey(notification.MsgModelNotRegisteredTitle, map[string]any{
@@ -65,5 +69,16 @@ func notifyModelsNotRegistered(sourceName string, modelIDs []string) {
 		}).
 		WithDeliveryTarget("bell")
 
-	_ = svc.CreateWithMetadata(notif)
+	// Arm the 6h suppression window only after the notification is actually
+	// created. The service rate-limits, so storing the key before the create (or
+	// on a failed create) would silence a genuine condition for six hours behind a
+	// notification the user never saw.
+	if err := svc.CreateWithMetadata(notif); err != nil {
+		GetLogger().Warn("failed to create model-not-registered notification",
+			logger.String("source", sourceName),
+			logger.String("models", models),
+			logger.Error(err))
+		return
+	}
+	modelNotRegisteredSeen.Store(key, now)
 }

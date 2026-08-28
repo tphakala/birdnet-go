@@ -45,8 +45,10 @@ func (o *Orchestrator) deferPathCorrection(registryID string, resolved modelFile
 // costs at most three os.Stat calls and cannot disagree with the build, since
 // nothing between them touches the filesystem.
 //
-// Must be called with o.mu held (it only appends to the pending queue; the
-// gallery-managed check that takes o.mu runs later in the drainer).
+// Must be called with o.mu held. It only resolves paths and appends to the
+// pending queue; neither takes o.mu, so it is safe under the loaders' write
+// lock. The settings write itself happens later, in the drainer, after o.mu is
+// released.
 func (o *Orchestrator) queuePathCorrectionIfFallback(registryID string, configured modelFileSet, needEmbeddings bool) {
 	resolved, usedFallback := o.resolveFamilyPaths(registryID, configured, needEmbeddings)
 	if !usedFallback {
@@ -66,8 +68,9 @@ func (o *Orchestrator) queuePathCorrectionIfFallback(registryID string, configur
 // installedModelBasenameHint, which ScanInstalled uses to decide which variant
 // is installed when more than one variant's files are present.
 //
-// Safe to call with o.mu NOT held (it must not be: the drain and
-// isGalleryManagedPath both acquire o.mu).
+// Must be called with o.mu NOT held: the snapshot-and-clear below takes o.mu
+// itself, and o.mu is not reentrant. (isGalleryManagedPath, reached from
+// applyPathCorrection, does NOT take o.mu; it is the drain that does.)
 func (o *Orchestrator) runPendingPathCorrections() {
 	o.mu.Lock()
 	pending := o.pendingPathCorrections
@@ -81,8 +84,16 @@ func (o *Orchestrator) runPendingPathCorrections() {
 
 // applyPathCorrection rewrites one family's stale gallery paths in settings and
 // persists them, using the clone-mutate-publish protocol every other settings
-// writer follows.
+// writer follows. It serializes against ModelManager's install/uninstall config
+// writers through the package-level settingsWriteMu.
 func (o *Orchestrator) applyPathCorrection(pc *pendingPathCorrection) {
+	settingsWriteMu.Lock()
+	defer settingsWriteMu.Unlock()
+
+	// Re-read INSIDE the critical section. Reading conf.GetSettings() before
+	// taking the lock is the load-bearing half of the bug: a concurrent
+	// ModelManager writer could publish between that read and our StoreSettings,
+	// and our clone (built from the stale snapshot) would then clobber its write.
 	current := conf.GetSettings()
 	if current == nil {
 		return
@@ -178,9 +189,13 @@ func emitPathReconciledNotification(registryID, modelPath string) {
 	notif := notification.NewNotification(
 		notification.TypeInfo,
 		notification.PriorityMedium,
-		fmt.Sprintf("Model path repaired for %s", modelName),
-		fmt.Sprintf("The configured file path for %s pointed at a file that no longer exists. "+
-			"It has been updated to the installed model at %s.", modelName, modelPath),
+		fmt.Sprintf("Model file paths repaired for %s", modelName),
+		// Worded to cover both branches: the model path itself may have gone stale,
+		// or (in sibling recovery) the model exists and it was the labels or shared
+		// embeddings path that changed. modelPath names the installed model the set
+		// was reconciled against.
+		fmt.Sprintf("Configured file paths for %s were out of date and have been repaired to match "+
+			"the installed model at %s.", modelName, modelPath),
 	).
 		WithComponent("classifier").
 		WithTitleKey(notification.MsgModelPathReconciledTitle, map[string]any{
