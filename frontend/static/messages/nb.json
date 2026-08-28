@@ -996,20 +996,20 @@
     },
     "history": {
       "title": "Registreringshistorikk",
-      "firstHeard": "First heard",
-      "lastHeard": "Last heard",
-      "totalDetections": "Detections",
-      "dailyWindow": "Daily detections, 30 days to {date}",
-      "recentTitle": "Other recent detections",
-      "viewAll": "View all {count} in Detections",
-      "noOthers": "This is the only detection of this species so far.",
-      "loading": "Loading species history...",
-      "loadError": "Could not load history for this species.",
-      "unavailable": "History is not available for this detection.",
+      "firstHeard": "Først hørt",
+      "lastHeard": "Sist hørt",
+      "totalDetections": "Registreringer",
+      "dailyWindow": "Daglige registreringer, 30 dager til {date}",
+      "recentTitle": "Andre nylige registreringer",
+      "viewAll": "Vis alle {count} i Registreringer",
+      "noOthers": "Dette er så langt den eneste registreringen av denne arten.",
+      "loading": "Laster artshistorikk...",
+      "loadError": "Kunne ikke laste historikk for denne arten.",
+      "unavailable": "Historikk er ikke tilgjengelig for denne registreringen.",
       "aria": {
-        "sparkline": "Daily detection counts for the 30 days ending {date}",
-        "recentList": "Other recent detections of this species",
-        "openDetection": "Open detection from {timestamp}"
+        "sparkline": "Daglige antall registreringer for de 30 dagene som slutter {date}",
+        "recentList": "Andre nylige registreringer av denne arten",
+        "openDetection": "Åpne registrering fra {timestamp}"
       }
     },
     "notes": {

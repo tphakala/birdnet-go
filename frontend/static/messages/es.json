@@ -996,20 +996,20 @@
     },
     "history": {
       "title": "Historial de detección",
-      "firstHeard": "First heard",
-      "lastHeard": "Last heard",
-      "totalDetections": "Detections",
-      "dailyWindow": "Daily detections, 30 days to {date}",
-      "recentTitle": "Other recent detections",
-      "viewAll": "View all {count} in Detections",
-      "noOthers": "This is the only detection of this species so far.",
-      "loading": "Loading species history...",
-      "loadError": "Could not load history for this species.",
-      "unavailable": "History is not available for this detection.",
+      "firstHeard": "Escuchado por primera vez",
+      "lastHeard": "Escuchado por última vez",
+      "totalDetections": "Detecciones",
+      "dailyWindow": "Detecciones diarias, 30 días hasta {date}",
+      "recentTitle": "Otras detecciones recientes",
+      "viewAll": "Ver las {count} en Detecciones",
+      "noOthers": "Esta es la única detección de esta especie hasta ahora.",
+      "loading": "Cargando historial de la especie...",
+      "loadError": "No se pudo cargar el historial de esta especie.",
+      "unavailable": "El historial no está disponible para esta detección.",
       "aria": {
-        "sparkline": "Daily detection counts for the 30 days ending {date}",
-        "recentList": "Other recent detections of this species",
-        "openDetection": "Open detection from {timestamp}"
+        "sparkline": "Recuento diario de detecciones de los 30 días que terminan el {date}",
+        "recentList": "Otras detecciones recientes de esta especie",
+        "openDetection": "Abrir la detección del {timestamp}"
       }
     },
     "notes": {

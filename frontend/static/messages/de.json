@@ -996,20 +996,20 @@
     },
     "history": {
       "title": "Erkennungsverlauf",
-      "firstHeard": "First heard",
-      "lastHeard": "Last heard",
-      "totalDetections": "Detections",
-      "dailyWindow": "Daily detections, 30 days to {date}",
-      "recentTitle": "Other recent detections",
-      "viewAll": "View all {count} in Detections",
-      "noOthers": "This is the only detection of this species so far.",
-      "loading": "Loading species history...",
-      "loadError": "Could not load history for this species.",
-      "unavailable": "History is not available for this detection.",
+      "firstHeard": "Zuerst gehört",
+      "lastHeard": "Zuletzt gehört",
+      "totalDetections": "Erkennungen",
+      "dailyWindow": "Tägliche Erkennungen, 30 Tage bis {date}",
+      "recentTitle": "Andere kürzliche Erkennungen",
+      "viewAll": "Alle {count} in Erkennungen anzeigen",
+      "noOthers": "Dies ist bisher die einzige Erkennung dieser Art.",
+      "loading": "Artenverlauf wird geladen...",
+      "loadError": "Verlauf für diese Art konnte nicht geladen werden.",
+      "unavailable": "Für diese Erkennung ist kein Verlauf verfügbar.",
       "aria": {
-        "sparkline": "Daily detection counts for the 30 days ending {date}",
-        "recentList": "Other recent detections of this species",
-        "openDetection": "Open detection from {timestamp}"
+        "sparkline": "Tägliche Erkennungszahlen für die 30 Tage bis {date}",
+        "recentList": "Andere kürzliche Erkennungen dieser Art",
+        "openDetection": "Erkennung vom {timestamp} öffnen"
       }
     },
     "notes": {

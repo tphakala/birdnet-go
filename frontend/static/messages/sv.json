@@ -996,20 +996,20 @@
     },
     "history": {
       "title": "Detekteringshistorik",
-      "firstHeard": "First heard",
-      "lastHeard": "Last heard",
-      "totalDetections": "Detections",
-      "dailyWindow": "Daily detections, 30 days to {date}",
-      "recentTitle": "Other recent detections",
-      "viewAll": "View all {count} in Detections",
-      "noOthers": "This is the only detection of this species so far.",
-      "loading": "Loading species history...",
-      "loadError": "Could not load history for this species.",
-      "unavailable": "History is not available for this detection.",
+      "firstHeard": "Först hörd",
+      "lastHeard": "Senast hörd",
+      "totalDetections": "Detekteringar",
+      "dailyWindow": "Dagliga detekteringar, 30 dagar till {date}",
+      "recentTitle": "Andra nyliga detekteringar",
+      "viewAll": "Visa alla {count} i Detekteringar",
+      "noOthers": "Detta är hittills den enda detekteringen av denna art.",
+      "loading": "Laddar artshistorik...",
+      "loadError": "Det gick inte att ladda historik för denna art.",
+      "unavailable": "Historik är inte tillgänglig för denna detektering.",
       "aria": {
-        "sparkline": "Daily detection counts for the 30 days ending {date}",
-        "recentList": "Other recent detections of this species",
-        "openDetection": "Open detection from {timestamp}"
+        "sparkline": "Dagliga detekteringsantal för de 30 dagar som slutar {date}",
+        "recentList": "Andra nyliga detekteringar av denna art",
+        "openDetection": "Öppna detektering från {timestamp}"
       }
     },
     "notes": {

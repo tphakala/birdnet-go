@@ -996,20 +996,20 @@
     },
     "history": {
       "title": "Detektálás előzmények",
-      "firstHeard": "First heard",
-      "lastHeard": "Last heard",
-      "totalDetections": "Detections",
-      "dailyWindow": "Daily detections, 30 days to {date}",
-      "recentTitle": "Other recent detections",
-      "viewAll": "View all {count} in Detections",
-      "noOthers": "This is the only detection of this species so far.",
-      "loading": "Loading species history...",
-      "loadError": "Could not load history for this species.",
-      "unavailable": "History is not available for this detection.",
+      "firstHeard": "Először hallva",
+      "lastHeard": "Utoljára hallva",
+      "totalDetections": "Detektálások",
+      "dailyWindow": "Napi detektálások, 30 nap eddig: {date}",
+      "recentTitle": "Egyéb közelmúltbeli detektálások",
+      "viewAll": "Összes megtekintése ({count}) a Detektálásoknál",
+      "noOthers": "Ez eddig az egyetlen detektálása ennek a fajnak.",
+      "loading": "Faj előzményeinek betöltése...",
+      "loadError": "Nem sikerült betölteni a faj előzményeit.",
+      "unavailable": "Ehhez a detektáláshoz nem érhető el előzmény.",
       "aria": {
-        "sparkline": "Daily detection counts for the 30 days ending {date}",
-        "recentList": "Other recent detections of this species",
-        "openDetection": "Open detection from {timestamp}"
+        "sparkline": "Napi detektálásszámok a(z) {date} napon végződő 30 napra",
+        "recentList": "Ennek a fajnak az egyéb közelmúltbeli detektálásai",
+        "openDetection": "Detektálás megnyitása innen: {timestamp}"
       }
     },
     "notes": {

@@ -996,20 +996,20 @@
     },
     "history": {
       "title": "História detekcií",
-      "firstHeard": "First heard",
-      "lastHeard": "Last heard",
-      "totalDetections": "Detections",
-      "dailyWindow": "Daily detections, 30 days to {date}",
-      "recentTitle": "Other recent detections",
-      "viewAll": "View all {count} in Detections",
-      "noOthers": "This is the only detection of this species so far.",
-      "loading": "Loading species history...",
-      "loadError": "Could not load history for this species.",
-      "unavailable": "History is not available for this detection.",
+      "firstHeard": "Prvýkrát počuté",
+      "lastHeard": "Naposledy počuté",
+      "totalDetections": "Detekcie",
+      "dailyWindow": "Denné detekcie, 30 dní do {date}",
+      "recentTitle": "Ďalšie nedávne detekcie",
+      "viewAll": "Zobraziť všetko ({count}) v Detekciách",
+      "noOthers": "Toto je zatiaľ jediná detekcia tohto druhu.",
+      "loading": "Načítava sa história druhu...",
+      "loadError": "Históriu tohto druhu sa nepodarilo načítať.",
+      "unavailable": "Pre túto detekciu nie je história k dispozícii.",
       "aria": {
-        "sparkline": "Daily detection counts for the 30 days ending {date}",
-        "recentList": "Other recent detections of this species",
-        "openDetection": "Open detection from {timestamp}"
+        "sparkline": "Počty denných detekcií za 30 dní končiacich {date}",
+        "recentList": "Ďalšie nedávne detekcie tohto druhu",
+        "openDetection": "Otvoriť detekciu z {timestamp}"
       }
     },
     "notes": {
