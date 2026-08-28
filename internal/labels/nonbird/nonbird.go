@@ -20,6 +20,14 @@ const (
 	CategoryNoise Category = "noise"
 	// CategoryDevice covers electronic devices and household appliances.
 	CategoryDevice Category = "device"
+
+	humanLabelPrefix = "human "
+	humanTaxonLabel  = "homo sapiens"
+	dogLabelPrefix   = "dog_"
+	dogLabel         = "dog"
+	dogBarkLabel     = "bark"
+	dogGrowlingLabel = "growling"
+	dogTaxonLabel    = "canis familiaris"
 )
 
 // firstTokenSet holds the first underscore-delimited token of every multi-word key in classes.
@@ -69,10 +77,10 @@ func CategoryOf(rawLabel string) (Category, bool) {
 // "Human " label prefix, Perch's human AudioSet/FSD50K classes, and the Perch
 // iNaturalist human taxon. Matching is case-insensitive.
 func IsHumanVocalization(rawLabel string) bool {
-	if hasFoldedPrefix(rawLabel, "human ") {
+	if hasFoldedPrefix(rawLabel, humanLabelPrefix) {
 		return true
 	}
-	if strings.EqualFold(rawLabel, "homo sapiens") {
+	if strings.EqualFold(rawLabel, humanTaxonLabel) {
 		return true
 	}
 	for _, label := range humanLabelsByLength[len(rawLabel)] {
@@ -88,13 +96,13 @@ func IsHumanVocalization(rawLabel string) bool {
 // locale-stable "Dog_" prefix and Perch's dog sound classes and domestic dog
 // taxon. Wild canids remain excluded. Matching is case-insensitive.
 func IsDogDetection(rawLabel string) bool {
-	if hasFoldedPrefix(rawLabel, "dog_") {
+	if hasFoldedPrefix(rawLabel, dogLabelPrefix) {
 		return true
 	}
-	return strings.EqualFold(rawLabel, "dog") ||
-		strings.EqualFold(rawLabel, "bark") ||
-		strings.EqualFold(rawLabel, "growling") ||
-		strings.EqualFold(rawLabel, "canis familiaris")
+	return strings.EqualFold(rawLabel, dogLabel) ||
+		strings.EqualFold(rawLabel, dogBarkLabel) ||
+		strings.EqualFold(rawLabel, dogGrowlingLabel) ||
+		strings.EqualFold(rawLabel, dogTaxonLabel)
 }
 
 func hasFoldedPrefix(value, prefix string) bool {

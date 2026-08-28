@@ -312,7 +312,7 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 	// Keep lower-ranked human/dog labels available to the filters without mixing
 	// them into the normal top-ranked results used by metrics, diagnostics, and
 	// additional-prediction persistence.
-	topResults, filterSignals := classifier.SplitFilterSignals(results)
+	topResults, filterSignals := classifier.SplitFilterSignals(results, classifier.DefaultTopKResults)
 
 	log.Debug("ProcessData inference complete",
 		logger.String("source", source),

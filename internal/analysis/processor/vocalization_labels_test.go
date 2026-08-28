@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -220,10 +221,6 @@ func TestFilterSignalsTriggerFiltersWithoutBecomingAdditionalResults(t *testing.
 	}
 	item := classifier.Results{
 		StartTime: start,
-		Results: []datastore.Results{
-			{Species: "Turdus merula_Common blackbird", Confidence: 0.9},
-			{Species: "Parus major_Great tit", Confidence: 0.8},
-		},
 		FilterSignals: []datastore.Results{
 			{Species: "Speech", Confidence: 0.09},
 			{Species: "Bark", Confidence: 0.08},
@@ -231,17 +228,13 @@ func TestFilterSignalsTriggerFiltersWithoutBecomingAdditionalResults(t *testing.
 	}
 	item.Source.ID = source
 
-	p.processFilterSignals(settings, &item)
+	detections := p.processResults(settings, item)
 
 	human, ok := p.LastHumanDetection[source]
 	require.True(t, ok)
 	assert.Equal(t, start, human.Time)
 	assert.Equal(t, start, p.LastDogDetection[source])
-
-	additional := convertToAdditionalResults(item.Results, "Turdus merula")
-	require.Len(t, additional, 1)
-	assert.Equal(t, "Parus major", additional[0].Species.ScientificName)
-	assert.Equal(t, "Parus major_Great tit", additional[0].RawLabel)
+	assert.Empty(t, detections, "filter-only signals must not become persisted detections or additional results")
 }
 
 // TestPerchHumanLabelsParityWithNonbird verifies that every AudioSet/FSD50K key

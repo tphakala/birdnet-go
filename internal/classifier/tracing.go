@@ -57,9 +57,9 @@ const (
 	errTypeBatClassification   = "bat_classification"
 )
 
-// defaultTopKResults is the baseline number of top predictions every model returns.
+// DefaultTopKResults is the baseline number of top predictions every model returns.
 // The strongest missing privacy and dog-bark signal can be retained in addition.
-const defaultTopKResults = 10
+const DefaultTopKResults = 10
 
 // TracingSpan represents a traced operation with minimal overhead.
 // A TracingSpan must not be used from multiple goroutines concurrently.
@@ -266,7 +266,7 @@ func recordPredictionFailure(span *TracingSpan, model, errorType string, start t
 func recordPredictionSuccess(span *TracingSpan, resultCount int, start time.Time) {
 	// Filter-only tail signals are an internal transport detail, not additional
 	// ranked predictions. Keep the existing result-count telemetry contract.
-	span.SetData(dataKeyResultCount, min(resultCount, defaultTopKResults))
+	span.SetData(dataKeyResultCount, min(resultCount, DefaultTopKResults))
 	span.SetData(dataKeyTotalDurationMs, time.Since(start).Milliseconds())
 	span.SetTag(tagKeyError, tagValueFalse)
 }

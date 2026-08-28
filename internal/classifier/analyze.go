@@ -97,7 +97,7 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 	}
 
 	// Select the top predictions while retaining labels required by downstream filters.
-	topResults := getTopKResults(results, defaultTopKResults)
+	topResults := getTopKResults(results, DefaultTopKResults)
 
 	// Log prediction timing for performance monitoring
 	duration := time.Since(start)
@@ -303,8 +303,9 @@ func getTopKResults(results []datastore.Results, k int) []datastore.Results {
 // lower-ranked signals retained solely for the privacy and dog-bark filters.
 // Model Predict implementations return the two slices as one ownership-safe
 // allocation; the analysis queue splits it before persistence processing.
-func SplitFilterSignals(results []datastore.Results) (topResults, filterSignals []datastore.Results) {
-	n := min(defaultTopKResults, len(results))
+// normalResultCount must match the limit passed to getTopKResults by the model.
+func SplitFilterSignals(results []datastore.Results, normalResultCount int) (topResults, filterSignals []datastore.Results) {
+	n := min(max(normalResultCount, 0), len(results))
 	// Cap the top slice at its length so an append by a future queue consumer
 	// cannot overwrite the adjacent filter-signal tail.
 	return results[:n:n], results[n:]

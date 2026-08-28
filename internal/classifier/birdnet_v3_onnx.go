@@ -261,7 +261,7 @@ func (b *BirdNETV3) Predict(ctx context.Context, samples [][]float32) ([]datasto
 	}
 
 	// Success: Finish records the single prediction because the span is not errored.
-	topResults := getTopKResults(results, defaultTopKResults)
+	topResults := getTopKResults(results, DefaultTopKResults)
 	recordPredictionSuccess(span, len(topResults), start)
 
 	return topResults, nil
