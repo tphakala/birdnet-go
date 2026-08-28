@@ -74,6 +74,7 @@ BirdNET configuration
 | `birdnet.backend` | string | inference backend preference: "auto" (default), "onnx", or "openvino" |
 | `birdnet.openvinodevice` | string | OpenVINO device preference: "auto" (default), "cpu", or "gpu" |
 | `birdnet.huggingfaceendpoint` | string | model download host, e.g. "https://hf-mirror.com" where huggingface.co is blocked; empty falls back to $HF_ENDPOINT then https://huggingface.co |
+| `birdnet.modelregion` | string | regional model preference: "auto" (resolve from coordinates, default), "global" (always global models), or a region slug pin (e.g. "iberia"); empty is treated as "auto" |
 
 ## perch
 
@@ -83,7 +84,8 @@ PerchConfig holds configuration for the Google Perch v2 model.
 |---------|------|-------------|
 | `perch.modelpath` | string | path to Perch v2 ONNX model file |
 | `perch.labelpath` | string | path to Perch v2 label CSV file |
-| `perch.threshold` | number | confidence threshold for detections |
+| `perch.overridethreshold` | boolean | when true, gate Perch detections on Threshold instead of following BirdNET.Threshold |
+| `perch.threshold` | number | confidence threshold for detections (applied only when OverrideThreshold is true) |
 | `perch.locale` | string | locale for species label translation |
 
 ## birdnetv3
@@ -94,7 +96,8 @@ BirdNETV3Config holds configuration for the BirdNET v3.0 acoustic classifier.
 |---------|------|-------------|
 | `birdnetv3.modelpath` | string | path to BirdNET v3.0 ONNX model file |
 | `birdnetv3.labelpath` | string | path to BirdNET v3.0 label file |
-| `birdnetv3.threshold` | number | confidence threshold for detections |
+| `birdnetv3.overridethreshold` | boolean | when true, gate BirdNET v3.0 detections on Threshold instead of following BirdNET.Threshold |
+| `birdnetv3.threshold` | number | confidence threshold for detections (applied only when OverrideThreshold is true) |
 | `birdnetv3.locale` | string | locale for species label translation |
 
 ## bat
@@ -257,7 +260,10 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.ebird.locale` | string | locale for eBird data (e.g., "en", "es") |
 | `realtime.privacyfilter.debug` | boolean | true to enable debug mode |
 | `realtime.privacyfilter.enabled` | boolean | true to enable privacy filter |
-| `realtime.privacyfilter.confidence` | number | confidence threshold for human detection |
+| `realtime.privacyfilter.confidence` | number | confidence threshold for label-based human detection |
+| `realtime.privacyfilter.vad.enabled` | boolean | true to enable the VAD speech gate (opt-in, default false) |
+| `realtime.privacyfilter.vad.threshold` | number | speech-probability gate in (0,1]; default 0.35 |
+| `realtime.privacyfilter.vad.modelpath` | string | optional override for the embedded silero .onnx; must be a sequence-export model (inputs input/h/c), not the stock upstream frame model; empty uses the embedded model |
 | `realtime.dogbarkfilter.debug` | boolean | true to enable debug mode |
 | `realtime.dogbarkfilter.enabled` | boolean | true to enable dog bark filter |
 | `realtime.dogbarkfilter.confidence` | number | confidence threshold for dog bark detection |
@@ -327,6 +333,8 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.speciestracking.seasonaltracking.enabled` | boolean | true to enable seasonal tracking |
 | `realtime.speciestracking.seasonaltracking.windowdays` | integer | Days to show "new this season" indicator (default: 7) |
 | `realtime.speciestracking.seasonaltracking.seasons` | any |  |
+| `realtime.speciestracking.infrequenttracking.enabled` | boolean | true to enable infrequent species tracking |
+| `realtime.speciestracking.infrequenttracking.absencedays` | integer | Days since last detection before a return is flagged "infrequent" (default: 14) |
 | `realtime.extendedcapture.enabled` | boolean |  |
 | `realtime.extendedcapture.maxduration` | integer |  |
 | `realtime.extendedcapture.capturebufferseconds` | integer |  |
@@ -436,9 +444,7 @@ BackupConfig contains backup-related configuration
 |---------|------|-------------|
 | `backup.enabled` | boolean | Global flag to enable or disable the entire backup system. If false, no backups (manual or scheduled) will occur. |
 | `backup.debug` | boolean | If true, enables detailed debug logging for backup operations. |
-| `backup.encryption` | boolean | If true, enables encryption for backup archives. Requires EncryptionKey to be set. |
-| `backup.encryption_key` | string | Base64-encoded encryption key used for AES-256-GCM encryption of backup archives. Must be kept secret and safe. |
-| `backup.sanitize_config` | boolean | If true, sensitive information (like passwords, API keys) will be removed from the configuration file copy that is included in the backup archive. |
+| `backup.encryption` | boolean | If true, enables encryption for backup archives. The AES-256-GCM key is generated and managed automatically in encryption.key in the config directory; there is no key to configure. |
 | `backup.retention.maxage` | string | Duration string for the maximum age of backups to keep (e.g., "30d" for 30 days, "6m" for 6 months, "1y" for 1 year). Backups older than this may be deleted. |
 | `backup.retention.maxbackups` | integer | Maximum total number of backups to keep for a given source. If 0, no limit by count (only by age or MinBackups). |
 | `backup.retention.minbackups` | integer | Minimum number of recent backups to keep for a given source, regardless of their age. This ensures a baseline number of backups are always available. |

@@ -412,6 +412,7 @@
         "updatingIntervals": "A atualizar intervalos de deteção...",
         "reconfiguringMqtt": "A atualizar ligação MQTT...",
         "reconfiguringBirdweather": "A atualizar integração BirdWeather...",
+        "reconfiguringEbird": "Updating eBird integration...",
         "reconfiguringStreams": "A atualizar fluxos de áudio...",
         "reconfiguringTelemetry": "A atualizar definições de telemetria...",
         "reconfiguringPushNotifications": "A reconfigurar fornecedores de notificações push...",
@@ -457,6 +458,11 @@
       "ort": {
         "unavailableTitle": "ONNX Runtime não disponível",
         "unavailableMessage": "O ONNX Runtime {requiredVersion} é necessário para {modelName}, mas não foi encontrado. Consulte o guia de instalação: {installGuideURL}"
+      },
+      "region": {
+        "staleTitle": "A região do modelo pode estar desatualizada",
+        "staleMessage": "{modelName} está instalado para {oldRegion}, mas a sua nova localização corresponde a {newRegion}. Pode mudar de variante a partir da galeria de modelos nas Configurações.",
+        "staleGlobalMessage": "{modelName} está instalado para {oldRegion}, mas a sua nova localização está fora da sua cobertura. Pode mudar para a variante global a partir da galeria de modelos nas Configurações."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -624,6 +630,7 @@
       "categoryYear": "Nova este ano",
       "categorySeason": "Nova nesta temporada",
       "categorySeasonNamed": "Nova nesta {season}",
+      "categoryInfrequent": "Infrequente",
       "maxConfidenceShort": "Máx {confidence}%",
       "detections": "{count, plural, one {# deteção} other {# deteções}}",
       "lastSeen": "Último: {days, plural, =0 {hoje} one {há # dia} other {há # dias}}"
@@ -658,7 +665,8 @@
         "viewSixHourly": "Ver todas as detecções de {startHour}:00 a {endHour}:00",
         "hourlyDetections": "{count} detecções às {hour}:00 - Clique para ver",
         "biHourlyDetections": "{count} detecções de {startHour}:00 a {endHour}:00 - Clique para ver",
-        "sixHourlyDetections": "{count} detecções de {startHour}:00 a {endHour}:00 - Clique para ver"
+        "sixHourlyDetections": "{count} detecções de {startHour}:00 a {endHour}:00 - Clique para ver",
+        "infrequent": "Infrequente - retornou após {days, plural, one {# dia} other {# dias}} de ausência"
       },
       "loading": {
         "preparing": "Preparando dados...",
@@ -1689,6 +1697,26 @@
       "title": "Modelos de IA e Inferência",
       "loading": "Carregando o status da inferência",
       "error": "Não foi possível carregar o status da inferência",
+      "vad": {
+        "section": "Proteção de privacidade",
+        "title": "Silero VAD",
+        "active": "Ativo",
+        "activeHelp": "O modelo de deteção de voz está carregado e a avaliar áudio.",
+        "idle": "Inativo",
+        "idleHelp": "Ativado e pronto; o modelo carrega ao avaliar o primeiro fragmento de áudio.",
+        "disabled": "Desativado",
+        "disabledHelp": "A proteção de privacidade está desligada nas definições do filtro de privacidade.",
+        "unavailable": "Sem modelo",
+        "unavailableHelp": "Nenhum modelo de deteção de voz disponível nesta versão. Defina o caminho do modelo VAD nas definições do filtro de privacidade, ou use uma versão com o modelo integrado.",
+        "description": "Silero VAD é um modelo acústico especializado que detecta a fala humana. Alimenta o filtro de privacidade, descartando o áudio quando a fala está presente para que as vozes fiquem fora das suas gravações.",
+        "threshold": "Limiar",
+        "speechHits": "Deteções de voz",
+        "recentTitle": "Fala recente",
+        "recentEmpty": "Nenhuma fala detectada ainda",
+        "colWhen": "Quando",
+        "colProbability": "Probabilidade",
+        "colSource": "Fonte"
+      },
       "sectionHardware": "Hardware",
       "sectionBackends": "Mecanismos de Inferência",
       "sectionModels": "Modelos",
@@ -1699,6 +1727,9 @@
       "fp16": "FP16",
       "fp16Supported": "FP16 suportado",
       "fp16Unsupported": "FP16 não suportado",
+      "advanced": "Avançado",
+      "capabilities": "Capacidades",
+      "capabilitiesHelp": "Tags de hardware usadas para corresponder esta máquina com as compilações de modelo disponíveis.",
       "backendTflite": "TensorFlow Lite",
       "backendOnnx": "ONNX Runtime",
       "backendOpenvino": "OpenVINO",
@@ -2807,7 +2838,8 @@
           "detectionPath": "Caminho relativo para a detecção (ex., \"/ui/detections/1234\")",
           "detectionUrl": "URL completa para a detecção",
           "imageUrl": "Link para imagem da espécie",
-          "daysSinceFirstSeen": "Número de dias desde a primeira detecção"
+          "daysSinceFirstSeen": "Número de dias desde a primeira detecção",
+          "daysSinceLastSeen": "Número de dias desde a última detecção"
         }
       },
       "testNotification": {
@@ -3123,7 +3155,11 @@
         "enable": "Ativar filtragem de privacidade",
         "disabled": "Filtragem de privacidade está desativada",
         "confidenceLabel": "Limiar de confiança para detecção humana",
-        "confidenceHelp": "Defina o nível de confiança para detecção de voz humana, valores mais baixos tornam o filtro mais sensível"
+        "confidenceHelp": "Defina o nível de confiança para detecção de voz humana, valores mais baixos tornam o filtro mais sensível",
+        "vadEnable": "Ativar Proteção de Privacidade (Silero VAD)",
+        "vadHelp": "Executa um modelo neural dedicado de deteção de voz juntamente com o classificador para uma filtragem de voz robusta. Consome recursos de sistema adicionais (aprox. 20-30 MB de RAM e inferência de CPU por segmento).",
+        "vadThresholdLabel": "Limiar de Proteção de Privacidade",
+        "vadThresholdHelp": "Limiar de sensibilidade para o detetor de atividade de voz (predefinido 0,35). Valores mais baixos tornam o filtro mais sensível a voz baixa ou distante."
       },
       "falsePositivePrevention": {
         "title": "Prevenção de falsos positivos",
@@ -4330,6 +4366,18 @@
             "hemisphereNote": "As datas das estações são configuradas automaticamente com base na sua latitude. O hemisfério norte usa estações padrão, o hemisfério sul tem datas deslocadas, e regiões equatoriais usam estações chuvosas/secas."
           }
         },
+        "infrequent": {
+          "title": "Rastreamento infrequente",
+          "description": "Marca espécies que retornam após uma longa ausência (visitantes raros de retorno)",
+          "enabled": {
+            "label": "Ativar rastreamento infrequente",
+            "helpText": "Rastreia e notifica quando uma espécie é detectada novamente após uma longa ausência"
+          },
+          "absenceDays": {
+            "label": "Limite de ausência (dias)",
+            "helpText": "Número mínimo de dias desde a última detecção antes que uma espécie que retorna seja marcada como 'infrequente' (1-365)"
+          }
+        },
         "months": {
           "january": "Janeiro",
           "february": "Fevereiro",
@@ -4527,6 +4575,7 @@
           "stream_disconnected": "Fluxo desconectado",
           "stream_error": "Erro de fluxo",
           "detection_new_species": "Nova espécie detetada",
+          "detection_infrequent_species": "Espécie infrequente detectada",
           "detection_occurred": "Deteção realizada",
           "application_started": "Aplicação iniciada",
           "application_stopped": "Aplicação parada",
@@ -4576,6 +4625,10 @@
         "newSpecies": {
           "name": "Nova espécie detetada",
           "description": "Notifica quando uma espécie é detetada pela primeira vez"
+        },
+        "infrequentSpecies": {
+          "name": "Espécie infrequente detectada",
+          "description": "Notifica quando uma espécie retorna após uma longa ausência"
         },
         "streamDisconnected": {
           "name": "Fluxo de áudio desligado",
@@ -5319,6 +5372,20 @@
       "locale": {
         "label": "Idioma das espécies",
         "helpText": "Idioma utilizado para os nomes comuns das espécies na interface."
+      },
+      "secondaryThresholdOverride": {
+        "label": "Override confidence threshold",
+        "helpText": "When enabled, this model uses its own confidence threshold below. When disabled, it follows the main BirdNET confidence threshold."
+      },
+      "secondaryThreshold": {
+        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
+        "followsBirdnet": "Enable the override above to set a custom value. This model currently follows the main BirdNET confidence threshold."
+      },
+      "perchThreshold": {
+        "label": "Perch v2 Confidence Threshold"
+      },
+      "birdnetv3Threshold": {
+        "label": "BirdNET v3.0 Confidence Threshold"
       }
     },
     "rangeFilter": {
@@ -5358,6 +5425,79 @@
     "gallery": {
       "title": "Galeria de modelos",
       "description": "Gerenciar modelos classificadores para detecção de aves e morcegos.",
+      "region": {
+        "title": "Região do modelo",
+        "modeAuto": "Automático",
+        "modeAutoHint": "Escolher a melhor variante regional a partir da localização da estação",
+        "modeManual": "Manual region select",
+        "modeManualHint": "Choose a region yourself, or the worldwide model",
+        "worldwideTitle": "Worldwide",
+        "worldwideSubtitle": "Every region, all species",
+        "worldwideResourceNote": "Largest model, uses the most RAM and CPU",
+        "selectedBadge": "Selected",
+        "orSpecificRegion": "Or a specific region",
+        "search": "Search regions or countries",
+        "searchNoResults": "No regions match \"{query}\"",
+        "manualPrompt": "Choose a region below, or the worldwide model.",
+        "countriesOverflow": "+{count}",
+        "coreCoverage": "Core coverage:",
+        "partialCoverage": "Partial coverage:",
+        "pinAction": "Fixar {region}",
+        "switchToAuto": "Mudar para automático",
+        "loading": "Carregando regiões...",
+        "loadFailed": "Falha ao carregar dados da região",
+        "mapUnavailable": "Mapa de cobertura indisponível",
+        "mapAria": "Mapa de cobertura de {region}",
+        "why": {
+          "noLocation": "A seleção automática requer a localização da estação. Defina-a nas Configurações principais; o modelo global será usado até lá.",
+          "outsideCoverage": "A sua localização está fora da cobertura de todos os modelos regionais, pelo que é utilizado o modelo global.",
+          "ambiguous": "A sua localização fica perto da fronteira entre {region} e {runnerUp}. A seleção automática utiliza {region}; fixe qualquer uma para tornar a escolha explícita.",
+          "resolved": "Região detetada a partir da sua localização: {region}.",
+          "global": "O modelo global é sempre utilizado, independentemente da localização da estação.",
+          "pinned": "Fixado em {region}. A localização da estação não afeta a seleção do modelo.",
+          "pinnedMismatch": "A sua localização corresponde atualmente a {resolved}.",
+          "pinnedUnknown": "A região fixada \"{region}\" não está disponível no catálogo de modelos atual. As famílias de modelos recorrem à sua localização ou ao modelo global."
+        }
+      },
+      "variants": {
+        "title": "Variante do modelo",
+        "recommended": "Recomendado",
+        "recommendedForHardware": "Ideal para o seu hardware",
+        "installed": "Instalado",
+        "default": "Padrão",
+        "incompatible": "Não disponível para o seu hardware",
+        "showAll": "Mostrar todas as variantes ({count})",
+        "showRegion": "Mostrar variantes para {region} e o seu hardware ({count})",
+        "showHardware": "Mostrar variantes de hardware ({count})",
+        "showAllRegions": "Mostrar todas as variantes, incluindo outras regiões ({count})",
+        "regionContext": "Variantes regionais mostradas para {region}, definidas pela seleção de região do modelo acima",
+        "regionContextNone": "Variantes regionais estão disponíveis. Escolha uma região na seleção de região do modelo acima ou mostre todas as variantes.",
+        "otherRegions": "Outras regiões",
+        "filterPlaceholder": "Filtrar regiões",
+        "filterAria": "Filtrar versões ajustadas por região",
+        "filterNoMatch": "Nenhuma região corresponde a \"{query}\"",
+        "latency": "~{ms} ms",
+        "precisionInfo": "About precision and variants",
+        "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
+      },
+      "actionInProgress": "Aguarde a conclusão da instalação, reinstalação ou remoção do modelo atual",
+      "removeSuccess": "Removed {name}",
+      "reasons": {
+        "backendRecommended": "Roda em {backend}, o backend recomendado para o seu hardware",
+        "backendSupported": "Roda em {backend}",
+        "regionMatched": "Adaptado à sua região ({region})",
+        "regionGlobalFallback": "Modelo global para a sua localização",
+        "precisionFp16Native": "Versão de meia precisão ajustada para o seu processador",
+        "precisionFp16GpuPreferred": "Versão de meia precisão: metade do download, roda na sua GPU",
+        "ramConstrainedFit": "Versão quantizada otimizada para a memória disponível",
+        "benchmarkMeasured": "O mais rápido no seu dispositivo segundo os testes de desempenho",
+        "variantLegacy": "Substituído por uma versão mais recente",
+        "archUnsupported": "Requer um processador {required}",
+        "backendMissing": "Necessita de um backend de inferência que a sua versão não consegue alcançar ({required})",
+        "ramInsufficient": "Necessita de pelo menos {requiredMb} MB de memória",
+        "hardwareExcluded": "Não suportado no seu hardware ({token})",
+        "backendOnnxUnavailable": "Requer ONNX Runtime, que não está disponível neste sistema. Imagens Docker e arquivos compactados de lançamento o incluem; consulte o guia de instalação do ONNX Runtime."
+      },
       "tabs": {
         "installed": "Instalados",
         "available": "Disponíveis"
@@ -5365,7 +5505,6 @@
       "loading": "Carregando modelos...",
       "retry": "Tentar novamente",
       "builtIn": "Integrado",
-      "builtInDescription": "Classificador de espécies de aves integrado pela equipe BirdNET.",
       "species": "{count} espécies",
       "install": "Instalar",
       "installing": "Instalando...",
@@ -5410,7 +5549,13 @@
       "errors": {
         "catalogLoadFailed": "Falha ao carregar o catálogo de modelos",
         "installFailed": "Falha ao iniciar a instalação do modelo",
-        "removeFailed": "Falha ao remover o modelo"
+        "removeFailed": "Falha ao remover o modelo",
+        "actionFailed": "Ocorreu um problema com {name}",
+        "downloadSourceHint": "Se o huggingface.co estiver bloqueado ou lento em sua rede, defina um espelho na seção Origem de download abaixo.",
+        "goToDownloadSource": "Ir para Origem de download",
+        "dismiss": "Dispensar",
+        "details": "Details",
+        "removeRetryHint": "To try again, use the Remove button on the model's card."
       },
       "regionLabel": "Região",
       "speciesLabel": "Espécies",
@@ -5418,9 +5563,40 @@
       "reinstalling": "Reinstalando...",
       "reinstallComplete": "Ficheiros verificados com sucesso",
       "geomodelBadge": "Inclui BirdNET v3.0 geomodel",
-      "onnxRuntimeRequired": "Requer ONNX Runtime que não está disponível neste sistema.",
-      "onnxRuntimeMissing": "O ONNX Runtime não está disponível. Este modelo não pode ser executado.",
-      "unavailable": "Indisponível"
+      "preview": {
+        "badge": "Prévia",
+        "buildLabel": "{version} · {build}",
+        "cardNotice": "Prévia para desenvolvedores, não é a versão final. Esta é uma versão inicial para testes; os resultados podem mudar antes da versão estável.",
+        "dialogNotice": "Você está instalando uma prévia para desenvolvedores ({build}). É útil para testes, mas ainda não é recomendada como seu único classificador."
+      },
+      "entryIncompatible": "Este modelo não está disponível neste sistema.",
+      "regionGlobal": "Global",
+      "hardwareLabel": "Hardware",
+      "hardware": {
+        "gpuNvidia": "GPU (NVIDIA)",
+        "gpuIntel": "GPU (Intel)",
+        "armCpu": "ARM CPU",
+        "amd64Cpu": "AMD64 CPU",
+        "arm64Cpu": "ARM64 CPU",
+        "cpu": "CPU"
+      },
+      "optimize": {
+        "bannerTitle": "{count, plural, one {# modelo pode funcionar mais rápido no seu hardware} other {# modelos podem funcionar mais rápido no seu hardware}}",
+        "review": "Revisar",
+        "dismiss": "Descartar",
+        "badgeTitle": "Está disponível uma versão mais rápida para o seu hardware",
+        "swap": "Otimizar",
+        "dialogTitle": "Otimizar os seus modelos",
+        "installedBuild": "Installed build",
+        "fromTo": "{from} para {to}",
+        "apply": "Aplicar",
+        "applyAll": "Aplicar tudo",
+        "applying": "A aplicar...",
+        "applied": "Aplicado",
+        "applyFailed": "Falha ao aplicar",
+        "upToDate": "Todos os seus modelos já estão otimizados para este hardware.",
+        "licenseNote": "A troca permanece dentro do mesmo modelo, pelo que a sua licença não é alterada."
+      }
     },
     "bird": {
       "title": "Deteção de aves",
@@ -5432,6 +5608,14 @@
     },
     "dynamicThreshold": {
       "birdOnlyNote": "O limiar dinâmico aplica-se apenas a classificadores de aves."
+    },
+    "perch": {
+      "title": "Perch v2 Detection",
+      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+    },
+    "birdnetv3": {
+      "title": "BirdNET v3.0 Detection",
+      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
     }
   },
   "restart": {

@@ -559,7 +559,10 @@ func shippedLineFor(t *testing.T, template []byte, key string) string {
 	var found []string
 	for line := range strings.Lines(string(template)) {
 		if strings.Contains(line, key) {
-			found = append(found, strings.TrimRight(line, "\n"))
+			// Trim both \r and \n: on a Windows checkout the embedded template
+			// carries CRLF line endings, and a lingering trailing \r would break
+			// the HasSuffix checks in TestRecommendedRatesMatchShippedConfig.
+			found = append(found, strings.TrimRight(line, "\r\n"))
 		}
 	}
 

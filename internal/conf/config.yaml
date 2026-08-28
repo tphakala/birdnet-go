@@ -161,6 +161,7 @@ birdnet:
       threshold: 0.01     # rangefilter species occurrence threshold
   modelpath: ""           # path to external model file (empty for embedded)
   labelpath: ""           # path to external label file (empty for embedded)
+  modelregion: auto       # regional model preference: auto (from coordinates), global (all species), or a region slug (e.g. iberia)
   usexnnpack: true        # true to use XNNPACK delegate for inference acceleration
 
 # Optional taxonomy synonym overrides for image lookups.

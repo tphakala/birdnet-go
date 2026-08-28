@@ -84,14 +84,14 @@
     ]
   },
   "devDependencies": {
-    "@ast-grep/cli": "^0.44.1",
+    "@ast-grep/cli": "^0.45.1",
     "@axe-core/playwright": "^4.11.3",
     "@eslint/js": "^10.0.1",
     "@formatjs/icu-messageformat-parser": "^3.5.11",
-    "@playwright/test": "^1.61.0",
+    "@playwright/test": "^1.62.1",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "@tailwindcss/vite": "^4.3.1",
-    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/svelte": "^5.4.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/d3": "^7.4.3",
@@ -113,7 +113,7 @@
     "lint-staged": "^17.0.8",
     "madge": "^8.0.0",
     "playwright": "^1.56.1",
-    "postcss-html": "^1.8.1",
+    "postcss-html": "^2.0.0",
     "prettier": "^3.8.4",
     "prettier-plugin-svelte": "^4.1.1",
     "stylelint": "^17.13.0",
@@ -123,7 +123,7 @@
     "svelte-eslint-parser": "^1.8.0",
     "tailwindcss": "^4.2",
     "typescript": "^6.0.3",
-    "vite": "8.1.5",
+    "vite": "8.2.2",
     "vite-bundle-analyzer": "^1.3.8",
     "vitest": "^4.1.9",
     "vitest-browser-svelte": "^3.0.0"
@@ -137,8 +137,8 @@
     "d3": "^7.9.0",
     "d3-time-format": "^4.1.0",
     "hls.js": "^1.6.16",
-    "maplibre-gl": "^5.24.0",
-    "svelte-dnd-action": "^0.9.70"
+    "maplibre-gl": "^6.2.0",
+    "svelte-dnd-action": "^0.9.76"
   },
   "bundleDependencies": [
     "svelte"
@@ -146,8 +146,8 @@
   "overrides": {
     "flatted": "3.4.2",
     "lru-cache": "11.2.7",
-    "undici": "7.28.0",
+    "undici": "7.29.0",
     "esrap": "2.2.11",
-    "fast-uri": "3.1.4"
+    "fast-uri": "3.1.5"
   }
 }

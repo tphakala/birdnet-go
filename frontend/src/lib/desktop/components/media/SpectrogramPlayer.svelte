@@ -21,6 +21,8 @@
   import { useAudioPlayback } from '$lib/utils/useAudioPlayback.svelte';
   import { useDelayedLoading } from '$lib/utils/delayedLoading.svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { get } from 'svelte/store';
+  import { dashboardSettings } from '$lib/stores/settings';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
 
@@ -50,9 +52,11 @@
   const initialOnPlayStart = onPlayStart;
   // svelte-ignore state_referenced_locally
   const initialOnPlayEnd = onPlayEnd;
+  const defaultGainDb = get(dashboardSettings)?.defaultAudioGain ?? 0;
   const audio = useAudioPlayback({
     audioUrl: initialAudioUrl,
     detectionId: initialDetectionId,
+    defaultGainDb,
     onPlayStart: initialOnPlayStart,
     onPlayEnd: initialOnPlayEnd,
   });

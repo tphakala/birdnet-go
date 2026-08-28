@@ -260,6 +260,136 @@ describe('SystemInference', () => {
     expect(text).toContain('Front Yard');
   });
 
+  // These tests run against the i18n stub in src/test/setup.ts, which returns the
+  // key for any unmapped string, so assertions target the rendered key names
+  // (system.inference.vad.*) plus the data values, not the English text.
+  it('hides the VAD panel when the snapshot carries no vad block', async () => {
+    installApi(makeSnapshot([makeModel()]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('BirdNET GLOBAL 6K');
+    });
+    expect(container.textContent).not.toContain('system.inference.vad.section');
+  });
+
+  it('renders the VAD panel with active state, stats and recent-speech feed', async () => {
+    const snapshot = makeSnapshot([makeModel()]);
+    snapshot.vad = {
+      enabled: true,
+      available: true,
+      loaded: true,
+      threshold: 0.35,
+      modelSource: 'embedded',
+      strategy: 'sequence',
+      sampleRate: 16000,
+      stats: { invocations: 90211, avgMs: 2.4, maxMs: 9.1, speechHits: 9042 },
+      lastSpeechAtUnix: 1750000000,
+      lastSpeechProbability: 0.82,
+      recentHits: [
+        { atUnix: 1750000000, probability: 0.87, source: 'Front Yard' },
+        { atUnix: 1749999500, probability: 0.91, source: 'Back Yard' },
+      ],
+    };
+    installApi(snapshot);
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('system.inference.vad.section');
+    });
+    // Scope every VAD assertion to the VAD card. Page-wide text also contains the
+    // co-rendered model card and the hardware fixture, which carry their own CPU,
+    // sample-rate, invocation and latency labels; asserting against the whole
+    // container would let this test keep passing after the VAD markup regresses.
+    const vadCard = container.querySelector('[data-testid="vad-card"]');
+    expect(vadCard).not.toBeNull();
+    const vadText = vadCard?.textContent ?? '';
+    expect(vadText).toContain('system.inference.vad.title'); // card name (like a model name)
+    expect(vadText).toContain('system.inference.vad.active'); // active indicator
+    expect(vadText).toContain('CPU'); // device badge
+    expect(vadText).toContain('system.inference.sampleRate'); // spec line sample rate
+    expect(vadText).toContain('16'); // sampleRateKhz(16000) => "16"
+    expect(vadText).toContain('0.35'); // threshold value
+    expect(vadText).toContain('system.inference.invocations'); // stats line segments analysed
+    expect(vadText).toContain('system.inference.avgLatency'); // stats line avg latency
+    expect(vadText).toContain('system.inference.maxLatency'); // stats line max latency
+    expect(vadText).toContain('90,211'); // invocations value
+    expect(vadText).toContain('9,042'); // speech hits value
+    // Recent-speech history feed: the source names and probabilities render.
+    expect(vadText).toContain('system.inference.vad.recentTitle');
+    expect(vadText).toContain('Front Yard');
+    expect(vadText).toContain('Back Yard');
+    expect(vadText).toContain('87%'); // hit probability rounded to a percentage
+  });
+
+  it('renders multiple VAD hits with identical timestamps and sources without crashing', async () => {
+    const snapshot = makeSnapshot([makeModel()]);
+    snapshot.vad = {
+      enabled: true,
+      available: true,
+      loaded: true,
+      threshold: 0.35,
+      stats: { invocations: 10, avgMs: 2.0, maxMs: 5.0, speechHits: 2 },
+      recentHits: [
+        { atUnix: 1750000000, probability: 0.85, source: 'SoundCard' },
+        { atUnix: 1750000000, probability: 0.88, source: 'SoundCard' },
+      ],
+    };
+    installApi(snapshot);
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('system.inference.vad.section');
+    });
+    const vadCard = container.querySelector('[data-testid="vad-card"]');
+    expect(vadCard).not.toBeNull();
+    expect(vadCard?.textContent).toContain('SoundCard');
+  });
+
+  it('shows the empty recent-speech state when there are no hits', async () => {
+    const snapshot = makeSnapshot([makeModel()]);
+    snapshot.vad = {
+      enabled: true,
+      available: true,
+      loaded: true,
+      threshold: 0.35,
+      stats: { invocations: 42, avgMs: 2.4, maxMs: 9.1, speechHits: 0 },
+      recentHits: [],
+    };
+    installApi(snapshot);
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('system.inference.vad.section');
+    });
+    expect(container.textContent).toContain('system.inference.vad.recentEmpty');
+  });
+
+  it('shows the disabled VAD state without stale descriptors', async () => {
+    const snapshot = makeSnapshot([makeModel()]);
+    snapshot.vad = {
+      enabled: false,
+      available: true,
+      loaded: false,
+      threshold: 0.35,
+      stats: { invocations: 0, avgMs: 0, maxMs: 0, speechHits: 0 },
+    };
+    installApi(snapshot);
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('system.inference.vad.section');
+    });
+    const text = container.textContent;
+    expect(text).toContain('system.inference.vad.disabled');
+    expect(text).not.toContain('system.inference.vad.active'); // not the active state
+  });
+
   it('shows the not-measured label when approxRssBytes is absent', async () => {
     // Drop the memory measurement: ramDisplay falls back to the not-measured label.
     const model = makeModel({ memory: { approximate: true } });
@@ -515,6 +645,36 @@ describe('SystemInference', () => {
     expect(text).not.toContain('×');
   });
 
+  it('renders multiple detections with identical species and timestamps without crashing', async () => {
+    const now = 1750000000;
+    const model = makeModel({
+      recentDetections: [
+        {
+          species: 'European Robin',
+          scientificName: 'Erithacus rubecula',
+          confidence: 0.81,
+          atUnix: now,
+          inRange: true,
+        },
+        {
+          species: 'European Robin',
+          scientificName: 'Erithacus rubecula',
+          confidence: 0.77,
+          atUnix: now,
+          inRange: true,
+        },
+      ],
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(2);
+  });
+
   it('lists other models that detected the same species within tolerance (Also column)', async () => {
     const now = Math.floor(Date.now() / 1000);
     const birdnet = makeModel({
@@ -646,9 +806,10 @@ describe('SystemInference', () => {
     await waitFor(() => {
       expect(container.textContent).toContain(model.name);
     });
-    // When the last throughput value > 0, the activity indicator shows "active"
+    // When the last throughput value > 0, the activity indicator shows "active" with label
     const activeEl = container.querySelector('[aria-label="system.inference.activityActive"]');
     expect(activeEl).not.toBeNull();
+    expect(activeEl?.textContent).toContain('system.inference.active');
     // The idle indicator must NOT be rendered at the same time (regression guard)
     const idleEl = container.querySelector('[aria-label="system.inference.activityIdle"]');
     expect(idleEl).toBeNull();
@@ -679,9 +840,10 @@ describe('SystemInference', () => {
     await waitFor(() => {
       expect(container.textContent).toContain(model.name);
     });
-    // When the last throughput value == 0, the activity indicator shows "idle"
+    // When the last throughput value == 0, the activity indicator shows "idle" with label
     const idleEl = container.querySelector('[aria-label="system.inference.activityIdle"]');
     expect(idleEl).not.toBeNull();
+    expect(idleEl?.textContent).toContain('system.inference.activityIdle');
     // The active indicator must NOT be rendered at the same time (regression guard)
     const activeEl = container.querySelector('[aria-label="system.inference.activityActive"]');
     expect(activeEl).toBeNull();
@@ -977,5 +1139,91 @@ describe('SystemInference', () => {
       });
       expect(container.textContent).toContain('system.inference.gpuReasonUnknown');
     });
+  });
+
+  describe('hardware capability tokens (Advanced disclosure)', () => {
+    // The mocked t() returns the key, so these are the strings that reach the DOM.
+    const ADVANCED_KEY = 'system.inference.advanced';
+    const CAPABILITIES_KEY = 'system.inference.capabilities';
+    const HARDWARE_HEADING_KEY = 'system.inference.sectionHardware';
+
+    it('hides the disclosure when the host reports no capability tokens', async () => {
+      installApi(makeSnapshot([makeModel({})], {})); // fixture omits capabilities
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain(HARDWARE_HEADING_KEY);
+      });
+      expect(container.textContent).not.toContain(ADVANCED_KEY);
+    });
+
+    it('reveals the tokens as badges when the host reports them', async () => {
+      installApi(
+        makeSnapshot([makeModel({})], {
+          capabilities: ['low-ram', 'openvino-gpu-intel-gen12'],
+        })
+      );
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain(ADVANCED_KEY);
+      });
+      // The disclosure must be collapsed by default (token soup stays hidden).
+      expect(container.querySelector('details[open]')).toBeNull();
+      expect(container.textContent).toContain(CAPABILITIES_KEY);
+      // The two non-derivable tokens this feature exists to surface.
+      expect(container.textContent).toContain('low-ram');
+      expect(container.textContent).toContain('openvino-gpu-intel-gen12');
+    });
+
+    // Placement, not just presence: the tokens describe the host, so the
+    // disclosure must live in the Hardware card (the definition-list card), not
+    // the Backends card. This fails if it is moved next to the FP16 footer.
+    it('places the disclosure in the Hardware card', async () => {
+      installApi(makeSnapshot([makeModel({})], { capabilities: ['low-ram'] }));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain(ADVANCED_KEY);
+      });
+      const card = container.querySelector('details')?.closest('div.rounded-xl');
+      expect(card?.textContent).toContain(HARDWARE_HEADING_KEY);
+      expect(card?.querySelector('dl')).not.toBeNull();
+    });
+
+    it('renders duplicate capability tokens without crashing', async () => {
+      installApi(
+        makeSnapshot([makeModel({})], {
+          capabilities: ['low-ram', 'low-ram'],
+        })
+      );
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain(ADVANCED_KEY);
+      });
+      expect(container.textContent).toContain('low-ram');
+    });
+  });
+
+  it('renders model sources with duplicate identifiers without crashing', async () => {
+    const model = makeModel({
+      sources: [
+        { id: 'mic', name: 'Microphone', type: 'soundcard', fallback: false },
+        { id: 'mic', name: 'Microphone', type: 'soundcard', fallback: false },
+      ],
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(model.name);
+    });
+    expect(container.textContent).toContain('Microphone');
   });
 });

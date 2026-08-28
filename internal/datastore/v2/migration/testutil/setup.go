@@ -194,7 +194,7 @@ func (ctx *TestContext) setupV2DB(t *testing.T, tmpDir string) {
 	ctx.SourceRepo = repository.NewAudioSourceRepository(db, nil, false, false)
 	ctx.WeatherRepo = repository.NewWeatherRepository(db, nil, false, false)
 	ctx.ImageCacheRepo = repository.NewImageCacheRepository(db, nil, ctx.LabelRepo, false, false)
-	ctx.ThresholdRepo = repository.NewDynamicThresholdRepository(db, nil, ctx.LabelRepo, false, false)
+	ctx.ThresholdRepo = repository.NewDynamicThresholdRepository(db, nil, false, false)
 	ctx.NotificationRepo = repository.NewNotificationHistoryRepository(db, nil, ctx.LabelRepo, false, false)
 
 	// Populate lookup tables for V2 normalized schema
@@ -808,7 +808,7 @@ func (s *testLegacyInterface) SearchDetections(_ *datastore.SearchFilters) ([]da
 	return nil, 0, nil
 }
 func (s *testLegacyInterface) SaveDynamicThreshold(_ *datastore.DynamicThreshold) error { return nil }
-func (s *testLegacyInterface) GetDynamicThreshold(_, _ string) (*datastore.DynamicThreshold, error) {
+func (s *testLegacyInterface) GetDynamicThreshold(_ string) (*datastore.DynamicThreshold, error) {
 	return nil, nil //nolint:nilnil // stub
 }
 func (s *testLegacyInterface) DeleteDynamicThreshold(_ string) error { return nil }

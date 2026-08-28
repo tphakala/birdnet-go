@@ -513,6 +513,13 @@ const testV24TFLiteModelPath = "data/BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite"
 func TestNewBirdNET_LocaleNormalization(t *testing.T) {
 	t.Parallel()
 
+	// This test constructs a TFLite v2.4 model to exercise locale normalization.
+	// A notflite build has no TFLite backend, so construction errors instead of
+	// running; skip so those builds stay green. See #1553.
+	if !tfliteBackendAvailable {
+		t.Skip("TFLite backend not linked (notflite build); locale normalization uses a TFLite v2.4 model")
+	}
+
 	tests := []struct {
 		name       string
 		input      string

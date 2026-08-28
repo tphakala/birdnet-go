@@ -28,19 +28,30 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { downloadBlob } from '$lib/utils/fileHelpers';
-  import type { CatalogEntry, DownloadProgress } from '$lib/types/models';
+  import type {
+    CatalogEntry,
+    CatalogVariant,
+    DownloadProgress,
+    InstalledModel,
+    ModelRegionsResponse,
+  } from '$lib/types/models';
   import {
     fetchCatalog,
+    fetchInstalled,
+    fetchModelRegions,
     installModel,
     reinstallModel,
     uninstallModel,
     subscribeInstallProgress,
+    isNetworkDownloadError,
   } from '$lib/utils/modelsApi';
   import { invalidateModels } from '$lib/stores/models.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
+  import ModelVariantPicker from '$lib/desktop/features/settings/components/ModelVariantPicker.svelte';
+  import ModelRegionSelector from '$lib/desktop/features/settings/components/ModelRegionSelector.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import FalsePositiveFilterControl, {
     type FilterLevel,
@@ -57,12 +68,26 @@
     dynamicThresholdSettings,
     realtimeSettings,
     batSettings,
+    perchSettings,
+    birdNetV3Settings,
   } from '$lib/stores/settings';
   import { cn } from '$lib/utils/cn.js';
   import { api, ApiError, getCsrfToken } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { toastActions } from '$lib/stores/toast';
   import { formatBytes, formatNumber } from '$lib/utils/formatters';
+  import {
+    pickPreselectedVariant,
+    translateReason,
+    normalizeRegionMode,
+    DEFAULT_REGION_MODE,
+    GLOBAL_REGION_MODE,
+    optimizeOffers,
+    variantHardwareLabel,
+    CHANNEL_PREVIEW,
+    type OptimizeOffer,
+  } from '$lib/utils/variantSelection';
+  import OptimizeReviewDialog from '$lib/desktop/features/settings/components/OptimizeReviewDialog.svelte';
   import { safeArrayAccess } from '$lib/utils/security';
   import { loggers } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
@@ -82,6 +107,7 @@
     XCircle,
     X,
     Check,
+    Sparkles,
     Settings as SettingsIcon,
   } from '@lucide/svelte';
 
@@ -109,14 +135,48 @@
     return null;
   }
 
+  // Render an entry-level incompatibility code (e.g. "backend.onnx_unavailable")
+  // through the same i18n reason path the variant picker uses, falling back to a
+  // generic localized line when the code is absent or has no translation, so a
+  // structured code never surfaces to the user as a raw dotted string. The
+  // fallback is cause-neutral on purpose: it is only reached when the code is
+  // missing or unmapped, which is exactly when the specific cause is not known.
+  // Entry-level codes carry no interpolation args (unlike variant reasons), so
+  // undefined args are passed; a future parameterized entry-level code would need
+  // an args field on CatalogEntryResponse.IncompatibleReason and a change here.
+  function entryIncompatibleText(code: string | undefined): string {
+    const fallback = t('analysis.gallery.entryIncompatible');
+    return code ? translateReason(code, undefined, fallback) : fallback;
+  }
+
   // ── Page-level tab state ──────────────────────────────────────────────
   type PageTab = 'settings' | 'models';
   let pageTab = $state<PageTab>('settings');
 
   // ── Gallery (Models tab) state ────────────────────────────────────────
   let catalog = $state<CatalogEntry[]>([]);
+  // Installed models incl. hidden ones (drives the secondary-model threshold
+  // sections, which the visibility-filtered catalog cannot).
+  let installedModels = $state<InstalledModel[]>([]);
   let loading = $state(true);
-  let error = $state<string | null>(null);
+  // Catalog loading failure: gates the two gallery tab bodies and drives the
+  // banner whose Retry re-runs loadCatalog.
+  let catalogError = $state<string | null>(null);
+
+  // A failed per-model action (install, reinstall, remove). Rendered as a
+  // dismissible banner above the gallery tabs so it never replaces the grid, and
+  // so switching tabs cannot strand it. Carries enough to offer a real Retry and,
+  // for a download-reachability failure, a pointer to the Download Source setting.
+  type GalleryActionKind = 'install' | 'reinstall' | 'remove';
+  interface GalleryActionError {
+    modelId: string;
+    modelName: string;
+    kind: GalleryActionKind;
+    message: string; // raw backend/SSE/ApiError text, kept inspectable
+    variantId?: string; // reused when retrying an install
+    network: boolean; // download could not reach the model host
+  }
+  let installError = $state<GalleryActionError | null>(null);
 
   let installingId = $state<string | null>(null);
   let deletingId = $state<string | null>(null);
@@ -124,7 +184,55 @@
   let downloadProgress = $state<DownloadProgress | null>(null);
   let completionTimer: ReturnType<typeof setTimeout> | undefined;
 
+  // One shared "any gallery action in flight" predicate. Install and reinstall
+  // share the single downloadProgress state and progressCleanup subscription, so
+  // starting a second action while one runs can strand the first's UI state; every
+  // action gate uses this rather than an ad-hoc subset of the three ids.
+  const galleryActionInFlight = $derived(
+    installingId !== null || reinstallingId !== null || deletingId !== null
+  );
+
+  // Shared DOM id for the "actions paused" status line rendered while any gallery
+  // action is in flight. Every cross-action-disabled button points its
+  // aria-describedby here so a keyboard/screen-reader user hears why it is
+  // blocked; the line is rendered exactly when a button references it.
+  const GALLERY_ACTION_STATUS_ID = 'gallery-action-status';
+
+  // Model regions, for localized region names in variant labels and the
+  // region-aware picker. Fetched once on mount; a failure degrades to raw slugs.
+  let regionsData = $state<ModelRegionsResponse | null>(null);
+  // Monotonic sequence guarding loadCatalog against out-of-order responses: a slow
+  // in-flight fetch must not overwrite a newer one (a region-change re-fetch, or
+  // the Retry button). Plain let: intentionally untracked.
+  let catalogRequestSeq = 0;
+  // The saved region the loaded catalog reflects, so the region effect below
+  // re-fetches only when a save actually changes it. Plain let: intentionally
+  // untracked, so mutating it never re-runs the effect.
+  let catalogLoadedRegion: string | null = null;
+
+  // Shared DOM id for the Download Source endpoint input, referenced both by the
+  // input's own id and by scrollToDownloadSource's getElementById lookup, so the
+  // two cannot drift apart.
+  const HUGGINGFACE_ENDPOINT_ID = 'huggingface-endpoint';
+
   let licenseModel = $state<CatalogEntry | null>(null);
+  // The variant preselected in the license/install dialog: the server-recommended
+  // one by default, overridable by the user. Empty for flat (variant-less) entries.
+  let selectedVariantId = $state('');
+  // The download-size row and the install target follow the selected variant when
+  // the entry has variants; otherwise they fall back to the whole-entry size.
+  const licenseSelectedVariant = $derived(
+    licenseModel?.variants?.find(v => v.id === selectedVariantId) ?? null
+  );
+  const licenseDownloadSize = $derived(
+    licenseSelectedVariant?.sizeBytes ?? licenseModel?.totalSizeBytes ?? 0
+  );
+  // Block install when the selected variant cannot run on this host (e.g. every
+  // variant is incompatible, so the preselected one is blocked). The default
+  // path preselects a compatible variant, so this only fires in the all-blocked case.
+  const installBlocked = $derived(
+    licenseSelectedVariant != null && !licenseSelectedVariant.compatible
+  );
   let removeConfirmModel = $state<CatalogEntry | null>(null);
 
   // Element bindings should NOT use $state - causes showModal() to fail
@@ -137,6 +245,54 @@
   // ── Store-derived state ───────────────────────────────────────────────
   let store = $derived($settingsStore);
   let birdnet = $derived($birdnetSettings);
+
+  // ── Region-aware picker wiring ────────────────────────────────────────
+  // slug -> localized name, from the same regions endpoint the region selector
+  // uses, so the picker labels a region exactly as the selector names it. Guarded
+  // against a missing or still-loading response.
+  const regionNameMap = $derived(new Map((regionsData?.regions ?? []).map(r => [r.slug, r.name])));
+  // The live selected region mode from the unsaved form store (mirrors the
+  // ModelRegionSelector), so the picker's region scoping tracks a selector click
+  // instantly, before any save. Note: until a save the server-computed
+  // recommended flags still reflect the SAVED region, so the recommended variant
+  // may lag the live selection; the effect below re-fetches on save to reconcile.
+  const liveModelRegion = $derived(normalizeRegionMode(birdnet?.modelRegion));
+  const activeRegionSlug = $derived.by<string>(() => {
+    if (!regionsData) return '';
+    if (liveModelRegion === GLOBAL_REGION_MODE) return '';
+    if (liveModelRegion === DEFAULT_REGION_MODE)
+      return regionsData.locationConfigured ? regionsData.resolved.slug : '';
+    return regionNameMap.has(liveModelRegion) ? liveModelRegion : '';
+  });
+  // The SAVED region the catalog's recommendation flags were computed from. Those
+  // flags come from the persisted setting (resolveRecommendRegion on the server),
+  // so the picker's server-side recommendation only needs a re-fetch when this
+  // changes, not on unsaved toggles.
+  const savedModelRegion = $derived.by<string | null>(() => {
+    const b = store.originalData.birdnet;
+    if (!b) return null; // settings not loaded yet
+    return normalizeRegionMode(b.modelRegion);
+  });
+
+  // Re-fetch the catalog when the SAVED region changes mid-session (a save), so
+  // the server-computed recommendation flags follow the region selector. Unsaved
+  // selector toggles do not fire this (they only move activeRegionSlug, which
+  // scopes the picker client-side); the first observation after settings load does
+  // not either (onMount already loaded the catalog for the persisted region). The
+  // only tracked read is savedModelRegion, a primitive $derived, so Svelte re-runs
+  // this only when its value actually changes; the catalogLoadedRegion guard is
+  // belt-and-braces.
+  $effect(() => {
+    const region = savedModelRegion;
+    if (region === null) return;
+    if (catalogLoadedRegion === null) {
+      catalogLoadedRegion = region; // onMount already loaded this region's catalog
+      return;
+    }
+    if (region === catalogLoadedRegion) return;
+    catalogLoadedRegion = region;
+    loadCatalog();
+  });
   let dynamicThreshold = $derived(
     $dynamicThresholdSettings ?? {
       enabled: false,
@@ -162,8 +318,151 @@
   const hasBatModel = $derived(catalog.some(e => e.installed && e.category === 'bat'));
   const batFPLevel = $derived(bat.falsePositiveFilter?.level ?? 0);
 
+  // Secondary acoustic classifiers with a per-model threshold override. These are
+  // gated on the installed-models list (not the catalog): the catalog endpoint
+  // hides foundation/preview models such as BirdNET v3.0 via VisibleCatalog(), so
+  // a catalog-based check would never light up the v3.0 section. The installed
+  // endpoint returns every downloaded model, hidden or not, keyed by catalogId.
+  let perch = $derived($perchSettings ?? { overrideThreshold: false, threshold: 0.5 });
+  let birdnetV3 = $derived($birdNetV3Settings ?? { overrideThreshold: false, threshold: 0.5 });
+  const hasPerchModel = $derived(installedModels.some(m => m.catalogId.startsWith('perch')));
+  const hasBirdNetV3Model = $derived(installedModels.some(m => m.catalogId === 'birdnet-v3.0'));
+
   // ── Derived catalog views ─────────────────────────────────────────────
-  const installedEntries = $derived(catalog.filter(e => e.installed));
+  // Installed models, with the permanent built-in classifier (BirdNET v2.4) sorted
+  // first so it heads the list where the old hardcoded static card used to sit.
+  // JS sort is stable, so the remaining entries keep their catalog order.
+  const installedEntries = $derived(
+    catalog.filter(e => e.installed).sort((a, b) => Number(!!b.permanent) - Number(!!a.permanent))
+  );
+
+  // ── Within-model "optimize" offers ────────────────────────────────────
+  // Derived entirely client-side from the catalog: an installed model whose
+  // host-recommended variant differs from the installed one and is compatible.
+  const offers = $derived(optimizeOffers(catalog));
+  const offerByEntry = $derived(new Map(offers.map(o => [o.entry.id, o])));
+
+  // Session-scoped banner dismissal, guarded so a private-window/blocked
+  // sessionStorage never throws (see frontend/CLAUDE.md).
+  const OPTIMIZE_BANNER_DISMISS_KEY = 'birdnet.optimizeBannerDismissed';
+  function readOptimizeDismissed(): boolean {
+    try {
+      return sessionStorage.getItem(OPTIMIZE_BANNER_DISMISS_KEY) === '1';
+    } catch {
+      return false;
+    }
+  }
+  let optimizeBannerDismissed = $state(readOptimizeDismissed());
+  function dismissOptimizeBanner() {
+    optimizeBannerDismissed = true;
+    try {
+      sessionStorage.setItem(OPTIMIZE_BANNER_DISMISS_KEY, '1');
+    } catch {
+      /* sessionStorage unavailable: dismissal is in-memory only for this session */
+    }
+  }
+
+  // Review dialog + apply-flow state. Applies reuse the normal install/variant-swap
+  // path (startInstall); a within-model swap never changes the license, so no extra
+  // consent is needed beyond the review dialog itself.
+  let optimizeReviewOpen = $state(false);
+  let appliedOptimizeIds = $state(new Set<string>());
+  // Entry ids whose optimize swap failed this session (drives the dialog's per-row
+  // failed marker); the shared installError banner carries the detail.
+  let failedOptimizeIds = $state(new Set<string>());
+  // The entry id whose optimize swap is in flight (drives the dialog's per-row
+  // spinner) and the sequential apply-all queue of entry ids still to apply.
+  let optimizeApplyingId = $state<string | null>(null);
+  let applyAllQueue = $state<string[]>([]);
+  // Plain (untracked) marker so the completion effect can detect installingId
+  // transitioning back to null without re-triggering itself.
+  let lastInstallingId: string | null = null;
+
+  function openOptimizeReview() {
+    optimizeReviewOpen = true;
+  }
+  function closeOptimizeReview() {
+    optimizeReviewOpen = false;
+  }
+
+  // Apply one offer: start the within-model swap to its recommended variant. Clear
+  // any prior failed marker for it so a retry shows progress, not the stale failure.
+  function applyOffer(offer: OptimizeOffer) {
+    if (galleryActionInFlight) return;
+    if (failedOptimizeIds.has(offer.entry.id)) {
+      const next = new Set(failedOptimizeIds);
+      next.delete(offer.entry.id);
+      failedOptimizeIds = next;
+    }
+    optimizeApplyingId = offer.entry.id;
+    startInstall(offer.entry.id, offer.entry.name, offer.to.id);
+  }
+
+  // Apply every current offer, sequentially: queue their entry ids and start the
+  // first; the completion effect below advances the queue as each swap finishes.
+  function applyAllOffers() {
+    if (galleryActionInFlight) return;
+    applyAllQueue = offers.map(o => o.entry.id);
+    applyNextInQueue();
+  }
+  function applyNextInQueue() {
+    while (applyAllQueue.length > 0) {
+      const nextId = applyAllQueue[0];
+      const offer = offerByEntry.get(nextId);
+      if (offer && !appliedOptimizeIds.has(nextId)) {
+        optimizeApplyingId = nextId;
+        startInstall(offer.entry.id, offer.entry.name, offer.to.id);
+        return;
+      }
+      applyAllQueue = applyAllQueue.slice(1);
+    }
+  }
+
+  // Detect an optimize swap completing (installingId returns to null after being
+  // set to the applying id): mark it applied on success, then advance the batch
+  // queue. A failed swap (installError names the id) is not marked applied but still
+  // advances the queue so one failure does not stall the rest.
+  $effect(() => {
+    const current = installingId;
+    if (lastInstallingId !== null && current === null && lastInstallingId === optimizeApplyingId) {
+      const done = lastInstallingId;
+      optimizeApplyingId = null;
+      const failed = installError?.modelId === done;
+      if (failed) failedOptimizeIds = new Set(failedOptimizeIds).add(done);
+      else appliedOptimizeIds = new Set(appliedOptimizeIds).add(done);
+      if (applyAllQueue[0] === done) {
+        applyAllQueue = applyAllQueue.slice(1);
+        applyNextInQueue();
+      }
+    }
+    lastInstallingId = current;
+  });
+
+  // Choose which variant a card should describe: the installed variant on the
+  // Installed tab, the host-recommended (else default) variant on the Available tab.
+  // Returns null for a flat (variant-less) entry.
+  function displayVariantFor(
+    entry: CatalogEntry,
+    mode: 'available' | 'installed'
+  ): CatalogVariant | null {
+    const variants = entry.variants ?? [];
+    if (variants.length === 0) return null;
+    if (mode === 'installed') {
+      return variants.find(v => v.id === entry.installedVariantId) ?? null;
+    }
+    return (
+      variants.find(v => v.id === entry.recommendedVariantId) ??
+      variants.find(v => v.default) ??
+      null
+    );
+  }
+
+  // The region display for a variant-bearing entry's card: the variant's region
+  // name (localized), or the "Global" label when the variant is global.
+  function displayRegionName(variant: CatalogVariant | null): string {
+    if (!variant?.region) return t('analysis.gallery.regionGlobal');
+    return regionNameMap.get(variant.region) ?? variant.region;
+  }
   const availableWildlife = $derived(
     catalog.filter(e => !e.installed && e.category === 'wildlife')
   );
@@ -772,6 +1071,40 @@
     settingsActions.updateSection('birdnet', { threshold: value });
   }
 
+  // Config for the shared secondary-model threshold section snippet.
+  interface SecondaryModelThresholdConfig {
+    titleKey: string;
+    descKey: string;
+    thresholdLabelKey: string;
+    // The BirdNET threshold this model follows while the override is off; shown
+    // in the disabled field so the number on screen matches the effective value.
+    effectiveThreshold: number;
+    current: { overrideThreshold: boolean; threshold: number };
+    originalOverride: boolean;
+    originalThreshold: number;
+    onOverride: (_value: boolean) => void;
+    onThreshold: (_value: number) => void;
+  }
+
+  // Secondary-model threshold override handlers. When the override is off, the
+  // model follows the BirdNET threshold (backend modelGlobalConfidenceThreshold),
+  // so the threshold field is disabled until the override is enabled.
+  function updatePerchOverride(value: boolean) {
+    settingsActions.updateSection('perch', { overrideThreshold: value });
+  }
+
+  function updatePerchThreshold(value: number) {
+    settingsActions.updateSection('perch', { threshold: value });
+  }
+
+  function updateBirdNetV3Override(value: boolean) {
+    settingsActions.updateSection('birdnetv3', { overrideThreshold: value });
+  }
+
+  function updateBirdNetV3Threshold(value: number) {
+    settingsActions.updateSection('birdnetv3', { threshold: value });
+  }
+
   // ── Gallery tab definitions ───────────────────────────────────────────
   const galleryTabs: TabDefinition[] = $derived([
     {
@@ -809,6 +1142,7 @@
 
   onMount(() => {
     loadCatalog();
+    loadModelRegions();
     loadBirdnetLocales();
     loadRangeFilterCount();
     loadRangeFilterStatus();
@@ -820,20 +1154,57 @@
 
   // ── Gallery functions ─────────────────────────────────────────────────
   async function loadCatalog() {
+    const seq = ++catalogRequestSeq;
     loading = true;
-    error = null;
+    catalogError = null;
     try {
       const response = await fetchCatalog();
+      // Bail if a newer loadCatalog started while this one awaited, so a slow
+      // response cannot overwrite the newer region's catalog.
+      if (seq !== catalogRequestSeq) return;
       catalog = response.catalog;
+      // Refresh the installed list alongside the catalog so the secondary-model
+      // threshold sections track install/uninstall. Swallows its own errors.
+      await loadInstalledModels(seq);
     } catch (e) {
-      error = e instanceof Error ? e.message : t('analysis.gallery.errors.catalogLoadFailed');
+      if (seq !== catalogRequestSeq) return;
+      catalogError =
+        e instanceof Error ? e.message : t('analysis.gallery.errors.catalogLoadFailed');
     } finally {
-      loading = false;
+      // Only the newest request owns the loading flag, so a superseded response
+      // does not clear the spinner out from under the one still running.
+      if (seq === catalogRequestSeq) loading = false;
+    }
+  }
+
+  // seq, when passed, is the owning loadCatalog request's sequence: a stale
+  // installed-list response is dropped rather than overwriting a newer one.
+  async function loadInstalledModels(seq?: number) {
+    try {
+      const installed = await fetchInstalled();
+      if (seq !== undefined && seq !== catalogRequestSeq) return;
+      installedModels = installed;
+    } catch (e) {
+      logger.error('Failed to load installed models:', e);
+    }
+  }
+
+  // Load the model regions for name resolution and region-aware picker scoping.
+  // Best-effort: on failure the picker degrades to raw slugs with no region
+  // scoping, which is strictly better than blocking the gallery.
+  async function loadModelRegions() {
+    try {
+      regionsData = await fetchModelRegions();
+    } catch (e) {
+      logger.error('Failed to load model regions:', e);
     }
   }
 
   function openLicenseDialog(entry: CatalogEntry) {
     licenseModel = entry;
+    // Smart default: preselect the recommended variant (falls back sensibly when
+    // there is no recommendation). Empty string for flat entries.
+    selectedVariantId = pickPreselectedVariant(entry);
     licenseDialogRef?.showModal();
   }
 
@@ -842,15 +1213,35 @@
     licenseModel = null;
   }
 
-  async function handleInstall() {
+  function handleInstall() {
     if (!licenseModel) return;
+    // Never install a variant the recommender flagged incompatible with this host
+    // (the button is disabled in this state; this guards a programmatic call too).
+    if (installBlocked) return;
+    // Do not start an install while any gallery action is in flight; they share
+    // the single downloadProgress state and SSE subscription.
+    if (galleryActionInFlight) return;
     const modelId = licenseModel.id;
+    const modelName = licenseModel.name;
+    // Only send a variantId when the entry actually offers variants; a flat entry
+    // installs its single build with no variant.
+    const variantId = licenseModel.variants?.length ? selectedVariantId : undefined;
     closeLicenseDialog();
+    startInstall(modelId, modelName, variantId);
+  }
+
+  // The install body, extracted so a failed install's Retry can re-run it without
+  // reopening the license dialog (the license was accepted this session).
+  async function startInstall(modelId: string, modelName: string, variantId: string | undefined) {
+    // Defensive boundary: callers already gate on galleryActionInFlight, but keep
+    // the invariant here so a future caller cannot start an overlapping action.
+    if (galleryActionInFlight) return;
+    installError = null;
     installingId = modelId;
     downloadProgress = null;
 
     try {
-      await installModel(modelId);
+      await installModel(modelId, variantId);
 
       if (progressCleanup) progressCleanup();
       progressCleanup = subscribeInstallProgress(
@@ -879,16 +1270,38 @@
           }, 2000);
         },
         (err: string) => {
-          error = err;
+          installError = reportActionError(modelId, modelName, 'install', err, variantId);
           installingId = null;
           downloadProgress = null;
           progressCleanup = null;
         }
       );
     } catch (e) {
-      error = e instanceof Error ? e.message : t('analysis.gallery.errors.installFailed');
+      const message = e instanceof Error ? e.message : t('analysis.gallery.errors.installFailed');
+      installError = reportActionError(modelId, modelName, 'install', message, variantId);
       installingId = null;
     }
+  }
+
+  // Build a GalleryActionError, classifying whether a mirror endpoint could help.
+  function reportActionError(
+    modelId: string,
+    modelName: string,
+    kind: GalleryActionKind,
+    message: string,
+    variantId?: string
+  ): GalleryActionError {
+    return {
+      modelId,
+      modelName,
+      kind,
+      message,
+      variantId,
+      // A remove failure never involves a download, so it is never network-shaped;
+      // enforce that structurally rather than trusting the delete error's text not
+      // to contain a download-error substring.
+      network: kind !== 'remove' && isNetworkDownloadError(message),
+    };
   }
 
   function openRemoveDialog(entry: CatalogEntry) {
@@ -903,38 +1316,53 @@
 
   async function handleUninstall() {
     if (!removeConfirmModel) return;
+    // Do not start a remove while any gallery action is in flight.
+    if (galleryActionInFlight) return;
     const modelId = removeConfirmModel.id;
+    const modelName = removeConfirmModel.name;
     closeRemoveDialog();
+    installError = null;
     deletingId = modelId;
 
     try {
       await uninstallModel(modelId);
       invalidateModels();
       await loadCatalog();
+      toastActions.success(t('analysis.gallery.removeSuccess', { name: modelName }));
     } catch (e) {
-      error = e instanceof Error ? e.message : t('analysis.gallery.errors.removeFailed');
+      const message = e instanceof Error ? e.message : t('analysis.gallery.errors.removeFailed');
+      // A remove failure never involves a download, so it is never network-shaped.
+      installError = reportActionError(modelId, modelName, 'remove', message);
     } finally {
       deletingId = null;
     }
   }
 
-  async function handleReinstall(entry: CatalogEntry) {
-    if (reinstallingId || installingId) return;
-    reinstallingId = entry.id;
+  function handleReinstall(entry: CatalogEntry) {
+    if (galleryActionInFlight) return;
+    startReinstall(entry.id, entry.name);
+  }
+
+  // The reinstall body, extracted so a failed reinstall's Retry can re-run it.
+  async function startReinstall(modelId: string, modelName: string) {
+    // Defensive boundary: callers already gate on galleryActionInFlight.
+    if (galleryActionInFlight) return;
+    installError = null;
+    reinstallingId = modelId;
     downloadProgress = null;
 
     try {
-      await reinstallModel(entry.id);
+      await reinstallModel(modelId);
 
       if (progressCleanup) progressCleanup();
       progressCleanup = subscribeInstallProgress(
-        entry.id,
+        modelId,
         (progress: DownloadProgress) => {
           downloadProgress = progress;
         },
         () => {
           downloadProgress = {
-            catalogId: entry.id,
+            catalogId: modelId,
             status: 'complete',
             downloadedBytes: 0,
             totalBytes: 0,
@@ -944,7 +1372,7 @@
           progressCleanup = null;
           clearTimeout(completionTimer);
           completionTimer = setTimeout(() => {
-            if (reinstallingId === entry.id) {
+            if (reinstallingId === modelId) {
               reinstallingId = null;
               downloadProgress = null;
             }
@@ -953,16 +1381,44 @@
           }, 2000);
         },
         (err: string) => {
-          error = err;
+          installError = reportActionError(modelId, modelName, 'reinstall', err);
           reinstallingId = null;
           downloadProgress = null;
           progressCleanup = null;
         }
       );
     } catch (e) {
-      error = e instanceof Error ? e.message : t('analysis.gallery.errors.installFailed');
+      const message = e instanceof Error ? e.message : t('analysis.gallery.errors.installFailed');
+      installError = reportActionError(modelId, modelName, 'reinstall', message);
       reinstallingId = null;
     }
+  }
+
+  // Re-run whichever action failed; the stored error object carries what is needed.
+  // A remove failure offers no retry (the card's Remove button is right there).
+  function retryFailedAction() {
+    if (!installError) return;
+    // Defensive in-flight guard, mirroring handleReinstall: installError is only set
+    // when nothing is in flight (each start clears it, every failure resets its id),
+    // so this is currently unreachable, but it keeps the invariant explicit and
+    // survives future refactors that might retry while an action is running.
+    if (galleryActionInFlight) return;
+    const { modelId, modelName, variantId, kind } = installError;
+    if (kind === 'install') startInstall(modelId, modelName, variantId);
+    else if (kind === 'reinstall') startReinstall(modelId, modelName);
+  }
+
+  function dismissInstallError() {
+    installError = null;
+  }
+
+  // Bring the Download Source setting into view and focus it: the mirror endpoint
+  // is the remedy for a download-reachability failure, and it lives on this same
+  // Models tab, just below the gallery.
+  function scrollToDownloadSource() {
+    const el = document.getElementById(HUGGINGFACE_ENDPOINT_ID);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el?.focus();
   }
 
   /** Compute download percentage for progress bar */
@@ -989,6 +1445,39 @@
     }
   }
 </script>
+
+<!-- ── Secondary-model threshold override section (Perch v2, BirdNET v3.0) ── -->
+{#snippet secondaryModelThreshold(cfg: SecondaryModelThresholdConfig)}
+  <SettingsSection
+    title={t(cfg.titleKey)}
+    description={t(cfg.descKey)}
+    defaultOpen={true}
+    originalData={{ override: cfg.originalOverride, threshold: cfg.originalThreshold }}
+    currentData={{ override: cfg.current.overrideThreshold, threshold: cfg.current.threshold }}
+  >
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <Checkbox
+        checked={cfg.current.overrideThreshold}
+        label={t('analysis.detection.secondaryThresholdOverride.label')}
+        helpText={t('analysis.detection.secondaryThresholdOverride.helpText')}
+        disabled={store.isLoading || store.isSaving}
+        onchange={cfg.onOverride}
+      />
+      <NumberField
+        label={t(cfg.thresholdLabelKey)}
+        value={cfg.current.overrideThreshold ? cfg.current.threshold : cfg.effectiveThreshold}
+        onUpdate={cfg.onThreshold}
+        min={0.01}
+        max={0.99}
+        step={0.01}
+        disabled={store.isLoading || store.isSaving || !cfg.current.overrideThreshold}
+        helpText={cfg.current.overrideThreshold
+          ? t('analysis.detection.secondaryThreshold.helpText')
+          : t('analysis.detection.secondaryThreshold.followsBirdnet')}
+      />
+    </div>
+  </SettingsSection>
+{/snippet}
 
 <!-- ── Settings Tab Content ──────────────────────────────────────────── -->
 {#snippet settingsTabContent()}
@@ -1077,7 +1566,37 @@
       {/if}
     </SettingsSection>
 
-    <!-- 2. Bat Detection (only when a bat model is installed) -->
+    <!-- 2. Perch v2 threshold override (only when the Perch model is installed) -->
+    {#if hasPerchModel}
+      {@render secondaryModelThreshold({
+        titleKey: 'analysis.perch.title',
+        descKey: 'analysis.perch.description',
+        thresholdLabelKey: 'analysis.detection.perchThreshold.label',
+        effectiveThreshold: birdnet?.threshold ?? 0.3,
+        current: perch,
+        originalOverride: store.originalData.perch?.overrideThreshold ?? false,
+        originalThreshold: store.originalData.perch?.threshold ?? 0.5,
+        onOverride: updatePerchOverride,
+        onThreshold: updatePerchThreshold,
+      })}
+    {/if}
+
+    <!-- 3. BirdNET v3.0 threshold override (only when the v3.0 model is installed) -->
+    {#if hasBirdNetV3Model}
+      {@render secondaryModelThreshold({
+        titleKey: 'analysis.birdnetv3.title',
+        descKey: 'analysis.birdnetv3.description',
+        thresholdLabelKey: 'analysis.detection.birdnetv3Threshold.label',
+        effectiveThreshold: birdnet?.threshold ?? 0.3,
+        current: birdnetV3,
+        originalOverride: store.originalData.birdnetv3?.overrideThreshold ?? false,
+        originalThreshold: store.originalData.birdnetv3?.threshold ?? 0.5,
+        onOverride: updateBirdNetV3Override,
+        onThreshold: updateBirdNetV3Threshold,
+      })}
+    {/if}
+
+    <!-- 4. Bat Detection (only when a bat model is installed) -->
     {#if hasBatModel}
       <SettingsSection
         title={t('analysis.bat.title')}
@@ -1146,7 +1665,7 @@
       </SettingsSection>
     {/if}
 
-    <!-- 3. Range Filter -->
+    <!-- 5. Range Filter -->
     <SettingsSection
       title={t('settings.main.sections.rangeFilter.title')}
       description={t('settings.main.sections.rangeFilter.description')}
@@ -1324,20 +1843,21 @@
           class="flex items-start gap-3 p-4 rounded-lg mt-4 bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]"
           role="alert"
         >
-          <XCircle class="size-5 shrink-0" />
+          <XCircle class="size-5 shrink-0" aria-hidden="true" />
           <span>{rangeFilterState.error}</span>
           <button
             type="button"
             class="ml-auto inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+            aria-label={t('common.aria.dismissAlert')}
             onclick={() => (rangeFilterState.error = null)}
           >
-            <X class="size-4" />
+            <X class="size-4" aria-hidden="true" />
           </button>
         </div>
       {/if}
     </SettingsSection>
 
-    <!-- 4. Dynamic Threshold -->
+    <!-- 6. Dynamic Threshold -->
     <SettingsSection
       title={t('settings.main.sections.dynamicThreshold.title')}
       description={t('settings.main.sections.dynamicThreshold.description')}
@@ -1394,7 +1914,7 @@
       {/if}
     </SettingsSection>
 
-    <!-- 5. Advanced (collapsed by default) -->
+    <!-- 7. Advanced (collapsed by default) -->
     <SettingsSection
       title={t('analysis.advanced.title')}
       description={t('analysis.advanced.description')}
@@ -1455,7 +1975,129 @@
       title={t('analysis.gallery.title')}
       description={t('analysis.gallery.description')}
       defaultOpen={true}
+      originalData={{ modelRegion: normalizeRegionMode(store.originalData.birdnet?.modelRegion) }}
+      currentData={{ modelRegion: normalizeRegionMode(birdnet?.modelRegion) }}
     >
+      <ModelRegionSelector disabled={store.isLoading || store.isSaving} />
+
+      <!-- A failed install/reinstall/remove surfaces here, above the gallery tabs,
+           so it never replaces the model grid and stays visible across tabs. -->
+      {#if installError}
+        <div
+          class="mt-4 flex flex-col gap-2 rounded-lg border border-[var(--color-error)]/30 bg-[var(--color-error)]/10 px-4 py-3 text-sm"
+          role="alert"
+        >
+          <div class="flex items-start gap-3">
+            <AlertTriangle class="size-5 shrink-0 text-[var(--color-error)]" aria-hidden="true" />
+            <div class="min-w-0 flex-1">
+              <p class="font-medium text-[var(--color-base-content)]">
+                {t('analysis.gallery.errors.actionFailed', { name: installError.modelName })}
+              </p>
+              {#if installError.network}
+                <p class="mt-1 text-[var(--color-base-content)]/80">
+                  {t('analysis.gallery.errors.downloadSourceHint')}
+                </p>
+              {:else if installError.kind === 'remove'}
+                <!-- A remove failure has no in-banner Retry (removes are not
+                     re-run from here); point the user back to the card's own
+                     Remove button so the recovery path is never left implicit. -->
+                <p class="mt-1 text-[var(--color-base-content)]/80">
+                  {t('analysis.gallery.errors.removeRetryHint')}
+                </p>
+              {/if}
+              <!-- Raw backend/SSE/ApiError text is often long and technical; lead
+                   with the plain-English title (and hint where classifiable) and
+                   keep the raw message one disclosure click away. -->
+              <details class="mt-1">
+                <summary
+                  class="cursor-pointer text-[var(--color-base-content)]/70 hover:text-[var(--color-base-content)]"
+                >
+                  {t('analysis.gallery.errors.details')}
+                </summary>
+                <p class="mt-1 break-words text-[var(--color-base-content)]/80">
+                  {installError.message}
+                </p>
+              </details>
+            </div>
+            <button
+              type="button"
+              class="ml-auto inline-flex items-center justify-center rounded-md p-1.5 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+              aria-label={t('analysis.gallery.errors.dismiss')}
+              onclick={dismissInstallError}
+            >
+              <X class="size-4" />
+            </button>
+          </div>
+          {#if installError.kind !== 'remove' || installError.network}
+            <div class="flex flex-wrap items-center gap-2 pl-8">
+              {#if installError.kind !== 'remove'}
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-base-200)] px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] transition-colors"
+                  onclick={retryFailedAction}
+                >
+                  <RefreshCw class="size-3.5" aria-hidden="true" />
+                  {t('analysis.gallery.retry')}
+                </button>
+              {/if}
+              {#if installError.network}
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-base-200)] px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] transition-colors"
+                  onclick={scrollToDownloadSource}
+                >
+                  <SettingsIcon class="size-3.5" aria-hidden="true" />
+                  {t('analysis.gallery.errors.goToDownloadSource')}
+                </button>
+              {/if}
+            </div>
+          {/if}
+        </div>
+      {/if}
+
+      {#if galleryActionInFlight}
+        <!-- One shared, live status line naming why the other cards' actions are
+             blocked. Touch users get no tooltip and aria-disabled buttons carry no
+             native title semantics, so this line (referenced via aria-describedby)
+             is how the reason reaches keyboard, screen-reader and tablet users. -->
+        <p
+          id={GALLERY_ACTION_STATUS_ID}
+          role="status"
+          class="mb-3 text-xs text-[var(--color-base-content)]/70"
+        >
+          {t('analysis.gallery.actionInProgress')}
+        </p>
+      {/if}
+
+      <!-- Optimize banner: one or more installed models have a faster or
+           better-matched build available for this host. Dismissible for the
+           session; opens the review dialog. -->
+      {#if offers.length > 0 && !optimizeBannerDismissed}
+        <div
+          class="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/10 px-4 py-3 text-sm"
+          role="status"
+        >
+          <Sparkles class="size-5 shrink-0 text-[var(--color-primary)]" aria-hidden="true" />
+          <p class="min-w-0 flex-1 font-medium text-[var(--color-base-content)]">
+            {t('analysis.gallery.optimize.bannerTitle', { count: offers.length })}
+          </p>
+          <button
+            type="button"
+            onclick={openOptimizeReview}
+            class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary-content)] transition-colors hover:bg-[var(--color-primary)]/80"
+          >
+            {t('analysis.gallery.optimize.review')}
+          </button>
+          <button
+            type="button"
+            onclick={dismissOptimizeBanner}
+            class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-base-200)] px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] transition-colors hover:bg-[var(--color-base-300)]"
+          >
+            {t('analysis.gallery.optimize.dismiss')}
+          </button>
+        </div>
+      {/if}
+
       <SettingsTabs tabs={galleryTabs} bind:activeTab={galleryTab} showActions={false} />
     </SettingsSection>
 
@@ -1490,7 +2132,7 @@
           keeps compiling it the way the browser does.
         -->
         <TextInput
-          id="huggingface-endpoint"
+          id={HUGGINGFACE_ENDPOINT_ID}
           type="url"
           pattern="[Hh][Tt][Tt][Pp][Ss]?:\/\/[^\/?#@]+(\/[^?#]*)?"
           value={birdnet?.huggingFaceEndpoint ?? ''}
@@ -1511,6 +2153,64 @@
 {/snippet}
 
 <!-- ── Gallery: Installed Tab ────────────────────────────────────────── -->
+<!-- Shared catalog-load-error banner, rendered in both gallery tabs. A single
+     definition keeps the two tabs' error UI (markup, retry action, a11y) from
+     drifting, and its decorative icons carry aria-hidden. -->
+{#snippet catalogErrorBanner()}
+  <div
+    class="flex items-center gap-3 rounded-lg border border-[var(--color-error)]/30 bg-[var(--color-error)]/10 px-4 py-3 text-sm"
+    role="alert"
+  >
+    <AlertTriangle class="size-5 shrink-0 text-[var(--color-error)]" aria-hidden="true" />
+    <span class="text-[var(--color-base-content)]">{catalogError}</span>
+    <button
+      type="button"
+      onclick={loadCatalog}
+      class="ml-auto flex items-center gap-1.5 rounded-md bg-[var(--color-base-200)] px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] transition-colors"
+    >
+      <RefreshCw class="size-3.5" aria-hidden="true" />
+      {t('analysis.gallery.retry')}
+    </button>
+  </div>
+{/snippet}
+
+<!-- Variant-aware metadata rows for a gallery card: region, species count, and a
+     friendly hardware chip, all describing the RELEVANT variant (the installed one
+     on the Installed tab, the recommended one on the Available tab) rather than the
+     entry-level globals. Flat (variant-less) entries keep the entry region/species. -->
+{#snippet cardMetaRows(entry: CatalogEntry, mode: 'available' | 'installed')}
+  {@const dv = displayVariantFor(entry, mode)}
+  {#if entry.variants && entry.variants.length > 0}
+    <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.regionLabel')}</div>
+    <div class="text-[var(--color-base-content)]/80">{displayRegionName(dv)}</div>
+    <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.speciesLabel')}</div>
+    <div class="text-[var(--color-base-content)]/80">
+      {t('analysis.gallery.species', { count: dv?.speciesCount ?? entry.speciesCount })}
+    </div>
+    <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.hardwareLabel')}</div>
+    <div>
+      {#if dv}
+        <span
+          class="inline-flex items-center gap-1 rounded-full bg-[var(--color-base-300)] px-2 py-0.5 text-xs text-[var(--color-base-content)]"
+        >
+          {variantHardwareLabel(dv)}
+        </span>
+      {:else}
+        <span class="text-[var(--color-base-content)]/80">-</span>
+      {/if}
+    </div>
+  {:else}
+    {#if entry.region}
+      <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.regionLabel')}</div>
+      <div class="text-[var(--color-base-content)]/80">{entry.region}</div>
+    {/if}
+    <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.speciesLabel')}</div>
+    <div class="text-[var(--color-base-content)]/80">
+      {t('analysis.gallery.species', { count: entry.speciesCount })}
+    </div>
+  {/if}
+{/snippet}
+
 {#snippet installedTabContent()}
   <div class="space-y-4">
     {#if loading}
@@ -1520,59 +2220,28 @@
           >{t('analysis.gallery.loading')}</span
         >
       </div>
-    {:else if error}
-      <div
-        class="flex items-center gap-3 rounded-lg border border-[var(--color-error)]/30 bg-[var(--color-error)]/10 px-4 py-3 text-sm"
-        role="alert"
-      >
-        <AlertTriangle class="size-5 shrink-0 text-[var(--color-error)]" />
-        <span class="text-[var(--color-base-content)]">{error}</span>
-        <button
-          onclick={loadCatalog}
-          class="ml-auto flex items-center gap-1.5 rounded-md bg-[var(--color-base-200)] px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] transition-colors"
-        >
-          <RefreshCw class="size-3.5" />
-          {t('analysis.gallery.retry')}
-        </button>
-      </div>
+    {:else if catalogError}
+      {@render catalogErrorBanner()}
     {:else}
       <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <!-- Built-in BirdNET model (always present) -->
-        <div
-          class="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-4"
-        >
-          <div class="flex items-start gap-3">
-            <img src={logoBirdnet} alt="" class="size-10 shrink-0 rounded-lg" />
-            <div class="min-w-0 flex-1">
-              <h4 class="text-sm font-semibold text-[var(--color-base-content)]">BirdNET v2.4</h4>
-              <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/80">
-                {t('analysis.gallery.builtInDescription')}
-              </p>
-              <p class="mt-1 text-xs text-[var(--color-base-content)]/80">
-                Cornell Lab of Ornithology / Chemnitz University
-              </p>
-            </div>
-          </div>
-          <div
-            class="mt-3 flex items-center justify-between border-t border-[var(--color-base-300)] pt-3"
-          >
-            <div class="flex items-center gap-2 text-xs text-[var(--color-base-content)]/80">
-              <span>v2.4</span>
-              <span>{t('analysis.gallery.species', { count: '6,000+' })}</span>
-            </div>
-            <span
-              class="inline-flex items-center gap-1 rounded-full bg-[var(--color-primary)]/15 px-2.5 py-0.5 text-xs font-medium text-[var(--color-primary)]"
-            >
-              {t('analysis.gallery.builtIn')}
-            </span>
-          </div>
-        </div>
-
-        <!-- Installed additional models -->
+        <!-- Installed models. The permanent built-in classifier (BirdNET v2.4) sorts
+             first and renders a built-in badge instead of Remove/Reinstall; every
+             installed model with a better host-recommended variant shows an Optimize
+             action. -->
         {#each installedEntries as entry (entry.id)}
           {@const isDeleting = deletingId === entry.id}
           {@const isReinstalling = reinstallingId === entry.id}
           {@const reinstallProgress = isReinstalling ? downloadProgress : null}
+          <!-- "Paused" = another gallery action is running, so THIS button is
+               cross-disabled (vs its own in-progress spinner). aria-disabled keeps
+               it tab-focusable to read the reason; native disabled stays for the
+               button's own running state. -->
+          {@const reinstallPaused = galleryActionInFlight && !isReinstalling}
+          {@const removePaused = galleryActionInFlight && !isDeleting}
+          {@const offer = offerByEntry.get(entry.id)}
+          {@const isSwapping = installingId === entry.id}
+          {@const optimizePaused = galleryActionInFlight && !isSwapping}
+          {@const cardProgress = reinstallProgress ?? (isSwapping ? downloadProgress : null)}
           {@const logo = getModelLogo(entry.id)}
           <div
             class="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-4"
@@ -1592,7 +2261,26 @@
                 </div>
               {/if}
               <div class="min-w-0 flex-1">
-                <h4 class="text-sm font-semibold text-[var(--color-base-content)]">{entry.name}</h4>
+                <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <h4 class="text-sm font-semibold text-[var(--color-base-content)]">
+                    {entry.name}
+                  </h4>
+                  {#if entry.channel === CHANNEL_PREVIEW}
+                    <span
+                      class="inline-flex items-center rounded-full bg-[var(--color-warning)]/15 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-[var(--color-warning)]"
+                    >
+                      {t('analysis.gallery.preview.badge')}
+                    </span>
+                  {/if}
+                  {#if entry.buildLabel}
+                    <span class="font-mono text-xs text-[var(--color-base-content)]/70">
+                      {t('analysis.gallery.preview.buildLabel', {
+                        version: entry.version,
+                        build: entry.buildLabel,
+                      })}
+                    </span>
+                  {/if}
+                </div>
                 <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/80">
                   {entry.description}
                 </p>
@@ -1611,20 +2299,24 @@
               </div>
             </div>
             <!-- Progress bar (shown during reinstall, not for companion entries) -->
-            {#if reinstallProgress}
+            {#if cardProgress}
               <div class="mt-3 space-y-1.5">
-                {#if reinstallProgress.status === 'complete'}
+                {#if cardProgress.status === 'complete'}
                   <div
                     class="flex items-center gap-2 text-sm font-medium text-[var(--color-success)]"
                   >
                     <Check class="h-4 w-4" />
-                    <span>{t('analysis.gallery.reinstallComplete')}</span>
+                    <span
+                      >{isSwapping
+                        ? t('analysis.gallery.progress.complete')
+                        : t('analysis.gallery.reinstallComplete')}</span
+                    >
                   </div>
                 {:else}
                   <div class="h-2 w-full overflow-hidden rounded-full bg-[var(--color-base-300)]">
                     <div
                       class="h-full rounded-full bg-[var(--color-primary)] transition-all duration-300"
-                      style:width="{progressPercent(reinstallProgress)}%"
+                      style:width="{progressPercent(cardProgress)}%"
                     ></div>
                   </div>
                   <div
@@ -1632,15 +2324,15 @@
                   >
                     <span>
                       {statusLabel(
-                        reinstallProgress.status
-                      )}{#if reinstallProgress.status === 'downloading' && reinstallProgress.totalFiles > 1}
-                        ({reinstallProgress.currentFile}/{reinstallProgress.totalFiles})
+                        cardProgress.status
+                      )}{#if cardProgress.status === 'downloading' && cardProgress.totalFiles > 1}
+                        ({cardProgress.currentFile}/{cardProgress.totalFiles})
                       {/if}
                     </span>
-                    {#if reinstallProgress.status === 'downloading' && reinstallProgress.totalBytes > 0}
+                    {#if cardProgress.status === 'downloading' && cardProgress.totalBytes > 0}
                       <span>
-                        {formatBytes(reinstallProgress.downloadedBytes)} / {formatBytes(
-                          reinstallProgress.totalBytes
+                        {formatBytes(cardProgress.downloadedBytes)} / {formatBytes(
+                          cardProgress.totalBytes
                         )}
                       </span>
                     {/if}
@@ -1651,28 +2343,23 @@
             <!-- Incompatible warning for installed models -->
             {#if !entry.compatible}
               <div
-                class="mt-3 flex items-start gap-2 rounded-lg bg-red-500/10 p-3 text-xs text-red-700 dark:text-red-400"
+                class="mt-3 flex items-start gap-2 rounded-lg bg-[var(--color-error)]/10 p-3 text-sm"
+                role="status"
               >
-                <XCircle class="h-4 w-4 shrink-0 mt-0.5" />
-                <span>{entry.incompatibleReason || t('analysis.gallery.onnxRuntimeMissing')}</span>
+                <XCircle
+                  class="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-error)]"
+                  aria-hidden="true"
+                />
+                <span class="text-[var(--color-base-content)]"
+                  >{entryIncompatibleText(entry.incompatibleReason)}</span
+                >
               </div>
             {/if}
             <!-- Metadata grid -->
             <div
               class="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-[var(--color-base-300)] pt-3 text-xs"
             >
-              {#if entry.region}
-                <div class="text-[var(--color-base-content)]/80">
-                  {t('analysis.gallery.regionLabel')}
-                </div>
-                <div class="text-[var(--color-base-content)]/80">{entry.region}</div>
-              {/if}
-              <div class="text-[var(--color-base-content)]/80">
-                {t('analysis.gallery.speciesLabel')}
-              </div>
-              <div class="text-[var(--color-base-content)]/80">
-                {t('analysis.gallery.species', { count: entry.speciesCount })}
-              </div>
+              {@render cardMetaRows(entry, 'installed')}
               <div class="text-[var(--color-base-content)]/80">
                 {t('analysis.gallery.license.license')}
               </div>
@@ -1706,36 +2393,114 @@
                 </span>
               </div>
             {/if}
-            <!-- Action footer -->
+            <!-- Optimize badge: a faster/better-matched build is available here. -->
+            {#if offer}
+              <div class="mt-2">
+                <span
+                  class="inline-flex items-center gap-1 rounded-full bg-[var(--color-primary)]/15 px-2.5 py-0.5 text-xs font-medium text-[var(--color-primary)]"
+                  title={t('analysis.gallery.optimize.badgeTitle')}
+                >
+                  <Sparkles class="size-3" aria-hidden="true" />
+                  {t('analysis.gallery.optimize.badgeTitle')}
+                </span>
+              </div>
+            {/if}
+            <!-- Action footer. The permanent built-in classifier shows a built-in
+                 badge instead of Remove and hides Reinstall; only its variant can be
+                 swapped (the Optimize action). -->
             <div class="mt-3 flex items-center justify-end gap-2">
-              <button
-                onclick={() => handleReinstall(entry)}
-                disabled={reinstallingId !== null || installingId !== null || isDeleting}
-                class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--color-base-content)]/80 hover:bg-[var(--color-base-300)] transition-colors disabled:opacity-50"
-                aria-label="{t('analysis.gallery.reinstall')} {entry.name}"
-              >
-                {#if isReinstalling}
-                  <Loader2 class="size-3.5 animate-spin" />
-                  {t('analysis.gallery.reinstalling')}
-                {:else}
-                  <RefreshCw class="size-3.5" />
-                  {t('analysis.gallery.reinstall')}
-                {/if}
-              </button>
-              <button
-                onclick={() => openRemoveDialog(entry)}
-                disabled={isDeleting || isReinstalling || installingId !== null}
-                class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors disabled:opacity-50"
-                aria-label="{t('analysis.gallery.remove')} {entry.name}"
-              >
-                {#if isDeleting}
-                  <Loader2 class="size-3.5 animate-spin" />
-                  {t('analysis.gallery.removing')}
-                {:else}
-                  <Trash2 class="size-3.5" />
-                  {t('analysis.gallery.remove')}
-                {/if}
-              </button>
+              {#if offer}
+                <button
+                  type="button"
+                  onclick={e => {
+                    if (optimizePaused) {
+                      e.preventDefault();
+                      return;
+                    }
+                    openLicenseDialog(entry);
+                  }}
+                  disabled={isSwapping}
+                  aria-disabled={optimizePaused ? 'true' : undefined}
+                  aria-describedby={optimizePaused ? GALLERY_ACTION_STATUS_ID : undefined}
+                  title={optimizePaused ? t('analysis.gallery.actionInProgress') : undefined}
+                  class={cn(
+                    'inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-primary-content)] transition-colors',
+                    optimizePaused
+                      ? 'cursor-not-allowed opacity-50'
+                      : 'hover:bg-[var(--color-primary)]/80'
+                  )}
+                  aria-label="{t('analysis.gallery.optimize.swap')} {entry.name}"
+                >
+                  <Sparkles class="size-3.5" aria-hidden="true" />
+                  {t('analysis.gallery.optimize.swap')}
+                </button>
+              {/if}
+              {#if entry.permanent}
+                <span
+                  class="inline-flex items-center gap-1 rounded-full bg-[var(--color-primary)]/15 px-2.5 py-0.5 text-xs font-medium text-[var(--color-primary)]"
+                >
+                  {t('analysis.gallery.builtIn')}
+                </span>
+              {:else}
+                <button
+                  type="button"
+                  onclick={e => {
+                    if (reinstallPaused) {
+                      e.preventDefault();
+                      return;
+                    }
+                    handleReinstall(entry);
+                  }}
+                  disabled={isReinstalling}
+                  aria-disabled={reinstallPaused ? 'true' : undefined}
+                  aria-describedby={reinstallPaused ? GALLERY_ACTION_STATUS_ID : undefined}
+                  title={reinstallPaused ? t('analysis.gallery.actionInProgress') : undefined}
+                  class={cn(
+                    'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--color-base-content)]/80 transition-colors',
+                    isReinstalling || reinstallPaused
+                      ? 'opacity-50'
+                      : 'hover:bg-[var(--color-base-300)]',
+                    reinstallPaused && 'cursor-not-allowed'
+                  )}
+                  aria-label="{t('analysis.gallery.reinstall')} {entry.name}"
+                >
+                  {#if isReinstalling}
+                    <Loader2 class="size-3.5 animate-spin" />
+                    {t('analysis.gallery.reinstalling')}
+                  {:else}
+                    <RefreshCw class="size-3.5" />
+                    {t('analysis.gallery.reinstall')}
+                  {/if}
+                </button>
+                <button
+                  type="button"
+                  onclick={e => {
+                    if (removePaused) {
+                      e.preventDefault();
+                      return;
+                    }
+                    openRemoveDialog(entry);
+                  }}
+                  disabled={isDeleting}
+                  aria-disabled={removePaused ? 'true' : undefined}
+                  aria-describedby={removePaused ? GALLERY_ACTION_STATUS_ID : undefined}
+                  title={removePaused ? t('analysis.gallery.actionInProgress') : undefined}
+                  class={cn(
+                    'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--color-error)] transition-colors',
+                    isDeleting || removePaused ? 'opacity-50' : 'hover:bg-[var(--color-error)]/10',
+                    removePaused && 'cursor-not-allowed'
+                  )}
+                  aria-label="{t('analysis.gallery.remove')} {entry.name}"
+                >
+                  {#if isDeleting}
+                    <Loader2 class="size-3.5 animate-spin" />
+                    {t('analysis.gallery.removing')}
+                  {:else}
+                    <Trash2 class="size-3.5" />
+                    {t('analysis.gallery.remove')}
+                  {/if}
+                </button>
+              {/if}
             </div>
           </div>
         {/each}
@@ -1753,6 +2518,11 @@
 {#snippet modelCard(entry: CatalogEntry)}
   {@const isInstalling = installingId === entry.id}
   {@const progress = isInstalling ? downloadProgress : null}
+  <!-- Paused only when this Install would otherwise be available: another action
+       is running, this one is not, and the entry is compatible. Incompatible
+       entries keep their permanent native-disabled state (explained by the banner
+       above), never a transient "action in progress" reason. -->
+  {@const installPaused = galleryActionInFlight && !isInstalling && entry.compatible}
   {@const logo = getModelLogo(entry.id)}
   <div
     class={cn(
@@ -1776,9 +2546,26 @@
         </div>
       {/if}
       <div class="min-w-0 flex-1">
-        <h4 class="text-sm font-semibold text-[var(--color-base-content)]">
-          {entry.name}
-        </h4>
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <h4 class="text-sm font-semibold text-[var(--color-base-content)]">
+            {entry.name}
+          </h4>
+          {#if entry.channel === CHANNEL_PREVIEW}
+            <span
+              class="inline-flex items-center rounded-full bg-[var(--color-warning)]/15 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-[var(--color-warning)]"
+            >
+              {t('analysis.gallery.preview.badge')}
+            </span>
+          {/if}
+          {#if entry.buildLabel}
+            <span class="font-mono text-xs text-[var(--color-base-content)]/70">
+              {t('analysis.gallery.preview.buildLabel', {
+                version: entry.version,
+                build: entry.buildLabel,
+              })}
+            </span>
+          {/if}
+        </div>
         <p class="mt-0.5 line-clamp-2 text-xs text-[var(--color-base-content)]/80">
           {entry.description}
         </p>
@@ -1796,6 +2583,23 @@
         {/if}
       </div>
     </div>
+
+    <!-- Developer-preview notice: v3.0 and any future preview build are flagged as
+         not the final GA release so users know what they are installing. -->
+    {#if entry.channel === CHANNEL_PREVIEW}
+      <div
+        class="mt-3 flex items-start gap-2 rounded-lg bg-[var(--color-warning)]/10 p-3 text-xs"
+        role="note"
+      >
+        <TriangleAlert
+          class="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-warning)]"
+          aria-hidden="true"
+        />
+        <span class="text-[var(--color-base-content)]"
+          >{t('analysis.gallery.preview.cardNotice')}</span
+        >
+      </div>
+    {/if}
 
     <!-- Progress bar (shown during install, not for companion entries) -->
     {#if progress}
@@ -1835,10 +2639,16 @@
     <!-- Incompatible warning banner -->
     {#if !entry.compatible}
       <div
-        class="mt-3 flex items-start gap-2 rounded-lg bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400"
+        class="mt-3 flex items-start gap-2 rounded-lg bg-[var(--color-warning)]/10 p-3 text-sm"
+        role="status"
       >
-        <TriangleAlert class="h-4 w-4 shrink-0 mt-0.5" />
-        <span>{entry.incompatibleReason || t('analysis.gallery.onnxRuntimeRequired')}</span>
+        <TriangleAlert
+          class="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-warning)]"
+          aria-hidden="true"
+        />
+        <span class="text-[var(--color-base-content)]"
+          >{entryIncompatibleText(entry.incompatibleReason)}</span
+        >
       </div>
     {/if}
 
@@ -1846,14 +2656,7 @@
     <div
       class="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-[var(--color-base-300)] pt-3 text-xs"
     >
-      {#if entry.region}
-        <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.regionLabel')}</div>
-        <div class="text-[var(--color-base-content)]">{entry.region}</div>
-      {/if}
-      <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.speciesLabel')}</div>
-      <div class="text-[var(--color-base-content)]">
-        {t('analysis.gallery.species', { count: entry.speciesCount })}
-      </div>
+      {@render cardMetaRows(entry, 'available')}
       <div class="text-[var(--color-base-content)]/80">{t('analysis.gallery.license.license')}</div>
       <div>
         {#if entry.commercialUse}
@@ -1890,9 +2693,25 @@
     <!-- Action footer (pushed to bottom via mt-auto) -->
     <div class="mt-auto flex items-center justify-end pt-3">
       <button
-        onclick={() => openLicenseDialog(entry)}
-        disabled={!entry.compatible || isInstalling || installingId !== null}
-        class="inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors disabled:opacity-50"
+        type="button"
+        onclick={e => {
+          if (installPaused) {
+            e.preventDefault();
+            return;
+          }
+          openLicenseDialog(entry);
+        }}
+        disabled={!entry.compatible || isInstalling}
+        aria-disabled={installPaused ? 'true' : undefined}
+        aria-describedby={installPaused ? GALLERY_ACTION_STATUS_ID : undefined}
+        title={installPaused ? t('analysis.gallery.actionInProgress') : undefined}
+        class={cn(
+          'inline-flex items-center gap-1.5 rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary-content)] transition-colors',
+          !entry.compatible || isInstalling || installPaused
+            ? 'opacity-50'
+            : 'hover:bg-[var(--color-primary)]/80',
+          installPaused && 'cursor-not-allowed'
+        )}
         aria-label="{t('analysis.gallery.install')} {entry.name}"
       >
         {#if isInstalling}
@@ -1916,21 +2735,8 @@
           >{t('analysis.gallery.loading')}</span
         >
       </div>
-    {:else if error}
-      <div
-        class="flex items-center gap-3 rounded-lg border border-[var(--color-error)]/30 bg-[var(--color-error)]/10 px-4 py-3 text-sm"
-        role="alert"
-      >
-        <AlertTriangle class="size-5 shrink-0 text-[var(--color-error)]" />
-        <span class="text-[var(--color-base-content)]">{error}</span>
-        <button
-          onclick={loadCatalog}
-          class="ml-auto flex items-center gap-1.5 rounded-md bg-[var(--color-base-200)] px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] transition-colors"
-        >
-          <RefreshCw class="size-3.5" />
-          {t('analysis.gallery.retry')}
-        </button>
-      </div>
+    {:else if catalogError}
+      {@render catalogErrorBanner()}
     {:else}
       <!-- Acoustic Classifiers section -->
       {#if availableWildlife.length > 0 || availableBirds.length > 0 || availableBats.length > 0}
@@ -2017,7 +2823,7 @@
 <!-- License Acceptance Dialog -->
 <dialog
   bind:this={licenseDialogRef}
-  class="m-auto w-full max-w-md rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)] p-0 shadow-xl backdrop:bg-black/50"
+  class="m-auto w-full max-w-3xl rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)] p-0 shadow-xl backdrop:bg-black/50"
   aria-labelledby="license-dialog-title"
 >
   {#if licenseModel}
@@ -2025,6 +2831,22 @@
       <h3 id="license-dialog-title" class="text-lg font-semibold text-[var(--color-base-content)]">
         {t('analysis.gallery.license.title')}
       </h3>
+      {#if licenseModel.channel === CHANNEL_PREVIEW}
+        <div
+          class="mt-4 flex items-start gap-2 rounded-lg bg-[var(--color-warning)]/10 p-3 text-sm"
+          role="note"
+        >
+          <TriangleAlert
+            class="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-warning)]"
+            aria-hidden="true"
+          />
+          <span class="text-[var(--color-base-content)]">
+            {t('analysis.gallery.preview.dialogNotice', {
+              build: licenseModel.buildLabel ?? licenseModel.version,
+            })}
+          </span>
+        </div>
+      {/if}
       <div class="mt-4 space-y-3">
         <table
           class="w-full overflow-hidden rounded-lg border-separate border-spacing-0 bg-[var(--color-base-200)] text-sm"
@@ -2088,17 +2910,42 @@
                 >{t('analysis.gallery.license.downloadSize')}</th
               >
               <td class="px-4 pt-1 pb-4 text-right align-top text-[var(--color-base-content)]"
-                >{formatBytes(licenseModel.totalSizeBytes)}</td
+                >{formatBytes(licenseDownloadSize)}</td
               >
             </tr>
           </tbody>
         </table>
 
+        {#if licenseModel.variants && licenseModel.variants.length > 0}
+          <ModelVariantPicker
+            variants={licenseModel.variants}
+            installedVariantId={licenseModel.installedVariantId}
+            {selectedVariantId}
+            {activeRegionSlug}
+            regionNames={regionNameMap}
+            onSelect={id => (selectedVariantId = id)}
+            idPrefix="license-variant"
+          />
+          <!-- Plain-language help for the precision jargon (FP32/FP16/INT8) and the
+               Default-vs-Recommended distinction, for the non-technical audience. A
+               native <details> is keyboard- and touch-accessible, unlike a
+               hover-only tooltip. -->
+          <details class="mt-2 text-xs text-[var(--color-base-content)]/70">
+            <summary class="cursor-pointer hover:text-[var(--color-base-content)]">
+              {t('analysis.gallery.variants.precisionInfo')}
+            </summary>
+            <p class="mt-1">{t('analysis.gallery.variants.precisionHelp')}</p>
+          </details>
+        {/if}
+
         {#if !licenseModel.commercialUse}
           <div
             class="flex items-start gap-2 rounded-lg border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 px-3 py-2.5 text-sm"
           >
-            <ShieldAlert class="mt-0.5 size-4 shrink-0 text-[var(--color-warning)]" />
+            <ShieldAlert
+              class="mt-0.5 size-4 shrink-0 text-[var(--color-warning)]"
+              aria-hidden="true"
+            />
             <p class="text-[var(--color-base-content)]">
               {t('analysis.gallery.license.nonCommercialWarning')}
             </p>
@@ -2106,16 +2953,25 @@
         {/if}
       </div>
 
+      {#if installBlocked}
+        <p class="mt-4 text-sm text-[var(--color-error)]" role="alert">
+          {t('analysis.gallery.variants.incompatible')}
+        </p>
+      {/if}
       <div class="mt-6 flex justify-end gap-3">
         <button
+          type="button"
           onclick={closeLicenseDialog}
           class="rounded-lg border border-[var(--color-base-300)] px-4 py-2 text-sm font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] transition-colors"
         >
           {t('common.cancel')}
         </button>
         <button
+          type="button"
           onclick={handleInstall}
-          class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors"
+          disabled={installBlocked}
+          title={installBlocked ? t('analysis.gallery.variants.incompatible') : undefined}
+          class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary)]/80 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Download class="size-4" />
           {t('analysis.gallery.license.acceptAndInstall')}
@@ -2135,7 +2991,7 @@
     <div class="w-full max-w-md p-6">
       <div class="flex items-start gap-3">
         <div class="shrink-0 rounded-full bg-[var(--color-error)]/10 p-2">
-          <AlertTriangle class="size-5 text-[var(--color-error)]" />
+          <AlertTriangle class="size-5 text-[var(--color-error)]" aria-hidden="true" />
         </div>
         <div>
           <h3
@@ -2152,12 +3008,14 @@
 
       <div class="mt-6 flex justify-end gap-3">
         <button
+          type="button"
           onclick={closeRemoveDialog}
           class="rounded-lg border border-[var(--color-base-300)] px-4 py-2 text-sm font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] transition-colors"
         >
           {t('common.cancel')}
         </button>
         <button
+          type="button"
           onclick={handleUninstall}
           class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-error)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-error)]/80 transition-colors"
         >
@@ -2168,6 +3026,20 @@
     </div>
   {/if}
 </dialog>
+
+<!-- Optimize Review Dialog -->
+<OptimizeReviewDialog
+  open={optimizeReviewOpen}
+  {offers}
+  regionNames={regionNameMap}
+  inFlight={galleryActionInFlight}
+  applyingId={optimizeApplyingId}
+  appliedIds={appliedOptimizeIds}
+  failedIds={failedOptimizeIds}
+  onApply={applyOffer}
+  onApplyAll={applyAllOffers}
+  onClose={closeOptimizeReview}
+/>
 
 <!-- Range Filter Species Modal -->
 {#if rangeFilterState.showModal}
@@ -2233,14 +3105,15 @@
           class="flex items-start gap-3 p-4 rounded-lg mb-4 bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]"
           role="alert"
         >
-          <XCircle class="size-5 shrink-0" />
+          <XCircle class="size-5 shrink-0" aria-hidden="true" />
           <span>{rangeFilterState.error}</span>
           <button
             type="button"
             class="ml-auto inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+            aria-label={t('common.aria.dismissAlert')}
             onclick={() => (rangeFilterState.error = null)}
           >
-            <X class="size-4" />
+            <X class="size-4" aria-hidden="true" />
           </button>
         </div>
       {/if}

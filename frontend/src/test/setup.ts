@@ -341,7 +341,7 @@ vi.mock('$lib/utils/settingsApi.js', () => {
         topic: 'birdnet',
         tls: {
           enabled: false,
-          skipVerify: false,
+          insecureSkipVerify: false,
         },
       },
       observability: {

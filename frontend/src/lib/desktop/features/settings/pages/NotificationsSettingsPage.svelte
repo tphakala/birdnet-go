@@ -274,6 +274,7 @@
     'detectionUrl',
     'imageUrl',
     'daysSinceFirstSeen',
+    'daysSinceLastSeen',
   ] as const;
 
   const templateFieldNames: Record<(typeof templateFieldKeys)[number], string> = {
@@ -291,6 +292,7 @@
     detectionUrl: 'DetectionURL',
     imageUrl: 'ImageURL',
     daysSinceFirstSeen: 'DaysSinceFirstSeen',
+    daysSinceLastSeen: 'DaysSinceLastSeen',
   };
 
   let templateFields = $derived(

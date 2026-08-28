@@ -267,6 +267,32 @@ func ConfidenceFilterToMinMax(cf *datastore.ConfidenceFilter) (minConf, maxConf 
 // "no filter applied" (nil).
 var sentinelNoMatchIDs = []uint{0}
 
+// mergeUniqueIDs combines label-ID sets while preserving first-seen order.
+// Common-name and explicit-scientific resolution often identify the same label;
+// keeping the IN-list unique avoids redundant query parameters.
+func mergeUniqueIDs(groups ...[]uint) []uint {
+	total := 0
+	for _, group := range groups {
+		total += len(group)
+	}
+	if total == 0 {
+		return nil
+	}
+
+	merged := make([]uint, 0, total)
+	seen := make(map[uint]struct{}, total)
+	for _, group := range groups {
+		for _, id := range group {
+			if _, exists := seen[id]; exists {
+				continue
+			}
+			seen[id] = struct{}{}
+			merged = append(merged, id)
+		}
+	}
+	return merged
+}
+
 // FilterLookupDeps contains dependencies for filter entity lookups.
 type FilterLookupDeps struct {
 	LabelRepo  LabelRepository
@@ -281,7 +307,7 @@ type FilterLookupDeps struct {
 }
 
 // ResolveSpeciesToLabelIDs converts species names to label IDs.
-// Accepts scientific names (looked up via GetLabelIDsByScientificName for cross-model support).
+// Accepts scientific names and resolves the full list in one cross-model batch.
 // If species is non-empty but no labels are found, returns sentinel []uint{0}
 // to ensure the query returns zero results (rather than ignoring the filter).
 // Returns nil if species is empty.
@@ -293,14 +319,21 @@ func ResolveSpeciesToLabelIDs(ctx context.Context, deps *FilterLookupDeps, speci
 		return nil, nil
 	}
 
+	labelsByName, err := deps.LabelRepo.GetByScientificNames(ctx, species)
+	if err != nil {
+		return nil, err
+	}
+
 	labelIDs := make([]uint, 0, len(species))
+	seen := make(map[uint]struct{}, len(species))
 	for _, name := range species {
-		// Use cross-model lookup to get all label IDs for this species
-		ids, err := deps.LabelRepo.GetLabelIDsByScientificName(ctx, name)
-		if err != nil {
-			return nil, err
+		for _, label := range labelsByName[name] {
+			if _, duplicate := seen[label.ID]; duplicate {
+				continue
+			}
+			seen[label.ID] = struct{}{}
+			labelIDs = append(labelIDs, label.ID)
 		}
-		labelIDs = append(labelIDs, ids...)
 	}
 
 	// If input was non-empty but we found nothing, use sentinel
@@ -682,7 +715,7 @@ func ConvertSearchFilters(
 			if sciErr != nil {
 				return nil, sciErr
 			}
-			sf.CommonLabelIDs = append(sf.CommonLabelIDs, sciLabelIDs...)
+			sf.CommonLabelIDs = mergeUniqueIDs(sf.CommonLabelIDs, sciLabelIDs)
 		}
 
 		// Convert device string to audio source IDs
@@ -737,6 +770,11 @@ func ConvertAdvancedFilters(
 
 	// Map SortBy string to v2 sort field constants
 	switch strings.ToLower(filters.SortBy) {
+	case datastore.SortBySearchDefault:
+		// SearchNotes historically sorts the normalized datastore by detection
+		// time, so preserve that contract when simple search needs exact-name ORs.
+		sf.SortBy = SortFieldDetectedAt
+		sf.SortDesc = true
 	case "date_asc":
 		sf.SortBy = SortFieldDetectedAt
 		sf.SortDesc = false
@@ -792,6 +830,17 @@ func ConvertAdvancedFilters(
 		sf.CommonLabelIDs, err = ResolveCommonNameToLabelIDs(ctx, deps, filters.TextQuery)
 		if err != nil {
 			return nil, err
+		}
+
+		// Exact scientific names resolved by the API are OR-ed into the same
+		// label-ID branch as common-name matches. This preserves the raw substring
+		// query while covering names whose stored/indexed common name is stale.
+		if len(filters.SpeciesScientific) > 0 {
+			sciLabelIDs, sciErr := ResolveSpeciesToLabelIDs(ctx, deps, filters.SpeciesScientific)
+			if sciErr != nil {
+				return nil, sciErr
+			}
+			sf.CommonLabelIDs = mergeUniqueIDs(sf.CommonLabelIDs, sciLabelIDs)
 		}
 
 		// Convert location names to audio source IDs

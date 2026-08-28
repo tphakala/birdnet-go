@@ -83,7 +83,7 @@ func buildConfigForManager(t *testing.T, manager v2.Manager, testLogger logger.L
 	sourceRepo := repository.NewAudioSourceRepository(db, nil, false, isMySQL)
 	weatherRepo := repository.NewWeatherRepository(db, nil, false, isMySQL)
 	imageCacheRepo := repository.NewImageCacheRepository(db, nil, labelRepo, false, isMySQL)
-	thresholdRepo := repository.NewDynamicThresholdRepository(db, nil, labelRepo, false, isMySQL)
+	thresholdRepo := repository.NewDynamicThresholdRepository(db, nil, false, isMySQL)
 	notificationRepo := repository.NewNotificationHistoryRepository(db, nil, labelRepo, false, isMySQL)
 
 	return &Config{
@@ -248,21 +248,6 @@ func (r nilInjectingLabelRepository) GetByIDs(ctx context.Context, ids []uint) (
 	return labels, nil
 }
 
-// errInjectingThresholdRepository wraps a DynamicThresholdRepository and forces
-// GetThresholdEvents to fail for one species, used to prove the second
-// (scientific-name) query error is propagated rather than swallowed.
-type errInjectingThresholdRepository struct {
-	repository.DynamicThresholdRepository
-	failOnSpecies string
-}
-
-func (r errInjectingThresholdRepository) GetThresholdEvents(ctx context.Context, speciesName string, limit int) ([]entities.ThresholdEvent, error) {
-	if speciesName == r.failOnSpecies {
-		return nil, fmt.Errorf("injected DB failure for %q", speciesName)
-	}
-	return r.DynamicThresholdRepository.GetThresholdEvents(ctx, speciesName, limit)
-}
-
 func TestV2OnlyDatastore_Open(t *testing.T) {
 	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
@@ -400,11 +385,9 @@ func TestV2OnlyDatastore_DynamicThreshold(t *testing.T) {
 	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
 
-	// Note: With LabelID normalization, lookups are now by scientific name.
-	// The SpeciesName field is still populated from the Label for compatibility.
 	threshold := &datastore.DynamicThreshold{
-		SpeciesName:    "Passer domesticus", // Will be derived from Label
-		ScientificName: "Passer domesticus",
+		SpeciesName:    "great tit",
+		ScientificName: "Parus major",
 		Level:          1,
 		CurrentValue:   0.7,
 		BaseThreshold:  0.6,
@@ -421,11 +404,11 @@ func TestV2OnlyDatastore_DynamicThreshold(t *testing.T) {
 	err := ds.SaveDynamicThreshold(threshold)
 	require.NoError(t, err)
 
-	// Get threshold by scientific name
-	retrieved, err := ds.GetDynamicThreshold("Passer domesticus", "")
+	// Get threshold by common name
+	retrieved, err := ds.GetDynamicThreshold("great tit")
 	require.NoError(t, err)
-	assert.Equal(t, "passer domesticus", retrieved.SpeciesName)
-	assert.Equal(t, "Passer domesticus", retrieved.ScientificName)
+	assert.Equal(t, "great tit", retrieved.SpeciesName)
+	assert.Equal(t, "Parus major", retrieved.ScientificName)
 	assert.Equal(t, 1, retrieved.Level)
 	assert.InDelta(t, 0.7, retrieved.CurrentValue, 0.001)
 
@@ -433,9 +416,11 @@ func TestV2OnlyDatastore_DynamicThreshold(t *testing.T) {
 	all, err := ds.GetAllDynamicThresholds()
 	require.NoError(t, err)
 	assert.Len(t, all, 1)
+	assert.Equal(t, "great tit", all[0].SpeciesName)
+	assert.Equal(t, "Parus major", all[0].ScientificName)
 
-	// Delete threshold by scientific name
-	err = ds.DeleteDynamicThreshold("Passer domesticus")
+	// Delete threshold by common name
+	err = ds.DeleteDynamicThreshold("great tit")
 	require.NoError(t, err)
 
 	// Verify deletion
@@ -445,19 +430,14 @@ func TestV2OnlyDatastore_DynamicThreshold(t *testing.T) {
 }
 
 // TestV2OnlyDatastore_DynamicThreshold_CommonNameDisplay verifies that
-// GetDynamicThreshold and GetAllDynamicThresholds return common names
-// in SpeciesName when a label mapping exists (Bug 1 fix).
+// SpeciesName round-trips as the stored lowercase common name and
+// ScientificName round-trips as stored metadata.
 func TestV2OnlyDatastore_DynamicThreshold_CommonNameDisplay(t *testing.T) {
-	labels := []string{
-		"Parus major_Great Tit",
-		"Turdus merula_Eurasian Blackbird",
-	}
-	ds, cleanup := setupTestDatastoreWithLabels(t, labels)
+	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
 
-	// Save threshold using scientific name (as the processor does)
 	threshold := &datastore.DynamicThreshold{
-		SpeciesName:    "Parus major",
+		SpeciesName:    "great tit",
 		ScientificName: "Parus major",
 		Level:          2,
 		CurrentValue:   0.5,
@@ -473,35 +453,29 @@ func TestV2OnlyDatastore_DynamicThreshold_CommonNameDisplay(t *testing.T) {
 	err := ds.SaveDynamicThreshold(threshold)
 	require.NoError(t, err)
 
-	// GetDynamicThreshold should return common name in SpeciesName
-	retrieved, err := ds.GetDynamicThreshold("Parus major", "")
+	// GetDynamicThreshold should return lowercase common name and stored scientific name
+	retrieved, err := ds.GetDynamicThreshold("great tit")
 	require.NoError(t, err)
-	assert.Equal(t, "great tit", retrieved.SpeciesName, "SpeciesName should be common name")
-	assert.Equal(t, "Parus major", retrieved.ScientificName, "ScientificName should stay scientific")
+	assert.Equal(t, "great tit", retrieved.SpeciesName)
+	assert.Equal(t, "Parus major", retrieved.ScientificName)
 
-	// GetAllDynamicThresholds should also return common name
+	// GetAllDynamicThresholds should also return lowercase common name and stored scientific name
 	all, err := ds.GetAllDynamicThresholds()
 	require.NoError(t, err)
 	require.Len(t, all, 1)
-	assert.Equal(t, "great tit", all[0].SpeciesName, "SpeciesName should be common name in list")
-	assert.Equal(t, "Parus major", all[0].ScientificName, "ScientificName should stay scientific in list")
+	assert.Equal(t, "great tit", all[0].SpeciesName)
+	assert.Equal(t, "Parus major", all[0].ScientificName)
 }
 
-// TestV2OnlyDatastore_DynamicThreshold_ModelName verifies that
-// GetAllDynamicThresholds and GetDynamicThreshold return ModelName
-// constructed from the Label's AIModel (e.g., "BirdNET_V2.4").
-// Regression test for GitHub issue #2902.
-func TestV2OnlyDatastore_DynamicThreshold_ModelName(t *testing.T) {
-	labels := []string{
-		"Parus major_Great Tit",
-	}
-	ds, cleanup := setupTestDatastoreWithLabels(t, labels)
+// TestV2OnlyDatastore_DynamicThreshold_SpeciesNameRetrieval verifies that
+// GetAllDynamicThresholds and GetDynamicThreshold return lowercase common names.
+func TestV2OnlyDatastore_DynamicThreshold_SpeciesNameRetrieval(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
 
 	threshold := &datastore.DynamicThreshold{
-		SpeciesName:    "Parus major",
+		SpeciesName:    "great tit",
 		ScientificName: "Parus major",
-		ModelName:      "BirdNET_V2.4",
 		Level:          2,
 		CurrentValue:   0.5,
 		BaseThreshold:  0.8,
@@ -516,38 +490,30 @@ func TestV2OnlyDatastore_DynamicThreshold_ModelName(t *testing.T) {
 	err := ds.SaveDynamicThreshold(threshold)
 	require.NoError(t, err)
 
-	// GetAllDynamicThresholds must return non-empty ModelName
+	// GetAllDynamicThresholds must return lowercase common name
 	all, err := ds.GetAllDynamicThresholds()
 	require.NoError(t, err)
 	require.Len(t, all, 1)
-	assert.Equal(t, "BirdNET_V2.4", all[0].ModelName,
-		"ModelName must be constructed from Label's Model (Name_VVersion)")
 	assert.Equal(t, "great tit", all[0].SpeciesName,
-		"SpeciesName must be lowercase to match processor convention")
+		"SpeciesName must be lowercase")
+	assert.Equal(t, "Parus major", all[0].ScientificName)
 
-	// GetDynamicThreshold (single lookup) must also return ModelName
-	single, err := ds.GetDynamicThreshold("Parus major", "")
+	// GetDynamicThreshold (single lookup) must also return lowercase common name
+	single, err := ds.GetDynamicThreshold("great tit")
 	require.NoError(t, err)
-	assert.Equal(t, "BirdNET_V2.4", single.ModelName,
-		"Single lookup must also return ModelName")
 	assert.Equal(t, "great tit", single.SpeciesName,
 		"Single lookup SpeciesName must be lowercase")
+	assert.Equal(t, "Parus major", single.ScientificName)
 }
 
 // TestV2OnlyDatastore_DynamicThreshold_DeleteByCommonName verifies that
-// DeleteDynamicThreshold works when called with a common name (Bug 2 fix).
-// The processor uses lowercase common names as map keys and passes them
-// to the datastore's delete method.
+// DeleteDynamicThreshold deletes by common name.
 func TestV2OnlyDatastore_DynamicThreshold_DeleteByCommonName(t *testing.T) {
-	labels := []string{
-		"Parus major_Great Tit",
-	}
-	ds, cleanup := setupTestDatastoreWithLabels(t, labels)
+	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
 
-	// Save threshold with scientific name
 	threshold := &datastore.DynamicThreshold{
-		SpeciesName:    "Parus major",
+		SpeciesName:    "great tit",
 		ScientificName: "Parus major",
 		Level:          1,
 		CurrentValue:   0.6,
@@ -566,7 +532,7 @@ func TestV2OnlyDatastore_DynamicThreshold_DeleteByCommonName(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, all, 1)
 
-	// Delete using lowercase common name (what the processor sends after Bug 1 fix)
+	// Delete using common name
 	err = ds.DeleteDynamicThreshold("great tit")
 	require.NoError(t, err)
 
@@ -576,18 +542,14 @@ func TestV2OnlyDatastore_DynamicThreshold_DeleteByCommonName(t *testing.T) {
 	assert.Empty(t, all, "threshold should be deleted when using common name")
 }
 
-// TestV2OnlyDatastore_DynamicThreshold_GetByCommonName verifies that
-// GetDynamicThreshold works when called with a common name.
+// TestV2OnlyDatastore_DynamicThreshold_GetByCommonName verifies case-insensitive
+// retrieval of dynamic thresholds.
 func TestV2OnlyDatastore_DynamicThreshold_GetByCommonName(t *testing.T) {
-	labels := []string{
-		"Parus major_Great Tit",
-	}
-	ds, cleanup := setupTestDatastoreWithLabels(t, labels)
+	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
 
-	// Save threshold with scientific name
 	threshold := &datastore.DynamicThreshold{
-		SpeciesName:    "Parus major",
+		SpeciesName:    "great tit",
 		ScientificName: "Parus major",
 		Level:          1,
 		CurrentValue:   0.6,
@@ -601,23 +563,44 @@ func TestV2OnlyDatastore_DynamicThreshold_GetByCommonName(t *testing.T) {
 	err := ds.SaveDynamicThreshold(threshold)
 	require.NoError(t, err)
 
-	// Retrieve using lowercase common name
-	retrieved, err := ds.GetDynamicThreshold("great tit", "")
+	// Retrieve using mixed-case common name
+	retrieved, err := ds.GetDynamicThreshold("Great Tit")
 	require.NoError(t, err)
 	assert.Equal(t, "great tit", retrieved.SpeciesName)
 	assert.Equal(t, "Parus major", retrieved.ScientificName)
 }
 
 // TestV2OnlyDatastore_DynamicThreshold_FallbackWithoutMapping verifies that
-// when no label mapping exists, SpeciesName falls back to scientific name
-// (existing behavior preserved).
+// with no name maps configured, a stored empty ScientificName stays empty,
+// while a stored non-empty ScientificName round-trips.
 func TestV2OnlyDatastore_DynamicThreshold_FallbackWithoutMapping(t *testing.T) {
-	// No labels - empty maps
 	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
 
-	threshold := &datastore.DynamicThreshold{
-		SpeciesName:    "Passer domesticus",
+	// Case 1: Stored empty ScientificName stays empty
+	emptySci := &datastore.DynamicThreshold{
+		SpeciesName:    "great tit",
+		ScientificName: "",
+		Level:          1,
+		CurrentValue:   0.7,
+		BaseThreshold:  0.6,
+		ValidHours:     24,
+		ExpiresAt:      time.Now().Add(24 * time.Hour),
+		LastTriggered:  time.Now(),
+		FirstCreated:   time.Now(),
+		UpdatedAt:      time.Now(),
+	}
+	err := ds.SaveDynamicThreshold(emptySci)
+	require.NoError(t, err)
+
+	retrievedEmpty, err := ds.GetDynamicThreshold("great tit")
+	require.NoError(t, err)
+	assert.Equal(t, "great tit", retrievedEmpty.SpeciesName)
+	assert.Empty(t, retrievedEmpty.ScientificName, "stored empty scientific name should stay empty without name maps")
+
+	// Case 2: Stored non-empty ScientificName round-trips
+	withSci := &datastore.DynamicThreshold{
+		SpeciesName:    "house sparrow",
 		ScientificName: "Passer domesticus",
 		Level:          1,
 		CurrentValue:   0.7,
@@ -628,25 +611,23 @@ func TestV2OnlyDatastore_DynamicThreshold_FallbackWithoutMapping(t *testing.T) {
 		FirstCreated:   time.Now(),
 		UpdatedAt:      time.Now(),
 	}
-	err := ds.SaveDynamicThreshold(threshold)
+	err = ds.SaveDynamicThreshold(withSci)
 	require.NoError(t, err)
 
-	// Without label mapping, should fall back to scientific name
-	retrieved, err := ds.GetDynamicThreshold("Passer domesticus", "")
+	retrievedWith, err := ds.GetDynamicThreshold("house sparrow")
 	require.NoError(t, err)
-	assert.Equal(t, "passer domesticus", retrieved.SpeciesName, "should fallback to scientific name")
-	assert.Equal(t, "Passer domesticus", retrieved.ScientificName)
+	assert.Equal(t, "house sparrow", retrievedWith.SpeciesName)
+	assert.Equal(t, "Passer domesticus", retrievedWith.ScientificName)
 }
 
 // TestV2OnlyDatastore_DynamicThreshold_UpdateExpiryByCommonName verifies that
 // UpdateDynamicThresholdExpiry works when called with a common name.
 func TestV2OnlyDatastore_DynamicThreshold_UpdateExpiryByCommonName(t *testing.T) {
-	labels := []string{"Parus major_Great Tit"}
-	ds, cleanup := setupTestDatastoreWithLabels(t, labels)
+	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
 
 	threshold := &datastore.DynamicThreshold{
-		SpeciesName:    "Parus major",
+		SpeciesName:    "great tit",
 		ScientificName: "Parus major",
 		Level:          1,
 		CurrentValue:   0.6,
@@ -666,7 +647,7 @@ func TestV2OnlyDatastore_DynamicThreshold_UpdateExpiryByCommonName(t *testing.T)
 	require.NoError(t, err, "UpdateDynamicThresholdExpiry should work with common name")
 
 	// Verify the expiry was updated
-	retrieved, err := ds.GetDynamicThreshold("Parus major", "")
+	retrieved, err := ds.GetDynamicThreshold("great tit")
 	require.NoError(t, err)
 	assert.WithinDuration(t, newExpiry, retrieved.ExpiresAt, time.Second, "expiry should be updated")
 }
@@ -674,27 +655,9 @@ func TestV2OnlyDatastore_DynamicThreshold_UpdateExpiryByCommonName(t *testing.T)
 // TestV2OnlyDatastore_DynamicThreshold_DeleteEventsByCommonName verifies that
 // DeleteThresholdEvents works when called with a common name.
 func TestV2OnlyDatastore_DynamicThreshold_DeleteEventsByCommonName(t *testing.T) {
-	labels := []string{"Parus major_Great Tit"}
-	ds, cleanup := setupTestDatastoreWithLabels(t, labels)
+	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
 
-	// Save a threshold first (needed for event's label resolution)
-	threshold := &datastore.DynamicThreshold{
-		SpeciesName:    "Parus major",
-		ScientificName: "Parus major",
-		Level:          1,
-		CurrentValue:   0.6,
-		BaseThreshold:  0.8,
-		ValidHours:     12,
-		ExpiresAt:      time.Now().Add(12 * time.Hour),
-		LastTriggered:  time.Now(),
-		FirstCreated:   time.Now(),
-		UpdatedAt:      time.Now(),
-	}
-	err := ds.SaveDynamicThreshold(threshold)
-	require.NoError(t, err)
-
-	// Save an event using scientific name (as the processor does after #1907)
 	event := &datastore.ThresholdEvent{
 		SpeciesName:    "great tit",
 		ScientificName: "Parus major",
@@ -706,11 +669,11 @@ func TestV2OnlyDatastore_DynamicThreshold_DeleteEventsByCommonName(t *testing.T)
 		Confidence:     0.95,
 		CreatedAt:      time.Now(),
 	}
-	err = ds.SaveThresholdEvent(event)
+	err := ds.SaveThresholdEvent(event)
 	require.NoError(t, err)
 
 	// Verify event exists
-	events, err := ds.GetThresholdEvents("Parus major", 10)
+	events, err := ds.GetThresholdEvents("great tit", 10)
 	require.NoError(t, err)
 	require.NotEmpty(t, events, "event should exist before delete")
 
@@ -719,61 +682,62 @@ func TestV2OnlyDatastore_DynamicThreshold_DeleteEventsByCommonName(t *testing.T)
 	require.NoError(t, err, "DeleteThresholdEvents should work with common name")
 
 	// Verify events are deleted
-	events, err = ds.GetThresholdEvents("Parus major", 10)
+	events, err = ds.GetThresholdEvents("great tit", 10)
 	require.NoError(t, err)
 	assert.Empty(t, events, "events should be deleted when using common name")
 }
 
-// TestV2OnlyDatastore_DeleteThresholdEvents_LegacyCommonNameLabel pins the read/delete
-// symmetry: an event saved under a legacy common-name-shaped label (its scientific_name
-// column actually holds the common name, mimicking pre-#1907 mis-saved data) must
-// be deleted, not just the post-#1907 scientific-name-shaped event. On the pre-fix
-// code DeleteThresholdEvents resolved only to the scientific name, so the legacy
-// event survived and GetThresholdEvents resurfaced it on the next read.
-func TestV2OnlyDatastore_DeleteThresholdEvents_LegacyCommonNameLabel(t *testing.T) {
-	ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Parus major_Great Tit"})
+// TestV2OnlyDatastore_DynamicThreshold_FirstCreatedPreservedOnUpsert verifies that
+// first_created timestamp is preserved across upsert conflicts.
+func TestV2OnlyDatastore_DynamicThreshold_FirstCreatedPreservedOnUpsert(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
 
-	// Legacy mis-saved event: an empty ScientificName forces SaveThresholdEvent's
-	// fallback to use the common name, creating a label whose scientific_name = "great tit".
-	legacy := &datastore.ThresholdEvent{
-		SpeciesName:   "great tit",
-		PreviousLevel: 0,
-		NewLevel:      1,
-		PreviousValue: 0.8,
-		NewValue:      0.6,
-		ChangeReason:  "high_confidence",
-		Confidence:    0.95,
-		CreatedAt:     time.Now(),
-	}
-	require.NoError(t, ds.SaveThresholdEvent(legacy))
+	t0 := time.Now().Add(-72 * time.Hour)
+	t1 := time.Now().Add(-1 * time.Hour)
 
-	// Correctly-shaped event (post-#1907): label scientific_name = "Parus major".
-	correct := &datastore.ThresholdEvent{
-		SpeciesName:    "great tit",
-		ScientificName: "Parus major",
-		PreviousLevel:  1,
-		NewLevel:       2,
-		PreviousValue:  0.6,
-		NewValue:       0.5,
-		ChangeReason:   "high_confidence",
-		Confidence:     0.97,
-		CreatedAt:      time.Now().Add(time.Second),
-	}
-	require.NoError(t, ds.SaveThresholdEvent(correct))
-
-	// The dual-read by common name surfaces both label shapes before delete.
-	events, err := ds.GetThresholdEvents("great tit", 10)
+	err := ds.BatchSaveDynamicThresholds([]datastore.DynamicThreshold{
+		{
+			SpeciesName:    "great tit",
+			ScientificName: "Parus major",
+			Level:          1,
+			CurrentValue:   0.7,
+			BaseThreshold:  0.8,
+			HighConfCount:  1,
+			ValidHours:     24,
+			ExpiresAt:      time.Now().Add(24 * time.Hour),
+			FirstCreated:   t0,
+			LastTriggered:  t1,
+			TriggerCount:   1,
+		},
+	})
 	require.NoError(t, err)
-	require.Len(t, events, 2, "both legacy and correct events should be visible before delete")
 
-	// Delete by common name must remove BOTH shapes (the read/delete symmetry fix).
-	require.NoError(t, ds.DeleteThresholdEvents("great tit"))
+	t2 := time.Now()
+	t3 := time.Now()
 
-	// Nothing should reappear on the next read.
-	events, err = ds.GetThresholdEvents("great tit", 10)
+	err = ds.BatchSaveDynamicThresholds([]datastore.DynamicThreshold{
+		{
+			SpeciesName:    "great tit",
+			ScientificName: "Parus major",
+			Level:          2,
+			CurrentValue:   0.7,
+			BaseThreshold:  0.8,
+			HighConfCount:  1,
+			ValidHours:     24,
+			ExpiresAt:      time.Now().Add(24 * time.Hour),
+			FirstCreated:   t2,
+			LastTriggered:  t3,
+			TriggerCount:   1,
+		},
+	})
 	require.NoError(t, err)
-	assert.Empty(t, events, "legacy common-name event must not survive the delete")
+
+	retrieved, err := ds.GetDynamicThreshold("great tit")
+	require.NoError(t, err)
+	assert.WithinDuration(t, t0, retrieved.FirstCreated, time.Second, "first_created must be preserved across upsert")
+	assert.Equal(t, 2, retrieved.Level)
+	assert.WithinDuration(t, t3, retrieved.LastTriggered, time.Second, "last_triggered must be updated across upsert")
 }
 
 func TestV2OnlyDatastore_ImageCache(t *testing.T) {
@@ -912,7 +876,7 @@ func TestV2OnlyDatastore_ThresholdReads_ErrorTelemetry(t *testing.T) {
 		// reachable via errors.Is (EnhancedError.Unwrap) and the CategoryNotFound
 		// "dynamic threshold not found" message is suppressed from Sentry, so it is never
 		// surfaced as a database error (#1019).
-		_, err := ds.GetDynamicThreshold("Parus major", "")
+		_, err := ds.GetDynamicThreshold("Parus major")
 		require.Error(t, err)
 		require.ErrorIs(t, err, repository.ErrDynamicThresholdNotFound,
 			"not-found sentinel must propagate so callers can distinguish a benign miss from a genuine DB fault")
@@ -939,7 +903,7 @@ func TestV2OnlyDatastore_ThresholdReads_ErrorTelemetry(t *testing.T) {
 			assert.Equal(t, string(errors.CategoryDatabase), ee.GetCategory(), "%s must tag database category", op)
 		}
 
-		_, errGet := ds.GetDynamicThreshold("Parus major", "")
+		_, errGet := ds.GetDynamicThreshold("Parus major")
 		assertDatastoreWrapped(t, errGet, "GetDynamicThreshold")
 
 		_, errAll := ds.GetAllDynamicThresholds()
@@ -953,17 +917,14 @@ func TestV2OnlyDatastore_ThresholdReads_ErrorTelemetry(t *testing.T) {
 	})
 }
 
-// TestV2OnlyDatastore_ThresholdEvent_ModelName verifies that GetThresholdEvents and
-// GetRecentThresholdEvents return ModelName constructed from the event Label's AIModel
-// (e.g., "BirdNET_V2.4"), the event-side parallel of the GitHub #2902 record fix.
-// Regression test for #1025: events previously returned an empty ModelName because the
-// repository only preloaded Label (not Label.Model) and the converter never set it.
-func TestV2OnlyDatastore_ThresholdEvent_ModelName(t *testing.T) {
-	ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Parus major_Great Tit"})
+// TestV2OnlyDatastore_ThresholdEvent_Retrieval verifies that GetThresholdEvents and
+// GetRecentThresholdEvents return events for the species.
+func TestV2OnlyDatastore_ThresholdEvent_Retrieval(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
 
 	event := &datastore.ThresholdEvent{
-		SpeciesName:   "Parus major",
+		SpeciesName:   "parus major",
 		PreviousLevel: 0,
 		NewLevel:      1,
 		PreviousValue: 0.6,
@@ -974,113 +935,15 @@ func TestV2OnlyDatastore_ThresholdEvent_ModelName(t *testing.T) {
 	}
 	require.NoError(t, ds.SaveThresholdEvent(event))
 
-	events, err := ds.GetThresholdEvents("Parus major", 10)
+	events, err := ds.GetThresholdEvents("parus major", 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	assert.Equal(t, "BirdNET_V2.4", events[0].ModelName,
-		"event ModelName must be constructed from the Label's Model (Name_VVersion)")
+	assert.Equal(t, "parus major", events[0].SpeciesName)
 
 	recent, err := ds.GetRecentThresholdEvents(10)
 	require.NoError(t, err)
 	require.Len(t, recent, 1)
-	assert.Equal(t, "BirdNET_V2.4", recent[0].ModelName,
-		"recent event ModelName must be constructed from the Label's Model")
-}
-
-// TestV2OnlyDatastore_GetThresholdEvents_ResolvesScientificName covers the
-// second (scientific-name) query path: a common-name input resolves to a
-// different scientific name, so the merge query runs and finds events stored
-// under the scientific name.
-func TestV2OnlyDatastore_GetThresholdEvents_ResolvesScientificName(t *testing.T) {
-	ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Parus major_Great Tit"})
-	defer cleanup()
-
-	// Save an event under the scientific name (the correctly-saved, post-#1907 shape).
-	event := &datastore.ThresholdEvent{
-		SpeciesName:   "Parus major",
-		PreviousLevel: 0,
-		NewLevel:      1,
-		PreviousValue: 0.6,
-		NewValue:      0.7,
-		ChangeReason:  "high_confidence",
-		Confidence:    0.95,
-		CreatedAt:     time.Now(),
-	}
-	require.NoError(t, ds.SaveThresholdEvent(event))
-
-	// Query by the common name. resolveToScientificName("Great Tit") -> "Parus major",
-	// so the second query runs and finds the event stored under the scientific name.
-	events, err := ds.GetThresholdEvents("Great Tit", 10)
-	require.NoError(t, err)
-	require.Len(t, events, 1)
-	assert.Equal(t, "Parus major", events[0].SpeciesName)
-}
-
-// TestV2OnlyDatastore_GetThresholdEvents_SecondQueryError pins the #1010 fix:
-// a DB failure on the second (scientific-name) query must surface, not be
-// swallowed and returned as an empty/partial success.
-func TestV2OnlyDatastore_GetThresholdEvents_SecondQueryError(t *testing.T) {
-	cfg, cfgCleanup := buildTestConfig(t, []string{"Parus major_Great Tit"})
-	defer cfgCleanup()
-
-	// Fail only the scientific-name (second) query; the common-name (first)
-	// query still succeeds, isolating the previously-swallowed error path.
-	cfg.Threshold = errInjectingThresholdRepository{
-		DynamicThresholdRepository: cfg.Threshold,
-		failOnSpecies:              "Parus major",
-	}
-
-	ds, err := New(cfg)
-	require.NoError(t, err)
-	defer func() { _ = ds.Close() }()
-
-	// resolveToScientificName("Great Tit") -> "Parus major", so the second query
-	// runs and the injected error must propagate. Assert on the injected message so
-	// the test pins the second (scientific-name) query as the failing one, not just
-	// any error.
-	_, err = ds.GetThresholdEvents("Great Tit", 10)
-	require.Error(t, err)
-	assert.ErrorContains(t, err, "injected DB failure")
-}
-
-// TestV2OnlyDatastore_GetThresholdEvents_SameTimestampTieBreak pins the
-// CreatedAt/ID sort tie-break. The per-query LIMIT is applied in SQL, so a
-// single query cannot exercise the Go-side sort; the tie-break only governs how
-// the MERGED result of the two queries (common-name + scientific-name) is
-// truncated. We store one event found by Query 1 (a legacy common-name label)
-// and one found by Query 2 (the resolved scientific name) sharing a timestamp,
-// then assert the higher-ID event wins truncation to one row.
-func TestV2OnlyDatastore_GetThresholdEvents_SameTimestampTieBreak(t *testing.T) {
-	ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Parus major_Great Tit"})
-	defer cleanup()
-
-	ts := time.Now()
-	// Query 1 finds this event (label scientific_name == the common-name input).
-	require.NoError(t, ds.SaveThresholdEvent(&datastore.ThresholdEvent{
-		SpeciesName: "Great Tit", NewLevel: 1, NewValue: 0.7, ChangeReason: "legacy", Confidence: 0.95, CreatedAt: ts,
-	}))
-	// Query 2 finds this event (label scientific_name == resolved scientific name).
-	require.NoError(t, ds.SaveThresholdEvent(&datastore.ThresholdEvent{
-		SpeciesName: "Parus major", NewLevel: 1, NewValue: 0.7, ChangeReason: "correct", Confidence: 0.95, CreatedAt: ts,
-	}))
-
-	// Both events come back from the merge; learn the higher ID (saved second).
-	all, err := ds.GetThresholdEvents("Great Tit", 10)
-	require.NoError(t, err)
-	require.Len(t, all, 2)
-	maxID := all[0].ID
-	for _, e := range all[1:] {
-		if e.ID > maxID {
-			maxID = e.ID
-		}
-	}
-
-	// Truncating the same-timestamp merge to one row must deterministically keep
-	// the higher ID via the tie-break.
-	top, err := ds.GetThresholdEvents("Great Tit", 1)
-	require.NoError(t, err)
-	require.Len(t, top, 1)
-	assert.Equal(t, maxID, top[0].ID)
+	assert.Equal(t, "parus major", recent[0].SpeciesName)
 }
 
 func TestV2OnlyDatastore_SearchNotes(t *testing.T) {
@@ -2103,4 +1966,91 @@ func TestV2OnlyDatastore_GetSpeciesDiversityData_TimezoneBucketing(t *testing.T)
 	none, err := ds.GetSpeciesDiversityData(ctx, "2024-06-14", "2024-06-14")
 	require.NoError(t, err)
 	assert.Empty(t, none, "detection must not bucket on the UTC date when the configured zone is UTC+5")
+}
+
+// TestV2OnlyDatastore_GetThresholdEvents_OrderingAndLimit verifies events are returned
+// most-recent-first (created_at DESC) and that the limit truncates to the newest (#4195).
+func TestV2OnlyDatastore_GetThresholdEvents_OrderingAndLimit(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	base := time.Now().Truncate(time.Second)
+	offsets := []time.Duration{0, time.Minute, 2 * time.Minute}
+	for i, off := range offsets {
+		require.NoError(t, ds.SaveThresholdEvent(&datastore.ThresholdEvent{
+			SpeciesName:  "great tit",
+			NewLevel:     i + 1,
+			NewValue:     0.7,
+			ChangeReason: "high_confidence",
+			Confidence:   0.95,
+			CreatedAt:    base.Add(off),
+		}))
+	}
+
+	events, err := ds.GetThresholdEvents("great tit", 10)
+	require.NoError(t, err)
+	require.Len(t, events, 3)
+	// Descending by created_at: newest first.
+	assert.Equal(t, base.Add(2*time.Minute).Unix(), events[0].CreatedAt.Unix(), "newest event must be first")
+	assert.Equal(t, base.Unix(), events[2].CreatedAt.Unix(), "oldest event must be last")
+
+	// Limit truncates to the newest.
+	top, err := ds.GetThresholdEvents("great tit", 1)
+	require.NoError(t, err)
+	require.Len(t, top, 1)
+	assert.Equal(t, base.Add(2*time.Minute).Unix(), top[0].CreatedAt.Unix())
+}
+
+// TestV2OnlyDatastore_GetThresholdEvents_SameTimestampTiebreak verifies the id DESC
+// tiebreaker makes same-created_at truncation deterministic under the limit (#4195).
+func TestV2OnlyDatastore_GetThresholdEvents_SameTimestampTiebreak(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	ts := time.Now().Truncate(time.Second)
+	require.NoError(t, ds.SaveThresholdEvent(&datastore.ThresholdEvent{
+		SpeciesName: "great tit", NewLevel: 1, NewValue: 0.7, ChangeReason: "first", Confidence: 0.9, CreatedAt: ts,
+	}))
+	require.NoError(t, ds.SaveThresholdEvent(&datastore.ThresholdEvent{
+		SpeciesName: "great tit", NewLevel: 2, NewValue: 0.6, ChangeReason: "second", Confidence: 0.9, CreatedAt: ts,
+	}))
+
+	all, err := ds.GetThresholdEvents("great tit", 10)
+	require.NoError(t, err)
+	require.Len(t, all, 2)
+	// Under "created_at DESC, id DESC" the higher id (saved second) sorts first.
+	assert.Greater(t, all[0].ID, all[1].ID, "same-timestamp events must order by id DESC")
+
+	top, err := ds.GetThresholdEvents("great tit", 1)
+	require.NoError(t, err)
+	require.Len(t, top, 1)
+	assert.Equal(t, all[0].ID, top[0].ID, "same-timestamp truncation must deterministically keep the higher id")
+}
+
+// TestV2OnlyDatastore_DynamicThreshold_EmptySpeciesRejected verifies the empty-key guard:
+// a save with an empty species key is rejected by the repository rather than silently
+// keying a row on the empty string (#4195).
+func TestV2OnlyDatastore_DynamicThreshold_EmptySpeciesRejected(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	err := ds.SaveDynamicThreshold(&datastore.DynamicThreshold{
+		SpeciesName:   "",
+		Level:         1,
+		CurrentValue:  0.7,
+		BaseThreshold: 0.8,
+		ValidHours:    24,
+		ExpiresAt:     time.Now().Add(24 * time.Hour),
+	})
+	require.Error(t, err, "empty species name must be rejected")
+
+	batchErr := ds.BatchSaveDynamicThresholds([]datastore.DynamicThreshold{{
+		SpeciesName:   "",
+		Level:         1,
+		CurrentValue:  0.7,
+		BaseThreshold: 0.8,
+		ValidHours:    24,
+		ExpiresAt:     time.Now().Add(24 * time.Hour),
+	}})
+	require.Error(t, batchErr, "empty species name must be rejected in batch save")
 }

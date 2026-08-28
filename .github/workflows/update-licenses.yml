@@ -49,6 +49,21 @@ jobs:
           echo "Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International" >> frontend/static/LICENSES.md
           echo "https://creativecommons.org/licenses/by-nc-sa/4.0/" >> frontend/static/LICENSES.md
           echo "" >> frontend/static/LICENSES.md
+
+          # Bundled data blobs are not Go module dependencies, so go-licenses does
+          # not see them. List them by hand here so the shipped attribution stays
+          # complete across regenerations.
+          echo "## Bundled Models" >> frontend/static/LICENSES.md
+          echo "" >> frontend/static/LICENSES.md
+          echo "### snakers4/silero-vad" >> frontend/static/LICENSES.md
+          echo "" >> frontend/static/LICENSES.md
+          echo "Silero VAD model (silero_vad.onnx), embedded in the binary and used by the" >> frontend/static/LICENSES.md
+          echo "privacy-filter speech gate. Unmodified, byte-identical to upstream." >> frontend/static/LICENSES.md
+          echo "" >> frontend/static/LICENSES.md
+          echo "License: https://github.com/snakers4/silero-vad/blob/master/LICENSE" >> frontend/static/LICENSES.md
+          echo "Source: MIT" >> frontend/static/LICENSES.md
+          echo "" >> frontend/static/LICENSES.md
+
           echo "## Dependencies" >> frontend/static/LICENSES.md
           echo "" >> frontend/static/LICENSES.md
 

@@ -259,6 +259,57 @@ func TestGetInferenceStatus_AudioBlock(t *testing.T) {
 	assert.GreaterOrEqual(t, resp.Audio.QueueDepth, 0, "audio.queueDepth must be non-negative")
 }
 
+// TestVADStatusInfo_JSONContract pins the wire field names of the VAD block and
+// the omitempty behaviour the frontend InferenceVAD type depends on.
+func TestVADStatusInfo_JSONContract(t *testing.T) {
+	t.Parallel()
+
+	loaded := VADStatusInfo{
+		Enabled:     true,
+		Available:   true,
+		Loaded:      true,
+		Threshold:   0.35,
+		ModelSource: "embedded",
+		Strategy:    "sequence",
+		SampleRate:  16000,
+		Stats: VADStatsInfo{
+			Invocations: 42,
+			AvgMs:       2.5,
+			MaxMs:       9.1,
+			SpeechHits:  3,
+		},
+		LastSpeechAtUnix:      1_700_000_000,
+		LastSpeechProbability: 0.87,
+		RecentHits: []VADHitInfo{
+			{AtUnix: 1_700_000_000, Probability: 0.87, Source: "Front Yard"},
+		},
+	}
+	raw, err := json.Marshal(loaded)
+	require.NoError(t, err)
+	for _, key := range []string{
+		`"enabled":true`, `"available":true`, `"loaded":true`, `"threshold":0.35`,
+		`"modelSource":"embedded"`, `"strategy":"sequence"`, `"sampleRate":16000`,
+		`"invocations":42`, `"avgMs":2.5`, `"maxMs":9.1`, `"speechHits":3`,
+		`"lastSpeechAtUnix":1700000000`, `"lastSpeechProbability":0.87`,
+		`"recentHits":[`, `"atUnix":1700000000`, `"probability":0.87`, `"source":"Front Yard"`,
+	} {
+		assert.Contains(t, string(raw), key, "VAD JSON must carry %s", key)
+	}
+
+	// A disabled/unloaded gate omits the optional descriptors so the panel renders
+	// a clean "disabled" state without stale strategy/source/last-speech values.
+	off := VADStatusInfo{Enabled: false, Available: false}
+	rawOff, err := json.Marshal(off)
+	require.NoError(t, err)
+	for _, absent := range []string{"modelSource", "strategy", "sampleRate", "lastSpeechAtUnix", "lastSpeechProbability"} {
+		assert.NotContains(t, string(rawOff), absent, "disabled VAD must omit %s", absent)
+	}
+	// The pointer field on the parent response omits entirely when nil.
+	rawResp, err := json.Marshal(InferenceStatusResponse{})
+	require.NoError(t, err)
+	assert.NotContains(t, string(rawResp), `"vad"`, "nil VAD must be omitted so the panel hides")
+}
+
 // TestBuildModelStatus_MetricKeys verifies that buildModelStatus populates
 // throughput and error-rate metric keys using the inferencestats helpers.
 func TestBuildModelStatus_MetricKeys(t *testing.T) {

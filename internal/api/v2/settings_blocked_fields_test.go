@@ -363,11 +363,10 @@ func TestPatchReportsEmptyArrayNotNull(t *testing.T) {
 		"a request that rejected nothing must report [] rather than null")
 }
 
-// TestPutCannotChangeBlockedFields pins the PUT half of the contract.
-//
-// restoreBlockedFields' doc comment asserts that PUT enforces the same map
-// before anything is written; nothing tested that. Deleting the blocked-field
-// arm of handleFieldPermission left every package in internal/api/v2 green.
+// TestPutCannotChangeBlockedFields pins the PUT half of the contract: PUT now
+// enforces the blocked-field map through restoreBlockedFields, the same function
+// PATCH uses, so this drives the real UpdateSettings handler to confirm a blocked
+// field survives a full-object PUT that tries to change it.
 func TestPutCannotChangeBlockedFields(t *testing.T) {
 	e := echo.New()
 	controller := getTestController(t, e)

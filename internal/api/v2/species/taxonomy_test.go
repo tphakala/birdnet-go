@@ -306,7 +306,7 @@ func TestGetSpeciesTaxonomyLocalDB(t *testing.T) {
 	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
 	require.NoError(t, err, "Failed to load taxonomy database")
 
-	c := &Handler{Core: &apicore.Core{TaxonomyDB: taxonomyDB, EBirdClient: nil}}
+	c := &Handler{Core: &apicore.Core{TaxonomyDB: taxonomyDB}}
 	c.Settings.Store(apitest.NewValidTestSettings())
 
 	tests := []struct {
@@ -359,7 +359,7 @@ func TestGetSpeciesTaxonomyLocalDB(t *testing.T) {
 func TestGetSpeciesTaxonomyWithoutLocalDB(t *testing.T) {
 	t.Parallel()
 
-	c := &Handler{Core: &apicore.Core{TaxonomyDB: nil, EBirdClient: nil}}
+	c := &Handler{Core: &apicore.Core{TaxonomyDB: nil}}
 	c.Settings.Store(apitest.NewValidTestSettings())
 
 	// This should fail gracefully

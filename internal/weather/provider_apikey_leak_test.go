@@ -1,8 +1,6 @@
 package weather
 
 import (
-	"bytes"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -13,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
 // sentinelAPIKey is a recognizable, non-secret token used to prove that a
@@ -21,34 +19,6 @@ import (
 // URL-safe characters so it survives URL building unescaped, making any leak
 // trivially detectable with a substring check.
 const sentinelAPIKey = "SENTINELKEY0123456789DONOTLEAK"
-
-// captureWeatherLogs redirects the global logger to an in-memory buffer for the
-// duration of the test and returns the buffer. The weather package logs through
-// logger.Global().Module("weather"), so this captures everything the providers
-// emit while a test runs. It swaps process-wide global state, so tests using it
-// must not run with t.Parallel().
-func captureWeatherLogs(t *testing.T) *bytes.Buffer {
-	t.Helper()
-
-	var buf bytes.Buffer
-	capture := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
-	cl, err := logger.NewCentralLogger(
-		&logger.LoggingConfig{
-			Console:      &logger.ConsoleOutput{Enabled: false},
-			FileOutput:   &logger.FileOutput{Enabled: false},
-			DefaultLevel: "debug",
-		},
-		capture,
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = cl.Close() })
-
-	prev := logger.Global()
-	logger.SetGlobal(cl)
-	t.Cleanup(func() { logger.SetGlobal(prev) })
-
-	return &buf
-}
 
 // TestOpenWeatherProvider_TransportError_DoesNotLeakAPIKey is a regression guard
 // for the API-key-in-logs vulnerability. net/http wraps transport failures in a
@@ -58,7 +28,7 @@ func captureWeatherLogs(t *testing.T) *bytes.Buffer {
 // support dumps.
 func TestOpenWeatherProvider_TransportError_DoesNotLeakAPIKey(t *testing.T) {
 	setupHTTPMock(t)
-	logs := captureWeatherLogs(t)
+	logs := logtest.CaptureBuffer(t)
 
 	// Force every attempt's client.Do to fail at the transport layer so the
 	// provider exercises its failure-log and error-wrap paths.
@@ -84,7 +54,7 @@ func TestOpenWeatherProvider_TransportError_DoesNotLeakAPIKey(t *testing.T) {
 // scrubbed so a plain logger.Error in weather.go cannot leak it.
 func TestWundergroundProvider_TransportError_DoesNotLeakAPIKey(t *testing.T) {
 	setupHTTPMock(t)
-	logs := captureWeatherLogs(t)
+	logs := logtest.CaptureBuffer(t)
 
 	httpmock.RegisterResponder("GET", `=~^https://api\.weather\.com/v2/pws/observations/current`,
 		httpmock.NewErrorResponder(errors.NewStd("simulated transport failure")))
@@ -112,7 +82,7 @@ func TestWundergroundProvider_TransportError_DoesNotLeakAPIKey(t *testing.T) {
 // payload here is the coordinates rather than an API key.
 func TestYrNoProvider_TransportError_DoesNotLeakCoordinates(t *testing.T) {
 	setupHTTPMock(t)
-	logs := captureWeatherLogs(t)
+	logs := logtest.CaptureBuffer(t)
 
 	// Force every attempt's client.Do to fail at the transport layer so the
 	// provider exercises its failure-log and error-wrap paths.

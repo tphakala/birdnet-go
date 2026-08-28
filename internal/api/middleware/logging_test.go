@@ -1,8 +1,6 @@
 package middleware
 
 import (
-	"bytes"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,34 +8,11 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
-func captureAccessLogs(t *testing.T) *bytes.Buffer {
-	t.Helper()
-
-	var buf bytes.Buffer
-	capture := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
-	cl, err := logger.NewCentralLogger(
-		&logger.LoggingConfig{
-			Console:      &logger.ConsoleOutput{Enabled: false},
-			FileOutput:   &logger.FileOutput{Enabled: false},
-			DefaultLevel: "debug",
-		},
-		capture,
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = cl.Close() })
-
-	prev := logger.Global()
-	logger.SetGlobal(cl)
-	t.Cleanup(func() { logger.SetGlobal(prev) })
-
-	return &buf
-}
-
 func TestNewRequestLogger_ScrubsHLSToken(t *testing.T) {
-	buf := captureAccessLogs(t)
+	buf := logtest.CaptureBuffer(t)
 
 	e := echo.New()
 	mw := NewRequestLogger()
@@ -92,7 +67,7 @@ func TestNewRequestLogger_ScrubsURI(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			buf := captureAccessLogs(t)
+			buf := logtest.CaptureBuffer(t)
 
 			e := echo.New()
 			mw := NewRequestLogger()

@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"iter"
+	"regexp"
 	"strings"
 	"time"
 
@@ -553,9 +554,21 @@ type OpenWeatherSettings struct {
 
 // PrivacyFilterSettings contains settings for the privacy filter.
 type PrivacyFilterSettings struct {
-	Debug      bool    `yaml:"debug" json:"debug"`           // true to enable debug mode
-	Enabled    bool    `yaml:"enabled" json:"enabled"`       // true to enable privacy filter
-	Confidence float32 `yaml:"confidence" json:"confidence"` // confidence threshold for human detection
+	Debug      bool        `yaml:"debug" json:"debug"`           // true to enable debug mode
+	Enabled    bool        `yaml:"enabled" json:"enabled"`       // true to enable privacy filter
+	Confidence float32     `yaml:"confidence" json:"confidence"` // confidence threshold for label-based human detection
+	VAD        VADSettings `yaml:"vad" json:"vad"`               // dedicated Silero VAD speech gate that augments the label-based filter
+}
+
+// VADSettings configures the Silero voice-activity-detection gate that augments
+// the label-based privacy filter. It detects speech PRESENCE only (not content
+// or speaker identity) and is opt-in. The Silero VAD model is embedded in the
+// binary, so no download is needed; it requires an ONNX Runtime library and is
+// inactive without one.
+type VADSettings struct {
+	Enabled   bool    `yaml:"enabled" json:"enabled"`     // true to enable the VAD speech gate (opt-in, default false)
+	Threshold float64 `yaml:"threshold" json:"threshold"` // speech-probability gate in (0,1]; default 0.35
+	ModelPath string  `yaml:"modelpath" json:"modelPath"` // optional override for the embedded silero .onnx; must be a sequence-export model (inputs input/h/c), not the stock upstream frame model; empty uses the embedded model
 }
 
 // DogBarkFilterSettings contains settings for the dog bark filter.
@@ -978,12 +991,13 @@ type LogDeduplicationSettings struct {
 
 // SpeciesTrackingSettings contains settings for tracking new species
 type SpeciesTrackingSettings struct {
-	Enabled                      bool                     `yaml:"enabled" json:"enabled"`                                           // true to enable new species tracking
-	NewSpeciesWindowDays         int                      `yaml:"newspecieswindowdays" json:"newSpeciesWindowDays"`                 // Days to consider a species "new" (default: 7)
-	SyncIntervalMinutes          int                      `yaml:"syncintervalminutes" json:"syncIntervalMinutes"`                   // Interval to sync with database (default: 60)
-	NotificationSuppressionHours int                      `yaml:"notificationsuppressionhours" json:"notificationSuppressionHours"` // Hours to suppress duplicate notifications (default: 168)
-	YearlyTracking               YearlyTrackingSettings   `yaml:"yearlytracking" json:"yearlyTracking"`                             // Settings for yearly species tracking
-	SeasonalTracking             SeasonalTrackingSettings `yaml:"seasonaltracking" json:"seasonalTracking"`                         // Settings for seasonal species tracking
+	Enabled                      bool                       `yaml:"enabled" json:"enabled"`                                           // true to enable new species tracking
+	NewSpeciesWindowDays         int                        `yaml:"newspecieswindowdays" json:"newSpeciesWindowDays"`                 // Days to consider a species "new" (default: 7)
+	SyncIntervalMinutes          int                        `yaml:"syncintervalminutes" json:"syncIntervalMinutes"`                   // Interval to sync with database (default: 60)
+	NotificationSuppressionHours int                        `yaml:"notificationsuppressionhours" json:"notificationSuppressionHours"` // Hours to suppress duplicate notifications (default: 168)
+	YearlyTracking               YearlyTrackingSettings     `yaml:"yearlytracking" json:"yearlyTracking"`                             // Settings for yearly species tracking
+	SeasonalTracking             SeasonalTrackingSettings   `yaml:"seasonaltracking" json:"seasonalTracking"`                         // Settings for seasonal species tracking
+	InfrequentTracking           InfrequentTrackingSettings `yaml:"infrequenttracking" json:"infrequentTracking"`                     // Settings for infrequent (rarely returning) species tracking
 }
 
 // YearlyTrackingSettings contains settings for tracking first arrivals each year
@@ -999,6 +1013,12 @@ type SeasonalTrackingSettings struct {
 	Enabled    bool              `yaml:"enabled" json:"enabled"`                       // true to enable seasonal tracking
 	WindowDays int               `yaml:"windowdays" json:"windowDays"`                 // Days to show "new this season" indicator (default: 7)
 	Seasons    map[string]Season `yaml:"seasons" json:"seasons" jsonschema:"nullable"` // Season definitions
+}
+
+// InfrequentTrackingSettings contains settings for flagging species detected for the first time after a long absence (rare returning visitors)
+type InfrequentTrackingSettings struct {
+	Enabled     bool `yaml:"enabled" json:"enabled"`         // true to enable infrequent species tracking
+	AbsenceDays int  `yaml:"absencedays" json:"absenceDays"` // Days since last detection before a return is flagged "infrequent" (default: 14)
 }
 
 // Season defines the start date for a season
@@ -1160,6 +1180,26 @@ func (s *SpeciesTrackingSettings) Validate() error {
 		if err := s.SeasonalTracking.Validate(); err != nil {
 			return err
 		}
+	}
+
+	// Validate infrequent tracking if enabled
+	if s.InfrequentTracking.Enabled {
+		if err := s.InfrequentTracking.Validate(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Validate validates the InfrequentTrackingSettings configuration
+func (i *InfrequentTrackingSettings) Validate() error {
+	// Validate absence days
+	if i.AbsenceDays < 1 || i.AbsenceDays > 365 {
+		return errors.Newf("infrequent absence days must be between 1 and 365, got %d", i.AbsenceDays).
+			Component("config").
+			Category(errors.CategoryValidation).
+			Build()
 	}
 
 	return nil
@@ -1324,6 +1364,7 @@ type BirdNETConfig struct {
 	Backend             string              `yaml:"backend,omitempty" json:"backend,omitempty"`                         // inference backend preference: "auto" (default), "onnx", or "openvino"
 	OpenVINODevice      string              `yaml:"openvinodevice,omitempty" json:"openVinoDevice,omitempty"`           // OpenVINO device preference: "auto" (default), "cpu", or "gpu"
 	HuggingFaceEndpoint string              `yaml:"huggingfaceendpoint,omitempty" json:"huggingFaceEndpoint,omitempty"` // model download host, e.g. "https://hf-mirror.com" where huggingface.co is blocked; empty falls back to $HF_ENDPOINT then https://huggingface.co
+	ModelRegion         string              `yaml:"modelregion,omitempty" json:"modelRegion,omitempty"`                 // regional model preference: "auto" (resolve from coordinates, default), "global" (always global models), or a region slug pin (e.g. "iberia"); empty is treated as "auto"
 }
 
 // Inference backend preferences for BirdNET.Backend.
@@ -1342,6 +1383,25 @@ const (
 	OVDeviceGPU  = "gpu"
 )
 
+// Model region preferences for BirdNET.ModelRegion. "auto" resolves the regional
+// model from the configured coordinates and falls back to the global model when
+// nothing resolves; "global" always prefers the global model; any other value is
+// a pinned region slug. An empty string is treated as "auto". These mirror the
+// resolver's mode vocabulary in internal/classifier/region (ModeAuto/ModeGlobal),
+// kept as independent literals so this foundational config package stays free of a
+// classifier dependency; a drift-guard test asserts they stay equal.
+const (
+	ModelRegionAuto   = "auto"
+	ModelRegionGlobal = "global"
+)
+
+// ModelRegionSlugPattern validates a pinned region slug: lowercase alphanumeric
+// segments joined by single hyphens (e.g. "iberia", "north-america-east"). It is
+// syntactic only; an unknown but well-formed slug is accepted, because the
+// per-family resolver degrades an unknown slug to coordinates then global, and a
+// slug may be valid for a model family added later.
+var ModelRegionSlugPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+
 // RangeFilterSettings contains settings for the range filter
 type RangeFilterSettings struct {
 	Debug                   bool                `yaml:"debug" json:"debug"`                               // true to enable debug mode
@@ -1357,18 +1417,20 @@ type RangeFilterSettings struct {
 
 // PerchConfig holds configuration for the Google Perch v2 model.
 type PerchConfig struct {
-	ModelPath string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to Perch v2 ONNX model file
-	LabelPath string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to Perch v2 label CSV file
-	Threshold float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for detections
-	Locale    string  `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation
+	ModelPath         string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to Perch v2 ONNX model file
+	LabelPath         string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to Perch v2 label CSV file
+	OverrideThreshold bool    `yaml:"overridethreshold" json:"overrideThreshold"`     // when true, gate Perch detections on Threshold instead of following BirdNET.Threshold
+	Threshold         float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for detections (applied only when OverrideThreshold is true)
+	Locale            string  `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation
 }
 
 // BirdNETV3Config holds configuration for the BirdNET v3.0 acoustic classifier.
 type BirdNETV3Config struct {
-	ModelPath string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to BirdNET v3.0 ONNX model file
-	LabelPath string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to BirdNET v3.0 label file
-	Threshold float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for detections
-	Locale    string  `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation
+	ModelPath         string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to BirdNET v3.0 ONNX model file
+	LabelPath         string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to BirdNET v3.0 label file
+	OverrideThreshold bool    `yaml:"overridethreshold" json:"overrideThreshold"`     // when true, gate BirdNET v3.0 detections on Threshold instead of following BirdNET.Threshold
+	Threshold         float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for detections (applied only when OverrideThreshold is true)
+	Locale            string  `yaml:"locale,omitempty" json:"locale,omitempty"`       // locale for species label translation
 }
 
 // BatConfig holds configuration for bat detection using BirdNET v2.4 embeddings.
@@ -1754,14 +1816,12 @@ type ImportConfig struct {
 
 // BackupConfig contains backup-related configuration
 type BackupConfig struct {
-	Enabled        bool                   `yaml:"enabled" json:"enabled"`                // Global flag to enable or disable the entire backup system. If false, no backups (manual or scheduled) will occur.
-	Debug          bool                   `yaml:"debug" json:"debug"`                    // If true, enables detailed debug logging for backup operations.
-	Encryption     bool                   `yaml:"encryption" json:"encryption"`          // If true, enables encryption for backup archives. Requires EncryptionKey to be set.
-	EncryptionKey  string                 `yaml:"encryption_key" json:"encryptionKey"`   // Base64-encoded encryption key used for AES-256-GCM encryption of backup archives. Must be kept secret and safe.
-	SanitizeConfig bool                   `yaml:"sanitize_config" json:"sanitizeConfig"` // If true, sensitive information (like passwords, API keys) will be removed from the configuration file copy that is included in the backup archive.
-	Retention      BackupRetention        `yaml:"retention" json:"retention"`            // Defines policies for how long and how many backups are kept.
-	Targets        []BackupTarget         `yaml:"targets" json:"targets"`                // A list of configured backup targets (destinations) where backup archives will be stored.
-	Schedules      []BackupScheduleConfig `yaml:"schedules" json:"schedules"`            // A list of schedules (e.g., daily, weekly) that define when automatic backups should run.
+	Enabled    bool                   `yaml:"enabled" json:"enabled"`       // Global flag to enable or disable the entire backup system. If false, no backups (manual or scheduled) will occur.
+	Debug      bool                   `yaml:"debug" json:"debug"`           // If true, enables detailed debug logging for backup operations.
+	Encryption bool                   `yaml:"encryption" json:"encryption"` // If true, enables encryption for backup archives. The AES-256-GCM key is generated and managed automatically in encryption.key in the config directory; there is no key to configure.
+	Retention  BackupRetention        `yaml:"retention" json:"retention"`   // Defines policies for how long and how many backups are kept.
+	Targets    []BackupTarget         `yaml:"targets" json:"targets"`       // A list of configured backup targets (destinations) where backup archives will be stored.
+	Schedules  []BackupScheduleConfig `yaml:"schedules" json:"schedules"`   // A list of schedules (e.g., daily, weekly) that define when automatic backups should run.
 
 	// OperationTimeouts defines timeouts for various backup operations
 	OperationTimeouts struct {

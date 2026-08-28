@@ -226,3 +226,176 @@ describe('settingsCoercion species guide show flags', () => {
     expect('dashboard' in result).toBe(false);
   });
 });
+
+describe('settingsCoercion realtime privacyFilter and VAD', () => {
+  it('coerces privacyFilter with default vad settings when vad is absent', () => {
+    const result = coerceSettings('realtime', {
+      privacyFilter: {
+        enabled: true,
+        confidence: 0.05,
+      },
+    }) as {
+      privacyFilter: {
+        enabled: boolean;
+        confidence: number;
+        debug: boolean;
+        vad: { enabled: boolean; threshold: number; modelPath: string };
+      };
+    };
+
+    expect(result.privacyFilter).toEqual({
+      enabled: true,
+      confidence: 0.05,
+      debug: false,
+      vad: {
+        enabled: false,
+        threshold: 0.35,
+        modelPath: '',
+      },
+    });
+  });
+
+  it('coerces string values and clamps vad threshold to valid bounds', () => {
+    const result = coerceSettings('realtime', {
+      privacyFilter: {
+        enabled: 'true',
+        confidence: '0.8',
+        debug: 'false',
+        vad: {
+          enabled: 'true',
+          threshold: '1.5', // should clamp to 1.0
+          modelPath: '/path/to/model.onnx',
+        },
+      },
+    }) as {
+      privacyFilter: {
+        enabled: boolean;
+        confidence: number;
+        debug: boolean;
+        vad: { enabled: boolean; threshold: number; modelPath: string };
+      };
+    };
+
+    expect(result.privacyFilter).toEqual({
+      enabled: true,
+      confidence: 0.8,
+      debug: false,
+      vad: {
+        enabled: true,
+        threshold: 1.0,
+        modelPath: '/path/to/model.onnx',
+      },
+    });
+  });
+
+  it('clamps vad threshold below minimum to 0.01', () => {
+    const result = coerceSettings('realtime', {
+      privacyFilter: {
+        vad: {
+          threshold: -0.5,
+        },
+      },
+    }) as { privacyFilter: { vad: { threshold: number } } };
+
+    expect(result.privacyFilter.vad.threshold).toBe(0.01);
+  });
+});
+
+describe('settingsCoercion realtime mqtt tls settings', () => {
+  it('coerces mqtt tls with insecureSkipVerify correctly', () => {
+    const result = coerceSettings('realtime', {
+      mqtt: {
+        enabled: true,
+        tls: {
+          enabled: true,
+          insecureSkipVerify: true,
+        },
+      },
+    }) as {
+      mqtt: {
+        enabled: boolean;
+        tls: {
+          enabled: boolean;
+          insecureSkipVerify: boolean;
+        };
+      };
+    };
+
+    expect(result.mqtt.tls).toEqual({
+      enabled: true,
+      insecureSkipVerify: true,
+    });
+  });
+
+  it('coerces legacy skipVerify to insecureSkipVerify as fallback', () => {
+    const result = coerceSettings('realtime', {
+      mqtt: {
+        enabled: true,
+        tls: {
+          enabled: true,
+          skipVerify: true,
+        },
+      },
+    }) as {
+      mqtt: {
+        enabled: boolean;
+        tls: {
+          enabled: boolean;
+          insecureSkipVerify: boolean;
+        };
+      };
+    };
+
+    expect(result.mqtt.tls).toEqual({
+      enabled: true,
+      insecureSkipVerify: true,
+    });
+  });
+
+  it('prefers insecureSkipVerify over skipVerify when both are present', () => {
+    const result = coerceSettings('realtime', {
+      mqtt: {
+        enabled: true,
+        tls: {
+          enabled: true,
+          insecureSkipVerify: false,
+          skipVerify: true,
+        },
+      },
+    }) as {
+      mqtt: {
+        enabled: boolean;
+        tls: {
+          enabled: boolean;
+          insecureSkipVerify: boolean;
+        };
+      };
+    };
+
+    expect(result.mqtt.tls).toEqual({
+      enabled: true,
+      insecureSkipVerify: false,
+    });
+  });
+
+  it('defaults insecureSkipVerify to false when tls is missing or default', () => {
+    const result = coerceSettings('realtime', {
+      mqtt: {
+        enabled: true,
+      },
+    }) as {
+      mqtt: {
+        enabled: boolean;
+        tls: {
+          enabled: boolean;
+          insecureSkipVerify: boolean;
+        };
+      };
+    };
+
+    expect(result.mqtt.tls).toEqual({
+      enabled: false,
+      insecureSkipVerify: false,
+    });
+  });
+});

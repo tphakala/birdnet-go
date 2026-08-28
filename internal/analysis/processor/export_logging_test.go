@@ -1,9 +1,7 @@
 package processor
 
 import (
-	"bytes"
 	"context"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -20,7 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/detection"
-	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
 // logLineContaining returns the single captured log line carrying marker, so an
@@ -46,34 +44,6 @@ const (
 	batModelName        = "BattyBirdNET"
 	batSourceSampleRate = 256000
 )
-
-// captureExportLogs redirects the global logger to an in-memory buffer for the
-// duration of the test and returns the buffer. The processor package logs
-// through logger.Global().Module("analysis.processor"), so this captures
-// everything the export path emits. It swaps process-wide global state, so
-// tests using it must not run with t.Parallel().
-func captureExportLogs(t *testing.T) *bytes.Buffer {
-	t.Helper()
-
-	var buf bytes.Buffer
-	capture := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
-	cl, err := logger.NewCentralLogger(
-		&logger.LoggingConfig{
-			Console:      &logger.ConsoleOutput{Enabled: false},
-			FileOutput:   &logger.FileOutput{Enabled: false},
-			DefaultLevel: "debug",
-		},
-		capture,
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, cl.Close()) })
-
-	prev := logger.Global()
-	logger.SetGlobal(cl)
-	t.Cleanup(func() { logger.SetGlobal(prev) })
-
-	return &buf
-}
 
 // newExportLogAction builds a SaveAudioAction that Execute will carry all the
 // way to an encoder: export enabled, a real output directory, and a second of
@@ -115,7 +85,7 @@ func blockOutputPath(t *testing.T, exportDir, clipName string) {
 // or FFmpeg" without the reader having to reconstruct it from the format and the
 // operator's environment.
 func TestExecute_SuccessLogNamesNativeEncoder(t *testing.T) {
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
 	a := newExportLogAction(t, dir, "clip.flac", ffmpeg.FormatFLAC)
 
@@ -141,7 +111,7 @@ func TestExecute_SuccessLogNamesNativeEncoder(t *testing.T) {
 // logger could not emit. This assertion is deliberately on the PRODUCER, against
 // the field set really written to the log.
 func TestExecute_SuccessLogNamesSpeciesForClipPathAggregation(t *testing.T) {
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
 	a := newExportLogAction(t, dir, "clip.flac", ffmpeg.FormatFLAC)
 	// Lowercase, matching what buildSaveAudioAction stores and what the sibling
@@ -166,7 +136,7 @@ func TestExecute_SuccessLogNamesSpeciesForClipPathAggregation(t *testing.T) {
 // two, and only this test would fail if the field regressed to a basename and
 // left SpeciesEntry.ClipPaths unresolvable.
 func TestExecute_SuccessLogClipPathKeepsDateSegments(t *testing.T) {
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
 	a := newExportLogAction(t, dir, "2026/07/wren.flac", ffmpeg.FormatFLAC)
 
@@ -321,7 +291,7 @@ func buildSpeciesTestSettings(t *testing.T) *conf.Settings {
 // ("my clips are too quiet") and the clip duration next to the file size ("my
 // clips are cut off"). Both used to be reachable only at Debug, or not at all.
 func TestExecute_SuccessLogCarriesGainAndDuration(t *testing.T) {
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
 	a := newExportLogAction(t, dir, "clip.wav", ffmpeg.FormatWAV)
 
@@ -356,7 +326,7 @@ func TestExecute_SuccessLogCarriesGainAndDuration(t *testing.T) {
 func TestExecute_SuccessLogCarriesBitrateForLossyFormats(t *testing.T) {
 	t.Setenv(conf.EnvNativeAACEncoder, "native")
 	resetNativeSkipOnce()
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
 	a := newExportLogAction(t, dir, "clip.m4a", ffmpeg.FormatAAC)
 
@@ -372,9 +342,8 @@ func TestExecute_SuccessLogCarriesBitrateForLossyFormats(t *testing.T) {
 // actively misleading. Opus caps at 256 kbps, so a 320k configuration is the
 // case that tells the two apart.
 func TestExecute_SuccessLogCarriesClampedBitrate(t *testing.T) {
-	t.Setenv(conf.EnvNativeOpusEncoder, "native")
 	resetNativeSkipOnce()
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
 	a := newExportLogAction(t, dir, "clip.opus", ffmpeg.FormatOpus)
 	a.Settings.Realtime.Audio.Export.Bitrate = "320k"
@@ -396,7 +365,7 @@ func TestExecute_SuccessLogCarriesClampedBitrate(t *testing.T) {
 func TestExecute_FailureLogNamesNativeEncoder(t *testing.T) {
 	t.Setenv(conf.EnvNativeAACEncoder, "native")
 	resetNativeSkipOnce()
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
 	blockOutputPath(t, dir, "clip.m4a")
 	a := newExportLogAction(t, dir, "clip.m4a", ffmpeg.FormatAAC)
@@ -419,7 +388,7 @@ func TestExecute_FailureLogNamesNativeEncoder(t *testing.T) {
 // job queue logs the same root cause as ERROR right afterwards. Two ERROR lines
 // for one failure would double-count and double-alert.
 func TestExecute_FailureLogIsWarnNotError(t *testing.T) {
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
 	a := newExportLogAction(t, dir, "clip.mp3", ffmpeg.FormatMP3)
 	a.Settings.Realtime.Audio.FfmpegPath = ""
@@ -439,7 +408,7 @@ func TestExecute_FailureLogIsWarnNotError(t *testing.T) {
 // The other half of the pair: the same failure on the FFmpeg path is attributed
 // to FFmpeg, so the two are distinguishable in a support log.
 func TestExecute_FailureLogNamesFFmpeg(t *testing.T) {
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
 	a := newExportLogAction(t, dir, "clip.mp3", ffmpeg.FormatMP3)
 	// No FFmpeg binary configured, so the export fails inside ffmpeg.ExportAudio.
@@ -463,7 +432,7 @@ func TestExecute_FailureLogNamesFFmpeg(t *testing.T) {
 // context already cancelled (so planNativeNormalizationGain refuses before
 // measuring), which is the shape a shutdown mid-measurement produces.
 func TestExecute_FailureBeforeGainResolutionOmitsGain(t *testing.T) {
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
 	a := newExportLogAction(t, dir, "clip.flac", ffmpeg.FormatFLAC)
 	a.Settings.Realtime.Audio.Export.Normalization = conf.NormalizationSettings{
@@ -497,7 +466,7 @@ func TestExecute_FailureBeforeGainResolutionOmitsGain(t *testing.T) {
 // instantly, and both numbers were already measured before this change; only the
 // success line consumed them.
 func TestExecute_FailureLogCarriesPhaseTimings(t *testing.T) {
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
 	a := newExportLogAction(t, dir, "clip.flac", ffmpeg.FormatFLAC)
 	blockOutputPath(t, dir, "clip.flac")
@@ -563,7 +532,7 @@ func TestRelativeClipPath(t *testing.T) {
 // is logged, matching the success line, because support logs and uploaded
 // support dumps are read by someone other than the operator.
 func TestExecute_FailureLogOmitsFullPath(t *testing.T) {
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
 	a := newExportLogAction(t, dir, "clip.mp3", ffmpeg.FormatMP3)
 	a.Settings.Realtime.Audio.FfmpegPath = ""
@@ -583,7 +552,7 @@ func TestExecute_FailureLogOmitsFullPath(t *testing.T) {
 // the context to be cancelled (see the sibling test below, which is the case
 // this one used to be testing by accident).
 func TestExecute_CancelledExportLogsAtDebug(t *testing.T) {
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
 	a := newExportLogAction(t, dir, "clip.flac", ffmpeg.FormatFLAC)
 
@@ -605,7 +574,7 @@ func TestExecute_CancelledExportLogsAtDebug(t *testing.T) {
 // asserting they had been cancelled. On a container that OOM-restarts that
 // misattributes every in-flight export failure in the restart window.
 func TestExecute_RealErrorDuringShutdownStaysAtWarn(t *testing.T) {
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
 	a := newExportLogAction(t, dir, "clip.mp3", ffmpeg.FormatMP3)
 	// Not a cancellation: FFmpeg is simply not there.
@@ -630,7 +599,7 @@ func TestExecute_RealErrorDuringShutdownStaysAtWarn(t *testing.T) {
 // deadline, and that is exactly the failure this line exists to surface. It must
 // not be filed under "cancelled" at Debug.
 func TestExecute_TimedOutExportStaysAtWarn(t *testing.T) {
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
 	a := newExportLogAction(t, dir, "clip.mp3", ffmpeg.FormatMP3)
 	a.Settings.Realtime.Audio.FfmpegPath = ""
@@ -655,7 +624,7 @@ func TestExecute_TimedOutExportStaysAtWarn(t *testing.T) {
 // on disk.
 func TestResolveExportParams_BatDowngradeIsLogged(t *testing.T) {
 	resetBatFormatDowngradeOnce()
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	a := newExportLogAction(t, t.TempDir(), "clip.mp3", ffmpeg.FormatMP3)
 	a.modelName = batModelName
 	a.sourceSampleRate = batSourceSampleRate
@@ -673,7 +642,7 @@ func TestResolveExportParams_BatDowngradeIsLogged(t *testing.T) {
 // the other half: a DIFFERENT condition still gets its own line.)
 func TestResolveExportParams_BatDowngradeLoggedOncePerCondition(t *testing.T) {
 	resetBatFormatDowngradeOnce()
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	a := newExportLogAction(t, t.TempDir(), "clip.mp3", ffmpeg.FormatMP3)
 	a.modelName = batModelName
 	a.sourceSampleRate = batSourceSampleRate
@@ -694,7 +663,7 @@ func TestResolveExportParams_BatDowngradeLoggedOncePerCondition(t *testing.T) {
 // since changed away from or a rate belonging to another source.
 func TestResolveExportParams_BatDowngradeLogsEachDistinctCondition(t *testing.T) {
 	resetBatFormatDowngradeOnce()
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 	a := newExportLogAction(t, t.TempDir(), "clip.mp3", ffmpeg.FormatMP3)
 	a.modelName = batModelName
 	a.sourceSampleRate = batSourceSampleRate
@@ -726,10 +695,9 @@ func TestResolveExportParams_BatDowngradeLogsEachDistinctCondition(t *testing.T)
 // way. It used to be the opposite of its sibling on both counts: WARN on every
 // single clip forever, against Info exactly once.
 func TestResolveExportParams_StrandedFallbackIsWarnedOncePerCondition(t *testing.T) {
-	t.Setenv(conf.EnvNativeOpusEncoder, "native")
 	resetNativeSkipOnce()
 	resetStrandedFormatOnce()
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 
 	// 44.1 kHz is a rate Opus does not accept, and with no FFmpeg to fall back
 	// on there is no encoder left for the configured format.
@@ -757,11 +725,10 @@ func TestResolveExportParams_StrandedFallbackIsWarnedOncePerCondition(t *testing
 // still explains itself. Without this, a bare sync.Once would pass the
 // once-per-condition test above identically.
 func TestResolveExportParams_StrandedFallbackLogsEachDistinctCondition(t *testing.T) {
-	t.Setenv(conf.EnvNativeOpusEncoder, "native")
 	t.Setenv(conf.EnvNativeAACEncoder, "native")
 	resetNativeSkipOnce()
 	resetStrandedFormatOnce()
-	logs := captureExportLogs(t)
+	logs := logtest.CaptureBuffer(t)
 
 	a := newExportLogAction(t, t.TempDir(), "clip.opus", ffmpeg.FormatOpus)
 	a.Settings.Realtime.Audio.FfmpegPath = ""
@@ -786,39 +753,37 @@ func TestResolveExportParams_StrandedFallbackLogsEachDistinctCondition(t *testin
 }
 
 // selectEncoder is the whole routing table, extracted so a failed export can
-// name its encoder. The gated formats are covered from both sides: with the gate
-// off, AAC and Opus must still resolve to FFmpeg, which is what every install
-// that has not opted in does on every clip. Asserting nativeAACSelected directly
-// (as the gate tests do) checks the predicate but not the routing built on it.
+// name its encoder. AAC is covered from both sides: with the gate off it must
+// still resolve to FFmpeg, which is what every install that has not opted in does
+// on every clip. Opus is no longer gated: go-opus is its unconditional default.
+// Asserting nativeAACSelected directly (as the gate tests do) checks the
+// predicate but not the routing built on it.
 func TestSelectEncoder_RoutingTable(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		aacGate    string
-		opusGate   string
 		format     string
 		rate       int
 		wantEncode string
 	}{
-		{"wav is always native", "", "", ffmpeg.FormatWAV, conf.SampleRate, clipenc.NativeWAV},
-		{"flac is always native", "", "", ffmpeg.FormatFLAC, conf.SampleRate, clipenc.NativeFLAC},
-		{"wav ignores the gates", "native", "native", ffmpeg.FormatWAV, conf.SampleRate, clipenc.NativeWAV},
-		{"flac ignores the gates", "native", "native", ffmpeg.FormatFLAC, conf.SampleRate, clipenc.NativeFLAC},
-		{"aac without the gate stays on ffmpeg", "", "", ffmpeg.FormatAAC, conf.SampleRate, clipenc.FFmpeg},
-		{"opus without the gate stays on ffmpeg", "", "", ffmpeg.FormatOpus, conf.SampleRate, clipenc.FFmpeg},
-		{"aac with the gate goes native", "native", "", ffmpeg.FormatAAC, conf.SampleRate, clipenc.NativeAAC},
-		{"opus with the gate goes native", "", "native", ffmpeg.FormatOpus, conf.SampleRate, clipenc.NativeOpus},
-		// Gated on, but the encoder cannot carry the clip's rate: FFmpeg takes it
-		// rather than the export failing outright.
-		{"aac falls back when the rate is unsupported", "native", "", ffmpeg.FormatAAC, 22050, clipenc.FFmpeg},
-		{"opus falls back when the rate is unsupported", "", "native", ffmpeg.FormatOpus, 22050, clipenc.FFmpeg},
-		// Neither gate touches the formats FFmpeg owns outright.
-		{"mp3 is always ffmpeg", "native", "native", ffmpeg.FormatMP3, conf.SampleRate, clipenc.FFmpeg},
-		{"alac is always ffmpeg", "native", "native", ffmpeg.FormatALAC, conf.SampleRate, clipenc.FFmpeg},
+		{"wav is always native", "", ffmpeg.FormatWAV, conf.SampleRate, clipenc.NativeWAV},
+		{"flac is always native", "", ffmpeg.FormatFLAC, conf.SampleRate, clipenc.NativeFLAC},
+		{"wav ignores the aac gate", "native", ffmpeg.FormatWAV, conf.SampleRate, clipenc.NativeWAV},
+		{"flac ignores the aac gate", "native", ffmpeg.FormatFLAC, conf.SampleRate, clipenc.NativeFLAC},
+		{"aac without the gate stays on ffmpeg", "", ffmpeg.FormatAAC, conf.SampleRate, clipenc.FFmpeg},
+		{"opus is native by default", "", ffmpeg.FormatOpus, conf.SampleRate, clipenc.NativeOpus},
+		{"aac with the gate goes native", "native", ffmpeg.FormatAAC, conf.SampleRate, clipenc.NativeAAC},
+		// The encoder cannot carry the clip's rate: FFmpeg takes it rather than the
+		// export failing outright.
+		{"aac falls back when the rate is unsupported", "native", ffmpeg.FormatAAC, 22050, clipenc.FFmpeg},
+		{"opus falls back when the rate is unsupported", "", ffmpeg.FormatOpus, 22050, clipenc.FFmpeg},
+		// The AAC gate never touches the formats FFmpeg owns outright.
+		{"mp3 is always ffmpeg", "native", ffmpeg.FormatMP3, conf.SampleRate, clipenc.FFmpeg},
+		{"alac is always ffmpeg", "native", ffmpeg.FormatALAC, conf.SampleRate, clipenc.FFmpeg},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			// Not parallel: t.Setenv, and the skip warning uses a package-level Once.
 			t.Setenv(conf.EnvNativeAACEncoder, tc.aacGate)
-			t.Setenv(conf.EnvNativeOpusEncoder, tc.opusGate)
 			resetNativeSkipOnce()
 
 			assert.Equal(t, tc.wantEncode, selectEncoder(tc.format, tc.rate))

@@ -705,7 +705,7 @@
       {#if det.clipName}
         <div class="meta-section">
           <a
-            href={buildAppUrl(`/api/v2/media/audio/${det.clipName}`)}
+            href={buildAppUrl(`/api/v2/audio/${det.id}`)}
             download
             class="meta-download"
             aria-label={t('detections.detail.aria.downloadAudioClip', { name: displayName })}

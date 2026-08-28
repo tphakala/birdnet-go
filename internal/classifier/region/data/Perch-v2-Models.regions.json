@@ -1,0 +1,1327 @@
+{
+  "schema": 1,
+  "repo": "tphakala/Perch-v2-Models",
+  "updated": "2026-08-22",
+  "regions": {
+    "nordic": {
+      "name": "Nordic",
+      "group": "europe",
+      "group_display": "Europe",
+      "realm": "palearctic",
+      "tier": 50,
+      "bboxes": [
+        [
+          53.1,
+          72.66,
+          3.32,
+          32.05
+        ]
+      ],
+      "centroid": [
+        62.88,
+        17.685
+      ],
+      "countries": {
+        "core": [
+          "AX",
+          "DK",
+          "FI",
+          "NO",
+          "SE"
+        ],
+        "partial": []
+      },
+      "classes": 638,
+      "map": "regional/nordic/coverage.svg"
+    },
+    "british-isles": {
+      "name": "British Isles",
+      "group": "europe",
+      "group_display": "Europe",
+      "realm": "palearctic",
+      "tier": 50,
+      "bboxes": [
+        [
+          49.5,
+          61.0,
+          -11.0,
+          2.5
+        ]
+      ],
+      "centroid": [
+        55.25,
+        -4.25
+      ],
+      "countries": {
+        "core": [
+          "GB",
+          "IE",
+          "IM"
+        ],
+        "partial": [
+          "GG"
+        ]
+      },
+      "classes": 776,
+      "map": "regional/british-isles/coverage.svg"
+    },
+    "central-europe": {
+      "name": "Central Europe",
+      "group": "europe",
+      "group_display": "Europe",
+      "realm": "palearctic",
+      "tier": 50,
+      "bboxes": [
+        [
+          45.0,
+          55.5,
+          2.0,
+          24.0
+        ]
+      ],
+      "centroid": [
+        50.25,
+        13.0
+      ],
+      "countries": {
+        "core": [
+          "AT",
+          "BE",
+          "CH",
+          "CZ",
+          "DE",
+          "FR",
+          "HR",
+          "HU",
+          "LI",
+          "LU",
+          "NL",
+          "PL",
+          "SI",
+          "SK"
+        ],
+        "partial": [
+          "BA",
+          "DK",
+          "IT",
+          "LT",
+          "RO",
+          "RS"
+        ]
+      },
+      "classes": 873,
+      "map": "regional/central-europe/coverage.svg"
+    },
+    "baltics": {
+      "name": "Baltics",
+      "group": "europe",
+      "group_display": "Europe",
+      "realm": "palearctic",
+      "tier": 50,
+      "bboxes": [
+        [
+          53.5,
+          59.8,
+          20.0,
+          30.0
+        ]
+      ],
+      "centroid": [
+        56.65,
+        25.0
+      ],
+      "countries": {
+        "core": [
+          "BY",
+          "EE",
+          "LT",
+          "LV",
+          "RU"
+        ],
+        "partial": []
+      },
+      "classes": 655,
+      "map": "regional/baltics/coverage.svg"
+    },
+    "iberia": {
+      "name": "Iberia",
+      "group": "europe",
+      "group_display": "Europe",
+      "realm": "palearctic",
+      "tier": 50,
+      "bboxes": [
+        [
+          35.5,
+          44.5,
+          -10.0,
+          3.5
+        ]
+      ],
+      "centroid": [
+        40.0,
+        -3.25
+      ],
+      "countries": {
+        "core": [
+          "AD",
+          "ES",
+          "PT"
+        ],
+        "partial": [
+          "FR"
+        ]
+      },
+      "classes": 856,
+      "map": "regional/iberia/coverage.svg"
+    },
+    "southern-europe": {
+      "name": "Southern Europe",
+      "group": "europe",
+      "group_display": "Europe",
+      "realm": "palearctic",
+      "tier": 50,
+      "bboxes": [
+        [
+          36.0,
+          47.0,
+          6.0,
+          29.0
+        ]
+      ],
+      "centroid": [
+        41.5,
+        17.5
+      ],
+      "countries": {
+        "core": [
+          "AL",
+          "BA",
+          "BG",
+          "GR",
+          "HR",
+          "IT",
+          "MC",
+          "ME",
+          "MK",
+          "MT",
+          "RO",
+          "RS",
+          "SI",
+          "SM",
+          "VA",
+          "XK"
+        ],
+        "partial": [
+          "CH",
+          "HU",
+          "TN",
+          "TR"
+        ]
+      },
+      "classes": 839,
+      "map": "regional/southern-europe/coverage.svg"
+    },
+    "eastern-europe": {
+      "name": "Eastern Europe",
+      "group": "europe",
+      "group_display": "Europe",
+      "realm": "palearctic",
+      "tier": 50,
+      "bboxes": [
+        [
+          44.0,
+          53.0,
+          22.0,
+          40.0
+        ]
+      ],
+      "centroid": [
+        48.5,
+        31.0
+      ],
+      "countries": {
+        "core": [
+          "MD",
+          "RO",
+          "RU",
+          "UA"
+        ],
+        "partial": [
+          "BY",
+          "PL"
+        ]
+      },
+      "classes": 739,
+      "map": "regional/eastern-europe/coverage.svg"
+    },
+    "western-palearctic": {
+      "name": "Western Palearctic",
+      "group": "europe",
+      "group_display": "Europe",
+      "realm": "palearctic",
+      "tier": 10,
+      "bboxes": [
+        [
+          35.0,
+          71.0,
+          -11.0,
+          45.0
+        ],
+        [
+          26.0,
+          40.0,
+          -32.0,
+          -13.0
+        ],
+        [
+          20.0,
+          37.0,
+          -13.0,
+          37.0
+        ],
+        [
+          30.0,
+          42.0,
+          34.0,
+          50.0
+        ],
+        [
+          12.0,
+          32.0,
+          34.0,
+          60.0
+        ]
+      ],
+      "centroid": [
+        41.5,
+        14.0
+      ],
+      "countries": {
+        "core": [
+          "AD",
+          "AE",
+          "AL",
+          "AM",
+          "AT",
+          "AX",
+          "AZ",
+          "BA",
+          "BE",
+          "BG",
+          "BH",
+          "BY",
+          "CH",
+          "CY",
+          "CZ",
+          "DE",
+          "DK",
+          "DZ",
+          "EE",
+          "EG",
+          "EH",
+          "ER",
+          "ES",
+          "FI",
+          "FO",
+          "FR",
+          "GB",
+          "GE",
+          "GG",
+          "GR",
+          "HR",
+          "HU",
+          "IE",
+          "IL",
+          "IM",
+          "IQ",
+          "IR",
+          "IT",
+          "JE",
+          "JO",
+          "KW",
+          "LB",
+          "LI",
+          "LT",
+          "LU",
+          "LV",
+          "LY",
+          "MA",
+          "MC",
+          "MD",
+          "ME",
+          "MK",
+          "MR",
+          "MT",
+          "NE",
+          "NL",
+          "NO",
+          "OM",
+          "PL",
+          "PS",
+          "PT",
+          "QA",
+          "RO",
+          "RS",
+          "SA",
+          "SD",
+          "SE",
+          "SI",
+          "SK",
+          "SM",
+          "SY",
+          "TD",
+          "TN",
+          "TR",
+          "UA",
+          "VA",
+          "XK",
+          "YE"
+        ],
+        "partial": [
+          "DJ",
+          "ET",
+          "ML",
+          "RU",
+          "TM"
+        ]
+      },
+      "classes": 1599,
+      "map": "regional/western-palearctic/coverage.svg"
+    },
+    "iceland": {
+      "name": "Iceland",
+      "group": "europe",
+      "group_display": "Europe",
+      "realm": "palearctic",
+      "tier": 90,
+      "bboxes": [
+        [
+          63.0,
+          67.0,
+          -25.0,
+          -13.0
+        ]
+      ],
+      "centroid": [
+        65.0,
+        -19.0
+      ],
+      "countries": {
+        "core": [
+          "IS"
+        ],
+        "partial": []
+      },
+      "classes": 591,
+      "map": "regional/iceland/coverage.svg"
+    },
+    "svalbard": {
+      "name": "Svalbard",
+      "group": "europe",
+      "group_display": "Europe",
+      "realm": "palearctic",
+      "tier": 90,
+      "bboxes": [
+        [
+          74.0,
+          81.0,
+          9.0,
+          34.0
+        ]
+      ],
+      "centroid": [
+        77.5,
+        21.5
+      ],
+      "countries": {
+        "core": [
+          "SJ"
+        ],
+        "partial": []
+      },
+      "classes": 480,
+      "map": "regional/svalbard/coverage.svg"
+    },
+    "canary-islands": {
+      "name": "Canary Islands",
+      "group": "europe",
+      "group_display": "Europe",
+      "realm": "palearctic",
+      "tier": 90,
+      "bboxes": [
+        [
+          27.0,
+          29.8,
+          -18.5,
+          -13.0
+        ]
+      ],
+      "centroid": [
+        28.4,
+        -15.75
+      ],
+      "countries": {
+        "core": [
+          "ES",
+          "MA"
+        ],
+        "partial": []
+      },
+      "classes": 598,
+      "map": "regional/canary-islands/coverage.svg"
+    },
+    "madeira": {
+      "name": "Madeira",
+      "group": "europe",
+      "group_display": "Europe",
+      "realm": "palearctic",
+      "tier": 90,
+      "bboxes": [
+        [
+          32.3,
+          33.2,
+          -17.4,
+          -16.2
+        ]
+      ],
+      "centroid": [
+        32.75,
+        -16.8
+      ],
+      "countries": {
+        "core": [
+          "PT"
+        ],
+        "partial": []
+      },
+      "classes": 459,
+      "map": "regional/madeira/coverage.svg"
+    },
+    "azores": {
+      "name": "Azores",
+      "group": "europe",
+      "group_display": "Europe",
+      "realm": "palearctic",
+      "tier": 90,
+      "bboxes": [
+        [
+          36.5,
+          40.0,
+          -31.5,
+          -24.8
+        ]
+      ],
+      "centroid": [
+        38.25,
+        -28.15
+      ],
+      "countries": {
+        "core": [
+          "PT"
+        ],
+        "partial": []
+      },
+      "classes": 426,
+      "map": "regional/azores/coverage.svg"
+    },
+    "south-asia-peninsular": {
+      "name": "South India & Sri Lanka",
+      "group": "asia",
+      "group_display": "Asia",
+      "realm": "indomalayan",
+      "tier": 50,
+      "bboxes": [
+        [
+          5.5,
+          21.0,
+          72.0,
+          88.0
+        ]
+      ],
+      "centroid": [
+        13.25,
+        80.0
+      ],
+      "countries": {
+        "core": [
+          "IN",
+          "LK"
+        ],
+        "partial": []
+      },
+      "classes": 879,
+      "map": "regional/south-asia-peninsular/coverage.svg"
+    },
+    "indo-gangetic": {
+      "name": "Indo-Gangetic Plain",
+      "group": "asia",
+      "group_display": "Asia",
+      "realm": "indomalayan",
+      "tier": 50,
+      "bboxes": [
+        [
+          21.0,
+          30.0,
+          68.0,
+          90.0
+        ]
+      ],
+      "centroid": [
+        25.5,
+        79.0
+      ],
+      "countries": {
+        "core": [
+          "BD",
+          "BT",
+          "IN",
+          "NP",
+          "PK"
+        ],
+        "partial": [
+          "CN"
+        ]
+      },
+      "classes": 1406,
+      "map": "regional/indo-gangetic/coverage.svg"
+    },
+    "himalaya": {
+      "name": "Himalaya",
+      "group": "asia",
+      "group_display": "Asia",
+      "realm": "indomalayan",
+      "tier": 50,
+      "bboxes": [
+        [
+          27.0,
+          36.0,
+          72.0,
+          97.0
+        ]
+      ],
+      "centroid": [
+        31.5,
+        84.5
+      ],
+      "countries": {
+        "core": [
+          "BT",
+          "CN",
+          "IN",
+          "NP"
+        ],
+        "partial": [
+          "PK"
+        ]
+      },
+      "classes": 1407,
+      "map": "regional/himalaya/coverage.svg"
+    },
+    "japan": {
+      "name": "Japan",
+      "group": "asia",
+      "group_display": "Asia",
+      "realm": "palearctic",
+      "tier": 50,
+      "bboxes": [
+        [
+          30.0,
+          46.0,
+          128.0,
+          146.0
+        ]
+      ],
+      "centroid": [
+        38.0,
+        137.0
+      ],
+      "countries": {
+        "core": [
+          "JP",
+          "KR"
+        ],
+        "partial": [
+          "CN",
+          "KP",
+          "RU"
+        ]
+      },
+      "classes": 799,
+      "map": "regional/japan/coverage.svg"
+    },
+    "china-northeast": {
+      "name": "China (Northeast)",
+      "group": "asia",
+      "group_display": "Asia",
+      "realm": "palearctic",
+      "tier": 50,
+      "bboxes": [
+        [
+          38.0,
+          54.0,
+          115.0,
+          135.0
+        ]
+      ],
+      "centroid": [
+        46.0,
+        125.0
+      ],
+      "countries": {
+        "core": [
+          "CN",
+          "KP",
+          "RU"
+        ],
+        "partial": [
+          "MN"
+        ]
+      },
+      "classes": 877,
+      "map": "regional/china-northeast/coverage.svg"
+    },
+    "china-north-central": {
+      "name": "China (North-Central)",
+      "group": "asia",
+      "group_display": "Asia",
+      "realm": "palearctic",
+      "tier": 50,
+      "bboxes": [
+        [
+          33.0,
+          42.0,
+          106.0,
+          122.0
+        ]
+      ],
+      "centroid": [
+        37.5,
+        114.0
+      ],
+      "countries": {
+        "core": [
+          "CN"
+        ],
+        "partial": []
+      },
+      "classes": 976,
+      "map": "regional/china-north-central/coverage.svg"
+    },
+    "china-southeast": {
+      "name": "China (Southeast)",
+      "group": "asia",
+      "group_display": "Asia",
+      "realm": "indomalayan",
+      "tier": 50,
+      "bboxes": [
+        [
+          20.0,
+          31.0,
+          106.0,
+          122.0
+        ]
+      ],
+      "centroid": [
+        25.5,
+        114.0
+      ],
+      "countries": {
+        "core": [
+          "CN",
+          "HK",
+          "MO",
+          "TW"
+        ],
+        "partial": []
+      },
+      "classes": 1373,
+      "map": "regional/china-southeast/coverage.svg"
+    },
+    "china-southwest": {
+      "name": "China (Southwest)",
+      "group": "asia",
+      "group_display": "Asia",
+      "realm": "palearctic",
+      "tier": 50,
+      "bboxes": [
+        [
+          22.0,
+          34.0,
+          97.0,
+          108.0
+        ]
+      ],
+      "centroid": [
+        28.0,
+        102.5
+      ],
+      "countries": {
+        "core": [
+          "CN"
+        ],
+        "partial": [
+          "MM",
+          "VN"
+        ]
+      },
+      "classes": 1409,
+      "map": "regional/china-southwest/coverage.svg"
+    },
+    "tibet": {
+      "name": "Tibetan Plateau",
+      "group": "asia",
+      "group_display": "Asia",
+      "realm": "palearctic",
+      "tier": 50,
+      "bboxes": [
+        [
+          29.0,
+          37.0,
+          79.0,
+          99.0
+        ]
+      ],
+      "centroid": [
+        33.0,
+        89.0
+      ],
+      "countries": {
+        "core": [
+          "CN"
+        ],
+        "partial": [
+          "NP"
+        ]
+      },
+      "classes": 1407,
+      "map": "regional/tibet/coverage.svg"
+    },
+    "north-america-east": {
+      "name": "North America (East)",
+      "group": "north-america",
+      "group_display": "North America",
+      "realm": "nearctic",
+      "tier": 50,
+      "bboxes": [
+        [
+          25.0,
+          50.0,
+          -95.0,
+          -60.0
+        ]
+      ],
+      "centroid": [
+        37.5,
+        -77.5
+      ],
+      "countries": {
+        "core": [
+          "BM",
+          "CA",
+          "US"
+        ],
+        "partial": []
+      },
+      "classes": 999,
+      "map": "regional/north-america-east/coverage.svg"
+    },
+    "north-america-west": {
+      "name": "North America (West)",
+      "group": "north-america",
+      "group_display": "North America",
+      "realm": "nearctic",
+      "tier": 50,
+      "bboxes": [
+        [
+          31.0,
+          55.0,
+          -125.0,
+          -100.0
+        ]
+      ],
+      "centroid": [
+        43.0,
+        -112.5
+      ],
+      "countries": {
+        "core": [
+          "CA",
+          "US"
+        ],
+        "partial": []
+      },
+      "classes": 1002,
+      "map": "regional/north-america-west/coverage.svg"
+    },
+    "canada-alaska": {
+      "name": "Canada Alaska",
+      "group": "north-america",
+      "group_display": "North America",
+      "realm": "nearctic",
+      "tier": 10,
+      "bboxes": [
+        [
+          49.0,
+          71.0,
+          -168.0,
+          -52.0
+        ]
+      ],
+      "centroid": [
+        60.0,
+        -110.0
+      ],
+      "countries": {
+        "core": [
+          "CA",
+          "US"
+        ],
+        "partial": []
+      },
+      "classes": 962,
+      "map": "regional/canada-alaska/coverage.svg"
+    },
+    "amazonia": {
+      "name": "Amazonia",
+      "group": "south-america",
+      "group_display": "South America",
+      "realm": "neotropic",
+      "tier": 50,
+      "bboxes": [
+        [
+          -13.0,
+          10.0,
+          -79.0,
+          -44.0
+        ]
+      ],
+      "centroid": [
+        -1.5,
+        -61.5
+      ],
+      "countries": {
+        "core": [
+          "BR",
+          "CO",
+          "EC",
+          "GY",
+          "PE",
+          "SR",
+          "TT",
+          "VE"
+        ],
+        "partial": [
+          "BO",
+          "PA"
+        ]
+      },
+      "classes": 3388,
+      "map": "regional/amazonia/coverage.svg"
+    },
+    "andes": {
+      "name": "Andes",
+      "group": "south-america",
+      "group_display": "South America",
+      "realm": "neotropic",
+      "tier": 50,
+      "bboxes": [
+        [
+          -40.0,
+          12.0,
+          -81.0,
+          -62.0
+        ]
+      ],
+      "centroid": [
+        -14.0,
+        -71.5
+      ],
+      "countries": {
+        "core": [
+          "AR",
+          "AW",
+          "BO",
+          "BR",
+          "CL",
+          "CO",
+          "CW",
+          "EC",
+          "GD",
+          "PA",
+          "PE",
+          "VE"
+        ],
+        "partial": []
+      },
+      "classes": 3535,
+      "map": "regional/andes/coverage.svg"
+    },
+    "eastern-brazil": {
+      "name": "Eastern Brazil",
+      "group": "south-america",
+      "group_display": "South America",
+      "realm": "neotropic",
+      "tier": 50,
+      "bboxes": [
+        [
+          -33.0,
+          -2.0,
+          -60.0,
+          -34.0
+        ]
+      ],
+      "centroid": [
+        -17.5,
+        -47.0
+      ],
+      "countries": {
+        "core": [
+          "BR",
+          "PY",
+          "UY"
+        ],
+        "partial": [
+          "AR"
+        ]
+      },
+      "classes": 2184,
+      "map": "regional/eastern-brazil/coverage.svg"
+    },
+    "southern-cone": {
+      "name": "Southern Cone",
+      "group": "south-america",
+      "group_display": "South America",
+      "realm": "neotropic",
+      "tier": 50,
+      "bboxes": [
+        [
+          -56.0,
+          -20.0,
+          -77.0,
+          -53.0
+        ]
+      ],
+      "centroid": [
+        -38.0,
+        -65.0
+      ],
+      "countries": {
+        "core": [
+          "AR",
+          "CL",
+          "FK",
+          "PY",
+          "UY"
+        ],
+        "partial": [
+          "BO",
+          "BR"
+        ]
+      },
+      "classes": 1855,
+      "map": "regional/southern-cone/coverage.svg"
+    },
+    "galapagos": {
+      "name": "Galapagos",
+      "group": "south-america",
+      "group_display": "South America",
+      "realm": "neotropic",
+      "tier": 90,
+      "bboxes": [
+        [
+          -1.6,
+          1.8,
+          -92.0,
+          -89.0
+        ]
+      ],
+      "centroid": [
+        0.1,
+        -90.5
+      ],
+      "countries": {
+        "core": [
+          "EC"
+        ],
+        "partial": []
+      },
+      "classes": 336,
+      "map": "regional/galapagos/coverage.svg"
+    },
+    "southern-africa": {
+      "name": "Southern Africa",
+      "group": "africa",
+      "group_display": "Africa",
+      "realm": "afrotropic",
+      "tier": 50,
+      "bboxes": [
+        [
+          -35.0,
+          -17.0,
+          15.0,
+          33.0
+        ]
+      ],
+      "centroid": [
+        -26.0,
+        24.0
+      ],
+      "countries": {
+        "core": [
+          "BW",
+          "LS",
+          "NA",
+          "SZ",
+          "ZA",
+          "ZW"
+        ],
+        "partial": []
+      },
+      "classes": 1002,
+      "map": "regional/southern-africa/coverage.svg"
+    },
+    "reunion": {
+      "name": "Reunion",
+      "group": "africa",
+      "group_display": "Africa",
+      "realm": "afrotropic",
+      "tier": 90,
+      "bboxes": [
+        [
+          -21.7,
+          -20.7,
+          55.0,
+          56.2
+        ]
+      ],
+      "centroid": [
+        -21.2,
+        55.6
+      ],
+      "countries": {
+        "core": [
+          "RE"
+        ],
+        "partial": []
+      },
+      "classes": 274,
+      "map": "regional/reunion/coverage.svg"
+    },
+    "mauritius": {
+      "name": "Mauritius",
+      "group": "africa",
+      "group_display": "Africa",
+      "realm": "afrotropic",
+      "tier": 90,
+      "bboxes": [
+        [
+          -20.6,
+          -19.9,
+          57.2,
+          57.9
+        ]
+      ],
+      "centroid": [
+        -20.25,
+        57.55
+      ],
+      "countries": {
+        "core": [
+          "MU"
+        ],
+        "partial": []
+      },
+      "classes": 272,
+      "map": "regional/mauritius/coverage.svg"
+    },
+    "seychelles": {
+      "name": "Seychelles",
+      "group": "africa",
+      "group_display": "Africa",
+      "realm": "afrotropic",
+      "tier": 90,
+      "bboxes": [
+        [
+          -5.0,
+          -3.7,
+          55.2,
+          56.0
+        ]
+      ],
+      "centroid": [
+        -4.35,
+        55.6
+      ],
+      "countries": {
+        "core": [
+          "SC"
+        ],
+        "partial": []
+      },
+      "classes": 318,
+      "map": "regional/seychelles/coverage.svg"
+    },
+    "cape-verde": {
+      "name": "Cape Verde",
+      "group": "africa",
+      "group_display": "Africa",
+      "realm": "afrotropic",
+      "tier": 90,
+      "bboxes": [
+        [
+          14.7,
+          17.3,
+          -25.5,
+          -22.6
+        ]
+      ],
+      "centroid": [
+        16.0,
+        -24.05
+      ],
+      "countries": {
+        "core": [
+          "CV"
+        ],
+        "partial": []
+      },
+      "classes": 346,
+      "map": "regional/cape-verde/coverage.svg"
+    },
+    "sao-tome-principe": {
+      "name": "Sao Tome & Principe",
+      "group": "africa",
+      "group_display": "Africa",
+      "realm": "afrotropic",
+      "tier": 90,
+      "bboxes": [
+        [
+          -0.7,
+          2.0,
+          6.2,
+          7.7
+        ]
+      ],
+      "centroid": [
+        0.65,
+        6.95
+      ],
+      "countries": {
+        "core": [
+          "ST"
+        ],
+        "partial": []
+      },
+      "classes": 324,
+      "map": "regional/sao-tome-principe/coverage.svg"
+    },
+    "australia-east": {
+      "name": "Australia (Southeast)",
+      "group": "oceania",
+      "group_display": "Oceania",
+      "realm": "australasian",
+      "tier": 50,
+      "bboxes": [
+        [
+          -44.0,
+          -24.0,
+          138.0,
+          154.0
+        ]
+      ],
+      "centroid": [
+        -34.0,
+        146.0
+      ],
+      "countries": {
+        "core": [
+          "AU"
+        ],
+        "partial": []
+      },
+      "classes": 946,
+      "map": "regional/australia-east/coverage.svg"
+    },
+    "new-zealand": {
+      "name": "New Zealand",
+      "group": "oceania",
+      "group_display": "Oceania",
+      "realm": "australasian",
+      "tier": 50,
+      "bboxes": [
+        [
+          -48.0,
+          -34.0,
+          166.0,
+          179.0
+        ]
+      ],
+      "centroid": [
+        -41.0,
+        172.5
+      ],
+      "countries": {
+        "core": [
+          "NZ"
+        ],
+        "partial": []
+      },
+      "classes": 486,
+      "map": "regional/new-zealand/coverage.svg"
+    },
+    "hawaii": {
+      "name": "Hawaii",
+      "group": "oceania",
+      "group_display": "Oceania",
+      "realm": "oceanian",
+      "tier": 90,
+      "bboxes": [
+        [
+          18.0,
+          23.0,
+          -161.0,
+          -154.0
+        ]
+      ],
+      "centroid": [
+        20.5,
+        -157.5
+      ],
+      "countries": {
+        "core": [
+          "US"
+        ],
+        "partial": []
+      },
+      "classes": 478,
+      "map": "regional/hawaii/coverage.svg"
+    },
+    "new-caledonia": {
+      "name": "New Caledonia",
+      "group": "oceania",
+      "group_display": "Oceania",
+      "realm": "australasian",
+      "tier": 90,
+      "bboxes": [
+        [
+          -22.8,
+          -19.5,
+          163.5,
+          168.2
+        ]
+      ],
+      "centroid": [
+        -21.15,
+        165.85
+      ],
+      "countries": {
+        "core": [
+          "NC"
+        ],
+        "partial": []
+      },
+      "classes": 377,
+      "map": "regional/new-caledonia/coverage.svg"
+    }
+  }
+}

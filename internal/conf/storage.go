@@ -123,6 +123,14 @@ func Load() (*Settings, error) {
 		persistMigration(settings, "stream enabled defaults")
 	}
 
+	// Canonicalize catalog-style model IDs (e.g. "perch-v2" -> "perch_v2") so a
+	// hand-edited config persists a single canonical spelling and model
+	// install/uninstall bookkeeping stays consistent. Runs before validation so
+	// the normalized IDs are what gets checked.
+	if settings.MigrateModelIDAliases() {
+		persistMigration(settings, "model ID aliases")
+	}
+
 	// Validate multi-model configuration
 	if err := settings.applyModelValidation(); err != nil {
 		return nil, err
@@ -203,6 +211,17 @@ func Load() (*Settings, error) {
 			settings.BirdNET.Latitude,
 		)
 	}
+
+	// Log the effective privacy and dog-bark filter thresholds once at load.
+	// These values are otherwise silent until a detection is actually filtered,
+	// which makes reports of a configured threshold "not taking effect"
+	// impossible to localize from logs or a support dump: this line records
+	// exactly what was read from config.yaml into the running settings.
+	GetLogger().Info("privacy and dog-bark filter settings loaded",
+		logger.Bool("privacy_enabled", settings.Realtime.PrivacyFilter.Enabled),
+		logger.Float32("privacy_confidence", settings.Realtime.PrivacyFilter.Confidence),
+		logger.Bool("dogbark_enabled", settings.Realtime.DogBarkFilter.Enabled),
+		logger.Float32("dogbark_confidence", settings.Realtime.DogBarkFilter.Confidence))
 
 	// Publish the loaded settings atomically. Readers calling GetSettings
 	// immediately after this point see this snapshot.
@@ -539,6 +558,17 @@ func SaveSettings() error {
 	}
 
 	GetLogger().Info("Settings saved successfully", logger.String("path", configPath))
+
+	// Record the privacy and dog-bark filter thresholds that were just
+	// persisted. Paired with the load-time log above, this brackets the config
+	// round-trip: comparing the value a user set in the UI against what actually
+	// reaches disk here isolates a frontend/save drop from a load-side problem
+	// without needing to reproduce a detection.
+	GetLogger().Info("persisted privacy and dog-bark filter settings",
+		logger.Bool("privacy_enabled", settingsCopy.Realtime.PrivacyFilter.Enabled),
+		logger.Float32("privacy_confidence", settingsCopy.Realtime.PrivacyFilter.Confidence),
+		logger.Bool("dogbark_enabled", settingsCopy.Realtime.DogBarkFilter.Enabled),
+		logger.Float32("dogbark_confidence", settingsCopy.Realtime.DogBarkFilter.Confidence))
 	return nil
 }
 

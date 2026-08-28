@@ -7,13 +7,17 @@ import (
 
 // Temporary runtime opt-in for the native Go encoders.
 //
-// AAC and Opus clip export, and HLS live streaming, still run through FFmpeg by
-// default. Setting BIRDNET_AAC_ENCODER=native, BIRDNET_OPUS_ENCODER=native or
-// BIRDNET_HLS_ENCODER=native switches the matching path to the pure-Go encoder
-// (go-aac plus go-m4a for .m4a and for HLS, go-opus for .opus) so it can be
-// exercised in the field before it becomes the default. The gates are
-// independent, so one path can be promoted while another is still proving
-// itself.
+// AAC clip export and HLS live streaming still run through FFmpeg by default.
+// Setting BIRDNET_AAC_ENCODER=native or BIRDNET_HLS_ENCODER=native switches the
+// matching path to the pure-Go encoder and muxer (go-aac plus go-m4a for .m4a,
+// and go-aac plus hlsmux for HLS, which segments AAC-LC) so it can be exercised
+// in the field before it becomes the default. The gates are independent, so one
+// path can be promoted while another is still proving itself.
+//
+// Opus clip export has already earned that confidence: go-opus is now the
+// unconditional encoder for .opus and its gate has been removed. FFmpeg is used
+// for .opus only as a fallback when go-opus cannot carry a clip's shape (see
+// nativeOpusSelected in the analysis processor).
 //
 // This lives in conf rather than in a package of its own so that every consumer
 // reaches it without a new dependency edge: the export-format validation here,
@@ -28,7 +32,6 @@ import (
 // goes away with it. The call sites are, per gate:
 //
 //	AAC:  exportFormatNeedsFFmpeg and SaveAudioAction.encodeClip
-//	Opus: exportFormatNeedsFFmpeg and SaveAudioAction.encodeClip
 //	HLS:  createHLSStream in internal/api/v2/audio/audio_hls.go, which routes to
 //	      createNativeHLSStream in audio_hls_native.go. Removing the gate means
 //	      deleting audio_hls.go's FFmpeg branch and the whole FFmpeg half of
@@ -39,8 +42,6 @@ import (
 const (
 	// EnvNativeAACEncoder selects the native AAC encoder for .m4a clip export.
 	EnvNativeAACEncoder = "BIRDNET_AAC_ENCODER"
-	// EnvNativeOpusEncoder selects the native Opus encoder for .opus clip export.
-	EnvNativeOpusEncoder = "BIRDNET_OPUS_ENCODER"
 	// EnvNativeHLSEncoder selects the native encoder and muxer for HLS live
 	// streaming, replacing the FFmpeg process that would otherwise encode,
 	// segment and write the playlist for a live stream.
@@ -54,10 +55,6 @@ const (
 // NativeAACEncoderEnabled reports whether AAC clip export should use the native
 // encoder.
 func NativeAACEncoderEnabled() bool { return nativeEncoderSelected(EnvNativeAACEncoder) }
-
-// NativeOpusEncoderEnabled reports whether Opus clip export should use the
-// native encoder.
-func NativeOpusEncoderEnabled() bool { return nativeEncoderSelected(EnvNativeOpusEncoder) }
 
 // NativeHLSEncoderEnabled reports whether HLS live streaming should use the
 // native encoder and muxer instead of spawning an FFmpeg process.

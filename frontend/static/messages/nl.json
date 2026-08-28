@@ -412,6 +412,7 @@
         "updatingIntervals": "Detectie-intervallen worden bijgewerkt...",
         "reconfiguringMqtt": "MQTT-verbinding wordt bijgewerkt...",
         "reconfiguringBirdweather": "BirdWeather-integratie wordt bijgewerkt...",
+        "reconfiguringEbird": "Updating eBird integration...",
         "reconfiguringStreams": "Audiostreams worden bijgewerkt...",
         "reconfiguringTelemetry": "Telemetrie-instellingen worden bijgewerkt...",
         "reconfiguringPushNotifications": "Pushmeldingsproviders herconfigureren...",
@@ -457,6 +458,11 @@
       "ort": {
         "unavailableTitle": "ONNX Runtime niet beschikbaar",
         "unavailableMessage": "ONNX Runtime {requiredVersion} is vereist voor {modelName}, maar werd niet gevonden. Zie de installatiegids: {installGuideURL}"
+      },
+      "region": {
+        "staleTitle": "Modelregio is mogelijk verouderd",
+        "staleMessage": "{modelName} is geïnstalleerd voor {oldRegion}, maar uw nieuwe locatie komt overeen met {newRegion}. U kunt van variant wisselen via de modellengalerij in Instellingen.",
+        "staleGlobalMessage": "{modelName} is geïnstalleerd voor {oldRegion}, maar uw nieuwe locatie valt buiten de dekking. U kunt overschakelen naar de globale variant via de modellengalerij in Instellingen."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -624,6 +630,7 @@
       "categoryYear": "Nieuw dit jaar",
       "categorySeason": "Nieuw dit seizoen",
       "categorySeasonNamed": "Nieuw dit {season}",
+      "categoryInfrequent": "Zeldzaam",
       "maxConfidenceShort": "Max. {confidence}%",
       "detections": "{count, plural, one {# detectie} other {# detecties}}",
       "lastSeen": "Laatst: {days, plural, =0 {vandaag} one {# dag geleden} other {# dagen geleden}}"
@@ -658,7 +665,8 @@
         "viewSixHourly": "Bekijk alle herkenningen van {startHour}:00 t/m {endHour}:00",
         "hourlyDetections": "{count} herkend om {hour}:00 - Klik om te zien",
         "biHourlyDetections": "{count} herkend van {startHour}:00 t/m {endHour}:00 - Klik om te zien",
-        "sixHourlyDetections": "{count} herkend van {startHour}:00 t/m {endHour}:00 - Klik om te zien"
+        "sixHourlyDetections": "{count} herkend van {startHour}:00 t/m {endHour}:00 - Klik om te zien",
+        "infrequent": "Zeldzaam - teruggekeerd na {days, plural, one {# dag} other {# dagen}} afwezigheid"
       },
       "loading": {
         "preparing": "Informatie voorbereiden ...",
@@ -1689,6 +1697,26 @@
       "title": "AI-modellen & Inferentie",
       "loading": "Inferentiestatus laden",
       "error": "Kan inferentiestatus niet laden",
+      "vad": {
+        "section": "Privacybescherming",
+        "title": "Silero VAD",
+        "active": "Actief",
+        "activeHelp": "Het spraakdetectiemodel is geladen en beoordeelt audio.",
+        "idle": "Inactief",
+        "idleHelp": "Ingeschakeld en gereed; het model wordt geladen wanneer het eerste audiofragment wordt beoordeeld.",
+        "disabled": "Uitgeschakeld",
+        "disabledHelp": "Privacybescherming is uitgeschakeld in de instellingen van het privacyfilter.",
+        "unavailable": "Geen model",
+        "unavailableHelp": "Er is geen spraakdetectiemodel beschikbaar in deze build. Stel een VAD-modelpad in bij de instellingen van het privacyfilter, of gebruik een build met een ingesloten model.",
+        "description": "Silero VAD is een gespecialiseerd akoestisch model dat menselijke spraak detecteert. Het stuurt het privacyfilter aan en gooit audio weg wanneer er spraak aanwezig is, zodat stemmen uit uw opnamen worden gehouden.",
+        "threshold": "Drempelwaarde",
+        "speechHits": "Spraaktreffers",
+        "recentTitle": "Recente spraak",
+        "recentEmpty": "Nog geen spraak gedetecteerd",
+        "colWhen": "Tijdstip",
+        "colProbability": "Waarschijnlijkheid",
+        "colSource": "Bron"
+      },
       "sectionHardware": "Hardware",
       "sectionBackends": "Inferentie Back-ends",
       "sectionModels": "Modellen",
@@ -1699,6 +1727,9 @@
       "fp16": "FP16",
       "fp16Supported": "FP16 ondersteund",
       "fp16Unsupported": "FP16 niet ondersteund",
+      "advanced": "Geavanceerd",
+      "capabilities": "Mogelijkheden",
+      "capabilitiesHelp": "Hardware-tags die worden gebruikt om deze machine te koppelen aan de beschikbare model-builds.",
       "backendTflite": "TensorFlow Lite",
       "backendOnnx": "ONNX Runtime",
       "backendOpenvino": "OpenVINO",
@@ -2807,7 +2838,8 @@
           "detectionPath": "Relatief pad naar detectie (bijv. \"/ui/detections/1234\")",
           "detectionUrl": "Volledige URL naar detectie",
           "imageUrl": "Link naar soortafbeelding",
-          "daysSinceFirstSeen": "Aantal dagen sinds eerste detectie"
+          "daysSinceFirstSeen": "Aantal dagen sinds eerste detectie",
+          "daysSinceLastSeen": "Aantal dagen sinds de laatste detectie"
         }
       },
       "testNotification": {
@@ -3123,7 +3155,11 @@
         "enable": "Schakel Privacy Filteren in",
         "disabled": "Privacy filteren is uitgeschakeld",
         "confidenceLabel": "Betrouwbaarheids Drempelwaarde voor Menselijke Detectie",
-        "confidenceHelp": "Stel het betrouwbaarheidsniveau in voor menselijke stem detectie, lagere waarde maakt filter gevoeliger"
+        "confidenceHelp": "Stel het betrouwbaarheidsniveau in voor menselijke stem detectie, lagere waarde maakt filter gevoeliger",
+        "vadEnable": "Privacybescherming inschakelen (Silero VAD)",
+        "vadHelp": "Voert een specifiek neuraal spraakdetectiemodel uit naast de classificator voor betrouwbare spraakfiltering. Verbruikt extra systeembronnen (ongeveer 20-30 MB RAM en CPU-inferentie per segment).",
+        "vadThresholdLabel": "Drempelwaarde voor privacybescherming",
+        "vadThresholdHelp": "Gevoeligheidsdrempel voor de spraakactiviteitsdetector (standaard 0.35). Lagere waarden maken het filter gevoeliger voor zachte of verre spraak."
       },
       "falsePositivePrevention": {
         "title": "Vals Positief Preventie",
@@ -4330,6 +4366,18 @@
             "hemisphereNote": "Seizoensdatums worden automatisch geconfigureerd op basis van uw breedtegraad. Het noordelijk halfrond gebruikt standaard seizoenen, het zuidelijk halfrond heeft verschoven datums, en equatoriale regio's gebruiken natte/droge seizoenen."
           }
         },
+        "infrequent": {
+          "title": "Volgen van zeldzame soorten",
+          "description": "Markeert soorten die terugkeren na een lange afwezigheid (zeldzame terugkerende bezoekers)",
+          "enabled": {
+            "label": "Volgen van zeldzame soorten inschakelen",
+            "helpText": "Houd bij en meld wanneer een soort opnieuw wordt gedetecteerd na een lange afwezigheid"
+          },
+          "absenceDays": {
+            "label": "Afwezigheidsdrempel (dagen)",
+            "helpText": "Minimumaantal dagen sinds de laatste detectie voordat een terugkerende soort als 'zeldzaam' wordt gemarkeerd (1-365)"
+          }
+        },
         "months": {
           "january": "Januari",
           "february": "Februari",
@@ -4527,6 +4575,7 @@
           "stream_disconnected": "Stream verbroken",
           "stream_error": "Stream-fout",
           "detection_new_species": "Nieuwe soort gedetecteerd",
+          "detection_infrequent_species": "Zeldzame soort gedetecteerd",
           "detection_occurred": "Detectie uitgevoerd",
           "application_started": "Applicatie gestart",
           "application_stopped": "Applicatie gestopt",
@@ -4576,6 +4625,10 @@
         "newSpecies": {
           "name": "Nieuwe soort gedetecteerd",
           "description": "Meldt wanneer een soort voor het eerst wordt gedetecteerd"
+        },
+        "infrequentSpecies": {
+          "name": "Zeldzame soort gedetecteerd",
+          "description": "Meldt wanneer een soort terugkeert na een lange afwezigheid"
         },
         "streamDisconnected": {
           "name": "Audiostream verbroken",
@@ -5319,6 +5372,20 @@
       "locale": {
         "label": "Soortentaal",
         "helpText": "Taal voor de gangbare soortnamen in de interface."
+      },
+      "secondaryThresholdOverride": {
+        "label": "Override confidence threshold",
+        "helpText": "When enabled, this model uses its own confidence threshold below. When disabled, it follows the main BirdNET confidence threshold."
+      },
+      "secondaryThreshold": {
+        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
+        "followsBirdnet": "Enable the override above to set a custom value. This model currently follows the main BirdNET confidence threshold."
+      },
+      "perchThreshold": {
+        "label": "Perch v2 Confidence Threshold"
+      },
+      "birdnetv3Threshold": {
+        "label": "BirdNET v3.0 Confidence Threshold"
       }
     },
     "rangeFilter": {
@@ -5358,6 +5425,79 @@
     "gallery": {
       "title": "Modellengalerij",
       "description": "Beheer classificatiemodellen voor vogel- en vleermuisdetectie.",
+      "region": {
+        "title": "Modelregio",
+        "modeAuto": "Automatisch",
+        "modeAutoHint": "Kies de beste regionale variant op basis van de stationslocatie",
+        "modeManual": "Manual region select",
+        "modeManualHint": "Choose a region yourself, or the worldwide model",
+        "worldwideTitle": "Worldwide",
+        "worldwideSubtitle": "Every region, all species",
+        "worldwideResourceNote": "Largest model, uses the most RAM and CPU",
+        "selectedBadge": "Selected",
+        "orSpecificRegion": "Or a specific region",
+        "search": "Search regions or countries",
+        "searchNoResults": "No regions match \"{query}\"",
+        "manualPrompt": "Choose a region below, or the worldwide model.",
+        "countriesOverflow": "+{count}",
+        "coreCoverage": "Core coverage:",
+        "partialCoverage": "Partial coverage:",
+        "pinAction": "{region} vastzetten",
+        "switchToAuto": "Overschakelen naar automatisch",
+        "loading": "Regio's laden...",
+        "loadFailed": "Kan regiogegevens niet laden",
+        "mapUnavailable": "Dekkingskaart niet beschikbaar",
+        "mapAria": "Dekkingskaart van {region}",
+        "why": {
+          "noLocation": "Automatische selectie vereist een stationslocatie. Stel deze in bij Hoofdinstellingen; tot die tijd wordt het globale model gebruikt.",
+          "outsideCoverage": "Uw locatie valt buiten de dekking van alle regionale modellen, dus wordt het globale model gebruikt.",
+          "ambiguous": "Uw locatie ligt dicht bij de grens tussen {region} en {runnerUp}. Automatische selectie gebruikt {region}; zet er een vast om de keuze expliciet te maken.",
+          "resolved": "Gedetecteerde regio op basis van uw locatie: {region}.",
+          "global": "Het globale model wordt altijd gebruikt, ongeacht de stationslocatie.",
+          "pinned": "Vastgezet op {region}. De stationslocatie heeft geen invloed op de modelselectie.",
+          "pinnedMismatch": "Uw locatie komt momenteel overeen met {resolved}.",
+          "pinnedUnknown": "De vastgezette regio \"{region}\" is niet beschikbaar in de huidige modelcatalogus. Modelfamilies vallen terug op uw locatie of het globale model."
+        }
+      },
+      "variants": {
+        "title": "Modelvariant",
+        "recommended": "Aanbevolen",
+        "recommendedForHardware": "Beste voor jouw hardware",
+        "installed": "Geïnstalleerd",
+        "default": "Standaard",
+        "incompatible": "Niet beschikbaar voor uw hardware",
+        "showAll": "Toon alle varianten ({count})",
+        "showRegion": "Toon varianten voor {region} en jouw hardware ({count})",
+        "showHardware": "Toon hardwarevarianten ({count})",
+        "showAllRegions": "Toon alle varianten, inclusief andere regio's ({count})",
+        "regionContext": "Regionale varianten getoond voor {region}, ingesteld door de modelregioselectie hierboven",
+        "regionContextNone": "Er zijn regionale varianten beschikbaar. Kies een regio in de modelregioselectie hierboven, of toon alle varianten.",
+        "otherRegions": "Andere regio's",
+        "filterPlaceholder": "Regio's filteren",
+        "filterAria": "Filter op regio afgestemde versies",
+        "filterNoMatch": "Geen regio's komen overeen met \"{query}\"",
+        "latency": "~{ms} ms",
+        "precisionInfo": "About precision and variants",
+        "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
+      },
+      "actionInProgress": "Wacht tot de huidige installatie, herinstallatie of verwijdering van het model is voltooid",
+      "removeSuccess": "Removed {name}",
+      "reasons": {
+        "backendRecommended": "Draait op {backend}, de aanbevolen backend voor jouw hardware",
+        "backendSupported": "Draait op {backend}",
+        "regionMatched": "Afgestemd op jouw regio ({region})",
+        "regionGlobalFallback": "Globaal model voor jouw locatie",
+        "precisionFp16Native": "Halve-precisie versie afgestemd op je processor",
+        "precisionFp16GpuPreferred": "Halve-precisie versie: halve downloadgrootte, draait op jouw GPU",
+        "ramConstrainedFit": "Gekwantiseerde versie aangepast aan je beschikbare geheugen",
+        "benchmarkMeasured": "Snelste op jouw apparaat in gemeten benchmarks",
+        "variantLegacy": "Vervangen door een nieuwere versie",
+        "archUnsupported": "Vereist een {required} processor",
+        "backendMissing": "Heeft een inference backend nodig die je installatie niet kan bereiken ({required})",
+        "ramInsufficient": "Heeft minimaal {requiredMb} MB geheugen nodig",
+        "hardwareExcluded": "Niet ondersteund op jouw hardware ({token})",
+        "backendOnnxUnavailable": "Vereist ONNX Runtime, dat niet beschikbaar is op dit systeem. Docker-images en release-archieven bevatten dit; zie de ONNX Runtime-installatiehandleiding."
+      },
       "tabs": {
         "installed": "Geïnstalleerd",
         "available": "Beschikbaar"
@@ -5365,7 +5505,6 @@
       "loading": "Modellen laden...",
       "retry": "Opnieuw proberen",
       "builtIn": "Ingebouwd",
-      "builtInDescription": "Ingebouwde vogelsoortclassificator van het BirdNET-team.",
       "species": "{count} soorten",
       "install": "Installeren",
       "installing": "Installeren...",
@@ -5410,7 +5549,13 @@
       "errors": {
         "catalogLoadFailed": "Kan modelcatalogus niet laden",
         "installFailed": "Kan modelinstallatie niet starten",
-        "removeFailed": "Kan model niet verwijderen"
+        "removeFailed": "Kan model niet verwijderen",
+        "actionFailed": "Er is een probleem opgetreden met {name}",
+        "downloadSourceHint": "Als huggingface.co geblokkeerd of traag is op uw netwerk, stel dan een spiegelserver in bij de sectie Downloadbron hieronder.",
+        "goToDownloadSource": "Ga naar Downloadbron",
+        "dismiss": "Negeren",
+        "details": "Details",
+        "removeRetryHint": "To try again, use the Remove button on the model's card."
       },
       "regionLabel": "Regio",
       "speciesLabel": "Soorten",
@@ -5418,9 +5563,40 @@
       "reinstalling": "Opnieuw installeren...",
       "reinstallComplete": "Bestanden succesvol geverifieerd",
       "geomodelBadge": "Bevat BirdNET v3.0 geomodel",
-      "onnxRuntimeRequired": "Vereist ONNX Runtime dat niet beschikbaar is op dit systeem.",
-      "onnxRuntimeMissing": "ONNX Runtime is niet beschikbaar. Dit model kan niet worden uitgevoerd.",
-      "unavailable": "Niet beschikbaar"
+      "preview": {
+        "badge": "Voorvertoning",
+        "buildLabel": "{version} · {build}",
+        "cardNotice": "Voorvertoning voor ontwikkelaars, niet de definitieve versie. Dit is een vroege versie om te testen; resultaten kunnen veranderen voor de stabiele versie.",
+        "dialogNotice": "Je installeert een voorvertoning voor ontwikkelaars ({build}). Handig om uit te proberen, maar nog niet aanbevolen als je enige classificator."
+      },
+      "entryIncompatible": "Dit model is niet beschikbaar op dit systeem.",
+      "regionGlobal": "Globaal",
+      "hardwareLabel": "Hardware",
+      "hardware": {
+        "gpuNvidia": "GPU (NVIDIA)",
+        "gpuIntel": "GPU (Intel)",
+        "armCpu": "ARM CPU",
+        "amd64Cpu": "AMD64 CPU",
+        "arm64Cpu": "ARM64 CPU",
+        "cpu": "CPU"
+      },
+      "optimize": {
+        "bannerTitle": "{count, plural, one {# model kan sneller werken op jouw hardware} other {# modellen kunnen sneller werken op jouw hardware}}",
+        "review": "Controleren",
+        "dismiss": "Afwijzen",
+        "badgeTitle": "Er is een snellere build beschikbaar voor jouw hardware",
+        "swap": "Optimaliseren",
+        "dialogTitle": "Optimaliseer jouw modellen",
+        "installedBuild": "Installed build",
+        "fromTo": "{from} naar {to}",
+        "apply": "Toepassen",
+        "applyAll": "Alles toepassen",
+        "applying": "Toepassen...",
+        "applied": "Toegepast",
+        "applyFailed": "Toepassen mislukt",
+        "upToDate": "Al jouw modellen zijn al geoptimaliseerd voor deze hardware.",
+        "licenseNote": "Het wisselen blijft binnen hetzelfde model, dus de licentie verandert niet."
+      }
     },
     "bird": {
       "title": "Vogeldetectie",
@@ -5432,6 +5608,14 @@
     },
     "dynamicThreshold": {
       "birdOnlyNote": "Dynamische drempel geldt alleen voor vogelclassificatoren."
+    },
+    "perch": {
+      "title": "Perch v2 Detection",
+      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+    },
+    "birdnetv3": {
+      "title": "BirdNET v3.0 Detection",
+      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
     }
   },
   "restart": {

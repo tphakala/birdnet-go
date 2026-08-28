@@ -45,12 +45,15 @@
     Minus,
     Pause,
     MapPinOff,
+    ShieldCheck,
+    TriangleAlert,
   } from '@lucide/svelte';
   import { isContainerEnvironment } from '$lib/desktop/features/system/environment';
   import type {
     InferenceStatusResponse,
     InferenceModel,
     InferenceLastDetection,
+    InferenceVAD,
     BackendStatus,
     OpenVINOBackendStatus,
   } from '$lib/desktop/features/system/inference.types';
@@ -98,6 +101,7 @@
   // places can drift apart silently: the reference just stops resolving, with no
   // error anywhere and nothing visible to a sighted reader.
   const FP16_HELP_ID = 'help-fp16';
+  const HARDWARE_CAPABILITIES_HELP_ID = 'hw-capabilities-help';
 
   interface MetricPoint {
     timestamp: string;
@@ -471,6 +475,15 @@
     return `${current.toFixed(1)} ${t('system.inference.unitMs')} · ${t('system.inference.peak')} ${peak.toFixed(1)}`;
   }
 
+  // Plain-English explanation of the current VAD gate state, so a disabled / no-model
+  // / idle indicator is never ambiguous (frontend/CLAUDE.md: never ship ambiguous states).
+  function vadStateHelp(v: InferenceVAD): string {
+    if (!v.enabled) return t('system.inference.vad.disabledHelp');
+    if (!v.available) return t('system.inference.vad.unavailableHelp');
+    if (v.loaded) return t('system.inference.vad.activeHelp');
+    return t('system.inference.vad.idleHelp');
+  }
+
   // Short names of other loaded models whose feed contains the same species within
   // CO_DETECTION_TOLERANCE_SEC of this detection, for cross-model correlation.
   function coDetectingModels(modelId: string, d: InferenceLastDetection): string[] {
@@ -698,6 +711,36 @@
             </dd>
           {/each}
         </dl>
+
+        <!-- Advanced: the raw capability tokens this host matches in the model
+             manifests' vocabulary. Collapsed by default, it is token soup for a
+             casual user, but the low-ram and per-generation Intel GPU tokens are
+             not derivable from any other fact on this card, so this is the only
+             place a user can see the tokens that decided which model was picked. -->
+        {#if snapshot.hardware.capabilities?.length}
+          <details class="mt-3 pt-3 border-t border-[var(--border-100)]">
+            <summary class="text-sm text-muted cursor-pointer">
+              {t('system.inference.advanced')}
+            </summary>
+            <div class="mt-2 flex items-start gap-3">
+              <span
+                class="text-sm text-muted shrink-0"
+                title={t('system.inference.capabilitiesHelp')}
+                aria-describedby={HARDWARE_CAPABILITIES_HELP_ID}
+              >
+                {t('system.inference.capabilities')}
+              </span>
+              <span id={HARDWARE_CAPABILITIES_HELP_ID} class="sr-only"
+                >{t('system.inference.capabilitiesHelp')}</span
+              >
+              <div class="flex flex-wrap items-center gap-2">
+                {#each snapshot.hardware.capabilities as capability}
+                  <Badge variant="neutral" size="sm" text={capability} />
+                {/each}
+              </div>
+            </div>
+          </details>
+        {/if}
       </div>
 
       <!-- Inference backends -->
@@ -743,7 +786,7 @@
               {/if}
               {#if openvino.supported && openvino.devices && openvino.devices.length > 0}
                 <span class="text-xs text-muted">{t('system.inference.devices')}:</span>
-                {#each openvino.devices as device (device)}
+                {#each openvino.devices as device}
                   <Badge variant="neutral" size="sm" text={device} />
                 {/each}
               {/if}
@@ -788,6 +831,159 @@
         Phase A spec (Forgejo #1144). Do NOT delete the audio types/fields.
       -->
     </div>
+
+    <!-- Privacy VAD speech gate: shown only when the privacy filter is enabled. -->
+    {#if snapshot.vad}
+      {@const vad = snapshot.vad}
+      <div>
+        <h3 class="text-xs font-semibold uppercase tracking-wider mb-3 text-muted">
+          {t('system.inference.vad.section')}
+        </h3>
+        <div
+          class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col gap-3"
+          data-testid="vad-card"
+        >
+          <!-- Header mirrors the model cards: icon + name + backend badge, with a
+               runtime-state indicator pinned right (same idiom as the model card's
+               active/idle/paused indicator, not a bespoke pill). -->
+          <div class="flex items-center gap-2 flex-wrap">
+            <ShieldCheck class="w-4 h-4 shrink-0 text-muted" aria-hidden="true" />
+            <span class="text-sm font-semibold truncate">{t('system.inference.vad.title')}</span>
+            <Badge variant="primary" size="sm" text="ONNX" />
+            <Badge variant="info" size="sm" text="CPU" />
+            <span
+              class="ml-auto flex items-center gap-1.5"
+              role="status"
+              aria-label={vadStateHelp(vad)}
+              title={vadStateHelp(vad)}
+            >
+              {#if !vad.enabled}
+                <Minus class="w-3 h-3 shrink-0 text-base-content/30" aria-hidden="true" />
+                <span class="text-xs text-muted">{t('system.inference.vad.disabled')}</span>
+              {:else if !vad.available}
+                <TriangleAlert class="w-3 h-3 shrink-0 text-amber-500" aria-hidden="true" />
+                <span class="text-xs text-amber-600 dark:text-amber-400"
+                  >{t('system.inference.vad.unavailable')}</span
+                >
+              {:else if vad.loaded}
+                <Activity
+                  class="w-3 h-3 shrink-0 text-green-500 animate-pulse motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
+                <span class="text-xs text-green-600 dark:text-green-400"
+                  >{t('system.inference.vad.active')}</span
+                >
+              {:else}
+                <Minus class="w-3 h-3 shrink-0 text-base-content/30" aria-hidden="true" />
+                <span class="text-xs text-muted">{t('system.inference.vad.idle')}</span>
+              {/if}
+            </span>
+          </div>
+
+          <!-- One-line purpose description, so a home user knows what this model is
+               and why it is here. -->
+          <p class="text-xs text-muted leading-snug">{t('system.inference.vad.description')}</p>
+
+          <!-- Spec line mirrors the model card's spec line: sample rate + threshold. -->
+          <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+            <span class="text-muted">
+              {t('system.inference.sampleRate')}:
+              <span class="font-mono tabular-nums text-base-content">
+                {#if vad.sampleRate != null}
+                  {sampleRateKhz(vad.sampleRate)}
+                  {t('system.inference.unitKhz')}
+                {:else}
+                  -
+                {/if}
+              </span>
+            </span>
+            <span class="text-muted">
+              {t('system.inference.vad.threshold')}:
+              <span class="font-mono tabular-nums text-base-content"
+                >{vad.threshold.toFixed(2)}</span
+              >
+            </span>
+          </div>
+
+          <!-- Stats line mirrors the model card's stats line: text-xs muted
+               "label: value" spans with mono values, wrapping. -->
+          <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+            <span class="text-muted">
+              {t('system.inference.invocations')}:
+              <span class="font-mono tabular-nums text-base-content"
+                >{formatNumber(vad.stats.invocations)}</span
+              >
+            </span>
+            <span class="text-muted">
+              {t('system.inference.avgLatency')}:
+              <span class="font-mono tabular-nums text-base-content">
+                {vad.stats.invocations > 0
+                  ? `${vad.stats.avgMs.toFixed(1)} ${t('system.inference.unitMs')}`
+                  : '-'}
+              </span>
+            </span>
+            <span class="text-muted">
+              {t('system.inference.maxLatency')}:
+              <span class="font-mono tabular-nums text-base-content">
+                {vad.stats.invocations > 0
+                  ? `${vad.stats.maxMs.toFixed(1)} ${t('system.inference.unitMs')}`
+                  : '-'}
+              </span>
+            </span>
+            <span class="text-muted">
+              {t('system.inference.vad.speechHits')}:
+              <span class="font-mono tabular-nums text-base-content"
+                >{formatNumber(vad.stats.speechHits)}</span
+              >
+            </span>
+          </div>
+
+          <!-- Recent-speech history: a newest-first feed of recent gate hits,
+               mirroring the model cards' "Last heard" table but shorter (up to 10)
+               and single-stream (when + probability + source). -->
+          <div>
+            <div class="text-xs text-muted mb-1">{t('system.inference.vad.recentTitle')}</div>
+            {#if vad.recentHits && vad.recentHits.length > 0}
+              <table class="w-full text-xs table-fixed">
+                <thead class="text-muted">
+                  <tr>
+                    <th class="text-left font-normal py-0.5 w-16 whitespace-nowrap"
+                      >{t('system.inference.vad.colWhen')}</th
+                    >
+                    <th class="text-left font-normal py-0.5 w-20 whitespace-nowrap"
+                      >{t('system.inference.vad.colProbability')}</th
+                    >
+                    <th class="text-left font-normal py-0.5"
+                      >{t('system.inference.vad.colSource')}</th
+                    >
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each vad.recentHits as hit}
+                    <tr class="border-t border-[var(--border-100)]">
+                      <td
+                        class="py-0.5 font-mono tabular-nums text-base-content whitespace-nowrap"
+                        title={formatLocalDateTime(new Date(hit.atUnix * 1000))}
+                      >
+                        {getLocalTimeString(new Date(hit.atUnix * 1000))}
+                      </td>
+                      <td class="py-0.5 font-mono tabular-nums text-base-content">
+                        {Math.round(hit.probability * 100)}%
+                      </td>
+                      <td class="py-0.5 text-base-content truncate min-w-0" title={hit.source}>
+                        {hit.source}
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            {:else}
+              <div class="text-xs text-muted">{t('system.inference.vad.recentEmpty')}</div>
+            {/if}
+          </div>
+        </div>
+      </div>
+    {/if}
 
     <!-- Models -->
     <div>
@@ -852,19 +1048,26 @@
                   </span>
                 {:else}
                   <span
-                    class="ml-auto flex items-center gap-1"
+                    class="ml-auto flex items-center gap-1.5"
                     role="status"
                     aria-label={isActive
+                      ? t('system.inference.activityActive')
+                      : t('system.inference.activityIdle')}
+                    title={isActive
                       ? t('system.inference.activityActive')
                       : t('system.inference.activityIdle')}
                   >
                     {#if isActive}
                       <Activity
-                        class="w-3 h-3 text-green-500 animate-pulse motion-reduce:animate-none"
+                        class="w-3 h-3 shrink-0 text-green-500 animate-pulse motion-reduce:animate-none"
                         aria-hidden="true"
                       />
+                      <span class="text-xs text-green-600 dark:text-green-400"
+                        >{t('system.inference.active')}</span
+                      >
                     {:else}
-                      <Minus class="w-3 h-3 text-base-content/30" aria-hidden="true" />
+                      <Minus class="w-3 h-3 shrink-0 text-base-content/30" aria-hidden="true" />
+                      <span class="text-xs text-muted">{t('system.inference.activityIdle')}</span>
                     {/if}
                   </span>
                 {/if}
@@ -1017,7 +1220,7 @@
                       </tr>
                     </thead>
                     <tbody>
-                      {#each rows as d (`${d.scientificName || d.species}-${d.atUnix}`)}
+                      {#each rows as d}
                         {@const coNames = coDetectingModels(model.id, d)}
                         <tr class="border-t border-[var(--border-100)]">
                           <td class="py-0.5 pr-2 text-base-content">
@@ -1117,7 +1320,7 @@
                   <span class="text-xs text-muted">{t('system.inference.noSources')}</span>
                 {:else}
                   <div class="flex flex-wrap gap-1.5">
-                    {#each model.sources as source (source.id)}
+                    {#each model.sources as source}
                       <Badge variant="ghost" size="sm">
                         {source.name}{#if source.type}
                           <span class="text-muted ml-1">({source.type})</span>

@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/hwprofile"
 	"github.com/tphakala/birdnet-go/internal/inference"
+	"github.com/tphakala/birdnet-go/internal/inference/vad"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
@@ -31,12 +32,72 @@ const eventInferenceTopologyChanged = "system.inference_topology_changed"
 
 // InferenceStatusResponse is the top-level payload for GET /api/v2/system/inference.
 type InferenceStatusResponse struct {
-	Hardware             HardwareInfo           `json:"hardware"`
-	Backends             BackendsInfo           `json:"backends"`
-	Models               []InferenceModelStatus `json:"models"`
-	Audio                AudioMetricsInfo       `json:"audio"`
-	RuntimeBaselineBytes int64                  `json:"runtimeBaselineBytes,omitempty"`
-	SnapshotAtUnix       int64                  `json:"snapshotAtUnix"`
+	Hardware HardwareInfo           `json:"hardware"`
+	Backends BackendsInfo           `json:"backends"`
+	Models   []InferenceModelStatus `json:"models"`
+	Audio    AudioMetricsInfo       `json:"audio"`
+	// VAD is the privacy-filter Silero VAD speech-gate status. Present only when
+	// the privacy filter is enabled (nil hides the dashboard panel entirely).
+	VAD                  *VADStatusInfo `json:"vad,omitempty"`
+	RuntimeBaselineBytes int64          `json:"runtimeBaselineBytes,omitempty"`
+	SnapshotAtUnix       int64          `json:"snapshotAtUnix"`
+}
+
+// VADStatusInfo reports the privacy-filter Silero VAD speech gate for the
+// inference dashboard. Stats are lifetime totals that survive session reloads.
+type VADStatusInfo struct {
+	// Enabled is the configured VAD gate toggle (realtime.privacyfilter.vad.enabled).
+	Enabled bool `json:"enabled"`
+	// Available reports whether a model source resolves (an embedded model is
+	// present, or a modelpath override is set). When false the gate is inert even
+	// if Enabled is true (e.g. a noembed build with no modelpath).
+	Available bool `json:"available"`
+	// Loaded is true when a session is currently held (loaded and scoring). It is
+	// set on a successful load and cleared on unload or an inference error.
+	Loaded bool `json:"loaded"`
+	// Threshold is the configured speech-probability gate threshold.
+	Threshold float64 `json:"threshold"`
+	// ModelSource is "embedded", "path" or "" (unloaded); never the on-disk path.
+	ModelSource string `json:"modelSource,omitempty"`
+	// Strategy is the active windowing strategy ("sequence"),
+	// empty when unloaded.
+	Strategy string `json:"strategy,omitempty"`
+	// SampleRate is the native sample rate of the loaded Silero VAD model (16 kHz),
+	// 0 when unloaded.
+	SampleRate int `json:"sampleRate,omitempty"`
+	// Stats holds lifetime inference counters for the gate.
+	Stats VADStatsInfo `json:"stats"`
+	// LastSpeechAtUnix is the Unix timestamp (seconds) of the most recent speech
+	// hit, 0 when none since start.
+	LastSpeechAtUnix int64 `json:"lastSpeechAtUnix,omitempty"`
+	// LastSpeechProbability is the VAD speech probability [0,1] of the most recent
+	// speech hit (pairs with LastSpeechAtUnix); 0 when none since start.
+	LastSpeechProbability float64 `json:"lastSpeechProbability,omitempty"`
+	// RecentHits is the newest-first history of recent speech hits (up to 10),
+	// always present (empty when none) so the frontend renders a stable feed.
+	RecentHits []VADHitInfo `json:"recentHits"`
+}
+
+// VADStatsInfo holds lifetime inference statistics for the VAD speech gate.
+type VADStatsInfo struct {
+	// Invocations is the total number of VAD inference calls performed.
+	Invocations int64 `json:"invocations"`
+	// AvgMs is the lifetime average inference time in milliseconds.
+	AvgMs float64 `json:"avgMs"`
+	// MaxMs is the lifetime peak inference time in milliseconds.
+	MaxMs float64 `json:"maxMs"`
+	// SpeechHits is the total number of chunks scored at or above the threshold.
+	SpeechHits int64 `json:"speechHits"`
+}
+
+// VADHitInfo is one recent VAD speech hit in the dashboard history feed.
+type VADHitInfo struct {
+	// AtUnix is the Unix timestamp (seconds) of the speech hit.
+	AtUnix int64 `json:"atUnix"`
+	// Probability is the VAD speech probability [0,1] that tripped the gate.
+	Probability float64 `json:"probability"`
+	// Source is the display name of the audio source; may be empty.
+	Source string `json:"source,omitempty"`
 }
 
 // HardwareInfo describes the host CPU/environment reported at snapshot time.
@@ -510,6 +571,44 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 		DroppedChunksTotal: totalDrops,
 		QueueCapacity:      queueCapacity,
 		MetricKeys:         AudioMetricKeys{QueueDepth: observability.MetricKeyAudioQueueDepthAggregate},
+	}
+
+	// Privacy-filter Silero VAD speech gate. Reported only when the privacy filter
+	// is enabled; a nil VAD block hides the dashboard panel. The runtime stats come
+	// from the processor's always-on counters (independent of Prometheus), so the
+	// panel works with telemetry disabled.
+	if settings.Realtime.PrivacyFilter.Enabled {
+		vadCfg := settings.Realtime.PrivacyFilter.VAD
+		info := &VADStatusInfo{
+			Enabled:   vadCfg.Enabled,
+			Available: vad.HasEmbeddedModel() || vadCfg.ModelPath != "",
+			Threshold: vadCfg.Threshold,
+		}
+		if c.Processor != nil {
+			st := c.Processor.VADStatus()
+			info.Loaded = st.Loaded
+			info.ModelSource = st.Source
+			info.Strategy = st.Strategy
+			info.SampleRate = st.SampleRate
+			info.Stats = VADStatsInfo{
+				Invocations: st.Invocations,
+				AvgMs:       st.AvgMs,
+				MaxMs:       st.MaxMs,
+				SpeechHits:  st.SpeechHits,
+			}
+			info.LastSpeechAtUnix = st.LastSpeechUnix
+			info.LastSpeechProbability = st.LastSpeechProbability
+			if len(st.RecentHits) > 0 {
+				info.RecentHits = make([]VADHitInfo, len(st.RecentHits))
+				for i, h := range st.RecentHits {
+					info.RecentHits[i] = VADHitInfo{AtUnix: h.AtUnix, Probability: h.Probability, Source: h.Source}
+				}
+			}
+		}
+		if info.RecentHits == nil {
+			info.RecentHits = []VADHitInfo{}
+		}
+		resp.VAD = info
 	}
 
 	resp.Models = make([]InferenceModelStatus, 0, len(infos))

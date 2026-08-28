@@ -40,6 +40,17 @@ const (
 	ModelIDBat       = "bat"
 	ModelIDBSG       = "bsg"
 
+	// Catalog-style model IDs mirror the hyphenated model *catalog* entry IDs
+	// (classifier/model_catalog.go) and are accepted as aliases for the canonical
+	// underscore IDs above, so a config that carries the catalog-style spelling
+	// still validates. Keep in sync with the secondary ConfigAliases in
+	// classifier/model_registry.go. See Sentry BIRDNET-GO-2FZ (a config with
+	// "perch-v2" was rejected as an unknown model ID).
+	ModelIDBirdNETCatalog   = "birdnet-v2.4"
+	ModelIDBirdNETV3Catalog = "birdnet-v3.0"
+	ModelIDPerchV2Catalog   = "perch-v2"
+	ModelIDBSGCatalog       = "bsg-finland"
+
 	SampleRate     = 48000 // Sample rate of the audio fed to BirdNET Analyzer
 	BitDepth       = 16    // Bit depth of the audio fed to BirdNET Analyzer
 	NumChannels    = 1     // Number of channels of the audio fed to BirdNET Analyzer
