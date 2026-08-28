@@ -57,26 +57,6 @@ func (s modelFileSet) allPresentOnDisk(needEmbeddings bool) bool {
 // above, so it classifies as presenceMissing (repairable), NOT indeterminate.
 // The guard against that rewriting a user's own path is the gallery-layout
 // requirement in isGalleryManagedPath, not this classification.
-// pathResolution carries resolveFamilyPaths' outcome out of a model builder so
-// the loader can act on it without resolving a second time.
-//
-// The builder and the loader need different halves of the same resolution: the
-// builder needs the resolved paths to construct from, and the loader needs to
-// know whether the gallery fallback was used so it can queue the configuration
-// repair. Resolving twice would not only duplicate the stat work, it would open
-// a window: the model constructor runs between the two resolutions and takes
-// real time for an ONNX session, so a concurrent gallery install, uninstall or
-// variant switch could make the second resolution disagree with the first, and
-// the repair would then persist paths the model was NOT built from.
-type pathResolution struct {
-	// resolved is the file set the model was actually built from.
-	resolved modelFileSet
-	// usedFallback reports whether a configured path was CONFIRMED missing and
-	// the gallery set was substituted, i.e. whether the configuration is stale
-	// and may be repaired. See resolveFamilyPaths' second return value.
-	usedFallback bool
-}
-
 type diskPresence int
 
 const (
@@ -92,6 +72,29 @@ const (
 	// path reports ErrNotExist and is therefore presenceMissing, not this.
 	presenceIndeterminate
 )
+
+// pathResolution carries resolveFamilyPaths' outcome out of a model builder so
+// the loader can act on it without resolving a second time.
+//
+// The builder and the loader need different halves of the same resolution: the
+// builder needs the resolved paths to construct from, and the loader needs to
+// know whether the gallery fallback was used so it can queue the configuration
+// repair. Resolving twice would not only duplicate the stat work, it would open
+// a window BETWEEN THE TWO RESOLUTIONS: the model constructor runs between them
+// and takes real time for an ONNX session, so a concurrent gallery install,
+// uninstall or variant switch could make the second resolution disagree with the
+// first, and the repair would then persist paths the model was NOT built from.
+// Threading keeps the two resolutions from disagreeing; it does not close the gap
+// between resolving and persisting (the drain still runs later), so the persisted
+// set can still lag a gallery change that lands after the build.
+type pathResolution struct {
+	// resolved is the file set the model was actually built from.
+	resolved modelFileSet
+	// usedFallback reports whether a configured path was CONFIRMED missing and
+	// the gallery set was substituted, i.e. whether the configuration is stale
+	// and may be repaired. See resolveFamilyPaths' second return value.
+	usedFallback bool
+}
 
 // nonEmptyMembersPresence classifies whether every NON-EMPTY required member of
 // the set exists on disk. An empty member is skipped, not treated as missing:
@@ -234,11 +237,10 @@ func (o *Orchestrator) resolveFamilyPaths(registryID string, configured modelFil
 		return configured, false
 	}
 
-	// Debug, not Info: this fires once per build and once more when the loader
-	// re-resolves to decide whether the configuration needs repairing, and the
-	// noteworthy outcomes already log at Info from planPathCorrection (either the
-	// repair itself, or the decision to leave a non-gallery path alone). Falling
-	// back for an empty configured path is the normal, uninteresting case.
+	// Debug, not Info: this fires once per build, and the noteworthy outcomes
+	// already log at Info from planPathCorrection (either the repair itself, or
+	// the decision to leave a non-gallery path alone). Falling back for an empty
+	// configured path is the normal, uninteresting case.
 	GetLogger().Debug("configured model path is missing on disk, falling back to the installed model",
 		logger.String("registry_id", registryID),
 		logger.String("configured_model_path", configured.model),
@@ -276,11 +278,17 @@ func (o *Orchestrator) resolveSiblingSet(registryID, modelPath string) (set mode
 	// model loaders, which hold o.mu.Lock(), and sync.RWMutex is not reentrant:
 	// acquiring a read lock here self-deadlocks the loader. This mirrors
 	// resolveInstalledPaths, which reads the same field on the same call path.
-	// The read is safe because the CALLER's lock already excludes the only writers:
-	// the constructor writes o.modelsDir before o is published, and SetModelsDir
-	// writes it under o.mu.Lock(). That is a stronger guarantee than "it is set
-	// early and never changes again", and it keeps holding if a models-directory
-	// change is ever made dynamic.
+	// The read is safe today because o.modelsDir is effectively immutable once the
+	// pipeline is running: the constructor writes it before o is published, and
+	// SetModelsDir (its only other writer, under o.mu.Lock()) is called at most
+	// once, from NewModelManager, before the pipeline starts; cmd/benchmark and
+	// cmd/rangefilter construct an Orchestrator and never call it at all. The
+	// loader path additionally holds o.mu, but is not the only reader: the reload
+	// path (ReloadSecondaryModels, which calls the builders after releasing o.mu)
+	// reads it here and via resolveInstalledPaths with no lock, and the correction
+	// drainer reads it via isGalleryManagedPath with no lock. Making the models
+	// directory dynamic would therefore require revisiting all three lock-free
+	// readers, not just adding a lock here.
 	modelsDir := o.modelsDir
 
 	base := filepath.Base(modelPath)
@@ -351,10 +359,12 @@ func declaresModelFile(files []CatalogFile, localName string) bool {
 // shares a catalog file name (for example /mnt/nas/models/perch_v2_labels.txt,
 // whose parent directory is "models", not the entry ID) does NOT qualify.
 //
-// Takes no Orchestrator lock: it reads only its arguments and the ActiveCatalog
-// snapshot (whose accessor takes its own unrelated catalogMu). It is called only
-// from planPathCorrection, which the drainer reaches after the loaders have
-// released o.mu.
+// Takes no Orchestrator lock. Besides its arguments it reads o.modelsDir (in the
+// o.modelsDir == "" guard and in filepath.Base(o.modelsDir) in the grandparent
+// check) and the ActiveCatalog snapshot (whose accessor takes its own unrelated
+// catalogMu). It is called only from planPathCorrection, which the drainer
+// reaches after the loaders have released o.mu, so this o.modelsDir read holds no
+// orchestrator lock; it is safe for the reason resolveSiblingSet documents.
 //
 // Calling THIS function under a loader's o.mu would be safe, since it takes no
 // orchestrator lock. What must not move inside a loader is its caller chain's

@@ -258,12 +258,22 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 // geomodel auto-selection, and registers the taxonomy resolver if
 // taxonomy.csv is available on disk.
 func (o *Orchestrator) SetModelsDir(dir string) {
-	// Guard the o.modelsDir write and the o.primary read under o.mu: o.modelsDir
-	// is read by resolveInstalledPaths (always under o.mu via the model loaders),
-	// and o.primary is cleared by Delete() under o.mu.Lock(). Release before the
-	// downstream calls, which take their own locks. registerTaxonomyResolver in
-	// particular acquires o.mu.RLock() internally, so holding o.mu here would
-	// self-deadlock (the RWMutex is not reentrant).
+	// Guard the o.modelsDir write and the o.primary read under o.mu: the model
+	// loaders read o.modelsDir under o.mu, and o.primary is cleared by Delete()
+	// under o.mu.Lock().
+	//
+	// The write is guarded, but NOT every read is, so this lock alone is not what
+	// makes the field safe. resolveInstalledPaths, resolveSiblingSet and
+	// isGalleryManagedPath all read o.modelsDir with NO lock held: the first two on
+	// the ReloadSecondaryModels path (which releases o.mu before calling the model
+	// builders) and the third on the config-correction drain path. Those reads are
+	// safe only because this setter runs at most once, before the pipeline starts.
+	// See resolveSiblingSet for the full rationale and for what making the models
+	// directory dynamic would require.
+	//
+	// Release before the downstream calls, which take their own locks.
+	// registerTaxonomyResolver in particular acquires o.mu.RLock() internally, so
+	// holding o.mu here would self-deadlock (the RWMutex is not reentrant).
 	o.mu.Lock()
 	o.modelsDir = dir
 	primary := o.primary
@@ -1399,9 +1409,10 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 	threadAlloc := o.computeThreadAllocation(settings, primaryID)
 
 	// The builders below run outside o.mu. They construct from the settings
-	// snapshot and may read o.modelsDir (via resolveInstalledPaths), which is set
-	// once at startup by SetModelsDir before the pipeline (and thus this reload
-	// path) starts, so the read is safe without o.mu.
+	// snapshot and may read o.modelsDir (via resolveInstalledPaths and
+	// resolveSiblingSet), which is set once at startup by SetModelsDir before the
+	// pipeline (and thus this reload path) starts, so the read is safe without
+	// o.mu. See resolveSiblingSet for the full rationale on this lock-free read.
 
 	var firstErr error
 	for _, ref := range refs {
@@ -1618,7 +1629,7 @@ var openvinoCapableSecondaryBuilders = map[string]secondaryModelBuilder{
 	RegistryIDPerchV2: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
 		// Explicit nil-on-error return avoids the typed-nil interface trap (a
 		// nil *Perch wrapped in a non-nil ModelInstance).
-		// The path resolution is deliberately discarded (see buildBirdNETV3 above).
+		// The path resolution is deliberately discarded (see the BirdNET v3.0 entry above).
 		p, _, err := o.buildPerch(settings, threads)
 		if err != nil {
 			return nil, err
@@ -1628,7 +1639,7 @@ var openvinoCapableSecondaryBuilders = map[string]secondaryModelBuilder{
 	RegistryIDBat: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
 		// Explicit nil-on-error return avoids the typed-nil interface trap (a
 		// nil *Bat wrapped in a non-nil ModelInstance).
-		// The path resolution is deliberately discarded (see buildBirdNETV3 above).
+		// The path resolution is deliberately discarded (see the BirdNET v3.0 entry above).
 		b, _, err := o.buildBat(settings, threads)
 		if err != nil {
 			return nil, err

@@ -20,6 +20,9 @@ import (
 // whether to repair a stale configuration without resolving a second time (see
 // pathResolution). ReloadSecondaryModels discards it, which is what keeps a
 // backend or device swap from rewriting the user's paths.
+//
+// The returned resolution is meaningful only when err == nil; every error return
+// yields the zero pathResolution{}.
 func (o *Orchestrator) buildPerch(settings *conf.Settings, threads int) (*Perch, pathResolution, error) {
 	resolved, usedFallback := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
 		model:  settings.Perch.ModelPath,
@@ -30,7 +33,7 @@ func (o *Orchestrator) buildPerch(settings *conf.Settings, threads int) (*Perch,
 	labelPath := resolved.labels
 
 	if modelPath == "" || labelPath == "" {
-		return nil, res, errors.Newf("Perch v2 model files not installed or configured").
+		return nil, pathResolution{}, errors.Newf("Perch v2 model files not installed or configured").
 			Component("classifier.orchestrator").
 			Category(errors.CategoryModelInit).
 			Context("model", RegistryIDPerchV2).
@@ -38,7 +41,7 @@ func (o *Orchestrator) buildPerch(settings *conf.Settings, threads int) (*Perch,
 	}
 
 	if err := checkORTOrFail(settings.BirdNET.ONNXRuntimePath, "Perch v2", RegistryIDPerchV2, "classifier.orchestrator"); err != nil {
-		return nil, res, err
+		return nil, pathResolution{}, err
 	}
 
 	cfg := PerchConfig{
@@ -53,7 +56,7 @@ func (o *Orchestrator) buildPerch(settings *conf.Settings, threads int) (*Perch,
 
 	perch, err := NewPerch(&cfg)
 	if err != nil {
-		return nil, res, errors.New(err).
+		return nil, pathResolution{}, errors.New(err).
 			Component("classifier.orchestrator").
 			Category(errors.CategoryModelInit).
 			Context("model", RegistryIDPerchV2).

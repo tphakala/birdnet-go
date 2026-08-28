@@ -475,14 +475,10 @@ func TestPathCorrection_QueuedThenDrainedRepairsConfig(t *testing.T) {
 	t.Cleanup(func() { SetPathCorrectionPersistenceDisabled(false) })
 
 	// The reconciled notification is the user's only signal that a repair
-	// happened, and it had no coverage at all (only the user-owned SUBSTITUTED
+	// happened, and it had no positive coverage (only the user-owned SUBSTITUTED
 	// case was asserted, in TestApplyPathCorrection_UserOwnedSubstitutionNotifies).
 	//
-	// NOTE: this pins the emitter, not the delivery. On the real startup path the
-	// drain runs inside NewOrchestrator, which completes BEFORE the notification
-	// service is initialized, so notification.GetService() is nil there and the
-	// notification is silently dropped. That is a separate, pre-existing defect;
-	// green here does NOT mean a user sees the bell on startup.
+	// This assertion pins the emitter, not the whole delivery pipeline.
 	notification.ResetForTest()
 	t.Cleanup(notification.ResetForTest)
 	notification.Initialize(notification.DefaultServiceConfig())
@@ -572,6 +568,84 @@ func TestPathCorrection_QueuedThenDrainedRepairsConfig(t *testing.T) {
 		"a persisted repair must emit the reconciled notification")
 	assert.False(t, substituted,
 		"config WAS rewritten, so the substituted notification must not fire")
+}
+
+// TestRunPendingPathCorrections_DrainsEveryQueuedFamily pins that the drain
+// applies EVERY queued correction, not only the first. The Bat family is the
+// second correction on purpose: its three-path set (classifier, labels, shared
+// embedding extractor) is otherwise never exercised through queue+drain. A drain
+// that stops after pending[0] would repair the first family and leave the second
+// family's stale config untouched, which is invisible to the rest of the suite.
+func TestRunPendingPathCorrections_DrainsEveryQueuedFamily(t *testing.T) {
+	// Not parallel: mutates the conf global settings, conf.ConfigPath, and the
+	// process-level persistence switch.
+	redirectConfigFile(t)
+
+	SetPathCorrectionPersistenceDisabled(false)
+	t.Cleanup(func() { SetPathCorrectionPersistenceDisabled(false) })
+
+	perchEntry, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok)
+	batEntry := firstBatCatalogEntry(t)
+
+	// Installed gallery variants under a "models" root, so the resolved sets point
+	// at real, distinct files. Name the directory "models" so filepath.Base matches
+	// production and the stale gallery-managed paths below qualify.
+	modelsDir := filepath.Join(t.TempDir(), "models")
+	installedPerchModel := writeVariantModelFile(t, modelsDir, &perchEntry, "fp32")
+	installedPerchLabels := writeVariantLabelsFile(t, modelsDir, &perchEntry, "fp32")
+	batModel, batLabels, batEmb := writeBatGalleryFiles(t, modelsDir, batEntry)
+
+	o := &Orchestrator{}
+	o.SetModelsDir(modelsDir)
+
+	// Stale, gallery-managed configured paths for BOTH families: the same
+	// <models>/<entry ID>/<local name> (and <models>/shared/<local name>) shape,
+	// but under an OLD root that no longer exists (the changed-container-HOME case).
+	// isGalleryManagedPath qualifies them (grandparent base is "models"), and they
+	// differ from the resolved sets, so each family's correction is a real change.
+	staleRoot := filepath.Join(t.TempDir(), "models")
+	stale := &conf.Settings{}
+	stale.Perch.ModelPath = filepath.Join(staleRoot, perchEntry.ID, filepath.Base(installedPerchModel))
+	stale.Perch.LabelPath = filepath.Join(staleRoot, perchEntry.ID, filepath.Base(installedPerchLabels))
+	stale.Bat.ClassifierModel = filepath.Join(staleRoot, batEntry.ID, filepath.Base(batModel))
+	stale.Bat.LabelPath = filepath.Join(staleRoot, batEntry.ID, filepath.Base(batLabels))
+	stale.Bat.EmbeddingModel = filepath.Join(staleRoot, "shared", filepath.Base(batEmb))
+
+	origSettings := conf.GetSettings()
+	conf.StoreSettings(stale)
+	t.Cleanup(func() { conf.StoreSettings(origSettings) })
+
+	// Queue Perch first, Bat second. A drain that applies only pending[0] would
+	// repair Perch and leave the whole Bat set stale.
+	o.queuePathCorrection(RegistryIDPerchV2, pathResolution{
+		resolved:     modelFileSet{model: installedPerchModel, labels: installedPerchLabels},
+		usedFallback: true,
+	})
+	o.queuePathCorrection(RegistryIDBat, pathResolution{
+		resolved:     modelFileSet{model: batModel, labels: batLabels, embeddings: batEmb},
+		usedFallback: true,
+	})
+	require.Len(t, o.pendingPathCorrections, 2, "both families must be queued")
+
+	o.runPendingPathCorrections()
+
+	assert.Empty(t, o.pendingPathCorrections, "the drain must clear the queue")
+
+	got := conf.GetSettings()
+	require.NotNil(t, got)
+
+	// The first queued family (pending[0]) is repaired.
+	assert.Equal(t, installedPerchModel, got.Perch.ModelPath)
+	assert.Equal(t, installedPerchLabels, got.Perch.LabelPath)
+
+	// The second queued family (pending[1]) must be repaired by the SAME drain,
+	// all three paths. A drain that stops after pending[0] fails these.
+	assert.Equal(t, batModel, got.Bat.ClassifierModel,
+		"the second queued family must be repaired by the same drain, not skipped")
+	assert.Equal(t, batLabels, got.Bat.LabelPath)
+	assert.Equal(t, batEmb, got.Bat.EmbeddingModel,
+		"the shared embedding extractor is part of the second family's set")
 }
 
 // TestIsGalleryManagedPath gates the automatic config repair: only paths the

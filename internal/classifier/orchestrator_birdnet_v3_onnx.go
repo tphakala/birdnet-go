@@ -20,6 +20,9 @@ import (
 // decide whether to repair a stale configuration without resolving a second time
 // (see pathResolution). ReloadSecondaryModels discards it, which is what keeps a
 // backend or device swap from rewriting the user's paths.
+//
+// The returned resolution is meaningful only when err == nil; every error return
+// yields the zero pathResolution{}.
 func (o *Orchestrator) buildBirdNETV3(settings *conf.Settings, threads int) (*BirdNETV3, pathResolution, error) {
 	resolved, usedFallback := o.resolveFamilyPaths(RegistryIDBirdNETV3, modelFileSet{
 		model:  settings.BirdNETV3.ModelPath,
@@ -30,7 +33,7 @@ func (o *Orchestrator) buildBirdNETV3(settings *conf.Settings, threads int) (*Bi
 	labelPath := resolved.labels
 
 	if modelPath == "" || labelPath == "" {
-		return nil, res, errors.Newf("BirdNET v3.0 model files not installed or configured").
+		return nil, pathResolution{}, errors.Newf("BirdNET v3.0 model files not installed or configured").
 			Component("classifier.orchestrator").
 			Category(errors.CategoryModelInit).
 			Context("model", RegistryIDBirdNETV3).
@@ -38,7 +41,7 @@ func (o *Orchestrator) buildBirdNETV3(settings *conf.Settings, threads int) (*Bi
 	}
 
 	if err := checkORTOrFail(settings.BirdNET.ONNXRuntimePath, "BirdNET v3.0", RegistryIDBirdNETV3, "classifier.orchestrator"); err != nil {
-		return nil, res, err
+		return nil, pathResolution{}, err
 	}
 
 	cfg := BirdNETV3Config{
@@ -53,7 +56,7 @@ func (o *Orchestrator) buildBirdNETV3(settings *conf.Settings, threads int) (*Bi
 
 	model, err := NewBirdNETV3(&cfg)
 	if err != nil {
-		return nil, res, errors.New(err).
+		return nil, pathResolution{}, errors.New(err).
 			Component("classifier.orchestrator").
 			Category(errors.CategoryModelInit).
 			Context("model", RegistryIDBirdNETV3).

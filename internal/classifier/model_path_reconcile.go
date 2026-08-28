@@ -64,11 +64,16 @@ func (o *Orchestrator) deferPathCorrection(registryID string, resolved modelFile
 //
 // The resolution is threaded out of build* rather than recomputed here for two
 // reasons. It avoids resolving the same file set twice per load, and, more
-// importantly, it removes the disagreement window: the model constructor runs
-// between a build-time and a load-time resolution and takes real time, so an
-// external writer (a concurrent gallery install, uninstall or variant switch)
-// could otherwise make the second resolution differ from the set the model was
-// actually built from, and this repair would persist those other paths.
+// importantly, it removes the window BETWEEN THE TWO RESOLUTIONS: recomputing
+// here would resolve a second time after the model constructor (which takes real
+// time), so an external writer (a concurrent gallery install, uninstall or
+// variant switch) could otherwise make that second resolution differ from the set
+// the model was actually built from, and this repair would persist those other
+// paths. Threading the build's own resolution therefore guarantees the repair
+// persists the set the instance was actually built from. It does NOT close the
+// gap between resolving and persisting the paths (the drain still runs later, so
+// the persisted set can lag a gallery change that lands after the build); it only
+// removes the disagreement between two resolutions of the same load.
 //
 // ReloadSecondaryModels calls build* directly and never calls this, which is
 // what keeps a backend or device swap from rewriting the user's paths: the
