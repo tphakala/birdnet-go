@@ -400,14 +400,14 @@ func TestResolveFamilyPaths_IndeterminateFallsBackWithoutRepair(t *testing.T) {
 		"the model still resolves to the installed gallery model so analysis can run")
 	assert.Equal(t, installedLabels, got.labels)
 
-	o.queuePathCorrectionIfFallback(RegistryIDPerchV2, indeterminate, false)
+	o.queuePathCorrection(RegistryIDPerchV2, pathResolution{resolved: got, usedFallback: usedFallback})
 	assert.Empty(t, o.pendingPathCorrections,
 		"an indeterminate path must not queue a config repair")
 }
 
-// TestQueuePathCorrectionIfFallback_HealthySetQueuesNothing is the negative for
+// TestQueuePathCorrection_HealthySetQueuesNothing is the negative for
 // the self-heal: a fully present configured set must not queue any repair.
-func TestQueuePathCorrectionIfFallback_HealthySetQueuesNothing(t *testing.T) {
+func TestQueuePathCorrection_HealthySetQueuesNothing(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -440,10 +440,138 @@ func TestQueuePathCorrectionIfFallback_HealthySetQueuesNothing(t *testing.T) {
 	assert.Equal(t, configured, got,
 		"a healthy configured set must be returned verbatim, never swapped for the installed gallery variant")
 
-	o.queuePathCorrectionIfFallback(RegistryIDPerchV2, configured, false)
+	o.queuePathCorrection(RegistryIDPerchV2, pathResolution{resolved: got, usedFallback: usedFallback})
 
 	assert.Empty(t, o.pendingPathCorrections,
 		"a healthy, fully-present configured set must not queue a config repair")
+}
+
+// TestPathCorrection_QueuedThenDrainedRepairsConfig is the POSITIVE test for the
+// self-heal. It covers the middle of the chain that the two negative tests above
+// and TestApplyPathCorrection_PersistsRepairedPaths leave uncovered: that a stale
+// configured set is actually QUEUED, and that draining the queue actually
+// APPLIES the repair.
+//
+// Without it the entire self-heal can be deleted in silence. Two mutations leave
+// the rest of the suite green: reducing queuePathCorrection to a no-op, and
+// reducing runPendingPathCorrections to snapshot-and-discard. Models would still
+// load either way, because the runtime fallback is covered separately, so nothing
+// would look broken; but config.yaml would never be repaired, the stale basename
+// would keep feeding installedModelBasenameHint, and affected users would fall
+// back again on every restart forever.
+//
+// The scenario is the one GitHub #4201 and #4204 report: the models directory
+// prefix changed (a different container HOME), so the configured paths still have
+// the gallery's <models dir>/<entry ID>/<local name> shape but point under the OLD
+// root and no longer exist.
+func TestPathCorrection_QueuedThenDrainedRepairsConfig(t *testing.T) {
+	// Not parallel: mutates the conf global settings, conf.ConfigPath, the
+	// process-level persistence switch, and the global notification service.
+	redirectConfigFile(t)
+
+	// A diagnostic command may have disabled persistence process-wide; this test
+	// asserts the persisting path, so pin the switch for its duration.
+	SetPathCorrectionPersistenceDisabled(false)
+	t.Cleanup(func() { SetPathCorrectionPersistenceDisabled(false) })
+
+	// The reconciled notification is the user's only signal that a repair
+	// happened, and it had no coverage at all (only the user-owned SUBSTITUTED
+	// case was asserted, in TestApplyPathCorrection_UserOwnedSubstitutionNotifies).
+	//
+	// NOTE: this pins the emitter, not the delivery. On the real startup path the
+	// drain runs inside NewOrchestrator, which completes BEFORE the notification
+	// service is initialized, so notification.GetService() is nil there and the
+	// notification is silently dropped. That is a separate, pre-existing defect;
+	// green here does NOT mean a user sees the bell on startup.
+	notification.ResetForTest()
+	t.Cleanup(notification.ResetForTest)
+	notification.Initialize(notification.DefaultServiceConfig())
+	svc := notification.GetService()
+	require.NotNil(t, svc)
+	t.Cleanup(svc.Stop)
+
+	entry, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok)
+
+	// Name the directory "models" so filepath.Base matches production. That base
+	// name is what isGalleryManagedPath compares against, so it lets the stale
+	// path below sit under a DIFFERENT root and still qualify as gallery-managed,
+	// which is the whole point of the changed-HOME case.
+	modelsDir := filepath.Join(t.TempDir(), "models")
+	installedModel := writeVariantModelFile(t, modelsDir, &entry, "fp32")
+	installedLabels := writeVariantLabelsFile(t, modelsDir, &entry, "fp32")
+
+	o := &Orchestrator{}
+	o.SetModelsDir(modelsDir)
+
+	// The same gallery layout under the OLD root: right shape, absent on disk.
+	staleDir := filepath.Join(t.TempDir(), "models", entry.ID)
+	configured := modelFileSet{
+		model:  filepath.Join(staleDir, filepath.Base(installedModel)),
+		labels: filepath.Join(staleDir, filepath.Base(installedLabels)),
+	}
+
+	stale := &conf.Settings{}
+	stale.Perch.ModelPath = configured.model
+	stale.Perch.LabelPath = configured.labels
+	origSettings := conf.GetSettings()
+	conf.StoreSettings(stale)
+	t.Cleanup(func() { conf.StoreSettings(origSettings) })
+
+	// 1. The resolution reports a repairable fallback onto the installed variant.
+	resolved, usedFallback := o.resolveFamilyPaths(RegistryIDPerchV2, configured, false)
+	require.True(t, usedFallback,
+		"a confirmed-missing gallery path must be reported as repairable")
+	require.Equal(t, installedModel, resolved.model)
+	require.Equal(t, installedLabels, resolved.labels)
+
+	// 2. Queueing records it. A queuePathCorrection that never queues fails here.
+	o.queuePathCorrection(RegistryIDPerchV2, pathResolution{resolved: resolved, usedFallback: usedFallback})
+	require.Len(t, o.pendingPathCorrections, 1,
+		"a repairable fallback must queue exactly one correction")
+	assert.Equal(t, RegistryIDPerchV2, o.pendingPathCorrections[0].registryID)
+	assert.Equal(t, resolved, o.pendingPathCorrections[0].resolved,
+		"the queued correction must carry the set the model was actually built from")
+
+	// 3. Draining applies it. A runPendingPathCorrections that snapshots and
+	// discards fails here.
+	o.runPendingPathCorrections()
+
+	assert.Empty(t, o.pendingPathCorrections,
+		"the drain must clear the queue so a later drain cannot rewrite config again")
+
+	got := conf.GetSettings()
+	require.NotNil(t, got)
+	assert.Equal(t, installedModel, got.Perch.ModelPath,
+		"the drain must repair the stale model path in the published snapshot")
+	assert.Equal(t, installedLabels, got.Perch.LabelPath,
+		"the labels path is repaired as part of the same atomic set")
+
+	data, err := os.ReadFile(conf.ConfigPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), installedModel,
+		"the repair must reach config.yaml, otherwise the fallback repeats on every restart")
+	assert.NotContains(t, string(data), configured.model,
+		"the stale path must not survive in the persisted config")
+
+	// 4. The repair is announced. A silent repair leaves someone who lost
+	// detections for days with no explanation, which is the whole reason
+	// emitPathReconciledNotification exists.
+	list, err := svc.List(nil)
+	require.NoError(t, err)
+	var reconciled, substituted bool
+	for _, n := range list {
+		switch n.TitleKey {
+		case notification.MsgModelPathReconciledTitle:
+			reconciled = true
+		case notification.MsgModelPathSubstitutedTitle:
+			substituted = true
+		}
+	}
+	assert.True(t, reconciled,
+		"a persisted repair must emit the reconciled notification")
+	assert.False(t, substituted,
+		"config WAS rewritten, so the substituted notification must not fire")
 }
 
 // TestIsGalleryManagedPath gates the automatic config repair: only paths the
@@ -1062,10 +1190,11 @@ func TestResolveFamilyPaths_SafeUnderOrchestratorLock(t *testing.T) {
 		}, false)
 
 		// Queueing a correction is also done under the lock.
-		o.queuePathCorrectionIfFallback(RegistryIDPerchV2, modelFileSet{
+		stale, usedFallback := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
 			model:  "/nonexistent/perch_v2.onnx",
 			labels: "/nonexistent/perch_v2_labels.txt",
 		}, false)
+		o.queuePathCorrection(RegistryIDPerchV2, pathResolution{resolved: stale, usedFallback: usedFallback})
 	}()
 
 	select {

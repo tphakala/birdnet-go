@@ -58,29 +58,30 @@ func (o *Orchestrator) deferPathCorrection(registryID string, resolved modelFile
 	})
 }
 
-// queuePathCorrectionIfFallback resolves the family's paths and, when the
-// gallery fallback was used, queues the configuration repair. The loaders call
-// this after a successful build.
+// queuePathCorrection queues the configuration repair when the build resolved
+// through the gallery fallback. The loaders call it after a successful build,
+// passing the resolution their builder already computed.
 //
-// It re-runs the resolution the builder already performed rather than threading
-// the result out through build*, because build* is shared with
-// ReloadSecondaryModels, where a settings write is explicitly unwanted: a
-// backend or device swap must not rewrite the user's paths. The re-resolution is
-// a handful of read-only stats (presence classification, sibling recovery and
-// the installed-paths probe together) and cannot disagree with the build, since
-// nothing between them writes to the filesystem: the model constructor in
-// between opens the model and reads the label file, but writes nothing.
+// The resolution is threaded out of build* rather than recomputed here for two
+// reasons. It avoids resolving the same file set twice per load, and, more
+// importantly, it removes the disagreement window: the model constructor runs
+// between a build-time and a load-time resolution and takes real time, so an
+// external writer (a concurrent gallery install, uninstall or variant switch)
+// could otherwise make the second resolution differ from the set the model was
+// actually built from, and this repair would persist those other paths.
 //
-// Must be called with o.mu held. It only resolves paths and appends to the
-// pending queue; neither takes o.mu, so it is safe under the loaders' write
-// lock. The settings write itself happens later, in the drainer, after o.mu is
-// released.
-func (o *Orchestrator) queuePathCorrectionIfFallback(registryID string, configured modelFileSet, needEmbeddings bool) {
-	resolved, usedFallback := o.resolveFamilyPaths(registryID, configured, needEmbeddings)
-	if !usedFallback {
+// ReloadSecondaryModels calls build* directly and never calls this, which is
+// what keeps a backend or device swap from rewriting the user's paths: the
+// reload path simply discards the resolution.
+//
+// Must be called with o.mu held. It only appends to the pending queue, which
+// does not take o.mu, so it is safe under the loaders' write lock. The settings
+// write itself happens later, in the drainer, after o.mu is released.
+func (o *Orchestrator) queuePathCorrection(registryID string, res pathResolution) {
+	if !res.usedFallback {
 		return
 	}
-	o.deferPathCorrection(registryID, resolved)
+	o.deferPathCorrection(registryID, res.resolved)
 }
 
 // runPendingPathCorrections drains the queued configuration repairs, rewriting
@@ -96,7 +97,7 @@ func (o *Orchestrator) queuePathCorrectionIfFallback(registryID string, configur
 //
 // Must be called with o.mu NOT held: the snapshot-and-clear below takes o.mu
 // itself, and o.mu is not reentrant. (isGalleryManagedPath, reached from
-// applyPathCorrection, does NOT take o.mu; it is the drain that does.)
+// planPathCorrection, does NOT take o.mu; it is the drain that does.)
 func (o *Orchestrator) runPendingPathCorrections() {
 	o.mu.Lock()
 	pending := o.pendingPathCorrections

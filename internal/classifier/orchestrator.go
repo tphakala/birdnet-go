@@ -1606,7 +1606,10 @@ var openvinoCapableSecondaryBuilders = map[string]secondaryModelBuilder{
 	RegistryIDBirdNETV3: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
 		// Explicit nil-on-error return avoids the typed-nil interface trap (a
 		// nil *BirdNETV3 wrapped in a non-nil ModelInstance).
-		m, err := o.buildBirdNETV3(settings, threads)
+		// The path resolution is deliberately discarded: a backend or device swap
+		// must never rewrite the user's configured paths, so the reload path does
+		// not call queuePathCorrection.
+		m, _, err := o.buildBirdNETV3(settings, threads)
 		if err != nil {
 			return nil, err
 		}
@@ -1615,7 +1618,8 @@ var openvinoCapableSecondaryBuilders = map[string]secondaryModelBuilder{
 	RegistryIDPerchV2: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
 		// Explicit nil-on-error return avoids the typed-nil interface trap (a
 		// nil *Perch wrapped in a non-nil ModelInstance).
-		p, err := o.buildPerch(settings, threads)
+		// The path resolution is deliberately discarded (see buildBirdNETV3 above).
+		p, _, err := o.buildPerch(settings, threads)
 		if err != nil {
 			return nil, err
 		}
@@ -1624,7 +1628,8 @@ var openvinoCapableSecondaryBuilders = map[string]secondaryModelBuilder{
 	RegistryIDBat: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
 		// Explicit nil-on-error return avoids the typed-nil interface trap (a
 		// nil *Bat wrapped in a non-nil ModelInstance).
-		b, err := o.buildBat(settings, threads)
+		// The path resolution is deliberately discarded (see buildBirdNETV3 above).
+		b, _, err := o.buildBat(settings, threads)
 		if err != nil {
 			return nil, err
 		}

@@ -57,6 +57,26 @@ func (s modelFileSet) allPresentOnDisk(needEmbeddings bool) bool {
 // above, so it classifies as presenceMissing (repairable), NOT indeterminate.
 // The guard against that rewriting a user's own path is the gallery-layout
 // requirement in isGalleryManagedPath, not this classification.
+// pathResolution carries resolveFamilyPaths' outcome out of a model builder so
+// the loader can act on it without resolving a second time.
+//
+// The builder and the loader need different halves of the same resolution: the
+// builder needs the resolved paths to construct from, and the loader needs to
+// know whether the gallery fallback was used so it can queue the configuration
+// repair. Resolving twice would not only duplicate the stat work, it would open
+// a window: the model constructor runs between the two resolutions and takes
+// real time for an ONNX session, so a concurrent gallery install, uninstall or
+// variant switch could make the second resolution disagree with the first, and
+// the repair would then persist paths the model was NOT built from.
+type pathResolution struct {
+	// resolved is the file set the model was actually built from.
+	resolved modelFileSet
+	// usedFallback reports whether a configured path was CONFIRMED missing and
+	// the gallery set was substituted, i.e. whether the configuration is stale
+	// and may be repaired. See resolveFamilyPaths' second return value.
+	usedFallback bool
+}
+
 type diskPresence int
 
 const (
@@ -256,8 +276,11 @@ func (o *Orchestrator) resolveSiblingSet(registryID, modelPath string) (set mode
 	// model loaders, which hold o.mu.Lock(), and sync.RWMutex is not reentrant:
 	// acquiring a read lock here self-deadlocks the loader. This mirrors
 	// resolveInstalledPaths, which reads the same field on the same call path.
-	// The field is written once at construction and again by SetModelsDir before
-	// the pipeline starts, so it is stable by the time any of this runs.
+	// The read is safe because the CALLER's lock already excludes the only writers:
+	// the constructor writes o.modelsDir before o is published, and SetModelsDir
+	// writes it under o.mu.Lock(). That is a stronger guarantee than "it is set
+	// early and never changes again", and it keeps holding if a models-directory
+	// change is ever made dynamic.
 	modelsDir := o.modelsDir
 
 	base := filepath.Base(modelPath)
@@ -330,10 +353,14 @@ func declaresModelFile(files []CatalogFile, localName string) bool {
 //
 // Takes no Orchestrator lock: it reads only its arguments and the ActiveCatalog
 // snapshot (whose accessor takes its own unrelated catalogMu). It is called only
-// from planPathCorrection, after the loaders have released o.mu. It would in
-// fact be safe on a loader path today, but keep it off one: the drainer that
-// reaches it DOES take o.mu, so moving the pair inward reintroduces the
-// self-deadlock this branch already shipped once.
+// from planPathCorrection, which the drainer reaches after the loaders have
+// released o.mu.
+//
+// Calling THIS function under a loader's o.mu would be safe, since it takes no
+// orchestrator lock. What must not move inside a loader is its caller chain's
+// entry point, runPendingPathCorrections: that drainer takes o.mu itself to
+// snapshot and clear the queue, and o.mu is not reentrant, so draining under the
+// loaders' write lock self-deadlocks the load. Keep the drain where it is.
 func (o *Orchestrator) isGalleryManagedPath(registryID, path string) bool {
 	if path == "" {
 		return false
