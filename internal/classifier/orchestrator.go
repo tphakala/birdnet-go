@@ -117,9 +117,12 @@ type Orchestrator struct {
 
 	// pendingPathCorrections queues configuration repairs recorded by model
 	// loaders while they hold o.mu. Drained by runPendingPathCorrections after
-	// o.mu is released, because applying one writes config.yaml (file I/O) and
-	// consults isGalleryManagedPath, which takes o.mu itself. Appended only under
-	// o.mu.Lock(); snapshotted and cleared under o.mu by the drainer.
+	// o.mu is released, because the drainer itself takes o.mu to snapshot and
+	// clear this queue, and o.mu is not reentrant; applying one also writes
+	// config.yaml (file I/O). (isGalleryManagedPath, reached from the apply step,
+	// takes NO orchestrator lock; the drainer's own snapshot-and-clear is what
+	// requires the deferral.) Appended only under o.mu.Lock(); snapshotted and
+	// cleared under o.mu by the drainer.
 	pendingPathCorrections []pendingPathCorrection
 }
 
@@ -2131,11 +2134,12 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 		o.runPendingWarmups()
 	}
 
-	// Drain the queued configuration repairs once, AFTER the loop. Applying one
-	// writes config.yaml, so batching them means three stale families produce a
-	// single write instead of three. Unlike the warm-up drain above, the config
-	// write has no per-model RSS measurement to keep accurate, so it does not need
-	// to run inside the loop.
+	// Drain the queued configuration repairs AFTER the loop. Each pending family
+	// still does its own config.yaml write (there is no coalescing here); draining
+	// outside the loop keeps those writes out of the per-model RSS measurement
+	// window, the same reason the warm-up drain above runs where it does. Unlike
+	// the warm-up drain, the config write has no per-model RSS measurement of its
+	// own to keep accurate, so it does not need to run inside the loop.
 	o.runPendingPathCorrections()
 
 	return nil

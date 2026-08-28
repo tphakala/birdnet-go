@@ -80,10 +80,6 @@ func (o *Orchestrator) loadBat(threads int) error {
 		instance: bat,
 		backend:  secondaryTripletFor(settings),
 	}
-	// Defer the warm-up + RSS measurement until the caller releases o.mu, so the
-	// warm-up inference runs via the serialized inference path instead of stalling
-	// live inference on o.mu. The entry is registered above first
-	// so the drainer can find it by key.
 	// Queue a config repair when the model loaded from the gallery fallback
 	// because the configured path was stale. Drained after o.mu is released.
 	o.queuePathCorrectionIfFallback(RegistryIDBat, modelFileSet{
@@ -92,6 +88,10 @@ func (o *Orchestrator) loadBat(threads int) error {
 		embeddings: settings.Bat.EmbeddingModel,
 	}, true)
 
+	// Defer the warm-up + RSS measurement until the caller releases o.mu, so the
+	// warm-up inference runs via the serialized inference path instead of stalling
+	// live inference on o.mu. The entry is registered above first
+	// so the drainer can find it by key.
 	o.deferWarmup(bat.ModelID(), before)
 
 	GetLogger().Info("Bat model loaded into Orchestrator",

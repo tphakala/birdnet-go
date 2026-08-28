@@ -466,6 +466,8 @@
       "modelPath": {
         "reconciledTitle": "Percorsi dei file del modello riparati per {modelName}",
         "reconciledMessage": "I percorsi dei file configurati per {modelName} erano obsoleti e sono stati riparati per corrispondere al modello installato in {modelPath}.",
+        "substitutedTitle": "File del modello configurato per {modelName} non trovato",
+        "substitutedMessage": "Il file del modello configurato per {modelName} non è stato trovato sul disco, quindi viene utilizzato il modello installato in {modelPath}. La tua configurazione non è stata modificata.",
         "notRegisteredTitle": "Il modello non sta analizzando {sourceName}",
         "notRegisteredMessage": "{models} è assegnato alla sorgente audio \"{sourceName}\" ma al momento non riceve audio, quindi non produce rilevamenti. Apra la galleria dei modelli in Impostazioni per verificarne lo stato."
       },

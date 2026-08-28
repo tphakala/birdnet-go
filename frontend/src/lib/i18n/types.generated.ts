@@ -396,6 +396,8 @@ export type TranslationKey =
   | 'notifications.content.region.staleGlobalMessage' // params: modelName, oldRegion
   | 'notifications.content.modelPath.reconciledTitle' // params: modelName
   | 'notifications.content.modelPath.reconciledMessage' // params: modelName, modelPath
+  | 'notifications.content.modelPath.substitutedTitle' // params: modelName
+  | 'notifications.content.modelPath.substitutedMessage' // params: modelName, modelPath
   | 'notifications.content.modelPath.notRegisteredTitle' // params: sourceName
   | 'notifications.content.modelPath.notRegisteredMessage' // params: models, sourceName
   | 'notifications.content.alert.firedTitle' // params: rule_name
@@ -4212,6 +4214,11 @@ export type TranslationParams = {
   };
   'notifications.content.modelPath.reconciledTitle': { modelName: string | number };
   'notifications.content.modelPath.reconciledMessage': {
+    modelName: string | number;
+    modelPath: string | number;
+  };
+  'notifications.content.modelPath.substitutedTitle': { modelName: string | number };
+  'notifications.content.modelPath.substitutedMessage': {
     modelName: string | number;
     modelPath: string | number;
   };

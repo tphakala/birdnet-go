@@ -3,12 +3,14 @@ package classifier
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 // labelsRoleLocalName returns the labels file name a catalog variant declares.
@@ -307,12 +309,68 @@ func TestResolveFamilyPaths_EmptyMemberFilledMissingMemberReplaced(t *testing.T)
 	})
 }
 
+// TestResolveFamilyPaths_EmptyMemberFilledFromConfiguredVariant asserts that when
+// a configured model names a REGIONAL variant present on disk and its labels
+// member is empty, the empty labels are filled from that SAME variant, not from a
+// different installed variant (a global build) that the catalog happens to list
+// first. For bat, whose label files are per-region with region-specific counts, a
+// count coincidence would otherwise silently mislabel every detection.
+func TestResolveFamilyPaths_EmptyMemberFilledFromConfiguredVariant(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok)
+
+	modelsDir := t.TempDir()
+	// A global build is installed and is listed FIRST in the catalog, so
+	// resolveInstalledPaths returns its labels (perch_v2_labels.txt).
+	writeVariantModelFile(t, modelsDir, &entry, "fp32")
+	globalLabels := writeVariantLabelsFile(t, modelsDir, &entry, "fp32")
+
+	// The configuration names a regional variant, also installed, whose labels
+	// file is region-specific and distinct from the global one.
+	const regionalVariant = "no-dft-fp32@reunion"
+	regionalModel := writeVariantModelFile(t, modelsDir, &entry, regionalVariant)
+	regionalLabels := writeVariantLabelsFile(t, modelsDir, &entry, regionalVariant)
+	require.NotEqual(t, globalLabels, regionalLabels,
+		"the two variants must declare distinct labels files for this test to mean anything")
+
+	o := &Orchestrator{}
+	o.SetModelsDir(modelsDir)
+
+	// Configured model present (regional), labels empty: presenceComplete, so the
+	// empty labels member is filled. It must be filled from the regional model's
+	// own variant.
+	got, usedFallback := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
+		model:  regionalModel,
+		labels: "",
+	}, false)
+
+	assert.False(t, usedFallback, "an empty member is filled, not a stale fallback")
+	assert.Equal(t, regionalModel, got.model, "the configured regional model is kept")
+	assert.Equal(t, regionalLabels, got.labels,
+		"empty labels must be filled from the SAME variant the configured model names")
+	assert.NotEqual(t, globalLabels, got.labels,
+		"filling from the catalog-first global variant would mislabel the regional model")
+}
+
 // TestResolveFamilyPaths_IndeterminateFallsBackWithoutRepair pins A2's third
 // outcome: a configured path that is unreadable for a reason OTHER than absence
 // (here ENOTDIR, standing in for a volume that has not finished mounting) still
 // falls back at runtime so analysis can run, but must NOT rewrite config.
 func TestResolveFamilyPaths_IndeterminateFallsBackWithoutRepair(t *testing.T) {
 	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		// This test provokes the indeterminate branch with a path whose intermediate
+		// component is a regular file, which yields ENOTDIR on Linux and macOS. On
+		// Windows the same stat reports ERROR_PATH_NOT_FOUND, which Go maps to
+		// fs.ErrNotExist, so nonEmptyMembersPresence returns presenceMissing rather
+		// than presenceIndeterminate: repairable becomes true and both assertions
+		// below would fail. os.Chmod is not an alternative (it is a no-op on Windows,
+		// which would make the test pass vacuously).
+		t.Skip("ENOTDIR-via-file-prefix is ERROR_PATH_NOT_FOUND on Windows, mapped to fs.ErrNotExist")
+	}
 
 	entry, ok := GetCatalogEntry("perch-v2")
 	require.True(t, ok)
@@ -398,7 +456,10 @@ func TestIsGalleryManagedPath(t *testing.T) {
 	require.True(t, ok)
 	galleryName := modelRoleLocalName(t, variantByID(t, &entry, "fp32").Files)
 
-	modelsDir := t.TempDir()
+	// The models directory's base name is "models", as it is in production
+	// (~/.config/birdnet-go/models). isGalleryManagedPath now requires a candidate
+	// path's grandparent directory to match this base name.
+	modelsDir := filepath.Join(t.TempDir(), "models")
 	o := &Orchestrator{}
 	o.SetModelsDir(modelsDir)
 
@@ -443,6 +504,26 @@ func TestIsGalleryManagedPath(t *testing.T) {
 		t.Parallel()
 		assert.False(t, o.isGalleryManagedPath(RegistryIDPerchV2, ""))
 	})
+
+	t.Run("a NAS-mirror path that only mimics the gallery layout is NOT gallery managed", func(t *testing.T) {
+		t.Parallel()
+		// Correct basename and entry-ID parent, but the grandparent is "nas", not the
+		// models directory. This is the "moved my models to a NAS but left the local
+		// copy" migration: a late mount yields ENOENT (presenceMissing), and without
+		// the grandparent check the user's NAS path would be permanently rewritten to
+		// the local gallery copy.
+		assert.False(t, o.isGalleryManagedPath(RegistryIDPerchV2, "/mnt/nas/perch-v2/"+galleryName))
+	})
+
+	t.Run("a shared-role file under the models directory is gallery managed", func(t *testing.T) {
+		t.Parallel()
+		// The shared embedding extractor lives in <models>/shared/, so its grandparent
+		// is the models directory and it still qualifies.
+		batEntry := firstBatCatalogEntry(t)
+		embName := embeddingsRoleLocalName(t, batEntry.Files)
+		p := filepath.Join(modelsDir, "shared", embName)
+		assert.True(t, o.isGalleryManagedPath(RegistryIDBat, p))
+	})
 }
 
 // TestPlanPathCorrection covers the automatic configuration repair. It exercises
@@ -464,7 +545,9 @@ func TestPlanPathCorrection(t *testing.T) {
 		t.Parallel()
 
 		o := &Orchestrator{}
-		o.SetModelsDir(t.TempDir())
+		// Base name "models" so the changed-HOME stale paths below (grandparent
+		// "models") satisfy the grandparent requirement in isGalleryManagedPath.
+		o.SetModelsDir(filepath.Join(t.TempDir(), "models"))
 
 		current := &conf.Settings{}
 		// Paths the gallery wrote, under a models directory prefix that no longer
@@ -570,7 +653,7 @@ func TestPlanPathCorrection(t *testing.T) {
 		v3Labels := labelsRoleLocalName(t, variantByID(t, &v3, "fp32").Files)
 
 		o := &Orchestrator{}
-		o.SetModelsDir(t.TempDir())
+		o.SetModelsDir(filepath.Join(t.TempDir(), "models"))
 
 		current := &conf.Settings{}
 		current.BirdNETV3.ModelPath = "/home/birdnet/.config/birdnet-go/models/birdnet-v3.0/" + v3Model
@@ -603,7 +686,59 @@ func TestPlanPathCorrection(t *testing.T) {
 		})
 
 		assert.False(t, changed)
-		assert.Same(t, current, updated)
+		assert.Nil(t, updated,
+			"an unknown registry returns nil, never the live published snapshot")
+	})
+
+	t.Run("a mixed set with one user-owned field is abandoned whole", func(t *testing.T) {
+		t.Parallel()
+
+		o := &Orchestrator{}
+		o.SetModelsDir(filepath.Join(t.TempDir(), "models"))
+
+		// The model path is a stale gallery-managed path (would be rewritten on its
+		// own); the labels path is the user's own custom file. Both DIFFER from the
+		// resolved set. Because a resolved set is atomic, rewriting only the model
+		// while keeping the custom labels would persist a cross-variant hybrid, so
+		// the whole correction must be abandoned.
+		current := &conf.Settings{}
+		current.Perch.ModelPath = "/home/birdnet/.config/birdnet-go/models/perch-v2/" + galleryName
+		current.Perch.LabelPath = "/srv/my-models/my_own_labels.txt"
+
+		updated, changed := o.planPathCorrection(current, &pendingPathCorrection{
+			registryID: RegistryIDPerchV2,
+			resolved:   modelFileSet{model: newModel, labels: newLabels},
+		})
+
+		assert.False(t, changed,
+			"a user-owned field must veto the whole correction, not just its own field")
+		assert.Nil(t, updated,
+			"an abandoned correction returns nil so the gallery-managed model is never written")
+	})
+
+	t.Run("a gallery path already equal to the resolved value is not rewritten", func(t *testing.T) {
+		t.Parallel()
+
+		o := &Orchestrator{}
+		o.SetModelsDir(filepath.Join(t.TempDir(), "models"))
+
+		// Gallery-managed paths that ALREADY equal the resolved set. There is nothing
+		// to change: the no-op guard must skip a field whose value already matches,
+		// so the plan reports changed==false rather than "rewriting" a field to the
+		// value it already holds.
+		samePath := "/home/birdnet/.config/birdnet-go/models/perch-v2/" + galleryName
+		sameLabels := "/home/birdnet/.config/birdnet-go/models/perch-v2/" + galleryLabelsName
+		current := &conf.Settings{}
+		current.Perch.ModelPath = samePath
+		current.Perch.LabelPath = sameLabels
+
+		_, changed := o.planPathCorrection(current, &pendingPathCorrection{
+			registryID: RegistryIDPerchV2,
+			resolved:   modelFileSet{model: samePath, labels: sameLabels},
+		})
+
+		assert.False(t, changed,
+			"a configured path already equal to the resolved value is not a change")
 	})
 }
 
@@ -631,8 +766,9 @@ func TestApplyPathCorrection_PersistsRepairedPaths(t *testing.T) {
 	stalePath := filepath.Join(modelsDir, "perch-v2", galleryName)
 	stale.Perch.ModelPath = stalePath
 	stale.Perch.LabelPath = filepath.Join(modelsDir, "perch-v2", galleryLabelsName)
+	origSettings := conf.GetSettings()
 	conf.StoreSettings(stale)
-	t.Cleanup(func() { conf.StoreSettings(nil) })
+	t.Cleanup(func() { conf.StoreSettings(origSettings) })
 
 	newModel := "/models/perch-v2/perch_v2_reunion_no_dft.onnx"
 	newLabels := "/models/perch-v2/perch_v2_reunion_labels.txt"
@@ -655,6 +791,188 @@ func TestApplyPathCorrection_PersistsRepairedPaths(t *testing.T) {
 		"the persisted config must carry the repaired path; StoreSettings must run before SaveSettings")
 	assert.NotContains(t, string(data), stalePath,
 		"the stale model path must not survive in the persisted config")
+}
+
+// TestApplyPathCorrection_NoWriteWhenNothingChanged pins the redundant-write
+// short-circuit: when planPathCorrection reports no change (the configured paths
+// already equal the resolved set), applyPathCorrection must NOT publish a new
+// snapshot and must NOT persist config.yaml. Without the `if !changed { return }`
+// guard the whole package stays green while a StoreSettings + SaveSettings runs
+// on a plan that changed nothing.
+func TestApplyPathCorrection_NoWriteWhenNothingChanged(t *testing.T) {
+	// Not parallel: mutates the conf global settings and conf.ConfigPath.
+	redirectConfigFile(t)
+
+	entry, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok)
+	galleryName := modelRoleLocalName(t, variantByID(t, &entry, "fp32").Files)
+	galleryLabelsName := labelsRoleLocalName(t, variantByID(t, &entry, "fp32").Files)
+
+	modelsDir := t.TempDir()
+	o := &Orchestrator{}
+	o.SetModelsDir(modelsDir)
+
+	// Gallery-managed paths published as current, and the resolved set is the SAME:
+	// there is nothing to repair, so planPathCorrection reports changed==false.
+	same := &conf.Settings{}
+	same.Perch.ModelPath = filepath.Join(modelsDir, "perch-v2", galleryName)
+	same.Perch.LabelPath = filepath.Join(modelsDir, "perch-v2", galleryLabelsName)
+
+	origSettings := conf.GetSettings()
+	conf.StoreSettings(same)
+	t.Cleanup(func() { conf.StoreSettings(origSettings) })
+
+	before, err := os.ReadFile(conf.ConfigPath)
+	require.NoError(t, err)
+
+	o.applyPathCorrection(&pendingPathCorrection{
+		registryID: RegistryIDPerchV2,
+		resolved:   modelFileSet{model: same.Perch.ModelPath, labels: same.Perch.LabelPath},
+	})
+
+	assert.Same(t, same, conf.GetSettings(),
+		"nothing changed, so applyPathCorrection must not publish a new snapshot")
+	after, err := os.ReadFile(conf.ConfigPath)
+	require.NoError(t, err)
+	assert.Equal(t, before, after,
+		"nothing changed, so applyPathCorrection must not persist config.yaml")
+}
+
+// TestApplyPathCorrection_PersistenceDisabledSkipsWrite covers the read-only
+// diagnostic path (benchmark, rangefilter print): a stale gallery path still
+// resolves via the runtime fallback, but with persistence disabled the correction
+// is NOT written to config.yaml and no new snapshot is published.
+func TestApplyPathCorrection_PersistenceDisabledSkipsWrite(t *testing.T) {
+	// Not parallel: mutates the conf global settings, conf.ConfigPath, and the
+	// process-level persistence switch.
+	redirectConfigFile(t)
+
+	SetPathCorrectionPersistenceDisabled(true)
+	t.Cleanup(func() { SetPathCorrectionPersistenceDisabled(false) })
+
+	entry, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok)
+	galleryLabelsName := labelsRoleLocalName(t, variantByID(t, &entry, "fp32").Files)
+
+	// An installed gallery variant so the fallback has something to resolve to. Base
+	// name "models" so the stale gallery-managed path below satisfies the
+	// grandparent requirement in isGalleryManagedPath.
+	modelsDir := filepath.Join(t.TempDir(), "models")
+	installedModel := writeVariantModelFile(t, modelsDir, &entry, "fp32")
+	installedLabels := writeVariantLabelsFile(t, modelsDir, &entry, "fp32")
+
+	o := &Orchestrator{}
+	o.SetModelsDir(modelsDir)
+
+	// A stale, gallery-managed configured model (a regional variant's declared file
+	// name, so isGalleryManagedPath qualifies it) that is confirmed missing on disk.
+	// The labels member already equals the resolved labels, so only the model would
+	// be rewritten: planPathCorrection reports a real change on the serve path.
+	stale := &conf.Settings{}
+	stale.Perch.ModelPath = filepath.Join(modelsDir, "perch-v2", "perch_v2_reunion_no_dft.onnx")
+	stale.Perch.LabelPath = filepath.Join(modelsDir, "perch-v2", galleryLabelsName)
+
+	// The runtime fallback still resolves the missing path to the installed model,
+	// independent of persistence.
+	resolved, usedFallback := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
+		model:  stale.Perch.ModelPath,
+		labels: stale.Perch.LabelPath,
+	}, false)
+	require.True(t, usedFallback, "a confirmed-missing configured path must still fall back")
+	assert.Equal(t, installedModel, resolved.model,
+		"the fallback still resolves the model so analysis can run")
+	assert.Equal(t, installedLabels, resolved.labels)
+
+	origSettings := conf.GetSettings()
+	conf.StoreSettings(stale)
+	t.Cleanup(func() { conf.StoreSettings(origSettings) })
+
+	before, err := os.ReadFile(conf.ConfigPath)
+	require.NoError(t, err)
+
+	o.applyPathCorrection(&pendingPathCorrection{
+		registryID: RegistryIDPerchV2,
+		resolved:   resolved,
+	})
+
+	assert.Same(t, stale, conf.GetSettings(),
+		"persistence disabled: applyPathCorrection must not publish a new snapshot")
+	after, err := os.ReadFile(conf.ConfigPath)
+	require.NoError(t, err)
+	assert.Equal(t, before, after,
+		"persistence disabled: conf.SaveSettings must not run and config.yaml must be unchanged")
+}
+
+// TestApplyPathCorrection_UserOwnedSubstitutionNotifies covers the silent-runtime
+// -substitution gap: a user's custom model path is confirmed missing, so the
+// gallery fallback runs a different model, but the config is (correctly) NOT
+// rewritten because the path is user-owned. Without a notification the user runs a
+// model they never chose with no signal. applyPathCorrection must emit the
+// substituted notification (distinct from the reconciled one) and leave config
+// untouched.
+func TestApplyPathCorrection_UserOwnedSubstitutionNotifies(t *testing.T) {
+	// Not parallel: mutates conf globals, conf.ConfigPath, the persistence switch,
+	// and the process-global notification service.
+	redirectConfigFile(t)
+
+	SetPathCorrectionPersistenceDisabled(false)
+
+	notification.ResetForTest()
+	t.Cleanup(notification.ResetForTest)
+	notification.Initialize(notification.DefaultServiceConfig())
+	svc := notification.GetService()
+	require.NotNil(t, svc)
+	t.Cleanup(svc.Stop)
+
+	modelsDir := filepath.Join(t.TempDir(), "models")
+	o := &Orchestrator{}
+	o.SetModelsDir(modelsDir)
+
+	// A user's own model path (not gallery-managed): the self-heal must not rewrite
+	// it, so planPathCorrection abandons the correction and returns a nil snapshot.
+	current := &conf.Settings{}
+	current.Perch.ModelPath = "/srv/my-models/my_own_perch.onnx"
+	current.Perch.LabelPath = "/srv/my-models/my_own_labels.txt"
+
+	origSettings := conf.GetSettings()
+	conf.StoreSettings(current)
+	t.Cleanup(func() { conf.StoreSettings(origSettings) })
+
+	before, err := os.ReadFile(conf.ConfigPath)
+	require.NoError(t, err)
+
+	// The fallback resolved to the installed gallery model, differing from the
+	// configured (missing) custom path.
+	o.applyPathCorrection(&pendingPathCorrection{
+		registryID: RegistryIDPerchV2,
+		resolved: modelFileSet{
+			model:  filepath.Join(modelsDir, "perch-v2", "perch_v2.onnx"),
+			labels: filepath.Join(modelsDir, "perch-v2", "perch_v2_labels.txt"),
+		},
+	})
+
+	list, err := svc.List(nil)
+	require.NoError(t, err)
+	var substituted, reconciled bool
+	for _, n := range list {
+		switch n.TitleKey {
+		case notification.MsgModelPathSubstitutedTitle:
+			substituted = true
+		case notification.MsgModelPathReconciledTitle:
+			reconciled = true
+		}
+	}
+	assert.True(t, substituted,
+		"a user-owned path substituted at runtime must produce the substituted notification")
+	assert.False(t, reconciled,
+		"config was not rewritten, so the reconciled notification must NOT fire")
+
+	assert.Same(t, current, conf.GetSettings(),
+		"a user-owned path must not be rewritten, so no new snapshot is published")
+	after, err := os.ReadFile(conf.ConfigPath)
+	require.NoError(t, err)
+	assert.Equal(t, before, after,
+		"a user-owned path must not be persisted; config.yaml must be unchanged")
 }
 
 // TestResolveFamilyPaths_KeepsConfiguredVariantWhenOnlyCompanionIsMissing

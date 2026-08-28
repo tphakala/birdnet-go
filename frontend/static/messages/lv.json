@@ -466,6 +466,8 @@
       "modelPath": {
         "reconciledTitle": "Modeļa {modelName} failu ceļi salaboti",
         "reconciledMessage": "Konfigurētie failu ceļi modelim {modelName} bija novecojuši un tika salaboti, lai atbilstu instalētajam modelim vietā {modelPath}.",
+        "substitutedTitle": "Konfigurētais {modelName} modeļa fails netika atrasts",
+        "substitutedMessage": "Modelim {modelName} konfigurētais faila ceļš netika atrasts diskā, tāpēc tā vietā tiek izmantots instalētais modelis {modelPath}. Jūsu konfigurācija netika mainīta.",
         "notRegisteredTitle": "Modelis neanalizē {sourceName}",
         "notRegisteredMessage": "{models} ir piešķirts audio avotam \"{sourceName}\", bet pašlaik nesaņem audio, tāpēc neveic noteikšanas. Atveriet modeļu galeriju sadaļā Iestatījumi, lai pārbaudītu tā statusu."
       },

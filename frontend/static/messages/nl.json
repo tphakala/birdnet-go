@@ -466,6 +466,8 @@
       "modelPath": {
         "reconciledTitle": "Bestandspaden van model hersteld voor {modelName}",
         "reconciledMessage": "De geconfigureerde bestandspaden voor {modelName} waren verouderd en zijn hersteld om overeen te komen met het geïnstalleerde model op {modelPath}.",
+        "substitutedTitle": "Geconfigureerd modelbestand voor {modelName} niet gevonden",
+        "substitutedMessage": "Het voor {modelName} geconfigureerde modelbestand is niet op de schijf gevonden, dus wordt in plaats daarvan het geïnstalleerde model op {modelPath} gebruikt. Uw configuratie is ongewijzigd gebleven.",
         "notRegisteredTitle": "Model analyseert {sourceName} niet",
         "notRegisteredMessage": "{models} is toegewezen aan audiobron \"{sourceName}\", maar ontvangt momenteel geen audio en produceert daarom geen detecties. Open de modellengalerij in Instellingen om de status te controleren."
       },

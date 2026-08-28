@@ -466,6 +466,8 @@
       "modelPath": {
         "reconciledTitle": "Cesty k souborům modelu {modelName} opraveny",
         "reconciledMessage": "Nakonfigurované cesty k souborům pro {modelName} byly zastaralé a byly opraveny tak, aby odpovídaly nainstalovanému modelu v {modelPath}.",
+        "substitutedTitle": "Nakonfigurovaný soubor modelu pro {modelName} nebyl nalezen",
+        "substitutedMessage": "Soubor modelu nakonfigurovaný pro {modelName} nebyl na disku nalezen, proto se místo něj používá nainstalovaný model v {modelPath}. Vaše konfigurace zůstala nezměněna.",
         "notRegisteredTitle": "Model neanalyzuje {sourceName}",
         "notRegisteredMessage": "{models} je přiřazen ke zdroji zvuku \"{sourceName}\", ale momentálně nepřijímá zvuk, takže nevytváří detekce. Otevřete galerii modelů v Nastavení a zkontrolujte jeho stav."
       },

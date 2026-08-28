@@ -76,10 +76,6 @@ func (o *Orchestrator) loadBirdNETV3(threads int) error {
 		instance: model,
 		backend:  secondaryTripletFor(settings),
 	}
-	// Defer the warm-up + RSS measurement until the caller releases o.mu, so the
-	// warm-up inference runs via the serialized inference path instead of stalling
-	// live inference on o.mu. The entry is registered above first so the drainer
-	// can find it by key.
 	// Queue a config repair when the model loaded from the gallery fallback
 	// because the configured path was stale. Drained after o.mu is released.
 	o.queuePathCorrectionIfFallback(RegistryIDBirdNETV3, modelFileSet{
@@ -87,6 +83,10 @@ func (o *Orchestrator) loadBirdNETV3(threads int) error {
 		labels: settings.BirdNETV3.LabelPath,
 	}, false)
 
+	// Defer the warm-up + RSS measurement until the caller releases o.mu, so the
+	// warm-up inference runs via the serialized inference path instead of stalling
+	// live inference on o.mu. The entry is registered above first so the drainer
+	// can find it by key.
 	o.deferWarmup(model.ModelID(), before)
 
 	// No separate name resolver needed. BirdNET v3.0 labels carry both the

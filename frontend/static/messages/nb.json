@@ -466,6 +466,8 @@
       "modelPath": {
         "reconciledTitle": "Modellfilstier reparert for {modelName}",
         "reconciledMessage": "De konfigurerte filstiene for {modelName} var utdaterte og har blitt reparert for å samsvare med den installerte modellen på {modelPath}.",
+        "substitutedTitle": "Fant ikke den konfigurerte modellfilen for {modelName}",
+        "substitutedMessage": "Modellfilen som er konfigurert for {modelName}, ble ikke funnet på disken, så den installerte modellen på {modelPath} brukes i stedet. Konfigurasjonen din ble ikke endret.",
         "notRegisteredTitle": "Modellen analyserer ikke {sourceName}",
         "notRegisteredMessage": "{models} er tilordnet lydkilden \"{sourceName}\", men mottar for øyeblikket ikke lyd og produserer derfor ikke registreringer. Åpne modellgalleriet i Innstillinger for å sjekke statusen."
       },

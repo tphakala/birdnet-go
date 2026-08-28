@@ -466,6 +466,8 @@
       "modelPath": {
         "reconciledTitle": "Rutas de archivo del modelo reparadas para {modelName}",
         "reconciledMessage": "Las rutas de archivo configuradas para {modelName} estaban desactualizadas y se han reparado para coincidir con el modelo instalado en {modelPath}.",
+        "substitutedTitle": "No se encontró el archivo de modelo configurado para {modelName}",
+        "substitutedMessage": "El archivo de modelo configurado para {modelName} no se encontró en el disco, por lo que en su lugar se está usando el modelo instalado en {modelPath}. Su configuración no se modificó.",
         "notRegisteredTitle": "El modelo no está analizando {sourceName}",
         "notRegisteredMessage": "{models} está asignado a la fuente de audio \"{sourceName}\", pero actualmente no está recibiendo audio, por lo que no genera detecciones. Abra la galería de modelos en Configuración para comprobar su estado."
       },

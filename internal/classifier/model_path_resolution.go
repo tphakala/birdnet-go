@@ -49,9 +49,14 @@ func (s modelFileSet) allPresentOnDisk(needEmbeddings bool) bool {
 // diskPresence classifies the on-disk state of a required member set. It
 // separates a member that is confirmed absent (fs.ErrNotExist), which marks the
 // configured set stale and worth repairing, from a member that could not be
-// stat'd for another reason (EACCES, EIO, a stale NFS handle) such as an
-// external volume that has not finished mounting. The latter must not trigger a
-// permanent config rewrite, because the file may well reappear.
+// stat'd for another reason (EACCES, EIO, a stale NFS handle, a half-initialised
+// mount that reports EIO). The latter must not trigger a permanent config
+// rewrite, because the file may well reappear.
+//
+// Note the boundary: a FULLY unmounted path reports ErrNotExist, not one of the
+// above, so it classifies as presenceMissing (repairable), NOT indeterminate.
+// The guard against that rewriting a user's own path is the gallery-layout
+// requirement in isGalleryManagedPath, not this classification.
 type diskPresence int
 
 const (
@@ -61,8 +66,10 @@ const (
 	// absent (fs.ErrNotExist) and no member was indeterminate.
 	presenceMissing
 	// presenceIndeterminate means at least one non-empty required member could
-	// not be stat'd for a reason other than absence. It dominates presenceMissing
-	// so a transient error is never mistaken for a stale path.
+	// not be stat'd for a reason OTHER than absence (a permissions failure, an I/O
+	// error, a half-initialised mount reporting EIO). It dominates presenceMissing
+	// so a transient error is never mistaken for a stale path. A fully unmounted
+	// path reports ErrNotExist and is therefore presenceMissing, not this.
 	presenceIndeterminate
 )
 
@@ -138,7 +145,25 @@ func (o *Orchestrator) resolveFamilyPaths(registryID string, configured modelFil
 			return configured, false
 		}
 		filled := configured
-		m, l, e := o.resolveInstalledPaths(registryID)
+
+		// Fill the empty members, anchoring on the variant the configuration
+		// NAMES rather than on whichever variant the catalog lists first. When
+		// configured.model matches a catalog variant, resolveSiblingSet supplies
+		// its companion files from the SAME variant, so an empty labels member is
+		// filled with that model's own labels. Anchoring on resolveInstalledPaths
+		// instead can pair a configured regional model with a different variant's
+		// labels (say a global build that is also installed); for bat, whose label
+		// files are per-region with region-specific counts, a count coincidence
+		// then silently mislabels. resolveSiblingSet returns ok=false when
+		// configured.model is empty or names no catalog variant, so the
+		// resolveInstalledPaths fallback preserves the previous behaviour for
+		// those cases.
+		var m, l, e string
+		if sibling, ok := o.resolveSiblingSet(registryID, configured.model); ok {
+			m, l, e = sibling.model, sibling.labels, sibling.embeddings
+		} else {
+			m, l, e = o.resolveInstalledPaths(registryID)
+		}
 		if filled.model == "" {
 			filled.model = m
 		}
@@ -152,11 +177,15 @@ func (o *Orchestrator) resolveFamilyPaths(registryID string, configured modelFil
 	}
 
 	// A non-empty configured path is missing or unreadable. Only a CONFIRMED
-	// absence (presenceMissing) marks the set stale and may rewrite config; an
-	// unreadable member (presenceIndeterminate, an external volume slow to mount)
-	// still falls back at runtime so analysis can run, but must NOT persist a
-	// repair, or a transient error rewrites config.yaml permanently. repairable
-	// carries that distinction to both fallback returns below.
+	// absence (presenceMissing) marks the set stale and may rewrite config; a
+	// member that is unreadable for a reason OTHER than absence
+	// (presenceIndeterminate: a permissions failure, an I/O error, a
+	// half-initialised mount reporting EIO) still falls back at runtime so
+	// analysis can run, but must NOT persist a repair, or a transient error
+	// rewrites config.yaml permanently. repairable carries that distinction to
+	// both fallback returns below. (A fully unmounted path reports ErrNotExist, so
+	// it is presenceMissing here; isGalleryManagedPath is what stops that rewrite
+	// from taking over a user's own path.)
 	repairable := presence == presenceMissing
 
 	// Before the generic gallery probe, try to keep the variant the configured
@@ -312,6 +341,27 @@ func (o *Orchestrator) isGalleryManagedPath(registryID, path string) bool {
 
 	base := filepath.Base(path)
 	parent := filepath.Base(filepath.Dir(path))
+
+	// Require the grandparent directory to be the models directory itself (its base
+	// name, normally "models"). Matching only base + parent would qualify any path
+	// that merely MIRRORS the gallery layout, e.g. /mnt/nas/perch-v2/perch_v2.onnx:
+	// a NAS or USB mount that is late at boot yields ENOENT (the mountpoint exists
+	// but is empty), which classifies as presenceMissing with repairable=true, so a
+	// user who moved their models to a NAS but left a local gallery copy would have
+	// the NAS path permanently rewritten. Dropping only the models-directory PREFIX
+	// (not its base name) still handles the changed-container-HOME case the issues
+	// report, because base(modelsDir) stays "models" across a HOME change, while a
+	// look-alike under a different grandparent ("nas") is rejected. This matches the
+	// stricter precedent in Settings.MigrateOrphanGeomodelRangeFilter
+	// (internal/conf/range_filter_migration.go), which acts only on exact
+	// gallery-managed paths and never touches custom or hand-edited ones.
+	if o.modelsDir == "" {
+		return false
+	}
+	grandparent := filepath.Base(filepath.Dir(filepath.Dir(path)))
+	if grandparent != filepath.Base(o.modelsDir) {
+		return false
+	}
 
 	catalog := ActiveCatalog()
 	for i := range catalog {

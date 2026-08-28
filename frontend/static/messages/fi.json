@@ -466,6 +466,8 @@
       "modelPath": {
         "reconciledTitle": "Mallin {modelName} tiedostopolut korjattu",
         "reconciledMessage": "Mallille {modelName} määritetyt tiedostopolut olivat vanhentuneet, ja ne korjattiin vastaamaan asennettua mallia sijainnissa {modelPath}.",
+        "substitutedTitle": "Mallille {modelName} määritettyä mallitiedostoa ei löytynyt",
+        "substitutedMessage": "Mallille {modelName} määritettyä mallitiedostoa ei löytynyt levyltä, joten sen sijaan käytetään asennettua mallia sijainnissa {modelPath}. Asetuksiasi ei muutettu.",
         "notRegisteredTitle": "Malli ei analysoi kohdetta {sourceName}",
         "notRegisteredMessage": "{models} on liitetty äänilähteeseen \"{sourceName}\", mutta se ei tällä hetkellä vastaanota ääntä, joten se ei tuota havaintoja. Avaa Asetusten malligalleria tarkistaaksesi sen tilan."
       },

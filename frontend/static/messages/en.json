@@ -466,6 +466,8 @@
       "modelPath": {
         "reconciledTitle": "Model file paths repaired for {modelName}",
         "reconciledMessage": "Configured file paths for {modelName} were out of date and have been repaired to match the installed model at {modelPath}.",
+        "substitutedTitle": "Configured model file for {modelName} was not found",
+        "substitutedMessage": "The model file configured for {modelName} was not found on disk, so the installed model at {modelPath} is being used instead. Your configuration was left unchanged.",
         "notRegisteredTitle": "Model is not analyzing {sourceName}",
         "notRegisteredMessage": "{models} is assigned to audio source \"{sourceName}\" but is not currently receiving audio, so it is not producing detections. Open the model gallery in Settings to check its status."
       },

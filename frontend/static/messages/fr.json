@@ -466,6 +466,8 @@
       "modelPath": {
         "reconciledTitle": "Chemins de fichiers du modèle réparés pour {modelName}",
         "reconciledMessage": "Les chemins de fichiers configurés pour {modelName} étaient obsolètes et ont été réparés pour correspondre au modèle installé à l'emplacement {modelPath}.",
+        "substitutedTitle": "Le fichier de modèle configuré pour {modelName} est introuvable",
+        "substitutedMessage": "Le fichier de modèle configuré pour {modelName} est introuvable sur le disque, le modèle installé à l'emplacement {modelPath} est donc utilisé à la place. Votre configuration n'a pas été modifiée.",
         "notRegisteredTitle": "Le modèle n'analyse pas {sourceName}",
         "notRegisteredMessage": "{models} est assigné à la source audio \"{sourceName}\" mais ne reçoit actuellement pas d'audio, il ne produit donc aucune détection. Ouvrez la galerie de modèles dans les Paramètres pour vérifier son état."
       },
