@@ -127,7 +127,7 @@ func writeVariantModelFile(t *testing.T, modelsDir string, entry *CatalogEntry, 
 	subdir := filepath.Join(modelsDir, entry.ID)
 	require.NoError(t, os.MkdirAll(subdir, 0o755))
 	modelPath := filepath.Join(subdir, modelName)
-	require.NoError(t, os.WriteFile(modelPath, []byte("fake-onnx-data"), 0o644))
+	require.NoError(t, os.WriteFile(modelPath, []byte("fake-onnx-data"), 0o600))
 	return modelPath
 }
 

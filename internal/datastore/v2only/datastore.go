@@ -23,7 +23,6 @@ import (
 	"maps"
 	"math"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -194,7 +193,7 @@ type Config struct {
 	ChiropteraClassID  *uint // "Chiroptera" taxonomic class ID (optional)
 
 	// Labels provides species label mappings in "ScientificName_CommonName" format.
-	// Used to build speciesMap for GetThresholdEvents workaround. See issue #1907.
+	// Used to build the species name map for common<->scientific name resolution.
 	Labels []string
 
 	// SpeciesCodeMap maps scientific names to eBird species codes.
@@ -349,8 +348,7 @@ func New(cfg *Config) (*Datastore, error) {
 }
 
 // buildNameMaps parses BirdNET labels ("ScientificName_CommonName" format)
-// into lookup maps for common name resolution.
-// See issue #1907 for context on species map usage.
+// into lookup maps for common<->scientific name resolution.
 // When resolver is non-nil, each label's common name is overridden by the
 // resolver (authoritative/localized); labels the resolver does not cover keep
 // their embedded common name. This keeps the reverse (search) maps consistent
@@ -3539,10 +3537,16 @@ func (ds *Datastore) civilDawnMinuteLookup() civilDawnMinuteLookup {
 // Dynamic Threshold Methods
 // ============================================================
 
-// thresholdScientificName extracts the scientific name from a threshold's label.
-func thresholdScientificName(t *entities.DynamicThreshold) string {
-	if t.Label != nil && t.Label.ScientificName != "" {
-		return detection.ExtractScientificName(t.Label.ScientificName)
+// displayScientificName returns the scientific name for display metadata, preferring
+// the stored column and falling back to resolving it from the species (common) name
+// when empty. Scientific name is display-only metadata since #4195; thresholds and
+// events are keyed by species (lowercase common name), not by a model-scoped label.
+func (ds *Datastore) displayScientificName(speciesName, stored string) string {
+	if stored != "" {
+		return stored
+	}
+	if resolved := ds.resolveToScientificName(speciesName); resolved != speciesName {
+		return resolved
 	}
 	return ""
 }
@@ -3604,44 +3608,39 @@ func (ds *Datastore) resolveToScientificName(name string) string {
 	return name
 }
 
-// SaveDynamicThreshold saves a dynamic threshold.
-// Resolves the scientific name to a label ID before saving.
+// SaveDynamicThreshold saves a dynamic threshold, keyed by species (lowercase common
+// name). Model-independent: no label resolution (#4195).
 func (ds *Datastore) SaveDynamicThreshold(threshold *datastore.DynamicThreshold) error {
 	if ds.threshold == nil {
 		return fmt.Errorf("threshold repository not configured")
 	}
 	ctx := context.Background()
 
-	// Resolve scientific name to label ID using default model
-	label, err := ds.label.GetOrCreate(ctx, threshold.ScientificName, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
-	if err != nil {
-		return fmt.Errorf("failed to resolve label for threshold: %w", err)
-	}
-
 	v2Threshold := &entities.DynamicThreshold{
-		LabelID:       label.ID,
-		Level:         threshold.Level,
-		CurrentValue:  threshold.CurrentValue,
-		BaseThreshold: threshold.BaseThreshold,
-		HighConfCount: threshold.HighConfCount,
-		ValidHours:    threshold.ValidHours,
-		ExpiresAt:     threshold.ExpiresAt,
-		LastTriggered: threshold.LastTriggered,
-		FirstCreated:  threshold.FirstCreated,
-		TriggerCount:  threshold.TriggerCount,
+		SpeciesName:    strings.ToLower(threshold.SpeciesName),
+		ScientificName: threshold.ScientificName,
+		Level:          threshold.Level,
+		CurrentValue:   threshold.CurrentValue,
+		BaseThreshold:  threshold.BaseThreshold,
+		HighConfCount:  threshold.HighConfCount,
+		ValidHours:     threshold.ValidHours,
+		ExpiresAt:      threshold.ExpiresAt,
+		LastTriggered:  threshold.LastTriggered,
+		FirstCreated:   threshold.FirstCreated,
+		TriggerCount:   threshold.TriggerCount,
 	}
 	return ds.threshold.SaveDynamicThreshold(ctx, v2Threshold)
 }
 
 // GetDynamicThreshold retrieves a dynamic threshold by species name.
-// Thresholds are tracked per species; the v2 schema scopes them through LabelID.
+// Thresholds are keyed by species (lowercase common name); model-independent (#4195).
 func (ds *Datastore) GetDynamicThreshold(speciesName string) (*datastore.DynamicThreshold, error) {
 	if ds.threshold == nil {
 		return nil, fmt.Errorf("threshold repository not configured")
 	}
 	ctx := context.Background()
-	// Resolve to scientific name in case caller passes a common name
-	t, err := ds.threshold.GetDynamicThreshold(ctx, ds.resolveToScientificName(speciesName))
+	// Thresholds are keyed by species (lowercase common name); look up directly.
+	t, err := ds.threshold.GetDynamicThreshold(ctx, strings.ToLower(speciesName))
 	if err != nil {
 		// Not-found is a benign result, not a DB fault. Wrap it as a CategoryNotFound
 		// EnhancedError (never CategoryDatabase, so it is not surfaced to Sentry as a
@@ -3664,11 +3663,10 @@ func (ds *Datastore) GetDynamicThreshold(speciesName string) (*datastore.Dynamic
 			Context("operation", "get_dynamic_threshold").
 			Build()
 	}
-	scientificName := thresholdScientificName(t)
 	return &datastore.DynamicThreshold{
 		ID:             t.ID,
-		SpeciesName:    strings.ToLower(ds.resolveCommonName(scientificName)),
-		ScientificName: scientificName,
+		SpeciesName:    t.SpeciesName,
+		ScientificName: ds.displayScientificName(t.SpeciesName, t.ScientificName),
 		Level:          t.Level,
 		CurrentValue:   t.CurrentValue,
 		BaseThreshold:  t.BaseThreshold,
@@ -3699,11 +3697,10 @@ func (ds *Datastore) GetAllDynamicThresholds(limit ...int) ([]datastore.DynamicT
 	result := make([]datastore.DynamicThreshold, 0, len(v2Thresholds))
 	for i := range v2Thresholds {
 		t := &v2Thresholds[i]
-		scientificName := thresholdScientificName(t)
 		result = append(result, datastore.DynamicThreshold{
 			ID:             t.ID,
-			SpeciesName:    strings.ToLower(ds.resolveCommonName(scientificName)),
-			ScientificName: scientificName,
+			SpeciesName:    t.SpeciesName,
+			ScientificName: ds.displayScientificName(t.SpeciesName, t.ScientificName),
 			Level:          t.Level,
 			CurrentValue:   t.CurrentValue,
 			BaseThreshold:  t.BaseThreshold,
@@ -3725,7 +3722,7 @@ func (ds *Datastore) DeleteDynamicThreshold(speciesName string) error {
 		return fmt.Errorf("threshold repository not configured")
 	}
 	ctx := context.Background()
-	return ds.threshold.DeleteDynamicThreshold(ctx, ds.resolveToScientificName(speciesName))
+	return ds.threshold.DeleteDynamicThreshold(ctx, strings.ToLower(speciesName))
 }
 
 // DeleteExpiredDynamicThresholds deletes expired thresholds.
@@ -3743,11 +3740,11 @@ func (ds *Datastore) UpdateDynamicThresholdExpiry(speciesName string, expiresAt 
 		return fmt.Errorf("threshold repository not configured")
 	}
 	ctx := context.Background()
-	return ds.threshold.UpdateDynamicThresholdExpiry(ctx, ds.resolveToScientificName(speciesName), expiresAt)
+	return ds.threshold.UpdateDynamicThresholdExpiry(ctx, strings.ToLower(speciesName), expiresAt)
 }
 
-// BatchSaveDynamicThresholds saves multiple thresholds.
-// Resolves scientific names to label IDs before saving.
+// BatchSaveDynamicThresholds saves multiple thresholds, keyed by species
+// (lowercase common name); model-independent, no label resolution (#4195).
 func (ds *Datastore) BatchSaveDynamicThresholds(thresholds []datastore.DynamicThreshold) error {
 	if ds.threshold == nil {
 		return fmt.Errorf("threshold repository not configured")
@@ -3757,40 +3754,22 @@ func (ds *Datastore) BatchSaveDynamicThresholds(thresholds []datastore.DynamicTh
 	}
 	ctx := context.Background()
 
-	// Collect all scientific names for batch resolution
-	names := make([]string, 0, len(thresholds))
-	for i := range thresholds {
-		if thresholds[i].ScientificName != "" {
-			names = append(names, thresholds[i].ScientificName)
-		}
-	}
-
-	// Batch resolve all labels in one operation using default model
-	labels, err := ds.label.BatchGetOrCreate(ctx, names, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
-	if err != nil {
-		return fmt.Errorf("failed to resolve labels for thresholds: %w", err)
-	}
-
-	// Build v2 thresholds with resolved label IDs
+	// Build v2 thresholds keyed by species (lowercase common name); model-independent (#4195).
 	v2Thresholds := make([]entities.DynamicThreshold, 0, len(thresholds))
 	for i := range thresholds {
 		t := &thresholds[i]
-		label := labels[t.ScientificName]
-		if label == nil {
-			return fmt.Errorf("label not found for threshold %s", t.ScientificName)
-		}
-
 		v2Thresholds = append(v2Thresholds, entities.DynamicThreshold{
-			LabelID:       label.ID,
-			Level:         t.Level,
-			CurrentValue:  t.CurrentValue,
-			BaseThreshold: t.BaseThreshold,
-			HighConfCount: t.HighConfCount,
-			ValidHours:    t.ValidHours,
-			ExpiresAt:     t.ExpiresAt,
-			LastTriggered: t.LastTriggered,
-			FirstCreated:  t.FirstCreated,
-			TriggerCount:  t.TriggerCount,
+			SpeciesName:    strings.ToLower(t.SpeciesName),
+			ScientificName: t.ScientificName,
+			Level:          t.Level,
+			CurrentValue:   t.CurrentValue,
+			BaseThreshold:  t.BaseThreshold,
+			HighConfCount:  t.HighConfCount,
+			ValidHours:     t.ValidHours,
+			ExpiresAt:      t.ExpiresAt,
+			LastTriggered:  t.LastTriggered,
+			FirstCreated:   t.FirstCreated,
+			TriggerCount:   t.TriggerCount,
 		})
 	}
 	return ds.threshold.BatchSaveDynamicThresholds(ctx, v2Thresholds)
@@ -3826,125 +3805,59 @@ func (ds *Datastore) GetDynamicThresholdStats() (totalCount, activeCount, atMini
 // Threshold Event Methods
 // ============================================================
 
-// eventSpeciesName extracts the species name from an event's label.
-// Handles legacy concatenated "ScientificName_CommonName" format.
-func eventSpeciesName(e *entities.ThresholdEvent) string {
-	if e.Label != nil && e.Label.ScientificName != "" {
-		return detection.ExtractScientificName(e.Label.ScientificName)
-	}
-	return ""
-}
-
-// SaveThresholdEvent saves a threshold event.
-// Uses event.ScientificName (if provided) for correct label resolution in V2 schema.
-// Falls back to event.SpeciesName (common name) for backward compatibility with
-// events created before #1907 fix.
+// SaveThresholdEvent saves a threshold event, keyed by species (lowercase common
+// name); model-independent (#4195). ScientificName is stored as display metadata.
 func (ds *Datastore) SaveThresholdEvent(event *datastore.ThresholdEvent) error {
 	if ds.threshold == nil {
 		return fmt.Errorf("threshold repository not configured")
 	}
 	ctx := context.Background()
 
-	// Use ScientificName if available (new behavior after #1907 fix),
-	// otherwise fall back to SpeciesName (common name) for backward compatibility.
-	labelName := event.ScientificName
-	if labelName == "" {
-		// Fallback for events without ScientificName populated.
-		// This creates incorrect labels but maintains backward compatibility.
-		labelName = event.SpeciesName
-	}
-
-	label, err := ds.label.GetOrCreate(ctx, labelName, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
-	if err != nil {
-		return fmt.Errorf("failed to resolve label for event: %w", err)
-	}
-
 	v2Event := &entities.ThresholdEvent{
-		LabelID:       label.ID,
-		PreviousLevel: event.PreviousLevel,
-		NewLevel:      event.NewLevel,
-		PreviousValue: event.PreviousValue,
-		NewValue:      event.NewValue,
-		ChangeReason:  event.ChangeReason,
-		Confidence:    event.Confidence,
-		CreatedAt:     event.CreatedAt,
+		SpeciesName:    strings.ToLower(event.SpeciesName),
+		ScientificName: event.ScientificName,
+		PreviousLevel:  event.PreviousLevel,
+		NewLevel:       event.NewLevel,
+		PreviousValue:  event.PreviousValue,
+		NewValue:       event.NewValue,
+		ChangeReason:   event.ChangeReason,
+		Confidence:     event.Confidence,
+		CreatedAt:      event.CreatedAt,
 	}
 	return ds.threshold.SaveThresholdEvent(ctx, v2Event)
 }
 
-// GetThresholdEvents retrieves threshold events for a species.
-// WORKAROUND(#1907): Prior to the fix, events were saved with labels created from common names
-// (e.g., "american robin" stored as scientific_name). After the fix, events are saved with
-// correct scientific names (e.g., "Turdus migratorius"). This method queries both label types
-// to return all events during the transition period.
-// TODO: Remove this workaround when legacy database support is dropped. At that point,
-// clean up orphaned common-name labels and simplify to a single query using scientific name.
+// GetThresholdEvents retrieves threshold events for a species (lowercase common name).
+// Events are keyed by species and ordered/limited by the repository (#4195).
 func (ds *Datastore) GetThresholdEvents(speciesName string, limit int) ([]datastore.ThresholdEvent, error) {
 	if ds.threshold == nil {
 		return []datastore.ThresholdEvent{}, nil
 	}
 	ctx := context.Background()
 
-	// Query 1: Try with the provided name (common name) - finds legacy/incorrectly saved events
-	v2Events, err := ds.threshold.GetThresholdEvents(ctx, speciesName, limit)
+	v2Events, err := ds.threshold.GetThresholdEvents(ctx, strings.ToLower(speciesName), limit)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).
 			Context("operation", "get_threshold_events").
-			Context("query_type", "common_name").
 			Build()
 	}
 
-	// Query 2: If we can resolve to scientific name, also query with that
-	// This finds correctly saved events (after #1907 fix)
-	// Resolve through resolveToScientificName so this shares the reverse map's NFC-folded
-	// normalization; a decomposed (NFD) localized name must match the NFC-folded keys.
-	if scientificName := ds.resolveToScientificName(speciesName); scientificName != speciesName {
-		sciEvents, err := ds.threshold.GetThresholdEvents(ctx, scientificName, limit)
-		if err != nil {
-			return nil, errors.New(err).
-				Component("datastore").
-				Category(errors.CategoryDatabase).
-				Context("operation", "get_threshold_events").
-				Context("query_type", "scientific_name").
-				Build()
-		}
-		v2Events = append(v2Events, sciEvents...)
-	}
-
-	// Note: Deduplication not needed - each event has exactly one LabelID,
-	// so queries for different labels return disjoint result sets.
-	uniqueEvents := v2Events
-
-	// Sort by CreatedAt DESC (most recent first). Tie-break on ID so events sharing a
-	// timestamp truncate deterministically when the limit is applied below.
-	sort.Slice(uniqueEvents, func(i, j int) bool {
-		if uniqueEvents[i].CreatedAt.Equal(uniqueEvents[j].CreatedAt) {
-			return uniqueEvents[i].ID > uniqueEvents[j].ID
-		}
-		return uniqueEvents[i].CreatedAt.After(uniqueEvents[j].CreatedAt)
-	})
-
-	// Apply limit after merge
-	if limit > 0 && len(uniqueEvents) > limit {
-		uniqueEvents = uniqueEvents[:limit]
-	}
-
-	// Convert to datastore.ThresholdEvent
-	result := make([]datastore.ThresholdEvent, 0, len(uniqueEvents))
-	for i := range uniqueEvents {
-		e := &uniqueEvents[i]
+	result := make([]datastore.ThresholdEvent, 0, len(v2Events))
+	for i := range v2Events {
+		e := &v2Events[i]
 		result = append(result, datastore.ThresholdEvent{
-			ID:            e.ID,
-			SpeciesName:   eventSpeciesName(e),
-			PreviousLevel: e.PreviousLevel,
-			NewLevel:      e.NewLevel,
-			PreviousValue: e.PreviousValue,
-			NewValue:      e.NewValue,
-			ChangeReason:  e.ChangeReason,
-			Confidence:    e.Confidence,
-			CreatedAt:     e.CreatedAt,
+			ID:             e.ID,
+			SpeciesName:    e.SpeciesName,
+			ScientificName: ds.displayScientificName(e.SpeciesName, e.ScientificName),
+			PreviousLevel:  e.PreviousLevel,
+			NewLevel:       e.NewLevel,
+			PreviousValue:  e.PreviousValue,
+			NewValue:       e.NewValue,
+			ChangeReason:   e.ChangeReason,
+			Confidence:     e.Confidence,
+			CreatedAt:      e.CreatedAt,
 		})
 	}
 	return result, nil
@@ -3968,55 +3881,33 @@ func (ds *Datastore) GetRecentThresholdEvents(limit int) ([]datastore.ThresholdE
 	for i := range v2Events {
 		e := &v2Events[i]
 		result = append(result, datastore.ThresholdEvent{
-			ID:            e.ID,
-			SpeciesName:   eventSpeciesName(e),
-			PreviousLevel: e.PreviousLevel,
-			NewLevel:      e.NewLevel,
-			PreviousValue: e.PreviousValue,
-			NewValue:      e.NewValue,
-			ChangeReason:  e.ChangeReason,
-			Confidence:    e.Confidence,
-			CreatedAt:     e.CreatedAt,
+			ID:             e.ID,
+			SpeciesName:    e.SpeciesName,
+			ScientificName: ds.displayScientificName(e.SpeciesName, e.ScientificName),
+			PreviousLevel:  e.PreviousLevel,
+			NewLevel:       e.NewLevel,
+			PreviousValue:  e.PreviousValue,
+			NewValue:       e.NewValue,
+			ChangeReason:   e.ChangeReason,
+			Confidence:     e.Confidence,
+			CreatedAt:      e.CreatedAt,
 		})
 	}
 	return result, nil
 }
 
-// DeleteThresholdEvents deletes threshold events for a species.
-// WORKAROUND(#1907): mirrors GetThresholdEvents' dual lookup. It deletes events saved
-// under BOTH the provided name (legacy common-name labels) AND the resolved scientific
-// name (post-#1907 labels). Without the common-name pass, legacy events survive the
-// delete and GetThresholdEvents resurfaces them on the next read.
-// TODO: Collapse to a single scientific-name delete when the #1907 workaround is removed
-// (after legacy common-name labels have been migrated).
+// DeleteThresholdEvents deletes threshold events for a species (lowercase common name).
 func (ds *Datastore) DeleteThresholdEvents(speciesName string) error {
 	if ds.threshold == nil {
 		return nil
 	}
 	ctx := context.Background()
-
-	// Delete by the provided name first - matches legacy/incorrectly saved events
-	// whose label scientific_name actually holds the common name.
-	if err := ds.threshold.DeleteThresholdEvents(ctx, speciesName); err != nil {
+	if err := ds.threshold.DeleteThresholdEvents(ctx, strings.ToLower(speciesName)); err != nil {
 		return errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).
 			Context("operation", "delete_threshold_events").
-			Context("query_type", "common_name").
 			Build()
-	}
-
-	// Also delete by the resolved scientific name when it differs - matches
-	// correctly saved events (after the #1907 fix).
-	if scientificName := ds.resolveToScientificName(speciesName); scientificName != speciesName {
-		if err := ds.threshold.DeleteThresholdEvents(ctx, scientificName); err != nil {
-			return errors.New(err).
-				Component("datastore").
-				Category(errors.CategoryDatabase).
-				Context("operation", "delete_threshold_events").
-				Context("query_type", "scientific_name").
-				Build()
-		}
 	}
 	return nil
 }

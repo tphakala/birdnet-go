@@ -463,6 +463,14 @@
         "staleMessage": "{modelName} est installé pour {oldRegion}, mais votre nouvel emplacement correspond à {newRegion}. Vous pouvez changer de variante depuis la galerie de modèles dans les Paramètres.",
         "staleGlobalMessage": "{modelName} est installé pour {oldRegion}, mais votre nouvel emplacement est en dehors de sa couverture. Vous pouvez passer à la variante globale depuis la galerie de modèles dans les Paramètres."
       },
+      "modelPath": {
+        "reconciledTitle": "Chemins de fichiers du modèle réparés pour {modelName}",
+        "reconciledMessage": "Les chemins de fichiers configurés pour {modelName} étaient obsolètes et ont été réparés pour correspondre au modèle installé à l'emplacement {modelPath}.",
+        "substitutedTitle": "Le fichier de modèle configuré pour {modelName} est introuvable",
+        "substitutedMessage": "Le fichier de modèle configuré pour {modelName} est introuvable sur le disque, le modèle installé à l'emplacement {modelPath} est donc utilisé à la place. Votre configuration n'a pas été modifiée.",
+        "notRegisteredTitle": "Aucun modèle n'analyse {sourceName}",
+        "notRegisteredMessage": "Aucun audio ne parvient à {models} sur la source audio \"{sourceName}\", aucune détection n'est donc produite. Ouvrez la galerie de modèles dans les Paramètres pour vérifier l'état."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valeur actuelle : {value}% (seuil : {threshold}%)",
@@ -1767,6 +1775,8 @@
       "sources": "Sources audio",
       "noSources": "Aucune source attachée",
       "primaryFallback": "primaire (secours)",
+      "sourceNotRunning": "n'analyse pas",
+      "sourceNotRunningTooltip": "Cette source est assignée au modèle dans les paramètres, mais son audio ne parvient pas au modèle, elle ne produit donc aucune détection. Ouvrez la galerie de modèles dans les Paramètres pour vérifier son état.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",

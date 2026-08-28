@@ -114,6 +114,16 @@ type Orchestrator struct {
 	// instead of stalling PredictModel on o.mu. Appended only
 	// under o.mu.Lock(); snapshotted and cleared under o.mu by the drainer.
 	pendingWarmups []pendingWarmup
+
+	// pendingPathCorrections queues configuration repairs recorded by model
+	// loaders while they hold o.mu. Drained by runPendingPathCorrections after
+	// o.mu is released, because the drainer itself takes o.mu to snapshot and
+	// clear this queue, and o.mu is not reentrant; applying one also writes
+	// config.yaml (file I/O). (isGalleryManagedPath, reached from the apply step,
+	// takes NO orchestrator lock; the drainer's own snapshot-and-clear is what
+	// requires the deferral.) Appended only under o.mu.Lock(); snapshotted and
+	// cleared under o.mu by the drainer.
+	pendingPathCorrections []pendingPathCorrection
 }
 
 // pendingWarmup defers a freshly-registered model's warm-up + RSS measurement
@@ -171,6 +181,28 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 		models:   map[string]*modelEntry{},
 		modelRSS: make(map[string]int64),
 	}
+
+	// Resolve the gallery models directory up front, before loadAdditionalModels
+	// runs below. ModelManager also sets it (via SetModelsDir) but is constructed
+	// only after this constructor returns, so without this the secondary loaders
+	// see an empty o.modelsDir on their very first attempt and resolveInstalledPaths
+	// cannot find an installed model. That made the fallback for a missing
+	// configured path structurally impossible at startup (GitHub #4201, #4204).
+	// Assigned directly rather than through SetModelsDir. SetModelsDir would run
+	// registerTaxonomyResolver, which appends a taxonomy resolver to
+	// o.nameResolvers, but the constructor overwrites that slice wholesale a few
+	// lines below (o.nameResolvers = []NameResolver{ofResolver, resolver}), so the
+	// registration would just be discarded. Its primary.SetModelsDir propagation is
+	// also skipped here, since o.primary is not set yet. No lock is needed for this
+	// write: o is not published until the constructor returns, so no other goroutine
+	// can observe it. On the analysis startup path ModelManager later calls
+	// SetModelsDir, which redoes both the resolver wiring and the primary
+	// propagation; cmd/benchmark and cmd/rangefilter construct an Orchestrator and
+	// never call SetModelsDir.
+	if modelsDir, ok := settings.ResolveModelsDir(); ok {
+		o.modelsDir = modelsDir
+	}
+
 	rssBefore := o.captureRSSBefore()
 
 	bn, err := NewBirdNET(settings, primaryInfo)
@@ -226,12 +258,22 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 // geomodel auto-selection, and registers the taxonomy resolver if
 // taxonomy.csv is available on disk.
 func (o *Orchestrator) SetModelsDir(dir string) {
-	// Guard the o.modelsDir write and the o.primary read under o.mu: o.modelsDir
-	// is read by resolveInstalledPaths (always under o.mu via the model loaders),
-	// and o.primary is cleared by Delete() under o.mu.Lock(). Release before the
-	// downstream calls, which take their own locks. registerTaxonomyResolver in
-	// particular acquires o.mu.RLock() internally, so holding o.mu here would
-	// self-deadlock (the RWMutex is not reentrant).
+	// Guard the o.modelsDir write and the o.primary read under o.mu: the model
+	// loaders read o.modelsDir under o.mu, and o.primary is cleared by Delete()
+	// under o.mu.Lock().
+	//
+	// The write is guarded, but NOT every read is, so this lock alone is not what
+	// makes the field safe. resolveInstalledPaths, resolveSiblingSet and
+	// isGalleryManagedPath all read o.modelsDir with NO lock held: the first two on
+	// the ReloadSecondaryModels path (which releases o.mu before calling the model
+	// builders) and the third on the config-correction drain path. Those reads are
+	// safe only because this setter runs at most once, before the pipeline starts.
+	// See resolveSiblingSet for the full rationale and for what making the models
+	// directory dynamic would require.
+	//
+	// Release before the downstream calls, which take their own locks.
+	// registerTaxonomyResolver in particular acquires o.mu.RLock() internally, so
+	// holding o.mu here would self-deadlock (the RWMutex is not reentrant).
 	o.mu.Lock()
 	o.modelsDir = dir
 	primary := o.primary
@@ -1367,9 +1409,10 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 	threadAlloc := o.computeThreadAllocation(settings, primaryID)
 
 	// The builders below run outside o.mu. They construct from the settings
-	// snapshot and may read o.modelsDir (via resolveInstalledPaths), which is set
-	// once at startup by SetModelsDir before the pipeline (and thus this reload
-	// path) starts, so the read is safe without o.mu.
+	// snapshot and may read o.modelsDir (via resolveInstalledPaths and
+	// resolveSiblingSet), which is set once at startup by SetModelsDir before the
+	// pipeline (and thus this reload path) starts, so the read is safe without
+	// o.mu. See resolveSiblingSet for the full rationale on this lock-free read.
 
 	var firstErr error
 	for _, ref := range refs {
@@ -1574,7 +1617,10 @@ var openvinoCapableSecondaryBuilders = map[string]secondaryModelBuilder{
 	RegistryIDBirdNETV3: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
 		// Explicit nil-on-error return avoids the typed-nil interface trap (a
 		// nil *BirdNETV3 wrapped in a non-nil ModelInstance).
-		m, err := o.buildBirdNETV3(settings, threads)
+		// The path resolution is deliberately discarded: a backend or device swap
+		// must never rewrite the user's configured paths, so the reload path does
+		// not call queuePathCorrection.
+		m, _, err := o.buildBirdNETV3(settings, threads)
 		if err != nil {
 			return nil, err
 		}
@@ -1583,7 +1629,8 @@ var openvinoCapableSecondaryBuilders = map[string]secondaryModelBuilder{
 	RegistryIDPerchV2: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
 		// Explicit nil-on-error return avoids the typed-nil interface trap (a
 		// nil *Perch wrapped in a non-nil ModelInstance).
-		p, err := o.buildPerch(settings, threads)
+		// The path resolution is deliberately discarded (see the BirdNET v3.0 entry above).
+		p, _, err := o.buildPerch(settings, threads)
 		if err != nil {
 			return nil, err
 		}
@@ -1592,7 +1639,8 @@ var openvinoCapableSecondaryBuilders = map[string]secondaryModelBuilder{
 	RegistryIDBat: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
 		// Explicit nil-on-error return avoids the typed-nil interface trap (a
 		// nil *Bat wrapped in a non-nil ModelInstance).
-		b, err := o.buildBat(settings, threads)
+		// The path resolution is deliberately discarded (see the BirdNET v3.0 entry above).
+		b, _, err := o.buildBat(settings, threads)
 		if err != nil {
 			return nil, err
 		}
@@ -1623,12 +1671,21 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 			Build()
 	}
 
+	// Drain any queued configuration repair after o.mu is released: loaders queue
+	// it under o.mu, and applying it writes config.yaml, so it must run outside the
+	// lock. Registered BEFORE the warm-up drain so that, defers being LIFO, it runs
+	// AFTER the warm-ups. The config write must not land inside the window the
+	// per-model RSS delta measures (see runPendingWarmups), matching the drain
+	// order in loadAdditionalModels (warm-ups first, config write after).
+	defer o.runPendingPathCorrections()
+
 	// Drain the deferred warm-up after o.mu is released, on every return path.
 	// Loaders queue the warm-up via deferWarmup while holding o.mu; running it
 	// here (outside o.mu, via the serialized inference path) is what keeps a
 	// runtime install from stalling live inference. Deferring it
 	// (rather than calling it only on success) guarantees a loader that queues a
 	// warm-up and then fails cannot orphan an entry in the queue for a later load.
+	// Registered LAST so it runs FIRST (LIFO).
 	defer o.runPendingWarmups()
 
 	// Build and register the model under o.mu (loaders write directly to
@@ -2092,6 +2149,14 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 		// before the next model allocates its arena.
 		o.runPendingWarmups()
 	}
+
+	// Drain the queued configuration repairs AFTER the loop. Each pending family
+	// still does its own config.yaml write (there is no coalescing here); draining
+	// outside the loop keeps those writes out of the per-model RSS measurement
+	// window, the same reason the warm-up drain above runs where it does. Unlike
+	// the warm-up drain, the config write has no per-model RSS measurement of its
+	// own to keep accurate, so it does not need to run inside the loop.
+	o.runPendingPathCorrections()
 
 	return nil
 }
