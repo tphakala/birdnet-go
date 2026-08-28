@@ -1489,12 +1489,17 @@ func (bn *BirdNET) reloadModelInternal(allowPathChange bool) error {
 	case bn.Settings.BirdNET.Version != "":
 		newInfo, ok := ResolveBirdNETVersion(bn.Settings.BirdNET.Version)
 		if !ok {
+			// Captured BEFORE rollback(), for the same reason as the case below:
+			// rollback restores bn.Settings to the previous snapshot, so reading the
+			// version afterwards reports the PREVIOUS (valid) version as unknown, or
+			// an empty string when the user had not set one.
+			requestedVersion := bn.Settings.BirdNET.Version
 			rollback()
-			return errors.Newf("unknown BirdNET version: %s", bn.Settings.BirdNET.Version).
+			return errors.Newf("unknown BirdNET version: %s", requestedVersion).
 				Component("birdnet").
 				Category(errors.CategoryModelInit).
 				Context("operation", "reload_model").
-				Context("version", bn.Settings.BirdNET.Version).
+				Context("version", requestedVersion).
 				Build()
 		}
 		newInfo.CustomPath = bn.configuredModelPath()

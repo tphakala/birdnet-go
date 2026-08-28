@@ -115,12 +115,20 @@ func TestResolvePrimaryModelPath(t *testing.T) {
 		modelsDir := t.TempDir()
 		writePrimaryGalleryModel(t, modelsDir)
 
-		// Every installed primary variant is an ONNX build, so on a host with no
-		// usable ONNX Runtime, recovering onto one converts a recoverable stale path
-		// into a hard startup failure: initializeModel has no TFLite fallback once
-		// usesONNXBackend is true. That is the very outcome this recovery exists to
-		// prevent, so it must fall through to the built-in baseline instead.
-		o := &Orchestrator{ortAvailable: func(string) bool { return false }}
+		// Every installed primary variant is an ONNX build, so on a host where
+		// NEITHER backend can load one, recovering onto it converts a recoverable
+		// stale path into a hard startup failure. That is the very outcome this
+		// recovery exists to prevent, so it must fall through to the built-in
+		// baseline instead.
+		//
+		// Both seams are stubbed, not just ORT. Stubbing ORT alone made this test
+		// environment-dependent: it passed on a bare runner and FAILED under
+		// -tags openvino on any host with a plannable OpenVINO device, a build CI
+		// compiles but never runs tests for.
+		o := &Orchestrator{
+			ortAvailable: func(string) bool { return false },
+			ovLoadable:   func(string) bool { return false },
+		}
 		o.SetModelsDir(modelsDir)
 
 		res := o.resolvePrimaryModelPath(filepath.Join(t.TempDir(), "gone", "primary.onnx"))
@@ -145,6 +153,62 @@ func TestResolvePrimaryModelPath(t *testing.T) {
 		assert.True(t, res.substituted, "running the baseline instead of the chosen model must not be silent")
 		assert.False(t, res.repairable,
 			"there is no correct path to write, so the user's own setting must survive for the next start")
+	})
+
+	t.Run("OpenVINO alone is enough to recover, with no ONNX Runtime", func(t *testing.T) {
+		t.Parallel()
+		modelsDir := t.TempDir()
+		installed := writePrimaryGalleryModel(t, modelsDir)
+
+		// An openvino-tagged build on an A76/Pi5 or an Intel iGPU runs these
+		// variants with no ONNX Runtime installed at all. Gating on ORT alone
+		// refused a variant that would have loaded, dropping such a host to the
+		// embedded model while telling the user no installed model was available.
+		//
+		// Only meaningful where OpenVINO is compiled in; in the default build
+		// openVINOPlanFor short-circuits on a compile-time false, so the leg under
+		// test is unreachable and the recovery correctly declines.
+		o := &Orchestrator{
+			ortAvailable: func(string) bool { return false },
+			ovLoadable:   func(string) bool { return true },
+		}
+		o.SetModelsDir(modelsDir)
+
+		res := o.resolvePrimaryModelPath(filepath.Join(t.TempDir(), "gone", "primary.onnx"))
+
+		if !openvinoBackendAvailable {
+			assert.Empty(t, res.resolved.model,
+				"without the openvino build tag there is no OpenVINO leg to take")
+			return
+		}
+		assert.Equal(t, installed, res.resolved.model,
+			"a loadable OpenVINO plan is sufficient; ONNX Runtime is only the fallback")
+		assert.True(t, res.substituted)
+		assert.True(t, res.repairable)
+	})
+
+	t.Run("an eligible but unloadable OpenVINO runtime does not count", func(t *testing.T) {
+		t.Parallel()
+		modelsDir := t.TempDir()
+		writePrimaryGalleryModel(t, modelsDir)
+
+		// initializeModel falls through to ONNX Runtime when OpenVINO is eligible
+		// but fails to LOAD, and openVINOPlanFor's CPU branch answers yes from the
+		// CPU's f16 support without ever opening the library. Accepting on
+		// eligibility would hand a host with a broken OpenVINO library to the ONNX
+		// path it has no runtime for.
+		o := &Orchestrator{
+			ortAvailable: func(string) bool { return false },
+			ovLoadable:   func(string) bool { return false },
+		}
+		o.SetModelsDir(modelsDir)
+
+		res := o.resolvePrimaryModelPath(filepath.Join(t.TempDir(), "gone", "primary.onnx"))
+
+		assert.Empty(t, res.resolved.model,
+			"an OpenVINO plan that cannot load must not count as a usable backend")
+		assert.True(t, res.substituted)
+		assert.False(t, res.repairable)
 	})
 
 	t.Run("an unreadable configured path is kept, not substituted", func(t *testing.T) {
@@ -583,23 +647,34 @@ func TestReloadModelInternal_BuiltinFallbackSteadyStateReloadsCleanly(t *testing
 // the reload must be refused rather than silently loading the baseline under an
 // identity that still names the vanished file.
 func TestReloadModelInternal_VanishedRunningModelIsRefused(t *testing.T) {
-	settings := conftest.GetTestSettings()
-	settings.BirdNET.Version = ""
-	settings.BirdNET.ModelPath = "/data/custom_v24.tflite"
-	conftest.SetTestSettings(settings)
+	const (
+		oldPath = "/data/previous_v24.tflite"
+		newPath = "/data/just_saved_v24.tflite"
+	)
+
+	// The published snapshot is what the reload reads; bn.Settings is the previous
+	// one that rollback restores. They must DIFFER, or the message could be built
+	// from either and the read-after-rollback bug would be invisible.
+	published := conftest.GetTestSettings()
+	published.BirdNET.Version = ""
+	published.BirdNET.ModelPath = newPath
+	conftest.SetTestSettings(published)
 	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	previous := conf.CloneSettings(published)
+	previous.BirdNET.ModelPath = oldPath
 
 	bn := &BirdNET{
 		classifier:     &rollbackFakeClassifier{},
-		Settings:       settings,
-		ModelInfo:      customBirdNETV24ModelInfo("/data/custom_v24.tflite"),
+		Settings:       previous,
+		ModelInfo:      customBirdNETV24ModelInfo(oldPath),
 		TaxonomyPath:   filepath.Join(t.TempDir(), "does-not-exist-taxonomy.json"),
 		speciesCache:   make(map[string]*speciesCacheEntry),
 		resolvePrimary: func(string) pathResolution { return pathResolution{substituted: true} },
 	}
 	// Was running a real custom file; the new resolution finds nothing.
-	bn.primaryPath = pathResolution{resolved: modelFileSet{model: "/data/custom_v24.tflite"}}
-	bn.settingsAtomic.Store(settings)
+	bn.primaryPath = pathResolution{resolved: modelFileSet{model: oldPath}}
+	bn.settingsAtomic.Store(previous)
 	bn.publishIdentity()
 
 	err := bn.reloadModelInternal(false)
@@ -607,6 +682,42 @@ func TestReloadModelInternal_VanishedRunningModelIsRefused(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "requires orchestrator restart",
 		"loading the baseline under an identity naming the vanished file would misattribute every detection")
+	assert.Contains(t, err.Error(), newPath,
+		"the message must name the path being reloaded")
+	assert.NotContains(t, err.Error(), oldPath,
+		"rollback restores the previous settings snapshot, so reading the path after it names the OLD file "+
+			"and tells the user a healthy path is unusable")
+}
+
+// TestReloadModelInternal_UnknownVersionNamesTheRequestedVersion pins the same
+// read-after-rollback hazard at its sibling site. rollback() restores bn.Settings,
+// so a message built afterwards reports the PREVIOUS, valid version as unknown, or
+// an empty string when the user had not set one.
+func TestReloadModelInternal_UnknownVersionNamesTheRequestedVersion(t *testing.T) {
+	published := conftest.GetTestSettings()
+	published.BirdNET.Version = "9.9"
+	conftest.SetTestSettings(published)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	previous := conf.CloneSettings(published)
+	previous.BirdNET.Version = "2.4"
+
+	bn := &BirdNET{
+		classifier:   &rollbackFakeClassifier{},
+		Settings:     previous,
+		ModelInfo:    ModelRegistry[DefaultModelVersion],
+		TaxonomyPath: filepath.Join(t.TempDir(), "does-not-exist-taxonomy.json"),
+		speciesCache: make(map[string]*speciesCacheEntry),
+	}
+	bn.settingsAtomic.Store(previous)
+	bn.publishIdentity()
+
+	err := bn.reloadModelInternal(false)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "9.9", "the message must name the version the user actually typed")
+	assert.NotContains(t, err.Error(), "2.4",
+		"naming the previously valid version tells the user a working setting is unknown")
 }
 
 // TestPrimaryRegistryID covers the family gate that decides whether the recovery

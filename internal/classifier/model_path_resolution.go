@@ -392,6 +392,15 @@ func declaresModelFile(files []CatalogFile, localName string) bool {
 // entry point, runPendingPathCorrections: that drainer takes o.mu itself to
 // snapshot and clear the queue, and o.mu is not reentrant, so draining under the
 // loaders' write lock self-deadlocks the load. Keep the drain where it is.
+// openVINOLoads reports whether the OpenVINO runtime can actually be opened.
+// Split out for the ovLoadable test seam; see Orchestrator.ovLoadable.
+func (o *Orchestrator) openVINOLoads(libraryPath string) bool {
+	if o.ovLoadable != nil {
+		return o.ovLoadable(libraryPath)
+	}
+	return inference.InitOpenVINO(libraryPath) == nil
+}
+
 func (o *Orchestrator) isGalleryManagedPath(registryID, path string) bool {
 	if path == "" {
 		return false
@@ -579,9 +588,11 @@ func (o *Orchestrator) resolvePrimaryModelPath(configured string) pathResolution
 // the embedded model and telling the user no installed model was available, which
 // is false.
 //
-// CheckORTAvailability is used rather than checkORTOrFail because this is a probe,
-// not a load: checkORTOrFail logs and raises a user notification, which would be
-// wrong for a path we are choosing NOT to take.
+// CheckORTAvailability is used rather than checkORTOrFail because the latter logs
+// and raises a user notification, which would be wrong for a path we are choosing
+// NOT to take. Note the OpenVINO leg below is a real load rather than a pure
+// probe: InitOpenVINO memoizes success, and there is no way to answer "would this
+// load" without trying.
 func (o *Orchestrator) primaryVariantUsable(modelPath string) bool {
 	if !isONNXModel(modelPath) {
 		return true
@@ -595,14 +606,21 @@ func (o *Orchestrator) primaryVariantUsable(modelPath string) bool {
 		settings = &conf.Settings{}
 	}
 
-	// OpenVINO first, mirroring initializeModel's own order.
+	// OpenVINO first, mirroring initializeModel's own order. Eligibility alone is
+	// NOT enough: initializeModel also falls through to ONNX Runtime when OpenVINO
+	// is eligible but FAILS TO LOAD, and openVINOPlanFor's CPU branch answers yes
+	// from the CPU's f16 support without ever opening the library. Accepting a
+	// variant on eligibility would therefore hand a host with a broken or missing
+	// OpenVINO library straight to the ONNX path it has no runtime for, which is
+	// the hard startup failure this gate exists to prevent, reached from the other
+	// side. So the plan must be usable AND the library must actually load.
 	if _, ok, _ := openVINOPlanFor(
 		settings.BirdNET.Backend,
 		settings.BirdNET.OpenVINODevice,
 		DefaultModelVersion,
 		settings.BirdNET.OpenVINOPath,
 		birdnetLogitsOutputIndex,
-	); ok {
+	); ok && o.openVINOLoads(settings.BirdNET.OpenVINOPath) {
 		return true
 	}
 

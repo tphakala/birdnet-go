@@ -91,11 +91,16 @@ type Orchestrator struct {
 	inferenceMu sync.Mutex   // serializes inference across all models
 	models      map[string]*modelEntry
 	primary     *BirdNET // direct access to the primary model
-	// ortAvailable reports whether ONNX Runtime can be loaded from the given
-	// configured path. Nil in production, where inference.CheckORTAvailability is
-	// used. Tests set it so both sides of the primary recovery's backend gate are
-	// reachable without a real ONNX Runtime on the host.
+	// ortAvailable and ovLoadable report whether each inference backend can
+	// actually load from the given configured path. Both are nil in production,
+	// where inference.CheckORTAvailability and inference.InitOpenVINO are used.
+	// Tests set them so every side of the primary recovery's backend gate is
+	// reachable regardless of what the host happens to have installed; without an
+	// OpenVINO seam the gate's OpenVINO leg is untestable in the default build
+	// (openvinoBackendAvailable is a compile-time false there) AND its ORT-only
+	// test silently inverts on a machine that does have OpenVINO.
 	ortAvailable func(configuredPath string) bool
+	ovLoadable   func(libraryPath string) bool
 	modelsDir    string // base directory for gallery-installed models
 
 	// Nighttime scheduling for bat model. Stored as atomic.Pointer so
