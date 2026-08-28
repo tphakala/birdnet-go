@@ -468,6 +468,9 @@
         "reconciledMessage": "Nakonfigurované cesty k souborům pro {modelName} byly zastaralé a byly opraveny tak, aby odpovídaly nainstalovanému modelu v {modelPath}.",
         "substitutedTitle": "Nakonfigurovaný soubor modelu pro {modelName} nebyl nalezen",
         "substitutedMessage": "Soubor modelu nakonfigurovaný pro {modelName} nebyl na disku nalezen, proto se místo něj používá nainstalovaný model v {modelPath}. Vaše konfigurace zůstala nezměněna.",
+        "unreadableTitle": "Nakonfigurovaný soubor modelu pro {modelName} se nepodařilo přečíst",
+        "unreadableMessage": "Soubor modelu nakonfigurovaný pro {modelName} existuje, ale nepodařilo se jej přečíst, proto se místo něj používá nainstalovaný model v {modelPath}. Vaše konfigurace zůstala nezměněna. Zkontrolujte oprávnění souboru a zda je jeho úložiště připojeno.",
+        "builtinMessage": "Soubor modelu nakonfigurovaný pro {modelName} nebyl na disku nalezen a není k dispozici žádný nainstalovaný model, který by jej nahradil, proto se místo něj používá vestavěný model. Vaše konfigurace zůstala nezměněna.",
         "notRegisteredTitle": "Žádný model neanalyzuje {sourceName}",
         "notRegisteredMessage": "K {models} na zdroji zvuku \"{sourceName}\" se nedostává žádný zvuk, takže se nevytvářejí žádné detekce. Otevřete galerii modelů v Nastavení a zkontrolujte stav."
       },

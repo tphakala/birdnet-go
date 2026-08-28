@@ -398,6 +398,9 @@ export type TranslationKey =
   | 'notifications.content.modelPath.reconciledMessage' // params: modelName, modelPath
   | 'notifications.content.modelPath.substitutedTitle' // params: modelName
   | 'notifications.content.modelPath.substitutedMessage' // params: modelName, modelPath
+  | 'notifications.content.modelPath.unreadableTitle' // params: modelName
+  | 'notifications.content.modelPath.unreadableMessage' // params: modelName, modelPath
+  | 'notifications.content.modelPath.builtinMessage' // params: modelName
   | 'notifications.content.modelPath.notRegisteredTitle' // params: sourceName
   | 'notifications.content.modelPath.notRegisteredMessage' // params: models, sourceName
   | 'notifications.content.alert.firedTitle' // params: rule_name
@@ -4222,6 +4225,12 @@ export type TranslationParams = {
     modelName: string | number;
     modelPath: string | number;
   };
+  'notifications.content.modelPath.unreadableTitle': { modelName: string | number };
+  'notifications.content.modelPath.unreadableMessage': {
+    modelName: string | number;
+    modelPath: string | number;
+  };
+  'notifications.content.modelPath.builtinMessage': { modelName: string | number };
   'notifications.content.modelPath.notRegisteredTitle': { sourceName: string | number };
   'notifications.content.modelPath.notRegisteredMessage': {
     models: string | number;

@@ -23,15 +23,14 @@ import (
 // The returned resolution is meaningful only when err == nil; every error return
 // yields the zero pathResolution{}.
 func (o *Orchestrator) buildBat(settings *conf.Settings, threads int) (*Bat, pathResolution, error) {
-	resolved, usedFallback := o.resolveFamilyPaths(RegistryIDBat, modelFileSet{
+	res := o.resolveFamilyPaths(RegistryIDBat, modelFileSet{
 		model:      settings.Bat.ClassifierModel,
 		labels:     settings.Bat.LabelPath,
 		embeddings: settings.Bat.EmbeddingModel,
 	}, true)
-	res := pathResolution{resolved: resolved, usedFallback: usedFallback}
-	classifierModel := resolved.model
-	labelPath := resolved.labels
-	embeddingModel := resolved.embeddings
+	classifierModel := res.resolved.model
+	labelPath := res.resolved.labels
+	embeddingModel := res.resolved.embeddings
 
 	if classifierModel == "" || labelPath == "" || embeddingModel == "" {
 		return nil, pathResolution{}, errors.Newf("bat model files not installed or configured").

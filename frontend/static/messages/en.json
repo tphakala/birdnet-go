@@ -468,6 +468,9 @@
         "reconciledMessage": "Configured file paths for {modelName} were out of date and have been repaired to match the installed model at {modelPath}.",
         "substitutedTitle": "Configured model file for {modelName} was not found",
         "substitutedMessage": "The model file configured for {modelName} was not found on disk, so the installed model at {modelPath} is being used instead. Your configuration was left unchanged.",
+        "unreadableTitle": "Configured model file for {modelName} could not be read",
+        "unreadableMessage": "The model file configured for {modelName} exists but could not be read, so the installed model at {modelPath} is being used instead. Your configuration was left unchanged. Check the file's permissions and that its storage is mounted.",
+        "builtinMessage": "The model file configured for {modelName} was not found on disk and no installed model is available to replace it, so the built-in model is being used instead. Your configuration was left unchanged.",
         "notRegisteredTitle": "No model is analyzing {sourceName}",
         "notRegisteredMessage": "No audio is reaching {models} on audio source \"{sourceName}\", so no detections are produced. Open the model gallery in Settings to check status."
       },

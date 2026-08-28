@@ -468,6 +468,9 @@
         "reconciledMessage": "De konfigurerte filstiene for {modelName} var utdaterte og har blitt reparert for å samsvare med den installerte modellen på {modelPath}.",
         "substitutedTitle": "Fant ikke den konfigurerte modellfilen for {modelName}",
         "substitutedMessage": "Modellfilen som er konfigurert for {modelName}, ble ikke funnet på disken, så den installerte modellen på {modelPath} brukes i stedet. Konfigurasjonen din ble ikke endret.",
+        "unreadableTitle": "Kunne ikke lese den konfigurerte modellfilen for {modelName}",
+        "unreadableMessage": "Modellfilen som er konfigurert for {modelName}, finnes, men kunne ikke leses, så den installerte modellen på {modelPath} brukes i stedet. Konfigurasjonen din ble ikke endret. Sjekk filens tillatelser og at lagringen er montert.",
+        "builtinMessage": "Modellfilen som er konfigurert for {modelName}, ble ikke funnet på disken, og ingen installert modell er tilgjengelig for å erstatte den, så den innebygde modellen brukes i stedet. Konfigurasjonen din ble ikke endret.",
         "notRegisteredTitle": "Ingen modell analyserer {sourceName}",
         "notRegisteredMessage": "Ingen lyd når {models} på lydkilden \"{sourceName}\", så det produseres ingen registreringer. Åpne modellgalleriet i Innstillinger for å sjekke status."
       },

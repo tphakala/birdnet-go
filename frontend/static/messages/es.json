@@ -468,6 +468,9 @@
         "reconciledMessage": "Las rutas de archivo configuradas para {modelName} estaban desactualizadas y se han reparado para coincidir con el modelo instalado en {modelPath}.",
         "substitutedTitle": "No se encontró el archivo de modelo configurado para {modelName}",
         "substitutedMessage": "El archivo de modelo configurado para {modelName} no se encontró en el disco, por lo que en su lugar se está usando el modelo instalado en {modelPath}. Su configuración no se modificó.",
+        "unreadableTitle": "No se pudo leer el archivo de modelo configurado para {modelName}",
+        "unreadableMessage": "El archivo de modelo configurado para {modelName} existe pero no se pudo leer, por lo que en su lugar se está usando el modelo instalado en {modelPath}. Su configuración no se modificó. Compruebe los permisos del archivo y que su almacenamiento esté montado.",
+        "builtinMessage": "El archivo de modelo configurado para {modelName} no se encontró en el disco y no hay ningún modelo instalado disponible para reemplazarlo, por lo que en su lugar se está usando el modelo integrado. Su configuración no se modificó.",
         "notRegisteredTitle": "Ningún modelo está analizando {sourceName}",
         "notRegisteredMessage": "No llega audio a {models} en la fuente de audio \"{sourceName}\", por lo que no se generan detecciones. Abra la galería de modelos en Configuración para comprobar el estado."
       },

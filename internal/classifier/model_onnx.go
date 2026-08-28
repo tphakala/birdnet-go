@@ -17,8 +17,8 @@ import (
 // the default in CustomPath avoids mutating settings.BirdNET.ModelPath, which
 // would make the default indistinguishable from a user override.
 func (bn *BirdNET) onnxModelPath() string {
-	if bn.Settings.BirdNET.ModelPath != "" {
-		return bn.Settings.BirdNET.ModelPath
+	if p := bn.configuredModelPath(); p != "" {
+		return p
 	}
 	return bn.ModelInfo.CustomPath
 }

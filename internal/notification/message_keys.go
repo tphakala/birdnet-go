@@ -191,6 +191,23 @@ const (
 	MsgModelPathSubstitutedTitle   = "notifications.content.modelPath.substitutedTitle"
 	MsgModelPathSubstitutedMessage = "notifications.content.modelPath.substitutedMessage"
 
+	// Model path unreadable notifications (a configured model file could not be
+	// read for a reason OTHER than absence: a permissions change, an I/O error, a
+	// half-initialised mount). The installed gallery model is used at runtime, and
+	// the configuration is never rewritten, because a transient failure must not be
+	// made permanent. Worded separately from the substituted pair above: telling a
+	// user their file "was not found" when it is present but unreadable sends them
+	// looking in the wrong place.
+	MsgModelPathUnreadableTitle   = "notifications.content.modelPath.unreadableTitle"
+	MsgModelPathUnreadableMessage = "notifications.content.modelPath.unreadableMessage"
+
+	// Model path built-in fallback notification (a configured model file is
+	// confirmed absent AND no installed model exists to replace it, so the built-in
+	// model is used instead). Shares MsgModelPathSubstitutedTitle, since the title
+	// ("was not found") is accurate for this case too; only the body differs,
+	// because there is no installed model path to name.
+	MsgModelPathBuiltinMessage = "notifications.content.modelPath.builtinMessage"
+
 	// Model registration notifications (a model assigned to an audio source is
 	// not receiving audio, so it produces no detections)
 	MsgModelNotRegisteredTitle   = "notifications.content.modelPath.notRegisteredTitle"

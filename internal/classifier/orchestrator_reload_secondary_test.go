@@ -414,3 +414,39 @@ func TestReloadSecondaryModels_PerEntryTripletRebuildsOnlyStale(t *testing.T) {
 	assert.Equal(t, int32(1), stale.closes.Load(), "stale old instance must be closed")
 	assert.Equal(t, currentTriplet, o.models[testSecondaryID2].backend, "stale entry triplet must advance to current")
 }
+
+// TestReloadSecondaryModels_DiscardsPathResolution pins the discard that keeps a
+// hot reload from rewriting the user's configured model paths.
+//
+// The loaders queue a configuration repair after a successful build; the reload
+// path deliberately calls build* directly and throws the resolution away, so a
+// backend or device swap never touches config.yaml. That discard is load-bearing
+// but is expressed as a bare `_`, which any future edit can flip to a
+// queuePathCorrection call without a single test noticing.
+//
+// The builder assertion is what stops this from passing vacuously: without it a
+// reload that skipped every rebuild would leave the queue empty too, and the
+// test would still pass against a broken discard.
+func TestReloadSecondaryModels_DiscardsPathResolution(t *testing.T) {
+	setGlobalBackend(t, "openvino", "gpu", "/opt/ov")
+
+	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
+	o.ModelInfo.ID = permanentRegistryID
+	o.models[testSecondaryID] = &modelEntry{
+		instance: &reloadFakeModel{id: testSecondaryID},
+		backend:  secondaryBackendKey{backend: "onnx"},
+	}
+
+	var built atomic.Int32
+	registerTestSecondaryBuilder(t, testSecondaryID, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
+		built.Add(1)
+		return &reloadFakeModel{id: testSecondaryID}, nil
+	})
+
+	require.NoError(t, o.ReloadSecondaryModels())
+
+	require.Equal(t, int32(1), built.Load(),
+		"the rebuild must actually run, or an empty queue proves nothing")
+	assert.Empty(t, o.pendingPathCorrections,
+		"a hot reload must never queue a config repair: a backend or device swap is not a stale path")
+}

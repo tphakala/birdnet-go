@@ -468,6 +468,9 @@
         "reconciledMessage": "De konfigurerede filstier for {modelName} var forældede og er blevet repareret, så de matcher den installerede model på {modelPath}.",
         "substitutedTitle": "Den konfigurerede modelfil for {modelName} blev ikke fundet",
         "substitutedMessage": "Modelfilen, der er konfigureret til {modelName}, blev ikke fundet på disken, så den installerede model på {modelPath} bruges i stedet. Din konfiguration blev ikke ændret.",
+        "unreadableTitle": "Den konfigurerede modelfil for {modelName} kunne ikke læses",
+        "unreadableMessage": "Modelfilen, der er konfigureret til {modelName}, findes, men kunne ikke læses, så den installerede model på {modelPath} bruges i stedet. Din konfiguration blev ikke ændret. Kontrollér filens tilladelser, og at dens lager er monteret.",
+        "builtinMessage": "Modelfilen, der er konfigureret til {modelName}, blev ikke fundet på disken, og der er ingen installeret model tilgængelig til at erstatte den, så den indbyggede model bruges i stedet. Din konfiguration blev ikke ændret.",
         "notRegisteredTitle": "Ingen model analyserer {sourceName}",
         "notRegisteredMessage": "Ingen lyd når {models} på lydkilden \"{sourceName}\", så der produceres ingen detektioner. Åbn modelgalleriet i Indstillinger for at tjekke status."
       },
