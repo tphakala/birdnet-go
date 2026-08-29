@@ -1203,6 +1203,8 @@ func TestDeleteDetectionRemovesFiles(t *testing.T) {
 		baseName + "_1026px_1026px.png",
 		baseName + "_2051px-norm1.png",
 		baseName + "_widepx-norm1.png",
+		baseName + ".md-extra.png",
+		baseName + ".md.backup.png",
 		baseName + ".md_extra.png",
 	}
 	for _, sf := range survivingFiles {

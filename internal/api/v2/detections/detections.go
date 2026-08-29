@@ -1394,8 +1394,9 @@ func isSpectrogramFileFor(pngName, baseFilename string) bool {
 	for _, sizeName := range spectrogramSizeNames {
 		parameterPrefix := baseFilename + "." + sizeName
 		if pngName == parameterPrefix+".png" ||
-			strings.HasPrefix(pngName, parameterPrefix+"-") ||
-			strings.HasPrefix(pngName, parameterPrefix+".") {
+			pngName == parameterPrefix+".raw.png" ||
+			pngName == parameterPrefix+spectrogram.RenderCacheVersionSuffix+".png" ||
+			pngName == parameterPrefix+".raw"+spectrogram.RenderCacheVersionSuffix+".png" {
 			return true
 		}
 	}
