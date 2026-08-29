@@ -703,6 +703,13 @@ func (r *detectionRepository) buildSearchJoins(query *gorm.DB, filters *SearchFi
 				r.reviewsTable(), r.reviewsTable(), r.tableName(), r.reviewsTable()))
 		}
 	}
+	if filters.ExcludeFalsePositives {
+		query = query.Where(fmt.Sprintf(
+			"NOT EXISTS (SELECT 1 FROM %s WHERE %s.detection_id = %s.id AND %s.verified = ?)",
+			r.reviewsTable(), r.reviewsTable(), r.tableName(), r.reviewsTable()),
+			string(entities.VerificationFalsePositive),
+		)
+	}
 
 	// Locked filter (requires locks join)
 	if filters.IsLocked != nil {
@@ -720,6 +727,17 @@ func (r *detectionRepository) buildSearchJoins(query *gorm.DB, filters *SearchFi
 
 // applySearchOrdering applies sorting and pagination to the query.
 func (r *detectionRepository) applySearchOrdering(query *gorm.DB, filters *SearchFilters) *gorm.DB {
+	if filters.CursorPagination {
+		query = query.Order(r.tableName() + ".id ASC")
+		if filters.Limit > 0 {
+			query = query.Limit(filters.Limit)
+		}
+		if filters.Offset > 0 {
+			query = query.Offset(filters.Offset)
+		}
+		return query
+	}
+
 	// Determine sort direction suffix
 	dir := " ASC"
 	if filters.SortDesc {
@@ -776,13 +794,19 @@ func (r *detectionRepository) Search(ctx context.Context, filters *SearchFilters
 
 	// Count total before pagination
 	var total int64
-	countQuery := query.Session(&gorm.Session{})
-	if err := countQuery.Count(&total).Error; err != nil {
-		return nil, 0, err
+	if !filters.SkipTotal {
+		countQuery := query.Session(&gorm.Session{})
+		if err := countQuery.Count(&total).Error; err != nil {
+			return nil, 0, err
+		}
 	}
 
 	// Apply ordering and pagination
 	query = r.applySearchOrdering(query, filters)
+	if filters.MinimalResults {
+		table := r.tableName()
+		query = query.Select(table + ".id, " + table + ".label_id, " + table + ".detected_at, " + table + ".confidence")
+	}
 
 	// Execute query
 	var dets []*entities.Detection

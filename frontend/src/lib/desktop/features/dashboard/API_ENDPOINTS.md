@@ -80,7 +80,7 @@ const recentDetections = await response.json();
 
 - `hours` (optional): Rolling time window in hours, default: 4
 - `limit` (optional): Maximum number of species to return, default: 8
-- `buckets` (optional): Number of confidence sparkline buckets, default: 12
+- `buckets` (optional): Number of confidence sparkline buckets, default: `hours * 4` (16 for the default 4-hour window)
 - `min_confidence` (optional): Minimum confidence percentage, default: 0
 
 **Response:**
@@ -96,7 +96,7 @@ const recentDetections = await response.json();
     "latest_confidence": 0.91,
     "max_confidence": 0.94,
     "avg_confidence": 0.83,
-    "confidence_trend": [0, 0.72, 0, 0.83, 0.91],
+    "confidence_trend": [0, 0.72, 0, 0.83, 0.91, 0, 0, 0.86, 0, 0, 0, 0.88, 0, 0, 0, 0.94],
     "trend_start": "2026-05-26T04:42:00-04:00",
     "trend_hours": 4,
     "score": 0.86,

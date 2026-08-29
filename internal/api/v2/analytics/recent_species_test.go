@@ -44,34 +44,19 @@ func TestGetRecentSpeciesActivity(t *testing.T) {
 		noteAt(5, now.Add(-5*time.Hour), "Blue Jay", "Cyanocitta cristata", 0.99),
 	}
 
-	notesForFilter := func(filters *datastore.AdvancedSearchFilters) []datastore.Note {
-		filtered := make([]datastore.Note, 0, len(notes))
-		startDate := filters.DateRange.Start.Format(time.DateOnly)
-		endDate := filters.DateRange.End.Format(time.DateOnly)
-		for _, note := range notes {
-			if note.Date >= startDate && note.Date <= endDate {
-				filtered = append(filtered, note)
-			}
-		}
-		return filtered
-	}
-
 	mockDS.On("SearchNotesAdvanced", mock.MatchedBy(func(filters *datastore.AdvancedSearchFilters) bool {
 		return filters != nil &&
-			filters.DateRange != nil &&
-			filters.DateRange.Start.Format(time.DateOnly) == filters.DateRange.End.Format(time.DateOnly) &&
-			filters.SortBy == recentSpeciesSortByDateDesc &&
-			filters.Limit == recentSpeciesCandidateLimit(2) &&
+			filters.DateRange == nil &&
+			filters.DetectedAtRange != nil &&
+			filters.DetectedAtRange.End.Sub(filters.DetectedAtRange.Start) > 4*time.Hour &&
+			filters.Limit == recentSpeciesQueryBatchSize &&
+			filters.MinID == 0 &&
+			filters.CursorPagination &&
+			filters.ExcludeFalsePositives &&
+			filters.MinimalResults &&
+			filters.SkipTotal &&
 			filters.Confidence == nil
-	})).Return(
-		func(filters *datastore.AdvancedSearchFilters) []datastore.Note {
-			return notesForFilter(filters)
-		},
-		func(filters *datastore.AdvancedSearchFilters) int64 {
-			return int64(len(notesForFilter(filters)))
-		},
-		nil,
-	)
+	})).Return(notes, int64(0), nil).Once()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/recent?hours=4&limit=2&buckets=4", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -98,21 +83,69 @@ func TestGetRecentSpeciesActivity(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
-func TestRecentSpeciesSearchDateRangesSpansMidnight(t *testing.T) {
+func TestLoadRecentSpeciesActivityPaginatesExactWindow(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "analytics")
 	t.Attr("feature", "recent-species-activity")
 	t.Attr("type", "unit")
 
-	loc := time.FixedZone("test", 0)
+	loc := time.Local
 	since := time.Date(2026, 5, 1, 22, 0, 0, 0, loc)
 	now := time.Date(2026, 5, 2, 2, 0, 0, 0, loc)
+	_, mockDS, controller := setupAnalyticsTestEnvironment(t)
+	firstPage := make([]datastore.Note, recentSpeciesQueryBatchSize)
+	for i := range firstPage {
+		firstPage[i] = datastore.Note{
+			ID:             uint(i + 1),
+			Date:           "2026-05-02",
+			Time:           "01:30:00",
+			ScientificName: "Turdus migratorius",
+			CommonName:     "American Robin",
+			Confidence:     0.8,
+		}
+	}
+	lastPage := []datastore.Note{{
+		ID:             uint(recentSpeciesQueryBatchSize + 1),
+		Date:           "2026-05-02",
+		Time:           "01:30:00",
+		ScientificName: "Turdus migratorius",
+		CommonName:     "American Robin",
+		Confidence:     0.9,
+	}}
 
-	ranges := recentSpeciesSearchDateRanges(since, now)
+	baseFilterMatches := func(filters *datastore.AdvancedSearchFilters) bool {
+		return filters != nil &&
+			filters.DateRange == nil &&
+			filters.DetectedAtRange != nil &&
+			filters.DetectedAtRange.Start.Equal(since) &&
+			filters.DetectedAtRange.End.Equal(now.Add(time.Second)) &&
+			filters.Limit == recentSpeciesQueryBatchSize &&
+			filters.CursorPagination &&
+			filters.ExcludeFalsePositives &&
+			filters.MinimalResults &&
+			filters.SkipTotal &&
+			filters.Confidence != nil &&
+			filters.Confidence.Operator == ">=" &&
+			filters.Confidence.Value == 0.75
+	}
+	mockDS.On("SearchNotesAdvanced", mock.MatchedBy(func(filters *datastore.AdvancedSearchFilters) bool {
+		return baseFilterMatches(filters) && filters.MinID == 0
+	})).Return(firstPage, int64(0), nil).Once()
+	mockDS.On("SearchNotesAdvanced", mock.MatchedBy(func(filters *datastore.AdvancedSearchFilters) bool {
+		return baseFilterMatches(filters) && filters.MinID == recentSpeciesQueryBatchSize
+	})).Return(lastPage, int64(0), nil).Once()
 
-	require.Len(t, ranges, 2)
-	assert.Equal(t, "2026-05-02", ranges[0].Start.Format(time.DateOnly))
-	assert.Equal(t, ranges[0].Start, ranges[0].End)
-	assert.Equal(t, "2026-05-01", ranges[1].Start.Format(time.DateOnly))
-	assert.Equal(t, ranges[1].Start, ranges[1].End)
+	got, detectionCount, err := controller.loadRecentSpeciesActivity(recentSpeciesActivityParams{
+		Hours:         4,
+		Limit:         8,
+		Buckets:       4,
+		MinConfidence: 0.75,
+	}, since, now)
+
+	require.NoError(t, err)
+	assert.Equal(t, recentSpeciesQueryBatchSize+1, detectionCount)
+	require.Len(t, got, 1)
+	assert.Equal(t, recentSpeciesQueryBatchSize+1, got[0].Count)
+	assert.Equal(t, uint(recentSpeciesQueryBatchSize+1), got[0].LatestDetectionID)
+	mockDS.AssertExpectations(t)
 }

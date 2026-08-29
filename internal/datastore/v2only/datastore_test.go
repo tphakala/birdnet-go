@@ -1035,6 +1035,48 @@ func TestV2OnlyDatastore_SearchNotesAdvanced_CommonName(t *testing.T) {
 	assert.Equal(t, "Corvus corone", notes[0].ScientificName)
 }
 
+func TestV2OnlyDatastore_SearchNotesAdvancedExactRangeExcludesFalsePositives(t *testing.T) {
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{
+		"Turdus migratorius_American Robin",
+		"Setophaga petechia_Yellow Warbler",
+		"Cyanocitta cristata_Blue Jay",
+	})
+	defer cleanup()
+
+	notes := []*datastore.Note{
+		{Date: "2026-05-01", Time: "21:59:59", ScientificName: "Cyanocitta cristata", Confidence: 0.9},
+		{Date: "2026-05-01", Time: "22:00:00", ScientificName: "Turdus migratorius", Confidence: 0.8},
+		{Date: "2026-05-01", Time: "23:00:00", ScientificName: "Cyanocitta cristata", Confidence: 0.95},
+		{Date: "2026-05-02", Time: "01:30:00", ScientificName: "Setophaga petechia", Confidence: 0.9},
+		{Date: "2026-05-02", Time: "02:00:00", ScientificName: "Cyanocitta cristata", Confidence: 0.9},
+	}
+	for _, note := range notes {
+		require.NoError(t, ds.Save(note, nil))
+	}
+	require.NotZero(t, notes[2].ID)
+	require.NoError(t, ds.SaveNoteReview(&datastore.NoteReview{
+		NoteID:   notes[2].ID,
+		Verified: "false_positive",
+	}))
+
+	start := time.Date(2026, 5, 1, 22, 0, 0, 0, ds.timezone)
+	end := time.Date(2026, 5, 2, 2, 0, 0, 0, ds.timezone)
+	results, total, err := ds.SearchNotesAdvanced(&datastore.AdvancedSearchFilters{
+		DetectedAtRange:       &datastore.DateRange{Start: start, End: end},
+		ExcludeFalsePositives: true,
+		MinimalResults:        true,
+		SkipTotal:             true,
+	})
+
+	require.NoError(t, err)
+	assert.Zero(t, total)
+	require.Len(t, results, 2)
+	assert.Equal(t, "Setophaga petechia", results[0].ScientificName)
+	assert.Equal(t, "Turdus migratorius", results[1].ScientificName)
+	assert.Equal(t, "Yellow Warbler", results[0].CommonName)
+	assert.Nil(t, results[0].Review)
+}
+
 func TestV2OnlyDatastore_GetLastDetections(t *testing.T) {
 	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()

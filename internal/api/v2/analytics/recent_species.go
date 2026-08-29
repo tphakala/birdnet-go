@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"fmt"
 	"net/http"
 	"sort"
 	"time"
@@ -22,11 +23,8 @@ const (
 	minRecentSpeciesBuckets     = 4
 	maxRecentSpeciesBuckets     = maxRecentSpeciesHours * recentSpeciesBucketsPerHour
 
-	recentSpeciesCandidateMultiplier = 200
-	recentSpeciesMinCandidates       = 200
-	recentSpeciesMaxCandidates       = 5000
-	recentSpeciesCountScoreMax       = 6
-	recentSpeciesSortByDateDesc      = "date_desc"
+	recentSpeciesCountScoreMax  = 6
+	recentSpeciesQueryBatchSize = 1000
 
 	recentSpeciesRecencyWeight    = 0.45
 	recentSpeciesConfidenceWeight = 0.45
@@ -76,19 +74,17 @@ func (c *Handler) GetRecentSpeciesActivity(ctx echo.Context) error {
 	params := c.parseRecentSpeciesActivityParams(ctx)
 	now := time.Now()
 	since := now.Add(-time.Duration(params.Hours) * time.Hour)
-	candidateLimit := recentSpeciesCandidateLimit(params.Limit)
 
 	c.LogDebugIfEnabled("Retrieving recent species activity",
 		logger.Int("hours", params.Hours),
 		logger.Int("limit", params.Limit),
 		logger.Int("buckets", params.Buckets),
 		logger.Float64("min_confidence", params.MinConfidence),
-		logger.Int("candidate_limit", candidateLimit),
 		logger.String("ip", ctx.RealIP()),
 		logger.String("path", ctx.Request().URL.Path),
 	)
 
-	notes, err := c.searchRecentSpeciesCandidateNotes(params, since, now, candidateLimit)
+	result, detectionCount, err := c.loadRecentSpeciesActivity(params, since, now)
 	if err != nil {
 		c.LogErrorIfEnabled("Failed to get recent species activity",
 			logger.Error(err),
@@ -98,10 +94,9 @@ func (c *Handler) GetRecentSpeciesActivity(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get recent species activity", http.StatusInternalServerError)
 	}
 
-	result := c.buildRecentSpeciesActivity(notes, since, now, params)
 	c.LogDebugIfEnabled("Recent species activity retrieved",
 		logger.Int("species_count", len(result)),
-		logger.Int("candidate_count", len(notes)),
+		logger.Int("detection_count", detectionCount),
 		logger.String("ip", ctx.RealIP()),
 		logger.String("path", ctx.Request().URL.Path),
 	)
@@ -109,48 +104,62 @@ func (c *Handler) GetRecentSpeciesActivity(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, result)
 }
 
-func (c *Handler) searchRecentSpeciesCandidateNotes(params recentSpeciesActivityParams, since, now time.Time, candidateLimit int) ([]datastore.Note, error) {
-	ranges := recentSpeciesSearchDateRanges(since, now)
-	notes := make([]datastore.Note, 0, candidateLimit)
-
-	for i := range ranges {
-		dateRange := ranges[i]
-		filters := &datastore.AdvancedSearchFilters{
-			DateRange: &dateRange,
-			SortBy:    recentSpeciesSortByDateDesc,
-			Limit:     candidateLimit,
+func (c *Handler) searchRecentSpeciesNotes(params recentSpeciesActivityParams, since, now time.Time, minID uint) ([]datastore.Note, error) {
+	filters := &datastore.AdvancedSearchFilters{
+		DetectedAtRange: &datastore.DateRange{
+			Start: since,
+			// Stored timestamps have second precision and the datastore range is
+			// half-open, so include the current second explicitly.
+			End: now.Add(time.Second),
+		},
+		ExcludeFalsePositives: true,
+		MinimalResults:        true,
+		SkipTotal:             true,
+		Limit:                 recentSpeciesQueryBatchSize,
+		MinID:                 minID,
+		CursorPagination:      true,
+	}
+	if params.MinConfidence > 0 {
+		filters.Confidence = &datastore.ConfidenceFilter{
+			Operator: ">=",
+			Value:    params.MinConfidence,
 		}
-		if params.MinConfidence > 0 {
-			filters.Confidence = &datastore.ConfidenceFilter{
-				Operator: ">=",
-				Value:    params.MinConfidence,
+	}
+
+	notes, _, err := c.DS.SearchNotesAdvanced(filters)
+	return notes, err
+}
+
+func (c *Handler) loadRecentSpeciesActivity(params recentSpeciesActivityParams, since, now time.Time) ([]RecentSpeciesActivity, int, error) {
+	bucketDuration := time.Duration(params.Hours) * time.Hour / time.Duration(params.Buckets)
+	bySpecies := make(map[string]*recentSpeciesAccumulator)
+	totalDetections := 0
+	var minID uint
+
+	for {
+		notes, err := c.searchRecentSpeciesNotes(params, since, now, minID)
+		if err != nil {
+			return nil, totalDetections, err
+		}
+		totalDetections += len(notes)
+		aggregateRecentSpeciesNotes(bySpecies, notes, since, now, bucketDuration, params)
+		if len(notes) < recentSpeciesQueryBatchSize {
+			break
+		}
+
+		nextMinID := minID
+		for i := range notes {
+			if notes[i].ID > nextMinID {
+				nextMinID = notes[i].ID
 			}
 		}
-
-		dateNotes, _, err := c.DS.SearchNotesAdvanced(filters)
-		if err != nil {
-			return nil, err
+		if nextMinID == minID {
+			return nil, totalDetections, fmt.Errorf("recent species cursor did not advance from detection %d", minID)
 		}
-		notes = append(notes, dateNotes...)
+		minID = nextMinID
 	}
 
-	return notes, nil
-}
-
-func recentSpeciesSearchDateRanges(since, now time.Time) []datastore.DateRange {
-	startDate := recentSpeciesDateStart(since)
-	endDate := recentSpeciesDateStart(now)
-	ranges := make([]datastore.DateRange, 0, 2)
-
-	for date := endDate; !date.Before(startDate); date = date.AddDate(0, 0, -1) {
-		ranges = append(ranges, datastore.DateRange{Start: date, End: date})
-	}
-
-	return ranges
-}
-
-func recentSpeciesDateStart(value time.Time) time.Time {
-	return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, value.Location())
+	return c.recentSpeciesActivitiesFromAccumulators(bySpecies, since, now, params), totalDetections, nil
 }
 
 func (c *Handler) parseRecentSpeciesActivityParams(ctx echo.Context) recentSpeciesActivityParams {
@@ -179,22 +188,7 @@ func (c *Handler) parseRecentSpeciesActivityParams(ctx echo.Context) recentSpeci
 	}
 }
 
-func recentSpeciesCandidateLimit(limit int) int {
-	return clampRecentInt(
-		limit*recentSpeciesCandidateMultiplier,
-		recentSpeciesMinCandidates,
-		recentSpeciesMaxCandidates,
-	)
-}
-
-func (c *Handler) buildRecentSpeciesActivity(notes []datastore.Note, since, now time.Time, params recentSpeciesActivityParams) []RecentSpeciesActivity {
-	if len(notes) == 0 {
-		return []RecentSpeciesActivity{}
-	}
-
-	bucketDuration := time.Duration(params.Hours) * time.Hour / time.Duration(params.Buckets)
-	bySpecies := make(map[string]*recentSpeciesAccumulator)
-
+func aggregateRecentSpeciesNotes(bySpecies map[string]*recentSpeciesAccumulator, notes []datastore.Note, since, now time.Time, bucketDuration time.Duration, params recentSpeciesActivityParams) {
 	for i := range notes {
 		note := &notes[i]
 		detectedAt, ok := parseNoteDetectedAt(note)
@@ -222,8 +216,6 @@ func (c *Handler) buildRecentSpeciesActivity(notes []datastore.Note, since, now 
 
 		updateRecentSpeciesAccumulator(acc, note, detectedAt, since, bucketDuration, params.Buckets)
 	}
-
-	return c.recentSpeciesActivitiesFromAccumulators(bySpecies, since, now, params)
 }
 
 func updateRecentSpeciesAccumulator(acc *recentSpeciesAccumulator, note *datastore.Note, detectedAt, since time.Time, bucketDuration time.Duration, buckets int) {
@@ -232,7 +224,8 @@ func updateRecentSpeciesAccumulator(acc *recentSpeciesAccumulator, note *datasto
 	if note.Confidence > acc.maxConfidence {
 		acc.maxConfidence = note.Confidence
 	}
-	if detectedAt.After(acc.latestHeardAt) || acc.latestHeardAt.IsZero() {
+	if detectedAt.After(acc.latestHeardAt) || acc.latestHeardAt.IsZero() ||
+		(detectedAt.Equal(acc.latestHeardAt) && note.ID > acc.latestDetectionID) {
 		acc.latestHeardAt = detectedAt
 		acc.latestConfidence = note.Confidence
 		acc.latestDetectionID = note.ID

@@ -69,6 +69,7 @@ Performance Optimizations:
   import { createDebounce } from '$lib/utils/debounce';
   import { getStoredValue, setStoredValue } from '$lib/utils/storage';
   import { safeArrayAccess, isPlainObject } from '$lib/utils/security';
+  import { validRecentSpeciesActivities } from '$lib/desktop/features/dashboard/utils/recentSpeciesActivity';
   import { api } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { navigation } from '$lib/stores/navigation.svelte';
@@ -161,29 +162,6 @@ Performance Optimizations:
       typeof o.speciesCode === 'string' &&
       (o.speciesCode as string).length > 0
     );
-  }
-
-  function isRecentSpeciesActivityArray(v: unknown): v is RecentSpeciesActivity[] {
-    if (!Array.isArray(v)) return false;
-    return v.every(item => {
-      if (!isPlainObject(item)) return false;
-      const o = item as Record<string, unknown>;
-      return (
-        typeof o.scientific_name === 'string' &&
-        typeof o.common_name === 'string' &&
-        typeof o.count === 'number' &&
-        typeof o.latest_heard_at === 'string' &&
-        typeof o.latest_confidence === 'number' &&
-        typeof o.max_confidence === 'number' &&
-        typeof o.avg_confidence === 'number' &&
-        Array.isArray(o.confidence_trend) &&
-        o.confidence_trend.every(value => typeof value === 'number') &&
-        typeof o.trend_start === 'string' &&
-        typeof o.trend_hours === 'number' &&
-        typeof o.score === 'number' &&
-        typeof o.latest_detection_id === 'number'
-      );
-    });
   }
 
   // State management
@@ -584,7 +562,7 @@ Performance Optimizations:
       }
       const data = await response.json();
       if (requestId !== recentHearingRequestId) return;
-      recentHearing = isRecentSpeciesActivityArray(data) ? data : [];
+      recentHearing = validRecentSpeciesActivities(data);
     } catch (error) {
       if (requestId !== recentHearingRequestId) return;
       recentHearingError =

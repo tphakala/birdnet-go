@@ -54,6 +54,9 @@ type SearchFilters struct {
 	// true = has review with verdict, false = no review or no verdict.
 	IsReviewed *bool
 
+	// ExcludeFalsePositives omits detections reviewed as false positives.
+	ExcludeFalsePositives bool
+
 	// IsLocked filters by lock status (optional).
 	IsLocked *bool
 
@@ -71,6 +74,15 @@ type SearchFilters struct {
 
 	// MinID filters to records with ID > MinID (cursor-based pagination).
 	MinID uint
+	// CursorPagination sorts by ID ascending so MinID pagination cannot skip
+	// records whose IDs and detection timestamps are not correlated.
+	CursorPagination bool
+
+	// SkipTotal avoids a separate count query when the caller does not use it.
+	SkipTotal bool
+
+	// MinimalResults selects only fields needed for species aggregation.
+	MinimalResults bool
 }
 
 // ModelStats contains statistics for a specific AI model.
