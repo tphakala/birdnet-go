@@ -3,6 +3,7 @@ package classifier
 import (
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -137,14 +138,59 @@ func openVINOCPUAllowed(devicePref string) bool {
 // is idempotent and fast on repeat); a load failure means no usable OV at all.
 func openVINOGPUAvailable(libraryPath string) bool {
 	if err := inference.InitOpenVINO(libraryPath); err != nil {
-		// Surface the load failure: without this, an explicit openvino/gpu opt-in
-		// with a bad OpenVINOPath would silently fall back to ORT carrying only a
-		// generic "not eligible" message, hiding the real library-load cause.
-		GetLogger().Warn("OpenVINO library load failed during device planning; treating GPU as unavailable",
-			logger.Error(err))
+		// A merely-absent OpenVINO library is the expected CPU-only case, not a
+		// fault: device planning falls back to ONNX Runtime and logs that fallback
+		// at INFO (logOpenVINODeclined). Log the absent case at Debug so a recurring
+		// line does not read as a problem in a support dump, and reserve Warn for a
+		// present-but-broken library (wrong version, missing symbol) whose load
+		// failure a user would actually want surfaced. This still surfaces the real
+		// cause of a broken explicit openvino/gpu opt-in, while staying quiet on a
+		// host that simply never installed OpenVINO.
+		if isLibraryAbsent(err) {
+			GetLogger().Debug("OpenVINO library not installed; treating GPU as unavailable",
+				logger.Error(err))
+		} else {
+			GetLogger().Warn("OpenVINO library load failed during device planning; treating GPU as unavailable",
+				logger.Error(err))
+		}
 		return false
 	}
 	return inference.OpenVINOHasDevice(inference.OVDeviceGPU)
+}
+
+// isLibraryAbsent reports whether err indicates the OpenVINO shared library is
+// simply not installed (the dynamic loader could not find the file), as opposed
+// to present but broken. The loader reports a missing library only through its
+// error text across the cgo boundary, so the message is the signal, matched
+// case-insensitively for Linux dlopen ("cannot open shared object file"), macOS
+// dyld ("image not found") and Windows LoadLibrary ("the specified module could
+// not be found"), plus os.ErrNotExist for any path stat'd before the load.
+//
+// It is best-effort and deliberately conservative about staying quiet. A
+// "permission denied" load failure is a present-but-broken case, not an absent
+// one, so it is excluded and stays a Warn. Two residual imperfections are
+// accepted because the only consequence is the Warn-vs-Debug log level (device
+// planning falls back to ONNX Runtime either way, and logOpenVINODeclined still
+// records the fallback at Info): a missing transitive dependency yields the same
+// "cannot open shared object file" text as an absent primary and is treated as
+// absent, and a non-English loader locale may not match the English text and so
+// falls through to Warn.
+func isLibraryAbsent(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	// A present-but-inaccessible library is broken, not absent; keep it a Warn.
+	if strings.Contains(msg, "permission denied") {
+		return false
+	}
+	return strings.Contains(msg, "cannot open shared object file") || // Linux dlopen
+		strings.Contains(msg, "no such file or directory") ||
+		strings.Contains(msg, "image not found") || // macOS dyld
+		strings.Contains(msg, "the specified module could not be found") // Windows LoadLibrary
 }
 
 // openVINOPlan returns the OpenVINO plan for the primary BirdNET classifier, or

@@ -24,6 +24,11 @@ type inferenceStats struct {
 	passedFilter  int
 	maxConfidence float32
 	threshold     float32
+	// daylightDiscards counts detections dropped by the daylight filter in the
+	// current window. Tracked here so a user who sees zero saved detections has an
+	// aggregate signal that a filter is discarding them, instead of only a
+	// per-detection Debug line they have to know to grep for.
+	daylightDiscards int
 }
 
 // PipelineStats accumulates per-source, per-model inference statistics
@@ -68,6 +73,24 @@ func (ps *PipelineStats) RecordInference(sourceID, modelID string, rawResults, p
 	s.threshold = threshold
 }
 
+// RecordDaylightDiscard records one detection dropped by the daylight filter for
+// the given source and model. It accumulates into the same per-source/model
+// window as RecordInference so the periodic summary can surface how many
+// detections a filter is silently eating.
+func (ps *PipelineStats) RecordDaylightDiscard(sourceID, modelID string) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+
+	key := sourceModelKey{sourceID: sourceID, modelID: modelID}
+	s := ps.stats[key]
+	if s == nil {
+		s = &inferenceStats{}
+		ps.stats[key] = s
+	}
+
+	s.daylightDiscards++
+}
+
 // Start launches the periodic logging goroutine. Safe to call multiple times.
 func (ps *PipelineStats) Start() {
 	ps.startOnce.Do(func() {
@@ -107,7 +130,14 @@ func (ps *PipelineStats) logAndReset(log logger.Logger) {
 	ps.mu.Unlock()
 
 	for key, s := range snapshot {
-		if s.inferences == 0 {
+		// Emit when the window saw any activity worth reporting: inferences, or
+		// daylight-filter discards on their own. Discards usually share a window with
+		// the inferences that produced them (RecordInference runs before filtering),
+		// but a detection inferred at the tail of one window can be flushed and
+		// discarded in the next, leaving a window with only discards; surfacing that
+		// window is exactly the zero-detections-saved signal a user needs, so it must
+		// not be suppressed here.
+		if s.inferences == 0 && s.daylightDiscards == 0 {
 			continue
 		}
 
@@ -124,6 +154,7 @@ func (ps *PipelineStats) logAndReset(log logger.Logger) {
 			logger.Int("inferences", s.inferences),
 			logger.Int("raw_results", s.rawResults),
 			logger.Int("passed_filter", s.passedFilter),
+			logger.Int("daylight_discards", s.daylightDiscards),
 			logger.Float64("max_confidence", roundTo2(float64(s.maxConfidence))),
 			logger.Float64("threshold", roundTo2(float64(s.threshold))),
 			logger.Duration("period", pipelineStatsInterval),

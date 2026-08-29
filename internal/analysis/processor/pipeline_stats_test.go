@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
 func TestPipelineStats_RecordAndReset(t *testing.T) {
@@ -72,4 +73,45 @@ func TestPipelineStats_ZeroActivitySuppressed(t *testing.T) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 	assert.Empty(t, ps.stats)
+}
+
+// TestPipelineStats_RecordDaylightDiscard verifies that daylight-filter discards
+// are aggregated into the periodic pipeline-stats summary, and in particular that
+// a window whose every detection was filtered (zero inferences, non-zero
+// discards) is still reported. That is exactly the case a user who sees zero
+// saved detections needs surfaced, so it must not be suppressed. Not parallel:
+// logtest swaps the process-global logger.
+func TestPipelineStats_RecordDaylightDiscard(t *testing.T) {
+	buf := logtest.CaptureBuffer(t)
+	ps := NewPipelineStats(nil)
+
+	ps.RecordDaylightDiscard("src-1", "BirdNET_v2.4")
+	ps.RecordDaylightDiscard("src-1", "BirdNET_v2.4")
+	ps.logAndReset(GetLogger())
+
+	out := buf.String()
+	require.Contains(t, out, "pipeline stats", "a discard-only window must still emit a summary")
+	assert.Contains(t, out, "daylight_discards=2")
+	assert.Contains(t, out, "inferences=0")
+
+	// The window was swapped out by logAndReset; an idle window logs nothing.
+	buf.Reset()
+	ps.logAndReset(GetLogger())
+	assert.NotContains(t, buf.String(), "pipeline stats", "an idle window must be suppressed")
+}
+
+// TestPipelineStats_InferencesAndDiscards verifies a window carrying both
+// inferences and daylight discards reports both counts on one line.
+func TestPipelineStats_InferencesAndDiscards(t *testing.T) {
+	buf := logtest.CaptureBuffer(t)
+	ps := NewPipelineStats(nil)
+
+	ps.RecordInference("src-2", "perch_v2", 5, 1, 0.8, 0.5)
+	ps.RecordDaylightDiscard("src-2", "perch_v2")
+	ps.logAndReset(GetLogger())
+
+	out := buf.String()
+	require.Contains(t, out, "pipeline stats")
+	assert.Contains(t, out, "inferences=1")
+	assert.Contains(t, out, "daylight_discards=1")
 }
