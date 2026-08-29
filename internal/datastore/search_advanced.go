@@ -107,9 +107,12 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 	// Apply confidence filter
 	query = applyConfidenceFilter(query, filters.Confidence)
 
-	// Apply date range filter
-	query = applyDateRangeFilter(query, filters.DateRange)
-	query = applyDetectedAtRangeFilter(query, filters.DetectedAtRange)
+	// Exact timestamps take precedence over calendar dates, matching the v2 datastore.
+	if filters.DetectedAtRange != nil {
+		query = applyDetectedAtRangeFilter(query, filters.DetectedAtRange)
+	} else {
+		query = applyDateRangeFilter(query, filters.DateRange)
+	}
 
 	// Apply hour filter
 	query = applyHourFilter(query, filters.Hour)
