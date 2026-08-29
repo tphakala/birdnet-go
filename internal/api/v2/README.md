@@ -551,7 +551,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 | GET    | `/models/regions`              | `GetModelRegions`       | ✅   | Region selector data: selectable regions, the auto-resolved region for the configured coordinates, and per-family resolution (auth-gated; never echoes raw coordinates) |
 | GET    | `/models/regions/:slug/map`    | `GetRegionCoverageMap`  | ❌   | Embedded SVG coverage map for a region slug (public static asset; strong ETag, honors If-None-Match; 404 when no map exists for the slug) |
 | GET    | `/models/installed`            | `GetInstalledModels`    | ❌   | List downloaded models                                |
-| POST   | `/models/install/:id`          | `InstallModel`          | ✅   | Download and install a catalog model                  |
+| POST   | `/models/install/:id`          | `InstallModel`          | ✅   | Download and install a catalog variant; body `{variantId?, allowIncompatible?}`. A variant incompatible with the detected hardware is rejected with 409 unless `allowIncompatible:true` |
 | POST   | `/models/reinstall/:id`        | `ReinstallModel`        | ✅   | Re-download missing/corrupt files for installed model |
 | DELETE | `/models/installed/:id`        | `UninstallModel`        | ✅   | Remove an installed model from disk                   |
 | GET    | `/models/install/:id/progress` | `StreamInstallProgress` | ❌   | SSE stream for install/reinstall progress             |

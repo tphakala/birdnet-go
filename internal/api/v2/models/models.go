@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -179,6 +180,12 @@ type VariantReasonResponse struct {
 // absent body or empty variantId installs (or switches to) the default variant.
 type installModelRequest struct {
 	VariantID string `json:"variantId"`
+	// AllowIncompatible overrides the hardware-compatibility gate. When false (the
+	// default), installing a variant the catalog marks incompatible with the
+	// detected hardware is rejected with 409. When true, an advanced user can force
+	// the install; it still proceeds but a WARN is logged so the choice is visible
+	// in logs and support dumps.
+	AllowIncompatible bool `json:"allowIncompatible"`
 }
 
 // ListModels returns classifier models that are enabled in the configuration.
@@ -594,6 +601,74 @@ func (c *Handler) rankCatalog(entries []classifier.CatalogEntry, ort inference.O
 	return byVariant, recommended, hostArch
 }
 
+// requestedVariantCompatibility reports the hardware compatibility of the
+// requested variant of entry, reusing the same recommender and host profile
+// GetModelCatalog uses so the install gate and the gallery's compatible flag stay
+// in agreement. gated is false for an entry the recommender does not rank (a flat
+// entry with no variants, or a variant it produced no verdict for), for which
+// there is nothing to gate; callers must treat gated==false as "allow". An empty
+// variantID resolves to the entry's default variant, matching install semantics.
+func (c *Handler) requestedVariantCompatibility(entry *classifier.CatalogEntry, variantID string, ort inference.ORTStatus) (compatible, gated bool, blockers []recommend.Reason, hostArch string) {
+	if entry == nil || len(entry.Variants) == 0 {
+		return true, false, nil, ""
+	}
+	resolvedID := variantID
+	if resolvedID == "" {
+		resolvedID = classifier.DefaultVariantID(entry)
+	}
+	byVariant, _, hostArch := c.rankCatalog([]classifier.CatalogEntry{*entry}, ort)
+	rec, ok := byVariant[entry.ID][resolvedID]
+	if !ok {
+		// The recommender produced no verdict for this variant (profiling seam
+		// returned nothing, or a variant the ranker skipped). Do not block on a
+		// missing verdict; offering the model is safer than a spurious rejection.
+		return true, false, nil, hostArch
+	}
+	return rec.Compatible, true, rec.Blockers, hostArch
+}
+
+// variantOrDefault renders a variant id for messages and logs, mapping the empty
+// (default) selection to a readable token instead of an empty string.
+func variantOrDefault(variantID string) string {
+	if variantID == "" {
+		return "(default)"
+	}
+	return variantID
+}
+
+// hostArchOrUnknown renders a host architecture for messages, mapping an empty
+// (unresolved) arch to a readable token.
+func hostArchOrUnknown(arch string) string {
+	if arch == "" {
+		return "unknown"
+	}
+	return arch
+}
+
+// formatBlockers renders recommender blocker reasons as a compact, deterministic
+// string for an error message or log field (e.g. "arch.unsupported[required=aarch64]").
+// Args are sorted so the output is stable across the map's iteration order.
+func formatBlockers(blockers []recommend.Reason) string {
+	if len(blockers) == 0 {
+		return "incompatible with this host"
+	}
+	parts := make([]string, 0, len(blockers))
+	for i := range blockers {
+		b := &blockers[i]
+		if len(b.Args) == 0 {
+			parts = append(parts, b.Code)
+			continue
+		}
+		args := make([]string, 0, len(b.Args))
+		for k, v := range b.Args {
+			args = append(args, k+"="+v)
+		}
+		slices.Sort(args)
+		parts = append(parts, b.Code+"["+strings.Join(args, ",")+"]")
+	}
+	return strings.Join(parts, "; ")
+}
+
 // defaultHardwareProfile resolves the live host profile from the already-probed
 // ONNX Runtime status plus a per-request OpenVINO device probe, mirroring the
 // inference-status endpoint (internal/api/v2/system/inference_status.go). The ORT
@@ -680,6 +755,11 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "unknown variant "+req.VariantID+" for model "+catalogID, http.StatusBadRequest)
 	}
 
+	// Probe ORT once: it gates ONNX-only variants below and also feeds the hardware
+	// profile the compatibility gate consults, mirroring how GetModelCatalog probes
+	// it a single time per request.
+	ortStatus := inference.CheckORTAvailability(c.CurrentSettings().BirdNET.ONNXRuntimePath)
+
 	// Reject installation of ONNX-dependent models when ORT is unavailable. The gate
 	// is variant-scoped: an entry may be ORT-free overall (e.g. BirdNET v2.4, whose
 	// BuiltIn baseline runs on the embedded TFLite model) yet expose ONNX-only
@@ -687,12 +767,35 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 	// flag so swapping to the embedded baseline is never blocked, while selecting an
 	// ONNX build still requires the runtime.
 	if entry.RequiresONNX || classifier.VariantNeedsONNX(&entry, req.VariantID) {
-		ortStatus := inference.CheckORTAvailability(c.CurrentSettings().BirdNET.ONNXRuntimePath)
 		if !ortStatus.Available {
 			return c.HandleError(ctx, nil,
 				"model requires ONNX Runtime "+inference.ORTRequiredVersion()+": "+ortStatus.Error,
 				http.StatusConflict)
 		}
+	}
+
+	// Hardware-compatibility gate. A variant the catalog marks incompatible with the
+	// detected hardware (an ARM-only int8 build on an x86 host, a variant needing
+	// more RAM than the host has) is rejected with 409 unless the request explicitly
+	// opts in via allowIncompatible. Reusing the same recommender GetModelCatalog
+	// uses keeps this gate and the gallery's compatible flag in agreement, and closes
+	// the hole where a direct API call could install an incompatible variant and, on
+	// switch, delete the working compatible one with no warning anywhere. An explicit
+	// override still installs, but logs a WARN so the choice is visible in support dumps.
+	compatible, gated, blockers, hostArch := c.requestedVariantCompatibility(&entry, req.VariantID, ortStatus)
+	if gated && !compatible {
+		if !req.AllowIncompatible {
+			return c.HandleError(ctx, nil,
+				fmt.Sprintf("variant %s of model %s is not compatible with the detected hardware (%s): %s; pass allowIncompatible to override",
+					variantOrDefault(req.VariantID), catalogID, hostArchOrUnknown(hostArch), formatBlockers(blockers)),
+				http.StatusConflict)
+		}
+		c.LogWarnIfEnabled("Installing model variant incompatible with detected hardware",
+			logger.String("catalog_id", catalogID),
+			logger.String("variant_id", variantOrDefault(req.VariantID)),
+			logger.String("host_arch", hostArchOrUnknown(hostArch)),
+			logger.String("blockers", formatBlockers(blockers)),
+			logger.String("operation", "model_install_incompatible_override"))
 	}
 
 	// Start async install in a background goroutine.

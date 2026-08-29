@@ -1584,7 +1584,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 				logger.Time("detection_time", item.FirstDetected),
 				logger.String("source", p.getDisplayNameForSource(item.Source)),
 				logger.String("operation", "daylight_filter"))
-			return true, "daylight filter"
+			return true, reasonDaylightFilter
 		}
 	}
 
@@ -1785,6 +1785,16 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 		itemMinDetections := calculateMinDetectionsForModel(settings, item.BestModelID)
 
 		if shouldDiscard, reason := p.shouldDiscardDetection(&item, settings, itemMinDetections); shouldDiscard {
+			// Aggregate daylight-filter discards into the periodic pipeline-stats
+			// summary so a user who sees zero saved detections has an at-a-glance
+			// signal that a filter is eating them. The per-detection log stays at
+			// Info: it carries the discard_detection operation the
+			// /system/events/detections API aggregates into per-species discard
+			// counts (DiscardReasons / TopDiscarded), so demoting it would silently
+			// drop daylight-filtered species from that endpoint on a default config.
+			if reason == reasonDaylightFilter && p.pipelineStats != nil {
+				p.pipelineStats.RecordDaylightDiscard(item.Source, item.BestModelID)
+			}
 			GetLogger().Info("discarding detection",
 				logger.String("species", speciesName),
 				logger.String("source", p.getDisplayNameForSource(item.Source)),
