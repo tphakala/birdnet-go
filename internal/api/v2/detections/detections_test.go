@@ -1179,6 +1179,9 @@ func TestDeleteDetectionRemovesFiles(t *testing.T) {
 		baseName + "_1026px-scientific_dark.png",
 		baseName + "_1026px-dr80.png",
 		baseName + "_1026px-high_contrast_dark-bat-legend.png",
+		baseName + "_1px-norm1.png",
+		baseName + "_800px-norm1.png",
+		baseName + "_2000px-scientific_dark-norm1.png",
 		baseName + "_1026px-norm1.png",
 		baseName + "_1026px-scientific_dark-norm1-legend.png",
 		// Parameterized API cache names use dot-delimited size/raw tokens.
@@ -1198,6 +1201,8 @@ func TestDeleteDetectionRemovesFiles(t *testing.T) {
 		"Some_Other_Bird_50p_20250115T100001Z_1026px.png",
 		baseName + "-another-clip.png",
 		baseName + "_1026px_1026px.png",
+		baseName + "_2051px-norm1.png",
+		baseName + "_widepx-norm1.png",
 		baseName + ".md_extra.png",
 	}
 	for _, sf := range survivingFiles {

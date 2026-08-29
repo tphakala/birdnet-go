@@ -1296,18 +1296,8 @@ func (c *Handler) DeleteDetection(ctx echo.Context) error {
 	return ctx.NoContent(http.StatusNoContent)
 }
 
-// spectrogramSizes lists all valid spectrogram sizes used for file naming.
-// These correspond to the parameterized and legacy width-based cache names:
-// sm=258, md=514, lg=1026, xl=2050.
-var spectrogramSizes = []struct {
-	name  string
-	width int
-}{
-	{name: "sm", width: apicore.SpectrogramSizeSm},
-	{name: "md", width: apicore.SpectrogramSizeMd},
-	{name: "lg", width: apicore.SpectrogramSizeLg},
-	{name: "xl", width: apicore.SpectrogramSizeXl},
-}
+// spectrogramSizeNames lists the named sizes used by parameterized cache paths.
+var spectrogramSizeNames = []string{"sm", "md", "lg", "xl"}
 
 // removeDetectionFiles removes the audio clip and all associated spectrogram
 // files from disk. Deletions are best-effort: files that are already missing
@@ -1398,13 +1388,11 @@ func isSpectrogramFileFor(pngName, baseFilename string) bool {
 		pngName == baseFilename+spectrogram.RenderCacheVersionSuffix+".png" {
 		return true
 	}
-	for _, size := range spectrogramSizes {
-		widthPrefix := fmt.Sprintf("%s_%dpx", baseFilename, size.width)
-		if pngName == widthPrefix+".png" || strings.HasPrefix(pngName, widthPrefix+"-") {
-			return true
-		}
-
-		parameterPrefix := baseFilename + "." + size.name
+	if isWidthBasedSpectrogramFileFor(pngName, baseFilename) {
+		return true
+	}
+	for _, sizeName := range spectrogramSizeNames {
+		parameterPrefix := baseFilename + "." + sizeName
 		if pngName == parameterPrefix+".png" ||
 			strings.HasPrefix(pngName, parameterPrefix+"-") ||
 			strings.HasPrefix(pngName, parameterPrefix+".") {
@@ -1412,6 +1400,19 @@ func isSpectrogramFileFor(pngName, baseFilename string) bool {
 		}
 	}
 	return false
+}
+
+func isWidthBasedSpectrogramFileFor(pngName, baseFilename string) bool {
+	remainder, ok := strings.CutPrefix(pngName, baseFilename+"_")
+	if !ok {
+		return false
+	}
+	widthToken, suffix, ok := strings.Cut(remainder, "px")
+	if !ok || (suffix != ".png" && !strings.HasPrefix(suffix, "-")) {
+		return false
+	}
+	width, err := strconv.Atoi(widthToken)
+	return err == nil && width > 0 && width <= apicore.SpectrogramSizeXl
 }
 
 // invalidateDetectionCache clears the detection cache to ensure fresh data
