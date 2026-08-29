@@ -51,7 +51,7 @@ func TestPreRenderer_RealSoxExecution(t *testing.T) {
 	ticker := time.NewTicker(testPollInterval)
 	defer ticker.Stop()
 
-	spectrogramPath := filepath.Join(env.AudioDir, "test.png")
+	spectrogramPath := filepath.Join(env.AudioDir, "test-norm1.png")
 
 	for {
 		select {
@@ -126,7 +126,7 @@ func TestPreRenderer_ConcurrentProcessing(t *testing.T) {
 
 				// Verify all spectrograms exist
 				for i := range numJobs {
-					spectrogramPath := filepath.Join(env.AudioDir, fmt.Sprintf("test-%d.png", i))
+					spectrogramPath := filepath.Join(env.AudioDir, fmt.Sprintf("test-%d-norm1.png", i))
 					_, err := os.Stat(spectrogramPath)
 					require.NoError(t, err, "Spectrogram %d not found", i)
 				}
