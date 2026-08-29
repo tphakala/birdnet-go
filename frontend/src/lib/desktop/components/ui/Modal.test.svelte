@@ -13,7 +13,7 @@
   {#snippet header()}
     {#if showCustomHeader}
       <div>
-        <h3 class="text-lg font-bold">Custom Header</h3>
+        <h3 id="modal-title" class="text-lg font-bold">Custom Header</h3>
         <p class="text-sm text-[var(--color-base-content)]/70">With subtitle</p>
       </div>
     {/if}

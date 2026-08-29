@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { cleanup, fireEvent, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/svelte';
 import { createComponentTestFactory } from '../../../test/render-helpers';
 import DetectionDetail from './DetectionDetail.svelte';
 import type { Detection } from '$lib/types/detection.types';
@@ -174,9 +174,10 @@ describe('DetectionDetail audio download', () => {
     requireElement(downloadButton);
     await fireEvent.click(downloadButton);
 
-    const formatButtons = Array.from(
-      container.querySelectorAll<HTMLButtonElement>('#modal-body > div > button')
-    );
+    const downloadDialog = screen.getByRole('dialog', { name: t('media.audio.download') });
+    const formatButtons = within(downloadDialog)
+      .getAllByRole('button')
+      .filter(button => button.getAttribute('aria-label') !== t('common.aria.closeModal'));
     expect(formatButtons.map(button => button.textContent.trim())).toEqual([
       t('components.audioPlayer.processing.exportOriginal'),
       'WAV',
@@ -226,9 +227,10 @@ describe('DetectionDetail audio download', () => {
     requireElement(downloadButton);
     await fireEvent.click(downloadButton);
 
-    const formatButtons = Array.from(
-      container.querySelectorAll<HTMLButtonElement>('#modal-body > div > button')
-    );
+    const downloadDialog = screen.getByRole('dialog', { name: t('media.audio.download') });
+    const formatButtons = within(downloadDialog)
+      .getAllByRole('button')
+      .filter(button => button.getAttribute('aria-label') !== t('common.aria.closeModal'));
     await fireEvent.click(formatButtons[1]);
     await waitFor(() => expect(exportSignal).not.toBeNull());
 
