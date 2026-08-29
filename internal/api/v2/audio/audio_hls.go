@@ -691,16 +691,60 @@ func (c *Handler) generateClientID(ctx echo.Context) string {
 	return clientIP + "-" + clientType
 }
 
-// resolveClientID returns a client identifier, preferring session-based ID when available.
-// Session ID is validated as a UUID and prefixed with IP to prevent spoofing.
-// Invalid or missing session IDs fall back to IP+UA-based identification.
-func (c *Handler) resolveClientID(ctx echo.Context, sessionID string) string {
-	if sessionID != "" {
-		if _, err := uuid.Parse(sessionID); err == nil {
-			return c.extractRemoteAddr(ctx) + "-" + sessionID
+// hlsSessionIDMinLen and hlsSessionIDMaxLen bound the length of a client-supplied
+// HLS session identifier that resolveClientID will accept. The lower bound keeps
+// trivially short tokens out; the upper bound caps how much client-controlled data
+// can enter the client-tracking map.
+const (
+	hlsSessionIDMinLen = 8
+	hlsSessionIDMaxLen = 128
+)
+
+// hlsSessionClientPrefix namespaces client IDs derived from a client-supplied
+// session ID. Without it a crafted session ID could equal the User-Agent type
+// segment that generateClientID appends (for example "HLSPlayer"), letting a
+// session-based client collide with a fallback client on the same IP. The prefix
+// keeps the two identity spaces disjoint regardless of the fallback type strings.
+const hlsSessionClientPrefix = "sid"
+
+// isSafeSessionID reports whether a client-supplied session identifier is safe to
+// embed in a client ID. It accepts bounded-length tokens containing only
+// URL/filename-safe characters ([A-Za-z0-9._-]). This admits canonical UUIDs as
+// well as other unique tokens a client may send (an alternate or older client may
+// use a non-canonical but still unique token), while rejecting empty, oversized,
+// or structurally unexpected input.
+func isSafeSessionID(sessionID string) bool {
+	if len(sessionID) < hlsSessionIDMinLen || len(sessionID) > hlsSessionIDMaxLen {
+		return false
+	}
+	for _, ch := range sessionID {
+		switch {
+		case ch >= 'a' && ch <= 'z',
+			ch >= 'A' && ch <= 'Z',
+			ch >= '0' && ch <= '9',
+			ch == '.', ch == '_', ch == '-':
+			// allowed character
+		default:
+			return false
 		}
 	}
-	// Fallback for non-browser clients (VLC, FFmpeg, etc.) or invalid session IDs
+	return true
+}
+
+// resolveClientID returns a client identifier, preferring a client-supplied
+// session ID when it is present and safe. The session ID is prefixed with the
+// remote IP so a client can never impersonate another IP's clients, and it lets
+// multiple live-audio consumers on the same host (for example the HLS player and
+// the dashboard spectrogram) be tracked as distinct clients instead of collapsing
+// onto a single IP+UA identity. Missing or unsafe session IDs fall back to
+// IP+UA-based identification (used by non-browser clients such as VLC and FFmpeg).
+func (c *Handler) resolveClientID(ctx echo.Context, sessionID string) string {
+	if isSafeSessionID(sessionID) {
+		// Namespace session-derived IDs so a crafted session ID can never collide
+		// with a generateClientID fallback (see hlsSessionClientPrefix).
+		return c.extractRemoteAddr(ctx) + "-" + hlsSessionClientPrefix + "-" + sessionID
+	}
+	// Fallback for non-browser clients (VLC, FFmpeg, etc.) or unsafe session IDs
 	return c.generateClientID(ctx)
 }
 

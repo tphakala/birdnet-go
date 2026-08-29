@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -507,9 +508,11 @@ func TestGetOrCreateStreamTokenConcurrency(t *testing.T) {
 
 // TestResolveClientID tests the resolveClientID method
 func TestResolveClientID(t *testing.T) {
+	t.Parallel()
 	const testRemoteAddr = "192.168.1.100:12345"
 
 	t.Run("prefers session ID when provided", func(t *testing.T) {
+		t.Parallel()
 		c := &Handler{Core: &apicore.Core{}}
 		c.Settings.Store(apitest.NewValidTestSettings())
 		e := echo.New()
@@ -524,6 +527,7 @@ func TestResolveClientID(t *testing.T) {
 	})
 
 	t.Run("falls back to generateClientID when no session", func(t *testing.T) {
+		t.Parallel()
 		c := &Handler{Core: &apicore.Core{}}
 		c.Settings.Store(apitest.NewValidTestSettings())
 		e := echo.New()
@@ -539,6 +543,7 @@ func TestResolveClientID(t *testing.T) {
 	})
 
 	t.Run("different sessions from same IP get different IDs", func(t *testing.T) {
+		t.Parallel()
 		c := &Handler{Core: &apicore.Core{}}
 		c.Settings.Store(apitest.NewValidTestSettings())
 		e := echo.New()
@@ -556,7 +561,8 @@ func TestResolveClientID(t *testing.T) {
 		assert.NotEqual(t, id1, id2)
 	})
 
-	t.Run("rejects invalid session ID format", func(t *testing.T) {
+	t.Run("accepts safe non-UUID session ID", func(t *testing.T) {
+		t.Parallel()
 		c := &Handler{Core: &apicore.Core{}}
 		c.Settings.Store(apitest.NewValidTestSettings())
 		e := echo.New()
@@ -565,12 +571,99 @@ func TestResolveClientID(t *testing.T) {
 		req.Header.Set("User-Agent", "Mozilla/5.0")
 		ctx := e.NewContext(req, httptest.NewRecorder())
 
-		// Non-UUID session ID should be rejected
-		clientID := c.resolveClientID(ctx, "not-a-valid-uuid")
-		// Should fall back to IP+UA-based ID
-		assert.Contains(t, clientID, "Browser")
-		assert.NotContains(t, clientID, "not-a-valid-uuid")
+		// A safe but non-canonical token (an alternate or older client may send one)
+		// must still identify a distinct client; otherwise concurrent consumers on
+		// the same host collapse to one client ID and tear down each other's shared
+		// stream.
+		safeSession := "client-1712345678901-abc123xyz"
+		clientID := c.resolveClientID(ctx, safeSession)
+		assert.Contains(t, clientID, "192.168.1.100")
+		assert.Contains(t, clientID, safeSession)
+		assert.NotContains(t, clientID, "Browser")
 	})
+
+	t.Run("session ID matching a fallback client type does not collide", func(t *testing.T) {
+		t.Parallel()
+		// A crafted session ID equal to generateClientID's fallback type string
+		// (e.g. "HLSPlayer", which is itself a safe token) must not resolve to the
+		// same client ID as an unrecognized-UA client with no session on the same
+		// IP. The session namespace prefix keeps the two identity spaces disjoint.
+		c := &Handler{Core: &apicore.Core{}}
+		c.Settings.Store(apitest.NewValidTestSettings())
+		e := echo.New()
+
+		reqSession := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+		reqSession.RemoteAddr = testRemoteAddr
+		reqSession.Header.Set("User-Agent", "curl/8.0") // unrecognized UA
+		ctxSession := e.NewContext(reqSession, httptest.NewRecorder())
+
+		reqFallback := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+		reqFallback.RemoteAddr = testRemoteAddr          // same IP
+		reqFallback.Header.Set("User-Agent", "curl/8.0") // same unrecognized UA -> "HLSPlayer" type
+		ctxFallback := e.NewContext(reqFallback, httptest.NewRecorder())
+
+		sessionID := c.resolveClientID(ctxSession, "HLSPlayer")
+		fallbackID := c.resolveClientID(ctxFallback, "")
+		assert.NotEqual(t, sessionID, fallbackID)
+	})
+
+	t.Run("rejects unsafe or malformed session ID", func(t *testing.T) {
+		t.Parallel()
+		c := &Handler{Core: &apicore.Core{}}
+		c.Settings.Store(apitest.NewValidTestSettings())
+		e := echo.New()
+
+		for _, unsafe := range []string{
+			"short",                // below minimum length
+			"has spaces here",      // whitespace not allowed
+			"path/../traversal",    // slashes not allowed
+			"semi;colon;injection", // punctuation not allowed
+			strings.Repeat("a", hlsSessionIDMaxLen+1), // above maximum length
+		} {
+			req := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+			req.RemoteAddr = testRemoteAddr
+			req.Header.Set("User-Agent", "Mozilla/5.0")
+			ctx := e.NewContext(req, httptest.NewRecorder())
+
+			clientID := c.resolveClientID(ctx, unsafe)
+			// Should fall back to IP+UA-based ID and never echo the unsafe token.
+			assert.Contains(t, clientID, "Browser", "input %q should fall back", unsafe)
+			assert.NotContains(t, clientID, unsafe)
+		}
+	})
+}
+
+// TestIsSafeSessionID tests the isSafeSessionID validation helper directly.
+func TestIsSafeSessionID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		sessionID string
+		want      bool
+	}{
+		{name: "canonical uuid", sessionID: "550e8400-e29b-41d4-a716-446655440000", want: true},
+		{name: "fallback token", sessionID: "fallback-1712345678901-abc123xyz", want: true},
+		{name: "alphanumeric with dot and underscore", sessionID: "a.b_c-1234", want: true},
+		{name: "uppercase and mixed case", sessionID: "ABCdef-1234", want: true},
+		{name: "minimum length", sessionID: strings.Repeat("a", hlsSessionIDMinLen), want: true},
+		{name: "maximum length", sessionID: strings.Repeat("a", hlsSessionIDMaxLen), want: true},
+		{name: "empty", sessionID: "", want: false},
+		{name: "one below minimum length", sessionID: strings.Repeat("a", hlsSessionIDMinLen-1), want: false},
+		{name: "one above maximum length", sessionID: strings.Repeat("a", hlsSessionIDMaxLen+1), want: false},
+		{name: "space", sessionID: "abc def ghi", want: false},
+		{name: "slash", sessionID: "abc/def/ghi", want: false},
+		{name: "semicolon", sessionID: "abc;def;ghi", want: false},
+		{name: "plus and at signs", sessionID: "abc+def@ghi", want: false},
+		{name: "non-ascii", sessionID: "abcdéfghij", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, isSafeSessionID(tt.sessionID))
+		})
+	}
 }
 
 // TestHLSConsumer_WriteDoesNotRetainFrameData verifies that hlsConsumer.Write
