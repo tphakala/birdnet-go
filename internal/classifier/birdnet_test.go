@@ -17,9 +17,10 @@ import (
 // fakeModelInstance is a minimal ModelInstance for testing orchestrator logic
 // without loading real models.
 type fakeModelInstance struct {
-	id     string
-	name   string
-	labels []string
+	id           string
+	name         string
+	labels       []string
+	resolvedPath string
 }
 
 func (f *fakeModelInstance) Predict(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
@@ -35,6 +36,7 @@ func (f *fakeModelInstance) Close() error         { return nil }
 func (f *fakeModelInstance) RuntimeInfo() (device, backend, precision string) {
 	return deviceCPU, BackendONNX, ""
 }
+func (f *fakeModelInstance) ResolvedModelPath() string { return f.resolvedPath }
 
 func TestShouldAutoSelectV3Geomodel(t *testing.T) {
 	t.Parallel()

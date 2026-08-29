@@ -45,6 +45,11 @@ type Perch struct {
 	// reported via RuntimeInfo().
 	backend   string
 	precision string
+	// modelPath is the model file this instance actually loaded from (the resolved
+	// path the loader built with, which after a stale-path recovery differs from the
+	// configured Perch.ModelPath). Set once at construction; reported via
+	// ResolvedModelPath().
+	modelPath string
 }
 
 // PerchConfig holds configuration for creating a Perch model instance.
@@ -149,6 +154,7 @@ func NewPerch(cfg *PerchConfig) (*Perch, error) {
 		device:     device,
 		backend:    backend,
 		precision:  precision,
+		modelPath:  cfg.ModelPath,
 	}, nil
 }
 
@@ -299,6 +305,10 @@ func (p *Perch) Labels() []string {
 func (p *Perch) RuntimeInfo() (device, backend, precision string) {
 	return p.device, p.backend, p.precision
 }
+
+// ResolvedModelPath returns the model file this Perch instance loaded from. Fixed
+// at construction, so the read needs no lock. Implements ModelInstance.
+func (p *Perch) ResolvedModelPath() string { return p.modelPath }
 
 // Close releases resources held by the Perch model.
 func (p *Perch) Close() error {

@@ -29,6 +29,12 @@ import (
 // that cannot be uninstalled.
 const permanentRegistryID = "BirdNET_V2.4"
 
+// sharedDirName is the gallery subdirectory that holds files shared across a
+// family's variants (the bat embedding extractor, the geomodel range filter).
+// Named once so the layout is not spelled out as a literal at every join and
+// parent-directory check.
+const sharedDirName = "shared"
+
 // Download status constants used in DownloadState.Status and SSE progress events.
 const (
 	StatusDownloading = "downloading"
@@ -129,6 +135,24 @@ type DownloadState struct {
 	Error           string `json:"error,omitempty"`
 }
 
+// IsActive reports whether this download state means the model is genuinely
+// mid-acquisition (downloading, verifying, or loading). A FAILED state is retained
+// for failedStateRetention so SSE pollers can still observe the failure, but during
+// that window the model is NOT analyzing, so callers deciding whether to suppress a
+// "not analyzing" alarm must treat failed (and the terminal complete/removed) as
+// inactive rather than as an in-progress download.
+func (s *DownloadState) IsActive() bool {
+	if s == nil {
+		return false
+	}
+	switch s.Status {
+	case StatusDownloading, StatusVerifying, StatusLoading:
+		return true
+	default:
+		return false
+	}
+}
+
 // NewModelManager creates a ModelManager that manages downloadable models
 // stored under modelsDir. The orchestrator is used for coordinating with
 // running model instances during install/uninstall operations. The settings
@@ -193,6 +217,17 @@ func (mm *ModelManager) ScanInstalled() {
 	// recorded model path points at). GetSettings returns an atomic snapshot.
 	settings := conf.GetSettings()
 
+	// Snapshot the resolved path each loaded instance is actually running, BEFORE
+	// taking mm.mu. installedModelBasenameHint prefers this over the configured path
+	// so the scan reports the RUNNING variant after a stale-path recovery, not the
+	// stale configured one. Snapshotting here keeps o.mu (taken
+	// briefly by LoadedModelPaths) from ever nesting under mm.mu. Nil when no
+	// orchestrator is wired (tests), which leaves the hint on its settings fallback.
+	var loadedPaths map[string]string
+	if mm.orchestrator != nil {
+		loadedPaths = mm.orchestrator.LoadedModelPaths()
+	}
+
 	// Phase 1: scan the filesystem under mm.mu.
 	mm.mu.Lock()
 	// Preserve in-flight installs/switches: replaceVariant swaps mm.installed and
@@ -225,7 +260,7 @@ func (mm *ModelManager) ScanInstalled() {
 		// file, so a variant entry is never shared-only and never needs the
 		// shared-only fall-through below.
 		if len(entry.Variants) > 0 {
-			if im, ok := scanVariantEntry(entry, subdir, installedModelBasenameHint(settings, entry.RegistryID)); ok {
+			if im, ok := scanVariantEntry(entry, subdir, installedModelBasenameHint(settings, entry.RegistryID, loadedPaths)); ok {
 				mm.installed[entry.ID] = im
 				log.Debug("Found installed model variant",
 					logger.String("catalog_id", entry.ID),
@@ -436,30 +471,62 @@ func variantByModelHint(entry *CatalogEntry, subdir, modelBasenameHint string) (
 // settings for the given registry ID, or "" when settings are absent or the
 // family carries no path. It is the tie-break scanVariantEntry uses to resolve an
 // ambiguous multi-variant on-disk state to the variant the loader actually opens.
-func installedModelBasenameHint(settings *conf.Settings, registryID string) string {
-	if settings == nil {
-		return ""
+// familyPathFields returns pointers to the model, labels, and embeddings path
+// fields in s for registryID, so the family-to-settings-field mapping lives in ONE
+// place instead of the copies that had drifted apart (the newest omitted BSG). A
+// nil labels or embeddings pointer means the family has no such field and it must
+// NOT be written: the primary is model-only (its label set is embedded and
+// identical across variants, so applyConfigForPrimarySwap writes BirdNET.ModelPath
+// alone and a user-configured BirdNET.LabelPath must survive a variant swap), and
+// every family but bat carries no embeddings path. ok is false for an unknown
+// registry ID or a nil settings pointer.
+func familyPathFields(s *conf.Settings, registryID string) (model, labels, embeddings *string, ok bool) {
+	if s == nil {
+		return nil, nil, nil, false
 	}
-	var p string
 	switch registryID {
 	case permanentRegistryID:
-		// The permanent BirdNET v2.4 classifier: its selected DFT-truncated file
-		// (if any) is recorded in BirdNET.ModelPath. An empty path means the
-		// embedded BuiltIn baseline is active.
-		p = settings.BirdNET.ModelPath
-	case RegistryIDBirdNETV3:
-		p = settings.BirdNETV3.ModelPath
+		return &s.BirdNET.ModelPath, nil, nil, true
 	case RegistryIDPerchV2:
-		p = settings.Perch.ModelPath
+		return &s.Perch.ModelPath, &s.Perch.LabelPath, nil, true
+	case RegistryIDBirdNETV3:
+		return &s.BirdNETV3.ModelPath, &s.BirdNETV3.LabelPath, nil, true
 	case RegistryIDBSG:
-		p = settings.BSG.ModelPath
+		return &s.BSG.ModelPath, &s.BSG.LabelPath, nil, true
 	case RegistryIDBat:
-		p = settings.Bat.ClassifierModel
+		return &s.Bat.ClassifierModel, &s.Bat.LabelPath, &s.Bat.EmbeddingModel, true
+	default:
+		return nil, nil, nil, false
 	}
-	if p == "" {
+}
+
+func installedModelBasenameHint(settings *conf.Settings, registryID string, loadedPaths map[string]string) string {
+	// Prefer the file the LOADED instance is actually running. After a stale-path
+	// recovery the settings field still names the pre-recovery file, so keying the
+	// gallery scan off it would report a variant that is not loaded and offer to
+	// "optimize" a build the process is already running. A family
+	// PRESENT in loadedPaths is authoritative even when its value is empty: empty
+	// means the built-in/default source is running, so returning "" (which
+	// scanVariantEntry maps to the BuiltIn record) is the correct answer, not a
+	// reason to fall back to config. Fall back to the configured field only when no
+	// instance is loaded for the family: the startup scan before models load, or a
+	// nil orchestrator in tests, both leave the family absent from loadedPaths.
+	if p, loaded := loadedPaths[registryID]; loaded {
+		if p == "" {
+			return ""
+		}
+		return filepath.Base(p)
+	}
+
+	// No loaded instance for this family: fall back to the configured model path.
+	// The permanent BirdNET v2.4 slot records its selected DFT-truncated file in
+	// BirdNET.ModelPath (empty means the embedded BuiltIn baseline); each secondary
+	// records its own. familyPathFields is the single source of that mapping.
+	model, _, _, ok := familyPathFields(settings, registryID)
+	if !ok || *model == "" {
 		return ""
 	}
-	return filepath.Base(p)
+	return filepath.Base(*model)
 }
 
 // installedFromVariant builds the InstalledModel for a specific variant if its
@@ -556,7 +623,7 @@ func (mm *ModelManager) ensureGeomodelConfig(log logger.Logger, installedIDs []s
 			if !isGeomodelRole(f.Role) {
 				continue
 			}
-			path := filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			path := filepath.Join(mm.modelsDir, sharedDirName, f.LocalName)
 			if _, err := os.Stat(path); err != nil {
 				allPresent = false
 				break
@@ -587,9 +654,9 @@ func (mm *ModelManager) applyInstalledGeomodelConfig(log logger.Logger, entry *C
 	for _, f := range entry.Files {
 		switch f.Role {
 		case RoleGeomodelModel:
-			expectedModelPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			expectedModelPath = filepath.Join(mm.modelsDir, sharedDirName, f.LocalName)
 		case RoleGeomodelLabels:
-			expectedLabelsPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			expectedLabelsPath = filepath.Join(mm.modelsDir, sharedDirName, f.LocalName)
 		}
 	}
 
@@ -646,8 +713,8 @@ func (mm *ModelManager) applyInstalledGeomodelConfig(log logger.Logger, entry *C
 // orchestrator and to cover cases where the config migration did not persist
 // (e.g. no config file on disk).
 func (mm *ModelManager) healOrphanGeomodelConfig(log logger.Logger) {
-	expectedModelPath := filepath.Join(mm.modelsDir, "shared", conf.GeomodelONNXLocalName)
-	expectedLabelsPath := filepath.Join(mm.modelsDir, "shared", conf.GeomodelLabelsLocalName)
+	expectedModelPath := filepath.Join(mm.modelsDir, sharedDirName, conf.GeomodelONNXLocalName)
+	expectedLabelsPath := filepath.Join(mm.modelsDir, sharedDirName, conf.GeomodelLabelsLocalName)
 
 	filesPresent := true
 	for _, path := range []string{expectedModelPath, expectedLabelsPath} {
@@ -767,7 +834,7 @@ func (mm *ModelManager) scanSharedOnlyEntry(log logger.Logger, entry *CatalogEnt
 	if !IsSharedOnly(entry) {
 		return false
 	}
-	sharedDir := filepath.Join(mm.modelsDir, "shared")
+	sharedDir := filepath.Join(mm.modelsDir, sharedDirName)
 	var modelPath, labelsPath string
 	for _, f := range entry.Files {
 		p := filepath.Join(sharedDir, f.LocalName)
@@ -1040,7 +1107,7 @@ func (mm *ModelManager) cleanupSharedFiles(log logger.Logger, catalogID string, 
 	}
 	for _, f := range entry.Files {
 		if matchRole(f.Role) {
-			path := filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			path := filepath.Join(mm.modelsDir, sharedDirName, f.LocalName)
 			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 				log.Warn("Failed to remove "+label+" file",
 					logger.String("path", path),
@@ -1412,7 +1479,7 @@ func (mm *ModelManager) rollbackVariantSwitch(log logger.Logger, entry *CatalogE
 	if oldFiles, ok := variantFilesByID(entry, old.VariantID); ok {
 		for _, f := range oldFiles {
 			if f.Role == RoleEmbeddings {
-				oldEmbeddings = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+				oldEmbeddings = filepath.Join(mm.modelsDir, sharedDirName, f.LocalName)
 				break
 			}
 		}
@@ -1720,7 +1787,7 @@ func (mm *ModelManager) downloadVariantFiles(ctx context.Context, entry *Catalog
 	// Shared files (embeddings, geomodel, taxonomy) are stored in a common directory.
 	fileDestPath := func(f CatalogFile) string {
 		if isSharedRole(f.Role) {
-			return filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			return filepath.Join(mm.modelsDir, sharedDirName, f.LocalName)
 		}
 		return filepath.Join(subdir, f.LocalName)
 	}
@@ -1851,7 +1918,7 @@ func (mm *ModelManager) downloadVariantFiles(ctx context.Context, entry *Catalog
 	// Find embeddings path for bat models.
 	for _, f := range files {
 		if f.Role == RoleEmbeddings {
-			embeddingsPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+			embeddingsPath = filepath.Join(mm.modelsDir, sharedDirName, f.LocalName)
 			break
 		}
 	}
@@ -2013,37 +2080,19 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 
 	updated := conf.CloneSettings(conf.GetSettings())
 
-	switch entry.RegistryID {
-	case RegistryIDBirdNETV3:
+	// Set only the non-empty paths, and only fields the family actually carries
+	// (familyPathFields returns nil for a family's absent labels/embeddings). The
+	// primary is not gallery-installed through this path, so a permanent registry ID
+	// never reaches here; if it did, familyPathFields would expose model only.
+	if model, labels, embeddings, ok := familyPathFields(updated, entry.RegistryID); ok {
 		if modelPath != "" {
-			updated.BirdNETV3.ModelPath = modelPath
+			*model = modelPath
 		}
-		if labelsPath != "" {
-			updated.BirdNETV3.LabelPath = labelsPath
+		if labels != nil && labelsPath != "" {
+			*labels = labelsPath
 		}
-	case RegistryIDPerchV2:
-		if modelPath != "" {
-			updated.Perch.ModelPath = modelPath
-		}
-		if labelsPath != "" {
-			updated.Perch.LabelPath = labelsPath
-		}
-	case RegistryIDBSG:
-		if modelPath != "" {
-			updated.BSG.ModelPath = modelPath
-		}
-		if labelsPath != "" {
-			updated.BSG.LabelPath = labelsPath
-		}
-	case RegistryIDBat:
-		if modelPath != "" {
-			updated.Bat.ClassifierModel = modelPath
-		}
-		if labelsPath != "" {
-			updated.Bat.LabelPath = labelsPath
-		}
-		if embeddingsPath != "" {
-			updated.Bat.EmbeddingModel = embeddingsPath
+		if embeddings != nil && embeddingsPath != "" {
+			*embeddings = embeddingsPath
 		}
 	}
 
@@ -2053,9 +2102,9 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 		for _, f := range entry.Files {
 			switch f.Role {
 			case RoleGeomodelModel:
-				updated.BirdNET.RangeFilter.ModelPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+				updated.BirdNET.RangeFilter.ModelPath = filepath.Join(mm.modelsDir, sharedDirName, f.LocalName)
 			case RoleGeomodelLabels:
-				updated.BirdNET.RangeFilter.LabelsPath = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+				updated.BirdNET.RangeFilter.LabelsPath = filepath.Join(mm.modelsDir, sharedDirName, f.LocalName)
 			}
 		}
 	}
@@ -2096,15 +2145,6 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 	retainAlias := false
 
 	switch entry.RegistryID {
-	case RegistryIDBirdNETV3:
-		updated.BirdNETV3.ModelPath = ""
-		updated.BirdNETV3.LabelPath = ""
-	case RegistryIDPerchV2:
-		updated.Perch.ModelPath = ""
-		updated.Perch.LabelPath = ""
-	case RegistryIDBSG:
-		updated.BSG.ModelPath = ""
-		updated.BSG.LabelPath = ""
 	case RegistryIDBat:
 		// Find another installed bat model to re-point config to.
 		var replacement *InstalledModel
@@ -2128,9 +2168,20 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 			updated.Bat.EmbeddingModel = ""
 			for _, f := range replacementEntry.Files {
 				if f.Role == RoleEmbeddings {
-					updated.Bat.EmbeddingModel = filepath.Join(mm.modelsDir, "shared", f.LocalName)
+					updated.Bat.EmbeddingModel = filepath.Join(mm.modelsDir, sharedDirName, f.LocalName)
 					break
 				}
+			}
+		}
+	default:
+		// The single-model families (Perch, BirdNET v3.0, BSG) just clear their
+		// paths; familyPathFields is the single source of that mapping. The primary
+		// is never uninstalled (Uninstall refuses permanentRegistryID) and an unknown
+		// registry ID yields ok=false, so both are safely no-ops here.
+		if model, labels, _, ok := familyPathFields(updated, entry.RegistryID); ok {
+			*model = ""
+			if labels != nil {
+				*labels = ""
 			}
 		}
 	}

@@ -1771,7 +1771,11 @@ func modelIsDownloading(mm *classifier.ModelManager, modelID string) bool {
 	}
 	catalog := classifier.ActiveCatalog()
 	for i := range catalog {
-		if catalog[i].RegistryID == registryID && mm.GetDownloadState(catalog[i].ID) != nil {
+		// Suppress the not-analyzing alarm only while a download is genuinely in
+		// progress. A FAILED state lingers for failedStateRetention so SSE pollers
+		// can see it, but the model is NOT analyzing during that window, so a
+		// non-nil-but-failed state must not be read as "still downloading".
+		if catalog[i].RegistryID == registryID && mm.GetDownloadState(catalog[i].ID).IsActive() {
 			return true
 		}
 	}

@@ -17,14 +17,15 @@ import (
 
 // mockModelInstance implements ModelInstance for testing.
 type mockModelInstance struct {
-	id         string
-	spec       ModelSpec
-	labels     []string // optional; when nil a single default label is returned
-	device     string   // optional; when empty RuntimeInfo reports "CPU"
-	backend    string   // optional; reported verbatim by RuntimeInfo
-	precision  string   // optional; reported verbatim by RuntimeInfo
-	numSpecies int      // optional; when 0 NumSpecies reports a single default species
-	predict    func(ctx context.Context, samples [][]float32) ([]datastore.Results, error)
+	id           string
+	spec         ModelSpec
+	labels       []string // optional; when nil a single default label is returned
+	device       string   // optional; when empty RuntimeInfo reports "CPU"
+	backend      string   // optional; reported verbatim by RuntimeInfo
+	precision    string   // optional; reported verbatim by RuntimeInfo
+	resolvedPath string
+	numSpecies   int // optional; when 0 NumSpecies reports a single default species
+	predict      func(ctx context.Context, samples [][]float32) ([]datastore.Results, error)
 }
 
 func (m *mockModelInstance) Predict(ctx context.Context, samples [][]float32) ([]datastore.Results, error) {
@@ -60,6 +61,7 @@ func (m *mockModelInstance) RuntimeInfo() (device, backend, precision string) {
 	}
 	return device, m.backend, m.precision
 }
+func (m *mockModelInstance) ResolvedModelPath() string { return m.resolvedPath }
 
 // newTestOrchestrator creates an Orchestrator with mock models for unit testing.
 // It does not require real model files.

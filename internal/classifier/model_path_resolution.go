@@ -48,32 +48,40 @@ func (s modelFileSet) allPresentOnDisk(needEmbeddings bool) bool {
 	return true
 }
 
-// diskPresence classifies the on-disk state of a required member set. It
-// separates a member that is confirmed absent (fs.ErrNotExist), which marks the
-// configured set stale and worth repairing, from a member that could not be
-// stat'd for another reason (EACCES, EIO, a stale NFS handle, a half-initialised
-// mount that reports EIO). The latter must not trigger a permanent config
-// rewrite, because the file may well reappear.
+// presenceResult classifies the on-disk state of a required member set as two
+// INDEPENDENT facts rather than one ranked enum, because a set can be both at once
+// (one member confirmed gone, another merely unreadable) and the two facts drive
+// two different decisions that must not be collapsed:
+//
+//   - missing is true when at least one non-empty required member is CONFIRMED
+//     absent (fs.ErrNotExist). This is what makes the configured set stale and, on
+//     its own, worth repairing.
+//   - unreadable is true when at least one non-empty required member could not be
+//     stat'd for a reason OTHER than absence (EACCES, EIO, a stale NFS handle, a
+//     half-initialised mount). The file may well reappear, so it must never trigger
+//     a permanent config rewrite.
+//
+// PERSISTENCE keys on unreadable: while any member is merely unreadable the repair
+// is withheld (repairable = missing && !unreadable), so a slow-to-mount volume is
+// never persisted as a stale path. WORDING keys on missing: a set with a
+// confirmed-absent member is "not found", never "exists but could not be read",
+// even when another member is also unreadable (the unreadable notification flag is
+// unreadable && !missing). Keeping the two facts separate is what lets a set that
+// is BOTH be reported honestly: withhold the rewrite AND tell the
+// user a file is missing.
 //
 // Note the boundary: a FULLY unmounted path reports ErrNotExist, not one of the
-// above, so it classifies as presenceMissing (repairable), NOT indeterminate.
-// The guard against that rewriting a user's own path is the gallery-layout
-// requirement in isGalleryManagedPath, not this classification.
-type diskPresence int
+// above, so it classifies as missing (repairable), NOT unreadable. The guard
+// against that rewriting a user's own path is the gallery-layout requirement in
+// isGalleryManagedPath, not this classification.
+type presenceResult struct {
+	missing    bool
+	unreadable bool
+}
 
-const (
-	// presenceComplete means every non-empty required member exists on disk.
-	presenceComplete diskPresence = iota
-	// presenceMissing means at least one non-empty required member is confirmed
-	// absent (fs.ErrNotExist) and no member was indeterminate.
-	presenceMissing
-	// presenceIndeterminate means at least one non-empty required member could
-	// not be stat'd for a reason OTHER than absence (a permissions failure, an I/O
-	// error, a half-initialised mount reporting EIO). It dominates presenceMissing
-	// so a transient error is never mistaken for a stale path. A fully unmounted
-	// path reports ErrNotExist and is therefore presenceMissing, not this.
-	presenceIndeterminate
-)
+// complete reports that every non-empty required member exists on disk (neither
+// missing nor unreadable).
+func (p presenceResult) complete() bool { return !p.missing && !p.unreadable }
 
 // pathResolution carries resolveFamilyPaths' outcome out of a model builder so
 // the loader can act on it without resolving a second time.
@@ -100,7 +108,7 @@ type pathResolution struct {
 	// repairable reports that the substitution came from a CONFIRMED absence
 	// (ErrNotExist), so the stale configuration MAY be rewritten. It is never true
 	// unless substituted is also true. A member that is unreadable for some OTHER
-	// reason (presenceIndeterminate: a permissions failure, an I/O error, a
+	// reason (unreadable: a permissions failure, an I/O error, a
 	// half-initialised mount) is substituted but NOT repairable, so a transient
 	// failure never rewrites config.yaml permanently.
 	repairable bool
@@ -121,32 +129,30 @@ type pathResolution struct {
 // configured path (fill it from the gallery, keep the rest) from a stale one (a
 // non-empty path that has gone missing, which makes the whole set stale).
 //
-// A member that is unreadable for a reason other than absence yields
-// presenceIndeterminate, which dominates: a single unreadable member classifies
-// the whole set as indeterminate so a slow-to-mount volume is never mistaken for
-// a stale configuration.
-func (s modelFileSet) nonEmptyMembersPresence(needEmbeddings bool) diskPresence {
+// Every member is stat'd and BOTH facts are recorded: the scan does not stop at the
+// first unreadable member, because a later member may be confirmed absent, and a
+// set with a confirmed-absent member must be reported as missing (for the wording)
+// even while its unreadable member withholds the config rewrite (for persistence).
+// See presenceResult for why the two are kept separate rather than ranked.
+func (s modelFileSet) nonEmptyMembersPresence(needEmbeddings bool) presenceResult {
 	paths := []string{s.model, s.labels}
 	if needEmbeddings {
 		paths = append(paths, s.embeddings)
 	}
-	sawMissing := false
+	var res presenceResult
 	for _, p := range paths {
 		if p == "" {
 			continue
 		}
 		if _, err := os.Stat(p); err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
-				sawMissing = true
+				res.missing = true
 				continue
 			}
-			return presenceIndeterminate
+			res.unreadable = true
 		}
 	}
-	if sawMissing {
-		return presenceMissing
-	}
-	return presenceComplete
+	return res
 }
 
 // resolveFamilyPaths decides which file set a secondary model family should be
@@ -184,7 +190,7 @@ func (o *Orchestrator) resolveFamilyPaths(registryID string, configured modelFil
 	// empty members from the gallery (main's behaviour). Neither flag is set:
 	// nothing configured went stale, so there is nothing to repair and nothing the
 	// user chose was replaced.
-	if presence == presenceComplete {
+	if presence.complete() {
 		if configured.complete(needEmbeddings) {
 			return pathResolution{resolved: configured}
 		}
@@ -220,17 +226,20 @@ func (o *Orchestrator) resolveFamilyPaths(registryID string, configured modelFil
 		return pathResolution{resolved: filled}
 	}
 
-	// A non-empty configured path is missing or unreadable. Only a CONFIRMED
-	// absence (presenceMissing) marks the set stale and may rewrite config; a
-	// member that is unreadable for a reason OTHER than absence
-	// (presenceIndeterminate: a permissions failure, an I/O error, a
-	// half-initialised mount reporting EIO) still falls back at runtime so
-	// analysis can run, but must NOT persist a repair, or a transient error
-	// rewrites config.yaml permanently. repairable carries that distinction to
-	// both fallback returns below. (A fully unmounted path reports ErrNotExist, so
-	// it is presenceMissing here; isGalleryManagedPath is what stops that rewrite
-	// from taking over a user's own path.)
-	repairable := presence == presenceMissing
+	// A non-empty configured path is missing or unreadable. The repair may rewrite
+	// config only for a CONFIRMED absence with NO member merely unreadable: a member
+	// that could not be read for a reason OTHER than absence (a permissions failure,
+	// an I/O error, a half-initialised mount reporting EIO) may still reappear, so a
+	// set that has ANY such member still falls back at runtime so analysis can run
+	// but must NOT persist a repair, or a transient error rewrites config.yaml
+	// permanently. repairable carries that distinction to both fallback returns
+	// below; the unreadable-for-wording flag (unreadable && !missing) is set only
+	// when NOTHING is confirmed absent, so a set with a missing member is reported
+	// "not found" rather than "could not be read". (A fully unmounted path reports
+	// ErrNotExist, so it is missing here; isGalleryManagedPath is what stops that
+	// rewrite from taking over a user's own path.)
+	repairable := presence.missing && !presence.unreadable
+	unreadableWording := presence.unreadable && !presence.missing
 
 	// Before the generic gallery probe, try to keep the variant the configured
 	// model file names. When only a companion file went missing (a partial
@@ -244,7 +253,7 @@ func (o *Orchestrator) resolveFamilyPaths(registryID string, configured modelFil
 		GetLogger().Debug("recovered the configured variant's companion files",
 			logger.String("registry_id", registryID),
 			logger.String("model_path", sameVariant.model))
-		return pathResolution{resolved: sameVariant, substituted: true, repairable: repairable, unreadable: presence == presenceIndeterminate}
+		return pathResolution{resolved: sameVariant, substituted: true, repairable: repairable, unreadable: unreadableWording}
 	}
 
 	m, l, e := o.resolveInstalledPaths(registryID)
@@ -267,7 +276,7 @@ func (o *Orchestrator) resolveFamilyPaths(registryID string, configured modelFil
 		logger.String("configured_model_path", configured.model),
 		logger.String("resolved_model_path", fallback.model))
 
-	return pathResolution{resolved: fallback, substituted: true, repairable: repairable, unreadable: presence == presenceIndeterminate}
+	return pathResolution{resolved: fallback, substituted: true, repairable: repairable, unreadable: unreadableWording}
 }
 
 // resolveSiblingSet rebuilds a family's complete file set from the variant that
@@ -291,7 +300,7 @@ func (o *Orchestrator) resolveSiblingSet(registryID, modelPath string) (set mode
 		// error (an unreadable volume) is treated the same as absence here, so a
 		// half-mounted volume never yields a spurious sibling set. Suppressing the
 		// config repair for the merely-unreadable case is the caller's job, via the
-		// presenceIndeterminate classification from nonEmptyMembersPresence.
+		// unreadable classification from nonEmptyMembersPresence.
 		return modelFileSet{}, false
 	}
 
@@ -339,7 +348,7 @@ func (o *Orchestrator) resolveSiblingSet(registryID, modelPath string) (set mode
 					candidate.labels = filepath.Join(dir, f.LocalName)
 				case RoleEmbeddings:
 					if modelsDir != "" {
-						candidate.embeddings = filepath.Join(modelsDir, "shared", f.LocalName)
+						candidate.embeddings = filepath.Join(modelsDir, sharedDirName, f.LocalName)
 					}
 				}
 			}
@@ -404,7 +413,7 @@ func (o *Orchestrator) isGalleryManagedPath(registryID, path string) bool {
 	// name, normally "models"). Matching only base + parent would qualify any path
 	// that merely MIRRORS the gallery layout, e.g. /mnt/nas/perch-v2/perch_v2.onnx:
 	// a NAS or USB mount that is late at boot yields ENOENT (the mountpoint exists
-	// but is empty), which classifies as presenceMissing with repairable=true, so a
+	// but is empty), which classifies as missing with repairable=true, so a
 	// user who moved their models to a NAS but left a local gallery copy would have
 	// the NAS path permanently rewritten. Dropping only the models-directory PREFIX
 	// (not its base name) still handles the changed-container-HOME case the issues
@@ -440,7 +449,7 @@ func (o *Orchestrator) isGalleryManagedPath(registryID, path string) bool {
 				}
 				expectedParent := entry.ID
 				if isSharedRole(f.Role) {
-					expectedParent = "shared"
+					expectedParent = sharedDirName
 				}
 				if parent == expectedParent {
 					return true

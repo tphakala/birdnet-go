@@ -65,6 +65,14 @@ type modelIdentity struct {
 	name    string
 	version string
 	spec    ModelSpec
+	// resolvedPath is the primary classifier model file this instance actually
+	// loaded from (bn.primaryPath.resolved.model), published alongside the identity
+	// so observers on and off the hot path can read the RUNNING file lock-free
+	// rather than settings.BirdNET.ModelPath, which after a stale-path recovery names
+	// a file the instance is not running. Empty means the built-in baseline is
+	// running (no configured path, or a confirmed-absent path with no usable
+	// installed variant).
+	resolvedPath string
 }
 
 // BirdNET struct represents the BirdNET model with interpreters and configuration.
@@ -167,6 +175,34 @@ func (bn *BirdNET) updateSettings(s *conf.Settings) {
 // the settings API's change detection is one such caller.
 func (bn *BirdNET) configuredModelPath() string {
 	return bn.primaryPath.resolved.model
+}
+
+// resolvedModelPath returns the primary classifier model file this instance is
+// running, read LOCK-FREE from the published identity snapshot. Unlike
+// configuredModelPath (which reads bn.primaryPath under bn.mu or before the
+// instance is shared), this is safe to call off bn.mu: it is what the pre-lock
+// inference decoration and the cross-package accessors below use so they report
+// the file the instance is actually running, never the stale configured path,
+// without taking bn.mu (held by inference for the full native call, issue #3336).
+//
+// Before the first publishIdentity (a struct-literal instance in tests that
+// bypassed NewBirdNET, never concurrently reloaded) the pointer is nil and it
+// falls back to reading bn.primaryPath directly, which is race-free in that case,
+// mirroring the ModelID/ModelName/ModelVersion getters.
+func (bn *BirdNET) resolvedModelPath() string {
+	if id := bn.identity.Load(); id != nil {
+		return id.resolvedPath
+	}
+	return bn.primaryPath.resolved.model
+}
+
+// ResolvedModelPath returns the primary classifier model file this instance is
+// running (empty means the built-in baseline). It is the lock-free, RUNNING-file
+// answer that cross-package consumers must prefer over settings.BirdNET.ModelPath,
+// which after a stale-path recovery names a file that is not loaded. Implements
+// ModelInstance.
+func (bn *BirdNET) ResolvedModelPath() string {
+	return bn.resolvedModelPath()
 }
 
 // resolvePrimaryOrConfigured applies a primaryPathResolver, treating a nil
@@ -1542,21 +1578,32 @@ func (bn *BirdNET) reloadModelInternal(allowPathChange bool) error {
 				Build()
 		}
 		bn.ModelInfo = newInfo
-	case !allowPathChange && bn.primaryPath.substituted &&
+	case !allowPathChange &&
 		oldPrimaryPath.resolved.model != "" && bn.primaryPath.resolved.model == "":
-		// The file this instance is RUNNING has gone away: the previous resolution
-		// named a real file, this one resolves to nothing (confirmed absent with no
-		// usable installed variant). A substitution onto a real file has a non-empty
-		// configuredModelPath and is handled by the case above.
+		// The file this instance is RUNNING is gone from the configuration: the
+		// previous resolution named a real file, this one resolves to nothing. Two
+		// ways in, both a model-identity change that the settings-reload path must
+		// refuse (the caller restarts the orchestrator instead):
+		//   - the configured file was CONFIRMED absent with no usable installed
+		//     variant, so resolvePrimaryModelPath substituted onto the empty
+		//     built-in (substituted=true, resolved.model=""); or
+		//   - the user CLEARED birdnet.modelpath while a custom model was running, so
+		//     resolvePrimaryModelPath("") returns the empty result verbatim
+		//     (substituted=false, resolved.model="").
+		// A substitution onto a REAL file has a non-empty configuredModelPath and is
+		// handled by the case above.
 		//
 		// The old-vs-new comparison is what makes this precise, and it is load
-		// bearing. Testing bn.primaryPath.substituted alone would also fire in the
-		// STEADY STATE after a successful startup recovery onto the built-in
-		// baseline: config keeps the stale path (the recovery is deliberately not
-		// repairable there), so every reload re-resolves to the same empty result,
-		// and every settings save would fail forever. That is precisely the
-		// second-order bug the re-resolution above exists to prevent, and it would
-		// hit exactly the users this whole recovery is for.
+		// bearing: it is what excludes the STEADY STATE after a successful startup
+		// recovery onto the built-in baseline. There config keeps the stale path (the
+		// recovery is deliberately not repairable), so every reload re-resolves to
+		// the same empty result, but the PREVIOUS resolution was already empty too
+		// (oldPrimaryPath.resolved.model == ""), so this case does not fire and
+		// settings saves keep succeeding. The guard deliberately does NOT test
+		// bn.primaryPath.substituted: gating on it would leave the cleared-path case
+		// (substituted=false) falling through, which is the silent-corruption bug
+		// below, while adding nothing to the steady-state exclusion the old!="" arm
+		// already provides.
 		//
 		// Falling through would instead be silent corruption: no case matches,
 		// bn.ModelInfo keeps naming the vanished file, initializeModel loads the
@@ -1763,10 +1810,11 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 // consistent.
 func (bn *BirdNET) publishIdentity() {
 	bn.identity.Store(&modelIdentity{
-		id:      bn.ModelInfo.ID,
-		name:    bn.ModelInfo.Name,
-		version: bn.modelVersion,
-		spec:    bn.ModelInfo.Spec,
+		id:           bn.ModelInfo.ID,
+		name:         bn.ModelInfo.Name,
+		version:      bn.modelVersion,
+		spec:         bn.ModelInfo.Spec,
+		resolvedPath: bn.primaryPath.resolved.model,
 	})
 }
 
@@ -1969,7 +2017,7 @@ func (bn *BirdNET) PrimaryRangeFilterCoverage() (geomodel *GeomodelStatus, prima
 	bn.mu.Unlock()
 
 	if rf.Model == "v3" && modelsDir != "" {
-		sharedDir := filepath.Join(modelsDir, "shared")
+		sharedDir := filepath.Join(modelsDir, sharedDirName)
 		expectedONNX := filepath.Join(sharedDir, conf.GeomodelONNXLocalName)
 		expectedLabels := filepath.Join(sharedDir, conf.GeomodelLabelsLocalName)
 		autoSelected = rf.ModelPath == expectedONNX && rf.LabelsPath == expectedLabels
@@ -2018,7 +2066,7 @@ func shouldAutoSelectV3Geomodel(modelID, modelsDir string) bool {
 	default:
 		return false
 	}
-	sharedDir := filepath.Join(modelsDir, "shared")
+	sharedDir := filepath.Join(modelsDir, sharedDirName)
 	onnxPath := filepath.Join(sharedDir, conf.GeomodelONNXLocalName)
 	labelsPath := filepath.Join(sharedDir, conf.GeomodelLabelsLocalName)
 	if _, err := os.Stat(onnxPath); err != nil {
@@ -2068,7 +2116,7 @@ func applyAutoSelectedGeomodelPaths(settings *conf.Settings, modelsDir string) {
 		}
 	}
 
-	sharedDir := filepath.Join(modelsDir, "shared")
+	sharedDir := filepath.Join(modelsDir, sharedDirName)
 	rf.Model = "v3"
 	rf.ModelPath = filepath.Join(sharedDir, conf.GeomodelONNXLocalName)
 	rf.LabelsPath = filepath.Join(sharedDir, conf.GeomodelLabelsLocalName)

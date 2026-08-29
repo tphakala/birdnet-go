@@ -32,6 +32,11 @@ type BirdNETV3 struct {
 	// Both set once at construction; reported via RuntimeInfo().
 	backend   string
 	precision string
+	// modelPath is the model file this instance actually loaded from (the resolved
+	// path the loader built with, which after a stale-path recovery differs from the
+	// configured BirdNETV3.ModelPath). Set once at construction; reported via
+	// ResolvedModelPath().
+	modelPath string
 }
 
 // BirdNETV3Config holds configuration for creating a BirdNET v3.0 model instance.
@@ -142,6 +147,7 @@ func NewBirdNETV3(cfg *BirdNETV3Config) (*BirdNETV3, error) {
 		device:     device,
 		backend:    backend,
 		precision:  precision,
+		modelPath:  cfg.ModelPath,
 	}, nil
 }
 
@@ -298,6 +304,10 @@ func (b *BirdNETV3) Labels() []string {
 func (b *BirdNETV3) RuntimeInfo() (device, backend, precision string) {
 	return b.device, b.backend, b.precision
 }
+
+// ResolvedModelPath returns the model file this BirdNET v3.0 instance loaded from.
+// Fixed at construction, so the read needs no lock. Implements ModelInstance.
+func (b *BirdNETV3) ResolvedModelPath() string { return b.modelPath }
 
 // Close releases resources held by the BirdNET v3.0 model.
 func (b *BirdNETV3) Close() error {

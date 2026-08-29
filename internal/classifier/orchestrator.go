@@ -393,7 +393,7 @@ func (o *Orchestrator) registerTaxonomyResolver(modelsDir string) {
 	}
 
 	log := GetLogger()
-	taxonomyPath := filepath.Join(modelsDir, "shared", "taxonomy.csv")
+	taxonomyPath := filepath.Join(modelsDir, sharedDirName, "taxonomy.csv")
 
 	locale := settings.BirdNET.Locale
 	// Load the resolver outside the lock; NewTaxonomyResolver does file I/O.
@@ -600,7 +600,7 @@ func (o *Orchestrator) resolveInstalledPaths(registryID string) (modelPath, labe
 				case RoleLabels:
 					lp = filepath.Join(subdir, f.LocalName)
 				case RoleEmbeddings:
-					ep = filepath.Join(o.modelsDir, "shared", f.LocalName)
+					ep = filepath.Join(o.modelsDir, sharedDirName, f.LocalName)
 				}
 			}
 			if mp != "" {
@@ -757,6 +757,71 @@ func scientificNamesFromLabels(labels []string) []string {
 		sci, _ := SplitSpeciesName(label)
 		if sci != "" {
 			out = append(out, sci)
+		}
+	}
+	return out
+}
+
+// PrimaryResolvedModelPath returns the model file the primary classifier is
+// actually running (empty when the built-in baseline runs, or when no primary is
+// loaded). Cross-package consumers must prefer it over settings.BirdNET.ModelPath,
+// which after a stale-path recovery names a file the instance is not running. The
+// o.primary read is guarded by o.mu; the resolved-path read itself is lock-free.
+func (o *Orchestrator) PrimaryResolvedModelPath() string {
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+	if primary == nil {
+		return ""
+	}
+	return primary.ResolvedModelPath()
+}
+
+// LoadedModelPaths returns, for each currently-loaded model family (keyed by its
+// registry ID, which is also the o.models key), the model file that instance is
+// actually running. A family PRESENT in the map with an EMPTY value is loaded and
+// running its built-in/default source; a family ABSENT from the map has no loaded
+// instance. That distinction lets the model-gallery scan tell "loaded, running the
+// built-in" from "not loaded", so it consults configuration only for the latter.
+// The model set is snapshotted under o.mu, which is then RELEASED before each
+// instance is read under its own entry.mu (see the body for why entry.instance
+// needs entry.mu). Because o.mu is never held while entry.mu is acquired, a caller
+// already holding another lock (ModelManager.mu, taken by ScanInstalled) never
+// causes o.mu to nest under it.
+func (o *Orchestrator) LoadedModelPaths() map[string]string {
+	// entry.instance is guarded by entry.mu, NOT o.mu: ReloadSecondaryModels,
+	// UnloadModel and Delete all swap it under entry.mu (see the "PredictModel reads
+	// entry.instance under entry.mu" contract at the reload swap), while o.mu guards
+	// only the o.models map itself. So snapshot the entries under o.mu, release it,
+	// then read each instance under its own entry.mu. This mirrors
+	// ReloadSecondaryModels (snapshot refs under o.mu, release, then per-entry
+	// entry.mu), and crucially never holds o.mu while acquiring entry.mu, so it adds
+	// no new lock-ordering edge.
+	type entryRef struct {
+		id    string
+		entry *modelEntry
+	}
+	o.mu.RLock()
+	refs := make([]entryRef, 0, len(o.models))
+	for id, entry := range o.models {
+		if entry != nil {
+			refs = append(refs, entryRef{id: id, entry: entry})
+		}
+	}
+	o.mu.RUnlock()
+
+	out := make(map[string]string, len(refs))
+	for _, r := range refs {
+		// Capture the instance under entry.mu, then call the lock-free
+		// ResolvedModelPath() on the captured value after releasing the lock: the
+		// resolved path is fixed at construction (secondaries) or published lock-free
+		// (the primary) and is not touched by Close(), so reading it off-lock on a
+		// captured instance is safe even if the entry is torn down concurrently.
+		r.entry.mu.Lock()
+		inst := r.entry.instance
+		r.entry.mu.Unlock()
+		if inst != nil {
+			out[r.id] = inst.ResolvedModelPath()
 		}
 	}
 	return out

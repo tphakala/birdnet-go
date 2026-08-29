@@ -35,6 +35,11 @@ type Bat struct {
 	// construction; reported via RuntimeInfo().
 	backend   string
 	precision string
+	// modelPath is the classifier model file this instance actually loaded from
+	// (the resolved path the loader built with, which after a stale-path recovery
+	// differs from the configured Bat.ClassifierModel). Set once at construction;
+	// reported via ResolvedModelPath().
+	modelPath string
 }
 
 // BatModelConfig holds configuration for creating a Bat model instance.
@@ -143,6 +148,7 @@ func NewBat(cfg *BatModelConfig) (*Bat, error) {
 		device:             device,
 		backend:            backend,
 		precision:          precision,
+		modelPath:          cfg.ClassifierModelPath,
 	}, nil
 }
 
@@ -384,6 +390,10 @@ func (b *Bat) Labels() []string {
 func (b *Bat) RuntimeInfo() (device, backend, precision string) {
 	return b.device, b.backend, b.precision
 }
+
+// ResolvedModelPath returns the classifier model file this bat instance loaded
+// from. Fixed at construction, so the read needs no lock. Implements ModelInstance.
+func (b *Bat) ResolvedModelPath() string { return b.modelPath }
 
 // Close releases resources held by the bat model.
 func (b *Bat) Close() error {
