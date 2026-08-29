@@ -348,7 +348,7 @@ func (o *Orchestrator) resolveSiblingSet(registryID, modelPath string) (set mode
 					candidate.labels = filepath.Join(dir, f.LocalName)
 				case RoleEmbeddings:
 					if modelsDir != "" {
-						candidate.embeddings = filepath.Join(modelsDir, "shared", f.LocalName)
+						candidate.embeddings = filepath.Join(modelsDir, sharedDirName, f.LocalName)
 					}
 				}
 			}
@@ -449,7 +449,7 @@ func (o *Orchestrator) isGalleryManagedPath(registryID, path string) bool {
 				}
 				expectedParent := entry.ID
 				if isSharedRole(f.Role) {
-					expectedParent = "shared"
+					expectedParent = sharedDirName
 				}
 				if parent == expectedParent {
 					return true

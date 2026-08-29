@@ -2017,7 +2017,7 @@ func (bn *BirdNET) PrimaryRangeFilterCoverage() (geomodel *GeomodelStatus, prima
 	bn.mu.Unlock()
 
 	if rf.Model == "v3" && modelsDir != "" {
-		sharedDir := filepath.Join(modelsDir, "shared")
+		sharedDir := filepath.Join(modelsDir, sharedDirName)
 		expectedONNX := filepath.Join(sharedDir, conf.GeomodelONNXLocalName)
 		expectedLabels := filepath.Join(sharedDir, conf.GeomodelLabelsLocalName)
 		autoSelected = rf.ModelPath == expectedONNX && rf.LabelsPath == expectedLabels
@@ -2066,7 +2066,7 @@ func shouldAutoSelectV3Geomodel(modelID, modelsDir string) bool {
 	default:
 		return false
 	}
-	sharedDir := filepath.Join(modelsDir, "shared")
+	sharedDir := filepath.Join(modelsDir, sharedDirName)
 	onnxPath := filepath.Join(sharedDir, conf.GeomodelONNXLocalName)
 	labelsPath := filepath.Join(sharedDir, conf.GeomodelLabelsLocalName)
 	if _, err := os.Stat(onnxPath); err != nil {
@@ -2116,7 +2116,7 @@ func applyAutoSelectedGeomodelPaths(settings *conf.Settings, modelsDir string) {
 		}
 	}
 
-	sharedDir := filepath.Join(modelsDir, "shared")
+	sharedDir := filepath.Join(modelsDir, sharedDirName)
 	rf.Model = "v3"
 	rf.ModelPath = filepath.Join(sharedDir, conf.GeomodelONNXLocalName)
 	rf.LabelsPath = filepath.Join(sharedDir, conf.GeomodelLabelsLocalName)

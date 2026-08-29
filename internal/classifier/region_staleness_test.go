@@ -293,8 +293,9 @@ func TestNotifyRegionStaleness_EmitsPerChange(t *testing.T) {
 	notification.Initialize(notification.DefaultServiceConfig())
 	svc := notification.GetService()
 	require.NotNil(t, svc)
-	// Stop the service's cleanup goroutine so the package goleak check stays clean;
-	// this test is the only one that starts the process-global notification service.
+	// Stop the service's cleanup goroutine so the package goleak check stays clean.
+	// Several tests in this package start the process-global notification service;
+	// each is responsible for stopping the instance it starts.
 	t.Cleanup(svc.Stop)
 
 	NotifyRegionStaleness([]RegionStalenessChange{

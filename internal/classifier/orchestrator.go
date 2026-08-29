@@ -393,7 +393,7 @@ func (o *Orchestrator) registerTaxonomyResolver(modelsDir string) {
 	}
 
 	log := GetLogger()
-	taxonomyPath := filepath.Join(modelsDir, "shared", "taxonomy.csv")
+	taxonomyPath := filepath.Join(modelsDir, sharedDirName, "taxonomy.csv")
 
 	locale := settings.BirdNET.Locale
 	// Load the resolver outside the lock; NewTaxonomyResolver does file I/O.
@@ -600,7 +600,7 @@ func (o *Orchestrator) resolveInstalledPaths(registryID string) (modelPath, labe
 				case RoleLabels:
 					lp = filepath.Join(subdir, f.LocalName)
 				case RoleEmbeddings:
-					ep = filepath.Join(o.modelsDir, "shared", f.LocalName)
+					ep = filepath.Join(o.modelsDir, sharedDirName, f.LocalName)
 				}
 			}
 			if mp != "" {
