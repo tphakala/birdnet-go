@@ -88,3 +88,21 @@ func TestBuildAlternativePredictionResponsesUsesConfiguredCommonNames(t *testing
 	assert.Equal(t, "Cyanocitta cristata", alternatives[1].ScientificName)
 	assert.Equal(t, "Blue Jay", alternatives[1].CommonName)
 }
+
+func TestBuildAlternativePredictionResponsesExcludesAliasedPrimary(t *testing.T) {
+	results := []datastore.Results{
+		{Species: "Streptopelia senegalensis_Laughing Dove", Confidence: 0.91},
+		{Species: "Turdus merula_Eurasian Blackbird", Confidence: 0.40},
+	}
+
+	alternatives := buildAlternativePredictionResponses(
+		results,
+		"Spilopelia senegalensis",
+		nil,
+		nil,
+		nil,
+	)
+
+	require.Len(t, alternatives, 1)
+	assert.Equal(t, "Turdus merula", alternatives[0].ScientificName)
+}

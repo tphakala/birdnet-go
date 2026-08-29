@@ -211,6 +211,10 @@ func (s *APIServerService) Start(ctx context.Context) error {
 			Build()
 	}
 	s.server = apiServer
+	// Install the authoritative resolver before the HTTP listener opens. The audio
+	// pipeline repeats this idempotent wiring when its control monitor starts, but
+	// that service starts after this one and must not create a localization window.
+	installNameResolver(bn.OpenFaunaResolver(), bn.AllLabels(), dataStore, s.server.APIController())
 	s.server.Start()
 
 	// Wire shutdown requester into API controller for restart endpoints.

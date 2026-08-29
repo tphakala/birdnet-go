@@ -23,6 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/openfauna"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -816,13 +817,13 @@ func buildAlternativePredictionResponses(
 		}
 	}
 
-	primaryScientificName = strings.TrimSpace(primaryScientificName)
+	primaryScientificName = openfauna.CanonicalName(primaryScientificName)
 	alternatives := make([]AlternativePredictionResponse, 0, len(results))
 	seen := make(map[string]int, len(results))
 
 	for _, result := range results {
 		species := resolveSpecies(result.Species)
-		scientificName := strings.TrimSpace(species.ScientificName)
+		scientificName := openfauna.CanonicalName(species.ScientificName)
 		if scientificName == "" || strings.EqualFold(scientificName, primaryScientificName) {
 			continue
 		}
