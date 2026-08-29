@@ -26,33 +26,44 @@ func TestRequestedVariantCompatibility(t *testing.T) {
 	h := New(core, nil)
 	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile { return amd64ONNXProfile() }
 
-	entry, ok := classifier.GetCatalogEntry("perch-v2")
+	perch, ok := classifier.GetCatalogEntry("perch-v2")
 	require.True(t, ok, "perch-v2 must exist in the embedded catalog")
-
+	flat := classifier.CatalogEntry{ID: "flat-test"}
 	ort := inference.ORTStatus{Available: true}
 
-	// int8-arm requires aarch64; on an amd64 host it is gated and incompatible,
-	// with an arch blocker naming the requirement.
-	compatible, gated, blockers, arch := h.requestedVariantCompatibility(&entry, "int8-arm", ort)
-	assert.True(t, gated, "a variant-bearing entry is gated")
-	assert.False(t, compatible, "int8-arm is incompatible on amd64")
-	require.NotEmpty(t, blockers, "an incompatible variant must carry blockers")
-	assert.Equal(t, "amd64", arch)
+	tests := []struct {
+		name           string
+		entry          *classifier.CatalogEntry
+		variantID      string
+		wantGated      bool
+		wantCompatible bool
+		wantBlockers   bool
+		wantArch       string
+	}{
+		// int8-arm requires aarch64; on an amd64 host it is gated and incompatible,
+		// carrying an arch blocker.
+		{"int8-arm incompatible on amd64", &perch, "int8-arm", true, false, true, "amd64"},
+		// fp32 (the default) runs on amd64 with ONNX available.
+		{"fp32 compatible on amd64 ONNX", &perch, "fp32", true, true, false, "amd64"},
+		// An empty variant id resolves to the default variant (fp32), compatible.
+		{"empty resolves to the compatible default", &perch, "", true, true, false, "amd64"},
+		// A flat entry (no variants) is never gated: there is nothing to select.
+		{"flat entry is not gated", &flat, "", false, false, false, ""},
+	}
 
-	// fp32 (the default) runs on amd64 with ONNX available.
-	compatible, gated, _, _ = h.requestedVariantCompatibility(&entry, "fp32", ort)
-	assert.True(t, gated)
-	assert.True(t, compatible, "fp32 is compatible on amd64 ONNX")
-
-	// An empty variant id resolves to the default variant (fp32), which is compatible.
-	compatible, gated, _, _ = h.requestedVariantCompatibility(&entry, "", ort)
-	assert.True(t, gated)
-	assert.True(t, compatible, "the default variant resolves and is compatible")
-
-	// A flat entry (no variants) is never gated: there is nothing to select.
-	flat := classifier.CatalogEntry{ID: "flat-test"}
-	_, gated, _, _ = h.requestedVariantCompatibility(&flat, "", ort)
-	assert.False(t, gated, "a flat entry with no variants is not gated")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			compatible, gated, blockers, arch := h.requestedVariantCompatibility(tt.entry, tt.variantID, ort)
+			assert.Equal(t, tt.wantGated, gated)
+			if !tt.wantGated {
+				// Nothing else is meaningful for an entry the recommender does not gate.
+				return
+			}
+			assert.Equal(t, tt.wantCompatible, compatible)
+			assert.Equal(t, tt.wantBlockers, len(blockers) > 0, "blocker presence")
+			assert.Equal(t, tt.wantArch, arch)
+		})
+	}
 }
 
 // TestInstallModel_RejectsIncompatibleVariant verifies the install handler

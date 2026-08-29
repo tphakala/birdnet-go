@@ -82,22 +82,32 @@ func TestPipelineStats_ZeroActivitySuppressed(t *testing.T) {
 // saved detections needs surfaced, so it must not be suppressed. Not parallel:
 // logtest swaps the process-global logger.
 func TestPipelineStats_RecordDaylightDiscard(t *testing.T) {
-	buf := logtest.CaptureBuffer(t)
-	ps := NewPipelineStats(nil)
+	// Each subtest builds isolated logger capture and PipelineStats state. Not
+	// parallel: logtest swaps the process-global logger.
+	t.Run("discard-only window is reported", func(t *testing.T) {
+		buf := logtest.CaptureBuffer(t)
+		ps := NewPipelineStats(nil)
 
-	ps.RecordDaylightDiscard("src-1", "BirdNET_v2.4")
-	ps.RecordDaylightDiscard("src-1", "BirdNET_v2.4")
-	ps.logAndReset(GetLogger())
+		ps.RecordDaylightDiscard("src-1", "BirdNET_v2.4")
+		ps.RecordDaylightDiscard("src-1", "BirdNET_v2.4")
+		ps.logAndReset(GetLogger())
 
-	out := buf.String()
-	require.Contains(t, out, "pipeline stats", "a discard-only window must still emit a summary")
-	assert.Contains(t, out, "daylight_discards=2")
-	assert.Contains(t, out, "inferences=0")
+		out := buf.String()
+		require.Contains(t, out, "pipeline stats", "a discard-only window must still emit a summary")
+		assert.Contains(t, out, "daylight_discards=2")
+		assert.Contains(t, out, "inferences=0")
+	})
 
-	// The window was swapped out by logAndReset; an idle window logs nothing.
-	buf.Reset()
-	ps.logAndReset(GetLogger())
-	assert.NotContains(t, buf.String(), "pipeline stats", "an idle window must be suppressed")
+	t.Run("window is suppressed after its discards were reported", func(t *testing.T) {
+		buf := logtest.CaptureBuffer(t)
+		ps := NewPipelineStats(nil)
+
+		ps.RecordDaylightDiscard("src-1", "BirdNET_v2.4")
+		ps.logAndReset(GetLogger()) // consumes and resets the window
+		buf.Reset()
+		ps.logAndReset(GetLogger()) // now idle
+		assert.NotContains(t, buf.String(), "pipeline stats", "an idle window after reset must be suppressed")
+	})
 }
 
 // TestPipelineStats_InferencesAndDiscards verifies a window carrying both

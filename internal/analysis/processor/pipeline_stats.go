@@ -74,9 +74,13 @@ func (ps *PipelineStats) RecordInference(sourceID, modelID string, rawResults, p
 }
 
 // RecordDaylightDiscard records one detection dropped by the daylight filter for
-// the given source and model. It accumulates into the same per-source/model
-// window as RecordInference so the periodic summary can surface how many
-// detections a filter is silently eating.
+// the given source and model so the periodic summary can surface how many
+// detections a filter is silently eating. The model id is the detection's best
+// (winning) model: in a multi-model consensus config that can differ from a
+// per-inference model id, so a discard may land on a different summary row than
+// some of that detection's inferences. That attribution is intentional (the
+// discard belongs to the model that produced the detection), and on the common
+// single-model config it shares the row with the matching inferences.
 func (ps *PipelineStats) RecordDaylightDiscard(sourceID, modelID string) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
