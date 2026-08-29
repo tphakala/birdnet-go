@@ -83,7 +83,6 @@ A [premade docker-compose.yml](https://github.com/tphakala/birdnet-go/blob/main/
 - The BirdNET-Go container configuration with the latest nightly image
 - Environment variables for customization (timezone, user permissions, etc.)
 - Volume mounts for persistent configuration and data storage
-- RAM disk (tmpfs) for HLS streaming segments to improve performance
 - Device mounts for sound card access
 - An optional Cloudflared service (commented out) for secure internet access
 
@@ -1601,7 +1600,7 @@ BirdNET-Go allows you to listen to the live audio feed directly from the web int
   5.  Audio playback will begin using your browser's audio capabilities.
   6.  Click the stop icon (⏹️) to end the stream.
 - **Technology:** The live stream uses HLS (HTTP Live Streaming) for broad browser compatibility and efficient delivery.
-- **Dependency:** This feature requires **FFmpeg** to be installed and accessible by BirdNET-Go. If FFmpeg is not found, the play button may not appear or function.
+- **Dependency:** This feature is encoded natively in-process and does not require FFmpeg.
 - **Server Interaction:** Starting the live stream initiates audio encoding on the server. The stream uses a heartbeat mechanism to stay active while you are listening. Stopping the stream or closing the browser tab/window signals the server to stop the encoding process, conserving server resources.
 
 ### Sound Level Monitoring
