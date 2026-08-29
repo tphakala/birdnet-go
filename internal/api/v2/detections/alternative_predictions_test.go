@@ -106,3 +106,35 @@ func TestBuildAlternativePredictionResponsesExcludesAliasedPrimary(t *testing.T)
 	require.Len(t, alternatives, 1)
 	assert.Equal(t, "Turdus merula", alternatives[0].ScientificName)
 }
+
+func TestBuildAlternativePredictionResponsesMergesMissingSpeciesCode(t *testing.T) {
+	results := []datastore.Results{
+		{Species: "without-code", Confidence: 0.70},
+		{Species: "with-code", Confidence: 0.65},
+		{Species: "later-code", Confidence: 0.80},
+	}
+
+	alternatives := buildAlternativePredictionResponses(
+		results,
+		"Corvus brachyrhynchos",
+		nil,
+		nil,
+		func(label string) detection.Species {
+			species := detection.Species{
+				ScientificName: "Melanerpes carolinus",
+				CommonName:     "Red-bellied Woodpecker",
+			}
+			switch label {
+			case "with-code":
+				species.Code = " RBWO "
+			case "later-code":
+				species.Code = "OTHER"
+			}
+			return species
+		},
+	)
+
+	require.Len(t, alternatives, 1)
+	assert.Equal(t, "RBWO", alternatives[0].SpeciesCode)
+	assert.InDelta(t, 0.80, alternatives[0].Confidence, 0.001)
+}

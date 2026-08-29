@@ -836,6 +836,7 @@ func buildAlternativePredictionResponses(
 		if commonName == "" {
 			commonName = resolveAlternativeCommonName(commonNameMap, scientificName, "")
 		}
+		speciesCode := strings.TrimSpace(species.Code)
 		normalizedScientificName := strings.ToLower(scientificName)
 		if existing, ok := seen[normalizedScientificName]; ok {
 			if confidence > alternatives[existing].Confidence {
@@ -845,6 +846,9 @@ func buildAlternativePredictionResponses(
 				commonName != scientificName {
 				alternatives[existing].CommonName = commonName
 			}
+			if alternatives[existing].SpeciesCode == "" && speciesCode != "" {
+				alternatives[existing].SpeciesCode = speciesCode
+			}
 			continue
 		}
 
@@ -852,7 +856,7 @@ func buildAlternativePredictionResponses(
 		alternatives = append(alternatives, AlternativePredictionResponse{
 			ScientificName: scientificName,
 			CommonName:     commonName,
-			SpeciesCode:    strings.TrimSpace(species.Code),
+			SpeciesCode:    speciesCode,
 			Confidence:     confidence,
 		})
 	}
