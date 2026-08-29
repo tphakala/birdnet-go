@@ -22,23 +22,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 )
 
-// TestHLSStreamInfoStruct tests the HLSStreamInfo struct
-func TestHLSStreamInfoStruct(t *testing.T) {
-	t.Run("new stream info has expected fields", func(t *testing.T) {
-		info := &HLSStreamInfo{
-			SourceID:     "test_source",
-			OutputDir:    "/tmp/hls/stream_test",
-			PlaylistPath: "/tmp/hls/stream_test/playlist.m3u8",
-			FifoPipe:     "/tmp/hls/stream_test/audio.pcm",
-		}
-
-		assert.Equal(t, "test_source", info.SourceID)
-		assert.Equal(t, "/tmp/hls/stream_test", info.OutputDir)
-		assert.Contains(t, info.PlaylistPath, "playlist.m3u8")
-		assert.Contains(t, info.FifoPipe, "audio.pcm")
-	})
-}
-
 // TestHLSStreamStatusStruct tests the HLSStreamStatus struct
 func TestHLSStreamStatusStruct(t *testing.T) {
 	t.Run("starting status", func(t *testing.T) {
@@ -244,8 +227,7 @@ func TestRemoveStreamFromManager(t *testing.T) {
 	t.Run("remove existing stream returns stream info", func(t *testing.T) {
 		testStreamID := "test_remove_stream_" + time.Now().String()
 		testStream := &HLSStreamInfo{
-			SourceID:  testStreamID,
-			OutputDir: "/tmp/test",
+			SourceID: testStreamID,
 		}
 
 		// Add stream
@@ -595,7 +577,7 @@ func TestResolveClientID(t *testing.T) {
 // copies the frame data before forwarding it on the channel, so the caller's
 // buffer can be safely reused after Write returns. This is the correctness
 // invariant that lets the audiocore router pool its output slices without
-// racing against FFmpeg reads.
+// racing against the feed loop's asynchronous reads.
 func TestHLSConsumer_WriteDoesNotRetainFrameData(t *testing.T) {
 	t.Parallel()
 

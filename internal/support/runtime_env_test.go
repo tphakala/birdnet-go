@@ -44,8 +44,8 @@ func TestCollectRuntimeEnvCapturesAllowlistedGates(t *testing.T) {
 
 	require.NotNil(t, env)
 	assert.Equal(t, "native", env[conf.EnvNativeAACEncoder])
-	assert.NotContains(t, env, conf.EnvNativeHLSEncoder,
-		"an unset gate must be absent, not present with an empty value")
+	assert.NotContains(t, env, "BIRDNET_HLS_ENCODER",
+		"an unset allowlisted variable must be absent, not present with an empty value")
 }
 
 // TestCollectRuntimeEnvIgnoresNonAllowlisted is the privacy half of the
@@ -83,10 +83,10 @@ func TestCollectRuntimeEnvEmptyWhenNoGatesSet(t *testing.T) {
 // the helper in, since the helper being correct in isolation is not what the
 // support dump depends on.
 func TestCollectSystemInfoIncludesRuntimeEnv(t *testing.T) {
-	t.Setenv(conf.EnvNativeHLSEncoder, "native")
+	t.Setenv(conf.EnvNativeAACEncoder, "native")
 
 	c := &Collector{}
 	info := c.collectSystemInfo()
 
-	assert.Equal(t, "native", info.RuntimeEnv[conf.EnvNativeHLSEncoder])
+	assert.Equal(t, "native", info.RuntimeEnv[conf.EnvNativeAACEncoder])
 }

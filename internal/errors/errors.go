@@ -441,7 +441,6 @@ func init() {
 	RegisterComponent("audiocore/engine", "audiocore.engine")
 	RegisterComponent("audiocore/schedule", "audiocore.schedule")
 	RegisterComponent("audiocore/equalizer", "audiocore.equalizer")
-	RegisterComponent("audiocore/hlsmux", "audiocore.hlsmux")
 }
 
 // Helper functions for auto-detection and categorization
