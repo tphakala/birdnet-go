@@ -787,12 +787,39 @@ func (o *Orchestrator) PrimaryResolvedModelPath() string {
 // holding another lock (ModelManager.mu, taken by ScanInstalled) never nests o.mu
 // under it.
 func (o *Orchestrator) LoadedModelPaths() map[string]string {
+	// entry.instance is guarded by entry.mu, NOT o.mu: ReloadSecondaryModels,
+	// UnloadModel and Delete all swap it under entry.mu (see the "PredictModel reads
+	// entry.instance under entry.mu" contract at the reload swap), while o.mu guards
+	// only the o.models map itself. So snapshot the entries under o.mu, release it,
+	// then read each instance under its own entry.mu. This mirrors
+	// ReloadSecondaryModels (snapshot refs under o.mu, release, then per-entry
+	// entry.mu), and crucially never holds o.mu while acquiring entry.mu, so it adds
+	// no new lock-ordering edge.
+	type entryRef struct {
+		id    string
+		entry *modelEntry
+	}
 	o.mu.RLock()
-	defer o.mu.RUnlock()
-	out := make(map[string]string, len(o.models))
+	refs := make([]entryRef, 0, len(o.models))
 	for id, entry := range o.models {
-		if entry != nil && entry.instance != nil {
-			out[id] = entry.instance.ResolvedModelPath()
+		if entry != nil {
+			refs = append(refs, entryRef{id: id, entry: entry})
+		}
+	}
+	o.mu.RUnlock()
+
+	out := make(map[string]string, len(refs))
+	for _, r := range refs {
+		// Capture the instance under entry.mu, then call the lock-free
+		// ResolvedModelPath() on the captured value after releasing the lock: the
+		// resolved path is fixed at construction (secondaries) or published lock-free
+		// (the primary) and is not touched by Close(), so reading it off-lock on a
+		// captured instance is safe even if the entry is torn down concurrently.
+		r.entry.mu.Lock()
+		inst := r.entry.instance
+		r.entry.mu.Unlock()
+		if inst != nil {
+			out[r.id] = inst.ResolvedModelPath()
 		}
 	}
 	return out
