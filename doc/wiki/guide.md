@@ -98,9 +98,9 @@ Pre-compiled BirdNET-Go executables are also available at https://github.com/tph
 BirdNET-Go has minimal external dependencies, but requires a few specific tools for certain features:
 
 - **TensorFlow Lite C library**: Required for the core audio analysis functionality
-- **FFmpeg**: Required for RTSP stream capture, the HLS live stream feature in the web interface, on-demand clip transcoding in the web interface, and audio export to MP3. WAV, FLAC and Opus are encoded natively and do not need FFmpeg. AAC export uses FFmpeg by default, but a native encoder is available as an opt-in preview via the `BIRDNET_AAC_ENCODER=native` environment variable. The HLS live stream also runs through FFmpeg by default; setting `BIRDNET_HLS_ENCODER=native` switches it to a pure-Go encoder and muxer, as an opt-in preview. Loudness normalization of saved clips is done natively for every format and no longer needs FFmpeg.
+- **FFmpeg**: Required for RTSP stream capture, on-demand clip transcoding in the web interface, and audio export to MP3. WAV, FLAC and Opus are encoded natively and do not need FFmpeg. AAC export uses FFmpeg by default, but a native encoder is available as an opt-in preview via the `BIRDNET_AAC_ENCODER=native` environment variable. The HLS live stream is now encoded natively and no longer uses FFmpeg. Loudness normalization of saved clips is done natively for every format and no longer needs FFmpeg.
 
-  With `BIRDNET_HLS_ENCODER=native` the live stream is encoded in-process and served from memory, so nothing is written to the HLS directory. Note two differences from the FFmpeg path while the preview is in place: the output sample rate is fixed at 48 kHz, so `webserver.livestream.samplerate` has no effect (a warning is logged if it is set to anything else), and `webserver.livestream.ffmpegloglevel` no longer applies since there is no FFmpeg process to configure.
+  The HLS live stream is encoded in-process and served from memory, so nothing is written to the HLS directory. Its output sample rate is fixed at 48 kHz, so `webserver.livestream.samplerate` has no effect (a warning is logged if it is set to anything else), and `webserver.livestream.ffmpegloglevel` no longer applies since there is no FFmpeg process to configure.
 
 - **SoX**: Required for rendering spectrograms in the web interface
 

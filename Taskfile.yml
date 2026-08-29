@@ -102,14 +102,14 @@ vars:
   # would not be caught here.
   #
   # Measured on a Raspberry Pi 5 (Cortex-A76), medians of -benchtime=2s -count=5
-  # over internal/audiocore/hlsmux BenchmarkStreamWrite10ms and
-  # BenchmarkStreamWrite32k: 11.2% and 12.8% faster respectively. Those cover
-  # encode plus fMP4 fragmentation, so the encoder-only gain is larger by an
-  # unmeasured margin. (go-aac's README reports 14% on the same hardware, but for
-  # the trellis kernel alone; it lists the both-kernels figure as pending, so it
-  # is not directly comparable.) Both consumers (native AAC clip export, native HLS)
-  # are still opt-in behind BIRDNET_AAC_ENCODER / BIRDNET_HLS_ENCODER=native, so
-  # today this speeds up those gated paths rather than a default deployment.
+  # over the HLS muxer's BenchmarkStreamWrite10ms and BenchmarkStreamWrite32k
+  # (the muxer since extracted to github.com/tphakala/go-hls): 11.2% and 12.8%
+  # faster respectively. Those cover encode plus fMP4 fragmentation, so the
+  # encoder-only gain is larger by an unmeasured margin. (go-aac's README reports
+  # 14% on the same hardware, but for the trellis kernel alone; it lists the
+  # both-kernels figure as pending, so it is not directly comparable.) Native HLS
+  # live streaming is now the unconditional default, so this speeds up a default
+  # deployment; native AAC clip export is still opt-in behind BIRDNET_AAC_ENCODER.
   BASE_BUILD_TAGS: 'goaac_simd'
   # Emits nothing when the joined list is empty, mirroring the ${BUILD_TAGS:+...}
   # guard on the linux_amd64 / linux_arm64 build lines. (noembed_build needs no

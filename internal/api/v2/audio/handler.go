@@ -56,9 +56,6 @@ const (
 	// HLS handlers.
 	queryValueTrue = "true"
 
-	// logLevelWarning is the ffmpeg log-level used when verbose HLS logging is off.
-	logLevelWarning = "warning"
-
 	// filePermReadWrite (0o644) and filePermExecutable (0o755) are the file/dir
 	// permissions used for the HLS FFmpeg output directory and log files.
 	filePermReadWrite  = 0o644
