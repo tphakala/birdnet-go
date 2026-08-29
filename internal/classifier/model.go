@@ -109,6 +109,16 @@ type ModelInstance interface {
 	// metadata.
 	RuntimeInfo() (device, backend, precision string)
 
+	// ResolvedModelPath returns the model file this instance is actually running,
+	// which after a stale-path recovery differs from the path configured in
+	// settings. Empty means the model's built-in/default source is running rather
+	// than a file the user named. The value is fixed at construction (secondaries)
+	// or published lock-free alongside the identity snapshot (the primary), so the
+	// read takes no lock. Consumers that need "which variant is loaded" (the model
+	// gallery scan, telemetry) must read this rather than the settings field, which
+	// can name a file that is not loaded.
+	ResolvedModelPath() string
+
 	// Close releases resources held by the model.
 	Close() error
 }

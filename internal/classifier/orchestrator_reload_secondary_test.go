@@ -30,9 +30,10 @@ const fakeModelVersion = "1.0"
 // reloadFakeModel is a ModelInstance that records Close calls so tests can assert
 // the old instance is torn down after a swap.
 type reloadFakeModel struct {
-	id      string
-	closes  atomic.Int32
-	onClose func()
+	id           string
+	closes       atomic.Int32
+	onClose      func()
+	resolvedPath string
 }
 
 func (m *reloadFakeModel) Predict(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
@@ -54,6 +55,7 @@ func (m *reloadFakeModel) Close() error {
 func (m *reloadFakeModel) RuntimeInfo() (device, backend, precision string) {
 	return deviceCPU, BackendONNX, ""
 }
+func (m *reloadFakeModel) ResolvedModelPath() string { return m.resolvedPath }
 
 // registerTestSecondaryBuilder adds a builder under id for the duration of the
 // test, restoring the global map on cleanup. The map is a package global, so the

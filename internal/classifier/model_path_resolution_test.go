@@ -426,6 +426,52 @@ func TestResolveFamilyPaths_IndeterminateFallsBackWithoutRepair(t *testing.T) {
 		"the queued correction must carry the do-not-rewrite verdict to the drain")
 }
 
+// TestResolveFamilyPaths_MissingAndUnreadableReportsNotFound pins the
+// missing-and-unreadable follow-up: a set with one member CONFIRMED absent and another merely unreadable
+// must withhold the config rewrite (unreadable dominates persistence) AND report
+// "not found" rather than "could not be read" (missing dominates the wording).
+// Before the two facts were separated, nonEmptyMembersPresence returned
+// indeterminate on the first non-ENOENT error regardless of the earlier confirmed
+// absence, so the user was told a file that is actually gone "exists but could not
+// be read".
+func TestResolveFamilyPaths_MissingAndUnreadableReportsNotFound(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("ENOTDIR-via-file-prefix is ERROR_PATH_NOT_FOUND on Windows, mapped to fs.ErrNotExist")
+	}
+
+	entry, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok)
+
+	modelsDir := t.TempDir()
+	installedModel := writeVariantModelFile(t, modelsDir, &entry, "fp32")
+	writeVariantLabelsFile(t, modelsDir, &entry, "fp32")
+
+	// A regular file used as a path prefix makes os.Stat return ENOTDIR (unreadable,
+	// not a confirmed absence). The model member sits under a real directory but is
+	// absent -> ENOENT (missing). The set is therefore BOTH missing and unreadable.
+	dir := t.TempDir()
+	regular := filepath.Join(dir, "not-a-dir")
+	require.NoError(t, os.WriteFile(regular, []byte("x"), 0o600))
+	mixed := modelFileSet{
+		model:  filepath.Join(dir, "perch_v2.onnx"),           // ENOENT -> missing
+		labels: filepath.Join(regular, "perch_v2_labels.txt"), // ENOTDIR -> unreadable
+	}
+
+	o := &Orchestrator{}
+	o.SetModelsDir(modelsDir)
+
+	res := o.resolveFamilyPaths(RegistryIDPerchV2, mixed, false)
+
+	assert.True(t, res.substituted, "the set fell back, so the substitution must be reported")
+	assert.Equal(t, installedModel, res.resolved.model, "analysis still runs from the installed model")
+	assert.False(t, res.repairable,
+		"an unreadable member withholds the config rewrite even though another member is confirmed absent")
+	assert.False(t, res.unreadable,
+		"a confirmed-absent member makes the wording 'not found', never 'could not be read'")
+}
+
 // TestApplyPathCorrection_UnreadableNotifiesWithoutRewriting is the other half of
 // the indeterminate case: the drain must tell the user AND leave config.yaml
 // byte-for-byte as they wrote it. Rewriting here would make a transient

@@ -762,6 +762,42 @@ func scientificNamesFromLabels(labels []string) []string {
 	return out
 }
 
+// PrimaryResolvedModelPath returns the model file the primary classifier is
+// actually running (empty when the built-in baseline runs, or when no primary is
+// loaded). Cross-package consumers must prefer it over settings.BirdNET.ModelPath,
+// which after a stale-path recovery names a file the instance is not running. The
+// o.primary read is guarded by o.mu; the resolved-path read itself is lock-free.
+func (o *Orchestrator) PrimaryResolvedModelPath() string {
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+	if primary == nil {
+		return ""
+	}
+	return primary.ResolvedModelPath()
+}
+
+// LoadedModelPaths returns, for each currently-loaded model family (keyed by its
+// registry ID, which is also the o.models key), the model file that instance is
+// actually running. A family PRESENT in the map with an EMPTY value is loaded and
+// running its built-in/default source; a family ABSENT from the map has no loaded
+// instance. That distinction lets the model-gallery scan tell "loaded, running the
+// built-in" from "not loaded", so it consults configuration only for the latter.
+// Snapshotted under a single o.mu.RLock so a caller already
+// holding another lock (ModelManager.mu, taken by ScanInstalled) never nests o.mu
+// under it.
+func (o *Orchestrator) LoadedModelPaths() map[string]string {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	out := make(map[string]string, len(o.models))
+	for id, entry := range o.models {
+		if entry != nil && entry.instance != nil {
+			out[id] = entry.instance.ResolvedModelPath()
+		}
+	}
+	return out
+}
+
 // GetProbableSpecies returns species scores from the range filter.
 func (o *Orchestrator) GetProbableSpecies(date time.Time, week float32) ([]SpeciesScore, error) {
 	o.mu.RLock()

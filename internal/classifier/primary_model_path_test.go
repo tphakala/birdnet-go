@@ -406,6 +406,56 @@ func TestReloadModelInternal_RecoveredPathDoesNotVetoReload(t *testing.T) {
 	})
 }
 
+// TestReloadModelInternal_ClearingPathWhileCustomRunningIsRefused pins the
+// cleared-path follow-up (the MAJOR-3 silent-corruption path). When the user CLEARS
+// birdnet.modelpath while a custom primary model is running, the settings-reload
+// path must REFUSE and require an orchestrator restart, exactly as it does when a
+// custom file is swapped for another. Before the reload guard dropped its
+// substituted conjunct, this case fell through the identity switch: no case
+// matched, initializeModel loaded the built-in baseline underneath a ModelInfo
+// still naming the custom file, and the reload reported success while every
+// detection was attributed to a model that was not running.
+//
+// The discriminator, as in the recovered-path test above, is an unreadable
+// TaxonomyPath that fails the reload at the first fallible step AFTER the identity
+// switch: reaching "taxonomy" would prove the guard let the fall-through through
+// (the bug), while "requires orchestrator restart" proves it refused (the fix).
+func TestReloadModelInternal_ClearingPathWhileCustomRunningIsRefused(t *testing.T) {
+	liveCustom := "/srv/models/my_custom_primary.tflite"
+
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Version = ""
+	settings.BirdNET.ModelPath = "" // the user just cleared the configured path
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	bn := &BirdNET{
+		classifier:   &rollbackFakeClassifier{},
+		Settings:     settings,
+		ModelInfo:    customBirdNETV24ModelInfo(liveCustom), // a custom model is live
+		TaxonomyPath: filepath.Join(t.TempDir(), "does-not-exist-taxonomy.json"),
+		speciesCache: make(map[string]*speciesCacheEntry),
+		// The resolver mirrors production: a cleared configured path resolves to the
+		// empty result (substituted=false), which is exactly the case the dropped
+		// conjunct used to let fall through.
+		resolvePrimary: func(configured string) pathResolution {
+			require.Empty(t, configured, "the reload must re-resolve the CLEARED configured path")
+			return pathResolution{}
+		},
+	}
+	bn.primaryPath = pathResolution{resolved: modelFileSet{model: liveCustom}}
+	bn.settingsAtomic.Store(settings)
+	bn.publishIdentity()
+
+	err := bn.reloadModelInternal(false)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires orchestrator restart",
+		"clearing the model path while a custom model runs is a model-identity change and must be refused")
+	assert.NotContains(t, err.Error(), "taxonomy",
+		"the reload must refuse in the identity switch, never fall through to load the baseline under the custom identity")
+}
+
 // TestPlanPathCorrection_PrimaryRepairsModelPathOnly pins the primary family's
 // settings mapping. BirdNET.LabelPath must be left alone: the v2.4 label set is
 // embedded and identical across variants, which is why applyConfigForPrimarySwap

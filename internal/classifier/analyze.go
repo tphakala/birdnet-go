@@ -32,14 +32,14 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 	settings := bn.currentSettings()
 	start := time.Now()
 
-	// The decoration below reports the CONFIGURED path
-	// (settings.BirdNET.ModelPath), not bn.configuredModelPath(), and that is
-	// deliberate: this runs BEFORE bn.mu is taken, and bn.primaryPath is written
-	// under bn.mu by reloadModelInternal, so reading the resolved value here would
-	// be a data race. Reporting the resolved path on THIS path needs a lock-free
-	// published copy alongside bn.identity. The two decorations after the lock do
-	// report the resolved path, since after a stale-path recovery the configured
-	// one names a file the instance is not running.
+	// This decoration runs BEFORE bn.mu is taken, so it must not read
+	// bn.primaryPath (written under bn.mu by reloadModelInternal). It reads the
+	// RESOLVED path lock-free from the published identity snapshot via
+	// bn.resolvedModelPath(), so after a stale-path recovery it names the file the
+	// instance is actually running rather than settings.BirdNET.ModelPath, which
+	// would name a file this instance is not loaded from. The two decorations after
+	// the lock report the same resolved path via bn.configuredModelPath(), so all
+	// three now agree.
 	//
 	// Guard against empty sample slice. Pre-inference rejections are tagged but
 	// not counted as predictions.
@@ -47,7 +47,7 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 		span.markErrored(errTypeEmptySample)
 		return nil, errors.Newf("empty audio sample").
 			Category(errors.CategoryValidation).
-			ModelContext(settings.BirdNET.ModelPath, modelID).
+			ModelContext(bn.resolvedModelPath(), modelID).
 			Build()
 	}
 

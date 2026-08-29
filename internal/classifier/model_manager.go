@@ -129,6 +129,24 @@ type DownloadState struct {
 	Error           string `json:"error,omitempty"`
 }
 
+// IsActive reports whether this download state means the model is genuinely
+// mid-acquisition (downloading, verifying, or loading). A FAILED state is retained
+// for failedStateRetention so SSE pollers can still observe the failure, but during
+// that window the model is NOT analyzing, so callers deciding whether to suppress a
+// "not analyzing" alarm must treat failed (and the terminal complete/removed) as
+// inactive rather than as an in-progress download.
+func (s *DownloadState) IsActive() bool {
+	if s == nil {
+		return false
+	}
+	switch s.Status {
+	case StatusDownloading, StatusVerifying, StatusLoading:
+		return true
+	default:
+		return false
+	}
+}
+
 // NewModelManager creates a ModelManager that manages downloadable models
 // stored under modelsDir. The orchestrator is used for coordinating with
 // running model instances during install/uninstall operations. The settings
@@ -193,6 +211,17 @@ func (mm *ModelManager) ScanInstalled() {
 	// recorded model path points at). GetSettings returns an atomic snapshot.
 	settings := conf.GetSettings()
 
+	// Snapshot the resolved path each loaded instance is actually running, BEFORE
+	// taking mm.mu. installedModelBasenameHint prefers this over the configured path
+	// so the scan reports the RUNNING variant after a stale-path recovery, not the
+	// stale configured one. Snapshotting here keeps o.mu (taken
+	// briefly by LoadedModelPaths) from ever nesting under mm.mu. Nil when no
+	// orchestrator is wired (tests), which leaves the hint on its settings fallback.
+	var loadedPaths map[string]string
+	if mm.orchestrator != nil {
+		loadedPaths = mm.orchestrator.LoadedModelPaths()
+	}
+
 	// Phase 1: scan the filesystem under mm.mu.
 	mm.mu.Lock()
 	// Preserve in-flight installs/switches: replaceVariant swaps mm.installed and
@@ -225,7 +254,7 @@ func (mm *ModelManager) ScanInstalled() {
 		// file, so a variant entry is never shared-only and never needs the
 		// shared-only fall-through below.
 		if len(entry.Variants) > 0 {
-			if im, ok := scanVariantEntry(entry, subdir, installedModelBasenameHint(settings, entry.RegistryID)); ok {
+			if im, ok := scanVariantEntry(entry, subdir, installedModelBasenameHint(settings, entry.RegistryID, loadedPaths)); ok {
 				mm.installed[entry.ID] = im
 				log.Debug("Found installed model variant",
 					logger.String("catalog_id", entry.ID),
@@ -436,7 +465,24 @@ func variantByModelHint(entry *CatalogEntry, subdir, modelBasenameHint string) (
 // settings for the given registry ID, or "" when settings are absent or the
 // family carries no path. It is the tie-break scanVariantEntry uses to resolve an
 // ambiguous multi-variant on-disk state to the variant the loader actually opens.
-func installedModelBasenameHint(settings *conf.Settings, registryID string) string {
+func installedModelBasenameHint(settings *conf.Settings, registryID string, loadedPaths map[string]string) string {
+	// Prefer the file the LOADED instance is actually running. After a stale-path
+	// recovery the settings field still names the pre-recovery file, so keying the
+	// gallery scan off it would report a variant that is not loaded and offer to
+	// "optimize" a build the process is already running. A family
+	// PRESENT in loadedPaths is authoritative even when its value is empty: empty
+	// means the built-in/default source is running, so returning "" (which
+	// scanVariantEntry maps to the BuiltIn record) is the correct answer, not a
+	// reason to fall back to config. Fall back to the configured field only when no
+	// instance is loaded for the family: the startup scan before models load, or a
+	// nil orchestrator in tests, both leave the family absent from loadedPaths.
+	if p, loaded := loadedPaths[registryID]; loaded {
+		if p == "" {
+			return ""
+		}
+		return filepath.Base(p)
+	}
+
 	if settings == nil {
 		return ""
 	}
