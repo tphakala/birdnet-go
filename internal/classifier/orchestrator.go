@@ -783,9 +783,11 @@ func (o *Orchestrator) PrimaryResolvedModelPath() string {
 // running its built-in/default source; a family ABSENT from the map has no loaded
 // instance. That distinction lets the model-gallery scan tell "loaded, running the
 // built-in" from "not loaded", so it consults configuration only for the latter.
-// Snapshotted under a single o.mu.RLock so a caller already
-// holding another lock (ModelManager.mu, taken by ScanInstalled) never nests o.mu
-// under it.
+// The model set is snapshotted under o.mu, which is then RELEASED before each
+// instance is read under its own entry.mu (see the body for why entry.instance
+// needs entry.mu). Because o.mu is never held while entry.mu is acquired, a caller
+// already holding another lock (ModelManager.mu, taken by ScanInstalled) never
+// causes o.mu to nest under it.
 func (o *Orchestrator) LoadedModelPaths() map[string]string {
 	// entry.instance is guarded by entry.mu, NOT o.mu: ReloadSecondaryModels,
 	// UnloadModel and Delete all swap it under entry.mu (see the "PredictModel reads
