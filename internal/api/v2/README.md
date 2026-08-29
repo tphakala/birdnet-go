@@ -302,6 +302,8 @@ Both verbs report identically under the `skippedFields` response key: it lists o
 **Features:**
 
 - Real-time audio level data for UI audio indicators (0-100 with clipping detection)
+- Optional server-computed spectrum bins for the live spectrogram, opted into
+  with `?spectrum=1` or `?spectrum=<sourceID>`; see `audio_level_spectrum.go`
 - Automatic source anonymization for unauthenticated clients
 - Connection limiting: up to 5 concurrent connections per client IP (allows multiple browser tabs)
 - Maximum connection duration: 30 minutes

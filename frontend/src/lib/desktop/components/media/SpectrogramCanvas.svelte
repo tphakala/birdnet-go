@@ -31,6 +31,12 @@
     analyser: AnalyserNode | null;
     /** Pre-allocated frequency data buffer */
     frequencyData: Uint8Array<ArrayBuffer>;
+    /**
+     * Render `frequencyData` as supplied instead of polling the analyser.
+     * Set when the bins come from the server because the browser's
+     * AnalyserNode cannot read HLS-backed media (Safari/WebKit).
+     */
+    externalFrequencyData?: boolean;
     /** Sample rate for bin-to-frequency mapping */
     sampleRate: number;
     /** FFT size for bin count calculation */
@@ -64,6 +70,7 @@
   let {
     analyser,
     frequencyData,
+    externalFrequencyData = false,
     sampleRate,
     fftSize,
     frequencyRange = [0, 15000],
@@ -203,7 +210,7 @@
 
   // Main animation loop
   $effect(() => {
-    if (!analyser || !isActive || !canvasEl) return;
+    if ((!analyser && !externalFrequencyData) || !isActive || !canvasEl) return;
 
     const ctx = canvasEl.getContext('2d');
     if (!ctx) return;
@@ -266,8 +273,11 @@
       const deltaTime = (now - lastFrameTime) / 1000;
       lastFrameTime = now;
 
-      // Read frequency data from analyser
-      analyser.getByteFrequencyData(frequencyData);
+      // Read frequency data from the analyser, unless the caller is filling
+      // frequencyData itself from the server.
+      if (!externalFrequencyData) {
+        analyser?.getByteFrequencyData(frequencyData);
+      }
 
       // Compute device pixels to scroll; cap deltaTime to prevent OOM after tab resume
       const clampedDelta = Math.min(deltaTime, MAX_FRAME_DELTA_SEC);

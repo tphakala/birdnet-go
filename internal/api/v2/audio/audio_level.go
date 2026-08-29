@@ -140,7 +140,7 @@ func runAudioLevelBroadcaster(ctx context.Context, sourceChan chan audiocore.Aud
 
 			// Track latest level per source for health checks
 			audioLevelMgr.latestLevelsMu.Lock()
-			audioLevelMgr.latestLevels[data.Source] = data
+			audioLevelMgr.latestLevels[data.Source] = withoutSpectrum(data)
 			audioLevelMgr.latestLevelsMu.Unlock()
 
 			// Fan out to all subscribers (non-blocking send)
@@ -319,6 +319,7 @@ func (c *Handler) StreamAudioLevel(ctx echo.Context) error {
 
 	// Check authentication status for data anonymization
 	isAuthenticated := c.isClientAuthenticated(ctx)
+	spectrumParam := ctx.QueryParam(spectrumQueryParam)
 
 	// Initialize level tracking data
 	levels := c.initializeAudioLevels(isAuthenticated)
@@ -368,8 +369,10 @@ func (c *Handler) StreamAudioLevel(ctx echo.Context) error {
 				return nil
 			}
 
+			filterSpectrum(&audioData, spectrumParam)
+
 			// Update audio levels with proper name handling
-			c.updateAudioLevel(audioData, levels, lastUpdateTime, lastNonZeroTime, isAuthenticated)
+			c.updateAudioLevel(&audioData, levels, lastUpdateTime, lastNonZeroTime, isAuthenticated)
 
 			// Rate limit updates
 			if time.Since(lastSentTime) >= audioLevelRateLimitUpdate {
@@ -478,9 +481,11 @@ func (c *Handler) addStreamSourcesToLevels(registry *audiocore.SourceRegistry, l
 	}
 }
 
-// updateAudioLevel processes incoming audio data and updates the levels map
+// updateAudioLevel processes incoming audio data and updates the levels map.
+// audioData is taken by pointer to avoid copying the struct (which carries an
+// optional spectrum column) on every update; the callee may rewrite its Name.
 func (c *Handler) updateAudioLevel(
-	audioData audiocore.AudioLevelData,
+	audioData *audiocore.AudioLevelData,
 	levels map[string]audiocore.AudioLevelData,
 	lastUpdateTime, lastNonZeroTime map[string]time.Time,
 	isAuthenticated bool,
@@ -513,12 +518,10 @@ func (c *Handler) updateAudioLevel(
 	}
 
 	// Update level unless source is inactive
-	if !c.isSourceInactive(audioData.Source, now, lastUpdateTime, lastNonZeroTime) {
-		levels[audioData.Source] = audioData
-	} else {
+	if c.isSourceInactive(audioData.Source, now, lastUpdateTime, lastNonZeroTime) {
 		audioData.Level = 0
-		levels[audioData.Source] = audioData
 	}
+	levels[audioData.Source] = *audioData
 }
 
 // getAnonymizedSourceName returns an anonymized name for a source
@@ -630,9 +633,10 @@ func (c *Handler) checkSourceActivity(
 	updated := false
 
 	for source, data := range levels {
-		if c.isSourceInactive(source, now, lastUpdateTime, lastNonZeroTime) && data.Level != 0 {
+		if c.isSourceInactive(source, now, lastUpdateTime, lastNonZeroTime) &&
+			(data.Level != 0 || data.Spectrum != nil) {
 			data.Level = 0
-			levels[source] = data
+			levels[source] = withoutSpectrum(data)
 			updated = true
 		}
 	}

@@ -3,6 +3,7 @@ package analysis
 import (
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -22,6 +23,7 @@ type AudioLevelConsumer struct {
 	depth     int
 	channels  int
 	outCh     chan AudioLevelData
+	spectrum  *spectrumAnalyzer
 	closed    atomic.Bool
 	closeOnce sync.Once
 	outDrops  atomic.Int64
@@ -42,6 +44,7 @@ func NewAudioLevelConsumer(id string, sampleRate, bitDepth, channels int) (consu
 		depth:    bitDepth,
 		channels: channels,
 		outCh:    ch,
+		spectrum: newSpectrumAnalyzer(),
 	}, ch
 }
 
@@ -68,6 +71,16 @@ func (c *AudioLevelConsumer) Write(frame audiocore.AudioFrame) error { //nolint:
 	}
 
 	level := calculateAudioLevel(frame.Data, frame.SourceID, frame.SourceName)
+
+	// Attach a magnitude column for browsers whose AnalyserNode cannot see
+	// HLS-backed audio (WebKit bug 180696). The analyzer rate-limits itself, so
+	// most frames add nothing beyond the rolling-window copy.
+	now := time.Now()
+	if bins := c.spectrum.process(frame.Data, now); bins != nil {
+		level.Spectrum = bins
+		level.SpectrumSampleRate = c.rate
+		level.SpectrumTime = float64(now.UnixNano()) / float64(time.Second)
+	}
 
 	select {
 	case c.outCh <- level:
