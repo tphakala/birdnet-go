@@ -1296,13 +1296,17 @@ func (c *Handler) DeleteDetection(ctx echo.Context) error {
 	return ctx.NoContent(http.StatusNoContent)
 }
 
-// spectrogramWidths lists all valid spectrogram widths used for file naming.
-// These correspond to the size constants: sm=258, md=514, lg=1026, xl=2050.
-var spectrogramWidths = []int{
-	apicore.SpectrogramSizeSm,
-	apicore.SpectrogramSizeMd,
-	apicore.SpectrogramSizeLg,
-	apicore.SpectrogramSizeXl,
+// spectrogramSizes lists all valid spectrogram sizes used for file naming.
+// These correspond to the parameterized and legacy width-based cache names:
+// sm=258, md=514, lg=1026, xl=2050.
+var spectrogramSizes = []struct {
+	name  string
+	width int
+}{
+	{name: "sm", width: apicore.SpectrogramSizeSm},
+	{name: "md", width: apicore.SpectrogramSizeMd},
+	{name: "lg", width: apicore.SpectrogramSizeLg},
+	{name: "xl", width: apicore.SpectrogramSizeXl},
 }
 
 // removeDetectionFiles removes the audio clip and all associated spectrogram
@@ -1394,9 +1398,16 @@ func isSpectrogramFileFor(pngName, baseFilename string) bool {
 		pngName == baseFilename+spectrogram.RenderCacheVersionSuffix+".png" {
 		return true
 	}
-	for _, width := range spectrogramWidths {
-		prefix := fmt.Sprintf("%s_%dpx", baseFilename, width)
-		if pngName == prefix+".png" || strings.HasPrefix(pngName, prefix+"-") {
+	for _, size := range spectrogramSizes {
+		widthPrefix := fmt.Sprintf("%s_%dpx", baseFilename, size.width)
+		if pngName == widthPrefix+".png" || strings.HasPrefix(pngName, widthPrefix+"-") {
+			return true
+		}
+
+		parameterPrefix := baseFilename + "." + size.name
+		if pngName == parameterPrefix+".png" ||
+			strings.HasPrefix(pngName, parameterPrefix+"-") ||
+			strings.HasPrefix(pngName, parameterPrefix+".") {
 			return true
 		}
 	}

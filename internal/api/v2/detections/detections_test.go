@@ -1181,6 +1181,11 @@ func TestDeleteDetectionRemovesFiles(t *testing.T) {
 		baseName + "_1026px-high_contrast_dark-bat-legend.png",
 		baseName + "_1026px-norm1.png",
 		baseName + "_1026px-scientific_dark-norm1-legend.png",
+		// Parameterized API cache names use dot-delimited size/raw tokens.
+		baseName + ".sm.png",
+		baseName + ".md-norm1.png",
+		baseName + ".lg.raw-norm1.png",
+		baseName + ".xl.raw.png",
 	}
 	for _, sf := range spectrogramFiles {
 		require.NoError(t, os.WriteFile(filepath.Join(clipDir, sf), []byte("fake-png"), 0o600))
@@ -1193,6 +1198,7 @@ func TestDeleteDetectionRemovesFiles(t *testing.T) {
 		"Some_Other_Bird_50p_20250115T100001Z_1026px.png",
 		baseName + "-another-clip.png",
 		baseName + "_1026px_1026px.png",
+		baseName + ".md_extra.png",
 	}
 	for _, sf := range survivingFiles {
 		require.NoError(t, os.WriteFile(filepath.Join(clipDir, sf), []byte("fake-png"), 0o600))
