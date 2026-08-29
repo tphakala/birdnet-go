@@ -75,3 +75,40 @@ func TestEffectiveBitrateKbps_AgreesWithFFmpegArgument(t *testing.T) {
 		})
 	}
 }
+
+func TestAudioOutputArgsUseOperationSpecificBitrates(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		format        string
+		wantClip      string
+		wantRecording string
+	}{
+		{format: FormatMP3, wantClip: "128k", wantRecording: "192k"},
+		{format: FormatAAC, wantClip: "96k", wantRecording: "192k"},
+		{format: FormatOpus, wantClip: "64k", wantRecording: "128k"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.format, func(t *testing.T) {
+			t.Parallel()
+
+			clipArgs := buildClipFFmpegArgs("input.wav", 0, 1, tt.format, "pipe:1", nil)
+			recordingArgs := buildTranscodeFFmpegArgs("input.wav", tt.format, "pipe:1", nil)
+
+			assert.Equal(t, tt.wantClip, audioBitrateArg(t, clipArgs))
+			assert.Equal(t, tt.wantRecording, audioBitrateArg(t, recordingArgs))
+		})
+	}
+}
+
+func audioBitrateArg(t *testing.T, args []string) string {
+	t.Helper()
+	for i, arg := range args {
+		if arg == "-b:a" && i+1 < len(args) {
+			return args[i+1]
+		}
+	}
+	t.Fatalf("FFmpeg args do not contain -b:a: %v", args)
+	return ""
+}

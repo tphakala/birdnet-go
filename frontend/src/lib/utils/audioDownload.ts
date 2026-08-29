@@ -21,6 +21,8 @@ const DEFAULT_DOWNLOAD_NAME = 'detection';
 /** Extension for downloaded clips. */
 const AUDIO_FILE_EXTENSION = '.wav';
 const CSRF_HEADER_NAME = 'X-CSRF-Token';
+const DEFAULT_ORIGINAL_EXTENSION = 'wav';
+const SUPPORTED_ORIGINAL_EXTENSIONS = new Set(['aac', 'flac', 'm4a', 'mp3', 'ogg', 'opus', 'wav']);
 
 export type RecordingDownloadFormat = 'original' | 'wav' | 'flac' | 'mp3' | 'aac' | 'opus' | 'alac';
 
@@ -102,10 +104,17 @@ function safeRecordingBaseName(detection: Detection): string {
   return safeName || `${DEFAULT_DOWNLOAD_NAME}_${detection.id}`;
 }
 
+function originalRecordingExtension(detection: Detection): string {
+  const extension = detection.clipName?.match(/\.([a-zA-Z0-9]+)$/)?.[1]?.toLowerCase();
+  return extension && SUPPORTED_ORIGINAL_EXTENSIONS.has(extension)
+    ? extension
+    : DEFAULT_ORIGINAL_EXTENSION;
+}
+
 function triggerOriginalDownload(detection: Detection): void {
   const link = document.createElement('a');
   link.href = buildAppUrl(`/api/v2/audio/${encodeURIComponent(String(detection.id))}`);
-  link.download = '';
+  link.download = `${safeRecordingBaseName(detection)}.${originalRecordingExtension(detection)}`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -117,8 +126,11 @@ export function recordingDownloadErrorMessage(error: unknown): string {
 
 export async function downloadDetectionRecording(
   detection: Detection,
-  format: RecordingDownloadFormat = 'original'
+  format: RecordingDownloadFormat = 'original',
+  signal?: AbortSignal
 ): Promise<void> {
+  signal?.throwIfAborted();
+
   if (format === 'original') {
     triggerOriginalDownload(detection);
     return;
@@ -137,6 +149,7 @@ export async function downloadDetectionRecording(
       credentials: 'same-origin',
       headers,
       body: JSON.stringify({ format }),
+      signal,
     }
   );
 
@@ -145,5 +158,6 @@ export async function downloadDetectionRecording(
   }
 
   const blob = await response.blob();
+  signal?.throwIfAborted();
   downloadBlob(blob, `${safeRecordingBaseName(detection)}.${extensionForFormat(format)}`);
 }

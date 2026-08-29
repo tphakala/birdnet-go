@@ -115,7 +115,7 @@ func TestExtractAudioClipByID(t *testing.T) {
 func TestExportAudioByID(t *testing.T) {
 	e, controller, tempDir := setupMediaTestEnvironment(t)
 
-	testFilename := "test_export.wav"
+	testFilename := "test export.wav"
 	audioFilePath := filepath.Join(tempDir, testFilename)
 	err := createTestAudioFile(t, audioFilePath)
 	require.NoError(t, err)
@@ -125,6 +125,7 @@ func TestExportAudioByID(t *testing.T) {
 	mockDS := mocks.NewMockInterface(t)
 	mockDS.On("GetNoteClipPath", "123").Return(testFilename, nil)
 	mockDS.On("GetNoteClipPath", "999").Return("", gorm.ErrRecordNotFound)
+	mockDS.On("GetNoteClipPath", "998").Return("", nil)
 	controller.DS = mockDS
 
 	testCases := []struct {
@@ -178,6 +179,12 @@ func TestExportAudioByID(t *testing.T) {
 			body:           `{"format": "wav"}`,
 			expectedStatus: http.StatusNotFound,
 		},
+		{
+			name:           "empty clip path",
+			noteID:         "998",
+			body:           `{"format": "wav"}`,
+			expectedStatus: http.StatusNotFound,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -199,8 +206,11 @@ func TestExportAudioByID(t *testing.T) {
 
 			if tc.expectedStatus == http.StatusOK {
 				assert.Equal(t, tc.expectedType, rec.Header().Get("Content-Type"))
-				assert.Contains(t, rec.Header().Get("Content-Disposition"), "attachment")
-				assert.Contains(t, rec.Header().Get("Content-Disposition"), tc.expectedExt)
+				contentDisposition := rec.Header().Get("Content-Disposition")
+				assert.Contains(t, contentDisposition, "attachment")
+				assert.Contains(t, contentDisposition, "test%20export")
+				assert.NotContains(t, contentDisposition, "test+export")
+				assert.Contains(t, contentDisposition, tc.expectedExt)
 				assert.Positive(t, rec.Body.Len())
 			}
 		})

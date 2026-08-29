@@ -68,6 +68,22 @@ describe('downloadDetectionRecording', () => {
     ]);
   });
 
+  it('uses the original clip extension and a non-empty download filename', async () => {
+    let downloadName = '';
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement
+    ) {
+      downloadName = this.download;
+    });
+
+    await downloadDetectionRecording(
+      makeDetection({ clipName: 'house_sparrow_90p_20260622T143005Z.m4a' }),
+      'original'
+    );
+
+    expect(downloadName).toBe('House_Sparrow_2026-06-22_14-30-05.m4a');
+  });
+
   it.each<[RecordingDownloadFormat, string]>([
     ['mp3', 'mp3'],
     ['aac', 'm4a'],
@@ -104,6 +120,31 @@ describe('downloadDetectionRecording', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 500 })));
 
     await expect(downloadDetectionRecording(makeDetection({}), 'wav')).rejects.toThrow();
+    expect(downloadBlob).not.toHaveBeenCalled();
+  });
+
+  it('passes cancellation to fetch and does not download a blob after abort', async () => {
+    let resolveBlob!: (blob: Blob) => void;
+    const blobPromise = new Promise<Blob>(resolve => {
+      resolveBlob = resolve;
+    });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      blob: vi.fn(() => blobPromise),
+    } as unknown as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const controller = new AbortController();
+    const downloadPromise = downloadDetectionRecording(makeDetection({}), 'wav', controller.signal);
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    const [, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(request.signal).toBe(controller.signal);
+
+    controller.abort();
+    resolveBlob(new Blob(['audio']));
+
+    await expect(downloadPromise).rejects.toMatchObject({ name: 'AbortError' });
     expect(downloadBlob).not.toHaveBeenCalled();
   });
 });

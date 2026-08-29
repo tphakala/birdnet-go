@@ -140,6 +140,7 @@
   let speciesController: AbortController | null = null;
   let taxonomyController: AbortController | null = null;
   let attributionController: AbortController | null = null;
+  let recordingDownloadController: AbortController | null = null;
 
   // Validate detection ID to prevent path traversal attacks
   // Only allow alphanumeric characters, hyphens, and underscores
@@ -188,6 +189,7 @@
       speciesController?.abort();
       taxonomyController?.abort();
       attributionController?.abort();
+      recordingDownloadController?.abort();
       cancelAttributionRetry();
     };
   });
@@ -439,12 +441,21 @@
 
     showDownloadFormatModal = false;
     isDownloadingRecording = true;
+    recordingDownloadController?.abort();
+    const controller = new AbortController();
+    recordingDownloadController = controller;
+
     try {
-      await downloadDetectionRecording(detection, format);
+      await downloadDetectionRecording(detection, format, controller.signal);
     } catch (error) {
-      toastActions.error(recordingDownloadErrorMessage(error));
+      if (!controller.signal.aborted && !(error instanceof Error && error.name === 'AbortError')) {
+        toastActions.error(recordingDownloadErrorMessage(error));
+      }
     } finally {
-      isDownloadingRecording = false;
+      if (recordingDownloadController === controller) {
+        recordingDownloadController = null;
+        isDownloadingRecording = false;
+      }
     }
   }
 

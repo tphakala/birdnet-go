@@ -185,6 +185,15 @@ func TestTranscodeAudio_InvalidInputs(t *testing.T) {
 			name: "empty FFmpeg path",
 			opts: &ffmpeg.TranscodeOptions{InputPath: testFile, Format: ffmpeg.FormatWAV, FFmpegPath: ""},
 		},
+		{
+			name: "output limit above hard ceiling",
+			opts: &ffmpeg.TranscodeOptions{
+				InputPath:      testFile,
+				Format:         ffmpeg.FormatWAV,
+				FFmpegPath:     ffmpegPath,
+				MaxOutputBytes: ffmpeg.DefaultMaxTranscodeOutputBytes + 1,
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -192,6 +201,42 @@ func TestTranscodeAudio_InvalidInputs(t *testing.T) {
 			t.Parallel()
 			_, err := ffmpeg.TranscodeAudio(t.Context(), tt.opts)
 			assert.Error(t, err)
+		})
+	}
+}
+
+func TestTranscodeAudio_OutputLimit(t *testing.T) {
+	t.Parallel()
+
+	ffmpegPath, err := findFFmpegBinary()
+	if err != nil {
+		t.Skip("FFmpeg not available:", err)
+	}
+
+	testFile := filepath.Join(t.TempDir(), "test.wav")
+	makeTestWAVSilence(t, testFile, 3)
+
+	tests := []struct {
+		name   string
+		format string
+	}{
+		{name: "pipe-backed WAV", format: ffmpeg.FormatWAV},
+		{name: "temporary-file FLAC", format: ffmpeg.FormatFLAC},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			buf, err := ffmpeg.TranscodeAudio(t.Context(), &ffmpeg.TranscodeOptions{
+				InputPath:      testFile,
+				Format:         tt.format,
+				FFmpegPath:     ffmpegPath,
+				MaxOutputBytes: 64,
+			})
+
+			require.ErrorIs(t, err, ffmpeg.ErrTranscodeOutputTooLarge)
+			assert.Nil(t, buf)
 		})
 	}
 }

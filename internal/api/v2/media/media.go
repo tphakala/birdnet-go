@@ -159,9 +159,7 @@ func contentDispositionFilename(filename string) string {
 	return stem[:timestampEnd-1] + stem[timestampEnd:] + ext
 }
 
-// setAudioContentDisposition advertises a safe, user-facing filename while
-// keeping the response inline for browser playback.
-func setAudioContentDisposition(ctx echo.Context, filename string) {
+func setAudioContentDispositionValue(ctx echo.Context, disposition, filename string) {
 	if !isValidFilename(filename) {
 		return
 	}
@@ -170,7 +168,17 @@ func setAudioContentDisposition(ctx echo.Context, filename string) {
 	// QueryEscape provides the conservative percent-encoding needed for an
 	// RFC 5987 filename* value, except that its form-style spaces use '+'.
 	encodedFilename := strings.ReplaceAll(url.QueryEscape(dispositionFilename), "+", "%20")
-	ctx.Response().Header().Set(echo.HeaderContentDisposition, fmt.Sprintf("inline; filename*=UTF-8''%s", encodedFilename))
+	ctx.Response().Header().Set(echo.HeaderContentDisposition, fmt.Sprintf("%s; filename*=UTF-8''%s", disposition, encodedFilename))
+}
+
+// setAudioContentDisposition advertises a safe, user-facing filename while
+// keeping the response inline for browser playback.
+func setAudioContentDisposition(ctx echo.Context, filename string) {
+	setAudioContentDispositionValue(ctx, "inline", filename)
+}
+
+func setAudioAttachmentContentDisposition(ctx echo.Context, filename string) {
+	setAudioContentDispositionValue(ctx, "attachment", filename)
 }
 
 func clearAudioResponseHeaders(ctx echo.Context) {
@@ -1165,8 +1173,7 @@ func (c *Handler) ExtractAudioClipByID(ctx echo.Context) error {
 	ctx.Response().Header().Set("Content-Type", mimeType)
 
 	filename := fmt.Sprintf("clip_%.1f-%.1f.%s", req.Start, req.End, clipFileExtension(req.Format))
-	ctx.Response().Header().Set("Content-Disposition",
-		fmt.Sprintf("attachment; filename*=UTF-8''%s", url.QueryEscape(filename)))
+	setAudioAttachmentContentDisposition(ctx, filename)
 
 	return ctx.Blob(http.StatusOK, mimeType, buf.Bytes())
 }
@@ -1231,14 +1238,18 @@ func (c *Handler) ExportAudioByID(ctx echo.Context) error {
 	}
 
 	buf, err := ffmpeg.TranscodeAudio(ctx.Request().Context(), &ffmpeg.TranscodeOptions{
-		InputPath:  absolutePath,
-		Format:     req.Format,
-		Filters:    filters,
-		FFmpegPath: c.CurrentSettings().Realtime.Audio.FfmpegPath,
+		InputPath:      absolutePath,
+		Format:         req.Format,
+		Filters:        filters,
+		FFmpegPath:     c.CurrentSettings().Realtime.Audio.FfmpegPath,
+		MaxOutputBytes: ffmpeg.DefaultMaxTranscodeOutputBytes,
 	})
 	if err != nil {
 		if handled, contextErr := c.handleRequestContextError(ctx); handled {
 			return contextErr
+		}
+		if errors.Is(err, ffmpeg.ErrTranscodeOutputTooLarge) {
+			return c.HandleError(ctx, err, "Export exceeds maximum size", http.StatusRequestEntityTooLarge)
 		}
 		c.logTranscodeFailure(noteID, "media_audio_export_failed", req.Format, filters, err)
 		return c.HandleError(ctx, err, "Failed to export audio", http.StatusInternalServerError)
@@ -1252,8 +1263,7 @@ func (c *Handler) ExportAudioByID(ctx echo.Context) error {
 	if !isValidFilename(filename) {
 		filename = fmt.Sprintf("recording_%s.%s", noteID, clipFileExtension(req.Format))
 	}
-	ctx.Response().Header().Set("Content-Disposition",
-		fmt.Sprintf("attachment; filename*=UTF-8''%s", url.QueryEscape(filename)))
+	setAudioAttachmentContentDisposition(ctx, filename)
 
 	return ctx.Blob(http.StatusOK, mimeType, buf.Bytes())
 }
