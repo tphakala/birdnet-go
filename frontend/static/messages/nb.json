@@ -631,6 +631,21 @@
       "subtitle": "Arter som identifiseres i sanntid",
       "empty": "Stille - ingen fugler registrert akkurat nå"
     },
+    "recentHearing": {
+      "title": "Nylig hørt",
+      "subtitle": "De siste {hours} timene",
+      "empty": "Ingen nylig artsaktivitet",
+      "loading": "Laster nylig artsaktivitet",
+      "justNow": "akkurat nå",
+      "minutesAgo": "for {count} min siden",
+      "hoursAgo": "for {count} t siden",
+      "detections": "{count, plural, one {# registrering} other {# registreringer}}",
+      "confidence": "{confidence}% sikkerhet",
+      "confidenceTrend": "Sikkerhetsutvikling for {species}",
+      "controls": {
+        "refresh": "Oppdater nylig artsaktivitet"
+      }
+    },
     "rejected": "Avvist",
     "newSpeciesHighlights": {
       "title": "Nye og tilbakevendende arter",
@@ -748,6 +763,8 @@
       "dailySummaryLoad": "Innlasting av daglig sammendrag mislyktes",
       "recentDetectionsFetch": "Henting av siste registreringer mislyktes: {status}",
       "recentDetectionsLoad": "Innlasting av siste registreringer mislyktes",
+      "recentHearingFetch": "Henting av nylig artsaktivitet mislyktes: {status}",
+      "recentHearingLoad": "Innlasting av nylig artsaktivitet mislyktes",
       "configFetch": "Henting av dashbordkonfigurasjon mislyktes: {status}"
     },
     "banner": {
@@ -814,6 +831,7 @@
       "dailySummary": "Daglig sammendrag",
       "newSpeciesHighlights": "Høydepunkter for nye arter",
       "currentlyHearing": "Hører nå",
+      "recentHearing": "Nylig hørt",
       "detectionsGrid": "Siste registreringer",
       "liveSpectrogram": "Direkte spektrogram",
       "videoEmbed": "Videoinnbygging"
