@@ -464,6 +464,17 @@
         "staleMessage": "{modelName} está instalado para {oldRegion}, mas a sua nova localização corresponde a {newRegion}. Pode mudar de variante a partir da galeria de modelos nas Configurações.",
         "staleGlobalMessage": "{modelName} está instalado para {oldRegion}, mas a sua nova localização está fora da sua cobertura. Pode mudar para a variante global a partir da galeria de modelos nas Configurações."
       },
+      "modelPath": {
+        "reconciledTitle": "Caminhos dos ficheiros do modelo reparados para {modelName}",
+        "reconciledMessage": "Os caminhos de ficheiro configurados para {modelName} estavam desatualizados e foram reparados para corresponder ao modelo instalado em {modelPath}.",
+        "substitutedTitle": "Ficheiro de modelo configurado para {modelName} não encontrado",
+        "substitutedMessage": "O ficheiro de modelo configurado para {modelName} não foi encontrado no disco, pelo que o modelo instalado em {modelPath} está a ser utilizado em vez disso. A sua configuração não foi alterada.",
+        "unreadableTitle": "Não foi possível ler o ficheiro de modelo configurado para {modelName}",
+        "unreadableMessage": "O ficheiro de modelo configurado para {modelName} existe, mas não pôde ser lido, pelo que o modelo instalado em {modelPath} está a ser utilizado em vez disso. A sua configuração não foi alterada. Verifique as permissões do ficheiro e se o seu armazenamento está montado.",
+        "builtinMessage": "O ficheiro de modelo configurado para {modelName} não foi encontrado no disco e não existe nenhum modelo instalado disponível para o substituir, pelo que o modelo integrado está a ser utilizado em vez disso. A sua configuração não foi alterada.",
+        "notRegisteredTitle": "Nenhum modelo está a analisar {sourceName}",
+        "notRegisteredMessage": "Nenhum áudio está a chegar a {models} na fonte de áudio \"{sourceName}\", pelo que não são produzidas deteções. Abra a galeria de modelos nas Configurações para verificar o estado."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valor atual: {value}% (limite: {threshold}%)",
@@ -1768,6 +1779,8 @@
       "sources": "Fontes de áudio",
       "noSources": "Nenhuma fonte conectada",
       "primaryFallback": "primária (reserva)",
+      "sourceNotRunning": "não está a analisar",
+      "sourceNotRunningTooltip": "Esta fonte está atribuída ao modelo nas configurações, mas o seu áudio não está a chegar ao modelo, pelo que não produz deteções. Abra a galeria de modelos nas Configurações para verificar o seu estado.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",

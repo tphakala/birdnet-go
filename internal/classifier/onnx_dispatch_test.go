@@ -30,8 +30,7 @@ func TestUsesONNXBackend(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			bn := &BirdNET{Settings: &conf.Settings{}, ModelInfo: ModelInfo{Backend: tt.backend}}
-			bn.Settings.BirdNET.ModelPath = tt.modelPath
+			bn := birdNETWithModelPath(tt.modelPath, &ModelInfo{Backend: tt.backend})
 			assert.Equal(t, tt.want, bn.usesONNXBackend())
 		})
 	}
@@ -41,14 +40,12 @@ func TestUsesONNXBackend(t *testing.T) {
 // and case-folding are exercised through usesONNXBackend (not parallel: t.Setenv).
 func TestUsesONNXBackend_PathNormalization(t *testing.T) {
 	t.Run("uppercase extension", func(t *testing.T) {
-		bn := &BirdNET{Settings: &conf.Settings{}, ModelInfo: ModelInfo{Backend: BackendTFLite}}
-		bn.Settings.BirdNET.ModelPath = "/models/X.ONNX"
+		bn := birdNETWithModelPath("/models/X.ONNX", &ModelInfo{Backend: BackendTFLite})
 		assert.True(t, bn.usesONNXBackend())
 	})
 	t.Run("env var expansion", func(t *testing.T) {
 		t.Setenv("TEST_MODELS_DIR", "/models")
-		bn := &BirdNET{Settings: &conf.Settings{}, ModelInfo: ModelInfo{Backend: BackendTFLite}}
-		bn.Settings.BirdNET.ModelPath = "$TEST_MODELS_DIR/x.onnx"
+		bn := birdNETWithModelPath("$TEST_MODELS_DIR/x.onnx", &ModelInfo{Backend: BackendTFLite})
 		assert.True(t, bn.usesONNXBackend())
 	})
 }
@@ -74,9 +71,24 @@ func TestONNXModelPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			bn := &BirdNET{Settings: &conf.Settings{}, ModelInfo: ModelInfo{CustomPath: tt.customPath}}
-			bn.Settings.BirdNET.ModelPath = tt.modelPath
+			bn := birdNETWithModelPath(tt.modelPath, &ModelInfo{CustomPath: tt.customPath})
 			assert.Equal(t, tt.want, bn.onnxModelPath())
 		})
 	}
+}
+
+// birdNETWithModelPath builds a BirdNET the way NewBirdNET does for a caller with
+// no path resolver: the configured setting AND the resolved primary path both
+// carry modelPath.
+//
+// Setting only Settings.BirdNET.ModelPath is not enough. Every load-path consumer
+// reads configuredModelPath(), which returns the RESOLVED path, so a literal that
+// leaves primaryPath at its zero value describes the "configured file was missing
+// and we recovered to the built-in baseline" state rather than the "user
+// configured this file" state these tests mean.
+func birdNETWithModelPath(modelPath string, info *ModelInfo) *BirdNET {
+	bn := &BirdNET{Settings: &conf.Settings{}, ModelInfo: *info}
+	bn.Settings.BirdNET.ModelPath = modelPath
+	bn.primaryPath = pathResolution{resolved: modelFileSet{model: modelPath}}
+	return bn
 }

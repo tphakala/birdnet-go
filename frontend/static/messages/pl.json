@@ -464,6 +464,17 @@
         "staleMessage": "{modelName} jest zainstalowany dla {oldRegion}, ale Twoja nowa lokalizacja wskazuje na {newRegion}. Możesz zmienić warianty w galerii modeli w Ustawieniach.",
         "staleGlobalMessage": "{modelName} jest zainstalowany dla {oldRegion}, ale Twoja nowa lokalizacja znajduje się poza jego zasięgiem. Możesz przełączyć się na wariant globalny w galerii modeli w Ustawieniach."
       },
+      "modelPath": {
+        "reconciledTitle": "Ścieżki plików modelu {modelName} naprawione",
+        "reconciledMessage": "Skonfigurowane ścieżki plików dla {modelName} były nieaktualne i zostały naprawione, aby pasowały do zainstalowanego modelu w {modelPath}.",
+        "substitutedTitle": "Nie znaleziono skonfigurowanego pliku modelu dla {modelName}",
+        "substitutedMessage": "Skonfigurowany plik modelu dla {modelName} nie został znaleziony na dysku, dlatego zamiast niego używany jest zainstalowany model w lokalizacji {modelPath}. Twoja konfiguracja pozostała niezmieniona.",
+        "unreadableTitle": "Nie udało się odczytać skonfigurowanego pliku modelu dla {modelName}",
+        "unreadableMessage": "Skonfigurowany plik modelu dla {modelName} istnieje, ale nie udało się go odczytać, dlatego zamiast niego używany jest zainstalowany model w lokalizacji {modelPath}. Twoja konfiguracja pozostała niezmieniona. Sprawdź uprawnienia pliku oraz to, czy pamięć masowa jest zamontowana.",
+        "builtinMessage": "Skonfigurowany plik modelu dla {modelName} nie został znaleziony na dysku i żaden zainstalowany model nie jest dostępny, aby go zastąpić, dlatego zamiast niego używany jest wbudowany model. Twoja konfiguracja pozostała niezmieniona.",
+        "notRegisteredTitle": "Żaden model nie analizuje {sourceName}",
+        "notRegisteredMessage": "Żaden dźwięk nie dociera do {models} na źródle audio \"{sourceName}\", więc nie są generowane żadne detekcje. Otwórz galerię modeli w Ustawieniach, aby sprawdzić stan."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Bieżąca wartość: {value}% (próg: {threshold}%)",
@@ -1768,6 +1779,8 @@
       "sources": "Źródła audio",
       "noSources": "Brak podłączonych źródeł",
       "primaryFallback": "podstawowy (zapasowy)",
+      "sourceNotRunning": "nie analizuje",
+      "sourceNotRunningTooltip": "To źródło jest przypisane do modelu w ustawieniach, ale jego dźwięk nie dociera do modelu, więc nie generuje detekcji. Otwórz galerię modeli w Ustawieniach, aby sprawdzić jego stan.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",

@@ -32,6 +32,15 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 	settings := bn.currentSettings()
 	start := time.Now()
 
+	// The decoration below reports the CONFIGURED path
+	// (settings.BirdNET.ModelPath), not bn.configuredModelPath(), and that is
+	// deliberate: this runs BEFORE bn.mu is taken, and bn.primaryPath is written
+	// under bn.mu by reloadModelInternal, so reading the resolved value here would
+	// be a data race. Reporting the resolved path on THIS path needs a lock-free
+	// published copy alongside bn.identity. The two decorations after the lock do
+	// report the resolved path, since after a stale-path recovery the configured
+	// one names a file the instance is not running.
+	//
 	// Guard against empty sample slice. Pre-inference rejections are tagged but
 	// not counted as predictions.
 	if len(sample) == 0 || len(sample[0]) == 0 {
@@ -51,7 +60,7 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 		span.markErrored(errTypeClassifierNil)
 		return nil, errors.Newf("classifier backend is not initialized").
 			Category(errors.CategoryModelInit).
-			ModelContext(settings.BirdNET.ModelPath, modelID).
+			ModelContext(bn.configuredModelPath(), modelID).
 			Build()
 	}
 
@@ -61,7 +70,7 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 	if err != nil {
 		err = errors.New(err).
 			Category(errors.CategoryAudio).
-			ModelContext(settings.BirdNET.ModelPath, modelID).
+			ModelContext(bn.configuredModelPath(), modelID).
 			Context("sample_length", len(sample[0])).
 			Timing("prediction-invoke", time.Since(invokeStart)).
 			Build()

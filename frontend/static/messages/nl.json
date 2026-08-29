@@ -464,6 +464,17 @@
         "staleMessage": "{modelName} is geïnstalleerd voor {oldRegion}, maar uw nieuwe locatie komt overeen met {newRegion}. U kunt van variant wisselen via de modellengalerij in Instellingen.",
         "staleGlobalMessage": "{modelName} is geïnstalleerd voor {oldRegion}, maar uw nieuwe locatie valt buiten de dekking. U kunt overschakelen naar de globale variant via de modellengalerij in Instellingen."
       },
+      "modelPath": {
+        "reconciledTitle": "Bestandspaden van model hersteld voor {modelName}",
+        "reconciledMessage": "De geconfigureerde bestandspaden voor {modelName} waren verouderd en zijn hersteld om overeen te komen met het geïnstalleerde model op {modelPath}.",
+        "substitutedTitle": "Geconfigureerd modelbestand voor {modelName} niet gevonden",
+        "substitutedMessage": "Het voor {modelName} geconfigureerde modelbestand is niet op de schijf gevonden, dus wordt in plaats daarvan het geïnstalleerde model op {modelPath} gebruikt. Uw configuratie is ongewijzigd gebleven.",
+        "unreadableTitle": "Geconfigureerd modelbestand voor {modelName} kon niet worden gelezen",
+        "unreadableMessage": "Het voor {modelName} geconfigureerde modelbestand bestaat, maar kon niet worden gelezen, dus wordt in plaats daarvan het geïnstalleerde model op {modelPath} gebruikt. Uw configuratie is ongewijzigd gebleven. Controleer de bestandsmachtigingen en of de opslag is gekoppeld.",
+        "builtinMessage": "Het voor {modelName} geconfigureerde modelbestand is niet op de schijf gevonden en er is geen geïnstalleerd model beschikbaar om het te vervangen, dus wordt in plaats daarvan het ingebouwde model gebruikt. Uw configuratie is ongewijzigd gebleven.",
+        "notRegisteredTitle": "Geen model analyseert {sourceName}",
+        "notRegisteredMessage": "Er bereikt geen audio {models} op audiobron \"{sourceName}\", waardoor er geen detecties worden geproduceerd. Open de modellengalerij in Instellingen om de status te controleren."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Huidige waarde: {value}% (drempelwaarde: {threshold}%)",
@@ -1768,6 +1779,8 @@
       "sources": "Audiobronnen",
       "noSources": "Geen bronnen verbonden",
       "primaryFallback": "primair (fallback)",
+      "sourceNotRunning": "analyseert niet",
+      "sourceNotRunningTooltip": "Deze bron is in de instellingen toegewezen aan het model, maar de audio bereikt het model niet, waardoor het geen detecties produceert. Open de modellengalerij in Instellingen om de status te controleren.",
       "notMeasured": "n/b",
       "unitMs": "ms",
       "unitKhz": "kHz",

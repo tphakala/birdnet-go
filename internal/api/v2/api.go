@@ -170,6 +170,16 @@ type Controller struct {
 
 	controlChan chan string
 
+	// topologyReconfigureTimer debounces the audio-source reconfigure triggered
+	// by a model topology change (see OnModelTopologyChanged). A gallery variant
+	// switch fires the callback twice and each reconfigure re-probes every RTSP
+	// stream, so the two are coalesced into one. topologyReconfigureShutdown is
+	// set under topologyReconfigureMu by Shutdown so a callback that fires during
+	// teardown does not re-arm the timer.
+	topologyReconfigureMu       sync.Mutex
+	topologyReconfigureTimer    *time.Timer
+	topologyReconfigureShutdown bool
+
 	// speciesGuide serves the species guide domain: the rate-limited
 	// /species/:name/guide and /species/:name/similar endpoints and the
 	// auth-gated species-notes CRUD. Beyond the shared *apicore.Core it OWNS the
@@ -177,6 +187,7 @@ type Controller struct {
 	// SetGuideCache delegator; the handler closes it on Shutdown) and the
 	// guide-rarity memoization for the expectedness badge.
 	speciesGuide *speciesguide.Handler
+
 	// DisableSaveSettings prevents persisting settings changes to disk.
 	// When set to true, all settings modifications remain in memory only.
 	// This is primarily used in testing but can be used in production for read-only mode.
@@ -366,10 +377,11 @@ func WithAudioEngine(e *engine.AudioEngine) Option {
 func WithModelManager(mm *classifier.ModelManager) Option {
 	return func(c *Controller) {
 		c.ModelManager = mm
-		// Wire the topology-changed callback so model add/remove broadcasts over
-		// the metrics SSE stream. The method value binds c; c.MetricsStore is read
-		// lazily at call time, so option ordering is irrelevant.
-		mm.SetTopologyChangedCallback(c.BroadcastInferenceTopologyChanged)
+		// Wire the topology-changed callback so a model add/remove both broadcasts
+		// over the metrics SSE stream AND re-registers the model against running
+		// audio sources. The method value binds c; c.MetricsStore and c.controlChan
+		// are read lazily at call time, so option ordering is irrelevant.
+		mm.SetTopologyChangedCallback(c.OnModelTopologyChanged)
 	}
 }
 
@@ -861,6 +873,18 @@ func (c *Controller) Shutdown() {
 	if c.alerts != nil {
 		c.alerts.Shutdown()
 	}
+
+	// Stop the topology-reconfigure debounce timer and mark it shut down so a
+	// model-topology callback that fires during teardown does not re-arm it. Done
+	// under topologyReconfigureMu, the same lock scheduleAudioSourceReconfigure
+	// takes, so the flag and the timer stay consistent.
+	c.topologyReconfigureMu.Lock()
+	c.topologyReconfigureShutdown = true
+	if c.topologyReconfigureTimer != nil {
+		c.topologyReconfigureTimer.Stop()
+		c.topologyReconfigureTimer = nil
+	}
+	c.topologyReconfigureMu.Unlock()
 
 	// Cancel context to stop all goroutines, then wait for them to finish.
 	c.Cancel()

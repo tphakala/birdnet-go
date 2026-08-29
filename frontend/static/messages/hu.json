@@ -464,6 +464,17 @@
         "staleMessage": "A(z) {modelName} a(z) {oldRegion} régióhoz van telepítve, de az új helyszíne a következőnek felel meg: {newRegion}. Változatot a Beállítások modellgalériájában válthat.",
         "staleGlobalMessage": "A(z) {modelName} a(z) {oldRegion} régióhoz van telepítve, de az új helyszíne kívül esik a lefedettségén. A globális változatra a Beállítások modellgalériájában válthat."
       },
+      "modelPath": {
+        "reconciledTitle": "A(z) {modelName} modell fájlelérési útjai javítva",
+        "reconciledMessage": "A(z) {modelName} beállított fájlelérési útjai elavultak voltak, és javításra kerültek, hogy megfeleljenek a(z) {modelPath} helyen telepített modellnek.",
+        "substitutedTitle": "A(z) {modelName} modellhez beállított modellfájl nem található",
+        "substitutedMessage": "A(z) {modelName} modellhez beállított modellfájl nem található a lemezen, ezért helyette a(z) {modelPath} helyen telepített modell van használatban. A konfigurációja változatlan maradt.",
+        "unreadableTitle": "A(z) {modelName} modellhez beállított modellfájlt nem sikerült beolvasni",
+        "unreadableMessage": "A(z) {modelName} modellhez beállított modellfájl létezik, de nem sikerült beolvasni, ezért helyette a(z) {modelPath} helyen telepített modell van használatban. A konfigurációja változatlan maradt. Ellenőrizze a fájl jogosultságait és azt, hogy a tárolója csatolva van-e.",
+        "builtinMessage": "A(z) {modelName} modellhez beállított modellfájl nem található a lemezen, és nem érhető el telepített modell a helyettesítésére, ezért helyette a beépített modell van használatban. A konfigurációja változatlan maradt.",
+        "notRegisteredTitle": "Egyetlen modell sem elemzi a következőt: {sourceName}",
+        "notRegisteredMessage": "Nem jut el hang a(z) {models} számára a(z) \"{sourceName}\" hangforráson, így nem jönnek létre detektálások. Nyissa meg a modellgalériát a Beállításokban az állapot ellenőrzéséhez."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Jelenlegi érték: {value}% (küszöbérték: {threshold}%)",
@@ -1768,6 +1779,8 @@
       "sources": "Hangforrások",
       "noSources": "Nincs csatlakoztatott hangforrás",
       "primaryFallback": "elsődleges (tartalék)",
+      "sourceNotRunning": "nem elemzi",
+      "sourceNotRunningTooltip": "Ez a forrás hozzá van rendelve a modellhez a beállításokban, de a hangja nem jut el a modellhez, így nem készít észleléseket. Nyissa meg a modellgalériát a Beállításokban az állapotának ellenőrzéséhez.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",

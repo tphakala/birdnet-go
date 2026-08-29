@@ -49,13 +49,21 @@ const failedStateRetention = 30 * time.Second
 // 38 MB (int8-arm v2.4) to 557 MB (global v3.0 fp32) against Pi storage.
 const diskSpaceMarginBytes int64 = 64 << 20 // 64 MiB
 
+// settingsWriteMu serializes clone-mutate-publish cycles on the global conf
+// settings across the whole classifier package. Every writer reads
+// conf.GetSettings(), mutates a clone, and publishes it with conf.StoreSettings.
+// Without one shared lock two such cycles interleave and the second clobbers the
+// first's write. It is package-level rather than a ModelManager field because
+// the Orchestrator's stale-path repair (applyPathCorrection) is a writer too and
+// must serialize against ModelManager's install/uninstall config writers.
+var settingsWriteMu sync.Mutex
+
 // ModelManager handles the lifecycle of downloadable models.
 type ModelManager struct {
 	modelsDir    string
 	orchestrator *Orchestrator
 	settings     *conf.Settings // nil sentinel: non-nil means config sync is enabled
 	mu           sync.RWMutex
-	settingsMu   sync.Mutex // serializes clone-mutate-publish cycles on settings
 	installed    map[string]InstalledModel
 	downloading  map[string]*DownloadState
 
@@ -268,7 +276,7 @@ func (mm *ModelManager) ScanInstalled() {
 
 	// Phase 2: sync Models.Enabled and load models (lock-free).
 	if mm.settings != nil {
-		mm.settingsMu.Lock()
+		settingsWriteMu.Lock()
 		updated := conf.CloneSettings(conf.GetSettings())
 		changed := false
 
@@ -312,7 +320,7 @@ func (mm *ModelManager) ScanInstalled() {
 					logger.Error(err))
 			}
 		}
-		mm.settingsMu.Unlock()
+		settingsWriteMu.Unlock()
 
 		mm.loadInstalledModels(log, installedIDs)
 
@@ -585,18 +593,18 @@ func (mm *ModelManager) applyInstalledGeomodelConfig(log logger.Logger, entry *C
 		}
 	}
 
-	// Decide and write under settingsMu so the already-matches check and the
+	// Decide and write under settingsWriteMu so the already-matches check and the
 	// store operate on one consistent snapshot. Reading outside the lock would
 	// let a concurrent install/uninstall publish a newer config between the
 	// check and the store, overwriting it with stale data.
-	mm.settingsMu.Lock()
+	settingsWriteMu.Lock()
 	current := conf.GetSettings()
 	rf := current.BirdNET.RangeFilter
 	if rf.Model == entry.GeomodelVersion &&
 		rf.ModelPath == expectedModelPath &&
 		rf.LabelsPath == expectedLabelsPath {
 		// Config already set; initializeMetaModel handled it at startup.
-		mm.settingsMu.Unlock()
+		settingsWriteMu.Unlock()
 		return
 	}
 
@@ -615,7 +623,7 @@ func (mm *ModelManager) applyInstalledGeomodelConfig(log logger.Logger, entry *C
 			logger.String("catalog_id", catalogID),
 			logger.Error(err))
 	}
-	mm.settingsMu.Unlock()
+	settingsWriteMu.Unlock()
 
 	if err := mm.orchestrator.ReloadRangeFilter(); err != nil {
 		log.Warn("Failed to reload range filter after geomodel config update",
@@ -649,17 +657,17 @@ func (mm *ModelManager) healOrphanGeomodelConfig(log logger.Logger) {
 		}
 	}
 
-	// Decide and write under settingsMu so the decision and the store operate on
+	// Decide and write under settingsWriteMu so the decision and the store operate on
 	// one consistent snapshot. Reading the config outside the lock would let a
 	// concurrent install publish a valid geomodel config between the decision
 	// and the store, after which a stale "clear" would wipe it. The filesystem
 	// check above is independent of settings, so it stays outside the lock.
-	mm.settingsMu.Lock()
+	settingsWriteMu.Lock()
 	current := conf.GetSettings()
 	rf := current.BirdNET.RangeFilter
 	action := decideGeomodelOrphanAction(&rf, expectedModelPath, expectedLabelsPath, filesPresent)
 	if action == geomodelOrphanNone {
-		mm.settingsMu.Unlock()
+		settingsWriteMu.Unlock()
 		return
 	}
 
@@ -682,7 +690,7 @@ func (mm *ModelManager) healOrphanGeomodelConfig(log logger.Logger) {
 		log.Warn("Failed to persist orphan geomodel config self-heal",
 			logger.Error(err))
 	}
-	mm.settingsMu.Unlock()
+	settingsWriteMu.Unlock()
 
 	if err := mm.orchestrator.ReloadRangeFilter(); err != nil {
 		log.Warn("Failed to reload range filter after orphan geomodel self-heal",
@@ -1565,8 +1573,8 @@ func (mm *ModelManager) applyConfigForPrimarySwap(modelPath string) {
 	if mm.settings == nil {
 		return
 	}
-	mm.settingsMu.Lock()
-	defer mm.settingsMu.Unlock()
+	settingsWriteMu.Lock()
+	defer settingsWriteMu.Unlock()
 
 	updated := conf.CloneSettings(conf.GetSettings())
 	updated.BirdNET.ModelPath = modelPath
@@ -1991,7 +1999,7 @@ func (mm *ModelManager) removeDownloading(catalogID string) {
 
 // applyConfigForInstall updates settings to reflect a newly installed model.
 // Only fields with non-empty paths are set. The caller must hold no locks
-// other than mm.settingsMu (acquired internally).
+// other than settingsWriteMu (acquired internally).
 // Uses clone-mutate-publish so the shared settings snapshot is never mutated
 // in place. Settings are persisted to disk via conf.SaveSettings so changes
 // survive restarts and are visible to concurrent readers through conf.Setting().
@@ -2000,8 +2008,8 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 		return
 	}
 
-	mm.settingsMu.Lock()
-	defer mm.settingsMu.Unlock()
+	settingsWriteMu.Lock()
+	defer settingsWriteMu.Unlock()
 
 	updated := conf.CloneSettings(conf.GetSettings())
 
@@ -2081,8 +2089,8 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 		return
 	}
 
-	mm.settingsMu.Lock()
-	defer mm.settingsMu.Unlock()
+	settingsWriteMu.Lock()
+	defer settingsWriteMu.Unlock()
 
 	updated := conf.CloneSettings(conf.GetSettings())
 	retainAlias := false

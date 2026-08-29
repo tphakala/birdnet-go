@@ -464,6 +464,17 @@
         "staleMessage": "{modelName} er installert for {oldRegion}, men den nye posisjonen din tilsvarer {newRegion}. Du kan bytte varianter fra modellgalleriet i Innstillinger.",
         "staleGlobalMessage": "{modelName} er installert for {oldRegion}, men den nye posisjonen din er utenfor dekningsområdet. Du kan bytte til den globale varianten fra modellgalleriet i Innstillinger."
       },
+      "modelPath": {
+        "reconciledTitle": "Modellfilstier reparert for {modelName}",
+        "reconciledMessage": "De konfigurerte filstiene for {modelName} var utdaterte og har blitt reparert for å samsvare med den installerte modellen på {modelPath}.",
+        "substitutedTitle": "Fant ikke den konfigurerte modellfilen for {modelName}",
+        "substitutedMessage": "Modellfilen som er konfigurert for {modelName}, ble ikke funnet på disken, så den installerte modellen på {modelPath} brukes i stedet. Konfigurasjonen din ble ikke endret.",
+        "unreadableTitle": "Kunne ikke lese den konfigurerte modellfilen for {modelName}",
+        "unreadableMessage": "Modellfilen som er konfigurert for {modelName}, finnes, men kunne ikke leses, så den installerte modellen på {modelPath} brukes i stedet. Konfigurasjonen din ble ikke endret. Sjekk filens tillatelser og at lagringen er montert.",
+        "builtinMessage": "Modellfilen som er konfigurert for {modelName}, ble ikke funnet på disken, og ingen installert modell er tilgjengelig for å erstatte den, så den innebygde modellen brukes i stedet. Konfigurasjonen din ble ikke endret.",
+        "notRegisteredTitle": "Ingen modell analyserer {sourceName}",
+        "notRegisteredMessage": "Ingen lyd når {models} på lydkilden \"{sourceName}\", så det produseres ingen registreringer. Åpne modellgalleriet i Innstillinger for å sjekke status."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Gjeldende verdi: {value}% (terskel: {threshold}%)",
@@ -1768,6 +1779,8 @@
       "sources": "Lydkilder",
       "noSources": "Ingen kilder tilkoblet",
       "primaryFallback": "primær (fallback)",
+      "sourceNotRunning": "analyserer ikke",
+      "sourceNotRunningTooltip": "Denne kilden er tilordnet modellen i innstillingene, men lyden når ikke modellen, så den produserer ingen registreringer. Åpne modellgalleriet i Innstillinger for å sjekke statusen.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",
