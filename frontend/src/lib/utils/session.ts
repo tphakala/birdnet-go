@@ -27,6 +27,8 @@ const UUID_GROUP_LENGTHS = [8, 4, 4, 4, 12] as const; // canonical 8-4-4-4-12 he
 
 const HEX_RADIX = 16;
 const HEX_BYTE_WIDTH = 2; // hex digits per byte
+const HEX_PADDING_CHARACTER = '0'; // left-pad for a single-digit hex byte
+const UUID_GROUP_SEPARATOR = '-'; // separator between the 8-4-4-4-12 groups
 const BYTE_VALUE_COUNT = 256; // number of distinct byte values [0, 255]
 
 export function generateSessionId(): string {
@@ -47,7 +49,7 @@ function uuidv4(): string {
     } else if (index === UUID_VARIANT_BYTE_INDEX) {
       value = (value & UUID_VARIANT_BITS_MASK) | UUID_VARIANT_RFC4122_BITS;
     }
-    return value.toString(HEX_RADIX).padStart(HEX_BYTE_WIDTH, '0');
+    return value.toString(HEX_RADIX).padStart(HEX_BYTE_WIDTH, HEX_PADDING_CHARACTER);
   }).join('');
 
   const groups: string[] = [];
@@ -56,7 +58,7 @@ function uuidv4(): string {
     groups.push(hex.slice(offset, offset + length));
     offset += length;
   }
-  return groups.join('-');
+  return groups.join(UUID_GROUP_SEPARATOR);
 }
 
 function tryNativeUUID(): string | null {
