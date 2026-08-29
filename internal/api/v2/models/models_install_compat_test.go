@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/classifier/recommend"
 	"github.com/tphakala/birdnet-go/internal/hwprofile"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger/logtest"
@@ -37,31 +38,36 @@ func TestRequestedVariantCompatibility(t *testing.T) {
 		variantID      string
 		wantGated      bool
 		wantCompatible bool
-		wantBlockers   bool
+		wantBlocker    string // expected blocker code, "" when none is expected
 		wantArch       string
 	}{
 		// int8-arm requires aarch64; on an amd64 host it is gated and incompatible,
-		// carrying an arch blocker.
-		{"int8-arm incompatible on amd64", &perch, "int8-arm", true, false, true, "amd64"},
+		// carrying the deterministic arch-unsupported blocker.
+		{"int8-arm incompatible on amd64", &perch, "int8-arm", true, false, recommend.BlockerArchUnsupported, "amd64"},
 		// fp32 (the default) runs on amd64 with ONNX available.
-		{"fp32 compatible on amd64 ONNX", &perch, "fp32", true, true, false, "amd64"},
+		{"fp32 compatible on amd64 ONNX", &perch, "fp32", true, true, "", "amd64"},
 		// An empty variant id resolves to the default variant (fp32), compatible.
-		{"empty resolves to the compatible default", &perch, "", true, true, false, "amd64"},
-		// A flat entry (no variants) is never gated: there is nothing to select.
-		{"flat entry is not gated", &flat, "", false, false, false, ""},
+		{"empty resolves to the compatible default", &perch, "", true, true, "", "amd64"},
+		// A flat entry (no variants) is never gated: the contract returns
+		// compatible=true, gated=false, no blockers, and no host arch.
+		{"flat entry is not gated", &flat, "", false, true, "", ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			compatible, gated, blockers, arch := h.requestedVariantCompatibility(tt.entry, tt.variantID, ort)
-			assert.Equal(t, tt.wantGated, gated)
-			if !tt.wantGated {
-				// Nothing else is meaningful for an entry the recommender does not gate.
+			assert.Equal(t, tt.wantGated, gated, "gated")
+			assert.Equal(t, tt.wantCompatible, compatible, "compatible")
+			assert.Equal(t, tt.wantArch, arch, "host arch")
+			if tt.wantBlocker == "" {
+				assert.Empty(t, blockers, "no blocker expected")
 				return
 			}
-			assert.Equal(t, tt.wantCompatible, compatible)
-			assert.Equal(t, tt.wantBlockers, len(blockers) > 0, "blocker presence")
-			assert.Equal(t, tt.wantArch, arch)
+			codes := make([]string, len(blockers))
+			for i := range blockers {
+				codes[i] = blockers[i].Code
+			}
+			assert.Contains(t, codes, tt.wantBlocker, "expected blocker code")
 		})
 	}
 }
