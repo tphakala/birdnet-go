@@ -151,12 +151,12 @@ const containerRuntimeHealthTimeout = 10 * time.Second
 // hanging. NewDockerProvider builds the client; Health pings the daemon and
 // closes that client via an internal defer, so there is nothing to clean up here
 // on either path.
-func containerRuntimeError() error {
+func containerRuntimeError(ctx context.Context) error {
 	provider, err := testcontainers.NewDockerProvider()
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), containerRuntimeHealthTimeout)
+	ctx, cancel := context.WithTimeout(ctx, containerRuntimeHealthTimeout)
 	defer cancel()
 	return provider.Health(ctx)
 }
@@ -178,7 +178,7 @@ func containerRuntimeError() error {
 // itself make the whole integration-tagged build green.
 func SkipIfContainerRuntimeUnavailable(tb testing.TB) {
 	tb.Helper()
-	err := containerRuntimeError()
+	err := containerRuntimeError(tb.Context())
 	if err == nil {
 		return
 	}
