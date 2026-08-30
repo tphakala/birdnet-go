@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import Modal from './Modal.svelte';
 
   let {
@@ -6,19 +6,18 @@
     showChildren = false,
     showCustomHeader = false,
     showCustomFooter = false,
+    customHeaderTitle = 'Custom Header',
   } = $props();
 </script>
 
-<Modal {isOpen} title="Test Modal">
-  {#snippet header()}
-    {#if showCustomHeader}
-      <div>
-        <h3 id="modal-title" class="text-lg font-bold">Custom Header</h3>
-        <p class="text-sm text-[var(--color-base-content)]/70">With subtitle</p>
-      </div>
-    {/if}
-  {/snippet}
+{#snippet customHeader(modalTitleId: string)}
+  <div>
+    <h3 id={modalTitleId} class="text-lg font-bold">{customHeaderTitle}</h3>
+    <p class="text-sm text-[var(--color-base-content)]/70">With subtitle</p>
+  </div>
+{/snippet}
 
+<Modal {isOpen} title="Test Modal" header={showCustomHeader ? customHeader : undefined}>
   {#snippet children()}
     {#if showChildren}
       <p>Custom modal content</p>

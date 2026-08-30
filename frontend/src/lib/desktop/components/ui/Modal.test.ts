@@ -282,8 +282,9 @@ describe('Modal', () => {
     const dialog = screen.getByRole('dialog');
     expect(screen.getByText('Custom Header')).toBeInTheDocument();
     expect(screen.getByText('With subtitle')).toBeInTheDocument();
-    expect(dialog).toHaveAttribute('aria-labelledby', 'modal-title');
-    expect(document.getElementById('modal-title')).toHaveTextContent('Custom Header');
+    const titleId = dialog.getAttribute('aria-labelledby');
+    if (!titleId) throw new Error('Modal is missing aria-labelledby');
+    expect(document.getElementById(titleId)).toHaveTextContent('Custom Header');
   });
 
   it('renders with custom footer snippet', () => {
@@ -401,5 +402,32 @@ describe('Modal', () => {
     if (!firstTitleId || !secondTitleId) throw new Error('Modal is missing aria-labelledby');
     expect(document.getElementById(firstTitleId)).toHaveTextContent('First Modal');
     expect(document.getElementById(secondTitleId)).toHaveTextContent('Second Modal');
+  });
+
+  it('uses unique accessible-name IDs for multiple custom headers', () => {
+    renderTyped(ModalTestWrapper, {
+      props: {
+        isOpen: true,
+        showCustomHeader: true,
+        customHeaderTitle: 'First Custom Header',
+      },
+    });
+    renderTyped(ModalTestWrapper, {
+      props: {
+        isOpen: true,
+        showCustomHeader: true,
+        customHeaderTitle: 'Second Custom Header',
+      },
+    });
+
+    const dialogs = screen.getAllByRole('dialog');
+    const titleIds = dialogs.map(dialog => dialog.getAttribute('aria-labelledby'));
+    const [firstTitleId, secondTitleId] = titleIds;
+
+    expect(titleIds.every(Boolean)).toBe(true);
+    expect(new Set(titleIds).size).toBe(2);
+    if (!firstTitleId || !secondTitleId) throw new Error('Modal is missing aria-labelledby');
+    expect(document.getElementById(firstTitleId)).toHaveTextContent('First Custom Header');
+    expect(document.getElementById(secondTitleId)).toHaveTextContent('Second Custom Header');
   });
 });

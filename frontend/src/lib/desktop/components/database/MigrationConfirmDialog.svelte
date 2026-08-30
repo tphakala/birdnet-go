@@ -53,12 +53,12 @@
   loading={isLoading}
   onClose={onCancel}
 >
-  {#snippet header()}
+  {#snippet header(modalTitleId)}
     <div class="flex items-center gap-4 mb-6">
       <div class="p-3 rounded-full bg-[var(--color-warning)]/10">
         <AlertTriangle class="size-7 text-[var(--color-warning)]" />
       </div>
-      <h3 id="modal-title" class="text-xl font-semibold text-[var(--color-base-content)]">
+      <h3 id={modalTitleId} class="text-xl font-semibold text-[var(--color-base-content)]">
         {t('system.database.migration.confirmDialog.title')}
       </h3>
     </div>

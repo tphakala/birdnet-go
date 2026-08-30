@@ -468,9 +468,9 @@
   closeOnEsc={currentStep !== 'progress'}
   showCloseButton={false}
 >
-  {#snippet header()}
+  {#snippet header(modalTitleId)}
     <div class="flex flex-col gap-3">
-      <h3 id="modal-title" class="font-bold text-lg text-[var(--color-base-content)]">
+      <h3 id={modalTitleId} class="font-bold text-lg text-[var(--color-base-content)]">
         {t('system.importExport.birdnetPi.wizardTitle')}
       </h3>
 
