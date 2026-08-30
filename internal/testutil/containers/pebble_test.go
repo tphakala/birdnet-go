@@ -20,6 +20,7 @@ import (
 // lives in internal/api behind the pebble_e2e build tag because it needs the api
 // package's unexported server path.
 func TestPebbleContainer_DirectoryAndRoots(t *testing.T) {
+	SkipIfContainerRuntimeUnavailable(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	t.Cleanup(cancel)
 

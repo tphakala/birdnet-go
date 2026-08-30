@@ -19,6 +19,7 @@ import (
 // and registers cleanup.
 func setupNtfyAuthContainer(t *testing.T, username, password string) *containers.NtfyContainer {
 	t.Helper()
+	containers.SkipIfContainerRuntimeUnavailable(t)
 	ctx := t.Context()
 	cfg := containers.DefaultNtfyConfig()
 	cfg.EnableAuth = true
