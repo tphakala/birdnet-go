@@ -609,13 +609,15 @@ func TestGetDetection(t *testing.T) {
 	testCases := []struct {
 		name           string
 		detectionID    string
+		authenticated  bool
 		mockSetup      func(*mock.Mock)
 		expectedStatus int
 		checkResponse  func(*testing.T, *httptest.ResponseRecorder)
 	}{
 		{
-			name:        "Valid detection",
-			detectionID: "1",
+			name:          "Valid detection",
+			detectionID:   "1",
+			authenticated: true,
 			mockSetup: func(m *mock.Mock) {
 				m.On("Get", "1").Return(mockNote, nil)
 				m.On("GetHourlyWeather", "2025-03-07").Return([]datastore.HourlyWeather{}, nil)
@@ -637,6 +639,7 @@ func TestGetDetection(t *testing.T) {
 				assert.Equal(t, "Corvus brachyrhynchos", response.ScientificName)
 				assert.Equal(t, "American Crow", response.CommonName)
 				assert.InDelta(t, 0.95, response.Confidence, 0.01)
+				require.NotNil(t, response.Source)
 				assert.Equal(t, "correct", response.Verified)
 				assert.False(t, response.Locked)
 				assert.Len(t, response.Comments, 1)
@@ -655,8 +658,9 @@ func TestGetDetection(t *testing.T) {
 			},
 		},
 		{
-			name:        "Alternative predictions load failure does not fail detection",
-			detectionID: "1",
+			name:          "Alternative predictions load failure does not fail detection",
+			detectionID:   "1",
+			authenticated: true,
 			mockSetup: func(m *mock.Mock) {
 				m.On("Get", "1").Return(mockNote, nil)
 				m.On("GetHourlyWeather", "2025-03-07").Return([]datastore.HourlyWeather{}, nil)
@@ -670,6 +674,24 @@ func TestGetDetection(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, uint(1), response.ID)
 				assert.Equal(t, "Corvus brachyrhynchos", response.ScientificName)
+				assert.Empty(t, response.AlternativePredictions)
+			},
+		},
+		{
+			name:        "Unauthenticated detection omits private fields and alternative query",
+			detectionID: "1",
+			mockSetup: func(m *mock.Mock) {
+				m.On("Get", "1").Return(mockNote, nil)
+				m.On("GetHourlyWeather", "2025-03-07").Return([]datastore.HourlyWeather{}, nil)
+			},
+			expectedStatus: http.StatusOK,
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var response DetectionResponse
+				err := json.Unmarshal(rec.Body.Bytes(), &response)
+				require.NoError(t, err)
+				assert.Equal(t, uint(1), response.ID)
+				assert.Nil(t, response.Source)
 				assert.Empty(t, response.AlternativePredictions)
 			},
 		},
@@ -696,6 +718,7 @@ func TestGetDetection(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup mock expectations
 			mockDS.ExpectedCalls = nil
+			controller.isClientAuthenticated = func(echo.Context) bool { return tc.authenticated }
 			tc.mockSetup(&mockDS.Mock)
 
 			// Create request

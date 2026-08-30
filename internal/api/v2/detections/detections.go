@@ -1394,12 +1394,13 @@ func (c *Handler) GetDetection(ctx echo.Context) error {
 	// For single detection, include weather data by default
 	weatherCache := make(map[string][]datastore.HourlyWeather)
 	detection := c.noteToDetectionResponse(&note, true, weatherCache)
-	if err := c.populateAlternativePredictions(&detection, id, note.ScientificName); err != nil {
-		c.LogDebugIfEnabled("Failed to load alternative predictions for detection",
-			logger.String("note_id", id),
-			logger.Error(err))
-	}
-	if !c.isClientAuthenticated(ctx) {
+	if c.isClientAuthenticated(ctx) {
+		if err := c.populateAlternativePredictions(&detection, id, note.ScientificName); err != nil {
+			c.LogDebugIfEnabled("Failed to load alternative predictions for detection",
+				logger.String("note_id", id),
+				logger.Error(err))
+		}
+	} else {
 		detection.Source = nil
 	}
 	return ctx.JSON(http.StatusOK, detection)
