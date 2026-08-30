@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"gorm.io/gorm"
 )
@@ -27,28 +26,19 @@ type AdvancedSearchFilters struct {
 	TimeOfDay         []string // ["dawn", "day", "dusk", "night"]
 	Hour              *HourFilter
 	DateRange         *DateRange
-	// DetectedAtRange filters by the exact half-open [Start, End) timestamp
-	// range. Unlike DateRange, it does not expand values to calendar days.
-	DetectedAtRange       *DateRange
-	Verified              *bool
-	ExcludeFalsePositives bool
-	Species               []string
-	Location              []string // Maps to source_node column
-	Locked                *bool
-	SortAscending         bool
-	SortBy                string // "date_desc", "date_asc", "species_asc", "species_desc", "confidence_asc", "confidence_desc", "status", or SortBySearchDefault
-	Limit                 int
-	Offset                int
+	Verified          *bool
+	Species           []string
+	Location          []string // Maps to source_node column
+	Locked            *bool
+	SortAscending     bool
+	SortBy            string // "date_desc", "date_asc", "species_asc", "species_desc", "confidence_asc", "confidence_desc", "status", or SortBySearchDefault
+	Limit             int
+	Offset            int
 	// MinID filters to records with ID > MinID (cursor-based pagination for migration)
 	MinID uint
 	// CursorPagination indicates this query uses cursor-based pagination and must
 	// sort by id ASC to guarantee all records are visited.
 	CursorPagination bool
-	// MinimalResults skips relations that are not needed to populate the note's
-	// species identity. This is intended for aggregation callers.
-	MinimalResults bool
-	// SkipTotal avoids a separate count query when the caller does not use it.
-	SkipTotal bool
 }
 
 // ConfidenceFilter represents a confidence level filter
@@ -83,19 +73,12 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 	// }
 
 	// Start building the query
-	query := ds.DB.Model(&Note{})
-	if filters.MinimalResults {
-		query = query.Select(
-			"notes.id, notes.date, notes.time, notes.species_code, notes.scientific_name, notes.common_name, notes.confidence",
-		)
-	} else {
-		query = query.
-			Preload("Review").
-			Preload("Lock").
-			Preload("Comments", func(db *gorm.DB) *gorm.DB {
-				return db.Order("created_at DESC")
-			})
-	}
+	query := ds.DB.Model(&Note{}).
+		Preload("Review").
+		Preload("Lock").
+		Preload("Comments", func(db *gorm.DB) *gorm.DB {
+			return db.Order("created_at DESC")
+		})
 
 	// Reuse the standard free-text + exact-scientific OR grouping so the simple
 	// and advanced legacy search paths cannot drift.
@@ -107,12 +90,8 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 	// Apply confidence filter
 	query = applyConfidenceFilter(query, filters.Confidence)
 
-	// Exact timestamps take precedence over calendar dates, matching the v2 datastore.
-	if filters.DetectedAtRange != nil {
-		query = applyDetectedAtRangeFilter(query, filters.DetectedAtRange)
-	} else {
-		query = applyDateRangeFilter(query, filters.DateRange)
-	}
+	// Apply date range filter
+	query = applyDateRangeFilter(query, filters.DateRange)
 
 	// Apply hour filter
 	query = applyHourFilter(query, filters.Hour)
@@ -132,12 +111,6 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 
 	// Apply verified filter
 	query = applyVerifiedFilter(query, filters.Verified)
-	if filters.ExcludeFalsePositives {
-		query = query.Where(
-			"NOT EXISTS (SELECT 1 FROM note_reviews WHERE note_reviews.note_id = notes.id AND note_reviews.verified = ?)",
-			string(entities.VerificationFalsePositive),
-		)
-	}
 
 	// Apply locked filter
 	query = applyLockedFilter(query, filters.Locked)
@@ -149,16 +122,14 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 
 	// Count total results before pagination
 	var totalCount int64
-	if !filters.SkipTotal {
-		countQuery := query.Session(&gorm.Session{})
-		if err := countQuery.Count(&totalCount).Error; err != nil {
-			return nil, 0, errors.Newf("failed to count advanced search results: %w", err).
-				Context("operation", "count_advanced_search_results").
-				Context("filters", fmt.Sprintf("%+v", filters)).
-				Component("datastore").
-				Category(errors.CategoryDatabase).
-				Build()
-		}
+	countQuery := query.Session(&gorm.Session{})
+	if err := countQuery.Count(&totalCount).Error; err != nil {
+		return nil, 0, errors.Newf("failed to count advanced search results: %w", err).
+			Context("operation", "count_advanced_search_results").
+			Context("filters", fmt.Sprintf("%+v", filters)).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Build()
 	}
 
 	// When cursor-based pagination is active, MUST sort by id ASC to guarantee
@@ -280,31 +251,6 @@ func applyDateRangeFilter(query *gorm.DB, dateRange *DateRange) *gorm.DB {
 	startDate := dateRange.Start.Format(time.DateOnly)
 	endDate := dateRange.End.Format(time.DateOnly)
 	return query.Where("date >= ? AND date <= ?", startDate, endDate)
-}
-
-// applyDetectedAtRangeFilter applies an exact half-open timestamp range to the
-// legacy date and time columns without relying on dialect-specific concatenation.
-func applyDetectedAtRangeFilter(query *gorm.DB, detectedAtRange *DateRange) *gorm.DB {
-	if detectedAtRange == nil {
-		return query
-	}
-	if !detectedAtRange.Start.IsZero() {
-		startDate := detectedAtRange.Start.Format(time.DateOnly)
-		startTime := detectedAtRange.Start.Format(time.TimeOnly)
-		query = query.Where(
-			"(notes.date > ? OR (notes.date = ? AND notes.time >= ?))",
-			startDate, startDate, startTime,
-		)
-	}
-	if !detectedAtRange.End.IsZero() {
-		endDate := detectedAtRange.End.Format(time.DateOnly)
-		endTime := detectedAtRange.End.Format(time.TimeOnly)
-		query = query.Where(
-			"(notes.date < ? OR (notes.date = ? AND notes.time < ?))",
-			endDate, endDate, endTime,
-		)
-	}
-	return query
 }
 
 // applyHourFilter applies hour filtering to the query

@@ -132,35 +132,6 @@ func TestSearch_QueryAndCommonLabelIDs(t *testing.T) {
 	})
 }
 
-func TestSearch_CursorPaginationOrdersByID(t *testing.T) {
-	db := setupDetectionTestDB(t)
-	repo := &detectionRepository{db: db}
-
-	first := createTestDetection(t, db, 3000)
-	second := createTestDetection(t, db, 1000)
-	third := createTestDetection(t, db, 2000)
-
-	page, total, err := repo.Search(t.Context(), &SearchFilters{
-		CursorPagination: true,
-		Limit:            2,
-		SkipTotal:        true,
-	})
-	require.NoError(t, err)
-	assert.Zero(t, total)
-	require.Len(t, page, 2)
-	assert.Equal(t, []uint{first.ID, second.ID}, []uint{page[0].ID, page[1].ID})
-
-	page, _, err = repo.Search(t.Context(), &SearchFilters{
-		CursorPagination: true,
-		MinID:            second.ID,
-		Limit:            2,
-		SkipTotal:        true,
-	})
-	require.NoError(t, err)
-	require.Len(t, page, 1)
-	assert.Equal(t, third.ID, page[0].ID)
-}
-
 // TestGetSpeciesFirstDetectionInPeriod characterizes the per-species first-detection
 // query: period filtering, aggregation across multiple labels of the same scientific
 // name, MIN(detected_at) selection, and ascending order. It must hold for any

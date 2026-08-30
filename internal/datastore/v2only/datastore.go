@@ -1617,17 +1617,10 @@ func (ds *Datastore) SearchNotesAdvanced(filters *datastore.AdvancedSearchFilter
 		return nil, 0, err
 	}
 
-	// Aggregation callers need species labels but not review, lock, comment,
-	// source, or model relations. The query itself applies any review filters.
-	var relationErr error
-	if filters != nil && filters.MinimalResults {
-		relationErr = ds.loadDetectionLabels(ctx, dets)
-	} else {
-		relationErr = ds.loadDetectionRelations(ctx, dets)
-	}
-	if relationErr != nil {
+	// Load relations (review, lock, label, source) for accurate virtual fields
+	if err := ds.loadDetectionRelations(ctx, dets); err != nil {
 		if ds.log != nil {
-			ds.log.Debug("failed to load some detection relations", logger.Error(relationErr))
+			ds.log.Debug("failed to load some detection relations", logger.Error(err))
 		}
 	}
 
@@ -2176,49 +2169,22 @@ func (ds *Datastore) SearchDetections(filters *datastore.SearchFilters) ([]datas
 	return records, int(total), nil
 }
 
-// loadDetectionLabels batch-loads only the labels needed to identify species.
-func (ds *Datastore) loadDetectionLabels(ctx context.Context, dets []*entities.Detection) error {
-	if len(dets) == 0 {
-		return nil
-	}
-
-	labelIDSet := make(map[uint]struct{})
-	for _, det := range dets {
-		labelIDSet[det.LabelID] = struct{}{}
-	}
-	labelIDs := slices.Collect(maps.Keys(labelIDSet))
-	if ds.label == nil {
-		return nil
-	}
-	labelMap, err := ds.label.GetByIDs(ctx, labelIDs)
-	if err != nil {
-		return fmt.Errorf("load labels: %w", err)
-	}
-	for _, det := range dets {
-		if label, ok := labelMap[det.LabelID]; ok {
-			det.Label = label
-		}
-	}
-	return nil
-}
-
 // loadDetectionRelations loads Label, Source, Model, Review, Lock, and Comments for detections.
 // Uses batch queries to minimize database round-trips.
 func (ds *Datastore) loadDetectionRelations(ctx context.Context, dets []*entities.Detection) error {
 	if len(dets) == 0 {
 		return nil
 	}
-	if err := ds.loadDetectionLabels(ctx, dets); err != nil {
-		return err
-	}
 
 	// Collect IDs for batch loading
 	detectionIDs := make([]uint, len(dets))
+	labelIDSet := make(map[uint]struct{})
 	sourceIDSet := make(map[uint]struct{})
 	modelIDSet := make(map[uint]struct{})
 
 	for i, det := range dets {
 		detectionIDs[i] = det.ID
+		labelIDSet[det.LabelID] = struct{}{}
 		modelIDSet[det.ModelID] = struct{}{}
 		if det.SourceID != nil {
 			sourceIDSet[*det.SourceID] = struct{}{}
@@ -2226,7 +2192,18 @@ func (ds *Datastore) loadDetectionRelations(ctx context.Context, dets []*entitie
 	}
 
 	// Convert sets to slices
+	labelIDs := slices.Collect(maps.Keys(labelIDSet))
 	sourceIDs := slices.Collect(maps.Keys(sourceIDSet))
+
+	// Batch load all relations (nil-safe for partially initialized datastores)
+	var labelMap map[uint]*entities.Label
+	if ds.label != nil {
+		var err error
+		labelMap, err = ds.label.GetByIDs(ctx, labelIDs)
+		if err != nil {
+			return fmt.Errorf("load labels: %w", err)
+		}
+	}
 
 	var sourceMap map[uint]*entities.AudioSource
 	if ds.source != nil {
@@ -2264,6 +2241,9 @@ func (ds *Datastore) loadDetectionRelations(ctx context.Context, dets []*entitie
 
 	// Assign loaded relations to detections
 	for _, det := range dets {
+		if label, ok := labelMap[det.LabelID]; ok {
+			det.Label = label
+		}
 		if det.SourceID != nil {
 			if source, ok := sourceMap[*det.SourceID]; ok {
 				det.Source = source

@@ -290,16 +290,12 @@ func TestConvertAdvancedFilters(t *testing.T) {
 	t.Run("direct field mappings", func(t *testing.T) {
 		locked := true
 		filters := &datastore.AdvancedSearchFilters{
-			TextQuery:             "robin",
-			Locked:                &locked,
-			Limit:                 50,
-			Offset:                10,
-			MinID:                 100,
-			SortAscending:         true,
-			CursorPagination:      true,
-			ExcludeFalsePositives: true,
-			MinimalResults:        true,
-			SkipTotal:             true,
+			TextQuery:     "robin",
+			Locked:        &locked,
+			Limit:         50,
+			Offset:        10,
+			MinID:         100,
+			SortAscending: true,
 		}
 
 		result, err := ConvertAdvancedFilters(ctx, filters, nil, tz)
@@ -310,30 +306,8 @@ func TestConvertAdvancedFilters(t *testing.T) {
 		assert.Equal(t, 50, result.Limit)
 		assert.Equal(t, 10, result.Offset)
 		assert.Equal(t, uint(100), result.MinID)
-		assert.True(t, result.CursorPagination)
-		assert.True(t, result.ExcludeFalsePositives)
-		assert.True(t, result.MinimalResults)
-		assert.True(t, result.SkipTotal)
 		assert.Equal(t, "detected_at", result.SortBy)
 		assert.False(t, result.SortDesc) // SortAscending=true → SortDesc=false
-	})
-
-	t.Run("exact timestamp range takes precedence over date range", func(t *testing.T) {
-		start := time.Date(2024, 6, 1, 22, 15, 30, 0, tz)
-		end := time.Date(2024, 6, 2, 2, 45, 0, 0, tz)
-		result, err := ConvertAdvancedFilters(ctx, &datastore.AdvancedSearchFilters{
-			DateRange: &datastore.DateRange{
-				Start: start.AddDate(0, 0, -10),
-				End:   end.AddDate(0, 0, 10),
-			},
-			DetectedAtRange: &datastore.DateRange{Start: start, End: end},
-		}, nil, tz)
-
-		require.NoError(t, err)
-		require.NotNil(t, result.StartTime)
-		require.NotNil(t, result.EndTime)
-		assert.Equal(t, start.Unix(), *result.StartTime)
-		assert.Equal(t, end.Unix(), *result.EndTime)
 	})
 
 	t.Run("sort descending when SortAscending is false", func(t *testing.T) {

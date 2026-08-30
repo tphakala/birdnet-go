@@ -1,10 +1,10 @@
 package analytics
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -22,49 +22,62 @@ func TestGetRecentSpeciesActivity(t *testing.T) {
 	t.Attr("type", "unit")
 
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+	now := time.Date(2026, 5, 2, 2, 0, 0, 0, time.Local)
+	controller.now = func() time.Time { return now }
 
-	now := time.Now()
-	noteAt := func(id uint, detectedAt time.Time, commonName, scientificName string, confidence float64) datastore.Note {
-		return datastore.Note{
-			ID:             id,
-			CommonName:     commonName,
-			ScientificName: scientificName,
-			SpeciesCode:    strings.ToLower(commonName[:3]),
-			Confidence:     confidence,
-			Date:           detectedAt.Format(time.DateOnly),
-			Time:           detectedAt.Format(time.TimeOnly),
-		}
+	rows := []datastore.RecentSpeciesData{
+		{
+			ScientificName:      "Turdus migratorius",
+			CommonName:          "American Robin",
+			SpeciesCode:         "amerob",
+			Bucket:              2,
+			Count:               1,
+			ConfidenceTotal:     0.66,
+			BucketMaxConfidence: 0.66,
+		},
+		{
+			ScientificName:      "Turdus migratorius",
+			CommonName:          "American Robin",
+			SpeciesCode:         "amerob",
+			Bucket:              3,
+			Count:               1,
+			ConfidenceTotal:     0.82,
+			BucketMaxConfidence: 0.82,
+			LatestDetectedAt:    now.Add(-10 * time.Minute),
+			LatestConfidence:    0.82,
+			LatestDetectionID:   2,
+		},
+		{
+			ScientificName:      "Cardinalis cardinalis", //nolint:misspell // Cardinalis is a valid scientific genus name.
+			CommonName:          "Northern Cardinal",
+			SpeciesCode:         "norcar",
+			Bucket:              3,
+			Count:               2,
+			ConfidenceTotal:     1.65,
+			BucketMaxConfidence: 0.95,
+			LatestDetectedAt:    now.Add(-20 * time.Minute),
+			LatestConfidence:    0.95,
+			LatestDetectionID:   4,
+		},
 	}
-
-	notes := []datastore.Note{
-		noteAt(1, now.Add(-10*time.Minute), "American Robin", "Turdus migratorius", 0.82),
-		noteAt(2, now.Add(-2*time.Hour), "American Robin", "Turdus migratorius", 0.66),
-		noteAt(3, now.Add(-20*time.Minute), "Northern Cardinal", "Cardinalis cardinalis", 0.95), //nolint:misspell // Scientific name.
-		noteAt(4, now.Add(-25*time.Minute), "Northern Cardinal", "Cardinalis cardinalis", 0.70), //nolint:misspell // Scientific name.
-		noteAt(5, now.Add(-5*time.Hour), "Blue Jay", "Cyanocitta cristata", 0.99),
-	}
-
-	mockDS.On("SearchNotesAdvanced", mock.MatchedBy(func(filters *datastore.AdvancedSearchFilters) bool {
-		return filters != nil &&
-			filters.DateRange == nil &&
-			filters.DetectedAtRange != nil &&
-			filters.DetectedAtRange.End.Sub(filters.DetectedAtRange.Start) > 4*time.Hour &&
-			filters.Limit == recentSpeciesQueryBatchSize &&
-			filters.MinID == 0 &&
-			filters.CursorPagination &&
-			filters.ExcludeFalsePositives &&
-			filters.MinimalResults &&
-			filters.SkipTotal &&
-			filters.Confidence == nil
-	})).Return(notes, int64(0), nil).Once()
+	mockDS.On(
+		"GetRecentSpeciesData",
+		mock.MatchedBy(func(ctx context.Context) bool {
+			_, hasDeadline := ctx.Deadline()
+			return hasDeadline
+		}),
+		now.Add(-4*time.Hour),
+		now,
+		0.0,
+		4,
+	).Return(rows, nil).Once()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/recent?hours=4&limit=2&buckets=4", http.NoBody)
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
 	ctx.SetPath("/api/v2/analytics/species/recent")
 
-	err := controller.GetRecentSpeciesActivity(ctx)
-	require.NoError(t, err)
+	require.NoError(t, controller.GetRecentSpeciesActivity(ctx))
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	var response []RecentSpeciesActivity
@@ -72,80 +85,85 @@ func TestGetRecentSpeciesActivity(t *testing.T) {
 	require.Len(t, response, 2)
 
 	assert.Equal(t, "Northern Cardinal", response[0].CommonName)
-	assert.Equal(t, uint(3), response[0].LatestDetectionID)
-	assert.Len(t, response[0].ConfidenceTrend, 4)
-	assert.InDelta(t, 0.0, response[0].ConfidenceTrend[0], 0.001)
-	assert.InDelta(t, 0.95, response[0].ConfidenceTrend[3], 0.001)
+	assert.Equal(t, uint(4), response[0].LatestDetectionID)
+	assert.Equal(t, []float64{0, 0, 0, 0.95}, response[0].ConfidenceTrend)
 	assert.Equal(t, "American Robin", response[1].CommonName)
 	assert.Equal(t, 2, response[1].Count)
-	assert.NotContains(t, []string{response[0].CommonName, response[1].CommonName}, "Blue Jay")
+	assert.Equal(t, []float64{0, 0, 0.66, 0.82}, response[1].ConfidenceTrend)
+	assert.Equal(t, now.Add(-4*time.Hour).Format(time.RFC3339), response[1].TrendStart)
 
 	mockDS.AssertExpectations(t)
 }
 
-func TestLoadRecentSpeciesActivityPaginatesExactWindow(t *testing.T) {
+func TestGetRecentSpeciesActivityPassesMinimumConfidence(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "analytics")
 	t.Attr("feature", "recent-species-activity")
 	t.Attr("type", "unit")
 
-	loc := time.Local
-	since := time.Date(2026, 5, 1, 22, 0, 0, 0, loc)
-	now := time.Date(2026, 5, 2, 2, 0, 0, 0, loc)
-	_, mockDS, controller := setupAnalyticsTestEnvironment(t)
-	firstPage := make([]datastore.Note, recentSpeciesQueryBatchSize)
-	for i := range firstPage {
-		firstPage[i] = datastore.Note{
-			ID:             uint(i + 1),
-			Date:           "2026-05-02",
-			Time:           "01:30:00",
-			ScientificName: "Turdus migratorius",
-			CommonName:     "American Robin",
-			Confidence:     0.8,
-		}
-	}
-	lastPage := []datastore.Note{{
-		ID:             uint(recentSpeciesQueryBatchSize + 1),
-		Date:           "2026-05-02",
-		Time:           "01:30:00",
-		ScientificName: "Turdus migratorius",
-		CommonName:     "American Robin",
-		Confidence:     0.9,
-	}}
+	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+	now := time.Date(2026, 5, 2, 2, 0, 0, 0, time.Local)
+	controller.now = func() time.Time { return now }
+	mockDS.On(
+		"GetRecentSpeciesData",
+		mock.Anything,
+		now.Add(-4*time.Hour),
+		now,
+		0.75,
+		16,
+	).Return([]datastore.RecentSpeciesData{}, nil).Once()
 
-	baseFilterMatches := func(filters *datastore.AdvancedSearchFilters) bool {
-		return filters != nil &&
-			filters.DateRange == nil &&
-			filters.DetectedAtRange != nil &&
-			filters.DetectedAtRange.Start.Equal(since) &&
-			filters.DetectedAtRange.End.Equal(now.Add(time.Second)) &&
-			filters.Limit == recentSpeciesQueryBatchSize &&
-			filters.CursorPagination &&
-			filters.ExcludeFalsePositives &&
-			filters.MinimalResults &&
-			filters.SkipTotal &&
-			filters.Confidence != nil &&
-			filters.Confidence.Operator == ">=" &&
-			filters.Confidence.Value == 0.75
-	}
-	mockDS.On("SearchNotesAdvanced", mock.MatchedBy(func(filters *datastore.AdvancedSearchFilters) bool {
-		return baseFilterMatches(filters) && filters.MinID == 0
-	})).Return(firstPage, int64(0), nil).Once()
-	mockDS.On("SearchNotesAdvanced", mock.MatchedBy(func(filters *datastore.AdvancedSearchFilters) bool {
-		return baseFilterMatches(filters) && filters.MinID == recentSpeciesQueryBatchSize
-	})).Return(lastPage, int64(0), nil).Once()
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/recent?min_confidence=75", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetPath("/api/v2/analytics/species/recent")
 
-	got, detectionCount, err := controller.loadRecentSpeciesActivity(recentSpeciesActivityParams{
-		Hours:         4,
-		Limit:         8,
-		Buckets:       4,
-		MinConfidence: 0.75,
-	}, since, now)
-
-	require.NoError(t, err)
-	assert.Equal(t, recentSpeciesQueryBatchSize+1, detectionCount)
-	require.Len(t, got, 1)
-	assert.Equal(t, recentSpeciesQueryBatchSize+1, got[0].Count)
-	assert.Equal(t, uint(recentSpeciesQueryBatchSize+1), got[0].LatestDetectionID)
+	require.NoError(t, controller.GetRecentSpeciesActivity(ctx))
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.JSONEq(t, `[]`, rec.Body.String())
 	mockDS.AssertExpectations(t)
+}
+
+func TestParseRecentSpeciesActivityParamsClampsBounds(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "analytics")
+	t.Attr("feature", "recent-species-activity")
+	t.Attr("type", "unit")
+
+	tests := []struct {
+		name  string
+		query string
+		want  recentSpeciesActivityParams
+	}{
+		{
+			name:  "upper bounds",
+			query: "?hours=999&limit=999&buckets=999&min_confidence=250",
+			want: recentSpeciesActivityParams{
+				Hours: 24, Limit: 20, Buckets: 96, MinConfidence: 1,
+			},
+		},
+		{
+			name:  "lower bounds",
+			query: "?hours=1&limit=1&buckets=1&min_confidence=-20",
+			want: recentSpeciesActivityParams{
+				Hours: 1, Limit: 1, Buckets: 4, MinConfidence: 0,
+			},
+		},
+		{
+			name:  "invalid values use defaults",
+			query: "?hours=0&limit=nope&buckets=-1&min_confidence=NaN",
+			want: recentSpeciesActivityParams{
+				Hours: 4, Limit: 8, Buckets: 16, MinConfidence: 0,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, _, controller := setupAnalyticsTestEnvironment(t)
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/recent"+tt.query, http.NoBody)
+			ctx := e.NewContext(req, httptest.NewRecorder())
+			assert.Equal(t, tt.want, controller.parseRecentSpeciesActivityParams(ctx))
+		})
+	}
 }

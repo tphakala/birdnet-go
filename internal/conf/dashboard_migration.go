@@ -31,13 +31,6 @@ func (s *Settings) MigrateDashboardLayout() bool {
 				ID:      "currently-hearing-0",
 				Type:    "currently-hearing",
 				Enabled: true,
-				Width:   "half",
-			},
-			{
-				ID:      "recent-hearing-0",
-				Type:    "recent-hearing",
-				Enabled: true,
-				Width:   "half",
 			},
 			{
 				ID:      "live-spectrogram-0",

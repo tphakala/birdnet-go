@@ -1,7 +1,8 @@
 package analytics
 
 import (
-	"fmt"
+	"context"
+	"math"
 	"net/http"
 	"sort"
 	"time"
@@ -23,8 +24,7 @@ const (
 	minRecentSpeciesBuckets     = 4
 	maxRecentSpeciesBuckets     = maxRecentSpeciesHours * recentSpeciesBucketsPerHour
 
-	recentSpeciesCountScoreMax  = 6
-	recentSpeciesQueryBatchSize = 1000
+	recentSpeciesCountScoreMax = 6
 
 	recentSpeciesRecencyWeight    = 0.45
 	recentSpeciesConfidenceWeight = 0.45
@@ -72,7 +72,7 @@ type recentSpeciesAccumulator struct {
 // GetRecentSpeciesActivity handles GET /api/v2/analytics/species/recent.
 func (c *Handler) GetRecentSpeciesActivity(ctx echo.Context) error {
 	params := c.parseRecentSpeciesActivityParams(ctx)
-	now := time.Now()
+	now := c.recentSpeciesNow().Truncate(time.Second)
 	since := now.Add(-time.Duration(params.Hours) * time.Hour)
 
 	c.LogDebugIfEnabled("Retrieving recent species activity",
@@ -84,14 +84,15 @@ func (c *Handler) GetRecentSpeciesActivity(ctx echo.Context) error {
 		logger.String("path", ctx.Request().URL.Path),
 	)
 
-	result, detectionCount, err := c.loadRecentSpeciesActivity(params, since, now)
+	queryCtx, cancel := withAnalyticsTimeout(ctx)
+	defer cancel()
+
+	result, detectionCount, err := c.loadRecentSpeciesActivity(queryCtx, params, since, now)
 	if err != nil {
-		c.LogErrorIfEnabled("Failed to get recent species activity",
-			logger.Error(err),
+		return c.handleAnalyticsQueryError(ctx, err, "Recent species activity", "Failed to get recent species activity",
 			logger.String("ip", ctx.RealIP()),
 			logger.String("path", ctx.Request().URL.Path),
 		)
-		return c.HandleError(ctx, err, "Failed to get recent species activity", http.StatusInternalServerError)
 	}
 
 	c.LogDebugIfEnabled("Recent species activity retrieved",
@@ -104,60 +105,21 @@ func (c *Handler) GetRecentSpeciesActivity(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, result)
 }
 
-func (c *Handler) searchRecentSpeciesNotes(params recentSpeciesActivityParams, since, now time.Time, minID uint) ([]datastore.Note, error) {
-	filters := &datastore.AdvancedSearchFilters{
-		DetectedAtRange: &datastore.DateRange{
-			Start: since,
-			// Stored timestamps have second precision and the datastore range is
-			// half-open, so include the current second explicitly.
-			End: now.Add(time.Second),
-		},
-		ExcludeFalsePositives: true,
-		MinimalResults:        true,
-		SkipTotal:             true,
-		Limit:                 recentSpeciesQueryBatchSize,
-		MinID:                 minID,
-		CursorPagination:      true,
+func (c *Handler) recentSpeciesNow() time.Time {
+	if c.now != nil {
+		return c.now()
 	}
-	if params.MinConfidence > 0 {
-		filters.Confidence = &datastore.ConfidenceFilter{
-			Operator: ">=",
-			Value:    params.MinConfidence,
-		}
-	}
-
-	notes, _, err := c.DS.SearchNotesAdvanced(filters)
-	return notes, err
+	return time.Now()
 }
 
-func (c *Handler) loadRecentSpeciesActivity(params recentSpeciesActivityParams, since, now time.Time) ([]RecentSpeciesActivity, int, error) {
-	bucketDuration := time.Duration(params.Hours) * time.Hour / time.Duration(params.Buckets)
-	bySpecies := make(map[string]*recentSpeciesAccumulator)
-	totalDetections := 0
-	var minID uint
-
-	for {
-		notes, err := c.searchRecentSpeciesNotes(params, since, now, minID)
-		if err != nil {
-			return nil, totalDetections, err
-		}
-		totalDetections += len(notes)
-		aggregateRecentSpeciesNotes(bySpecies, notes, since, now, bucketDuration, params)
-		if len(notes) < recentSpeciesQueryBatchSize {
-			break
-		}
-
-		nextMinID := minID
-		for i := range notes {
-			if notes[i].ID > nextMinID {
-				nextMinID = notes[i].ID
-			}
-		}
-		if nextMinID == minID {
-			return nil, totalDetections, fmt.Errorf("recent species cursor did not advance from detection %d", minID)
-		}
-		minID = nextMinID
+func (c *Handler) loadRecentSpeciesActivity(ctx context.Context, params recentSpeciesActivityParams, since, now time.Time) ([]RecentSpeciesActivity, int, error) {
+	rows, err := c.DS.GetRecentSpeciesData(ctx, since, now, params.MinConfidence, params.Buckets)
+	if err != nil {
+		return nil, 0, err
 	}
+
+	bySpecies := make(map[string]*recentSpeciesAccumulator)
+	totalDetections := aggregateRecentSpeciesRows(bySpecies, rows, params.Buckets)
 
 	return c.recentSpeciesActivitiesFromAccumulators(bySpecies, since, now, params), totalDetections, nil
 }
@@ -188,67 +150,60 @@ func (c *Handler) parseRecentSpeciesActivityParams(ctx echo.Context) recentSpeci
 	}
 }
 
-func aggregateRecentSpeciesNotes(bySpecies map[string]*recentSpeciesAccumulator, notes []datastore.Note, since, now time.Time, bucketDuration time.Duration, params recentSpeciesActivityParams) {
-	for i := range notes {
-		note := &notes[i]
-		detectedAt, ok := parseNoteDetectedAt(note)
-		if !ok || detectedAt.Before(since) || detectedAt.After(now) {
-			continue
-		}
-		if note.Confidence < params.MinConfidence {
+func aggregateRecentSpeciesRows(bySpecies map[string]*recentSpeciesAccumulator, rows []datastore.RecentSpeciesData, buckets int) int {
+	totalDetections := 0
+	for i := range rows {
+		row := &rows[i]
+		if row.Count <= 0 || row.Bucket < 0 || row.Bucket >= buckets {
 			continue
 		}
 
-		key := recentSpeciesKey(note)
+		key := row.ScientificName
+		if key == "" {
+			key = row.CommonName
+		}
 		if key == "" {
 			continue
 		}
+
 		acc := bySpecies[key]
 		if acc == nil {
 			acc = &recentSpeciesAccumulator{
-				scientificName:       note.ScientificName,
-				commonName:           note.CommonName,
-				speciesCode:          note.SpeciesCode,
-				bucketMaxConfidences: make([]float64, params.Buckets),
+				scientificName:       row.ScientificName,
+				commonName:           row.CommonName,
+				speciesCode:          row.SpeciesCode,
+				bucketMaxConfidences: make([]float64, buckets),
 			}
 			bySpecies[key] = acc
 		}
 
-		updateRecentSpeciesAccumulator(acc, note, detectedAt, since, bucketDuration, params.Buckets)
+		acc.count += row.Count
+		acc.confidenceTotal += row.ConfidenceTotal
+		if row.BucketMaxConfidence > acc.maxConfidence {
+			acc.maxConfidence = row.BucketMaxConfidence
+		}
+		if row.BucketMaxConfidence > acc.bucketMaxConfidences[row.Bucket] {
+			acc.bucketMaxConfidences[row.Bucket] = row.BucketMaxConfidence
+		}
+		if !row.LatestDetectedAt.IsZero() && (acc.latestHeardAt.IsZero() ||
+			row.LatestDetectedAt.After(acc.latestHeardAt) ||
+			(row.LatestDetectedAt.Equal(acc.latestHeardAt) && row.LatestDetectionID > acc.latestDetectionID)) {
+			acc.latestHeardAt = row.LatestDetectedAt
+			acc.latestConfidence = row.LatestConfidence
+			acc.latestDetectionID = row.LatestDetectionID
+		}
+		if acc.speciesCode == "" {
+			acc.speciesCode = row.SpeciesCode
+		}
+		if acc.commonName == "" {
+			acc.commonName = row.CommonName
+		}
+		if acc.scientificName == "" {
+			acc.scientificName = row.ScientificName
+		}
+		totalDetections += row.Count
 	}
-}
-
-func updateRecentSpeciesAccumulator(acc *recentSpeciesAccumulator, note *datastore.Note, detectedAt, since time.Time, bucketDuration time.Duration, buckets int) {
-	acc.count++
-	acc.confidenceTotal += note.Confidence
-	if note.Confidence > acc.maxConfidence {
-		acc.maxConfidence = note.Confidence
-	}
-	if detectedAt.After(acc.latestHeardAt) || acc.latestHeardAt.IsZero() ||
-		(detectedAt.Equal(acc.latestHeardAt) && note.ID > acc.latestDetectionID) {
-		acc.latestHeardAt = detectedAt
-		acc.latestConfidence = note.Confidence
-		acc.latestDetectionID = note.ID
-	}
-	if acc.speciesCode == "" && note.SpeciesCode != "" {
-		acc.speciesCode = note.SpeciesCode
-	}
-	if acc.commonName == "" && note.CommonName != "" {
-		acc.commonName = note.CommonName
-	}
-	if acc.scientificName == "" && note.ScientificName != "" {
-		acc.scientificName = note.ScientificName
-	}
-
-	bucketIndex := int(detectedAt.Sub(since) / bucketDuration)
-	if bucketIndex < 0 {
-		bucketIndex = 0
-	} else if bucketIndex >= buckets {
-		bucketIndex = buckets - 1
-	}
-	if note.Confidence > acc.bucketMaxConfidences[bucketIndex] {
-		acc.bucketMaxConfidences[bucketIndex] = note.Confidence
-	}
+	return totalDetections
 }
 
 func (c *Handler) recentSpeciesActivitiesFromAccumulators(bySpecies map[string]*recentSpeciesAccumulator, since, now time.Time, params recentSpeciesActivityParams) []RecentSpeciesActivity {
@@ -316,21 +271,6 @@ func recentSpeciesScore(acc *recentSpeciesAccumulator, now time.Time, hours int)
 		countScore*recentSpeciesCountWeight
 }
 
-func parseNoteDetectedAt(note *datastore.Note) (time.Time, bool) {
-	detectedAt, err := time.ParseInLocation(time.DateTime, note.Date+" "+note.Time, time.Local)
-	if err != nil {
-		return time.Time{}, false
-	}
-	return detectedAt, true
-}
-
-func recentSpeciesKey(note *datastore.Note) string {
-	if note.ScientificName != "" {
-		return note.ScientificName
-	}
-	return note.CommonName
-}
-
 func recentSpeciesDisplayName(acc *recentSpeciesAccumulator) string {
 	if acc.commonName != "" {
 		return acc.commonName
@@ -339,21 +279,12 @@ func recentSpeciesDisplayName(acc *recentSpeciesAccumulator) string {
 }
 
 func clampRecentInt(value, minVal, maxVal int) int {
-	if value < minVal {
-		return minVal
-	}
-	if value > maxVal {
-		return maxVal
-	}
-	return value
+	return min(max(value, minVal), maxVal)
 }
 
 func clamp01(value float64) float64 {
-	if value < 0 {
+	if math.IsNaN(value) {
 		return 0
 	}
-	if value > 1 {
-		return 1
-	}
-	return value
+	return min(max(value, 0), 1)
 }

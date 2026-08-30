@@ -101,7 +101,7 @@ const recentDetections = await response.json();
     "trend_hours": 4,
     "score": 0.86,
     "latest_detection_id": 15573,
-    "thumbnail_url": "/ui/assets/bird-placeholder.svg"
+    "thumbnail_url": "/api/v2/media/image/Turdus%20migratorius"
   }
 ]
 ```

@@ -1035,7 +1035,7 @@ func TestV2OnlyDatastore_SearchNotesAdvanced_CommonName(t *testing.T) {
 	assert.Equal(t, "Corvus corone", notes[0].ScientificName)
 }
 
-func TestV2OnlyDatastore_SearchNotesAdvancedExactRangeExcludesFalsePositives(t *testing.T) {
+func TestV2OnlyDatastore_GetRecentSpeciesData(t *testing.T) {
 	ds, cleanup := setupTestDatastoreWithLabels(t, []string{
 		"Turdus migratorius_American Robin",
 		"Setophaga petechia_Yellow Warbler",
@@ -1047,8 +1047,12 @@ func TestV2OnlyDatastore_SearchNotesAdvancedExactRangeExcludesFalsePositives(t *
 		{Date: "2026-05-01", Time: "21:59:59", ScientificName: "Cyanocitta cristata", Confidence: 0.9},
 		{Date: "2026-05-01", Time: "22:00:00", ScientificName: "Turdus migratorius", Confidence: 0.8},
 		{Date: "2026-05-01", Time: "23:00:00", ScientificName: "Cyanocitta cristata", Confidence: 0.95},
-		{Date: "2026-05-02", Time: "01:30:00", ScientificName: "Setophaga petechia", Confidence: 0.9},
-		{Date: "2026-05-02", Time: "02:00:00", ScientificName: "Cyanocitta cristata", Confidence: 0.9},
+		{Date: "2026-05-02", Time: "00:30:00", ScientificName: "Setophaga petechia", Confidence: 0.7},
+		{Date: "2026-05-02", Time: "01:30:00", ScientificName: "Turdus migratorius", Confidence: 0.9},
+		{Date: "2026-05-02", Time: "01:30:00", ScientificName: "Turdus migratorius", Confidence: 0.75},
+		{Date: "2026-05-02", Time: "01:45:00", ScientificName: "Cyanocitta cristata", Confidence: 0.69},
+		{Date: "2026-05-02", Time: "02:00:00", ScientificName: "Cyanocitta cristata", Confidence: 0.85},
+		{Date: "2026-05-02", Time: "02:00:01", ScientificName: "Cyanocitta cristata", Confidence: 0.99},
 	}
 	for _, note := range notes {
 		require.NoError(t, ds.Save(note, nil))
@@ -1061,20 +1065,34 @@ func TestV2OnlyDatastore_SearchNotesAdvancedExactRangeExcludesFalsePositives(t *
 
 	start := time.Date(2026, 5, 1, 22, 0, 0, 0, ds.timezone)
 	end := time.Date(2026, 5, 2, 2, 0, 0, 0, ds.timezone)
-	results, total, err := ds.SearchNotesAdvanced(&datastore.AdvancedSearchFilters{
-		DetectedAtRange:       &datastore.DateRange{Start: start, End: end},
-		ExcludeFalsePositives: true,
-		MinimalResults:        true,
-		SkipTotal:             true,
-	})
+	rows, err := ds.GetRecentSpeciesData(t.Context(), start, end, 0.7, 4)
 
 	require.NoError(t, err)
-	assert.Zero(t, total)
-	require.Len(t, results, 2)
-	assert.Equal(t, "Setophaga petechia", results[0].ScientificName)
-	assert.Equal(t, "Turdus migratorius", results[1].ScientificName)
-	assert.Equal(t, "Yellow Warbler", results[0].CommonName)
-	assert.Nil(t, results[0].Review)
+	require.Len(t, rows, 4)
+	type speciesBucket struct {
+		species string
+		bucket  int
+	}
+	bySpeciesBucket := make(map[speciesBucket]datastore.RecentSpeciesData)
+	for i := range rows {
+		row := rows[i]
+		bySpeciesBucket[speciesBucket{species: row.ScientificName, bucket: row.Bucket}] = row
+	}
+
+	robinStart := bySpeciesBucket[speciesBucket{species: "Turdus migratorius", bucket: 0}]
+	assert.Equal(t, 1, robinStart.Count)
+	assert.Equal(t, "American Robin", robinStart.CommonName)
+
+	robinLatest := bySpeciesBucket[speciesBucket{species: "Turdus migratorius", bucket: 3}]
+	assert.Equal(t, 2, robinLatest.Count)
+	assert.InDelta(t, 1.65, robinLatest.ConfidenceTotal, 0.001)
+	assert.InDelta(t, 0.9, robinLatest.BucketMaxConfidence, 0.001)
+	assert.Equal(t, notes[5].ID, robinLatest.LatestDetectionID)
+	assert.InDelta(t, 0.75, robinLatest.LatestConfidence, 0.001)
+	assert.Equal(t, "2026-05-02 01:30:00", robinLatest.LatestDetectedAt.Format(time.DateTime))
+
+	assert.Equal(t, "Yellow Warbler", bySpeciesBucket[speciesBucket{species: "Setophaga petechia", bucket: 2}].CommonName)
+	assert.Equal(t, 3, bySpeciesBucket[speciesBucket{species: "Cyanocitta cristata", bucket: 3}].Bucket)
 }
 
 func TestV2OnlyDatastore_GetLastDetections(t *testing.T) {

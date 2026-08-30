@@ -755,15 +755,11 @@ func ConvertAdvancedFilters(
 
 	sf := &SearchFilters{
 		// Direct mappings
-		Query:                 filters.TextQuery,
-		IsLocked:              filters.Locked,
-		ExcludeFalsePositives: filters.ExcludeFalsePositives,
-		Limit:                 filters.Limit,
-		Offset:                filters.Offset,
-		MinID:                 filters.MinID,
-		CursorPagination:      filters.CursorPagination,
-		SkipTotal:             filters.SkipTotal,
-		MinimalResults:        filters.MinimalResults,
+		Query:    filters.TextQuery,
+		IsLocked: filters.Locked,
+		Limit:    filters.Limit,
+		Offset:   filters.Offset,
+		MinID:    filters.MinID,
 
 		// Sort (mapped below)
 		SortDesc: !filters.SortAscending,
@@ -802,19 +798,8 @@ func ConvertAdvancedFilters(
 		// sf.SortDesc already set from !filters.SortAscending above
 	}
 
-	// Exact timestamps take precedence over calendar-day filtering.
-	if filters.DetectedAtRange != nil {
-		if !filters.DetectedAtRange.Start.IsZero() {
-			start := filters.DetectedAtRange.Start.Unix()
-			sf.StartTime = &start
-		}
-		if !filters.DetectedAtRange.End.IsZero() {
-			end := filters.DetectedAtRange.End.Unix()
-			sf.EndTime = &end
-		}
-	} else {
-		sf.StartTime, sf.EndTime = DateRangeToUnix(filters.DateRange, tz)
-	}
+	// Time conversions
+	sf.StartTime, sf.EndTime = DateRangeToUnix(filters.DateRange, tz)
 
 	// Hour filtering (merge TimeOfDay and Hour filters)
 	sf.IncludedHours = MergeHourFilters(filters.TimeOfDay, filters.Hour)

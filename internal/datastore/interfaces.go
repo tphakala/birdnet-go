@@ -105,6 +105,8 @@ type Interface interface {
 	// GetTopBirdsData returns daily detection summaries, ordered by detection count descending.
 	// The limit parameter (if > 0) restricts the number of unique species returned.
 	GetTopBirdsData(ctx context.Context, selectedDate string, minConfidenceNormalized float64, limit int) ([]Note, error)
+	// GetRecentSpeciesData returns bucketed species aggregates for an exact time window.
+	GetRecentSpeciesData(ctx context.Context, start, end time.Time, minConfidence float64, buckets int) ([]RecentSpeciesData, error)
 	// GetBatchHourlyOccurrences retrieves hourly detection counts for multiple species over the
 	// inclusive [startDate, endDate] calendar-date range, summed across every day in the range.
 	// Pass the same date for both to cover a single day.

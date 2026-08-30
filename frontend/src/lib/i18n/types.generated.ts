@@ -519,9 +519,6 @@ export type TranslationKey =
   | 'dashboard.recentHearing.subtitle' // params: hours
   | 'dashboard.recentHearing.empty'
   | 'dashboard.recentHearing.loading'
-  | 'dashboard.recentHearing.justNow'
-  | 'dashboard.recentHearing.minutesAgo' // params: count
-  | 'dashboard.recentHearing.hoursAgo' // params: count
   | 'dashboard.recentHearing.detections' // params: count
   | 'dashboard.recentHearing.confidence' // params: confidence
   | 'dashboard.recentHearing.confidenceTrend' // params: species
@@ -4270,8 +4267,6 @@ export type TranslationParams = {
   'search.errors.searchFailed': { error: string | number };
   'search.pagination.page': { current: string | number; total: string | number };
   'dashboard.recentHearing.subtitle': { hours: string | number };
-  'dashboard.recentHearing.minutesAgo': { count: string | number };
-  'dashboard.recentHearing.hoursAgo': { count: string | number };
   'dashboard.recentHearing.detections': { count: string | number };
   'dashboard.recentHearing.confidence': { confidence: string | number };
   'dashboard.recentHearing.confidenceTrend': { species: string | number };

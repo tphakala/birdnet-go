@@ -6,13 +6,15 @@ compact confidence sparkline for the configured time window.
 -->
 <script lang="ts">
   import { RefreshCw, XCircle } from '@lucide/svelte';
+  import ConfidenceBadge from './ConfidenceBadge.svelte';
   import Sparkline from '$lib/desktop/features/system/components/Sparkline.svelte';
-  import { t } from '$lib/i18n';
+  import { getLocale, t } from '$lib/i18n';
   import type { RecentSpeciesActivity } from '$lib/types/detection.types';
   import { getLocalDateString } from '$lib/utils/date';
   import { buildSpeciesDetectionUrl } from '$lib/utils/detectionUrls';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { cn } from '$lib/utils/cn';
+  import { formatRelativeTime } from '$lib/utils/formatters';
 
   interface Props {
     data: RecentSpeciesActivity[];
@@ -33,10 +35,8 @@ compact confidence sparkline for the configured time window.
   }: Props = $props();
 
   const MAX_VISIBLE_ROWS = 8;
-  const HIGH_CONFIDENCE = 0.8;
-  const MEDIUM_CONFIDENCE = 0.5;
+  const HIGH_CONFIDENCE = 0.9;
   const MINUTE_SECONDS = 60;
-  const HOUR_SECONDS = 3600;
   const ISO_DATE_LENGTH = 10;
   const REFRESH_STATUS_ID = 'recent-hearing-refresh-status';
 
@@ -58,31 +58,7 @@ compact confidence sparkline for the configured time window.
 
   function relativeTime(value: string): string {
     void tick;
-    const detectedAt = Date.parse(value);
-    if (Number.isNaN(detectedAt)) return '';
-
-    const elapsedSeconds = Math.max(0, Math.floor((Date.now() - detectedAt) / 1000));
-    if (elapsedSeconds < MINUTE_SECONDS) {
-      return t('dashboard.recentHearing.justNow');
-    }
-
-    const minutes = Math.floor(elapsedSeconds / MINUTE_SECONDS);
-    if (minutes < MINUTE_SECONDS) {
-      return t('dashboard.recentHearing.minutesAgo', { count: minutes });
-    }
-
-    const hoursElapsed = Math.floor(elapsedSeconds / HOUR_SECONDS);
-    return t('dashboard.recentHearing.hoursAgo', { count: hoursElapsed });
-  }
-
-  function confidenceTone(value: number): string {
-    if (value >= HIGH_CONFIDENCE) {
-      return 'bg-[var(--color-success)]/15 text-[var(--color-success)] ring-[var(--color-success)]/25';
-    }
-    if (value >= MEDIUM_CONFIDENCE) {
-      return 'bg-[var(--color-warning)]/15 text-[var(--color-warning)] ring-[var(--color-warning)]/25';
-    }
-    return 'bg-[var(--color-base-200)] text-[var(--color-base-content)]/70 ring-[var(--color-base-content)]/10';
+    return formatRelativeTime(value, getLocale());
   }
 
   function displayName(item: RecentSpeciesActivity): string {
@@ -167,8 +143,7 @@ compact confidence sparkline for the configured time window.
     {:else if error}
       <div
         class="flex h-full min-h-32 items-center justify-center gap-2 px-4 text-sm text-[var(--color-error)]"
-        role="alert"
-        aria-live="assertive"
+        aria-live="polite"
       >
         <XCircle class="size-4 shrink-0" />
         <span>{error}</span>
@@ -243,17 +218,13 @@ compact confidence sparkline for the configured time window.
               />
             </div>
 
-            <div
-              class={cn(
-                'justify-self-end rounded-full px-2 py-1 text-xs font-semibold tabular-nums ring-1',
-                confidenceTone(item.latest_confidence)
-              )}
-              title={t('dashboard.recentHearing.confidence', {
+            <ConfidenceBadge
+              confidence={item.latest_confidence}
+              className="justify-self-end tabular-nums"
+              label={t('dashboard.recentHearing.confidence', {
                 confidence: confidencePercent(item.latest_confidence),
               })}
-            >
-              {confidencePercent(item.latest_confidence)}%
-            </div>
+            />
           </li>
         {/each}
       </ul>

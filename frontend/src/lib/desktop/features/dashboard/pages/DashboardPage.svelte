@@ -197,8 +197,7 @@ Performance Optimizations:
   // Dashboard layout: derive enabled elements from layout config with fallback
   const defaultElements: DashboardElement[] = [
     { id: 'daily-summary-0', type: 'daily-summary', enabled: true, summary: { summaryLimit: 30 } },
-    { id: 'currently-hearing-0', type: 'currently-hearing', enabled: true, width: 'half' },
-    { id: 'recent-hearing-0', type: 'recent-hearing', enabled: true, width: 'half' },
+    { id: 'currently-hearing-0', type: 'currently-hearing', enabled: true },
     { id: 'live-spectrogram-0', type: 'live-spectrogram', enabled: true },
     { id: 'detections-grid-0', type: 'detections-grid', enabled: true },
   ];
@@ -575,6 +574,24 @@ Performance Optimizations:
     }
   }
 
+  $effect(() => {
+    if (!hasRecentHearingTile) {
+      recentHearingRequestId++;
+      isLoadingRecentHearing = false;
+      return;
+    }
+
+    untrack(() => fetchRecentHearing(true));
+    const refreshTimer = setInterval(() => {
+      fetchRecentHearing();
+    }, RECENT_HEARING_REFRESH_MS);
+
+    return () => {
+      clearInterval(refreshTimer);
+      recentHearingRequestId++;
+    };
+  });
+
   async function fetchDashboardConfig() {
     try {
       interface DashboardConfig {
@@ -620,7 +637,6 @@ Performance Optimizations:
   let animationCleanupTimers = $state.raw(new Set<ReturnType<typeof setTimeout>>());
   let animationFrame: number | null = null;
   let pendingCleanups = $state.raw(new Map<string, { fn: () => void; timestamp: number }>());
-  let recentHearingRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
   // Clear animation states from daily summary
   function clearDailySummaryAnimations() {
@@ -869,11 +885,6 @@ Performance Optimizations:
       // Adjacent date preloading is handled by the $effect gated on configLoaded
     });
     fetchRecentDetections();
-    fetchRecentHearing();
-    recentHearingRefreshTimer = setInterval(() => {
-      fetchRecentHearing();
-    }, RECENT_HEARING_REFRESH_MS);
-
     // Setup SSE connection for real-time updates
     connectToDetectionStream();
 
@@ -914,11 +925,6 @@ Performance Optimizations:
       if (sseFetchTimer) {
         clearTimeout(sseFetchTimer);
         sseFetchTimer = null;
-      }
-
-      if (recentHearingRefreshTimer) {
-        clearInterval(recentHearingRefreshTimer);
-        recentHearingRefreshTimer = null;
       }
 
       // Clean up preload debounce timer
@@ -1381,7 +1387,7 @@ Performance Optimizations:
     if (online && !wasOnline) {
       fetchDailySummary();
       fetchRecentDetections();
-      fetchRecentHearing();
+      if (hasRecentHearingTile) fetchRecentHearing();
     }
     wasOnline = online;
   });
@@ -1414,7 +1420,7 @@ Performance Optimizations:
     if (!sseFetchTimer) {
       sseFetchTimer = setTimeout(() => {
         fetchRecentDetections(true);
-        fetchRecentHearing();
+        if (hasRecentHearingTile) fetchRecentHearing();
         sseFetchTimer = null;
       }, 150);
     }
