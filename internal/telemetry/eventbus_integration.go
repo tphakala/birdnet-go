@@ -23,7 +23,7 @@ func InitializeEventBusIntegration() error {
 	log := GetLogger()
 
 	// Check if Sentry is enabled (skip check in test mode)
-	if testMode.Load() == 0 {
+	if testMode.Load() == testModeDisabled {
 		settings := conf.GetSettings()
 		if settings == nil || !settings.Sentry.Enabled {
 			log.Info("Sentry telemetry disabled, skipping event bus integration")

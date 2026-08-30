@@ -66,7 +66,7 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 
 	// Mark as initialized and enable test mode
 	sentryInitialized = true
-	testMode.Store(1)
+	testMode.Store(testModeEnabled)
 
 	// Update telemetry enabled state for test mode
 	UpdateTelemetryEnabled()
@@ -120,7 +120,7 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 
 		// Reset initialization state
 		sentryInitialized = false
-		testMode.Store(0)
+		testMode.Store(testModeDisabled)
 
 		// Clear deferred messages
 		deferredMutex.Lock()
