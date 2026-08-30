@@ -409,16 +409,19 @@ func TestBuildFFmpegSpectrogramFilter_ResamplesPerProfile(t *testing.T) {
 
 			got := buildFFmpegSpectrogramFilter(1026, false, "", tt.profile)
 
+			assert.True(t, strings.HasPrefix(got, ffmpegVisualNormalizeFilter+","),
+				"visual normalization must be the first filter stage, got %q", got)
+
 			// The showspectrumpic stage must always be present.
 			assert.Contains(t, got, "showspectrumpic=", "filter must always include showspectrumpic")
 
 			if tt.wantResamplePrefix == "" {
 				assert.NotContains(t, got, "aresample", "native profile must not add a resample stage")
-				assert.True(t, strings.HasPrefix(got, "showspectrumpic="),
-					"native filter should start with showspectrumpic, got %q", got)
+				assert.Contains(t, got, ffmpegVisualNormalizeFilter+",showspectrumpic=",
+					"native filter should render immediately after normalization, got %q", got)
 			} else {
-				assert.True(t, strings.HasPrefix(got, tt.wantResamplePrefix),
-					"filter should start with %q, got %q", tt.wantResamplePrefix, got)
+				assert.Contains(t, got, ffmpegVisualNormalizeFilter+","+tt.wantResamplePrefix,
+					"resampling must follow normalization, got %q", got)
 			}
 		})
 	}

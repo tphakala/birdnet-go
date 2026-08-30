@@ -1340,10 +1340,9 @@ func (c *Handler) removeDetectionFiles(clipName string) {
 
 	// Remove all associated spectrogram files. buildSpectrogramPaths names them
 	// <basename>_<width>px<suffix>.png, where <suffix> encodes the visual style,
-	// dynamic range, render version, frequency profile (e.g. "-norm1-bat-v2"), and
-	// legend/raw variant. A single clip can accumulate several of these as settings
-	// change over time. Rather than enumerate every combination, scan the directory
-	// and remove any PNG whose name matches this clip's anchored filename prefix.
+	// dynamic range, render version, frequency profile, and legend/raw variant. Scan
+	// the directory once, then exact-match the supported parameterized prerender names;
+	// only width-based _<width>px names use an anchored prefix match.
 	ext := filepath.Ext(normalized)
 	baseFilename := strings.TrimSuffix(filepath.Base(normalized), ext)
 	clipDir := filepath.Dir(absClipPath)
