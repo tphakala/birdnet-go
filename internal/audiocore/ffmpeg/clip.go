@@ -29,6 +29,8 @@ const (
 const (
 	clipExtractionMinTimeout = 30 * time.Second
 	clipExtractionMaxTimeout = 10 * time.Minute
+	clipExtractOperation     = "clip_extract"
+	audioExportOperation     = "audio_export"
 )
 
 // MaxClipDurationSec is the maximum allowed clip duration in seconds.
@@ -266,11 +268,11 @@ func extractClipViaPipe(ctx context.Context, ffmpegPath, inputPath string, start
 // it into memory. Required for MP4-based muxers and FLAC that need seekable output.
 func extractClipViaTempFile(ctx context.Context, ffmpegPath, inputPath string, start, duration float64, format string, filters *AudioFilters) (*bytes.Buffer, error) {
 	ext := getFileExtension(format)
-	tmpPath, err := createTempOutput("birdnet-clip-*."+ext, "clip_extract")
+	tmpPath, err := createTempOutput("birdnet-clip-*."+ext, clipExtractOperation)
 	if err != nil {
 		return nil, err
 	}
-	defer removeTempOutput(tmpPath, "clip_extract")
+	defer removeTempOutput(tmpPath, clipExtractOperation)
 
 	args := buildClipFFmpegArgs(inputPath, start, duration, format, tmpPath, filters)
 
@@ -364,11 +366,11 @@ func transcodeAudioViaPipe(ctx context.Context, ffmpegPath, inputPath, format st
 
 func transcodeAudioViaTempFile(ctx context.Context, ffmpegPath, inputPath, format string, filters *AudioFilters, maxOutputBytes int64) (*bytes.Buffer, error) {
 	ext := getFileExtension(format)
-	tmpPath, err := createTempOutput("birdnet-audio-export-*."+ext, "audio_export")
+	tmpPath, err := createTempOutput("birdnet-audio-export-*."+ext, audioExportOperation)
 	if err != nil {
 		return nil, err
 	}
-	defer removeTempOutput(tmpPath, "audio_export")
+	defer removeTempOutput(tmpPath, audioExportOperation)
 
 	args := buildTranscodeFFmpegArgs(inputPath, format, tmpPath, filters)
 
