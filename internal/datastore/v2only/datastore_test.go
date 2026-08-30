@@ -3,6 +3,7 @@ package v2only
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -29,9 +30,9 @@ func buildTestConfig(t *testing.T, labels []string) (cfg *Config, cleanup func()
 
 	// Create SQLite manager
 	manager, err := v2.NewSQLiteManager(v2.Config{
-		DataDir: tempDir,
-		Debug:   false,
-		Logger:  testLogger,
+		ConfiguredPath: filepath.Join(tempDir, "birdnet.db"),
+		Debug:          false,
+		Logger:         testLogger,
 	})
 	require.NoError(t, err)
 

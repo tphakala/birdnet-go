@@ -171,9 +171,9 @@ func (ctx *TestContext) setupV2DB(t *testing.T, tmpDir string) {
 
 	// Create V2 manager
 	mgr, err := datastoreV2.NewSQLiteManager(datastoreV2.Config{
-		DataDir: tmpDir,
-		Debug:   false,
-		Logger:  ctx.Logger,
+		ConfiguredPath: filepath.Join(tmpDir, "birdnet.db"),
+		Debug:          false,
+		Logger:         ctx.Logger,
 	})
 	require.NoError(t, err, "failed to create V2 manager")
 
