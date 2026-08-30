@@ -178,10 +178,7 @@ func transientOverQuietBed(clip []byte) []byte {
 	// dominate the gated integrated loudness, short enough to leave the bed as
 	// the clip's character.
 	burstStart := (len(out) / 3) &^ 1 // keep the offset sample-aligned
-	burstEnd := burstStart + bytesPerSecond
-	if burstEnd > len(out) {
-		burstEnd = len(out)
-	}
+	burstEnd := min(burstStart+bytesPerSecond, len(out))
 	copy(out[burstStart:burstEnd], clip[burstStart:burstEnd])
 	return out
 }

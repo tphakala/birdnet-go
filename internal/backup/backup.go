@@ -307,9 +307,7 @@ func (m *Manager) RunBackup(ctx context.Context) error {
 	sourcesLen := len(m.sources)
 	targetsLen := len(m.targets)
 	sources := make(map[string]Source, sourcesLen)
-	for k, v := range m.sources {
-		sources[k] = v
-	}
+	maps.Copy(sources, m.sources)
 	m.mu.RUnlock()
 
 	// Early-return when neither sources nor targets have been registered.

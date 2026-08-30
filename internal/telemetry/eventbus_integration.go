@@ -3,7 +3,6 @@ package telemetry
 import (
 	"fmt"
 	"sync"
-	"sync/atomic"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/events"
@@ -24,7 +23,7 @@ func InitializeEventBusIntegration() error {
 	log := GetLogger()
 
 	// Check if Sentry is enabled (skip check in test mode)
-	if atomic.LoadInt32(&testMode) == 0 {
+	if testMode.Load() == testModeDisabled {
 		settings := conf.GetSettings()
 		if settings == nil || !settings.Sentry.Enabled {
 			log.Info("Sentry telemetry disabled, skipping event bus integration")

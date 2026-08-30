@@ -85,9 +85,7 @@ type mockCorruptStore struct {
 
 func newMockCorruptStore() *mockCorruptStore {
 	return &mockCorruptStore{
-		mockStore: mockStore{
-			images: make(map[string]*datastore.ImageCache),
-		},
+		images: make(map[string]*datastore.ImageCache),
 	}
 }
 

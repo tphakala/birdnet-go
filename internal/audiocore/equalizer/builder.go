@@ -28,10 +28,7 @@ func BuildFilterChain(settings conf.EqualizerSettings, sampleRate int) *FilterCh
 
 	for i := range settings.Filters {
 		f := &settings.Filters[i]
-		passes := f.Passes
-		if passes < 1 {
-			passes = 1
-		}
+		passes := max(f.Passes, 1)
 
 		filter, err := buildFilter(f, sr, passes)
 		if err != nil {

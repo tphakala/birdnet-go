@@ -98,9 +98,9 @@ type SourceHealthSnapshot struct {
 	SourceID     string        `json:"source_id"`
 	State        string        `json:"state"`
 	Retries      int           `json:"retries"`
-	LastRestart  time.Time     `json:"last_restart,omitempty"`
+	LastRestart  time.Time     `json:"last_restart,omitzero"`
 	StateEntered time.Time     `json:"state_entered"`
-	LastDispatch time.Time     `json:"last_dispatch,omitempty"`
+	LastDispatch time.Time     `json:"last_dispatch,omitzero"`
 	RawState     LivenessState `json:"-"`
 }
 
