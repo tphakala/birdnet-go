@@ -266,19 +266,19 @@ func testSingleConnectionContextCancellation(t *testing.T, server *httptest.Serv
 func testMultipleConcurrentConnections(t *testing.T, server *httptest.Server, config SSETestConfig) {
 	t.Helper()
 	var wg sync.WaitGroup
-	var connectionsEstablished int32
+	var connectionsEstablished atomic.Int32
 
 	for i := range config.maxConnections {
 		connID := i
 		wg.Go(func() {
 			if attemptSSEConnection(t, server.URL, config.endpoint, connID, config.testTimeout) {
-				atomic.AddInt32(&connectionsEstablished, 1)
+				connectionsEstablished.Add(1)
 			}
 		})
 	}
 
 	wg.Wait()
-	require.Positive(t, int(atomic.LoadInt32(&connectionsEstablished)),
+	require.Positive(t, int(connectionsEstablished.Load()),
 		"At least one connection should have been established")
 }
 

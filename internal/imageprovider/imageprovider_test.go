@@ -437,9 +437,7 @@ type mockFailingStore struct {
 
 func newMockFailingStore() *mockFailingStore {
 	return &mockFailingStore{
-		mockStore: mockStore{
-			images: make(map[string]*datastore.ImageCache),
-		},
+		images: make(map[string]*datastore.ImageCache),
 	}
 }
 
@@ -1078,8 +1076,8 @@ func TestBackgroundRequestsRateLimited(t *testing.T) {
 
 	fetchAttempts := make(chan time.Time, 2*numStaleEntries)
 	mockProvider := &mockProviderWithContext{
-		mockImageProvider: mockImageProvider{fetchDelay: 5 * time.Millisecond},
-		fetchChannel:      fetchAttempts,
+		fetchDelay:   5 * time.Millisecond,
+		fetchChannel: fetchAttempts,
 	}
 
 	store := newMockStore()

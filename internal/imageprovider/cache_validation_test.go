@@ -20,9 +20,7 @@ func setupTestCache(t *testing.T) (*mockProviderWithAPICounter, *imageprovider.B
 	t.Helper()
 
 	mockProvider := &mockProviderWithAPICounter{
-		mockImageProvider: mockImageProvider{
-			fetchDelay: 10 * time.Millisecond,
-		},
+		fetchDelay: 10 * time.Millisecond,
 	}
 
 	mockStore := newMockStore()
@@ -44,9 +42,7 @@ func setupTestCacheWithSharedStore(t *testing.T) (*mockProviderWithAPICounter, *
 	t.Helper()
 
 	mockProvider := &mockProviderWithAPICounter{
-		mockImageProvider: mockImageProvider{
-			fetchDelay: 10 * time.Millisecond,
-		},
+		fetchDelay: 10 * time.Millisecond,
 	}
 
 	mockStore := newMockStore()
@@ -190,10 +186,8 @@ func TestBackgroundRefreshIsolation(t *testing.T) {
 	)
 
 	mockProvider := &mockProviderWithContextTracking{
-		mockProviderWithAPICounter: mockProviderWithAPICounter{
-			mockImageProvider: mockImageProvider{
-				fetchDelay: providerFetchDelay, // Simulate slow API
-			},
+		mockImageProvider: mockImageProvider{
+			fetchDelay: providerFetchDelay, // Simulate slow API
 		},
 	}
 
@@ -294,13 +288,13 @@ func TestCacheMetrics(t *testing.T) {
 // mockProviderWithAPICounter tracks API calls
 type mockProviderWithAPICounter struct {
 	mockImageProvider
-	apiCallCount    int64
+	apiCallCount    atomic.Int64
 	notFoundSpecies map[string]bool
 	mu2             sync.RWMutex
 }
 
 func (m *mockProviderWithAPICounter) Fetch(scientificName string) (imageprovider.BirdImage, error) {
-	atomic.AddInt64(&m.apiCallCount, 1)
+	m.apiCallCount.Add(1)
 
 	m.mu2.RLock()
 	if m.notFoundSpecies != nil && m.notFoundSpecies[scientificName] {
@@ -313,11 +307,11 @@ func (m *mockProviderWithAPICounter) Fetch(scientificName string) (imageprovider
 }
 
 func (m *mockProviderWithAPICounter) getAPICallCount() int64 {
-	return atomic.LoadInt64(&m.apiCallCount)
+	return m.apiCallCount.Load()
 }
 
 func (m *mockProviderWithAPICounter) resetCounters() {
-	atomic.StoreInt64(&m.apiCallCount, 0)
+	m.apiCallCount.Store(0)
 }
 
 func (m *mockProviderWithAPICounter) setNotFoundSpecies(species string) {
@@ -332,25 +326,25 @@ func (m *mockProviderWithAPICounter) setNotFoundSpecies(species string) {
 // mockProviderWithContextTracking tracks background vs user fetches
 type mockProviderWithContextTracking struct {
 	mockProviderWithAPICounter
-	backgroundFetches int64
-	userFetches       int64
+	backgroundFetches atomic.Int64
+	userFetches       atomic.Int64
 }
 
 func (m *mockProviderWithContextTracking) FetchWithContext(ctx context.Context, scientificName string) (imageprovider.BirdImage, error) {
 	// Track whether this is a background fetch
 	if imageprovider.IsBackgroundContext(ctx) {
-		atomic.AddInt64(&m.backgroundFetches, 1)
+		m.backgroundFetches.Add(1)
 	} else {
-		atomic.AddInt64(&m.userFetches, 1)
+		m.userFetches.Add(1)
 	}
 
 	return m.Fetch(scientificName)
 }
 
 func (m *mockProviderWithContextTracking) getBackgroundFetchCount() int64 {
-	return atomic.LoadInt64(&m.backgroundFetches)
+	return m.backgroundFetches.Load()
 }
 
 func (m *mockProviderWithContextTracking) getUserFetchCount() int64 {
-	return atomic.LoadInt64(&m.userFetches)
+	return m.userFetches.Load()
 }

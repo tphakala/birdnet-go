@@ -1050,14 +1050,12 @@ type slowConsumer struct {
 
 func newSlowConsumer(id string, delay time.Duration) *slowConsumer {
 	return &slowConsumer{
-		mockConsumer: mockConsumer{
-			id:         id,
-			sampleRate: 48000,
-			bitDepth:   16,
-			channels:   1,
-			frames:     make(chan AudioFrame, 256),
-		},
-		delay: delay,
+		id:         id,
+		sampleRate: 48000,
+		bitDepth:   16,
+		channels:   1,
+		frames:     make(chan AudioFrame, 256),
+		delay:      delay,
 	}
 }
 

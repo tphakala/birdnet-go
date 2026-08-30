@@ -181,7 +181,7 @@ var (
 	deferredMutex          sync.Mutex
 	deferredOverflowLogged bool
 	attachmentUploader     *AttachmentUploader
-	testMode               int32 // testMode allows tests to bypass settings checks (0=false, 1=true)
+	testMode               atomic.Int32 // testMode allows tests to bypass settings checks (0=false, 1=true)
 )
 
 // shouldSkipTelemetry returns true if telemetry should be skipped.
@@ -190,7 +190,7 @@ var (
 // This helper reduces code duplication across telemetry functions.
 func shouldSkipTelemetry() bool {
 	// In test mode, never skip (telemetry is always "enabled" for testing)
-	if atomic.LoadInt32(&testMode) == 1 {
+	if testMode.Load() == 1 {
 		return false
 	}
 	settings := conf.GetSettings()

@@ -27,6 +27,13 @@ import "github.com/quasilyte/go-ruleguard/dsl"
 //   - Automatic panic handling
 //
 // See: https://pkg.go.dev/sync#WaitGroup.Go
+//
+// NOTE: the goroutine body is captured as $*body (a NodeSlice). Do NOT interpolate
+// it into Report or Suggest: go-ruleguard renders both templates via go/printer,
+// which panics on *gogrep.NodeSlice ("unsupported node type") and crashes gocritic
+// on any file that matches (e.g. the openvino backend). That is why these rules
+// interpolate only the single-node $wg (never the $*body NodeSlice) and provide no
+// Suggest quickfix.
 func WaitGroupGo(m dsl.Matcher) {
 	// Pattern 1: wg.Add(1) followed by go func() with defer wg.Done()
 	// This matches when the defer is the first statement
@@ -34,16 +41,14 @@ func WaitGroupGo(m dsl.Matcher) {
 		`$wg.Add(1); go func() { defer $wg.Done(); $*body }()`,
 	).
 		Where(m["wg"].Type.Is("*sync.WaitGroup") || m["wg"].Type.Is("sync.WaitGroup")).
-		Report("use $wg.Go(func() { $body }) instead of manual Add/Done pattern (Go 1.25+)").
-		Suggest("$wg.Go(func() { $body })")
+		Report("use $wg.Go(func() { ... }) instead of the manual Add/Done goroutine pattern (Go 1.25+)")
 
 	// Pattern 2: Same but with pointer receiver explicitly
 	m.Match(
 		`$wg.Add(1); go func() { defer $wg.Done(); $*body }()`,
 	).
 		Where(m["wg"].Type.Underlying().Is("sync.WaitGroup")).
-		Report("use $wg.Go(func() { $body }) instead of manual Add/Done pattern (Go 1.25+)").
-		Suggest("$wg.Go(func() { $body })")
+		Report("use $wg.Go(func() { ... }) instead of the manual Add/Done goroutine pattern (Go 1.25+)")
 
 	// Pattern 3: When wg is passed by reference to the closure
 	m.Match(
@@ -51,5 +56,5 @@ func WaitGroupGo(m dsl.Matcher) {
 		`$wg.Add(1); go func($param $typ) { defer $param.Done(); $*body }(&$wg)`,
 	).
 		Where(m["wg"].Type.Is("*sync.WaitGroup") || m["wg"].Type.Is("sync.WaitGroup")).
-		Report("use $wg.Go(func() { $body }) instead of manual Add/Done pattern (Go 1.25+)")
+		Report("use $wg.Go(func() { ... }) instead of the manual Add/Done goroutine pattern (Go 1.25+)")
 }

@@ -38,9 +38,7 @@ func createDatabaseErrorTestFunc(t *testing.T) func() error {
 	t.Helper()
 	return func() error {
 		failingStore := &mockFailingStore{
-			mockStore: mockStore{
-				images: make(map[string]*datastore.ImageCache),
-			},
+			images:       make(map[string]*datastore.ImageCache),
 			failGetCache: true,
 		}
 		metrics, err := observability.NewMetrics()

@@ -164,7 +164,7 @@ type Datastore struct {
 
 	// dbstatAvailable caches whether the dbstat virtual table exists.
 	// 0 = unchecked, 1 = available, -1 = not available.
-	dbstatAvailable int32
+	dbstatAvailable atomic.Int32
 
 	// dbCounters tracks atomic query latency counters for metrics collection.
 	dbCounters *dbstats.Counters

@@ -19,6 +19,17 @@ linters:
         text: "dupSubExpr"
         linters:
           - gocritic
+      # The notflite stub build of NewTFLiteClassifier / NewTFLiteRangeFilter
+      # always returns a non-nil error, so staticcheck's SA4023 flags the
+      # `if err != nil` guards (and their related-information notes) as "always
+      # true" under -tags notflite. Those guards are real runtime checks in the
+      # default tflite build; suppress the stub-only false positive for this
+      # file. CI never lints the notflite tag (it is a compile check only), so
+      # this only affects the notflite lint lane.
+      - path: internal/classifier/birdnet.go
+        text: "SA4023"
+        linters:
+          - staticcheck
       # goconst v1.9.0+ started walking
       # composite-literal nodes (map keys, slice elements, struct-init values),
       # which surfaced hundreds of "make it a constant" nits for inline
@@ -59,7 +70,7 @@ linters:
     - thelper
     - testifylint
     - gocyclo
-    # - modernize  # Disabled: enabling surfaces many modernization suggestions (e.g. embedlit) across the codebase; deferred to a dedicated cleanup pass rather than the toolchain bump
+    - modernize  # Re-enabled under golangci-lint v2.13.2 + Go 1.27: the earlier Go 1.26 atomic-types panic no longer reproduces, and the codebase was modernized in the same change
     - forbidigo  # Sensitive field name detection
     # Performance linters
     - prealloc

@@ -2,6 +2,7 @@ package conf
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"reflect"
 	"strings"
@@ -384,9 +385,7 @@ func normalizeRTSPStreamEnabledDefaults(rawStreams any) ([]any, bool) {
 		}
 
 		copied := make(map[string]any, len(streamMap)+1)
-		for key, value := range streamMap {
-			copied[key] = value
-		}
+		maps.Copy(copied, streamMap)
 		copied["enabled"] = true
 		normalized[i] = copied
 		migrated = true
@@ -839,6 +838,11 @@ func (s *Settings) mergeSourceIntoStream(src *AudioSourceConfig, stream *StreamC
 // ever gains a non-comparable field this returns false so the merge is skipped
 // rather than risking a runtime panic.
 func quietHoursComparable() bool {
+	// Keep reflect.TypeOf here, not reflect.TypeFor[QuietHoursConfig](): the
+	// generic form trips a Go linker bug (R_USEIFACE ... references type:.eqfunc
+	// which is not a type or itab) during deadcode elimination for this
+	// comparable-struct check.
+	//nolint:modernize // reflect.TypeOf is intentional; reflect.TypeFor breaks the linker here (see above)
 	return reflect.TypeOf(QuietHoursConfig{}).Comparable()
 }
 

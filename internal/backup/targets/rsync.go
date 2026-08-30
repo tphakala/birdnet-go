@@ -617,17 +617,15 @@ func (t *RsyncTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 		}
 
 		backupInfo := backup.BackupInfo{
-			Metadata: backup.Metadata{
-				Version:    metadata.Version,
-				Timestamp:  metadata.Timestamp,
-				Size:       metadata.Size,
-				Type:       metadata.Type,
-				Source:     metadata.Source,
-				IsDaily:    metadata.IsDaily,
-				ConfigHash: metadata.ConfigHash,
-				AppVersion: metadata.AppVersion,
-			},
-			Target: t.Name(),
+			Version:    metadata.Version,
+			Timestamp:  metadata.Timestamp,
+			Size:       metadata.Size,
+			Type:       metadata.Type,
+			Source:     metadata.Source,
+			IsDaily:    metadata.IsDaily,
+			ConfigHash: metadata.ConfigHash,
+			AppVersion: metadata.AppVersion,
+			Target:     t.Name(),
 		}
 		backups = append(backups, backupInfo)
 	}
