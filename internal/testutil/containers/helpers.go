@@ -7,8 +7,12 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
+	"testing"
 	"time"
+
+	"github.com/testcontainers/testcontainers-go"
 )
 
 // WaitForHTTP waits for an HTTP endpoint to respond with a 200 status code.
@@ -135,4 +139,53 @@ func GetFreePort() (int, error) {
 		return 0, fmt.Errorf("listener address is not TCP: %T", listener.Addr())
 	}
 	return addr.Port, nil
+}
+
+// containerRuntimeHealthTimeout bounds the daemon health probe in
+// containerRuntimeError so an unresponsive runtime fails fast.
+const containerRuntimeHealthTimeout = 10 * time.Second
+
+// containerRuntimeError returns nil when a Docker-compatible container runtime
+// is reachable, or the reason it is not. It bounds the daemon health probe so an
+// unresponsive runtime (socket present but not answering) fails fast instead of
+// hanging. NewDockerProvider builds the client; Health pings the daemon and
+// closes that client via an internal defer, so there is nothing to clean up here
+// on either path.
+func containerRuntimeError() error {
+	provider, err := testcontainers.NewDockerProvider()
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), containerRuntimeHealthTimeout)
+	defer cancel()
+	return provider.Health(ctx)
+}
+
+// SkipIfContainerRuntimeUnavailable keeps container-backed tests usable on a host
+// with no Docker-compatible runtime. Call it before creating any container.
+//
+// The integration build tag compiles these tests, but a developer host without
+// Docker (for example a rootless Podman setup with no DOCKER_HOST) has no
+// provider to start containers with, so testcontainers fails when it tries. There
+// it skips, so the tests that call it stay green locally while still running
+// wherever a runtime is present.
+//
+// On CI a runtime is promised, so its absence is a real breakage rather than an
+// expected environment: when the CI environment variable is set, a missing or
+// unhealthy runtime fails loudly instead of skipping green and masking the
+// outage. This helper only covers the call sites that invoke it; sibling
+// container suites in other packages are not yet guarded, so it does not by
+// itself make the whole integration-tagged build green.
+func SkipIfContainerRuntimeUnavailable(tb testing.TB) {
+	tb.Helper()
+	err := containerRuntimeError()
+	if err == nil {
+		return
+	}
+	// GitHub Actions and most CI systems set CI; there a container runtime is
+	// expected, so surface its absence as a failure rather than a silent skip.
+	if os.Getenv("CI") != "" {
+		tb.Fatalf("container runtime required on CI but unavailable: %v", err)
+	}
+	tb.Skipf("skipping: container runtime unavailable (%v)", err)
 }

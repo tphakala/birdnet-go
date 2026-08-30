@@ -209,9 +209,10 @@ func TestApplyRuntimeBackend(t *testing.T) {
 }
 
 // TestGetInferenceStatus_HTTP200 verifies that GetInferenceStatus returns HTTP
-// 200 and a valid InferenceStatusResponse with TFLite marked available. It uses
-// an apitest.NewCore-backed Handler over httptest to exercise the handler
-// without starting any background goroutines.
+// 200 and a valid InferenceStatusResponse whose TFLite backend availability
+// tracks the compiled-in state (true by default, false under the notflite build
+// tag). It uses an apitest.NewCore-backed Handler over httptest to exercise the
+// handler without starting any background goroutines.
 func TestGetInferenceStatus_HTTP200(t *testing.T) {
 	// NOT parallel: apitest.NewCore publishes settings to the process-global snapshot.
 	e := echo.New()
@@ -226,7 +227,7 @@ func TestGetInferenceStatus_HTTP200(t *testing.T) {
 
 	var resp InferenceStatusResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp), "response body must unmarshal to InferenceStatusResponse")
-	assert.True(t, resp.Backends.TFLite.Available, "TFLite backend must always report Available=true")
+	assert.Equal(t, hwprofile.TFLiteLinked(), resp.Backends.TFLite.Available, "TFLite backend availability must match the compiled-in state (false under the notflite build tag)")
 	assert.NotZero(t, resp.SnapshotAtUnix, "SnapshotAtUnix must be a non-zero Unix timestamp")
 }
 
