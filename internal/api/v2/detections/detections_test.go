@@ -776,7 +776,6 @@ func TestGetDetection_ClipNameSerialized(t *testing.T) {
 		mockDS.ExpectedCalls = nil
 		mockDS.On("Get", "7").Return(note, nil)
 		mockDS.On("GetHourlyWeather", "2025-03-07").Return([]datastore.HourlyWeather{}, nil)
-		mockDS.On("GetNoteResults", "7").Return([]datastore.Results{}, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/7", http.NoBody)
 		rec := httptest.NewRecorder()
@@ -803,7 +802,6 @@ func TestGetDetection_ClipNameSerialized(t *testing.T) {
 		mockDS.ExpectedCalls = nil
 		mockDS.On("Get", "7").Return(note, nil)
 		mockDS.On("GetHourlyWeather", "2025-03-07").Return([]datastore.HourlyWeather{}, nil)
-		mockDS.On("GetNoteResults", "7").Return([]datastore.Results{}, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/7", http.NoBody)
 		rec := httptest.NewRecorder()
@@ -900,7 +898,6 @@ func TestGetDetectionCommentFormat(t *testing.T) {
 	// Setup mock expectations
 	mockDS.On("Get", "42").Return(mockNote, nil)
 	mockDS.On("GetHourlyWeather", "2025-01-09").Return([]datastore.HourlyWeather{}, nil)
-	mockDS.On("GetNoteResults", "42").Return([]datastore.Results{}, nil)
 
 	// Create request
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/42", http.NoBody)
@@ -973,7 +970,6 @@ func TestGetDetectionEmptyComments(t *testing.T) {
 
 	mockDS.On("Get", "99").Return(mockNote, nil)
 	mockDS.On("GetHourlyWeather", "2025-01-09").Return([]datastore.HourlyWeather{}, nil)
-	mockDS.On("GetNoteResults", "99").Return([]datastore.Results{}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/99", http.NoBody)
 	rec := httptest.NewRecorder()
