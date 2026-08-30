@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -72,7 +73,7 @@ func setupWorkerTest(t *testing.T) (sm *datastoreV2.StateManager, cleanup func()
 	t.Helper()
 
 	tmpDir := t.TempDir()
-	mgr, err := datastoreV2.NewSQLiteManager(datastoreV2.Config{DataDir: tmpDir})
+	mgr, err := datastoreV2.NewSQLiteManager(datastoreV2.Config{ConfiguredPath: filepath.Join(tmpDir, "birdnet.db")})
 	require.NoError(t, err)
 
 	err = mgr.Initialize()
