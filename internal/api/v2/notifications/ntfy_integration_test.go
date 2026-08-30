@@ -22,6 +22,7 @@ import (
 // setupNtfyContainerForAPI creates a no-auth ntfy container for API integration tests.
 func setupNtfyContainerForAPI(t *testing.T) *containers.NtfyContainer {
 	t.Helper()
+	containers.SkipIfContainerRuntimeUnavailable(t)
 	ctx := t.Context()
 	c, err := containers.NewNtfyContainer(ctx, nil)
 	require.NoError(t, err, "failed to start ntfy container")

@@ -22,6 +22,10 @@ var (
 
 // TestMain sets up the MySQL container for all tests in this package
 func TestMain(m *testing.M) {
+	if code, skip := containers.SkipTestMainIfContainerRuntimeUnavailable(); skip {
+		os.Exit(code)
+	}
+
 	var err error
 
 	ctx := context.Background() //nolint:gocritic // no *testing.T available (TestMain / setup helper)

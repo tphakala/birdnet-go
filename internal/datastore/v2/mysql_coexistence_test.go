@@ -40,6 +40,9 @@ func TestMain(m *testing.M) {
 }
 
 func testMain(m *testing.M) int {
+	if code, skip := containers.SkipTestMainIfContainerRuntimeUnavailable(); skip {
+		return code
+	}
 	ctx := context.Background() //nolint:gocritic // testMain uses *testing.M, not *testing.T — no t.Context() available
 
 	cfg := &containers.MySQLConfig{

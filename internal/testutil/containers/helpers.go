@@ -173,9 +173,8 @@ func containerRuntimeError(ctx context.Context) error {
 // On CI a runtime is promised, so its absence is a real breakage rather than an
 // expected environment: when the CI environment variable is set, a missing or
 // unhealthy runtime fails loudly instead of skipping green and masking the
-// outage. This helper only covers the call sites that invoke it; sibling
-// container suites in other packages are not yet guarded, so it does not by
-// itself make the whole integration-tagged build green.
+// outage. Suites that build their container in TestMain (which has no
+// *testing.T) use SkipTestMainIfContainerRuntimeUnavailable instead.
 func SkipIfContainerRuntimeUnavailable(tb testing.TB) {
 	tb.Helper()
 	err := containerRuntimeError(tb.Context())
@@ -188,4 +187,35 @@ func SkipIfContainerRuntimeUnavailable(tb testing.TB) {
 		tb.Fatalf("container runtime required on CI but unavailable: %v", err)
 	}
 	tb.Skipf("skipping: container runtime unavailable (%v)", err)
+}
+
+// SkipTestMainIfContainerRuntimeUnavailable is the TestMain counterpart of
+// SkipIfContainerRuntimeUnavailable, for suites that build their container in
+// TestMain and therefore have no *testing.T to skip with. It reports whether the
+// suite should exit early because no container runtime is reachable, and the exit
+// code to use. Call it before creating any container and, when skip is true,
+// os.Exit(code) (or return code from a TestMain helper) without running the
+// suite:
+//
+//	func TestMain(m *testing.M) {
+//		if code, skip := containers.SkipTestMainIfContainerRuntimeUnavailable(); skip {
+//			os.Exit(code)
+//		}
+//		// ... build container, m.Run(), cleanup ...
+//	}
+//
+// In local dev a missing runtime returns (0, true) so the package is skipped
+// cleanly; on CI (the CI env var is set) it logs the reason and returns
+// (1, true) so a broken runtime fails loudly instead of passing green.
+func SkipTestMainIfContainerRuntimeUnavailable() (code int, skip bool) {
+	err := containerRuntimeError(context.Background())
+	if err == nil {
+		return 0, false
+	}
+	if os.Getenv("CI") != "" {
+		fmt.Fprintf(os.Stderr, "container runtime required on CI but unavailable: %v\n", err)
+		return 1, true
+	}
+	fmt.Fprintf(os.Stderr, "skipping: container runtime unavailable (%v)\n", err)
+	return 0, true
 }
