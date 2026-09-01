@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"math"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -140,7 +141,7 @@ func medianPredict(t *testing.T, c Classifier, samples []float32, n int) time.Du
 		require.NoError(t, err)
 		ds[i] = time.Since(start)
 	}
-	sort.Slice(ds, func(a, b int) bool { return ds[a] < ds[b] })
+	slices.Sort(ds)
 	return ds[n/2]
 }
 
