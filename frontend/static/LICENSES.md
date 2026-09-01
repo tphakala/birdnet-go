@@ -10,9 +10,7 @@ https://creativecommons.org/licenses/by-nc-sa/4.0/
 ### snakers4/silero-vad
 
 Silero VAD model (silero_vad.onnx), embedded in the binary and used by the
-privacy-filter speech gate. Built from the upstream examples/onnx_sequence
-export at 16 kHz (opset 16), which runs a whole hop sequence in one call and is
-bit-exact to the upstream recurrent frame model.
+privacy-filter speech gate. Unmodified, byte-identical to upstream.
 
 License: https://github.com/snakers4/silero-vad/blob/master/LICENSE
 Source: MIT
@@ -91,7 +89,7 @@ Source: Unlicense
 
 ### github.com/getsentry/sentry-go
 
-License: https://github.com/getsentry/sentry-go/blob/v0.48.0/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/v0.49.0/LICENSE
 Source: MIT
 
 ### github.com/go-chi/chi/v5
@@ -236,12 +234,12 @@ Source: BSD-3-Clause
 
 ### github.com/nicholas-fedor/shoutrrr
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.17.1/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.18.0/LICENSE.md
 Source: MIT
 
 ### github.com/nicholas-fedor/shoutrrr/pkg/color
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.17.1/pkg/color/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.18.0/pkg/color/LICENSE.md
 Source: MIT
 
 ### github.com/patrickmn/go-cache
@@ -416,7 +414,7 @@ Source: Unknown
 
 ### github.com/tphakala/go-aac
 
-License: https://github.com/tphakala/go-aac/blob/v0.4.0/LICENSE
+License: https://github.com/tphakala/go-aac/blob/v0.6.0/LICENSE
 Source: LGPL-2.1
 
 ### github.com/tphakala/go-audio-resampler
@@ -429,9 +427,14 @@ Source: LGPL-2.1
 License: https://github.com/tphakala/go-flac/blob/v1.1.0/LICENSE
 Source: MIT
 
+### github.com/tphakala/go-hls
+
+License: https://github.com/tphakala/go-hls/blob/v0.1.0/LICENSE
+Source: MIT
+
 ### github.com/tphakala/go-m4a
 
-License: https://github.com/tphakala/go-m4a/blob/v0.3.0/LICENSE
+License: https://github.com/tphakala/go-m4a/blob/v0.4.0/LICENSE
 Source: MIT
 
 ### github.com/tphakala/go-opus
@@ -546,7 +549,7 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.293.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.295.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
@@ -556,7 +559,7 @@ Source: Apache-2.0
 
 ### google.golang.org/grpc
 
-License: https://github.com/grpc/grpc-go/blob/v1.83.1/LICENSE
+License: https://github.com/grpc/grpc-go/blob/v1.83.2/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/protobuf
