@@ -59,16 +59,51 @@ const (
 // the context. Variable rather than constant so tests can shorten it.
 var ovProbeTimeout = 60 * time.Second
 
-// ovProbeState caches the single per-process probe outcome.
-type ovProbeState struct {
-	mu          sync.Mutex
-	done        bool
-	libraryPath string
-	devices     []string
-	err         error
+// ovProbeResult is one cached probe verdict.
+type ovProbeResult struct {
+	devices []string
+	err     error
 }
 
-var ovProbe ovProbeState
+// ovProbeState caches probe outcomes per library path and tracks probes in
+// flight. The mutex guards only the maps; it is never held while a child
+// runs, so status/API readers of the cache do not stall behind a slow or
+// hanging driver stack.
+type ovProbeState struct {
+	mu sync.Mutex
+	// results holds the cached verdict per library path. Keyed by path so
+	// switching openvinopath A -> B -> A does not re-run a probe (and a known
+	// crashing driver stack) for a path already decided.
+	results map[string]ovProbeResult
+	// inFlight holds a channel per library path whose probe child is running;
+	// it is closed when the child finishes, so concurrent callers for the same
+	// path wait for that result instead of launching a second child.
+	inFlight map[string]chan struct{}
+	// lastPath is the library path most recently requested through
+	// OpenVINOProbeDevices; it is the path cache readers without a path of
+	// their own (OpenVINOHasDevice) are answered for.
+	lastPath string
+}
+
+var ovProbe = ovProbeState{
+	results:  map[string]ovProbeResult{},
+	inFlight: map[string]chan struct{}{},
+}
+
+// ovProbeCacheStatus describes what the probe cache can say right now.
+type ovProbeCacheStatus int
+
+const (
+	// ovProbeNotRun means no probe has been attempted (or a transient failure
+	// left nothing cached); callers may use their pre-probe behavior.
+	ovProbeNotRun ovProbeCacheStatus = iota
+	// ovProbeInFlight means a probe child is currently running; callers should
+	// not touch the in-process driver stack until it reports.
+	ovProbeInFlight
+	// ovProbeCached means a definitive result (success or child failure) is
+	// available.
+	ovProbeCached
+)
 
 // Test seams: how the probe locates and launches its child process.
 var (
@@ -85,45 +120,72 @@ func newOVProbeCommand(ctx context.Context, exe, libraryPath string) *exec.Cmd {
 
 // OpenVINOProbeDevices reports the OpenVINO device names visible on this host
 // (e.g. "CPU", "GPU"), determined by running the enumeration in a short-lived
-// child process so a driver-stack crash cannot abort the caller. The result
-// (success or failure) is cached for the life of the process per library
-// path; only a changed libraryPath re-runs the probe. Callers treat any error
-// as "no OpenVINO devices" and fall back to ONNX Runtime.
+// child process so a driver-stack crash cannot abort the caller. Callers treat
+// any error as "no OpenVINO devices" and fall back to ONNX Runtime.
+//
+// Caching: a successful result, and any failure produced by the child itself
+// (signaled, non-zero exit, no completion marker), is cached for the life of
+// the process per library path, so a crashing driver stack is not re-executed
+// on every hot reload; only a changed libraryPath re-probes. Failures that
+// never reached a child verdict (executable lookup, pipe or start errors, the
+// probe timeout) are transient and are NOT cached, so the next planning pass
+// retries. Concurrent callers for the same path share one child.
 func OpenVINOProbeDevices(libraryPath string) ([]string, error) {
 	if !ov.Supported {
 		return nil, ov.ErrOpenVINOUnavailable
 	}
 
-	ovProbe.mu.Lock()
-	defer ovProbe.mu.Unlock()
-	if ovProbe.done && ovProbe.libraryPath == libraryPath {
-		return slices.Clone(ovProbe.devices), ovProbe.err
-	}
+	for {
+		ovProbe.mu.Lock()
+		ovProbe.lastPath = libraryPath
+		if res, ok := ovProbe.results[libraryPath]; ok {
+			ovProbe.mu.Unlock()
+			return slices.Clone(res.devices), res.err
+		}
+		if wait, running := ovProbe.inFlight[libraryPath]; running {
+			ovProbe.mu.Unlock()
+			<-wait
+			continue // re-read the cache the finished probe populated (or retry)
+		}
+		inFlight := make(chan struct{})
+		ovProbe.inFlight[libraryPath] = inFlight
+		ovProbe.mu.Unlock()
 
-	devices, err := runOVProbe(libraryPath)
-	ovProbe.done = true
-	ovProbe.libraryPath = libraryPath
-	ovProbe.devices = devices
-	ovProbe.err = err
-	return slices.Clone(devices), err
+		devices, cacheable, err := runOVProbe(libraryPath)
+
+		ovProbe.mu.Lock()
+		if err == nil || cacheable {
+			ovProbe.results[libraryPath] = ovProbeResult{devices: devices, err: err}
+		}
+		delete(ovProbe.inFlight, libraryPath)
+		close(inFlight)
+		ovProbe.mu.Unlock()
+		return slices.Clone(devices), err
+	}
 }
 
-// cachedOVProbeDevices returns the cached probe result, reporting ok=false
-// when no probe has completed in this process.
-func cachedOVProbeDevices() (devices []string, probed bool, err error) {
+// cachedOVProbeDevices returns the cached probe result for the most recently
+// requested library path, together with the cache status. It never blocks on
+// a running probe.
+func cachedOVProbeDevices() (devices []string, status ovProbeCacheStatus, err error) {
 	ovProbe.mu.Lock()
 	defer ovProbe.mu.Unlock()
-	if !ovProbe.done {
-		return nil, false, nil
+	if res, ok := ovProbe.results[ovProbe.lastPath]; ok {
+		return slices.Clone(res.devices), ovProbeCached, res.err
 	}
-	return slices.Clone(ovProbe.devices), true, ovProbe.err
+	if _, running := ovProbe.inFlight[ovProbe.lastPath]; running {
+		return nil, ovProbeInFlight, nil
+	}
+	return nil, ovProbeNotRun, nil
 }
 
-// runOVProbe launches the probe child and parses its marker output.
-func runOVProbe(libraryPath string) ([]string, error) {
+// runOVProbe launches the probe child and parses its marker output. cacheable
+// reports whether a returned error is a child verdict worth remembering (see
+// OpenVINOProbeDevices) as opposed to a transient launch or timeout failure.
+func runOVProbe(libraryPath string) (devices []string, cacheable bool, err error) {
 	exe, err := ovProbeExecutable()
 	if err != nil {
-		return nil, errors.Newf("openvino probe: cannot resolve own executable: %v", err).
+		return nil, false, errors.Newf("openvino probe: cannot resolve own executable: %v", err).
 			Category(errors.CategorySystem).Build()
 	}
 
@@ -135,35 +197,51 @@ func runOVProbe(libraryPath string) ([]string, error) {
 	cmd.Stderr = &stderr
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, errors.Newf("openvino probe: stdout pipe: %v", err).
+		return nil, false, errors.Newf("openvino probe: stdout pipe: %v", err).
 			Category(errors.CategorySystem).Build()
 	}
 	if err := cmd.Start(); err != nil {
-		return nil, errors.Newf("openvino probe: start: %v", err).
+		return nil, false, errors.Newf("openvino probe: start: %v", err).
 			Category(errors.CategorySystem).Build()
 	}
 
-	devices, sawOK := parseOVProbeOutput(stdout)
+	devices, sawOK, scanErr := parseOVProbeOutput(stdout)
+	waitErr := cmd.Wait()
 
-	if err := cmd.Wait(); err != nil {
+	if ctx.Err() != nil {
+		// The context killed the child: a timeout, not a verdict. Do not cache,
+		// so a transiently slow driver init gets another chance next time.
+		return nil, false, errors.Newf("openvino probe: child timed out after %s", ovProbeTimeout).
+			Category(errors.CategorySystem).Build()
+	}
+	if waitErr != nil {
 		// A signaled child (the crash this probe exists for) surfaces here as
-		// e.g. "signal: aborted"; include trailing stderr for the journal.
-		return nil, errors.Newf("openvino probe: child failed: %v (stderr: %s)",
-			err, lastOVProbeStderr(stderr.String())).
+		// e.g. "signal: aborted"; include a stderr excerpt for the journal.
+		return nil, true, errors.Newf("openvino probe: child failed: %v (stderr: %s)",
+			waitErr, lastOVProbeStderr(stderr.String())).
+			Category(errors.CategorySystem).Build()
+	}
+	if scanErr != nil {
+		return nil, false, errors.Newf("openvino probe: reading child output: %v", scanErr).
 			Category(errors.CategorySystem).Build()
 	}
 	if !sawOK {
-		return nil, errors.Newf("openvino probe: child exited without completion marker").
+		return nil, true, errors.Newf("openvino probe: child exited without completion marker").
 			Category(errors.CategorySystem).Build()
 	}
-	return devices, nil
+	return devices, false, nil
 }
 
+// ovProbeMaxLineBytes bounds a single stdout line from the child. Marker lines
+// are tiny; the headroom is for bootstrap log lines sharing the stream.
+const ovProbeMaxLineBytes = 1 << 20
+
 // parseOVProbeOutput scans probe stdout for marker lines, returning the device
-// names and whether the completion marker was seen. Non-marker lines (logging
-// from the CLI bootstrap) are ignored.
-func parseOVProbeOutput(r io.Reader) (devices []string, sawOK bool) {
+// names, whether the completion marker was seen, and any read error.
+// Non-marker lines (logging from the CLI bootstrap) are ignored.
+func parseOVProbeOutput(r io.Reader) (devices []string, sawOK bool, err error) {
 	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), ovProbeMaxLineBytes)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		switch {
@@ -175,7 +253,7 @@ func parseOVProbeOutput(r io.Reader) (devices []string, sawOK bool) {
 			}
 		}
 	}
-	return devices, sawOK
+	return devices, sawOK, scanner.Err()
 }
 
 // ovProbeStderrExcerpt bounds each half of the child stderr excerpt echoed

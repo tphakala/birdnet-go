@@ -90,16 +90,21 @@ func NewOpenVINOClassifier(modelPath string, opts OpenVINOClassifierOptions) (Cl
 // When the out-of-process probe has completed (the device planner runs it before
 // any classifier is built), its cached result answers without touching the
 // in-process driver stack, so a status or capability query can never trip the
-// enumeration crash the probe exists to contain (issue #4236). Before any probe
-// has run it falls back to the in-process query, preserving prior behavior.
+// enumeration crash the probe exists to contain (issue #4236). While a probe is
+// still in flight it answers false rather than enumerating in-process behind
+// the child's back. Before any probe has run it falls back to the in-process
+// query, preserving prior behavior.
 func OpenVINOHasDevice(name string) bool {
-	if devs, probed, err := cachedOVProbeDevices(); probed {
-		if err != nil {
-			return false
-		}
-		return slices.Contains(devs, name)
+	devs, status, err := cachedOVProbeDevices()
+	switch status {
+	case ovProbeCached:
+		return err == nil && slices.Contains(devs, name)
+	case ovProbeInFlight:
+		return false
+	case ovProbeNotRun:
+		// fall through to the in-process query below
 	}
-	devs, err := ov.AvailableDevices()
+	devs, err = ov.AvailableDevices()
 	if err != nil {
 		return false
 	}
