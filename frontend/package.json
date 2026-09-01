@@ -84,7 +84,7 @@
     ]
   },
   "devDependencies": {
-    "@ast-grep/cli": "^0.45.1",
+    "@ast-grep/cli": "^0.45.2",
     "@axe-core/playwright": "^4.11.3",
     "@eslint/js": "^10.0.1",
     "@formatjs/icu-messageformat-parser": "^3.5.11",
@@ -110,7 +110,7 @@
     "husky": "^9.1.7",
     "jscpd": "^5.0.11",
     "jsdom": "^29.1.1",
-    "lint-staged": "^17.0.8",
+    "lint-staged": "^17.4.1",
     "madge": "^8.0.0",
     "playwright": "^1.56.1",
     "postcss-html": "^2.0.0",
@@ -130,14 +130,14 @@
   },
   "dependencies": {
     "@bybas/weather-icons": "^2.0.0",
-    "@lucide/svelte": "^1.21.0",
-    "@sentry/browser": "^10.59.0",
+    "@lucide/svelte": "^1.35.0",
+    "@sentry/browser": "^10.72.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "d3": "^7.9.0",
     "d3-time-format": "^4.1.0",
     "hls.js": "^1.6.16",
-    "maplibre-gl": "^6.2.0",
+    "maplibre-gl": "^6.6.0",
     "svelte-dnd-action": "^0.9.76"
   },
   "bundleDependencies": [
