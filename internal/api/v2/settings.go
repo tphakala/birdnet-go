@@ -1120,15 +1120,17 @@ func handleGenericSection(sectionPtr any, data json.RawMessage, sectionName stri
 		return fmt.Errorf("failed to merge settings for section %s: %w", sectionName, err)
 	}
 
-	// Blocked fields are NOT enforced here. This function only merges; the merge
-	// deliberately writes every key the request carried, and UpdateSectionSettings
-	// then calls restoreBlockedFields to revert the blocked ones against the
-	// pre-update snapshot. Enforcing here is not possible anyway: a section name
-	// does not always map to a top-level key of getBlockedFieldMap (PATCH
-	// /settings/audio targets Realtime.Audio), so a per-section lookup would
-	// silently miss exactly the nested section that carries blocked leaves: the
-	// audio tool paths live under the map's "Realtime" key, which a lookup keyed
-	// on the section name "audio" would never find.
+	// Blocked fields (including Realtime.Species.Confirmed, which is
+	// analytics-only and managed exclusively via /api/v2/detections/confirm) are
+	// NOT enforced here. This function only merges; the merge deliberately
+	// writes every key the request carried, and UpdateSectionSettings then calls
+	// restoreBlockedFields to revert the blocked ones — Confirmed included —
+	// against the pre-update snapshot. Enforcing here is not possible anyway: a
+	// section name does not always map to a top-level key of getBlockedFieldMap
+	// (PATCH /settings/audio targets Realtime.Audio), so a per-section lookup
+	// would silently miss exactly the nested section that carries blocked
+	// leaves: the audio tool paths live under the map's "Realtime" key, which a
+	// lookup keyed on the section name "audio" would never find.
 	//
 	// Blocked-field enforcement for both write paths lives in restoreBlockedFields,
 	// called after the merge by UpdateSettings (PUT) and UpdateSectionSettings
@@ -2183,6 +2185,12 @@ func getBlockedFieldMap() map[string]any {
 		// Realtime section - block runtime fields
 		"Realtime": map[string]any{
 			"Audio": getAudioBlockedFields(),
+			// Species.Confirmed is analytics-only and managed exclusively via
+			// /api/v2/detections/confirm. Block it so a Settings save (which omits
+			// it) cannot clobber the confirmed list.
+			"Species": map[string]any{
+				"Confirmed": true,
+			},
 		},
 
 		// All other fields are allowed by default
