@@ -13,6 +13,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
+// Named RTSP transport values for tests, so the diff/resolution cases avoid raw
+// magic strings.
+const (
+	transportTCP = "tcp"
+	transportUDP = "udp"
+)
+
 func TestSourceNeedsReconfigure(t *testing.T) {
 	t.Parallel()
 
@@ -148,10 +155,10 @@ func TestSourceNeedsReconfigure(t *testing.T) {
 			// resolves the transport.
 			name: "transport unchanged is a no-op",
 			running: &audiocore.AudioSource{
-				SampleRate: 48000, BitDepth: 16, Channels: 1, Transport: "tcp",
+				SampleRate: 48000, BitDepth: 16, Channels: 1, Transport: transportTCP,
 			},
 			desired: &audiocore.SourceConfig{
-				SampleRate: 48000, BitDepth: 16, Channels: 1, Transport: "tcp",
+				SampleRate: 48000, BitDepth: 16, Channels: 1, Transport: transportTCP,
 			},
 			expected: false,
 		},
@@ -173,10 +180,10 @@ func TestSourceNeedsReconfigure(t *testing.T) {
 			// MUST restart. A hardcoded empty->tcp canonicalization would mask this.
 			name: "transport udp to tcp changes",
 			running: &audiocore.AudioSource{
-				SampleRate: 48000, BitDepth: 16, Channels: 1, Transport: "udp",
+				SampleRate: 48000, BitDepth: 16, Channels: 1, Transport: transportUDP,
 			},
 			desired: &audiocore.SourceConfig{
-				SampleRate: 48000, BitDepth: 16, Channels: 1, Transport: "tcp",
+				SampleRate: 48000, BitDepth: 16, Channels: 1, Transport: transportTCP,
 			},
 			expected: true,
 		},

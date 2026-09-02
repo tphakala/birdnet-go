@@ -65,7 +65,7 @@ func TestBuildSourceConfigsWithModels_RTSPStreamCarriesTransport(t *testing.T) {
 			URL:       "rtsp://cam-udp",
 			Enabled:   true,
 			Type:      conf.StreamTypeRTSP,
-			Transport: "udp",
+			Transport: transportUDP,
 			Models:    []string{"birdnet"},
 		},
 	}
@@ -77,7 +77,7 @@ func TestBuildSourceConfigsWithModels_RTSPStreamCarriesTransport(t *testing.T) {
 	require.Len(t, configs, 1)
 	cfg := findConfigByConnection(configs, "rtsp://cam-udp")
 	require.NotNil(t, cfg, "rtsp stream config should be present")
-	assert.Equal(t, "udp", cfg.Transport, "per-stream transport should flow to the pipeline")
+	assert.Equal(t, transportUDP, cfg.Transport, "per-stream transport should flow to the pipeline")
 }
 
 // TestBuildSourceConfigsWithModels_RTSPStreamResolvesGlobalTransport verifies a
@@ -89,7 +89,7 @@ func TestBuildSourceConfigsWithModels_RTSPStreamResolvesGlobalTransport(t *testi
 	t.Cleanup(func() { conftest.SetTestSettings(prev) })
 
 	settings := &conf.Settings{}
-	settings.Realtime.RTSP.Transport = "udp" // global default
+	settings.Realtime.RTSP.Transport = transportUDP // global default
 	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
 		{
 			Name:    "no-transport-stream",
@@ -108,7 +108,7 @@ func TestBuildSourceConfigsWithModels_RTSPStreamResolvesGlobalTransport(t *testi
 	require.Len(t, configs, 1)
 	cfg := findConfigByConnection(configs, "rtsp://cam-global")
 	require.NotNil(t, cfg, "rtsp stream config should be present")
-	assert.Equal(t, "udp", cfg.Transport, "unset per-stream transport must resolve to the global default")
+	assert.Equal(t, transportUDP, cfg.Transport, "unset per-stream transport must resolve to the global default")
 }
 
 // TestBuildSourceConfigsWithModels_StreamURLInAudioSources verifies that a

@@ -17,6 +17,12 @@ import (
 // testModelID is used by tests to verify analysis buffer allocation.
 const testModelID = "BirdNET_V2.4"
 
+// Named RTSP transport values for tests.
+const (
+	transportTCP = "tcp"
+	transportUDP = "udp"
+)
+
 // BirdNET v2.4 analysis buffer dimensions: 3s of 16-bit 48kHz mono audio.
 const (
 	testClipBytes    = 288000 // 48000 * 3 * 1 * 2
@@ -77,9 +83,9 @@ func TestEngine_resolveTransport(t *testing.T) {
 		streamTransport string
 		want            string
 	}{
-		{name: "per-stream wins over default", engineDefault: "tcp", streamTransport: "udp", want: "udp"},
-		{name: "empty per-stream falls back to default", engineDefault: "tcp", streamTransport: "", want: "tcp"},
-		{name: "per-stream used when default empty", engineDefault: "", streamTransport: "udp", want: "udp"},
+		{name: "per-stream wins over default", engineDefault: transportTCP, streamTransport: transportUDP, want: transportUDP},
+		{name: "empty per-stream falls back to default", engineDefault: transportTCP, streamTransport: "", want: transportTCP},
+		{name: "per-stream used when default empty", engineDefault: "", streamTransport: transportUDP, want: transportUDP},
 		{name: "both empty stays empty (ffmpeg guard applies later)", engineDefault: "", streamTransport: "", want: ""},
 	}
 
@@ -380,7 +386,7 @@ func TestEngine_ReconfigureSource(t *testing.T) {
 func TestEngine_ReconfigureSource_NonRTSPTransportStaysEmpty(t *testing.T) {
 	t.Parallel()
 	// Engine default is a concrete transport; the non-RTSP source must not pick it up.
-	eng := New(t.Context(), &Config{Logger: audiocore.GetLogger(), Transport: "tcp"}, nil)
+	eng := New(t.Context(), &Config{Logger: audiocore.GetLogger(), Transport: transportTCP}, nil)
 	eng.SetPrimaryModel(testModelID, testClipBytes, testOverlapBytes, testReadSize)
 	t.Cleanup(eng.Stop)
 
