@@ -1106,13 +1106,33 @@ func sourceNeedsReconfigure(running *audiocore.AudioSource, desired *audiocore.S
 	// running FFmpeg, silently breaking hot-reload.
 	mediaModeChanged := conf.MediaMode(running.MediaMode).Canonical() !=
 		conf.MediaMode(desired.MediaMode).Canonical()
+	// Both sides carry the resolved concrete transport (buildSourceConfigsWithModels
+	// resolves it via RTSPSettings.ResolveTransport, and the registry stores that
+	// same value), so a direct compare is correct. It must NOT canonicalize an
+	// empty value to conf.DefaultTransport here: the true default is the engine
+	// global, which can be "udp", and hardcoding "tcp" would mask a real
+	// udp->tcp change (issue #4240 hot-reload path).
+	transportChanged := running.Transport != desired.Transport
 	return running.SampleRate != desired.SampleRate ||
 		sourceSampleRateChanged ||
 		running.BitDepth != desired.BitDepth ||
 		running.Channels != desired.Channels ||
 		channelModeChanged ||
 		mediaModeChanged ||
+		transportChanged ||
 		sourceChannelsChanged
+}
+
+// rtspStreamTransport resolves the concrete transport for an rtsp.streams entry:
+// the per-stream value if set, else the global default (via ResolveTransport),
+// and only for RTSP/RTMP types where transport applies. Resolving here keeps the
+// built SourceConfig, the registry entry, and the engine's FFmpeg args all in
+// agreement on one concrete value, so change detection compares like with like.
+func rtspStreamTransport(stream *conf.StreamConfig, rtsp *conf.RTSPSettings) string {
+	if stream.Type != conf.StreamTypeRTSP && stream.Type != conf.StreamTypeRTMP {
+		return ""
+	}
+	return rtsp.ResolveTransport(stream.Transport)
 }
 
 // resolveDesiredModelSet resolves config-level model IDs to registry IDs,
@@ -1442,6 +1462,7 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 				SourceChannels:   probe.channels,
 				ChannelMode:      string(stream.ChannelMode),
 				MediaMode:        string(stream.MediaMode),
+				Transport:        rtspStreamTransport(stream, &settings.Realtime.RTSP),
 				Gain:             stream.Gain,
 			},
 			modelIDs: stream.Models,
@@ -1481,6 +1502,10 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 		// stream URL from being opened as an ALSA device (which fails and
 		// breaks live audio) even before the config migration relocates it.
 		sourceType := audiocore.SourceTypeAudioCard
+		// transport stays empty for ALSA cards; a misplaced RTSP/RTMP stream URL
+		// resolves to the global default so the built config carries the same
+		// concrete value the engine will use (audio.sources has no per-stream field).
+		transport := ""
 		if streamType, isStream := audiocore.StreamSourceType(device); isStream {
 			if _, dup := streamConns[device]; dup {
 				// Already produced from rtsp.streams; skip the duplicate so the
@@ -1488,6 +1513,9 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 				continue
 			}
 			sourceType = streamType
+			if streamType == audiocore.SourceTypeRTSP || streamType == audiocore.SourceTypeRTMP {
+				transport = settings.Realtime.RTSP.ResolveTransport("")
+			}
 		}
 
 		result = append(result, sourceConfigWithModels{
@@ -1498,6 +1526,7 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 				SampleRate:       sampleRate,
 				BitDepth:         conf.BitDepth,
 				Channels:         1,
+				Transport:        transport,
 				Gain:             src.Gain,
 			},
 			modelIDs: src.Models,

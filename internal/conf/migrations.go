@@ -220,12 +220,14 @@ func inferStreamType(url string) string {
 
 // MigrateRTSPConfig migrates legacy URLs []string to Streams []StreamConfig.
 // This migration:
-// - Skips if Streams already has entries (already migrated)
-// - Only migrates if URLs has data
-// - Trims whitespace and skips empty URLs
-// - Infers stream type from URL scheme
-// - Preserves the global Transport setting for RTSP/RTMP streams
-// - Returns true if migration occurred, false if skipped
+//   - Skips if Streams already has entries (already migrated)
+//   - Only migrates if URLs has data
+//   - Trims whitespace and skips empty URLs
+//   - Infers stream type from URL scheme
+//   - Copies the global Transport into each RTSP/RTMP stream entry AND keeps the
+//     global Transport in place, because the startup path reads the global value
+//     as the engine-wide default
+//   - Returns true if migration occurred, false if skipped
 func (s *Settings) MigrateRTSPConfig() bool {
 	rtsp := &s.Realtime.RTSP
 
@@ -289,9 +291,13 @@ func (s *Settings) MigrateRTSPConfig() bool {
 		return false
 	}
 
-	// Clear legacy fields
+	// Clear the legacy URLs list now that it has been migrated to Streams.
+	// Keep rtsp.Transport: it is copied into each per-stream entry above, but
+	// the startup path (cmd/serve/serve.go) still reads the global value as the
+	// engine-wide default transport. Clearing it made FFmpeg receive an empty
+	// -rtsp_transport and fail to open the stream on the next start (the value
+	// is present-but-empty, so the Viper default no longer applies).
 	rtsp.URLs = nil
-	rtsp.Transport = ""
 
 	GetLogger().Info("Migrated RTSP configuration to new streams format",
 		logger.Int("stream_count", len(rtsp.Streams)))
