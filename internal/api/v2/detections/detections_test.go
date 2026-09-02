@@ -609,16 +609,24 @@ func TestGetDetection(t *testing.T) {
 	testCases := []struct {
 		name           string
 		detectionID    string
+		authenticated  bool
 		mockSetup      func(*mock.Mock)
 		expectedStatus int
 		checkResponse  func(*testing.T, *httptest.ResponseRecorder)
 	}{
 		{
-			name:        "Valid detection",
-			detectionID: "1",
+			name:          "Valid detection",
+			detectionID:   "1",
+			authenticated: true,
 			mockSetup: func(m *mock.Mock) {
 				m.On("Get", "1").Return(mockNote, nil)
 				m.On("GetHourlyWeather", "2025-03-07").Return([]datastore.HourlyWeather{}, nil)
+				m.On("GetNoteResults", "1").Return([]datastore.Results{
+					{Species: "Melanerpes carolinus_Red-bellied Woodpecker_RBWO", Confidence: 0.81},
+					{Species: "Corvus brachyrhynchos_American Crow_AMCRO", Confidence: 0.95},
+					{Species: "Cyanocitta cristata_Blue Jay_BLJA", Confidence: 0.72},
+					{Species: "Melanerpes carolinus_Red-bellied Woodpecker_RBWO", Confidence: 0.86},
+				}, nil)
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
@@ -631,6 +639,7 @@ func TestGetDetection(t *testing.T) {
 				assert.Equal(t, "Corvus brachyrhynchos", response.ScientificName)
 				assert.Equal(t, "American Crow", response.CommonName)
 				assert.InDelta(t, 0.95, response.Confidence, 0.01)
+				require.NotNil(t, response.Source)
 				assert.Equal(t, "correct", response.Verified)
 				assert.False(t, response.Locked)
 				assert.Len(t, response.Comments, 1)
@@ -638,6 +647,52 @@ func TestGetDetection(t *testing.T) {
 				assert.Equal(t, uint(1), response.Comments[0].ID)
 				assert.NotEmpty(t, response.Comments[0].CreatedAt)
 				assert.NotEmpty(t, response.Comments[0].UpdatedAt)
+				require.Len(t, response.AlternativePredictions, 2)
+				assert.Equal(t, 2, response.AlternativePredictions[0].Rank)
+				assert.Equal(t, "Melanerpes carolinus", response.AlternativePredictions[0].ScientificName)
+				assert.Equal(t, "Red-bellied Woodpecker", response.AlternativePredictions[0].CommonName)
+				assert.Equal(t, "RBWO", response.AlternativePredictions[0].SpeciesCode)
+				assert.InDelta(t, 0.86, response.AlternativePredictions[0].Confidence, 0.001)
+				assert.Equal(t, 3, response.AlternativePredictions[1].Rank)
+				assert.Equal(t, "Cyanocitta cristata", response.AlternativePredictions[1].ScientificName)
+			},
+		},
+		{
+			name:          "Alternative predictions load failure does not fail detection",
+			detectionID:   "1",
+			authenticated: true,
+			mockSetup: func(m *mock.Mock) {
+				m.On("Get", "1").Return(mockNote, nil)
+				m.On("GetHourlyWeather", "2025-03-07").Return([]datastore.HourlyWeather{}, nil)
+				m.On("GetNoteResults", "1").Return([]datastore.Results{}, errors.New("results unavailable"))
+			},
+			expectedStatus: http.StatusOK,
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var response DetectionResponse
+				err := json.Unmarshal(rec.Body.Bytes(), &response)
+				require.NoError(t, err)
+				assert.Equal(t, uint(1), response.ID)
+				assert.Equal(t, "Corvus brachyrhynchos", response.ScientificName)
+				assert.Empty(t, response.AlternativePredictions)
+			},
+		},
+		{
+			name:        "Unauthenticated detection omits private fields and alternative query",
+			detectionID: "1",
+			mockSetup: func(m *mock.Mock) {
+				m.On("Get", "1").Return(mockNote, nil)
+				m.On("GetHourlyWeather", "2025-03-07").Return([]datastore.HourlyWeather{}, nil)
+			},
+			expectedStatus: http.StatusOK,
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var response DetectionResponse
+				err := json.Unmarshal(rec.Body.Bytes(), &response)
+				require.NoError(t, err)
+				assert.Equal(t, uint(1), response.ID)
+				assert.Nil(t, response.Source)
+				assert.Empty(t, response.AlternativePredictions)
 			},
 		},
 		{
@@ -663,6 +718,7 @@ func TestGetDetection(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup mock expectations
 			mockDS.ExpectedCalls = nil
+			controller.isClientAuthenticated = func(echo.Context) bool { return tc.authenticated }
 			tc.mockSetup(&mockDS.Mock)
 
 			// Create request
