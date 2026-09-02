@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 
 	ov "github.com/tphakala/birdnet-go/internal/inference/openvino"
 )
@@ -288,6 +289,10 @@ func TestOpenVINOHasDeviceDoesNotBlockOnInFlightProbe(t *testing.T) {
 	}
 	calls := fakeOVProbeChild(t, "hang")
 	shortenOVProbeTimeout(t, 2*time.Second)
+
+	// If an assertion below fails before <-done, the probe goroutine (and its
+	// child) would outlive the test; make that a reported leak, not a silent one.
+	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
 
 	done := make(chan struct{})
 	go func() {

@@ -151,17 +151,30 @@ func OpenVINOProbeDevices(libraryPath string) ([]string, error) {
 		ovProbe.inFlight[libraryPath] = inFlight
 		ovProbe.mu.Unlock()
 
-		devices, cacheable, err := runOVProbe(libraryPath)
+		return probeAndPublish(libraryPath, inFlight)
+	}
+}
 
+// probeAndPublish runs the probe child for libraryPath, records a cacheable
+// verdict, and always releases the in-flight registration. The release is
+// deferred so that a panic inside the exec plumbing cannot leave the path
+// marked in flight forever, which would block every later caller on <-wait.
+func probeAndPublish(libraryPath string, inFlight chan struct{}) (devices []string, err error) {
+	defer func() {
 		ovProbe.mu.Lock()
-		if err == nil || cacheable {
-			ovProbe.results[libraryPath] = ovProbeResult{devices: devices, err: err}
-		}
 		delete(ovProbe.inFlight, libraryPath)
 		close(inFlight)
 		ovProbe.mu.Unlock()
-		return slices.Clone(devices), err
+	}()
+
+	devices, cacheable, err := runOVProbe(libraryPath)
+
+	ovProbe.mu.Lock()
+	if err == nil || cacheable {
+		ovProbe.results[libraryPath] = ovProbeResult{devices: devices, err: err}
 	}
+	ovProbe.mu.Unlock()
+	return slices.Clone(devices), err
 }
 
 // cachedOVProbeDevices returns the cached probe result for the most recently
