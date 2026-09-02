@@ -1,0 +1,68 @@
+name: OpenSSF Scorecard
+
+# Runs the OpenSSF Scorecard analysis, which scores the repository against a set
+# of automated security best-practice checks (branch protection, pinned
+# dependencies, token permissions, dangerous workflow patterns, SAST, and so
+# on). Results are uploaded to the GitHub code-scanning dashboard and, when
+# publish_results is enabled, to the public Scorecard API that backs the
+# Scorecard badge and deps.dev.
+on:
+  # Weekly re-score so drift (a new dependency, a relaxed setting) surfaces
+  # without waiting for the next push.
+  schedule:
+    - cron: '27 6 * * 1'
+  # Re-score on every push to the default branch so changes are reflected
+  # promptly. Scorecard analyzes only the default branch.
+  push:
+    branches:
+      - main
+  # Needed for the Branch-Protection check to read the ruleset via the token
+  # granted on this event.
+  branch_protection_rule:
+
+# Cancel an in-flight run when a newer commit lands on main.
+concurrency:
+  group: scorecard-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least-privilege at the workflow level; the job elevates only what it needs.
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-24.04
+    permissions:
+      # Required to upload the SARIF results to the code-scanning dashboard.
+      security-events: write
+      # Required by the Scorecard publish step to obtain a short-lived OIDC token
+      # used to attest the results to the public API.
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run analysis
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          # Publish results to the public OpenSSF API. This powers the Scorecard
+          # badge and the deps.dev score, and is safe for a public repository.
+          publish_results: true
+
+      # Retain the raw SARIF as a build artifact for debugging and offline review.
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: SARIF file
+          path: results.sarif
+          retention-days: 5
+
+      # Surface the findings in the Security > Code scanning tab.
+      - name: Upload to code-scanning
+        uses: github/codeql-action/upload-sarif@4e94bd11f71e507f7f87df81788dff88d1dacbfb # v4.31.0
+        with:
+          sarif_file: results.sarif
