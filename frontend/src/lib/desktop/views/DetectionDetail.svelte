@@ -192,7 +192,7 @@
     if (activeTab !== 'history') return;
     const det = detection;
     if (!det?.scientificName || !det.date) return;
-    void speciesHistory.load(det.scientificName, det.date, String(det.id));
+    void speciesHistory.load(det.scientificName, det.date, det.id);
   });
 
   // Fetch detection data

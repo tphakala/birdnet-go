@@ -11,7 +11,7 @@
  *
  * Usage:
  *   const history = useSpeciesHistory();
- *   await history.load(detection.scientificName, detection.date, String(detection.id));
+ *   await history.load(detection.scientificName, detection.date, detection.id);
  */
 
 import { api } from '$lib/utils/api';
@@ -28,7 +28,8 @@ export const HISTORY_WINDOW_DAYS = 30;
 export const RECENT_LIMIT = 10;
 
 export interface SpeciesHistoryEntry {
-  id: string;
+  /** Numeric, as the API sends it (`ID uint` in the detections response). */
+  id: number;
   timestamp: string;
   confidence: number;
 }
@@ -104,7 +105,7 @@ export function useSpeciesHistory() {
   async function load(
     scientificName: string,
     anchorDate: string,
-    currentDetectionId: string
+    currentDetectionId: number
   ): Promise<void> {
     const name = scientificName.trim();
     if (name === '' || anchorDate === '') return;
