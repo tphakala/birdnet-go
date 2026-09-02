@@ -20,7 +20,7 @@
     <img src="https://img.shields.io/badge/Built%20with-Go-teal?style=flat-square&logo=go">
   </a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/tphakala/birdnet-go">
-    <img src="https://api.scorecard.dev/projects/github.com/tphakala/birdnet-go/badge">
+    <img src="https://img.shields.io/ossf-scorecard/github.com/tphakala/birdnet-go?label=OpenSSF%20Scorecard&style=flat-square">
   </a>
 
   <br>
