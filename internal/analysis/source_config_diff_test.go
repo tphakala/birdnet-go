@@ -13,6 +13,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
+// Named RTSP transport values for tests, so the diff/resolution cases avoid raw
+// magic strings.
+const (
+	transportTCP = "tcp"
+	transportUDP = "udp"
+)
+
 func TestSourceNeedsReconfigure(t *testing.T) {
 	t.Parallel()
 
@@ -139,6 +146,44 @@ func TestSourceNeedsReconfigure(t *testing.T) {
 			},
 			desired: &audiocore.SourceConfig{
 				SampleRate: 48000, BitDepth: 16, Channels: 1, MediaMode: string(conf.MediaModeAudioOnly),
+			},
+			expected: true,
+		},
+		{
+			// Both sides carry the resolved concrete transport, so equal values
+			// are a no-op. This is the common case after buildSourceConfigsWithModels
+			// resolves the transport.
+			name: "transport unchanged is a no-op",
+			running: &audiocore.AudioSource{
+				SampleRate: 48000, BitDepth: 16, Channels: 1, Transport: transportTCP,
+			},
+			desired: &audiocore.SourceConfig{
+				SampleRate: 48000, BitDepth: 16, Channels: 1, Transport: transportTCP,
+			},
+			expected: false,
+		},
+		{
+			// Non-RTSP sources carry no transport on either side; empty vs empty
+			// must not be seen as a change.
+			name: "empty transport both sides is a no-op",
+			running: &audiocore.AudioSource{
+				SampleRate: 48000, BitDepth: 16, Channels: 1, Transport: "",
+			},
+			desired: &audiocore.SourceConfig{
+				SampleRate: 48000, BitDepth: 16, Channels: 1, Transport: "",
+			},
+			expected: false,
+		},
+		{
+			// The issue #4240 hot-reload path: a stream running on the global "udp"
+			// (resolved to a concrete "udp" on both sides) edited to explicit "tcp"
+			// MUST restart. A hardcoded empty->tcp canonicalization would mask this.
+			name: "transport udp to tcp changes",
+			running: &audiocore.AudioSource{
+				SampleRate: 48000, BitDepth: 16, Channels: 1, Transport: transportUDP,
+			},
+			desired: &audiocore.SourceConfig{
+				SampleRate: 48000, BitDepth: 16, Channels: 1, Transport: transportTCP,
 			},
 			expected: true,
 		},

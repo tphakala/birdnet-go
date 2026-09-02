@@ -258,6 +258,22 @@ func (s *StreamConfig) validateURLScheme() error {
 	return nil
 }
 
+// ResolveTransport returns the concrete RTSP transport to use for a stream given
+// its per-stream value: the per-stream value when set, otherwise the global
+// RTSPSettings.Transport, otherwise DefaultTransport. This is the single owner of
+// the "per-stream else global else default" rule, so the migration, the startup
+// engine default, and the audio pipeline all resolve transport the same way and
+// never disagree about what an unset value means.
+func (r *RTSPSettings) ResolveTransport(perStreamTransport string) string {
+	if perStreamTransport != "" {
+		return perStreamTransport
+	}
+	if r.Transport != "" {
+		return r.Transport
+	}
+	return DefaultTransport
+}
+
 // ApplyStreamDefaults sets default transport for RTSP/RTMP streams that have an empty
 // transport field. This handles the case where users write the new streams: YAML format
 // directly without specifying per-stream transport; the global RTSPSettings.Transport

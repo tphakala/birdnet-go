@@ -17,6 +17,12 @@ import (
 // testModelID is used by tests to verify analysis buffer allocation.
 const testModelID = "BirdNET_V2.4"
 
+// Named RTSP transport values for tests.
+const (
+	transportTCP = "tcp"
+	transportUDP = "udp"
+)
+
 // BirdNET v2.4 analysis buffer dimensions: 3s of 16-bit 48kHz mono audio.
 const (
 	testClipBytes    = 288000 // 48000 * 3 * 1 * 2
@@ -63,6 +69,34 @@ func TestEngine_Accessors(t *testing.T) {
 	assert.NotNil(t, eng.FFmpegManager(), "FFmpegManager() should return non-nil")
 	assert.NotNil(t, eng.DeviceManager(), "DeviceManager() should return non-nil")
 	assert.Nil(t, eng.Scheduler(), "Scheduler() should be nil when no scheduler provided")
+}
+
+// TestEngine_resolveTransport verifies that a per-stream transport wins over
+// the engine-wide default, and that an unset per-stream value falls back to
+// the engine default (issue #4240).
+func TestEngine_resolveTransport(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		engineDefault   string
+		streamTransport string
+		want            string
+	}{
+		{name: "per-stream wins over default", engineDefault: transportTCP, streamTransport: transportUDP, want: transportUDP},
+		{name: "empty per-stream falls back to default", engineDefault: transportTCP, streamTransport: "", want: transportTCP},
+		{name: "per-stream used when default empty", engineDefault: "", streamTransport: transportUDP, want: transportUDP},
+		{name: "both empty stays empty (ffmpeg guard applies later)", engineDefault: "", streamTransport: "", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			eng := New(t.Context(), &Config{Logger: audiocore.GetLogger(), Transport: tt.engineDefault}, nil)
+			t.Cleanup(eng.Stop)
+			assert.Equal(t, tt.want, eng.resolveTransport(tt.streamTransport))
+		})
+	}
 }
 
 // TestEngine_AddSource_Stream adds an RTSP source and verifies that it is
@@ -340,6 +374,51 @@ func TestEngine_ReconfigureSource(t *testing.T) {
 	// Verify the FFmpeg stream was restarted.
 	health := eng.FFmpegManager().AllStreamHealth()
 	assert.Contains(t, health, "test_reconfig_001", "stream should be restarted after reconfigure")
+}
+
+// TestEngine_ReconfigureSource_NonRTSPTransportStaysEmpty guards against the
+// hot-reload restart loop for non-RTSP stream types (issue #4240). A non-RTSP
+// source (HLS/HTTP/UDP) carries an empty Transport in its desired config, so the
+// reconfigure write-back must store that empty value verbatim, NOT re-resolve it
+// to the engine default. If it stored a concrete default, the registry entry
+// ("tcp") would never equal the empty desired value and every later reload would
+// restart the stream forever.
+func TestEngine_ReconfigureSource_NonRTSPTransportStaysEmpty(t *testing.T) {
+	t.Parallel()
+	// Engine default is a concrete transport; the non-RTSP source must not pick it up.
+	eng := New(t.Context(), &Config{Logger: audiocore.GetLogger(), Transport: transportTCP}, nil)
+	eng.SetPrimaryModel(testModelID, testClipBytes, testOverlapBytes, testReadSize)
+	t.Cleanup(eng.Stop)
+
+	cfg := &audiocore.SourceConfig{
+		ID:               "test_hls_transport",
+		DisplayName:      "HLS Source",
+		Type:             audiocore.SourceTypeHLS,
+		ConnectionString: "https://example.com/live/playlist.m3u8",
+		SampleRate:       48000,
+		BitDepth:         16,
+		Channels:         1,
+		// Transport intentionally empty: HLS does not use -rtsp_transport.
+	}
+	require.NoError(t, eng.AddSource(cfg))
+
+	src, ok := eng.Registry().Get("test_hls_transport")
+	require.True(t, ok)
+	assert.Empty(t, src.Transport, "non-RTSP source must be registered with an empty transport")
+
+	// Reconfigure an unrelated field; desired transport is still empty.
+	newCfg := &audiocore.SourceConfig{
+		ConnectionString: "https://example.com/live/playlist.m3u8",
+		SampleRate:       32000,
+		BitDepth:         16,
+		Channels:         1,
+	}
+	require.NoError(t, eng.ReconfigureSource("test_hls_transport", newCfg))
+
+	src, ok = eng.Registry().Get("test_hls_transport")
+	require.True(t, ok)
+	assert.Empty(t, src.Transport,
+		"reconfigure must not re-resolve a non-RTSP transport to the engine default")
 }
 
 // TestEngine_ReconfigureSource_NotFound verifies that reconfiguring a

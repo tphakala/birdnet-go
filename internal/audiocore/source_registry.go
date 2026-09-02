@@ -140,6 +140,7 @@ func (r *SourceRegistry) Register(cfg *SourceConfig) (*AudioSource, error) {
 		SourceChannels:   cfg.SourceChannels,
 		ChannelMode:      cfg.ChannelMode,
 		MediaMode:        cfg.MediaMode,
+		Transport:        cfg.Transport,
 		Gain:             cfg.Gain,
 		State:            SourceInactive,
 		RegisteredAt:     time.Now(),
@@ -315,19 +316,24 @@ func (r *SourceRegistry) UpdateAudioParams(sourceID string, sampleRate, bitDepth
 	return true
 }
 
-// SyncReconfiguredParams updates the registry entry's mode and probed source-shape
-// fields after an in-place reconfigure. Register writes these once at add time and
-// ReconfigureSource does not re-register, so without this the registry keeps the
-// values captured when the source was first added. Because sourceNeedsReconfigure
-// diffs the desired config against the registry entry, a stale entry makes a
-// change to only these fields re-trigger on every subsequent reconfigure and
-// restart the stream indefinitely; quiet-hours resume (which rebuilds the stream
-// config from the registry) would also use the old values. Source-shape fields are
-// only overwritten when the new value is known (non-zero), matching the "desired
-// != 0" guard in sourceNeedsReconfigure. It does not notify; the caller's
-// following UpdateAudioParams emits the SourceReconfigured event with the fully
-// updated snapshot.
-func (r *SourceRegistry) SyncReconfiguredParams(sourceID, channelMode, mediaMode string, sourceSampleRate, sourceChannels int) bool {
+// SyncReconfiguredParams updates the registry entry's mode, transport, and probed
+// source-shape fields after an in-place reconfigure. Register writes these once at
+// add time and ReconfigureSource does not re-register, so without this the registry
+// keeps the values captured when the source was first added. Because
+// sourceNeedsReconfigure diffs the desired config against the registry entry, a
+// stale entry makes a change to only these fields re-trigger on every subsequent
+// reconfigure and restart the stream indefinitely; quiet-hours resume (which
+// rebuilds the stream config from the registry) would also use the old values.
+// transport is stored EXACTLY as the caller passes it (the pipeline's desired
+// value, matching what Register stores), NOT re-resolved to the engine default:
+// buildSourceConfigsWithModels leaves it empty for non-RTSP stream types, so
+// re-resolving here would store a concrete default that never equals the empty
+// desired value and would re-trigger a restart on every later reload. Source-shape
+// fields are only overwritten when the new value is known (non-zero), matching the
+// "desired != 0" guard in sourceNeedsReconfigure. It does not notify; the caller's following
+// UpdateAudioParams emits the SourceReconfigured event with the fully updated
+// snapshot.
+func (r *SourceRegistry) SyncReconfiguredParams(sourceID, channelMode, mediaMode, transport string, sourceSampleRate, sourceChannels int) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	src, ok := r.sources[sourceID]
@@ -336,6 +342,7 @@ func (r *SourceRegistry) SyncReconfiguredParams(sourceID, channelMode, mediaMode
 	}
 	src.ChannelMode = channelMode
 	src.MediaMode = mediaMode
+	src.Transport = transport
 	if sourceSampleRate != 0 {
 		src.SourceSampleRate = sourceSampleRate
 	}
