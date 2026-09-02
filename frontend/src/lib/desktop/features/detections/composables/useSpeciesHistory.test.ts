@@ -23,12 +23,12 @@ function descResponse() {
     currentPage: 1,
     results: [
       {
-        id: '20481',
+        id: 20481,
         timestamp: '2026-07-26T08:14:40-04:00',
         confidence: 0.94,
       },
       {
-        id: '20480',
+        id: 20480,
         timestamp: '2026-07-26T08:14:00-04:00',
         confidence: 0.9,
       },
@@ -44,7 +44,7 @@ function ascResponse() {
     currentPage: 1,
     results: [
       {
-        id: '1',
+        id: 1,
         timestamp: '2026-06-25T09:21:51-04:00',
         confidence: 0.81,
       },
@@ -60,7 +60,7 @@ function cardinalAscResponse() {
     currentPage: 1,
     results: [
       {
-        id: '100',
+        id: 100,
         timestamp: '2026-05-01T10:30:00-04:00', // Completely different timestamp
         confidence: 0.88,
       },
@@ -76,7 +76,7 @@ function cardinalDescResponse() {
     currentPage: 1,
     results: [
       {
-        id: '200',
+        id: 200,
         timestamp: '2026-07-20T15:45:00-04:00', // Different from Spinus
         confidence: 0.91,
       },
@@ -126,7 +126,7 @@ describe('useSpeciesHistory', () => {
   it('derives first heard, last heard and lifetime total', async () => {
     wireHappyPath();
     const h = useSpeciesHistory();
-    await h.load('Spinus tristis', '2026-07-26', '20481');
+    await h.load('Spinus tristis', '2026-07-26', 20481);
     flushSync();
 
     expect(h.data?.firstHeard).toBe('2026-06-25T09:21:51-04:00');
@@ -139,7 +139,7 @@ describe('useSpeciesHistory', () => {
   it('zero-fills and ascending-sorts the daily counts across the whole window', async () => {
     wireHappyPath();
     const h = useSpeciesHistory();
-    await h.load('Spinus tristis', '2026-07-26', '20481');
+    await h.load('Spinus tristis', '2026-07-26', 20481);
     flushSync();
 
     const counts = h.data?.dailyCounts ?? [];
@@ -158,10 +158,10 @@ describe('useSpeciesHistory', () => {
   it('excludes the detection being viewed from the recent list', async () => {
     wireHappyPath();
     const h = useSpeciesHistory();
-    await h.load('Spinus tristis', '2026-07-26', '20481');
+    await h.load('Spinus tristis', '2026-07-26', 20481);
     flushSync();
 
-    expect(h.data?.recent.map(r => r.id)).toEqual(['20480']);
+    expect(h.data?.recent.map(r => r.id)).toEqual([20480]);
   });
 
   it('reports an error and keeps data null when a request fails', async () => {
@@ -169,7 +169,7 @@ describe('useSpeciesHistory', () => {
     get.mockResolvedValue(dailyResponse());
 
     const h = useSpeciesHistory();
-    await h.load('Spinus tristis', '2026-07-26', '20481');
+    await h.load('Spinus tristis', '2026-07-26', 20481);
     flushSync();
 
     expect(h.error).toBe('detections.history.loadError');
@@ -180,11 +180,11 @@ describe('useSpeciesHistory', () => {
   it('does not refetch the same species and anchor date twice', async () => {
     wireHappyPath();
     const h = useSpeciesHistory();
-    await h.load('Spinus tristis', '2026-07-26', '20481');
+    await h.load('Spinus tristis', '2026-07-26', 20481);
     flushSync();
     const callsAfterFirst = post.mock.calls.length;
 
-    await h.load('Spinus tristis', '2026-07-26', '20481');
+    await h.load('Spinus tristis', '2026-07-26', 20481);
     flushSync();
 
     expect(post.mock.calls.length).toBe(callsAfterFirst);
@@ -193,11 +193,11 @@ describe('useSpeciesHistory', () => {
   it('refetches when the species changes', async () => {
     wireHappyPath();
     const h = useSpeciesHistory();
-    await h.load('Spinus tristis', '2026-07-26', '20481');
+    await h.load('Spinus tristis', '2026-07-26', 20481);
     flushSync();
     const callsAfterFirst = post.mock.calls.length;
 
-    await h.load('Cardinalis cardinalis', '2026-07-26', '20481');
+    await h.load('Cardinalis cardinalis', '2026-07-26', 20481);
     flushSync();
 
     expect(post.mock.calls.length).toBeGreaterThan(callsAfterFirst);
@@ -206,7 +206,7 @@ describe('useSpeciesHistory', () => {
   it('sends an exact scientific-name filter and no free-text species term', async () => {
     wireHappyPath();
     const h = useSpeciesHistory();
-    await h.load('Spinus tristis', '2026-07-26', '20481');
+    await h.load('Spinus tristis', '2026-07-26', 20481);
     flushSync();
 
     const [url, body] = post.mock.calls[0] as [string, Record<string, unknown>];
@@ -218,14 +218,14 @@ describe('useSpeciesHistory', () => {
   it('reset clears data and allows a refetch', async () => {
     wireHappyPath();
     const h = useSpeciesHistory();
-    await h.load('Spinus tristis', '2026-07-26', '20481');
+    await h.load('Spinus tristis', '2026-07-26', 20481);
     flushSync();
 
     h.reset();
     flushSync();
     expect(h.data).toBeNull();
 
-    await h.load('Spinus tristis', '2026-07-26', '20481');
+    await h.load('Spinus tristis', '2026-07-26', 20481);
     flushSync();
     expect(h.data?.totalDetections).toBe(820);
   });
@@ -276,10 +276,10 @@ describe('useSpeciesHistory', () => {
     const h = useSpeciesHistory();
 
     // Start load for species A (will hang indefinitely)
-    h.load('Spinus tristis', '2026-07-26', '20481');
+    h.load('Spinus tristis', '2026-07-26', 20481);
 
     // Without awaiting A, start and await load for species B (resolves immediately)
-    await h.load('Cardinalis cardinalis', '2026-07-26', '20481');
+    await h.load('Cardinalis cardinalis', '2026-07-26', 20481);
     flushSync();
 
     // Species B should be loaded: total is 42, not 820
@@ -362,14 +362,14 @@ describe('useSpeciesHistory', () => {
     const h = useSpeciesHistory();
 
     // Start load A (Spinus tristis) — will hang on pendingA
-    h.load('Spinus tristis', '2026-07-26', '20481');
+    h.load('Spinus tristis', '2026-07-26', 20481);
 
     // Start load B (Cardinalis cardinalis) without awaiting A — aborts A
-    h.load('Cardinalis cardinalis', '2026-07-26', '20481');
+    h.load('Cardinalis cardinalis', '2026-07-26', 20481);
 
     // Start load C (third species: Turdus migratorius) without awaiting B — aborts B
     // This will use pendingC
-    h.load('Turdus migratorius', '2026-07-26', '20481');
+    h.load('Turdus migratorius', '2026-07-26', 20481);
 
     // Do NOT await C yet — leave it pending in flight
     flushSync();
