@@ -3,6 +3,7 @@ package classifier
 import (
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -155,7 +156,20 @@ func openVINOGPUAvailable(libraryPath string) bool {
 		}
 		return false
 	}
-	return inference.OpenVINOHasDevice(inference.OVDeviceGPU)
+	// Enumerate devices in a short-lived child process rather than in-process:
+	// ov_core_get_available_devices walks the vendor driver stack, and a fault
+	// there aborts the process before Go can recover (glibc heap-corruption
+	// SIGABRT during cgo, issue #4236 - a systemd crash-loop on the first GPU
+	// enablement). A crashing probe child degrades to the ordinary ORT
+	// fallback instead. The probe result is cached per process, so this costs
+	// one child run per library path.
+	devices, err := inference.OpenVINOProbeDevices(libraryPath)
+	if err != nil {
+		GetLogger().Warn("OpenVINO device probe failed; treating GPU as unavailable",
+			logger.Error(err))
+		return false
+	}
+	return slices.Contains(devices, inference.OVDeviceGPU)
 }
 
 // isLibraryAbsent reports whether err indicates the OpenVINO shared library is
