@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/inference"
 )
 
@@ -111,18 +112,70 @@ func TestModelSpec_BufferInterval(t *testing.T) {
 	tests := []struct {
 		name     string
 		clip     time.Duration
+		overlap  time.Duration
 		expected time.Duration
 	}{
-		{"BirdNET v2.4 (3s)", 3 * time.Second, 1500 * time.Millisecond},
-		{"Perch v2 (5s)", 5 * time.Second, 2500 * time.Millisecond},
+		{"3s clip, 50% overlap", 3 * time.Second, 1500 * time.Millisecond, 1500 * time.Millisecond},
+		{"5s clip, 50% overlap", 5 * time.Second, 2500 * time.Millisecond, 2500 * time.Millisecond},
+		{"3s clip, 2.4s overlap", 3 * time.Second, 2400 * time.Millisecond, 600 * time.Millisecond},
+		{"3s clip, zero overlap", 3 * time.Second, 0, 3 * time.Second},
+		{"5s clip, 4s overlap", 5 * time.Second, 4 * time.Second, 1 * time.Second},
+		{"overlap == clip floored", 3 * time.Second, 3 * time.Second, minAnalysisStep},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			spec := ModelSpec{SampleRate: 48000, ClipLength: tt.clip}
-			assert.Equal(t, tt.expected, spec.BufferInterval())
+			assert.Equal(t, tt.expected, spec.BufferInterval(tt.overlap))
 		})
 	}
+}
+
+func TestModelSpec_BufferDimensions(t *testing.T) {
+	t.Parallel()
+
+	// BirdNET v2.4: 48kHz, 3s, mono 16-bit -> 288000 clip bytes.
+	spec := ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second}
+	frame := conf.NumChannels * conf.BytesPerSample
+
+	t.Run("50% overlap", func(t *testing.T) {
+		t.Parallel()
+		clip, overlap, read := spec.BufferDimensions(1500 * time.Millisecond)
+		assert.Equal(t, 288000, clip)
+		assert.Equal(t, 144000, overlap)
+		assert.Equal(t, 144000, read)
+	})
+
+	t.Run("2.4s overlap gives 0.6s step", func(t *testing.T) {
+		t.Parallel()
+		clip, overlap, read := spec.BufferDimensions(2400 * time.Millisecond)
+		assert.Equal(t, 288000, clip)
+		assert.Equal(t, 230400, overlap) // 2.4s * 48000 * 2
+		assert.Equal(t, 57600, read)     // 0.6s * 48000 * 2
+	})
+
+	t.Run("zero overlap reads whole clip", func(t *testing.T) {
+		t.Parallel()
+		clip, overlap, read := spec.BufferDimensions(0)
+		assert.Equal(t, 288000, clip)
+		assert.Equal(t, 0, overlap)
+		assert.Equal(t, 288000, read)
+	})
+
+	t.Run("overlap at clip length is clamped to keep read positive", func(t *testing.T) {
+		t.Parallel()
+		clip, overlap, read := spec.BufferDimensions(3 * time.Second)
+		assert.Equal(t, 288000, clip)
+		assert.Positive(t, read, "read size must stay positive")
+		assert.Equal(t, clip-overlap, read)
+		assert.Equal(t, 0, read%frame, "read size must be frame-aligned")
+	})
+
+	t.Run("overlap bytes are frame-aligned", func(t *testing.T) {
+		t.Parallel()
+		_, overlap, _ := spec.BufferDimensions(2400 * time.Millisecond)
+		assert.Equal(t, 0, overlap%frame)
+	})
 }
 
 func TestModelSpec_EffectiveSampleRate(t *testing.T) {

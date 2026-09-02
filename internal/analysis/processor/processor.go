@@ -1692,16 +1692,10 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 // calculateMinDetectionsFromSettings computes minimum detections from settings alone.
 // This is a standalone function that doesn't require a Processor instance.
 func calculateMinDetectionsFromSettings(settings *conf.Settings) int {
-	// BirdNET uses 3-second chunks for analysis
+	// BirdNET uses 3-second chunks for analysis. Since Option A (issue #4096) the
+	// realtime buffer honors birdnet.overlap, so the analysis step is
+	// chunkDurationSeconds - overlap, matching the buffer's BufferInterval.
 	const chunkDurationSeconds = 3.0
-	// Bird vocalization reference window - typical duration of a bird call
-	// Used to calculate how many detections are possible within a single vocalization
-	const referenceWindowSeconds = 6.0
-	// Minimum segment length to prevent division by near-zero values
-	const minSegmentLength = 0.1
-	// Small epsilon to prevent floating-point rounding errors in ceil()
-	// Without this, values like 5.0000000003 would ceil to 6 instead of 5
-	const epsilon = 1e-9
 
 	// Get filtering level from settings
 	level := settings.Realtime.FalsePositiveFilter.Level
@@ -1718,7 +1712,7 @@ func calculateMinDetectionsFromSettings(settings *conf.Settings) int {
 			logger.Float64("overlap", overlap),
 			logger.Float64("chunk_duration", chunkDurationSeconds),
 			logger.String("operation", "calculate_min_detections"))
-		// Continue with safe fallback
+		// Continue with safe fallback (segment length is floored in the helper)
 	}
 
 	// Validate overlap meets minimum for level (warning only, don't block)
@@ -1733,24 +1727,8 @@ func calculateMinDetectionsFromSettings(settings *conf.Settings) int {
 		// Continue with calculation - system will work but may not achieve target filtering
 	}
 
-	// Calculate segment length (how often we analyze)
-	segmentLength := math.Max(minSegmentLength, chunkDurationSeconds-overlap)
-
-	// How many detections are possible within a 6-second bird vocalization window?
-	maxDetectionsIn6s := referenceWindowSeconds / segmentLength
-
-	// Get threshold percentage for this level
-	threshold := getThresholdForLevel(level)
-
-	// Calculate minimum required detections
-	// Use Ceil to ensure we require at least the threshold percentage
-	// Subtract epsilon before ceiling to handle floating-point precision issues
-	// (e.g., 5.0000000003 becomes 4.9999999993, which correctly ceils to 5)
-	// Always require at least 1 detection
-	required := maxDetectionsIn6s*threshold - epsilon
-	minDetections := int(math.Max(1, math.Ceil(required)))
-
-	return minDetections
+	// The analysis step (how often a new window is produced) is chunk - overlap.
+	return minDetectionsForSegment(chunkDurationSeconds-overlap, level)
 }
 
 // calculateMinDetections is a convenience method that calls calculateMinDetectionsFromSettings

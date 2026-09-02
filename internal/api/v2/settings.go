@@ -2450,6 +2450,7 @@ const (
 // pointer; the reasoning is at that call site.
 var settingsChangeChecks = []settingsChangeCheck{
 	{"BirdNET", "reload_birdnet", birdnetSettingsChanged, "Reloading BirdNET model with new settings...", notification.MsgSettingsReloadingBirdnet, ToastTypeInfo, toastDurationLong},
+	{"Analysis overlap", actionRestartAudioCapture, analysisOverlapChanged, "Restarting audio capture to apply new overlap...", "", ToastTypeInfo, toastDurationMedium},
 	{"Range filter", "rebuild_range_filter", rangeFilterSettingsChanged, "Rebuilding species range filter...", notification.MsgSettingsRebuildingRangeFilter, ToastTypeInfo, toastDurationMedium},
 	{"Species interval", "update_detection_intervals", intervalSettingsChanged, "Updating detection intervals...", notification.MsgSettingsUpdatingIntervals, ToastTypeInfo, toastDurationShort},
 	{"Dynamic thresholds", "reconfigure_dynamic_thresholds", dynamicThresholdEnabledChanged, "Reconfiguring dynamic thresholds...", notification.MsgSettingsReconfiguringDynamicThresholds, ToastTypeInfo, toastDurationMedium},
@@ -2666,6 +2667,18 @@ func birdnetSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	}
 
 	return false
+}
+
+// analysisOverlapChanged reports whether birdnet.overlap changed. Overlap drives
+// the realtime analysis-buffer cadence (read/overlap size), so a change requires
+// reallocating the analysis buffers. Overlap is not a per-source audio property,
+// so the diff-based reconfigure_audio_sources cannot see it; instead this triggers
+// restart_audio_capture, a full teardown and rebuild that re-applies the primary
+// model dimensions and reallocates every source's analysis buffers with the new
+// overlap. This is separate from reload_birdnet (which rebuilds the model
+// instance, not the source buffers).
+func analysisOverlapChanged(oldSettings, currentSettings *conf.Settings) bool {
+	return oldSettings.BirdNET.Overlap != currentSettings.BirdNET.Overlap
 }
 
 // dynamicThresholdEnabledChanged checks if the DynamicThreshold.Enabled flag was toggled.

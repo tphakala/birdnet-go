@@ -49,8 +49,12 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"BirdNET.Sensitivity": {categories: []hotReloadCategory{hotReloadFresh}},
 	// The base threshold is read live per detection; the dynamic threshold applies
 	// it against the shared per-species level at read time, so no recalc action fires.
-	"BirdNET.Threshold":          {categories: []hotReloadCategory{hotReloadFresh}},
-	"BirdNET.Overlap":            {categories: []hotReloadCategory{hotReloadFresh}},
+	"BirdNET.Threshold": {categories: []hotReloadCategory{hotReloadFresh}},
+	// Overlap is read fresh by the false-positive filter per flush, AND drives the
+	// realtime analysis-buffer cadence, so a change reallocates the buffers via a
+	// full audio-capture restart (restart_audio_capture; analysisOverlapChanged in
+	// the detector table).
+	"BirdNET.Overlap":            {categories: []hotReloadCategory{hotReloadFresh}, action: "restart_audio_capture"},
 	"BirdNET.Longitude":          {categories: []hotReloadCategory{hotReloadDisplay}, action: "rebuild_range_filter"},
 	"BirdNET.Latitude":           {categories: []hotReloadCategory{hotReloadDisplay}, action: "rebuild_range_filter"},
 	"BirdNET.LocationConfigured": {categories: []hotReloadCategory{hotReloadDisplay}},

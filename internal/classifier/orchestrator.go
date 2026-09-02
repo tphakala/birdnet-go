@@ -2135,8 +2135,13 @@ func (o *Orchestrator) PrimaryModelID() string {
 // ModelInfo if no primary is set.
 func (o *Orchestrator) PrimaryModelInfo() ModelInfo {
 	o.mu.RLock()
-	defer o.mu.RUnlock()
-	return o.ModelInfo
+	info := o.ModelInfo
+	o.mu.RUnlock()
+	// Stamp the effective overlap from the live settings so buffer allocation
+	// and cadence consumers honor birdnet.overlap (bat stays fixed at 50%).
+	// CurrentSettings is independently synchronized, so resolve outside o.mu.
+	info.Overlap = ResolveModelOverlap(info.ID, info.Spec, o.CurrentSettings())
+	return info
 }
 
 // ModelInfos returns ModelInfo for all registered models. Thread-safe.
@@ -2163,6 +2168,11 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 	primaryID := o.ModelInfo.ID
 	primaryInfo := o.ModelInfo
 	o.mu.RUnlock()
+
+	// Resolve overlap against the live settings snapshot (independently
+	// synchronized), so every returned ModelInfo carries the effective overlap
+	// used for buffer allocation and cadence.
+	settings := o.CurrentSettings()
 
 	infos := make([]ModelInfo, 0, len(refs))
 	for _, ref := range refs {
@@ -2202,6 +2212,7 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 		// count, so source it from the live instance to report what is actually
 		// loaded.
 		info.NumSpecies = instance.NumSpecies()
+		info.Overlap = ResolveModelOverlap(info.ID, info.Spec, settings)
 		infos = append(infos, info)
 	}
 	return infos
