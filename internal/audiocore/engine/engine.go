@@ -331,7 +331,13 @@ func (e *AudioEngine) StartStream(sourceID, url, transport string) error {
 // for the primary model. This must be called before AddSource to ensure
 // buffers are allocated with the correct model key and size.
 // clipBytes, overlapBytes, and readSize should be derived from the model's
-// ModelSpec.BufferDimensions(), matching the secondary model allocation path.
+// ModelSpec.BufferDimensions(overlap) with the resolved per-model overlap,
+// matching the secondary model allocation path.
+//
+// The primary* fields written here are not mutex-guarded: SetPrimaryModel and the
+// AddSource/RemoveSource readers must be serialized by the caller. The audio
+// pipeline does this with p.sourcesMu (startup and every restart hold it), so an
+// overlap hot-reload that re-applies these dims stays race-free.
 func (e *AudioEngine) SetPrimaryModel(id string, clipBytes, overlapBytes, readSize int) {
 	e.primaryModelID = id
 	e.primaryClipBytes = clipBytes

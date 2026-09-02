@@ -179,9 +179,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	// Set the primary model ID and buffer dimensions on the engine so that
 	// analysis buffers are allocated from the model's spec, not hardcoded
 	// constants. This matches the secondary model allocation path.
-	primaryInfo := bn.PrimaryModelInfo()
-	clipBytes, overlapBytes, readSize := primaryInfo.Spec.BufferDimensions()
-	p.engine.SetPrimaryModel(primaryInfo.ID, clipBytes, overlapBytes, readSize)
+	p.applyPrimaryModelDims()
 
 	// Register all loaded models in the ai_models database table so they
 	// appear even before any detections are saved.
@@ -499,9 +497,33 @@ func (p *AudioPipelineService) restartAudioCapture() {
 	// Remove all existing sources.
 	p.removeAllSources("restart")
 
+	// Re-resolve the primary model's buffer dimensions from current settings
+	// before re-adding sources, so a hot-reloaded birdnet.overlap takes effect
+	// (engine.AddSource allocates the primary buffer from these cached dims).
+	p.applyPrimaryModelDims()
+
 	// Re-add sources, register consumers, and update buffer monitors.
 	audioLevelChan := p.apiService.AudioLevelChan()
 	p.setupAudioSources(audioLevelChan, "restart")
+}
+
+// applyPrimaryModelDims resolves the primary model's analysis-buffer dimensions
+// from the current settings (honoring birdnet.overlap; the bat model stays fixed
+// at 50%) and pushes them to the engine, so subsequent AddSource calls allocate
+// the primary buffer at the current cadence. Called at startup and on every
+// audio-capture restart, so an overlap change routed through a restart
+// reallocates the primary buffer with the new dimensions.
+func (p *AudioPipelineService) applyPrimaryModelDims() {
+	if p.bnAnalyzer == nil {
+		return
+	}
+	bn := p.bnAnalyzer.BirdNET()
+	if bn == nil {
+		return
+	}
+	primaryInfo := bn.PrimaryModelInfo()
+	clipBytes, overlapBytes, readSize := primaryInfo.Spec.BufferDimensions(primaryInfo.Overlap)
+	p.engine.SetPrimaryModel(primaryInfo.ID, clipBytes, overlapBytes, readSize)
 }
 
 // RestartSource tears down and reinitializes a single audio source.
@@ -981,7 +1003,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				allocatedModels[modelInfos[i].ID] = true
 				continue
 			}
-			clipBytes, overlapBytes, readSize := modelInfos[i].Spec.BufferDimensions()
+			clipBytes, overlapBytes, readSize := modelInfos[i].Spec.BufferDimensions(modelInfos[i].Overlap)
 			if allocErr := bufMgr.AllocateAnalysis(sid, modelInfos[i].ID, clipBytes, overlapBytes, readSize); allocErr != nil {
 				log.Warn("failed to allocate analysis buffer",
 					logger.String("source_id", sid),

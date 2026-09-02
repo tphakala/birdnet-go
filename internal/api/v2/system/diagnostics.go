@@ -323,7 +323,7 @@ func (c *Handler) buildModelLoadInfoProvider() func() []checks.ModelLoadInfo {
 // buildPerModelInferenceProvider returns a closure that queries per-model
 // inference counters and model specs to produce per-model latency stats.
 // Each model's analysis window is derived from its own BufferInterval
-// (ClipLength / 2), not from a global setting.
+// (ClipLength - resolved overlap; the bat model stays fixed at 50%).
 func (c *Handler) buildPerModelInferenceProvider() func() []checks.ModelInferenceInfo {
 	return func() []checks.ModelInferenceInfo {
 		p := c.Processor
@@ -372,7 +372,7 @@ func mapInferenceSnapshots(snapshots map[string]inferencestats.PeekSnapshot, inf
 		name := modelID
 		if mi, ok := infoMap[modelID]; ok {
 			name = mi.DisplayName()
-			windowMS = float64(mi.Spec.BufferInterval().Milliseconds())
+			windowMS = float64(mi.Spec.BufferInterval(mi.Overlap).Milliseconds())
 		} else {
 			apicore.GetLogger().Warn("inference counter has no matching model info; surfacing raw id",
 				logger.String("model_id", modelID))
