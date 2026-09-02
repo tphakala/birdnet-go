@@ -163,6 +163,13 @@ func minDetectionsForSegment(segmentSeconds float64, level int) int {
 	if level == 0 {
 		return 1
 	}
+	// fpMinSegmentLength (0.1s) is coarser than the buffer's minAnalysisStep (1ms),
+	// so the FP-assumed step and the real buffer step diverge once the step drops
+	// below 0.1s, i.e. overlap > 2.9s on the 3s base clip. Overlap is driven by the
+	// false-positive filter level, which caps at 2.8s (getMinimumOverlapForLevel(5)),
+	// so the operational range never reaches that divergence; and it is conservative
+	// (fewer confirmations required than windows produced), so no valid detection is
+	// wrongly dropped even if it did.
 	if segmentSeconds < fpMinSegmentLength {
 		segmentSeconds = fpMinSegmentLength
 	}

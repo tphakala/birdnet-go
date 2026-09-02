@@ -41,8 +41,9 @@ func TestAnalysisOverlapDispatchesRestart(t *testing.T) {
 
 // TestAnalysisOverlapChanged verifies the birdnet.overlap change detector. Overlap
 // drives the realtime analysis-buffer cadence, so a change must be detected to
-// trigger reconfigure_audio_sources (which reallocates the buffers with new
-// dimensions); an unrelated save must not, so buffers are not needlessly rebuilt.
+// trigger restart_audio_capture (a full teardown that reallocates the buffers
+// with new dimensions); an unrelated save must not, so buffers are not needlessly
+// rebuilt.
 func TestAnalysisOverlapChanged(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

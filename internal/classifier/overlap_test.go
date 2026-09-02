@@ -80,7 +80,7 @@ func TestResolveModelOverlap_Perch5sScales(t *testing.T) {
 	s := &conf.Settings{}
 	s.BirdNET.Overlap = 2.4
 	// 2.4s on a 3s base = 80% -> 80% of 5s = 4.0s.
-	assert.Equal(t, 4*time.Second, ResolveModelOverlap(RegistryIDBirdNETV3, spec, s))
+	assert.Equal(t, 4*time.Second, ResolveModelOverlap(RegistryIDPerchV2, spec, s))
 }
 
 func TestResolveModelOverlap_ZeroOverlap(t *testing.T) {
