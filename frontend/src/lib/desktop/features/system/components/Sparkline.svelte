@@ -14,6 +14,8 @@
     datasets?: Dataset[];
     threshold?: number;
     thresholdColor?: string;
+    minValue?: number;
+    maxValue?: number;
     viewWidth?: number;
     viewHeight?: number;
     decorative?: boolean;
@@ -26,6 +28,8 @@
     datasets,
     threshold,
     thresholdColor = '#ef4444',
+    minValue,
+    maxValue,
     viewWidth = 200,
     viewHeight = 40,
     decorative = false,
@@ -65,6 +69,13 @@
     if (threshold != null) {
       if (threshold > globalMax) globalMax = threshold;
       if (threshold < globalMin) globalMin = threshold;
+    }
+    if (minValue != null) globalMin = minValue;
+    if (maxValue != null) globalMax = maxValue;
+    if (globalMin > globalMax) {
+      const min = globalMax;
+      globalMax = globalMin;
+      globalMin = min;
     }
     if (!isFinite(globalMin)) globalMin = 0;
     if (!isFinite(globalMax) || globalMax === globalMin) globalMax = globalMin + 1;

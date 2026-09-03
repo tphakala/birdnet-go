@@ -631,6 +631,18 @@
       "subtitle": "Arter der identificeres i realtid",
       "empty": "Alt er stille - ingen fugle registreret lige nu"
     },
+    "recentHearing": {
+      "title": "Senest hørt",
+      "subtitle": "Seneste {hours} timer",
+      "empty": "Ingen nylig artsaktivitet",
+      "loading": "Indlæser nylig artsaktivitet",
+      "detections": "{count} registreringer",
+      "confidence": "{confidence}% sikkerhed",
+      "confidenceTrend": "Sikkerhedstrend for {species}",
+      "controls": {
+        "refresh": "Opdater nylig artsaktivitet"
+      }
+    },
     "rejected": "Afvist",
     "newSpeciesHighlights": {
       "title": "Nye & tilbagevendende arter",
@@ -748,6 +760,8 @@
       "dailySummaryLoad": "Kunne ikke indlæse daglig oversigt",
       "recentDetectionsFetch": "Kunne ikke hente seneste registreringer: {status}",
       "recentDetectionsLoad": "Kunne ikke indlæse seneste registreringer",
+      "recentHearingFetch": "Kunne ikke hente nylig artsaktivitet: {status}",
+      "recentHearingLoad": "Kunne ikke indlæse nylig artsaktivitet",
       "configFetch": "Kunne ikke hente instrumentpanelkonfiguration: {status}"
     },
     "banner": {
@@ -814,6 +828,7 @@
       "dailySummary": "Daglig oversigt",
       "newSpeciesHighlights": "Nye artsrekorder",
       "currentlyHearing": "Hører lige nu",
+      "recentHearing": "Senest hørt",
       "detectionsGrid": "Seneste registreringer",
       "liveSpectrogram": "Live spektrogram",
       "videoEmbed": "Videoindlejring"

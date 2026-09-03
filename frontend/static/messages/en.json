@@ -631,6 +631,18 @@
       "subtitle": "Real-time species being identified",
       "empty": "All quiet - no birds detected right now"
     },
+    "recentHearing": {
+      "title": "Recently Heard",
+      "subtitle": "Last {hours} hours",
+      "empty": "No recent species activity",
+      "loading": "Loading recent species activity",
+      "detections": "{count} detections",
+      "confidence": "{confidence}% confidence",
+      "confidenceTrend": "Confidence trend for {species}",
+      "controls": {
+        "refresh": "Refresh recent species activity"
+      }
+    },
     "rejected": "Rejected",
     "newSpeciesHighlights": {
       "title": "New & Returning Species",
@@ -748,6 +760,8 @@
       "dailySummaryLoad": "Failed to load daily summary",
       "recentDetectionsFetch": "Failed to fetch recent detections: {status}",
       "recentDetectionsLoad": "Failed to load recent detections",
+      "recentHearingFetch": "Failed to fetch recent species activity: {status}",
+      "recentHearingLoad": "Failed to load recent species activity",
       "configFetch": "Failed to fetch dashboard config: {status}"
     },
     "banner": {
@@ -814,6 +828,7 @@
       "dailySummary": "Daily Summary",
       "newSpeciesHighlights": "New Species Highlights",
       "currentlyHearing": "Currently Hearing",
+      "recentHearing": "Recently Heard",
       "detectionsGrid": "Recent Detections",
       "liveSpectrogram": "Live Spectrogram",
       "videoEmbed": "Video Embed"

@@ -631,6 +631,18 @@
       "subtitle": "Lajeja tunnistetaan reaaliajassa",
       "empty": "Kaikki hiljaista - lintuja ei havaittu juuri nyt"
     },
+    "recentHearing": {
+      "title": "Viimeksi kuultu",
+      "subtitle": "Viimeiset {hours} tuntia",
+      "empty": "Ei viimeaikaista lajitoimintaa",
+      "loading": "Ladataan viimeaikaista lajitoimintaa",
+      "detections": "{count} havaintoa",
+      "confidence": "{confidence} % varmuus",
+      "confidenceTrend": "Varmuustrendi lajille {species}",
+      "controls": {
+        "refresh": "Päivitä viimeaikainen lajitoiminta"
+      }
+    },
     "rejected": "Hylätty",
     "newSpeciesHighlights": {
       "title": "Uudet ja palaavat lajit",
@@ -748,6 +760,8 @@
       "dailySummaryLoad": "Päivän aktiivisuuden lataus epäonnistui",
       "recentDetectionsFetch": "Viimeaikaisten havaintojen haku epäonnistui: {status}",
       "recentDetectionsLoad": "Viimeaikaisten havaintojen lataus epäonnistui",
+      "recentHearingFetch": "Viimeaikaisen lajitoiminnan haku epäonnistui: {status}",
+      "recentHearingLoad": "Viimeaikaisen lajitoiminnan lataus epäonnistui",
       "configFetch": "Etusivun asetusten haku epäonnistui: {status}"
     },
     "banner": {
@@ -814,6 +828,7 @@
       "dailySummary": "Päivittäinen yhteenveto",
       "newSpeciesHighlights": "Uudet lajihavainnot",
       "currentlyHearing": "Juuri nyt kuuluu",
+      "recentHearing": "Viimeksi kuultu",
       "detectionsGrid": "Viimeisimmät havainnot",
       "liveSpectrogram": "Reaaliaikainen spektrogrammi",
       "videoEmbed": "Videoupotus"

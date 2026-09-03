@@ -631,6 +631,18 @@
       "subtitle": "Druhy identifikované v reálnom čase",
       "empty": "Všetko ticho - momentálne žiadne vtáky nezistené"
     },
+    "recentHearing": {
+      "title": "Nedávno počuté",
+      "subtitle": "Posledných {hours} hodín",
+      "empty": "Žiadna nedávna aktivita druhov",
+      "loading": "Načítava sa nedávna aktivita druhov",
+      "detections": "{count} detekcií",
+      "confidence": "spoľahlivosť {confidence} %",
+      "confidenceTrend": "Trend spoľahlivosti pre {species}",
+      "controls": {
+        "refresh": "Obnoviť nedávnu aktivitu druhov"
+      }
+    },
     "rejected": "Zamietnuté",
     "newSpeciesHighlights": {
       "title": "Nové a vracajúce sa druhy",
@@ -748,6 +760,8 @@
       "dailySummaryLoad": "Nepodarilo sa načítať denný súhrn",
       "recentDetectionsFetch": "Nepodarilo sa získať nedávne detekcie: {status}",
       "recentDetectionsLoad": "Nepodarilo sa načítať nedávne detekcie",
+      "recentHearingFetch": "Nepodarilo sa načítať nedávnu aktivitu druhov: {status}",
+      "recentHearingLoad": "Nepodarilo sa zobraziť nedávnu aktivitu druhov",
       "configFetch": "Nepodarilo sa získať konfiguráciu prehľadu: {status}"
     },
     "banner": {
@@ -814,6 +828,7 @@
       "dailySummary": "Denný prehľad",
       "newSpeciesHighlights": "Nové druhy - prehľad",
       "currentlyHearing": "Práve počuté",
+      "recentHearing": "Nedávno počuté",
       "detectionsGrid": "Nedávne detekcie",
       "liveSpectrogram": "Živý spektrogram",
       "videoEmbed": "Vložené video"

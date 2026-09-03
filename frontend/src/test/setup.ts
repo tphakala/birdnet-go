@@ -734,6 +734,11 @@ Object.defineProperty(window, 'location', {
 
 // Mock security utilities - consolidated mock for consistent test behavior
 vi.mock('$lib/utils/security', () => ({
+  isPlainObject: vi.fn((value: unknown): value is Record<string, unknown> => {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+    const proto = Object.getPrototypeOf(value);
+    return proto === null || proto === Object.prototype;
+  }),
   safeGet: vi.fn(
     (
       obj: Record<string, unknown> | null | undefined,

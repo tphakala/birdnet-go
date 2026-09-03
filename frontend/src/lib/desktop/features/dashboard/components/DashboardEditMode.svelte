@@ -57,6 +57,7 @@
     'daily-summary',
     'new-species-highlights',
     'currently-hearing',
+    'recent-hearing',
     'live-spectrogram',
     'detections-grid',
     'video-embed',

@@ -58,6 +58,9 @@ func (m *MockDatastore) GetAllNotes() ([]datastore.Note, error) {
 func (m *MockDatastore) GetTopBirdsData(context.Context, string, float64, int) ([]datastore.Note, error) {
 	return make([]datastore.Note, 0), nil
 }
+func (m *MockDatastore) GetRecentSpeciesData(context.Context, time.Time, time.Time, float64, int) ([]datastore.RecentSpeciesData, error) {
+	return make([]datastore.RecentSpeciesData, 0), nil
+}
 func (m *MockDatastore) GetBatchHourlyOccurrences(context.Context, string, string, []string, float64) (map[string][24]int, error) {
 	return make(map[string][24]int), nil
 }

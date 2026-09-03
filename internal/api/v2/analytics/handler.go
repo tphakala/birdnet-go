@@ -24,6 +24,8 @@
 package analytics
 
 import (
+	"time"
+
 	"github.com/labstack/echo/v4"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
@@ -41,6 +43,7 @@ type Handler struct {
 	isClientAuthenticated     func(ctx echo.Context) bool
 	loadCommonNameMap         func() map[string]string
 	loadCommonToScientificMap func() map[string]string
+	now                       func() time.Time
 
 	// insightsRepo is the enhanced (v2) database repository backing the
 	// /insights/* and /dashboard/kpis endpoints. It is created lazily in
@@ -63,6 +66,7 @@ func New(
 		isClientAuthenticated:     isClientAuthenticated,
 		loadCommonNameMap:         loadCommonNameMap,
 		loadCommonToScientificMap: loadCommonToScientificMap,
+		now:                       time.Now,
 	}
 }
 
@@ -77,6 +81,7 @@ func (c *Handler) RegisterAnalyticsRoutes(g *echo.Group) {
 	speciesGroup := analyticsGroup.Group("/species")
 	speciesGroup.GET("/daily", c.GetDailySpeciesSummary)
 	speciesGroup.GET("/daily/batch", c.GetBatchDailySpeciesSummary) // Batch daily summaries endpoint
+	speciesGroup.GET("/recent", c.GetRecentSpeciesActivity)         // Recent species activity for dashboard
 	speciesGroup.GET("/summary", c.GetSpeciesSummary)
 	speciesGroup.GET("/detections/new", c.GetNewSpeciesDetections) // Renamed endpoint
 	speciesGroup.GET("/thumbnails", c.GetSpeciesThumbnails)        // Batch thumbnail endpoint

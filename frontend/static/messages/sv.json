@@ -631,6 +631,18 @@
       "subtitle": "Arter som identifieras i realtid",
       "empty": "Allt är tyst - inga fåglar detekterade just nu"
     },
+    "recentHearing": {
+      "title": "Nyligen hört",
+      "subtitle": "Senaste {hours} timmarna",
+      "empty": "Ingen nylig artaktivitet",
+      "loading": "Läser in nylig artaktivitet",
+      "detections": "{count} detektioner",
+      "confidence": "{confidence}% säkerhet",
+      "confidenceTrend": "Säkerhetstrend för {species}",
+      "controls": {
+        "refresh": "Uppdatera nylig artaktivitet"
+      }
+    },
     "rejected": "Avvisad",
     "newSpeciesHighlights": {
       "title": "Nya & återvändande arter",
@@ -748,6 +760,8 @@
       "dailySummaryLoad": "Kunde inte ladda daglig sammanfattning",
       "recentDetectionsFetch": "Kunde inte hämta senaste detekteringar: {status}",
       "recentDetectionsLoad": "Kunde inte ladda senaste detekteringar",
+      "recentHearingFetch": "Det gick inte att hämta nylig artaktivitet: {status}",
+      "recentHearingLoad": "Det gick inte att läsa in nylig artaktivitet",
       "configFetch": "Kunde inte hämta instrumentpanelens konfiguration: {status}"
     },
     "banner": {
@@ -814,6 +828,7 @@
       "dailySummary": "Daglig sammanfattning",
       "newSpeciesHighlights": "Nya artsrekord",
       "currentlyHearing": "Hörs just nu",
+      "recentHearing": "Nyligen hört",
       "detectionsGrid": "Senaste detekteringar",
       "liveSpectrogram": "Live spektrogram",
       "videoEmbed": "Videoinbäddning"

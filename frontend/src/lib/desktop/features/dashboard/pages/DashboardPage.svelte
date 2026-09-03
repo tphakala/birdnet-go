@@ -41,11 +41,16 @@ Performance Optimizations:
   import { onMount, untrack } from 'svelte';
   import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
   import CurrentlyHearingCard from '$lib/desktop/features/dashboard/components/CurrentlyHearingCard.svelte';
+  import RecentHearingCard from '$lib/desktop/features/dashboard/components/RecentHearingCard.svelte';
   import DailySummaryCard from '$lib/desktop/features/dashboard/components/DailySummaryCard.svelte';
   import NewSpeciesHighlightsCard from '$lib/desktop/features/dashboard/components/NewSpeciesHighlightsCard.svelte';
   import DetectionCardGrid from '$lib/desktop/features/dashboard/components/DetectionCardGrid.svelte';
   import { t } from '$lib/i18n';
-  import type { DailySpeciesSummary, Detection } from '$lib/types/detection.types';
+  import type {
+    DailySpeciesSummary,
+    Detection,
+    RecentSpeciesActivity,
+  } from '$lib/types/detection.types';
   import type { PendingDetection } from '$lib/types/pending.types';
   import {
     getLocalDateString,
@@ -64,6 +69,7 @@ Performance Optimizations:
   import { createDebounce } from '$lib/utils/debounce';
   import { getStoredValue, setStoredValue } from '$lib/utils/storage';
   import { safeArrayAccess, isPlainObject } from '$lib/utils/security';
+  import { validRecentSpeciesActivities } from '$lib/desktop/features/dashboard/utils/recentSpeciesActivity';
   import { api } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { navigation } from '$lib/stores/navigation.svelte';
@@ -98,6 +104,11 @@ Performance Optimizations:
   // Constants
   const ANIMATION_CLEANUP_DELAY = 2200; // Slightly longer than 2s animation duration
   const MIN_FETCH_LIMIT = 10; // Minimum number of detections to fetch for SSE processing
+  const RECENT_HEARING_HOURS = 4;
+  const RECENT_HEARING_LIMIT = 8;
+  const RECENT_HEARING_BUCKETS = RECENT_HEARING_HOURS * 4;
+  const RECENT_HEARING_REFRESH_MS = 60000;
+  const RECENT_HEARING_FETCH_THROTTLE_MS = 10000;
   // Species limit buffer constants for SSE updates
   // BUFFER_TRIGGER: When array exceeds limit + this, trigger cleanup
   // BUFFER_TARGET: After cleanup, keep limit + this many species to avoid frequent re-sorting
@@ -156,11 +167,14 @@ Performance Optimizations:
   // State management
   let dailySummary = $state<DailySpeciesSummary[]>([]);
   let recentDetections = $state<Detection[]>([]);
+  let recentHearing = $state<RecentSpeciesActivity[]>([]);
   let selectedDate = $state(getInitialDate());
   let isLoadingSummary = $state(true);
   let isLoadingDetections = $state(true);
+  let isLoadingRecentHearing = $state(true);
   let summaryError = $state<string | null>(null);
   let detectionsError = $state<string | null>(null);
+  let recentHearingError = $state<string | null>(null);
   let showThumbnails = $state(true); // Default to true for backward compatibility
   let summaryLimit = $state(30); // Default from backend (conf/defaults.go) - species count limit for daily summary
   let configLoaded = $state(false); // Gates reactive preloading until config is loaded
@@ -213,6 +227,9 @@ Performance Optimizations:
         : { elements: defaultElements, source: LAYOUT_SOURCE.HARDCODED_DEFAULTS }
   );
   let layoutElements = $derived(layoutResolution.elements);
+  let hasRecentHearingTile = $derived(
+    layoutElements.some(element => element.enabled && element.type === 'recent-hearing')
+  );
 
   // Current layout as a DashboardLayout object for DashboardEditMode
   let currentLayout = $derived<DashboardLayout>({ elements: layoutElements });
@@ -509,6 +526,72 @@ Performance Optimizations:
     }
   }
 
+  let lastRecentHearingFetch = 0;
+  let recentHearingRequestId = 0;
+
+  async function fetchRecentHearing(force = false) {
+    if (!hasRecentHearingTile || !connectionState.isOnline) {
+      recentHearingRequestId++;
+      isLoadingRecentHearing = false;
+      return;
+    }
+
+    const now = Date.now();
+    if (!force && now - lastRecentHearingFetch < RECENT_HEARING_FETCH_THROTTLE_MS) {
+      return;
+    }
+    lastRecentHearingFetch = now;
+
+    const requestId = ++recentHearingRequestId;
+    isLoadingRecentHearing = true;
+    recentHearingError = null;
+
+    try {
+      const response = await fetch(
+        buildAppUrl(
+          `/api/v2/analytics/species/recent?hours=${RECENT_HEARING_HOURS}&limit=${RECENT_HEARING_LIMIT}&buckets=${RECENT_HEARING_BUCKETS}`
+        )
+      );
+      if (!response.ok) {
+        throw new Error(
+          t('dashboard.errors.recentHearingFetch', {
+            status: response.statusText || `HTTP ${response.status}`,
+          })
+        );
+      }
+      const data = await response.json();
+      if (requestId !== recentHearingRequestId) return;
+      recentHearing = validRecentSpeciesActivities(data);
+    } catch (error) {
+      if (requestId !== recentHearingRequestId) return;
+      recentHearingError =
+        error instanceof Error ? error.message : t('dashboard.errors.recentHearingLoad');
+      logger.error('Error fetching recent hearing:', error);
+    } finally {
+      if (requestId === recentHearingRequestId) {
+        isLoadingRecentHearing = false;
+      }
+    }
+  }
+
+  $effect(() => {
+    if (!hasRecentHearingTile) {
+      recentHearingRequestId++;
+      isLoadingRecentHearing = false;
+      return;
+    }
+
+    untrack(() => fetchRecentHearing(true));
+    const refreshTimer = setInterval(() => {
+      fetchRecentHearing();
+    }, RECENT_HEARING_REFRESH_MS);
+
+    return () => {
+      clearInterval(refreshTimer);
+      recentHearingRequestId++;
+    };
+  });
+
   async function fetchDashboardConfig() {
     try {
       interface DashboardConfig {
@@ -544,6 +627,10 @@ Performance Optimizations:
 
     // Just fetch recent detections - don't touch daily summary
     fetchRecentDetections();
+  }
+
+  function handleRecentHearingRefresh() {
+    fetchRecentHearing(true);
   }
 
   // Animation cleanup timers and RAF manager - use $state.raw() for performance
@@ -798,7 +885,6 @@ Performance Optimizations:
       // Adjacent date preloading is handled by the $effect gated on configLoaded
     });
     fetchRecentDetections();
-
     // Setup SSE connection for real-time updates
     connectToDetectionStream();
 
@@ -1301,6 +1387,7 @@ Performance Optimizations:
     if (online && !wasOnline) {
       fetchDailySummary();
       fetchRecentDetections();
+      if (hasRecentHearingTile) fetchRecentHearing();
     }
     wasOnline = online;
   });
@@ -1333,6 +1420,7 @@ Performance Optimizations:
     if (!sseFetchTimer) {
       sseFetchTimer = setTimeout(() => {
         fetchRecentDetections(true);
+        if (hasRecentHearingTile) fetchRecentHearing();
         sseFetchTimer = null;
       }, 150);
     }
@@ -1576,6 +1664,14 @@ Performance Optimizations:
         />
       {:else if element.type === 'currently-hearing'}
         <CurrentlyHearingCard detections={isViewingToday ? pendingDetections : []} />
+      {:else if element.type === 'recent-hearing'}
+        <RecentHearingCard
+          data={recentHearing}
+          loading={isLoadingRecentHearing}
+          error={recentHearingError}
+          hours={RECENT_HEARING_HOURS}
+          onRefresh={handleRecentHearingRefresh}
+        />
       {:else if element.type === 'live-spectrogram'}
         {#if isViewingToday}
           <MiniSpectrogram {pendingDetections} />

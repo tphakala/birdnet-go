@@ -631,6 +631,18 @@
       "subtitle": "Reāllaikā identificētās sugas",
       "empty": "Viss kluss - pašlaik nav atklāts neviens putns"
     },
+    "recentHearing": {
+      "title": "Nesen dzirdēts",
+      "subtitle": "Pēdējās {hours} stundas",
+      "empty": "Nav nesenas sugu aktivitātes",
+      "loading": "Ielādē neseno sugu aktivitāti",
+      "detections": "{count} noteikšanas",
+      "confidence": "{confidence}% pārliecība",
+      "confidenceTrend": "{species} pārliecības tendence",
+      "controls": {
+        "refresh": "Atsvaidzināt neseno sugu aktivitāti"
+      }
+    },
     "rejected": "Noraidīts",
     "newSpeciesHighlights": {
       "title": "Jaunās un atgriezušās sugas",
@@ -748,6 +760,8 @@
       "dailySummaryLoad": "Neizdevās ielādēt dienas kopsavilkumu",
       "recentDetectionsFetch": "Neizdevās ielādēt nesenās atklāšanas: {status}",
       "recentDetectionsLoad": "Neizdevās ielādēt nesenās atklāšanas",
+      "recentHearingFetch": "Neizdevās izgūt neseno sugu aktivitāti: {status}",
+      "recentHearingLoad": "Neizdevās ielādēt neseno sugu aktivitāti",
       "configFetch": "Neizdevās ielādēt informācijas paneļa konfigurāciju: {status}"
     },
     "banner": {
@@ -814,6 +828,7 @@
       "dailySummary": "Dienas kopsavilkums",
       "newSpeciesHighlights": "Jaunu sugu apskats",
       "currentlyHearing": "Pašlaik dzirdams",
+      "recentHearing": "Nesen dzirdēts",
       "detectionsGrid": "Nesenās atklāšanas",
       "liveSpectrogram": "Tiešraides spektrogramma",
       "videoEmbed": "Video iegultne"

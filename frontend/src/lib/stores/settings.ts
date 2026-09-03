@@ -651,6 +651,7 @@ export type DashboardElementType =
   | 'daily-summary'
   | 'new-species-highlights'
   | 'currently-hearing'
+  | 'recent-hearing'
   | 'detections-grid'
   | 'live-spectrogram'
   | 'video-embed';

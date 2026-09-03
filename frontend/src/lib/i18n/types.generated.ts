@@ -515,6 +515,14 @@ export type TranslationKey =
   | 'dashboard.currentlyHearing.title'
   | 'dashboard.currentlyHearing.subtitle'
   | 'dashboard.currentlyHearing.empty'
+  | 'dashboard.recentHearing.title'
+  | 'dashboard.recentHearing.subtitle' // params: hours
+  | 'dashboard.recentHearing.empty'
+  | 'dashboard.recentHearing.loading'
+  | 'dashboard.recentHearing.detections' // params: count
+  | 'dashboard.recentHearing.confidence' // params: confidence
+  | 'dashboard.recentHearing.confidenceTrend' // params: species
+  | 'dashboard.recentHearing.controls.refresh'
   | 'dashboard.rejected'
   | 'dashboard.newSpeciesHighlights.title'
   | 'dashboard.newSpeciesHighlights.subtitle'
@@ -599,6 +607,8 @@ export type TranslationKey =
   | 'dashboard.errors.dailySummaryLoad'
   | 'dashboard.errors.recentDetectionsFetch' // params: status
   | 'dashboard.errors.recentDetectionsLoad'
+  | 'dashboard.errors.recentHearingFetch' // params: status
+  | 'dashboard.errors.recentHearingLoad'
   | 'dashboard.errors.configFetch' // params: status
   | 'dashboard.banner.title'
   | 'dashboard.banner.titlePlaceholder'
@@ -657,6 +667,7 @@ export type TranslationKey =
   | 'dashboard.elements.dailySummary'
   | 'dashboard.elements.newSpeciesHighlights'
   | 'dashboard.elements.currentlyHearing'
+  | 'dashboard.elements.recentHearing'
   | 'dashboard.elements.detectionsGrid'
   | 'dashboard.elements.liveSpectrogram'
   | 'dashboard.elements.videoEmbed'
@@ -4255,6 +4266,10 @@ export type TranslationParams = {
   'search.detailsPanel.viewDetails': { species: string | number };
   'search.errors.searchFailed': { error: string | number };
   'search.pagination.page': { current: string | number; total: string | number };
+  'dashboard.recentHearing.subtitle': { hours: string | number };
+  'dashboard.recentHearing.detections': { count: string | number };
+  'dashboard.recentHearing.confidence': { confidence: string | number };
+  'dashboard.recentHearing.confidenceTrend': { species: string | number };
   'dashboard.newSpeciesHighlights.categorySeasonNamed': { season: string | number };
   'dashboard.newSpeciesHighlights.maxConfidenceShort': { confidence: string | number };
   'dashboard.newSpeciesHighlights.detections': { count: string | number };
@@ -4296,6 +4311,7 @@ export type TranslationParams = {
   'dashboard.recentDetections.actions.menuLabel': { species: string | number };
   'dashboard.errors.dailySummaryFetch': { status: string | number };
   'dashboard.errors.recentDetectionsFetch': { status: string | number };
+  'dashboard.errors.recentHearingFetch': { status: string | number };
   'dashboard.errors.configFetch': { status: string | number };
   'dashboard.editMode.configureTitle': { element: string | number };
   'detections.titles.hourly': { hour: string | number; date: string | number };
