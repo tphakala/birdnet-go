@@ -2623,9 +2623,9 @@
           "label": "Sprache",
           "helpText": "Sprache für übersetzte Artnamen."
         },
-        "tensorflowThreads": {
-          "label": "TensorFlow CPU-Threads",
-          "helpText": "Anzahl der CPU-Threads. Auf 0 setzen, um alle verfügbaren Threads zu verwenden."
+        "inferenceThreads": {
+          "label": "Inferenz-CPU-Threads",
+          "helpText": "Anzahl der für die Modellinferenz verwendeten CPU-Threads. Auf 0 setzen, um alle verfügbaren Threads zu verwenden. Hat keine Auswirkung auf Modelle, die auf einer GPU ausgeführt werden."
         }
       },
       "errors": {

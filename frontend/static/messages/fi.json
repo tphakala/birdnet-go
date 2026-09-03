@@ -2623,9 +2623,9 @@
           "label": "Kieli",
           "helpText": "Kieli käännetyille lajien nimille."
         },
-        "tensorflowThreads": {
-          "label": "TensorFlow CPU-säikeet",
-          "helpText": "CPU-säikeiden määrä. Aseta 0 käyttääksesi kaikkia saatavilla olevia säikeitä."
+        "inferenceThreads": {
+          "label": "Inferenssin CPU-säikeet",
+          "helpText": "Mallin inferenssiin käytettävien CPU-säikeiden määrä. Aseta 0 käyttääksesi kaikkia saatavilla olevia säikeitä. Ei vaikuta GPU:lla suoritettaviin malleihin."
         }
       },
       "errors": {

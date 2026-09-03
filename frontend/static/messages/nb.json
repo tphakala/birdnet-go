@@ -2623,9 +2623,9 @@
           "label": "Lokalitet",
           "helpText": "Lokalitet for oversatte artsnavnene."
         },
-        "tensorflowThreads": {
-          "label": "TensorFlow CPU-tråder",
-          "helpText": "Antall CPU-tråder. Sett til 0 for å bruke alle tilgjengelige tråder."
+        "inferenceThreads": {
+          "label": "CPU-tråder for inferens",
+          "helpText": "Antall CPU-tråder som brukes til modellinferens. Sett til 0 for å bruke alle tilgjengelige tråder. Har ingen effekt på modeller som kjører på en GPU."
         }
       },
       "errors": {

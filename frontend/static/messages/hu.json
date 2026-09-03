@@ -2623,9 +2623,9 @@
           "label": "Területi beállítás",
           "helpText": "A lefordított faj közhasználatú nevek területi beállítása."
         },
-        "tensorflowThreads": {
-          "label": "TensorFlow CPU szálak",
-          "helpText": "CPU szálak száma. 0-ra állítva az összes elérhető szálat használja."
+        "inferenceThreads": {
+          "label": "Következtetési CPU szálak",
+          "helpText": "A modellkövetkeztetéshez használt CPU szálak száma. 0-ra állítva az összes elérhető szálat használja. Nincs hatással a GPU-n futó modellekre."
         }
       },
       "errors": {

@@ -2623,9 +2623,9 @@
           "label": "Lokalizācija",
           "helpText": "Lokalizācija tulkotajiem sugu vispārīgajiem nosaukumiem."
         },
-        "tensorflowThreads": {
-          "label": "TensorFlow CPU pavedieni",
-          "helpText": "CPU pavedienu skaits. Iestatiet 0, lai izmantotu visus pieejamos pavedienus."
+        "inferenceThreads": {
+          "label": "Secinājumu CPU pavedieni",
+          "helpText": "Modeļa secinājumiem izmantoto CPU pavedienu skaits. Iestatiet 0, lai izmantotu visus pieejamos pavedienus. Neietekmē modeļus, kas darbojas ar GPU."
         }
       },
       "errors": {

@@ -1932,13 +1932,13 @@
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <NumberField
-          label={t('settings.main.fields.tensorflowThreads.label')}
+          label={t('settings.main.fields.inferenceThreads.label')}
           value={birdnet?.threads ?? 0}
           onUpdate={value => updateBirdnetSetting('threads', value)}
           min={0}
           max={32}
           step={1}
-          helpText={t('settings.main.fields.tensorflowThreads.helpText')}
+          helpText={t('settings.main.fields.inferenceThreads.helpText')}
           disabled={store.isLoading || store.isSaving}
         />
       </div>

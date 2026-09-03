@@ -109,6 +109,90 @@ func TestReloadSecondaryModels_SwapsAndClosesOld(t *testing.T) {
 		"entry triplet should advance to the new backend")
 }
 
+// TestReloadSecondaryModels_ThreadCountChangeForcesRebuild verifies that a runtime
+// change to the CPU thread budget (birdnet.threads) rebuilds an OV-capable secondary
+// even when the backend, device, and OpenVINO path are unchanged, so a secondary
+// re-applies the new thread count live exactly as the primary model does. Before the
+// fix the per-entry gate keyed only on backend/device/path, so a pure thread-count
+// change was silently skipped and secondaries kept their old thread count until a
+// restart. Mutation check: this fails if `threads` is dropped from secondaryBackendKey.
+func TestReloadSecondaryModels_ThreadCountChangeForcesRebuild(t *testing.T) {
+	// CPU device so INFERENCE_NUM_THREADS is meaningful; only Threads differs from
+	// the loaded entry below.
+	s := conftest.GetTestSettings()
+	s.BirdNET.Backend = "openvino"
+	s.BirdNET.OpenVINODevice = "cpu"
+	s.BirdNET.OpenVINOPath = "/opt/ov"
+	s.BirdNET.Threads = 1
+	conftest.SetTestSettings(s)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	old := &reloadFakeModel{id: testSecondaryID}
+	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
+	o.ModelInfo.ID = permanentRegistryID
+	// Loaded with the SAME backend/device/path but a different thread count (4).
+	o.models[testSecondaryID] = &modelEntry{instance: old, backend: secondaryBackendKey{
+		backend: "openvino", ovDevice: "cpu", ovPath: "/opt/ov", threads: 4,
+	}}
+
+	var built atomic.Int32
+	var gotThreads atomic.Int32
+	newInst := &reloadFakeModel{id: testSecondaryID}
+	registerTestSecondaryBuilder(t, testSecondaryID, func(_ *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
+		built.Add(1)
+		gotThreads.Store(int32(threads)) //nolint:gosec // small test thread count
+		assert.Equal(t, 1, settings.BirdNET.Threads, "builder must see the new thread count")
+		return newInst, nil
+	})
+
+	require.NoError(t, o.ReloadSecondaryModels())
+
+	assert.Equal(t, int32(1), built.Load(), "a thread-count change must rebuild the secondary")
+	assert.Same(t, ModelInstance(newInst), o.models[testSecondaryID].instance, "new instance should be swapped in")
+	assert.Equal(t, int32(1), old.closes.Load(), "old instance should be closed once")
+	assert.Equal(t, int32(1), gotThreads.Load(), "builder should receive the new per-model thread budget")
+	assert.Equal(t, secondaryBackendKey{backend: "openvino", ovDevice: "cpu", ovPath: "/opt/ov", threads: 1},
+		o.models[testSecondaryID].backend, "entry key should advance to the new thread count")
+}
+
+// TestReloadSecondaryModels_NoOpWhenThreadsUnchangedNonZero verifies the skip
+// direction of the thread-aware gate at a NON-ZERO thread count: when the entry
+// was already built with the same backend/device/path AND the same thread count,
+// an unrelated reload_birdnet trigger must NOT rebuild it. The sibling
+// TestReloadSecondaryModels_NoOpWhenTripletUnchanged only exercises the zero-value
+// (threads:0) match; this brackets the new `threads` field at a real value so a
+// regression that made every reload rebuild (e.g. comparing against a zero-value
+// key) is caught.
+func TestReloadSecondaryModels_NoOpWhenThreadsUnchangedNonZero(t *testing.T) {
+	s := conftest.GetTestSettings()
+	s.BirdNET.Backend = "openvino"
+	s.BirdNET.OpenVINODevice = "cpu"
+	s.BirdNET.OpenVINOPath = "/opt/ov"
+	s.BirdNET.Threads = 4
+	conftest.SetTestSettings(s)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	old := &reloadFakeModel{id: testSecondaryID}
+	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
+	o.ModelInfo.ID = permanentRegistryID
+	// Already built with the exact current key, including threads:4.
+	o.models[testSecondaryID] = &modelEntry{instance: old, backend: secondaryBackendKey{
+		backend: "openvino", ovDevice: "cpu", ovPath: "/opt/ov", threads: 4,
+	}}
+
+	var built atomic.Int32
+	registerTestSecondaryBuilder(t, testSecondaryID, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
+		built.Add(1)
+		return &reloadFakeModel{id: testSecondaryID}, nil
+	})
+
+	require.NoError(t, o.ReloadSecondaryModels())
+
+	assert.Equal(t, int32(0), built.Load(), "unchanged threads (and backend/device/path) must NOT rebuild")
+	assert.Same(t, ModelInstance(old), o.models[testSecondaryID].instance, "instance must be left in place")
+	assert.Equal(t, int32(0), old.closes.Load(), "old instance must not be closed")
+}
+
 // TestReloadSecondaryModels_WarmupHoldsInferenceMu verifies that the hot-reload
 // warm-up of the freshly built secondary serializes via inferenceMu, so it cannot
 // run a second model session concurrently with live inference. Mutation check:
