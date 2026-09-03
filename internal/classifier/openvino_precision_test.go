@@ -19,20 +19,60 @@ import (
 // hardware dependency and runs in the default test suite.
 func TestOpenVINOPrecisionFor(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, inference.OVPrecisionF32, openVINOPrecisionFor(DefaultModelVersion, inference.OVDeviceGPU),
-		"BirdNET v2.4 on the GPU must be forced to f32")
-	assert.Empty(t, openVINOPrecisionFor(DefaultModelVersion, inference.OVDeviceCPU),
-		"BirdNET v2.4 on CPU keeps the f16 default")
-	assert.Equal(t, inference.OVPrecisionF32, openVINOPrecisionFor(RegistryIDPerchV2, inference.OVDeviceGPU),
-		"Perch on the GPU must be forced to f32 (f16 returns all-NaN logits on Intel Arc A380)")
-	assert.Empty(t, openVINOPrecisionFor(RegistryIDPerchV2, inference.OVDeviceCPU),
-		"Perch on CPU keeps the f16 default")
-	// The bat embedding model overflows at f16 on every device, so it must be forced
-	// to f32 on BOTH GPU and CPU (unlike BirdNET v2.4, which is f32 on GPU only).
-	assert.Equal(t, inference.OVPrecisionF32, openVINOPrecisionFor(RegistryIDBat, inference.OVDeviceGPU),
-		"bat embedding model on the GPU must be forced to f32")
-	assert.Equal(t, inference.OVPrecisionF32, openVINOPrecisionFor(RegistryIDBat, inference.OVDeviceCPU),
-		"bat embedding model on CPU must be forced to f32 (f16 overflows the embedding head)")
+
+	tests := []struct {
+		name    string
+		modelID string
+		device  string
+		want    string
+	}{
+		{
+			name:    "birdnet v2.4 on GPU is forced to f32",
+			modelID: DefaultModelVersion,
+			device:  inference.OVDeviceGPU,
+			want:    inference.OVPrecisionF32,
+		},
+		{
+			name:    "birdnet v2.4 on CPU keeps the f16 default",
+			modelID: DefaultModelVersion,
+			device:  inference.OVDeviceCPU,
+			want:    "",
+		},
+		{
+			name:    "perch v2 on GPU is forced to f32 (f16 returns all-NaN logits on Intel Arc A380)",
+			modelID: RegistryIDPerchV2,
+			device:  inference.OVDeviceGPU,
+			want:    inference.OVPrecisionF32,
+		},
+		{
+			name:    "perch v2 on CPU keeps the f16 default",
+			modelID: RegistryIDPerchV2,
+			device:  inference.OVDeviceCPU,
+			want:    "",
+		},
+		// The bat embedding model overflows at f16 on every device, so it must be
+		// forced to f32 on BOTH GPU and CPU (unlike BirdNET v2.4, which is f32 on
+		// GPU only).
+		{
+			name:    "bat on GPU is forced to f32",
+			modelID: RegistryIDBat,
+			device:  inference.OVDeviceGPU,
+			want:    inference.OVPrecisionF32,
+		},
+		{
+			name:    "bat on CPU is forced to f32 (f16 overflows the embedding head)",
+			modelID: RegistryIDBat,
+			device:  inference.OVDeviceCPU,
+			want:    inference.OVPrecisionF32,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, openVINOPrecisionFor(tt.modelID, tt.device))
+		})
+	}
 }
 
 // TestOpenVINOEffectivePrecision verifies the mapping from an OpenVINO
