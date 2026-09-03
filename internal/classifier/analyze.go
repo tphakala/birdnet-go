@@ -87,8 +87,8 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 		m.RecordModelInvoke(modelID, invokeDuration.Seconds())
 	}
 
-	if idx := firstNonFinite(predictions); idx >= 0 {
-		err = newNonFiniteScoreError(modelID, idx, len(predictions), bn.RuntimeInfo)
+	if idx := firstNonFinite(predictions); idx != noNonFiniteScore {
+		err = newNonFiniteScoreError(nonFiniteScore{modelID: modelID, index: idx, count: len(predictions)}, bn.RuntimeInfo)
 		recordPredictionFailure(span, modelID, errTypeNonFiniteLogits, start, err)
 		return nil, err
 	}
@@ -136,15 +136,25 @@ func sortResults(results []datastore.Results) {
 	})
 }
 
+// noNonFiniteScore is the index firstNonFinite returns when every score is finite.
+const noNonFiniteScore = -1
+
 // firstNonFinite returns the index of the first NaN or infinite value in
-// scores, or -1 when every value is finite.
+// scores, or noNonFiniteScore when every value is finite.
 func firstNonFinite(scores []float32) int {
 	for i, v := range scores {
 		if f := float64(v); math.IsNaN(f) || math.IsInf(f, 0) {
 			return i
 		}
 	}
-	return -1
+	return noNonFiniteScore
+}
+
+// nonFiniteScore locates the offending value for newNonFiniteScoreError.
+type nonFiniteScore struct {
+	modelID string // registry ID of the classifier that produced the score
+	index   int    // position of the first non-finite value in the backend output
+	count   int    // number of scores the backend returned
 }
 
 // newNonFiniteScoreError builds the error every ModelInstance.Predict returns
@@ -154,11 +164,11 @@ func firstNonFinite(scores []float32) int {
 // the model's RuntimeInfo method, so the error names the backend, device and
 // precision that produced the value (the OpenVINO f16 GPU path is the known
 // offender).
-func newNonFiniteScoreError(modelID string, idx, n int, runtimeInfo func() (device, backend, precision string)) error {
+func newNonFiniteScoreError(score nonFiniteScore, runtimeInfo func() (device, backend, precision string)) error {
 	device, backend, precision := runtimeInfo()
-	return errors.Newf("%s classifier returned a non-finite score (index %d of %d)", modelID, idx, n).
+	return errors.Newf("%s classifier returned a non-finite score (index %d of %d)", score.modelID, score.index, score.count).
 		Category(errors.CategoryAudioAnalysis).
-		Context("model", modelID).
+		Context("model", score.modelID).
 		Context("backend", backend).
 		Context("device", device).
 		Context("precision", precision).

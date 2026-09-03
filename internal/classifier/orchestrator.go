@@ -650,6 +650,20 @@ func (o *Orchestrator) resetInferenceFailureStreak(modelID string) {
 	}
 }
 
+// dropInferenceFailureStreak removes modelID's streak entry when its instance is
+// torn down or replaced, so a later instance under the same ID starts fresh (its
+// first failure is logged at ERROR) and stale IDs do not accumulate across reloads.
+func dropInferenceFailureStreak(modelID string) {
+	inferenceFailureStreaks.Delete(modelID)
+}
+
+// inferenceFailureLogsAtError reports whether the streak-th consecutive failure
+// of one model is logged at ERROR (the first, then every
+// inferenceFailureLogEvery-th) rather than DEBUG.
+func inferenceFailureLogsAtError(streak int64) bool {
+	return streak == 1 || streak%inferenceFailureLogEvery == 0
+}
+
 func (o *Orchestrator) Predict(ctx context.Context, sample [][]float32) ([]datastore.Results, error) {
 	o.mu.RLock()
 	id := o.ModelInfo.ID
@@ -714,7 +728,7 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 		// records each one.
 		streak := o.inferenceFailureStreak(modelID)
 		emit := log.Debug
-		if streak == 1 || streak%inferenceFailureLogEvery == 0 {
+		if inferenceFailureLogsAtError(streak) {
 			emit = log.Error
 		}
 		emit("PredictModel inference failed",
@@ -1476,6 +1490,10 @@ func (o *Orchestrator) reloadPrimaryModel(reload func(primary *BirdNET) error) e
 	}
 
 	info, taxMap, taxPath, sciIndex := o.primary.ReloadSnapshot()
+	// The reloaded primary is a fresh instance: drop its streak, and the previous
+	// ID's when the reload changed it, so neither lingers.
+	dropInferenceFailureStreak(o.ModelInfo.ID)
+	dropInferenceFailureStreak(info.ID)
 	o.ModelInfo = info
 	o.TaxonomyMap = taxMap
 	o.TaxonomyPath = taxPath
@@ -1698,6 +1716,7 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 		}
 		ref.entry.instance = newInst
 		ref.entry.backend = triplet
+		dropInferenceFailureStreak(ref.id) // fresh instance, fresh streak
 		ref.entry.mu.Unlock()
 
 		// Close the old instance after releasing entry.mu: native teardown can be
@@ -1760,6 +1779,7 @@ func (o *Orchestrator) Delete() {
 		// re-creating the entry after deletion, and stops a teardown-then-recreate
 		// cycle from leaking counter entries.
 		globalInferenceCounters.Delete(id)
+		dropInferenceFailureStreak(id)
 		entry.mu.Unlock()
 	}
 
@@ -2017,6 +2037,7 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 	defer entry.mu.Unlock()
 
 	globalInferenceCounters.Delete(registryID)
+	dropInferenceFailureStreak(registryID)
 
 	o.rssMu.Lock()
 	delete(o.modelRSS, registryID)

@@ -861,8 +861,8 @@ func TestFirstNonFinite(t *testing.T) {
 		scores []float32
 		want   int
 	}{
-		{name: "empty", scores: nil, want: -1},
-		{name: "all finite", scores: []float32{0.2, 0.1, 0.0, -3.5}, want: -1},
+		{name: "empty", scores: nil, want: noNonFiniteScore},
+		{name: "all finite", scores: []float32{0.2, 0.1, 0.0, -3.5}, want: noNonFiniteScore},
 		{name: "NaN", scores: []float32{0.2, float32(math.NaN()), 0.1}, want: 1},
 		{name: "+Inf first", scores: []float32{float32(math.Inf(1)), 0.2}, want: 0},
 		{name: "-Inf last", scores: []float32{0.2, 0.1, float32(math.Inf(-1))}, want: 2},

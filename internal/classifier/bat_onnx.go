@@ -304,8 +304,8 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 		logger.Int("score_count", len(scores)),
 		logger.Duration("duration", classDuration))
 
-	if idx := firstNonFinite(scores); idx >= 0 {
-		err = newNonFiniteScoreError(RegistryIDBat, idx, len(scores), b.RuntimeInfo)
+	if idx := firstNonFinite(scores); idx != noNonFiniteScore {
+		err = newNonFiniteScoreError(nonFiniteScore{modelID: RegistryIDBat, index: idx, count: len(scores)}, b.RuntimeInfo)
 		recordPredictionFailure(span, RegistryIDBat, errTypeNonFiniteLogits, start, err)
 		return nil, err
 	}

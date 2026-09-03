@@ -262,8 +262,8 @@ func (b *BirdNETV3) Predict(ctx context.Context, samples [][]float32) ([]datasto
 	// The in-graph sigmoid bounds every finite score to [0,1]; a NaN or Inf here
 	// is a backend fault (see newNonFiniteScoreError) and must not become a
 	// detection.
-	if idx := firstNonFinite(scores); idx >= 0 {
-		err = newNonFiniteScoreError(RegistryIDBirdNETV3, idx, len(scores), b.RuntimeInfo)
+	if idx := firstNonFinite(scores); idx != noNonFiniteScore {
+		err = newNonFiniteScoreError(nonFiniteScore{modelID: RegistryIDBirdNETV3, index: idx, count: len(scores)}, b.RuntimeInfo)
 		recordPredictionFailure(span, RegistryIDBirdNETV3, errTypeNonFiniteLogits, start, err)
 		return nil, err
 	}

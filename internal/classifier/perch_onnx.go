@@ -261,8 +261,8 @@ func (p *Perch) Predict(ctx context.Context, samples [][]float32) ([]datastore.R
 	// being dropped it would be promoted to a detection for whichever labels
 	// happen to sort first. Fail the window so the backend fault is counted and
 	// logged rather than turned into bogus detections.
-	if idx := firstNonFinite(rawLogits); idx >= 0 {
-		err = newNonFiniteScoreError(RegistryIDPerchV2, idx, len(rawLogits), p.RuntimeInfo)
+	if idx := firstNonFinite(rawLogits); idx != noNonFiniteScore {
+		err = newNonFiniteScoreError(nonFiniteScore{modelID: RegistryIDPerchV2, index: idx, count: len(rawLogits)}, p.RuntimeInfo)
 		recordPredictionFailure(span, RegistryIDPerchV2, errTypeNonFiniteLogits, start, err)
 		return nil, err
 	}
