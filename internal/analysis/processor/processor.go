@@ -1035,6 +1035,33 @@ func isFiniteConfidence(c float32) bool {
 
 // shouldFilterDetection checks if a detection should be filtered out
 func (p *Processor) shouldFilterDetection(settings *conf.Settings, result datastore.Results, commonName, scientificName, speciesLowercase string, baseThreshold float32, source, modelID string) (shouldFilter bool, confidenceThreshold float32) {
+	// A non-finite confidence (NaN or Inf) is a classifier fault, not a score. NaN
+	// compares false against every threshold, so the "<= threshold" gate below
+	// would let it through and it would be saved as a detection, with a "NaNp"
+	// confidence token in the clip name. Drop it first, ahead of the privacy and
+	// exclusion filters, so every non-finite value reaches the diagnostic below
+	// no matter which label it landed on. It is logged once per model and source
+	// at WARN (the fault repeats every window while the backend is broken, so a
+	// per-hit line would flood the log) and per hit at DEBUG.
+	if !isFiniteConfidence(result.Confidence) {
+		nonFiniteConfidenceWarned.do(modelID+"|"+source, func() {
+			GetLogger().Warn("Classifier returned a non-finite confidence; dropping such detections",
+				logger.String("species", result.Species),
+				logger.String("source", p.getDisplayNameForSource(source)),
+				logger.String("model_id", modelID),
+				logger.String("operation", "confidence_filter"))
+		})
+		if settings.Debug {
+			GetLogger().Debug("Detection filtered out due to non-finite confidence",
+				logger.String("species", result.Species),
+				logger.Float32("confidence", result.Confidence),
+				logger.String("source", p.getDisplayNameForSource(source)),
+				logger.String("model_id", modelID),
+				logger.String("operation", "confidence_filter"))
+		}
+		return true, 0
+	}
+
 	// Check human detection privacy filter. Match the raw label so Perch v2's
 	// FSD50K human classes are caught too, not just BirdNET's "Human *" classes.
 	if isHumanVocalization(result.Species) && result.Confidence > baseThreshold {
@@ -1066,32 +1093,6 @@ func (p *Processor) shouldFilterDetection(settings *conf.Settings, result datast
 		confidenceThreshold = p.getAdjustedConfidenceThreshold(speciesLowercase, baseThreshold, isCustomThreshold)
 	} else {
 		confidenceThreshold = baseThreshold
-	}
-
-	// A non-finite confidence (NaN or Inf) is a classifier fault, not a score. NaN
-	// compares false against every threshold, so the "<= threshold" gate below
-	// would let it through and it would be saved as a detection, with a "NaNp"
-	// confidence token in the clip name. Drop it here regardless of threshold.
-	// It is logged once per model and source at WARN (the fault repeats every
-	// window while the backend is broken, so a per-hit line would flood the log)
-	// and per hit at DEBUG.
-	if !isFiniteConfidence(result.Confidence) {
-		nonFiniteConfidenceWarned.do(modelID+"|"+source, func() {
-			GetLogger().Warn("Classifier returned a non-finite confidence; dropping such detections",
-				logger.String("species", result.Species),
-				logger.String("source", p.getDisplayNameForSource(source)),
-				logger.String("model_id", modelID),
-				logger.String("operation", "confidence_filter"))
-		})
-		if settings.Debug {
-			GetLogger().Debug("Detection filtered out due to non-finite confidence",
-				logger.String("species", result.Species),
-				logger.Float32("confidence", result.Confidence),
-				logger.String("source", p.getDisplayNameForSource(source)),
-				logger.String("model_id", modelID),
-				logger.String("operation", "confidence_filter"))
-		}
-		return true, confidenceThreshold
 	}
 
 	// Check confidence threshold
