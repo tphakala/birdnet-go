@@ -304,6 +304,12 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 		logger.Int("score_count", len(scores)),
 		logger.Duration("duration", classDuration))
 
+	if idx := firstNonFinite(scores); idx >= 0 {
+		err = newNonFiniteScoreError(RegistryIDBat, idx, len(scores), b.RuntimeInfo)
+		recordPredictionFailure(span, RegistryIDBat, errTypeNonFiniteLogits, start, err)
+		return nil, err
+	}
+
 	results, err := pairLabelsAndConfidence(b.batClassifier.Labels(), scores)
 	if err != nil {
 		recordPredictionFailure(span, RegistryIDBat, errTypeLabelMismatch, start, err)

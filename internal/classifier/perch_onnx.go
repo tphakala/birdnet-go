@@ -255,6 +255,18 @@ func (p *Perch) Predict(ctx context.Context, samples [][]float32) ([]datastore.R
 		return nil, err
 	}
 
+	// Reject non-finite logits before softmax: a single NaN or +Inf poisons every
+	// score (the running max and the normalising sum both turn NaN), and a NaN
+	// confidence compares false against every threshold downstream, so instead of
+	// being dropped it would be promoted to a detection for whichever labels
+	// happen to sort first. Fail the window so the backend fault is counted and
+	// logged rather than turned into bogus detections.
+	if idx := firstNonFinite(rawLogits); idx >= 0 {
+		err = newNonFiniteScoreError(RegistryIDPerchV2, idx, len(rawLogits), p.RuntimeInfo)
+		recordPredictionFailure(span, RegistryIDPerchV2, errTypeNonFiniteLogits, start, err)
+		return nil, err
+	}
+
 	// Apply softmax to normalize raw logits into probabilities (0.0-1.0).
 	// The inference.Classifier interface returns pre-activation logits;
 	// BirdNET applies sigmoid in its own Predict path, Perch needs softmax.

@@ -625,6 +625,31 @@ func (o *Orchestrator) resolveInstalledPaths(registryID string) (modelPath, labe
 
 // Predict runs inference using the primary model.
 // Delegates to PredictModel for uniform locking and telemetry.
+// inferenceFailureLogEvery is the interval, in consecutive failures of one
+// model, at which PredictModel repeats its ERROR log after the first failure.
+const inferenceFailureLogEvery = 100
+
+// inferenceFailureStreaks tracks consecutive PredictModel failures per model ID
+// (value: *atomic.Int64) for the log rate limiting in PredictModel.
+//
+//nolint:gochecknoglobals // log-flood guard shared with globalInferenceCounters
+var inferenceFailureStreaks sync.Map
+
+// inferenceFailureStreak increments and returns the consecutive failure count
+// for modelID.
+func (o *Orchestrator) inferenceFailureStreak(modelID string) int64 {
+	v, _ := inferenceFailureStreaks.LoadOrStore(modelID, new(atomic.Int64))
+	return v.(*atomic.Int64).Add(1) //nolint:errcheck // stored type is fixed above
+}
+
+// resetInferenceFailureStreak clears the consecutive failure count for modelID
+// after a successful inference so the next fault is logged at ERROR again.
+func (o *Orchestrator) resetInferenceFailureStreak(modelID string) {
+	if v, ok := inferenceFailureStreaks.Load(modelID); ok {
+		v.(*atomic.Int64).Store(0) //nolint:errcheck // stored type is fixed above
+	}
+}
+
 func (o *Orchestrator) Predict(ctx context.Context, sample [][]float32) ([]datastore.Results, error) {
 	o.mu.RLock()
 	id := o.ModelInfo.ID
@@ -683,11 +708,22 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 
 	if err != nil {
 		globalInferenceCounters.RecordError(modelID)
-		log.Error("PredictModel inference failed",
+		// A broken backend fails every window (one per few seconds per source), so
+		// after the first failure only every inferenceFailureLogEvery-th repeat is
+		// logged at ERROR; the rest go to DEBUG. The metrics counter above still
+		// records each one.
+		streak := o.inferenceFailureStreak(modelID)
+		emit := log.Debug
+		if streak == 1 || streak%inferenceFailureLogEvery == 0 {
+			emit = log.Error
+		}
+		emit("PredictModel inference failed",
 			logger.String("model_id", modelID),
 			logger.Error(err),
+			logger.Int64("consecutive_failures", streak),
 			logger.Duration("duration", duration))
 	} else {
+		o.resetInferenceFailureStreak(modelID)
 		globalInferenceCounters.RecordInvoke(modelID, duration.Microseconds())
 		log.Debug("PredictModel complete",
 			logger.String("model_id", modelID),

@@ -87,6 +87,12 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 		m.RecordModelInvoke(modelID, invokeDuration.Seconds())
 	}
 
+	if idx := firstNonFinite(predictions); idx >= 0 {
+		err = newNonFiniteScoreError(modelID, idx, len(predictions), bn.RuntimeInfo)
+		recordPredictionFailure(span, modelID, errTypeNonFiniteLogits, start, err)
+		return nil, err
+	}
+
 	// Use optimized sigmoid function with buffer reuse
 	confidence := applySigmoidToPredictionsReuse(predictions, settings.BirdNET.Sensitivity, bn.confidenceBuffer)
 
@@ -128,6 +134,35 @@ func sortResults(results []datastore.Results) {
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Confidence > results[j].Confidence
 	})
+}
+
+// firstNonFinite returns the index of the first NaN or infinite value in
+// scores, or -1 when every value is finite.
+func firstNonFinite(scores []float32) int {
+	for i, v := range scores {
+		if f := float64(v); math.IsNaN(f) || math.IsInf(f, 0) {
+			return i
+		}
+	}
+	return -1
+}
+
+// newNonFiniteScoreError builds the error every ModelInstance.Predict returns
+// when its backend produced a NaN or Inf score. A non-finite score is a backend
+// fault, not a prediction: it compares false against every threshold, so left
+// alone it is promoted to a detection instead of being dropped. runtimeInfo is
+// the model's RuntimeInfo method, so the error names the backend, device and
+// precision that produced the value (the OpenVINO f16 GPU path is the known
+// offender).
+func newNonFiniteScoreError(modelID string, idx, n int, runtimeInfo func() (device, backend, precision string)) error {
+	device, backend, precision := runtimeInfo()
+	return errors.Newf("%s classifier returned a non-finite score (index %d of %d)", modelID, idx, n).
+		Category(errors.CategoryAudioAnalysis).
+		Context("model", modelID).
+		Context("backend", backend).
+		Context("device", device).
+		Context("precision", precision).
+		Build()
 }
 
 // pairLabelsAndConfidence pairs labels with their corresponding confidence values.
