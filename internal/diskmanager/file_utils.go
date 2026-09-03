@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/csv"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -40,11 +39,18 @@ const nonFiniteConfidence = 0
 var lastParseErrorCount atomic.Int64
 
 // isNonFiniteConfidenceToken reports whether a clip-name confidence token is one
-// of the non-finite spellings Go's %f verbs produce ("NaN", "+Inf", "-Inf", with
-// the trailing "p"), which is what the exporter writes for a non-finite score.
+// of the exact non-finite spellings Go's %f verbs produce ("NaN", "+Inf", "-Inf",
+// with the trailing "p"), which is what the exporter writes for a non-finite
+// score. It deliberately does not use strconv.ParseFloat, which would also accept
+// "nan", "inf", "infinity" and other spellings the exporter never emits, so a
+// foreign file with such a token keeps being rejected rather than swept up.
 func isNonFiniteConfidenceToken(token string) bool {
-	f, err := strconv.ParseFloat(strings.TrimSuffix(token, "p"), 64)
-	return err == nil && (math.IsNaN(f) || math.IsInf(f, 0))
+	switch strings.TrimSuffix(token, "p") {
+	case "NaN", "+Inf", "-Inf":
+		return true
+	default:
+		return false
+	}
 }
 
 // errUnrecognizedFilename is returned when a file's name does not match the

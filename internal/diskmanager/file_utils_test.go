@@ -2,6 +2,7 @@ package diskmanager
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -587,16 +588,38 @@ func TestParseFileInfo_NonFiniteConfidenceStaysEligible(t *testing.T) {
 }
 
 // TestIsNonFiniteConfidenceToken pins the accepted spellings to exactly what
-// fmt's %f verbs emit for NaN and Inf, with or without the "p" suffix.
+// fmt's %f verbs emit for NaN and Inf, with or without the "p" suffix. Every
+// other spelling strconv.ParseFloat would accept (unsigned or lower-case Inf,
+// "infinity", lower-case NaN) is rejected: the exporter never writes them, so a
+// file carrying one is foreign and must not become a cleanup candidate.
 func TestIsNonFiniteConfidenceToken(t *testing.T) {
 	t.Parallel()
-	for token, want := range map[string]bool{
-		"NaNp": true, "+Infp": true, "-Infp": true, "NaN": true, "Infp": true,
-		"80p": false, "XXp": false, "": false, "p": false,
-		// An out-of-range literal parses to Inf with a range error; fmt never
-		// emits it for a float32 score, so it is not one of ours.
-		"1e999p": false,
-	} {
-		assert.Equal(t, want, isNonFiniteConfidenceToken(token), "token %q", token)
+	tests := []struct {
+		token string
+		want  bool
+	}{
+		{token: "NaNp", want: true},
+		{token: "+Infp", want: true},
+		{token: "-Infp", want: true},
+		{token: "NaN", want: true},
+		{token: "+Inf", want: true},
+		{token: "Infp", want: false},
+		{token: "infp", want: false},
+		{token: "+infp", want: false},
+		{token: "nanp", want: false},
+		{token: "NANp", want: false},
+		{token: "infinityp", want: false},
+		{token: "+Infinityp", want: false},
+		{token: "1e999p", want: false},
+		{token: "80p", want: false},
+		{token: "XXp", want: false},
+		{token: "", want: false},
+		{token: "p", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("token=%q", tt.token), func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, isNonFiniteConfidenceToken(tt.token))
+		})
 	}
 }
