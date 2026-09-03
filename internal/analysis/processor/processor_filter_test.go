@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -141,6 +142,41 @@ func TestShouldFilterDetection_AppliesRangeFilterToPerch(t *testing.T) {
 			)
 
 			assert.Equal(t, tt.expectedFilter, shouldFilter)
+			assert.InDelta(t, 0.7, threshold, 0.001)
+		})
+	}
+}
+
+// TestShouldFilterDetection_DropsNonFiniteConfidence verifies that a NaN or Inf
+// confidence is always filtered. NaN compares false against every threshold, so
+// without an explicit guard "Confidence <= threshold" would promote a poisoned
+// classifier output to a saved detection. Seen in the field with Perch v2 on
+// OpenVINO f16 (all-NaN logits), which filled a disk with unparseable clips.
+func TestShouldFilterDetection_DropsNonFiniteConfidence(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	p := &Processor{}
+
+	tests := []struct {
+		name       string
+		confidence float32
+		wantFilter bool
+	}{
+		{name: "NaN is dropped", confidence: float32(math.NaN()), wantFilter: true},
+		{name: "+Inf is dropped", confidence: float32(math.Inf(1)), wantFilter: true},
+		{name: "-Inf is dropped", confidence: float32(math.Inf(-1)), wantFilter: true},
+		{name: "finite above threshold passes", confidence: 0.95, wantFilter: false},
+		{name: "finite below threshold is dropped", confidence: 0.2, wantFilter: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := datastore.Results{Species: "Turdus migratorius", Confidence: tt.confidence}
+			shouldFilter, threshold := p.shouldFilterDetection(
+				settings, result, "American Robin", "Turdus migratorius", "american robin",
+				0.7, "Backyard", "Perch_V2")
+			assert.Equal(t, tt.wantFilter, shouldFilter)
 			assert.InDelta(t, 0.7, threshold, 0.001)
 		})
 	}

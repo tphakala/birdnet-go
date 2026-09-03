@@ -1020,6 +1020,19 @@ func shouldApplyRangeFilter(modelID string, settings *conf.Settings) bool {
 	return false
 }
 
+// nonFiniteConfidenceWarned guards the once-per-(model, source) warning for
+// non-finite confidences in shouldFilterDetection. Keyed on both so a second
+// broken backend or source still announces itself.
+//
+//nolint:gochecknoglobals // log-flood guard, see onceByKey
+var nonFiniteConfidenceWarned onceByKey
+
+// isFiniteConfidence reports whether c is a usable score: not NaN and not Inf.
+func isFiniteConfidence(c float32) bool {
+	f := float64(c)
+	return !math.IsNaN(f) && !math.IsInf(f, 0)
+}
+
 // shouldFilterDetection checks if a detection should be filtered out
 func (p *Processor) shouldFilterDetection(settings *conf.Settings, result datastore.Results, commonName, scientificName, speciesLowercase string, baseThreshold float32, source, modelID string) (shouldFilter bool, confidenceThreshold float32) {
 	// Check human detection privacy filter. Match the raw label so Perch v2's
@@ -1053,6 +1066,32 @@ func (p *Processor) shouldFilterDetection(settings *conf.Settings, result datast
 		confidenceThreshold = p.getAdjustedConfidenceThreshold(speciesLowercase, baseThreshold, isCustomThreshold)
 	} else {
 		confidenceThreshold = baseThreshold
+	}
+
+	// A non-finite confidence (NaN or Inf) is a classifier fault, not a score. NaN
+	// compares false against every threshold, so the "<= threshold" gate below
+	// would let it through and it would be saved as a detection, with a "NaNp"
+	// confidence token in the clip name. Drop it here regardless of threshold.
+	// It is logged once per model and source at WARN (the fault repeats every
+	// window while the backend is broken, so a per-hit line would flood the log)
+	// and per hit at DEBUG.
+	if !isFiniteConfidence(result.Confidence) {
+		nonFiniteConfidenceWarned.do(modelID+"|"+source, func() {
+			GetLogger().Warn("Classifier returned a non-finite confidence; dropping such detections",
+				logger.String("species", result.Species),
+				logger.String("source", p.getDisplayNameForSource(source)),
+				logger.String("model_id", modelID),
+				logger.String("operation", "confidence_filter"))
+		})
+		if settings.Debug {
+			GetLogger().Debug("Detection filtered out due to non-finite confidence",
+				logger.String("species", result.Species),
+				logger.Float32("confidence", result.Confidence),
+				logger.String("source", p.getDisplayNameForSource(source)),
+				logger.String("model_id", modelID),
+				logger.String("operation", "confidence_filter"))
+		}
+		return true, confidenceThreshold
 	}
 
 	// Check confidence threshold
@@ -1251,6 +1290,13 @@ func convertToAdditionalResults(results []datastore.Results, primaryScientificNa
 	additional := make([]detection.AdditionalResult, 0, len(results))
 	seen := make(map[string]int, len(results)) // scientificName → index in additional
 	for _, r := range results {
+		// A non-finite confidence never reaches the primary detection (see
+		// shouldFilterDetection) and must not ride along as an additional result
+		// either: it would be persisted as NULL on SQLite and rejected by MySQL,
+		// failing the whole save.
+		if !isFiniteConfidence(r.Confidence) {
+			continue
+		}
 		sp := detection.ParseSpeciesString(r.Species)
 		// Canonicalize the candidate's scientific name so the primary species is
 		// excluded even when this prediction carries it under a legacy/alias name.
