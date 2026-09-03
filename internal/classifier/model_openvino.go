@@ -103,9 +103,17 @@ func openVINOPlanFor(backendPref, devicePref, modelID, libraryPath string, outpu
 // (2026-06-18), f16 collapses on realistic low-SNR audio (max confidence error
 // ~0.8, wrong top-1, confidences fall to ~0) while a loud single-species clip
 // survives by luck; f32 is bit-exact with ORT (~6e-6) and still ~4.6x faster than
-// ORT CPU. CPU f16 (incl. ARM A76) and Perch v2 f16-GPU are unaffected, so the
-// BirdNET-v2.4 override is scoped to its GPU path. Do NOT widen it to f16 without
-// re-running the inference/openvino_parity_functional_test.go soundscape parity check.
+// ORT CPU. CPU f16 (incl. ARM A76) is unaffected, so the override is scoped to
+// the GPU path. Do NOT widen it to f16 without re-running the
+// inference/openvino_parity_functional_test.go soundscape parity check.
+//
+// Perch v2 is likewise forced to f32 on the GPU. Its f16-GPU path was validated
+// on an Iris Xe iGPU, but on an Intel Arc A380 (dGPU) the f16 kernel returns
+// all-NaN logits for every window, which the pipeline then promoted to bogus
+// detections. The plan carries only the device class ("GPU"), not the adapter,
+// so the override necessarily covers every Intel GPU; f32 costs some throughput
+// on adapters where f16 worked, but stays well within real time. Do NOT relax it
+// to f16 without validating on a discrete Arc part.
 //
 // The bat embedding model is the exception that is forced to f32 on EVERY device:
 // its embedding head overflows at f16 on genuine f16 hardware (the A76 CPU's f16 NEON
@@ -116,7 +124,7 @@ func openVINOPrecisionFor(modelID, device string) string {
 	if modelID == RegistryIDBat {
 		return inference.OVPrecisionF32
 	}
-	if device == inference.OVDeviceGPU && modelID == DefaultModelVersion {
+	if device == inference.OVDeviceGPU && (modelID == DefaultModelVersion || modelID == RegistryIDPerchV2) {
 		return inference.OVPrecisionF32
 	}
 	return ""
@@ -251,9 +259,9 @@ func openVINOPrecisionLabel(precision string) string {
 // openVINOEffectivePrecision maps an OpenVINO INFERENCE_PRECISION_HINT to the
 // effective runtime precision label shown on the inference status card, using the
 // shared Quantization vocabulary ("FP16"/"FP32"). An empty hint means the backend
-// default, which is f16 (see openVINOPrecisionFor), so it maps to FP16; the only
-// explicit override currently emitted is OVPrecisionF32 (BirdNET v2.4 on the GPU),
-// which maps to FP32.
+// default, which is f16 (see openVINOPrecisionFor), so it maps to FP16; the
+// explicit override OVPrecisionF32 (BirdNET v2.4 and Perch v2 on the GPU, the bat
+// embedding model on every device) maps to FP32.
 func openVINOEffectivePrecision(precisionHint string) string {
 	if precisionHint == inference.OVPrecisionF32 {
 		return string(QuantizationFP32)
