@@ -155,7 +155,8 @@ func medianPredict(t *testing.T, c Classifier, samples []float32, n int) time.Du
 // env: OV_TEST_DIVERGE_AUDIO (raw f32 input), OV_TEST_DIVERGE_OUTPUT_INDEX,
 // OV_TEST_DEVICE (default "gpu"), OV_TEST_LIB, OV_TEST_DIVERGE_MAX_CONF_ERR
 // (default 0.15: cross-precision drift is inherently larger than ORT-vs-f32, e.g.
-// Perch v2 f16-GPU is ~0.08 while a broken model like BirdNET v2.4 f16-GPU is
+// Perch v2 f16 on an Iris Xe GPU is ~0.08 (NaN on an Arc A380, hence its f32
+// override) while a broken model like BirdNET v2.4 f16-GPU is
 // ~0.8; the top-1 match assertion is the primary catch for a catastrophic
 // divergence). The divergence knob is named distinctly from the parity test's
 // OV_TEST_MAX_CONF_ERR so the two tolerances cannot be conflated.
