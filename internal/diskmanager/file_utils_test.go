@@ -24,11 +24,13 @@ func TestInvalidFileNameErrorMessages(t *testing.T) {
 		// This actually gets parsed as species="bubo", confidence="bubo", which fails at the confidence parsing step
 		{"bubo_bubo_80p.wav", "diskmanager: invalid confidence value"},
 
-		// Invalid confidence value
-		{"bubo_bubo_XXp_20210102T150405Z.wav", "diskmanager: invalid confidence value"},
-
 		// Invalid timestamp format
 		{"bubo_bubo_80p_invalid.wav", "diskmanager: invalid timestamp format"},
+
+		// Non-numeric confidence token that is not one of the non-finite float
+		// spellings the exporter can produce: still rejected so foreign files that
+		// merely share the name shape never become deletion candidates.
+		{"bubo_bubo_XXp_20210102T150405Z.wav", "diskmanager: invalid confidence value"},
 	}
 
 	for _, tc := range testCases {
@@ -270,6 +272,7 @@ func TestGetAudioFilesWithMixedFiles(t *testing.T) {
 		filepath.Join(tempDir, "erithacus_rubecula_60p_20210104T150405Z.flac"),
 		filepath.Join(tempDir, "turdus_migratorius_94p_20210105T150405Z_86s.m4a"),  // with duration suffix
 		filepath.Join(tempDir, "cyanocitta_cristata_89p_20210106T150405Z_38s.wav"), // with duration suffix
+		filepath.Join(tempDir, "acris_crepitans_NaNp_20210102T150405Z_105s.wav"),   // non-finite confidence: tolerated, lowest confidence
 	}
 
 	invalidFiles := []string{
@@ -548,4 +551,52 @@ func TestDotDirectorySkipping(t *testing.T) {
 	// Hidden dir's file should be skipped, normal file should be found
 	assert.Contains(t, visited, normalWAV)
 	assert.NotContains(t, visited, hiddenWAV)
+}
+
+// TestParseFileInfo_NonFiniteConfidenceStaysEligible verifies that a clip whose
+// confidence token is a non-finite float is still returned as a cleanup candidate
+// with the lowest confidence, instead of being skipped. The exporter writes "NaNp"
+// (or "+Infp"/"-Infp") when a classifier returns a non-finite score; such clips
+// previously never entered the deletion candidate set and accumulated until the
+// disk was full. Any other unparseable token keeps being rejected (see
+// TestInvalidFileNameErrorMessages) so foreign files are not swept up.
+func TestParseFileInfo_NonFiniteConfidenceStaysEligible(t *testing.T) {
+	t.Parallel()
+
+	for _, filename := range []string{
+		"acris_crepitans_NaNp_20260901T230412Z_105s.wav",
+		"bubo_bubo_+Infp_20210102T150405Z.wav",
+		"bubo_bubo_-Infp_20210102T150405Z.wav",
+	} {
+		t.Run(filename, func(t *testing.T) {
+			t.Parallel()
+			mockInfo := &MockFileInfo{
+				FileName:    filename,
+				FileSize:    1024,
+				FileMode:    0o644,
+				FileModTime: parseTime("20210102T150405Z"),
+				FileIsDir:   false,
+			}
+
+			info, err := parseFileInfo("/test/"+filename, mockInfo, allowedFileTypes)
+			require.NoError(t, err, "a non-finite confidence token must not reject the file")
+			assert.Equal(t, nonFiniteConfidence, info.Confidence, "non-finite confidence must be the lowest value")
+			assert.False(t, info.Timestamp.IsZero(), "timestamp must still be parsed")
+		})
+	}
+}
+
+// TestIsNonFiniteConfidenceToken pins the accepted spellings to exactly what
+// fmt's %f verbs emit for NaN and Inf, with or without the "p" suffix.
+func TestIsNonFiniteConfidenceToken(t *testing.T) {
+	t.Parallel()
+	for token, want := range map[string]bool{
+		"NaNp": true, "+Infp": true, "-Infp": true, "NaN": true, "Infp": true,
+		"80p": false, "XXp": false, "": false, "p": false,
+		// An out-of-range literal parses to Inf with a range error; fmt never
+		// emits it for a float32 score, so it is not one of ours.
+		"1e999p": false,
+	} {
+		assert.Equal(t, want, isNonFiniteConfidenceToken(token), "token %q", token)
+	}
 }
