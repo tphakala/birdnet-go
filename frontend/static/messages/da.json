@@ -2623,9 +2623,9 @@
           "label": "Landestandard",
           "helpText": "Landestandard for oversatte artsfællesnavne."
         },
-        "tensorflowThreads": {
-          "label": "TensorFlow CPU-tråde",
-          "helpText": "Antal CPU-tråde. Sæt til 0 for at bruge alle tilgængelige tråde."
+        "inferenceThreads": {
+          "label": "CPU-tråde til inferens",
+          "helpText": "Antal CPU-tråde, der bruges til modelinferens. Sæt til 0 for at bruge alle tilgængelige tråde. Har ingen effekt på modeller, der kører på en GPU."
         }
       },
       "errors": {

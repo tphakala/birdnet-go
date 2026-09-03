@@ -2623,9 +2623,9 @@
           "label": "Lokalizácia",
           "helpText": "Lokalizácia pre preložené bežné názvy druhov."
         },
-        "tensorflowThreads": {
-          "label": "TensorFlow CPU vlákna",
-          "helpText": "Počet vlákien CPU. Nastavte na 0, aby sa použili všetky dostupné vlákna."
+        "inferenceThreads": {
+          "label": "CPU vlákna pre inferenciu",
+          "helpText": "Počet vlákien CPU použitých na inferenciu modelu. Nastavte na 0, aby sa použili všetky dostupné vlákna. Nemá vplyv na modely bežiace na GPU."
         }
       },
       "errors": {

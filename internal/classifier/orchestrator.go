@@ -45,15 +45,25 @@ type entryRef struct {
 	entry *modelEntry
 }
 
-// secondaryBackendKey identifies the inference backend / OpenVINO device that an
-// OV-capable secondary model was last built against. Each modelEntry stores its
-// own key (see modelEntry.backend); ReloadSecondaryModels uses it as a per-entry
-// change-detection gate so an unrelated reload_birdnet trigger (locale,
-// thresholds) does not needlessly rebuild a large secondary model.
+// secondaryBackendKey identifies the inference backend / OpenVINO device / CPU
+// thread count that an OV-capable secondary model was last built against. Each
+// modelEntry stores its own key (see modelEntry.backend); ReloadSecondaryModels
+// uses it as a per-entry change-detection gate so an unrelated reload_birdnet
+// trigger (locale, thresholds) does not needlessly rebuild a large secondary
+// model, while a change that DOES affect the built session (backend, device, or
+// thread count) does force a rebuild.
 type secondaryBackendKey struct {
 	backend  string
 	ovDevice string
 	ovPath   string
+	// threads is BirdNET.Threads (the CPU inference thread budget) the session was
+	// built with. It is part of the gate so a runtime thread-count change rebuilds
+	// every secondary model, matching the primary's reload. The raw configured
+	// value is stored (0 = auto): it never misses a change, and at worst forces one
+	// redundant rebuild when toggling 0 and a value that happens to equal NumCPU.
+	// Ignored in practice by GPU sessions, which reject INFERENCE_NUM_THREADS, so a
+	// GPU-bound secondary simply rebuilds to an equivalent session.
+	threads int
 }
 
 // Orchestrator manages classifier model instances and provides the primary
@@ -1476,22 +1486,24 @@ func (o *Orchestrator) reloadPrimaryModel(reload func(primary *BirdNET) error) e
 	return nil
 }
 
-// secondaryTripletFor returns the inference-backend triplet that OV-capable
-// secondary models build against. The secondaries share the primary's OpenVINO
-// configuration, so the triplet is derived from settings.BirdNET. Each modelEntry
-// records this (modelEntry.backend) at build time so ReloadSecondaryModels can
-// detect a per-model backend/device change.
+// secondaryTripletFor returns the inference-backend key that OV-capable secondary
+// models build against. The secondaries share the primary's OpenVINO configuration
+// and CPU thread budget, so the key is derived from settings.BirdNET. Each
+// modelEntry records this (modelEntry.backend) at build time so ReloadSecondaryModels
+// can detect a per-model backend/device/thread-count change.
 func secondaryTripletFor(settings *conf.Settings) secondaryBackendKey {
 	return secondaryBackendKey{
 		backend:  settings.BirdNET.Backend,
 		ovDevice: settings.BirdNET.OpenVINODevice,
 		ovPath:   settings.BirdNET.OpenVINOPath,
+		threads:  settings.BirdNET.Threads,
 	}
 }
 
 // ReloadSecondaryModels rebuilds the OV-capable secondary models (Perch, and the
-// bat embedding extractor) when the BirdNET inference backend or OpenVINO device
-// preference changes at runtime, so they move to the new device without a full restart.
+// bat embedding extractor) when the BirdNET inference backend, OpenVINO device
+// preference, or CPU thread count changes at runtime, so they move to the new
+// device (or thread budget) without a full restart, matching the primary reload.
 // It mirrors the primary reload's transactional safety: each model is built on
 // the new backend BEFORE the old instance is closed, and a build failure leaves
 // the old instance serving (one model failing does not abort the others).
@@ -1582,10 +1594,11 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 			continue
 		}
 		if current == triplet {
-			log.Debug("secondary model already built on current backend/device, skipping reload",
+			log.Debug("secondary model already built on current backend/device/threads, skipping reload",
 				logger.String("registry_id", ref.id),
 				logger.String("backend", triplet.backend),
-				logger.String("ov_device", triplet.ovDevice))
+				logger.String("ov_device", triplet.ovDevice),
+				logger.Int("threads", triplet.threads))
 			continue
 		}
 
@@ -1615,10 +1628,11 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 				ref.entry.backend = triplet
 			}
 			ref.entry.mu.Unlock()
-			log.Error("failed to rebuild secondary model on backend/device change; keeping existing instance",
+			log.Error("failed to rebuild secondary model on backend/device/threads change; keeping existing instance",
 				logger.String("registry_id", ref.id),
 				logger.String("backend", triplet.backend),
 				logger.String("ov_device", triplet.ovDevice),
+				logger.Int("threads", triplet.threads),
 				logger.Error(err))
 			continue
 		}
@@ -1675,10 +1689,11 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 				logger.Error(cerr))
 		}
 
-		log.Info("secondary model reloaded on new backend/device",
+		log.Info("secondary model reloaded on new backend/device/threads",
 			logger.String("registry_id", ref.id),
 			logger.String("backend", triplet.backend),
-			logger.String("ov_device", triplet.ovDevice))
+			logger.String("ov_device", triplet.ovDevice),
+			logger.Int("threads", triplet.threads))
 	}
 
 	return firstErr
@@ -1757,12 +1772,12 @@ type secondaryModelBuilder func(o *Orchestrator, settings *conf.Settings, thread
 
 // openvinoCapableSecondaryBuilders maps the registry IDs of secondary models
 // whose construction honors the BirdNET inference backend / OpenVINO device
-// preference to a builder returning a fresh, unregistered instance.
-// ReloadSecondaryModels rebuilds exactly these models when the backend/device
-// changes at runtime. For Bat, only the heavy embedding extractor honors the
-// preference; the tiny bat classifier head always runs on ORT. Giving a new
-// secondary OpenVINO support is a one-line entry here, paired with the OV fields on
-// its loader config.
+// preference and CPU thread count to a builder returning a fresh, unregistered
+// instance. ReloadSecondaryModels rebuilds exactly these models when the
+// backend/device/thread-count changes at runtime. For Bat, only the heavy
+// embedding extractor honors the preference; the tiny bat classifier head always
+// runs on ORT. Giving a new secondary OpenVINO support is a one-line entry here,
+// paired with the OV fields on its loader config.
 var openvinoCapableSecondaryBuilders = map[string]secondaryModelBuilder{
 	RegistryIDBirdNETV3: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
 		// Explicit nil-on-error return avoids the typed-nil interface trap (a

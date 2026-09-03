@@ -2623,9 +2623,9 @@
           "label": "Lokalizacja",
           "helpText": "Lokalizacja dla przetłumaczonych nazw pospolitych gatunków."
         },
-        "tensorflowThreads": {
-          "label": "Wątki CPU TensorFlow",
-          "helpText": "Liczba wątków CPU. Ustaw na 0, aby użyć wszystkich dostępnych wątków."
+        "inferenceThreads": {
+          "label": "Wątki CPU wnioskowania",
+          "helpText": "Liczba wątków CPU używanych do wnioskowania modelu. Ustaw na 0, aby użyć wszystkich dostępnych wątków. Nie ma wpływu na modele działające na GPU."
         }
       },
       "errors": {

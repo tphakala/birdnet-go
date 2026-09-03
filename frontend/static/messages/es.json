@@ -2623,9 +2623,9 @@
           "label": "Idioma",
           "helpText": "Idioma para nombres comunes de especies traducidos."
         },
-        "tensorflowThreads": {
-          "label": "Hilos de CPU TensorFlow",
-          "helpText": "Número de hilos de CPU. Establezca en 0 para usar todos los hilos disponibles."
+        "inferenceThreads": {
+          "label": "Hilos de CPU para inferencia",
+          "helpText": "Número de hilos de CPU utilizados para la inferencia del modelo. Establezca en 0 para usar todos los hilos disponibles. No tiene efecto en modelos que se ejecutan en una GPU."
         }
       },
       "errors": {

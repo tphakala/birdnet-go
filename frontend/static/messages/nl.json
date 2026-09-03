@@ -2623,9 +2623,9 @@
           "label": "Taalregio",
           "helpText": "Taalregio voor vertaalde soorten algemene namen."
         },
-        "tensorflowThreads": {
-          "label": "TensorFlow CPU-threads",
-          "helpText": "Aantal CPU threads. Zet op 0 om alle beschikbare threads te gebruiken."
+        "inferenceThreads": {
+          "label": "CPU-threads voor inferentie",
+          "helpText": "Aantal CPU-threads dat wordt gebruikt voor modelinferentie. Zet op 0 om alle beschikbare threads te gebruiken. Heeft geen effect op modellen die op een GPU draaien."
         }
       },
       "errors": {

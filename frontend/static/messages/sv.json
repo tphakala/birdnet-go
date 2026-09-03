@@ -2623,9 +2623,9 @@
           "label": "Språk",
           "helpText": "Språk för översatta artnamn."
         },
-        "tensorflowThreads": {
-          "label": "TensorFlow CPU-trådar",
-          "helpText": "Antal CPU-trådar. Ange 0 för att använda alla tillgängliga trådar."
+        "inferenceThreads": {
+          "label": "CPU-trådar för inferens",
+          "helpText": "Antal CPU-trådar som används för modellinferens. Ange 0 för att använda alla tillgängliga trådar. Har ingen effekt på modeller som körs på en GPU."
         }
       },
       "errors": {

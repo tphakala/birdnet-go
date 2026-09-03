@@ -2623,9 +2623,9 @@
           "label": "Idioma",
           "helpText": "Idioma para nomes comuns de espécies traduzidos."
         },
-        "tensorflowThreads": {
-          "label": "Threads de CPU do TensorFlow",
-          "helpText": "Número de threads de CPU. Defina como 0 para usar todos os threads disponíveis."
+        "inferenceThreads": {
+          "label": "Threads de CPU para inferência",
+          "helpText": "Número de threads de CPU utilizados na inferência do modelo. Defina como 0 para usar todos os threads disponíveis. Não tem efeito em modelos executados numa GPU."
         }
       },
       "errors": {
