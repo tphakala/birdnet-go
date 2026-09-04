@@ -97,7 +97,7 @@ Pre-compiled BirdNET-Go executables are also available at https://github.com/tph
 BirdNET-Go has minimal external dependencies, but requires a few specific tools for certain features:
 
 - **TensorFlow Lite C library**: Required for the core audio analysis functionality
-- **FFmpeg**: Required for RTSP stream capture, on-demand clip transcoding in the web interface, and audio export to MP3. WAV, FLAC and Opus are encoded natively and do not need FFmpeg. AAC export uses FFmpeg by default, but a native encoder is available as an opt-in preview via the `BIRDNET_AAC_ENCODER=native` environment variable. The HLS live stream is now encoded natively and no longer uses FFmpeg. Loudness normalization of saved clips is done natively for every format and no longer needs FFmpeg.
+- **FFmpeg**: Required for RTSP stream capture and on-demand clip transcoding in the web interface. WAV, FLAC and Opus are encoded natively and do not need FFmpeg. AAC and MP3 export use FFmpeg by default, but each has a native encoder available as an opt-in preview via the `BIRDNET_AAC_ENCODER=native` and `BIRDNET_MP3_ENCODER=native` environment variables. The HLS live stream is now encoded natively and no longer uses FFmpeg. Loudness normalization of saved clips is done natively for every format and no longer needs FFmpeg.
 
   The HLS live stream is encoded in-process and served from memory, so nothing is written to the HLS directory. Its output sample rate is fixed at 48 kHz, so `webserver.livestream.samplerate` has no effect (a warning is logged if it is set to anything else), and `webserver.livestream.ffmpegloglevel` no longer applies since there is no FFmpeg process to configure.
 

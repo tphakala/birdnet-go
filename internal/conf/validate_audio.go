@@ -439,21 +439,25 @@ func (s *AudioSettings) applyFfmpegFormatFallback() {
 // produced by shelling out to FFmpeg.
 //
 // WAV, FLAC and Opus always have a native encoder, so they never need FFmpeg and
-// must NOT be downgraded to WAV when it is missing. AAC has one too, but it is
-// opt-in while it earns field confidence, so for it the answer depends on the
-// runtime gate: without the gate the export really does need FFmpeg, and with it
-// the format is native and must NOT be downgraded. Getting this wrong is silent,
-// because the downgrade happens during config validation and the operator only
-// sees WAV files appear where they asked for .m4a.
+// must NOT be downgraded to WAV when it is missing. AAC and MP3 have one too, but
+// each is opt-in while it earns field confidence, so for them the answer depends
+// on the runtime gate: without the gate the export really does need FFmpeg, and
+// with it the format is native and must NOT be downgraded. Getting this wrong is
+// silent, because the downgrade happens during config validation and the operator
+// only sees WAV files appear where they asked for .m4a or .mp3.
 //
-// REMOVAL: when the native AAC encoder becomes the default too, the remaining
-// gate call goes away and this collapses to "only MP3 needs FFmpeg".
+// REMOVAL: when the native AAC and MP3 encoders become the default too, the
+// remaining gate calls go away: every supported export type then has a native
+// encoder and this returns false for all of them, leaving the default true only
+// as a guard for an unrecognized type.
 func exportFormatNeedsFFmpeg(exportType string) bool {
 	switch exportType {
 	case AudioExportTypeWAV, AudioExportTypeFLAC, AudioExportTypeOPUS:
 		return false
 	case AudioExportTypeAAC:
 		return !NativeAACEncoderEnabled()
+	case AudioExportTypeMP3:
+		return !NativeMP3EncoderEnabled()
 	default:
 		return true
 	}

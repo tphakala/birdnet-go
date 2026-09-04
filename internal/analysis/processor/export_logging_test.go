@@ -777,16 +777,21 @@ func TestSelectEncoder_RoutingTable(t *testing.T) {
 		// export failing outright.
 		{"aac falls back when the rate is unsupported", "native", ffmpeg.FormatAAC, 22050, clipenc.FFmpeg},
 		{"opus falls back when the rate is unsupported", "", ffmpeg.FormatOpus, 22050, clipenc.FFmpeg},
-		// The AAC gate never touches the formats FFmpeg owns outright.
-		{"mp3 is always ffmpeg", "native", ffmpeg.FormatMP3, conf.SampleRate, clipenc.FFmpeg},
+		// With its own gate pinned off below, MP3 routes to FFmpeg; ALAC has no
+		// native encoder at all. Neither is touched by the AAC gate.
+		{"mp3 without its gate stays on ffmpeg", "native", ffmpeg.FormatMP3, conf.SampleRate, clipenc.FFmpeg},
 		{"alac is always ffmpeg", "native", ffmpeg.FormatALAC, conf.SampleRate, clipenc.FFmpeg},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			// Not parallel: t.Setenv, and the skip warning uses a package-level Once.
 			t.Setenv(conf.EnvNativeAACEncoder, tc.aacGate)
+			// This table exercises the AAC gate; MP3 has its own, covered in
+			// native_mp3_gate_test.go. Pin it off so MP3 routes to FFmpeg here
+			// regardless of the ambient environment.
+			t.Setenv(conf.EnvNativeMP3Encoder, "")
 			resetNativeSkipOnce()
 
-			assert.Equal(t, tc.wantEncode, selectEncoder(tc.format, tc.rate))
+			assert.Equal(t, tc.wantEncode, selectEncoder(tc.format, tc.rate, 128))
 		})
 	}
 }

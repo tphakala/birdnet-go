@@ -5,12 +5,13 @@ import (
 	"strings"
 )
 
-// Temporary runtime opt-in for the native Go AAC encoder.
+// Temporary runtime opt-in for the native Go AAC and MP3 encoders.
 //
-// AAC clip export still runs through FFmpeg by default. Setting
-// BIRDNET_AAC_ENCODER=native switches it to the pure-Go encoder and muxer
-// (go-aac plus go-m4a for .m4a) so it can be exercised in the field before it
-// becomes the default.
+// AAC and MP3 clip export still run through FFmpeg by default. Setting
+// BIRDNET_AAC_ENCODER=native switches AAC to the pure-Go encoder and muxer
+// (go-aac plus go-m4a for .m4a); BIRDNET_MP3_ENCODER=native switches MP3 to the
+// pure-Go go-mp3 encoder. Each is exercised in the field behind its own gate
+// before becoming the default.
 //
 // Opus clip export and HLS live streaming have already earned that confidence.
 // go-opus is the unconditional encoder for .opus (FFmpeg is used only as a
@@ -26,16 +27,20 @@ import (
 // inverts the layering and widens the deliberately exact internal closure that
 // internal/diagnostics guards.
 //
-// REMOVAL: this file is scaffolding with a planned end of life. Once the native
-// AAC encoder has earned field confidence, delete its gate along with the branch
-// that reads it (exportFormatNeedsFFmpeg and SaveAudioAction.encodeClip); the
-// native path becomes unconditional and the FFmpeg branch goes away with it.
+// REMOVAL: this file is scaffolding with a planned end of life. Once a native
+// encoder (AAC or MP3) has earned field confidence, delete its gate along with
+// the branches that read it (exportFormatNeedsFFmpeg, selectEncoder and
+// strandedWithoutEncoder); that format's native path becomes unconditional and
+// its FFmpeg branch goes away with it.
 //
 // Nothing else depends on this file, and it deliberately holds no other logic
 // so that each removal stays a mechanical edit.
 const (
 	// EnvNativeAACEncoder selects the native AAC encoder for .m4a clip export.
 	EnvNativeAACEncoder = "BIRDNET_AAC_ENCODER"
+
+	// EnvNativeMP3Encoder selects the native MP3 encoder for .mp3 clip export.
+	EnvNativeMP3Encoder = "BIRDNET_MP3_ENCODER"
 
 	// nativeEncoderValue is the only value that enables a native encoder.
 	// Anything else, including an unset variable, keeps the FFmpeg path.
@@ -45,6 +50,10 @@ const (
 // NativeAACEncoderEnabled reports whether AAC clip export should use the native
 // encoder.
 func NativeAACEncoderEnabled() bool { return nativeEncoderSelected(EnvNativeAACEncoder) }
+
+// NativeMP3EncoderEnabled reports whether MP3 clip export should use the native
+// encoder.
+func NativeMP3EncoderEnabled() bool { return nativeEncoderSelected(EnvNativeMP3Encoder) }
 
 // nativeEncoderSelected reads env and reports whether it opts into the native
 // encoder. Matching is case-insensitive and tolerates surrounding whitespace,
