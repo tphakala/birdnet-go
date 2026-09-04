@@ -499,8 +499,11 @@ func TestLearnFromApprovedDetectionSubTriggerDoesNotRenewLatchedTimer(t *testing
 
 	dt := p.DynamicThresholds["test species"]
 	require.NotNil(t, dt, "threshold entry must still exist after a sub-trigger detection")
-	assert.True(t, dt.Timer.Before(before.Add(2*time.Hour)),
-		"Sub-trigger detection must not renew the timer (expected ~1h out, got %v out)", time.Until(dt.Timer))
+	// Assert the timer is unchanged (exactly soonToExpire), not merely "still soon":
+	// the intended behavior is no renewal at all, so any partial or unexpected timer
+	// mutation must fail. Exact equality also keeps the assertion time-independent.
+	assert.Equal(t, soonToExpire, dt.Timer,
+		"Sub-trigger detection must not renew the timer; it must stay exactly at soonToExpire")
 	// HighConfCount is the discriminating field: Level is already saturated at 3,
 	// so a spurious learn would surface as the count advancing to 4.
 	assert.Equal(t, 3, dt.HighConfCount, "Sub-trigger detection must not count as a learning event")
