@@ -264,3 +264,160 @@ func TestThreadSafeWriter_ConcurrentBounded(t *testing.T) {
 	assert.LessOrEqual(t, len(buf.buf), 1024,
 		"retained bytes must stay within the cap under concurrent writes")
 }
+
+// TestStderrLogTail verifies the pure tail-extraction used for the
+// stderr-on-exit log field: trailing-byte capping, leading-partial-line drop,
+// whitespace trimming, and the maxBytes <= 0 passthrough.
+func TestStderrLogTail(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		maxBytes int
+		want     string
+	}{
+		{name: "empty", input: "", maxBytes: 16, want: ""},
+		{name: "whitespace only", input: "  \n\t\n ", maxBytes: 16, want: ""},
+		{
+			name:     "under cap returned trimmed",
+			input:    "line one\nline two\n",
+			maxBytes: 64,
+			want:     "line one\nline two",
+		},
+		{
+			name:     "over cap keeps trailing window on line boundary",
+			input:    "aaaa\nbbbb\ncccc\ndddd\n",
+			maxBytes: 12, // last 12 bytes = "b\ncccc\ndddd\n"; partial "b" line dropped
+			want:     "cccc\ndddd",
+		},
+		{
+			// The cut lands exactly on a newline, so the first retained line is
+			// complete and must be kept rather than dropped.
+			name:     "cut on line boundary keeps complete first line",
+			input:    "aaaa\nbbbb\ncccc\n",
+			maxBytes: 10, // last 10 bytes = "bbbb\ncccc\n"; cut sits right after a newline
+			want:     "bbbb\ncccc",
+		},
+		{
+			name:     "single long line over cap keeps trailing bytes",
+			input:    "0123456789abcdef",
+			maxBytes: 6,
+			want:     "abcdef",
+		},
+		{
+			// The window's only newline is its last byte, so the partial-line
+			// drop is skipped (nl+1 < len(s) is false) and TrimSpace removes the
+			// trailing newline rather than collapsing to "".
+			name:     "trailing newline is last byte in window",
+			input:    "xxabc\n",
+			maxBytes: 4,
+			want:     "abc",
+		},
+		{
+			name:     "non-positive maxBytes returns whole trimmed input",
+			input:    "  keep everything  ",
+			maxBytes: 0,
+			want:     "keep everything",
+		},
+		{
+			name:     "negative maxBytes returns whole trimmed input",
+			input:    "\nkeep\n",
+			maxBytes: -1,
+			want:     "keep",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := stderrLogTail(tt.input, tt.maxBytes)
+			assert.Equal(t, tt.want, got)
+			if tt.maxBytes > 0 {
+				assert.LessOrEqual(t, len(got), tt.maxBytes,
+					"result must not exceed the cap")
+			}
+		})
+	}
+}
+
+// TestStream_stderrTailForLog verifies the Stream method reads the captured
+// stderr under its mutex, sanitizes FFmpeg memory-address prefixes, returns ""
+// when nothing was captured, and bounds the snippet to stderrLogTailMaxBytes.
+func TestStream_stderrTailForLog(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty buffer returns empty", func(t *testing.T) {
+		t.Parallel()
+		s := &Stream{}
+		assert.Empty(t, s.stderrTailForLog())
+	})
+
+	t.Run("strips ffmpeg memory-address prefix", func(t *testing.T) {
+		t.Parallel()
+		s := &Stream{}
+		_, err := s.stderr.Write([]byte("[rtsp @ 0x55d4a4808980] method DESCRIBE failed: 404 Not Found\n"))
+		require.NoError(t, err)
+
+		got := s.stderrTailForLog()
+		assert.NotContains(t, got, "0x55d4a4808980", "memory address must be sanitized")
+		assert.Contains(t, got, "404 Not Found", "diagnostic message must be preserved")
+	})
+
+	t.Run("redacts URL credentials", func(t *testing.T) {
+		t.Parallel()
+		s := &Stream{}
+		_, err := s.stderr.Write([]byte("Error opening input file rtsp://user:secret@cam.example.com:554/stream.\n"))
+		require.NoError(t, err)
+
+		got := s.stderrTailForLog()
+		// Credentials embedded in a stream URL must never reach the log; the
+		// host and path may remain for debugging.
+		assert.NotContains(t, got, "secret", "URL password must be redacted")
+		assert.NotContains(t, got, "user:", "URL username must be redacted")
+	})
+
+	t.Run("redacts credentials that straddle the tail boundary", func(t *testing.T) {
+		t.Parallel()
+		s := &Stream{}
+		// One long line with no newlines (so the partial-line drop cannot remove
+		// the fragment), sized so the last stderrLogTailMaxBytes bytes begin right
+		// after the URL scheme. If the tail were taken before sanitizing, only
+		// "user:secret@..." would remain and evade URL redaction. Sanitizing the
+		// whole capture first strips the credential regardless of the cut point.
+		url := "rtsp://user:secret@cam.example.com/stream"
+		// tail length 2014 makes the cut land at urlStart+7 (just past "rtsp://").
+		full := strings.Repeat("x", 50) + url + strings.Repeat("y", stderrLogTailMaxBytes-34)
+		_, err := s.stderr.Write([]byte(full))
+		require.NoError(t, err)
+		require.Greater(t, len(full), stderrLogTailMaxBytes, "input must exceed the cap to force truncation")
+
+		got := s.stderrTailForLog()
+		assert.NotContains(t, got, "secret", "credential must be redacted even when the URL straddles the tail cut")
+		assert.NotContains(t, got, "user:", "credential username must be redacted across the boundary")
+		// The host survives redaction and lies in the retained window, proving the
+		// URL region was kept and sanitized rather than simply truncated away.
+		assert.Contains(t, got, "cam.example.com", "host should remain after credential redaction")
+		assert.LessOrEqual(t, len(got), stderrLogTailMaxBytes)
+	})
+
+	t.Run("bounds snippet to the log tail cap", func(t *testing.T) {
+		t.Parallel()
+		s := &Stream{}
+		// Write far more than the log tail cap as distinct newline-terminated lines.
+		var written strings.Builder
+		for i := range 4000 {
+			line := "ffmpeg diagnostic line number " + strings.Repeat("x", i%5) + "\n"
+			written.WriteString(line)
+			_, err := s.stderr.Write([]byte(line))
+			require.NoError(t, err)
+		}
+		got := s.stderrTailForLog()
+		assert.NotEmpty(t, got)
+		assert.LessOrEqual(t, len(got), stderrLogTailMaxBytes,
+			"logged tail must not exceed the log tail cap")
+		// The tail must be a suffix of the full written stream (all ASCII).
+		assert.True(t, strings.HasSuffix(strings.TrimSpace(written.String()), got),
+			"logged tail must be the trailing portion of the captured stderr")
+	})
+}

@@ -521,6 +521,36 @@ func (b *boundedBuffer) Reset() {
 	b.buf = b.buf[:0]
 }
 
+// stderrLogTailMaxBytes caps how much of the captured FFmpeg stderr is attached
+// to the process-ended log lines. The capture itself is bounded to
+// stderrTailMaxBytes; this keeps the log field small and readable while still
+// showing the last handful of FFmpeg messages that explain why the process
+// stopped.
+const stderrLogTailMaxBytes = 2 << 10 // 2 KiB
+
+// stderrLogTail returns the trailing snippet of s used for a stderr-on-exit log
+// field: at most maxBytes trailing bytes, with surrounding whitespace trimmed. A
+// leading partial line is dropped so the snippet starts on a line boundary, but
+// only when the cut bisects a line; if the retained suffix already begins right
+// after a newline its first line is kept whole. It performs no locking or
+// sanitization; callers do both. A maxBytes <= 0 returns the whole trimmed input.
+func stderrLogTail(s string, maxBytes int) string {
+	if maxBytes > 0 && len(s) > maxBytes {
+		start := len(s) - maxBytes
+		// When the cut bisects a line (the byte before the retained suffix is not
+		// a newline), drop the leading partial line so the snippet starts on a
+		// line boundary, but only when content remains after the break. When the
+		// cut already lands on a boundary, keep the complete first line.
+		if s[start-1] != '\n' {
+			if nl := strings.IndexByte(s[start:], '\n'); nl >= 0 && start+nl+1 < len(s) {
+				start += nl + 1
+			}
+		}
+		s = s[start:]
+	}
+	return strings.TrimSpace(s)
+}
+
 // threadSafeWriter wraps a boundedBuffer with mutex protection for concurrent access.
 type threadSafeWriter struct {
 	buf *boundedBuffer
@@ -846,7 +876,8 @@ func (s *Stream) Run(parentCtx context.Context) {
 			runtime := time.Since(processStartTime)
 
 			fallbackEngaged := false
-			if err != nil && !errors.Is(err, context.Canceled) {
+			abnormalExit := err != nil && !errors.Is(err, context.Canceled)
+			if abnormalExit {
 				s.recordFailure(runtime)
 				// Latch to the full-stream request if repeated RTSP failures with
 				// no audio point at an audio-only handshake the camera cannot
@@ -907,6 +938,14 @@ func (s *Stream) Run(parentCtx context.Context) {
 			}
 
 			s.cleanupProcess()
+
+			// Surface the tail of FFmpeg's own stderr so operators can see why it
+			// stopped. It is otherwise only read during the early-detection and
+			// quick-exit windows, so a steady-state exit would leave it unlogged.
+			// Logged after cleanupProcess so cmd.Wait has flushed the final stderr:
+			// WARN for an abnormal exit, DEBUG for a normal one, and only when
+			// non-empty.
+			s.logStderrTailOnExit(abnormalExit)
 
 			// Notify consumers of stream restart.
 			if s.onReset != nil {
@@ -2346,4 +2385,46 @@ func (s *Stream) checkEarlyErrors() *ErrorContext {
 	s.stderrMu.RUnlock()
 
 	return ExtractErrorContext(stderrOutput)
+}
+
+// stderrTailForLog returns a sanitized, trailing snippet of this process's
+// captured FFmpeg stderr for a log field, or "" if nothing was captured. The
+// process-ended paths use it to surface why FFmpeg stopped without requiring a
+// live debugger, since the capture is otherwise only inspected during the early
+// detection and quick-exit windows. It is called after cleanupProcess has run
+// cmd.Wait, so the os/exec stderr copy is fully flushed and the capture is
+// complete; the read is also guarded by stderrMu.
+func (s *Stream) stderrTailForLog() string {
+	s.stderrMu.RLock()
+	full := s.stderr.String()
+	s.stderrMu.RUnlock()
+
+	// Sanitize the whole capture BEFORE trimming to the tail. Truncating first
+	// could cut a credential-bearing stream URL at the tail boundary and leave a
+	// fragment the URL sanitizer can no longer recognize, leaking the credential
+	// into the log. stderrLogTail returns "" for empty or whitespace-only input.
+	return stderrLogTail(privacy.SanitizeFFmpegError(full), stderrLogTailMaxBytes)
+}
+
+// logStderrTailOnExit logs the tail of this process's captured FFmpeg stderr, if
+// any, with the process-ended context. abnormal true logs at WARN (the process
+// failed); abnormal false logs at DEBUG (a normal exit rarely carries useful
+// stderr at loglevel error, so keep steady-state logs quiet). Nothing is logged
+// when no stderr was captured.
+func (s *Stream) logStderrTailOnExit(abnormal bool) {
+	tail := s.stderrTailForLog()
+	if tail == "" {
+		return
+	}
+	fields := []logger.Field{
+		logger.String("url", s.config.safeURL()),
+		logger.String("stderr_tail", tail),
+		logger.String("component", "ffmpeg-stream"),
+		logger.String("operation", "process_ended_stderr"),
+	}
+	if abnormal {
+		getStreamLogger().Warn("FFmpeg stderr on exit", fields...)
+		return
+	}
+	getStreamLogger().Debug("FFmpeg stderr on exit", fields...)
 }
