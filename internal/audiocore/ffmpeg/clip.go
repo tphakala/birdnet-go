@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // Audio format constants for export and clip operations.
@@ -27,11 +29,22 @@ const (
 const (
 	clipExtractionMinTimeout = 30 * time.Second
 	clipExtractionMaxTimeout = 10 * time.Minute
+	clipExtractOperation     = "clip_extract"
+	audioExportOperation     = "audio_export"
 )
 
 // MaxClipDurationSec is the maximum allowed clip duration in seconds.
 // Prevents memory exhaustion from very long extraction requests.
 const MaxClipDurationSec = 300 // 5 minutes
+
+// DefaultMaxTranscodeOutputBytes bounds the complete response retained for a
+// whole-recording export. It accommodates the maximum 20-minute extended
+// capture as 48 kHz, mono, 16-bit WAV while keeping concurrent exports bounded.
+const DefaultMaxTranscodeOutputBytes int64 = 128 << 20
+
+// ErrTranscodeOutputTooLarge identifies exports that exceed the in-memory
+// response limit.
+var ErrTranscodeOutputTooLarge = errors.NewStd("transcoded audio exceeds output size limit")
 
 // clipDefaultBitrates defines the default bitrates for lossy clip extraction formats.
 // These are independent of the audio export bitrate setting — clips are short previews
@@ -40,6 +53,14 @@ var clipDefaultBitrates = map[string]string{
 	FormatMP3:  "128k",
 	FormatOpus: "64k",
 	FormatAAC:  "96k",
+}
+
+// recordingExportDefaultBitrates preserve more detail than the preview-oriented
+// clip defaults when a user explicitly downloads a whole recording.
+var recordingExportDefaultBitrates = map[string]string{
+	FormatMP3:  "192k",
+	FormatOpus: "128k",
+	FormatAAC:  "192k",
 }
 
 // supportedClipFormats lists the formats supported by ExtractClip.
@@ -82,6 +103,21 @@ type ClipOptions struct {
 	FFmpegPath string
 }
 
+// TranscodeOptions contains all parameters for transcoding a whole audio file.
+type TranscodeOptions struct {
+	// InputPath is the path to the source audio file.
+	InputPath string
+	// Format is the output audio format (e.g., FormatWAV, FormatMP3).
+	Format string
+	// Filters contains optional audio processing filters.
+	Filters *AudioFilters
+	// FFmpegPath is the absolute path to the FFmpeg binary.
+	FFmpegPath string
+	// MaxOutputBytes is the maximum complete output retained in memory. Zero uses
+	// DefaultMaxTranscodeOutputBytes; callers may provide a smaller positive limit.
+	MaxOutputBytes int64
+}
+
 // IsSupportedClipFormat returns true if the format is supported for clip extraction.
 func IsSupportedClipFormat(format string) bool {
 	return supportedClipFormats[format]
@@ -92,7 +128,7 @@ func IsSupportedClipFormat(format string) bool {
 // rather than raw .aac, because M4A supports seeking and metadata that
 // raw AAC streams lack.
 func getFileExtension(format string) string {
-	if format == FormatAAC {
+	if format == FormatAAC || format == FormatALAC {
 		return "m4a"
 	}
 	return format
@@ -155,6 +191,49 @@ func ExtractClip(ctx context.Context, opts *ClipOptions) (*bytes.Buffer, error) 
 	return extractClipViaPipe(ctx, opts.FFmpegPath, opts.InputPath, opts.Start, duration, opts.Format, filters)
 }
 
+// TranscodeAudio re-encodes a whole audio file to the specified format.
+// The result is returned as an in-memory buffer.
+func TranscodeAudio(ctx context.Context, opts *TranscodeOptions) (*bytes.Buffer, error) {
+	if opts == nil {
+		return nil, fmt.Errorf("transcode options cannot be nil")
+	}
+	if !supportedClipFormats[opts.Format] {
+		return nil, fmt.Errorf("unsupported audio format: %q", opts.Format)
+	}
+	if err := ValidateFFmpegPath(opts.FFmpegPath); err != nil {
+		return nil, fmt.Errorf("invalid FFmpeg path: %w", err)
+	}
+	if opts.MaxOutputBytes < 0 || opts.MaxOutputBytes > DefaultMaxTranscodeOutputBytes {
+		return nil, fmt.Errorf("max output bytes must be between 1 and %d, or zero for the default", DefaultMaxTranscodeOutputBytes)
+	}
+
+	maxOutputBytes := opts.MaxOutputBytes
+	if maxOutputBytes == 0 {
+		maxOutputBytes = DefaultMaxTranscodeOutputBytes
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, clipExtractionMaxTimeout)
+	defer cancel()
+
+	filters := opts.Filters
+	if filters != nil && filters.Normalize && filters.LoudnessStats == nil {
+		stats, err := AnalyzeFileLoudness(ctx, opts.InputPath, opts.FFmpegPath,
+			AudioFilters{Denoise: filters.Denoise, Normalize: true}, nil)
+		if err != nil {
+			return nil, fmt.Errorf("loudness analysis for audio export failed: %w", err)
+		}
+		filtersCopy := *filters
+		filtersCopy.LoudnessStats = stats
+		filters = &filtersCopy
+	}
+
+	if requiresSeekableOutput[opts.Format] {
+		return transcodeAudioViaTempFile(ctx, opts.FFmpegPath, opts.InputPath, opts.Format, filters, maxOutputBytes)
+	}
+
+	return transcodeAudioViaPipe(ctx, opts.FFmpegPath, opts.InputPath, opts.Format, filters, maxOutputBytes)
+}
+
 // extractClipViaPipe runs FFmpeg with output piped to stdout.
 func extractClipViaPipe(ctx context.Context, ffmpegPath, inputPath string, start, duration float64, format string, filters *AudioFilters) (*bytes.Buffer, error) {
 	args := buildClipFFmpegArgs(inputPath, start, duration, format, "pipe:1", filters)
@@ -189,13 +268,11 @@ func extractClipViaPipe(ctx context.Context, ffmpegPath, inputPath string, start
 // it into memory. Required for MP4-based muxers and FLAC that need seekable output.
 func extractClipViaTempFile(ctx context.Context, ffmpegPath, inputPath string, start, duration float64, format string, filters *AudioFilters) (*bytes.Buffer, error) {
 	ext := getFileExtension(format)
-	tmpFile, err := os.CreateTemp("", "birdnet-clip-*."+ext)
+	tmpPath, err := createTempOutput("birdnet-clip-*."+ext, clipExtractOperation)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temp file for clip extraction: %w", err)
+		return nil, err
 	}
-	tmpPath := tmpFile.Name()
-	_ = tmpFile.Close()
-	defer func() { _ = os.Remove(tmpPath) }()
+	defer removeTempOutput(tmpPath, clipExtractOperation)
 
 	args := buildClipFFmpegArgs(inputPath, start, duration, format, tmpPath, filters)
 
@@ -228,40 +305,191 @@ func extractClipViaTempFile(ctx context.Context, ffmpegPath, inputPath string, s
 	return bytes.NewBuffer(data), nil
 }
 
+type limitedBuffer struct {
+	buffer   bytes.Buffer
+	maxBytes int64
+	exceeded bool
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	remaining := b.maxBytes - int64(b.buffer.Len())
+	if remaining <= 0 {
+		b.exceeded = true
+		return 0, ErrTranscodeOutputTooLarge
+	}
+	if int64(len(p)) > remaining {
+		n, _ := b.buffer.Write(p[:int(remaining)])
+		b.exceeded = true
+		return n, ErrTranscodeOutputTooLarge
+	}
+	return b.buffer.Write(p)
+}
+
+func transcodeOutputLimitError(maxOutputBytes int64) error {
+	return fmt.Errorf("%w: maximum is %d bytes", ErrTranscodeOutputTooLarge, maxOutputBytes)
+}
+
+func transcodeAudioViaPipe(ctx context.Context, ffmpegPath, inputPath, format string, filters *AudioFilters, maxOutputBytes int64) (*bytes.Buffer, error) {
+	args := buildTranscodeFFmpegArgs(inputPath, format, "pipe:1", filters)
+
+	cmd := exec.CommandContext(ctx, ffmpegPath, args...) //nolint:gosec // G204: ffmpegPath validated by ValidateFFmpegPath, args built internally
+
+	stdout := limitedBuffer{maxBytes: maxOutputBytes}
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		if stdout.exceeded {
+			return nil, transcodeOutputLimitError(maxOutputBytes)
+		}
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("audio export timed out or cancelled: %w", ctx.Err())
+		}
+		return nil, errors.Newf("FFmpeg audio export failed: %w", err).
+			Component("audiocore/ffmpeg").
+			Category(errors.CategoryAudio).
+			Context("operation", "audio_export_pipe").
+			Context("error_detail", stderr.String()).
+			Build()
+	}
+	if stdout.exceeded {
+		return nil, transcodeOutputLimitError(maxOutputBytes)
+	}
+
+	if stdout.buffer.Len() == 0 {
+		return nil, fmt.Errorf("FFmpeg produced empty output for %s", filepath.Base(inputPath))
+	}
+
+	return &stdout.buffer, nil
+}
+
+func transcodeAudioViaTempFile(ctx context.Context, ffmpegPath, inputPath, format string, filters *AudioFilters, maxOutputBytes int64) (*bytes.Buffer, error) {
+	ext := getFileExtension(format)
+	tmpPath, err := createTempOutput("birdnet-audio-export-*."+ext, audioExportOperation)
+	if err != nil {
+		return nil, err
+	}
+	defer removeTempOutput(tmpPath, audioExportOperation)
+
+	args := buildTranscodeFFmpegArgs(inputPath, format, tmpPath, filters)
+
+	cmd := exec.CommandContext(ctx, ffmpegPath, args...) //nolint:gosec // G204: ffmpegPath validated by ValidateFFmpegPath, args built internally
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("audio export timed out or cancelled: %w", ctx.Err())
+		}
+		return nil, errors.Newf("FFmpeg audio export failed: %w", err).
+			Component("audiocore/ffmpeg").
+			Category(errors.CategoryAudio).
+			Context("operation", "audio_export_tempfile").
+			Context("error_detail", stderr.String()).
+			Build()
+	}
+
+	data, err := readTempOutputWithLimit(tmpPath, maxOutputBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read temp audio export file: %w", err)
+	}
+
+	if len(data) == 0 {
+		return nil, fmt.Errorf("FFmpeg produced empty output for %s", filepath.Base(inputPath))
+	}
+
+	return bytes.NewBuffer(data), nil
+}
+
+func createTempOutput(pattern, operation string) (string, error) {
+	tmpFile, err := os.CreateTemp("", pattern)
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file for %s: %w", operation, err)
+	}
+
+	tmpPath := tmpFile.Name()
+	if err := tmpFile.Close(); err != nil {
+		removeTempOutput(tmpPath, operation)
+		return "", fmt.Errorf("failed to close temp file for %s: %w", operation, err)
+	}
+	return tmpPath, nil
+}
+
+func removeTempOutput(path, operation string) {
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		getStreamLogger().Warn("failed to remove temporary FFmpeg output",
+			logger.String("operation", operation),
+			logger.String("file", filepath.Base(path)),
+			logger.Error(err))
+	}
+}
+
+func readTempOutputWithLimit(path string, maxOutputBytes int64) (data []byte, resultErr error) {
+	file, err := os.Open(path) //nolint:gosec // G304: path is generated by os.CreateTemp
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("failed to close temp audio export file: %w", closeErr))
+		}
+	}()
+
+	data, err = io.ReadAll(io.LimitReader(file, maxOutputBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxOutputBytes {
+		return nil, transcodeOutputLimitError(maxOutputBytes)
+	}
+	return data, nil
+}
+
 // buildClipFFmpegArgs constructs the FFmpeg command arguments for clip extraction.
 // Uses -ss before -i for fast input seeking and -t for duration (not -to, which
 // has inconsistent behavior across FFmpeg versions when combined with input seeking).
 // Always re-encodes to ensure frame-accurate cuts (no -c copy).
 // outputTarget is either "pipe:1" for stdout or a file path.
 func buildClipFFmpegArgs(inputPath string, start, duration float64, format, outputTarget string, filters *AudioFilters) []string {
-	var outputEncoder, outputFormat string
-	if format == FormatWAV {
-		outputEncoder = "pcm_s16le"
-		outputFormat = FormatWAV
-	} else {
-		outputEncoder = getEncoder(format)
-		outputFormat = getOutputFormat(format)
-	}
-
 	args := []string{
 		"-hide_banner",
 		"-loglevel", "error",
 		"-ss", fmt.Sprintf("%.6f", start),
 		"-i", inputPath,
 		"-t", fmt.Sprintf("%.6f", duration),
-		"-c:a", outputEncoder,
 	}
 
-	// Add bitrate for lossy formats using clip-specific defaults
-	// (independent of the audio export bitrate setting).
-	if bitrate, ok := clipDefaultBitrates[format]; ok {
+	return appendAudioOutputArgs(args, format, outputTarget, filters, clipDefaultBitrates)
+}
+
+func buildTranscodeFFmpegArgs(inputPath, format, outputTarget string, filters *AudioFilters) []string {
+	args := []string{
+		"-hide_banner",
+		"-loglevel", "error",
+		"-i", inputPath,
+	}
+
+	return appendAudioOutputArgs(args, format, outputTarget, filters, recordingExportDefaultBitrates)
+}
+
+func appendAudioOutputArgs(args []string, format, outputTarget string, filters *AudioFilters, defaultBitrates map[string]string) []string {
+	outputEncoder := getEncoder(format)
+	outputFormat := getOutputFormat(format)
+	if format == FormatWAV {
+		outputEncoder = "pcm_s16le"
+		outputFormat = FormatWAV
+	}
+
+	args = append(args, "-c:a", outputEncoder)
+
+	if bitrate, ok := defaultBitrates[format]; ok {
 		args = append(args, "-b:a", bitrate)
 	}
 
-	// Add processing filters if provided.
 	if filters != nil {
-		filterChain := BuildProcessingFilterChain(*filters)
-		if filterChain != "" {
+		if filterChain := BuildProcessingFilterChain(*filters); filterChain != "" {
 			args = append(args, "-af", filterChain)
 		}
 	}

@@ -76,9 +76,9 @@
   closeOnBackdrop={false}
   onClose={() => wizardState.skip()}
 >
-  {#snippet header()}
+  {#snippet header(modalTitleId)}
     <div class="flex items-center justify-between">
-      <h3 id="modal-title" class="text-lg font-bold">{stepTitle}</h3>
+      <h3 id={modalTitleId} class="text-lg font-bold">{stepTitle}</h3>
       <WizardProgressBar
         currentStep={wizardState.currentStepIndex}
         totalSteps={wizardState.totalSteps}

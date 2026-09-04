@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { waitFor, cleanup } from '@testing-library/svelte';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/svelte';
 import { createComponentTestFactory } from '../../../test/render-helpers';
 import DetectionDetail from './DetectionDetail.svelte';
 import type { Detection } from '$lib/types/detection.types';
+import { t } from '$lib/i18n';
+import { toastActions } from '$lib/stores/toast';
 
 // Heavy / context-dependent children are not relevant to the fetch-race logic.
 vi.mock('$lib/desktop/components/media/AudioPlayer.svelte');
@@ -131,10 +133,11 @@ describe('DetectionDetail audio download', () => {
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
-  it('uses the ID-based endpoint when downloading the original audio', async () => {
+  it('offers recording formats and uses the ID-based endpoint for the original audio', async () => {
     const detection = makeDetection({
       id: 1239,
       scientificName: 'Phalaenoptilus nuttallii',
@@ -152,16 +155,92 @@ describe('DetectionDetail audio download', () => {
       })
     );
 
+    let clickedHref = '';
+    let clickedDownloadName = '';
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement
+    ) {
+      clickedHref = this.href;
+      clickedDownloadName = this.download;
+    });
+
     const { container } = detailTest.render({ detectionId: '1239' });
 
     await waitFor(() => {
-      expect(container.querySelector('a.meta-download')).not.toBeNull();
+      expect(container.querySelector('button.meta-download')).not.toBeNull();
     });
 
-    const downloadLink = container.querySelector<HTMLAnchorElement>('a.meta-download');
-    expect(downloadLink?.getAttribute('href')).toBe('/api/v2/audio/1239');
-    // Keep the attribute valueless so the response's Content-Disposition header
-    // supplies the canonical filename and extension.
-    expect(downloadLink).toHaveAttribute('download', '');
+    const downloadButton = container.querySelector<HTMLButtonElement>('button.meta-download');
+    requireElement(downloadButton);
+    await fireEvent.click(downloadButton);
+
+    const downloadDialog = screen.getByRole('dialog', { name: t('media.audio.download') });
+    const formatButtons = within(downloadDialog)
+      .getAllByRole('button')
+      .filter(button => button.getAttribute('aria-label') !== t('common.aria.closeModal'));
+    expect(formatButtons.map(button => button.textContent.trim())).toEqual([
+      t('components.audioPlayer.processing.exportOriginal'),
+      'WAV',
+      'FLAC',
+      'MP3',
+      'AAC',
+      'Opus',
+      'ALAC',
+    ]);
+
+    await fireEvent.click(formatButtons[0]);
+    expect(clickedHref).toContain('/api/v2/audio/1239');
+    expect(clickedDownloadName).toBe('Common_Poorwill_2024-01-01_10-00-00.m4a');
+  });
+
+  it('aborts an in-flight recording export when the detail view unmounts', async () => {
+    const detection = makeDetection({ id: 1240, clipName: 'recording.wav' });
+    let exportSignal: AbortSignal | null = null;
+    const toastErrorSpy = vi.spyOn(toastActions, 'error');
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes('/api/v2/detections/1240')) {
+          return Promise.resolve(jsonResponse(detection));
+        }
+        if (url.includes('/api/v2/audio/1240/export')) {
+          exportSignal = init?.signal as AbortSignal;
+          return new Promise<Response>((_resolve, reject) => {
+            exportSignal?.addEventListener('abort', () => reject(exportSignal?.reason), {
+              once: true,
+            });
+          });
+        }
+        return Promise.resolve(jsonResponse({}));
+      })
+    );
+
+    const { container, unmount } = detailTest.render({ detectionId: '1240' });
+
+    await waitFor(() => {
+      expect(container.querySelector('button.meta-download')).not.toBeNull();
+    });
+
+    const downloadButton = container.querySelector<HTMLButtonElement>('button.meta-download');
+    requireElement(downloadButton);
+    await fireEvent.click(downloadButton);
+
+    const downloadDialog = screen.getByRole('dialog', { name: t('media.audio.download') });
+    const formatButtons = within(downloadDialog)
+      .getAllByRole('button')
+      .filter(button => button.getAttribute('aria-label') !== t('common.aria.closeModal'));
+    await fireEvent.click(formatButtons[1]);
+    await waitFor(() => expect(exportSignal).not.toBeNull());
+
+    unmount();
+
+    await waitFor(() => expect(exportSignal?.aborted).toBe(true));
+    expect(toastErrorSpy).not.toHaveBeenCalled();
   });
 });
+
+function requireElement<T extends Element>(element: T | null): asserts element is T {
+  expect(element).not.toBeNull();
+}

@@ -7,6 +7,9 @@
   import { loggers } from '$lib/utils/logger';
 
   const logger = loggers.ui;
+  const modalInstanceId = $props.id();
+  const modalTitleId = `${modalInstanceId}-title`;
+  const modalBodyId = `${modalInstanceId}-body`;
 
   // CSS selector for focusable elements used in focus management
   const FOCUSABLE_SELECTOR =
@@ -31,7 +34,7 @@
     className?: string;
     onClose?: () => void;
     onConfirm?: () => void | Promise<void>;
-    header?: Snippet;
+    header?: Snippet<[string]>;
     children?: Snippet;
     footer?: Snippet;
   }
@@ -213,8 +216,8 @@
   )}
   role="dialog"
   aria-modal="true"
-  aria-labelledby={title ? 'modal-title' : undefined}
-  aria-describedby={children ? 'modal-body' : undefined}
+  aria-labelledby={header || title ? modalTitleId : undefined}
+  aria-describedby={children ? modalBodyId : undefined}
   onclick={handleBackdropClick}
   {...rest}
 >
@@ -248,13 +251,13 @@
     {/if}
 
     {#if header}
-      {@render header()}
+      {@render header(modalTitleId)}
     {:else if title}
-      <h3 id="modal-title" class="font-bold text-lg mb-4">{title}</h3>
+      <h3 id={modalTitleId} class="font-bold text-lg mb-4">{title}</h3>
     {/if}
 
     {#if children}
-      <div id="modal-body" class="py-4">
+      <div id={modalBodyId} class="py-4">
         {@render children()}
       </div>
     {/if}
