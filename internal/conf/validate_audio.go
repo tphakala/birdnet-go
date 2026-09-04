@@ -447,7 +447,9 @@ func (s *AudioSettings) applyFfmpegFormatFallback() {
 // only sees WAV files appear where they asked for .m4a or .mp3.
 //
 // REMOVAL: when the native AAC and MP3 encoders become the default too, the
-// remaining gate calls go away and this collapses to "only ALAC needs FFmpeg".
+// remaining gate calls go away: every supported export type then has a native
+// encoder and this returns false for all of them, leaving the default true only
+// as a guard for an unrecognized type.
 func exportFormatNeedsFFmpeg(exportType string) bool {
 	switch exportType {
 	case AudioExportTypeWAV, AudioExportTypeFLAC, AudioExportTypeOPUS:

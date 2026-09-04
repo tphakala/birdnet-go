@@ -86,14 +86,15 @@ vars:
   #
   # A future opt-in tag that must reach every shipped binary goes here. CI does
   # not enforce parity automatically, so if this becomes non-empty, add the tag
-  # to the same lanes in lockstep:
-  #   .github/workflows/cross-platform-build.yml  (env: BASE_BUILD_TAGS)
-  #   .github/workflows/golangci-test.yml         (env: BASE_BUILD_TAGS)
-  #   .github/workflows/golangci-lint.yml         (literal; it is a
-  #                                                workflow_call target and does
-  #                                                not inherit the caller's env)
-  #   .github/workflows/macos-test.yml            (literal)
-  #   .github/workflows/windows-test.yml          (literal)
+  # to the same lanes in lockstep. None of these workflows carries a go-aac tag
+  # any more; the note after each says how to re-wire one:
+  #   .github/workflows/cross-platform-build.yml  (re-add an env: BASE_BUILD_TAGS block)
+  #   .github/workflows/golangci-test.yml         (re-add an env: BASE_BUILD_TAGS block)
+  #   .github/workflows/golangci-lint.yml         (put it in the literal -tags; it is a
+  #                                                workflow_call target and does not
+  #                                                inherit the caller's env)
+  #   .github/workflows/macos-test.yml            (literal -tags)
+  #   .github/workflows/windows-test.yml          (literal -tags)
   BASE_BUILD_TAGS: ''
   # Emits nothing when the joined list is empty, mirroring the ${BUILD_TAGS:+...}
   # guard on the linux_amd64 / linux_arm64 build lines. (noembed_build needs no
