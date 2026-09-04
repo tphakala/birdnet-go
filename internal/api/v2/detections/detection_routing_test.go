@@ -58,6 +58,11 @@ func TestNeedsAdvancedRouting(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "source triggers advanced",
+			params:   detectionQueryParams{Source: "north"},
+			expected: true,
+		},
+		{
 			name:     "locked triggers advanced",
 			params:   detectionQueryParams{Locked: "true"},
 			expected: true,
@@ -193,4 +198,18 @@ func TestNeedsAdvancedRouting(t *testing.T) {
 			assert.Equal(t, tt.expected, result, "needsAdvancedRouting() mismatch")
 		})
 	}
+}
+
+// TestAdvancedSearchCacheKey_NoDelimiterCollision pins that free-text filter values containing
+// the key's own delimiter cannot make two different requests share a cache entry.
+func TestAdvancedSearchCacheKey_NoDelimiterCollision(t *testing.T) {
+	t.Parallel()
+	a := detectionQueryParams{QueryType: queryTypeSearch, Location: "node", Source: "rtsp://camera", Locked: "true"}
+	b := detectionQueryParams{QueryType: queryTypeSearch, Location: "node:rtsp", Source: "//camera", Locked: "true"}
+	assert.NotEqual(t, a.advancedSearchCacheKey(), b.advancedSearchCacheKey())
+
+	same := a
+	assert.Equal(t, a.advancedSearchCacheKey(), same.advancedSearchCacheKey())
+	same.Source = "rtsp://camera2"
+	assert.NotEqual(t, a.advancedSearchCacheKey(), same.advancedSearchCacheKey(), "source must be part of the key")
 }
