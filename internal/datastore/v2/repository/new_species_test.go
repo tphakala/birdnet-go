@@ -70,3 +70,27 @@ func TestGetNewSpecies_RealDetectionBeforeWindowIsNotNew(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, got, "species first detected before the window is not new")
 }
+
+// TestGetNewSpecies_CountInPeriod pins count_in_period to the number of detections of the
+// species inside the queried window, excluding false positives and detections after the window.
+// The field was declared and always reported as zero.
+func TestGetNewSpecies_CountInPeriod(t *testing.T) {
+	db := setupInsightsTestDB(t)
+	repo := NewDetectionRepository(db, nil, false, false)
+	ctx := t.Context()
+
+	label := seedLabel(t, db, "Megascops asio")
+	seedDetection(t, db, label, 600, 0.7)          // first ever, inside the window
+	seedDetection(t, db, label, 900, 0.8)          // inside
+	fpID := seedDetection(t, db, label, 1200, 0.6) // inside but reviewed away
+	seedFalsePositiveReview(t, db, fpID)
+	seedDetection(t, db, label, 5000, 0.9) // exactly at the end: the window is [start, end)
+	seedDetection(t, db, label, 9000, 0.9) // after the window
+
+	got, err := repo.GetNewSpecies(ctx, 500, 5000, 100, 0)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "Megascops asio", got[0].ScientificName)
+	assert.Equal(t, int64(600), got[0].FirstDetected)
+	assert.Equal(t, 2, got[0].CountInPeriod)
+}

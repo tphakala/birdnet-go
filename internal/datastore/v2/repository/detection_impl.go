@@ -1721,13 +1721,11 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 	// This finds species where their lifetime first detection is within the requested range.
 	//
 	// Approach: Use a derived table to compute lifetime first detection per species,
-	// then filter and join back to get detection details. This is O(n) instead of
-	// the O(n²) correlated subquery approach.
-	// Both levels exclude false positives (same filter as buildAnalyticsBaseQuery): the derived table
-	// so a reviewed-away detection cannot pin a species' lifetime first-seen (or make an
-	// all-false-positive species look new at all), and the outer join so the reported
-	// detection_id/confidence never come from a false-positive row sharing that timestamp.
-	// DetectionReview has a unique index on detection_id, so neither LEFT JOIN multiplies rows.
+	// The species_first derived table finds each species' lifetime first detection with one
+	// grouped scan; the outer join then picks the representative detection at that timestamp.
+	// count_in_period is a correlated subquery evaluated once per reported species (a handful per
+	// window, each an index lookup by label and time), joined on scientific_name so it counts the
+	// species across every model's label, not just the label of the first detection.
 	fpFilter := string(entities.VerificationFalsePositive)
 	rawSQL := fmt.Sprintf(`
 		SELECT
@@ -1736,7 +1734,16 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 			species_first.lifetime_first as first_detected,
 			species_first.lifetime_last as last_detected,
 			MIN(d.id) as detection_id,
-			MAX(d.confidence) as confidence
+			MAX(d.confidence) as confidence,
+			(
+				SELECT COUNT(*)
+				FROM %s d3
+				JOIN %s l3 ON l3.id = d3.label_id
+				LEFT JOIN %s dr3 ON dr3.detection_id = d3.id
+				WHERE l3.scientific_name = species_first.scientific_name
+					AND d3.detected_at >= ? AND d3.detected_at < ?
+					AND (dr3.verified IS NULL OR dr3.verified != ?)
+			) as count_in_period
 		FROM (
 			SELECT
 				l2.scientific_name,
@@ -1756,9 +1763,11 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 		GROUP BY species_first.scientific_name, species_first.lifetime_first, species_first.lifetime_last
 		ORDER BY first_detected DESC
 		LIMIT ? OFFSET ?
-	`, r.tableName(), r.labelsTable(), r.reviewsTable(), r.labelsTable(), r.tableName(), r.reviewsTable())
+	`, r.tableName(), r.labelsTable(), r.reviewsTable(), r.tableName(), r.labelsTable(), r.reviewsTable(), r.labelsTable(), r.tableName(), r.reviewsTable())
 
-	err := r.db.WithContext(ctx).Raw(rawSQL, fpFilter, start, end, fpFilter, limit, offset).Scan(&results).Error
+	// Placeholders in text order: the count_in_period subquery in the SELECT list, then the
+	// species_first derived table, then the outer WHERE, then LIMIT/OFFSET.
+	err := r.db.WithContext(ctx).Raw(rawSQL, start, end, fpFilter, fpFilter, start, end, fpFilter, limit, offset).Scan(&results).Error
 	return results, err
 }
 
