@@ -414,7 +414,7 @@ Source: Unknown
 
 ### github.com/tphakala/go-aac
 
-License: https://github.com/tphakala/go-aac/blob/v0.6.0/LICENSE
+License: https://github.com/tphakala/go-aac/blob/v0.6.1/LICENSE
 Source: LGPL-2.1
 
 ### github.com/tphakala/go-audio-resampler
@@ -435,6 +435,11 @@ Source: MIT
 ### github.com/tphakala/go-m4a
 
 License: https://github.com/tphakala/go-m4a/blob/v0.4.0/LICENSE
+Source: MIT
+
+### github.com/tphakala/go-mp3
+
+License: https://github.com/tphakala/go-mp3/blob/v0.1.0/LICENSE
 Source: MIT
 
 ### github.com/tphakala/go-opus
