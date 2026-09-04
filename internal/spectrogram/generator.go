@@ -58,6 +58,11 @@ const (
 	// ffmpegDrange controls the dynamic range parameter for FFmpeg showspectrumpic filter
 	ffmpegDrange = "100"
 
+	// ffmpegVisualNormalizeFilter peak-normalizes only the stream rendered into the
+	// spectrogram. The high max gain keeps very quiet detections visible, while the
+	// alternative boundary mode avoids leaving the start and end of short clips dark.
+	ffmpegVisualNormalizeFilter = "dynaudnorm=p=0.95:m=100:b=1"
+
 	// durationRoundingOffset is added to duration before truncating to int for rounding
 	durationRoundingOffset = 0.5
 
@@ -66,6 +71,12 @@ const (
 
 	// osWindows is the GOOS value for Windows operating system
 	osWindows = "windows"
+
+	// soxVisualNormalizeEffect normalizes only the audio stream used for image rendering.
+	// Sox spectrograms use an absolute 0 dBFS scale, so quiet detections otherwise render
+	// nearly black even when the frequency content is present.
+	soxVisualNormalizeEffect = "gain"
+	soxVisualNormalizeArg    = "-n"
 )
 
 // GenerateOption configures optional parameters for spectrogram generation.
@@ -826,8 +837,9 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, settings *conf.Setti
 		"-e", "signed", // Encoding: signed integer
 		"-b", strconv.Itoa(conf.BitDepth), // Bit depth: 16-bit
 		"-c", strconv.Itoa(conf.NumChannels), // Channels: mono
-		"-",  // Read from stdin
-		"-n", // No audio output (null output)
+		"-",                                             // Read from stdin
+		"-n",                                            // No audio output (null output)
+		soxVisualNormalizeEffect, soxVisualNormalizeArg, // Visual-only peak normalization
 	}
 
 	// Frequency-dependent effects: resample to the profile's rate (bird 24 kHz,
@@ -898,15 +910,17 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, settings *conf.Setti
 }
 
 // buildFFmpegSpectrogramFilter builds the -lavfi filtergraph for the FFmpeg-only
-// fallback. The showspectrumpic stage uses a style-aware color mode so the fallback
-// visually matches the Sox primary path (without it the fallback always renders the
-// default colorful style, causing intermittent mismatches when Sox fails under load).
-// When the frequency profile sets a resample rate, an aresample stage is prepended so
-// the rendered frequency axis matches the Sox paths (which apply the same rate) and the
-// fixed UI overlay: bird clips resample to 24 kHz (0-12 kHz axis) and bat clips to
-// 256 kHz (0-128 kHz axis) regardless of capture rate. Without it the fallback renders
-// to the native Nyquist and that axis-mismatched image gets cached under the profile
-// filename.
+// fallback. It peak-normalizes the visual-only stream before resampling and rendering,
+// matching the normalized Sox paths without modifying the stored recording. The
+// showspectrumpic stage uses a style-aware color mode so the fallback visually matches
+// the Sox primary path (without it the fallback always renders the default colorful
+// style, causing intermittent mismatches when Sox fails under load).
+// When the frequency profile sets a resample rate, an aresample stage follows
+// normalization so the rendered frequency axis matches the Sox paths (which apply the
+// same rate) and the fixed UI overlay: bird clips resample to 24 kHz (0-12 kHz axis)
+// and bat clips to 256 kHz (0-128 kHz axis) regardless of capture rate. Without it the
+// fallback renders to the native Nyquist and that axis-mismatched image gets cached
+// under the profile filename.
 func buildFFmpegSpectrogramFilter(width int, raw bool, style string, profile FrequencyProfile) string {
 	height := fftFriendlyHeight(width)
 	colorMode := getFFmpegColorMode(style)
@@ -916,16 +930,20 @@ func buildFFmpegSpectrogramFilter(width int, raw bool, style string, profile Fre
 		legendFlag = 0
 	}
 
+	// Normalize before resampling so quiet clips remain visible regardless of which
+	// frequency profile is selected. dynaudnorm preserves the input sample rate, unlike
+	// loudnorm's dynamic mode, so the native-rate profile also keeps its frequency axis.
+	filterPrefix := ffmpegVisualNormalizeFilter + ","
+
 	// Match the Sox "rate" effect so both backends produce the same frequency axis:
 	// an aresample stage sets showspectrumpic's input rate, so the axis tops out at
 	// its Nyquist (rate/2). Built as a single Sprintf to avoid a throwaway alloc.
-	resamplePrefix := ""
 	if profile.ResampleRate > 0 {
-		resamplePrefix = fmt.Sprintf("aresample=%d,", profile.ResampleRate)
+		filterPrefix += fmt.Sprintf("aresample=%d,", profile.ResampleRate)
 	}
 
 	return fmt.Sprintf("%sshowspectrumpic=s=%dx%d:legend=%d:gain=%s:drange=%s:color=%s",
-		resamplePrefix, width, height, legendFlag, ffmpegGain, ffmpegDrange, colorMode)
+		filterPrefix, width, height, legendFlag, ffmpegGain, ffmpegDrange, colorMode)
 }
 
 // generateWithFFmpeg generates a spectrogram using only FFmpeg (no Sox).
@@ -1014,14 +1032,14 @@ func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, settings *conf.Se
 	heightStr := strconv.Itoa(fftFriendlyHeight(width))
 	widthStr := strconv.Itoa(width)
 
-	// Build base args: resample to the profile's rate (bird 24 kHz, bat 256 kHz) so
-	// the spectrogram's frequency axis matches the fixed UI overlay.
-	var args []string
+	// Normalize the render input only; saved clips and inference audio are left
+	// unchanged. Then resample to the profile's rate (bird 24 kHz, bat 256 kHz)
+	// so the spectrogram's frequency axis matches the fixed UI overlay.
+	args := []string{"-n", soxVisualNormalizeEffect, soxVisualNormalizeArg}
 	if profile.ResampleRate > 0 {
-		args = []string{"-n", "rate", strconv.Itoa(profile.ResampleRate), "spectrogram", "-x", widthStr, "-y", heightStr}
-	} else {
-		args = []string{"-n", "spectrogram", "-x", widthStr, "-y", heightStr}
+		args = append(args, "rate", strconv.Itoa(profile.ResampleRate))
 	}
+	args = append(args, "spectrogram", "-x", widthStr, "-y", heightStr)
 
 	// Always provide explicit duration via -d parameter to ensure spectrogram
 	// shows the full audio duration regardless of image width (fixes #1484).

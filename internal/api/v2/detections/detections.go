@@ -23,6 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/spectrogram"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -1295,14 +1296,8 @@ func (c *Handler) DeleteDetection(ctx echo.Context) error {
 	return ctx.NoContent(http.StatusNoContent)
 }
 
-// spectrogramWidths lists all valid spectrogram widths used for file naming.
-// These correspond to the size constants: sm=258, md=514, lg=1026, xl=2050.
-var spectrogramWidths = []int{
-	apicore.SpectrogramSizeSm,
-	apicore.SpectrogramSizeMd,
-	apicore.SpectrogramSizeLg,
-	apicore.SpectrogramSizeXl,
-}
+// spectrogramSizeNames lists the named sizes used by parameterized cache paths.
+var spectrogramSizeNames = []string{"sm", "md", "lg", "xl"}
 
 // removeDetectionFiles removes the audio clip and all associated spectrogram
 // files from disk. Deletions are best-effort: files that are already missing
@@ -1345,13 +1340,9 @@ func (c *Handler) removeDetectionFiles(clipName string) {
 
 	// Remove all associated spectrogram files. buildSpectrogramPaths names them
 	// <basename>_<width>px<suffix>.png, where <suffix> encodes the visual style,
-	// dynamic range, frequency profile (e.g. "-bat-v2") and legend/raw variant - and a
-	// single clip can accumulate several of these as those settings change over time.
-	// Rather than enumerate every combination (and miss renders from styles no longer
-	// configured), scan the directory and remove any PNG whose name matches this
-	// clip's "<basename>_<width>px" prefix followed by ".png" or a "-"-prefixed
-	// suffix. The separator anchor after the width prevents matching a different clip
-	// whose basename merely shares this prefix.
+	// dynamic range, render version, frequency profile, and legend/raw variant. Scan
+	// the directory once, then exact-match the supported parameterized prerender names;
+	// only width-based _<width>px names use an anchored prefix match.
 	ext := filepath.Ext(normalized)
 	baseFilename := strings.TrimSuffix(filepath.Base(normalized), ext)
 	clipDir := filepath.Dir(absClipPath)
@@ -1385,21 +1376,43 @@ func (c *Handler) removeDetectionFiles(clipName string) {
 }
 
 // isSpectrogramFileFor reports whether pngName is a spectrogram render of the clip
-// with the given base filename. It matches "<baseFilename>_<width>px" followed by
-// either ".png" or a "-"-prefixed suffix (style, dynamic-range, frequency-profile
-// and legend tokens), for any known render width. The "."/"-" anchor after the
-// width avoids matching a different clip whose base name merely shares this prefix.
+// with the given base filename. It matches both prerender names and API-sized names.
+// Only exact prerender versions and anchored width suffixes are accepted so a clip
+// whose basename merely shares this prefix is never removed.
 func isSpectrogramFileFor(pngName, baseFilename string) bool {
 	if !strings.HasSuffix(pngName, ".png") {
 		return false
 	}
-	for _, width := range spectrogramWidths {
-		prefix := fmt.Sprintf("%s_%dpx", baseFilename, width)
-		if pngName == prefix+".png" || strings.HasPrefix(pngName, prefix+"-") {
+	if pngName == baseFilename+".png" ||
+		pngName == baseFilename+spectrogram.RenderCacheVersionSuffix+".png" {
+		return true
+	}
+	if isWidthBasedSpectrogramFileFor(pngName, baseFilename) {
+		return true
+	}
+	for _, sizeName := range spectrogramSizeNames {
+		parameterPrefix := baseFilename + "." + sizeName
+		if pngName == parameterPrefix+".png" ||
+			pngName == parameterPrefix+".raw.png" ||
+			pngName == parameterPrefix+spectrogram.RenderCacheVersionSuffix+".png" ||
+			pngName == parameterPrefix+".raw"+spectrogram.RenderCacheVersionSuffix+".png" {
 			return true
 		}
 	}
 	return false
+}
+
+func isWidthBasedSpectrogramFileFor(pngName, baseFilename string) bool {
+	remainder, ok := strings.CutPrefix(pngName, baseFilename+"_")
+	if !ok {
+		return false
+	}
+	widthToken, suffix, ok := strings.Cut(remainder, "px")
+	if !ok || (suffix != ".png" && !strings.HasPrefix(suffix, "-")) {
+		return false
+	}
+	width, err := strconv.Atoi(widthToken)
+	return err == nil && width > 0 && width <= apicore.SpectrogramSizeXl
 }
 
 // invalidateDetectionCache clears the detection cache to ensure fresh data

@@ -1162,6 +1162,8 @@ func TestDeleteDetectionRemovesFiles(t *testing.T) {
 	// Create spectrogram files in the naming patterns used by the API
 	baseName := "Eurasian_Blue_Tit_85p_20250115T100000Z"
 	spectrogramFiles := []string{
+		baseName + ".png",
+		baseName + "-norm1.png",
 		baseName + "_258px.png",
 		baseName + "_1026px.png",
 		baseName + "_1026px-legend.png",
@@ -1177,6 +1179,16 @@ func TestDeleteDetectionRemovesFiles(t *testing.T) {
 		baseName + "_1026px-scientific_dark.png",
 		baseName + "_1026px-dr80.png",
 		baseName + "_1026px-high_contrast_dark-bat-legend.png",
+		baseName + "_1px-norm1.png",
+		baseName + "_800px-norm1.png",
+		baseName + "_2000px-scientific_dark-norm1.png",
+		baseName + "_1026px-norm1.png",
+		baseName + "_1026px-scientific_dark-norm1-legend.png",
+		// Parameterized API cache names use dot-delimited size/raw tokens.
+		baseName + ".sm.png",
+		baseName + ".md-norm1.png",
+		baseName + ".lg.raw-norm1.png",
+		baseName + ".xl.raw.png",
 	}
 	for _, sf := range spectrogramFiles {
 		require.NoError(t, os.WriteFile(filepath.Join(clipDir, sf), []byte("fake-png"), 0o600))
@@ -1187,7 +1199,13 @@ func TestDeleteDetectionRemovesFiles(t *testing.T) {
 	// with a "_" separator (not a render of this clip) - guards the deletion anchor.
 	survivingFiles := []string{
 		"Some_Other_Bird_50p_20250115T100001Z_1026px.png",
+		baseName + "-another-clip.png",
 		baseName + "_1026px_1026px.png",
+		baseName + "_2051px-norm1.png",
+		baseName + "_widepx-norm1.png",
+		baseName + ".md-extra.png",
+		baseName + ".md.backup.png",
+		baseName + ".md_extra.png",
 	}
 	for _, sf := range survivingFiles {
 		require.NoError(t, os.WriteFile(filepath.Join(clipDir, sf), []byte("fake-png"), 0o600))
