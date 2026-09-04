@@ -1,7 +1,6 @@
 package ffmpeg
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -452,9 +451,79 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dh %dm %ds", hours, minutes, seconds)
 }
 
-// threadSafeWriter wraps a bytes.Buffer with mutex protection for concurrent access.
+// stderrTailMaxBytes bounds how many trailing bytes of FFmpeg stderr are kept
+// for diagnostics. FFmpeg error and warning output is only inspected during the
+// early-detection and quick-exit windows (a few seconds after process start),
+// so a 64 KiB tail comfortably holds the relevant lines while preventing the
+// buffer from growing for the entire lifetime of a long-lived stream. Before
+// this cap the capture used an unbounded bytes.Buffer that only reset on a
+// process restart, so a stream that stayed up for a day accumulated gigabytes
+// of stderr in memory (issue #4257).
+const stderrTailMaxBytes = 64 << 10 // 64 KiB
+
+// boundedBuffer is an io.Writer that retains only the most recent limit() bytes
+// written to it, discarding older data on overflow. It replaces the unbounded
+// bytes.Buffer previously used to capture FFmpeg stderr, whose size scaled with
+// stream uptime rather than staying bounded.
+//
+// boundedBuffer is NOT safe for concurrent use on its own; callers must provide
+// external synchronization. Stream serializes all access through stderrMu.
+type boundedBuffer struct {
+	buf []byte
+	// limitBytes caps the retained size. A value <= 0 selects
+	// stderrTailMaxBytes, so the zero value is already bounded.
+	limitBytes int
+}
+
+// limit returns the effective retention cap in bytes.
+func (b *boundedBuffer) limit() int {
+	if b.limitBytes <= 0 {
+		return stderrTailMaxBytes
+	}
+	return b.limitBytes
+}
+
+// Write appends p, keeping only the trailing limit() bytes and discarding older
+// data on overflow. It never returns an error and always reports len(p) written,
+// so it satisfies io.Writer and never stalls the io.Copy that feeds it from the
+// FFmpeg stderr pipe.
+func (b *boundedBuffer) Write(p []byte) (n int, err error) {
+	n = len(p)
+	maxBytes := b.limit()
+
+	if n >= maxBytes {
+		// This single write already fills or exceeds the window; keep only its
+		// trailing maxBytes and drop everything retained before it.
+		b.buf = append(b.buf[:0], p[n-maxBytes:]...)
+		return n, nil
+	}
+
+	if len(b.buf)+n > maxBytes {
+		// Drop the oldest bytes so existing content plus p fits in maxBytes,
+		// preserving the most recent data. copy compacts the surviving tail to
+		// the front (safe for the overlapping ranges).
+		drop := len(b.buf) + n - maxBytes
+		b.buf = b.buf[:copy(b.buf, b.buf[drop:])]
+	}
+
+	b.buf = append(b.buf, p...)
+	return n, nil
+}
+
+// String returns the retained bytes as a string, matching bytes.Buffer.String.
+func (b *boundedBuffer) String() string {
+	return string(b.buf)
+}
+
+// Reset discards all retained bytes while keeping the backing array for reuse,
+// matching bytes.Buffer.Reset.
+func (b *boundedBuffer) Reset() {
+	b.buf = b.buf[:0]
+}
+
+// threadSafeWriter wraps a boundedBuffer with mutex protection for concurrent access.
 type threadSafeWriter struct {
-	buf *bytes.Buffer
+	buf *boundedBuffer
 	mu  *sync.RWMutex
 }
 
@@ -482,7 +551,7 @@ type Stream struct {
 	cmd      *exec.Cmd
 	cmdMu    sync.Mutex
 	stdout   io.ReadCloser
-	stderr   bytes.Buffer
+	stderr   boundedBuffer
 	stderrMu sync.RWMutex
 
 	// State management.
