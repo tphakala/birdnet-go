@@ -284,6 +284,8 @@ github.com/tklauser/numcpus v0.12.0 h1:NR85qdvHA9pFse3x3weVZ0r0ST8R6l5RHbZrlRaqo
 github.com/tklauser/numcpus v0.12.0/go.mod h1:ABHeXzJnr/qqwguhClkZKT1/8VABcYrsyUiUGobwWJg=
 github.com/tphakala/go-aac v0.6.0 h1:xrfvcISfVAyBwH7+tN3LGouw1g7CrIEzWOSdaJkCiUo=
 github.com/tphakala/go-aac v0.6.0/go.mod h1:zbnhFT1TNtHgFjbtJnW32vCi9yyaSC9tdhqyjAiti1c=
+github.com/tphakala/go-aac v0.6.1 h1:X9BFJT2SnkiLm9xNij4XrL1baM1gkpKWJrSplccxFCA=
+github.com/tphakala/go-aac v0.6.1/go.mod h1:zbnhFT1TNtHgFjbtJnW32vCi9yyaSC9tdhqyjAiti1c=
 github.com/tphakala/go-audio-resampler v1.7.0 h1:Nqr1zNRlow28EjlQKS/SSmhqSa6qHRZRydrPXNkiKTo=
 github.com/tphakala/go-audio-resampler v1.7.0/go.mod h1:h/j0tsie+Jv7qVEytRZ4KrxfO//zxO3RAbesX+1ZEo4=
 github.com/tphakala/go-flac v1.1.0 h1:dyVNPFW+MVLzPvw1n3dEvBHPtKUMbQ5PHWvW/pxQMv0=
