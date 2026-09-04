@@ -541,6 +541,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 **Query Parameters:**
 
 - All insights endpoints accept optional `model_id` query parameter to filter by BirdNET model
+- `/insights/dawn-chorus` also accepts `period_days` (default 30, 1 to 365) and `min_days` (default 3, clamped to `period_days`); the response echoes both as `period_days` and `min_days`
 
 ### Models (`models/models.go`)
 
