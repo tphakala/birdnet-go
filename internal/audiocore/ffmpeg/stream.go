@@ -529,18 +529,24 @@ func (b *boundedBuffer) Reset() {
 const stderrLogTailMaxBytes = 2 << 10 // 2 KiB
 
 // stderrLogTail returns the trailing snippet of s used for a stderr-on-exit log
-// field: at most maxBytes trailing bytes, with a leading partial line dropped so
-// the snippet starts on a line boundary, and surrounding whitespace trimmed. It
-// performs no locking or sanitization; callers do both. A maxBytes <= 0 returns
-// the whole trimmed input.
+// field: at most maxBytes trailing bytes, with surrounding whitespace trimmed. A
+// leading partial line is dropped so the snippet starts on a line boundary, but
+// only when the cut bisects a line; if the retained suffix already begins right
+// after a newline its first line is kept whole. It performs no locking or
+// sanitization; callers do both. A maxBytes <= 0 returns the whole trimmed input.
 func stderrLogTail(s string, maxBytes int) string {
 	if maxBytes > 0 && len(s) > maxBytes {
-		s = s[len(s)-maxBytes:]
-		// Drop a leading partial line so the snippet starts on a line boundary,
-		// but only when there is still content after the break.
-		if nl := strings.IndexByte(s, '\n'); nl >= 0 && nl+1 < len(s) {
-			s = s[nl+1:]
+		start := len(s) - maxBytes
+		// When the cut bisects a line (the byte before the retained suffix is not
+		// a newline), drop the leading partial line so the snippet starts on a
+		// line boundary, but only when content remains after the break. When the
+		// cut already lands on a boundary, keep the complete first line.
+		if s[start-1] != '\n' {
+			if nl := strings.IndexByte(s[start:], '\n'); nl >= 0 && start+nl+1 < len(s) {
+				start += nl + 1
+			}
 		}
+		s = s[start:]
 	}
 	return strings.TrimSpace(s)
 }
@@ -870,7 +876,8 @@ func (s *Stream) Run(parentCtx context.Context) {
 			runtime := time.Since(processStartTime)
 
 			fallbackEngaged := false
-			if err != nil && !errors.Is(err, context.Canceled) {
+			abnormalExit := err != nil && !errors.Is(err, context.Canceled)
+			if abnormalExit {
 				s.recordFailure(runtime)
 				// Latch to the full-stream request if repeated RTSP failures with
 				// no audio point at an audio-only handshake the camera cannot
@@ -907,12 +914,6 @@ func (s *Stream) Run(parentCtx context.Context) {
 					logger.String("component", "ffmpeg-stream"),
 					logger.String("operation", "process_ended"))
 
-				// Surface the tail of FFmpeg's own stderr so operators can see why
-				// it stopped. It is captured but otherwise only read during the
-				// early-detection and quick-exit windows, so a steady-state failure
-				// would leave it unlogged. WARN for an abnormal exit.
-				s.logStderrTailOnExit(true)
-
 				if isSilenceTimeout {
 					func() {
 						s.restartCountMu.Lock()
@@ -933,14 +934,18 @@ func (s *Stream) Run(parentCtx context.Context) {
 					logger.Float64("runtime_seconds", runtime.Seconds()),
 					logger.String("component", "ffmpeg-stream"),
 					logger.String("operation", "process_ended"))
-
-				// A normal exit rarely leaves meaningful stderr at loglevel error,
-				// so surface any tail only at debug to keep steady-state logs quiet.
-				s.logStderrTailOnExit(false)
 				s.resetFailures()
 			}
 
 			s.cleanupProcess()
+
+			// Surface the tail of FFmpeg's own stderr so operators can see why it
+			// stopped. It is otherwise only read during the early-detection and
+			// quick-exit windows, so a steady-state exit would leave it unlogged.
+			// Logged after cleanupProcess so cmd.Wait has flushed the final stderr:
+			// WARN for an abnormal exit, DEBUG for a normal one, and only when
+			// non-empty.
+			s.logStderrTailOnExit(abnormalExit)
 
 			// Notify consumers of stream restart.
 			if s.onReset != nil {
@@ -2386,21 +2391,19 @@ func (s *Stream) checkEarlyErrors() *ErrorContext {
 // captured FFmpeg stderr for a log field, or "" if nothing was captured. The
 // process-ended paths use it to surface why FFmpeg stopped without requiring a
 // live debugger, since the capture is otherwise only inspected during the early
-// detection and quick-exit windows. It is called after the stdout read loop has
-// reached EOF (FFmpeg has exited and closed its pipes), so the captured stderr
-// is effectively complete; the read is guarded by stderrMu, which serializes it
-// against the stderr copy goroutine regardless of whether cmd.Wait (which may
-// run slightly later in cleanupProcess for steady-state exits) has returned.
+// detection and quick-exit windows. It is called after cleanupProcess has run
+// cmd.Wait, so the os/exec stderr copy is fully flushed and the capture is
+// complete; the read is also guarded by stderrMu.
 func (s *Stream) stderrTailForLog() string {
 	s.stderrMu.RLock()
 	full := s.stderr.String()
 	s.stderrMu.RUnlock()
 
-	tail := stderrLogTail(full, stderrLogTailMaxBytes)
-	if tail == "" {
-		return ""
-	}
-	return privacy.SanitizeFFmpegError(tail)
+	// Sanitize the whole capture BEFORE trimming to the tail. Truncating first
+	// could cut a credential-bearing stream URL at the tail boundary and leave a
+	// fragment the URL sanitizer can no longer recognize, leaking the credential
+	// into the log. stderrLogTail returns "" for empty or whitespace-only input.
+	return stderrLogTail(privacy.SanitizeFFmpegError(full), stderrLogTailMaxBytes)
 }
 
 // logStderrTailOnExit logs the tail of this process's captured FFmpeg stderr, if

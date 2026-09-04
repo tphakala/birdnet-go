@@ -292,6 +292,14 @@ func TestStderrLogTail(t *testing.T) {
 			want:     "cccc\ndddd",
 		},
 		{
+			// The cut lands exactly on a newline, so the first retained line is
+			// complete and must be kept rather than dropped.
+			name:     "cut on line boundary keeps complete first line",
+			input:    "aaaa\nbbbb\ncccc\n",
+			maxBytes: 10, // last 10 bytes = "bbbb\ncccc\n"; cut sits right after a newline
+			want:     "bbbb\ncccc",
+		},
+		{
 			name:     "single long line over cap keeps trailing bytes",
 			input:    "0123456789abcdef",
 			maxBytes: 6,
@@ -367,6 +375,30 @@ func TestStream_stderrTailForLog(t *testing.T) {
 		// host and path may remain for debugging.
 		assert.NotContains(t, got, "secret", "URL password must be redacted")
 		assert.NotContains(t, got, "user:", "URL username must be redacted")
+	})
+
+	t.Run("redacts credentials that straddle the tail boundary", func(t *testing.T) {
+		t.Parallel()
+		s := &Stream{}
+		// One long line with no newlines (so the partial-line drop cannot remove
+		// the fragment), sized so the last stderrLogTailMaxBytes bytes begin right
+		// after the URL scheme. If the tail were taken before sanitizing, only
+		// "user:secret@..." would remain and evade URL redaction. Sanitizing the
+		// whole capture first strips the credential regardless of the cut point.
+		url := "rtsp://user:secret@cam.example.com/stream"
+		// tail length 2014 makes the cut land at urlStart+7 (just past "rtsp://").
+		full := strings.Repeat("x", 50) + url + strings.Repeat("y", stderrLogTailMaxBytes-34)
+		_, err := s.stderr.Write([]byte(full))
+		require.NoError(t, err)
+		require.Greater(t, len(full), stderrLogTailMaxBytes, "input must exceed the cap to force truncation")
+
+		got := s.stderrTailForLog()
+		assert.NotContains(t, got, "secret", "credential must be redacted even when the URL straddles the tail cut")
+		assert.NotContains(t, got, "user:", "credential username must be redacted across the boundary")
+		// The host survives redaction and lies in the retained window, proving the
+		// URL region was kept and sanitized rather than simply truncated away.
+		assert.Contains(t, got, "cam.example.com", "host should remain after credential redaction")
+		assert.LessOrEqual(t, len(got), stderrLogTailMaxBytes)
 	})
 
 	t.Run("bounds snippet to the log tail cap", func(t *testing.T) {
