@@ -84,6 +84,7 @@ func TestGetNewSpecies_CountInPeriod(t *testing.T) {
 	seedDetection(t, db, label, 900, 0.8)          // inside
 	fpID := seedDetection(t, db, label, 1200, 0.6) // inside but reviewed away
 	seedFalsePositiveReview(t, db, fpID)
+	seedDetection(t, db, label, 5000, 0.9) // exactly at the end: the window is [start, end)
 	seedDetection(t, db, label, 9000, 0.9) // after the window
 
 	got, err := repo.GetNewSpecies(ctx, 500, 5000, 100, 0)
