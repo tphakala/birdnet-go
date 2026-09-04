@@ -92,7 +92,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 
 | Method | Route                                 | Handler                    | Auth | Description                        |
 | ------ | ------------------------------------- | -------------------------- | ---- | ---------------------------------- |
-| GET    | `/analytics/species/daily`            | `GetDailySpeciesSummary`   | ❌   | Daily species detection summary    |
+| GET    | `/analytics/species/daily`            | `GetDailySpeciesSummary`   | ❌   | Daily species detection summary (`first_heard` earliest, `latest_heard` latest call of the day) |
 | GET    | `/analytics/species/summary`          | `GetSpeciesSummary`        | ❌   | Overall species statistics         |
 | GET    | `/analytics/species/detections/new`   | `GetNewSpeciesDetections`  | ❌   | Recently detected new species, with the non-false-positive detection count in `count_in_period` |
 | GET    | `/analytics/species/thumbnails`       | `GetSpeciesThumbnails`     | ❌   | Species thumbnail images           |
