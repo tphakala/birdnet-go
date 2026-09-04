@@ -2857,6 +2857,7 @@ type speciesFirstSeenInfo struct {
 	ScientificName string
 	FirstDetected  int64
 	LastDetected   int64
+	CountInPeriod  int // detections inside the queried window; only the lifetime-first query fills it
 }
 
 // convertToNewSpeciesData converts species first-seen data to NewSpeciesData with common name resolution.
@@ -2889,7 +2890,7 @@ func (ds *Datastore) convertToNewSpeciesData(_ context.Context, data []speciesFi
 			CommonName:     commonName,
 			FirstSeenDate:  firstSeenDate,
 			LastSeenDate:   lastSeenDate,
-			CountInPeriod:  0,
+			CountInPeriod:  d.CountInPeriod,
 		})
 	}
 	return result
@@ -2915,6 +2916,7 @@ func (ds *Datastore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 			ScientificName: d.ScientificName,
 			FirstDetected:  d.FirstDetected,
 			LastDetected:   d.LastDetected,
+			CountInPeriod:  d.CountInPeriod,
 		}
 	}
 

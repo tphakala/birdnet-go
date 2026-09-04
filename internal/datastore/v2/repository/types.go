@@ -254,6 +254,10 @@ type NewSpeciesData struct {
 	// FirstDetected is the Unix timestamp of the very first detection.
 	FirstDetected int64
 
+	// CountInPeriod is how many non-false-positive detections of the species fall inside the
+	// queried [start, end) window, across every model's label for it.
+	CountInPeriod int
+
 	// LastDetected is the Unix timestamp of the most recent detection.
 	LastDetected int64
 
