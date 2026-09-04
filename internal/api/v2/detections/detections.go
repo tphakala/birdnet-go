@@ -240,6 +240,7 @@ type detectionQueryParams struct {
 	HourRange  string
 	Verified   string
 	Location   string
+	Source     string
 	Locked     string
 	// Sorting
 	SortBy string
@@ -250,10 +251,10 @@ type detectionQueryParams struct {
 // advancedSearchCacheKey generates a deterministic cache key for advanced search queries.
 // Includes all filter parameters to avoid cache collisions.
 func (p *detectionQueryParams) advancedSearchCacheKey() string {
-	return fmt.Sprintf("adv_search:%s:%s:%d:%d:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%d",
+	return fmt.Sprintf("adv_search:%s:%s:%d:%d:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%d",
 		p.Search, strings.Join(p.SearchScientific, "\x00"), p.NumResults, p.Offset,
 		p.Confidence, p.TimeOfDay, p.HourRange,
-		p.Verified, p.Location, p.Locked,
+		p.Verified, p.Location, p.Source, p.Locked,
 		p.Species, p.Date, p.StartDate+":"+p.EndDate,
 		p.SortBy, p.QueryType, p.Hour, p.Duration)
 }
@@ -274,6 +275,7 @@ func (c *Handler) parseDetectionQueryParams(ctx echo.Context) (*detectionQueryPa
 		HourRange:  ctx.QueryParam("hourRange"),
 		Verified:   ctx.QueryParam("verified"),
 		Location:   ctx.QueryParam("location"),
+		Source:     ctx.QueryParam("source"),
 		Locked:     ctx.QueryParam("locked"),
 		// Sorting
 		SortBy: ctx.QueryParam("sortBy"),
@@ -589,7 +591,7 @@ func (c *Handler) GetDetections(ctx echo.Context) error {
 func (p *detectionQueryParams) needsAdvancedRouting() bool {
 	if p.Confidence != "" || p.TimeOfDay != "" ||
 		p.HourRange != "" || p.Verified != "" ||
-		p.Location != "" || p.Locked != "" ||
+		p.Location != "" || p.Source != "" || p.Locked != "" ||
 		p.StartDate != "" || p.EndDate != "" {
 		return true
 	}
@@ -1108,6 +1110,9 @@ func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams) datas
 	}
 	if params.Location != "" {
 		filters.Location = []string{params.Location}
+	}
+	if params.Source != "" {
+		filters.Source = []string{params.Source}
 	}
 
 	// Apply boolean filters

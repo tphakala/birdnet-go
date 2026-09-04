@@ -58,6 +58,11 @@ func TestNeedsAdvancedRouting(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "source triggers advanced",
+			params:   detectionQueryParams{Source: "north"},
+			expected: true,
+		},
+		{
 			name:     "locked triggers advanced",
 			params:   detectionQueryParams{Locked: "true"},
 			expected: true,
