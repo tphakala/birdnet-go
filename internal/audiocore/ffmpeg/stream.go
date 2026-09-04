@@ -521,6 +521,30 @@ func (b *boundedBuffer) Reset() {
 	b.buf = b.buf[:0]
 }
 
+// stderrLogTailMaxBytes caps how much of the captured FFmpeg stderr is attached
+// to the process-ended log lines. The capture itself is bounded to
+// stderrTailMaxBytes; this keeps the log field small and readable while still
+// showing the last handful of FFmpeg messages that explain why the process
+// stopped.
+const stderrLogTailMaxBytes = 2 << 10 // 2 KiB
+
+// stderrLogTail returns the trailing snippet of s used for a stderr-on-exit log
+// field: at most maxBytes trailing bytes, with a leading partial line dropped so
+// the snippet starts on a line boundary, and surrounding whitespace trimmed. It
+// performs no locking or sanitization; callers do both. A maxBytes <= 0 returns
+// the whole trimmed input.
+func stderrLogTail(s string, maxBytes int) string {
+	if maxBytes > 0 && len(s) > maxBytes {
+		s = s[len(s)-maxBytes:]
+		// Drop a leading partial line so the snippet starts on a line boundary,
+		// but only when there is still content after the break.
+		if nl := strings.IndexByte(s, '\n'); nl >= 0 && nl+1 < len(s) {
+			s = s[nl+1:]
+		}
+	}
+	return strings.TrimSpace(s)
+}
+
 // threadSafeWriter wraps a boundedBuffer with mutex protection for concurrent access.
 type threadSafeWriter struct {
 	buf *boundedBuffer
@@ -883,6 +907,12 @@ func (s *Stream) Run(parentCtx context.Context) {
 					logger.String("component", "ffmpeg-stream"),
 					logger.String("operation", "process_ended"))
 
+				// Surface the tail of FFmpeg's own stderr so operators can see why
+				// it stopped. It is captured but otherwise only read during the
+				// early-detection and quick-exit windows, so a steady-state failure
+				// would leave it unlogged. WARN for an abnormal exit.
+				s.logStderrTailOnExit(true)
+
 				if isSilenceTimeout {
 					func() {
 						s.restartCountMu.Lock()
@@ -903,6 +933,10 @@ func (s *Stream) Run(parentCtx context.Context) {
 					logger.Float64("runtime_seconds", runtime.Seconds()),
 					logger.String("component", "ffmpeg-stream"),
 					logger.String("operation", "process_ended"))
+
+				// A normal exit rarely leaves meaningful stderr at loglevel error,
+				// so surface any tail only at debug to keep steady-state logs quiet.
+				s.logStderrTailOnExit(false)
 				s.resetFailures()
 			}
 
@@ -2346,4 +2380,48 @@ func (s *Stream) checkEarlyErrors() *ErrorContext {
 	s.stderrMu.RUnlock()
 
 	return ExtractErrorContext(stderrOutput)
+}
+
+// stderrTailForLog returns a sanitized, trailing snippet of this process's
+// captured FFmpeg stderr for a log field, or "" if nothing was captured. The
+// process-ended paths use it to surface why FFmpeg stopped without requiring a
+// live debugger, since the capture is otherwise only inspected during the early
+// detection and quick-exit windows. It is called after the stdout read loop has
+// reached EOF (FFmpeg has exited and closed its pipes), so the captured stderr
+// is effectively complete; the read is guarded by stderrMu, which serializes it
+// against the stderr copy goroutine regardless of whether cmd.Wait (which may
+// run slightly later in cleanupProcess for steady-state exits) has returned.
+func (s *Stream) stderrTailForLog() string {
+	s.stderrMu.RLock()
+	full := s.stderr.String()
+	s.stderrMu.RUnlock()
+
+	tail := stderrLogTail(full, stderrLogTailMaxBytes)
+	if tail == "" {
+		return ""
+	}
+	return privacy.SanitizeFFmpegError(tail)
+}
+
+// logStderrTailOnExit logs the tail of this process's captured FFmpeg stderr, if
+// any, with the process-ended context. abnormal true logs at WARN (the process
+// failed); abnormal false logs at DEBUG (a normal exit rarely carries useful
+// stderr at loglevel error, so keep steady-state logs quiet). Nothing is logged
+// when no stderr was captured.
+func (s *Stream) logStderrTailOnExit(abnormal bool) {
+	tail := s.stderrTailForLog()
+	if tail == "" {
+		return
+	}
+	fields := []logger.Field{
+		logger.String("url", s.config.safeURL()),
+		logger.String("stderr_tail", tail),
+		logger.String("component", "ffmpeg-stream"),
+		logger.String("operation", "process_ended_stderr"),
+	}
+	if abnormal {
+		getStreamLogger().Warn("FFmpeg stderr on exit", fields...)
+		return
+	}
+	getStreamLogger().Debug("FFmpeg stderr on exit", fields...)
 }
