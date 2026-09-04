@@ -1623,7 +1623,7 @@ func (r *detectionRepository) GetSpeciesSummary(ctx context.Context, start, end 
 
 // buildAnalyticsBaseQuery creates a base query with JOIN and WHERE clauses for analytics.
 // This helper reduces duplication between analytics query methods.
-func (r *detectionRepository) buildAnalyticsBaseQuery(ctx context.Context, start, end int64, labelID, modelID *uint) *gorm.DB {
+func (r *detectionRepository) buildAnalyticsBaseQuery(ctx context.Context, start, end int64, labelIDs []uint, modelID *uint) *gorm.DB {
 	detTable := r.tableName()
 	revTable := r.reviewsTable()
 	query := r.db.WithContext(ctx).Table(fmt.Sprintf("%s d", detTable)).
@@ -1631,8 +1631,10 @@ func (r *detectionRepository) buildAnalyticsBaseQuery(ctx context.Context, start
 		Where("d.detected_at >= ? AND d.detected_at < ?", start, end).
 		Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive))
 
-	if labelID != nil {
-		query = query.Where("d.label_id = ?", *labelID)
+	// A species has one label per model, so a species filter is a set of label IDs, not one:
+	// filtering on a single label silently dropped every detection made by the other models.
+	if len(labelIDs) > 0 {
+		query = query.Where("d.label_id IN ?", labelIDs)
 	}
 	if modelID != nil {
 		query = query.Where("d.model_id = ?", *modelID)
@@ -1642,13 +1644,13 @@ func (r *detectionRepository) buildAnalyticsBaseQuery(ctx context.Context, start
 }
 
 // GetHourlyDistribution returns detection counts by hour.
-func (r *detectionRepository) GetHourlyDistribution(ctx context.Context, start, end int64, tzOffsetSeconds int, labelID, modelID *uint) ([]HourlyDistributionData, error) {
+func (r *detectionRepository) GetHourlyDistribution(ctx context.Context, start, end int64, tzOffsetSeconds int, labelIDs []uint, modelID *uint) ([]HourlyDistributionData, error) {
 	var results []HourlyDistributionData
 
 	// Bucket by wall-clock hour in the configured timezone via hourFromUnixExpr.
 	// Exclude detections marked as false_positive
 	hourExpr := r.hourFromUnixExpr("d.detected_at", tzOffsetSeconds)
-	query := r.buildAnalyticsBaseQuery(ctx, start, end, labelID, modelID).
+	query := r.buildAnalyticsBaseQuery(ctx, start, end, labelIDs, modelID).
 		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourExpr)).
 		Group("hour").
 		Order("hour ASC")
@@ -1660,23 +1662,23 @@ func (r *detectionRepository) GetHourlyDistribution(ctx context.Context, start, 
 // GetDetectionTimestamps returns raw detected_at epochs for [start, end), false positives
 // excluded, in no particular order. See the interface doc for why bucketing happens in Go,
 // not SQL.
-func (r *detectionRepository) GetDetectionTimestamps(ctx context.Context, start, end int64, labelID *uint) ([]int64, error) {
+func (r *detectionRepository) GetDetectionTimestamps(ctx context.Context, start, end int64, labelIDs []uint) ([]int64, error) {
 	var timestamps []int64
 	// No ORDER BY: the caller buckets timestamps into a map and sorts the resulting cells
 	// itself, so ordering (potentially millions of) rows in SQL would be wasted work.
-	err := r.buildAnalyticsBaseQuery(ctx, start, end, labelID, nil).
+	err := r.buildAnalyticsBaseQuery(ctx, start, end, labelIDs, nil).
 		Pluck("d.detected_at", &timestamps).Error
 	return timestamps, err
 }
 
 // GetDailyAnalytics returns daily statistics.
-func (r *detectionRepository) GetDailyAnalytics(ctx context.Context, start, end int64, tzOffsetSeconds int, labelID, modelID *uint) ([]DailyAnalyticsData, error) {
+func (r *detectionRepository) GetDailyAnalytics(ctx context.Context, start, end int64, tzOffsetSeconds int, labelIDs []uint, modelID *uint) ([]DailyAnalyticsData, error) {
 	var results []DailyAnalyticsData
 
 	// Group by wall-clock date in the configured timezone (offset-adjusted).
 	// Exclude detections marked as false_positive
 	dateExpr := r.dateFromUnixExpr("d.detected_at", tzOffsetSeconds)
-	query := r.buildAnalyticsBaseQuery(ctx, start, end, labelID, modelID).
+	query := r.buildAnalyticsBaseQuery(ctx, start, end, labelIDs, modelID).
 		Select(fmt.Sprintf(`
 			%s as date,
 			COUNT(*) as total_detections,
