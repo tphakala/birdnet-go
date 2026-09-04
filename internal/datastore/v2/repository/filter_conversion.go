@@ -350,14 +350,15 @@ func ResolveSpeciesToLabelIDs(ctx context.Context, deps *FilterLookupDeps, speci
 // same matching as the search endpoint's device filter (ResolveDeviceToSourceIDs: node name,
 // display name or source URI, case-insensitively, exact before substring). Returns nil for an
 // empty filter and sentinelNoMatchIDs when nothing matches, so an unknown source yields no rows
-// rather than every row.
+// rather than every row. Without a source repository only numeric IDs can match.
 func ResolveSourcesToSourceIDs(ctx context.Context, deps *FilterLookupDeps, sources []string) ([]uint, error) {
 	if len(sources) == 0 {
 		return nil, nil
 	}
-	if deps == nil || deps.SourceRepo == nil {
-		return nil, nil
-	}
+	// Numeric IDs need no lookup, so a filter is still applied when no source repository is
+	// wired; names then match nothing rather than being dropped, so the response is never
+	// silently unfiltered.
+	haveRepo := deps != nil && deps.SourceRepo != nil
 	var groups [][]uint
 	for _, want := range sources {
 		want = strings.TrimSpace(want)
@@ -366,6 +367,9 @@ func ResolveSourcesToSourceIDs(ctx context.Context, deps *FilterLookupDeps, sour
 		}
 		if id, ok := parseSourceID(want); ok {
 			groups = append(groups, []uint{id})
+			continue
+		}
+		if !haveRepo {
 			continue
 		}
 		ids, err := ResolveDeviceToSourceIDs(ctx, deps, want)

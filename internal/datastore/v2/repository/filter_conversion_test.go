@@ -1469,11 +1469,14 @@ func TestResolveSourcesToSourceIDs(t *testing.T) {
 		})
 	}
 
-	t.Run("nil deps is no filter", func(t *testing.T) {
+	t.Run("nil deps: names match nothing, ids still apply", func(t *testing.T) {
 		t.Parallel()
 		got, err := ResolveSourcesToSourceIDs(ctx, nil, []string{"north"})
 		require.NoError(t, err)
-		assert.Nil(t, got)
+		assert.Equal(t, sentinelNoMatchIDs, got, "a name cannot be resolved without a repository, so it must not drop the filter")
+		got, err = ResolveSourcesToSourceIDs(ctx, nil, []string{"north", "2"})
+		require.NoError(t, err)
+		assert.Equal(t, []uint{2}, got)
 	})
 }
 

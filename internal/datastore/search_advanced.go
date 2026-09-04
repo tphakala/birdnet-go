@@ -16,6 +16,10 @@ import (
 const SortBySearchDefault = "search_default"
 
 // AdvancedSearchFilters represents all possible search filters from the frontend
+// sourceNodeInPredicate selects notes by the node that recorded them; both the location and
+// source filters resolve to it on the legacy schema.
+const sourceNodeInPredicate = "source_node IN ?"
+
 type AdvancedSearchFilters struct {
 	TextQuery string
 	// SpeciesScientific contains exact scientific names that are OR-ed with
@@ -111,12 +115,12 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 
 	// Apply location/source filter (source_node column in notes table)
 	if len(filters.Location) > 0 {
-		query = query.Where("source_node IN ?", filters.Location)
+		query = query.Where(sourceNodeInPredicate, filters.Location)
 	}
 	// The legacy schema records only the node per note, so a source filter can select rows only
 	// by node name; any other spelling matches nothing rather than everything.
 	if len(filters.Source) > 0 {
-		query = query.Where("source_node IN ?", filters.Source)
+		query = query.Where(sourceNodeInPredicate, filters.Source)
 	}
 
 	// Apply verified filter
