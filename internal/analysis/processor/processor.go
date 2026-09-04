@@ -799,8 +799,11 @@ func (p *Processor) processDetections(item classifier.Results) {
 			p.applyExtendedCapture(mapKey, now, detectionWindow)
 		}
 
-		// Update the dynamic threshold for this species if enabled
-		p.updateDynamicThreshold(item.ModelID, commonName, confidence)
+		// Note: the dynamic-threshold expiry timer is renewed only from approved,
+		// filter-passing detections above Trigger in LearnFromApprovedDetection
+		// (via processApprovedDetection). Renewing it here from pending detections
+		// above the model base let sub-trigger noise sustain a lowered gate
+		// indefinitely (#4194), so no renewal happens on the pending path.
 
 		// Unlock the mutex to allow other goroutines to access shared resources
 		p.pendingMutex.Unlock()
