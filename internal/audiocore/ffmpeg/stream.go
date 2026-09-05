@@ -2312,13 +2312,13 @@ func (s *Stream) recordErrorContext(ctx *audiocore.StreamErrorContext) {
 			logger.String("component", "ffmpeg-stream"),
 			logger.String("operation", "error_troubleshooting"))
 	}
-	if ctx.RawFFmpegOutput != "" {
+	if ctx.RawProducerOutput != "" {
 		log.Debug("FFmpeg raw error output",
 			logger.String("source_id", s.config.SourceID),
 			logger.String("error_type", ctx.ErrorType),
 			logger.String("target_host", targetHost),
 			logger.Int("target_port", ctx.TargetPort),
-			logger.String("ffmpeg_output", ctx.RawFFmpegOutput),
+			logger.String("ffmpeg_output", ctx.RawProducerOutput),
 			logger.String("component", "ffmpeg-stream"),
 			logger.String("operation", "error_raw_output"))
 	}

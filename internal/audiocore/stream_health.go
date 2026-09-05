@@ -192,14 +192,14 @@ type StreamErrorContext struct {
 	TimeoutDuration time.Duration // Extracted timeout (if applicable)
 	HTTPStatus      int           // HTTP/RTSP status code (if applicable)
 	RTSPMethod      string        // RTSP method that failed (if applicable)
-	// RawFFmpegOutput stores the sanitized producer stderr/log output for
+	// RawProducerOutput stores the sanitized producer stderr/log output for
 	// debugging. SECURITY: this field is sanitized by the producer (for FFmpeg,
 	// privacy.SanitizeFFmpegError) to remove credentials from stream URLs. The
 	// json:"-" tag prevents accidental credential leakage via JSON marshaling.
-	RawFFmpegOutput string    `json:"-"` // Full producer output for debugging (sanitized)
-	UserFacingMsg   string    // Friendly message for user
-	TroubleShooting []string  // List of troubleshooting steps
-	Timestamp       time.Time // When this error was detected
+	RawProducerOutput string    `json:"-"` // Full producer output for debugging (sanitized)
+	UserFacingMsg     string    // Friendly message for user
+	TroubleShooting   []string  // List of troubleshooting steps
+	Timestamp         time.Time // When this error was detected
 }
 
 // FormatForConsole renders the user-facing message plus troubleshooting steps
