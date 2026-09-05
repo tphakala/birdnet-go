@@ -999,7 +999,21 @@
     },
     "history": {
       "title": "Registreringshistorik",
-      "comingSoon": "Historiksporing kommer snart..."
+      "firstHeard": "Først hørt",
+      "lastHeard": "Sidst hørt",
+      "totalDetections": "Registreringer",
+      "dailyWindow": "Daglige registreringer, 30 dage til {date}",
+      "recentTitle": "Andre nylige registreringer",
+      "viewAll": "Vis alle {count} i Registreringer",
+      "noOthers": "Dette er indtil videre den eneste registrering af denne art.",
+      "loading": "Indlæser artshistorik...",
+      "loadError": "Kunne ikke indlæse historik for denne art.",
+      "unavailable": "Historik er ikke tilgængelig for denne registrering.",
+      "aria": {
+        "sparkline": "Daglige antal registreringer for de 30 dage, der slutter {date}",
+        "recentList": "Andre nylige registreringer af denne art",
+        "openDetection": "Åbn registrering fra {timestamp}"
+      }
     },
     "notes": {
       "title": "Noter og kommentarer",

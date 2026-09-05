@@ -999,7 +999,21 @@
     },
     "history": {
       "title": "Atklāšanu vēsture",
-      "comingSoon": "Vēstures izsekošana drīzumā..."
+      "firstHeard": "Pirmoreiz dzirdēts",
+      "lastHeard": "Pēdējoreiz dzirdēts",
+      "totalDetections": "Atklāšanas",
+      "dailyWindow": "Ikdienas atklāšanas, 30 dienas līdz {date}",
+      "recentTitle": "Citas nesenās atklāšanas",
+      "viewAll": "Skatīt visas ({count}) sadaļā Atklāšanas",
+      "noOthers": "Šī pagaidām ir vienīgā šīs sugas atklāšana.",
+      "loading": "Ielādē sugas vēsturi...",
+      "loadError": "Neizdevās ielādēt šīs sugas vēsturi.",
+      "unavailable": "Šai atklāšanai vēsture nav pieejama.",
+      "aria": {
+        "sparkline": "Ikdienas atklāšanu skaits 30 dienās, kas beidzas {date}",
+        "recentList": "Citas nesenās šīs sugas atklāšanas",
+        "openDetection": "Atvērt atklāšanu no {timestamp}"
+      }
     },
     "notes": {
       "title": "Piezīmes un komentāri",

@@ -999,7 +999,21 @@
     },
     "history": {
       "title": "Detekteringshistorik",
-      "comingSoon": "Historikspårning kommer snart..."
+      "firstHeard": "Först hörd",
+      "lastHeard": "Senast hörd",
+      "totalDetections": "Detekteringar",
+      "dailyWindow": "Dagliga detekteringar, 30 dagar till {date}",
+      "recentTitle": "Andra nyliga detekteringar",
+      "viewAll": "Visa alla {count} i Detekteringar",
+      "noOthers": "Detta är hittills den enda detekteringen av denna art.",
+      "loading": "Laddar artshistorik...",
+      "loadError": "Det gick inte att ladda historik för denna art.",
+      "unavailable": "Historik är inte tillgänglig för denna detektering.",
+      "aria": {
+        "sparkline": "Dagliga detekteringsantal för de 30 dagar som slutar {date}",
+        "recentList": "Andra nyliga detekteringar av denna art",
+        "openDetection": "Öppna detektering från {timestamp}"
+      }
     },
     "notes": {
       "title": "Anteckningar och kommentarer",

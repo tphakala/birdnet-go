@@ -999,7 +999,21 @@
     },
     "history": {
       "title": "Registreringshistorikk",
-      "comingSoon": "Historikksporing kommer snart..."
+      "firstHeard": "Først hørt",
+      "lastHeard": "Sist hørt",
+      "totalDetections": "Registreringer",
+      "dailyWindow": "Daglige registreringer, 30 dager til {date}",
+      "recentTitle": "Andre nylige registreringer",
+      "viewAll": "Vis alle {count} i Registreringer",
+      "noOthers": "Dette er så langt den eneste registreringen av denne arten.",
+      "loading": "Laster artshistorikk...",
+      "loadError": "Kunne ikke laste historikk for denne arten.",
+      "unavailable": "Historikk er ikke tilgjengelig for denne registreringen.",
+      "aria": {
+        "sparkline": "Daglige antall registreringer for de 30 dagene som slutter {date}",
+        "recentList": "Andre nylige registreringer av denne arten",
+        "openDetection": "Åpne registrering fra {timestamp}"
+      }
     },
     "notes": {
       "title": "Notater og kommentarer",

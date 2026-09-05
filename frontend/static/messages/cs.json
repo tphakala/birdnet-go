@@ -999,7 +999,21 @@
     },
     "history": {
       "title": "Historie detekcí",
-      "comingSoon": "Sledování historie bude brzy k dispozici…"
+      "firstHeard": "Poprvé slyšeno",
+      "lastHeard": "Naposledy slyšeno",
+      "totalDetections": "Detekce",
+      "dailyWindow": "Denní detekce, 30 dní do {date}",
+      "recentTitle": "Další nedávné detekce",
+      "viewAll": "Zobrazit vše ({count}) v Detekcích",
+      "noOthers": "Toto je zatím jediná detekce tohoto druhu.",
+      "loading": "Načítání historie druhu...",
+      "loadError": "Historii tohoto druhu se nepodařilo načíst.",
+      "unavailable": "Historie není pro tuto detekci k dispozici.",
+      "aria": {
+        "sparkline": "Počty denních detekcí za 30 dní končících {date}",
+        "recentList": "Další nedávné detekce tohoto druhu",
+        "openDetection": "Otevřít detekci z {timestamp}"
+      }
     },
     "notes": {
       "title": "Poznámky a komentáře",

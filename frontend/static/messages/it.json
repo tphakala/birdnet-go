@@ -999,7 +999,21 @@
     },
     "history": {
       "title": "Cronologia Rilevamento",
-      "comingSoon": "Tracciamento cronologia in arrivo..."
+      "firstHeard": "Primo ascolto",
+      "lastHeard": "Ultimo ascolto",
+      "totalDetections": "Rilevamenti",
+      "dailyWindow": "Rilevamenti giornalieri, 30 giorni fino al {date}",
+      "recentTitle": "Altri rilevamenti recenti",
+      "viewAll": "Visualizza tutti i {count} in Rilevamenti",
+      "noOthers": "Questo è finora l'unico rilevamento di questa specie.",
+      "loading": "Caricamento cronologia della specie...",
+      "loadError": "Impossibile caricare la cronologia di questa specie.",
+      "unavailable": "La cronologia non è disponibile per questo rilevamento.",
+      "aria": {
+        "sparkline": "Conteggi giornalieri dei rilevamenti per i 30 giorni che terminano il {date}",
+        "recentList": "Altri rilevamenti recenti di questa specie",
+        "openDetection": "Apri il rilevamento del {timestamp}"
+      }
     },
     "notes": {
       "title": "Note e Commenti",

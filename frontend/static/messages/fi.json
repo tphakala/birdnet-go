@@ -999,7 +999,21 @@
     },
     "history": {
       "title": "Havainnon historia",
-      "comingSoon": "Historian seuranta tulossa pian..."
+      "firstHeard": "Kuultu ensimmäisen kerran",
+      "lastHeard": "Kuultu viimeksi",
+      "totalDetections": "Havainnot",
+      "dailyWindow": "Päivittäiset havainnot, 30 päivää {date} asti",
+      "recentTitle": "Muut viimeaikaiset havainnot",
+      "viewAll": "Näytä kaikki ({count}) Havainnoissa",
+      "noOthers": "Tämä on toistaiseksi ainoa havainto tästä lajista.",
+      "loading": "Ladataan lajin historiaa...",
+      "loadError": "Tämän lajin historiaa ei voitu ladata.",
+      "unavailable": "Historia ei ole saatavilla tälle havainnolle.",
+      "aria": {
+        "sparkline": "Päivittäiset havaintomäärät 30 päivän ajalta, joka päättyy {date}",
+        "recentList": "Muut viimeaikaiset havainnot tästä lajista",
+        "openDetection": "Avaa havainto ajalta {timestamp}"
+      }
     },
     "notes": {
       "title": "Huomiot ja kommentit",
