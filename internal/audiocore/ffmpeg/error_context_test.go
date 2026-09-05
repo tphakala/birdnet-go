@@ -488,10 +488,12 @@ Error opening input file rtsp://user:p@ssw0rd!@host.local:8554/live`,
 			assert.NotContains(t, ctx.RawProducerOutput, "secret", "RawProducerOutput contains unsanitized 'secret'")
 			assert.NotContains(t, ctx.RawProducerOutput, "p@ssw0rd", "RawProducerOutput contains unsanitized 'p@ssw0rd'")
 
-			// Check that credentials should be replaced with ***.
-			if !strings.Contains(ctx.RawProducerOutput, "***") {
-				t.Log("Note: RawProducerOutput should contain *** placeholders for credentials")
-			}
+			// SanitizeFFmpegError strips the user:pass@ credentials from the URL
+			// rather than masking them, so the sanitized output keeps the scheme
+			// and host but not the secret. Assert the URL line survived as a
+			// non-vacuous positive control for the credential-absence checks above.
+			assert.Contains(t, ctx.RawProducerOutput, "rtsp://",
+				"sanitized output should retain the stream URL, not be emptied")
 
 			// Check TargetHost is clean.
 			if tt.checkHost {

@@ -65,9 +65,11 @@ func TestBuildStreamSpec(t *testing.T) {
 			t.Parallel()
 			e := &AudioEngine{debug: tt.debug}
 			// The call site assembles every field except Debug, which the engine
-			// owns; buildStreamSpec must stamp it and leave the rest untouched.
+			// owns. Start Debug at the opposite of the wanted value so the
+			// assertion proves buildStreamSpec actively stamps it, not that it
+			// happened to match.
 			in := tt.want
-			in.Debug = false
+			in.Debug = !tt.debug
 			got := e.buildStreamSpec(&in)
 			assert.Equal(t, &tt.want, got)
 		})
