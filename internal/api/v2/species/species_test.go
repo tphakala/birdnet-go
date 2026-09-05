@@ -190,6 +190,22 @@ func TestRarityStatusConstants(t *testing.T) {
 	assert.InDelta(t, 0.05, RarityThresholdRare, 0.001)
 }
 
+func TestFindNativeSpeciesScore(t *testing.T) {
+	t.Parallel()
+
+	scores := []classifier.SpeciesScore{
+		{Label: "Amazona viridigenalis_Red-crowned Parrot", Score: 1, IsSyntheticOverride: true},
+		{Label: "Amazona viridigenalis_Red-crowned Amazon", Score: 0.95},
+	}
+
+	score, found := findNativeSpeciesScore("amazona VIRIDIGENALIS", scores)
+	require.True(t, found)
+	assert.InDelta(t, 0.95, score, 1e-9)
+
+	_, found = findNativeSpeciesScore("Amazona viridigenalis", scores[:1])
+	assert.False(t, found, "synthetic override scores must not drive rarity")
+}
+
 // TestSpeciesAPIValidation tests validation for all species endpoints in a single table-driven test.
 func TestSpeciesAPIValidation(t *testing.T) {
 	t.Parallel()
@@ -849,12 +865,9 @@ func TestComputeRarity_CollidingSpecies(t *testing.T) {
 // covers: previously they read as very_rare, so the badge depended on an unrelated
 // toggle.
 //
-// Note what this does NOT cover. addUserOverrideSpeciesScores also injects at 1.0, but
-// resolveOverrideLabels resolves an override against the geomodel labels first, so a
-// force-included species the geomodel knows sits INSIDE the coverage vocabulary and
-// still reads as very_common. Only an override outside it, as constructed here, reaches
-// the unknown path. Separating a real score from an injected one needs the range filter
-// to tag synthetic entries.
+// This test exercises the coverage guard for rows outside both vocabularies.
+// TestFindNativeSpeciesScore separately verifies that tagged include-override rows
+// inside the coverage vocabulary are ignored in favor of native probabilities.
 func TestComputeRarity_SyntheticScoresReportUnknown(t *testing.T) {
 	t.Parallel()
 

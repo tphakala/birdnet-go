@@ -20,12 +20,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/openfauna"
 )
 
-// SpeciesScore holds a species label and its associated score.
+// SpeciesScore holds a species label, its associated score, and override provenance.
+// Synthetic provenance distinguishes score-1.0 rows appended solely to admit user
+// overrides from native geomodel scores.
 type SpeciesScore struct {
-	Score              float64
-	Label              string
-	HasCustomConfig    bool
-	IsManuallyIncluded bool
+	Score               float64
+	Label               string
+	HasCustomConfig     bool
+	IsManuallyIncluded  bool
+	IsSyntheticOverride bool
 }
 
 // ByScore implements sort.Interface for []SpeciesScore based on the Score field.
@@ -422,13 +425,13 @@ func resolveOverrideLabelsWithSource(settings *conf.Settings, geoLabels []string
 // "Configured" and "Included" badges correct (issue #3974).
 //
 // Dedup here is by exact label and intentionally narrow: it only avoids
-// re-appending a label already present verbatim. A force-included species that
-// the geomodel also scored can therefore appear twice (its range-filter score
-// plus this score-1.0 entry) when the two carry different label strings; that is
-// expected. The score-1.0 entry must be kept so the species reads as
-// always-active, and same-taxon near-duplicates are collapsed for the user at
-// the display boundary (dedupeSpeciesForDisplay in internal/api/v2/range/range.go),
-// not here, so the functional inclusion set keeps every scientific name.
+// re-appending a label already present verbatim. An exact match keeps its native
+// score and gains manual-inclusion provenance. A force-included species that the
+// geomodel also scored under a different label can therefore appear twice: its
+// native range-filter row plus a synthetic score-1.0 row. Same-taxon
+// near-duplicates are collapsed for the user at the display boundary
+// (dedupeSpeciesForDisplay in internal/api/v2/range/range.go), not here, so the
+// functional inclusion set keeps every scientific name.
 func addUserOverrideSpeciesScores(bn *BirdNET, speciesScores *[]SpeciesScore, settings *conf.Settings, geoLabels []string) {
 	labels, sources := resolveOverrideLabelsWithSource(settings, geoLabels)
 
@@ -455,10 +458,11 @@ func addUserOverrideSpeciesScores(bn *BirdNET, speciesScores *[]SpeciesScore, se
 		src := sources[label]
 		bn.Debug("Adding override species with max score: %s", label)
 		*speciesScores = append(*speciesScores, SpeciesScore{
-			Score:              1.0,
-			Label:              label,
-			HasCustomConfig:    src.customConfig,
-			IsManuallyIncluded: src.manuallyIncluded,
+			Score:               1.0,
+			Label:               label,
+			HasCustomConfig:     src.customConfig,
+			IsManuallyIncluded:  src.manuallyIncluded,
+			IsSyntheticOverride: true,
 		})
 		seen[label] = true
 	}
@@ -672,7 +676,7 @@ func zeroScoresForAllLabels(labels []string, excl excludeMatcher) []SpeciesScore
 // OpenFauna. The reverse resolution is batched once at construction (one dataset scan),
 // keeping the per-label match off OpenFauna so it stays safe on the hot paths the
 // matcher runs on (per geomodel score during rebuild, zeroScoresForAllLabels). This
-// mirrors the include-side reverse lookup in resolveOverrideLabels.
+// mirrors the include-side reverse lookup in resolveOverrideLabelsWithSource.
 type excludeMatcher struct {
 	entries    []string            // raw exclude entries, forward-matched per label
 	reverseSci map[string]struct{} // lower-cased scientific names of localized entries

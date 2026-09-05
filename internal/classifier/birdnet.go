@@ -991,18 +991,26 @@ func clampOccurrence(score float64) float64 {
 	}
 }
 
-// buildOccurrenceIndex indexes species scores for lookupOccurrence: every species under
-// its exact scientific name, plus a canonical-name entry wherever that does not shadow
-// an exact one. The cached and uncached paths both build the index through this helper
-// so they cannot disagree about which species a name refers to.
+// buildOccurrenceIndex indexes native species scores for lookupOccurrence: every
+// species under its exact scientific name, plus a canonical-name entry wherever that
+// does not shadow an exact one. Synthetic override sentinels do not represent
+// geomodel probabilities and must not drive detection occurrence values. The cached
+// and uncached paths both build the index through this helper so they cannot disagree
+// about which species a name refers to.
 func buildOccurrenceIndex(speciesScores []SpeciesScore) map[string]float64 {
 	scores := make(map[string]float64, len(speciesScores))
 	for _, s := range speciesScores {
+		if s.IsSyntheticOverride {
+			continue
+		}
 		if key := rawSpeciesKey(s.Label); key != "" {
 			scores[key] = s.Score
 		}
 	}
 	for _, s := range speciesScores {
+		if s.IsSyntheticOverride {
+			continue
+		}
 		if key := canonicalSpeciesKey(s.Label); key != "" {
 			if _, exact := scores[key]; !exact {
 				scores[key] = s.Score
