@@ -438,6 +438,39 @@ func TestLiveness_NoRestartDuringSupervisedReconnect(t *testing.T) {
 	})
 }
 
+// TestLiveness_ZeroCeilingDisablesCoordination verifies that a non-positive
+// ProducerRecoveryCeiling turns the coordination off entirely: the watchdog takes
+// the legacy restart path even while the producer reports RecoveryInProgress, and
+// it never invokes the RecoveryState callback.
+func TestLiveness_ZeroCeilingDisablesCoordination(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const src = "src-1"
+		r := setupRouter(t, src)
+		defer r.Close()
+
+		cfg := fastConfig()
+		cfg.ProducerRecoveryCeiling = 0 // coordination disabled
+
+		var restarts, recoveryCalls atomic.Int32
+		w := NewLivenessWatchdog(cfg, r, LivenessCallbacks{
+			RestartSource: func(_ string) error { restarts.Add(1); return nil },
+			RecoveryState: func(_ string) (RecoveryState, time.Time) {
+				recoveryCalls.Add(1)
+				return RecoveryInProgress, time.Now()
+			},
+		})
+
+		dispatchFrame(r, src)
+		w.Start()
+		defer w.Stop()
+
+		time.Sleep(cfg.SilenceThreshold + 3*cfg.CheckInterval)
+
+		assert.NotZero(t, restarts.Load(), "a zero ceiling must take the legacy restart path despite RecoveryInProgress")
+		assert.Zero(t, recoveryCalls.Load(), "a zero ceiling short-circuits before invoking the RecoveryState callback")
+	})
+}
+
 // TestLiveness_RestartWhenSupervisorGivesUp is the other half of contract case
 // 16: once the producer reports RecoveryGivenUp the watchdog restarts exactly
 // once, which (in production) re-adds the source under a fresh dispatch clock.

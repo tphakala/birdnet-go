@@ -84,7 +84,12 @@ func (p *pipeline) setCodec(codec audiostream.Codec, format audiostream.AudioFor
 		// Clear the decoder so a failed (re)resolution does not keep feeding the
 		// new bitstream into the previous decoder: process drops frames while
 		// p.dec is nil until a valid codec is resolved (e.g. via OnCodecUpdate).
+		// Clear the published geometry too, so the health snapshot does not report
+		// a codec and rate that are no longer active.
 		p.dec = nil
+		p.codecLabel.Store(nil)
+		p.srcRate.Store(0)
+		p.srcChannels.Store(0)
 		if p.resampler != nil {
 			_ = p.resampler.Close()
 			p.resampler = nil
@@ -94,6 +99,11 @@ func (p *pipeline) setCodec(codec audiostream.Codec, format audiostream.AudioFor
 	p.dec = dec
 	label := codecName(codec)
 	p.codecLabel.Store(&label)
+	// Reset the geometry until the first decoded frame of the new codec repopulates
+	// it, so a snapshot between the codec change and the first frame does not report
+	// the previous codec's rate.
+	p.srcRate.Store(0)
+	p.srcChannels.Store(0)
 	if p.resampler != nil {
 		_ = p.resampler.Close()
 		p.resampler = nil

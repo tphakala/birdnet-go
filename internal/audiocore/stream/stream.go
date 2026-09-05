@@ -370,6 +370,12 @@ const minWireRateInterval = 1 * time.Second
 // session-stats deltas and reports whether it recomputed this call (so the
 // caller can emit the rate to metrics OUTSIDE the lock). The caller holds mu.
 func (s *stream) updateWireRates(capturedAt time.Time, wire, payload uint64) bool {
+	// A zero capture time (no live session yet) carries no usable delta; ignore it
+	// so it never becomes a stale baseline that a later valid sample measures a
+	// negative interval against. Mirrors the guard in aggregateTrackStats.
+	if capturedAt.IsZero() {
+		return false
+	}
 	if s.lastStatsAt.IsZero() {
 		s.lastStatsAt = capturedAt
 		s.lastWire = wire

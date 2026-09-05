@@ -333,10 +333,11 @@ const (
 // whether to restart a silent source now or let the producer's own supervisor
 // finish an in-progress reconnect. A nil callback, an unknown or idle intent, a
 // give-up, or a producer that has been recovering longer than the ceiling all
-// take the legacy restart path. A zero ceiling (coordination disabled) also takes
-// the legacy path because now.Sub(since) is never negative.
+// take the legacy restart path. A nil callback or a non-positive ceiling
+// (coordination disabled) short-circuits to the legacy path without invoking the
+// callback at all.
 func (w *LivenessWatchdog) restartDisposition(sourceID string, now time.Time) restartDisposition {
-	if w.callbacks.RecoveryState == nil {
+	if w.callbacks.RecoveryState == nil || w.cfg.ProducerRecoveryCeiling <= 0 {
 		return restartLegacy
 	}
 	recovery, since := w.callbacks.RecoveryState(sourceID)

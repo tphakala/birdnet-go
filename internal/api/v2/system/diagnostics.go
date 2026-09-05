@@ -434,6 +434,18 @@ func (c *Handler) buildStreamHealthProvider() func() []checks.StreamHealthInfo {
 				SSRCResets:         sh.SSRCResets,
 			})
 		}
+		// AllStreamHealth ranges a map, so sort by URL for a stable support-dump
+		// ordering (the diagnostics file sorts its other map-derived outputs too).
+		slices.SortFunc(infos, func(a, b checks.StreamHealthInfo) int {
+			switch {
+			case a.URL < b.URL:
+				return -1
+			case a.URL > b.URL:
+				return 1
+			default:
+				return 0
+			}
+		})
 		return infos
 	}
 }
