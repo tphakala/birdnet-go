@@ -121,7 +121,7 @@ type Health interface {
 // Manager is the minimal producer contract the characterization suite drives. It
 // is the de facto surface the engine calls on ffmpeg.Manager today (spec section
 // 2.2), narrowed to what the suite needs. Producers satisfy it through a thin
-// adapter so the SAME suite runs unchanged against nativestream.Manager later.
+// adapter so the SAME suite runs unchanged against stream.Manager later.
 type Manager interface {
 	// StartStream begins capturing spec.SourceID and dispatching its frames.
 	StartStream(spec *StreamSpec) error
