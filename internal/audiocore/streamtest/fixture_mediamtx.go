@@ -27,6 +27,10 @@ const (
 	// unreachableHostURL points at TEST-NET-1 (RFC 5737), which is guaranteed not
 	// to be routable, so a connect attempt times out.
 	unreachableHostURL = "rtsp://192.0.2.1:554/dead"
+
+	// fallbackRefusedPort is a port that is almost never listening, used by
+	// RefusedPortURL only when a free port cannot be obtained.
+	fallbackRefusedPort = 1
 )
 
 // MediaMTXFixture is a Fixture backed by a MediaMTX container. It publishes
@@ -84,7 +88,7 @@ func (f *MediaMTXFixture) UnreachableHostURL() string {
 
 // RefusedPortURL returns a URL on the live server host but a closed port.
 func (f *MediaMTXFixture) RefusedPortURL() string {
-	port := 1 // a port almost never open, used if a free port cannot be found
+	port := fallbackRefusedPort
 	if free, err := containers.GetFreePort(); err == nil {
 		port = free
 	}

@@ -158,6 +158,16 @@ func caseLifecycle(t *testing.T, cfg *ContractConfig) {
 	coll := &frameCollector{}
 	mgr := cfg.Factory(t, FactoryConfig{OnFrame: coll.onFrame, OnReset: coll.onReset, BufferManager: bufferManagerFor(t)})
 	require.NotNil(t, mgr)
+	// Safety net so a require failure before the explicit shutdown below cannot
+	// leak the manager (and its FFmpeg child) into the sibling subtests that
+	// share the fixture. The explicit ShutdownWithContext below still owns the
+	// assertion; this best-effort call is a no-op once that has run.
+	t.Cleanup(func() {
+		//nolint:gocritic // t.Context() is already cancelled when Cleanup runs; shutdown needs a live context
+		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		_ = mgr.ShutdownWithContext(ctx)
+	})
 
 	spec := cfg.rtspSpec(uniquePath("lifecycle"), pub.URL())
 	require.NoError(t, mgr.StartStream(spec), "first start should succeed")
