@@ -36,10 +36,6 @@ const (
 	silenceTimeout       = 90 * time.Second
 	silenceCheckInterval = 10 * time.Second
 
-	// Data rate calculation settings.
-	dataRateWindowSize = 10 * time.Second
-	dataRateMaxSamples = 100
-
 	// Process management timeouts.
 	processCleanupTimeout = 5 * time.Second
 	processQuickExitTime  = 5 * time.Second
@@ -107,6 +103,9 @@ const (
 
 	// Maximum number of state transitions to keep in history.
 	maxStateHistory = 100
+	// maxStateHistoryExposed caps how many recent state transitions the health
+	// snapshot surfaces to the API.
+	maxStateHistoryExposed = 10
 )
 
 // getStreamLogger returns the logger for FFmpeg stream operations.
@@ -168,8 +167,11 @@ func (s ProcessState) String() string {
 	}
 }
 
-// StateTransition records a transition between process states for debugging.
-type StateTransition struct {
+// ProcessStateTransition records a transition between FFmpeg process states for
+// the stream's internal state machine and debug history. It is distinct from
+// audiocore.StateTransition, the producer-neutral transition the health snapshot
+// exposes; GetHealth maps each of these onto that neutral type.
+type ProcessStateTransition struct {
 	From      ProcessState
 	To        ProcessState
 	Timestamp time.Time
@@ -325,102 +327,6 @@ func (c *StreamConfig) effectiveSilenceTimeout() time.Duration {
 		return c.SilenceTimeout
 	}
 	return silenceTimeout
-}
-
-// StreamHealth represents the health status of an FFmpeg stream.
-type StreamHealth struct {
-	IsHealthy          bool
-	LastDataReceived   time.Time
-	RestartCount       int
-	Error              error
-	TotalBytesReceived int64
-	BytesPerSecond     float64
-	IsReceivingData    bool
-	ProcessState       ProcessState
-	StateHistory       []StateTransition
-	LastErrorContext   *ErrorContext
-	ErrorHistory       []*ErrorContext
-	SourceChannels     int
-}
-
-// dataRateCalculator tracks data rate over a sliding window.
-type dataRateCalculator struct {
-	samples    []dataSample
-	samplesMu  sync.RWMutex
-	windowSize time.Duration
-	maxSamples int
-}
-
-type dataSample struct {
-	timestamp time.Time
-	bytes     int64
-}
-
-// newDataRateCalculator creates a new data rate calculator.
-func newDataRateCalculator(windowSize time.Duration) *dataRateCalculator {
-	return &dataRateCalculator{
-		samples:    make([]dataSample, 0, dataRateMaxSamples),
-		windowSize: windowSize,
-		maxSamples: dataRateMaxSamples,
-	}
-}
-
-// addSample adds a new data sample.
-func (d *dataRateCalculator) addSample(numBytes int64) {
-	d.samplesMu.Lock()
-	defer d.samplesMu.Unlock()
-
-	now := time.Now()
-	d.samples = append(d.samples, dataSample{
-		timestamp: now,
-		bytes:     numBytes,
-	})
-
-	// Remove old samples outside the window.
-	cutoff := now.Add(-d.windowSize)
-	i := 0
-	for i < len(d.samples) && d.samples[i].timestamp.Before(cutoff) {
-		i++
-	}
-	if i > 0 {
-		d.samples = d.samples[i:]
-	}
-
-	// Limit max samples.
-	if len(d.samples) > d.maxSamples {
-		d.samples = d.samples[len(d.samples)-d.maxSamples:]
-	}
-}
-
-// getRate returns the current data rate in bytes per second.
-func (d *dataRateCalculator) getRate() float64 {
-	d.samplesMu.RLock()
-	defer d.samplesMu.RUnlock()
-
-	if len(d.samples) == 0 {
-		return 0
-	}
-
-	if len(d.samples) == 1 {
-		sample := d.samples[0]
-		timeSinceSample := time.Since(sample.timestamp)
-		if timeSinceSample < 5*time.Second {
-			return float64(sample.bytes)
-		}
-		return 0
-	}
-
-	totalBytes := int64(0)
-	for _, s := range d.samples {
-		totalBytes += s.bytes
-	}
-
-	duration := d.samples[len(d.samples)-1].timestamp.Sub(d.samples[0].timestamp).Seconds()
-	if duration <= 0 {
-		return 0
-	}
-
-	return float64(totalBytes) / duration
 }
 
 // secondsSinceOrZero returns seconds since t, or 0 if t is zero.
@@ -628,7 +534,7 @@ type Stream struct {
 	// Data tracking.
 	totalBytesReceived int64
 	bytesReceivedMu    sync.RWMutex
-	dataRateCalc       *dataRateCalculator
+	dataRateCalc       *audiocore.DataRateMeter
 
 	// Process timing.
 	processStartTime time.Time
@@ -671,11 +577,11 @@ type Stream struct {
 	// Process state tracking.
 	processState     ProcessState
 	processStateMu   sync.RWMutex
-	stateTransitions []StateTransition
+	stateTransitions []ProcessStateTransition
 	transitionsMu    sync.Mutex
 
 	// FFmpeg error tracking for diagnostics.
-	errorContexts   []*ErrorContext
+	errorContexts   []*audiocore.StreamErrorContext
 	errorContextsMu sync.RWMutex
 	maxErrorHistory int
 
@@ -707,12 +613,12 @@ func NewStream(cfg *StreamConfig, onFrame func(frame audiocore.AudioFrame), onRe
 		backoffDuration:  defaultBackoffDuration,
 		maxBackoff:       maxBackoffDuration,
 		lastDataTime:     time.Time{},
-		dataRateCalc:     newDataRateCalculator(dataRateWindowSize),
+		dataRateCalc:     audiocore.NewDataRateMeter(audiocore.DataRateWindowSize),
 		lastDropLogTime:  time.Now(),
 		streamCreatedAt:  time.Now(),
 		processState:     StateIdle,
-		stateTransitions: make([]StateTransition, 0, maxStateHistory),
-		errorContexts:    make([]*ErrorContext, 0, maxErrorHistorySize),
+		stateTransitions: make([]ProcessStateTransition, 0, maxStateHistory),
+		errorContexts:    make([]*audiocore.StreamErrorContext, 0, maxErrorHistorySize),
 		maxErrorHistory:  maxErrorHistorySize,
 		bufMgr:           bufMgr,
 	}
@@ -767,7 +673,7 @@ func (s *Stream) transitionState(to ProcessState, reason string) {
 	s.processState = to
 	s.processStateMu.Unlock()
 
-	transition := StateTransition{
+	transition := ProcessStateTransition{
 		From:      from,
 		To:        to,
 		Timestamp: time.Now(),
@@ -799,7 +705,7 @@ func (s *Stream) GetProcessState() ProcessState {
 }
 
 // GetStateHistory returns recent state transitions for debugging (thread-safe).
-func (s *Stream) GetStateHistory() []StateTransition {
+func (s *Stream) GetStateHistory() []ProcessStateTransition {
 	s.transitionsMu.Lock()
 	defer s.transitionsMu.Unlock()
 	return slices.Clone(s.stateTransitions)
@@ -1433,7 +1339,7 @@ func (s *Stream) dispatchAudioData(data []byte, ref *audiocore.FrameRef) {
 	totalReceived := s.totalBytesReceived
 	s.bytesReceivedMu.Unlock()
 
-	s.dataRateCalc.addSample(int64(n))
+	s.dataRateCalc.AddSample(int64(n))
 
 	s.conditionalFailureReset(totalReceived)
 
@@ -1457,7 +1363,7 @@ func (s *Stream) dispatchAudioData(data []byte, ref *audiocore.FrameRef) {
 
 	// Update metrics if available.
 	if s.metrics != nil {
-		s.metrics.RecordDataRate(s.config.SourceID, s.dataRateCalc.getRate())
+		s.metrics.RecordDataRate(s.config.SourceID, s.dataRateCalc.Rate())
 	}
 }
 
@@ -1903,7 +1809,7 @@ func (s *Stream) GetProcessStartTime() time.Time {
 }
 
 // GetHealth returns the current health status of the stream.
-func (s *Stream) GetHealth() StreamHealth {
+func (s *Stream) GetHealth() audiocore.StreamHealth {
 	s.lastDataMu.RLock()
 	lastData := s.lastDataTime
 	s.lastDataMu.RUnlock()
@@ -1916,7 +1822,7 @@ func (s *Stream) GetHealth() StreamHealth {
 	totalBytes := s.totalBytesReceived
 	s.bytesReceivedMu.RUnlock()
 
-	dataRate := s.dataRateCalc.getRate()
+	dataRate := s.dataRateCalc.Rate()
 
 	healthyDataThreshold := s.config.healthyThreshold()
 	const maxHealthyDataThreshold = 30 * time.Minute
@@ -1950,15 +1856,36 @@ func (s *Stream) GetHealth() StreamHealth {
 	}
 
 	allHistory := s.GetStateHistory()
-	var recentHistory []StateTransition
-	if len(allHistory) > 10 {
-		recentHistory = allHistory[len(allHistory)-10:]
+	var recentHistory []ProcessStateTransition
+	if len(allHistory) > maxStateHistoryExposed {
+		recentHistory = allHistory[len(allHistory)-maxStateHistoryExposed:]
 	} else {
 		recentHistory = allHistory
 	}
+	// Map the FFmpeg process transitions onto the neutral health type, carrying
+	// each process-state name in FromDetail/ToDetail so the legacy process_state
+	// history stays byte-identical.
+	stateHistory := make([]audiocore.StateTransition, 0, len(recentHistory))
+	for _, t := range recentHistory {
+		stateHistory = append(stateHistory, audiocore.StateTransition{
+			From:       processStateToStreamState(t.From),
+			To:         processStateToStreamState(t.To),
+			FromDetail: t.From.String(),
+			ToDetail:   t.To.String(),
+			Timestamp:  t.Timestamp,
+			Reason:     t.Reason,
+		})
+	}
+
+	// StateEntered is the timestamp of the most recent transition into the
+	// current state; it stays zero until the first transition is recorded.
+	var stateEntered time.Time
+	if n := len(allHistory); n > 0 {
+		stateEntered = allHistory[n-1].Timestamp
+	}
 
 	allErrors := s.getErrorContexts()
-	var recentErrors []*ErrorContext
+	var recentErrors []*audiocore.StreamErrorContext
 	if len(allErrors) > maxErrorHistoryExposed {
 		recentErrors = allErrors[len(allErrors)-maxErrorHistoryExposed:]
 	} else {
@@ -1967,18 +1894,41 @@ func (s *Stream) GetHealth() StreamHealth {
 
 	lastError := s.getLastErrorContext()
 
-	return StreamHealth{
+	return audiocore.StreamHealth{
+		State:              processStateToStreamState(state),
+		StateDetail:        state.String(),
+		StateEntered:       stateEntered,
+		Recovery:           audiocore.RecoveryUnknown,
 		IsHealthy:          isHealthy,
 		LastDataReceived:   lastData,
 		RestartCount:       restarts,
 		TotalBytesReceived: totalBytes,
 		BytesPerSecond:     dataRate,
 		IsReceivingData:    isReceivingData,
-		ProcessState:       state,
-		StateHistory:       recentHistory,
+		StateHistory:       stateHistory,
 		LastErrorContext:   lastError,
 		ErrorHistory:       recentErrors,
 		SourceChannels:     s.config.SourceChannels,
+	}
+}
+
+// processStateToStreamState maps an FFmpeg process state onto the neutral
+// audiocore.StreamState. The FFmpeg process name is carried separately in
+// StreamHealth.StateDetail (and in StateTransition detail fields) so the legacy
+// process_state API strings remain byte-identical. FFmpeg never reports a
+// terminal failure state, so StreamStateFailed is unmapped here.
+func processStateToStreamState(state ProcessState) audiocore.StreamState {
+	switch state {
+	case StateIdle, StateStarting:
+		return audiocore.StreamStateStarting
+	case StateRunning:
+		return audiocore.StreamStateConnected
+	case StateRestarting, StateBackoff, StateCircuitOpen:
+		return audiocore.StreamStateReconnecting
+	case StateStopped:
+		return audiocore.StreamStateStopped
+	default:
+		return audiocore.StreamStateStarting
 	}
 }
 
@@ -2315,7 +2265,7 @@ func detectUserTimeout(params []string) (found bool, value string) {
 }
 
 // recordErrorContext stores an error context in the history buffer.
-func (s *Stream) recordErrorContext(ctx *ErrorContext) {
+func (s *Stream) recordErrorContext(ctx *audiocore.StreamErrorContext) {
 	if ctx == nil {
 		return
 	}
@@ -2375,17 +2325,17 @@ func (s *Stream) recordErrorContext(ctx *ErrorContext) {
 }
 
 // getErrorContexts returns a copy of the error history.
-func (s *Stream) getErrorContexts() []*ErrorContext {
+func (s *Stream) getErrorContexts() []*audiocore.StreamErrorContext {
 	s.errorContextsMu.RLock()
 	defer s.errorContextsMu.RUnlock()
 
-	result := make([]*ErrorContext, len(s.errorContexts))
+	result := make([]*audiocore.StreamErrorContext, len(s.errorContexts))
 	copy(result, s.errorContexts)
 	return result
 }
 
 // getLastErrorContext returns the most recent error context, or nil if no errors.
-func (s *Stream) getLastErrorContext() *ErrorContext {
+func (s *Stream) getLastErrorContext() *audiocore.StreamErrorContext {
 	s.errorContextsMu.RLock()
 	defer s.errorContextsMu.RUnlock()
 
@@ -2396,7 +2346,7 @@ func (s *Stream) getLastErrorContext() *ErrorContext {
 }
 
 // checkEarlyErrors checks FFmpeg stderr for errors during the early detection window.
-func (s *Stream) checkEarlyErrors() *ErrorContext {
+func (s *Stream) checkEarlyErrors() *audiocore.StreamErrorContext {
 	s.stderrMu.RLock()
 	stderrOutput := s.stderr.String()
 	s.stderrMu.RUnlock()

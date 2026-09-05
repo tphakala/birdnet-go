@@ -48,7 +48,7 @@ func TestEngine_NewAndStop(t *testing.T) {
 	// All subsystems should be non-nil after construction.
 	assert.NotNil(t, eng.registry)
 	assert.NotNil(t, eng.router)
-	assert.NotNil(t, eng.ffmpegMgr)
+	assert.NotNil(t, eng.streamMgr)
 	assert.NotNil(t, eng.deviceMgr)
 	assert.NotNil(t, eng.bufferMgr)
 	assert.NotNil(t, eng.logger)
@@ -66,7 +66,7 @@ func TestEngine_Accessors(t *testing.T) {
 	assert.NotNil(t, eng.Registry(), "Registry() should return non-nil")
 	assert.NotNil(t, eng.Router(), "Router() should return non-nil")
 	assert.NotNil(t, eng.BufferManager(), "BufferManager() should return non-nil")
-	assert.NotNil(t, eng.FFmpegManager(), "FFmpegManager() should return non-nil")
+	assert.NotNil(t, eng.StreamManager(), "StreamManager() should return non-nil")
 	assert.NotNil(t, eng.DeviceManager(), "DeviceManager() should return non-nil")
 	assert.Nil(t, eng.Scheduler(), "Scheduler() should be nil when no scheduler provided")
 }
@@ -136,7 +136,7 @@ func TestEngine_AddSource_Stream(t *testing.T) {
 	assert.NotNil(t, cb, "capture buffer should be allocated")
 
 	// Verify FFmpeg stream was started (it appears in AllStreamHealth).
-	health := eng.FFmpegManager().AllStreamHealth()
+	health := eng.StreamManager().AllStreamHealth()
 	assert.Contains(t, health, "test_rtsp_001", "stream should appear in FFmpeg manager")
 }
 
@@ -304,7 +304,7 @@ func TestEngine_RemoveSource(t *testing.T) {
 	require.Error(t, cbErr, "capture buffer should be deallocated")
 
 	// Verify stream is gone from FFmpeg manager.
-	health := eng.FFmpegManager().AllStreamHealth()
+	health := eng.StreamManager().AllStreamHealth()
 	assert.NotContains(t, health, "test_remove_001", "stream should be removed from FFmpeg manager")
 }
 
@@ -372,7 +372,7 @@ func TestEngine_ReconfigureSource(t *testing.T) {
 	assert.NotNil(t, cb2, "new capture buffer should be allocated after reconfigure")
 
 	// Verify the FFmpeg stream was restarted.
-	health := eng.FFmpegManager().AllStreamHealth()
+	health := eng.StreamManager().AllStreamHealth()
 	assert.Contains(t, health, "test_reconfig_001", "stream should be restarted after reconfigure")
 }
 
@@ -597,7 +597,7 @@ func TestEngine_StartStream_ZeroBitDepthFallback(t *testing.T) {
 	require.NoError(t, eng.AddSource(cfg))
 
 	// Stop the stream started by AddSource so we can restart it.
-	require.NoError(t, eng.FFmpegManager().StopStream("test_startstream_bitdepth"))
+	require.NoError(t, eng.StreamManager().StopStream("test_startstream_bitdepth"))
 
 	// Manually zero out BitDepth in the registry to simulate an edge case.
 	eng.Registry().UpdateAudioParams("test_startstream_bitdepth", 48000, 0, 1)
@@ -606,6 +606,6 @@ func TestEngine_StartStream_ZeroBitDepthFallback(t *testing.T) {
 	err := eng.StartStream("test_startstream_bitdepth", "rtsp://192.168.1.100/stream2", "")
 	require.NoError(t, err)
 
-	health := eng.FFmpegManager().AllStreamHealth()
+	health := eng.StreamManager().AllStreamHealth()
 	assert.Contains(t, health, "test_startstream_bitdepth")
 }

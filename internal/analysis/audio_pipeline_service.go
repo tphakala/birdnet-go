@@ -250,7 +250,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 
 	// Register watchdog reset callback so analysis monitors are recreated
 	// when the watchdog force-resets a stuck stream.
-	p.engine.FFmpegManager().SetOnStreamReset(func(newSourceID string) {
+	p.engine.StreamManager().SetOnStreamReset(func(newSourceID string) {
 		if err := p.bufferMgr.AddMonitor(newSourceID); err != nil {
 			audiocore.GetLogger().Warn("failed to add monitor after watchdog stream reset",
 				logger.String("source_id", newSourceID),

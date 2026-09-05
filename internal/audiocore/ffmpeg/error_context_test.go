@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 )
 
 func TestExtractErrorContext_ConnectionTimeout(t *testing.T) {
@@ -96,7 +98,7 @@ func TestExtractErrorContext_EmptyString(t *testing.T) {
 }
 
 func TestFormatForConsole(t *testing.T) {
-	ctx := &ErrorContext{
+	ctx := &audiocore.StreamErrorContext{
 		ErrorType:      "connection_timeout",
 		PrimaryMessage: "Connection timed out",
 		TargetHost:     "192.168.1.1",
@@ -149,7 +151,7 @@ func TestFormatForConsole(t *testing.T) {
 
 // TestFormatForConsole_NoTroubleshooting tests formatting when no troubleshooting steps are provided.
 func TestFormatForConsole_NoTroubleshooting(t *testing.T) {
-	ctx := &ErrorContext{
+	ctx := &audiocore.StreamErrorContext{
 		ErrorType:       "unknown",
 		PrimaryMessage:  "Unknown error",
 		UserFacingMsg:   "An unknown error occurred",
@@ -193,7 +195,7 @@ func TestErrorContext_ShouldOpenCircuit(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.description, func(t *testing.T) {
-			ctx := &ErrorContext{ErrorType: tt.errorType}
+			ctx := &audiocore.StreamErrorContext{ErrorType: tt.errorType}
 			assert.Equal(t, tt.shouldOpen, ctx.ShouldOpenCircuit(), tt.description)
 		})
 	}
@@ -221,7 +223,7 @@ func TestErrorContext_ShouldRestart(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.description, func(t *testing.T) {
-			ctx := &ErrorContext{ErrorType: tt.errorType}
+			ctx := &audiocore.StreamErrorContext{ErrorType: tt.errorType}
 			assert.Equal(t, tt.shouldRestart, ctx.ShouldRestart(), tt.description)
 		})
 	}

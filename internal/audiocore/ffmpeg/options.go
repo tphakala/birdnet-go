@@ -7,11 +7,12 @@ import "time"
 // reproduces the manager's historic behaviour, so the plain NewManager
 // constructor (which passes a zero Options) is unaffected.
 //
-// The only knob today is SilenceTimeout, which exists so characterization tests
-// can drive the silence watchdog in seconds instead of the production 90 s
-// without mutating the package-level silenceTimeout constant. Later phases fold
-// the remaining per-manager settings (FFmpeg binary path, extra FFmpeg
-// parameters, log level) into this struct as well.
+// SilenceTimeout exists so characterization tests can drive the silence
+// watchdog in seconds instead of the production 90 s without mutating the
+// package-level silenceTimeout constant. FFmpegPath, FFmpegParameters, and
+// LogLevel are the manager-level FFmpeg settings the engine used to set on every
+// StreamConfig; folding them here lets the engine hand StartStream a
+// protocol-neutral audiocore.StreamSpec that carries none of them.
 type Options struct {
 	// SilenceTimeout overrides the per-stream silence watchdog timeout for every
 	// stream started through this manager, unless a stream's own
@@ -24,6 +25,18 @@ type Options struct {
 	// future phase that wires a non-90s value into a PRODUCTION path must update
 	// that suppression signature to a prefix match or keep the two in sync.
 	SilenceTimeout time.Duration
+
+	// FFmpegPath is the absolute path to the FFmpeg binary applied to every stream
+	// this manager starts.
+	FFmpegPath string
+
+	// FFmpegParameters are additional FFmpeg command-line parameters applied to
+	// every stream this manager starts.
+	FFmpegParameters []string
+
+	// LogLevel is the FFmpeg log level (e.g. "error") applied to every stream this
+	// manager starts.
+	LogLevel string
 }
 
 // withManagerDefaults returns cfg with manager-level defaults applied where the

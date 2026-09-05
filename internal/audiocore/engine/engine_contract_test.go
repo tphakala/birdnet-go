@@ -72,7 +72,7 @@ func TestEngineIngestContract(t *testing.T) {
 // engineStreamHealthy reports whether the engine's FFmpeg stream for sourceID is
 // healthy right now.
 func engineStreamHealthy(eng *AudioEngine, sourceID string) bool {
-	h, err := eng.FFmpegManager().StreamHealth(sourceID)
+	h, err := eng.StreamManager().StreamHealth(sourceID)
 	return err == nil && h != nil && h.IsHealthy
 }
 
@@ -120,7 +120,7 @@ func engineReconfigureCase(t *testing.T, ffmpegPath string, fixture streamtest.F
 	// Quiet-hours round-trip: stop then start the same source.
 	require.NoError(t, eng.StopStream(sourceID))
 	require.Eventually(t, func() bool {
-		_, err := eng.FFmpegManager().StreamHealth(sourceID)
+		_, err := eng.StreamManager().StreamHealth(sourceID)
 		return err != nil
 	}, engineHealthyBudget, enginePollInterval, "stream should be gone from the manager after StopStream")
 
@@ -172,7 +172,7 @@ func livenessChainCase(t *testing.T, ffmpegPath string, fixture streamtest.Fixtu
 	consumer := &countingConsumer{id: "liveness-consumer"}
 	require.NoError(t, router.AddRoute(sourceID, consumer, engineSampleRate, 0, nil))
 
-	mgr := ffmpeg.NewManager(t.Context(), func(f audiocore.AudioFrame) { router.Dispatch(f) }, nil, log, bufMgr)
+	mgr := ffmpeg.NewManagerWithOptions(t.Context(), func(f audiocore.AudioFrame) { router.Dispatch(f) }, nil, log, bufMgr, ffmpeg.Options{FFmpegPath: ffmpegPath, LogLevel: "error"})
 	t.Cleanup(func() {
 		//nolint:gocritic // t.Context() is already cancelled when Cleanup runs; shutdown needs a live context
 		ctx, cancel := context.WithTimeout(context.Background(), managerShutdownCleanupTimeout)
@@ -180,17 +180,15 @@ func livenessChainCase(t *testing.T, ffmpegPath string, fixture streamtest.Fixtu
 		assert.NoError(t, mgr.ShutdownWithContext(ctx), "manager should shut down cleanly")
 	})
 
-	streamCfg := &ffmpeg.StreamConfig{
+	streamCfg := &audiocore.StreamSpec{
 		SourceID:   sourceID,
 		SourceName: "Liveness Chain",
 		URL:        pub.URL(),
-		Type:       "rtsp",
+		Type:       audiocore.SourceTypeRTSP,
 		SampleRate: engineSampleRate,
 		BitDepth:   engineBitDepth,
 		Channels:   engineChannels,
 		Transport:  "tcp",
-		FFmpegPath: ffmpegPath,
-		LogLevel:   "error",
 	}
 
 	var restartCalls atomic.Int64
