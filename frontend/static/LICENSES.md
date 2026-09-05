@@ -414,13 +414,18 @@ Source: Unknown
 
 ### github.com/tphakala/go-aac
 
-License: https://github.com/tphakala/go-aac/blob/v0.6.1/LICENSE
+License: https://github.com/tphakala/go-aac/blob/v0.7.0/LICENSE
 Source: LGPL-2.1
 
 ### github.com/tphakala/go-audio-resampler
 
 License: https://github.com/tphakala/go-audio-resampler/blob/v1.7.0/LICENSE
 Source: LGPL-2.1
+
+### github.com/tphakala/go-audio-stream
+
+License: https://github.com/tphakala/go-audio-stream/blob/v0.4.0/LICENSE
+Source: MIT
 
 ### github.com/tphakala/go-flac
 
@@ -501,6 +506,11 @@ Source: Apache-2.0
 
 License: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.45.0/trace/LICENSE
 Source: Apache-2.0
+
+### go.uber.org/goleak
+
+License: https://github.com/uber-go/goleak/blob/v1.3.0/LICENSE
+Source: MIT
 
 ### go.yaml.in/yaml/v3
 
