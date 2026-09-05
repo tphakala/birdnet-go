@@ -59,8 +59,8 @@ func TestConvertStreamHealthToResponse_Golden(t *testing.T) {
 			require.NoError(t, err)
 			want := fmt.Sprintf(goldenTemplate, tt.wantProcess, tt.wantState)
 			// Compare the exact marshaled bytes, not a semantic JSON match, so a
-			// reordered or renamed field (which assert.JSONEq would tolerate) fails
-			// the byte-identity contract this test exists to lock.
+			// reordered field or changed whitespace (which assert.JSONEq tolerates)
+			// also fails the byte-identity contract this test exists to lock.
 			assert.Equal(t, want, string(got))
 		})
 	}
