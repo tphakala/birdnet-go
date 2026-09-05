@@ -76,6 +76,7 @@
   // Menu state for z-index management
   let isMenuOpen = $state(false);
   let isAudioSettingsOpen = $state(false);
+  let isAudibleBatsOpen = $state(false);
 
   // Mutual-exclusion signals: bumping one forces the sibling popup (Audible
   // Bats vs Audio Settings) closed, so only one is ever open at a time.
@@ -123,9 +124,14 @@
   }
 
   function handleAudibleBatsOpen() {
-    isAudioSettingsOpen = true;
+    isAudibleBatsOpen = true;
     closeAudioSettingsSignal++;
     onFreezeStart?.();
+  }
+
+  function handleAudibleBatsClose() {
+    isAudibleBatsOpen = false;
+    onFreezeEnd?.();
   }
 
   function handleAudioSettingsOpen() {
@@ -189,7 +195,7 @@
   class={cn(
     'detection-card group relative rounded-xl',
     isNew && 'new-detection',
-    (isMenuOpen || isAudioSettingsOpen) && 'z-[60]'
+    (isMenuOpen || isAudioSettingsOpen || isAudibleBatsOpen) && 'z-[60]'
   )}
 >
   <!-- Inner container with overflow-hidden for spectrogram clipping -->
@@ -286,7 +292,7 @@
           onEnable={settings => audibleBats.enable(settings)}
           onDisable={() => audibleBats.disable()}
           onMenuOpen={handleAudibleBatsOpen}
-          onMenuClose={handleAudioSettingsClose}
+          onMenuClose={handleAudibleBatsClose}
         />
       {/if}
       <AudioSettingsButton

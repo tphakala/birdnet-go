@@ -55,6 +55,8 @@
   let cardElement = $state<HTMLElement | undefined>(undefined);
   let isVisible = $state(false);
   let isMenuOpen = $state(false);
+  let isAudioSettingsOpen = $state(false);
+  let isAudibleBatsOpen = $state(false);
 
   // Mutual-exclusion signals: bumping one forces the sibling popup (Audible
   // Bats vs Audio Settings) closed, so only one is ever open at a time.
@@ -117,13 +119,21 @@
   }
 
   function handleAudibleBatsOpen() {
-    isMenuOpen = true;
+    isAudibleBatsOpen = true;
     closeAudioSettingsSignal++;
   }
 
+  function handleAudibleBatsClose() {
+    isAudibleBatsOpen = false;
+  }
+
   function handleAudioSettingsOpen() {
-    isMenuOpen = true;
+    isAudioSettingsOpen = true;
     closeAudibleBatsSignal++;
+  }
+
+  function handleAudioSettingsClose() {
+    isAudioSettingsOpen = false;
   }
 
   function handleViewDetails() {
@@ -161,7 +171,10 @@
 
 <article
   bind:this={cardElement}
-  class={cn('detection-card group relative rounded-xl', isMenuOpen && 'z-[60]')}
+  class={cn(
+    'detection-card group relative rounded-xl',
+    (isMenuOpen || isAudioSettingsOpen || isAudibleBatsOpen) && 'z-[60]'
+  )}
 >
   <!-- Inner container with overflow-hidden for spectrogram clipping -->
   <!-- Compact (shorter) layout when there is no spectrogram to display -->
@@ -262,7 +275,7 @@
           onEnable={settings => audibleBats.enable(settings)}
           onDisable={() => audibleBats.disable()}
           onMenuOpen={handleAudibleBatsOpen}
-          onMenuClose={handleMenuClose}
+          onMenuClose={handleAudibleBatsClose}
         />
       {/if}
       <AudioSettingsButton
@@ -276,7 +289,7 @@
         disabled={!audioContextAvailable}
         closeSignal={closeAudioSettingsSignal}
         onMenuOpen={handleAudioSettingsOpen}
-        onMenuClose={handleMenuClose}
+        onMenuClose={handleAudioSettingsClose}
       />
     {/if}
     <ActionMenu

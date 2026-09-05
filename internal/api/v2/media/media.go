@@ -1440,6 +1440,12 @@ func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 		if ctx.Request().Context().Err() != nil {
 			return nil // Client disconnected
 		}
+		// A source with no audio streams (a corrupt or video-only file) is a
+		// client-side problem, not a server fault: report 422 like the stream
+		// test handler rather than a generic 500.
+		if errors.Is(err, ffmpeg.ErrNoAudioStreamsFound) {
+			return c.HandleError(ctx, err, "Source audio has no audio track", http.StatusUnprocessableEntity)
+		}
 		return c.HandleError(ctx, err, "Failed to probe audio sample rate", http.StatusInternalServerError)
 	}
 	// Sources below the minimum bat capture rate cannot carry ultrasonic content,
