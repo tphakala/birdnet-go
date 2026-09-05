@@ -8,11 +8,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 )
 
-// TestBuildStreamSpec verifies that buildStreamSpec maps its parameters onto the
-// StreamSpec field-for-field, reproducing the three former ffmpeg.StreamConfig
-// literals in AddSource, the reconfigure path, and the quiet-hours restart path.
-// Every column uses a distinct value so a transposed positional argument in the
-// twelve-parameter helper is caught. Debug is read from the engine, not passed.
+// TestBuildStreamSpec verifies that buildStreamSpec stamps the engine-owned
+// Debug field onto a caller-assembled StreamSpec and otherwise returns it
+// unchanged, covering both debug settings. Every column uses a distinct value so
+// a field the helper accidentally overwrote would be caught.
 func TestBuildStreamSpec(t *testing.T) {
 	t.Parallel()
 
@@ -65,20 +64,11 @@ func TestBuildStreamSpec(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			e := &AudioEngine{debug: tt.debug}
-			got := e.buildStreamSpec(
-				tt.want.SourceID,
-				tt.want.SourceName,
-				tt.want.URL,
-				tt.want.Type,
-				tt.want.SampleRate,
-				tt.want.SourceSampleRate,
-				tt.want.BitDepth,
-				tt.want.Channels,
-				tt.want.SourceChannels,
-				tt.want.ChannelMode,
-				tt.want.MediaMode,
-				tt.want.Transport,
-			)
+			// The call site assembles every field except Debug, which the engine
+			// owns; buildStreamSpec must stamp it and leave the rest untouched.
+			in := tt.want
+			in.Debug = false
+			got := e.buildStreamSpec(&in)
 			assert.Equal(t, &tt.want, got)
 		})
 	}

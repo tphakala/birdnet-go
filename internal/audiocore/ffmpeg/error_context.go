@@ -110,8 +110,8 @@ func ExtractErrorContext(stderrOutput string) *audiocore.StreamErrorContext {
 	sanitizedOutput := privacy.SanitizeFFmpegError(stderrOutput)
 
 	ctx := &audiocore.StreamErrorContext{
-		RawFFmpegOutput: sanitizedOutput,
-		Timestamp:       time.Now(),
+		RawProducerOutput: sanitizedOutput,
+		Timestamp:         time.Now(),
 	}
 
 	// Connection timeout - very common with unreachable hosts.
