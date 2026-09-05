@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -345,24 +346,40 @@ func TestSupports_BitDepthAndChannels(t *testing.T) {
 
 func TestRoundBitrateKbps(t *testing.T) {
 	t.Parallel()
-	// Zero (and any non-positive value) maps to go-mp3's default.
-	assert.Equal(t, 0, RoundBitrateKbps(0))
-	assert.Equal(t, 0, RoundBitrateKbps(-1))
-	// Each of the 14 valid MPEG-1 Layer III rates maps to itself.
-	for _, kbps := range []int{32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320} {
-		assert.Equal(t, kbps, RoundBitrateKbps(kbps), "%d kbps is already a valid rate", kbps)
+	type roundCase struct {
+		name string
+		in   int
+		want int
 	}
-	// In-range non-MPEG-1 values snap to the nearest rate instead of being rejected.
-	assert.Equal(t, 96, RoundBitrateKbps(100), "100 -> nearest is 96")
-	assert.Equal(t, 192, RoundBitrateKbps(200), "200 -> nearest is 192")
-	assert.Equal(t, 224, RoundBitrateKbps(210), "210 -> nearest is 224")
-	// Below the lowest rate snaps up; above the highest snaps down.
-	assert.Equal(t, 32, RoundBitrateKbps(10))
-	assert.Equal(t, 320, RoundBitrateKbps(500))
-	assert.Equal(t, 320, RoundBitrateKbps(321))
-	// An exact midpoint resolves to the higher rate.
-	assert.Equal(t, 160, RoundBitrateKbps(144), "144 is midway between 128 and 160; ties round up")
-	assert.Equal(t, 40, RoundBitrateKbps(36), "36 is midway between 32 and 40; ties round up")
+	specials := []roundCase{
+		// Zero and any non-positive value map to go-mp3's default (0).
+		{"zero maps to the go-mp3 default", 0, 0},
+		{"negative maps to the go-mp3 default", -1, 0},
+		// In-range non-MPEG-1 values snap to the nearest rate instead of being rejected.
+		{"in-range rounds down to 96", 100, 96},
+		{"in-range rounds down to 192", 200, 192},
+		{"in-range rounds up to 224", 210, 224},
+		// Below the lowest rate snaps up; above the highest snaps down.
+		{"below the lowest rate snaps up to 32", 10, 32},
+		{"above the highest rate snaps down to 320", 500, 320},
+		{"just above 320 snaps to 320", 321, 320},
+		// An exact midpoint resolves to the higher rate.
+		{"exact midpoint rounds up (128 vs 160)", 144, 160},
+		{"exact midpoint rounds up (32 vs 40)", 36, 40},
+	}
+	validRates := []int{32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320}
+	cases := make([]roundCase, 0, len(specials)+len(validRates))
+	cases = append(cases, specials...)
+	// Every valid MPEG-1 Layer III rate maps to itself.
+	for _, kbps := range validRates {
+		cases = append(cases, roundCase{strconv.Itoa(kbps) + "k maps to itself", kbps, kbps})
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, RoundBitrateKbps(tc.in))
+		})
+	}
 }
 
 func TestEncodePCM_RoundsNonStandardBitrate(t *testing.T) {
