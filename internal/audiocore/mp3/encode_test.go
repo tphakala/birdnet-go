@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -280,7 +281,6 @@ func TestEncodePCM_RejectsInvalidOptions(t *testing.T) {
 		{name: "unsupported bit depth 32", mutate: func(o *Options) { o.BitDepth = 32 }},
 		{name: "unsupported channel count", mutate: func(o *Options) { o.Channels = 3 }},
 		{name: "negative bitrate", mutate: func(o *Options) { o.BitrateKbps = -1 }},
-		{name: "non-MPEG-1 bitrate", mutate: func(o *Options) { o.BitrateKbps = 100 }},
 		{name: "partial trailing sample", mutate: func(o *Options) { o.PCMData = append(o.PCMData, 0) }},
 	}
 	for _, tt := range tests {
@@ -344,19 +344,69 @@ func TestSupports_BitDepthAndChannels(t *testing.T) {
 	require.Error(t, Supports(48000, 16, 3))
 }
 
-func TestSupportsBitrate(t *testing.T) {
+func TestRoundBitrateKbps(t *testing.T) {
 	t.Parallel()
-	// Zero maps to go-mp3's default and is accepted.
-	require.NoError(t, SupportsBitrate(0))
-	// The 14 valid MPEG-1 Layer III CBR rates.
-	for _, kbps := range []int{32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320} {
-		require.NoError(t, SupportsBitrate(kbps), "%d kbps is a valid MPEG-1 rate", kbps)
+	type roundCase struct {
+		name string
+		in   int
+		want int
 	}
-	// In-range but not an MPEG-1 rate: allowed by BirdNET-Go config, rejected here.
-	require.Error(t, SupportsBitrate(100))
-	require.Error(t, SupportsBitrate(200))
-	require.Error(t, SupportsBitrate(-1))
-	require.Error(t, SupportsBitrate(321))
+	specials := []roundCase{
+		// Zero and any non-positive value map to go-mp3's default (0).
+		{"zero maps to the go-mp3 default", 0, 0},
+		{"negative maps to the go-mp3 default", -1, 0},
+		// In-range non-MPEG-1 values snap to the nearest rate instead of being rejected.
+		{"in-range rounds down to 96", 100, 96},
+		{"in-range rounds down to 192", 200, 192},
+		{"in-range rounds up to 224", 210, 224},
+		// Below the lowest rate snaps up; above the highest snaps down.
+		{"below the lowest rate snaps up to 32", 10, 32},
+		{"above the highest rate snaps down to 320", 500, 320},
+		{"just above 320 snaps to 320", 321, 320},
+		// An exact midpoint resolves to the higher rate.
+		{"exact midpoint rounds up (128 vs 160)", 144, 160},
+		{"exact midpoint rounds up (32 vs 40)", 36, 40},
+	}
+	validRates := []int{32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320}
+	cases := make([]roundCase, 0, len(specials)+len(validRates))
+	cases = append(cases, specials...)
+	// Every valid MPEG-1 Layer III rate maps to itself.
+	for _, kbps := range validRates {
+		cases = append(cases, roundCase{strconv.Itoa(kbps) + "k maps to itself", kbps, kbps})
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, RoundBitrateKbps(tc.in))
+		})
+	}
+}
+
+func TestEncodePCM_RoundsNonStandardBitrate(t *testing.T) {
+	t.Parallel()
+	// 100 kbps is in BirdNET-Go's configurable range but not an MPEG-1 rate. It must
+	// encode natively (rounded to 96k) rather than error, so a clip is never lost to
+	// a bitrate the config allowed.
+	out := filepath.Join(t.TempDir(), "clip.mp3")
+	err := EncodePCM(t.Context(), &Options{
+		PCMData:     tonePCM(t, testSampleRate, 0.1, testToneHz),
+		OutputPath:  out,
+		SampleRate:  testSampleRate,
+		Channels:    1,
+		BitDepth:    16,
+		BitrateKbps: 100,
+	})
+	require.NoError(t, err)
+	b, err := os.ReadFile(out) //nolint:gosec // test-controlled path
+	require.NoError(t, err)
+	require.Greater(t, len(b), 4, "MP3 stream truncated")
+	assert.Equal(t, byte(0xFF), b[0], "output must start with a frame sync byte")
+	assert.Equal(t, byte(0xE0), b[1]&0xE0, "second byte must carry the 11-bit frame sync")
+	// Prove the rounded rate actually reached the stream, not just that encoding
+	// succeeded: byte 2's top nibble is the MPEG-1 Layer III bitrate index, and
+	// 96 kbps is index 7 (0b0111). This fails if the wrapper ever passed 0 and let
+	// go-mp3 default to 128 kbps (index 9) instead of rounding 100 to 96.
+	assert.Equal(t, byte(0x70), b[2]&0xF0, "third byte must carry the 96 kbps bitrate index")
 }
 
 // Cross-validate the stream against an external decoder when ffprobe is present.

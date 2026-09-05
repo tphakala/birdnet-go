@@ -45,13 +45,14 @@ const (
 var supportedSampleRates = [...]int{32000, 44100, 48000}
 
 // supportedBitratesKbps is the fixed set of MPEG-1 Layer III CBR bitrates go-mp3
-// accepts. Unlike AAC and Opus, MP3 has no continuous bitrate range: a value
-// outside this set (a BirdNET-Go config as ordinary as 100k, which validation
-// allows anywhere in 32-320k) is rejected by go-mp3 rather than snapped, so the
-// encoder selection uses SupportsBitrate to fall back to FFmpeg rather than
-// failing the export. The set is duplicated here rather than imported because
-// go-mp3 keeps its validator (enc.ValidBitrateKbps) internal, the same way the
-// sibling codecs duplicate small constants across module boundaries.
+// accepts, in ascending order. Unlike AAC and Opus, MP3 has no continuous bitrate
+// range: a value outside this set (a BirdNET-Go config as ordinary as 100k, which
+// validation allows anywhere in 32-320k) is rejected by go-mp3 rather than snapped.
+// RoundBitrateKbps snaps any requested rate to the nearest entry here so the native
+// path always encodes MP3 rather than falling back. The set is duplicated here
+// rather than imported because go-mp3 keeps its validator (enc.ValidBitrateKbps)
+// internal, the same way the sibling codecs duplicate small constants across module
+// boundaries.
 var supportedBitratesKbps = [...]int{32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320}
 
 // Options configures a native MP3 export of an in-memory PCM buffer.
@@ -67,9 +68,9 @@ type Options struct {
 	Channels int
 	// BitDepth is the PCM bit depth; only 16 is supported.
 	BitDepth int
-	// BitrateKbps is the target CBR bitrate in kbit/s. It must be one of the 14
-	// MPEG-1 Layer III rates (see SupportsBitrate); zero selects go-mp3's default
-	// (128 kbps).
+	// BitrateKbps is the target CBR bitrate in kbit/s. Any non-negative value is
+	// accepted: EncodePCM rounds it to the nearest of the 14 MPEG-1 Layer III rates
+	// (see RoundBitrateKbps). Zero selects go-mp3's default (128 kbps).
 	BitrateKbps int
 	// GainDB is the volume adjustment in dB (0 = no change).
 	GainDB float64
@@ -77,9 +78,9 @@ type Options struct {
 
 // Supports reports whether the native encoder can carry a clip of this shape,
 // returning a descriptive error naming the offending value when it cannot. It
-// covers rate, depth and channel count; bitrate is checked separately by
-// SupportsBitrate because MP3, unlike the other lossy formats, constrains it to
-// a fixed set rather than a range.
+// covers rate, depth and channel count. Bitrate is not a carriability constraint:
+// EncodePCM rounds any requested bitrate to a rate go-mp3 accepts (see
+// RoundBitrateKbps), so it is never a reason to fall back.
 func Supports(sampleRate, bitDepth, channels int) error {
 	if !slices.Contains(supportedSampleRates[:], sampleRate) {
 		return errors.Newf("mp3: unsupported sample rate %d (supported: %v)", sampleRate, supportedSampleRates).
@@ -108,21 +109,30 @@ func Supports(sampleRate, bitDepth, channels int) error {
 	return nil
 }
 
-// SupportsBitrate reports whether go-mp3 can encode at bitrateKbps, returning a
-// descriptive error when it cannot. Zero is accepted and maps to go-mp3's
-// default rate. MP3 only codes the 14 fixed MPEG-1 Layer III rates, so a
-// configured bitrate outside that set is the reason a clip falls back to FFmpeg
-// rather than being encoded natively.
-func SupportsBitrate(bitrateKbps int) error {
-	if bitrateKbps == 0 || slices.Contains(supportedBitratesKbps[:], bitrateKbps) {
-		return nil
+// RoundBitrateKbps maps a requested CBR bitrate to the nearest rate go-mp3 can
+// code. MP3, unlike AAC and Opus, has no continuous bitrate range: it codes only
+// the 14 fixed MPEG-1 Layer III rates. BirdNET-Go config allows any value in
+// 32-320k, so a setting like 100k that is not one of those rates is snapped to the
+// closest one (96k) instead of being rejected, so the native path always encodes
+// MP3 rather than downgrading the clip to FFmpeg or WAV. Zero (and any non-positive
+// value) maps to 0, which selects go-mp3's default (128 kbps). A value below 32k
+// snaps up to 32k and one above 320k snaps down to 320k; on an exact tie the higher
+// rate wins, favouring quality and keeping the result deterministic.
+func RoundBitrateKbps(kbps int) int {
+	if kbps <= 0 {
+		return 0
 	}
-	return errors.Newf("mp3: unsupported bitrate %d kbps (supported: %v)", bitrateKbps, supportedBitratesKbps).
-		Component(component).
-		Category(errors.CategoryValidation).
-		Context("operation", "mp3_supports_bitrate").
-		Context("bitrate_kbps", bitrateKbps).
-		Build()
+	// The list is ascending, so keeping the last rate whose distance ties or beats
+	// the current best makes an exact tie resolve to the higher rate. max(d, -d) is
+	// the integer absolute distance (the standard library has no int abs).
+	nearest := supportedBitratesKbps[0]
+	bestDelta := max(kbps-nearest, nearest-kbps)
+	for _, rate := range supportedBitratesKbps[1:] {
+		if delta := max(kbps-rate, rate-kbps); delta <= bestDelta {
+			nearest, bestDelta = rate, delta
+		}
+	}
+	return nearest
 }
 
 // EncodePCM encodes opts.PCMData to a CBR MP3 file at opts.OutputPath. The write
@@ -144,10 +154,13 @@ func EncodePCM(ctx context.Context, opts *Options) error {
 		return err
 	}
 
+	// go-mp3 codes only the 14 fixed MPEG-1 Layer III rates, so round the requested
+	// bitrate to the nearest before handing it over; this is what lets the native
+	// path carry any configured 32-320k value instead of falling back to FFmpeg.
 	cfg := mp3pcm.Config{
 		SampleRate: opts.SampleRate,
 		Channels:   opts.Channels,
-		Bitrate:    opts.BitrateKbps * bitsPerKilobit,
+		Bitrate:    RoundBitrateKbps(opts.BitrateKbps) * bitsPerKilobit,
 	}
 
 	// Gain is applied up front because the library entry point takes the whole
@@ -203,9 +216,6 @@ func validateEncodeInput(opts *Options) error {
 			Context("operation", "mp3_encode_validate").
 			Context("bitrate_kbps", opts.BitrateKbps).
 			Build()
-	}
-	if err := SupportsBitrate(opts.BitrateKbps); err != nil {
-		return err
 	}
 	// Reject a partial trailing sample early rather than letting it surface as an
 	// opaque length error inside go-mp3.

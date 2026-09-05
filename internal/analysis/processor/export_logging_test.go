@@ -791,7 +791,7 @@ func TestSelectEncoder_RoutingTable(t *testing.T) {
 			t.Setenv(conf.EnvNativeMP3Encoder, "")
 			resetNativeSkipOnce()
 
-			assert.Equal(t, tc.wantEncode, selectEncoder(tc.format, tc.rate, 128))
+			assert.Equal(t, tc.wantEncode, selectEncoder(tc.format, tc.rate))
 		})
 	}
 }

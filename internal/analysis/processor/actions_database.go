@@ -812,11 +812,9 @@ func (a *SaveAudioAction) logExportFailure(enc *clipEncoding, exportFormat strin
 // fallback for a clip go-opus cannot carry. AAC and MP3 each have a native
 // encoder too, but both are opt-in while they earn field confidence, so AAC
 // reaches go-aac/go-m4a and MP3 reaches go-mp3 only when the matching gate in
-// internal/conf is set and the encoder accepts the clip's shape (for MP3 that
-// includes the bitrate, since go-mp3 codes only the fixed MPEG-1 rates).
-// Everything else, a non-gated AAC or MP3 clip, and an Opus clip go-opus cannot
-// carry go to FFmpeg.
-func selectEncoder(exportFormat string, exportRate, bitrateKbps int) string {
+// internal/conf is set and the encoder accepts the clip's shape. Everything else,
+// a non-gated AAC or MP3 clip, and an Opus clip go-opus cannot carry go to FFmpeg.
+func selectEncoder(exportFormat string, exportRate int) string {
 	switch exportFormat {
 	case ffmpeg.FormatWAV:
 		return clipenc.NativeWAV
@@ -837,7 +835,7 @@ func selectEncoder(exportFormat string, exportRate, bitrateKbps int) string {
 		return clipenc.FFmpeg
 	case ffmpeg.FormatMP3:
 		// Opt-in; see internal/conf/native_encoders.go for the gate and its removal.
-		if nativeMP3Selected(exportRate, bitrateKbps) {
+		if nativeMP3Selected(exportRate) {
 			return clipenc.NativeMP3
 		}
 		return clipenc.FFmpeg
@@ -877,8 +875,16 @@ func lossyBitrateKbps(exportFormat, bitrate string) int {
 // gain that was going to be applied.
 func (a *SaveAudioAction) encodeClip(ctx context.Context, exportRate int, exportFormat, outputPath string) (clipEncoding, error) {
 	bitrateKbps := lossyBitrateKbps(exportFormat, a.Settings.Realtime.Audio.Export.Bitrate)
+	encoder := selectEncoder(exportFormat, exportRate)
+	if encoder == clipenc.NativeMP3 {
+		// go-mp3 codes only the 14 fixed MPEG-1 rates and the wrapper rounds the
+		// requested bitrate to the nearest, so report that rounded value here to keep
+		// the encoding log and the file on disk in agreement. The FFmpeg MP3 path
+		// keeps the clamped EffectiveBitrateKbps, which is what FFmpeg is handed.
+		bitrateKbps = mp3.RoundBitrateKbps(bitrateKbps)
+	}
 	enc := clipEncoding{
-		Encoder:     selectEncoder(exportFormat, exportRate, bitrateKbps),
+		Encoder:     encoder,
 		BitrateKbps: bitrateKbps,
 	}
 
@@ -1058,21 +1064,17 @@ func nativeOpusSelected(exportRate int) bool {
 }
 
 // nativeMP3Selected reports whether this clip should take the native MP3 path:
-// the operator opted in AND go-mp3 accepts the clip's rate, depth, channel count
-// and bitrate. MP3 differs from AAC and Opus in that last check: it codes only
-// the 14 fixed MPEG-1 Layer III bitrates, so a configured rate outside that set
-// (BirdNET-Go validation allows any value in 32-320k) falls back to FFmpeg with a
-// warning rather than failing the export. Like the AAC gate, this whole check
-// goes away when the native encoder becomes the default.
-func nativeMP3Selected(exportRate, bitrateKbps int) bool {
+// the operator opted in AND go-mp3 accepts the clip's rate, depth and channel
+// count. Bitrate is not part of the check: go-mp3 codes only the 14 fixed MPEG-1
+// Layer III rates, but the encoder rounds any configured value (BirdNET-Go allows
+// any 32-320k) to the nearest of them, so a bitrate is never a reason to fall back.
+// This mirrors nativeAACSelected and goes away when the native encoder becomes the
+// default.
+func nativeMP3Selected(exportRate int) bool {
 	if !conf.NativeMP3EncoderEnabled() {
 		return false
 	}
 	if err := mp3.Supports(exportRate, conf.BitDepth, conf.NumChannels); err != nil {
-		logNativeEncoderSkipped(ffmpeg.FormatMP3, exportRate, err)
-		return false
-	}
-	if err := mp3.SupportsBitrate(bitrateKbps); err != nil {
 		logNativeEncoderSkipped(ffmpeg.FormatMP3, exportRate, err)
 		return false
 	}
@@ -1568,12 +1570,12 @@ func (a *SaveAudioAction) strandedWithoutEncoder(rate int, format string) bool {
 	case ffmpeg.FormatAAC:
 		return conf.NativeAACEncoderEnabled() && !nativeAACSelected(rate)
 	case ffmpeg.FormatMP3:
-		// Like AAC: opting MP3 into its native encoder stops config validation
-		// from downgrading it to WAV, so a clip go-mp3 cannot carry (an
-		// unsupported rate or a non-MPEG-1 bitrate) is stranded without FFmpeg
-		// and must be downgraded here.
-		bitrateKbps := lossyBitrateKbps(format, a.Settings.Realtime.Audio.Export.Bitrate)
-		return conf.NativeMP3EncoderEnabled() && !nativeMP3Selected(rate, bitrateKbps)
+		// Like AAC: opting MP3 into its native encoder stops config validation from
+		// downgrading it to WAV, so a clip go-mp3 cannot carry is stranded without
+		// FFmpeg and must be downgraded here. Bitrate is no longer a reason (the
+		// encoder rounds any configured value to a valid MPEG-1 rate); only an
+		// unsupported sample rate can strand an MP3 clip now.
+		return conf.NativeMP3EncoderEnabled() && !nativeMP3Selected(rate)
 	case ffmpeg.FormatOpus:
 		// go-opus is the default, so config validation never downgrades .opus to
 		// WAV: if go-opus cannot carry this clip and there is no FFmpeg, it is
