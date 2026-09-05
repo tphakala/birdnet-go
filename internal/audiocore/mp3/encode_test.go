@@ -280,7 +280,6 @@ func TestEncodePCM_RejectsInvalidOptions(t *testing.T) {
 		{name: "unsupported bit depth 32", mutate: func(o *Options) { o.BitDepth = 32 }},
 		{name: "unsupported channel count", mutate: func(o *Options) { o.Channels = 3 }},
 		{name: "negative bitrate", mutate: func(o *Options) { o.BitrateKbps = -1 }},
-		{name: "non-MPEG-1 bitrate", mutate: func(o *Options) { o.BitrateKbps = 100 }},
 		{name: "partial trailing sample", mutate: func(o *Options) { o.PCMData = append(o.PCMData, 0) }},
 	}
 	for _, tt := range tests {
@@ -344,19 +343,53 @@ func TestSupports_BitDepthAndChannels(t *testing.T) {
 	require.Error(t, Supports(48000, 16, 3))
 }
 
-func TestSupportsBitrate(t *testing.T) {
+func TestRoundBitrateKbps(t *testing.T) {
 	t.Parallel()
-	// Zero maps to go-mp3's default and is accepted.
-	require.NoError(t, SupportsBitrate(0))
-	// The 14 valid MPEG-1 Layer III CBR rates.
+	// Zero (and any non-positive value) maps to go-mp3's default.
+	assert.Equal(t, 0, RoundBitrateKbps(0))
+	assert.Equal(t, 0, RoundBitrateKbps(-1))
+	// Each of the 14 valid MPEG-1 Layer III rates maps to itself.
 	for _, kbps := range []int{32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320} {
-		require.NoError(t, SupportsBitrate(kbps), "%d kbps is a valid MPEG-1 rate", kbps)
+		assert.Equal(t, kbps, RoundBitrateKbps(kbps), "%d kbps is already a valid rate", kbps)
 	}
-	// In-range but not an MPEG-1 rate: allowed by BirdNET-Go config, rejected here.
-	require.Error(t, SupportsBitrate(100))
-	require.Error(t, SupportsBitrate(200))
-	require.Error(t, SupportsBitrate(-1))
-	require.Error(t, SupportsBitrate(321))
+	// In-range non-MPEG-1 values snap to the nearest rate instead of being rejected.
+	assert.Equal(t, 96, RoundBitrateKbps(100), "100 -> nearest is 96")
+	assert.Equal(t, 192, RoundBitrateKbps(200), "200 -> nearest is 192")
+	assert.Equal(t, 224, RoundBitrateKbps(210), "210 -> nearest is 224")
+	// Below the lowest rate snaps up; above the highest snaps down.
+	assert.Equal(t, 32, RoundBitrateKbps(10))
+	assert.Equal(t, 320, RoundBitrateKbps(500))
+	assert.Equal(t, 320, RoundBitrateKbps(321))
+	// An exact midpoint resolves to the higher rate.
+	assert.Equal(t, 160, RoundBitrateKbps(144), "144 is midway between 128 and 160; ties round up")
+	assert.Equal(t, 40, RoundBitrateKbps(36), "36 is midway between 32 and 40; ties round up")
+}
+
+func TestEncodePCM_RoundsNonStandardBitrate(t *testing.T) {
+	t.Parallel()
+	// 100 kbps is in BirdNET-Go's configurable range but not an MPEG-1 rate. It must
+	// encode natively (rounded to 96k) rather than error, so a clip is never lost to
+	// a bitrate the config allowed.
+	out := filepath.Join(t.TempDir(), "clip.mp3")
+	err := EncodePCM(t.Context(), &Options{
+		PCMData:     tonePCM(t, testSampleRate, 0.1, testToneHz),
+		OutputPath:  out,
+		SampleRate:  testSampleRate,
+		Channels:    1,
+		BitDepth:    16,
+		BitrateKbps: 100,
+	})
+	require.NoError(t, err)
+	b, err := os.ReadFile(out) //nolint:gosec // test-controlled path
+	require.NoError(t, err)
+	require.Greater(t, len(b), 4, "MP3 stream truncated")
+	assert.Equal(t, byte(0xFF), b[0], "output must start with a frame sync byte")
+	assert.Equal(t, byte(0xE0), b[1]&0xE0, "second byte must carry the 11-bit frame sync")
+	// Prove the rounded rate actually reached the stream, not just that encoding
+	// succeeded: byte 2's top nibble is the MPEG-1 Layer III bitrate index, and
+	// 96 kbps is index 7 (0b0111). This fails if the wrapper ever passed 0 and let
+	// go-mp3 default to 128 kbps (index 9) instead of rounding 100 to 96.
+	assert.Equal(t, byte(0x70), b[2]&0xF0, "third byte must carry the 96 kbps bitrate index")
 }
 
 // Cross-validate the stream against an external decoder when ffprobe is present.

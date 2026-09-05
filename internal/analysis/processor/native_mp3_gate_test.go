@@ -18,7 +18,7 @@ import (
 // the native MP3 encoder is still proving itself.
 func TestNativeMP3Selected_GateUnsetKeepsFFmpeg(t *testing.T) {
 	t.Setenv(conf.EnvNativeMP3Encoder, "")
-	assert.False(t, nativeMP3Selected(conf.SampleRate, 128), "MP3 must stay on FFmpeg without its gate")
+	assert.False(t, nativeMP3Selected(conf.SampleRate), "MP3 must stay on FFmpeg without its gate")
 }
 
 // With the gate set and a shape go-mp3 accepts, the clip is encoded natively and
@@ -27,7 +27,7 @@ func TestEncodeClip_GateSelectsNativeMP3(t *testing.T) {
 	t.Setenv(conf.EnvNativeMP3Encoder, "native")
 
 	a := newGateTestAction(t, "96k")
-	require.True(t, nativeMP3Selected(conf.SampleRate, 96))
+	require.True(t, nativeMP3Selected(conf.SampleRate))
 
 	out := filepath.Join(t.TempDir(), "clip.mp3")
 	encoder, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatMP3, out)
@@ -42,42 +42,69 @@ func TestEncodeClip_GateSelectsNativeMP3(t *testing.T) {
 	assert.Equal(t, byte(0xE0), b[1]&0xE0, "second byte must carry the 11-bit frame sync")
 }
 
-// A clip go-mp3 cannot carry falls back to FFmpeg rather than failing. MP3 has
-// two ways to be unable to carry a clip the other codecs do not: an unsupported
-// capture rate, and a bitrate outside the 14 MPEG-1 Layer III rates, which
-// BirdNET-Go config otherwise allows anywhere in 32-320k.
+// A native MP3 clip encoded at a non-MPEG-1 configured bitrate records the rounded
+// bitrate that was actually used, so the encoding log matches the file on disk.
+func TestEncodeClip_NativeMP3RoundsBitrate(t *testing.T) {
+	t.Setenv(conf.EnvNativeMP3Encoder, "native")
+
+	a := newGateTestAction(t, "100k")
+	out := filepath.Join(t.TempDir(), "clip.mp3")
+	encoder, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatMP3, out)
+	require.NoError(t, err)
+	assert.Equal(t, clipenc.NativeMP3, encoder.Encoder, "100k is rounded, so the clip stays native MP3")
+	assert.Equal(t, 96, encoder.BitrateKbps, "100k rounds to the nearest MPEG-1 rate, 96k")
+}
+
+// The rounding is deliberately native-only: a clip that routes to FFmpeg must keep
+// the unrounded configured bitrate, because FFmpeg accepts arbitrary rates and the
+// log must report what FFmpeg was actually handed. This pins the else-arm of the
+// conditional round in encodeClip so removing the "native only" guard is caught.
+func TestEncodeClip_FFmpegMP3KeepsUnroundedBitrate(t *testing.T) {
+	t.Setenv(conf.EnvNativeMP3Encoder, "") // gate off routes MP3 to FFmpeg
+
+	a := newGateTestAction(t, "100k")
+	out := filepath.Join(t.TempDir(), "clip.mp3")
+	// The FFmpeg encode itself may fail when no ffmpeg binary is present; the
+	// returned clipEncoding is populated before the encoder runs, and its
+	// BitrateKbps is what this test asserts, so the encode error is irrelevant here.
+	encoder, _ := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatMP3, out)
+	assert.Equal(t, clipenc.FFmpeg, encoder.Encoder, "gate off routes MP3 to FFmpeg")
+	assert.Equal(t, 100, encoder.BitrateKbps, "the FFmpeg path keeps the unrounded configured bitrate")
+}
+
+// A clip go-mp3 cannot carry falls back to FFmpeg rather than failing. After the
+// bitrate is rounded to a valid MPEG-1 rate, the only remaining reason MP3 cannot
+// be carried natively is an unsupported capture rate.
 func TestNativeMP3Selected_FallsBackToFFmpeg(t *testing.T) {
 	t.Setenv(conf.EnvNativeMP3Encoder, "native")
 
-	// 22.05 kHz is not an MPEG-1 Layer III rate.
-	assert.False(t, nativeMP3Selected(22050, 128), "22.05 kHz must fall back to FFmpeg")
-	// The bitrate half: 128 kbps is a valid MPEG-1 rate, 100 kbps is in the
-	// configurable range but not one go-mp3 codes.
-	assert.True(t, nativeMP3Selected(conf.SampleRate, 128), "128 kbps is a valid MPEG-1 rate")
-	assert.False(t, nativeMP3Selected(conf.SampleRate, 100), "100 kbps must fall back to FFmpeg")
+	// 22.05 kHz is not an MPEG-1 Layer III rate, so it still falls back.
+	assert.False(t, nativeMP3Selected(22050), "22.05 kHz must fall back to FFmpeg")
+	// A supported capture rate is carried natively regardless of the configured
+	// bitrate, which the encoder rounds to a valid MPEG-1 rate.
+	assert.True(t, nativeMP3Selected(conf.SampleRate), "a supported rate is carried natively")
 }
 
 // selectEncoder routes MP3 to the native encoder only with the gate on and a
-// carriable clip, and to FFmpeg otherwise. This pins the bitrate-driven fork the
-// other lossy formats do not have.
+// carriable clip, and to FFmpeg otherwise. The bitrate no longer forks the
+// decision: any configured value is rounded to a valid MPEG-1 rate, so only the
+// gate and the capture rate matter.
 func TestSelectEncoder_MP3Routing(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		gate    string
-		rate    int
-		bitrate int
-		want    string
+		name string
+		gate string
+		rate int
+		want string
 	}{
-		{"gate off routes to ffmpeg", "", conf.SampleRate, 128, clipenc.FFmpeg},
-		{"gate on with a carriable clip goes native", "native", conf.SampleRate, 128, clipenc.NativeMP3},
-		{"gate on with an unsupported rate falls back", "native", 22050, 128, clipenc.FFmpeg},
-		{"gate on with a non-MPEG-1 bitrate falls back", "native", conf.SampleRate, 100, clipenc.FFmpeg},
+		{"gate off routes to ffmpeg", "", conf.SampleRate, clipenc.FFmpeg},
+		{"gate on with a carriable clip goes native", "native", conf.SampleRate, clipenc.NativeMP3},
+		{"gate on with an unsupported rate falls back", "native", 22050, clipenc.FFmpeg},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			// Not parallel: t.Setenv, and the skip warning uses a package-level Once.
 			t.Setenv(conf.EnvNativeMP3Encoder, tc.gate)
 			resetNativeSkipOnce()
-			assert.Equal(t, tc.want, selectEncoder(ffmpeg.FormatMP3, tc.rate, tc.bitrate))
+			assert.Equal(t, tc.want, selectEncoder(ffmpeg.FormatMP3, tc.rate))
 		})
 	}
 }
@@ -110,9 +137,11 @@ func TestResolveExportParams_MP3StrandedClipFallsBackToWAV(t *testing.T) {
 			wantFormat: "wav", wantExt: ".wav",
 		},
 		{
-			name: "gate on, non-MPEG-1 bitrate, no ffmpeg strands the clip",
+			// 100k is not an MPEG-1 rate, but the encoder rounds it to 96k rather
+			// than stranding the clip, so the format stays MP3 even without FFmpeg.
+			name: "gate on, non-MPEG-1 bitrate, no ffmpeg keeps mp3 (rounded)",
 			gate: "native", bitrate: "100k", ffmpegPath: "", rate: conf.SampleRate,
-			wantFormat: "wav", wantExt: ".wav",
+			wantFormat: ffmpeg.FormatMP3, wantExt: ".mp3",
 		},
 		{
 			// FFmpeg present: it can still take the clip, so keep the format.
