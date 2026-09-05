@@ -26,7 +26,7 @@ type MediaMTXContainer struct {
 
 // MediaMTXConfig holds configuration for MediaMTX container creation.
 type MediaMTXConfig struct {
-	// ImageTag for bluenviron/mediamtx (default: "latest")
+	// ImageTag for bluenviron/mediamtx (default: "1.16.1" via DefaultMediaMTXConfig)
 	ImageTag string
 }
 
@@ -159,6 +159,31 @@ func (c *MediaMTXContainer) GetRTSPPort() int {
 // GetRTSPAddress returns the host:port for RTSP connections.
 func (c *MediaMTXContainer) GetRTSPAddress() string {
 	return net.JoinHostPort(c.host, strconv.Itoa(c.rtspPort))
+}
+
+// Stop stops the running MediaMTX container without removing it, so it can be
+// started again with the same port mappings. It is used to characterize how a
+// consumer recovers when the media server disappears and returns.
+func (c *MediaMTXContainer) Stop(ctx context.Context, timeout time.Duration) error {
+	if c.container == nil {
+		return nil
+	}
+	return c.container.Stop(ctx, &timeout)
+}
+
+// Start restarts a container previously stopped with Stop and waits until the
+// RTSP port accepts connections again.
+func (c *MediaMTXContainer) Start(ctx context.Context) error {
+	if c.container == nil {
+		return nil
+	}
+	if err := c.container.Start(ctx); err != nil {
+		return fmt.Errorf("failed to restart MediaMTX container: %w", err)
+	}
+	if err := WaitForTCP(c.host, c.rtspPort, 30*time.Second); err != nil {
+		return fmt.Errorf("RTSP port did not come back after restart: %w", err)
+	}
+	return nil
 }
 
 // Terminate stops and removes the MediaMTX container.

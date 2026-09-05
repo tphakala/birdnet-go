@@ -259,6 +259,13 @@ type StreamConfig struct {
 	// Zero uses defaultHealthyDataThreshold.
 	HealthyDataThreshold time.Duration
 
+	// SilenceTimeout is how long without any received data before the stream
+	// forces a restart. Zero uses the package default (silenceTimeout, 90 s).
+	// Exposed so characterization tests can drive the silence watchdog in
+	// seconds without mutating the package-level constant; production callers
+	// leave it zero.
+	SilenceTimeout time.Duration
+
 	// Debug enables verbose debug logging.
 	Debug bool
 }
@@ -309,6 +316,15 @@ func (c *StreamConfig) healthyThreshold() time.Duration {
 		return c.HealthyDataThreshold
 	}
 	return defaultHealthyDataThreshold
+}
+
+// effectiveSilenceTimeout returns the configured silence timeout or the package
+// default (silenceTimeout) when it is unset or non-positive.
+func (c *StreamConfig) effectiveSilenceTimeout() time.Duration {
+	if c.SilenceTimeout > 0 {
+		return c.SilenceTimeout
+	}
+	return silenceTimeout
 }
 
 // StreamHealth represents the health status of an FFmpeg stream.
@@ -1127,7 +1143,7 @@ func (s *Stream) processAudio() error {
 	s.cmdMu.Unlock()
 
 	if stdout == nil {
-		// During intentional stop, cleanupProcess clears stdout before Run checks —
+		// During intentional stop, cleanupProcess clears stdout before Run checks;
 		// this is expected, not a warning condition.
 		s.stoppedMu.RLock()
 		stopped := s.stopped
@@ -1464,24 +1480,25 @@ func (s *Stream) handleSilenceTimeout(startTime time.Time) error {
 		return time.Since(lastData)
 	}()
 
-	if effectiveAge > 0 && effectiveAge > silenceTimeout {
+	timeout := s.config.effectiveSilenceTimeout()
+	if effectiveAge > 0 && effectiveAge > timeout {
 		lastDataDesc := formatLastDataDescription(lastData)
 
 		getStreamLogger().Warn("no data received from stream source, triggering restart",
 			logger.String("url", s.config.safeURL()),
-			logger.Float64("timeout_seconds", silenceTimeout.Seconds()),
+			logger.Float64("timeout_seconds", timeout.Seconds()),
 			logger.String("last_data", lastDataDesc),
 			logger.Float64("effective_age_seconds", effectiveAge.Seconds()),
 			logger.Float64("process_runtime_seconds", time.Since(startTime).Seconds()),
 			logger.String("component", "ffmpeg-stream"),
 			logger.String("operation", "silence_detected"))
 		s.cleanupProcess()
-		return errors.Newf("stream stopped producing data for %v seconds", silenceTimeout.Seconds()).
+		return errors.Newf("stream stopped producing data for %v seconds", timeout.Seconds()).
 			Category(errors.CategoryRTSP).
 			Component("ffmpeg-stream").
 			Context("operation", "silence_timeout").
 			Context("url", s.config.safeURL()).
-			Context("timeout_seconds", silenceTimeout.Seconds()).
+			Context("timeout_seconds", timeout.Seconds()).
 			Context("last_data", lastDataDesc).
 			Build()
 	}
@@ -1590,7 +1607,7 @@ func (s *Stream) handleQuickExitError(startTime time.Time) error {
 				processState = s.exitProcessState
 				s.exitInfoMu.Unlock()
 			case <-time.After(stderrDrainTimeout):
-				// cmd.Wait() still pending — proceed with partial stderr.
+				// cmd.Wait() still pending; proceed with partial stderr.
 			}
 		}
 	}
@@ -1912,7 +1929,7 @@ func (s *Stream) GetHealth() StreamHealth {
 	var isHealthy, isReceivingData bool
 	switch {
 	case state != StateRunning:
-		// Stream is not actively processing audio — always unhealthy.
+		// Stream is not actively processing audio; always unhealthy.
 		// Covers StateIdle, StateStarting, StateRestarting, StateBackoff,
 		// StateCircuitOpen, and StateStopped.
 		isHealthy = false

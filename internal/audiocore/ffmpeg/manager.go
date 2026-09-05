@@ -36,8 +36,6 @@ const (
 	managerShutdownTimeout = 30 * time.Second
 )
 
-// FrameCallback is invoked for each chunk of audio data received from a stream.
-// sourceID identifies the stream and data contains the raw audio bytes.
 // FrameCallback is invoked by a Stream for every chunk of audio data received.
 // The AudioFrame is fully populated with source metadata (ID, name, sample rate,
 // bit depth, channels, timestamp).
@@ -64,6 +62,11 @@ type Manager struct {
 	// pool their read buffers via FrameRef. May be nil (legacy allocation).
 	bufMgr *buffer.Manager
 
+	// opts carries manager-level defaults applied to every stream this manager
+	// starts (see withManagerDefaults). The zero value reproduces the historic
+	// behaviour, so NewManager callers are unaffected.
+	opts Options
+
 	// Watchdog state: tracks when each stream was last force-reset.
 	lastForceReset   map[string]time.Time
 	lastForceResetMu sync.Mutex
@@ -86,6 +89,15 @@ type Manager struct {
 // attach a FrameRef whose release closure returns the slice. When nil, streams
 // fall back to per-iteration allocation.
 func NewManager(ctx context.Context, onFrame FrameCallback, onReset func(sourceID string), log logger.Logger, bufMgr *buffer.Manager) *Manager {
+	return NewManagerWithOptions(ctx, onFrame, onReset, log, bufMgr, Options{})
+}
+
+// NewManagerWithOptions is NewManager with manager-level defaults. The extra
+// Options argument carries settings that apply to every stream the manager
+// starts. NewManager delegates here with a zero Options, so the two constructors
+// behave identically unless a non-zero option is supplied. See Options for the
+// available knobs.
+func NewManagerWithOptions(ctx context.Context, onFrame FrameCallback, onReset func(sourceID string), log logger.Logger, bufMgr *buffer.Manager, opts Options) *Manager {
 	if log == nil {
 		log = audiocore.GetLogger()
 	}
@@ -98,12 +110,13 @@ func NewManager(ctx context.Context, onFrame FrameCallback, onReset func(sourceI
 		onReset:        onReset,
 		logger:         log,
 		bufMgr:         bufMgr,
+		opts:           opts,
 		lastForceReset: make(map[string]time.Time),
 	}
 }
 
 // SetOnFrame registers a callback invoked for each chunk of audio data
-// received from any managed stream. Thread-safe — can be called while the
+// received from any managed stream. Thread-safe; can be called while the
 // manager is running.
 func (m *Manager) SetOnFrame(fn FrameCallback) {
 	m.onFrameMu.Lock()
@@ -113,7 +126,7 @@ func (m *Manager) SetOnFrame(fn FrameCallback) {
 
 // SetOnStreamReset registers a callback invoked after a stream starts or is
 // force-reset by the watchdog. The callback receives the sourceID of the
-// newly-started stream. Thread-safe — can be called while the manager is running.
+// newly-started stream. Thread-safe; can be called while the manager is running.
 func (m *Manager) SetOnStreamReset(fn func(sourceID string)) {
 	m.onResetMu.Lock()
 	defer m.onResetMu.Unlock()
@@ -139,6 +152,10 @@ func (m *Manager) StartStream(cfg *StreamConfig) error {
 			Context("operation", "start_stream").
 			Build()
 	}
+
+	// Apply manager-level defaults (e.g. a shortened silence timeout for tests)
+	// before constructing the stream, without mutating the caller's config.
+	cfg = m.withManagerDefaults(cfg)
 
 	// Hold the lock only for the map check and insertion.
 	stream := NewStream(cfg, m.dispatchFrame, m.notifyReset, m.metrics, m.bufMgr)
@@ -220,7 +237,7 @@ func (m *Manager) StopStream(sourceID string) error {
 	delete(m.streams, sourceID)
 	m.mu.Unlock()
 
-	// Stop the stream outside the lock — Stop() can block.
+	// Stop the stream outside the lock; Stop() can block.
 	stream.Stop()
 
 	// Clean up watchdog tracking.
@@ -378,7 +395,7 @@ func (m *Manager) ShutdownWithContext(ctx context.Context) error {
 
 	for i, id := range sourceIDs {
 		if ctx.Err() != nil {
-			m.logger.Warn("skipping remaining stream stops — context expired",
+			m.logger.Warn("skipping remaining stream stops; context expired",
 				logger.Int("remaining", len(sourceIDs)-i),
 				logger.String("component", "ffmpeg-manager"),
 				logger.String("operation", "shutdown"))
