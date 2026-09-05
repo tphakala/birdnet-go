@@ -263,7 +263,7 @@ func (e *AudioEngine) SetScheduler(s *schedule.QuietHoursScheduler) {
 	}
 }
 
-// GetActiveStreamIDs returns the runtime source IDs currently tracked by FFmpeg.
+// GetActiveStreamIDs returns the runtime source IDs currently tracked by the stream manager.
 func (e *AudioEngine) GetActiveStreamIDs() []string {
 	return e.streamMgr.GetActiveStreamIDs()
 }

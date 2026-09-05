@@ -58,7 +58,10 @@ func TestConvertStreamHealthToResponse_Golden(t *testing.T) {
 			got, err := json.Marshal(response)
 			require.NoError(t, err)
 			want := fmt.Sprintf(goldenTemplate, tt.wantProcess, tt.wantState)
-			assert.JSONEq(t, want, string(got))
+			// Compare the exact marshaled bytes, not a semantic JSON match, so a
+			// reordered or renamed field (which assert.JSONEq would tolerate) fails
+			// the byte-identity contract this test exists to lock.
+			assert.Equal(t, want, string(got))
 		})
 	}
 }
