@@ -86,6 +86,34 @@ func TestReadCPUTemperature(t *testing.T) {
 			wantDetails: "Source: thermal_zone1, Type: x86_pkg_temp",
 		},
 		{
+			// Regression for issue #4271. ARM big.LITTLE systems (such as
+			// Orange Pi 4 Pro) expose cpul_thermal_zone and cpub_thermal_zone
+			// alongside non-CPU zones (gpu, npu, ddr, skin). The helper must
+			// filter out non-CPU zones and report the hottest CPU cluster.
+			name: "recognizes Orange Pi 4 Pro ARM big.LITTLE thermal zones and reports hottest cluster",
+			zones: []thermalZone{
+				{name: "thermal_zone0", typ: "cpul_thermal_zone", temp: "62000"},
+				{name: "thermal_zone1", typ: "cpub_thermal_zone", temp: "61938"},
+				{name: "thermal_zone2", typ: "gpu_thermal_zone", temp: "70000"},
+				{name: "thermal_zone3", typ: "npu_thermal_zone", temp: "60760"},
+				{name: "thermal_zone4", typ: "ddr_thermal_zone", temp: "60264"},
+				{name: "thermal_zone5", typ: "skin_zone", temp: "36400"},
+			},
+			wantCelsius: 62.0,
+			wantDetails: "Source: thermal_zone0, Type: cpul_thermal_zone",
+		},
+		{
+			// When the big cluster is hotter than the LITTLE cluster under load,
+			// cpub_thermal_zone must be selected over cpul_thermal_zone.
+			name: "selects cpub_thermal_zone when big cluster is hotter",
+			zones: []thermalZone{
+				{name: "thermal_zone0", typ: "cpul_thermal_zone", temp: "48000"},
+				{name: "thermal_zone1", typ: "cpub_thermal_zone", temp: "65000"},
+			},
+			wantCelsius: 65.0,
+			wantDetails: "Source: thermal_zone1, Type: cpub_thermal_zone",
+		},
+		{
 			// A hot but plausible x86 package temperature above 100°C must be
 			// accepted rather than rejected as out of range.
 			name: "accepts high but valid x86 package temperature",

@@ -29,11 +29,13 @@ const (
 // cpuThermalSensorTypes holds the sysfs thermal-zone "type" values that identify
 // a CPU temperature sensor, filtering out unrelated zones (GPU, battery, ACPI).
 var cpuThermalSensorTypes = map[string]bool{
-	"cpu-thermal":     true, // Common on Raspberry Pi
-	"x86_pkg_temp":    true, // Common on Intel x86 systems (like NUC)
-	"soc_thermal":     true, // Common on some ARM SoCs
-	"cpu_thermal":     true, // Alternative name
-	"thermal-fan-est": true, // Seen on some systems
+	"cpu-thermal":       true, // Common on Raspberry Pi
+	"x86_pkg_temp":      true, // Common on Intel x86 systems (like NUC)
+	"soc_thermal":       true, // Common on some ARM SoCs
+	"cpu_thermal":       true, // Alternative name
+	"thermal-fan-est":   true, // Seen on some systems
+	"cpul_thermal_zone": true, // ARM big.LITTLE LITTLE cluster (e.g. Orange Pi 4 Pro)
+	"cpub_thermal_zone": true, // ARM big.LITTLE big cluster (e.g. Orange Pi 4 Pro)
 }
 
 // ReadCPUTemperature scans Linux thermal zones under basePath for a CPU
