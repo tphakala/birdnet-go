@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
@@ -16,8 +16,8 @@ type StreamHealthInfo struct {
 	URL string
 	// IsHealthy indicates whether the stream is considered healthy.
 	IsHealthy bool
-	// ProcessState is the current state of the underlying FFmpeg process (e.g. "running", "stopped").
-	ProcessState string
+	// State is the producer-neutral connection state of the underlying stream.
+	State audiocore.StreamState
 	// RestartCount is the number of times this stream has been restarted.
 	RestartCount int
 	// Error holds the most recent error message, if any.
@@ -182,10 +182,10 @@ func (c *FFmpegHealthCheck) Run(_ context.Context) health.Result {
 	notRunningCount := 0
 
 	for _, s := range streams {
-		switch s.ProcessState {
-		case ffmpeg.ProcessStateRunning:
+		switch s.State {
+		case audiocore.StreamStateConnected:
 			// healthy
-		case ffmpeg.ProcessStateStopped:
+		case audiocore.StreamStateStopped:
 			stoppedCount++
 		default:
 			notRunningCount++

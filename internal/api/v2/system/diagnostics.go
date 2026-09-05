@@ -388,8 +388,8 @@ func mapInferenceSnapshots(snapshots map[string]inferencestats.PeekSnapshot, inf
 	return result
 }
 
-// buildStreamHealthProvider returns a closure that bridges the FFmpegManager's
-// stream health data to the checks.StreamHealthInfo format. The closure
+// buildStreamHealthProvider returns a closure that bridges the stream manager's
+// health data to the checks.StreamHealthInfo format. The closure
 // atomically loads c.Engine at call time because it is set after Controller init.
 func (c *Handler) buildStreamHealthProvider() func() []checks.StreamHealthInfo {
 	return func() []checks.StreamHealthInfo {
@@ -397,7 +397,7 @@ func (c *Handler) buildStreamHealthProvider() func() []checks.StreamHealthInfo {
 		if eng == nil {
 			return nil
 		}
-		mgr := eng.FFmpegManager()
+		mgr := eng.StreamManager()
 		if mgr == nil {
 			return nil
 		}
@@ -421,7 +421,7 @@ func (c *Handler) buildStreamHealthProvider() func() []checks.StreamHealthInfo {
 			infos = append(infos, checks.StreamHealthInfo{
 				URL:          url,
 				IsHealthy:    sh.IsHealthy,
-				ProcessState: sh.ProcessState.String(),
+				State:        sh.State,
 				RestartCount: sh.RestartCount,
 				Error:        errMsg,
 			})
@@ -479,7 +479,7 @@ func (c *Handler) buildStreamHealthSnapshotProvider() func() []observability.Str
 		if eng == nil {
 			return nil
 		}
-		mgr := eng.FFmpegManager()
+		mgr := eng.StreamManager()
 		if mgr == nil {
 			return nil
 		}

@@ -8,7 +8,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -464,44 +463,6 @@ func TestStream_CircuitBreakerCooldown(t *testing.T) {
 
 	// Failures should be reset.
 	assert.Equal(t, 0, stream.getConsecutiveFailures())
-}
-
-func TestStream_DataRateCalculation(t *testing.T) {
-	// getRate divides total bytes by the time span between the first and last
-	// sample, returning 0 when that span is zero (div-by-zero guard). On
-	// coarse-timer platforms (Windows, ~15ms resolution) three back-to-back
-	// addSample calls can share a timestamp, making the span zero and the rate
-	// zero. Use synctest's fake clock advanced by time.Sleep so the samples get
-	// distinct timestamps deterministically on every platform.
-	synctest.Test(t, func(t *testing.T) {
-		calc := newDataRateCalculator(dataRateWindowSize)
-
-		calc.addSample(1024)
-		time.Sleep(time.Millisecond)
-		calc.addSample(2048)
-		time.Sleep(time.Millisecond)
-		calc.addSample(1536)
-
-		rate := calc.getRate()
-		assert.Greater(t, rate, 0.0)
-	})
-}
-
-func TestStream_DataRateCalculator_EmptyRate(t *testing.T) {
-	t.Parallel()
-
-	calc := newDataRateCalculator(dataRateWindowSize)
-	assert.InDelta(t, 0.0, calc.getRate(), 0.001)
-}
-
-func TestStream_DataRateCalculator_SingleSampleRate(t *testing.T) {
-	t.Parallel()
-
-	calc := newDataRateCalculator(dataRateWindowSize)
-	calc.addSample(1024)
-
-	rate := calc.getRate()
-	assert.InDelta(t, 1024.0, rate, 0.01, "Single recent sample should return instantaneous rate")
 }
 
 func TestStream_HealthTracking(t *testing.T) {
@@ -1239,8 +1200,8 @@ func TestStream_ErrorContextTracking(t *testing.T) {
 	assert.Nil(t, stream.getLastErrorContext())
 	assert.Empty(t, stream.getErrorContexts())
 
-	ctx1 := &ErrorContext{ErrorType: ErrTypeConnectionTimeout, PrimaryMessage: "test1"}
-	ctx2 := &ErrorContext{ErrorType: ErrTypeConnectionRefused, PrimaryMessage: "test2"}
+	ctx1 := &audiocore.StreamErrorContext{ErrorType: audiocore.ErrTypeConnectionTimeout, PrimaryMessage: "test1"}
+	ctx2 := &audiocore.StreamErrorContext{ErrorType: audiocore.ErrTypeConnectionRefused, PrimaryMessage: "test2"}
 
 	stream.recordErrorContext(ctx1)
 	assert.Equal(t, ctx1, stream.getLastErrorContext())

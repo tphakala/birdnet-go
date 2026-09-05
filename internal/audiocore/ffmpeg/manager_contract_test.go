@@ -11,25 +11,27 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/streamtest"
 	"github.com/tphakala/birdnet-go/internal/testutil/containers"
 )
 
 // ffmpegManagerAdapter adapts *ffmpeg.Manager to the producer-agnostic
-// streamtest.Manager contract, translating the neutral StreamSpec into an
-// ffmpeg.StreamConfig and the ffmpeg health snapshot into streamtest.Health.
+// streamtest.Manager contract, translating the neutral streamtest.StreamSpec
+// into an audiocore.StreamSpec and the neutral health snapshot into
+// streamtest.Health. The FFmpeg binary path and log level are manager-level
+// options passed to NewManagerWithOptions, not per-stream spec fields.
 type ffmpegManagerAdapter struct {
-	mgr        *ffmpeg.Manager
-	ffmpegPath string
+	mgr *ffmpeg.Manager
 }
 
 func (a *ffmpegManagerAdapter) StartStream(spec *streamtest.StreamSpec) error {
-	return a.mgr.StartStream(&ffmpeg.StreamConfig{
+	return a.mgr.StartStream(&audiocore.StreamSpec{
 		URL:                  spec.URL,
 		SourceID:             spec.SourceID,
 		SourceName:           spec.SourceName,
-		Type:                 spec.Type,
+		Type:                 audiocore.SourceType(spec.Type),
 		SampleRate:           spec.SampleRate,
 		SourceSampleRate:     spec.SourceSampleRate,
 		BitDepth:             spec.BitDepth,
@@ -40,8 +42,6 @@ func (a *ffmpegManagerAdapter) StartStream(spec *streamtest.StreamSpec) error {
 		Transport:            spec.Transport,
 		HealthyDataThreshold: spec.HealthyDataThreshold,
 		Debug:                spec.Debug,
-		FFmpegPath:           a.ffmpegPath,
-		LogLevel:             "error",
 	})
 }
 
@@ -74,8 +74,8 @@ func (a *ffmpegManagerAdapter) ShutdownWithContext(ctx context.Context) error {
 	return a.mgr.ShutdownWithContext(ctx)
 }
 
-// ffmpegHealth adapts *ffmpeg.StreamHealth to streamtest.Health.
-type ffmpegHealth struct{ h *ffmpeg.StreamHealth }
+// ffmpegHealth adapts *audiocore.StreamHealth to streamtest.Health.
+type ffmpegHealth struct{ h *audiocore.StreamHealth }
 
 func (f ffmpegHealth) IsHealthy() bool             { return f.h.IsHealthy }
 func (f ffmpegHealth) IsReceivingData() bool       { return f.h.IsReceivingData }
@@ -84,7 +84,7 @@ func (f ffmpegHealth) TotalBytesReceived() int64   { return f.h.TotalBytesReceiv
 func (f ffmpegHealth) BytesPerSecond() float64     { return f.h.BytesPerSecond }
 func (f ffmpegHealth) LastDataReceived() time.Time { return f.h.LastDataReceived }
 func (f ffmpegHealth) SourceChannels() int         { return f.h.SourceChannels }
-func (f ffmpegHealth) ProcessState() string        { return f.h.ProcessState.String() }
+func (f ffmpegHealth) ProcessState() string        { return f.h.ProcessStateName() }
 func (f ffmpegHealth) StateHistoryLen() int        { return len(f.h.StateHistory) }
 
 func (f ffmpegHealth) ErrorType() string {
@@ -133,9 +133,9 @@ func TestFFmpegManagerContract(t *testing.T) {
 			fc.OnReset,
 			nil,
 			fc.BufferManager,
-			ffmpeg.Options{SilenceTimeout: fc.SilenceTimeout},
+			ffmpeg.Options{SilenceTimeout: fc.SilenceTimeout, FFmpegPath: ffmpegPath, LogLevel: "error"},
 		)
-		return &ffmpegManagerAdapter{mgr: mgr, ffmpegPath: ffmpegPath}
+		return &ffmpegManagerAdapter{mgr: mgr}
 	}
 
 	streamtest.RunManagerContract(t, &streamtest.ContractConfig{

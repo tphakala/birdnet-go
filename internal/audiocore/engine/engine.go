@@ -61,7 +61,7 @@ type Config struct {
 	Logger logger.Logger
 
 	// FFmpegPath is the absolute path to the FFmpeg binary.
-	// It is passed to StreamConfig when starting stream-type sources.
+	// It is handed to the FFmpeg stream manager as a manager-level option.
 	FFmpegPath string
 
 	// SoxPath is the absolute path to the SoX binary.
@@ -119,7 +119,7 @@ func captureBufferSecs(v int) int {
 type AudioEngine struct {
 	registry  *audiocore.SourceRegistry
 	router    *audiocore.AudioRouter
-	ffmpegMgr *ffmpeg.Manager
+	streamMgr audiocore.StreamManager
 	deviceMgr *audiocore.DeviceManager
 	bufferMgr *buffer.Manager
 	scheduler atomic.Pointer[schedule.QuietHoursScheduler]
@@ -136,16 +136,10 @@ type AudioEngine struct {
 	primaryClipBytes    int
 	primaryOverlapBytes int
 	primaryReadSize     int
-	// ffmpegPath is the absolute path to the FFmpeg binary.
-	ffmpegPath string
 	// soxPath is the absolute path to the SoX binary.
 	soxPath string
 	// transport is the default RTSP transport protocol.
 	transport string
-	// ffmpegParameters are additional FFmpeg command-line parameters.
-	ffmpegParameters []string
-	// logLevel is the FFmpeg log level.
-	logLevel string
 	// debug enables verbose debug logging for stream capture.
 	debug bool
 	// captureBufferSeconds is the ring buffer capacity for audio history.
@@ -170,9 +164,17 @@ func New(ctx context.Context, cfg *Config, scheduler *schedule.QuietHoursSchedul
 	// convert-on-capture (malgo) go through pooled byte slices instead of
 	// allocating per-frame. The router Retain/Release path keeps pooled
 	// buffers alive across fan-out subscribers.
-	ffmpegMgr := ffmpeg.NewManager(engineCtx, func(frame audiocore.AudioFrame) {
+	// The engine drives its network stream producer through the
+	// audiocore.StreamManager seam. The manager-level FFmpeg settings (binary
+	// path, extra parameters, log level) are handed to the manager once here
+	// rather than repeated on every StreamSpec.
+	var streamMgr audiocore.StreamManager = ffmpeg.NewManagerWithOptions(engineCtx, func(frame audiocore.AudioFrame) {
 		router.Dispatch(frame)
-	}, nil, log, bufMgr)
+	}, nil, log, bufMgr, ffmpeg.Options{
+		FFmpegPath:       cfg.FFmpegPath,
+		FFmpegParameters: cfg.FFmpegParameters,
+		LogLevel:         cfg.LogLevel,
+	})
 	deviceMgr := audiocore.NewDeviceManager(router, bufMgr, log)
 
 	// Probe all device capabilities at startup, before any capture begins.
@@ -183,17 +185,14 @@ func New(ctx context.Context, cfg *Config, scheduler *schedule.QuietHoursSchedul
 	e := &AudioEngine{
 		registry:             audiocore.NewSourceRegistry(log),
 		router:               router,
-		ffmpegMgr:            ffmpegMgr,
+		streamMgr:            streamMgr,
 		deviceMgr:            deviceMgr,
 		bufferMgr:            bufMgr,
 		logger:               log.With(logger.String("component", "audio_engine")),
 		ctx:                  engineCtx,
 		cancel:               cancel,
-		ffmpegPath:           cfg.FFmpegPath,
 		soxPath:              cfg.SoxPath,
 		transport:            cfg.Transport,
-		ffmpegParameters:     cfg.FFmpegParameters,
-		logLevel:             cfg.LogLevel,
 		debug:                cfg.Debug,
 		captureBufferSeconds: captureBufferSecs(cfg.CaptureBufferSeconds),
 	}
@@ -216,9 +215,32 @@ func (e *AudioEngine) BufferManager() *buffer.Manager {
 	return e.bufferMgr
 }
 
-// FFmpegManager returns the FFmpeg stream manager.
-func (e *AudioEngine) FFmpegManager() *ffmpeg.Manager {
-	return e.ffmpegMgr
+// StreamManager returns the network stream manager the engine drives through
+// the producer-neutral audiocore.StreamManager seam.
+func (e *AudioEngine) StreamManager() audiocore.StreamManager {
+	return e.streamMgr
+}
+
+// buildStreamSpec assembles the protocol-neutral audiocore.StreamSpec the stream
+// manager consumes from a source's resolved parameters. The manager-level FFmpeg
+// settings (binary path, extra parameters, log level) are not part of the spec;
+// the manager already holds them from its Options.
+func (e *AudioEngine) buildStreamSpec(sourceID, displayName, url string, typ audiocore.SourceType, sampleRate, sourceSampleRate, bitDepth, channels, sourceChannels int, channelMode, mediaMode, transport string) *audiocore.StreamSpec {
+	return &audiocore.StreamSpec{
+		SourceID:         sourceID,
+		SourceName:       displayName,
+		URL:              url,
+		Type:             typ,
+		SampleRate:       sampleRate,
+		SourceSampleRate: sourceSampleRate,
+		BitDepth:         bitDepth,
+		Channels:         channels,
+		SourceChannels:   sourceChannels,
+		ChannelMode:      channelMode,
+		MediaMode:        mediaMode,
+		Transport:        transport,
+		Debug:            e.debug,
+	}
 }
 
 // DeviceManager returns the device manager.
@@ -241,14 +263,14 @@ func (e *AudioEngine) SetScheduler(s *schedule.QuietHoursScheduler) {
 	}
 }
 
-// GetActiveStreamIDs returns the runtime source IDs currently tracked by FFmpeg.
+// GetActiveStreamIDs returns the runtime source IDs currently tracked by the stream manager.
 func (e *AudioEngine) GetActiveStreamIDs() []string {
-	return e.ffmpegMgr.GetActiveStreamIDs()
+	return e.streamMgr.GetActiveStreamIDs()
 }
 
 // GetActiveStreamURLs returns active runtime sourceID -> raw stream URL.
 func (e *AudioEngine) GetActiveStreamURLs() map[string]string {
-	ids := e.ffmpegMgr.GetActiveStreamIDs()
+	ids := e.streamMgr.GetActiveStreamIDs()
 	urls := make(map[string]string, len(ids))
 	for _, sourceID := range ids {
 		if url, ok := e.registry.ConnectionStringByID(sourceID); ok {
@@ -261,7 +283,7 @@ func (e *AudioEngine) GetActiveStreamURLs() map[string]string {
 // StopStream stops the FFmpeg stream for sourceID while keeping the registered
 // source, routes, and buffers available for a later quiet-hours restart.
 func (e *AudioEngine) StopStream(sourceID string) error {
-	if err := e.ffmpegMgr.StopStream(sourceID); err != nil {
+	if err := e.streamMgr.StopStream(sourceID); err != nil {
 		return err
 	}
 	_ = e.registry.UpdateState(sourceID, audiocore.SourceStopped)
@@ -301,25 +323,8 @@ func (e *AudioEngine) StartStream(sourceID, url, transport string) error {
 	if bitDepth <= 0 {
 		bitDepth = defaultBitDepth
 	}
-	streamCfg := &ffmpeg.StreamConfig{
-		SourceID:         sourceID,
-		SourceName:       src.DisplayName,
-		URL:              url,
-		Type:             string(src.Type),
-		SampleRate:       sampleRate,
-		SourceSampleRate: src.SourceSampleRate,
-		BitDepth:         bitDepth,
-		Channels:         channels,
-		SourceChannels:   src.SourceChannels,
-		ChannelMode:      src.ChannelMode,
-		MediaMode:        src.MediaMode,
-		FFmpegPath:       e.ffmpegPath,
-		Transport:        transport,
-		FFmpegParameters: e.ffmpegParameters,
-		LogLevel:         e.logLevel,
-		Debug:            e.debug,
-	}
-	if err := e.ffmpegMgr.StartStream(streamCfg); err != nil {
+	spec := e.buildStreamSpec(sourceID, src.DisplayName, url, src.Type, sampleRate, src.SourceSampleRate, bitDepth, channels, src.SourceChannels, src.ChannelMode, src.MediaMode, transport)
+	if err := e.streamMgr.StartStream(spec); err != nil {
 		_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
 		return err
 	}
@@ -445,25 +450,8 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 
 	// 5. Start capture based on source type.
 	if isStreamType(cfg.Type) {
-		streamCfg := &ffmpeg.StreamConfig{
-			SourceID:         sourceID,
-			SourceName:       src.DisplayName,
-			URL:              cfg.ConnectionString,
-			Type:             string(cfg.Type),
-			SampleRate:       sampleRate,
-			SourceSampleRate: cfg.SourceSampleRate,
-			BitDepth:         bitDepth,
-			Channels:         channels,
-			SourceChannels:   cfg.SourceChannels,
-			ChannelMode:      cfg.ChannelMode,
-			MediaMode:        cfg.MediaMode,
-			FFmpegPath:       e.ffmpegPath,
-			Transport:        e.resolveTransport(cfg.Transport),
-			FFmpegParameters: e.ffmpegParameters,
-			LogLevel:         e.logLevel,
-			Debug:            e.debug,
-		}
-		if err := e.ffmpegMgr.StartStream(streamCfg); err != nil {
+		spec := e.buildStreamSpec(sourceID, src.DisplayName, cfg.ConnectionString, cfg.Type, sampleRate, cfg.SourceSampleRate, bitDepth, channels, cfg.SourceChannels, cfg.ChannelMode, cfg.MediaMode, e.resolveTransport(cfg.Transport))
+		if err := e.streamMgr.StartStream(spec); err != nil {
 			e.bufferMgr.DeallocateSource(sourceID)
 			_ = e.registry.Unregister(sourceID)
 			return errors.New(err).
@@ -527,7 +515,7 @@ func (e *AudioEngine) RemoveSource(sourceID string) error {
 
 	// 1. Stop capture.
 	if isStreamType(src.Type) {
-		if err := e.ffmpegMgr.StopStream(sourceID); err != nil {
+		if err := e.streamMgr.StopStream(sourceID); err != nil {
 			e.logger.Warn("failed to stop stream during removal",
 				logger.String("source_id", sourceID),
 				logger.Error(err))
@@ -582,7 +570,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 
 	// 1. Stop existing capture.
 	if isStreamType(src.Type) {
-		_ = e.ffmpegMgr.StopStream(sourceID)
+		_ = e.streamMgr.StopStream(sourceID)
 	} else if src.Type == audiocore.SourceTypeAudioCard {
 		_ = e.deviceMgr.StopCapture(sourceID)
 	}
@@ -651,25 +639,8 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 	}
 
 	if isStreamType(newType) {
-		streamCfg := &ffmpeg.StreamConfig{
-			SourceID:         sourceID,
-			SourceName:       src.DisplayName,
-			URL:              newCfg.ConnectionString,
-			Type:             string(newType),
-			SampleRate:       sampleRate,
-			SourceSampleRate: newCfg.SourceSampleRate,
-			BitDepth:         bitDepth,
-			Channels:         channels,
-			SourceChannels:   newCfg.SourceChannels,
-			ChannelMode:      newCfg.ChannelMode,
-			MediaMode:        newCfg.MediaMode,
-			FFmpegPath:       e.ffmpegPath,
-			Transport:        e.resolveTransport(newCfg.Transport),
-			FFmpegParameters: e.ffmpegParameters,
-			LogLevel:         e.logLevel,
-			Debug:            e.debug,
-		}
-		if err := e.ffmpegMgr.StartStream(streamCfg); err != nil {
+		spec := e.buildStreamSpec(sourceID, src.DisplayName, newCfg.ConnectionString, newType, sampleRate, newCfg.SourceSampleRate, bitDepth, channels, newCfg.SourceChannels, newCfg.ChannelMode, newCfg.MediaMode, e.resolveTransport(newCfg.Transport))
+		if err := e.streamMgr.StartStream(spec); err != nil {
 			e.bufferMgr.DeallocateSource(sourceID)
 			_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
 			return errors.New(err).
@@ -732,7 +703,7 @@ func (e *AudioEngine) Stop() {
 	e.cancel(ErrEngineStopped)
 
 	// Shut down FFmpeg streams.
-	if err := e.ffmpegMgr.Shutdown(); err != nil {
+	if err := e.streamMgr.Shutdown(); err != nil {
 		e.logger.Warn("ffmpeg manager shutdown error", logger.Error(err))
 	}
 
