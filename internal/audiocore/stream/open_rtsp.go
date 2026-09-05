@@ -38,6 +38,7 @@ func (s *stream) rtspFactory() supervisor.Factory {
 			Transport:     mapTransport(s.spec.Transport),
 			OnFrame:       s.onFrame,
 			OnCodecUpdate: s.onCodecUpdate,
+			Logger:        debugSlog(s.spec.Debug, s.log),
 		}
 		client, err := rtsp.Dial(ctx, cfg)
 		if err != nil {

@@ -16,11 +16,11 @@ import (
 // only; what bounds reconnects is the supervisor plus the liveness watchdog, not
 // the cap value.
 const (
-	// defaultReadIdle is the supervisor read-idle watchdog window: a session
+	// DefaultReadIdle is the supervisor read-idle watchdog window: a session
 	// with no delivered frame within this window ends with ErrReadTimeout and
 	// reconnects. The engine tightens this to sit in front of the liveness
 	// threshold; this is the base before that clamp.
-	defaultReadIdle = 20 * time.Second
+	DefaultReadIdle = 20 * time.Second
 	// defaultChunkBytes is the pooled flush unit for dispatched frames (42.7 ms
 	// at 48 kHz mono). There is no time-based flush; a chunk emits when full or
 	// when the session ends.
@@ -46,7 +46,7 @@ type Options struct {
 	// frame within it ends with a read timeout and reconnects. It defaults below
 	// the liveness watchdog's silence threshold so the supervisor repairs a
 	// transport stall in place before the watchdog would escalate. Zero uses
-	// defaultReadIdle.
+	// DefaultReadIdle.
 	ReadIdle time.Duration
 
 	// Backoff parameterizes the supervisor reconnect schedule. Any zero field is
@@ -73,7 +73,7 @@ type Options struct {
 // the rest of the package reads resolved values.
 func (o *Options) applyDefaults() {
 	if o.ReadIdle <= 0 {
-		o.ReadIdle = defaultReadIdle
+		o.ReadIdle = DefaultReadIdle
 	}
 	if o.ChunkBytes <= 0 {
 		o.ChunkBytes = defaultChunkBytes

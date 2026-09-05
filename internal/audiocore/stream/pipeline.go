@@ -2,6 +2,7 @@ package stream
 
 import (
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	audiostream "github.com/tphakala/go-audio-stream"
@@ -46,6 +47,13 @@ type pipeline struct {
 
 	chunk    []byte // the pooled slice currently being filled, or nil
 	chunkLen int
+
+	// Observability, published for the health snapshot. The reader goroutine is
+	// the sole writer; the snapshot reads them from another goroutine, so they are
+	// atomics rather than mutex-guarded (a lock on the per-frame path is avoided).
+	codecLabel  atomic.Pointer[string]
+	srcRate     atomic.Int32
+	srcChannels atomic.Int32
 }
 
 // newPipeline builds a pipeline for one source. pool may be nil for the unpooled
@@ -76,7 +84,12 @@ func (p *pipeline) setCodec(codec audiostream.Codec, format audiostream.AudioFor
 		// Clear the decoder so a failed (re)resolution does not keep feeding the
 		// new bitstream into the previous decoder: process drops frames while
 		// p.dec is nil until a valid codec is resolved (e.g. via OnCodecUpdate).
+		// Clear the published geometry too, so the health snapshot does not report
+		// a codec and rate that are no longer active.
 		p.dec = nil
+		p.codecLabel.Store(nil)
+		p.srcRate.Store(0)
+		p.srcChannels.Store(0)
 		if p.resampler != nil {
 			_ = p.resampler.Close()
 			p.resampler = nil
@@ -84,6 +97,13 @@ func (p *pipeline) setCodec(codec audiostream.Codec, format audiostream.AudioFor
 		return err
 	}
 	p.dec = dec
+	label := codecName(codec)
+	p.codecLabel.Store(&label)
+	// Reset the geometry until the first decoded frame of the new codec repopulates
+	// it, so a snapshot between the codec change and the first frame does not report
+	// the previous codec's rate.
+	p.srcRate.Store(0)
+	p.srcChannels.Store(0)
 	if p.resampler != nil {
 		_ = p.resampler.Close()
 		p.resampler = nil
@@ -101,6 +121,9 @@ func (p *pipeline) process(data []byte) error {
 	if err != nil {
 		return err
 	}
+	// Publish the codec's native geometry (before resampling) for observability.
+	p.srcRate.Store(int32(rate))
+	p.srcChannels.Store(int32(channels))
 	if len(pcm) == 0 {
 		return nil
 	}
@@ -219,4 +242,15 @@ func (p *pipeline) dispatch(data, owner []byte) {
 	frame.Ref = audiocore.NewFrameRef(func() { p.pool.Put(owner) })
 	p.onFrame(frame)
 	frame.Ref.Release()
+}
+
+// codecInfo returns the current source codec label and the codec's native sample
+// rate and channel count (before resampling and downmix), for the health
+// snapshot. Values are zero until the first frame resolves the codec. Safe for
+// concurrent use.
+func (p *pipeline) codecInfo() (codec string, sampleRate, channels int) {
+	if lbl := p.codecLabel.Load(); lbl != nil {
+		codec = *lbl
+	}
+	return codec, int(p.srcRate.Load()), int(p.srcChannels.Load())
 }

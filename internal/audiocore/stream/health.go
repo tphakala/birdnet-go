@@ -46,6 +46,52 @@ const (
 	errTypeStreamError          = "stream_error"
 )
 
+// trackAggregate is the per-session RTP stats summed across the live tracks for
+// the observability snapshot.
+type trackAggregate struct {
+	packets    uint64
+	seqGaps    uint64
+	duplicates uint64
+	malformed  uint64
+	ssrcResets uint64
+	wire       uint64
+	payload    uint64
+
+	lastFrameAt      time.Time
+	senderClockValid bool
+	senderClockAge   time.Duration
+}
+
+// aggregateTrackStats sums the go-audio-stream per-track counters into one
+// per-session view. The newest valid SenderClock across tracks wins; its age is
+// measured against the stats capture time.
+func aggregateTrackStats(stats audiostream.Stats) trackAggregate {
+	var agg trackAggregate
+	var newestSR time.Time
+	for _, t := range stats.Tracks { //nolint:gocritic // rangeValCopy: TrackStats is a map value (no pointer iteration) and tracks per session are few (1-2)
+		agg.packets += t.Packets
+		agg.seqGaps += t.SeqGaps
+		agg.duplicates += t.Duplicates
+		agg.malformed += t.Malformed
+		agg.ssrcResets += t.SSRCResets
+		agg.wire += t.WireBytes
+		agg.payload += t.PayloadBytes
+		if t.LastFrameAt.After(agg.lastFrameAt) {
+			agg.lastFrameAt = t.LastFrameAt
+		}
+		if t.SenderClock.Valid && t.SenderClock.ReceivedAt.After(newestSR) {
+			newestSR = t.SenderClock.ReceivedAt
+			agg.senderClockValid = true
+			if !stats.CapturedAt.IsZero() {
+				if age := stats.CapturedAt.Sub(t.SenderClock.ReceivedAt); age > 0 {
+					agg.senderClockAge = age
+				}
+			}
+		}
+	}
+	return agg
+}
+
 // mapState maps a supervisor lifecycle transition onto the neutral connection
 // model: the StreamState, the legacy process_state detail string, and the
 // RecoveryState the liveness watchdog consults. FFmpeg never reports these

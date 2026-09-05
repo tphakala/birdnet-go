@@ -43,6 +43,26 @@ func pcmL16(rate, ch int) (audiostream.Codec, audiostream.AudioFormat) {
 		audiostream.AudioFormat{Kind: audiostream.KindPCMS16LE, SampleRate: rate, Channels: ch}
 }
 
+func TestPipeline_setCodecClearsMetadataOnError(t *testing.T) {
+	t.Parallel()
+	spec := &audiocore.StreamSpec{SourceID: "s1", SampleRate: 48000, Channels: 1, ChannelMode: channelModeDownmix, BitDepth: 16}
+	p := newPipeline(spec, 8, nil, func(audiocore.AudioFrame) {}, nil)
+
+	// A supported codec publishes its label.
+	codec, format := pcmL16(48000, 1)
+	require.NoError(t, p.setCodec(codec, format))
+	got, _, _ := p.codecInfo()
+	require.Equal(t, "l16", got)
+
+	// A later unsupported codec fails; the stale label and geometry must clear so
+	// the health snapshot does not keep reporting a codec that is no longer active.
+	require.Error(t, p.setCodec(audiostream.CodecFLAC{}, audiostream.AudioFormat{}))
+	got, rate, ch := p.codecInfo()
+	assert.Empty(t, got, "codec label cleared after a failed setCodec")
+	assert.Zero(t, rate, "source rate cleared after a failed setCodec")
+	assert.Zero(t, ch, "source channels cleared after a failed setCodec")
+}
+
 func TestPipeline_chunksAndDispatchesMonoPassthrough(t *testing.T) {
 	pool := &fakeBytePool{size: 8}
 	col := &frameCollector{}

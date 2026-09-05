@@ -175,7 +175,8 @@
   // Derive connection stability status
   let connectionStatus = $derived.by(() => {
     if (!health) return 'Unknown';
-    if (health.process_state === 'circuit_open') return 'Failed';
+    if (health.process_state === 'circuit_open' || health.process_state === 'failed')
+      return 'Failed';
     if (health.process_state === 'backoff' || health.process_state === 'restarting')
       return 'Degraded';
     if (health.is_healthy && health.is_receiving_data) return 'Stable';
@@ -893,7 +894,9 @@
               <span
                 class={cn(
                   'ml-2',
-                  health?.process_state === 'circuit_open' || health?.process_state === 'stopped'
+                  health?.process_state === 'circuit_open' ||
+                    health?.process_state === 'failed' ||
+                    health?.process_state === 'stopped'
                     ? 'text-[var(--color-error)]'
                     : 'text-[var(--color-base-content)]'
                 )}

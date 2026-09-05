@@ -2,6 +2,7 @@
 package system
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -406,24 +407,51 @@ func (c *Handler) buildStreamHealthProvider() func() []checks.StreamHealthInfo {
 			return nil
 		}
 		registry := eng.Registry()
-		infos := make([]checks.StreamHealthInfo, 0, len(healthMap))
-		for sourceID, sh := range healthMap {
+		// AllStreamHealth ranges a map, so order deterministically for a stable
+		// support-dump ordering (the diagnostics file sorts its other map-derived
+		// outputs too). Sort by sanitized URL, then by the unique source ID, so two
+		// sources that sanitize to the same URL (credentials stripped) still order
+		// deterministically. Source IDs are precomputed to sanitized URLs so the
+		// comparator does no per-comparison registry lookup.
+		urls := make(map[string]string, len(healthMap))
+		ids := make([]string, 0, len(healthMap))
+		for sourceID := range healthMap {
 			url := sourceID
 			if registry != nil {
 				if connStr, ok := registry.ConnectionStringByID(sourceID); ok {
 					url = privacy.SanitizeStreamUrl(connStr)
 				}
 			}
+			urls[sourceID] = url
+			ids = append(ids, sourceID)
+		}
+		slices.SortFunc(ids, func(a, b string) int {
+			if c := cmp.Compare(urls[a], urls[b]); c != 0 {
+				return c
+			}
+			return cmp.Compare(a, b)
+		})
+		infos := make([]checks.StreamHealthInfo, 0, len(ids))
+		for _, sourceID := range ids {
+			sh := healthMap[sourceID]
 			errMsg := ""
 			if sh.Error != nil {
 				errMsg = sh.Error.Error()
 			}
 			infos = append(infos, checks.StreamHealthInfo{
-				URL:          url,
-				IsHealthy:    sh.IsHealthy,
-				State:        sh.State,
-				RestartCount: sh.RestartCount,
-				Error:        errMsg,
+				URL:                urls[sourceID],
+				IsHealthy:          sh.IsHealthy,
+				State:              sh.State,
+				RestartCount:       sh.RestartCount,
+				Error:              errMsg,
+				Engine:             sh.Engine,
+				Codec:              sh.Codec,
+				WireBytesPerSecond: sh.WireBytesPerSecond,
+				Packets:            sh.Packets,
+				SeqGaps:            sh.SeqGaps,
+				Duplicates:         sh.Duplicates,
+				Malformed:          sh.Malformed,
+				SSRCResets:         sh.SSRCResets,
 			})
 		}
 		return infos

@@ -24,6 +24,14 @@ type StreamMetrics interface {
 
 	// RecordDataRate records the current data rate (bytes per second) for a stream.
 	RecordDataRate(sourceID string, bytesPerSec float64)
+
+	// RecordWireRate records the current wire data rate (bytes per second) for a
+	// stream, distinct from the decoded-PCM RecordDataRate. Native ingest only.
+	RecordWireRate(sourceID string, bytesPerSec float64)
+
+	// SetStreamEngine records which ingest producer ("native"/"ffmpeg") is serving
+	// a stream.
+	SetStreamEngine(sourceID, engine string)
 }
 
 // BufferMetrics tracks buffer pool allocation, usage, and performance metrics.

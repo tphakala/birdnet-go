@@ -70,6 +70,7 @@ type stream struct {
 	stateDetail      string
 	stateEntered     time.Time
 	recovery         audiocore.RecoveryState
+	recoveryEntered  time.Time
 	lastData         time.Time
 	totalBytes       int64
 	restartCount     int
@@ -80,6 +81,14 @@ type stream struct {
 	errorHistory     []*audiocore.StreamErrorContext
 	stateHistory     []audiocore.StateTransition
 	audioOnlyStreak  int
+
+	// Wire/payload byte-rate bookkeeping for the observability snapshot, computed
+	// from cumulative session-stats deltas. Guarded by mu.
+	lastStatsAt time.Time
+	lastWire    uint64
+	lastPayload uint64
+	wireRate    float64
+	payloadRate float64
 }
 
 // newStream builds a stream and its supervisor. The supervisor begins connecting
@@ -107,6 +116,7 @@ func newStream(spec *audiocore.StreamSpec, opts *Options, deliver dispatchFunc, 
 		stateDetail:      detailStarting,
 		stateEntered:     time.Now(),
 		recovery:         audiocore.RecoveryInProgress,
+		recoveryEntered:  time.Now(),
 	}
 
 	var pool bytePool
@@ -125,7 +135,11 @@ func newStream(spec *audiocore.StreamSpec, opts *Options, deliver dispatchFunc, 
 		Backoff:   opts.Backoff,
 		OnState:   s.onState,
 		Retryable: s.retryable,
+		Logger:    debugSlog(spec.Debug, log),
 	})
+	if opts.Metrics != nil {
+		opts.Metrics.SetStreamEngine(spec.SourceID, audiocore.EngineNative)
+	}
 	return s
 }
 
@@ -173,6 +187,13 @@ func (s *stream) onState(sc supervisor.StateChange) {
 	s.state = state
 	s.stateDetail = detail
 	s.stateEntered = time.Now()
+	// recoveryEntered advances only when the recovery intent itself changes, not on
+	// every transition: the supervisor cycles Connecting<->Reconnecting (both
+	// RecoveryInProgress) during one outage, and the liveness watchdog measures how
+	// long recovery has been continuously in progress against its ceiling.
+	if s.recovery != recovery {
+		s.recoveryEntered = time.Now()
+	}
 	s.recovery = recovery
 
 	switch sc.State {
@@ -276,19 +297,28 @@ func (s *stream) recordError(err error) {
 // fields against the current time. The returned slices are freshly copied so the
 // caller may read them without holding the lock.
 func (s *stream) snapshot() *audiocore.StreamHealth {
+	// Read the live session stats and codec geometry OUTSIDE s.mu: the supervisor
+	// may invoke onState (which takes s.mu) while holding its own lock, so calling
+	// s.sup.Stats() under s.mu would risk a lock-order inversion.
+	stats := s.sup.Stats()
+	codec, srcRate, _ := s.pl.codecInfo()
+	agg := aggregateTrackStats(stats)
+
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	now := time.Now()
 	receiving := !s.lastData.IsZero() && now.Sub(s.lastData) < receivingDataThreshold
 	healthy := s.state == audiocore.StreamStateConnected &&
 		!s.lastData.IsZero() && now.Sub(s.lastData) < s.healthyThreshold
 
+	recomputed := s.updateWireRates(stats.CapturedAt, agg.wire, agg.payload)
+
 	h := &audiocore.StreamHealth{
 		State:              s.state,
 		StateDetail:        s.stateDetail,
 		StateEntered:       s.stateEntered,
 		Recovery:           s.recovery,
+		RecoveryEntered:    s.recoveryEntered,
 		IsHealthy:          healthy,
 		LastDataReceived:   s.lastData,
 		RestartCount:       s.restartCount,
@@ -298,10 +328,79 @@ func (s *stream) snapshot() *audiocore.StreamHealth {
 		IsReceivingData:    receiving,
 		LastErrorContext:   s.lastErrCtx,
 		SourceChannels:     s.spec.SourceChannels,
+
+		Engine:                audiocore.EngineNative,
+		Codec:                 codec,
+		SourceSampleRate:      srcRate,
+		Transport:             s.spec.Transport,
+		WireBytesPerSecond:    s.wireRate,
+		PayloadBytesPerSecond: s.payloadRate,
+		Packets:               agg.packets,
+		SeqGaps:               agg.seqGaps,
+		Duplicates:            agg.duplicates,
+		Malformed:             agg.malformed,
+		SSRCResets:            agg.ssrcResets,
+		LastFrameAt:           agg.lastFrameAt,
+		SenderClockValid:      agg.senderClockValid,
+		SenderClockAge:        agg.senderClockAge,
+		ReconnectAttempt:      s.reconnectAttempt,
+		NextRetryIn:           s.nextRetryIn,
 	}
 	h.StateHistory = slices.Clone(s.stateHistory)
 	h.ErrorHistory = slices.Clone(s.errorHistory)
+	wireRate := s.wireRate
+	s.mu.Unlock()
+
+	// Emit the wire rate outside s.mu, matching onDeliver's RecordDataRate, so a
+	// metrics implementation that calls back into the stream cannot deadlock.
+	// The wire rate is sampled at health-read cadence (its API/dump consumer);
+	// continuous emission would need a dedicated sampler.
+	if recomputed && s.opts.Metrics != nil {
+		s.opts.Metrics.RecordWireRate(s.spec.SourceID, wireRate)
+	}
 	return h
+}
+
+// minWireRateInterval smooths the wire/payload rate against health-poll cadence:
+// the rate is recomputed only when at least this much has elapsed since the last
+// sample, so back-to-back snapshots do not divide by a tiny interval.
+const minWireRateInterval = 1 * time.Second
+
+// updateWireRates recomputes the wire and payload byte rates from cumulative
+// session-stats deltas and reports whether it recomputed this call (so the
+// caller can emit the rate to metrics OUTSIDE the lock). The caller holds mu.
+func (s *stream) updateWireRates(capturedAt time.Time, wire, payload uint64) bool {
+	// A zero capture time (no live session yet) carries no usable delta; ignore it
+	// so it never becomes a stale baseline that a later valid sample measures a
+	// negative interval against. Mirrors the guard in aggregateTrackStats.
+	if capturedAt.IsZero() {
+		return false
+	}
+	if s.lastStatsAt.IsZero() {
+		s.lastStatsAt = capturedAt
+		s.lastWire = wire
+		s.lastPayload = payload
+		return false
+	}
+	dt := capturedAt.Sub(s.lastStatsAt).Seconds()
+	if dt < minWireRateInterval.Seconds() {
+		return false
+	}
+	s.wireRate = deltaRate(wire, s.lastWire, dt)
+	s.payloadRate = deltaRate(payload, s.lastPayload, dt)
+	s.lastStatsAt = capturedAt
+	s.lastWire = wire
+	s.lastPayload = payload
+	return true
+}
+
+// deltaRate returns (cur-prev)/dt, guarding a counter reset (cur<prev) or a
+// non-positive interval as a zero rate.
+func deltaRate(cur, prev uint64, dt float64) float64 {
+	if cur < prev || dt <= 0 {
+		return 0
+	}
+	return float64(cur-prev) / dt
 }
 
 // close stops the supervisor, waits for it to fully stop so no reader goroutine
