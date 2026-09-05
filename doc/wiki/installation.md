@@ -92,7 +92,7 @@ If you installed BirdNET-Go using the `install.sh` script, updating is straightf
 
 ## Troubleshooting `install.sh`
 
-The installer runs a series of preflight checks and stops with a clear message if one fails. The most common failures, and how to fix them, are below. Every step is also written to the install log (the path is printed at the start of the run), so check the log if you need more detail.
+The installer runs a series of preflight checks and stops with a clear message if one fails. The most common failures, and how to fix them, are below. Every step is also written to a timestamped install log at `~/birdnet-go-app/data/logs/install-<timestamp>.log`, so open the newest file there if you need more detail.
 
 ### `This script requires systemd as the init system`
 
@@ -100,14 +100,14 @@ The installer runs a series of preflight checks and stops with a clear message i
 
 On WSL, enable systemd once and restart the distribution:
 
-1.  Edit (or create) `/etc/wsl.conf` inside your WSL distribution:
+1.  Edit `/etc/wsl.conf` inside your WSL distribution (create it if it does not exist), for example with `sudo nano /etc/wsl.conf`. Make sure it contains:
 
-    ```bash
-    sudo tee /etc/wsl.conf > /dev/null <<'EOF'
+    ```ini
     [boot]
     systemd=true
-    EOF
     ```
+
+    If the file already has content, do not overwrite it: keep the existing sections and just add the `[boot]` section, or add `systemd=true` under an existing `[boot]` section.
 
 2.  From a **Windows** PowerShell or Command Prompt, fully restart WSL:
 
@@ -225,13 +225,19 @@ docker run -ti --rm \\
 
 ## Manual Binary Installation (All platforms)
 
-This method does not use Docker but requires manual dependency installation.
+This method does not use Docker. The release archive bundles the machine learning libraries, so a minimal run needs no extra downloads; you only install the optional tools (FFmpeg, SoX, `libasound2`) for the features that use them, and you manage the process yourself.
 
 1.  **Download Binary:** Go to the [BirdNET-Go Releases page](https://github.com/tphakala/birdnet-go/releases) and download the pre-compiled archive for your operating system (Linux, macOS, Windows) and architecture.
 2.  **Machine learning libraries are bundled:** The release archive already includes the TensorFlow Lite C library and the ONNX Runtime library next to the executable (`tensorflowlite_c.dll` and `onnxruntime.dll` on Windows, `libtensorflowlite_c.so`/`libonnxruntime.so` on Linux, `libtensorflowlite_c.dylib`/`libonnxruntime.dylib` on macOS). Each archive contains a `README.md` with the exact per-platform steps; in short:
     - **Windows:** Keep the `.dll` files in the same folder as `birdnet-go.exe`. Windows loads them from the application directory automatically, so no further setup is needed.
     - **Linux:** Copy the `.so` files to a directory on the library search path and refresh the linker cache (`sudo cp libtensorflowlite_c.so libonnxruntime.so /usr/local/lib/ && sudo ldconfig`), or, without root, run the binary from the extracted folder with `LD_LIBRARY_PATH="$(pwd):$LD_LIBRARY_PATH"`.
-    - **macOS:** Copy the `.dylib` files to `/usr/local/lib/` (the dynamic linker searches it by default), and clear the Gatekeeper quarantine attribute with `xattr -d com.apple.quarantine` on the binary and the libraries.
+    - **macOS:** Copy the `.dylib` files to `/usr/local/lib/` (the dynamic linker searches it by default), then clear the Gatekeeper quarantine attribute from the binary and both libraries, naming each path explicitly:
+
+      ```bash
+      xattr -d com.apple.quarantine birdnet-go
+      xattr -d com.apple.quarantine /usr/local/lib/libtensorflowlite_c.dylib
+      xattr -d com.apple.quarantine /usr/local/lib/libonnxruntime.dylib
+      ```
 
     You only need to download the library separately (from [tphakala/tflite_c Releases](https://github.com/tphakala/tflite_c/releases), `v2.17.1` or newer for XNNPACK support) if you build BirdNET-Go from source rather than using a release archive. See the [ONNX Runtime Installation Guide](onnx-runtime-installation.md) if you need to install ONNX Runtime manually.
 
@@ -239,7 +245,7 @@ This method does not use Docker but requires manual dependency installation.
     - **FFmpeg:** Required for RTSP stream capture and on-demand clip transcoding in the web interface. WAV, FLAC and Opus are encoded natively and do not need FFmpeg. AAC and MP3 export use FFmpeg by default, but each has a native encoder available as an opt-in preview via the `BIRDNET_AAC_ENCODER=native` and `BIRDNET_MP3_ENCODER=native` environment variables. The [Live Audio Streaming](guide.md#live-audio-streaming) feature is now encoded natively and no longer uses FFmpeg at all. Loudness normalization of saved clips is done natively for every format and no longer needs FFmpeg. Install using your system's package manager (e.g., `sudo apt install ffmpeg` on Debian/Ubuntu, `brew install ffmpeg` on macOS, or download a build from [ffmpeg.org](https://ffmpeg.org/download.html) on Windows).
     - **SoX:** Required for rendering spectrograms in the web interface. Install using your system's package manager (e.g., `sudo apt install sox` on Debian/Ubuntu, `brew install sox` on macOS, or download from the [SoX project](https://sourceforge.net/projects/sox/) on Windows).
     - **libasound2 (Linux only):** Required for microphone audio capture. Install with `sudo apt install libasound2-dev` on Debian/Ubuntu.
-4.  **Place Executable:** Put the `birdnet-go` binary wherever you want to run it. If you did not install the libraries to a system path in step 2, keep the bundled libraries in the same folder as the binary (this is the required setup on Windows).
+4.  **Place Executable:** Put the `birdnet-go` binary wherever you want to run it. On **Windows**, keep the bundled `.dll` files in that same folder (Windows loads them from the application directory). On **Linux** and **macOS**, placing the libraries next to the binary is not enough on its own, because the dynamic linker does not search the application directory by default; make them findable using the system-path or `LD_LIBRARY_PATH` approach from step 2.
 5.  **Run BirdNET-Go:** Open a terminal or command prompt, navigate to the directory containing the `birdnet-go` executable, and run it (e.g., `./birdnet-go` on Linux/macOS, or double-click `birdnet-go.exe` on Windows).
 6.  **Configuration:** On the first run, BirdNET-Go will create a default `config.yaml` file. Edit this file according to your needs. See the [Configuration](guide.md#configuration) section in the Wiki for details and default file locations per OS.
 7.  **Process Management:** You are responsible for managing the BirdNET-Go process (running it in the background, ensuring it restarts on boot, etc.) using tools like `systemd`, `supervisor`, `screen`, or Task Scheduler (Windows).
