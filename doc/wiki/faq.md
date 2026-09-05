@@ -28,6 +28,12 @@ The app opened a fresh, empty database instead of your real one. Your old detect
 
 No. `install.sh` supports Debian, Ubuntu, and Raspberry Pi OS only. Use a manual binary install on macOS (see the [Installation Guide](installation.md)).
 
+### install.sh fails on WSL ("requires systemd" or "Docker cannot be accessed")
+
+Two things trip people up under WSL. First, the installer manages BirdNET-Go as a systemd service, so systemd has to be the init system (PID 1). Enable it by adding a `[boot]` section with `systemd=true` to `/etc/wsl.conf`, then run `wsl --shutdown` from Windows and reopen the distro. Second, "Docker cannot be accessed by user" means the `docker info` check failed, usually because your user isn't in the `docker` group yet (group changes need a fresh login, and on WSL that means another `wsl --shutdown`) or the Docker service isn't running (`sudo systemctl enable --now docker`). The full step-by-step is in [Troubleshooting install.sh](installation.md#troubleshooting-installsh).
+
+Worth knowing: BirdNET-Go also runs natively on Windows with no Docker and no WSL, so if WSL is more hassle than it's worth, just download the Windows archive from the [releases page](https://github.com/tphakala/birdnet-go/releases) and run `birdnet-go.exe`.
+
 ### I installed as root. How do I move to a normal user without losing data?
 
 Run `install.sh` as your normal user; it detects the root install and offers to migrate it automatically. After migrating, the old `/root/birdnet-go-app` is left in place so you can verify, which makes the installer keep re-offering migration. Once you have confirmed everything works, remove it:
