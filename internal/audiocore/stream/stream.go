@@ -53,6 +53,10 @@ type stream struct {
 
 	targetHost string
 	targetPort int
+	// healthyThreshold is the resolved per-source "no data before unhealthy"
+	// window: spec.HealthyDataThreshold when set, else healthyDataThreshold,
+	// mirroring the FFmpeg producer's StreamConfig.healthyThreshold().
+	healthyThreshold time.Duration
 
 	// deliveredSession is set by the reader goroutine when a frame is dispatched
 	// and cleared in the RTSP factory at each session start (before routing
@@ -87,17 +91,22 @@ func newStream(spec *audiocore.StreamSpec, opts *Options, deliver dispatchFunc, 
 		log = audiocore.GetLogger()
 	}
 	host, port := parseHostPort(spec.URL)
+	healthyThreshold := spec.HealthyDataThreshold
+	if healthyThreshold <= 0 {
+		healthyThreshold = healthyDataThreshold
+	}
 	s := &stream{
-		spec:         spec,
-		opts:         opts,
-		log:          log,
-		rateMeter:    audiocore.NewDataRateMeter(dataRateWindow),
-		targetHost:   host,
-		targetPort:   port,
-		state:        audiocore.StreamStateStarting,
-		stateDetail:  detailStarting,
-		stateEntered: time.Now(),
-		recovery:     audiocore.RecoveryInProgress,
+		spec:             spec,
+		opts:             opts,
+		log:              log,
+		rateMeter:        audiocore.NewDataRateMeter(dataRateWindow),
+		targetHost:       host,
+		targetPort:       port,
+		healthyThreshold: healthyThreshold,
+		state:            audiocore.StreamStateStarting,
+		stateDetail:      detailStarting,
+		stateEntered:     time.Now(),
+		recovery:         audiocore.RecoveryInProgress,
 	}
 
 	var pool bytePool
@@ -273,7 +282,7 @@ func (s *stream) snapshot() *audiocore.StreamHealth {
 	now := time.Now()
 	receiving := !s.lastData.IsZero() && now.Sub(s.lastData) < receivingDataThreshold
 	healthy := s.state == audiocore.StreamStateConnected &&
-		!s.lastData.IsZero() && now.Sub(s.lastData) < healthyDataThreshold
+		!s.lastData.IsZero() && now.Sub(s.lastData) < s.healthyThreshold
 
 	h := &audiocore.StreamHealth{
 		State:              s.state,

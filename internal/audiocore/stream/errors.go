@@ -4,8 +4,9 @@ import "github.com/tphakala/birdnet-go/internal/errors"
 
 // Sentinel errors for the native ingest path. They are terminal (non-retryable)
 // causes: the Retryable policy in stream.go marks them so the supervisor stops
-// rather than reconnecting into the same failure, and the liveness watchdog sees
-// RecoveryGivenUp and escalates once.
+// rather than reconnecting into the same failure, and the health snapshot then
+// reports RecoveryGivenUp (which a liveness watchdog can consult once the
+// watchdog-side coordination lands; it is not wired yet).
 
 // ErrNoAudioTrack is returned when a negotiated session exposes no decodable
 // audio track. A fresh connection will not grow one, so it is terminal. It maps

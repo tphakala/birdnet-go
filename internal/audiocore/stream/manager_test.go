@@ -64,10 +64,11 @@ func TestManager_StreamHealth_unknownErrors(t *testing.T) {
 }
 
 func TestManager_lifecycle_tracksHealthAndShutsDownCleanly(t *testing.T) {
-	defer goleak.VerifyNone(t,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-	)
+	// Snapshot the goroutines that exist before the test (deferred args evaluate
+	// now, at the defer statement), so the check flags only NEW goroutines such
+	// as a leaked supervisor or reader, rather than filtering by top-of-stack
+	// function, which can hide a parked leaked goroutine.
+	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
 	m := NewManager(t.Context(), func(audiocore.AudioFrame) {}, nil, nil, nil, nil)
 
 	require.NoError(t, m.StartStream(rtspSpec("s1")))

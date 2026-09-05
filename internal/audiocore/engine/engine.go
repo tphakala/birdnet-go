@@ -174,9 +174,7 @@ func New(ctx context.Context, cfg *Config, scheduler *schedule.QuietHoursSchedul
 	dispatch := func(frame audiocore.AudioFrame) { router.Dispatch(frame) }
 	var streamMgr audiocore.StreamManager
 	if conf.NativeStreamIngestEnabled() {
-		streamMgr = stream.NewManager(engineCtx, dispatch, nil, log, bufMgr, &stream.Options{
-			Debug: cfg.Debug,
-		})
+		streamMgr = stream.NewManager(engineCtx, dispatch, nil, log, bufMgr, &stream.Options{})
 		log.Info("network stream ingest using native go-audio-stream path",
 			logger.String("ingest_engine", "native"))
 	} else {

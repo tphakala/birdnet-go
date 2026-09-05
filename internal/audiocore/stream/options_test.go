@@ -27,7 +27,6 @@ func TestOptions_applyDefaults_fillsZeroFields(t *testing.T) {
 func TestOptions_applyDefaults_preservesExplicitValues(t *testing.T) {
 	strict := false
 	in := Options{
-		Debug:       true,
 		ReadIdle:    5 * time.Second,
 		ChunkBytes:  8192,
 		InsecureTLS: &strict,
@@ -35,7 +34,6 @@ func TestOptions_applyDefaults_preservesExplicitValues(t *testing.T) {
 	in.Backoff.Base = 250 * time.Millisecond
 	in.applyDefaults()
 
-	assert.True(t, in.Debug, "Debug preserved")
 	assert.Equal(t, 5*time.Second, in.ReadIdle, "explicit ReadIdle preserved")
 	assert.Equal(t, 8192, in.ChunkBytes, "explicit ChunkBytes preserved")
 	assert.Equal(t, 250*time.Millisecond, in.Backoff.Base, "explicit Backoff.Base preserved")

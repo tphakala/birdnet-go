@@ -37,9 +37,6 @@ const (
 // zero Options passed to NewManager is filled by applyDefaults. Producer-neutral
 // per-stream settings live on audiocore.StreamSpec, not here.
 type Options struct {
-	// Debug enables verbose debug logging for stream capture.
-	Debug bool
-
 	// AllowInsecureAuth permits plaintext-credential auth on http and hls
 	// sources. It has no effect on RTSP (challenge-response auth) and is unused
 	// until Phase 3 adds those source types.

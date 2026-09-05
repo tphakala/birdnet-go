@@ -13,8 +13,10 @@
 // PCM kinds passed through), downmixing to mono, resampling to the analysis
 // sample rate, chunking, and dispatching audiocore.AudioFrames into the router.
 // It also maps the supervisor's connection lifecycle onto the neutral
-// audiocore.StreamHealth model and coordinates with the liveness watchdog so an
-// ordinary supervised reconnect never triggers a full source teardown.
+// audiocore.StreamHealth model, including a RecoveryState that a liveness
+// watchdog can consult. The watchdog-side coordination that lets an ordinary
+// supervised reconnect avoid a full source teardown is a planned follow-up; it
+// is not wired yet.
 //
 // # Goroutine model
 //
