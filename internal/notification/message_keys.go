@@ -39,6 +39,7 @@ const (
 	MsgSettingsReconfiguringStreams           = "notifications.content.settings.reconfiguringStreams"
 	MsgSettingsReconfiguringTelemetry         = "notifications.content.settings.reconfiguringTelemetry"
 	MsgSettingsReconfiguringSpeciesTracking   = "notifications.content.settings.reconfiguringSpeciesTracking"
+	MsgSettingsReconfiguringSpeciesGuide      = "notifications.content.settings.reconfiguringSpeciesGuide"
 	MsgSettingsReconfiguringPushNotifications = "notifications.content.settings.reconfiguringPushNotifications"
 	MsgSettingsReconfiguringDynamicThresholds = "notifications.content.settings.reconfiguringDynamicThresholds"
 	MsgSettingsWebserverRestart               = "notifications.content.settings.webserverRestartRequired"
@@ -153,6 +154,9 @@ const (
 	MsgErrNotifHostRequired       = "errors.notification.hostRequired"
 	MsgErrNotifInvalidHost        = "errors.notification.invalidHost"
 	MsgErrNotifRateLimit          = "errors.notification.rateLimit"
+
+	// Species guide errors
+	MsgErrSpeciesGuideRateLimit = "errors.speciesGuide.rateLimit"
 
 	// Debug errors
 	MsgErrDebugNotEnabled = "errors.debug.notEnabled"

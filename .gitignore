@@ -68,5 +68,9 @@ __pycache__/
 # they must never be committed. See the drafting-release-changelog skill.
 RELEASE_NOTES_DRAFT.md
 
+# gstack local tooling state (auth token, PID/port, browse audit log).
+# Never commit: .gstack/terminal-internal-token is a credential.
+.gstack/
+
 # Compiled Go test binaries (`go test -c`), which are easy to sweep in with `git add -A`
 *.test

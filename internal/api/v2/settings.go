@@ -2448,6 +2448,14 @@ const (
 // atomic stores that cannot fail and so need neither the controlChan queue nor
 // a toast. Anyone adding a diagnostics setting will look here first, hence this
 // pointer; the reasoning is at that call site.
+// SignalReconfigureSpeciesGuide is the control-channel signal that rebuilds and
+// swaps the species guide cache. It is emitted here and consumed by the analysis
+// control monitor, which imports this package; sharing the constant is what stops
+// a typo in either half from silently disabling species-guide hot-reload. This
+// mirrors schedule.SignalReconfigureQuietHours below, where the emitting package
+// likewise owns the name.
+const SignalReconfigureSpeciesGuide = "reconfigure_species_guide"
+
 var settingsChangeChecks = []settingsChangeCheck{
 	{"BirdNET", "reload_birdnet", birdnetSettingsChanged, "Reloading BirdNET model with new settings...", notification.MsgSettingsReloadingBirdnet, ToastTypeInfo, toastDurationLong},
 	{"Analysis overlap", actionRestartAudioCapture, analysisOverlapChanged, "Restarting audio capture to apply new overlap...", "", ToastTypeInfo, toastDurationMedium},
@@ -2460,6 +2468,7 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"Streams", "reconfigure_rtsp_sources", streamsSettingsChanged, "Reconfiguring audio streams...", notification.MsgSettingsReconfiguringStreams, ToastTypeInfo, toastDurationMedium},
 	{"Telemetry", "reconfigure_telemetry", telemetrySettingsChanged, "Reconfiguring telemetry settings...", notification.MsgSettingsReconfiguringTelemetry, ToastTypeInfo, toastDurationShort},
 	{"Species tracking", "reconfigure_species_tracking", speciesTrackingSettingsChanged, "Reconfiguring species tracking...", notification.MsgSettingsReconfiguringSpeciesTracking, ToastTypeInfo, toastDurationShort},
+	{"Species guide", SignalReconfigureSpeciesGuide, speciesGuideSettingsChanged, "Reconfiguring species guide...", notification.MsgSettingsReconfiguringSpeciesGuide, ToastTypeInfo, toastDurationShort},
 	{"Push notifications", "reconfigure_push_notifications", pushNotificationSettingsChanged, "Reconfiguring push notification providers...", notification.MsgSettingsReconfiguringPushNotifications, ToastTypeInfo, toastDurationMedium},
 	{"Quiet hours", schedule.SignalReconfigureQuietHours, quietHoursSettingsChanged, "Updating quiet hours schedule...", "", ToastTypeInfo, toastDurationShort},
 	{"Web server", "", webserverSettingsChanged, "Web server settings changed. Restart required to apply.", notification.MsgSettingsWebserverRestart, ToastTypeWarning, toastDurationExtended},
@@ -2982,6 +2991,49 @@ func seasonalTrackingChanged(old, current conf.SeasonalTrackingSettings) bool {
 		}
 	}
 	return false
+}
+
+// speciesGuideSettingsChanged reports whether a species guide setting changed in a
+// way that requires REBUILDING the guide cache, so the settings handler can emit the
+// reconfigure_species_guide hot-reload signal.
+//
+// Only settings that affect the cache itself qualify. The Show* flags and
+// EnableSupplementaryLinks are response-shaping only: requireGuideFeature re-reads
+// them from the settings snapshot on every request, which is the per-request check
+// the project's hot-reload rule asks for, so they already take effect immediately.
+// Signalling on them anyway cost a full teardown and rebuild — a fresh AutoMigrate,
+// a DB pre-load, a discarded HTTP connection pool and a re-run of the top-N ranking
+// query over the whole detection history — on the control-monitor goroutine that
+// every other reconfigure signal queues behind, every time someone toggled a
+// checkbox. It also briefly ran two live caches against the same table, because the
+// outgoing one is only retired once the replacement has been built and swapped in.
+func speciesGuideSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	o := oldSettings.Realtime.Dashboard.SpeciesGuide
+	n := currentSettings.Realtime.Dashboard.SpeciesGuide
+
+	// A toggle of the feature itself always requires reconfiguration.
+	if o.Enabled != n.Enabled {
+		return true
+	}
+	// If it was and remains disabled, nothing else matters.
+	if !n.Enabled {
+		return false
+	}
+	// The dashboard locale is not a speciesguide field, but the cache captures it at
+	// construction (SetWarmLocale) and treats it as immutable for its lifetime, so a
+	// locale change only reaches warming and pre-fetch by way of a rebuild. Without
+	// this, switching the dashboard language leaves every pre-fetch writing the old
+	// locale's cache key while the UI requests the new one — a guaranteed miss and a
+	// live fetch for exactly the species pre-fetch was supposed to have warmed.
+	if oldSettings.Realtime.Dashboard.Locale != currentSettings.Realtime.Dashboard.Locale {
+		return true
+	}
+
+	// EnableWikipedia changes the registered provider set (and therefore the cache
+	// key); WarmTopN and PreFetchEnabled are captured by the cache at construction.
+	return o.EnableWikipedia != n.EnableWikipedia ||
+		o.WarmTopN != n.WarmTopN ||
+		o.PreFetchEnabled != n.PreFetchEnabled
 }
 
 // speciesTrackingSettingsChanged checks if species tracking settings have changed

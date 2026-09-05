@@ -146,6 +146,46 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	// -- Dashboard (display only, read per-request by frontend) --
 	"Realtime.Dashboard": {categories: []hotReloadCategory{hotReloadDisplay}},
 
+	// The dashboard locale is display-only for the frontend, but the guide cache
+	// captures it at construction (SetWarmLocale) and treats it as immutable, so a
+	// locale change reaches warming and pre-fetch only via a rebuild. Declared here
+	// so the coverage test can actually catch that trigger being dropped —
+	// previously only the SpeciesGuide subtree carried the action, and the locale
+	// comparison in speciesGuideSettingsChanged could have been refactored away with
+	// nothing failing.
+	"Realtime.Dashboard.Locale": {
+		categories: []hotReloadCategory{hotReloadDisplay, hotReloadFresh},
+		action:     "reconfigure_species_guide",
+	},
+
+	// SpeciesGuide splits by whether a setting affects the CACHE or only the
+	// response shape. Only the former emits reconfigure_species_guide; declaring the
+	// whole subtree as actionable would over-claim, because speciesGuideSettingsChanged
+	// deliberately does not signal for the Show* flags.
+	"Realtime.Dashboard.SpeciesGuide.Enabled": {
+		categories: []hotReloadCategory{hotReloadFresh},
+		action:     "reconfigure_species_guide",
+	},
+	"Realtime.Dashboard.SpeciesGuide.EnableWikipedia": {
+		categories: []hotReloadCategory{hotReloadFresh},
+		action:     "reconfigure_species_guide",
+	},
+	"Realtime.Dashboard.SpeciesGuide.WarmTopN": {
+		categories: []hotReloadCategory{hotReloadFresh},
+		action:     "reconfigure_species_guide",
+	},
+	"Realtime.Dashboard.SpeciesGuide.PreFetchEnabled": {
+		categories: []hotReloadCategory{hotReloadFresh},
+		action:     "reconfigure_species_guide",
+	},
+	// Read per request by requireGuideFeature, so they take effect immediately with
+	// no control signal and no cache rebuild. No action is the correct declaration.
+	"Realtime.Dashboard.SpeciesGuide.ShowNotes":                {categories: []hotReloadCategory{hotReloadFresh}},
+	"Realtime.Dashboard.SpeciesGuide.ShowEnrichments":          {categories: []hotReloadCategory{hotReloadFresh}},
+	"Realtime.Dashboard.SpeciesGuide.ShowSimilarSpecies":       {categories: []hotReloadCategory{hotReloadFresh}},
+	"Realtime.Dashboard.SpeciesGuide.ShowTaxonomy":             {categories: []hotReloadCategory{hotReloadFresh}},
+	"Realtime.Dashboard.SpeciesGuide.EnableSupplementaryLinks": {categories: []hotReloadCategory{hotReloadFresh}},
+
 	// -- DynamicThreshold --
 	"Realtime.DynamicThreshold.Enabled": {
 		categories: []hotReloadCategory{hotReloadFresh},
