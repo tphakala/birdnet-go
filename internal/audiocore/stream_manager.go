@@ -6,7 +6,7 @@ import (
 )
 
 // StreamManager is the contract the engine drives network stream producers
-// through. It is implemented by ffmpeg.Manager today and by nativestream.Manager
+// through. It is implemented by ffmpeg.Manager today and by stream.Manager
 // later, so both producers satisfy the same surface without importing the
 // engine. It is distinct from schedule.StreamManager, which is the engine-level
 // stop/start surface the quiet-hours scheduler uses.

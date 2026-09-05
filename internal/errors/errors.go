@@ -396,6 +396,7 @@ func init() {
 	RegisterComponent("myaudio", "myaudio")
 	RegisterComponent("ffmpeg-manager", "ffmpeg-manager")
 	RegisterComponent("ffmpeg-stream", "ffmpeg-stream")
+	RegisterComponent("audiocore/stream.", "native-stream")
 	RegisterComponent("datastore", "datastore")
 	RegisterComponent("imageprovider", "imageprovider")
 	RegisterComponent("diskmanager", "diskmanager")

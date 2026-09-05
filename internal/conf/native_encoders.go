@@ -1,10 +1,5 @@
 package conf
 
-import (
-	"os"
-	"strings"
-)
-
 // Temporary runtime opt-in for the native Go AAC and MP3 encoders.
 //
 // AAC and MP3 clip export still run through FFmpeg by default. Setting
@@ -41,29 +36,12 @@ const (
 
 	// EnvNativeMP3Encoder selects the native MP3 encoder for .mp3 clip export.
 	EnvNativeMP3Encoder = "BIRDNET_MP3_ENCODER"
-
-	// nativeEncoderValue is the only value that enables a native encoder.
-	// Anything else, including an unset variable, keeps the FFmpeg path.
-	nativeEncoderValue = "native"
 )
 
 // NativeAACEncoderEnabled reports whether AAC clip export should use the native
 // encoder.
-func NativeAACEncoderEnabled() bool { return nativeEncoderSelected(EnvNativeAACEncoder) }
+func NativeAACEncoderEnabled() bool { return nativeSelected(EnvNativeAACEncoder) }
 
 // NativeMP3EncoderEnabled reports whether MP3 clip export should use the native
 // encoder.
-func NativeMP3EncoderEnabled() bool { return nativeEncoderSelected(EnvNativeMP3Encoder) }
-
-// nativeEncoderSelected reads env and reports whether it opts into the native
-// encoder. Matching is case-insensitive and tolerates surrounding whitespace,
-// because these are hand-edited in compose files and systemd unit drop-ins where
-// a stray space is easy to introduce and hard to spot.
-//
-// The value is read per call rather than cached at startup. A clip export
-// happens once per detection, so the lookup cost is irrelevant, and reading it
-// live keeps the gate consistent with the rest of BirdNET-Go's settings, which
-// take effect without a restart.
-func nativeEncoderSelected(env string) bool {
-	return strings.EqualFold(strings.TrimSpace(os.Getenv(env)), nativeEncoderValue)
-}
+func NativeMP3EncoderEnabled() bool { return nativeSelected(EnvNativeMP3Encoder) }

@@ -38,8 +38,9 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/mysql v0.44.0
-	github.com/tphakala/go-aac v0.6.1
+	github.com/tphakala/go-aac v0.7.0
 	github.com/tphakala/go-audio-resampler v1.7.0
+	github.com/tphakala/go-audio-stream v0.4.0
 	github.com/tphakala/go-flac v1.1.0
 	github.com/tphakala/go-hls v0.1.0
 	github.com/tphakala/go-m4a v0.4.0

@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
+	"github.com/tphakala/birdnet-go/internal/audiocore/stream"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -165,16 +166,26 @@ func New(ctx context.Context, cfg *Config, scheduler *schedule.QuietHoursSchedul
 	// allocating per-frame. The router Retain/Release path keeps pooled
 	// buffers alive across fan-out subscribers.
 	// The engine drives its network stream producer through the
-	// audiocore.StreamManager seam. The manager-level FFmpeg settings (binary
-	// path, extra parameters, log level) are handed to the manager once here
-	// rather than repeated on every StreamSpec.
-	var streamMgr audiocore.StreamManager = ffmpeg.NewManagerWithOptions(engineCtx, func(frame audiocore.AudioFrame) {
-		router.Dispatch(frame)
-	}, nil, log, bufMgr, ffmpeg.Options{
-		FFmpegPath:       cfg.FFmpegPath,
-		FFmpegParameters: cfg.FFmpegParameters,
-		LogLevel:         cfg.LogLevel,
-	})
+	// audiocore.StreamManager seam, selected at construction by the
+	// BIRDNET_STREAM_INGEST gate. FFmpeg is the default; the value "native"
+	// switches to the pure-Go go-audio-stream producer. Manager-level settings
+	// are handed to the chosen manager once here rather than repeated on every
+	// StreamSpec.
+	dispatch := func(frame audiocore.AudioFrame) { router.Dispatch(frame) }
+	var streamMgr audiocore.StreamManager
+	if conf.NativeStreamIngestEnabled() {
+		streamMgr = stream.NewManager(engineCtx, dispatch, nil, log, bufMgr, &stream.Options{
+			Debug: cfg.Debug,
+		})
+		log.Info("network stream ingest using native go-audio-stream path",
+			logger.String("ingest_engine", "native"))
+	} else {
+		streamMgr = ffmpeg.NewManagerWithOptions(engineCtx, dispatch, nil, log, bufMgr, ffmpeg.Options{
+			FFmpegPath:       cfg.FFmpegPath,
+			FFmpegParameters: cfg.FFmpegParameters,
+			LogLevel:         cfg.LogLevel,
+		})
+	}
 	deviceMgr := audiocore.NewDeviceManager(router, bufMgr, log)
 
 	// Probe all device capabilities at startup, before any capture begins.
