@@ -101,7 +101,7 @@ func NewManager(ctx context.Context, onFrame FrameCallback, onReset func(sourceI
 // starts. NewManager delegates here with a zero Options, so the two constructors
 // behave identically unless a non-zero option is supplied. See Options for the
 // available knobs.
-func NewManagerWithOptions(ctx context.Context, onFrame FrameCallback, onReset func(sourceID string), log logger.Logger, bufMgr *buffer.Manager, opts Options) *Manager {
+func NewManagerWithOptions(ctx context.Context, onFrame FrameCallback, onReset func(sourceID string), log logger.Logger, bufMgr *buffer.Manager, opts Options) *Manager { //nolint:gocritic // hugeParam: Options is a startup config struct passed once per manager; by-value keeps the call sites literal
 	if log == nil {
 		log = audiocore.GetLogger()
 	}
@@ -115,6 +115,7 @@ func NewManagerWithOptions(ctx context.Context, onFrame FrameCallback, onReset f
 		logger:         log,
 		bufMgr:         bufMgr,
 		opts:           opts,
+		metrics:        opts.Metrics,
 		lastForceReset: make(map[string]time.Time),
 	}
 }

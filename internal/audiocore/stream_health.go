@@ -295,6 +295,14 @@ func detailOrLegacyName(detail string, s StreamState) string {
 	return s.LegacyProcessName()
 }
 
+// Engine labels for StreamHealth.Engine, naming the ingest producer.
+const (
+	// EngineNative is the pure-Go go-audio-stream producer.
+	EngineNative = "native"
+	// EngineFFmpeg is the FFmpeg subprocess producer.
+	EngineFFmpeg = "ffmpeg"
+)
+
 // StreamHealth is the producer-neutral health snapshot for one network stream,
 // consumed by the health API and the support dump. State plus StateDetail carry
 // the connection state and the producer's sub-state; every other field matches
@@ -310,6 +318,12 @@ type StreamHealth struct {
 	StateEntered time.Time
 	// Recovery is the producer's recovery intent for the liveness watchdog.
 	Recovery RecoveryState
+	// RecoveryEntered is when the current Recovery value was entered. It advances
+	// only when Recovery changes, not on every state transition, so the liveness
+	// watchdog can measure how long a producer has been continuously recovering
+	// (bounded by LivenessConfig.ProducerRecoveryCeiling). Zero when the producer
+	// does not report recovery intent (FFmpeg).
+	RecoveryEntered time.Time
 
 	IsHealthy          bool
 	LastDataReceived   time.Time
@@ -322,6 +336,44 @@ type StreamHealth struct {
 	LastErrorContext   *StreamErrorContext
 	ErrorHistory       []*StreamErrorContext
 	SourceChannels     int
+
+	// Observability fields (additive). The native producer populates them from the
+	// go-audio-stream session stats; the FFmpeg producer leaves the RTP-specific
+	// values zero, so they omit from the API and support dump under the ffmpeg gate.
+
+	// Engine names the ingest producer ("native" or "ffmpeg").
+	Engine string
+	// Codec is the decoded source codec label (e.g. "aac-lc", "opus", "pcmu").
+	Codec string
+	// SourceSampleRate is the codec's native sample rate in Hz before resampling.
+	SourceSampleRate int
+	// Transport is the negotiated (or configured) stream transport (e.g. "tcp").
+	Transport string
+
+	// WireBytesPerSecond and PayloadBytesPerSecond are the wire and RTP-payload
+	// data rates from the session stats, distinct from BytesPerSecond (the decoded
+	// PCM rate).
+	WireBytesPerSecond    float64
+	PayloadBytesPerSecond float64
+
+	// Per-session RTP counters, summed across the tracks of the live session.
+	Packets    uint64
+	SeqGaps    uint64
+	Duplicates uint64
+	Malformed  uint64
+	SSRCResets uint64
+
+	// LastFrameAt is the wall-clock arrival of the most recent media frame.
+	LastFrameAt time.Time
+	// SenderClockValid reports whether an RTCP Sender Report has supplied a valid
+	// RTP-to-wall-clock mapping; SenderClockAge is how old that report is.
+	SenderClockValid bool
+	SenderClockAge   time.Duration
+
+	// ReconnectAttempt is the current reconnect attempt (0 while connected) and
+	// NextRetryIn is the backoff wait before the next attempt.
+	ReconnectAttempt int
+	NextRetryIn      time.Duration
 }
 
 // ProcessStateName returns the legacy process_state string for this snapshot:

@@ -66,6 +66,25 @@ type StreamHealthResponse struct {
 	ErrorHistory     []*ErrorContextResponse `json:"error_history,omitempty"`      // Recent errors (last 10)
 	// State history (for debugging state transitions)
 	StateHistory []StateTransitionResponse `json:"state_history,omitempty"` // Recent state transitions
+	// Observability (native ingest). FFmpeg populates Engine and Transport and
+	// leaves the RTP-specific fields zero so they omit from the response.
+	Engine                string    `json:"engine,omitempty"`                   // Ingest producer: "native" or "ffmpeg"
+	Recovery              string    `json:"recovery,omitempty"`                 // Producer recovery intent (native): idle, in_progress, given_up
+	Codec                 string    `json:"codec,omitempty"`                    // Decoded source codec label
+	SourceSampleRate      int       `json:"source_sample_rate,omitempty"`       // Codec native sample rate (Hz) before resampling
+	Transport             string    `json:"transport,omitempty"`                // Negotiated/configured transport (tcp, udp)
+	WireBytesPerSecond    float64   `json:"wire_bytes_per_second,omitempty"`    // Wire data rate (native)
+	PayloadBytesPerSecond float64   `json:"payload_bytes_per_second,omitempty"` // RTP payload data rate (native)
+	Packets               uint64    `json:"packets,omitempty"`                  // Accepted RTP frames this session (native)
+	SeqGaps               uint64    `json:"seq_gaps,omitempty"`                 // Packets lost per sequence tracking (native)
+	Duplicates            uint64    `json:"duplicates,omitempty"`               // Duplicate/reordered packets (native)
+	Malformed             uint64    `json:"malformed,omitempty"`                // Discarded unparseable packets (native)
+	SSRCResets            uint64    `json:"ssrc_resets,omitempty"`              // Mid-stream SSRC changes tolerated (native)
+	LastFrameAt           time.Time `json:"last_frame_at,omitzero"`             // Wall-clock of most recent media frame (native)
+	SenderClockValid      bool      `json:"sender_clock_valid,omitempty"`       // RTCP sender-report clock present (native)
+	SenderClockAgeSeconds float64   `json:"sender_clock_age_seconds,omitempty"` // Age of the RTCP sender report (native)
+	ReconnectAttempt      int       `json:"reconnect_attempt,omitempty"`        // Current reconnect attempt (native)
+	NextRetryInSeconds    float64   `json:"next_retry_in_seconds,omitempty"`    // Backoff before the next reconnect (native)
 }
 
 // ErrorContextResponse represents the API response for FFmpeg error context
@@ -393,6 +412,29 @@ func convertStreamHealthToResponse(rawURL string, health *audiocore.StreamHealth
 		BytesPerSecond:     health.BytesPerSecond,
 		IsReceivingData:    health.IsReceivingData,
 		SourceChannels:     health.SourceChannels,
+
+		Engine:                health.Engine,
+		Codec:                 health.Codec,
+		SourceSampleRate:      health.SourceSampleRate,
+		Transport:             health.Transport,
+		WireBytesPerSecond:    health.WireBytesPerSecond,
+		PayloadBytesPerSecond: health.PayloadBytesPerSecond,
+		Packets:               health.Packets,
+		SeqGaps:               health.SeqGaps,
+		Duplicates:            health.Duplicates,
+		Malformed:             health.Malformed,
+		SSRCResets:            health.SSRCResets,
+		LastFrameAt:           health.LastFrameAt,
+		SenderClockValid:      health.SenderClockValid,
+		SenderClockAgeSeconds: health.SenderClockAge.Seconds(),
+		ReconnectAttempt:      health.ReconnectAttempt,
+		NextRetryInSeconds:    health.NextRetryIn.Seconds(),
+	}
+
+	// Recovery intent is native-only; FFmpeg reports RecoveryUnknown, which stays
+	// absent so the FFmpeg response is unchanged.
+	if health.Recovery != audiocore.RecoveryUnknown {
+		response.Recovery = health.Recovery.String()
 	}
 
 	// Handle LastDataReceived (may be zero time if never received data)

@@ -223,10 +223,27 @@ func float32ToS16LE(dst []byte, src []float32) {
 	}
 }
 
-// codecName is a short label for an unsupported codec, used only in the
-// terminal error message.
+// codecName is a short, stable label for a codec. It feeds the
+// StreamHealth.Codec observability field (e.g. "aac-lc", "opus", "pcmu") and the
+// terminal unsupported-codec error message. An unrecognized codec falls back to
+// its Go type name.
 func codecName(codec audiostream.Codec) string {
-	switch codec.(type) {
+	switch c := codec.(type) {
+	case audiostream.CodecOpus:
+		return "opus"
+	case audiostream.CodecMP3:
+		return "mp3"
+	case audiostream.CodecAAC, audiostream.CodecMP4ALATM:
+		return "aac-lc"
+	case audiostream.CodecG711:
+		if c.Law == audiostream.ALaw {
+			return "pcma"
+		}
+		return "pcmu"
+	case audiostream.CodecG726:
+		return "g726"
+	case audiostream.CodecL16:
+		return "l16"
 	case audiostream.CodecFLAC:
 		return "flac"
 	case audiostream.CodecUnknown:

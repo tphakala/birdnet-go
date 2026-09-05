@@ -1895,6 +1895,8 @@ func (s *Stream) GetHealth() audiocore.StreamHealth {
 	lastError := s.getLastErrorContext()
 
 	return audiocore.StreamHealth{
+		Engine:             audiocore.EngineFFmpeg,
+		Transport:          s.config.Transport,
 		State:              processStateToStreamState(state),
 		StateDetail:        state.String(),
 		StateEntered:       stateEntered,

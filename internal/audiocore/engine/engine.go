@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"sync/atomic"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
@@ -88,6 +89,13 @@ type Config struct {
 	// to support extended capture mode.
 	CaptureBufferSeconds int
 
+	// LivenessSilenceThreshold is the audio watchdog's silence threshold. The
+	// native stream manager tightens its supervisor read-idle window below this so
+	// a stalled transport reconnects in place before the watchdog would alarm.
+	// Zero leaves the native read-idle at its own default. Ignored under the FFmpeg
+	// gate.
+	LivenessSilenceThreshold time.Duration
+
 	// RouterMetrics is optional; nil-safe.
 	// NOTE: Not yet wired to subsystems; metrics plumbing is planned for a future PR.
 	RouterMetrics audiocore.RouterMetrics
@@ -111,6 +119,31 @@ func captureBufferSecs(v int) int {
 		return v
 	}
 	return defaultCaptureBufferSeconds
+}
+
+// nativeReadIdleFloor is the minimum native supervisor read-idle window. A value
+// below this would reconnect on transient network jitter.
+const nativeReadIdleFloor = 5 * time.Second
+
+// deriveNativeReadIdle tightens the native supervisor read-idle window to sit in
+// front of the liveness watchdog silence threshold, so a stalled transport is
+// repaired in place (RecoveryInProgress) before the watchdog would alarm. It
+// returns 0 when the threshold is unknown (<=0), letting the native default
+// apply. The result is min(stream.DefaultReadIdle, two thirds of the threshold),
+// floored at nativeReadIdleFloor only while that floor stays below the silence
+// threshold (so the result is always strictly less than the threshold).
+func deriveNativeReadIdle(silenceThreshold time.Duration) time.Duration {
+	if silenceThreshold <= 0 {
+		return 0
+	}
+	readIdle := min(silenceThreshold*2/3, stream.DefaultReadIdle)
+	// Apply the jitter floor only when it stays below the silence threshold. A
+	// very small threshold must not push readIdle up to or past it, or the
+	// watchdog could alarm before the supervisor's read-idle fires.
+	if readIdle < nativeReadIdleFloor && nativeReadIdleFloor < silenceThreshold {
+		readIdle = nativeReadIdleFloor
+	}
+	return readIdle
 }
 
 // AudioEngine coordinates all audio subsystems: source registry, audio router,
@@ -174,7 +207,11 @@ func New(ctx context.Context, cfg *Config, scheduler *schedule.QuietHoursSchedul
 	dispatch := func(frame audiocore.AudioFrame) { router.Dispatch(frame) }
 	var streamMgr audiocore.StreamManager
 	if conf.NativeStreamIngestEnabled() {
-		streamMgr = stream.NewManager(engineCtx, dispatch, nil, log, bufMgr, &stream.Options{})
+		nativeOpts := &stream.Options{Metrics: cfg.StreamMetrics}
+		if ri := deriveNativeReadIdle(cfg.LivenessSilenceThreshold); ri > 0 {
+			nativeOpts.ReadIdle = ri
+		}
+		streamMgr = stream.NewManager(engineCtx, dispatch, nil, log, bufMgr, nativeOpts)
 		log.Info("network stream ingest using native go-audio-stream path",
 			logger.String("ingest_engine", "native"))
 	} else {
@@ -182,6 +219,7 @@ func New(ctx context.Context, cfg *Config, scheduler *schedule.QuietHoursSchedul
 			FFmpegPath:       cfg.FFmpegPath,
 			FFmpegParameters: cfg.FFmpegParameters,
 			LogLevel:         cfg.LogLevel,
+			Metrics:          cfg.StreamMetrics,
 		})
 	}
 	deviceMgr := audiocore.NewDeviceManager(router, bufMgr, log)

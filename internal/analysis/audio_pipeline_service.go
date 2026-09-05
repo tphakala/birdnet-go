@@ -317,6 +317,17 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 			}
 			return p.quietHoursScheduler.IsStreamSuppressed(sourceID)
 		},
+		// RecoveryState lets the watchdog defer a restart to the native stream
+		// supervisor while it reconnects in place. Sound-card sources and the FFmpeg
+		// producer have no recovery intent, so the lookup miss / RecoveryUnknown both
+		// return the legacy restart path.
+		RecoveryState: func(sourceID string) (audiocore.RecoveryState, time.Time) {
+			h, err := p.engine.StreamManager().StreamHealth(sourceID)
+			if err != nil || h == nil {
+				return audiocore.RecoveryUnknown, time.Time{}
+			}
+			return h.Recovery, h.RecoveryEntered
+		},
 	}
 	p.watchdog = audiocore.NewLivenessWatchdog(
 		buildLivenessConfig(settings.Realtime.Audio.Watchdog),

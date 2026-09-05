@@ -419,11 +419,19 @@ func (c *Handler) buildStreamHealthProvider() func() []checks.StreamHealthInfo {
 				errMsg = sh.Error.Error()
 			}
 			infos = append(infos, checks.StreamHealthInfo{
-				URL:          url,
-				IsHealthy:    sh.IsHealthy,
-				State:        sh.State,
-				RestartCount: sh.RestartCount,
-				Error:        errMsg,
+				URL:                url,
+				IsHealthy:          sh.IsHealthy,
+				State:              sh.State,
+				RestartCount:       sh.RestartCount,
+				Error:              errMsg,
+				Engine:             sh.Engine,
+				Codec:              sh.Codec,
+				WireBytesPerSecond: sh.WireBytesPerSecond,
+				Packets:            sh.Packets,
+				SeqGaps:            sh.SeqGaps,
+				Duplicates:         sh.Duplicates,
+				Malformed:          sh.Malformed,
+				SSRCResets:         sh.SSRCResets,
 			})
 		}
 		return infos

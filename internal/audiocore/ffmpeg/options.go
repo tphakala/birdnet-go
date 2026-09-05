@@ -1,6 +1,10 @@
 package ffmpeg
 
-import "time"
+import (
+	"time"
+
+	"github.com/tphakala/birdnet-go/internal/audiocore"
+)
 
 // Options carries manager-level defaults that apply to every stream a Manager
 // starts, as opposed to the per-stream settings on StreamConfig. The zero value
@@ -37,6 +41,10 @@ type Options struct {
 	// LogLevel is the FFmpeg log level (e.g. "error") applied to every stream this
 	// manager starts.
 	LogLevel string
+
+	// Metrics receives stream health and data-rate samples for every stream this
+	// manager starts. Nil-safe: the stream checks for nil before every call.
+	Metrics audiocore.StreamMetrics
 }
 
 // withManagerDefaults returns cfg with manager-level defaults applied where the

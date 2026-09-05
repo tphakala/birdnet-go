@@ -22,6 +22,18 @@ type StreamHealthInfo struct {
 	RestartCount int
 	// Error holds the most recent error message, if any.
 	Error string
+	// Engine names the ingest producer ("native" or "ffmpeg").
+	Engine string
+	// Codec is the decoded source codec label (native ingest; empty for FFmpeg).
+	Codec string
+	// WireBytesPerSecond is the wire data rate (native ingest; zero for FFmpeg).
+	WireBytesPerSecond float64
+	// Per-session RTP counters (native ingest; zero for FFmpeg).
+	Packets    uint64
+	SeqGaps    uint64
+	Duplicates uint64
+	Malformed  uint64
+	SSRCResets uint64
 }
 
 // StreamConnectivityCheck verifies that all configured RTSP streams are reachable and healthy.
@@ -54,8 +66,8 @@ func (c *StreamConnectivityCheck) Run(_ context.Context) health.Result {
 	}
 
 	unhealthy := 0
-	for _, s := range streams {
-		if !s.IsHealthy {
+	for i := range streams {
+		if !streams[i].IsHealthy {
 			unhealthy++
 		}
 	}
@@ -181,8 +193,8 @@ func (c *FFmpegHealthCheck) Run(_ context.Context) health.Result {
 	stoppedCount := 0
 	notRunningCount := 0
 
-	for _, s := range streams {
-		switch s.State {
+	for i := range streams {
+		switch streams[i].State {
 		case audiocore.StreamStateConnected:
 			// healthy
 		case audiocore.StreamStateStopped:
