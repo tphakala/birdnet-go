@@ -1563,6 +1563,9 @@
         // is reset to audioUrl above; this just clears the derived-copy state).
         audibleBats.reset();
         audibleBatsPendingFraction = null;
+        // Clear any pending source-swap autoplay so a swap that was in flight for
+        // the previous detection can't auto-start playback on the new one.
+        audibleBatsPendingAutoplay = false;
         // Reset playback state for new audio
         isPlaying = false;
         currentTime = 0;

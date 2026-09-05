@@ -1328,6 +1328,47 @@ func (c *Handler) ProcessAudioByID(ctx echo.Context) error {
 	return ctx.Blob(http.StatusOK, MimeTypeWAV, wavData)
 }
 
+// resolveBatClipFile confirms noteID refers to a bat detection and returns the
+// absolute, validated path to its source audio clip, following the same
+// path-resolution pattern as ProcessAudioByID. When ok is false it has already
+// written the HTTP error response and the caller must return respErr unchanged
+// (respErr is nil once the JSON error body is written successfully).
+func (c *Handler) resolveBatClipFile(ctx echo.Context, noteID string) (absolutePath string, ok bool, respErr error) {
+	// Audible-bats playback only applies to bat detections.
+	modelType, err := c.DS.GetNoteModelType(noteID)
+	if err != nil {
+		if isClipNotFoundErr(err) {
+			return "", false, c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
+		}
+		return "", false, c.HandleError(ctx, err, "Failed to resolve detection model type", http.StatusInternalServerError)
+	}
+	if modelType != modelTypeBat {
+		return "", false, c.HandleError(ctx, fmt.Errorf("model type %q is not a bat model", modelType),
+			"Audible bats mode is only available for bat detections", http.StatusBadRequest)
+	}
+
+	// Resolve and validate clip path (same pattern as ProcessAudioByID).
+	clipPath, err := c.DS.GetNoteClipPath(noteID)
+	if err != nil {
+		if isClipNotFoundErr(err) {
+			return "", false, c.HandleError(ctx, err, "No audio clip available", http.StatusNotFound)
+		}
+		return "", false, c.HandleError(ctx, err, "Failed to get clip path", http.StatusInternalServerError)
+	}
+	if clipPath == "" {
+		return "", false, c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available", http.StatusNotFound)
+	}
+	normalizedPath, err := c.normalizeAndValidatePathWithLogger(clipPath, c.APILogger)
+	if err != nil {
+		return "", false, c.HandleError(ctx, err, "Invalid clip path", http.StatusBadRequest)
+	}
+	absolutePath = filepath.Join(c.SFS.BaseDir(), normalizedPath)
+	if _, statErr := c.SFS.StatRel(normalizedPath); statErr != nil {
+		return "", false, c.HandleError(ctx, statErr, "Audio clip not found", http.StatusNotFound)
+	}
+	return absolutePath, true, nil
+}
+
 // AudibleBatsByID generates a derived "audible bats" review clip from a bat
 // detection's full audio. The ultrasonic clip is time-expanded (slowed and
 // pitched down) into the human hearing range and resampled to 48 kHz, then
@@ -1365,37 +1406,11 @@ func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 			"Gain must be between -60 and 60 dB", http.StatusBadRequest)
 	}
 
-	// Audible-bats playback only applies to bat detections.
-	modelType, err := c.DS.GetNoteModelType(noteID)
-	if err != nil {
-		if isClipNotFoundErr(err) {
-			return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
-		}
-		return c.HandleError(ctx, err, "Failed to resolve detection model type", http.StatusInternalServerError)
-	}
-	if modelType != modelTypeBat {
-		return c.HandleError(ctx, fmt.Errorf("model type %q is not a bat model", modelType),
-			"Audible bats mode is only available for bat detections", http.StatusBadRequest)
-	}
-
-	// Resolve and validate clip path (same pattern as ProcessAudioByID).
-	clipPath, err := c.DS.GetNoteClipPath(noteID)
-	if err != nil {
-		if isClipNotFoundErr(err) {
-			return c.HandleError(ctx, err, "No audio clip available", http.StatusNotFound)
-		}
-		return c.HandleError(ctx, err, "Failed to get clip path", http.StatusInternalServerError)
-	}
-	if clipPath == "" {
-		return c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available", http.StatusNotFound)
-	}
-	normalizedPath, err := c.normalizeAndValidatePathWithLogger(clipPath, c.APILogger)
-	if err != nil {
-		return c.HandleError(ctx, err, "Invalid clip path", http.StatusBadRequest)
-	}
-	absolutePath := filepath.Join(c.SFS.BaseDir(), normalizedPath)
-	if _, statErr := c.SFS.StatRel(normalizedPath); statErr != nil {
-		return c.HandleError(ctx, statErr, "Audio clip not found", http.StatusNotFound)
+	// Confirm this is a bat detection and resolve its validated source clip path.
+	// When ok is false the helper has already written the HTTP error response.
+	absolutePath, ok, respErr := c.resolveBatClipFile(ctx, noteID)
+	if !ok {
+		return respErr
 	}
 
 	// Serve from the ephemeral cache when available.

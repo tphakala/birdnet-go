@@ -1,7 +1,6 @@
 package ffmpeg_test
 
 import (
-	"context"
 	"path/filepath"
 	"testing"
 
@@ -54,7 +53,7 @@ func TestAudibleBatsOutputSampleRate(t *testing.T) {
 func TestTimeExpandBatAudioValidation(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	placeholderFFmpegPath := filepath.Join(t.TempDir(), "ffmpeg")
 
 	t.Run("empty ffmpeg path rejected", func(t *testing.T) {
