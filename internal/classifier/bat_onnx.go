@@ -331,7 +331,7 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 	// Sort and trim before logging so top_species reflects the highest-confidence
 	// detection rather than the first label that cleared the threshold (results is
 	// in label order, not confidence order).
-	topResults := getTopKResults(results, defaultTopKResults)
+	topResults := getTopKResults(results, DefaultTopKResults)
 	if len(topResults) > 0 {
 		log.Debug("bat detections after threshold",
 			logger.Int("pre_filter", preFilterCount),

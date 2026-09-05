@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -203,9 +204,41 @@ func TestDetectionHandlers_RecordTimestamp(t *testing.T) {
 	}
 }
 
-// TestPerchHumanLabelsParityWithNonbird verifies that every key previously in
-// perchHumanLabels (except "homo sapiens", which is the iNaturalist taxon
-// preserved in perchHumanExtraLabels) is classified as CategoryHuman by the
+func TestFilterSignalsTriggerFiltersWithoutBecomingAdditionalResults(t *testing.T) {
+	t.Parallel()
+
+	const source = "src1"
+	start := time.Date(2026, 6, 19, 8, 0, 0, 0, time.UTC)
+	settings := &conf.Settings{}
+	settings.Realtime.PrivacyFilter.Enabled = true
+	settings.Realtime.PrivacyFilter.Confidence = 0.05
+	settings.Realtime.DogBarkFilter.Enabled = true
+	settings.Realtime.DogBarkFilter.Confidence = 0.05
+
+	p := &Processor{
+		LastHumanDetection: make(map[string]HumanDetection),
+		LastDogDetection:   make(map[string]time.Time),
+	}
+	item := classifier.Results{
+		StartTime: start,
+		FilterSignals: []datastore.Results{
+			{Species: "Speech", Confidence: 0.09},
+			{Species: "Bark", Confidence: 0.08},
+		},
+	}
+	item.Source.ID = source
+
+	detections := p.processResults(settings, item)
+
+	human, ok := p.LastHumanDetection[source]
+	require.True(t, ok)
+	assert.Equal(t, start, human.Time)
+	assert.Equal(t, start, p.LastDogDetection[source])
+	assert.Empty(t, detections, "filter-only signals must not become persisted detections or additional results")
+}
+
+// TestPerchHumanLabelsParityWithNonbird verifies that every AudioSet/FSD50K key
+// previously handled by the processor is classified as CategoryHuman by the
 // shared nonbird package. A failure here means a coverage regression: a label
 // that used to engage the privacy filter would silently stop doing so.
 func TestPerchHumanLabelsParityWithNonbird(t *testing.T) {
@@ -213,7 +246,7 @@ func TestPerchHumanLabelsParityWithNonbird(t *testing.T) {
 
 	// The complete former perchHumanLabels key set (37 entries minus "homo sapiens").
 	// "homo sapiens" is excluded: it is an iNaturalist taxon, not an AudioSet/FSD50K
-	// sound class, so nonbird does not include it. It lives in perchHumanExtraLabels.
+	// sound class, and IsHumanVocalization handles it directly.
 	oldAudioSetKeys := []string{
 		"speech",
 		"speech_synthesizer",

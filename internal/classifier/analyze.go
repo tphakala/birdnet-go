@@ -9,6 +9,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
 )
 
 // Filter structure is used for filtering predictions based on certain criteria.
@@ -110,8 +111,8 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 		return nil, err
 	}
 
-	// Use optimized top-k algorithm instead of full sort + trim
-	topResults := getTopKResults(results, defaultTopKResults)
+	// Select the top predictions while retaining labels required by downstream filters.
+	topResults := getTopKResults(results, DefaultTopKResults)
 
 	// Log prediction timing for performance monitoring
 	duration := time.Since(start)
@@ -120,7 +121,7 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 	// Record metrics. Finish() records the single success because the span is not errored.
 	recordPredictionSuccess(span, len(topResults), start)
 
-	// Return the top 10 results
+	// Return the ranked results.
 	return topResults, nil
 }
 
@@ -269,8 +270,9 @@ func trimResultsToMax(results []datastore.Results, maxResults int) []datastore.R
 	return results
 }
 
-// getTopKResults returns the top k results without fully sorting the array.
-// Uses a partial sort algorithm that's more efficient than sorting all results.
+// getTopKResults returns the top k results plus the strongest lower-ranked label
+// for each filter family not already represented in the top k. It avoids fully
+// sorting the input array.
 func getTopKResults(results []datastore.Results, k int) []datastore.Results {
 	if len(results) == 0 || k <= 0 {
 		return []datastore.Results{}
@@ -289,21 +291,78 @@ func getTopKResults(results []datastore.Results, k int) []datastore.Results {
 		sortResults(results[:k])
 	}
 
+	// A human or dog label can score below the top-k boundary while still exceeding
+	// its filter's configured threshold. One strongest signal per family is enough:
+	// both filters compare every matching label against one family-wide threshold.
+	// If the top-k prefix already contains that family, every tail score is less than
+	// or equal to the retained score and cannot change the filter decision.
+	hasHuman, hasDog := false, false
+	for i := range n {
+		hasHuman = hasHuman || nonbird.IsHumanVocalization(results[i].Species)
+		hasDog = hasDog || nonbird.IsDogDetection(results[i].Species)
+	}
+
+	var bestHuman, bestDog datastore.Results
+	haveHuman, haveDog := false, false
+	for i := n; i < len(results); i++ {
+		candidate := results[i]
+		if !hasHuman && nonbird.IsHumanVocalization(candidate.Species) &&
+			(!haveHuman || candidate.Confidence > bestHuman.Confidence) {
+			bestHuman, haveHuman = candidate, true
+		}
+		if !hasDog && nonbird.IsDogDetection(candidate.Species) &&
+			(!haveDog || candidate.Confidence > bestDog.Confidence) {
+			bestDog, haveDog = candidate, true
+		}
+	}
+
+	retained := n
+	if haveHuman {
+		retained++
+	}
+	if haveDog {
+		retained++
+	}
+
 	// Return a freshly-allocated copy so the result never aliases the caller's
 	// backing array. BirdNET.Predict passes a reused per-instance scratch buffer
 	// (bn.resultsBuffer) that the next inference window overwrites in place via
 	// pairLabelsAndConfidenceReuse; without this copy a top-K slice already handed
 	// to classifier.ResultsQueue would be mutated concurrently with the queue
 	// consumer reading it, an unsynchronized read/write data race that can corrupt
-	// queued detections. The Bat and Perch Predict paths pass
-	// freshly-allocated slices, so the copy is redundant-but-harmless there; doing
-	// it unconditionally keeps the ownership contract uniform for every model. n
-	// is small (defaultTopKResults = 10), so the copy is cheap and the upstream
-	// large-buffer reuse optimization stays intact: bn.resultsBuffer remains
-	// internal scratch that never escapes.
-	out := make([]datastore.Results, n)
+	// queued detections. The Bat and Perch Predict paths pass freshly-allocated
+	// slices, so the copy is redundant-but-harmless there; doing it unconditionally
+	// keeps the ownership contract uniform for every model. The copied set is
+	// normally small, and the upstream large-buffer reuse optimization stays intact:
+	// bn.resultsBuffer remains internal scratch that never escapes.
+	out := make([]datastore.Results, retained)
 	copy(out, results[:n])
+	next := n
+	if haveHuman {
+		out[next] = bestHuman
+		next++
+	}
+	if haveDog {
+		out[next] = bestDog
+	}
+
+	// The top-k prefix is already sorted. Every retained tail result ranks at or
+	// below that prefix, so sorting only the retained tail preserves the full
+	// descending-order contract.
+	sortResults(out[n:])
 	return out
+}
+
+// SplitFilterSignals separates the normal top-k prediction set from the extra
+// lower-ranked signals retained solely for the privacy and dog-bark filters.
+// Model Predict implementations return the two slices as one ownership-safe
+// allocation; the analysis queue splits it before persistence processing.
+// normalResultCount must match the limit passed to getTopKResults by the model.
+func SplitFilterSignals(results []datastore.Results, normalResultCount int) (topResults, filterSignals []datastore.Results) {
+	n := min(max(normalResultCount, 0), len(results))
+	// Cap the top slice at its length so an append by a future queue consumer
+	// cannot overwrite the adjacent filter-signal tail.
+	return results[:n:n], results[n:]
 }
 
 // partialSort performs a partial sort to move the top k elements to the front.

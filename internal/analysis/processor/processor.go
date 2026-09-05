@@ -819,6 +819,11 @@ func (p *Processor) processDetections(item classifier.Results) {
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
 func (p *Processor) processResults(settings *conf.Settings, item classifier.Results) []Detections {
+	// Process lower-ranked human/dog signals before normal detections. They can
+	// trigger their filters but remain outside item.Results, so they cannot leak
+	// into persisted additional predictions.
+	p.processFilterSignals(settings, &item)
+
 	// Pre-allocate slice with capacity for all results
 	detections := make([]Detections, 0, len(item.Results))
 
@@ -1393,6 +1398,16 @@ func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifie
 		p.detectionMutex.Lock()
 		p.LastHumanDetection[item.Source.ID] = HumanDetection{Time: item.StartTime, Trigger: metrics.TriggerLabel}
 		p.detectionMutex.Unlock()
+	}
+}
+
+// processFilterSignals applies the privacy and dog-bark handlers to signals
+// retained below the normal top-k boundary. These signals deliberately bypass
+// detection creation and additional-result persistence.
+func (p *Processor) processFilterSignals(settings *conf.Settings, item *classifier.Results) {
+	for _, result := range item.FilterSignals {
+		p.handleDogDetection(settings, *item, result)
+		p.handleHumanDetection(settings, *item, result)
 	}
 }
 

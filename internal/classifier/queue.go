@@ -11,7 +11,8 @@ type Results struct {
 	StartTime       time.Time             // Time when the analysis started (back-dated for clip export)
 	AudioCapturedAt time.Time             // Wall-clock time when the 3s audio chunk was ready for analysis
 	PCMdata         []byte                // Raw PCM audio data
-	Results         []datastore.Results   // Slice of analysis results
+	Results         []datastore.Results   // Normal top-ranked analysis results
+	FilterSignals   []datastore.Results   // Lower-ranked human/dog signals; never persisted as predictions
 	ElapsedTime     time.Duration         // Time taken for analysis
 	ClipName        string                // Name of the audio clip
 	Source          datastore.AudioSource // Audio source with ID, SafeString, and DisplayName
@@ -53,6 +54,13 @@ func (r Results) Copy() Results { //nolint:gocritic // This is a copy function, 
 		newCopy.Results = make([]datastore.Results, len(r.Results))
 		for i, result := range r.Results {
 			newCopy.Results[i] = result.Copy()
+		}
+	}
+
+	if r.FilterSignals != nil {
+		newCopy.FilterSignals = make([]datastore.Results, len(r.FilterSignals))
+		for i, result := range r.FilterSignals {
+			newCopy.FilterSignals[i] = result.Copy()
 		}
 	}
 

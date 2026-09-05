@@ -780,6 +780,64 @@ func TestGetTopKResults(t *testing.T) {
 	}
 }
 
+func TestGetTopKResults_PreservesFilterLabelsBeyondLimit(t *testing.T) {
+	t.Parallel()
+
+	input := make([]datastore.Results, 0, DefaultTopKResults+5)
+	for i := range DefaultTopKResults {
+		input = append(input, datastore.Results{
+			Species:    fmt.Sprintf("Bird %d", i+1),
+			Confidence: 0.99 - float32(i)*0.05,
+		})
+	}
+	input = append(input,
+		datastore.Results{Species: "Human vocal_Mensch Stimme", Confidence: 0.09},
+		datastore.Results{Species: "Speech", Confidence: 0.08},
+		datastore.Results{Species: "Dog_Hund", Confidence: 0.07},
+		datastore.Results{Species: "Bark", Confidence: 0.06},
+		datastore.Results{Species: "Turdus merula", Confidence: 0.05},
+	)
+
+	results := getTopKResults(input, DefaultTopKResults)
+
+	require.Len(t, results, DefaultTopKResults+2)
+	assert.Equal(t, "Human vocal_Mensch Stimme", results[DefaultTopKResults].Species)
+	assert.Equal(t, "Dog_Hund", results[DefaultTopKResults+1].Species)
+
+	topResults, filterSignals := SplitFilterSignals(results, DefaultTopKResults)
+	require.Len(t, topResults, DefaultTopKResults)
+	assert.Equal(t, len(topResults), cap(topResults))
+	require.Len(t, filterSignals, 2)
+	assert.Equal(t, "Human vocal_Mensch Stimme", filterSignals[0].Species)
+	assert.Equal(t, "Dog_Hund", filterSignals[1].Species)
+	assert.NotContains(t, results, datastore.Results{Species: "Speech", Confidence: 0.08})
+	assert.NotContains(t, results, datastore.Results{Species: "Bark", Confidence: 0.06})
+
+	for i := range input {
+		input[i].Species = "OVERWRITTEN"
+	}
+	assert.Equal(t, "Human vocal_Mensch Stimme", results[DefaultTopKResults].Species)
+}
+
+func TestSplitFilterSignals_UsesRequestedNormalResultCount(t *testing.T) {
+	t.Parallel()
+
+	const normalResultCount = 3
+	input := []datastore.Results{
+		{Species: "Bird 1", Confidence: 0.9},
+		{Species: "Bird 2", Confidence: 0.8},
+		{Species: "Bird 3", Confidence: 0.7},
+		{Species: "Speech", Confidence: 0.1},
+	}
+	results := getTopKResults(input, normalResultCount)
+
+	topResults, filterSignals := SplitFilterSignals(results, normalResultCount)
+	require.Len(t, topResults, normalResultCount)
+	assert.Equal(t, len(topResults), cap(topResults))
+	require.Len(t, filterSignals, 1)
+	assert.Equal(t, "Speech", filterSignals[0].Species)
+}
+
 // TestGetTopKResults_ReturnsCopyNotAlias verifies getTopKResults returns a
 // freshly-allocated slice that does not share a backing array with the input
 // buffer. This is the guarantee that closes the data race: the
