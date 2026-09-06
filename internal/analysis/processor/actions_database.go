@@ -1497,9 +1497,12 @@ func (a *SaveAudioAction) planNativeNormalizationGain(ctx context.Context, sampl
 }
 
 // resolveExportParams determines the export sample rate, format, and output
-// path. Bird audio at rates above 48kHz is downsampled. Bat audio keeps the
-// native rate; if the configured format cannot carry it, the format is
-// silently switched to WAV.
+// path. Bird audio above 48kHz is downsampled to 48kHz. Bird audio below 48kHz
+// whose configured lossy native encoder cannot carry the source rate is resampled
+// UP to 48kHz (which every native lossy encoder accepts) so the configured format
+// is kept rather than stranded to WAV, on an install with no FFmpeg to take the
+// source rate directly. Bat audio keeps its native rate and is never resampled; if
+// the configured format cannot carry it, the format is switched to WAV.
 func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, format, path string) {
 	rate = a.sourceSampleRate
 	if rate <= 0 {
@@ -1511,30 +1514,21 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 
 	isBat := detection.ResolveModelType(a.modelName, "") == entities.ModelTypeBat
 
-	if needsBatFormatFallback(a.modelName, "", rate, format) {
+	switch {
+	case needsBatFormatFallback(a.modelName, "", rate, format):
 		logBatFormatDowngrade(format, rate)
 		format = ffmpeg.FormatWAV
 		path = replaceExtension(path, ".wav")
-	} else if rate > conf.SampleRate && !isBat {
-		resampled, err := resample.ResampleBytes(a.pcmData, rate, conf.SampleRate)
-		if err != nil {
-			// Guarded per rate pair: resampling a fixed pair either works or it
-			// does not, so an affected source fails on every detection forever.
-			// The target is conf.SampleRate today, but it is keyed rather than
-			// assumed so a future variable target cannot silence the new pair.
-			resampleFailureLogged.do(resampleKey(rate, conf.SampleRate), func() {
-				GetLogger().Warn("Resampling failed, exporting at source rate",
-					logger.String("component", "analysis.processor.actions"),
-					logger.Int("source_rate", rate),
-					logger.Int("target_rate", conf.SampleRate),
-					logger.Error(err),
-					logger.String("operation", "audio_export_resample"))
-			})
-		} else {
-			a.pcmData = resampled
-			a.sourceSampleRate = conf.SampleRate
-			rate = conf.SampleRate
-		}
+	case rate > conf.SampleRate && !isBat:
+		// Bird audio above the analysis rate is downsampled to it.
+		rate = a.resampleExportTo(rate, conf.SampleRate)
+	case rate < conf.SampleRate && !isBat && a.nativeEncoderNeedsUpsample(rate, format):
+		// The configured lossy native encoder cannot carry this sub-48k rate and
+		// there is no FFmpeg to take it. Resample up to conf.SampleRate (accepted by
+		// every native lossy encoder) rather than stranding to WAV; on a resample
+		// failure the rate is unchanged and strandedWithoutEncoder below downgrades
+		// to WAV so the clip survives.
+		rate = a.resampleExportTo(rate, conf.SampleRate)
 	}
 
 	if a.strandedWithoutEncoder(rate, format) {
@@ -1585,6 +1579,66 @@ func (a *SaveAudioAction) strandedWithoutEncoder(rate int, format string) bool {
 		// Every other format either has an unconditional native encoder (WAV,
 		// FLAC) or was already downgraded to WAV by config validation when
 		// FFmpeg went missing (ALAC).
+		return false
+	}
+}
+
+// resampleExportTo converts the captured PCM from srcRate to dstRate for export,
+// updating the action's PCM buffer and source rate on success and returning the
+// rate the clip is now at. On failure it logs once per rate pair and leaves the
+// clip at srcRate for the caller's fallback to handle.
+//
+// The failure log is keyed per rate pair because resampling a fixed pair either
+// works or it does not, so an affected source would otherwise warn on every
+// detection forever; keying by the pair (rather than assuming a fixed target) keeps
+// a future variable target from silencing a new pair.
+func (a *SaveAudioAction) resampleExportTo(srcRate, dstRate int) int {
+	resampled, err := resample.ResampleBytes(a.pcmData, srcRate, dstRate)
+	if err != nil {
+		resampleFailureLogged.do(resampleKey(srcRate, dstRate), func() {
+			GetLogger().Warn("Resampling failed, exporting at source rate",
+				logger.String("component", "analysis.processor.actions"),
+				logger.Int("source_rate", srcRate),
+				logger.Int("target_rate", dstRate),
+				logger.Error(err),
+				logger.String("operation", "audio_export_resample"))
+		})
+		return srcRate
+	}
+	a.pcmData = resampled
+	a.sourceSampleRate = dstRate
+	return dstRate
+}
+
+// nativeEncoderNeedsUpsample reports whether a sub-48k clip must be resampled up to
+// conf.SampleRate to be encodable in its configured lossy format. It is the
+// resample counterpart to strandedWithoutEncoder: the same precondition (no FFmpeg,
+// and the format's active native encoder does not accept the source rate), but the
+// remedy is conversion to 48kHz (accepted by every native lossy encoder) instead of
+// a WAV downgrade.
+//
+// It checks the encoders' Supports directly rather than through nativeXSelected,
+// because a clip about to be resampled is not being skipped and must not emit the
+// "native encoder skipped" log. Opus is always native; AAC and MP3 only once opted
+// in, matching strandedWithoutEncoder. In this pipeline bit depth and channels are
+// fixed (conf.BitDepth, conf.NumChannels), so the only thing Supports rejects here
+// is the sample rate, which 48kHz resolves.
+//
+// REMOVAL: the FfmpegPath guard and the AAC/MP3 gates go away with FFmpeg and the
+// opt-in gates, leaving a plain "resample if the native encoder cannot carry it".
+func (a *SaveAudioAction) nativeEncoderNeedsUpsample(rate int, format string) bool {
+	if a.Settings.Realtime.Audio.FfmpegPath != "" {
+		return false // FFmpeg encodes the source rate directly; no resample needed
+	}
+	switch format {
+	case ffmpeg.FormatAAC:
+		return conf.NativeAACEncoderEnabled() && aac.Supports(rate, conf.BitDepth, conf.NumChannels) != nil
+	case ffmpeg.FormatMP3:
+		return conf.NativeMP3EncoderEnabled() && mp3.Supports(rate, conf.BitDepth, conf.NumChannels) != nil
+	case ffmpeg.FormatOpus:
+		return opus.Supports(rate, conf.BitDepth, conf.NumChannels) != nil
+	default:
+		// WAV and FLAC carry any rate; ALAC is FFmpeg-only. Nothing to resample for.
 		return false
 	}
 }

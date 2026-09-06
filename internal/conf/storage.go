@@ -156,6 +156,15 @@ func Load() (*Settings, error) {
 		persistMigration(settings, "LocationConfigured flag")
 	}
 
+	// Heal a lossy export left with a blank bitrate by writing the documented
+	// default back once. Runs before normalizeIncompleteFeatures so persistMigration
+	// saves the file with every feature's on-disk enabled state intact; that pass
+	// disables switched-on-but-unconfigured integrations in memory only, and those
+	// disables must never be written to disk.
+	if settings.migrateEmptyLossyExportBitrate() {
+		persistMigration(settings, "empty lossy export bitrate")
+	}
+
 	// Auto-generate SessionSecret if not set (for backward compatibility)
 	if err := ensureSessionSecret(settings); err != nil {
 		return nil, err

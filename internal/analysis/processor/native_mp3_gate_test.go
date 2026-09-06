@@ -118,42 +118,44 @@ func TestEncodeClip_MP3GateDoesNotAffectOtherFormats(t *testing.T) {
 	assert.True(t, nativeOpusSelected(conf.SampleRate), "Opus is native by default, unaffected by the MP3 gate")
 }
 
-// On an FFmpeg-less install, opting MP3 into the native encoder must not strand a
-// clip go-mp3 cannot carry: the format is downgraded to WAV so the recording
-// survives, and the clip path extension follows the resolved format.
-func TestResolveExportParams_MP3StrandedClipFallsBackToWAV(t *testing.T) {
+// On an FFmpeg-less install, opting MP3 into the native encoder and feeding it a
+// sub-48k rate go-mp3 cannot carry must now resample the clip up to 48kHz and keep
+// the MP3 format, rather than stranding it to WAV. Supported rates and FFmpeg
+// installs keep MP3 without resampling; the clip path extension follows the format.
+func TestResolveExportParams_MP3SubRateResamplesInsteadOfStranding(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		gate       string
 		bitrate    string
 		ffmpegPath string
 		rate       int
+		wantRate   int
 		wantFormat string
 		wantExt    string
 	}{
 		{
-			name: "gate on, unsupported rate, no ffmpeg strands the clip",
+			name: "gate on, unsupported sub-48k rate, no ffmpeg resamples and keeps mp3",
 			gate: "native", bitrate: "128k", ffmpegPath: "", rate: 22050,
-			wantFormat: "wav", wantExt: ".wav",
+			wantRate: conf.SampleRate, wantFormat: ffmpeg.FormatMP3, wantExt: ".mp3",
 		},
 		{
 			// 100k is not an MPEG-1 rate, but the encoder rounds it to 96k rather
 			// than stranding the clip, so the format stays MP3 even without FFmpeg.
 			name: "gate on, non-MPEG-1 bitrate, no ffmpeg keeps mp3 (rounded)",
 			gate: "native", bitrate: "100k", ffmpegPath: "", rate: conf.SampleRate,
-			wantFormat: ffmpeg.FormatMP3, wantExt: ".mp3",
+			wantRate: conf.SampleRate, wantFormat: ffmpeg.FormatMP3, wantExt: ".mp3",
 		},
 		{
-			// FFmpeg present: it can still take the clip, so keep the format.
+			// FFmpeg present: it can still take the clip at its source rate, no resample.
 			name: "gate on, unsupported rate, ffmpeg present keeps mp3",
 			gate: "native", bitrate: "128k", ffmpegPath: "/usr/bin/ffmpeg", rate: 22050,
-			wantFormat: ffmpeg.FormatMP3, wantExt: ".mp3",
+			wantRate: 22050, wantFormat: ffmpeg.FormatMP3, wantExt: ".mp3",
 		},
 		{
-			// Carriable clip: the native encoder takes it, no fallback needed.
+			// Carriable clip: the native encoder takes it at source rate, no fallback.
 			name: "gate on, carriable clip, no ffmpeg keeps mp3",
 			gate: "native", bitrate: "128k", ffmpegPath: "", rate: conf.SampleRate,
-			wantFormat: ffmpeg.FormatMP3, wantExt: ".mp3",
+			wantRate: conf.SampleRate, wantFormat: ffmpeg.FormatMP3, wantExt: ".mp3",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -165,7 +167,8 @@ func TestResolveExportParams_MP3StrandedClipFallsBackToWAV(t *testing.T) {
 			a.Settings.Realtime.Audio.Export.Type = ffmpeg.FormatMP3
 			a.Settings.Realtime.Audio.FfmpegPath = tc.ffmpegPath
 
-			_, format, path := a.resolveExportParams("/clips/2026/07/19/clip.mp3")
+			rate, format, path := a.resolveExportParams("/clips/2026/07/19/clip.mp3")
+			assert.Equal(t, tc.wantRate, rate, "resolved sample rate")
 			assert.Equal(t, tc.wantFormat, format)
 			assert.Equal(t, tc.wantExt, filepath.Ext(path),
 				"the clip path extension must follow the resolved format")

@@ -693,16 +693,20 @@ func TestResolveExportParams_BatDowngradeLogsEachDistinctCondition(t *testing.T)
 // cannot carry the clip either. It means the same thing as the bat downgrade
 // ("you are not getting the format you configured"), so it is logged the same
 // way. It used to be the opposite of its sibling on both counts: WARN on every
-// single clip forever, against Info exactly once.
+// single clip forever, against Info exactly once. A bat clip drives it: bat audio
+// is never resampled (ultrasonic handling is out of scope), so a sub-48k bat clip
+// the encoder cannot carry still strands to WAV instead of being converted.
 func TestResolveExportParams_StrandedFallbackIsWarnedOncePerCondition(t *testing.T) {
 	resetNativeSkipOnce()
 	resetStrandedFormatOnce()
 	logs := logtest.CaptureBuffer(t)
 
 	// 44.1 kHz is a rate Opus does not accept, and with no FFmpeg to fall back
-	// on there is no encoder left for the configured format.
+	// on there is no encoder left for the configured format. A bat clip is not
+	// resampled, so this still strands rather than converting to 48kHz.
 	const unsupportedOpusRate = 44100
 	a := newExportLogAction(t, t.TempDir(), "clip.opus", ffmpeg.FormatOpus)
+	a.modelName = "BattyBirdNET"
 	a.Settings.Realtime.Audio.FfmpegPath = ""
 	a.sourceSampleRate = unsupportedOpusRate
 
@@ -723,7 +727,8 @@ func TestResolveExportParams_StrandedFallbackIsWarnedOncePerCondition(t *testing
 
 // The stranded guard is keyed like its sibling, so a second distinct condition
 // still explains itself. Without this, a bare sync.Once would pass the
-// once-per-condition test above identically.
+// once-per-condition test above identically. Bat clips drive it: they are never
+// resampled, so a sub-48k rate the native encoder cannot carry still strands.
 func TestResolveExportParams_StrandedFallbackLogsEachDistinctCondition(t *testing.T) {
 	t.Setenv(conf.EnvNativeAACEncoder, "native")
 	resetNativeSkipOnce()
@@ -731,6 +736,7 @@ func TestResolveExportParams_StrandedFallbackLogsEachDistinctCondition(t *testin
 	logs := logtest.CaptureBuffer(t)
 
 	a := newExportLogAction(t, t.TempDir(), "clip.opus", ffmpeg.FormatOpus)
+	a.modelName = "BattyBirdNET"
 	a.Settings.Realtime.Audio.FfmpegPath = ""
 	a.sourceSampleRate = 44100
 	_, _, _ = a.resolveExportParams("/clips/clip.opus")

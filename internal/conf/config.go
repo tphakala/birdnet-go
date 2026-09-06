@@ -47,7 +47,7 @@ type ExportSettings struct {
 	Enabled       bool                  `yaml:"enabled" json:"enabled" mapstructure:"enabled"`                   // export audio clips containing indentified bird calls
 	Path          string                `yaml:"path" json:"path" mapstructure:"path"`                            // path to audio clip export directory
 	Type          string                `yaml:"type" json:"type" mapstructure:"type"`                            // audio file type, wav, mp3 or flac
-	Bitrate       string                `yaml:"bitrate" json:"bitrate" mapstructure:"bitrate"`                   // bitrate for audio export
+	Bitrate       string                `yaml:"bitrate,omitempty" json:"bitrate" mapstructure:"bitrate"`         // bitrate for audio export
 	Retention     RetentionSettings     `yaml:"retention" json:"retention" mapstructure:"retention"`             // retention settings
 	Length        int                   `yaml:"length" json:"length" mapstructure:"length"`                      // audio capture length in seconds
 	PreCapture    int                   `yaml:"precapture" json:"preCapture" mapstructure:"preCapture"`          // pre-capture in seconds

@@ -26,6 +26,35 @@ func persistMigration(settings *Settings, label string) {
 	}
 }
 
+// migrateEmptyLossyExportBitrate fills the documented default into a lossy export
+// whose bitrate was left blank on disk (an explicit `bitrate: ""` from a save made
+// while export was disabled, or a hand-edit), returning whether it changed anything.
+//
+// viper reads the blank as "", so without a persisted repair the default would be
+// re-applied only in memory on every load, re-emitting the same telemetry warning on
+// every restart because nothing writes it back. Healing it here, before the file is
+// saved, writes the default to disk once. The warning is recorded here (once, on the
+// healing load, when the export is enabled); the persisted default then stops it
+// firing on later loads.
+//
+// It runs from Load before normalizeIncompleteFeatures on purpose: a persistMigration
+// of the returned change writes the file with every feature's on-disk enabled state
+// intact. The incomplete-feature pass disables switched-on-but-unconfigured
+// integrations only in memory, and those disables must never reach disk.
+func (s *Settings) migrateEmptyLossyExportBitrate() bool {
+	export := &s.Realtime.Audio.Export
+	if !isLossyExportFormat(export.Type) || export.Bitrate != "" {
+		return false
+	}
+	export.Bitrate = DefaultAudioExportBitrate
+	if export.Enabled {
+		s.recordValidationWarning(warnComponentAudio,
+			"audio export is enabled with the lossy format %s but no bitrate is set; using the default %s",
+			export.Type, DefaultAudioExportBitrate)
+	}
+	return true
+}
+
 // migrateStreamEnabledDefaults materializes missing enabled fields for legacy
 // RTSP stream configs before viper unmarshals them into the strongly typed
 // settings struct.
