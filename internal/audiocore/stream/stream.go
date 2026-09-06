@@ -179,7 +179,6 @@ func (s *stream) onState(sc supervisor.StateChange) {
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	if s.state != state || s.stateDetail != detail {
 		s.appendHistory(state, detail, causeString(sc.Err))
@@ -196,14 +195,15 @@ func (s *stream) onState(sc supervisor.StateChange) {
 	}
 	s.recovery = recovery
 
+	errored := false
 	switch sc.State {
 	case supervisor.StateReconnecting:
 		s.restartCount++
 		s.reconnectAttempt = sc.Attempt
 		s.nextRetryIn = sc.Backoff
-		s.recordError(sc.Err)
+		errored = s.recordError(sc.Err)
 	case supervisor.StateFailed:
-		s.recordError(sc.Err)
+		errored = s.recordError(sc.Err)
 	case supervisor.StateConnected:
 		s.reconnectAttempt = 0
 		s.nextRetryIn = 0
@@ -211,7 +211,17 @@ func (s *stream) onState(sc supervisor.StateChange) {
 		// no counter changes
 	}
 
+	s.mu.Unlock()
+
+	// Emit metrics outside s.mu, matching onDeliver and snapshot, so a metrics
+	// implementation that reads stream health back cannot deadlock (AB-BA). The
+	// error count is emitted before the health gauge to preserve the previous
+	// under-lock ordering. state is a local and s.spec.SourceID is immutable, so
+	// both are safe to read after the unlock.
 	if s.opts.Metrics != nil {
+		if errored {
+			s.opts.Metrics.IncStreamErrors(s.spec.SourceID)
+		}
 		s.opts.Metrics.SetStreamHealth(s.spec.SourceID, state == audiocore.StreamStateConnected)
 	}
 }
@@ -274,23 +284,24 @@ func (s *stream) appendHistory(to audiocore.StreamState, toDetail, reason string
 }
 
 // recordError classifies err and stores it as the last error plus history entry.
-// Caller holds mu.
-func (s *stream) recordError(err error) {
+// It returns true when an error context was recorded, so the caller can emit the
+// IncStreamErrors metric after releasing the lock (the metric must not be emitted
+// under s.mu; see onState). Caller holds mu.
+func (s *stream) recordError(err error) bool {
 	if err == nil {
-		return
+		return false
 	}
 	s.lastErr = err
 	ctx := classifyError(err, s.targetHost, s.targetPort)
 	s.lastErrCtx = ctx
-	if ctx != nil {
-		s.errorHistory = append(s.errorHistory, ctx)
-		if len(s.errorHistory) > errorHistoryLen {
-			s.errorHistory = s.errorHistory[len(s.errorHistory)-errorHistoryLen:]
-		}
-		if s.opts.Metrics != nil {
-			s.opts.Metrics.IncStreamErrors(s.spec.SourceID)
-		}
+	if ctx == nil {
+		return false
 	}
+	s.errorHistory = append(s.errorHistory, ctx)
+	if len(s.errorHistory) > errorHistoryLen {
+		s.errorHistory = s.errorHistory[len(s.errorHistory)-errorHistoryLen:]
+	}
+	return true
 }
 
 // snapshot returns a copy of the current health, computing the derived liveness
