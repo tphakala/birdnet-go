@@ -844,18 +844,7 @@ func (s *Stream) Run(parentCtx context.Context) {
 					logger.String("operation", "process_ended"))
 
 				if isSilenceTimeout {
-					func() {
-						s.restartCountMu.Lock()
-						defer s.restartCountMu.Unlock()
-						s.restartCount = 0
-					}()
-					func() {
-						s.circuitMu.Lock()
-						defer s.circuitMu.Unlock()
-						if s.consecutiveFailures > 0 {
-							s.consecutiveFailures--
-						}
-					}()
+					s.resetForSilenceTimeout()
 				}
 			} else {
 				getStreamLogger().Info("FFmpeg process ended normally",
@@ -2071,6 +2060,30 @@ func (s *Stream) isCircuitOpen() bool {
 
 // recordFailure records a failure for the circuit breaker with runtime consideration.
 // Graduated threshold system opens the circuit breaker earlier for rapid failures.
+// resetForSilenceTimeout undoes this iteration's failure bookkeeping for a
+// silence-watchdog restart. A silent-but-connected source (a session opened but
+// no audio flowed) is a recoverable condition, not a hard failure, so it must not
+// accumulate restarts or leave the circuit breaker open. It clears restartCount,
+// decrements the consecutive-failure count that recordFailure incremented for
+// this event, and clears circuitOpenTime: recordFailure may have just opened the
+// breaker (isCircuitOpen keys off circuitOpenTime, not the failure count), and
+// leaving it set would suppress ingest for the whole cooldown after a merely
+// silent restart. Before the silence classifier was fixed this path was dead, so
+// this completes the reset it now performs.
+func (s *Stream) resetForSilenceTimeout() {
+	func() {
+		s.restartCountMu.Lock()
+		defer s.restartCountMu.Unlock()
+		s.restartCount = 0
+	}()
+	s.circuitMu.Lock()
+	defer s.circuitMu.Unlock()
+	if s.consecutiveFailures > 0 {
+		s.consecutiveFailures--
+	}
+	s.circuitOpenTime = time.Time{}
+}
+
 func (s *Stream) recordFailure(runtime time.Duration) {
 	s.circuitMu.Lock()
 	defer s.circuitMu.Unlock()

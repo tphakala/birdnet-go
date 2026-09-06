@@ -14,8 +14,10 @@ import (
 )
 
 // publisherStderrCap bounds the captured publisher stderr so a chatty or
-// long-running publisher cannot grow the buffer without limit. The publishers run
-// with -loglevel error, so this is generous headroom for a diagnostic tail.
+// long-running publisher cannot grow the buffer without limit. cappedBuffer keeps
+// the first N bytes (where FFmpeg prints its arg/codec startup errors) and
+// discards the rest; with -loglevel error this is generous headroom for that
+// diagnostic prefix.
 const publisherStderrCap = 64 * 1024
 
 // cappedBuffer is a concurrency-safe io.Writer that retains up to cap bytes of
