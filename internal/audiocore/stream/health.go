@@ -49,13 +49,14 @@ const (
 // trackAggregate is the per-session RTP stats summed across the live tracks for
 // the observability snapshot.
 type trackAggregate struct {
-	packets    uint64
-	seqGaps    uint64
-	duplicates uint64
-	malformed  uint64
-	ssrcResets uint64
-	wire       uint64
-	payload    uint64
+	packets        uint64
+	seqGaps        uint64
+	duplicates     uint64
+	malformed      uint64
+	ssrcResets     uint64
+	sourceFiltered uint64
+	wire           uint64
+	payload        uint64
 
 	lastFrameAt      time.Time
 	senderClockValid bool
@@ -74,6 +75,7 @@ func aggregateTrackStats(stats audiostream.Stats) trackAggregate {
 		agg.duplicates += t.Duplicates
 		agg.malformed += t.Malformed
 		agg.ssrcResets += t.SSRCResets
+		agg.sourceFiltered += t.SourceFiltered
 		agg.wire += t.WireBytes
 		agg.payload += t.PayloadBytes
 		if t.LastFrameAt.After(agg.lastFrameAt) {
@@ -82,11 +84,17 @@ func aggregateTrackStats(stats audiostream.Stats) trackAggregate {
 		if t.SenderClock.Valid && t.SenderClock.ReceivedAt.After(newestSR) {
 			newestSR = t.SenderClock.ReceivedAt
 			agg.senderClockValid = true
-			if !stats.CapturedAt.IsZero() {
-				if age := stats.CapturedAt.Sub(t.SenderClock.ReceivedAt); age > 0 {
-					agg.senderClockAge = age
-				}
-			}
+		}
+	}
+	// Measure the age of the selected (newest valid) report once, after the loop,
+	// so it always tracks the winning report. Computing it per-candidate could
+	// leave a stale age from an earlier report when a newer one is selected but
+	// its age is not computable. A zero capture time carries no usable delta, and
+	// a report timestamped after the capture (clock skew) yields no positive age;
+	// both leave senderClockAge at zero.
+	if agg.senderClockValid && !stats.CapturedAt.IsZero() {
+		if age := stats.CapturedAt.Sub(newestSR); age > 0 {
+			agg.senderClockAge = age
 		}
 	}
 	return agg

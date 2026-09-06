@@ -154,7 +154,7 @@ func (s *StreamConfig) Validate() error {
 	}
 
 	// Validate transport (only tcp/udp allowed, empty defaults to tcp)
-	if s.Transport != "" && s.Transport != "tcp" && s.Transport != "udp" {
+	if s.Transport != "" && s.Transport != TransportTCP && s.Transport != TransportUDP {
 		return fmt.Errorf("invalid transport '%s' for '%s': must be tcp or udp", s.Transport, s.Name)
 	}
 
@@ -292,10 +292,10 @@ func (r *RTSPSettings) ResolveTransport(perStreamTransport string) string {
 // directly without specifying per-stream transport; the global RTSPSettings.Transport
 // (defaulting to "tcp") is propagated to each applicable stream.
 func (r *RTSPSettings) ApplyStreamDefaults() {
-	globalTransport := r.Transport
-	if globalTransport == "" {
-		globalTransport = DefaultTransport
-	}
+	// ResolveTransport("") yields the global transport when set, else the default.
+	// Resolve once (it is loop-invariant) and propagate to each per-stream empty,
+	// matching MigrateRTSPConfig and the single owner of the rule.
+	globalTransport := r.ResolveTransport("")
 	for _, stream := range r.AllStreams() {
 		if stream.Transport == "" && (stream.Type == StreamTypeRTSP || stream.Type == StreamTypeRTMP) {
 			stream.Transport = globalTransport

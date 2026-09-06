@@ -179,7 +179,7 @@ func supportedCodec(c audiostream.Codec) bool {
 // mapTransport maps the spec transport onto the library preference: udp prefers
 // UDP with TCP fallback, everything else uses TCP interleaved.
 func mapTransport(t string) rtsp.TransportPreference {
-	if strings.EqualFold(strings.TrimSpace(t), "udp") {
+	if strings.EqualFold(strings.TrimSpace(t), conf.TransportUDP) {
 		return rtsp.PreferUDPThenTCP
 	}
 	return rtsp.PreferTCP

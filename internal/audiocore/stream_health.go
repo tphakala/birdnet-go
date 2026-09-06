@@ -362,6 +362,11 @@ type StreamHealth struct {
 	Duplicates uint64
 	Malformed  uint64
 	SSRCResets uint64
+	// SourceFiltered counts datagrams dropped because their source address did
+	// not match the negotiated media peer (RTSP over UDP) or the configured
+	// SourceIP allowlist (udpsource). It stays zero on TCP-interleaved transport
+	// and for the FFmpeg producer.
+	SourceFiltered uint64
 
 	// LastFrameAt is the wall-clock arrival of the most recent media frame.
 	LastFrameAt time.Time

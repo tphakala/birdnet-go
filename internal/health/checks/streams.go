@@ -34,6 +34,10 @@ type StreamHealthInfo struct {
 	Duplicates uint64
 	Malformed  uint64
 	SSRCResets uint64
+	// SourceFiltered counts datagrams dropped because their source did not match
+	// the negotiated media peer or configured allowlist (native UDP only; zero
+	// on TCP-interleaved transport and for FFmpeg).
+	SourceFiltered uint64
 }
 
 // StreamConnectivityCheck verifies that all configured RTSP streams are reachable and healthy.

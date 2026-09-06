@@ -80,6 +80,7 @@ type StreamHealthResponse struct {
 	Duplicates            uint64    `json:"duplicates,omitempty"`               // Duplicate/reordered packets (native)
 	Malformed             uint64    `json:"malformed,omitempty"`                // Discarded unparseable packets (native)
 	SSRCResets            uint64    `json:"ssrc_resets,omitempty"`              // Mid-stream SSRC changes tolerated (native)
+	SourceFiltered        uint64    `json:"source_filtered,omitempty"`          // Datagrams dropped: source != peer/allowlist (native, UDP only)
 	LastFrameAt           time.Time `json:"last_frame_at,omitzero"`             // Wall-clock of most recent media frame (native)
 	SenderClockValid      bool      `json:"sender_clock_valid,omitempty"`       // RTCP sender-report clock present (native)
 	SenderClockAgeSeconds float64   `json:"sender_clock_age_seconds,omitempty"` // Age of the RTCP sender report (native)
@@ -424,6 +425,7 @@ func convertStreamHealthToResponse(rawURL string, health *audiocore.StreamHealth
 		Duplicates:            health.Duplicates,
 		Malformed:             health.Malformed,
 		SSRCResets:            health.SSRCResets,
+		SourceFiltered:        health.SourceFiltered,
 		LastFrameAt:           health.LastFrameAt,
 		SenderClockValid:      health.SenderClockValid,
 		SenderClockAgeSeconds: health.SenderClockAge.Seconds(),
