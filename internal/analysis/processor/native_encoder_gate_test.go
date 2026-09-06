@@ -392,21 +392,21 @@ func TestResolveExportParams_StrandedClipFallsBackToWAV(t *testing.T) {
 			// cannot carry still strands to WAV rather than being converted. The input
 			// is .opus so the rewrite to .wav is actually exercised, not a no-op.
 			name:      "bat opus at an unsupported sub-48k rate with no ffmpeg strands the clip",
-			modelName: "BattyBirdNET", format: ffmpeg.FormatOpus, inExt: ".opus",
+			modelName: batModelName, format: ffmpeg.FormatOpus, inExt: ".opus",
 			ffmpegPath: "", rate: 44100,
 			wantFormat: "wav", wantExt: ".wav",
 		},
 		{
 			// FFmpeg present: it can still take the clip, so keep the format.
-			name:       "opus at an unsupported rate keeps opus when ffmpeg exists",
-			format:     ffmpeg.FormatOpus, inExt: ".opus",
+			name:   "opus at an unsupported rate keeps opus when ffmpeg exists",
+			format: ffmpeg.FormatOpus, inExt: ".opus",
 			ffmpegPath: "/usr/bin/ffmpeg", rate: 44100,
 			wantFormat: ffmpeg.FormatOpus, wantExt: ".opus",
 		},
 		{
 			// Supported rate: the native encoder carries it, no fallback needed.
-			name:       "opus at a supported rate with no ffmpeg keeps opus",
-			format:     ffmpeg.FormatOpus, inExt: ".opus",
+			name:   "opus at a supported rate with no ffmpeg keeps opus",
+			format: ffmpeg.FormatOpus, inExt: ".opus",
 			ffmpegPath: "", rate: conf.SampleRate,
 			wantFormat: ffmpeg.FormatOpus, wantExt: ".opus",
 		},

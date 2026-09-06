@@ -706,7 +706,7 @@ func TestResolveExportParams_StrandedFallbackIsWarnedOncePerCondition(t *testing
 	// resampled, so this still strands rather than converting to 48kHz.
 	const unsupportedOpusRate = 44100
 	a := newExportLogAction(t, t.TempDir(), "clip.opus", ffmpeg.FormatOpus)
-	a.modelName = "BattyBirdNET"
+	a.modelName = batModelName
 	a.Settings.Realtime.Audio.FfmpegPath = ""
 	a.sourceSampleRate = unsupportedOpusRate
 
@@ -736,7 +736,7 @@ func TestResolveExportParams_StrandedFallbackLogsEachDistinctCondition(t *testin
 	logs := logtest.CaptureBuffer(t)
 
 	a := newExportLogAction(t, t.TempDir(), "clip.opus", ffmpeg.FormatOpus)
-	a.modelName = "BattyBirdNET"
+	a.modelName = batModelName
 	a.Settings.Realtime.Audio.FfmpegPath = ""
 	a.sourceSampleRate = 44100
 	_, _, _ = a.resolveExportParams("/clips/clip.opus")
