@@ -424,7 +424,7 @@ Source: LGPL-2.1
 
 ### github.com/tphakala/go-audio-stream
 
-License: https://github.com/tphakala/go-audio-stream/blob/v0.4.0/LICENSE
+License: https://github.com/tphakala/go-audio-stream/blob/v0.5.0/LICENSE
 Source: MIT
 
 ### github.com/tphakala/go-flac
