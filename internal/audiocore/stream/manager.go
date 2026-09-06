@@ -212,6 +212,12 @@ func (m *Manager) ShutdownWithContext(ctx context.Context) error {
 			go func(s *stream) {
 				defer wg.Done()
 				s.close(ctx)
+				// Remove metric series on shutdown too, matching StopStream, so a
+				// manager stopped while the process/registry outlives it (engine
+				// restart, tests) does not leak stale series.
+				if m.opts.Metrics != nil {
+					m.opts.Metrics.DeleteStream(s.spec.SourceID)
+				}
 			}(s)
 		}
 		wg.Wait()
