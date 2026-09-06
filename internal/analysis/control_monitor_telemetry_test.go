@@ -50,7 +50,7 @@ func freeLoopbackAddr(t *testing.T) string {
 func TestControlMonitor_InitializeTelemetryStartsEndpoint(t *testing.T) {
 	// Not parallel: conftest.SetTestSettings mutates package-global settings and
 	// initializeTelemetryIfEnabled reads them via conf.Setting().
-	prev := conf.GetSettings()
+	prev := conf.CloneSettings(conf.GetSettings())
 	t.Cleanup(func() { conftest.SetTestSettings(prev) })
 
 	metrics, err := observability.NewMetrics()
@@ -94,7 +94,7 @@ func TestControlMonitor_InitializeTelemetryStartsEndpoint(t *testing.T) {
 // is not started when telemetry is disabled, so the loopback listener is never
 // bound. This pins the enabled-gate behavior alongside the enabled case above.
 func TestControlMonitor_InitializeTelemetryDisabledNoEndpoint(t *testing.T) {
-	prev := conf.GetSettings()
+	prev := conf.CloneSettings(conf.GetSettings())
 	t.Cleanup(func() { conftest.SetTestSettings(prev) })
 
 	metrics, err := observability.NewMetrics()
@@ -117,7 +117,7 @@ func TestControlMonitor_InitializeTelemetryDisabledNoEndpoint(t *testing.T) {
 // hand a nil *observability.Metrics to NewEndpoint. This pins the "drops the
 // metrics argument" regression the package comment names.
 func TestControlMonitor_InitializeTelemetryNilMetricsNoEndpoint(t *testing.T) {
-	prev := conf.GetSettings()
+	prev := conf.CloneSettings(conf.GetSettings())
 	t.Cleanup(func() { conftest.SetTestSettings(prev) })
 
 	settings := &conf.Settings{}
