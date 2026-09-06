@@ -2058,8 +2058,6 @@ func (s *Stream) isCircuitOpen() bool {
 	return false
 }
 
-// recordFailure records a failure for the circuit breaker with runtime consideration.
-// Graduated threshold system opens the circuit breaker earlier for rapid failures.
 // resetForSilenceTimeout undoes this iteration's failure bookkeeping for a
 // silence-watchdog restart. A silent-but-connected source (a session opened but
 // no audio flowed) is a recoverable condition, not a hard failure, so it must not
@@ -2084,6 +2082,8 @@ func (s *Stream) resetForSilenceTimeout() {
 	s.circuitOpenTime = time.Time{}
 }
 
+// recordFailure records a failure for the circuit breaker with runtime consideration.
+// Graduated threshold system opens the circuit breaker earlier for rapid failures.
 func (s *Stream) recordFailure(runtime time.Duration) {
 	s.circuitMu.Lock()
 	defer s.circuitMu.Unlock()
