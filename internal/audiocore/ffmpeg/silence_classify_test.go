@@ -43,6 +43,17 @@ func TestIsSilenceTimeoutError(t *testing.T) {
 			want: true,
 		},
 		{
+			// The silence error nested inside ANOTHER EnhancedError whose own
+			// operation differs: a single errors.As would stop at the outer one and
+			// miss it, so this proves the chain is walked.
+			name: "silence error wrapped in a different enhanced error is still classified",
+			err: errors.New(silenceErr).
+				Component("ffmpeg-stream").
+				Context("operation", "process_ended").
+				Build(),
+			want: true,
+		},
+		{
 			name: "different operation is not a silence timeout",
 			err: errors.Newf("error reading from FFmpeg").
 				Component("ffmpeg-stream").

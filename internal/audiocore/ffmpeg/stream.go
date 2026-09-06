@@ -603,7 +603,7 @@ type Stream struct {
 // bufMgr is an optional buffer manager used to pool stdout read buffers via
 // FrameRef; when nil, readStdout falls back to a fresh per-iteration allocation.
 func NewStream(cfg *StreamConfig, onFrame func(frame audiocore.AudioFrame), onReset func(sourceID string), metrics audiocore.StreamMetrics, bufMgr *buffer.Manager) *Stream {
-	return &Stream{
+	s := &Stream{
 		config:           *cfg,
 		onFrame:          onFrame,
 		onReset:          onReset,
@@ -622,6 +622,13 @@ func NewStream(cfg *StreamConfig, onFrame func(frame audiocore.AudioFrame), onRe
 		maxErrorHistory:  maxErrorHistorySize,
 		bufMgr:           bufMgr,
 	}
+	// Record the ingest engine once at construction, matching the native producer,
+	// so the audio_stream_engine metric is populated for the default FFmpeg path
+	// too (native emits EngineNative in its own constructor).
+	if metrics != nil {
+		metrics.SetStreamEngine(cfg.SourceID, audiocore.EngineFFmpeg)
+	}
+	return s
 }
 
 // transitionState safely transitions the process state and logs the change.
@@ -1373,17 +1380,24 @@ func (s *Stream) dispatchAudioData(data []byte, ref *audiocore.FrameRef) {
 // depend on the human-readable (and dynamic) error message.
 const opSilenceTimeout = "silence_timeout"
 
-// isSilenceTimeoutError reports whether err is the silence-watchdog restart error
-// produced by handleSilenceTimeout, identified by its operation=silence_timeout
-// context rather than a substring of its message. processAudio returns that error
-// directly, so a single errors.As locates it.
+// isSilenceTimeoutError reports whether err (or any error it wraps) is the
+// silence-watchdog restart error produced by handleSilenceTimeout, identified by
+// its operation=silence_timeout context rather than a substring of its message.
+// It walks the whole chain of EnhancedError values so classification still holds
+// if the silence error is ever wrapped inside another EnhancedError with a
+// different operation (errors.As alone would stop at the outer one).
 func isSilenceTimeoutError(err error) bool {
-	var ee *errors.EnhancedError
-	if !errors.As(err, &ee) {
-		return false
+	for err != nil {
+		var ee *errors.EnhancedError
+		if !errors.As(err, &ee) {
+			return false
+		}
+		if op, _ := ee.GetContext()["operation"].(string); op == opSilenceTimeout {
+			return true
+		}
+		err = ee.Unwrap()
 	}
-	op, _ := ee.GetContext()["operation"].(string)
-	return op == opSilenceTimeout
+	return false
 }
 
 // handleSilenceTimeout checks if stream has stopped producing data and triggers restart.
