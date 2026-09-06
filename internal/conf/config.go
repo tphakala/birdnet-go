@@ -567,8 +567,16 @@ const (
 	StreamTypeUDP  = "udp"  // UDP/RTP - Low-latency LAN
 )
 
+// Transport protocol identifiers for RTSP/RTMP streams.
+const (
+	// TransportTCP is the TCP interleaved RTP transport.
+	TransportTCP = "tcp"
+	// TransportUDP is the UDP RTP transport.
+	TransportUDP = "udp"
+)
+
 // DefaultTransport is the default RTSP/RTMP transport protocol
-const DefaultTransport = "tcp"
+const DefaultTransport = TransportTCP
 
 // ChannelMode controls how multi-channel audio is handled before analysis.
 type ChannelMode string

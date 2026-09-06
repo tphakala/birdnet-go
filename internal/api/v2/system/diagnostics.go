@@ -452,6 +452,7 @@ func (c *Handler) buildStreamHealthProvider() func() []checks.StreamHealthInfo {
 				Duplicates:         sh.Duplicates,
 				Malformed:          sh.Malformed,
 				SSRCResets:         sh.SSRCResets,
+				SourceFiltered:     sh.SourceFiltered,
 			})
 		}
 		return infos

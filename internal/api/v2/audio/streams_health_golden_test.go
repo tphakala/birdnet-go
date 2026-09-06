@@ -132,6 +132,35 @@ func TestConvertStreamHealthToResponse_RealFFmpegGetHealth(t *testing.T) {
 	assert.Equal(t, baseMap, realMap, "engine and transport must be the only additions vs the pre-seam JSON")
 }
 
+// TestConvertStreamHealthToResponse_NativeCounters verifies the native RTP
+// observability counters, including SourceFiltered (added with the go-audio-stream
+// v0.5.0 bump), surface through the health response. They are omitempty, so only
+// the nonzero ones serialize and a clean stream adds no key.
+func TestConvertStreamHealthToResponse_NativeCounters(t *testing.T) {
+	t.Parallel()
+
+	const url = "rtsp://camera.local:554/stream"
+
+	health := &audiocore.StreamHealth{
+		State:          audiocore.StreamStateConnected,
+		Engine:         audiocore.EngineNative,
+		Packets:        1000,
+		SeqGaps:        3,
+		Malformed:      2,
+		SSRCResets:     1,
+		SourceFiltered: 42,
+	}
+	response := convertStreamHealthToResponse(url, health)
+	assert.Equal(t, uint64(42), response.SourceFiltered, "source-filtered count must map onto the response")
+
+	m := toJSONMap(t, response)
+	assert.EqualValues(t, 42, m["source_filtered"], "source_filtered must serialize when nonzero")
+
+	// Zero stays omitted (omitempty), so a stream with no filtered datagrams adds no key.
+	zero := &audiocore.StreamHealth{State: audiocore.StreamStateConnected, Engine: audiocore.EngineNative}
+	assert.NotContains(t, toJSONMap(t, convertStreamHealthToResponse(url, zero)), "source_filtered", "source_filtered omitted when zero")
+}
+
 // toJSONMap marshals v and unmarshals it into a generic map so two responses can
 // be diffed by key set.
 func toJSONMap(t *testing.T, v any) map[string]any {

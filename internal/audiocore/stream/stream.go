@@ -351,6 +351,7 @@ func (s *stream) snapshot() *audiocore.StreamHealth {
 		Duplicates:            agg.duplicates,
 		Malformed:             agg.malformed,
 		SSRCResets:            agg.ssrcResets,
+		SourceFiltered:        agg.sourceFiltered,
 		LastFrameAt:           agg.lastFrameAt,
 		SenderClockValid:      agg.senderClockValid,
 		SenderClockAge:        agg.senderClockAge,

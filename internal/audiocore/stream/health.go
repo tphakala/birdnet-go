@@ -49,13 +49,14 @@ const (
 // trackAggregate is the per-session RTP stats summed across the live tracks for
 // the observability snapshot.
 type trackAggregate struct {
-	packets    uint64
-	seqGaps    uint64
-	duplicates uint64
-	malformed  uint64
-	ssrcResets uint64
-	wire       uint64
-	payload    uint64
+	packets        uint64
+	seqGaps        uint64
+	duplicates     uint64
+	malformed      uint64
+	ssrcResets     uint64
+	sourceFiltered uint64
+	wire           uint64
+	payload        uint64
 
 	lastFrameAt      time.Time
 	senderClockValid bool
@@ -74,6 +75,7 @@ func aggregateTrackStats(stats audiostream.Stats) trackAggregate {
 		agg.duplicates += t.Duplicates
 		agg.malformed += t.Malformed
 		agg.ssrcResets += t.SSRCResets
+		agg.sourceFiltered += t.SourceFiltered
 		agg.wire += t.WireBytes
 		agg.payload += t.PayloadBytes
 		if t.LastFrameAt.After(agg.lastFrameAt) {
