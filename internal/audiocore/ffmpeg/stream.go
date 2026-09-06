@@ -808,7 +808,7 @@ func (s *Stream) Run(parentCtx context.Context) {
 				fallbackEngaged = s.maybeEngageAudioOnlyFallback()
 				errorMsg := err.Error()
 				sanitizedError := privacy.SanitizeFFmpegError(errorMsg)
-				isSilenceTimeout := strings.Contains(errorMsg, "silence timeout")
+				isSilenceTimeout := isSilenceTimeoutError(err)
 
 				// Publish stream event for alerting rules.
 				// A normal EOF (audio already seen) or a canceled context returns
@@ -1367,6 +1367,25 @@ func (s *Stream) dispatchAudioData(data []byte, ref *audiocore.FrameRef) {
 	}
 }
 
+// opSilenceTimeout is the structured error operation context stamped on the
+// silence-watchdog restart error built by handleSilenceTimeout. The run loop
+// reads it back to classify a silence restart, so the classification does not
+// depend on the human-readable (and dynamic) error message.
+const opSilenceTimeout = "silence_timeout"
+
+// isSilenceTimeoutError reports whether err is the silence-watchdog restart error
+// produced by handleSilenceTimeout, identified by its operation=silence_timeout
+// context rather than a substring of its message. processAudio returns that error
+// directly, so a single errors.As locates it.
+func isSilenceTimeoutError(err error) bool {
+	var ee *errors.EnhancedError
+	if !errors.As(err, &ee) {
+		return false
+	}
+	op, _ := ee.GetContext()["operation"].(string)
+	return op == opSilenceTimeout
+}
+
 // handleSilenceTimeout checks if stream has stopped producing data and triggers restart.
 func (s *Stream) handleSilenceTimeout(startTime time.Time) error {
 	s.lastDataMu.RLock()
@@ -1402,7 +1421,7 @@ func (s *Stream) handleSilenceTimeout(startTime time.Time) error {
 		return errors.Newf("stream stopped producing data for %v seconds", timeout.Seconds()).
 			Category(errors.CategoryRTSP).
 			Component("ffmpeg-stream").
-			Context("operation", "silence_timeout").
+			Context("operation", opSilenceTimeout).
 			Context("url", s.config.safeURL()).
 			Context("timeout_seconds", timeout.Seconds()).
 			Context("last_data", lastDataDesc).
