@@ -13,7 +13,8 @@ type RouterMetrics interface {
 	IncRouteErrors(sourceID, consumerID string)
 }
 
-// StreamMetrics tracks FFmpeg stream health and performance metrics.
+// StreamMetrics tracks network audio stream ingest health and performance
+// metrics for either the FFmpeg or the native go-audio-stream producer.
 // Callers must check for nil before calling methods on this interface.
 type StreamMetrics interface {
 	// IncStreamErrors increments the error count for a stream.

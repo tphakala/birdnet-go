@@ -100,8 +100,9 @@ type Config struct {
 	// NOTE: Not yet wired to subsystems; metrics plumbing is planned for a future PR.
 	RouterMetrics audiocore.RouterMetrics
 
-	// StreamMetrics is optional; nil-safe.
-	// NOTE: Not yet wired to subsystems; metrics plumbing is planned for a future PR.
+	// StreamMetrics is optional; nil-safe. Forwarded to whichever stream manager
+	// the BIRDNET_STREAM_INGEST gate selects (FFmpeg or native), which emits
+	// per-source health, error, and data-rate metrics.
 	StreamMetrics audiocore.StreamMetrics
 
 	// BufferMetrics is optional; nil-safe.

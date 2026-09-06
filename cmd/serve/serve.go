@@ -62,6 +62,10 @@ The "realtime" command is an alias for backward compatibility.`,
 				Debug:                    settings.Debug,
 				CaptureBufferSeconds:     settings.Realtime.ExtendedCapture.EffectiveCaptureBufferSeconds(settings.Realtime.Audio.Export.PreCapture),
 				LivenessSilenceThreshold: time.Duration(settings.Realtime.Audio.Watchdog.SilenceThreshold) * time.Second,
+				// StreamMetrics is the concrete Prometheus collector for both the
+				// FFmpeg and native stream producers. The engine forwards it to
+				// whichever manager the BIRDNET_STREAM_INGEST gate selects.
+				StreamMetrics: metrics.AudioStream,
 			}, nil)
 			defer audioEngine.Stop()
 
