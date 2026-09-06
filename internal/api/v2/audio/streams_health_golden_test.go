@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 )
 
 // TestConvertStreamHealthToResponse_Golden locks the health API JSON for every
@@ -81,4 +82,63 @@ func TestRemovedStreamHealth_ByteIdentity(t *testing.T) {
 
 	assert.Equal(t, "idle", response.ProcessState, "removed-stream process_state must stay byte-identical")
 	assert.Equal(t, "stopped", response.State, "removed-stream neutral state should read stopped")
+}
+
+// TestConvertStreamHealthToResponse_RealFFmpegGetHealth guards the FFmpeg
+// producer's actually-emitted JSON. The golden cases above hand-build
+// StreamHealth with empty Engine/Transport, so they cannot catch a change to the
+// additive keys the real ffmpeg.GetHealth emits (engine, transport). This runs a
+// real ffmpeg.Stream's GetHealth through the converter and asserts engine and
+// transport are the ONLY additions over the same health with those two fields
+// cleared (Forgejo #1648).
+func TestConvertStreamHealthToResponse_RealFFmpegGetHealth(t *testing.T) {
+	t.Parallel()
+
+	const (
+		url       = "rtsp://camera.local:554/stream"
+		transport = "tcp"
+	)
+
+	// A freshly constructed stream is never Run, so it starts no FFmpeg process
+	// and no goroutines; GetHealth only reads struct state, so this is goleak-safe.
+	st := ffmpeg.NewStream(&ffmpeg.StreamConfig{
+		URL:       url,
+		SourceID:  "golden-source",
+		Transport: transport,
+	}, nil, nil, nil, nil)
+
+	health := st.GetHealth()
+	require.Equal(t, audiocore.EngineFFmpeg, health.Engine, "ffmpeg GetHealth must stamp the engine")
+	require.Equal(t, transport, health.Transport, "ffmpeg GetHealth must carry the configured transport")
+
+	realMap := toJSONMap(t, convertStreamHealthToResponse(url, &health))
+
+	// Baseline: the same health with the additive fields cleared, so any key
+	// difference isolates exactly what the ffmpeg producer adds.
+	baseHealth := health
+	baseHealth.Engine = ""
+	baseHealth.Transport = ""
+	baseMap := toJSONMap(t, convertStreamHealthToResponse(url, &baseHealth))
+
+	assert.Equal(t, audiocore.EngineFFmpeg, realMap["engine"], "engine key must carry the ffmpeg producer name")
+	assert.Equal(t, transport, realMap["transport"], "transport key must carry the configured transport")
+	assert.NotContains(t, baseMap, "engine", "baseline (cleared) health must omit engine")
+	assert.NotContains(t, baseMap, "transport", "baseline (cleared) health must omit transport")
+
+	// After removing the two additive keys, every other key must match the
+	// baseline exactly: engine and transport are the only additions.
+	delete(realMap, "engine")
+	delete(realMap, "transport")
+	assert.Equal(t, baseMap, realMap, "engine and transport must be the only additions vs the pre-seam JSON")
+}
+
+// toJSONMap marshals v and unmarshals it into a generic map so two responses can
+// be diffed by key set.
+func toJSONMap(t *testing.T, v any) map[string]any {
+	t.Helper()
+	b, err := json.Marshal(v)
+	require.NoError(t, err)
+	var m map[string]any
+	require.NoError(t, json.Unmarshal(b, &m))
+	return m
 }
