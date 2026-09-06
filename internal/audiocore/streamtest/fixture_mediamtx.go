@@ -6,6 +6,7 @@ import (
 	"context"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -147,4 +148,21 @@ func (p *mediaPublication) Restart(t *testing.T) {
 	p.pub = pub
 	p.mu.Unlock()
 	time.Sleep(publishSettle)
+	requirePublisherAlive(t, pub)
+}
+
+// requirePublisherAlive fails fast, with the publisher's captured stderr, when
+// the FFmpeg tone publisher has already exited (bad args, an unsupported codec).
+// Without it a dead publisher surfaces only later as a confusing "frames should
+// flow" waitForFrames timeout instead of a clear "publisher died: <stderr>".
+func requirePublisherAlive(t *testing.T, pub *containers.StreamPublisher) {
+	t.Helper()
+	if pub.IsRunning() {
+		return
+	}
+	stderr := strings.TrimSpace(pub.Stderr())
+	if exitErr, ok := pub.ExitError(); ok && exitErr != nil {
+		t.Fatalf("FFmpeg publisher exited shortly after start: %v\nstderr:\n%s", exitErr, stderr)
+	}
+	t.Fatalf("FFmpeg publisher exited shortly after start\nstderr:\n%s", stderr)
 }
