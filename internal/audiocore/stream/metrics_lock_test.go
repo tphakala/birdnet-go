@@ -47,6 +47,7 @@ func (m *reentrantMetrics) SetStreamHealth(_ string, healthy bool) {
 func (m *reentrantMetrics) RecordDataRate(string, float64) {}
 func (m *reentrantMetrics) RecordWireRate(string, float64) {}
 func (m *reentrantMetrics) SetStreamEngine(string, string) {}
+func (m *reentrantMetrics) DeleteStream(string)            {}
 
 // TestOnState_EmitsMetricsOutsideLock is a regression test for the AB-BA hazard
 // fixed in Forgejo #1646: onState must release s.mu before emitting stream

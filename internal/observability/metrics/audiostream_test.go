@@ -32,15 +32,25 @@ func TestAudioStreamMetrics(t *testing.T) {
 	m.SetStreamHealth(src, true)
 	m.RecordDataRate(src, 1234.5)
 	m.RecordWireRate(src, 678.0)
-	m.SetStreamEngine(src, "native")
+	m.SetStreamEngine(src, audiocore.EngineNative)
+
+	// The aggregate Collect must export exactly one series per vec (5). ToFloat64
+	// below only exercises each vec in isolation, so this guards against a vec
+	// being dropped from Collect.
+	assert.Equal(t, 5, testutil.CollectAndCount(m), "Collect must export one series per vec")
 
 	assert.InDelta(t, 2.0, testutil.ToFloat64(m.StreamErrors.WithLabelValues(src)), delta)
 	assert.InDelta(t, 1.0, testutil.ToFloat64(m.StreamHealthy.WithLabelValues(src)), delta)
 	assert.InDelta(t, 1234.5, testutil.ToFloat64(m.DataRate.WithLabelValues(src)), delta)
 	assert.InDelta(t, 678.0, testutil.ToFloat64(m.WireRate.WithLabelValues(src)), delta)
-	assert.InDelta(t, 1.0, testutil.ToFloat64(m.StreamEngine.WithLabelValues(src, "native")), delta)
+	assert.InDelta(t, 1.0, testutil.ToFloat64(m.StreamEngine.WithLabelValues(src, audiocore.EngineNative)), delta)
 
-	// An unhealthy transition flips the health gauge to 0.
+	// An unhealthy transition flips the health gauge to 0 (still a live series).
 	m.SetStreamHealth(src, false)
 	assert.InDelta(t, 0.0, testutil.ToFloat64(m.StreamHealthy.WithLabelValues(src)), delta)
+
+	// DeleteStream removes every series for the source, so a stopped stream stops
+	// being exported.
+	m.DeleteStream(src)
+	assert.Equal(t, 0, testutil.CollectAndCount(m), "DeleteStream must remove all series for the source")
 }

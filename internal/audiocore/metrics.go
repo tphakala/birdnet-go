@@ -33,6 +33,12 @@ type StreamMetrics interface {
 	// SetStreamEngine records which ingest producer ("native"/"ffmpeg") is serving
 	// a stream.
 	SetStreamEngine(sourceID, engine string)
+
+	// DeleteStream removes every metric series for a stream. It is called when a
+	// source is stopped or removed so a dead stream stops being exported (no stale
+	// health/rate series reading as if it were live) and series do not accumulate
+	// without bound across repeated add/remove churn.
+	DeleteStream(sourceID string)
 }
 
 // BufferMetrics tracks buffer pool allocation, usage, and performance metrics.

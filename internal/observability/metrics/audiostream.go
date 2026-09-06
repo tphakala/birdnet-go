@@ -95,6 +95,19 @@ func (m *AudioStreamMetrics) SetStreamEngine(sourceID, engine string) {
 	m.StreamEngine.WithLabelValues(sourceID, engine).Set(1)
 }
 
+// DeleteStream removes every series for sourceID across all vecs, so a stopped or
+// removed stream stops being exported. It is safe to call for a source that has
+// no series yet (the deletes are no-ops).
+func (m *AudioStreamMetrics) DeleteStream(sourceID string) {
+	m.StreamErrors.DeleteLabelValues(sourceID)
+	m.StreamHealthy.DeleteLabelValues(sourceID)
+	m.DataRate.DeleteLabelValues(sourceID)
+	m.WireRate.DeleteLabelValues(sourceID)
+	// StreamEngine carries a second (engine) label, so delete every series whose
+	// source_id matches regardless of the engine value.
+	m.StreamEngine.DeletePartialMatch(prometheus.Labels{"source_id": sourceID})
+}
+
 // Collect implements the prometheus.Collector interface.
 func (m *AudioStreamMetrics) Collect(ch chan<- prometheus.Metric) {
 	m.StreamErrors.Collect(ch)

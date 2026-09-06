@@ -280,6 +280,12 @@ func (m *Manager) StopStream(sourceID string) error {
 	// Stop the stream outside the lock; Stop() can block.
 	stream.Stop()
 
+	// Remove the stream's metric series once it is stopped, so a stopped source
+	// stops being exported instead of lingering (e.g. reading healthy forever).
+	if m.metrics != nil {
+		m.metrics.DeleteStream(sourceID)
+	}
+
 	// Clean up watchdog tracking.
 	m.lastForceResetMu.Lock()
 	delete(m.lastForceReset, sourceID)

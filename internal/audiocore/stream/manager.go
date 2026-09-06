@@ -135,6 +135,11 @@ func (m *Manager) StopStream(sourceID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	s.close(ctx)
+	// Remove the stream's metric series after it is fully closed, so a stopped
+	// source stops being exported instead of lingering as stale series.
+	if m.opts.Metrics != nil {
+		m.opts.Metrics.DeleteStream(sourceID)
+	}
 	m.log.Info("stopped native stream",
 		logger.String("source_id", sourceID),
 		logger.String("ingest_engine", "native"),
