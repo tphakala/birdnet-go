@@ -352,10 +352,17 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 		Properties: map[string]any{},
 	})
 
-	// RTSP health monitoring is built into the FFmpeg manager.
+	// RTSP health monitoring is built into whichever stream manager the
+	// BIRDNET_STREAM_INGEST gate selected: the native stream manager when
+	// native ingest is enabled, otherwise the FFmpeg manager.
 	if len(settings.Realtime.RTSP.Streams) > 0 {
-		audiocore.GetLogger().Info("RTSP streams will be monitored by FFmpeg manager",
+		streamManagerName := "FFmpeg manager"
+		if conf.NativeStreamIngestEnabled() {
+			streamManagerName = "native stream manager"
+		}
+		audiocore.GetLogger().Info("RTSP streams will be monitored",
 			logger.Int("stream_count", len(settings.Realtime.RTSP.Streams)),
+			logger.String("stream_manager", streamManagerName),
 			logger.String("operation", "rtsp_monitoring_setup"))
 	}
 

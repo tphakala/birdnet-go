@@ -186,6 +186,15 @@ func caseLifecycle(t *testing.T, cfg *ContractConfig) {
 	defer cancel()
 	require.NoError(t, mgr.ShutdownWithContext(ctx), "shutdown should return within the timeout")
 
+	// Stop the MediaMTX publisher before the leak check. pub.Stop is also
+	// registered via t.Cleanup as a safety net, but t.Cleanup runs only after
+	// this function body returns, i.e. after goleak.VerifyNone below. Without
+	// this explicit stop, the publisher's still-running cmd.Wait() goroutine
+	// (containers.startPublisher.func1) is caught as a false goroutine leak.
+	// mediaPublication.Stop is idempotent, so the deferred cleanup call is a
+	// no-op once this has run.
+	pub.Stop(t)
+
 	// os/exec.(*Cmd).watchCtx is the Go stdlib goroutine that watches a child
 	// process's context; it is reaped by the runtime shortly after the child
 	// exits and is not a producer goroutine, so it is ignored here. Any other
