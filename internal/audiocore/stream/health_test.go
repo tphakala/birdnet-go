@@ -224,4 +224,24 @@ func TestAggregateTrackStats_SenderClockGuards(t *testing.T) {
 		assert.True(t, agg.senderClockValid, "a valid report still marks the clock valid")
 		assert.Zero(t, agg.senderClockAge, "a zero capture time yields no measurable age")
 	})
+
+	t.Run("newer selected report with no positive age does not retain an older age", func(t *testing.T) {
+		t.Parallel()
+		// An older valid report (2s before capture, age 8s) precedes a NEWER valid
+		// report received after capture (clock skew). The newest report wins the
+		// clock, but its age is not positive, so the aggregate age must be zero
+		// rather than falling back to the older report's 8s. This is order-independent
+		// only because the age is computed once, against the winning report, after
+		// the loop.
+		stats := audiostream.Stats{
+			CapturedAt: base.Add(10 * time.Second),
+			Tracks: map[int]audiostream.TrackStats{
+				0: {SenderClock: audiostream.SenderClock{Valid: true, ReceivedAt: base.Add(2 * time.Second)}},
+				1: {SenderClock: audiostream.SenderClock{Valid: true, ReceivedAt: base.Add(12 * time.Second)}},
+			},
+		}
+		agg := aggregateTrackStats(stats)
+		assert.True(t, agg.senderClockValid, "a valid report still marks the clock valid")
+		assert.Zero(t, agg.senderClockAge, "the newest report's non-positive age must not fall back to an older report's age")
+	})
 }

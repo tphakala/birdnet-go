@@ -139,22 +139,29 @@ func TestConvertStreamHealthToResponse_RealFFmpegGetHealth(t *testing.T) {
 func TestConvertStreamHealthToResponse_NativeCounters(t *testing.T) {
 	t.Parallel()
 
-	const url = "rtsp://camera.local:554/stream"
+	const (
+		url                       = "rtsp://camera.local:554/stream"
+		wantPackets        uint64 = 1000
+		wantSeqGaps        uint64 = 3
+		wantMalformed      uint64 = 2
+		wantSSRCResets     uint64 = 1
+		wantSourceFiltered uint64 = 42
+	)
 
 	health := &audiocore.StreamHealth{
 		State:          audiocore.StreamStateConnected,
 		Engine:         audiocore.EngineNative,
-		Packets:        1000,
-		SeqGaps:        3,
-		Malformed:      2,
-		SSRCResets:     1,
-		SourceFiltered: 42,
+		Packets:        wantPackets,
+		SeqGaps:        wantSeqGaps,
+		Malformed:      wantMalformed,
+		SSRCResets:     wantSSRCResets,
+		SourceFiltered: wantSourceFiltered,
 	}
 	response := convertStreamHealthToResponse(url, health)
-	assert.Equal(t, uint64(42), response.SourceFiltered, "source-filtered count must map onto the response")
+	assert.Equal(t, wantSourceFiltered, response.SourceFiltered, "source-filtered count must map onto the response")
 
 	m := toJSONMap(t, response)
-	assert.EqualValues(t, 42, m["source_filtered"], "source_filtered must serialize when nonzero")
+	assert.EqualValues(t, wantSourceFiltered, m["source_filtered"], "source_filtered must serialize when nonzero")
 
 	// Zero stays omitted (omitempty), so a stream with no filtered datagrams adds no key.
 	zero := &audiocore.StreamHealth{State: audiocore.StreamStateConnected, Engine: audiocore.EngineNative}
