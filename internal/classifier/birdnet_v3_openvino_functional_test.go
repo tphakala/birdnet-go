@@ -53,7 +53,14 @@ func TestBirdNETV3OpenVINO_ForcesF32AndStaysFinite(t *testing.T) {
 	device, backend, precision := model.RuntimeInfo()
 	t.Logf("backend=%s device=%s precision=%s species=%d", backend, device, precision, model.NumSpecies())
 	if backend != BackendOpenVINO {
-		t.Skipf("OpenVINO backend not active on this host (backend=%s); cannot exercise the f16->f32 fix", backend)
+		// A fallback to ORT is legitimate when no usable OpenVINO device was requested
+		// or available (amd64 "auto" with no Intel GPU, or a non-A76 ARM CPU), so skip
+		// there. But when OV_V3_DEVICE explicitly named a device, OpenVINO was expected,
+		// so an ORT fallback is a regression in the OV path rather than a silent skip.
+		if dev := os.Getenv("OV_V3_DEVICE"); dev != "" {
+			t.Fatalf("OV_V3_DEVICE=%s requested but BirdNET v3.0 fell back to %s; the OpenVINO path regressed", dev, backend)
+		}
+		t.Skipf("OpenVINO backend not active on this host (backend=%s); set OV_V3_DEVICE to require it", backend)
 	}
 
 	// The fix: v3.0 on OpenVINO must compile at FP32 on every device, so the f16
