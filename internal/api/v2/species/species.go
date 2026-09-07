@@ -562,15 +562,27 @@ func (c *Handler) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLabel
 			Build()
 	}
 
-	// Create rarity info
+	// Create rarity info. location_based reports whether this rarity number is actually
+	// derived from the location-based range filter, so it tracks filterActive, not merely
+	// whether coordinates are configured. With coordinates set but the filter inactive
+	// (e.g. the geomodel failed to load), computeRarity returns unknown; leaving
+	// location_based true here would make the UI render "Unknown 0% - Based on location"
+	// and partially reintroduce the false 0% that #3935 removed. The && LocationConfigured
+	// ties location_based to the SAME settings snapshot as the coordinate gate below
+	// (filterActive comes from a separate snapshot taken inside GetRarityContext): in
+	// steady state filterActive already implies LocationConfigured, so this is a no-op,
+	// but it guarantees a concurrent settings reload can never pair location_based=true
+	// with omitted coordinates (which the frontend would then render undefined).
 	rarityInfo := SpeciesRarityInfo{
 		Date:             today.Format(time.DateOnly),
-		LocationBased:    settings.BirdNET.LocationConfigured,
+		LocationBased:    filterActive && settings.BirdNET.LocationConfigured,
 		ThresholdApplied: float64(settings.BirdNET.RangeFilter.Threshold),
 	}
 
-	// Add location if available
-	if rarityInfo.LocationBased {
+	// Surface the configured coordinates whenever a location is set, independent of
+	// whether the filter is currently active, so a client still learns the location is
+	// known even when the rarity itself is unknown.
+	if settings.BirdNET.LocationConfigured {
 		rarityInfo.Latitude = settings.BirdNET.Latitude
 		rarityInfo.Longitude = settings.BirdNET.Longitude
 	}

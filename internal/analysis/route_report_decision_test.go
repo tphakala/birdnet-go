@@ -63,7 +63,7 @@ func TestIsReconfigureOperation(t *testing.T) {
 		{"gain_change suppresses first failure", operationGainChange, true},
 		{"model_change suppresses first failure", operationModelChange, true},
 		{"start reports immediately", operationStart, false},
-		{"restart reports immediately", "restart", false},
+		{"restart reports immediately", operationRestart, false},
 		{"restart_source reports immediately", operationRestartSource, false},
 		{"empty reports immediately", "", false},
 		{"unknown reports immediately", "unknown", false},

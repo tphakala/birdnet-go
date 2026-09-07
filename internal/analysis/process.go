@@ -242,6 +242,18 @@ func SetProcessMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
 	processMetrics.CompareAndSwap(nil, myAudioMetrics)
 }
 
+// ProcessRequest carries the per-window audio payload and identifiers for one
+// ProcessData call. ctx, the classifier backend, and the *buffer.Manager stay separate
+// parameters (they are collaborators, not request data); grouping the payload keeps the
+// call within the >3-parameters-use-a-struct convention.
+type ProcessRequest struct {
+	Data            []byte    // raw PCM bytes for this analysis window
+	StartTime       time.Time // wall-clock start of the analysis window
+	AudioCapturedAt time.Time // capture timestamp used for detection alignment
+	Source          string    // audio source ID
+	ModelID         string    // registry model ID to run inference with
+}
+
 // ProcessData processes the given audio data to detect bird species, logs the
 // detected species and optionally saves the audio clip if a bird species is
 // detected above the configured threshold.
@@ -250,7 +262,7 @@ func SetProcessMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
 // bufMgr is the audiocore buffer manager owning the Float32Pool that the
 // 16-bit conversion hot path draws from. Must be non-nil; callers that reach
 // ProcessData without a manager have a plumbing bug.
-func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manager, data []byte, startTime, audioCapturedAt time.Time, source, modelID string) error {
+func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manager, req *ProcessRequest) error {
 	if bufMgr == nil {
 		return errors.Newf("buffer manager must not be nil").
 			Component("analysis").
@@ -258,6 +270,21 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 			Context("operation", "process_data").
 			Build()
 	}
+	if req == nil {
+		return errors.Newf("process request must not be nil").
+			Component("analysis").
+			Category(errors.CategoryValidation).
+			Context("operation", "process_data").
+			Build()
+	}
+	// Unpack the request payload into the local names the body below uses so the
+	// hot-path logic is unchanged by the parameter-grouping refactor. req is passed by
+	// pointer because the struct is large enough that gocritic flags a by-value copy.
+	data := req.Data
+	startTime := req.StartTime
+	audioCapturedAt := req.AudioCapturedAt
+	source := req.Source
+	modelID := req.ModelID
 	log := GetLogger()
 	// get current time to track processing time
 	predictStart := time.Now()
