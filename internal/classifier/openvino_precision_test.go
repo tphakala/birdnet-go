@@ -120,6 +120,11 @@ func TestOpenVINOEffectivePrecision(t *testing.T) {
 func TestBackendForcesFP32(t *testing.T) {
 	t.Parallel()
 
+	// cudaBackendToken is a representative non-OpenVINO compute backend: only the
+	// OpenVINO backends carry a precision hint, so a CUDA host runs the file as
+	// stored and never forces f32.
+	const cudaBackendToken = "cuda"
+
 	tests := []struct {
 		name         string
 		registryID   string
@@ -147,7 +152,7 @@ func TestBackendForcesFP32(t *testing.T) {
 		{
 			name:         "birdnet v3.0 on a non-openvino gpu backend runs the file as stored",
 			registryID:   RegistryIDBirdNETV3,
-			backendToken: "cuda",
+			backendToken: cudaBackendToken,
 			want:         false,
 		},
 		{
