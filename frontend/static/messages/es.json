@@ -472,7 +472,7 @@
         "unreadableMessage": "El archivo de modelo configurado para {modelName} existe pero no se pudo leer, por lo que en su lugar se está usando el modelo instalado en {modelPath}. Su configuración no se modificó. Compruebe los permisos del archivo y que su almacenamiento esté montado.",
         "builtinMessage": "El archivo de modelo configurado para {modelName} no se encontró en el disco y no hay ningún modelo instalado disponible para reemplazarlo, por lo que en su lugar se está usando el modelo integrado. Su configuración no se modificó.",
         "notRegisteredTitle": "Ningún modelo está analizando {sourceName}",
-        "notRegisteredMessage": "No llega audio a {models} en la fuente de audio \"{sourceName}\", por lo que no se generan detecciones. Abra la galería de modelos en Configuración para comprobar el estado."
+        "notRegisteredMessage": "No llega audio a {models} en la fuente de audio \"{sourceName}\", por lo que no se generan detecciones. Abra Sistema > Modelos de IA para comprobar su estado por fuente y confirmar que la fuente de audio esté conectada y enviando audio."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1779,7 +1779,8 @@
       "noSources": "No hay fuentes conectadas",
       "primaryFallback": "principal (respaldo)",
       "sourceNotRunning": "no está analizando",
-      "sourceNotRunningTooltip": "Esta fuente está asignada al modelo en la configuración, pero su audio no llega al modelo, por lo que no genera detecciones. Abra la galería de modelos en Configuración para comprobar su estado.",
+      "sourceNotRunningTooltip": "Esta fuente está asignada al modelo en la configuración, pero su audio no llega al modelo, por lo que no genera detecciones. Compruebe que la fuente de audio esté conectada y enviando audio.",
+      "modelNotAnalyzingTooltip": "One or more audio sources assigned to this model are not sending it audio, so it is not producing detections. See the sources listed below.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",

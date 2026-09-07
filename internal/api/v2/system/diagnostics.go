@@ -19,7 +19,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/inferencestats"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/health/checks"
@@ -36,6 +35,16 @@ type diagnosticsStatusResponse struct {
 	Status     health.Status                     `json:"status"`
 	Categories map[health.Category]health.Status `json:"categories"`
 	LastRun    *time.Time                        `json:"last_run"`
+}
+
+// integrityResulter is implemented by any datastore that can report a cached
+// database integrity result (PRAGMA quick_check) for the Database Integrity
+// health check. Both the legacy *datastore.SQLiteStore and the v2 datastore
+// satisfy it, so the check reads through this interface instead of asserting a
+// concrete datastore type. The old concrete assertion failed on v2 installs,
+// leaving the check stuck at "Unknown" forever (#3939).
+type integrityResulter interface {
+	IntegrityResult() (string, bool)
 }
 
 // RegisterDiagnosticsRoutes initializes health check infrastructure and registers
@@ -192,11 +201,14 @@ func (c *Handler) registerHealthChecks() {
 			if ds == nil {
 				return "", false
 			}
-			sqliteStore, ok := ds.(*datastore.SQLiteStore)
-			if !ok || sqliteStore == nil {
-				return "", false
+			// Read integrity from whichever datastore exposes it (the legacy
+			// SQLiteStore or the v2 datastore) via a consumer-side interface. The
+			// old *datastore.SQLiteStore assertion failed on v2 installs, leaving
+			// the check stuck at "Unknown" (#3939).
+			if ir, ok := ds.(integrityResulter); ok {
+				return ir.IntegrityResult()
 			}
-			return sqliteStore.IntegrityResult()
+			return "", false
 		}),
 
 		// Network checks

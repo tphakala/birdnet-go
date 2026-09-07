@@ -121,7 +121,7 @@ func TestGetProbableSpecies_BareLocalizedCommonNameOverride_CanonicalizesLabel(t
 		speciesCache: make(map[string]*speciesCacheEntry),
 	}
 
-	scores, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
+	scores, _, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
 	require.NoError(t, err)
 
 	labels := make([]string, 0, len(scores))
@@ -173,7 +173,7 @@ func TestGetProbableSpecies_NonPrimaryLocalizedCommonOverride_ReverseResolvesToS
 		speciesCache: make(map[string]*speciesCacheEntry),
 	}
 
-	scores, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
+	scores, _, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
 	require.NoError(t, err)
 
 	labels := make([]string, 0, len(scores))
@@ -257,7 +257,7 @@ func TestGetProbableSpecies_LegacyPath_NonPrimaryLocalizedCommonOverride_Reverse
 		speciesCache: make(map[string]*speciesCacheEntry),
 	}
 
-	scores, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
+	scores, _, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
 	require.NoError(t, err)
 
 	labels := make([]string, 0, len(scores))
@@ -323,7 +323,7 @@ func probableSpeciesFor(t *testing.T, settings *conf.Settings, rf *fakeUniversal
 		rangeFilter:  rf,
 		speciesCache: make(map[string]*speciesCacheEntry),
 	}
-	scores, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
+	scores, _, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
 	require.NoError(t, err)
 	return scores
 }

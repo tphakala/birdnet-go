@@ -79,4 +79,56 @@ describe('CurrentlyHearingCard species-name localization', () => {
 
     expect(getByText('Eurasian Wren')).toBeInTheDocument();
   });
+
+  // Regression for Sentry BIRDNET-GO-2HP: two concurrent pending detections of the same species on
+  // the same source used to collide on a bare `${source}_${scientificName}` key,
+  // throwing each_key_duplicate and (no error boundary) white-screening the dashboard.
+  // displayDetections now dedupes by a stable source+species+firstDetected key.
+  it('dedupes identical pending detections to one chip instead of crashing (Sentry BIRDNET-GO-2HP)', () => {
+    // Same source, species, and firstDetected (pending() default) => one render key.
+    const { getAllByText } = card.render({
+      props: {
+        detections: [
+          pending({
+            species: 'Eurasian Wren',
+            scientificName: 'Troglodytes troglodytes',
+            source: 'mic-9',
+            sourceID: 'mic-9',
+          }),
+          pending({
+            species: 'Eurasian Wren',
+            scientificName: 'Troglodytes troglodytes',
+            source: 'mic-9',
+            sourceID: 'mic-9',
+          }),
+        ],
+      },
+    });
+    expect(getAllByText('Eurasian Wren')).toHaveLength(1);
+  });
+
+  it('keeps two same-species detections that differ only in start time (Sentry BIRDNET-GO-2HP)', () => {
+    // Distinct firstDetected => distinct render keys => both chips survive dedupe.
+    const { getAllByText } = card.render({
+      props: {
+        detections: [
+          pending({
+            species: 'Eurasian Wren',
+            scientificName: 'Troglodytes troglodytes',
+            source: 'mic-9',
+            sourceID: 'mic-9',
+            firstDetected: 1_700_000_000,
+          }),
+          pending({
+            species: 'Eurasian Wren',
+            scientificName: 'Troglodytes troglodytes',
+            source: 'mic-9',
+            sourceID: 'mic-9',
+            firstDetected: 1_700_000_005,
+          }),
+        ],
+      },
+    });
+    expect(getAllByText('Eurasian Wren')).toHaveLength(2);
+  });
 });

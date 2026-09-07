@@ -985,7 +985,7 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 	// ReloadRangeFilter cannot desync them. geoLabels is non-nil only on the
 	// universal (v3 geomodel) path, where it covers every scientific name the
 	// geomodel knows regardless of threshold.
-	scores, geoLabels, err := primary.getProbableSpecies(date, week, settings)
+	scores, geoLabels, _, err := primary.getProbableSpecies(date, week, settings)
 	if err != nil {
 		return nil, err
 	}
@@ -2584,7 +2584,12 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 // TFLite meta model and the plain ONNX range filter, and when no range filter or
 // location is configured; in every one of those cases the scores are labeled with the
 // classifier's own vocabulary, so callers must fall back to classifierLabels.
-func (o *Orchestrator) GetRarityContext(date time.Time) (scores []SpeciesScore, geomodelLabels, classifierLabels []string, err error) {
+//
+// filterActive is true only when the returned scores are genuine location-based
+// predictions; it is false when they are the synthetic all-zero fallback (no range
+// filter loaded, or no location configured), so a caller can avoid reporting a zero as
+// "very rare" (#3935).
+func (o *Orchestrator) GetRarityContext(date time.Time) (scores []SpeciesScore, geomodelLabels, classifierLabels []string, filterActive bool, err error) {
 	// Snapshot the primary once and drive every read below from it. Delegating to
 	// o.GetProbableSpecies would re-resolve o.primary under a fresh lock and could
 	// score against a different model than the labels describe.
@@ -2592,12 +2597,20 @@ func (o *Orchestrator) GetRarityContext(date time.Time) (scores []SpeciesScore, 
 	primary := o.primary
 	o.mu.RUnlock()
 	if primary == nil {
-		return nil, nil, nil, nil
+		return nil, nil, nil, false, nil
 	}
 
 	settings := primary.currentSettings()
-	scores, geomodelLabels, err = primary.getProbableSpecies(date, 0.0, settings)
+	// filterActive is decided inside getProbableSpecies, in the same locked section
+	// that produced the scores: it is false whenever those scores are the synthetic
+	// all-zero fallback (no range-filter backend loaded, OR no location configured).
+	// Deriving it here rather than from a separate rangeFilterRuntimeState() read
+	// closes a TOCTOU where a concurrent unload between the two reads could pair
+	// filterActive=true with synthetic zeros, and it also covers the no-location case
+	// a bare rangeFilter!=nil check missed, so a caller never reports a synthetic zero
+	// as "very rare" (#3935).
+	scores, geomodelLabels, filterActive, err = primary.getProbableSpecies(date, 0.0, settings)
 	classifierLabels = slices.Clone(settings.BirdNET.Labels)
 
-	return scores, geomodelLabels, classifierLabels, err
+	return scores, geomodelLabels, classifierLabels, filterActive, err
 }

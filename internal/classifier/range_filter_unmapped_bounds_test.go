@@ -60,7 +60,7 @@ func TestGetProbableSpecies_PassUnmapped_MappingLongerThanSnapshotLabels_NoPanic
 	}
 
 	require.NotPanics(t, func() {
-		scores, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
+		scores, _, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
 		require.NoError(t, err)
 		labels := make([]string, 0, len(scores))
 		for _, ss := range scores {

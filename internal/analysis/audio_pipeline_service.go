@@ -89,6 +89,17 @@ type AudioPipelineService struct {
 	// active for that source. Populated by registerSoundLevelConsumers, drained
 	// by removeAllSoundLevelConsumers.
 	soundLevelConsumers map[string]string
+
+	// routeFailedLastPass records source IDs whose buffer route failed to come up on
+	// the previous reconfigure pass. It implements the "survives a reconfigure"
+	// suppression for #4208 (see routeReportDecision): a transient AddRoute failure
+	// during a reconfigure is not reported as "not analyzing" on its first
+	// occurrence, only if the route is still down on the next reconfigure pass. An
+	// entry is dropped when a source's route recovers and the whole map is cleared
+	// when all sources are torn down (removeAllSources). Accessed only from
+	// registerConsumersForSources, which runs single-threaded on the startup pass and
+	// under sourcesMu on every later pass, so it needs no lock of its own.
+	routeFailedLastPass map[string]bool
 }
 
 // NewAudioPipelineService creates a new AudioPipelineService with the given dependencies.
@@ -661,6 +672,10 @@ func (p *AudioPipelineService) removeAllSources(operation string) {
 	// router state so the next registerSoundLevelConsumers call (e.g. after
 	// restartAudioCapture) does not skip sources due to stale entries.
 	p.untrackAllSoundLevelConsumers()
+	// Drop the per-source route-failure memory: all sources are gone, so any
+	// retained "failed last pass" entry is stale and would otherwise defeat the
+	// first-pass grace for a source ID that later returns (#4208).
+	clear(p.routeFailedLastPass)
 	ResetOverrunTrackers()
 }
 
@@ -971,6 +986,69 @@ func (p *AudioPipelineService) wireSourceBufferRoute(sid, sourceName string, sou
 	return true, true
 }
 
+// routeReportDecision returns the allocated-model set that reportUnregisteredModels
+// should treat as registered for a source, given whether its buffer route came up
+// this pass (bufferRouteOK), whether that route was already down on the previous
+// pass (failedLastPass), and whether this pass is a reconfigure where a transient
+// AddRoute failure is expected (suppressTransient). It implements the "survives a
+// reconfigure" suppression for #4208:
+//   - route up: report normally (a per-model allocation miss still surfaces);
+//   - route down on a reconfigure pass, first time: suppress the alarm this pass,
+//     because the next reconfigure usually repairs a transient AddRoute race;
+//   - route down and either not a reconfigure (a start/restart failure is a genuine
+//     outage) or still down on a later pass: surface every resolved model.
+//
+// Scoping the suppression to reconfigure passes is essential: a route that fails on
+// the startup pass has no preceding reconfigure churn to be a transient of, and on a
+// stable config no later pass revisits it, so suppressing it there would silence a
+// permanent model outage forever (the #4201/#4204 class). Pure, so the policy is
+// unit-tested without standing up the audio engine.
+func routeReportDecision(bufferRouteOK, failedLastPass, suppressTransient bool, allocated map[string]bool) map[string]bool {
+	if bufferRouteOK {
+		return allocated
+	}
+	if suppressTransient && !failedLastPass {
+		return allocated // first transient reconfigure failure: suppress the alarm this pass
+	}
+	return nil // report the resolved models as not-analyzing
+}
+
+// isReconfigureOperation reports whether a registerConsumersForSources pass was
+// driven by a settings-change reconfigure, where a transient AddRoute failure can
+// occur and is repaired by the next pass, as opposed to a start or explicit restart
+// where a route failure is a genuine outage to report immediately (see
+// routeReportDecision, #4208). These operations originate in reconfigureChangedSources.
+func isReconfigureOperation(operation string) bool {
+	switch operation {
+	case "reconfigure_diff", "reconfigure_params", "gain_change", "model_change":
+		return true
+	default:
+		return false
+	}
+}
+
+// reportSourceRegistration reports the models that will not analyze sourceName and
+// updates the per-source route-failure memory for the "survives a reconfigure"
+// suppression (#4208). A transient route-build failure during a reconfigure is not
+// alarmed on its first occurrence; a start/restart failure, genuinely unresolvable
+// (skipped) models, and per-model allocation misses are reported immediately.
+// Extracted from registerConsumersForSources to keep it within the
+// cognitive-complexity budget. registerConsumersForSources runs single-threaded on
+// the startup pass and under sourcesMu on every later pass, so routeFailedLastPass
+// needs no lock of its own.
+func (p *AudioPipelineService) reportSourceRegistration(mm *classifier.ModelManager, sid, sourceName, operation string, bufferRouteOK bool, skipped []string, assigned []classifier.ModelInfo, allocated map[string]bool) {
+	if p.routeFailedLastPass == nil {
+		p.routeFailedLastPass = make(map[string]bool)
+	}
+	registered := routeReportDecision(bufferRouteOK, p.routeFailedLastPass[sid], isReconfigureOperation(operation), allocated)
+	if bufferRouteOK {
+		delete(p.routeFailedLastPass, sid)
+	} else {
+		p.routeFailedLastPass[sid] = true
+	}
+	reportUnregisteredModels(mm, sourceName, skipped, assigned, registered)
+}
+
 // registerConsumersForSources registers BufferConsumer and AudioLevelConsumer
 // on the AudioRouter for each source ID. The sourceModelMap carries the
 // config-level model IDs for each source so that buffer consumers fan out to
@@ -1076,16 +1154,6 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 		consumerOK, bufferRouteOK := p.wireSourceBufferRoute(
 			sid, sourceName, sourceSampleRate, gainDB, targets, currentSettings, operation)
 
-		// Report models the source assigns but that will not analyze it, AFTER the
-		// buffer consumer and its route are attached, so a consumer- or route-build
-		// failure is included rather than silently missed. When the buffer route did
-		// not come up, no target on this source runs, so report every resolved model;
-		// otherwise report only the ones that did not register (unresolved, or buffer
-		// allocation failed).
-		registered := allocatedModels
-		if !bufferRouteOK {
-			registered = nil
-		}
 		// Report only models the configuration actually assigns. When the source
 		// resolved to no loaded target and fell back to the primary, the user
 		// assigned nothing here, so naming the built-in primary as "assigned to this
@@ -1096,7 +1164,11 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 		if usedPrimaryFallback {
 			assigned = nil
 		}
-		reportUnregisteredModels(modelMgr, sourceName, skippedModels, assigned, registered)
+		// Report models that will not analyze this source, AFTER the buffer consumer
+		// and its route are attached so a consumer- or route-build failure is included.
+		// Also updates the per-source route-failure memory that implements the
+		// "survives a reconfigure" suppression (#4208).
+		p.reportSourceRegistration(modelMgr, sid, sourceName, operation, bufferRouteOK, skippedModels, assigned, allocatedModels)
 
 		if !consumerOK {
 			// The buffer consumer never came up; skip wiring the audio-level route,
@@ -1385,6 +1457,9 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		// source is re-added later.
 		p.untrackSoundLevelConsumer(src.ID)
 		RemoveOverrunTrackers(src.ID)
+		// Drop the route-failure memory too, so a source ID re-added later starts
+		// with a clean first-pass grace rather than a stale "failed last pass" (#4208).
+		delete(p.routeFailedLastPass, src.ID)
 	}
 
 	// Register consumers and monitors only for newly added sources.

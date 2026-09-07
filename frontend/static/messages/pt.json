@@ -472,7 +472,7 @@
         "unreadableMessage": "O ficheiro de modelo configurado para {modelName} existe, mas não pôde ser lido, pelo que o modelo instalado em {modelPath} está a ser utilizado em vez disso. A sua configuração não foi alterada. Verifique as permissões do ficheiro e se o seu armazenamento está montado.",
         "builtinMessage": "O ficheiro de modelo configurado para {modelName} não foi encontrado no disco e não existe nenhum modelo instalado disponível para o substituir, pelo que o modelo integrado está a ser utilizado em vez disso. A sua configuração não foi alterada.",
         "notRegisteredTitle": "Nenhum modelo está a analisar {sourceName}",
-        "notRegisteredMessage": "Nenhum áudio está a chegar a {models} na fonte de áudio \"{sourceName}\", pelo que não são produzidas deteções. Abra a galeria de modelos nas Configurações para verificar o estado."
+        "notRegisteredMessage": "Nenhum áudio está a chegar a {models} na fonte de áudio \"{sourceName}\", pelo que não são produzidas deteções. Abra Sistema > Modelos de IA para verificar o seu estado por fonte e confirmar que a fonte de áudio está conectada e a enviar áudio."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1779,7 +1779,8 @@
       "noSources": "Nenhuma fonte conectada",
       "primaryFallback": "primária (reserva)",
       "sourceNotRunning": "não está a analisar",
-      "sourceNotRunningTooltip": "Esta fonte está atribuída ao modelo nas configurações, mas o seu áudio não está a chegar ao modelo, pelo que não produz deteções. Abra a galeria de modelos nas Configurações para verificar o seu estado.",
+      "sourceNotRunningTooltip": "Esta fonte está atribuída ao modelo nas configurações, mas o seu áudio não está a chegar ao modelo, pelo que não produz deteções. Verifique se a fonte de áudio está conectada e a enviar áudio.",
+      "modelNotAnalyzingTooltip": "One or more audio sources assigned to this model are not sending it audio, so it is not producing detections. See the sources listed below.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",

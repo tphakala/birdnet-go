@@ -472,7 +472,7 @@
         "unreadableMessage": "Le fichier de modèle configuré pour {modelName} existe mais n'a pas pu être lu, le modèle installé à l'emplacement {modelPath} est donc utilisé à la place. Votre configuration n'a pas été modifiée. Vérifiez les permissions du fichier et que son stockage est monté.",
         "builtinMessage": "Le fichier de modèle configuré pour {modelName} est introuvable sur le disque et aucun modèle installé n'est disponible pour le remplacer, le modèle intégré est donc utilisé à la place. Votre configuration n'a pas été modifiée.",
         "notRegisteredTitle": "Aucun modèle n'analyse {sourceName}",
-        "notRegisteredMessage": "Aucun audio ne parvient à {models} sur la source audio \"{sourceName}\", aucune détection n'est donc produite. Ouvrez la galerie de modèles dans les Paramètres pour vérifier l'état."
+        "notRegisteredMessage": "Aucun audio ne parvient à {models} sur la source audio \"{sourceName}\", aucune détection n'est donc produite. Ouvrez Système > Modèles IA pour vérifier son état par source et confirmer que la source audio est connectée et envoie de l'audio."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1779,7 +1779,8 @@
       "noSources": "Aucune source attachée",
       "primaryFallback": "primaire (secours)",
       "sourceNotRunning": "n'analyse pas",
-      "sourceNotRunningTooltip": "Cette source est assignée au modèle dans les paramètres, mais son audio ne parvient pas au modèle, elle ne produit donc aucune détection. Ouvrez la galerie de modèles dans les Paramètres pour vérifier son état.",
+      "sourceNotRunningTooltip": "Cette source est assignée au modèle dans les paramètres, mais son audio ne parvient pas au modèle, elle ne produit donc aucune détection. Vérifiez que la source audio est connectée et envoie de l'audio.",
+      "modelNotAnalyzingTooltip": "One or more audio sources assigned to this model are not sending it audio, so it is not producing detections. See the sources listed below.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",

@@ -472,7 +472,7 @@
         "unreadableMessage": "Die für {modelName} konfigurierte Modelldatei ist vorhanden, konnte aber nicht gelesen werden, daher wird stattdessen das installierte Modell unter {modelPath} verwendet. Ihre Konfiguration wurde nicht verändert. Überprüfen Sie die Dateiberechtigungen und ob der Speicher eingebunden ist.",
         "builtinMessage": "Die für {modelName} konfigurierte Modelldatei wurde nicht auf dem Datenträger gefunden und es ist kein installiertes Modell als Ersatz verfügbar, daher wird stattdessen das integrierte Modell verwendet. Ihre Konfiguration wurde nicht verändert.",
         "notRegisteredTitle": "Kein Modell analysiert {sourceName}",
-        "notRegisteredMessage": "Kein Audio erreicht {models} an der Audioquelle \"{sourceName}\", sodass keine Erkennungen erzeugt werden. Öffnen Sie die Modellgalerie unter Einstellungen, um den Status zu überprüfen."
+        "notRegisteredMessage": "Kein Audio erreicht {models} an der Audioquelle \"{sourceName}\", sodass keine Erkennungen erzeugt werden. Öffnen Sie System > KI-Modelle, um den Status pro Quelle zu überprüfen, und stellen Sie sicher, dass die Audioquelle verbunden ist und Audio sendet."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1779,7 +1779,8 @@
       "noSources": "Keine Quellen verbunden",
       "primaryFallback": "Primär (Fallback)",
       "sourceNotRunning": "analysiert nicht",
-      "sourceNotRunningTooltip": "Diese Quelle ist dem Modell in den Einstellungen zugewiesen, aber ihre Audiodaten erreichen das Modell nicht, sodass keine Erkennungen erzeugt werden. Öffnen Sie die Modellgalerie unter Einstellungen, um den Status zu überprüfen.",
+      "sourceNotRunningTooltip": "Diese Quelle ist dem Modell in den Einstellungen zugewiesen, aber ihre Audiodaten erreichen das Modell nicht, sodass keine Erkennungen erzeugt werden. Überprüfen Sie, ob die Audioquelle verbunden ist und Audio sendet.",
+      "modelNotAnalyzingTooltip": "One or more audio sources assigned to this model are not sending it audio, so it is not producing detections. See the sources listed below.",
       "notMeasured": "n.v.",
       "unitMs": "ms",
       "unitKhz": "kHz",

@@ -176,9 +176,10 @@ func TestGetRarityContext_UniversalGeomodel(t *testing.T) {
 	bn, _ := newAliasedGeomodelBirdNET(t, 0.5)
 	orch := &Orchestrator{Settings: bn.Settings, ModelInfo: bn.ModelInfo, primary: bn}
 
-	scores, geomodelLabels, classifierLabels, err := orch.GetRarityContext(time.Now())
+	scores, geomodelLabels, classifierLabels, filterActive, err := orch.GetRarityContext(time.Now())
 	require.NoError(t, err)
 
+	assert.True(t, filterActive, "a loaded range filter reports active so rarity is honest (#3935)")
 	assert.NotEmpty(t, scores, "universal geomodel path should return scored species")
 	assert.Contains(t, geomodelLabels, aliasCanonicalLabel,
 		"geomodel vocabulary should come back so coverage is checked against it")
@@ -214,9 +215,13 @@ func TestGetRarityContext_NoGeomodel(t *testing.T) {
 	t.Cleanup(bn.Delete)
 	orch := &Orchestrator{Settings: settings, ModelInfo: bn.ModelInfo, primary: bn}
 
-	_, geomodelLabels, classifierLabels, err := orch.GetRarityContext(time.Now())
+	_, geomodelLabels, classifierLabels, filterActive, err := orch.GetRarityContext(time.Now())
 	require.NoError(t, err)
 
+	// Location is unconfigured here, so getProbableSpecies returns synthetic zero
+	// scores even though a filter is loaded; filterActive must be false so rarity is
+	// reported as unknown rather than a bogus "very rare" (#3935).
+	assert.False(t, filterActive, "unconfigured location yields synthetic zeros, so the filter is not active for rarity")
 	assert.Empty(t, geomodelLabels, "no universal geomodel means no geomodel vocabulary")
 	assert.Contains(t, classifierLabels, "Turdus merula_Common Blackbird")
 }
@@ -224,8 +229,9 @@ func TestGetRarityContext_NoGeomodel(t *testing.T) {
 func TestGetRarityContext_NilPrimary(t *testing.T) {
 	orch := &Orchestrator{}
 
-	scores, geomodelLabels, classifierLabels, err := orch.GetRarityContext(time.Now())
+	scores, geomodelLabels, classifierLabels, filterActive, err := orch.GetRarityContext(time.Now())
 	require.NoError(t, err)
+	assert.False(t, filterActive, "no primary model means no active range filter")
 	assert.Nil(t, scores)
 	assert.Nil(t, geomodelLabels)
 	assert.Nil(t, classifierLabels)

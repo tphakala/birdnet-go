@@ -146,7 +146,7 @@ func TestGetProbableSpecies_LocalizedExclude_DropsScientificOnlyNonPrimaryLabel(
 		speciesCache: make(map[string]*speciesCacheEntry),
 	}
 
-	scores, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
+	scores, _, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
 	require.NoError(t, err)
 
 	labels := make([]string, 0, len(scores))

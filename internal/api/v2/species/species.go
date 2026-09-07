@@ -502,7 +502,11 @@ func findSpeciesScore(targetSci string, speciesScores []classifier.SpeciesScore)
 
 // computeRarity resolves a species to its occurrence score and rarity status.
 //
-// Coverage decides first. A species the range filter cannot score has no occurrence
+// filterActive gates everything: when the range filter produced no real scores (no
+// backend loaded, or no location configured), the probable-species list is synthetic
+// zeros, so rarity is reported unknown regardless of coverage (#3935).
+//
+// Coverage decides next. A species the range filter cannot score has no occurrence
 // probability at all, so it is reported as unknown even when it does appear in the
 // probable-species list, because PassUnmappedSpecies injects species with no geomodel
 // match at score 0.0 purely so they survive the filter. Reading that synthetic zero as a
@@ -519,7 +523,16 @@ func findSpeciesScore(targetSci string, speciesScores []classifier.SpeciesScore)
 //
 // A covered species present in the list is scored directly; one that is covered but
 // absent is below today's threshold and therefore genuinely very rare.
-func computeRarity(targetSci string, speciesScores []classifier.SpeciesScore, geomodelLabels, classifierLabels []string) (float64, RarityStatus) {
+func computeRarity(filterActive bool, targetSci string, speciesScores []classifier.SpeciesScore, geomodelLabels, classifierLabels []string) (float64, RarityStatus) {
+	// Without an active range filter the probable-species list is synthetic zero
+	// scores for every label, so a covered species would score 0.0 and be
+	// misreported as "very rare" at "0%". The occurrence probability is genuinely
+	// unknown in that state (the geomodel could not load), so report unknown rather
+	// than a confident wrong answer (#3935).
+	if !filterActive {
+		return 0.0, RarityUnknown
+	}
+
 	if !speciesHasGeomodelCoverage(targetSci, geomodelLabels, classifierLabels) {
 		return 0.0, RarityUnknown
 	}
@@ -540,7 +553,7 @@ func (c *Handler) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLabel
 	// probable-species list, not the multi-model union: the union assigns synthetic
 	// always-active scores (1.0) to secondary-model species (bats, Perch) that have
 	// no real occurrence probability, which would misclassify them as "very common".
-	speciesScores, geomodelLabels, classifierLabels, err := bn.GetRarityContext(today)
+	speciesScores, geomodelLabels, classifierLabels, filterActive, err := bn.GetRarityContext(today)
 	if err != nil {
 		return SpeciesRarityInfo{}, errors.New(err).
 			Category(errors.CategoryProcessing).
@@ -565,7 +578,7 @@ func (c *Handler) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLabel
 	// Resolve the score and status together; computeRarity documents how an absent
 	// species is split between "very rare" and "unknown" by geomodel coverage.
 	targetSci := detection.ExtractScientificName(speciesLabel)
-	rarityInfo.Score, rarityInfo.Status = computeRarity(targetSci, speciesScores, geomodelLabels, classifierLabels)
+	rarityInfo.Score, rarityInfo.Status = computeRarity(filterActive, targetSci, speciesScores, geomodelLabels, classifierLabels)
 
 	return rarityInfo, nil
 }
