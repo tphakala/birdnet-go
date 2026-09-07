@@ -96,4 +96,22 @@ func TestReportSourceRegistration_RouteFailureMemory(t *testing.T) {
 	p.reportSourceRegistration(nil, sid, sid, "reconfigure_diff", true, nil, nil, alloc)
 	_, present := p.routeFailedLastPass[sid]
 	assert.False(t, present, "a recovered route clears the source's failure memory")
+
+	// A start/restart route failure must NOT populate the reconfigure-failure memory:
+	// it is reported immediately, so carrying it forward would make the next reconfigure's
+	// first (transient) failure look like a repeat and skip the #4208 grace.
+	p.reportSourceRegistration(nil, sid, sid, "start", false, nil, nil, alloc)
+	_, present = p.routeFailedLastPass[sid]
+	assert.False(t, present, "a start failure must not populate reconfigure failure memory")
+
+	p.reportSourceRegistration(nil, sid, sid, "restart_source", false, nil, nil, alloc)
+	_, present = p.routeFailedLastPass[sid]
+	assert.False(t, present, "a restart_source failure must not populate reconfigure failure memory")
+
+	// A start/restart failure also CLEARS a stale reconfigure-failure entry, so a
+	// prior reconfigure failure followed by a restart cannot poison the next pass.
+	p.routeFailedLastPass[sid] = true
+	p.reportSourceRegistration(nil, sid, sid, "start", false, nil, nil, alloc)
+	_, present = p.routeFailedLastPass[sid]
+	assert.False(t, present, "a start pass clears any stale reconfigure-failure entry")
 }

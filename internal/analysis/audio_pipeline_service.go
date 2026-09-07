@@ -1045,8 +1045,14 @@ func (p *AudioPipelineService) reportSourceRegistration(mm *classifier.ModelMana
 	if p.routeFailedLastPass == nil {
 		p.routeFailedLastPass = make(map[string]bool)
 	}
-	registered := routeReportDecision(bufferRouteOK, p.routeFailedLastPass[sid], isReconfigureOperation(operation), allocated)
-	if bufferRouteOK {
+	// routeFailedLastPass tracks failures ACROSS RECONFIGURE PASSES only. A start or
+	// restart failure is reported immediately (suppressTransient=false below) and must
+	// not populate this memory, or the next reconfigure's first (transient) failure
+	// would see failedLastPass=true and be reported instead of suppressed (#4208). So
+	// only a reconfigure failure records state; every other pass clears it.
+	reconfigure := isReconfigureOperation(operation)
+	registered := routeReportDecision(bufferRouteOK, reconfigure && p.routeFailedLastPass[sid], reconfigure, allocated)
+	if bufferRouteOK || !reconfigure {
 		delete(p.routeFailedLastPass, sid)
 	} else {
 		p.routeFailedLastPass[sid] = true
