@@ -115,13 +115,28 @@ func openVINOPlanFor(backendPref, devicePref, modelID, libraryPath string, outpu
 // on adapters where f16 worked, but stays well within real time. Do NOT relax it
 // to f16 without validating on a discrete Arc part.
 //
-// The bat embedding model is the exception that is forced to f32 on EVERY device:
+// The bat embedding model is forced to f32 on EVERY device:
 // its embedding head overflows at f16 on genuine f16 hardware (the A76 CPU's f16 NEON
 // and the Intel iGPU), corrupting the raw embedding the bat classifier consumes and
 // flipping detections. Unlike BirdNET v2.4 this is not GPU-only. Do NOT relax it to
 // f16 without re-running the bat embedding parity check.
+//
+// BirdNET v3.0 is likewise forced to f32 on EVERY device. Its EfficientNetV2-S
+// backbone is numerically unstable at f16 wherever genuine f16 kernels run (the Intel
+// GPU always, and the A76 CPU's native f16), independent of the model file's weight
+// precision. On fp16-weight regional tiles, f16 execution overflows to NaN (Sentry
+// BIRDNET-GO-2H6: the 800-class north-america-east tile, "non-finite score (index 0
+// of 800)", backend=OpenVINO precision=FP16); the in-graph sigmoid cannot rescue a
+// NaN, so every window is dropped. On fp32-weight tiles f16 stays finite but silently
+// inflates the scores: measured against an f32 reference on identical input, the max
+// post-sigmoid confidence error was ~0.28 on the A76 CPU and ~0.29 on an Iris Xe iGPU
+// (both far past the 0.15 divergence tolerance), with index 0 the worst (~25-30x). f32
+// restores parity (~1e-4). Forced on the CPU too, not GPU-only, because the A76
+// native-f16 path is affected as well. Do NOT relax it to f16 without re-running
+// inference/openvino_parity_functional_test.go on a genuine f16 device (the Intel GPU
+// and the A76 CPU) with an fp16-weight regional tile.
 func openVINOPrecisionFor(modelID, device string) string {
-	if modelID == RegistryIDBat {
+	if modelID == RegistryIDBat || modelID == RegistryIDBirdNETV3 {
 		return inference.OVPrecisionF32
 	}
 	if device == inference.OVDeviceGPU && (modelID == DefaultModelVersion || modelID == RegistryIDPerchV2) {
@@ -261,7 +276,7 @@ func openVINOPrecisionLabel(precision string) string {
 // shared Quantization vocabulary ("FP16"/"FP32"). An empty hint means the backend
 // default, which is f16 (see openVINOPrecisionFor), so it maps to FP16; the
 // explicit override OVPrecisionF32 (BirdNET v2.4 and Perch v2 on the GPU, the bat
-// embedding model on every device) maps to FP32.
+// embedding model and BirdNET v3.0 on every device) maps to FP32.
 func openVINOEffectivePrecision(precisionHint string) string {
 	if precisionHint == inference.OVPrecisionF32 {
 		return string(QuantizationFP32)
