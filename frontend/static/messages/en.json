@@ -472,7 +472,7 @@
         "unreadableMessage": "The model file configured for {modelName} exists but could not be read, so the installed model at {modelPath} is being used instead. Your configuration was left unchanged. Check the file's permissions and that its storage is mounted.",
         "builtinMessage": "The model file configured for {modelName} was not found on disk and no installed model is available to replace it, so the built-in model is being used instead. Your configuration was left unchanged.",
         "notRegisteredTitle": "No model is analyzing {sourceName}",
-        "notRegisteredMessage": "No audio is reaching {models} on audio source \"{sourceName}\", so no detections are produced. Open the model gallery in Settings to check status."
+        "notRegisteredMessage": "No audio is reaching {models} on audio source \"{sourceName}\", so no detections are produced. Open System > AI Models to check its per-source status, and confirm the audio source is connected and sending audio."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1779,7 +1779,8 @@
       "noSources": "No sources attached",
       "primaryFallback": "primary (fallback)",
       "sourceNotRunning": "not analyzing",
-      "sourceNotRunningTooltip": "This source is assigned to the model in settings, but its audio is not reaching the model, so it produces no detections. Open the model gallery in Settings to check its status.",
+      "sourceNotRunningTooltip": "This source is assigned to the model in settings, but its audio is not reaching the model, so it produces no detections. Check that the audio source is connected and sending audio.",
+      "modelNotAnalyzingTooltip": "One or more audio sources assigned to this model are not sending it audio, so it is not producing detections. See the sources listed below.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",

@@ -57,7 +57,8 @@ func notifyModelsNotRegistered(sourceName string, modelIDs []string) {
 		// primary-fallback case where it could tell the user the built-in BirdNET
 		// model is not installed.
 		fmt.Sprintf("%s is assigned to audio source %q but is not currently receiving audio, so it is not "+
-			"producing detections. Open the model gallery in Settings to check its status.", models, sourceName),
+			"producing detections. Open System > AI Models to check its per-source status, and confirm the "+
+			"audio source is connected and sending audio.", models, sourceName),
 	).
 		WithComponent("analysis.audio_pipeline").
 		WithTitleKey(notification.MsgModelNotRegisteredTitle, map[string]any{

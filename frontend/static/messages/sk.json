@@ -472,7 +472,7 @@
         "unreadableMessage": "Súbor modelu nakonfigurovaný pre {modelName} existuje, ale nepodarilo sa ho prečítať, preto sa namiesto neho používa nainštalovaný model v {modelPath}. Vaša konfigurácia zostala nezmenená. Skontrolujte oprávnenia súboru a to, či je jeho úložisko pripojené.",
         "builtinMessage": "Súbor modelu nakonfigurovaný pre {modelName} sa na disku nenašiel a nie je k dispozícii žiadny nainštalovaný model, ktorý by ho nahradil, preto sa namiesto neho používa vstavaný model. Vaša konfigurácia zostala nezmenená.",
         "notRegisteredTitle": "Žiadny model neanalyzuje {sourceName}",
-        "notRegisteredMessage": "K {models} na zvukovom zdroji \"{sourceName}\" sa nedostáva žiadny zvuk, takže sa nevytvárajú žiadne detekcie. Otvorte galériu modelov v Nastaveniach a skontrolujte stav."
+        "notRegisteredMessage": "K {models} na zvukovom zdroji \"{sourceName}\" sa nedostáva žiadny zvuk, takže sa nevytvárajú žiadne detekcie. Otvorte Systém > Modely AI, skontrolujte jeho stav pre jednotlivé zdroje a overte, že je zdroj zvuku pripojený a odosiela zvuk."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1779,7 +1779,8 @@
       "noSources": "Žiadne pripojené zdroje",
       "primaryFallback": "primárny (záložný)",
       "sourceNotRunning": "neanalyzuje",
-      "sourceNotRunningTooltip": "Tento zdroj je v nastaveniach priradený k modelu, ale jeho zvuk sa k modelu nedostáva, takže nevytvára žiadne detekcie. Otvorte galériu modelov v Nastaveniach a skontrolujte jeho stav.",
+      "sourceNotRunningTooltip": "Tento zdroj je v nastaveniach priradený k modelu, ale jeho zvuk sa k modelu nedostáva, takže nevytvára žiadne detekcie. Skontrolujte, či je zdroj zvuku pripojený a odosiela zvuk.",
+      "modelNotAnalyzingTooltip": "Jeden alebo viac zdrojov zvuku priradených k tomuto modelu mu neodosiela zvuk, takže nevytvára žiadne detekcie. Pozrite si zdroje uvedené nižšie.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",

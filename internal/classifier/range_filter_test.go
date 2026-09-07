@@ -290,7 +290,7 @@ func TestGetProbableSpecies_PassUnmappedSpecies(t *testing.T) {
 				speciesCache: make(map[string]*speciesCacheEntry),
 			}
 
-			scores, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
+			scores, _, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
 			require.NoError(t, err)
 			assert.GreaterOrEqual(t, len(scores), tt.wantMinSpecies)
 

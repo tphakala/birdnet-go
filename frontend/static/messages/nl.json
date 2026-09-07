@@ -472,7 +472,7 @@
         "unreadableMessage": "Het voor {modelName} geconfigureerde modelbestand bestaat, maar kon niet worden gelezen, dus wordt in plaats daarvan het geïnstalleerde model op {modelPath} gebruikt. Uw configuratie is ongewijzigd gebleven. Controleer de bestandsmachtigingen en of de opslag is gekoppeld.",
         "builtinMessage": "Het voor {modelName} geconfigureerde modelbestand is niet op de schijf gevonden en er is geen geïnstalleerd model beschikbaar om het te vervangen, dus wordt in plaats daarvan het ingebouwde model gebruikt. Uw configuratie is ongewijzigd gebleven.",
         "notRegisteredTitle": "Geen model analyseert {sourceName}",
-        "notRegisteredMessage": "Er bereikt geen audio {models} op audiobron \"{sourceName}\", waardoor er geen detecties worden geproduceerd. Open de modellengalerij in Instellingen om de status te controleren."
+        "notRegisteredMessage": "Er bereikt geen audio {models} op audiobron \"{sourceName}\", waardoor er geen detecties worden geproduceerd. Open Systeem > AI-modellen om de status per bron te controleren, en bevestig dat de audiobron is verbonden en audio verzendt."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1779,7 +1779,8 @@
       "noSources": "Geen bronnen verbonden",
       "primaryFallback": "primair (fallback)",
       "sourceNotRunning": "analyseert niet",
-      "sourceNotRunningTooltip": "Deze bron is in de instellingen toegewezen aan het model, maar de audio bereikt het model niet, waardoor het geen detecties produceert. Open de modellengalerij in Instellingen om de status te controleren.",
+      "sourceNotRunningTooltip": "Deze bron is in de instellingen toegewezen aan het model, maar de audio bereikt het model niet, waardoor het geen detecties produceert. Controleer of de audiobron is verbonden en audio verzendt.",
+      "modelNotAnalyzingTooltip": "Eén of meer aan dit model toegewezen audiobronnen verzenden er geen audio naar, waardoor het geen detecties produceert. Zie de hieronder vermelde bronnen.",
       "notMeasured": "n/b",
       "unitMs": "ms",
       "unitKhz": "kHz",

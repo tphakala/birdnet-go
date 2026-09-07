@@ -472,7 +472,7 @@
         "unreadableMessage": "Mallille {modelName} määritetty mallitiedosto on olemassa, mutta sitä ei voitu lukea, joten sen sijaan käytetään asennettua mallia sijainnissa {modelPath}. Asetuksiasi ei muutettu. Tarkista tiedoston käyttöoikeudet ja se, että sen tallennustila on liitetty.",
         "builtinMessage": "Mallille {modelName} määritettyä mallitiedostoa ei löytynyt levyltä eikä korvaavaa asennettua mallia ole saatavilla, joten sen sijaan käytetään sisäänrakennettua mallia. Asetuksiasi ei muutettu.",
         "notRegisteredTitle": "Mikään malli ei analysoi kohdetta {sourceName}",
-        "notRegisteredMessage": "Ääni ei tavoita kohdetta {models} äänilähteessä \"{sourceName}\", joten havaintoja ei tuoteta. Avaa Asetusten malligalleria tarkistaaksesi tilan."
+        "notRegisteredMessage": "Ääni ei tavoita kohdetta {models} äänilähteessä \"{sourceName}\", joten havaintoja ei tuoteta. Avaa Järjestelmä > Tekoälymallit tarkistaaksesi sen lähdekohtaisen tilan ja varmistaaksesi, että äänilähde on yhdistetty ja lähettää ääntä."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1779,7 +1779,8 @@
       "noSources": "Ei liitettyjä lähteitä",
       "primaryFallback": "ensisijainen (vara)",
       "sourceNotRunning": "ei analysoida",
-      "sourceNotRunningTooltip": "Tämä lähde on liitetty malliin asetuksissa, mutta sen ääni ei tavoita mallia, joten se ei tuota havaintoja. Avaa Asetusten malligalleria tarkistaaksesi sen tilan.",
+      "sourceNotRunningTooltip": "Tämä lähde on liitetty malliin asetuksissa, mutta sen ääni ei tavoita mallia, joten se ei tuota havaintoja. Tarkista, että äänilähde on yhdistetty ja lähettää ääntä.",
+      "modelNotAnalyzingTooltip": "Yksi tai useampi tähän malliin liitetyistä äänilähteistä ei lähetä sille ääntä, joten se ei tuota havaintoja. Katso alla luetellut lähteet.",
       "notMeasured": "-",
       "unitMs": "ms",
       "unitKhz": "kHz",

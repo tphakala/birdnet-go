@@ -168,6 +168,13 @@ type Datastore struct {
 
 	// dbCounters tracks atomic query latency counters for metrics collection.
 	dbCounters *dbstats.Counters
+
+	// Cached PRAGMA quick_check result for the Database Integrity health check
+	// (#3939). integrityMu is dedicated to this cache only, never a broader
+	// datastore lock, because quick_check can be slow and must not block Save.
+	integrityMu        sync.RWMutex
+	integrityResult    string    // "ok", a corruption description, or "" until first run
+	integrityCheckedAt time.Time // when integrityResult was last computed
 }
 
 // Config configures the Datastore.
@@ -519,6 +526,113 @@ func (ds *Datastore) PingWithLatency(ctx context.Context) (time.Duration, error)
 		return 0, fmt.Errorf("database ping failed: %w", err)
 	}
 	return time.Since(start), nil
+}
+
+// v2IntegrityCacheTTL bounds how long a PRAGMA quick_check result is reused
+// before the Database Integrity health check recomputes it. quick_check can be
+// slow on a large database, so the on-demand health check reads a cached result.
+const v2IntegrityCacheTTL = 24 * time.Hour
+
+// v2IntegrityCheckTimeout caps a single PRAGMA quick_check run. quick_check scans
+// every page on the single pinned SQLite connection, so an unbounded run would
+// block writes for its full duration; the timeout is generous enough for a
+// legitimate scan to complete (and then be cached for the TTL) while capping a
+// pathological hang (#3939).
+const v2IntegrityCheckTimeout = 2 * time.Minute
+
+const (
+	// integrityResultOK is the healthy PRAGMA quick_check result. DatabaseIntegrityCheck.Run
+	// maps any non-empty, non-"ok" result to a corruption status, so this exact value
+	// is the integrity-result contract shared across cache reads, writes and the
+	// non-SQLite path.
+	integrityResultOK = "ok"
+	// sqliteDialectName is gorm's dialect name for SQLite (db.Name()); other dialects
+	// have no PRAGMA quick_check equivalent.
+	sqliteDialectName = "sqlite"
+)
+
+// IntegrityResult reports the cached database integrity result and whether the
+// database is corrupted, for the Database Integrity health check (#3939). It
+// mirrors the legacy SQLiteStore accessor so the check can read integrity through
+// a shared interface instead of asserting the concrete legacy type; on v2 installs
+// that assertion failed, leaving the check stuck at "Unknown" forever.
+//
+// The result is "ok" for a healthy SQLite database (and for any non-SQLite dialect,
+// where PRAGMA quick_check does not apply), a quick_check corruption description
+// when corruption is found, or "" when a check could not be run yet. The health
+// check treats a non-"ok", non-empty result as corruption, so a dialect without
+// quick_check must report "ok", never a "skipped"-style sentinel.
+func (ds *Datastore) IntegrityResult() (string, bool) {
+	// Fast path: a fresh cached result needs only a read lock and runs no query.
+	ds.integrityMu.RLock()
+	cached := ds.integrityResult
+	fresh := cached != "" && time.Since(ds.integrityCheckedAt) < v2IntegrityCacheTTL
+	ds.integrityMu.RUnlock()
+	if fresh {
+		return cached, cached != integrityResultOK
+	}
+
+	// Slow path: recompute under the write lock so concurrent callers with a cold or
+	// expired cache do not all run PRAGMA quick_check at once (thundering herd).
+	// integrityMu is dedicated to this cache and is never taken by Save or any query
+	// path, so holding it across the check serializes only integrity reads and cannot
+	// block writes; the single SQLite connection, not this mutex, is what the query
+	// occupies for its duration (#3939).
+	ds.integrityMu.Lock()
+	defer ds.integrityMu.Unlock()
+	// Re-check under the write lock: another caller may have refreshed it while we
+	// waited for the lock.
+	if ds.integrityResult != "" && time.Since(ds.integrityCheckedAt) < v2IntegrityCacheTTL {
+		return ds.integrityResult, ds.integrityResult != integrityResultOK
+	}
+
+	result, ran := ds.runIntegrityQuickCheck()
+	if !ran {
+		// Could not run the check (no DB handle, timeout, or query error); report
+		// "not run yet" rather than a false corruption alarm, and do not cache so the
+		// next health run retries.
+		return "", false
+	}
+	ds.integrityResult = result
+	ds.integrityCheckedAt = time.Now()
+	return result, result != integrityResultOK
+}
+
+// runIntegrityQuickCheck executes PRAGMA quick_check on SQLite and returns the
+// result ("ok" or a "; "-joined corruption description) with ran=true. Non-SQLite
+// dialects have no quick_check equivalent, so it returns ("ok", true) to report
+// healthy. ran is false only when the check could not run at all (no DB handle or
+// a query error), which the caller maps to the "not run yet" state.
+func (ds *Datastore) runIntegrityQuickCheck() (result string, ran bool) {
+	db := ds.manager.DB()
+	if db == nil {
+		return "", false
+	}
+	// PRAGMA quick_check is SQLite-specific; other engines (e.g. MySQL/InnoDB)
+	// self-check and have no equivalent, so report healthy rather than tripping
+	// the corruption branch of the health check. db.Name() is the dialect name
+	// ("sqlite"/"mysql"), promoted from gorm.DB's embedded Dialector.
+	if db.Name() != sqliteDialectName {
+		return integrityResultOK, true
+	}
+	// Bound the scan: quick_check reads every page and runs on the single pinned
+	// SQLite connection, so an unbounded run would block writes for its full
+	// duration. A context timeout interrupts it (the SQLite driver honors
+	// cancellation), capping the worst-case write stall (#3939).
+	ctx, cancel := context.WithTimeout(context.Background(), v2IntegrityCheckTimeout)
+	defer cancel()
+	var rows []string
+	if err := db.WithContext(ctx).Raw("PRAGMA quick_check").Scan(&rows).Error; err != nil {
+		if ds.log != nil {
+			ds.log.Warn("database integrity quick_check failed to run", logger.Error(err))
+		}
+		return "", false
+	}
+	joined := strings.Join(rows, "; ")
+	if joined == "" {
+		return integrityResultOK, true
+	}
+	return joined, true
 }
 
 // CountDetectionsSince returns the number of detections recorded since the given time.
@@ -2753,7 +2867,6 @@ func (ds *Datastore) GetHourlyAnalyticsData(ctx context.Context, date, species s
 	}
 	return result, nil
 }
-
 
 // errNotFound is returned by resolveLabelIDs when no label carries the species name.
 var errNotFound = errors.NewStd("species not found")

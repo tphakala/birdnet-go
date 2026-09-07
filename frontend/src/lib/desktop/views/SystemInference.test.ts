@@ -262,13 +262,16 @@ describe('SystemInference', () => {
 
   // The "not analyzing" source chip. The i18n stub returns the key for unmapped
   // strings, so assertions target the key names. The Badge component renders a
-  // <span>; its error+outline variant is identified by the CSS custom property
-  // classes, and its help text is an sr-only span referenced by aria-describedby.
+  // <span>; the not-running chip uses the FILLED error variant (contrast-safe,
+  // #4209), and the reason is a single visible per-model element referenced by
+  // aria-describedby, shared by every not-running badge on that model.
   describe('not-analyzing source chip', () => {
     /** The Badge outer spans that carry the not-running help association. */
     function notRunningBadges(container: HTMLElement): HTMLSpanElement[] {
       return Array.from(
-        container.querySelectorAll<HTMLSpanElement>('span[aria-describedby^="source-not-running-"]')
+        container.querySelectorAll<HTMLSpanElement>(
+          'span[aria-describedby^="model-not-analyzing-"]'
+        )
       );
     }
 
@@ -291,9 +294,12 @@ describe('SystemInference', () => {
       const badges = notRunningBadges(container);
       expect(badges).toHaveLength(1);
       const badge = badges[0];
-      // error + outline variant classes from Badge.svelte.
-      expect(badge.className).toContain('text-[var(--color-error)]');
-      expect(badge.className).toContain('border-[var(--color-error)]');
+      // Filled error variant from Badge.svelte (contrast-safe): opaque error
+      // background with the matching content token, NOT the transparent outline
+      // variant that failed WCAG AA (#4209).
+      expect(badge.className).toContain('bg-[var(--color-error)]');
+      expect(badge.className).toContain('text-[var(--color-error-content)]');
+      expect(badge.className).not.toContain('bg-transparent');
       expect(badge.getAttribute('title')).toBe('system.inference.sourceNotRunningTooltip');
     });
 
@@ -356,12 +362,12 @@ describe('SystemInference', () => {
       expect(help?.textContent).toContain('system.inference.sourceNotRunningTooltip');
     });
 
-    it('renders the label once and generates unique help ids when only one of several sources is not running', async () => {
+    it('shares one per-model reason element across every not-running source, with a unique id', async () => {
       const model = makeModel({
         sources: [
           { id: 'a', name: 'Front Yard', type: 'soundcard', fallback: false },
           { id: 'b', name: 'Back Yard', type: 'rtsp', fallback: false, notRunning: true },
-          { id: 'c', name: 'Garage', type: 'soundcard', fallback: false },
+          { id: 'c', name: 'Garage', type: 'soundcard', fallback: false, notRunning: true },
         ],
       });
       installApi(makeSnapshot([model]));
@@ -372,24 +378,51 @@ describe('SystemInference', () => {
         expect(container.textContent).toContain('Back Yard');
       });
 
-      // Exactly one source is flagged, so exactly one badge carries the association
-      // and one help element exists.
+      // Two sources are flagged, so two badges carry the association, but the reason
+      // is a single shared per-model element (#4209).
       const badges = notRunningBadges(container);
-      expect(badges).toHaveLength(1);
+      expect(badges).toHaveLength(2);
 
-      const helpSpans = Array.from(
-        container.querySelectorAll<HTMLElement>('span[id^="source-not-running-"]')
+      const helpEls = Array.from(
+        container.querySelectorAll<HTMLElement>('[id^="model-not-analyzing-"]')
       );
-      const ids = helpSpans.map(s => s.id);
-      expect(ids).toHaveLength(1);
-      // Guards the duplicate-id family behind issue #4190: every generated id is unique.
+      expect(helpEls).toHaveLength(1);
+      expect(helpEls[0].textContent).toContain('system.inference.sourceNotRunningTooltip');
+
+      const ids = helpEls.map(el => el.id);
+      // Guards the duplicate-id family behind issue #4190: the generated id is unique.
       expect(new Set(ids).size).toBe(ids.length);
 
-      // Every aria-describedby resolves to an element that actually exists.
+      // Both not-running badges point at that same existing element.
       for (const badge of badges) {
         const helpId = badge.getAttribute('aria-describedby');
+        expect(helpId).toBe(helpEls[0].id);
         expect(container.querySelector(`[id="${helpId}"]`)).not.toBeNull();
       }
+    });
+
+    it('shows the model header as not-analyzing rather than idle when a source is not running (#4209)', async () => {
+      const model = makeModel({
+        paused: false,
+        sources: [
+          { id: 'mic1', name: 'Front Yard', type: 'soundcard', fallback: false, notRunning: true },
+        ],
+      });
+      installApi(makeSnapshot([model]));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('Front Yard');
+      });
+
+      // The dominant header slot must reflect the attention state, not a benign
+      // "Idle" that contradicts the not-analyzing badge below it.
+      const header = container.querySelector(
+        '[aria-label="system.inference.modelNotAnalyzingTooltip"]'
+      );
+      expect(header).not.toBeNull();
+      expect(container.textContent).not.toContain('system.inference.activityIdle');
     });
   });
 

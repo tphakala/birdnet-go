@@ -472,7 +472,7 @@
         "unreadableMessage": "Modelim {modelName} konfigurētais modeļa fails pastāv, taču to nevarēja nolasīt, tāpēc tā vietā tiek izmantots instalētais modelis {modelPath}. Jūsu konfigurācija netika mainīta. Pārbaudiet faila atļaujas un to, vai tā krātuve ir montēta.",
         "builtinMessage": "Modelim {modelName} konfigurētais modeļa fails netika atrasts diskā un nav pieejams neviens instalēts modelis tā aizstāšanai, tāpēc tā vietā tiek izmantots iebūvētais modelis. Jūsu konfigurācija netika mainīta.",
         "notRegisteredTitle": "Neviens modelis neanalizē {sourceName}",
-        "notRegisteredMessage": "Audio nesasniedz {models} audio avotā \"{sourceName}\", tāpēc noteikšanas netiek veiktas. Atveriet modeļu galeriju sadaļā Iestatījumi, lai pārbaudītu statusu."
+        "notRegisteredMessage": "Audio nesasniedz {models} audio avotā \"{sourceName}\", tāpēc noteikšanas netiek veiktas. Atveriet Sistēma > MI Modeļi, lai pārbaudītu tā statusu katram avotam, un pārliecinieties, ka audio avots ir pievienots un sūta audio."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1779,7 +1779,8 @@
       "noSources": "Nav pievienotu avotu",
       "primaryFallback": "primārais (rezerves)",
       "sourceNotRunning": "neanalizē",
-      "sourceNotRunningTooltip": "Šis avots ir piešķirts modelim iestatījumos, bet tā audio nesasniedz modeli, tāpēc tas neveic noteikšanas. Atveriet modeļu galeriju sadaļā Iestatījumi, lai pārbaudītu tā statusu.",
+      "sourceNotRunningTooltip": "Šis avots ir piešķirts modelim iestatījumos, bet tā audio nesasniedz modeli, tāpēc tas neveic noteikšanas. Pārbaudiet, vai audio avots ir pievienots un sūta audio.",
+      "modelNotAnalyzingTooltip": "Viens vai vairāki šim modelim piešķirtie audio avoti nesūta tam audio, tāpēc tas neveic noteikšanas. Skatiet zemāk norādītos avotus.",
       "notMeasured": "n/p",
       "unitMs": "ms",
       "unitKhz": "kHz",

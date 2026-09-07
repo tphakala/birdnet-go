@@ -472,7 +472,7 @@
         "unreadableMessage": "Modellfilen som er konfigurert for {modelName}, finnes, men kunne ikke leses, så den installerte modellen på {modelPath} brukes i stedet. Konfigurasjonen din ble ikke endret. Sjekk filens tillatelser og at lagringen er montert.",
         "builtinMessage": "Modellfilen som er konfigurert for {modelName}, ble ikke funnet på disken, og ingen installert modell er tilgjengelig for å erstatte den, så den innebygde modellen brukes i stedet. Konfigurasjonen din ble ikke endret.",
         "notRegisteredTitle": "Ingen modell analyserer {sourceName}",
-        "notRegisteredMessage": "Ingen lyd når {models} på lydkilden \"{sourceName}\", så det produseres ingen registreringer. Åpne modellgalleriet i Innstillinger for å sjekke status."
+        "notRegisteredMessage": "Ingen lyd når {models} på lydkilden \"{sourceName}\", så det produseres ingen registreringer. Åpne System > AI-modeller for å sjekke dens status per kilde, og bekreft at lydkilden er tilkoblet og sender lyd."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1779,7 +1779,8 @@
       "noSources": "Ingen kilder tilkoblet",
       "primaryFallback": "primær (fallback)",
       "sourceNotRunning": "analyserer ikke",
-      "sourceNotRunningTooltip": "Denne kilden er tilordnet modellen i innstillingene, men lyden når ikke modellen, så den produserer ingen registreringer. Åpne modellgalleriet i Innstillinger for å sjekke statusen.",
+      "sourceNotRunningTooltip": "Denne kilden er tilordnet modellen i innstillingene, men lyden når ikke modellen, så den produserer ingen registreringer. Sjekk at lydkilden er tilkoblet og sender lyd.",
+      "modelNotAnalyzingTooltip": "Én eller flere lydkilder tilordnet denne modellen sender ikke lyd til den, så den produserer ingen registreringer. Se kildene oppført nedenfor.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",

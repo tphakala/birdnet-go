@@ -489,7 +489,7 @@ func addUserOverrideSpecies(includedSpecies *[]string, settings *conf.Settings, 
 // so that UI changes to coordinates, threshold, or LocationConfigured take
 // effect immediately without restarting the service.
 func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesScore, error) {
-	scores, _, err := bn.getProbableSpecies(date, week, bn.currentSettings())
+	scores, _, _, err := bn.getProbableSpecies(date, week, bn.currentSettings())
 	return scores, err
 }
 
@@ -499,7 +499,7 @@ func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesSc
 // publishing temporary values into the global settings, eliminating the race
 // where a concurrent BuildRangeFilter could pick up test data.
 func (bn *BirdNET) GetProbableSpeciesWithSettings(date time.Time, week float32, settings *conf.Settings) ([]SpeciesScore, error) {
-	scores, _, err := bn.getProbableSpecies(date, week, settings)
+	scores, _, _, err := bn.getProbableSpecies(date, week, settings)
 	return scores, err
 }
 
@@ -517,7 +517,16 @@ func (bn *BirdNET) GetProbableSpeciesWithSettings(date time.Time, week float32, 
 // the universal path. Returning it here lets callers that need both avoid a
 // second lock that could observe a different range-filter instance after a
 // concurrent ReloadRangeFilter.
-func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *conf.Settings) ([]SpeciesScore, []string, error) {
+//
+// The third return value, realScores, is true only when the returned scores are
+// genuine location-based predictions. It is false whenever the scores are the
+// synthetic all-zero fallback (no range-filter backend loaded, or no location
+// configured). Because it is decided inside the same locked section that produced
+// the scores, a caller can trust that "the filter was active" and "these scores"
+// describe one consistent snapshot, with no separate read that could race a
+// concurrent unload (used by GetRarityContext to avoid reporting a synthetic zero
+// as "very rare", #3935).
+func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *conf.Settings) (probableSpecies []SpeciesScore, geomodelLabels []string, filterActive bool, err error) {
 	bn.Debug("Applying range filter")
 
 	// Build the exclude matcher once: it reverse-resolves localized common-name exclude
@@ -532,13 +541,13 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 	bn.mu.Unlock()
 	if !hasRangeFilter {
 		bn.Debug("Range filter model not loaded, returning zero scores for all labels")
-		return zeroScoresForAllLabels(settings.BirdNET.Labels, excluder), nil, nil
+		return zeroScoresForAllLabels(settings.BirdNET.Labels, excluder), nil, false, nil
 	}
 
 	// Skip filtering if location is not configured
 	if !settings.BirdNET.LocationConfigured {
 		bn.Debug("Location not configured, not using location based prediction filter")
-		return zeroScoresForAllLabels(settings.BirdNET.Labels, excluder), nil, nil
+		return zeroScoresForAllLabels(settings.BirdNET.Labels, excluder), nil, false, nil
 	}
 
 	threshold := settings.BirdNET.RangeFilter.Threshold
@@ -572,7 +581,7 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 		bn.mu.Unlock()
 
 		if err != nil {
-			return nil, nil, errors.New(err).
+			return nil, nil, false, errors.New(err).
 				Category(errors.CategoryValidation).
 				Context("date", date.Format(time.DateOnly)).
 				Context("week", week).
@@ -614,14 +623,14 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 		}
 
 		sort.Sort(ByScore(speciesScores))
-		return speciesScores, allGeoLabels, nil
+		return speciesScores, allGeoLabels, true, nil
 	}
 	bn.mu.Unlock()
 
 	// Legacy path: map geomodel scores to the classifier's label set.
 	filters, err := bn.predictFilter(date, week, settings, threshold)
 	if err != nil {
-		return nil, nil, errors.New(err).
+		return nil, nil, false, errors.New(err).
 			Category(errors.CategoryValidation).
 			Context("date", date.Format(time.DateOnly)).
 			Context("week", week).
@@ -646,7 +655,7 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 	addUserOverrideSpeciesScores(bn, &speciesScores, settings, nil)
 
 	sort.Sort(ByScore(speciesScores))
-	return speciesScores, nil, nil
+	return speciesScores, nil, true, nil
 }
 
 // zeroScoresForAllLabels creates a slice of SpeciesScore with zero scores for all provided labels,

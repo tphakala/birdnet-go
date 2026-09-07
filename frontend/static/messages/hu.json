@@ -472,7 +472,7 @@
         "unreadableMessage": "A(z) {modelName} modellhez beállított modellfájl létezik, de nem sikerült beolvasni, ezért helyette a(z) {modelPath} helyen telepített modell van használatban. A konfigurációja változatlan maradt. Ellenőrizze a fájl jogosultságait és azt, hogy a tárolója csatolva van-e.",
         "builtinMessage": "A(z) {modelName} modellhez beállított modellfájl nem található a lemezen, és nem érhető el telepített modell a helyettesítésére, ezért helyette a beépített modell van használatban. A konfigurációja változatlan maradt.",
         "notRegisteredTitle": "Egyetlen modell sem elemzi a következőt: {sourceName}",
-        "notRegisteredMessage": "Nem jut el hang a(z) {models} számára a(z) \"{sourceName}\" hangforráson, így nem jönnek létre detektálások. Nyissa meg a modellgalériát a Beállításokban az állapot ellenőrzéséhez."
+        "notRegisteredMessage": "Nem jut el hang a(z) {models} számára a(z) \"{sourceName}\" hangforráson, így nem jönnek létre detektálások. Nyissa meg a Rendszer > AI Modellek menüpontot a forrásonkénti állapot ellenőrzéséhez, és győződjön meg róla, hogy a hangforrás csatlakoztatva van és hangot küld."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1779,7 +1779,8 @@
       "noSources": "Nincs csatlakoztatott hangforrás",
       "primaryFallback": "elsődleges (tartalék)",
       "sourceNotRunning": "nem elemzi",
-      "sourceNotRunningTooltip": "Ez a forrás hozzá van rendelve a modellhez a beállításokban, de a hangja nem jut el a modellhez, így nem készít észleléseket. Nyissa meg a modellgalériát a Beállításokban az állapotának ellenőrzéséhez.",
+      "sourceNotRunningTooltip": "Ez a forrás hozzá van rendelve a modellhez a beállításokban, de a hangja nem jut el a modellhez, így nem készít észleléseket. Ellenőrizze, hogy a hangforrás csatlakoztatva van-e és hangot küld-e.",
+      "modelNotAnalyzingTooltip": "Egy vagy több, ehhez a modellhez hozzárendelt hangforrás nem küld neki hangot, így nem készít észleléseket. Lásd az alább felsorolt forrásokat.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",

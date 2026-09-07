@@ -1011,6 +1011,7 @@
             {@const throughputLatest =
               throughputSeries.length > 0 ? throughputSeries[throughputSeries.length - 1] : 0}
             {@const isActive = throughputSeries.length > 0 && throughputLatest > 0}
+            {@const notAnalyzing = model.sources.some(s => s.notRunning)}
             <div
               class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col gap-3"
             >
@@ -1045,6 +1046,25 @@
                           class="text-muted">&nbsp;({model.scheduleLabel})</span
                         >{/if}
                     </span>
+                  </span>
+                {:else if notAnalyzing && !isActive}
+                  <!-- A source assigned to this model is not sending it audio AND the
+                       model is producing no throughput, so it is genuinely not analyzing.
+                       Surface it in the dominant header slot rather than a benign "Idle"
+                       (#4209). Gated on !isActive so a multi-source model still analyzing
+                       via another source reads "active", not a misleading blanket "not
+                       analyzing"; the specific down source is still flagged by its badge
+                       below. Precedence: paused > not-analyzing > active > idle. -->
+                  <span
+                    class="ml-auto flex items-center gap-1.5"
+                    role="status"
+                    aria-label={t('system.inference.modelNotAnalyzingTooltip')}
+                    title={t('system.inference.modelNotAnalyzingTooltip')}
+                  >
+                    <TriangleAlert class="w-3 h-3 shrink-0 text-red-500" aria-hidden="true" />
+                    <span class="text-xs font-medium text-red-600 dark:text-red-400"
+                      >{t('system.inference.sourceNotRunning')}</span
+                    >
                   </span>
                 {:else}
                   <span
@@ -1319,17 +1339,19 @@
                 {#if model.sources.length === 0}
                   <span class="text-xs text-muted">{t('system.inference.noSources')}</span>
                 {:else}
+                  {@const notAnalyzingHelpId = `model-not-analyzing-${model.id}`}
                   <div class="flex flex-wrap gap-1.5">
-                    {#each model.sources as source, sourceIdx}
-                      {@const notRunningHelpId = `source-not-running-${model.id}-${sourceIdx}`}
+                    {#each model.sources as source}
+                      <!-- notRunning uses the filled (not outline) error variant: the
+                           outline variant's transparent background failed WCAG AA
+                           contrast at this size (#4209). -->
                       <Badge
                         variant={source.notRunning ? 'error' : 'ghost'}
-                        outline={source.notRunning}
                         size="sm"
                         title={source.notRunning
                           ? t('system.inference.sourceNotRunningTooltip')
                           : undefined}
-                        aria-describedby={source.notRunning ? notRunningHelpId : undefined}
+                        aria-describedby={source.notRunning ? notAnalyzingHelpId : undefined}
                       >
                         {source.name}{#if source.type}
                           <span class={source.notRunning ? 'ml-1' : 'text-muted ml-1'}
@@ -1345,13 +1367,21 @@
                           </span>
                         {/if}
                       </Badge>
-                      {#if source.notRunning}
-                        <span id={notRunningHelpId} class="sr-only">
-                          {t('system.inference.sourceNotRunningTooltip')}
-                        </span>
-                      {/if}
                     {/each}
                   </div>
+                  <!-- Persistent, visible reason so keyboard and touch users get the
+                       cause without a hover (frontend/CLAUDE.md: no ambiguous states).
+                       Each not-analyzing badge references it via aria-describedby for
+                       screen readers. It points at this page, not the model gallery,
+                       which has no per-source liveness view (#4209). -->
+                  {#if notAnalyzing}
+                    <p
+                      id={notAnalyzingHelpId}
+                      class="text-xs text-red-600 dark:text-red-400 mt-1.5 leading-snug"
+                    >
+                      {t('system.inference.sourceNotRunningTooltip')}
+                    </p>
+                  {/if}
                 {/if}
               </div>
             </div>
