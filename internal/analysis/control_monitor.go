@@ -343,6 +343,8 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleRebuildExtendedCapture()
 	case "reconfigure_audio_sources":
 		cm.handleReconfigureAudioSources()
+	case "restart_audio_capture":
+		cm.handleRestartAudioCapture()
 	case "reconfigure_dynamic_thresholds":
 		cm.handleReconfigureDynamicThresholds()
 	case schedule.SignalReconfigureQuietHours:
@@ -1061,6 +1063,22 @@ func (cm *ControlMonitor) handleReconfigureQuietHours() {
 		emitHotReload("quiet_hours")
 	} else {
 		GetLogger().Warn("Quiet hours scheduler not available")
+	}
+}
+
+// handleRestartAudioCapture signals a full audio-capture restart. Used for a
+// setting that changes the analysis-buffer dimensions but is not a per-source
+// audio property (e.g. birdnet.overlap): the diff-based reconfigure cannot see
+// it, so the capture is torn down and rebuilt, which re-applies the primary
+// model dimensions and reallocates every analysis buffer with the new values.
+func (cm *ControlMonitor) handleRestartAudioCapture() {
+	GetLogger().Info("Restarting audio capture to apply analysis buffer changes")
+	ResetOverrunTrackers()
+	select {
+	case cm.restartChan <- struct{}{}:
+		GetLogger().Info("audio capture restart signal sent")
+	default:
+		GetLogger().Warn("restart channel full, could not signal audio capture restart")
 	}
 }
 

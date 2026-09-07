@@ -735,6 +735,20 @@ func defaultVariant(entry *CatalogEntry) *CatalogVariant {
 	return &entry.Variants[0]
 }
 
+// DefaultVariantID returns the ID of the variant that an empty variant selection
+// resolves to (the one flagged Default, else the first), or "" for a flat entry
+// with no variants. It is the exported form used by the API layer to map an empty
+// install request to the concrete variant ID the recommender keys its verdict by.
+func DefaultVariantID(entry *CatalogEntry) string {
+	if entry == nil {
+		return ""
+	}
+	if v := defaultVariant(entry); v != nil {
+		return v.ID
+	}
+	return ""
+}
+
 // variantFilesByID returns the file list for the given variant of an entry. An
 // empty variantID yields the entry's resolved (default) Files, preserving the
 // pre-variant behaviour. A non-empty variantID selects the matching variant's

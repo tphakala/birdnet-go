@@ -416,6 +416,10 @@ func (s *Settings) normalizeIntegrations() {
 // and viper drops a nested default whenever the parent key is present but the child
 // is not, so an unfinished edit here is the likeliest way to meet this whole class
 // of failure.
+//
+// A blank lossy bitrate is not repaired here: it is healed and persisted by
+// migrateEmptyLossyExportBitrate in Load (before this pass), so the fix reaches
+// disk and the warning fires at most once instead of on every load.
 func (s *Settings) normalizeAudioExport() {
 	export := &s.Realtime.Audio.Export
 	if !export.Enabled {
@@ -427,16 +431,6 @@ func (s *Settings) normalizeAudioExport() {
 		s.recordValidationWarning(warnComponentAudio,
 			"audio export is enabled but no clip length is set; using the default %d seconds",
 			DefaultAudioExportLength)
-	}
-
-	switch export.Type {
-	case AudioExportTypeAAC, AudioExportTypeOPUS, AudioExportTypeMP3:
-		if export.Bitrate == "" {
-			export.Bitrate = DefaultAudioExportBitrate
-			s.recordValidationWarning(warnComponentAudio,
-				"audio export is enabled with the lossy format %s but no bitrate is set; using the default %s",
-				export.Type, DefaultAudioExportBitrate)
-		}
 	}
 
 	// Only targetLufs needs this: zero is outside its supported range, while zero

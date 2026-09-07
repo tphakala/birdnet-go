@@ -2,6 +2,7 @@ package conf
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"reflect"
 	"strings"
@@ -23,6 +24,35 @@ func persistMigration(settings *Settings, label string) {
 	} else {
 		GetLogger().Info("Saved migrated "+label+" configuration", logger.String("path", configFile))
 	}
+}
+
+// migrateEmptyLossyExportBitrate fills the documented default into a lossy export
+// whose bitrate was left blank on disk (an explicit `bitrate: ""` from a save made
+// while export was disabled, or a hand-edit), returning whether it changed anything.
+//
+// viper reads the blank as "", so without a persisted repair the default would be
+// re-applied only in memory on every load, re-emitting the same telemetry warning on
+// every restart because nothing writes it back. Healing it here, before the file is
+// saved, writes the default to disk once. The warning is recorded here (once, on the
+// healing load, when the export is enabled); the persisted default then stops it
+// firing on later loads.
+//
+// It runs from Load before normalizeIncompleteFeatures on purpose: a persistMigration
+// of the returned change writes the file with every feature's on-disk enabled state
+// intact. The incomplete-feature pass disables switched-on-but-unconfigured
+// integrations only in memory, and those disables must never reach disk.
+func (s *Settings) migrateEmptyLossyExportBitrate() bool {
+	export := &s.Realtime.Audio.Export
+	if !isLossyExportFormat(export.Type) || export.Bitrate != "" {
+		return false
+	}
+	export.Bitrate = DefaultAudioExportBitrate
+	if export.Enabled {
+		s.recordValidationWarning(warnComponentAudio,
+			"audio export is enabled with the lossy format %s but no bitrate is set; using the default %s",
+			export.Type, DefaultAudioExportBitrate)
+	}
+	return true
 }
 
 // migrateStreamEnabledDefaults materializes missing enabled fields for legacy
@@ -219,12 +249,14 @@ func inferStreamType(url string) string {
 
 // MigrateRTSPConfig migrates legacy URLs []string to Streams []StreamConfig.
 // This migration:
-// - Skips if Streams already has entries (already migrated)
-// - Only migrates if URLs has data
-// - Trims whitespace and skips empty URLs
-// - Infers stream type from URL scheme
-// - Preserves the global Transport setting for RTSP/RTMP streams
-// - Returns true if migration occurred, false if skipped
+//   - Skips if Streams already has entries (already migrated)
+//   - Only migrates if URLs has data
+//   - Trims whitespace and skips empty URLs
+//   - Infers stream type from URL scheme
+//   - Copies the global Transport into each RTSP/RTMP stream entry AND keeps the
+//     global Transport in place, because the startup path reads the global value
+//     as the engine-wide default
+//   - Returns true if migration occurred, false if skipped
 func (s *Settings) MigrateRTSPConfig() bool {
 	rtsp := &s.Realtime.RTSP
 
@@ -238,11 +270,8 @@ func (s *Settings) MigrateRTSPConfig() bool {
 		return false
 	}
 
-	// Get global transport, default to tcp
-	globalTransport := rtsp.Transport
-	if globalTransport == "" {
-		globalTransport = DefaultTransport
-	}
+	// Get global transport via the single resolution owner (global else default).
+	globalTransport := rtsp.ResolveTransport("")
 
 	// Preallocate streams slice with capacity and track seen URLs for deduplication
 	rtsp.Streams = make([]StreamConfig, 0, len(rtsp.URLs))
@@ -288,9 +317,13 @@ func (s *Settings) MigrateRTSPConfig() bool {
 		return false
 	}
 
-	// Clear legacy fields
+	// Clear the legacy URLs list now that it has been migrated to Streams.
+	// Keep rtsp.Transport: it is copied into each per-stream entry above, but
+	// the startup path (cmd/serve/serve.go) still reads the global value as the
+	// engine-wide default transport. Clearing it made FFmpeg receive an empty
+	// -rtsp_transport and fail to open the stream on the next start (the value
+	// is present-but-empty, so the Viper default no longer applies).
 	rtsp.URLs = nil
-	rtsp.Transport = ""
 
 	GetLogger().Info("Migrated RTSP configuration to new streams format",
 		logger.Int("stream_count", len(rtsp.Streams)))
@@ -384,9 +417,7 @@ func normalizeRTSPStreamEnabledDefaults(rawStreams any) ([]any, bool) {
 		}
 
 		copied := make(map[string]any, len(streamMap)+1)
-		for key, value := range streamMap {
-			copied[key] = value
-		}
+		maps.Copy(copied, streamMap)
 		copied["enabled"] = true
 		normalized[i] = copied
 		migrated = true
@@ -839,6 +870,11 @@ func (s *Settings) mergeSourceIntoStream(src *AudioSourceConfig, stream *StreamC
 // ever gains a non-comparable field this returns false so the merge is skipped
 // rather than risking a runtime panic.
 func quietHoursComparable() bool {
+	// Keep reflect.TypeOf here, not reflect.TypeFor[QuietHoursConfig](): the
+	// generic form trips a Go linker bug (R_USEIFACE ... references type:.eqfunc
+	// which is not a type or itab) during deadcode elimination for this
+	// comparable-struct check.
+	//nolint:modernize // reflect.TypeOf is intentional; reflect.TypeFor breaks the linker here (see above)
 	return reflect.TypeOf(QuietHoursConfig{}).Comparable()
 }
 

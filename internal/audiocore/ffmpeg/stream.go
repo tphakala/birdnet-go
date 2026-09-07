@@ -1,7 +1,6 @@
 package ffmpeg
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -36,10 +35,6 @@ const (
 	healthCheckInterval  = 5 * time.Second
 	silenceTimeout       = 90 * time.Second
 	silenceCheckInterval = 10 * time.Second
-
-	// Data rate calculation settings.
-	dataRateWindowSize = 10 * time.Second
-	dataRateMaxSamples = 100
 
 	// Process management timeouts.
 	processCleanupTimeout = 5 * time.Second
@@ -108,6 +103,9 @@ const (
 
 	// Maximum number of state transitions to keep in history.
 	maxStateHistory = 100
+	// maxStateHistoryExposed caps how many recent state transitions the health
+	// snapshot surfaces to the API.
+	maxStateHistoryExposed = 10
 )
 
 // getStreamLogger returns the logger for FFmpeg stream operations.
@@ -169,8 +167,11 @@ func (s ProcessState) String() string {
 	}
 }
 
-// StateTransition records a transition between process states for debugging.
-type StateTransition struct {
+// ProcessStateTransition records a transition between FFmpeg process states for
+// the stream's internal state machine and debug history. It is distinct from
+// audiocore.StateTransition, the producer-neutral transition the health snapshot
+// exposes; GetHealth maps each of these onto that neutral type.
+type ProcessStateTransition struct {
 	From      ProcessState
 	To        ProcessState
 	Timestamp time.Time
@@ -260,6 +261,13 @@ type StreamConfig struct {
 	// Zero uses defaultHealthyDataThreshold.
 	HealthyDataThreshold time.Duration
 
+	// SilenceTimeout is how long without any received data before the stream
+	// forces a restart. Zero uses the package default (silenceTimeout, 90 s).
+	// Exposed so characterization tests can drive the silence watchdog in
+	// seconds without mutating the package-level constant; production callers
+	// leave it zero.
+	SilenceTimeout time.Duration
+
 	// Debug enables verbose debug logging.
 	Debug bool
 }
@@ -312,100 +320,13 @@ func (c *StreamConfig) healthyThreshold() time.Duration {
 	return defaultHealthyDataThreshold
 }
 
-// StreamHealth represents the health status of an FFmpeg stream.
-type StreamHealth struct {
-	IsHealthy          bool
-	LastDataReceived   time.Time
-	RestartCount       int
-	Error              error
-	TotalBytesReceived int64
-	BytesPerSecond     float64
-	IsReceivingData    bool
-	ProcessState       ProcessState
-	StateHistory       []StateTransition
-	LastErrorContext   *ErrorContext
-	ErrorHistory       []*ErrorContext
-	SourceChannels     int
-}
-
-// dataRateCalculator tracks data rate over a sliding window.
-type dataRateCalculator struct {
-	samples    []dataSample
-	samplesMu  sync.RWMutex
-	windowSize time.Duration
-	maxSamples int
-}
-
-type dataSample struct {
-	timestamp time.Time
-	bytes     int64
-}
-
-// newDataRateCalculator creates a new data rate calculator.
-func newDataRateCalculator(windowSize time.Duration) *dataRateCalculator {
-	return &dataRateCalculator{
-		samples:    make([]dataSample, 0, dataRateMaxSamples),
-		windowSize: windowSize,
-		maxSamples: dataRateMaxSamples,
+// effectiveSilenceTimeout returns the configured silence timeout or the package
+// default (silenceTimeout) when it is unset or non-positive.
+func (c *StreamConfig) effectiveSilenceTimeout() time.Duration {
+	if c.SilenceTimeout > 0 {
+		return c.SilenceTimeout
 	}
-}
-
-// addSample adds a new data sample.
-func (d *dataRateCalculator) addSample(numBytes int64) {
-	d.samplesMu.Lock()
-	defer d.samplesMu.Unlock()
-
-	now := time.Now()
-	d.samples = append(d.samples, dataSample{
-		timestamp: now,
-		bytes:     numBytes,
-	})
-
-	// Remove old samples outside the window.
-	cutoff := now.Add(-d.windowSize)
-	i := 0
-	for i < len(d.samples) && d.samples[i].timestamp.Before(cutoff) {
-		i++
-	}
-	if i > 0 {
-		d.samples = d.samples[i:]
-	}
-
-	// Limit max samples.
-	if len(d.samples) > d.maxSamples {
-		d.samples = d.samples[len(d.samples)-d.maxSamples:]
-	}
-}
-
-// getRate returns the current data rate in bytes per second.
-func (d *dataRateCalculator) getRate() float64 {
-	d.samplesMu.RLock()
-	defer d.samplesMu.RUnlock()
-
-	if len(d.samples) == 0 {
-		return 0
-	}
-
-	if len(d.samples) == 1 {
-		sample := d.samples[0]
-		timeSinceSample := time.Since(sample.timestamp)
-		if timeSinceSample < 5*time.Second {
-			return float64(sample.bytes)
-		}
-		return 0
-	}
-
-	totalBytes := int64(0)
-	for _, s := range d.samples {
-		totalBytes += s.bytes
-	}
-
-	duration := d.samples[len(d.samples)-1].timestamp.Sub(d.samples[0].timestamp).Seconds()
-	if duration <= 0 {
-		return 0
-	}
-
-	return float64(totalBytes) / duration
+	return silenceTimeout
 }
 
 // secondsSinceOrZero returns seconds since t, or 0 if t is zero.
@@ -452,9 +373,109 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dh %dm %ds", hours, minutes, seconds)
 }
 
-// threadSafeWriter wraps a bytes.Buffer with mutex protection for concurrent access.
+// stderrTailMaxBytes bounds how many trailing bytes of FFmpeg stderr are kept
+// for diagnostics. FFmpeg error and warning output is only inspected during the
+// early-detection and quick-exit windows (a few seconds after process start),
+// so a 64 KiB tail comfortably holds the relevant lines while preventing the
+// buffer from growing for the entire lifetime of a long-lived stream. Before
+// this cap the capture used an unbounded bytes.Buffer that only reset on a
+// process restart, so a stream that stayed up for a day accumulated gigabytes
+// of stderr in memory (issue #4257).
+const stderrTailMaxBytes = 64 << 10 // 64 KiB
+
+// boundedBuffer is an io.Writer that retains only the most recent limit() bytes
+// written to it, discarding older data on overflow. It replaces the unbounded
+// bytes.Buffer previously used to capture FFmpeg stderr, whose size scaled with
+// stream uptime rather than staying bounded.
+//
+// boundedBuffer is NOT safe for concurrent use on its own; callers must provide
+// external synchronization. Stream serializes all access through stderrMu.
+type boundedBuffer struct {
+	buf []byte
+	// limitBytes caps the retained size. A value <= 0 selects
+	// stderrTailMaxBytes, so the zero value is already bounded.
+	limitBytes int
+}
+
+// limit returns the effective retention cap in bytes.
+func (b *boundedBuffer) limit() int {
+	if b.limitBytes <= 0 {
+		return stderrTailMaxBytes
+	}
+	return b.limitBytes
+}
+
+// Write appends p, keeping only the trailing limit() bytes and discarding older
+// data on overflow. It never returns an error and always reports len(p) written,
+// so it satisfies io.Writer and never stalls the io.Copy that feeds it from the
+// FFmpeg stderr pipe.
+func (b *boundedBuffer) Write(p []byte) (n int, err error) {
+	n = len(p)
+	maxBytes := b.limit()
+
+	if n >= maxBytes {
+		// This single write already fills or exceeds the window; keep only its
+		// trailing maxBytes and drop everything retained before it.
+		b.buf = append(b.buf[:0], p[n-maxBytes:]...)
+		return n, nil
+	}
+
+	if len(b.buf)+n > maxBytes {
+		// Drop the oldest bytes so existing content plus p fits in maxBytes,
+		// preserving the most recent data. copy compacts the surviving tail to
+		// the front (safe for the overlapping ranges).
+		drop := len(b.buf) + n - maxBytes
+		b.buf = b.buf[:copy(b.buf, b.buf[drop:])]
+	}
+
+	b.buf = append(b.buf, p...)
+	return n, nil
+}
+
+// String returns the retained bytes as a string, matching bytes.Buffer.String.
+func (b *boundedBuffer) String() string {
+	return string(b.buf)
+}
+
+// Reset discards all retained bytes while keeping the backing array for reuse,
+// matching bytes.Buffer.Reset.
+func (b *boundedBuffer) Reset() {
+	b.buf = b.buf[:0]
+}
+
+// stderrLogTailMaxBytes caps how much of the captured FFmpeg stderr is attached
+// to the process-ended log lines. The capture itself is bounded to
+// stderrTailMaxBytes; this keeps the log field small and readable while still
+// showing the last handful of FFmpeg messages that explain why the process
+// stopped.
+const stderrLogTailMaxBytes = 2 << 10 // 2 KiB
+
+// stderrLogTail returns the trailing snippet of s used for a stderr-on-exit log
+// field: at most maxBytes trailing bytes, with surrounding whitespace trimmed. A
+// leading partial line is dropped so the snippet starts on a line boundary, but
+// only when the cut bisects a line; if the retained suffix already begins right
+// after a newline its first line is kept whole. It performs no locking or
+// sanitization; callers do both. A maxBytes <= 0 returns the whole trimmed input.
+func stderrLogTail(s string, maxBytes int) string {
+	if maxBytes > 0 && len(s) > maxBytes {
+		start := len(s) - maxBytes
+		// When the cut bisects a line (the byte before the retained suffix is not
+		// a newline), drop the leading partial line so the snippet starts on a
+		// line boundary, but only when content remains after the break. When the
+		// cut already lands on a boundary, keep the complete first line.
+		if s[start-1] != '\n' {
+			if nl := strings.IndexByte(s[start:], '\n'); nl >= 0 && start+nl+1 < len(s) {
+				start += nl + 1
+			}
+		}
+		s = s[start:]
+	}
+	return strings.TrimSpace(s)
+}
+
+// threadSafeWriter wraps a boundedBuffer with mutex protection for concurrent access.
 type threadSafeWriter struct {
-	buf *bytes.Buffer
+	buf *boundedBuffer
 	mu  *sync.RWMutex
 }
 
@@ -482,7 +503,7 @@ type Stream struct {
 	cmd      *exec.Cmd
 	cmdMu    sync.Mutex
 	stdout   io.ReadCloser
-	stderr   bytes.Buffer
+	stderr   boundedBuffer
 	stderrMu sync.RWMutex
 
 	// State management.
@@ -513,7 +534,7 @@ type Stream struct {
 	// Data tracking.
 	totalBytesReceived int64
 	bytesReceivedMu    sync.RWMutex
-	dataRateCalc       *dataRateCalculator
+	dataRateCalc       *audiocore.DataRateMeter
 
 	// Process timing.
 	processStartTime time.Time
@@ -556,11 +577,11 @@ type Stream struct {
 	// Process state tracking.
 	processState     ProcessState
 	processStateMu   sync.RWMutex
-	stateTransitions []StateTransition
+	stateTransitions []ProcessStateTransition
 	transitionsMu    sync.Mutex
 
 	// FFmpeg error tracking for diagnostics.
-	errorContexts   []*ErrorContext
+	errorContexts   []*audiocore.StreamErrorContext
 	errorContextsMu sync.RWMutex
 	maxErrorHistory int
 
@@ -582,7 +603,7 @@ type Stream struct {
 // bufMgr is an optional buffer manager used to pool stdout read buffers via
 // FrameRef; when nil, readStdout falls back to a fresh per-iteration allocation.
 func NewStream(cfg *StreamConfig, onFrame func(frame audiocore.AudioFrame), onReset func(sourceID string), metrics audiocore.StreamMetrics, bufMgr *buffer.Manager) *Stream {
-	return &Stream{
+	s := &Stream{
 		config:           *cfg,
 		onFrame:          onFrame,
 		onReset:          onReset,
@@ -592,15 +613,22 @@ func NewStream(cfg *StreamConfig, onFrame func(frame audiocore.AudioFrame), onRe
 		backoffDuration:  defaultBackoffDuration,
 		maxBackoff:       maxBackoffDuration,
 		lastDataTime:     time.Time{},
-		dataRateCalc:     newDataRateCalculator(dataRateWindowSize),
+		dataRateCalc:     audiocore.NewDataRateMeter(audiocore.DataRateWindowSize),
 		lastDropLogTime:  time.Now(),
 		streamCreatedAt:  time.Now(),
 		processState:     StateIdle,
-		stateTransitions: make([]StateTransition, 0, maxStateHistory),
-		errorContexts:    make([]*ErrorContext, 0, maxErrorHistorySize),
+		stateTransitions: make([]ProcessStateTransition, 0, maxStateHistory),
+		errorContexts:    make([]*audiocore.StreamErrorContext, 0, maxErrorHistorySize),
 		maxErrorHistory:  maxErrorHistorySize,
 		bufMgr:           bufMgr,
 	}
+	// Record the ingest engine once at construction, matching the native producer,
+	// so the audio_stream_engine metric is populated for the default FFmpeg path
+	// too (native emits EngineNative in its own constructor).
+	if metrics != nil {
+		metrics.SetStreamEngine(cfg.SourceID, audiocore.EngineFFmpeg)
+	}
+	return s
 }
 
 // transitionState safely transitions the process state and logs the change.
@@ -652,7 +680,7 @@ func (s *Stream) transitionState(to ProcessState, reason string) {
 	s.processState = to
 	s.processStateMu.Unlock()
 
-	transition := StateTransition{
+	transition := ProcessStateTransition{
 		From:      from,
 		To:        to,
 		Timestamp: time.Now(),
@@ -684,7 +712,7 @@ func (s *Stream) GetProcessState() ProcessState {
 }
 
 // GetStateHistory returns recent state transitions for debugging (thread-safe).
-func (s *Stream) GetStateHistory() []StateTransition {
+func (s *Stream) GetStateHistory() []ProcessStateTransition {
 	s.transitionsMu.Lock()
 	defer s.transitionsMu.Unlock()
 	return slices.Clone(s.stateTransitions)
@@ -777,7 +805,8 @@ func (s *Stream) Run(parentCtx context.Context) {
 			runtime := time.Since(processStartTime)
 
 			fallbackEngaged := false
-			if err != nil && !errors.Is(err, context.Canceled) {
+			abnormalExit := err != nil && !errors.Is(err, context.Canceled)
+			if abnormalExit {
 				s.recordFailure(runtime)
 				// Latch to the full-stream request if repeated RTSP failures with
 				// no audio point at an audio-only handshake the camera cannot
@@ -786,7 +815,7 @@ func (s *Stream) Run(parentCtx context.Context) {
 				fallbackEngaged = s.maybeEngageAudioOnlyFallback()
 				errorMsg := err.Error()
 				sanitizedError := privacy.SanitizeFFmpegError(errorMsg)
-				isSilenceTimeout := strings.Contains(errorMsg, "silence timeout")
+				isSilenceTimeout := isSilenceTimeoutError(err)
 
 				// Publish stream event for alerting rules.
 				// A normal EOF (audio already seen) or a canceled context returns
@@ -815,18 +844,7 @@ func (s *Stream) Run(parentCtx context.Context) {
 					logger.String("operation", "process_ended"))
 
 				if isSilenceTimeout {
-					func() {
-						s.restartCountMu.Lock()
-						defer s.restartCountMu.Unlock()
-						s.restartCount = 0
-					}()
-					func() {
-						s.circuitMu.Lock()
-						defer s.circuitMu.Unlock()
-						if s.consecutiveFailures > 0 {
-							s.consecutiveFailures--
-						}
-					}()
+					s.resetForSilenceTimeout()
 				}
 			} else {
 				getStreamLogger().Info("FFmpeg process ended normally",
@@ -838,6 +856,14 @@ func (s *Stream) Run(parentCtx context.Context) {
 			}
 
 			s.cleanupProcess()
+
+			// Surface the tail of FFmpeg's own stderr so operators can see why it
+			// stopped. It is otherwise only read during the early-detection and
+			// quick-exit windows, so a steady-state exit would leave it unlogged.
+			// Logged after cleanupProcess so cmd.Wait has flushed the final stderr:
+			// WARN for an abnormal exit, DEBUG for a normal one, and only when
+			// non-empty.
+			s.logStderrTailOnExit(abnormalExit)
 
 			// Notify consumers of stream restart.
 			if s.onReset != nil {
@@ -1019,7 +1045,7 @@ func (s *Stream) processAudio() error {
 	s.cmdMu.Unlock()
 
 	if stdout == nil {
-		// During intentional stop, cleanupProcess clears stdout before Run checks —
+		// During intentional stop, cleanupProcess clears stdout before Run checks;
 		// this is expected, not a warning condition.
 		s.stoppedMu.RLock()
 		stopped := s.stopped
@@ -1309,7 +1335,7 @@ func (s *Stream) dispatchAudioData(data []byte, ref *audiocore.FrameRef) {
 	totalReceived := s.totalBytesReceived
 	s.bytesReceivedMu.Unlock()
 
-	s.dataRateCalc.addSample(int64(n))
+	s.dataRateCalc.AddSample(int64(n))
 
 	s.conditionalFailureReset(totalReceived)
 
@@ -1333,8 +1359,34 @@ func (s *Stream) dispatchAudioData(data []byte, ref *audiocore.FrameRef) {
 
 	// Update metrics if available.
 	if s.metrics != nil {
-		s.metrics.RecordDataRate(s.config.SourceID, s.dataRateCalc.getRate())
+		s.metrics.RecordDataRate(s.config.SourceID, s.dataRateCalc.Rate())
 	}
+}
+
+// opSilenceTimeout is the structured error operation context stamped on the
+// silence-watchdog restart error built by handleSilenceTimeout. The run loop
+// reads it back to classify a silence restart, so the classification does not
+// depend on the human-readable (and dynamic) error message.
+const opSilenceTimeout = "silence_timeout"
+
+// isSilenceTimeoutError reports whether err (or any error it wraps) is the
+// silence-watchdog restart error produced by handleSilenceTimeout, identified by
+// its operation=silence_timeout context rather than a substring of its message.
+// It walks the whole chain of EnhancedError values so classification still holds
+// if the silence error is ever wrapped inside another EnhancedError with a
+// different operation (errors.As alone would stop at the outer one).
+func isSilenceTimeoutError(err error) bool {
+	for err != nil {
+		var ee *errors.EnhancedError
+		if !errors.As(err, &ee) {
+			return false
+		}
+		if op, _ := ee.GetContext()["operation"].(string); op == opSilenceTimeout {
+			return true
+		}
+		err = ee.Unwrap()
+	}
+	return false
 }
 
 // handleSilenceTimeout checks if stream has stopped producing data and triggers restart.
@@ -1356,24 +1408,25 @@ func (s *Stream) handleSilenceTimeout(startTime time.Time) error {
 		return time.Since(lastData)
 	}()
 
-	if effectiveAge > 0 && effectiveAge > silenceTimeout {
+	timeout := s.config.effectiveSilenceTimeout()
+	if effectiveAge > 0 && effectiveAge > timeout {
 		lastDataDesc := formatLastDataDescription(lastData)
 
 		getStreamLogger().Warn("no data received from stream source, triggering restart",
 			logger.String("url", s.config.safeURL()),
-			logger.Float64("timeout_seconds", silenceTimeout.Seconds()),
+			logger.Float64("timeout_seconds", timeout.Seconds()),
 			logger.String("last_data", lastDataDesc),
 			logger.Float64("effective_age_seconds", effectiveAge.Seconds()),
 			logger.Float64("process_runtime_seconds", time.Since(startTime).Seconds()),
 			logger.String("component", "ffmpeg-stream"),
 			logger.String("operation", "silence_detected"))
 		s.cleanupProcess()
-		return errors.Newf("stream stopped producing data for %v seconds", silenceTimeout.Seconds()).
+		return errors.Newf("stream stopped producing data for %v seconds", timeout.Seconds()).
 			Category(errors.CategoryRTSP).
 			Component("ffmpeg-stream").
-			Context("operation", "silence_timeout").
+			Context("operation", opSilenceTimeout).
 			Context("url", s.config.safeURL()).
-			Context("timeout_seconds", silenceTimeout.Seconds()).
+			Context("timeout_seconds", timeout.Seconds()).
 			Context("last_data", lastDataDesc).
 			Build()
 	}
@@ -1482,7 +1535,7 @@ func (s *Stream) handleQuickExitError(startTime time.Time) error {
 				processState = s.exitProcessState
 				s.exitInfoMu.Unlock()
 			case <-time.After(stderrDrainTimeout):
-				// cmd.Wait() still pending — proceed with partial stderr.
+				// cmd.Wait() still pending; proceed with partial stderr.
 			}
 		}
 	}
@@ -1778,7 +1831,7 @@ func (s *Stream) GetProcessStartTime() time.Time {
 }
 
 // GetHealth returns the current health status of the stream.
-func (s *Stream) GetHealth() StreamHealth {
+func (s *Stream) GetHealth() audiocore.StreamHealth {
 	s.lastDataMu.RLock()
 	lastData := s.lastDataTime
 	s.lastDataMu.RUnlock()
@@ -1791,7 +1844,7 @@ func (s *Stream) GetHealth() StreamHealth {
 	totalBytes := s.totalBytesReceived
 	s.bytesReceivedMu.RUnlock()
 
-	dataRate := s.dataRateCalc.getRate()
+	dataRate := s.dataRateCalc.Rate()
 
 	healthyDataThreshold := s.config.healthyThreshold()
 	const maxHealthyDataThreshold = 30 * time.Minute
@@ -1804,7 +1857,7 @@ func (s *Stream) GetHealth() StreamHealth {
 	var isHealthy, isReceivingData bool
 	switch {
 	case state != StateRunning:
-		// Stream is not actively processing audio — always unhealthy.
+		// Stream is not actively processing audio; always unhealthy.
 		// Covers StateIdle, StateStarting, StateRestarting, StateBackoff,
 		// StateCircuitOpen, and StateStopped.
 		isHealthy = false
@@ -1825,15 +1878,36 @@ func (s *Stream) GetHealth() StreamHealth {
 	}
 
 	allHistory := s.GetStateHistory()
-	var recentHistory []StateTransition
-	if len(allHistory) > 10 {
-		recentHistory = allHistory[len(allHistory)-10:]
+	var recentHistory []ProcessStateTransition
+	if len(allHistory) > maxStateHistoryExposed {
+		recentHistory = allHistory[len(allHistory)-maxStateHistoryExposed:]
 	} else {
 		recentHistory = allHistory
 	}
+	// Map the FFmpeg process transitions onto the neutral health type, carrying
+	// each process-state name in FromDetail/ToDetail so the legacy process_state
+	// history stays byte-identical.
+	stateHistory := make([]audiocore.StateTransition, 0, len(recentHistory))
+	for _, t := range recentHistory {
+		stateHistory = append(stateHistory, audiocore.StateTransition{
+			From:       processStateToStreamState(t.From),
+			To:         processStateToStreamState(t.To),
+			FromDetail: t.From.String(),
+			ToDetail:   t.To.String(),
+			Timestamp:  t.Timestamp,
+			Reason:     t.Reason,
+		})
+	}
+
+	// StateEntered is the timestamp of the most recent transition into the
+	// current state; it stays zero until the first transition is recorded.
+	var stateEntered time.Time
+	if n := len(allHistory); n > 0 {
+		stateEntered = allHistory[n-1].Timestamp
+	}
 
 	allErrors := s.getErrorContexts()
-	var recentErrors []*ErrorContext
+	var recentErrors []*audiocore.StreamErrorContext
 	if len(allErrors) > maxErrorHistoryExposed {
 		recentErrors = allErrors[len(allErrors)-maxErrorHistoryExposed:]
 	} else {
@@ -1842,18 +1916,43 @@ func (s *Stream) GetHealth() StreamHealth {
 
 	lastError := s.getLastErrorContext()
 
-	return StreamHealth{
+	return audiocore.StreamHealth{
+		Engine:             audiocore.EngineFFmpeg,
+		Transport:          s.config.Transport,
+		State:              processStateToStreamState(state),
+		StateDetail:        state.String(),
+		StateEntered:       stateEntered,
+		Recovery:           audiocore.RecoveryUnknown,
 		IsHealthy:          isHealthy,
 		LastDataReceived:   lastData,
 		RestartCount:       restarts,
 		TotalBytesReceived: totalBytes,
 		BytesPerSecond:     dataRate,
 		IsReceivingData:    isReceivingData,
-		ProcessState:       state,
-		StateHistory:       recentHistory,
+		StateHistory:       stateHistory,
 		LastErrorContext:   lastError,
 		ErrorHistory:       recentErrors,
 		SourceChannels:     s.config.SourceChannels,
+	}
+}
+
+// processStateToStreamState maps an FFmpeg process state onto the neutral
+// audiocore.StreamState. The FFmpeg process name is carried separately in
+// StreamHealth.StateDetail (and in StateTransition detail fields) so the legacy
+// process_state API strings remain byte-identical. FFmpeg never reports a
+// terminal failure state, so StreamStateFailed is unmapped here.
+func processStateToStreamState(state ProcessState) audiocore.StreamState {
+	switch state {
+	case StateIdle, StateStarting:
+		return audiocore.StreamStateStarting
+	case StateRunning:
+		return audiocore.StreamStateConnected
+	case StateRestarting, StateBackoff, StateCircuitOpen:
+		return audiocore.StreamStateReconnecting
+	case StateStopped:
+		return audiocore.StreamStateStopped
+	default:
+		return audiocore.StreamStateStarting
 	}
 }
 
@@ -1957,6 +2056,30 @@ func (s *Stream) isCircuitOpen() bool {
 	}
 
 	return false
+}
+
+// resetForSilenceTimeout undoes this iteration's failure bookkeeping for a
+// silence-watchdog restart. A silent-but-connected source (a session opened but
+// no audio flowed) is a recoverable condition, not a hard failure, so it must not
+// accumulate restarts or leave the circuit breaker open. It clears restartCount,
+// decrements the consecutive-failure count that recordFailure incremented for
+// this event, and clears circuitOpenTime: recordFailure may have just opened the
+// breaker (isCircuitOpen keys off circuitOpenTime, not the failure count), and
+// leaving it set would suppress ingest for the whole cooldown after a merely
+// silent restart. Before the silence classifier was fixed this path was dead, so
+// this completes the reset it now performs.
+func (s *Stream) resetForSilenceTimeout() {
+	func() {
+		s.restartCountMu.Lock()
+		defer s.restartCountMu.Unlock()
+		s.restartCount = 0
+	}()
+	s.circuitMu.Lock()
+	defer s.circuitMu.Unlock()
+	if s.consecutiveFailures > 0 {
+		s.consecutiveFailures--
+	}
+	s.circuitOpenTime = time.Time{}
 }
 
 // recordFailure records a failure for the circuit breaker with runtime consideration.
@@ -2190,7 +2313,7 @@ func detectUserTimeout(params []string) (found bool, value string) {
 }
 
 // recordErrorContext stores an error context in the history buffer.
-func (s *Stream) recordErrorContext(ctx *ErrorContext) {
+func (s *Stream) recordErrorContext(ctx *audiocore.StreamErrorContext) {
 	if ctx == nil {
 		return
 	}
@@ -2237,30 +2360,30 @@ func (s *Stream) recordErrorContext(ctx *ErrorContext) {
 			logger.String("component", "ffmpeg-stream"),
 			logger.String("operation", "error_troubleshooting"))
 	}
-	if ctx.RawFFmpegOutput != "" {
+	if ctx.RawProducerOutput != "" {
 		log.Debug("FFmpeg raw error output",
 			logger.String("source_id", s.config.SourceID),
 			logger.String("error_type", ctx.ErrorType),
 			logger.String("target_host", targetHost),
 			logger.Int("target_port", ctx.TargetPort),
-			logger.String("ffmpeg_output", ctx.RawFFmpegOutput),
+			logger.String("ffmpeg_output", ctx.RawProducerOutput),
 			logger.String("component", "ffmpeg-stream"),
 			logger.String("operation", "error_raw_output"))
 	}
 }
 
 // getErrorContexts returns a copy of the error history.
-func (s *Stream) getErrorContexts() []*ErrorContext {
+func (s *Stream) getErrorContexts() []*audiocore.StreamErrorContext {
 	s.errorContextsMu.RLock()
 	defer s.errorContextsMu.RUnlock()
 
-	result := make([]*ErrorContext, len(s.errorContexts))
+	result := make([]*audiocore.StreamErrorContext, len(s.errorContexts))
 	copy(result, s.errorContexts)
 	return result
 }
 
 // getLastErrorContext returns the most recent error context, or nil if no errors.
-func (s *Stream) getLastErrorContext() *ErrorContext {
+func (s *Stream) getLastErrorContext() *audiocore.StreamErrorContext {
 	s.errorContextsMu.RLock()
 	defer s.errorContextsMu.RUnlock()
 
@@ -2271,10 +2394,52 @@ func (s *Stream) getLastErrorContext() *ErrorContext {
 }
 
 // checkEarlyErrors checks FFmpeg stderr for errors during the early detection window.
-func (s *Stream) checkEarlyErrors() *ErrorContext {
+func (s *Stream) checkEarlyErrors() *audiocore.StreamErrorContext {
 	s.stderrMu.RLock()
 	stderrOutput := s.stderr.String()
 	s.stderrMu.RUnlock()
 
 	return ExtractErrorContext(stderrOutput)
+}
+
+// stderrTailForLog returns a sanitized, trailing snippet of this process's
+// captured FFmpeg stderr for a log field, or "" if nothing was captured. The
+// process-ended paths use it to surface why FFmpeg stopped without requiring a
+// live debugger, since the capture is otherwise only inspected during the early
+// detection and quick-exit windows. It is called after cleanupProcess has run
+// cmd.Wait, so the os/exec stderr copy is fully flushed and the capture is
+// complete; the read is also guarded by stderrMu.
+func (s *Stream) stderrTailForLog() string {
+	s.stderrMu.RLock()
+	full := s.stderr.String()
+	s.stderrMu.RUnlock()
+
+	// Sanitize the whole capture BEFORE trimming to the tail. Truncating first
+	// could cut a credential-bearing stream URL at the tail boundary and leave a
+	// fragment the URL sanitizer can no longer recognize, leaking the credential
+	// into the log. stderrLogTail returns "" for empty or whitespace-only input.
+	return stderrLogTail(privacy.SanitizeFFmpegError(full), stderrLogTailMaxBytes)
+}
+
+// logStderrTailOnExit logs the tail of this process's captured FFmpeg stderr, if
+// any, with the process-ended context. abnormal true logs at WARN (the process
+// failed); abnormal false logs at DEBUG (a normal exit rarely carries useful
+// stderr at loglevel error, so keep steady-state logs quiet). Nothing is logged
+// when no stderr was captured.
+func (s *Stream) logStderrTailOnExit(abnormal bool) {
+	tail := s.stderrTailForLog()
+	if tail == "" {
+		return
+	}
+	fields := []logger.Field{
+		logger.String("url", s.config.safeURL()),
+		logger.String("stderr_tail", tail),
+		logger.String("component", "ffmpeg-stream"),
+		logger.String("operation", "process_ended_stderr"),
+	}
+	if abnormal {
+		getStreamLogger().Warn("FFmpeg stderr on exit", fields...)
+		return
+	}
+	getStreamLogger().Debug("FFmpeg stderr on exit", fields...)
 }

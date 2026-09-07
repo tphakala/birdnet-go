@@ -19,7 +19,18 @@ linters:
         text: "dupSubExpr"
         linters:
           - gocritic
-      # goconst v1.9.0+ (bundled since golangci-lint v2.12.0) started walking
+      # The notflite stub build of NewTFLiteClassifier / NewTFLiteRangeFilter
+      # always returns a non-nil error, so staticcheck's SA4023 flags the
+      # `if err != nil` guards (and their related-information notes) as "always
+      # true" under -tags notflite. Those guards are real runtime checks in the
+      # default tflite build; suppress the stub-only false positive for this
+      # file. CI never lints the notflite tag (it is a compile check only), so
+      # this only affects the notflite lint lane.
+      - path: internal/classifier/birdnet.go
+        text: "SA4023"
+        linters:
+          - staticcheck
+      # goconst v1.9.0+ started walking
       # composite-literal nodes (map keys, slice elements, struct-init values),
       # which surfaced hundreds of "make it a constant" nits for inline
       # structured-logging and DB/JSON field-name keys that are conventionally
@@ -43,7 +54,7 @@ linters:
     - predeclared
     - revive
     - unconvert
-    # - wastedassign  # Disabled: SIGSEGV in golang.org/x/tools go/ssa.CreatePackage under golangci-lint v2.12.2 + Go 1.26 (same SSA crash class as modernize below); ineffassign covers the overlapping cases
+    - wastedassign  # Re-enabled under golangci-lint v2.13.2 + Go 1.27: the earlier go/ssa.CreatePackage SIGSEGV no longer reproduces, and a full-project run reports 0 issues
     # Security & quality linters
     # - gosec
     - goconst  # "constant already exists" enforcement; extraction nits suppressed via exclusions rule (see above)
@@ -59,7 +70,7 @@ linters:
     - thelper
     - testifylint
     - gocyclo
-    # - modernize  # Disabled: causes panic with Go 1.26 and atomic types (known bug in golangci-lint v2.11.4)
+    - modernize  # Re-enabled under golangci-lint v2.13.2 + Go 1.27: the earlier Go 1.26 atomic-types panic no longer reproduces, and the codebase was modernized in the same change
     - forbidigo  # Sensitive field name detection
     # Performance linters
     - prealloc

@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -21,6 +22,36 @@ import (
 // Audio files are written with this suffix during recording and renamed upon
 // completion to ensure atomic file operations.
 const tempFileExt = ".temp"
+
+// nonFiniteConfidence is the confidence assigned to a clip whose filename
+// confidence token is a non-finite float ("NaNp", "+Infp", "-Infp"), which the
+// exporter writes when a classifier returns a NaN or Inf score. Such a clip
+// carries no usable score, so it gets the lowest value and becomes the first
+// candidate among equally-aged clips under both the age and usage policies,
+// where confidence is the final tie-breaker.
+const nonFiniteConfidence = 0
+
+// lastParseErrorCount remembers the unparseable-file count from the previous
+// scan so the summary warning fires when the situation changes rather than on
+// every check interval.
+//
+//nolint:gochecknoglobals // scan-to-scan log dedup state, see GetAudioFilesContext
+var lastParseErrorCount atomic.Int64
+
+// isNonFiniteConfidenceToken reports whether a clip-name confidence token is one
+// of the exact non-finite spellings Go's %f verbs produce ("NaN", "+Inf", "-Inf",
+// with the trailing "p"), which is what the exporter writes for a non-finite
+// score. It deliberately does not use strconv.ParseFloat, which would also accept
+// "nan", "inf", "infinity" and other spellings the exporter never emits, so a
+// foreign file with such a token keeps being rejected rather than swept up.
+func isNonFiniteConfidenceToken(token string) bool {
+	switch strings.TrimSuffix(token, "p") {
+	case "NaN", "+Inf", "-Inf":
+		return true
+	default:
+		return false
+	}
+}
 
 // errUnrecognizedFilename is returned when a file's name does not match the
 // expected BirdNET naming pattern (species_confidence_timestamp). Such files
@@ -296,11 +327,19 @@ func GetAudioFilesContext(ctx context.Context, baseDir string, allowedExts []str
 		return nil, descriptiveErr
 	}
 
-	// If we encountered parse errors but still have some valid files, log a summary but continue
+	// Files that failed to parse are excluded from every retention policy, so an
+	// operator whose disk keeps filling needs to see this at the default log
+	// level, not only with diskmanager debug logging enabled. The scan repeats
+	// every check interval and a foreign file never goes away by itself, so warn
+	// only when the count changes and demote the steady-state repeats to debug.
 	if state.parseErrorCount > 0 {
-		log.Debug("Encountered file parsing errors during cleanup",
-			logger.Int("error_count", state.parseErrorCount),
-			logger.Int("max_logged", maxParseErrors))
+		summary := log.Debug
+		if lastParseErrorCount.Swap(int64(state.parseErrorCount)) != int64(state.parseErrorCount) {
+			summary = log.Warn
+		}
+		summary("Skipped audio files with unparseable names during cleanup; they will not be deleted by any retention policy",
+			logger.Int("skipped_count", state.parseErrorCount),
+			logger.Error(state.firstParseError))
 		// If we have no valid files at all, return an error
 		if len(state.files) == 0 && state.firstParseError != nil {
 			descriptiveErr := errors.Newf("diskmanager: failed to parse any audio files: %w", state.firstParseError).
@@ -311,6 +350,10 @@ func GetAudioFilesContext(ctx context.Context, baseDir string, allowedExts []str
 				Build()
 			return nil, descriptiveErr
 		}
+	}
+
+	if state.parseErrorCount == 0 {
+		lastParseErrorCount.Store(0)
 	}
 
 	// Update the pooled slice with the final data while preserving the backing array
@@ -362,16 +405,23 @@ func parseFileInfo(path string, info os.FileInfo, allowedExts []string) (FileInf
 
 	confidence, err := strconv.Atoi(strings.TrimSuffix(confidenceStr, "p"))
 	if err != nil {
-		// Lightweight error for confidence parsing
-		descriptiveErr := errors.Newf("diskmanager: invalid confidence value").
-			Component("diskmanager").
-			Category(errors.CategoryValidation).
-			Context("confidence_string", confidenceStr).
-			Context("filename", name).
-			Context("parsed_species", species).
-			Context("parsed_timestamp_str", timestampStr).
-			Build()
-		return FileInfo{}, descriptiveErr
+		// A clip that retention cannot parse is never deleted by any policy, so an
+		// exporter-written non-finite token would otherwise accumulate without
+		// bound. Tolerate exactly those spellings (see nonFiniteConfidence) and
+		// keep rejecting every other token, so foreign files that merely share the
+		// name shape do not become deletion candidates.
+		if !isNonFiniteConfidenceToken(confidenceStr) {
+			descriptiveErr := errors.Newf("diskmanager: invalid confidence value").
+				Component("diskmanager").
+				Category(errors.CategoryValidation).
+				Context("confidence_string", confidenceStr).
+				Context("filename", name).
+				Context("parsed_species", species).
+				Context("parsed_timestamp_str", timestampStr).
+				Build()
+			return FileInfo{}, descriptiveErr
+		}
+		confidence = nonFiniteConfidence
 	}
 
 	// IMPORTANT: Despite the Z suffix in the filename (which normally indicates UTC),

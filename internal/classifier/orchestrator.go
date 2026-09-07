@@ -45,15 +45,25 @@ type entryRef struct {
 	entry *modelEntry
 }
 
-// secondaryBackendKey identifies the inference backend / OpenVINO device that an
-// OV-capable secondary model was last built against. Each modelEntry stores its
-// own key (see modelEntry.backend); ReloadSecondaryModels uses it as a per-entry
-// change-detection gate so an unrelated reload_birdnet trigger (locale,
-// thresholds) does not needlessly rebuild a large secondary model.
+// secondaryBackendKey identifies the inference backend / OpenVINO device / CPU
+// thread count that an OV-capable secondary model was last built against. Each
+// modelEntry stores its own key (see modelEntry.backend); ReloadSecondaryModels
+// uses it as a per-entry change-detection gate so an unrelated reload_birdnet
+// trigger (locale, thresholds) does not needlessly rebuild a large secondary
+// model, while a change that DOES affect the built session (backend, device, or
+// thread count) does force a rebuild.
 type secondaryBackendKey struct {
 	backend  string
 	ovDevice string
 	ovPath   string
+	// threads is BirdNET.Threads (the CPU inference thread budget) the session was
+	// built with. It is part of the gate so a runtime thread-count change rebuilds
+	// every secondary model, matching the primary's reload. The raw configured
+	// value is stored (0 = auto): it never misses a change, and at worst forces one
+	// redundant rebuild when toggling 0 and a value that happens to equal NumCPU.
+	// Ignored in practice by GPU sessions, which reject INFERENCE_NUM_THREADS, so a
+	// GPU-bound secondary simply rebuilds to an equivalent session.
+	threads int
 }
 
 // Orchestrator manages classifier model instances and provides the primary
@@ -91,7 +101,17 @@ type Orchestrator struct {
 	inferenceMu sync.Mutex   // serializes inference across all models
 	models      map[string]*modelEntry
 	primary     *BirdNET // direct access to the primary model
-	modelsDir   string   // base directory for gallery-installed models
+	// ortAvailable and ovLoadable report whether each inference backend can
+	// actually load from the given configured path. Both are nil in production,
+	// where inference.CheckORTAvailability and inference.InitOpenVINO are used.
+	// Tests set them so every side of the primary recovery's backend gate is
+	// reachable regardless of what the host happens to have installed; without an
+	// OpenVINO seam the gate's OpenVINO leg is untestable in the default build
+	// (openvinoBackendAvailable is a compile-time false there) AND its ORT-only
+	// test silently inverts on a machine that does have OpenVINO.
+	ortAvailable func(configuredPath string) bool
+	ovLoadable   func(libraryPath string) bool
+	modelsDir    string // base directory for gallery-installed models
 
 	// Nighttime scheduling for bat model. Stored as atomic.Pointer so
 	// IsModelActive (called on every monitor tick) reads lock-free.
@@ -114,6 +134,17 @@ type Orchestrator struct {
 	// instead of stalling PredictModel on o.mu. Appended only
 	// under o.mu.Lock(); snapshotted and cleared under o.mu by the drainer.
 	pendingWarmups []pendingWarmup
+
+	// pendingPathCorrections queues configuration repairs recorded by model
+	// loaders while they hold o.mu, and by NewOrchestrator for the primary before o
+	// is published. Drained by runPendingPathCorrections after
+	// o.mu is released, because the drainer itself takes o.mu to snapshot and
+	// clear this queue, and o.mu is not reentrant; applying one also writes
+	// config.yaml (file I/O). (isGalleryManagedPath, reached from the apply step,
+	// takes NO orchestrator lock; the drainer's own snapshot-and-clear is what
+	// requires the deferral.) Appended only under o.mu.Lock(); snapshotted and
+	// cleared under o.mu by the drainer.
+	pendingPathCorrections []pendingPathCorrection
 }
 
 // pendingWarmup defers a freshly-registered model's warm-up + RSS measurement
@@ -151,17 +182,17 @@ func (o *Orchestrator) updateSettings(s *conf.Settings) {
 // and loads any additional models from configuration.
 // This is the primary constructor - callers should use this instead of NewBirdNET.
 func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
-	// Resolve primary model identity from config
-	var primaryInfo *ModelInfo
-	if settings.BirdNET.Version != "" {
-		info, ok := ResolveBirdNETVersion(settings.BirdNET.Version)
-		if ok {
-			if settings.BirdNET.ModelPath != "" {
-				info.CustomPath = settings.BirdNET.ModelPath
-			}
-			primaryInfo = &info
-		}
-	}
+	// The primary model identity is resolved inside NewBirdNET rather than
+	// pre-seeded here. This used to build a *ModelInfo from settings.BirdNET.Version
+	// and settings.BirdNET.ModelPath before o existed, which is strictly earlier
+	// than o.modelsDir is known, so it could only ever see the RAW configured path
+	// and would defeat the stale-path recovery below. NewBirdNET's Tier 2 computes
+	// the identical ModelInfo from the same two settings (and returns the same error
+	// for an unknown version, which this block silently left to Tier 2 anyway). The
+	// two agree on everything except the path, and that difference is the entire
+	// point: Tier 2 sees the RESOLVED path, which is what this block could never
+	// do. Passing nil therefore loses nothing and lets the resolution happen once,
+	// in the one place that has it.
 
 	// Capture host RSS before the primary model allocates its arena. We need o
 	// to exist first (captureRSSBefore records the runtime baseline on first call),
@@ -171,12 +202,76 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 		models:   map[string]*modelEntry{},
 		modelRSS: make(map[string]int64),
 	}
+
+	// Resolve the gallery models directory up front, before loadAdditionalModels
+	// runs below. ModelManager also sets it (via SetModelsDir) but is constructed
+	// only after this constructor returns, so without this the secondary loaders
+	// see an empty o.modelsDir on their very first attempt and resolveInstalledPaths
+	// cannot find an installed model. That made the fallback for a missing
+	// configured path structurally impossible at startup (GitHub #4201, #4204).
+	// Assigned directly rather than through SetModelsDir. SetModelsDir would run
+	// registerTaxonomyResolver, which appends a taxonomy resolver to
+	// o.nameResolvers, but the constructor overwrites that slice wholesale a few
+	// lines below (o.nameResolvers = []NameResolver{ofResolver, resolver}), so the
+	// registration would just be discarded. Its primary.SetModelsDir propagation is
+	// also skipped here, since o.primary is not set yet. No lock is needed for this
+	// write: o is not published until the constructor returns, so no other goroutine
+	// can observe it. On the analysis startup path ModelManager later calls
+	// SetModelsDir, which redoes both the resolver wiring and the primary
+	// propagation; cmd/benchmark and cmd/rangefilter construct an Orchestrator and
+	// never call SetModelsDir.
+	if modelsDir, ok := settings.ResolveModelsDir(); ok {
+		o.modelsDir = modelsDir
+	}
+
 	rssBefore := o.captureRSSBefore()
 
-	bn, err := NewBirdNET(settings, primaryInfo)
+	// Install the stale-path recovery ONLY when the primary slot really is the
+	// BirdNET v2.4 family.
+	//
+	// The slot is family-selectable through birdnet.version, but both the recovery
+	// target (resolveInstalledPaths) and the queued correction label are
+	// permanentRegistryID. A v3.0 primary with a stale path would therefore be
+	// "recovered" onto a v2.4 model file: a 32 kHz/5 s identity pinned to a
+	// 48 kHz/3 s model with a different label set, which fails late with a
+	// label-count mismatch or, were the counts ever to agree, would attribute every
+	// detection to the wrong model. That is exactly the cross-variant pairing
+	// hazard resolveFamilyPaths prevents for the secondaries.
+	//
+	// A nil resolver is the pre-recovery behaviour: the configured path is used
+	// verbatim, so any other family is left exactly as it was.
+	//
+	// o.resolvePrimaryModelPath is safe to hand over now. It reads o.modelsDir
+	// (assigned above), o.ortAvailable (nil in production) and o.currentSettings(),
+	// which falls back to the o.Settings the struct literal above already set. All
+	// three are populated before this point. NewBirdNET calls it once at
+	// construction and keeps it for its hot-reload path, so both resolve the same
+	// way. Passing the bound method rather than a precomputed value is what keeps
+	// the reload from re-deriving the identity off the raw configured string.
+	bn, err := NewBirdNET(settings, nil, o.primaryPathResolverFor(settings))
 	if err != nil {
 		return nil, err
 	}
+
+	// Queue the primary's configuration repair, if its configured path was
+	// recovered. Queued here rather than inside NewBirdNET because the queue lives
+	// on the orchestrator, and applied by the existing drain at the end of
+	// loadAdditionalModels below, which runs on every path where NewBirdNET
+	// succeeded. Nothing is queued when the path resolved cleanly.
+	//
+	// No lock is taken: o is not published until this constructor returns, so no
+	// other goroutine can observe the queue. deferPathCorrection documents an
+	// o.mu-held precondition for the loader path; here there is nothing to race.
+	// Read the resolution NewBirdNET already performed rather than resolving a
+	// second time: a second call would repeat the stat work and, more visibly,
+	// duplicate every recovery log line for a single start.
+	//
+	// Routed through queuePathCorrection rather than calling deferPathCorrection
+	// directly, so the primary obeys the same queueing rule as the three
+	// secondaries. That rule has already been edited once (it now gates on
+	// substituted rather than repairable); a hand-rolled copy here is the one place
+	// the next such edit would silently miss.
+	o.queuePathCorrection(permanentRegistryID, bn.primaryPath)
 
 	resolver := NewBirdNETLabelResolver(bn.Labels())
 	ofResolver := openfauna.NewResolver()
@@ -219,6 +314,33 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	return o, nil
 }
 
+// primaryPathResolverFor returns the stale-path resolver to hand to NewBirdNET,
+// or nil when the primary slot is not the BirdNET v2.4 family.
+//
+// Extracted from NewOrchestrator so the decision is reachable without building a
+// real model: inline, the only way to observe it was to construct an Orchestrator,
+// so removing the family check broke no test.
+func (o *Orchestrator) primaryPathResolverFor(settings *conf.Settings) primaryPathResolver {
+	if primaryRegistryID(settings) != permanentRegistryID {
+		return nil
+	}
+	return o.resolvePrimaryModelPath
+}
+
+// primaryRegistryID reports which model family occupies the primary classifier
+// slot. An empty birdnet.version selects the default BirdNET v2.4 family; an
+// unrecognised version returns "" so callers treat it as "not v2.4" rather than
+// guessing (NewBirdNET's Tier 2 reports the unknown version as an error).
+func primaryRegistryID(settings *conf.Settings) string {
+	if settings.BirdNET.Version == "" {
+		return permanentRegistryID
+	}
+	if info, ok := ResolveBirdNETVersion(settings.BirdNET.Version); ok {
+		return info.ID
+	}
+	return ""
+}
+
 // SetModelsDir sets the base directory for gallery-installed models.
 // Called by ModelManager after creation so model loaders can resolve
 // paths from the installed models directory when config paths are empty.
@@ -226,12 +348,23 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 // geomodel auto-selection, and registers the taxonomy resolver if
 // taxonomy.csv is available on disk.
 func (o *Orchestrator) SetModelsDir(dir string) {
-	// Guard the o.modelsDir write and the o.primary read under o.mu: o.modelsDir
-	// is read by resolveInstalledPaths (always under o.mu via the model loaders),
-	// and o.primary is cleared by Delete() under o.mu.Lock(). Release before the
-	// downstream calls, which take their own locks. registerTaxonomyResolver in
-	// particular acquires o.mu.RLock() internally, so holding o.mu here would
-	// self-deadlock (the RWMutex is not reentrant).
+	// Guard the o.modelsDir write and the o.primary read under o.mu: the model
+	// loaders read o.modelsDir under o.mu, and o.primary is cleared by Delete()
+	// under o.mu.Lock().
+	//
+	// The write is guarded, but NOT every read is, so this lock alone is not what
+	// makes the field safe. resolveInstalledPaths, resolveSiblingSet and
+	// isGalleryManagedPath all read o.modelsDir with NO lock held: the first two on
+	// the ReloadSecondaryModels path (which releases o.mu before calling the model
+	// builders) and on the primary's construction and hot-reload path (via
+	// resolvePrimaryModelPath), and the third on the config-correction drain path. Those reads are
+	// safe only because this setter runs at most once, before the pipeline starts.
+	// See resolveSiblingSet for the full rationale and for what making the models
+	// directory dynamic would require.
+	//
+	// Release before the downstream calls, which take their own locks.
+	// registerTaxonomyResolver in particular acquires o.mu.RLock() internally, so
+	// holding o.mu here would self-deadlock (the RWMutex is not reentrant).
 	o.mu.Lock()
 	o.modelsDir = dir
 	primary := o.primary
@@ -270,7 +403,7 @@ func (o *Orchestrator) registerTaxonomyResolver(modelsDir string) {
 	}
 
 	log := GetLogger()
-	taxonomyPath := filepath.Join(modelsDir, "shared", "taxonomy.csv")
+	taxonomyPath := filepath.Join(modelsDir, sharedDirName, "taxonomy.csv")
 
 	locale := settings.BirdNET.Locale
 	// Load the resolver outside the lock; NewTaxonomyResolver does file I/O.
@@ -477,7 +610,7 @@ func (o *Orchestrator) resolveInstalledPaths(registryID string) (modelPath, labe
 				case RoleLabels:
 					lp = filepath.Join(subdir, f.LocalName)
 				case RoleEmbeddings:
-					ep = filepath.Join(o.modelsDir, "shared", f.LocalName)
+					ep = filepath.Join(o.modelsDir, sharedDirName, f.LocalName)
 				}
 			}
 			if mp != "" {
@@ -490,7 +623,11 @@ func (o *Orchestrator) resolveInstalledPaths(registryID string) (modelPath, labe
 			}
 		}
 	}
-	log.Warn("model in models.enabled but not installed on disk",
+	// Worded for BOTH callers. The secondary loaders reach this for a model listed
+	// in models.enabled, but resolvePrimaryModelPath also calls it for the primary
+	// classifier, which is never in that list, so naming models.enabled here would
+	// put a claim in a support dump that is false for the primary.
+	log.Warn("no installed model found on disk for this model family",
 		logger.String("registry_id", registryID),
 		logger.String("models_dir", o.modelsDir))
 	return "", "", ""
@@ -498,6 +635,45 @@ func (o *Orchestrator) resolveInstalledPaths(registryID string) (modelPath, labe
 
 // Predict runs inference using the primary model.
 // Delegates to PredictModel for uniform locking and telemetry.
+// inferenceFailureLogEvery is the interval, in consecutive failures of one
+// model, at which PredictModel repeats its ERROR log after the first failure.
+const inferenceFailureLogEvery = 100
+
+// inferenceFailureStreaks tracks consecutive PredictModel failures per model ID
+// (value: *atomic.Int64) for the log rate limiting in PredictModel.
+//
+//nolint:gochecknoglobals // log-flood guard shared with globalInferenceCounters
+var inferenceFailureStreaks sync.Map
+
+// inferenceFailureStreak increments and returns the consecutive failure count
+// for modelID.
+func (o *Orchestrator) inferenceFailureStreak(modelID string) int64 {
+	v, _ := inferenceFailureStreaks.LoadOrStore(modelID, new(atomic.Int64))
+	return v.(*atomic.Int64).Add(1) //nolint:errcheck // stored type is fixed above
+}
+
+// resetInferenceFailureStreak clears the consecutive failure count for modelID
+// after a successful inference so the next fault is logged at ERROR again.
+func (o *Orchestrator) resetInferenceFailureStreak(modelID string) {
+	if v, ok := inferenceFailureStreaks.Load(modelID); ok {
+		v.(*atomic.Int64).Store(0) //nolint:errcheck // stored type is fixed above
+	}
+}
+
+// dropInferenceFailureStreak removes modelID's streak entry when its instance is
+// torn down or replaced, so a later instance under the same ID starts fresh (its
+// first failure is logged at ERROR) and stale IDs do not accumulate across reloads.
+func dropInferenceFailureStreak(modelID string) {
+	inferenceFailureStreaks.Delete(modelID)
+}
+
+// inferenceFailureLogsAtError reports whether the streak-th consecutive failure
+// of one model is logged at ERROR (the first, then every
+// inferenceFailureLogEvery-th) rather than DEBUG.
+func inferenceFailureLogsAtError(streak int64) bool {
+	return streak == 1 || streak%inferenceFailureLogEvery == 0
+}
+
 func (o *Orchestrator) Predict(ctx context.Context, sample [][]float32) ([]datastore.Results, error) {
 	o.mu.RLock()
 	id := o.ModelInfo.ID
@@ -556,11 +732,22 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 
 	if err != nil {
 		globalInferenceCounters.RecordError(modelID)
-		log.Error("PredictModel inference failed",
+		// A broken backend fails every window (one per few seconds per source), so
+		// after the first failure only every inferenceFailureLogEvery-th repeat is
+		// logged at ERROR; the rest go to DEBUG. The metrics counter above still
+		// records each one.
+		streak := o.inferenceFailureStreak(modelID)
+		emit := log.Debug
+		if inferenceFailureLogsAtError(streak) {
+			emit = log.Error
+		}
+		emit("PredictModel inference failed",
 			logger.String("model_id", modelID),
 			logger.Error(err),
+			logger.Int64("consecutive_failures", streak),
 			logger.Duration("duration", duration))
 	} else {
+		o.resetInferenceFailureStreak(modelID)
 		globalInferenceCounters.RecordInvoke(modelID, duration.Microseconds())
 		log.Debug("PredictModel complete",
 			logger.String("model_id", modelID),
@@ -630,6 +817,71 @@ func scientificNamesFromLabels(labels []string) []string {
 		sci, _ := SplitSpeciesName(label)
 		if sci != "" {
 			out = append(out, sci)
+		}
+	}
+	return out
+}
+
+// PrimaryResolvedModelPath returns the model file the primary classifier is
+// actually running (empty when the built-in baseline runs, or when no primary is
+// loaded). Cross-package consumers must prefer it over settings.BirdNET.ModelPath,
+// which after a stale-path recovery names a file the instance is not running. The
+// o.primary read is guarded by o.mu; the resolved-path read itself is lock-free.
+func (o *Orchestrator) PrimaryResolvedModelPath() string {
+	o.mu.RLock()
+	primary := o.primary
+	o.mu.RUnlock()
+	if primary == nil {
+		return ""
+	}
+	return primary.ResolvedModelPath()
+}
+
+// LoadedModelPaths returns, for each currently-loaded model family (keyed by its
+// registry ID, which is also the o.models key), the model file that instance is
+// actually running. A family PRESENT in the map with an EMPTY value is loaded and
+// running its built-in/default source; a family ABSENT from the map has no loaded
+// instance. That distinction lets the model-gallery scan tell "loaded, running the
+// built-in" from "not loaded", so it consults configuration only for the latter.
+// The model set is snapshotted under o.mu, which is then RELEASED before each
+// instance is read under its own entry.mu (see the body for why entry.instance
+// needs entry.mu). Because o.mu is never held while entry.mu is acquired, a caller
+// already holding another lock (ModelManager.mu, taken by ScanInstalled) never
+// causes o.mu to nest under it.
+func (o *Orchestrator) LoadedModelPaths() map[string]string {
+	// entry.instance is guarded by entry.mu, NOT o.mu: ReloadSecondaryModels,
+	// UnloadModel and Delete all swap it under entry.mu (see the "PredictModel reads
+	// entry.instance under entry.mu" contract at the reload swap), while o.mu guards
+	// only the o.models map itself. So snapshot the entries under o.mu, release it,
+	// then read each instance under its own entry.mu. This mirrors
+	// ReloadSecondaryModels (snapshot refs under o.mu, release, then per-entry
+	// entry.mu), and crucially never holds o.mu while acquiring entry.mu, so it adds
+	// no new lock-ordering edge.
+	type entryRef struct {
+		id    string
+		entry *modelEntry
+	}
+	o.mu.RLock()
+	refs := make([]entryRef, 0, len(o.models))
+	for id, entry := range o.models {
+		if entry != nil {
+			refs = append(refs, entryRef{id: id, entry: entry})
+		}
+	}
+	o.mu.RUnlock()
+
+	out := make(map[string]string, len(refs))
+	for _, r := range refs {
+		// Capture the instance under entry.mu, then call the lock-free
+		// ResolvedModelPath() on the captured value after releasing the lock: the
+		// resolved path is fixed at construction (secondaries) or published lock-free
+		// (the primary) and is not touched by Close(), so reading it off-lock on a
+		// captured instance is safe even if the entry is torn down concurrently.
+		r.entry.mu.Lock()
+		inst := r.entry.instance
+		r.entry.mu.Unlock()
+		if inst != nil {
+			out[r.id] = inst.ResolvedModelPath()
 		}
 	}
 	return out
@@ -1248,6 +1500,10 @@ func (o *Orchestrator) reloadPrimaryModel(reload func(primary *BirdNET) error) e
 	}
 
 	info, taxMap, taxPath, sciIndex := o.primary.ReloadSnapshot()
+	// The reloaded primary is a fresh instance: drop its streak, and the previous
+	// ID's when the reload changed it, so neither lingers.
+	dropInferenceFailureStreak(o.ModelInfo.ID)
+	dropInferenceFailureStreak(info.ID)
 	o.ModelInfo = info
 	o.TaxonomyMap = taxMap
 	o.TaxonomyPath = taxPath
@@ -1284,22 +1540,24 @@ func (o *Orchestrator) reloadPrimaryModel(reload func(primary *BirdNET) error) e
 	return nil
 }
 
-// secondaryTripletFor returns the inference-backend triplet that OV-capable
-// secondary models build against. The secondaries share the primary's OpenVINO
-// configuration, so the triplet is derived from settings.BirdNET. Each modelEntry
-// records this (modelEntry.backend) at build time so ReloadSecondaryModels can
-// detect a per-model backend/device change.
+// secondaryTripletFor returns the inference-backend key that OV-capable secondary
+// models build against. The secondaries share the primary's OpenVINO configuration
+// and CPU thread budget, so the key is derived from settings.BirdNET. Each
+// modelEntry records this (modelEntry.backend) at build time so ReloadSecondaryModels
+// can detect a per-model backend/device/thread-count change.
 func secondaryTripletFor(settings *conf.Settings) secondaryBackendKey {
 	return secondaryBackendKey{
 		backend:  settings.BirdNET.Backend,
 		ovDevice: settings.BirdNET.OpenVINODevice,
 		ovPath:   settings.BirdNET.OpenVINOPath,
+		threads:  settings.BirdNET.Threads,
 	}
 }
 
 // ReloadSecondaryModels rebuilds the OV-capable secondary models (Perch, and the
-// bat embedding extractor) when the BirdNET inference backend or OpenVINO device
-// preference changes at runtime, so they move to the new device without a full restart.
+// bat embedding extractor) when the BirdNET inference backend, OpenVINO device
+// preference, or CPU thread count changes at runtime, so they move to the new
+// device (or thread budget) without a full restart, matching the primary reload.
 // It mirrors the primary reload's transactional safety: each model is built on
 // the new backend BEFORE the old instance is closed, and a build failure leaves
 // the old instance serving (one model failing does not abort the others).
@@ -1367,9 +1625,10 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 	threadAlloc := o.computeThreadAllocation(settings, primaryID)
 
 	// The builders below run outside o.mu. They construct from the settings
-	// snapshot and may read o.modelsDir (via resolveInstalledPaths), which is set
-	// once at startup by SetModelsDir before the pipeline (and thus this reload
-	// path) starts, so the read is safe without o.mu.
+	// snapshot and may read o.modelsDir (via resolveInstalledPaths and
+	// resolveSiblingSet), which is set once at startup by SetModelsDir before the
+	// pipeline (and thus this reload path) starts, so the read is safe without
+	// o.mu. See resolveSiblingSet for the full rationale on this lock-free read.
 
 	var firstErr error
 	for _, ref := range refs {
@@ -1389,10 +1648,11 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 			continue
 		}
 		if current == triplet {
-			log.Debug("secondary model already built on current backend/device, skipping reload",
+			log.Debug("secondary model already built on current backend/device/threads, skipping reload",
 				logger.String("registry_id", ref.id),
 				logger.String("backend", triplet.backend),
-				logger.String("ov_device", triplet.ovDevice))
+				logger.String("ov_device", triplet.ovDevice),
+				logger.Int("threads", triplet.threads))
 			continue
 		}
 
@@ -1422,10 +1682,11 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 				ref.entry.backend = triplet
 			}
 			ref.entry.mu.Unlock()
-			log.Error("failed to rebuild secondary model on backend/device change; keeping existing instance",
+			log.Error("failed to rebuild secondary model on backend/device/threads change; keeping existing instance",
 				logger.String("registry_id", ref.id),
 				logger.String("backend", triplet.backend),
 				logger.String("ov_device", triplet.ovDevice),
+				logger.Int("threads", triplet.threads),
 				logger.Error(err))
 			continue
 		}
@@ -1469,6 +1730,7 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 		}
 		ref.entry.instance = newInst
 		ref.entry.backend = triplet
+		dropInferenceFailureStreak(ref.id) // fresh instance, fresh streak
 		ref.entry.mu.Unlock()
 
 		// Close the old instance after releasing entry.mu: native teardown can be
@@ -1482,10 +1744,11 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 				logger.Error(cerr))
 		}
 
-		log.Info("secondary model reloaded on new backend/device",
+		log.Info("secondary model reloaded on new backend/device/threads",
 			logger.String("registry_id", ref.id),
 			logger.String("backend", triplet.backend),
-			logger.String("ov_device", triplet.ovDevice))
+			logger.String("ov_device", triplet.ovDevice),
+			logger.Int("threads", triplet.threads))
 	}
 
 	return firstErr
@@ -1531,6 +1794,7 @@ func (o *Orchestrator) Delete() {
 		// re-creating the entry after deletion, and stops a teardown-then-recreate
 		// cycle from leaking counter entries.
 		globalInferenceCounters.Delete(id)
+		dropInferenceFailureStreak(id)
 		entry.mu.Unlock()
 	}
 
@@ -1564,17 +1828,20 @@ type secondaryModelBuilder func(o *Orchestrator, settings *conf.Settings, thread
 
 // openvinoCapableSecondaryBuilders maps the registry IDs of secondary models
 // whose construction honors the BirdNET inference backend / OpenVINO device
-// preference to a builder returning a fresh, unregistered instance.
-// ReloadSecondaryModels rebuilds exactly these models when the backend/device
-// changes at runtime. For Bat, only the heavy embedding extractor honors the
-// preference; the tiny bat classifier head always runs on ORT. Giving a new
-// secondary OpenVINO support is a one-line entry here, paired with the OV fields on
-// its loader config.
+// preference and CPU thread count to a builder returning a fresh, unregistered
+// instance. ReloadSecondaryModels rebuilds exactly these models when the
+// backend/device/thread-count changes at runtime. For Bat, only the heavy
+// embedding extractor honors the preference; the tiny bat classifier head always
+// runs on ORT. Giving a new secondary OpenVINO support is a one-line entry here,
+// paired with the OV fields on its loader config.
 var openvinoCapableSecondaryBuilders = map[string]secondaryModelBuilder{
 	RegistryIDBirdNETV3: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
 		// Explicit nil-on-error return avoids the typed-nil interface trap (a
 		// nil *BirdNETV3 wrapped in a non-nil ModelInstance).
-		m, err := o.buildBirdNETV3(settings, threads)
+		// The path resolution is deliberately discarded: a backend or device swap
+		// must never rewrite the user's configured paths, so the reload path does
+		// not call queuePathCorrection.
+		m, _, err := o.buildBirdNETV3(settings, threads)
 		if err != nil {
 			return nil, err
 		}
@@ -1583,7 +1850,8 @@ var openvinoCapableSecondaryBuilders = map[string]secondaryModelBuilder{
 	RegistryIDPerchV2: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
 		// Explicit nil-on-error return avoids the typed-nil interface trap (a
 		// nil *Perch wrapped in a non-nil ModelInstance).
-		p, err := o.buildPerch(settings, threads)
+		// The path resolution is deliberately discarded (see the BirdNET v3.0 entry above).
+		p, _, err := o.buildPerch(settings, threads)
 		if err != nil {
 			return nil, err
 		}
@@ -1592,7 +1860,8 @@ var openvinoCapableSecondaryBuilders = map[string]secondaryModelBuilder{
 	RegistryIDBat: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
 		// Explicit nil-on-error return avoids the typed-nil interface trap (a
 		// nil *Bat wrapped in a non-nil ModelInstance).
-		b, err := o.buildBat(settings, threads)
+		// The path resolution is deliberately discarded (see the BirdNET v3.0 entry above).
+		b, _, err := o.buildBat(settings, threads)
 		if err != nil {
 			return nil, err
 		}
@@ -1623,12 +1892,21 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 			Build()
 	}
 
+	// Drain any queued configuration repair after o.mu is released: loaders queue
+	// it under o.mu, and applying it writes config.yaml, so it must run outside the
+	// lock. Registered BEFORE the warm-up drain so that, defers being LIFO, it runs
+	// AFTER the warm-ups. The config write must not land inside the window the
+	// per-model RSS delta measures (see runPendingWarmups), matching the drain
+	// order in loadAdditionalModels (warm-ups first, config write after).
+	defer o.runPendingPathCorrections()
+
 	// Drain the deferred warm-up after o.mu is released, on every return path.
 	// Loaders queue the warm-up via deferWarmup while holding o.mu; running it
 	// here (outside o.mu, via the serialized inference path) is what keeps a
 	// runtime install from stalling live inference. Deferring it
 	// (rather than calling it only on success) guarantees a loader that queues a
 	// warm-up and then fails cannot orphan an entry in the queue for a later load.
+	// Registered LAST so it runs FIRST (LIFO).
 	defer o.runPendingWarmups()
 
 	// Build and register the model under o.mu (loaders write directly to
@@ -1774,6 +2052,7 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 	defer entry.mu.Unlock()
 
 	globalInferenceCounters.Delete(registryID)
+	dropInferenceFailureStreak(registryID)
 
 	o.rssMu.Lock()
 	delete(o.modelRSS, registryID)
@@ -1928,8 +2207,13 @@ func (o *Orchestrator) PrimaryModelID() string {
 // ModelInfo if no primary is set.
 func (o *Orchestrator) PrimaryModelInfo() ModelInfo {
 	o.mu.RLock()
-	defer o.mu.RUnlock()
-	return o.ModelInfo
+	info := o.ModelInfo
+	o.mu.RUnlock()
+	// Stamp the effective overlap from the live settings so buffer allocation
+	// and cadence consumers honor birdnet.overlap (bat stays fixed at 50%).
+	// CurrentSettings is independently synchronized, so resolve outside o.mu.
+	info.Overlap = ResolveModelOverlap(info.ID, info.Spec, o.CurrentSettings())
+	return info
 }
 
 // ModelInfos returns ModelInfo for all registered models. Thread-safe.
@@ -1956,6 +2240,11 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 	primaryID := o.ModelInfo.ID
 	primaryInfo := o.ModelInfo
 	o.mu.RUnlock()
+
+	// Resolve overlap against the live settings snapshot (independently
+	// synchronized), so every returned ModelInfo carries the effective overlap
+	// used for buffer allocation and cadence.
+	settings := o.CurrentSettings()
 
 	infos := make([]ModelInfo, 0, len(refs))
 	for _, ref := range refs {
@@ -1995,6 +2284,7 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 		// count, so source it from the live instance to report what is actually
 		// loaded.
 		info.NumSpecies = instance.NumSpecies()
+		info.Overlap = ResolveModelOverlap(info.ID, info.Spec, settings)
 		infos = append(infos, info)
 	}
 	return infos
@@ -2046,6 +2336,26 @@ func (o *Orchestrator) computeThreadAllocation(settings *conf.Settings, primaryI
 // threadAlloc provides the pre-computed thread count for each model.
 func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 	log := GetLogger()
+
+	// Drain the queued configuration repairs on every exit path, including a
+	// panic unwinding out of a loader. Deferred rather than called after the loop
+	// so this reads the same as the sibling drain in LoadModel; on the happy path
+	// it still runs exactly where it did, immediately before the return.
+	//
+	// Note what "every exit path" would mean if this function ever gained an error
+	// return: the drain would then also rewrite config.yaml on a startup that goes
+	// on to fail, where the previous placement skipped it. It has exactly one
+	// return today, so that case does not arise, but anyone adding an early error
+	// return here should decide whether a failed startup may still repair the
+	// configuration. The paths written are consistent with what was actually
+	// loaded either way, since a correction is only queued after a successful
+	// build.
+	//
+	// Warm-ups are drained per-iteration INSIDE the loop below, so they still
+	// complete before this does: the config write must not land inside the window
+	// a per-model RSS delta measures (see runPendingWarmups). That ordering is why
+	// LoadModel registers its two drains in the order it does.
+	defer o.runPendingPathCorrections()
 
 	// Read the live published settings snapshot rather than the deprecated
 	// o.Settings pointer, consistent with the per-model loaders (loadPerch/loadBat).

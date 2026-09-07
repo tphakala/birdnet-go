@@ -1,74 +1,47 @@
 package conf
 
-import (
-	"os"
-	"strings"
-)
-
-// Temporary runtime opt-in for the native Go encoders.
+// Temporary runtime opt-in for the native Go AAC and MP3 encoders.
 //
-// AAC clip export and HLS live streaming still run through FFmpeg by default.
-// Setting BIRDNET_AAC_ENCODER=native or BIRDNET_HLS_ENCODER=native switches the
-// matching path to the pure-Go encoder and muxer (go-aac plus go-m4a for .m4a,
-// and go-aac plus hlsmux for HLS, which segments AAC-LC) so it can be exercised
-// in the field before it becomes the default. The gates are independent, so one
-// path can be promoted while another is still proving itself.
+// AAC and MP3 clip export still run through FFmpeg by default. Setting
+// BIRDNET_AAC_ENCODER=native switches AAC to the pure-Go encoder and muxer
+// (go-aac plus go-m4a for .m4a); BIRDNET_MP3_ENCODER=native switches MP3 to the
+// pure-Go go-mp3 encoder. Each is exercised in the field behind its own gate
+// before becoming the default.
 //
-// Opus clip export has already earned that confidence: go-opus is now the
-// unconditional encoder for .opus and its gate has been removed. FFmpeg is used
-// for .opus only as a fallback when go-opus cannot carry a clip's shape (see
-// nativeOpusSelected in the analysis processor).
+// Opus clip export and HLS live streaming have already earned that confidence.
+// go-opus is the unconditional encoder for .opus (FFmpeg is used only as a
+// fallback when go-opus cannot carry a clip's shape; see nativeOpusSelected in
+// the analysis processor). HLS live streaming is served unconditionally by the
+// in-process go-hls muxer; its BIRDNET_HLS_ENCODER gate and the entire FFmpeg
+// HLS output path have both been removed.
 //
 // This lives in conf rather than in a package of its own so that every consumer
-// reaches it without a new dependency edge: the export-format validation here,
-// the encoder dispatch in the analysis processor, and the HLS handler in the v2
-// API already depend on conf. A dedicated package under audiocore would make
-// conf import audiocore, which inverts the layering and widens the deliberately
-// exact internal closure that internal/diagnostics guards.
+// reaches it without a new dependency edge: the export-format validation here
+// and the encoder dispatch in the analysis processor already depend on conf. A
+// dedicated package under audiocore would make conf import audiocore, which
+// inverts the layering and widens the deliberately exact internal closure that
+// internal/diagnostics guards.
 //
 // REMOVAL: this file is scaffolding with a planned end of life. Once a native
-// encoder has earned field confidence, delete its gate along with the branch
-// that reads it; the native path becomes unconditional and the FFmpeg branch
-// goes away with it. The call sites are, per gate:
-//
-//	AAC:  exportFormatNeedsFFmpeg and SaveAudioAction.encodeClip
-//	HLS:  createHLSStream in internal/api/v2/audio/audio_hls.go, which routes to
-//	      createNativeHLSStream in audio_hls_native.go. Removing the gate means
-//	      deleting audio_hls.go's FFmpeg branch and the whole FFmpeg half of
-//	      that package, not just the conditional.
+// encoder (AAC or MP3) has earned field confidence, delete its gate along with
+// the branches that read it (exportFormatNeedsFFmpeg, selectEncoder and
+// strandedWithoutEncoder); that format's native path becomes unconditional and
+// its FFmpeg branch goes away with it.
 //
 // Nothing else depends on this file, and it deliberately holds no other logic
 // so that each removal stays a mechanical edit.
 const (
 	// EnvNativeAACEncoder selects the native AAC encoder for .m4a clip export.
 	EnvNativeAACEncoder = "BIRDNET_AAC_ENCODER"
-	// EnvNativeHLSEncoder selects the native encoder and muxer for HLS live
-	// streaming, replacing the FFmpeg process that would otherwise encode,
-	// segment and write the playlist for a live stream.
-	EnvNativeHLSEncoder = "BIRDNET_HLS_ENCODER"
 
-	// nativeEncoderValue is the only value that enables a native encoder.
-	// Anything else, including an unset variable, keeps the FFmpeg path.
-	nativeEncoderValue = "native"
+	// EnvNativeMP3Encoder selects the native MP3 encoder for .mp3 clip export.
+	EnvNativeMP3Encoder = "BIRDNET_MP3_ENCODER"
 )
 
 // NativeAACEncoderEnabled reports whether AAC clip export should use the native
 // encoder.
-func NativeAACEncoderEnabled() bool { return nativeEncoderSelected(EnvNativeAACEncoder) }
+func NativeAACEncoderEnabled() bool { return nativeSelected(EnvNativeAACEncoder) }
 
-// NativeHLSEncoderEnabled reports whether HLS live streaming should use the
-// native encoder and muxer instead of spawning an FFmpeg process.
-func NativeHLSEncoderEnabled() bool { return nativeEncoderSelected(EnvNativeHLSEncoder) }
-
-// nativeEncoderSelected reads env and reports whether it opts into the native
-// encoder. Matching is case-insensitive and tolerates surrounding whitespace,
-// because these are hand-edited in compose files and systemd unit drop-ins where
-// a stray space is easy to introduce and hard to spot.
-//
-// The value is read per call rather than cached at startup. A clip export
-// happens once per detection, so the lookup cost is irrelevant, and reading it
-// live keeps the gate consistent with the rest of BirdNET-Go's settings, which
-// take effect without a restart.
-func nativeEncoderSelected(env string) bool {
-	return strings.EqualFold(strings.TrimSpace(os.Getenv(env)), nativeEncoderValue)
-}
+// NativeMP3EncoderEnabled reports whether MP3 clip export should use the native
+// encoder.
+func NativeMP3EncoderEnabled() bool { return nativeSelected(EnvNativeMP3Encoder) }

@@ -70,47 +70,32 @@ vars:
   OPENVINO_HEADERS_DIR: '{{.ROOT_DIR}}/.cache/openvino'
   CGO_FLAGS: CGO_ENABLED=1 CGO_CFLAGS="-I{{.TENSORFLOW_HEADERS_DIR}} -I{{.OPENVINO_HEADERS_DIR}}/include"
   EXTRA_BUILD_TAGS: '{{.EXTRA_BUILD_TAGS | default ""}}'
-  # Tags applied to every artifact we ship, independent of the caller-supplied
-  # EXTRA_BUILD_TAGS. Every build path that produces a shipped binary must fold
-  # these in, or a target silently ships a different binary than the rest.
-  # (tools/dbexport is deliberately exempt: it never reaches go-aac.)
+  # Extra build tags folded into every artifact we ship, independent of the
+  # caller-supplied EXTRA_BUILD_TAGS. Every build path that produces a shipped
+  # binary folds these in, so a target cannot silently ship a different binary
+  # than the rest. (tools/dbexport is deliberately exempt: it never reaches
+  # go-aac.)
   #
-  # CI carries the same tag so the checks compile what ships, and nothing
-  # enforces that automatically. Change these together:
-  #   .github/workflows/cross-platform-build.yml  (env: BASE_BUILD_TAGS)
-  #   .github/workflows/golangci-test.yml         (env: BASE_BUILD_TAGS)
-  #   .github/workflows/golangci-lint.yml         (literal; it is a
-  #                                                workflow_call target and does
-  #                                                not inherit the caller's env)
-  #   .github/workflows/macos-test.yml            (literal)
-  #   .github/workflows/windows-test.yml          (literal)
+  # Currently empty. go-aac enables its SIMD kernels by DEFAULT now: runtime CPU
+  # dispatch via github.com/tphakala/simd (AVX2/AVX/SSE2 on amd64, NEON on arm64)
+  # with a pure-Go fallback when the feature bit is absent, and `-tags noasm` as
+  # the opt-out. birdnet-go wants that default, so no go-aac tag is needed. The
+  # old opt-in `goaac_simd` tag was removed upstream in go-aac v0.5.0; passing it
+  # now selects nothing (Go ignores an unused tag), so it has been dropped here
+  # and from CI rather than left as misleading dead config.
   #
-  # goaac_simd selects go-aac's SIMD kernels, which are opt-in upstream so that
-  # the default build carries no assembly. It swaps exactly two hot kernels: the
-  # NMR Viterbi trellis (f32.MinIdxOfSumRows) and the AbsPow34 magnitude
-  # transform. Dispatch is by CPU feature at RUNTIME, via github.com/tphakala/simd
-  # (which wraps golang.org/x/sys/cpu and adds its own darwin/arm64 detection):
-  # the trellis takes AVX2 on amd64 and NEON on arm64, AbsPow34 takes AVX, else
-  # SSE2, on amd64 and NEON on arm64. Every kernel falls back to pure Go when the
-  # feature bit is absent, and f32_other.go covers architectures that are neither
-  # amd64 nor arm64, so a tagged binary runs unchanged on any CPU rather than
-  # trapping on an unsupported instruction.
-  #
-  # Output is bit-identical to the scalar path; go-aac gates both kernels with
-  # bitwise differential tests plus fuzz targets. Note those tests live upstream
-  # and do not run in our CI, so a go-aac bump that regressed only the SIMD path
-  # would not be caught here.
-  #
-  # Measured on a Raspberry Pi 5 (Cortex-A76), medians of -benchtime=2s -count=5
-  # over internal/audiocore/hlsmux BenchmarkStreamWrite10ms and
-  # BenchmarkStreamWrite32k: 11.2% and 12.8% faster respectively. Those cover
-  # encode plus fMP4 fragmentation, so the encoder-only gain is larger by an
-  # unmeasured margin. (go-aac's README reports 14% on the same hardware, but for
-  # the trellis kernel alone; it lists the both-kernels figure as pending, so it
-  # is not directly comparable.) Both consumers (native AAC clip export, native HLS)
-  # are still opt-in behind BIRDNET_AAC_ENCODER / BIRDNET_HLS_ENCODER=native, so
-  # today this speeds up those gated paths rather than a default deployment.
-  BASE_BUILD_TAGS: 'goaac_simd'
+  # A future opt-in tag that must reach every shipped binary goes here. CI does
+  # not enforce parity automatically, so if this becomes non-empty, add the tag
+  # to the same lanes in lockstep. None of these workflows carries a go-aac tag
+  # any more; the note after each says how to re-wire one:
+  #   .github/workflows/cross-platform-build.yml  (re-add an env: BASE_BUILD_TAGS block)
+  #   .github/workflows/golangci-test.yml         (re-add an env: BASE_BUILD_TAGS block)
+  #   .github/workflows/golangci-lint.yml         (put it in the literal -tags; it is a
+  #                                                workflow_call target and does not
+  #                                                inherit the caller's env)
+  #   .github/workflows/macos-test.yml            (literal -tags)
+  #   .github/workflows/windows-test.yml          (literal -tags)
+  BASE_BUILD_TAGS: ''
   # Emits nothing when the joined list is empty, mirroring the ${BUILD_TAGS:+...}
   # guard on the linux_amd64 / linux_arm64 build lines. (noembed_build needs no
   # such guard: its list always contains noembed.) Without this, overriding
@@ -207,11 +192,12 @@ tasks:
       - '[ -f "{{.AVICOMMONS_JSON_FILE}}" ]'
 
   sync-region-snapshots:
-    desc: Refresh the embedded region snapshots and coverage maps from a sibling acoustic-models checkout
+    desc: Refresh the embedded region snapshots, coverage maps, and vendored model manifests from a sibling acoustic-models checkout
     vars:
       ACOUSTIC_MODELS_DIR: '{{.ACOUSTIC_MODELS_DIR | default "../acoustic-models"}}'
       REGION_DATA_DIR: internal/classifier/region/data
       MAPS_DIR: internal/classifier/region/data/maps
+      GEN_MANIFESTS_DIR: internal/classifier/gen/manifests
     cmds:
       - |
         SRC="{{.ACOUSTIC_MODELS_DIR}}/models/manifests"
@@ -220,11 +206,24 @@ tasks:
           echo "Set ACOUSTIC_MODELS_DIR to your acoustic-models checkout." >&2
           exit 1
         fi
+        # Embedded region tables (bbox / tier / countries) read at runtime.
         for f in Perch-v2-Models.regions.json BirdNET-v3.0-Models.regions.json; do
           cp "$SRC/$f" "{{.REGION_DATA_DIR}}/$f"
           echo "synced $f"
         done
-        echo "Refreshed region snapshots. If tiers changed, update golden_tier_test.go."
+        # Vendored model manifests the catalog generator reads. These MUST be
+        # refreshed in lockstep with the region tables above: "go generate
+        # ./internal/classifier" joins models.json against regions.json, so a
+        # stale models.json here silently regenerates the catalog against the old
+        # region set (the two inputs disagree on which tiles exist).
+        for f in Perch-v2-Models.models.json BirdNET-v3.0-Models.models.json; do
+          cp "$SRC/$f" "{{.GEN_MANIFESTS_DIR}}/$f"
+          echo "synced $f"
+        done
+        echo "Refreshed region snapshots and model manifests. Next: run"
+        echo "  go run ./gen -update-labels-checksums   (from internal/classifier; networked)"
+        echo "  go generate ./internal/classifier"
+        echo "and if tiers changed, update golden_tier_test.go."
       - |
         # Sync per-region coverage maps (SVG). The geometry is model-family-agnostic,
         # so a tile's coverage.svg is byte-identical across families; we embed ONE set
@@ -621,7 +620,7 @@ tasks:
         if ! command -v golangci-lint >/dev/null 2>&1; then
           echo "📥 Installing golangci-lint..."
           # Add timeout for install script download and execution
-          if ! timeout 120 bash -c "curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b \$(go env GOPATH)/bin v2.12.2"; then
+          if ! timeout 120 bash -c "curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b \$(go env GOPATH)/bin v2.13.2"; then
             echo "❌ Failed to install golangci-lint"
             echo "   Check your internet connection and try again"
             exit 1

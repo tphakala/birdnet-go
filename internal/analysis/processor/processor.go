@@ -799,8 +799,11 @@ func (p *Processor) processDetections(item classifier.Results) {
 			p.applyExtendedCapture(mapKey, now, detectionWindow)
 		}
 
-		// Update the dynamic threshold for this species if enabled
-		p.updateDynamicThreshold(item.ModelID, commonName, confidence)
+		// Note: the dynamic-threshold expiry timer is renewed only from approved,
+		// filter-passing detections above Trigger in LearnFromApprovedDetection
+		// (via processApprovedDetection). Renewing it here from pending detections
+		// above the model base let sub-trigger noise sustain a lowered gate
+		// indefinitely (#4194), so no renewal happens on the pending path.
 
 		// Unlock the mutex to allow other goroutines to access shared resources
 		p.pendingMutex.Unlock()
@@ -978,8 +981,12 @@ func (p *Processor) parseAndValidateSpecies(settings *conf.Settings, result data
 		commonName = scientificName
 	}
 
-	// Log placeholder taxonomy codes if using custom model
-	if settings.BirdNET.ModelPath != "" && settings.Debug && speciesCode != "" {
+	// Log placeholder taxonomy codes if a custom model is actually running. Read the
+	// RESOLVED primary path, not settings.BirdNET.ModelPath: after a stale-path
+	// recovery the configured value can name a file the instance is not running (or
+	// the built-in baseline is running while config still points at a custom path),
+	// so the raw setting would misclassify which model produced the code.
+	if p.Bn.PrimaryResolvedModelPath() != "" && settings.Debug && speciesCode != "" {
 		if len(speciesCode) == 8 && (speciesCode[:2] == "XX" || (speciesCode[0] >= 'A' && speciesCode[0] <= 'Z' && speciesCode[1] >= 'A' && speciesCode[1] <= 'Z')) {
 			GetLogger().Debug("using placeholder taxonomy code",
 				logger.String("taxonomy_code", speciesCode),
@@ -1016,8 +1023,48 @@ func shouldApplyRangeFilter(modelID string, settings *conf.Settings) bool {
 	return false
 }
 
+// nonFiniteConfidenceWarned guards the once-per-(model, source) warning for
+// non-finite confidences in shouldFilterDetection. Keyed on both so a second
+// broken backend or source still announces itself.
+//
+//nolint:gochecknoglobals // log-flood guard, see onceByKey
+var nonFiniteConfidenceWarned onceByKey
+
+// isFiniteConfidence reports whether c is a usable score: not NaN and not Inf.
+func isFiniteConfidence(c float32) bool {
+	f := float64(c)
+	return !math.IsNaN(f) && !math.IsInf(f, 0)
+}
+
 // shouldFilterDetection checks if a detection should be filtered out
 func (p *Processor) shouldFilterDetection(settings *conf.Settings, result datastore.Results, commonName, scientificName, speciesLowercase string, baseThreshold float32, source, modelID string) (shouldFilter bool, confidenceThreshold float32) {
+	// A non-finite confidence (NaN or Inf) is a classifier fault, not a score. NaN
+	// compares false against every threshold, so the "<= threshold" gate below
+	// would let it through and it would be saved as a detection, with a "NaNp"
+	// confidence token in the clip name. Drop it first, ahead of the privacy and
+	// exclusion filters, so every non-finite value reaches the diagnostic below
+	// no matter which label it landed on. It is logged once per model and source
+	// at WARN (the fault repeats every window while the backend is broken, so a
+	// per-hit line would flood the log) and per hit at DEBUG.
+	if !isFiniteConfidence(result.Confidence) {
+		nonFiniteConfidenceWarned.do(modelID+"|"+source, func() {
+			GetLogger().Warn("Classifier returned a non-finite confidence; dropping such detections",
+				logger.String("species", result.Species),
+				logger.String("source", p.getDisplayNameForSource(source)),
+				logger.String("model_id", modelID),
+				logger.String("operation", "confidence_filter"))
+		})
+		if settings.Debug {
+			GetLogger().Debug("Detection filtered out due to non-finite confidence",
+				logger.String("species", result.Species),
+				logger.Float32("confidence", result.Confidence),
+				logger.String("source", p.getDisplayNameForSource(source)),
+				logger.String("model_id", modelID),
+				logger.String("operation", "confidence_filter"))
+		}
+		return true, 0
+	}
+
 	// Check human detection privacy filter. Match the raw label so Perch v2's
 	// FSD50K human classes are caught too, not just BirdNET's "Human *" classes.
 	if isHumanVocalization(result.Species) && result.Confidence > baseThreshold {
@@ -1247,6 +1294,13 @@ func convertToAdditionalResults(results []datastore.Results, primaryScientificNa
 	additional := make([]detection.AdditionalResult, 0, len(results))
 	seen := make(map[string]int, len(results)) // scientificName → index in additional
 	for _, r := range results {
+		// A non-finite confidence never reaches the primary detection (see
+		// shouldFilterDetection) and must not ride along as an additional result
+		// either: it would be persisted as NULL on SQLite and rejected by MySQL,
+		// failing the whole save.
+		if !isFiniteConfidence(r.Confidence) {
+			continue
+		}
 		sp := detection.ParseSpeciesString(r.Species)
 		// Canonicalize the candidate's scientific name so the primary species is
 		// excluded even when this prediction carries it under a legacy/alias name.
@@ -1580,7 +1634,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 				logger.Time("detection_time", item.FirstDetected),
 				logger.String("source", p.getDisplayNameForSource(item.Source)),
 				logger.String("operation", "daylight_filter"))
-			return true, "daylight filter"
+			return true, reasonDaylightFilter
 		}
 	}
 
@@ -1688,16 +1742,10 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 // calculateMinDetectionsFromSettings computes minimum detections from settings alone.
 // This is a standalone function that doesn't require a Processor instance.
 func calculateMinDetectionsFromSettings(settings *conf.Settings) int {
-	// BirdNET uses 3-second chunks for analysis
+	// BirdNET uses 3-second chunks for analysis. Since Option A (issue #4096) the
+	// realtime buffer honors birdnet.overlap, so the analysis step is
+	// chunkDurationSeconds - overlap, matching the buffer's BufferInterval.
 	const chunkDurationSeconds = 3.0
-	// Bird vocalization reference window - typical duration of a bird call
-	// Used to calculate how many detections are possible within a single vocalization
-	const referenceWindowSeconds = 6.0
-	// Minimum segment length to prevent division by near-zero values
-	const minSegmentLength = 0.1
-	// Small epsilon to prevent floating-point rounding errors in ceil()
-	// Without this, values like 5.0000000003 would ceil to 6 instead of 5
-	const epsilon = 1e-9
 
 	// Get filtering level from settings
 	level := settings.Realtime.FalsePositiveFilter.Level
@@ -1714,7 +1762,7 @@ func calculateMinDetectionsFromSettings(settings *conf.Settings) int {
 			logger.Float64("overlap", overlap),
 			logger.Float64("chunk_duration", chunkDurationSeconds),
 			logger.String("operation", "calculate_min_detections"))
-		// Continue with safe fallback
+		// Continue with safe fallback (segment length is floored in the helper)
 	}
 
 	// Validate overlap meets minimum for level (warning only, don't block)
@@ -1729,24 +1777,8 @@ func calculateMinDetectionsFromSettings(settings *conf.Settings) int {
 		// Continue with calculation - system will work but may not achieve target filtering
 	}
 
-	// Calculate segment length (how often we analyze)
-	segmentLength := math.Max(minSegmentLength, chunkDurationSeconds-overlap)
-
-	// How many detections are possible within a 6-second bird vocalization window?
-	maxDetectionsIn6s := referenceWindowSeconds / segmentLength
-
-	// Get threshold percentage for this level
-	threshold := getThresholdForLevel(level)
-
-	// Calculate minimum required detections
-	// Use Ceil to ensure we require at least the threshold percentage
-	// Subtract epsilon before ceiling to handle floating-point precision issues
-	// (e.g., 5.0000000003 becomes 4.9999999993, which correctly ceils to 5)
-	// Always require at least 1 detection
-	required := maxDetectionsIn6s*threshold - epsilon
-	minDetections := int(math.Max(1, math.Ceil(required)))
-
-	return minDetections
+	// The analysis step (how often a new window is produced) is chunk - overlap.
+	return minDetectionsForSegment(chunkDurationSeconds-overlap, level)
 }
 
 // calculateMinDetections is a convenience method that calls calculateMinDetectionsFromSettings
@@ -1781,6 +1813,16 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 		itemMinDetections := calculateMinDetectionsForModel(settings, item.BestModelID)
 
 		if shouldDiscard, reason := p.shouldDiscardDetection(&item, settings, itemMinDetections); shouldDiscard {
+			// Aggregate daylight-filter discards into the periodic pipeline-stats
+			// summary so a user who sees zero saved detections has an at-a-glance
+			// signal that a filter is eating them. The per-detection log stays at
+			// Info: it carries the discard_detection operation the
+			// /system/events/detections API aggregates into per-species discard
+			// counts (DiscardReasons / TopDiscarded), so demoting it would silently
+			// drop daylight-filtered species from that endpoint on a default config.
+			if reason == reasonDaylightFilter && p.pipelineStats != nil {
+				p.pipelineStats.RecordDaylightDiscard(item.Source, item.BestModelID)
+			}
 			GetLogger().Info("discarding detection",
 				logger.String("species", speciesName),
 				logger.String("source", p.getDisplayNameForSource(item.Source)),

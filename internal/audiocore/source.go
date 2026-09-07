@@ -125,6 +125,10 @@ type AudioSource struct {
 	// Values: "auto", "audio-only", "full-stream" (empty = full-stream).
 	MediaMode string `json:"mediaMode,omitempty"`
 
+	// Transport is the per-stream RTSP transport protocol ("tcp" or "udp").
+	// Empty means fall back to the engine-wide default. Only applied to RTSP/RTMP sources.
+	Transport string `json:"transport,omitempty"`
+
 	// Gain is the configured input gain in dB. 0 means no adjustment.
 	Gain float64 `json:"gain"`
 
@@ -244,6 +248,11 @@ type SourceConfig struct {
 	// MediaMode controls which RTSP media is requested from the camera.
 	// Values: "auto", "audio-only", "full-stream" (empty = full-stream).
 	MediaMode string
+
+	// Transport is the per-stream RTSP transport protocol ("tcp" or "udp").
+	// Empty means fall back to the engine-wide default. Only applied to
+	// RTSP/RTMP sources; ignored for local audio cards and HTTP sources.
+	Transport string
 
 	// Gain is the input gain adjustment in dB. 0 means no adjustment.
 	// Positive values amplify, negative values attenuate.

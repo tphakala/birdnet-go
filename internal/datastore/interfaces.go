@@ -356,24 +356,18 @@ func New(settings *conf.Settings) Interface {
 	case settings.Output.SQLite.Enabled:
 		return &SQLiteStore{
 			Settings: settings,
-			DataStore: DataStore{
-				SunCalc: sunCalc,
-			},
+			SunCalc:  sunCalc,
 		}
 	case settings.Output.MySQL.Enabled:
 		return &MySQLStore{
 			Settings: settings,
-			DataStore: DataStore{
-				SunCalc: sunCalc,
-			},
+			SunCalc:  sunCalc,
 		}
 	default:
 		// No database explicitly enabled — default to SQLite
 		return &SQLiteStore{
 			Settings: settings,
-			DataStore: DataStore{
-				SunCalc: sunCalc,
-			},
+			SunCalc:  sunCalc,
 		}
 	}
 }
@@ -701,6 +695,7 @@ func (ds *DataStore) GetTopBirdsData(ctx context.Context, selectedDate string, m
 		Confidence     float64
 		Date           string
 		Time           string
+		FirstTime      string
 	}
 
 	var results []SpeciesCount
@@ -715,7 +710,7 @@ func (ds *DataStore) GetTopBirdsData(ctx context.Context, selectedDate string, m
 	// Exclude detections marked as false_positive
 	query := ds.DB.WithContext(ctx).Table("notes").
 		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
-		Select("notes.common_name, notes.scientific_name, notes.species_code, COUNT(*) as count, MAX(notes.confidence) as confidence, notes.date, MAX(notes.time) as time").
+		Select("notes.common_name, notes.scientific_name, notes.species_code, COUNT(*) as count, MAX(notes.confidence) as confidence, notes.date, MAX(notes.time) as time, MIN(notes.time) as first_time").
 		Where("notes.date = ? AND notes.confidence >= ?", selectedDate, minConfidenceNormalized).
 		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", string(entities.VerificationFalsePositive)).
 		Group("notes.common_name, notes.scientific_name, notes.species_code, notes.date").
@@ -743,6 +738,7 @@ func (ds *DataStore) GetTopBirdsData(ctx context.Context, selectedDate string, m
 			Confidence:     result.Confidence,
 			Date:           result.Date,
 			Time:           result.Time,
+			FirstTime:      result.FirstTime,
 		}
 
 		// Add this note to our results

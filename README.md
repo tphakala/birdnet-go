@@ -19,8 +19,8 @@
   <a href="https://golang.org">
     <img src="https://img.shields.io/badge/Built%20with-Go-teal?style=flat-square&logo=go">
   </a>
-  <a href="https://goreportcard.com/report/github.com/tphakala/birdnet-go">
-    <img src="https://goreportcard.com/badge/github.com/tphakala/birdnet-go?style=flat-square">
+  <a href="https://scorecard.dev/viewer/?uri=github.com/tphakala/birdnet-go">
+    <img src="https://img.shields.io/ossf-scorecard/github.com/tphakala/birdnet-go?label=OpenSSF%20Scorecard&style=flat-square">
   </a>
 
   <br>
@@ -36,7 +36,7 @@
     <img src="https://img.shields.io/github/issues/tphakala/birdnet-go?style=flat-square&color=red">
   </a>
   <a href="https://discord.gg/gcSCFGUtsd">
-    <img src="https://img.shields.io/discord/1298738918239100939?style=flat-square&logo=discord&color=5865F2&label=Discord">
+    <img src="https://img.shields.io/discord/1416220486433767436?style=flat-square&logo=discord&color=5865F2&label=Discord">
   </a>
 
   <a href="https://coderabbit.ai">

@@ -463,6 +463,17 @@
         "staleMessage": "{modelName} is installed for {oldRegion}, but your new location resolves to {newRegion}. You can switch variants from the model gallery in Settings.",
         "staleGlobalMessage": "{modelName} is installed for {oldRegion}, but your new location is outside its coverage. You can switch to the global variant from the model gallery in Settings."
       },
+      "modelPath": {
+        "reconciledTitle": "Model file paths repaired for {modelName}",
+        "reconciledMessage": "Configured file paths for {modelName} were out of date and have been repaired to match the installed model at {modelPath}.",
+        "substitutedTitle": "Configured model file for {modelName} was not found",
+        "substitutedMessage": "The model file configured for {modelName} was not found on disk, so the installed model at {modelPath} is being used instead. Your configuration was left unchanged.",
+        "unreadableTitle": "Configured model file for {modelName} could not be read",
+        "unreadableMessage": "The model file configured for {modelName} exists but could not be read, so the installed model at {modelPath} is being used instead. Your configuration was left unchanged. Check the file's permissions and that its storage is mounted.",
+        "builtinMessage": "The model file configured for {modelName} was not found on disk and no installed model is available to replace it, so the built-in model is being used instead. Your configuration was left unchanged.",
+        "notRegisteredTitle": "No model is analyzing {sourceName}",
+        "notRegisteredMessage": "No audio is reaching {models} on audio source \"{sourceName}\", so no detections are produced. Open the model gallery in Settings to check status."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Current value: {value}% (threshold: {threshold}%)",
@@ -1767,6 +1778,8 @@
       "sources": "Audio sources",
       "noSources": "No sources attached",
       "primaryFallback": "primary (fallback)",
+      "sourceNotRunning": "not analyzing",
+      "sourceNotRunningTooltip": "This source is assigned to the model in settings, but its audio is not reaching the model, so it produces no detections. Open the model gallery in Settings to check its status.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",
@@ -2631,9 +2644,9 @@
           "label": "Locale",
           "helpText": "Locale for translated species common names."
         },
-        "tensorflowThreads": {
-          "label": "TensorFlow CPU Threads",
-          "helpText": "Number of CPU threads. Set to 0 to use all available threads."
+        "inferenceThreads": {
+          "label": "Inference CPU Threads",
+          "helpText": "Number of CPU threads used for model inference. Set to 0 to use all available threads. Has no effect on models running on a GPU."
         }
       },
       "errors": {
@@ -4862,7 +4875,16 @@
       "streamTitleDefault": "Bird Audio Stream",
       "streamArtist": "BirdNET-Go",
       "streamAlbum": "Live Stream",
-      "playbackError": "Playback error: {details}"
+      "playbackError": "Playback error: {details}",
+      "audibleBats": {
+        "title": "Audible bat playback",
+        "subtitle": "Slow ultrasonic calls into human hearing range.",
+        "timeExpansion": "Time expansion",
+        "enable": "Activate",
+        "disable": "Deactivate",
+        "generating": "Generating derived audio…",
+        "error": "Failed to generate audible bats audio"
+      }
     },
     "spectrogram": {
       "notGenerated": "Spectrogram not yet generated",

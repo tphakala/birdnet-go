@@ -38,13 +38,14 @@ import "slices"
 //nolint:gochecknoglobals // package-level allowlist, never mutated after init
 var supportEnvAllowlist = []string{
 	EnvNativeAACEncoder,
-	EnvNativeHLSEncoder,
-	// Historical: no longer read by any code path, because native FLAC and native
-	// Opus are now unconditional. Captured anyway, so a dump distinguishes "the
-	// operator set nothing" from "the operator set a variable that stopped doing
-	// anything", which otherwise look identical from the outside.
+	// Historical: no longer read by any code path, because native FLAC, native
+	// Opus and native HLS are now unconditional. Captured anyway, so a dump
+	// distinguishes "the operator set nothing" from "the operator set a variable
+	// that stopped doing anything", which otherwise look identical from the
+	// outside.
 	"BIRDNET_FLAC_ENCODER",
 	"BIRDNET_OPUS_ENCODER",
+	"BIRDNET_HLS_ENCODER",
 	// Not a BIRDNET_ variable, and the one entry here whose value is withheld:
 	// the name matches the "endpoint" sensitive-key pattern on its underscore
 	// boundary, so a dump records that it is set but redacts what it is set to.

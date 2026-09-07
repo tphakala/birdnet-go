@@ -1320,16 +1320,36 @@
                   <span class="text-xs text-muted">{t('system.inference.noSources')}</span>
                 {:else}
                   <div class="flex flex-wrap gap-1.5">
-                    {#each model.sources as source}
-                      <Badge variant="ghost" size="sm">
+                    {#each model.sources as source, sourceIdx}
+                      {@const notRunningHelpId = `source-not-running-${model.id}-${sourceIdx}`}
+                      <Badge
+                        variant={source.notRunning ? 'error' : 'ghost'}
+                        outline={source.notRunning}
+                        size="sm"
+                        title={source.notRunning
+                          ? t('system.inference.sourceNotRunningTooltip')
+                          : undefined}
+                        aria-describedby={source.notRunning ? notRunningHelpId : undefined}
+                      >
                         {source.name}{#if source.type}
-                          <span class="text-muted ml-1">({source.type})</span>
+                          <span class={source.notRunning ? 'ml-1' : 'text-muted ml-1'}
+                            >({source.type})</span
+                          >
                         {/if}{#if source.fallback}
                           <span class="text-muted ml-1">
                             - {t('system.inference.primaryFallback')}
                           </span>
+                        {/if}{#if source.notRunning}
+                          <span class="ml-1">
+                            - {t('system.inference.sourceNotRunning')}
+                          </span>
                         {/if}
                       </Badge>
+                      {#if source.notRunning}
+                        <span id={notRunningHelpId} class="sr-only">
+                          {t('system.inference.sourceNotRunningTooltip')}
+                        </span>
+                      {/if}
                     {/each}
                   </div>
                 {/if}

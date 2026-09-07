@@ -4,7 +4,7 @@ Thank you for your interest in contributing to BirdNET-Go!
 
 ## TL;DR - Quick Start
 
-**Legal:** By contributing, you agree to [CC BY-NC-SA 4.0 license](#license-and-legal) and [privacy-by-design principles](PRIVACY.md).
+**Legal:** By contributing, you agree to the [CC BY-NC-SA 4.0 license](#license-and-legal), the [relicensing grant](#relicensing-grant) allowing a future move to an OSI-approved open source license, and [privacy-by-design principles](PRIVACY.md).
 
 **Automated Setup (Linux/macOS):**
 
@@ -67,6 +67,14 @@ By contributing to BirdNET-Go, you agree that your contributions will be license
 
 See [LICENSE](LICENSE) for full terms.
 
+### Relicensing Grant
+
+BirdNET-Go currently ships under CC BY-NC-SA 4.0, which is not an OSI-approved open source license. To keep the option of adopting a recognized open source license later, without having to track down every past contributor, contributions carry a forward relicensing grant.
+
+By submitting a contribution (a pull request, patch, or any other change), you grant the project maintainer a perpetual, worldwide, non-exclusive, royalty-free, and irrevocable right to relicense your contribution, in whole or in part, under any license approved by the [Open Source Initiative](https://opensource.org/licenses) as an open source license. This grant is in addition to the CC BY-NC-SA 4.0 license above. It does not transfer your copyright, and you keep every right to your own work.
+
+If you are unable or unwilling to grant this, please do not submit the contribution, or state your objection in the pull request so it can be handled separately.
+
 ### Privacy Policy
 
 BirdNET-Go is **privacy-first** with zero data collection by default. Contributors must:
@@ -86,6 +94,7 @@ By submitting a pull request, you certify:
 2. ✅ Your contribution is original work or you have permission
 3. ✅ You've read the [privacy policy](PRIVACY.md)
 4. ✅ Your contribution follows privacy-by-design principles
+5. ✅ You grant the relicensing rights described in [Relicensing Grant](#relicensing-grant)
 
 ## Getting Started
 

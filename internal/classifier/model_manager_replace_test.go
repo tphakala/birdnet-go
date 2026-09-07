@@ -372,7 +372,37 @@ func TestInstalledModelBasenameHint(t *testing.T) {
 
 	s := &conf.Settings{}
 	s.Perch.ModelPath = "/models/perch-v2/perch_v2_int8_arm.onnx"
-	assert.Equal(t, "perch_v2_int8_arm.onnx", installedModelBasenameHint(s, RegistryIDPerchV2))
-	assert.Empty(t, installedModelBasenameHint(s, RegistryIDBirdNETV3), "a family with no recorded path yields no hint")
-	assert.Empty(t, installedModelBasenameHint(nil, RegistryIDPerchV2), "nil settings yields no hint")
+	assert.Equal(t, "perch_v2_int8_arm.onnx", installedModelBasenameHint(s, RegistryIDPerchV2, nil))
+	assert.Empty(t, installedModelBasenameHint(s, RegistryIDBirdNETV3, nil), "a family with no recorded path yields no hint")
+	assert.Empty(t, installedModelBasenameHint(nil, RegistryIDPerchV2, nil), "nil settings yields no hint")
+}
+
+// TestInstalledModelBasenameHint_PrefersLoadedPath pins the stale-variant
+// follow-up: after a
+// stale-path recovery the settings field still names the pre-recovery variant, so
+// the gallery scan must key off the file the LOADED instance is actually running,
+// not config.
+func TestInstalledModelBasenameHint_PrefersLoadedPath(t *testing.T) {
+	t.Parallel()
+
+	s := &conf.Settings{}
+	// Config still points at the stale, pre-recovery variant.
+	s.Perch.ModelPath = "/stale/perch_v2_fp32.onnx"
+
+	// A loaded instance whose resolved path is the RECOVERED variant wins over the
+	// stale config: the scan must report the running variant.
+	loaded := map[string]string{RegistryIDPerchV2: "/models/perch-v2/perch_v2_int8_arm.onnx"}
+	assert.Equal(t, "perch_v2_int8_arm.onnx", installedModelBasenameHint(s, RegistryIDPerchV2, loaded),
+		"the loaded instance's resolved path wins over the stale configured path")
+
+	// A loaded instance running the built-in (empty resolved path) yields no hint
+	// even though config still names a file: present-but-empty is authoritative.
+	builtin := map[string]string{RegistryIDPerchV2: ""}
+	assert.Empty(t, installedModelBasenameHint(s, RegistryIDPerchV2, builtin),
+		"a loaded instance running the built-in yields no hint, not a fallback to the stale config")
+
+	// A family ABSENT from the loaded map (no instance loaded: startup scan, or a
+	// family the user disabled) falls back to the configured value.
+	assert.Equal(t, "perch_v2_fp32.onnx", installedModelBasenameHint(s, RegistryIDPerchV2, map[string]string{}),
+		"with no loaded instance the hint falls back to the configured field")
 }

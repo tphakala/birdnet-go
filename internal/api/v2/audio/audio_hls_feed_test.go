@@ -219,15 +219,14 @@ func TestAudioFeedAdmitsOversizedChunk(t *testing.T) {
 	assert.Equal(t, int64(budget*2), totalBytes)
 }
 
-// TestAudioFeedUnboundedKeepsSlotBound pins the FFmpeg path's behaviour: with
-// hlsFeedQueueUnbounded the byte budget is inert and the channel's slot count
-// is the only bound, exactly as before the budget existed. Dropping PCM there
-// would shift EXT-X-PROGRAM-DATE-TIME permanently, because FFmpeg cannot see a
-// gap in what it is handed.
+// TestAudioFeedUnboundedKeepsSlotBound pins audioFeed's contract when the byte
+// budget is disabled (maxBytes 0): the budget is inert and the channel's slot
+// count is the only bound. Production always sets a budget, but the primitive
+// must still behave when one is not supplied.
 func TestAudioFeedUnboundedKeepsSlotBound(t *testing.T) {
 	t.Parallel()
 
-	h, feed := newTestFeedConsumer(hlsFeedQueueUnbounded)
+	h, feed := newTestFeedConsumer(0)
 
 	// Well past any byte budget: this is 32 MB of PCM at the RTSP frame size.
 	for seq := range uint64(defaultReadBufferSize) {
@@ -252,9 +251,9 @@ func TestAudioFeedUnboundedKeepsSlotBound(t *testing.T) {
 func TestAudioFeedSlotExhaustionDropsOldest(t *testing.T) {
 	t.Parallel()
 
-	// Unbounded budget so the slot count, not the byte budget, is what bounds
-	// the queue. Small frames keep the intent legible.
-	h, feed := newTestFeedConsumer(hlsFeedQueueUnbounded)
+	// Disabled budget (maxBytes 0) so the slot count, not the byte budget, is what
+	// bounds the queue. Small frames keep the intent legible.
+	h, feed := newTestFeedConsumer(0)
 
 	const overflow = 3
 	const written = defaultReadBufferSize + overflow

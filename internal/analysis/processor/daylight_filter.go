@@ -9,6 +9,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
+// reasonDaylightFilter is the discard reason returned by shouldDiscardDetection
+// when a detection is dropped by the daylight filter. Shared with the flush path
+// so it can single out daylight discards for aggregate reporting instead of
+// matching a bare string literal.
+const reasonDaylightFilter = "daylight filter"
+
 // SetSunCalc injects the sun calculator into the processor and initializes
 // the daylight filter species list. This is called after processor creation
 // when the suncalc instance becomes available.

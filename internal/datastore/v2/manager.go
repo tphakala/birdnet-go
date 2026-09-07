@@ -319,6 +319,33 @@ func v2Entities() []any {
 	}
 }
 
+// dropStaleThresholdTables recreates the dynamic_thresholds and threshold_events tables
+// when they still carry the pre-#4195 label_id column. Those tables were re-keyed from a
+// model-scoped label foreign key to species_name (lowercase common name); since GORM's
+// AutoMigrate is additive and cannot drop the old NOT NULL/unique label_id column, a stale
+// table would reject every new insert. Existing rows are intentionally discarded (#4195):
+// dynamic thresholds are short-lived and relearned. The GORM migrator resolves the physical
+// (prefix-aware) table name from the entity, so this is dialect- and prefix-agnostic.
+func dropStaleThresholdTables(db *gorm.DB, log logger.Logger) error {
+	mig := db.Migrator()
+	// entities.ThresholdEvent, then entities.DynamicThreshold. "label_id" is checked as a raw
+	// column name (the field no longer exists on the struct), so HasColumn probes the physical
+	// table for a leftover label_id column.
+	for _, tbl := range []any{&entities.ThresholdEvent{}, &entities.DynamicThreshold{}} {
+		if !mig.HasTable(tbl) || !mig.HasColumn(tbl, "label_id") {
+			continue
+		}
+		if err := mig.DropTable(tbl); err != nil {
+			return fmt.Errorf("failed to drop stale threshold table for re-keying: %w", err)
+		}
+		if log != nil {
+			log.Info("recreated threshold table to key on species_name (#4195)",
+				logger.String("operation", "drop_stale_threshold_tables"))
+		}
+	}
+	return nil
+}
+
 // Initialize creates the schema and seeds initial data.
 func (m *SQLiteManager) Initialize() error {
 	// Rename tables that changed names in PR #2165 (TableName() overrides removed).
@@ -335,6 +362,13 @@ func (m *SQLiteManager) Initialize() error {
 				logger.Error(err),
 				logger.String("operation", "cleanup_legacy_contamination"))
 		}
+	}
+
+	// Re-key threshold tables on species_name if they still carry the legacy label_id
+	// column; AutoMigrate cannot drop it, so recreate them (#4195). Rows are discarded.
+	if err := dropStaleThresholdTables(m.db, m.log); err != nil {
+		reportInitFailure("sqlite", "dropStaleThresholdTables", err, m.dbPath)
+		return err
 	}
 
 	// Run GORM auto-migrations for all entities

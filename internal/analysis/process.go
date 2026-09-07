@@ -348,12 +348,18 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 		}
 	}
 
-	// Derive the analysis buffer interval from the model's spec. If
-	// inference exceeds this interval the pipeline falls behind real-time.
-	effectiveBufferDuration := 3 * time.Second / 2 // fallback: BirdNET v2.4
-	if spec, ok := bn.ModelSpecFor(modelID); ok {
-		effectiveBufferDuration = spec.BufferInterval()
+	// Derive the analysis buffer interval from the model's spec and the
+	// effective overlap, so the overrun threshold matches the real cadence
+	// (which now honors birdnet.overlap; the bat model stays fixed at 50%).
+	// If inference exceeds this interval the pipeline falls behind real-time.
+	settings := bn.CurrentSettings()
+	spec, ok := bn.ModelSpecFor(modelID)
+	if !ok {
+		// Defensive fallback for an unregistered model: assume the BirdNET base
+		// clip. BufferInterval depends only on ClipLength and the overlap.
+		spec = classifier.ModelSpec{ClipLength: 3 * time.Second}
 	}
+	effectiveBufferDuration := spec.BufferInterval(classifier.ResolveModelOverlap(modelID, spec, settings))
 
 	if elapsedTime > effectiveBufferDuration {
 		log.Warn("processing time exceeded buffer interval",

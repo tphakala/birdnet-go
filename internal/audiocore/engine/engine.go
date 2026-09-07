@@ -7,11 +7,13 @@ import (
 	"context"
 	"fmt"
 	"sync/atomic"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
+	"github.com/tphakala/birdnet-go/internal/audiocore/stream"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -61,7 +63,7 @@ type Config struct {
 	Logger logger.Logger
 
 	// FFmpegPath is the absolute path to the FFmpeg binary.
-	// It is passed to StreamConfig when starting stream-type sources.
+	// It is handed to the FFmpeg stream manager as a manager-level option.
 	FFmpegPath string
 
 	// SoxPath is the absolute path to the SoX binary.
@@ -87,12 +89,20 @@ type Config struct {
 	// to support extended capture mode.
 	CaptureBufferSeconds int
 
+	// LivenessSilenceThreshold is the audio watchdog's silence threshold. The
+	// native stream manager tightens its supervisor read-idle window below this so
+	// a stalled transport reconnects in place before the watchdog would alarm.
+	// Zero leaves the native read-idle at its own default. Ignored under the FFmpeg
+	// gate.
+	LivenessSilenceThreshold time.Duration
+
 	// RouterMetrics is optional; nil-safe.
 	// NOTE: Not yet wired to subsystems; metrics plumbing is planned for a future PR.
 	RouterMetrics audiocore.RouterMetrics
 
-	// StreamMetrics is optional; nil-safe.
-	// NOTE: Not yet wired to subsystems; metrics plumbing is planned for a future PR.
+	// StreamMetrics is optional; nil-safe. Forwarded to whichever stream manager
+	// the BIRDNET_STREAM_INGEST gate selects (FFmpeg or native), which emits
+	// per-source health, error, and data-rate metrics.
 	StreamMetrics audiocore.StreamMetrics
 
 	// BufferMetrics is optional; nil-safe.
@@ -112,6 +122,31 @@ func captureBufferSecs(v int) int {
 	return defaultCaptureBufferSeconds
 }
 
+// nativeReadIdleFloor is the minimum native supervisor read-idle window. A value
+// below this would reconnect on transient network jitter.
+const nativeReadIdleFloor = 5 * time.Second
+
+// deriveNativeReadIdle tightens the native supervisor read-idle window to sit in
+// front of the liveness watchdog silence threshold, so a stalled transport is
+// repaired in place (RecoveryInProgress) before the watchdog would alarm. It
+// returns 0 when the threshold is unknown (<=0), letting the native default
+// apply. The result is min(stream.DefaultReadIdle, two thirds of the threshold),
+// floored at nativeReadIdleFloor only while that floor stays below the silence
+// threshold (so the result is always strictly less than the threshold).
+func deriveNativeReadIdle(silenceThreshold time.Duration) time.Duration {
+	if silenceThreshold <= 0 {
+		return 0
+	}
+	readIdle := min(silenceThreshold*2/3, stream.DefaultReadIdle)
+	// Apply the jitter floor only when it stays below the silence threshold. A
+	// very small threshold must not push readIdle up to or past it, or the
+	// watchdog could alarm before the supervisor's read-idle fires.
+	if readIdle < nativeReadIdleFloor && nativeReadIdleFloor < silenceThreshold {
+		readIdle = nativeReadIdleFloor
+	}
+	return readIdle
+}
+
 // AudioEngine coordinates all audio subsystems: source registry, audio router,
 // FFmpeg stream manager, device manager, buffer manager, and quiet hours
 // scheduler. It provides a single point of control for adding, removing, and
@@ -119,7 +154,7 @@ func captureBufferSecs(v int) int {
 type AudioEngine struct {
 	registry  *audiocore.SourceRegistry
 	router    *audiocore.AudioRouter
-	ffmpegMgr *ffmpeg.Manager
+	streamMgr audiocore.StreamManager
 	deviceMgr *audiocore.DeviceManager
 	bufferMgr *buffer.Manager
 	scheduler atomic.Pointer[schedule.QuietHoursScheduler]
@@ -136,16 +171,10 @@ type AudioEngine struct {
 	primaryClipBytes    int
 	primaryOverlapBytes int
 	primaryReadSize     int
-	// ffmpegPath is the absolute path to the FFmpeg binary.
-	ffmpegPath string
 	// soxPath is the absolute path to the SoX binary.
 	soxPath string
 	// transport is the default RTSP transport protocol.
 	transport string
-	// ffmpegParameters are additional FFmpeg command-line parameters.
-	ffmpegParameters []string
-	// logLevel is the FFmpeg log level.
-	logLevel string
 	// debug enables verbose debug logging for stream capture.
 	debug bool
 	// captureBufferSeconds is the ring buffer capacity for audio history.
@@ -170,9 +199,30 @@ func New(ctx context.Context, cfg *Config, scheduler *schedule.QuietHoursSchedul
 	// convert-on-capture (malgo) go through pooled byte slices instead of
 	// allocating per-frame. The router Retain/Release path keeps pooled
 	// buffers alive across fan-out subscribers.
-	ffmpegMgr := ffmpeg.NewManager(engineCtx, func(frame audiocore.AudioFrame) {
-		router.Dispatch(frame)
-	}, nil, log, bufMgr)
+	// The engine drives its network stream producer through the
+	// audiocore.StreamManager seam, selected at construction by the
+	// BIRDNET_STREAM_INGEST gate. FFmpeg is the default; the value "native"
+	// switches to the pure-Go go-audio-stream producer. Manager-level settings
+	// are handed to the chosen manager once here rather than repeated on every
+	// StreamSpec.
+	dispatch := func(frame audiocore.AudioFrame) { router.Dispatch(frame) }
+	var streamMgr audiocore.StreamManager
+	if conf.NativeStreamIngestEnabled() {
+		nativeOpts := &stream.Options{Metrics: cfg.StreamMetrics}
+		if ri := deriveNativeReadIdle(cfg.LivenessSilenceThreshold); ri > 0 {
+			nativeOpts.ReadIdle = ri
+		}
+		streamMgr = stream.NewManager(engineCtx, dispatch, nil, log, bufMgr, nativeOpts)
+		log.Info("network stream ingest using native go-audio-stream path",
+			logger.String("ingest_engine", "native"))
+	} else {
+		streamMgr = ffmpeg.NewManagerWithOptions(engineCtx, dispatch, nil, log, bufMgr, ffmpeg.Options{
+			FFmpegPath:       cfg.FFmpegPath,
+			FFmpegParameters: cfg.FFmpegParameters,
+			LogLevel:         cfg.LogLevel,
+			Metrics:          cfg.StreamMetrics,
+		})
+	}
 	deviceMgr := audiocore.NewDeviceManager(router, bufMgr, log)
 
 	// Probe all device capabilities at startup, before any capture begins.
@@ -183,17 +233,14 @@ func New(ctx context.Context, cfg *Config, scheduler *schedule.QuietHoursSchedul
 	e := &AudioEngine{
 		registry:             audiocore.NewSourceRegistry(log),
 		router:               router,
-		ffmpegMgr:            ffmpegMgr,
+		streamMgr:            streamMgr,
 		deviceMgr:            deviceMgr,
 		bufferMgr:            bufMgr,
 		logger:               log.With(logger.String("component", "audio_engine")),
 		ctx:                  engineCtx,
 		cancel:               cancel,
-		ffmpegPath:           cfg.FFmpegPath,
 		soxPath:              cfg.SoxPath,
 		transport:            cfg.Transport,
-		ffmpegParameters:     cfg.FFmpegParameters,
-		logLevel:             cfg.LogLevel,
 		debug:                cfg.Debug,
 		captureBufferSeconds: captureBufferSecs(cfg.CaptureBufferSeconds),
 	}
@@ -216,9 +263,22 @@ func (e *AudioEngine) BufferManager() *buffer.Manager {
 	return e.bufferMgr
 }
 
-// FFmpegManager returns the FFmpeg stream manager.
-func (e *AudioEngine) FFmpegManager() *ffmpeg.Manager {
-	return e.ffmpegMgr
+// StreamManager returns the network stream manager the engine drives through
+// the producer-neutral audiocore.StreamManager seam.
+func (e *AudioEngine) StreamManager() audiocore.StreamManager {
+	return e.streamMgr
+}
+
+// buildStreamSpec stamps the engine-owned fields onto a caller-assembled
+// audiocore.StreamSpec and returns it. Call sites pass a keyed literal holding
+// the resolved per-source fields, so the many string and int fields cannot be
+// transposed; Debug is engine state, so it is injected here rather than repeated
+// at every call site. Manager-level FFmpeg settings (binary path, extra
+// parameters, log level) are not part of the spec; the manager holds them from
+// its Options.
+func (e *AudioEngine) buildStreamSpec(spec *audiocore.StreamSpec) *audiocore.StreamSpec {
+	spec.Debug = e.debug
+	return spec
 }
 
 // DeviceManager returns the device manager.
@@ -241,14 +301,14 @@ func (e *AudioEngine) SetScheduler(s *schedule.QuietHoursScheduler) {
 	}
 }
 
-// GetActiveStreamIDs returns the runtime source IDs currently tracked by FFmpeg.
+// GetActiveStreamIDs returns the runtime source IDs currently tracked by the stream manager.
 func (e *AudioEngine) GetActiveStreamIDs() []string {
-	return e.ffmpegMgr.GetActiveStreamIDs()
+	return e.streamMgr.GetActiveStreamIDs()
 }
 
 // GetActiveStreamURLs returns active runtime sourceID -> raw stream URL.
 func (e *AudioEngine) GetActiveStreamURLs() map[string]string {
-	ids := e.ffmpegMgr.GetActiveStreamIDs()
+	ids := e.streamMgr.GetActiveStreamIDs()
 	urls := make(map[string]string, len(ids))
 	for _, sourceID := range ids {
 		if url, ok := e.registry.ConnectionStringByID(sourceID); ok {
@@ -261,11 +321,24 @@ func (e *AudioEngine) GetActiveStreamURLs() map[string]string {
 // StopStream stops the FFmpeg stream for sourceID while keeping the registered
 // source, routes, and buffers available for a later quiet-hours restart.
 func (e *AudioEngine) StopStream(sourceID string) error {
-	if err := e.ffmpegMgr.StopStream(sourceID); err != nil {
+	if err := e.streamMgr.StopStream(sourceID); err != nil {
 		return err
 	}
 	_ = e.registry.UpdateState(sourceID, audiocore.SourceStopped)
 	return nil
+}
+
+// resolveTransport selects the RTSP transport for a stream: the per-stream
+// value when set, otherwise the engine-wide default. The per-stream value is
+// the source of truth in the new streams format, so it wins; the engine
+// default covers streams that leave it unset. A final empty-string guard in
+// the ffmpeg package still applies conf.DefaultTransport if both are empty, so
+// FFmpeg never receives an empty -rtsp_transport value.
+func (e *AudioEngine) resolveTransport(streamTransport string) string {
+	if streamTransport != "" {
+		return streamTransport
+	}
+	return e.transport
 }
 
 // StartStream restarts a quiet-hours-suppressed FFmpeg stream under its
@@ -275,9 +348,7 @@ func (e *AudioEngine) StartStream(sourceID, url, transport string) error {
 	if !ok {
 		return fmt.Errorf("restart stream: %w: %s", audiocore.ErrSourceNotFound, sourceID)
 	}
-	if transport == "" {
-		transport = e.transport
-	}
+	transport = e.resolveTransport(transport)
 	sampleRate := src.SampleRate
 	if sampleRate <= 0 {
 		sampleRate = defaultSampleRate
@@ -290,11 +361,11 @@ func (e *AudioEngine) StartStream(sourceID, url, transport string) error {
 	if bitDepth <= 0 {
 		bitDepth = defaultBitDepth
 	}
-	streamCfg := &ffmpeg.StreamConfig{
+	spec := e.buildStreamSpec(&audiocore.StreamSpec{
 		SourceID:         sourceID,
 		SourceName:       src.DisplayName,
 		URL:              url,
-		Type:             string(src.Type),
+		Type:             src.Type,
 		SampleRate:       sampleRate,
 		SourceSampleRate: src.SourceSampleRate,
 		BitDepth:         bitDepth,
@@ -302,13 +373,9 @@ func (e *AudioEngine) StartStream(sourceID, url, transport string) error {
 		SourceChannels:   src.SourceChannels,
 		ChannelMode:      src.ChannelMode,
 		MediaMode:        src.MediaMode,
-		FFmpegPath:       e.ffmpegPath,
 		Transport:        transport,
-		FFmpegParameters: e.ffmpegParameters,
-		LogLevel:         e.logLevel,
-		Debug:            e.debug,
-	}
-	if err := e.ffmpegMgr.StartStream(streamCfg); err != nil {
+	})
+	if err := e.streamMgr.StartStream(spec); err != nil {
 		_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
 		return err
 	}
@@ -320,7 +387,13 @@ func (e *AudioEngine) StartStream(sourceID, url, transport string) error {
 // for the primary model. This must be called before AddSource to ensure
 // buffers are allocated with the correct model key and size.
 // clipBytes, overlapBytes, and readSize should be derived from the model's
-// ModelSpec.BufferDimensions(), matching the secondary model allocation path.
+// ModelSpec.BufferDimensions(overlap) with the resolved per-model overlap,
+// matching the secondary model allocation path.
+//
+// The primary* fields written here are not mutex-guarded: SetPrimaryModel and the
+// AddSource/RemoveSource readers must be serialized by the caller. The audio
+// pipeline does this with p.sourcesMu (startup and every restart hold it), so an
+// overlap hot-reload that re-applies these dims stays race-free.
 func (e *AudioEngine) SetPrimaryModel(id string, clipBytes, overlapBytes, readSize int) {
 	e.primaryModelID = id
 	e.primaryClipBytes = clipBytes
@@ -428,11 +501,11 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 
 	// 5. Start capture based on source type.
 	if isStreamType(cfg.Type) {
-		streamCfg := &ffmpeg.StreamConfig{
+		spec := e.buildStreamSpec(&audiocore.StreamSpec{
 			SourceID:         sourceID,
 			SourceName:       src.DisplayName,
 			URL:              cfg.ConnectionString,
-			Type:             string(cfg.Type),
+			Type:             cfg.Type,
 			SampleRate:       sampleRate,
 			SourceSampleRate: cfg.SourceSampleRate,
 			BitDepth:         bitDepth,
@@ -440,13 +513,9 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 			SourceChannels:   cfg.SourceChannels,
 			ChannelMode:      cfg.ChannelMode,
 			MediaMode:        cfg.MediaMode,
-			FFmpegPath:       e.ffmpegPath,
-			Transport:        e.transport,
-			FFmpegParameters: e.ffmpegParameters,
-			LogLevel:         e.logLevel,
-			Debug:            e.debug,
-		}
-		if err := e.ffmpegMgr.StartStream(streamCfg); err != nil {
+			Transport:        e.resolveTransport(cfg.Transport),
+		})
+		if err := e.streamMgr.StartStream(spec); err != nil {
 			e.bufferMgr.DeallocateSource(sourceID)
 			_ = e.registry.Unregister(sourceID)
 			return errors.New(err).
@@ -510,7 +579,7 @@ func (e *AudioEngine) RemoveSource(sourceID string) error {
 
 	// 1. Stop capture.
 	if isStreamType(src.Type) {
-		if err := e.ffmpegMgr.StopStream(sourceID); err != nil {
+		if err := e.streamMgr.StopStream(sourceID); err != nil {
 			e.logger.Warn("failed to stop stream during removal",
 				logger.String("source_id", sourceID),
 				logger.Error(err))
@@ -565,7 +634,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 
 	// 1. Stop existing capture.
 	if isStreamType(src.Type) {
-		_ = e.ffmpegMgr.StopStream(sourceID)
+		_ = e.streamMgr.StopStream(sourceID)
 	} else if src.Type == audiocore.SourceTypeAudioCard {
 		_ = e.deviceMgr.StopCapture(sourceID)
 	}
@@ -634,11 +703,11 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 	}
 
 	if isStreamType(newType) {
-		streamCfg := &ffmpeg.StreamConfig{
+		spec := e.buildStreamSpec(&audiocore.StreamSpec{
 			SourceID:         sourceID,
 			SourceName:       src.DisplayName,
 			URL:              newCfg.ConnectionString,
-			Type:             string(newType),
+			Type:             newType,
 			SampleRate:       sampleRate,
 			SourceSampleRate: newCfg.SourceSampleRate,
 			BitDepth:         bitDepth,
@@ -646,13 +715,9 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 			SourceChannels:   newCfg.SourceChannels,
 			ChannelMode:      newCfg.ChannelMode,
 			MediaMode:        newCfg.MediaMode,
-			FFmpegPath:       e.ffmpegPath,
-			Transport:        e.transport,
-			FFmpegParameters: e.ffmpegParameters,
-			LogLevel:         e.logLevel,
-			Debug:            e.debug,
-		}
-		if err := e.ffmpegMgr.StartStream(streamCfg); err != nil {
+			Transport:        e.resolveTransport(newCfg.Transport),
+		})
+		if err := e.streamMgr.StartStream(spec); err != nil {
 			e.bufferMgr.DeallocateSource(sourceID)
 			_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
 			return errors.New(err).
@@ -686,7 +751,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 	// snapshots and emits the SourceReconfigured event with the fully updated entry.
 	// Without the sync, a channel/media-mode-only change re-triggers on every later
 	// reconfigure and restarts the stream indefinitely.
-	syncedModes := e.registry.SyncReconfiguredParams(sourceID, newCfg.ChannelMode, newCfg.MediaMode, newCfg.SourceSampleRate, newCfg.SourceChannels)
+	syncedModes := e.registry.SyncReconfiguredParams(sourceID, newCfg.ChannelMode, newCfg.MediaMode, newCfg.Transport, newCfg.SourceSampleRate, newCfg.SourceChannels)
 	syncedParams := e.registry.UpdateAudioParams(sourceID, sampleRate, bitDepth, channels)
 	if !syncedModes || !syncedParams {
 		// The source was fetched at the top of this function and the reconfigure
@@ -715,7 +780,7 @@ func (e *AudioEngine) Stop() {
 	e.cancel(ErrEngineStopped)
 
 	// Shut down FFmpeg streams.
-	if err := e.ffmpegMgr.Shutdown(); err != nil {
+	if err := e.streamMgr.Shutdown(); err != nil {
 		e.logger.Warn("ffmpeg manager shutdown error", logger.Error(err))
 	}
 

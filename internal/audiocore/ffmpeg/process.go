@@ -61,6 +61,13 @@ func isRTSPURL(url string) bool {
 // fallen back to requesting the full stream (issue #3902); video is still
 // dropped after decode via -vn, so the fallback only affects the RTSP handshake.
 func appendRTSPMediaArgs(args []string, transport string, audioOnly bool) []string {
+	// Final safety net: never emit an empty -rtsp_transport. A blank value makes
+	// FFmpeg fail to parse the option ("Error setting option rtsp_transport to
+	// value") and the stream never opens. Callers should resolve the transport
+	// upstream, but a missing or misconfigured value falls back to the default.
+	if transport == "" {
+		transport = conf.DefaultTransport
+	}
 	args = append(args, "-rtsp_transport", transport)
 	if audioOnly {
 		args = append(args, ffmpegAllowedMediaTypesFlag, ffmpegAllowedMediaTypesAudio)

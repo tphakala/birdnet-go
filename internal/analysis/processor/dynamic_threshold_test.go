@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -451,4 +452,59 @@ func TestEffectiveDynamicThreshold(t *testing.T) {
 			assert.InDelta(t, tt.expected, effectiveDynamicThreshold(tt.base, tt.level, tt.min), 0.001)
 		})
 	}
+}
+
+// =============================================================================
+// Regression coverage for #4194 (dynamic-threshold timer renewal)
+// =============================================================================
+//
+// The #4194 bug lived in updateDynamicThreshold, which renewed the expiry timer
+// from the PENDING detection path on any detection above the model base, letting
+// sub-trigger noise (or a lower-base model's normal output on the shared
+// per-species timer) pin a species at its lowered gate indefinitely. That method
+// was removed; LearnFromApprovedDetection is now the only runtime path that
+// renews the timer (creation-time init and DB hydration also assign it), and it
+// is Trigger-gated.
+//
+// The test below guards that surviving renewal path: a sub-trigger detection must
+// neither renew the timer nor count as a learning event on an already-latched
+// species. It does not drive the removed pending path (processDetections) end to
+// end, so it does not by itself reproduce the original bug; the above-Trigger
+// renewal direction is covered by TestLearnFromApprovedDetectionExtendsTimer.
+
+// TestLearnFromApprovedDetectionSubTriggerDoesNotRenewLatchedTimer verifies the
+// sole runtime renewal path stays Trigger-gated: a species latched at its maximum
+// reduction must not have its expiry timer renewed, nor its learning count
+// advanced, by a sub-trigger detection, so the lowered gate decays once
+// above-Trigger activity stops.
+func TestLearnFromApprovedDetectionSubTriggerDoesNotRenewLatchedTimer(t *testing.T) {
+	p := newTestProcessor()
+
+	// Species latched at Level 3 with a timer about to expire.
+	before := time.Now()
+	soonToExpire := before.Add(1 * time.Hour)
+	p.DynamicThresholds["test species"] = &DynamicThreshold{
+		Level:          3,
+		BaseThreshold:  0.80,
+		Timer:          soonToExpire,
+		HighConfCount:  3,
+		ValidHours:     24,
+		LastLearnedAt:  before.Add(-1 * time.Hour),
+		ScientificName: "Testus speciesus",
+	}
+
+	// 0.85 is above base (0.80) but below Trigger (0.90): a sub-trigger detection.
+	// It must not renew the timer, so the latched state is allowed to expire.
+	p.LearnFromApprovedDetection("test species", "Testus speciesus", 0.85, 0.80)
+
+	dt := p.DynamicThresholds["test species"]
+	require.NotNil(t, dt, "threshold entry must still exist after a sub-trigger detection")
+	// Assert the timer is unchanged (exactly soonToExpire), not merely "still soon":
+	// the intended behavior is no renewal at all, so any partial or unexpected timer
+	// mutation must fail. Exact equality also keeps the assertion time-independent.
+	assert.Equal(t, soonToExpire, dt.Timer,
+		"Sub-trigger detection must not renew the timer; it must stay exactly at soonToExpire")
+	// HighConfCount is the discriminating field: Level is already saturated at 3,
+	// so a spurious learn would surface as the count advancing to 4.
+	assert.Equal(t, 3, dt.HighConfCount, "Sub-trigger detection must not count as a learning event")
 }

@@ -16,6 +16,10 @@ import (
 const SortBySearchDefault = "search_default"
 
 // AdvancedSearchFilters represents all possible search filters from the frontend
+// sourceNodeInPredicate selects notes by the node that recorded them; both the location and
+// source filters resolve to it on the legacy schema.
+const sourceNodeInPredicate = "source_node IN ?"
+
 type AdvancedSearchFilters struct {
 	TextQuery string
 	// SpeciesScientific contains exact scientific names that are OR-ed with
@@ -29,11 +33,16 @@ type AdvancedSearchFilters struct {
 	Verified          *bool
 	Species           []string
 	Location          []string // Maps to source_node column
-	Locked            *bool
-	SortAscending     bool
-	SortBy            string // "date_desc", "date_asc", "species_asc", "species_desc", "confidence_asc", "confidence_desc", "status", or SortBySearchDefault
-	Limit             int
-	Offset            int
+	// Source restricts results to audio sources, each given as the source's numeric ID (as listed
+	// by /analytics/sources), its display name, node name, or source URI. The v2 store resolves it
+	// against the audio_sources table; the legacy store, which records only the node name per
+	// note, matches it against source_node, so only node-name values select rows there.
+	Source        []string
+	Locked        *bool
+	SortAscending bool
+	SortBy        string // "date_desc", "date_asc", "species_asc", "species_desc", "confidence_asc", "confidence_desc", "status", or SortBySearchDefault
+	Limit         int
+	Offset        int
 	// MinID filters to records with ID > MinID (cursor-based pagination for migration)
 	MinID uint
 	// CursorPagination indicates this query uses cursor-based pagination and must
@@ -106,7 +115,12 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 
 	// Apply location/source filter (source_node column in notes table)
 	if len(filters.Location) > 0 {
-		query = query.Where("source_node IN ?", filters.Location)
+		query = query.Where(sourceNodeInPredicate, filters.Location)
+	}
+	// The legacy schema records only the node per note, so a source filter can select rows only
+	// by node name; any other spelling matches nothing rather than everything.
+	if len(filters.Source) > 0 {
+		query = query.Where(sourceNodeInPredicate, filters.Source)
 	}
 
 	// Apply verified filter

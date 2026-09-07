@@ -2,6 +2,7 @@
 package system
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -323,7 +324,7 @@ func (c *Handler) buildModelLoadInfoProvider() func() []checks.ModelLoadInfo {
 // buildPerModelInferenceProvider returns a closure that queries per-model
 // inference counters and model specs to produce per-model latency stats.
 // Each model's analysis window is derived from its own BufferInterval
-// (ClipLength / 2), not from a global setting.
+// (ClipLength - resolved overlap; the bat model stays fixed at 50%).
 func (c *Handler) buildPerModelInferenceProvider() func() []checks.ModelInferenceInfo {
 	return func() []checks.ModelInferenceInfo {
 		p := c.Processor
@@ -372,7 +373,7 @@ func mapInferenceSnapshots(snapshots map[string]inferencestats.PeekSnapshot, inf
 		name := modelID
 		if mi, ok := infoMap[modelID]; ok {
 			name = mi.DisplayName()
-			windowMS = float64(mi.Spec.BufferInterval().Milliseconds())
+			windowMS = float64(mi.Spec.BufferInterval(mi.Overlap).Milliseconds())
 		} else {
 			apicore.GetLogger().Warn("inference counter has no matching model info; surfacing raw id",
 				logger.String("model_id", modelID))
@@ -388,8 +389,8 @@ func mapInferenceSnapshots(snapshots map[string]inferencestats.PeekSnapshot, inf
 	return result
 }
 
-// buildStreamHealthProvider returns a closure that bridges the FFmpegManager's
-// stream health data to the checks.StreamHealthInfo format. The closure
+// buildStreamHealthProvider returns a closure that bridges the stream manager's
+// health data to the checks.StreamHealthInfo format. The closure
 // atomically loads c.Engine at call time because it is set after Controller init.
 func (c *Handler) buildStreamHealthProvider() func() []checks.StreamHealthInfo {
 	return func() []checks.StreamHealthInfo {
@@ -397,7 +398,7 @@ func (c *Handler) buildStreamHealthProvider() func() []checks.StreamHealthInfo {
 		if eng == nil {
 			return nil
 		}
-		mgr := eng.FFmpegManager()
+		mgr := eng.StreamManager()
 		if mgr == nil {
 			return nil
 		}
@@ -406,24 +407,52 @@ func (c *Handler) buildStreamHealthProvider() func() []checks.StreamHealthInfo {
 			return nil
 		}
 		registry := eng.Registry()
-		infos := make([]checks.StreamHealthInfo, 0, len(healthMap))
-		for sourceID, sh := range healthMap {
+		// AllStreamHealth ranges a map, so order deterministically for a stable
+		// support-dump ordering (the diagnostics file sorts its other map-derived
+		// outputs too). Sort by sanitized URL, then by the unique source ID, so two
+		// sources that sanitize to the same URL (credentials stripped) still order
+		// deterministically. Source IDs are precomputed to sanitized URLs so the
+		// comparator does no per-comparison registry lookup.
+		urls := make(map[string]string, len(healthMap))
+		ids := make([]string, 0, len(healthMap))
+		for sourceID := range healthMap {
 			url := sourceID
 			if registry != nil {
 				if connStr, ok := registry.ConnectionStringByID(sourceID); ok {
 					url = privacy.SanitizeStreamUrl(connStr)
 				}
 			}
+			urls[sourceID] = url
+			ids = append(ids, sourceID)
+		}
+		slices.SortFunc(ids, func(a, b string) int {
+			if c := cmp.Compare(urls[a], urls[b]); c != 0 {
+				return c
+			}
+			return cmp.Compare(a, b)
+		})
+		infos := make([]checks.StreamHealthInfo, 0, len(ids))
+		for _, sourceID := range ids {
+			sh := healthMap[sourceID]
 			errMsg := ""
 			if sh.Error != nil {
 				errMsg = sh.Error.Error()
 			}
 			infos = append(infos, checks.StreamHealthInfo{
-				URL:          url,
-				IsHealthy:    sh.IsHealthy,
-				ProcessState: sh.ProcessState.String(),
-				RestartCount: sh.RestartCount,
-				Error:        errMsg,
+				URL:                urls[sourceID],
+				IsHealthy:          sh.IsHealthy,
+				State:              sh.State,
+				RestartCount:       sh.RestartCount,
+				Error:              errMsg,
+				Engine:             sh.Engine,
+				Codec:              sh.Codec,
+				WireBytesPerSecond: sh.WireBytesPerSecond,
+				Packets:            sh.Packets,
+				SeqGaps:            sh.SeqGaps,
+				Duplicates:         sh.Duplicates,
+				Malformed:          sh.Malformed,
+				SSRCResets:         sh.SSRCResets,
+				SourceFiltered:     sh.SourceFiltered,
 			})
 		}
 		return infos
@@ -479,7 +508,7 @@ func (c *Handler) buildStreamHealthSnapshotProvider() func() []observability.Str
 		if eng == nil {
 			return nil
 		}
-		mgr := eng.FFmpegManager()
+		mgr := eng.StreamManager()
 		if mgr == nil {
 			return nil
 		}

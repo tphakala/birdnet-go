@@ -92,10 +92,10 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 
 | Method | Route                                 | Handler                    | Auth | Description                        |
 | ------ | ------------------------------------- | -------------------------- | ---- | ---------------------------------- |
-| GET    | `/analytics/species/daily`            | `GetDailySpeciesSummary`   | ❌   | Daily species detection summary    |
+| GET    | `/analytics/species/daily`            | `GetDailySpeciesSummary`   | ❌   | Daily species detection summary (`first_heard` earliest, `latest_heard` latest call of the day) |
 | GET    | `/analytics/species/summary`          | `GetSpeciesSummary`        | ❌   | Overall species statistics         |
 | GET    | `/analytics/species/review-stats`     | `GetSpeciesReviewStats`    | ✅   | Per-species total/verified/rejected review counts (Manage view; 501 if datastore unsupported) |
-| GET    | `/analytics/species/detections/new`   | `GetNewSpeciesDetections`  | ❌   | Recently detected new species      |
+| GET    | `/analytics/species/detections/new`   | `GetNewSpeciesDetections`  | ❌   | Recently detected new species, with the non-false-positive detection count in `count_in_period` |
 | GET    | `/analytics/species/thumbnails`       | `GetSpeciesThumbnails`     | ❌   | Species thumbnail images           |
 | GET    | `/analytics/species/accumulation`     | `GetSpeciesAccumulation`   | ❌   | Species accumulation curve (biodiversity collector's curve): per calendar day, the cumulative count of distinct species first detected within the range (false positives excluded; "first seen" is bounded to the window, not lifetime). All-species (no species filter). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days) |
 | GET    | `/analytics/species/phenology`        | `GetSpeciesPhenology`      | ❌   | Arrival/departure phenology (residency-bar Gantt): per species, the first and last detection date (station-local, false positives excluded) plus the in-range detection count, for the top-N species by volume. All-species top-N (no species filter). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `limit` optional (default 12, max 20) |
@@ -136,7 +136,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 
 | Method | Route                         | Handler                 | Auth | Description                                |
 | ------ | ----------------------------- | ----------------------- | ---- | ------------------------------------------ |
-| GET    | `/detections`                 | `GetDetections`         | ❌   | List bird detections                       |
+| GET    | `/detections`                 | `GetDetections`         | ❌   | List bird detections; `source` (id from `/analytics/sources`, display name, node name or URI) restricts to an audio source |
 | GET    | `/detections/:id`             | `GetDetection`          | ❌   | Get specific detection                     |
 | GET    | `/detections/recent`          | `GetRecentDetections`   | ❌   | Recent detections                          |
 | GET    | `/detections/:id/time-of-day` | `GetDetectionTimeOfDay` | ❌   | Detection time context                     |
@@ -186,6 +186,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/spectrogram/:id/generate`          | `GenerateSpectrogramByID` | ❌   | Trigger spectrogram generation     |
 | GET    | `/spectrogram/:id/status`            | `GetSpectrogramStatus`   | ❌   | Get spectrogram generation status  |
 | POST   | `/audio/:id/clip`                    | `ExtractAudioClipByID`   | ✅   | Extract audio clip from time range |
+| POST   | `/audio/:id/audible-bats`            | `AudibleBatsByID`        | ✅   | Time-expand bat clip into audible range |
 
 **Pending species image (`503 + Retry-After`).** The image endpoints never contact an
 image provider on the request goroutine: a cold species can take minutes to resolve
@@ -547,6 +548,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 **Query Parameters:**
 
 - All insights endpoints accept optional `model_id` query parameter to filter by BirdNET model
+- `/insights/dawn-chorus` also accepts `period_days` (default 30, 1 to 365) and `min_days` (default 3, clamped to `period_days`); the response echoes both as `period_days` and `min_days`
 
 ### Models (`models/models.go`)
 
@@ -557,7 +559,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 | GET    | `/models/regions`              | `GetModelRegions`       | ✅   | Region selector data: selectable regions, the auto-resolved region for the configured coordinates, and per-family resolution (auth-gated; never echoes raw coordinates) |
 | GET    | `/models/regions/:slug/map`    | `GetRegionCoverageMap`  | ❌   | Embedded SVG coverage map for a region slug (public static asset; strong ETag, honors If-None-Match; 404 when no map exists for the slug) |
 | GET    | `/models/installed`            | `GetInstalledModels`    | ❌   | List downloaded models                                |
-| POST   | `/models/install/:id`          | `InstallModel`          | ✅   | Download and install a catalog model                  |
+| POST   | `/models/install/:id`          | `InstallModel`          | ✅   | Download and install a catalog variant; body `{variantId?, allowIncompatible?}`. A variant incompatible with the detected hardware is rejected with 409 unless `allowIncompatible:true` |
 | POST   | `/models/reinstall/:id`        | `ReinstallModel`        | ✅   | Re-download missing/corrupt files for installed model |
 | DELETE | `/models/installed/:id`        | `UninstallModel`        | ✅   | Remove an installed model from disk                   |
 | GET    | `/models/install/:id/progress` | `StreamInstallProgress` | ❌   | SSE stream for install/reinstall progress             |

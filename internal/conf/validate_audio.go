@@ -38,6 +38,19 @@ const (
 	AudioExportTypeOPUS = "opus" // Lossy compressed audio
 )
 
+// isLossyExportFormat reports whether an export format is a lossy codec that needs
+// a bitrate. AAC, Opus and MP3 are lossy; WAV and FLAC are lossless and ignore the
+// bitrate. Callers gate bitrate defaulting and validation on this instead of
+// repeating the AAC/OPUS/MP3 set.
+func isLossyExportFormat(format string) bool {
+	switch format {
+	case AudioExportTypeAAC, AudioExportTypeOPUS, AudioExportTypeMP3:
+		return true
+	default:
+		return false
+	}
+}
+
 // EBU R128 normalization limits
 const (
 	MinTargetLUFS    = -40.0 // Minimum target loudness in LUFS
@@ -141,7 +154,7 @@ func (s *StreamConfig) Validate() error {
 	}
 
 	// Validate transport (only tcp/udp allowed, empty defaults to tcp)
-	if s.Transport != "" && s.Transport != "tcp" && s.Transport != "udp" {
+	if s.Transport != "" && s.Transport != TransportTCP && s.Transport != TransportUDP {
 		return fmt.Errorf("invalid transport '%s' for '%s': must be tcp or udp", s.Transport, s.Name)
 	}
 
@@ -258,15 +271,31 @@ func (s *StreamConfig) validateURLScheme() error {
 	return nil
 }
 
+// ResolveTransport returns the concrete RTSP transport to use for a stream given
+// its per-stream value: the per-stream value when set, otherwise the global
+// RTSPSettings.Transport, otherwise DefaultTransport. This is the single owner of
+// the "per-stream else global else default" rule, so the migration, the startup
+// engine default, and the audio pipeline all resolve transport the same way and
+// never disagree about what an unset value means.
+func (r *RTSPSettings) ResolveTransport(perStreamTransport string) string {
+	if perStreamTransport != "" {
+		return perStreamTransport
+	}
+	if r.Transport != "" {
+		return r.Transport
+	}
+	return DefaultTransport
+}
+
 // ApplyStreamDefaults sets default transport for RTSP/RTMP streams that have an empty
 // transport field. This handles the case where users write the new streams: YAML format
 // directly without specifying per-stream transport; the global RTSPSettings.Transport
 // (defaulting to "tcp") is propagated to each applicable stream.
 func (r *RTSPSettings) ApplyStreamDefaults() {
-	globalTransport := r.Transport
-	if globalTransport == "" {
-		globalTransport = DefaultTransport
-	}
+	// ResolveTransport("") yields the global transport when set, else the default.
+	// Resolve once (it is loop-invariant) and propagate to each per-stream empty,
+	// matching MigrateRTSPConfig and the single owner of the rule.
+	globalTransport := r.ResolveTransport("")
 	for _, stream := range r.AllStreams() {
 		if stream.Transport == "" && (stream.Type == StreamTypeRTSP || stream.Type == StreamTypeRTMP) {
 			stream.Transport = globalTransport
@@ -423,21 +452,25 @@ func (s *AudioSettings) applyFfmpegFormatFallback() {
 // produced by shelling out to FFmpeg.
 //
 // WAV, FLAC and Opus always have a native encoder, so they never need FFmpeg and
-// must NOT be downgraded to WAV when it is missing. AAC has one too, but it is
-// opt-in while it earns field confidence, so for it the answer depends on the
-// runtime gate: without the gate the export really does need FFmpeg, and with it
-// the format is native and must NOT be downgraded. Getting this wrong is silent,
-// because the downgrade happens during config validation and the operator only
-// sees WAV files appear where they asked for .m4a.
+// must NOT be downgraded to WAV when it is missing. AAC and MP3 have one too, but
+// each is opt-in while it earns field confidence, so for them the answer depends
+// on the runtime gate: without the gate the export really does need FFmpeg, and
+// with it the format is native and must NOT be downgraded. Getting this wrong is
+// silent, because the downgrade happens during config validation and the operator
+// only sees WAV files appear where they asked for .m4a or .mp3.
 //
-// REMOVAL: when the native AAC encoder becomes the default too, the remaining
-// gate call goes away and this collapses to "only MP3 needs FFmpeg".
+// REMOVAL: when the native AAC and MP3 encoders become the default too, the
+// remaining gate calls go away: every supported export type then has a native
+// encoder and this returns false for all of them, leaving the default true only
+// as a guard for an unrecognized type.
 func exportFormatNeedsFFmpeg(exportType string) bool {
 	switch exportType {
 	case AudioExportTypeWAV, AudioExportTypeFLAC, AudioExportTypeOPUS:
 		return false
 	case AudioExportTypeAAC:
 		return !NativeAACEncoderEnabled()
+	case AudioExportTypeMP3:
+		return !NativeMP3EncoderEnabled()
 	default:
 		return true
 	}
@@ -555,12 +588,9 @@ func validateAudioSettings(settings *AudioSettings) error {
 	settings.applyFfmpegFormatFallback()
 
 	// Bitrate only matters for lossy formats and only when export is enabled.
-	switch settings.Export.Type {
-	case AudioExportTypeAAC, AudioExportTypeOPUS, AudioExportTypeMP3:
-		if settings.Export.Enabled {
-			if err := validateExportBitrate(settings.Export.Type, settings.Export.Bitrate); err != nil {
-				return err
-			}
+	if settings.Export.Enabled && isLossyExportFormat(settings.Export.Type) {
+		if err := validateExportBitrate(settings.Export.Type, settings.Export.Bitrate); err != nil {
+			return err
 		}
 	}
 

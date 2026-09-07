@@ -234,8 +234,8 @@ func TestHighContentionScenario(t *testing.T) {
 	)
 
 	species := "Maximum_Contention_Species"
-	var negativeCount int64
-	var totalCount int64
+	var negativeCount atomic.Int64
+	var totalCount atomic.Int64
 	var wg sync.WaitGroup
 
 	baseTime := time.Now()
@@ -251,9 +251,9 @@ func TestHighContentionScenario(t *testing.T) {
 
 				isNew, days := tracker.CheckAndUpdateSpecies(species, detectionTime)
 
-				atomic.AddInt64(&totalCount, 1)
+				totalCount.Add(1)
 				if days < 0 {
-					atomic.AddInt64(&negativeCount, 1)
+					negativeCount.Add(1)
 				}
 
 				_ = isNew // Use the result to prevent optimization
@@ -265,11 +265,11 @@ func TestHighContentionScenario(t *testing.T) {
 
 	t.Logf("High contention test results:")
 	t.Logf("  Single species: %s", species)
-	t.Logf("  Total operations: %d", atomic.LoadInt64(&totalCount))
-	t.Logf("  Negative day results: %d", atomic.LoadInt64(&negativeCount))
+	t.Logf("  Total operations: %d", totalCount.Load())
+	t.Logf("  Negative day results: %d", negativeCount.Load())
 
-	if atomic.LoadInt64(&negativeCount) > 0 {
-		errorRate := float64(atomic.LoadInt64(&negativeCount)) / float64(atomic.LoadInt64(&totalCount)) * 100
+	if negativeCount.Load() > 0 {
+		errorRate := float64(negativeCount.Load()) / float64(totalCount.Load()) * 100
 		t.Logf("  🔥 Race condition rate: %.2f%%", errorRate)
 		t.Logf("  📊 This demonstrates the race condition under maximum contention")
 	} else {

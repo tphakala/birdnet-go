@@ -6,6 +6,7 @@ import (
 	"context"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -342,6 +343,83 @@ func ResolveSpeciesToLabelIDs(ctx context.Context, deps *FilterLookupDeps, speci
 	}
 
 	return labelIDs, nil
+}
+
+// ResolveSourcesToSourceIDs maps the public source filter values to audio source IDs. Each value
+// is the source's numeric ID (as /analytics/sources lists it) or a name, which goes through the
+// same matching as the search endpoint's device filter (ResolveDeviceToSourceIDs: node name,
+// display name or source URI, case-insensitively, exact before substring). Returns nil for an
+// empty filter and sentinelNoMatchIDs when nothing matches, so an unknown source yields no rows
+// rather than every row. Without a source repository only numeric IDs can match.
+func ResolveSourcesToSourceIDs(ctx context.Context, deps *FilterLookupDeps, sources []string) ([]uint, error) {
+	if len(sources) == 0 {
+		return nil, nil
+	}
+	// Numeric IDs need no lookup, so a filter is still applied when no source repository is
+	// wired; names then match nothing rather than being dropped, so the response is never
+	// silently unfiltered.
+	haveRepo := deps != nil && deps.SourceRepo != nil
+	var groups [][]uint
+	for _, want := range sources {
+		want = strings.TrimSpace(want)
+		if want == "" {
+			continue
+		}
+		if id, ok := parseSourceID(want); ok {
+			groups = append(groups, []uint{id})
+			continue
+		}
+		if !haveRepo {
+			continue
+		}
+		ids, err := ResolveDeviceToSourceIDs(ctx, deps, want)
+		if err != nil {
+			return nil, err
+		}
+		if len(ids) > 0 && ids[0] != sentinelNoMatchIDs[0] {
+			groups = append(groups, ids)
+		}
+	}
+	merged := mergeUniqueIDs(groups...)
+	if len(merged) == 0 {
+		return sentinelNoMatchIDs, nil
+	}
+	return merged, nil
+}
+
+// parseSourceID reports whether s is a positive decimal integer and returns it.
+func parseSourceID(s string) (id uint, ok bool) {
+	n, err := strconv.ParseUint(s, 10, 32)
+	if err != nil || n == 0 {
+		return 0, false
+	}
+	return uint(n), true
+}
+
+// intersectSourceIDs combines the location and source filters: nil means "no filter" on either
+// side, so the other side wins; when both are set only sources in both survive, and an empty
+// intersection becomes the no-match sentinel.
+func intersectSourceIDs(a, b []uint) []uint {
+	if a == nil {
+		return b
+	}
+	if b == nil {
+		return a
+	}
+	inB := make(map[uint]struct{}, len(b))
+	for _, id := range b {
+		inB[id] = struct{}{}
+	}
+	out := make([]uint, 0, len(a))
+	for _, id := range a {
+		if _, ok := inB[id]; ok {
+			out = append(out, id)
+		}
+	}
+	if len(out) == 0 {
+		return sentinelNoMatchIDs
+	}
+	return out
 }
 
 // ResolveLocationsToSourceIDs converts location/node names to audio source IDs.
@@ -848,6 +926,11 @@ func ConvertAdvancedFilters(
 		if err != nil {
 			return nil, err
 		}
+		sourceIDs, err := ResolveSourcesToSourceIDs(ctx, deps, filters.Source)
+		if err != nil {
+			return nil, err
+		}
+		sf.AudioSourceIDs = intersectSourceIDs(sf.AudioSourceIDs, sourceIDs)
 	}
 
 	return sf, nil

@@ -23,6 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -240,6 +241,7 @@ type detectionQueryParams struct {
 	HourRange  string
 	Verified   string
 	Location   string
+	Source     string
 	Locked     string
 	// Sorting
 	SortBy string
@@ -248,13 +250,15 @@ type detectionQueryParams struct {
 }
 
 // advancedSearchCacheKey generates a deterministic cache key for advanced search queries.
-// Includes all filter parameters to avoid cache collisions.
+// Includes all filter parameters to avoid cache collisions. Free-text values (search text,
+// species, location, source, which may be URIs) are quoted so a delimiter inside a value
+// cannot make two different requests share a key.
 func (p *detectionQueryParams) advancedSearchCacheKey() string {
-	return fmt.Sprintf("adv_search:%s:%s:%d:%d:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%d",
+	return fmt.Sprintf("adv_search:%q:%q:%d:%d:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%d",
 		p.Search, strings.Join(p.SearchScientific, "\x00"), p.NumResults, p.Offset,
 		p.Confidence, p.TimeOfDay, p.HourRange,
-		p.Verified, p.Location, p.Locked,
-		p.Species, p.Date, p.StartDate+":"+p.EndDate,
+		p.Verified, p.Location, p.Source, p.Locked,
+		p.Species, p.Date, p.StartDate, p.EndDate,
 		p.SortBy, p.QueryType, p.Hour, p.Duration)
 }
 
@@ -274,6 +278,7 @@ func (c *Handler) parseDetectionQueryParams(ctx echo.Context) (*detectionQueryPa
 		HourRange:  ctx.QueryParam("hourRange"),
 		Verified:   ctx.QueryParam("verified"),
 		Location:   ctx.QueryParam("location"),
+		Source:     ctx.QueryParam("source"),
 		Locked:     ctx.QueryParam("locked"),
 		// Sorting
 		SortBy: ctx.QueryParam("sortBy"),
@@ -589,7 +594,7 @@ func (c *Handler) GetDetections(ctx echo.Context) error {
 func (p *detectionQueryParams) needsAdvancedRouting() bool {
 	if p.Confidence != "" || p.TimeOfDay != "" ||
 		p.HourRange != "" || p.Verified != "" ||
-		p.Location != "" || p.Locked != "" ||
+		p.Location != "" || p.Source != "" || p.Locked != "" ||
 		p.StartDate != "" || p.EndDate != "" {
 		return true
 	}
@@ -1040,8 +1045,9 @@ func (c *Handler) getSearchDetectionsAdvanced(params *detectionQueryParams) ([]d
 
 	notes, totalCount, err := c.DS.SearchNotesAdvanced(&filters)
 	if err != nil {
+		// Filters carry request text, and a source value may be a URI with credentials.
 		c.LogErrorIfEnabled("Failed to perform advanced search",
-			logger.String("filters", fmt.Sprintf("%+v", filters)),
+			logger.String("filters", privacy.ScrubMessage(fmt.Sprintf("%+v", filters))),
 			logger.Error(err),
 		)
 		return nil, 0, err
@@ -1108,6 +1114,9 @@ func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams) datas
 	}
 	if params.Location != "" {
 		filters.Location = []string{params.Location}
+	}
+	if params.Source != "" {
+		filters.Source = []string{params.Source}
 	}
 
 	// Apply boolean filters

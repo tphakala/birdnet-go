@@ -952,7 +952,7 @@ func TestSanitizeAny_NonFiniteBehindInterfaces(t *testing.T) {
 		{"nested Stringer with NaN", map[string]any{"src": stringerWithFloat{Gain: math.NaN()}, "trigger": math.Inf(1)}},
 		{"top-level error with Inf", floatFieldError{Gain: math.Inf(1)}},
 		{"nested error with NaN", map[string]any{"err": floatFieldError{Gain: math.NaN()}, "trigger": math.Inf(1)}},
-		{"unexported embedded struct with NaN", outerEmbed{innerFloat: innerFloat{Y: math.NaN()}, Name: "x"}},
+		{"unexported embedded struct with NaN", outerEmbed{Y: math.NaN(), Name: "x"}},
 		{"pointer to Stringer with NaN", &stringerWithFloat{Gain: math.NaN()}},
 	}
 	for _, tt := range tests {
@@ -980,7 +980,7 @@ func TestSanitizeAny_MatchesEncodingJSONForCleanValues(t *testing.T) {
 		Score float64 `json:"score"`
 	}
 	cases := []any{
-		Outer{Inner: Inner{A: 1}, Name: "x", Score: 2.5},
+		Outer{A: 1, Name: "x", Score: 2.5},
 		[]any{1, "two", 3.5, true},
 		map[string]any{"a": 1, "b": []int{1, 2}},
 		Inner{A: 7, B: "z"},
@@ -1012,7 +1012,7 @@ func FuzzSanitizeAny(f *testing.F) {
 			fuzzStruct{V: x, S: string(b)},
 			stringerWithFloat{Gain: x},
 			floatFieldError{Gain: x},
-			outerEmbed{innerFloat: innerFloat{Y: x}, Name: string(b)},
+			outerEmbed{Y: x, Name: string(b)},
 			&fuzzStruct{V: x, S: string(b)},
 			[]float64{x, float64(n)},
 		}

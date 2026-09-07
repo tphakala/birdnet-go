@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
@@ -163,7 +164,7 @@ func buildProbeArgs(url string, audioOnly bool) []string {
 	// handshake to audio tracks so ffprobe never SETUPs the camera's video track
 	// (issue #3798); -select_streams below only filters ffprobe's output.
 	if isRTSPURL(url) {
-		args = appendRTSPMediaArgs(args, "tcp", audioOnly)
+		args = appendRTSPMediaArgs(args, conf.DefaultTransport, audioOnly)
 	}
 
 	args = append(args,

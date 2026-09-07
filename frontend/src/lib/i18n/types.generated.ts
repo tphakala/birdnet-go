@@ -394,6 +394,15 @@ export type TranslationKey =
   | 'notifications.content.region.staleTitle'
   | 'notifications.content.region.staleMessage' // params: modelName, oldRegion, newRegion
   | 'notifications.content.region.staleGlobalMessage' // params: modelName, oldRegion
+  | 'notifications.content.modelPath.reconciledTitle' // params: modelName
+  | 'notifications.content.modelPath.reconciledMessage' // params: modelName, modelPath
+  | 'notifications.content.modelPath.substitutedTitle' // params: modelName
+  | 'notifications.content.modelPath.substitutedMessage' // params: modelName, modelPath
+  | 'notifications.content.modelPath.unreadableTitle' // params: modelName
+  | 'notifications.content.modelPath.unreadableMessage' // params: modelName, modelPath
+  | 'notifications.content.modelPath.builtinMessage' // params: modelName
+  | 'notifications.content.modelPath.notRegisteredTitle' // params: sourceName
+  | 'notifications.content.modelPath.notRegisteredMessage' // params: models, sourceName
   | 'notifications.content.alert.firedTitle' // params: rule_name
   | 'notifications.content.alert.metricExceeded' // params: value, threshold
   | 'notifications.content.alert.detectionOccurred' // params: species_name, confidence
@@ -1366,6 +1375,8 @@ export type TranslationKey =
   | 'system.inference.sources'
   | 'system.inference.noSources'
   | 'system.inference.primaryFallback'
+  | 'system.inference.sourceNotRunning'
+  | 'system.inference.sourceNotRunningTooltip'
   | 'system.inference.notMeasured'
   | 'system.inference.unitMs'
   | 'system.inference.unitKhz'
@@ -1973,8 +1984,8 @@ export type TranslationKey =
   | 'settings.main.fields.overlap.helpText'
   | 'settings.main.fields.locale.label'
   | 'settings.main.fields.locale.helpText'
-  | 'settings.main.fields.tensorflowThreads.label'
-  | 'settings.main.fields.tensorflowThreads.helpText'
+  | 'settings.main.fields.inferenceThreads.label'
+  | 'settings.main.fields.inferenceThreads.helpText'
   | 'settings.main.errors.localesLoadFailed'
   | 'settings.main.errors.providersLoadFailed'
   | 'settings.main.errors.rangeFilterTestFailed'
@@ -3566,6 +3577,13 @@ export type TranslationKey =
   | 'media.audio.streamArtist'
   | 'media.audio.streamAlbum'
   | 'media.audio.playbackError' // params: details
+  | 'media.audio.audibleBats.title'
+  | 'media.audio.audibleBats.subtitle'
+  | 'media.audio.audibleBats.timeExpansion'
+  | 'media.audio.audibleBats.enable'
+  | 'media.audio.audibleBats.disable'
+  | 'media.audio.audibleBats.generating'
+  | 'media.audio.audibleBats.error'
   | 'media.spectrogram.notGenerated'
   | 'media.spectrogram.generate'
   | 'media.spectrogram.generateButton'
@@ -4220,6 +4238,27 @@ export type TranslationParams = {
   'notifications.content.region.staleGlobalMessage': {
     modelName: string | number;
     oldRegion: string | number;
+  };
+  'notifications.content.modelPath.reconciledTitle': { modelName: string | number };
+  'notifications.content.modelPath.reconciledMessage': {
+    modelName: string | number;
+    modelPath: string | number;
+  };
+  'notifications.content.modelPath.substitutedTitle': { modelName: string | number };
+  'notifications.content.modelPath.substitutedMessage': {
+    modelName: string | number;
+    modelPath: string | number;
+  };
+  'notifications.content.modelPath.unreadableTitle': { modelName: string | number };
+  'notifications.content.modelPath.unreadableMessage': {
+    modelName: string | number;
+    modelPath: string | number;
+  };
+  'notifications.content.modelPath.builtinMessage': { modelName: string | number };
+  'notifications.content.modelPath.notRegisteredTitle': { sourceName: string | number };
+  'notifications.content.modelPath.notRegisteredMessage': {
+    models: string | number;
+    sourceName: string | number;
   };
   'notifications.content.alert.firedTitle': { rule_name: string | number };
   'notifications.content.alert.metricExceeded': {

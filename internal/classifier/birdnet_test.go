@@ -17,9 +17,10 @@ import (
 // fakeModelInstance is a minimal ModelInstance for testing orchestrator logic
 // without loading real models.
 type fakeModelInstance struct {
-	id     string
-	name   string
-	labels []string
+	id           string
+	name         string
+	labels       []string
+	resolvedPath string
 }
 
 func (f *fakeModelInstance) Predict(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
@@ -35,6 +36,7 @@ func (f *fakeModelInstance) Close() error         { return nil }
 func (f *fakeModelInstance) RuntimeInfo() (device, backend, precision string) {
 	return deviceCPU, BackendONNX, ""
 }
+func (f *fakeModelInstance) ResolvedModelPath() string { return f.resolvedPath }
 
 func TestShouldAutoSelectV3Geomodel(t *testing.T) {
 	t.Parallel()
@@ -551,7 +553,9 @@ func TestNewBirdNET_LocaleNormalization(t *testing.T) {
 			settings.BirdNET.Version = "2.4"
 			settings.BirdNET.ModelPath = testV24TFLiteModelPath
 
-			bn, err := NewBirdNET(settings, nil)
+			// nil resolver: no orchestrator here, so the configured path is used
+			// verbatim, which is exactly the pre-recovery behaviour this test asserts.
+			bn, err := NewBirdNET(settings, nil, nil)
 			if bn != nil {
 				t.Cleanup(bn.Delete)
 			}

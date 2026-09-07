@@ -2,6 +2,7 @@ package audiocore
 
 import (
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -376,5 +377,197 @@ func TestLiveness_RecoveryFromFailed(t *testing.T) {
 		require.Len(t, snaps, 1)
 		assert.Equal(t, "HEALTHY", snaps[0].State,
 			"should recover from FAILED when frames resume")
+	})
+}
+
+// TestLiveness_NoRestartDuringSupervisedReconnect is contract case 16: while a
+// producer reports RecoveryInProgress within the ceiling, the watchdog alarms
+// once but never restarts or escalates, so it does not tear down a supervisor
+// that is reconnecting in place.
+func TestLiveness_NoRestartDuringSupervisedReconnect(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const src = "src-1"
+		r := setupRouter(t, src)
+		defer r.Close()
+
+		cfg := fastConfig()
+		cfg.ProducerRecoveryCeiling = 5 * time.Minute
+
+		var restarts, escalations atomic.Int32
+		var mu sync.Mutex
+		alarms := 0
+
+		// recoveryStart is fixed for the whole outage, mirroring the native
+		// producer, which advances RecoveryEntered only when the recovery intent
+		// changes, not on every reconnect attempt.
+		recoveryStart := time.Now()
+
+		w := NewLivenessWatchdog(cfg, r, LivenessCallbacks{
+			RestartSource: func(_ string) error { restarts.Add(1); return nil },
+			Escalate:      func(_ string) { escalations.Add(1) },
+			Notify: func(_ string, state LivenessState, _ string) {
+				if state == StateAlarmed {
+					mu.Lock()
+					alarms++
+					mu.Unlock()
+				}
+			},
+			RecoveryState: func(_ string) (RecoveryState, time.Time) {
+				return RecoveryInProgress, recoveryStart
+			},
+		})
+
+		dispatchFrame(r, src)
+		w.Start()
+		defer w.Stop()
+
+		// Simulate a 60 s outage: the supervisor is reconnecting in place the whole
+		// time, well within the 5 min ceiling.
+		time.Sleep(60 * time.Second)
+
+		assert.Zero(t, restarts.Load(), "watchdog must not restart while the supervisor reconnects within the ceiling")
+		assert.Zero(t, escalations.Load(), "watchdog must not escalate while suppressed")
+
+		snaps := w.Snapshot()
+		require.Len(t, snaps, 1)
+		assert.Equal(t, "RECOVERING", snaps[0].State, "source parks in RECOVERING while the supervisor works")
+
+		mu.Lock()
+		assert.Equal(t, 1, alarms, "silence still alarms exactly once on the HEALTHY->ALARMED edge")
+		mu.Unlock()
+	})
+}
+
+// TestLiveness_ZeroCeilingDisablesCoordination verifies that a non-positive
+// ProducerRecoveryCeiling turns the coordination off entirely: the watchdog takes
+// the legacy restart path even while the producer reports RecoveryInProgress, and
+// it never invokes the RecoveryState callback.
+func TestLiveness_ZeroCeilingDisablesCoordination(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const src = "src-1"
+		r := setupRouter(t, src)
+		defer r.Close()
+
+		cfg := fastConfig()
+		cfg.ProducerRecoveryCeiling = 0 // coordination disabled
+
+		var restarts, recoveryCalls atomic.Int32
+		w := NewLivenessWatchdog(cfg, r, LivenessCallbacks{
+			RestartSource: func(_ string) error { restarts.Add(1); return nil },
+			RecoveryState: func(_ string) (RecoveryState, time.Time) {
+				recoveryCalls.Add(1)
+				return RecoveryInProgress, time.Now()
+			},
+		})
+
+		dispatchFrame(r, src)
+		w.Start()
+		defer w.Stop()
+
+		time.Sleep(cfg.SilenceThreshold + 3*cfg.CheckInterval)
+
+		assert.NotZero(t, restarts.Load(), "a zero ceiling must take the legacy restart path despite RecoveryInProgress")
+		assert.Zero(t, recoveryCalls.Load(), "a zero ceiling short-circuits before invoking the RecoveryState callback")
+	})
+}
+
+// TestLiveness_RestartWhenSupervisorGivesUp is the other half of contract case
+// 16: once the producer reports RecoveryGivenUp the watchdog restarts exactly
+// once, which (in production) re-adds the source under a fresh dispatch clock.
+func TestLiveness_RestartWhenSupervisorGivesUp(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const src = "src-1"
+		r := setupRouter(t, src)
+		defer r.Close()
+
+		cfg := fastConfig()
+		cfg.ProducerRecoveryCeiling = 5 * time.Minute
+
+		var restarts atomic.Int32
+		w := NewLivenessWatchdog(cfg, r, LivenessCallbacks{
+			RestartSource: func(_ string) error {
+				restarts.Add(1)
+				// A successful restart brings the source back, mirroring the real
+				// RestartSource re-adding the source with a fresh dispatch clock.
+				dispatchFrame(r, src)
+				return nil
+			},
+			RecoveryState: func(_ string) (RecoveryState, time.Time) {
+				return RecoveryGivenUp, time.Time{}
+			},
+		})
+
+		dispatchFrame(r, src)
+		w.Start()
+		defer w.Stop()
+
+		time.Sleep(cfg.SilenceThreshold + 5*cfg.CheckInterval)
+
+		assert.Equal(t, int32(1), restarts.Load(), "a give-up must restart exactly once")
+
+		snaps := w.Snapshot()
+		require.Len(t, snaps, 1)
+		assert.Equal(t, "HEALTHY", snaps[0].State, "source recovers after the single restart")
+	})
+}
+
+// TestLiveness_RestartPastRecoveryCeiling verifies the ceiling backstop: a
+// producer stuck in RecoveryInProgress past ProducerRecoveryCeiling falls back
+// to the legacy restart ladder so a genuinely dead source is not parked forever.
+func TestLiveness_RestartPastRecoveryCeiling(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const src = "src-1"
+		r := setupRouter(t, src)
+		defer r.Close()
+
+		cfg := fastConfig()
+		cfg.ProducerRecoveryCeiling = 200 * time.Millisecond // outage quickly exceeds it
+
+		var restarts atomic.Int32
+		recoveryStart := time.Now()
+		w := NewLivenessWatchdog(cfg, r, LivenessCallbacks{
+			RestartSource: func(_ string) error { restarts.Add(1); return nil },
+			RecoveryState: func(_ string) (RecoveryState, time.Time) {
+				return RecoveryInProgress, recoveryStart
+			},
+		})
+
+		dispatchFrame(r, src)
+		w.Start()
+		defer w.Stop()
+
+		time.Sleep(cfg.SilenceThreshold + 10*cfg.CheckInterval)
+
+		assert.NotZero(t, restarts.Load(), "past the ceiling the legacy restart ladder resumes")
+	})
+}
+
+// TestLiveness_UnknownRecoveryTakesLegacyPath pins FFmpeg parity: a producer
+// reporting RecoveryUnknown (as FFmpeg always does) takes the legacy restart
+// path unchanged, so the coordination is a no-op under the ffmpeg gate.
+func TestLiveness_UnknownRecoveryTakesLegacyPath(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const src = "src-1"
+		r := setupRouter(t, src)
+		defer r.Close()
+
+		cfg := fastConfig()
+		cfg.ProducerRecoveryCeiling = 5 * time.Minute
+
+		var restarts atomic.Int32
+		w := NewLivenessWatchdog(cfg, r, LivenessCallbacks{
+			RestartSource: func(_ string) error { restarts.Add(1); return nil },
+			RecoveryState: func(_ string) (RecoveryState, time.Time) {
+				return RecoveryUnknown, time.Time{}
+			},
+		})
+
+		dispatchFrame(r, src)
+		w.Start()
+		defer w.Stop()
+
+		time.Sleep(cfg.SilenceThreshold + 3*cfg.CheckInterval)
+
+		assert.NotZero(t, restarts.Load(), "RecoveryUnknown (FFmpeg) takes the legacy restart path unchanged")
 	})
 }

@@ -968,3 +968,45 @@ func TestSQLiteManager_Close_NilsOutDB(t *testing.T) {
 
 	assert.Nil(t, mgr.DB(), "DB should be nil after Close to prevent stale reference queries")
 }
+
+// TestDropStaleThresholdTables verifies the #4195 schema-recreate migration: a
+// pre-#4195 threshold table carrying a label_id column is dropped so AutoMigrate can
+// recreate it keyed on species_name, while fresh and already-migrated tables are left
+// untouched.
+func TestDropStaleThresholdTables(t *testing.T) {
+	mgr, err := NewSQLiteManager(Config{DataDir: t.TempDir()})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mgr.Close() })
+	db := mgr.DB()
+	require.NotNil(t, db)
+
+	// Simulate the pre-#4195 schema: threshold tables keyed through a label_id FK.
+	require.NoError(t, db.Exec(`CREATE TABLE dynamic_thresholds (id INTEGER PRIMARY KEY, label_id INTEGER NOT NULL, level INTEGER)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE threshold_events (id INTEGER PRIMARY KEY, label_id INTEGER NOT NULL)`).Error)
+	require.True(t, db.Migrator().HasColumn(&entities.DynamicThreshold{}, "label_id"))
+	require.True(t, db.Migrator().HasColumn(&entities.ThresholdEvent{}, "label_id"))
+
+	// Drop the stale tables, then let AutoMigrate recreate them in the new shape.
+	require.NoError(t, dropStaleThresholdTables(db, nil))
+	require.NoError(t, db.AutoMigrate(&entities.DynamicThreshold{}, &entities.ThresholdEvent{}))
+
+	assert.True(t, db.Migrator().HasColumn(&entities.DynamicThreshold{}, "species_name"), "recreated table must be keyed on species_name")
+	assert.False(t, db.Migrator().HasColumn(&entities.DynamicThreshold{}, "label_id"), "stale label_id column must be gone")
+	assert.True(t, db.Migrator().HasColumn(&entities.ThresholdEvent{}, "species_name"))
+	assert.False(t, db.Migrator().HasColumn(&entities.ThresholdEvent{}, "label_id"))
+
+	// An insert on the new schema must succeed.
+	require.NoError(t, db.Exec(`INSERT INTO dynamic_thresholds (species_name, level, current_value, base_threshold, high_conf_count, valid_hours, expires_at, last_triggered, first_created, trigger_count) VALUES ('great tit', 1, 0.7, 0.8, 1, 24, '2099-01-01', '2099-01-01', '2099-01-01', 1)`).Error)
+
+	// Idempotency: a second call on the already-migrated table (no label_id) is a no-op
+	// and must not drop the table or its row.
+	require.NoError(t, dropStaleThresholdTables(db, nil))
+	assert.True(t, db.Migrator().HasColumn(&entities.DynamicThreshold{}, "species_name"), "already-migrated table must be untouched")
+	var count int64
+	require.NoError(t, db.Table("dynamic_thresholds").Count(&count).Error)
+	assert.Equal(t, int64(1), count, "already-migrated row must survive an idempotent call")
+
+	// Fresh install: tables absent -> no-op, no error.
+	require.NoError(t, db.Migrator().DropTable(&entities.DynamicThreshold{}, &entities.ThresholdEvent{}))
+	require.NoError(t, dropStaleThresholdTables(db, nil))
+}

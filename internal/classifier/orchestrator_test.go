@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,14 +18,15 @@ import (
 
 // mockModelInstance implements ModelInstance for testing.
 type mockModelInstance struct {
-	id         string
-	spec       ModelSpec
-	labels     []string // optional; when nil a single default label is returned
-	device     string   // optional; when empty RuntimeInfo reports "CPU"
-	backend    string   // optional; reported verbatim by RuntimeInfo
-	precision  string   // optional; reported verbatim by RuntimeInfo
-	numSpecies int      // optional; when 0 NumSpecies reports a single default species
-	predict    func(ctx context.Context, samples [][]float32) ([]datastore.Results, error)
+	id           string
+	spec         ModelSpec
+	labels       []string // optional; when nil a single default label is returned
+	device       string   // optional; when empty RuntimeInfo reports "CPU"
+	backend      string   // optional; reported verbatim by RuntimeInfo
+	precision    string   // optional; reported verbatim by RuntimeInfo
+	resolvedPath string
+	numSpecies   int // optional; when 0 NumSpecies reports a single default species
+	predict      func(ctx context.Context, samples [][]float32) ([]datastore.Results, error)
 }
 
 func (m *mockModelInstance) Predict(ctx context.Context, samples [][]float32) ([]datastore.Results, error) {
@@ -60,6 +62,7 @@ func (m *mockModelInstance) RuntimeInfo() (device, backend, precision string) {
 	}
 	return device, m.backend, m.precision
 }
+func (m *mockModelInstance) ResolvedModelPath() string { return m.resolvedPath }
 
 // newTestOrchestrator creates an Orchestrator with mock models for unit testing.
 // It does not require real model files.
@@ -535,6 +538,93 @@ func TestOrchestrator_PredictModel_ErrorIncrementsInvokeErrors(t *testing.T) {
 	// The success counter must not have been touched.
 	assert.Equal(t, int64(0), GetInferenceCounters().PeekAll()[modelID].InvokeCount,
 		"InvokeCount must remain zero after a failed predict")
+}
+
+// TestInferenceFailureLogsAtError pins the PredictModel failure-log throttle:
+// the first consecutive failure and every inferenceFailureLogEvery-th one are
+// logged at ERROR, everything in between at DEBUG.
+func TestInferenceFailureLogsAtError(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		streak int64
+		want   bool
+	}{
+		{streak: 1, want: true},
+		{streak: 2, want: false},
+		{streak: inferenceFailureLogEvery - 1, want: false},
+		{streak: inferenceFailureLogEvery, want: true},
+		{streak: inferenceFailureLogEvery + 1, want: false},
+		{streak: 2 * inferenceFailureLogEvery, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("streak_%d", tt.streak), func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, inferenceFailureLogsAtError(tt.streak))
+		})
+	}
+}
+
+// TestOrchestrator_PredictModel_FailureStreak verifies the per-model consecutive
+// failure count that drives the failure-log throttle: it grows across failed
+// Predict calls, a success resets it so the next failure is logged at ERROR
+// again, and unloading the model drops the entry so a later instance under the
+// same ID starts fresh.
+func TestOrchestrator_PredictModel_FailureStreak(t *testing.T) {
+	// Not parallel: exercises the package-global inferenceFailureStreaks map.
+	const modelID = "streak-model"
+	predictErr := errors.New("injected predict failure")
+
+	var fail bool
+	mock := &mockModelInstance{
+		id:   modelID,
+		spec: ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+		predict: func(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
+			if fail {
+				return nil, predictErr
+			}
+			return []datastore.Results{{Species: "Turdus merula", Confidence: 0.95}}, nil
+		},
+	}
+	o := newTestOrchestrator(t, mock)
+	dropInferenceFailureStreak(modelID)
+	t.Cleanup(func() { dropInferenceFailureStreak(modelID) })
+
+	streak := func() (int64, bool) {
+		v, ok := inferenceFailureStreaks.Load(modelID)
+		if !ok {
+			return 0, false
+		}
+		return v.(*atomic.Int64).Load(), true
+	}
+	sample := [][]float32{{0.1}}
+
+	fail = true
+	for want := int64(1); want <= 3; want++ {
+		_, err := o.PredictModel(t.Context(), modelID, sample)
+		require.ErrorIs(t, err, predictErr)
+		got, ok := streak()
+		require.True(t, ok, "streak entry must exist after a failure")
+		assert.Equal(t, want, got, "each consecutive failure increments the streak")
+		assert.Equal(t, want == 1, inferenceFailureLogsAtError(got))
+	}
+
+	fail = false
+	_, err := o.PredictModel(t.Context(), modelID, sample)
+	require.NoError(t, err)
+	got, ok := streak()
+	require.True(t, ok)
+	assert.Zero(t, got, "a successful inference resets the streak")
+
+	fail = true
+	_, err = o.PredictModel(t.Context(), modelID, sample)
+	require.ErrorIs(t, err, predictErr)
+	got, _ = streak()
+	assert.Equal(t, int64(1), got, "the first failure after a success starts a new streak")
+	assert.True(t, inferenceFailureLogsAtError(got), "and is logged at ERROR again")
+
+	require.NoError(t, o.UnloadModel(modelID))
+	_, ok = streak()
+	assert.False(t, ok, "unloading the model must drop its streak entry")
 }
 
 // testRegistryIDForLoadFailure is a synthetic registry ID used only in tests

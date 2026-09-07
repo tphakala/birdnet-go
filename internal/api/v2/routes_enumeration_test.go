@@ -187,6 +187,7 @@ var goldenRoutes = []string{
 	"POST /api/v2/alerts/rules/import",
 	"POST /api/v2/alerts/rules/reset-defaults",
 	"POST /api/v2/app/wizard/dismiss",
+	"POST /api/v2/audio/:id/audible-bats",
 	"POST /api/v2/audio/:id/clip",
 	"POST /api/v2/audio/:id/process",
 	"POST /api/v2/auth/login",

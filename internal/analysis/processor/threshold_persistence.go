@@ -95,6 +95,8 @@ func (p *Processor) loadDynamicThresholdsFromDB() error {
 			HighConfCount:  dbThreshold.HighConfCount,
 			ValidHours:     dbThreshold.ValidHours,
 			ScientificName: dbThreshold.ScientificName,
+			FirstCreated:   dbThreshold.FirstCreated,
+			LastTriggered:  dbThreshold.LastTriggered,
 		}
 		loadedCount++
 
@@ -134,6 +136,17 @@ func (p *Processor) convertThresholdsForPersistence(settings *conf.Settings) (db
 	minThreshold := settings.Realtime.DynamicThreshold.Min
 
 	for speciesName, threshold := range p.DynamicThresholds {
+		// The species (lowercase common name) is the persistence key. An empty key
+		// cannot be stored; route it into the eviction path instead of only skipping,
+		// so a stray entry cannot linger in memory forever unpersisted. This is defense
+		// in depth: addSpeciesToDynamicThresholds already rejects empty keys (#4195).
+		if speciesName == "" {
+			GetLogger().Warn("Evicting dynamic threshold with empty species key during persistence",
+				logger.String("operation", "persist_dynamic_thresholds"))
+			expiredSpecies = append(expiredSpecies, speciesName)
+			continue
+		}
+
 		if now.After(threshold.Timer) {
 			expiredSpecies = append(expiredSpecies, speciesName)
 			if settings.Realtime.DynamicThreshold.Debug {
@@ -145,6 +158,18 @@ func (p *Processor) convertThresholdsForPersistence(settings *conf.Settings) (db
 			continue
 		}
 
+		// Preserve the real per-entry timestamps instead of stamping the flush time,
+		// so first_created/last_triggered reflect actual events (#4195). Fall back to
+		// now for entries created before these fields existed.
+		firstCreated := threshold.FirstCreated
+		if firstCreated.IsZero() {
+			firstCreated = now
+		}
+		lastTriggered := threshold.LastTriggered
+		if lastTriggered.IsZero() {
+			lastTriggered = firstCreated
+		}
+
 		dbThresholds = append(dbThresholds, datastore.DynamicThreshold{
 			SpeciesName:    speciesName,
 			ScientificName: threshold.ScientificName,
@@ -154,8 +179,8 @@ func (p *Processor) convertThresholdsForPersistence(settings *conf.Settings) (db
 			HighConfCount:  threshold.HighConfCount,
 			ValidHours:     threshold.ValidHours,
 			ExpiresAt:      threshold.Timer,
-			LastTriggered:  now,
-			FirstCreated:   now,
+			LastTriggered:  lastTriggered,
+			FirstCreated:   firstCreated,
 			UpdatedAt:      now,
 			TriggerCount:   threshold.HighConfCount,
 		})

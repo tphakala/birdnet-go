@@ -893,3 +893,61 @@ func TestDrainPendingResetsRequeuesOnFailure(t *testing.T) {
 			"pendingResets should remain empty after successful reset-all")
 	})
 }
+
+// TestConvertThresholdsForPersistence_PreservesTimestamps verifies the #4195 timestamp
+// fix at the processor layer: convertThresholdsForPersistence copies the real per-entry
+// FirstCreated/LastTriggered from the in-memory struct instead of stamping the flush time,
+// falls back to now for zero values, and skips empty-species keys without aborting.
+func TestConvertThresholdsForPersistence_PreservesTimestamps(t *testing.T) {
+	t.Parallel()
+	p := createTestProcessor()
+	settings := p.currentSettings()
+
+	firstCreated := time.Now().Add(-72 * time.Hour)
+	lastTriggered := time.Now().Add(-90 * time.Minute)
+	future := time.Now().Add(24 * time.Hour)
+
+	p.DynamicThresholds["american crow"] = &DynamicThreshold{
+		Level:          2,
+		BaseThreshold:  0.7,
+		Timer:          future,
+		HighConfCount:  3,
+		ValidHours:     48,
+		ScientificName: "Corvus brachyrhynchos",
+		FirstCreated:   firstCreated,
+		LastTriggered:  lastTriggered,
+	}
+	// An empty-key entry must not be persisted, must not abort the batch, and must be
+	// routed into the eviction path so it cannot linger in memory forever.
+	p.DynamicThresholds[""] = &DynamicThreshold{
+		Level: 1, Timer: future, ValidHours: 48, FirstCreated: firstCreated, LastTriggered: lastTriggered,
+	}
+
+	dbThresholds, expired := p.convertThresholdsForPersistence(settings)
+
+	require.Len(t, dbThresholds, 1, "empty-key entry must not be persisted")
+	assert.Equal(t, []string{""}, expired, "empty-key entry must be routed to eviction")
+	got := dbThresholds[0]
+	assert.Equal(t, "american crow", got.SpeciesName)
+	// The flush time is now; the real values are hours in the past, so a regression that
+	// stamped now (the #4195 bug) would fail these tight bounds.
+	assert.WithinDuration(t, firstCreated, got.FirstCreated, time.Second, "FirstCreated must be the real per-entry value, not the flush time")
+	assert.WithinDuration(t, lastTriggered, got.LastTriggered, time.Second, "LastTriggered must be the real per-entry value, not the flush time")
+}
+
+// TestConvertThresholdsForPersistence_ZeroTimestampFallback verifies that an in-memory
+// entry with zero FirstCreated/LastTriggered falls back to now (never persisted as zero).
+func TestConvertThresholdsForPersistence_ZeroTimestampFallback(t *testing.T) {
+	t.Parallel()
+	p := createTestProcessor()
+	p.DynamicThresholds["blue jay"] = &DynamicThreshold{
+		Level: 1, BaseThreshold: 0.7, Timer: time.Now().Add(24 * time.Hour), ValidHours: 48,
+	}
+
+	dbThresholds, _ := p.convertThresholdsForPersistence(p.currentSettings())
+	require.Len(t, dbThresholds, 1)
+	got := dbThresholds[0]
+	assert.False(t, got.FirstCreated.IsZero(), "zero FirstCreated must fall back to now")
+	assert.WithinDuration(t, time.Now(), got.FirstCreated, 5*time.Second)
+	assert.Equal(t, got.FirstCreated, got.LastTriggered, "zero LastTriggered falls back to FirstCreated")
+}

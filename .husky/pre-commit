@@ -19,7 +19,7 @@ if [ -n "$GO_FILES" ]; then
   # Check if golangci-lint is available
   if ! command -v golangci-lint >/dev/null 2>&1; then
     echo "❌ golangci-lint is not installed or not in PATH"
-    echo "💡 Install it with: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b \$(go env GOPATH)/bin v1.61.0"
+    echo "💡 Install it with: curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b \$(go env GOPATH)/bin v2.13.2"
     exit 1
   fi
   
