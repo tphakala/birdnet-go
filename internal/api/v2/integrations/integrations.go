@@ -292,8 +292,19 @@ func runStreamingIntegrationTest[T any](
 		select {
 		case <-httpCtx.Done():
 			c.Debug("HTTP client disconnected during %s test", integrationName)
+			// Signal shutdown under writeMu, mirroring the encode-error path
+			// above. Acquiring the lock blocks until any in-progress worker
+			// final write finishes (so ctx is not recycled mid-write), and it
+			// establishes the happens-before that makes a worker later blocked
+			// on writeMu.Lock() observe the closed doneChan and skip its write.
+			// Signalling after the unlock instead would leave a window where the
+			// worker touches the recycled ctx after this handler returns, since
+			// testCtx cancellation propagates from httpCtx only after httpCtx's
+			// own Done channel is already closed (issue #4292 bug class).
+			writeMu.Lock()
 			safeDoneClose()
 			cancel()
+			writeMu.Unlock()
 			drainResultChan()
 			return nil
 		default:
