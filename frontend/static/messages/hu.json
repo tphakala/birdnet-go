@@ -1780,7 +1780,7 @@
       "primaryFallback": "elsődleges (tartalék)",
       "sourceNotRunning": "nem elemzi",
       "sourceNotRunningTooltip": "Ez a forrás hozzá van rendelve a modellhez a beállításokban, de a hangja nem jut el a modellhez, így nem készít észleléseket. Ellenőrizze, hogy a hangforrás csatlakoztatva van-e és hangot küld-e.",
-      "modelNotAnalyzingTooltip": "One or more audio sources assigned to this model are not sending it audio, so it is not producing detections. See the sources listed below.",
+      "modelNotAnalyzingTooltip": "Egy vagy több, ehhez a modellhez hozzárendelt hangforrás nem küld neki hangot, így nem készít észleléseket. Lásd az alább felsorolt forrásokat.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",

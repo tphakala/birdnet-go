@@ -540,6 +540,17 @@ const v2IntegrityCacheTTL = 24 * time.Hour
 // pathological hang (#3939).
 const v2IntegrityCheckTimeout = 2 * time.Minute
 
+const (
+	// integrityResultOK is the healthy PRAGMA quick_check result. DatabaseIntegrityCheck.Run
+	// maps any non-empty, non-"ok" result to a corruption status, so this exact value
+	// is the integrity-result contract shared across cache reads, writes and the
+	// non-SQLite path.
+	integrityResultOK = "ok"
+	// sqliteDialectName is gorm's dialect name for SQLite (db.Name()); other dialects
+	// have no PRAGMA quick_check equivalent.
+	sqliteDialectName = "sqlite"
+)
+
 // IntegrityResult reports the cached database integrity result and whether the
 // database is corrupted, for the Database Integrity health check (#3939). It
 // mirrors the legacy SQLiteStore accessor so the check can read integrity through
@@ -558,7 +569,7 @@ func (ds *Datastore) IntegrityResult() (string, bool) {
 	fresh := cached != "" && time.Since(ds.integrityCheckedAt) < v2IntegrityCacheTTL
 	ds.integrityMu.RUnlock()
 	if fresh {
-		return cached, cached != "ok"
+		return cached, cached != integrityResultOK
 	}
 
 	// Slow path: recompute under the write lock so concurrent callers with a cold or
@@ -572,7 +583,7 @@ func (ds *Datastore) IntegrityResult() (string, bool) {
 	// Re-check under the write lock: another caller may have refreshed it while we
 	// waited for the lock.
 	if ds.integrityResult != "" && time.Since(ds.integrityCheckedAt) < v2IntegrityCacheTTL {
-		return ds.integrityResult, ds.integrityResult != "ok"
+		return ds.integrityResult, ds.integrityResult != integrityResultOK
 	}
 
 	result, ran := ds.runIntegrityQuickCheck()
@@ -584,7 +595,7 @@ func (ds *Datastore) IntegrityResult() (string, bool) {
 	}
 	ds.integrityResult = result
 	ds.integrityCheckedAt = time.Now()
-	return result, result != "ok"
+	return result, result != integrityResultOK
 }
 
 // runIntegrityQuickCheck executes PRAGMA quick_check on SQLite and returns the
@@ -601,8 +612,8 @@ func (ds *Datastore) runIntegrityQuickCheck() (result string, ran bool) {
 	// self-check and have no equivalent, so report healthy rather than tripping
 	// the corruption branch of the health check. db.Name() is the dialect name
 	// ("sqlite"/"mysql"), promoted from gorm.DB's embedded Dialector.
-	if db.Name() != "sqlite" {
-		return "ok", true
+	if db.Name() != sqliteDialectName {
+		return integrityResultOK, true
 	}
 	// Bound the scan: quick_check reads every page and runs on the single pinned
 	// SQLite connection, so an unbounded run would block writes for its full
@@ -619,7 +630,7 @@ func (ds *Datastore) runIntegrityQuickCheck() (result string, ran bool) {
 	}
 	joined := strings.Join(rows, "; ")
 	if joined == "" {
-		return "ok", true
+		return integrityResultOK, true
 	}
 	return joined, true
 }

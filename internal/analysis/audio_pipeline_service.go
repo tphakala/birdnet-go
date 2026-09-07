@@ -590,6 +590,11 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 	// 2. Untrack sound level consumer (engine.RemoveSource removes the route).
 	p.untrackSoundLevelConsumer(sourceID)
 
+	// Drop the route-failure memory for the old ID: RestartSource re-adds the source
+	// under a fresh registry ID, so any retained "failed last pass" entry for the old
+	// ID is stale and would otherwise never be pruned (#4208).
+	delete(p.routeFailedLastPass, sourceID)
+
 	// 3. Remove source from engine (stops capture, removes routes, deallocates buffers, unregisters).
 	if err := p.engine.RemoveSource(sourceID); err != nil {
 		log.Error("failed to remove source during restart",

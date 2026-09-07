@@ -1780,7 +1780,7 @@
       "primaryFallback": "ensisijainen (vara)",
       "sourceNotRunning": "ei analysoida",
       "sourceNotRunningTooltip": "Tämä lähde on liitetty malliin asetuksissa, mutta sen ääni ei tavoita mallia, joten se ei tuota havaintoja. Tarkista, että äänilähde on yhdistetty ja lähettää ääntä.",
-      "modelNotAnalyzingTooltip": "One or more audio sources assigned to this model are not sending it audio, so it is not producing detections. See the sources listed below.",
+      "modelNotAnalyzingTooltip": "Yksi tai useampi tähän malliin liitetyistä äänilähteistä ei lähetä sille ääntä, joten se ei tuota havaintoja. Katso alla luetellut lähteet.",
       "notMeasured": "-",
       "unitMs": "ms",
       "unitKhz": "kHz",

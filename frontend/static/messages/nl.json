@@ -1780,7 +1780,7 @@
       "primaryFallback": "primair (fallback)",
       "sourceNotRunning": "analyseert niet",
       "sourceNotRunningTooltip": "Deze bron is in de instellingen toegewezen aan het model, maar de audio bereikt het model niet, waardoor het geen detecties produceert. Controleer of de audiobron is verbonden en audio verzendt.",
-      "modelNotAnalyzingTooltip": "One or more audio sources assigned to this model are not sending it audio, so it is not producing detections. See the sources listed below.",
+      "modelNotAnalyzingTooltip": "Eén of meer aan dit model toegewezen audiobronnen verzenden er geen audio naar, waardoor het geen detecties produceert. Zie de hieronder vermelde bronnen.",
       "notMeasured": "n/b",
       "unitMs": "ms",
       "unitKhz": "kHz",

@@ -1780,7 +1780,7 @@
       "primaryFallback": "primārais (rezerves)",
       "sourceNotRunning": "neanalizē",
       "sourceNotRunningTooltip": "Šis avots ir piešķirts modelim iestatījumos, bet tā audio nesasniedz modeli, tāpēc tas neveic noteikšanas. Pārbaudiet, vai audio avots ir pievienots un sūta audio.",
-      "modelNotAnalyzingTooltip": "One or more audio sources assigned to this model are not sending it audio, so it is not producing detections. See the sources listed below.",
+      "modelNotAnalyzingTooltip": "Viens vai vairāki šim modelim piešķirtie audio avoti nesūta tam audio, tāpēc tas neveic noteikšanas. Skatiet zemāk norādītos avotus.",
       "notMeasured": "n/p",
       "unitMs": "ms",
       "unitKhz": "kHz",

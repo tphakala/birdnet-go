@@ -1780,7 +1780,7 @@
       "primaryFallback": "primær (fallback)",
       "sourceNotRunning": "analyserer ikke",
       "sourceNotRunningTooltip": "Denne kilde er tildelt modellen i indstillingerne, men dens lyd når ikke modellen, så den producerer ingen detektioner. Kontrollér, at lydkilden er forbundet og sender lyd.",
-      "modelNotAnalyzingTooltip": "One or more audio sources assigned to this model are not sending it audio, so it is not producing detections. See the sources listed below.",
+      "modelNotAnalyzingTooltip": "En eller flere lydkilder tildelt denne model sender ikke lyd til den, så den producerer ingen detektioner. Se kilderne anført nedenfor.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",

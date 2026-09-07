@@ -53,13 +53,26 @@ func TestRouteReportDecision(t *testing.T) {
 // so a startup route outage is not silenced (#4208 regression guard).
 func TestIsReconfigureOperation(t *testing.T) {
 	t.Parallel()
-	reconfigure := []string{"reconfigure_diff", "reconfigure_params", "gain_change", "model_change"}
-	immediate := []string{"start", "restart", "restart_source", "", "unknown"}
-	for _, op := range reconfigure {
-		assert.Truef(t, isReconfigureOperation(op), "%q should be a reconfigure operation", op)
+	tests := []struct {
+		name string
+		op   string
+		want bool
+	}{
+		{"reconfigure_diff suppresses first failure", "reconfigure_diff", true},
+		{"reconfigure_params suppresses first failure", "reconfigure_params", true},
+		{"gain_change suppresses first failure", "gain_change", true},
+		{"model_change suppresses first failure", "model_change", true},
+		{"start reports immediately", "start", false},
+		{"restart reports immediately", "restart", false},
+		{"restart_source reports immediately", "restart_source", false},
+		{"empty reports immediately", "", false},
+		{"unknown reports immediately", "unknown", false},
 	}
-	for _, op := range immediate {
-		assert.Falsef(t, isReconfigureOperation(op), "%q should report immediately, not suppress", op)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, isReconfigureOperation(tt.op))
+		})
 	}
 }
 

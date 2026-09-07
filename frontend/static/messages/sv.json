@@ -1780,7 +1780,7 @@
       "primaryFallback": "primär (reserv)",
       "sourceNotRunning": "analyserar inte",
       "sourceNotRunningTooltip": "Denna källa är tilldelad modellen i inställningarna, men dess ljud når inte modellen, så den producerar inga detektioner. Kontrollera att ljudkällan är ansluten och skickar ljud.",
-      "modelNotAnalyzingTooltip": "One or more audio sources assigned to this model are not sending it audio, so it is not producing detections. See the sources listed below.",
+      "modelNotAnalyzingTooltip": "En eller flera ljudkällor tilldelade denna modell skickar inte ljud till den, så den producerar inga detektioner. Se källorna som anges nedan.",
       "notMeasured": "-",
       "unitMs": "ms",
       "unitKhz": "kHz",

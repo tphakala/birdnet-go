@@ -1780,7 +1780,7 @@
       "primaryFallback": "principal (respaldo)",
       "sourceNotRunning": "no está analizando",
       "sourceNotRunningTooltip": "Esta fuente está asignada al modelo en la configuración, pero su audio no llega al modelo, por lo que no genera detecciones. Compruebe que la fuente de audio esté conectada y enviando audio.",
-      "modelNotAnalyzingTooltip": "One or more audio sources assigned to this model are not sending it audio, so it is not producing detections. See the sources listed below.",
+      "modelNotAnalyzingTooltip": "Una o más fuentes de audio asignadas a este modelo no le están enviando audio, por lo que no genera detecciones. Consulte las fuentes enumeradas a continuación.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",

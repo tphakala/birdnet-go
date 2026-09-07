@@ -1780,7 +1780,7 @@
       "primaryFallback": "primárny (záložný)",
       "sourceNotRunning": "neanalyzuje",
       "sourceNotRunningTooltip": "Tento zdroj je v nastaveniach priradený k modelu, ale jeho zvuk sa k modelu nedostáva, takže nevytvára žiadne detekcie. Skontrolujte, či je zdroj zvuku pripojený a odosiela zvuk.",
-      "modelNotAnalyzingTooltip": "One or more audio sources assigned to this model are not sending it audio, so it is not producing detections. See the sources listed below.",
+      "modelNotAnalyzingTooltip": "Jeden alebo viac zdrojov zvuku priradených k tomuto modelu mu neodosiela zvuk, takže nevytvára žiadne detekcie. Pozrite si zdroje uvedené nižšie.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",

@@ -1780,7 +1780,7 @@
       "primaryFallback": "principale (fallback)",
       "sourceNotRunning": "non sta analizzando",
       "sourceNotRunningTooltip": "Questa sorgente è assegnata al modello nelle impostazioni, ma il suo audio non raggiunge il modello, quindi non produce rilevamenti. Verifica che la sorgente audio sia connessa e invii audio.",
-      "modelNotAnalyzingTooltip": "One or more audio sources assigned to this model are not sending it audio, so it is not producing detections. See the sources listed below.",
+      "modelNotAnalyzingTooltip": "Una o più sorgenti audio assegnate a questo modello non gli inviano audio, quindi non produce rilevamenti. Vedi le sorgenti elencate qui sotto.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",
