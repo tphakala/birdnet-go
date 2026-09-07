@@ -221,6 +221,23 @@ func runStreamingIntegrationTest[T any](
 			writeMu.Lock()
 			defer writeMu.Unlock()
 
+			// Re-check under the lock before touching ctx. The handler may have
+			// returned (encode error or client disconnect) while we were blocked
+			// acquiring writeMu; on those paths it closes doneChan / cancels
+			// testCtx before releasing the lock, so observing either here means
+			// the handler has gone. Writing to ctx after the handler returns
+			// touches a recycled echo.Context/Response and races with the next
+			// request that reuses it (issue #4292 bug class).
+			select {
+			case <-doneChan:
+				c.Debug("HTTP client disconnected, skipping final result")
+				return
+			case <-testCtx.Done():
+				c.Debug("Test context cancelled: %v", testCtx.Err())
+				return
+			default:
+			}
+
 			finalResult := map[string]any{
 				"elapsed_time_ms": elapsedTime,
 				"state":           "completed",
@@ -257,9 +274,14 @@ func runStreamingIntegrationTest[T any](
 				logger.String("integration", integrationName),
 				logger.Error(err),
 			)
-			writeMu.Unlock()
+			// Signal shutdown BEFORE releasing writeMu so a worker goroutine
+			// blocked on writeMu.Lock() observes the closed doneChan (and the
+			// cancelled testCtx) once it acquires the lock, and skips its final
+			// write instead of touching the recycled ctx after this handler
+			// returns (issue #4292 bug class).
 			safeDoneClose()
 			cancel()
+			writeMu.Unlock()
 			drainResultChan()
 			return nil
 		}
