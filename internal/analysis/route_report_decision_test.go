@@ -58,13 +58,13 @@ func TestIsReconfigureOperation(t *testing.T) {
 		op   string
 		want bool
 	}{
-		{"reconfigure_diff suppresses first failure", "reconfigure_diff", true},
-		{"reconfigure_params suppresses first failure", "reconfigure_params", true},
-		{"gain_change suppresses first failure", "gain_change", true},
-		{"model_change suppresses first failure", "model_change", true},
-		{"start reports immediately", "start", false},
+		{"reconfigure_diff suppresses first failure", operationReconfigureDiff, true},
+		{"reconfigure_params suppresses first failure", operationReconfigureParams, true},
+		{"gain_change suppresses first failure", operationGainChange, true},
+		{"model_change suppresses first failure", operationModelChange, true},
+		{"start reports immediately", operationStart, false},
 		{"restart reports immediately", "restart", false},
-		{"restart_source reports immediately", "restart_source", false},
+		{"restart_source reports immediately", operationRestartSource, false},
 		{"empty reports immediately", "", false},
 		{"unknown reports immediately", "unknown", false},
 	}
@@ -88,30 +88,30 @@ func TestReportSourceRegistration_RouteFailureMemory(t *testing.T) {
 	alloc := map[string]bool{"BirdNET_GLOBAL_6K_V2.4": true}
 
 	// First reconfigure-pass route failure marks the source (and lazily inits the map).
-	p.reportSourceRegistration(nil, sid, sid, "reconfigure_diff", false, nil, nil, alloc)
+	p.reportSourceRegistration(nil, sid, sid, operationReconfigureDiff, false, nil, nil, alloc)
 	assert.NotNil(t, p.routeFailedLastPass, "map must be lazily initialized")
 	assert.True(t, p.routeFailedLastPass[sid], "a route failure records the source")
 
 	// Route recovers: the entry is cleared.
-	p.reportSourceRegistration(nil, sid, sid, "reconfigure_diff", true, nil, nil, alloc)
+	p.reportSourceRegistration(nil, sid, sid, operationReconfigureDiff, true, nil, nil, alloc)
 	_, present := p.routeFailedLastPass[sid]
 	assert.False(t, present, "a recovered route clears the source's failure memory")
 
 	// A start/restart route failure must NOT populate the reconfigure-failure memory:
 	// it is reported immediately, so carrying it forward would make the next reconfigure's
 	// first (transient) failure look like a repeat and skip the #4208 grace.
-	p.reportSourceRegistration(nil, sid, sid, "start", false, nil, nil, alloc)
+	p.reportSourceRegistration(nil, sid, sid, operationStart, false, nil, nil, alloc)
 	_, present = p.routeFailedLastPass[sid]
 	assert.False(t, present, "a start failure must not populate reconfigure failure memory")
 
-	p.reportSourceRegistration(nil, sid, sid, "restart_source", false, nil, nil, alloc)
+	p.reportSourceRegistration(nil, sid, sid, operationRestartSource, false, nil, nil, alloc)
 	_, present = p.routeFailedLastPass[sid]
 	assert.False(t, present, "a restart_source failure must not populate reconfigure failure memory")
 
 	// A start/restart failure also CLEARS a stale reconfigure-failure entry, so a
 	// prior reconfigure failure followed by a restart cannot poison the next pass.
 	p.routeFailedLastPass[sid] = true
-	p.reportSourceRegistration(nil, sid, sid, "start", false, nil, nil, alloc)
+	p.reportSourceRegistration(nil, sid, sid, operationStart, false, nil, nil, alloc)
 	_, present = p.routeFailedLastPass[sid]
 	assert.False(t, present, "a start pass clears any stale reconfigure-failure entry")
 }

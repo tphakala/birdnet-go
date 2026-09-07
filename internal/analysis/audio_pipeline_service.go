@@ -257,7 +257,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 
 	// Add audio sources, register consumers, and start buffer monitors.
 	apiAudioLevelChan := p.apiService.AudioLevelChan()
-	sourceIDs := p.setupAudioSources(apiAudioLevelChan, "start")
+	sourceIDs := p.setupAudioSources(apiAudioLevelChan, operationStart)
 
 	if len(sourceIDs) == 0 {
 		audiocore.GetLogger().Warn("starting without active audio sources",
@@ -572,7 +572,7 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 	log := audiocore.GetLogger()
 	log.Info("restarting single audio source",
 		logger.String("source_id", sourceID),
-		logger.String("operation", "restart_source"))
+		logger.String("operation", operationRestartSource))
 
 	registry := p.engine.Registry()
 
@@ -600,7 +600,7 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 		log.Error("failed to remove source during restart",
 			logger.String("source_id", sourceID),
 			logger.Error(err),
-			logger.String("operation", "restart_source"))
+			logger.String("operation", operationRestartSource))
 		return fmt.Errorf("restart source: remove failed: %w", err)
 	}
 
@@ -616,7 +616,7 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 	if targetConfig == nil {
 		log.Warn("source config no longer in settings after removal",
 			logger.String("source_id", sourceID),
-			logger.String("operation", "restart_source"))
+			logger.String("operation", operationRestartSource))
 		return fmt.Errorf("restart source: config for %s no longer exists in settings", sourceID)
 	}
 
@@ -625,7 +625,7 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 		log.Error("failed to re-add source during restart",
 			logger.String("source_id", sourceID),
 			logger.Error(err),
-			logger.String("operation", "restart_source"))
+			logger.String("operation", operationRestartSource))
 		return fmt.Errorf("restart source: add failed: %w", err)
 	}
 
@@ -639,15 +639,15 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 	// 7. Re-register consumers and monitors.
 	audioLevelChan := p.apiService.AudioLevelChan()
 	sourceModelMap := map[string][]string{newSourceID: targetConfig.modelIDs}
-	p.registerConsumersForSources([]string{newSourceID}, sourceModelMap, audioLevelChan, "restart_source")
-	p.registerSoundLevelConsumers([]string{newSourceID}, "restart_source")
+	p.registerConsumersForSources([]string{newSourceID}, sourceModelMap, audioLevelChan, operationRestartSource)
+	p.registerSoundLevelConsumers([]string{newSourceID}, operationRestartSource)
 
 	// Update buffer monitors.
 	if monErr := p.bufferMgr.AddMonitor(newSourceID); monErr != nil {
 		log.Warn("buffer monitor update failed during source restart",
 			logger.String("source_id", newSourceID),
 			logger.Error(monErr),
-			logger.String("operation", "restart_source"))
+			logger.String("operation", operationRestartSource))
 	}
 
 	// Reset dispatch timestamp so watchdog starts fresh.
@@ -656,7 +656,7 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 	log.Info("single source restart complete",
 		logger.String("old_source_id", sourceID),
 		logger.String("new_source_id", newSourceID),
-		logger.String("operation", "restart_source"))
+		logger.String("operation", operationRestartSource))
 
 	return nil
 }
@@ -1018,6 +1018,18 @@ func routeReportDecision(bufferRouteOK, failedLastPass, suppressTransient bool, 
 	return nil // report the resolved models as not-analyzing
 }
 
+// Audio-source registration operations. Each labels a registration pass and, via
+// isReconfigureOperation, drives transient-route-failure suppression (#4208), so the
+// classifier switch and the call sites that pass these values must share one vocabulary.
+const (
+	operationStart             = "start"
+	operationRestartSource     = "restart_source"
+	operationReconfigureDiff   = "reconfigure_diff"
+	operationReconfigureParams = "reconfigure_params"
+	operationGainChange        = "gain_change"
+	operationModelChange       = "model_change"
+)
+
 // isReconfigureOperation reports whether a registerConsumersForSources pass was
 // driven by a settings-change reconfigure, where a transient AddRoute failure can
 // occur and is repaired by the next pass, as opposed to a start or explicit restart
@@ -1025,7 +1037,7 @@ func routeReportDecision(bufferRouteOK, failedLastPass, suppressTransient bool, 
 // routeReportDecision, #4208). These operations originate in reconfigureChangedSources.
 func isReconfigureOperation(operation string) bool {
 	switch operation {
-	case "reconfigure_diff", "reconfigure_params", "gain_change", "model_change":
+	case operationReconfigureDiff, operationReconfigureParams, operationGainChange, operationModelChange:
 		return true
 	default:
 		return false
@@ -1364,7 +1376,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 				logger.String("source_name", src.DisplayName),
 				logger.String("models", strings.Join(scm.modelIDs, ", ")),
 				logger.Int("model_count", len(scm.modelIDs)),
-				logger.String("operation", "reconfigure_diff"))
+				logger.String("operation", operationReconfigureDiff))
 
 			// Classify the kind of change needed, from most to least
 			// disruptive. Model changes are checked before gain-only
@@ -1379,7 +1391,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 					logger.Int("new_sample_rate", scm.config.SampleRate),
 					logger.Int("old_bit_depth", src.BitDepth),
 					logger.Int("new_bit_depth", scm.config.BitDepth),
-					logger.String("operation", "reconfigure_diff"))
+					logger.String("operation", operationReconfigureDiff))
 				if src.Gain != scm.config.Gain {
 					registry.UpdateGain(src.ID, scm.config.Gain)
 				}
@@ -1388,7 +1400,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 					log.Error("failed to reconfigure source",
 						logger.String("source_id", src.ID),
 						logger.Error(err),
-						logger.String("operation", "reconfigure_diff"))
+						logger.String("operation", operationReconfigureDiff))
 				} else {
 					reconfiguredIDs = append(reconfiguredIDs, src.ID)
 				}
@@ -1402,7 +1414,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 				}
 				log.Info("model assignment changed for kept source, rebuilding consumers",
 					logger.String("source_id", src.ID),
-					logger.String("operation", "reconfigure_diff"))
+					logger.String("operation", operationReconfigureDiff))
 				modelChangedIDs = append(modelChangedIDs, src.ID)
 
 			case src.Gain != scm.config.Gain:
@@ -1411,7 +1423,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 					logger.String("source_id", src.ID),
 					logger.Float64("old_gain_db", src.Gain),
 					logger.Float64("new_gain_db", scm.config.Gain),
-					logger.String("operation", "reconfigure_diff"))
+					logger.String("operation", operationReconfigureDiff))
 				registry.UpdateGain(src.ID, scm.config.Gain)
 				gainChangedIDs = append(gainChangedIDs, src.ID)
 			}
@@ -1424,7 +1436,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 			// New source - add it.
 			log.Info("adding new stream from config",
 				logger.String("connection", privacy.SanitizeStreamUrl(connStr)),
-				logger.String("operation", "reconfigure_diff"))
+				logger.String("operation", operationReconfigureDiff))
 			if err := p.engine.AddSource(scm.config); err != nil {
 				log.Warn("failed to add source during reconfigure",
 					logger.String("connection", privacy.SanitizeStreamUrl(connStr)),
@@ -1456,7 +1468,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		removedCount++
 		log.Info("removing stream no longer in config",
 			logger.String("source_id", src.ID),
-			logger.String("operation", "reconfigure_diff"))
+			logger.String("operation", operationReconfigureDiff))
 		if err := p.engine.RemoveSource(src.ID); err != nil {
 			log.Warn("failed to remove source during reconfigure",
 				logger.String("source_id", src.ID),
@@ -1475,15 +1487,15 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 
 	// Register consumers and monitors only for newly added sources.
 	if len(newSourceIDs) > 0 {
-		p.registerConsumersForSources(newSourceIDs, sourceModelMap, audioLevelChan, "reconfigure_diff")
-		p.registerSoundLevelConsumers(newSourceIDs, "reconfigure_diff")
+		p.registerConsumersForSources(newSourceIDs, sourceModelMap, audioLevelChan, operationReconfigureDiff)
+		p.registerSoundLevelConsumers(newSourceIDs, operationReconfigureDiff)
 	}
 
 	// Rebuild routes for sources whose audio params changed. ReconfigureSource
 	// removed all routes and reallocated buffers; consumers must be re-created.
 	if len(reconfiguredIDs) > 0 {
-		p.registerConsumersForSources(reconfiguredIDs, sourceModelMap, audioLevelChan, "reconfigure_params")
-		p.registerSoundLevelConsumers(reconfiguredIDs, "reconfigure_params")
+		p.registerConsumersForSources(reconfiguredIDs, sourceModelMap, audioLevelChan, operationReconfigureParams)
+		p.registerSoundLevelConsumers(reconfiguredIDs, operationReconfigureParams)
 	}
 
 	// Rebuild routes for sources whose gain changed. The capture device
@@ -1498,8 +1510,8 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 			// it permanently without sound level monitoring.
 			p.untrackSoundLevelConsumer(sid)
 		}
-		p.registerConsumersForSources(gainChangedIDs, sourceModelMap, audioLevelChan, "gain_change")
-		p.registerSoundLevelConsumers(gainChangedIDs, "gain_change")
+		p.registerConsumersForSources(gainChangedIDs, sourceModelMap, audioLevelChan, operationGainChange)
+		p.registerSoundLevelConsumers(gainChangedIDs, operationGainChange)
 	}
 
 	// Rebuild routes for sources whose model assignment changed (e.g.,
@@ -1513,8 +1525,8 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 			desiredSet := resolveDesiredModelSet(sourceModelMap[sid], loadedModels, primaryModelID)
 			deallocateStaleAnalysisBuffers(bufMgr, sid, desiredSet)
 		}
-		p.registerConsumersForSources(modelChangedIDs, sourceModelMap, audioLevelChan, "model_change")
-		p.registerSoundLevelConsumers(modelChangedIDs, "model_change")
+		p.registerConsumersForSources(modelChangedIDs, sourceModelMap, audioLevelChan, operationModelChange)
+		p.registerSoundLevelConsumers(modelChangedIDs, operationModelChange)
 	}
 
 	// Sync monitors for ALL active sources (kept + new) so UpdateMonitors
@@ -1536,7 +1548,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		logger.Int("removed", removedCount),
 		logger.Int("gain_changed", len(gainChangedIDs)),
 		logger.Int("model_changed", len(modelChangedIDs)),
-		logger.String("operation", "reconfigure_diff"))
+		logger.String("operation", operationReconfigureDiff))
 }
 
 // sourceConfigWithModels pairs an audiocore.SourceConfig with the config-level
