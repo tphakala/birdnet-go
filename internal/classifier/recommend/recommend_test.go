@@ -751,6 +751,97 @@ func TestRank_FP16NativeBonus(t *testing.T) {
 	assert.True(t, hasReason(&fp16, ReasonPrecisionFP16Native), "fp16 variant on an fp16-native host gets the precision bonus (reasons: %+v)", fp16.Reasons)
 }
 
+// TestRank_FP16NativeBonus_BackendAware pins that the fp16 native-speed reward is
+// awarded only when the variant's selected backend actually runs the fp16 file at
+// f16. After #4289 BirdNET v3.0 is force-run at f32 on every OpenVINO device, so
+// the reward must not be given on an OpenVINO backend for v3.0, while it must
+// still be given on the ONNX Runtime path (which executes the fp16 file as
+// stored) and for a model whose OpenVINO path does keep f16.
+func TestRank_FP16NativeBonus_BackendAware(t *testing.T) {
+	t.Parallel()
+
+	t.Run("onnx runtime host keeps the reward", func(t *testing.T) {
+		t.Parallel()
+		v3 := realEntry(t, "birdnet-v3.0")
+		recs := Rank(&Input{
+			Capabilities: []string{hwprofile.CapAArch64, hwprofile.CapAArch64A76, hwprofile.CapONNXRuntimeCPU, hwprofile.CapFP16Native},
+			DeviceClass:  deviceClassRPi5,
+			Entries:      []classifier.CatalogEntry{v3},
+		})
+		fp16, ok := variantRec(recs, "birdnet-v3.0", "fp16")
+		require.True(t, ok)
+		assert.True(t, hasReason(&fp16, ReasonPrecisionFP16Native),
+			"fp16 runs at f16 on the ONNX Runtime path, so the native-f16 reward applies (reasons: %+v)", fp16.Reasons)
+	})
+
+	t.Run("openvino cpu host drops the reward for v3.0", func(t *testing.T) {
+		t.Parallel()
+		v3 := realEntry(t, "birdnet-v3.0")
+		recs := Rank(&Input{
+			Capabilities: []string{hwprofile.CapAArch64, hwprofile.CapAArch64A76, hwprofile.CapONNXRuntimeCPU, hwprofile.CapOpenVINOCPU, hwprofile.CapFP16Native},
+			DeviceClass:  deviceClassRPi5,
+			Entries:      []classifier.CatalogEntry{v3},
+		})
+		fp16, ok := variantRec(recs, "birdnet-v3.0", "fp16")
+		require.True(t, ok)
+		assert.False(t, hasReason(&fp16, ReasonPrecisionFP16Native),
+			"v3.0 is forced to f32 on OpenVINO, so the native-f16 reward must be suppressed (reasons: %+v)", fp16.Reasons)
+		assert.Equal(t, hwprofile.CapOpenVINOCPU, reasonArg(&fp16, ReasonBackendSupported, ReasonArgBackend),
+			"the suppression is driven by the openvino-cpu backend the recommender selected")
+		assert.Equal(t, "fp32", recommendedVariant(recs, "birdnet-v3.0"),
+			"dropping the reward does not flip the recommended pick away from fp32")
+	})
+
+	t.Run("openvino gpu host drops the reward but keeps the gpu size lever", func(t *testing.T) {
+		t.Parallel()
+		v3 := realEntry(t, "birdnet-v3.0")
+		// A real x86 iGPU never carries fp16-native (that token is arm64-only); the
+		// synthetic token here forces the fp16 modifier to be evaluated so the test
+		// pins the OpenVINO-GPU suppression branch specifically.
+		recs := Rank(&Input{
+			Capabilities: []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU, hwprofile.CapOpenVINOCPU, hwprofile.CapOpenVINOGPU, hwprofile.CapFP16Native},
+			DeviceClass:  deviceClassX86,
+			Entries:      []classifier.CatalogEntry{v3},
+		})
+		fp16, ok := variantRec(recs, "birdnet-v3.0", "fp16")
+		require.True(t, ok)
+		assert.False(t, hasReason(&fp16, ReasonPrecisionFP16Native),
+			"v3.0 is forced to f32 on the OpenVINO GPU, so the native-f16 reward must be suppressed (reasons: %+v)", fp16.Reasons)
+		assert.True(t, hasReason(&fp16, ReasonPrecisionFP16GPUPreferred),
+			"the GPU size lever is unrelated to precision forcing and must still apply")
+		assert.Equal(t, "fp16", recommendedVariant(recs, "birdnet-v3.0"),
+			"fp16 stays the recommended build on the iGPU host")
+	})
+
+	t.Run("reward is policy-driven not blanket openvino", func(t *testing.T) {
+		t.Parallel()
+		// A model whose OpenVINO CPU path keeps f16 (registry ID BirdNET v2.4) must
+		// still earn the reward on an OpenVINO CPU host: the suppression follows the
+		// per-model precision policy, it is not "OpenVINO means no reward".
+		synthetic := classifier.CatalogEntry{
+			ID:         "synthetic-v24",
+			RegistryID: classifier.DefaultModelVersion,
+			Variants: []classifier.CatalogVariant{
+				{
+					ID:        "fp16",
+					Precision: precisionFP16,
+					Backends:  map[string]classifier.BackendSupport{hwprofile.CapOpenVINOCPU: {Supported: true, Recommended: true}},
+					Files:     []classifier.CatalogFile{{SizeBytes: 100}},
+				},
+			},
+		}
+		recs := Rank(&Input{
+			Capabilities: []string{hwprofile.CapAArch64, hwprofile.CapAArch64A76, hwprofile.CapOpenVINOCPU, hwprofile.CapFP16Native},
+			DeviceClass:  deviceClassRPi5,
+			Entries:      []classifier.CatalogEntry{synthetic},
+		})
+		fp16, ok := variantRec(recs, "synthetic-v24", "fp16")
+		require.True(t, ok)
+		assert.True(t, hasReason(&fp16, ReasonPrecisionFP16Native),
+			"v2.4 keeps f16 on the OpenVINO CPU path, so its fp16 variant still earns the reward (reasons: %+v)", fp16.Reasons)
+	})
+}
+
 func TestRank_LowRAMInt8Bonus(t *testing.T) {
 	t.Parallel()
 

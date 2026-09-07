@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/tphakala/birdnet-go/internal/hwprofile"
 	"github.com/tphakala/birdnet-go/internal/inference"
 )
 
@@ -104,4 +105,93 @@ func TestOpenVINOEffectivePrecision(t *testing.T) {
 		"empty hint is the backend f16 default, shown as FP16")
 	assert.Equal(t, string(QuantizationFP32), openVINOEffectivePrecision(inference.OVPrecisionF32),
 		"the f32 hint (BirdNET v2.4 and Perch v2 on the GPU, bat and BirdNET v3.0 on every device) is shown as FP32")
+}
+
+// TestBackendForcesFP32 verifies the backend-token predicate the model-gallery
+// recommender uses to decide whether a variant's declared file precision (for
+// example an fp16 model) will actually run at f16 on a given host backend, or be
+// overridden to f32. Only the OpenVINO backends carry an INFERENCE_PRECISION_HINT
+// that can override the file precision; ONNX Runtime and the CUDA/TensorRT
+// compute backends run the file as stored. The truth table mirrors
+// openVINOPrecisionFor: bat and BirdNET v3.0 are f32 on every OpenVINO device,
+// BirdNET v2.4 and Perch v2 only on the OpenVINO GPU.
+//
+// Tag-agnostic like BackendForcesFP32 itself, so it runs in the default suite.
+func TestBackendForcesFP32(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		registryID   string
+		backendToken string
+		want         bool
+	}{
+		{
+			name:         "birdnet v3.0 on openvino cpu is forced to f32",
+			registryID:   RegistryIDBirdNETV3,
+			backendToken: hwprofile.CapOpenVINOCPU,
+			want:         true,
+		},
+		{
+			name:         "birdnet v3.0 on openvino gpu is forced to f32",
+			registryID:   RegistryIDBirdNETV3,
+			backendToken: hwprofile.CapOpenVINOGPU,
+			want:         true,
+		},
+		{
+			name:         "birdnet v3.0 on onnx runtime cpu runs the file as stored",
+			registryID:   RegistryIDBirdNETV3,
+			backendToken: hwprofile.CapONNXRuntimeCPU,
+			want:         false,
+		},
+		{
+			name:         "birdnet v3.0 on a non-openvino gpu backend runs the file as stored",
+			registryID:   RegistryIDBirdNETV3,
+			backendToken: "cuda",
+			want:         false,
+		},
+		{
+			name:         "bat on openvino cpu is forced to f32",
+			registryID:   RegistryIDBat,
+			backendToken: hwprofile.CapOpenVINOCPU,
+			want:         true,
+		},
+		{
+			name:         "birdnet v2.4 on openvino cpu keeps the f16 default",
+			registryID:   DefaultModelVersion,
+			backendToken: hwprofile.CapOpenVINOCPU,
+			want:         false,
+		},
+		{
+			name:         "birdnet v2.4 on openvino gpu is forced to f32",
+			registryID:   DefaultModelVersion,
+			backendToken: hwprofile.CapOpenVINOGPU,
+			want:         true,
+		},
+		{
+			name:         "perch v2 on openvino cpu keeps the f16 default",
+			registryID:   RegistryIDPerchV2,
+			backendToken: hwprofile.CapOpenVINOCPU,
+			want:         false,
+		},
+		{
+			name:         "unknown model on openvino cpu forces nothing",
+			registryID:   "",
+			backendToken: hwprofile.CapOpenVINOCPU,
+			want:         false,
+		},
+		{
+			name:         "empty backend token is not an openvino backend",
+			registryID:   RegistryIDBirdNETV3,
+			backendToken: "",
+			want:         false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, BackendForcesFP32(tt.registryID, tt.backendToken))
+		})
+	}
 }
