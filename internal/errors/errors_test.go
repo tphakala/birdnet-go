@@ -250,3 +250,31 @@ func TestRegexPrecompilation(t *testing.T) {
 		})
 	}
 }
+
+// TestDetectCategoryComponentMapping covers the component-based fallback in
+// detectCategory, in particular that the api component (the HTTP server, the
+// successor to the removed http-controller package) auto-categorizes as
+// CategoryHTTP when an error carries no explicit category. The error messages
+// are neutral so the string heuristics that run before the component switch do
+// not fire.
+func TestDetectCategoryComponentMapping(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		component string
+		expected  ErrorCategory
+	}{
+		{name: "api maps to HTTP", component: "api", expected: CategoryHTTP},
+		{name: "datastore maps to database", component: "datastore", expected: CategoryDatabase},
+		{name: "unknown component falls back to generic", component: "somethingelse", expected: CategoryGeneric},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := detectCategory(fmt.Errorf("request rejected"), tt.component)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
