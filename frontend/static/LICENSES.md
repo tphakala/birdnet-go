@@ -109,7 +109,7 @@ Source: Apache-2.0
 
 ### github.com/go-sql-driver/mysql
 
-License: https://github.com/go-sql-driver/mysql/blob/v1.10.0/LICENSE
+License: https://github.com/go-sql-driver/mysql/blob/v1.10.1/LICENSE
 Source: MPL-2.0
 
 ### github.com/go-viper/mapstructure/v2
@@ -224,7 +224,7 @@ Source: MIT
 
 ### github.com/mattn/go-sqlite3
 
-License: https://github.com/mattn/go-sqlite3/blob/v1.14.50/LICENSE
+License: https://github.com/mattn/go-sqlite3/blob/v1.14.52/LICENSE
 Source: MIT
 
 ### github.com/munnerz/goautoneg
@@ -234,12 +234,12 @@ Source: BSD-3-Clause
 
 ### github.com/nicholas-fedor/shoutrrr
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.18.0/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.19.0/LICENSE.md
 Source: MIT
 
 ### github.com/nicholas-fedor/shoutrrr/pkg/color
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.18.0/pkg/color/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.19.0/pkg/color/LICENSE.md
 Source: MIT
 
 ### github.com/patrickmn/go-cache
@@ -269,7 +269,7 @@ Source: Apache-2.0
 
 ### github.com/prometheus/client_model/go
 
-License: https://github.com/prometheus/client_model/blob/v0.6.2/LICENSE
+License: https://github.com/prometheus/client_model/blob/v0.6.3/LICENSE
 Source: Apache-2.0
 
 ### github.com/prometheus/common
@@ -439,7 +439,7 @@ Source: MIT
 
 ### github.com/tphakala/go-m4a
 
-License: https://github.com/tphakala/go-m4a/blob/v0.4.0/LICENSE
+License: https://github.com/tphakala/go-m4a/blob/v0.5.0/LICENSE
 Source: MIT
 
 ### github.com/tphakala/go-mp3
@@ -459,7 +459,7 @@ Source: MIT
 
 ### github.com/tphakala/go-wav
 
-License: https://github.com/tphakala/go-wav/blob/v1.0.0/LICENSE
+License: https://github.com/tphakala/go-wav/blob/v1.1.0/LICENSE
 Source: MIT
 
 ### github.com/tphakala/simd
@@ -524,7 +524,7 @@ Source: Apache-2.0
 
 ### golang.org/x/crypto
 
-License: https://cs.opensource.google/go/x/crypto/+/v0.55.0:LICENSE
+License: https://cs.opensource.google/go/x/crypto/+/v0.56.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/net
@@ -564,7 +564,7 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.295.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.297.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
