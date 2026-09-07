@@ -1,14 +1,67 @@
 package analysis
 
 import (
+	"bytes"
+	"io"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
+
+// TestProcessMonitorTick_SkipsWhenModelNotLoaded verifies the monitor-layer guard
+// that stops the "model not loaded" error storm (Sentry BIRDNET-GO-2G6 / 1S1). A
+// monitor whose model was unloaded (or never registered) must skip the inference
+// window with a single warning instead of dispatching to ProcessData, which would
+// log "error processing data" on every window during the reconfigure gap.
+func TestProcessMonitorTick_SkipsWhenModelNotLoaded(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sourceID = "src"
+		modelID  = "Perch_V2"
+		readSize = 480
+	)
+
+	mgr := buffer.NewManager(logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC))
+	require.NoError(t, mgr.AllocateAnalysis(sourceID, modelID, readSize*2, 0, readSize))
+	ab, err := mgr.AnalysisBuffer(sourceID, modelID)
+	require.NoError(t, err)
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+
+	var logBuf bytes.Buffer
+	bm := &BufferManager{
+		bn:        &classifier.Orchestrator{}, // no models loaded, so IsModelLoaded is false
+		bufferMgr: mgr,
+		logger:    logger.NewSlogLogger(&logBuf, logger.LogLevelDebug, time.UTC),
+	}
+
+	cfg := &monitorConfig{sourceID: sourceID, modelID: modelID, readSize: readSize}
+	quit := make(chan struct{})
+	state := &monitorTickState{}
+
+	keepRunning := bm.processMonitorTick(quit, cfg, readSize, 0, state, 1)
+	require.True(t, keepRunning, "the monitor keeps running so a reinstall can resume it")
+	assert.Contains(t, logBuf.String(), "model not loaded, skipping inference window")
+	assert.NotContains(t, logBuf.String(), "error processing data",
+		"a not-loaded model must not reach ProcessData")
+	assert.True(t, state.notLoadedWarned, "the warn-once latch is set after the first skip")
+
+	// A second full window on the next tick must not repeat the warning and must
+	// still never dispatch to ProcessData.
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+	logBuf.Reset()
+	keepRunning = bm.processMonitorTick(quit, cfg, readSize, 0, state, 2)
+	require.True(t, keepRunning)
+	assert.NotContains(t, logBuf.String(), "error processing data")
+	assert.NotContains(t, logBuf.String(), "model not loaded, skipping inference window",
+		"the warning is emitted once per monitor, not on every tick")
+}
 
 func TestMonitorConfig_ReadSize(t *testing.T) {
 	t.Parallel()

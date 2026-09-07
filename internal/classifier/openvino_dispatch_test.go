@@ -110,10 +110,11 @@ func TestTryBatOpenVINO_FallsBackWithoutTag(t *testing.T) {
 		Backend:        conf.BackendPrefOpenVINO,
 		OpenVINODevice: conf.OVDeviceGPU,
 	}
-	ext, device, ok := tryBatOpenVINO(cfg, 1024)
+	ext, device, precision, ok := tryBatOpenVINO(cfg, 1024)
 	assert.False(t, ok, "without the openvino tag, the bat OV path must decline")
 	assert.Nil(t, ext, "a declined OV path must return a nil extractor (no typed-nil trap)")
 	assert.Empty(t, device)
+	assert.Empty(t, precision, "a declined OV path reports no precision; NewBat's ORT branch sets it")
 }
 
 // TestOpenVINOPlanForBat_NotBuilt verifies that in the default (no-tag) build the

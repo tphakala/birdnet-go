@@ -10,6 +10,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/cpuspec"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/hwprofile"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -143,6 +144,43 @@ func openVINOPrecisionFor(modelID, device string) string {
 		return inference.OVPrecisionF32
 	}
 	return ""
+}
+
+// openVINODeviceForBackend maps a hwprofile backend capability token to the
+// concrete inference OpenVINO device it denotes, reporting ok=false for any
+// token that is not an OpenVINO backend. Only OpenVINO carries an
+// INFERENCE_PRECISION_HINT, so a non-OpenVINO backend can never override a
+// model's declared file precision.
+func openVINODeviceForBackend(backendToken string) (device string, ok bool) {
+	switch backendToken {
+	case hwprofile.CapOpenVINOCPU:
+		return inference.OVDeviceCPU, true
+	case hwprofile.CapOpenVINOGPU:
+		return inference.OVDeviceGPU, true
+	default:
+		return "", false
+	}
+}
+
+// BackendForcesFP32 reports whether running the given model on the given host
+// backend forces FP32 execution, overriding whatever precision the model file
+// declares. Only the OpenVINO backends carry an INFERENCE_PRECISION_HINT that
+// can override the file precision (see openVINOPrecisionFor); every other
+// backend (ONNX Runtime, and the CUDA/TensorRT compute backends) runs the file
+// as stored, so this returns false for them.
+//
+// It is exported for the model-gallery recommender (internal/classifier/recommend),
+// which uses it to avoid rewarding an fp16 variant's native-f16 speed on a
+// backend that will not actually run that variant at f16. backendToken is a
+// hwprofile capability token (hwprofile.CapOpenVINOCPU and friends). Keeping the
+// policy here means the recommender never has to name a model ID, so any future
+// change to the per-model precision policy propagates automatically.
+func BackendForcesFP32(registryID, backendToken string) bool {
+	device, ok := openVINODeviceForBackend(backendToken)
+	if !ok {
+		return false
+	}
+	return openVINOPrecisionFor(registryID, device) == inference.OVPrecisionF32
 }
 
 // openVINOCPUAllowed reports whether the OpenVINO CPU device may be used. The f16

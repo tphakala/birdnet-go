@@ -174,17 +174,106 @@ func TestOrchestrator_PredictModel_Success(t *testing.T) {
 	assert.InDelta(t, 0.88, float64(results[0].Confidence), 0.001)
 }
 
-func TestOrchestrator_PredictModel_UnknownModel(t *testing.T) {
-	t.Parallel()
+// testRegistryIDNotLoaded is a synthetic registry ID registered by the
+// not-loaded reason tests so the unknown-registry branch is not taken for the
+// cases that exercise the other reasons.
+const testRegistryIDNotLoaded = "__test_not_loaded__"
 
-	o := newTestOrchestrator(t) // no models registered
+// TestOrchestrator_PredictModel_NotLoaded verifies that a predict on a model that
+// is not in o.models fails with the ErrModelNotLoaded sentinel and an actionable
+// reason, rather than the bare "unknown model" it used to return. The reason
+// distinguishes the causes that Sentry BIRDNET-GO-2G6 / 1S1 could not tell apart:
+// a shut-down orchestrator, an unregistered ID, a model disabled in settings, a
+// model whose load failed, and a model that was unloaded (the reconfigure race).
+func TestOrchestrator_PredictModel_NotLoaded(t *testing.T) {
+	// Not parallel: mutates package-level ModelRegistry/modelLoaders and the
+	// global settings snapshot.
 
-	results, err := o.PredictModel(t.Context(), "nonexistent", [][]float32{{0.1}})
+	ModelRegistry[testRegistryIDNotLoaded] = ModelInfo{ID: testRegistryIDNotLoaded}
+	t.Cleanup(func() { delete(ModelRegistry, testRegistryIDNotLoaded) })
 
-	require.Error(t, err)
-	assert.Nil(t, results)
-	assert.Contains(t, err.Error(), "unknown model")
-	assert.Contains(t, err.Error(), "nonexistent")
+	sample := [][]float32{{0.1}}
+
+	t.Run("unknown registry id", func(t *testing.T) {
+		o := newTestOrchestrator(t) // empty models map (not nil)
+		results, err := o.PredictModel(t.Context(), "nonexistent", sample)
+		require.Error(t, err)
+		assert.Nil(t, results)
+		require.ErrorIs(t, err, ErrModelNotLoaded)
+		assert.Contains(t, err.Error(), "nonexistent")
+		assert.Contains(t, err.Error(), notLoadedReasonUnknownRegistry)
+	})
+
+	t.Run("registered but not enabled", func(t *testing.T) {
+		conftest.SetTestSettings(conftest.GetTestSettings()) // Models.Enabled is empty
+		t.Cleanup(func() { conftest.SetTestSettings(nil) })
+		o := &Orchestrator{models: map[string]*modelEntry{}, modelRSS: make(map[string]int64), Settings: conftest.GetTestSettings()}
+		results, err := o.PredictModel(t.Context(), testRegistryIDNotLoaded, sample)
+		require.Error(t, err)
+		assert.Nil(t, results)
+		require.ErrorIs(t, err, ErrModelNotLoaded)
+		assert.Contains(t, err.Error(), testRegistryIDNotLoaded)
+		assert.Contains(t, err.Error(), notLoadedReasonNotEnabled)
+	})
+
+	t.Run("enabled but loader failed", func(t *testing.T) {
+		loaderErr := fmt.Errorf("injected loader failure")
+		modelLoaders[testRegistryIDNotLoaded] = func(_ *Orchestrator, _ int) error { return loaderErr }
+		t.Cleanup(func() { delete(modelLoaders, testRegistryIDNotLoaded) })
+		o := &Orchestrator{models: map[string]*modelEntry{}, modelRSS: make(map[string]int64), Settings: conftest.GetTestSettings()}
+		require.Error(t, o.LoadModel(testRegistryIDNotLoaded))
+		results, err := o.PredictModel(t.Context(), testRegistryIDNotLoaded, sample)
+		require.Error(t, err)
+		assert.Nil(t, results)
+		require.ErrorIs(t, err, ErrModelNotLoaded)
+		assert.Contains(t, err.Error(), "failed to load")
+		assert.Contains(t, err.Error(), loaderErr.Error())
+	})
+
+	t.Run("unloaded", func(t *testing.T) {
+		mock := &mockModelInstance{id: testRegistryIDNotLoaded}
+		o := newTestOrchestrator(t, mock)
+		require.NoError(t, o.UnloadModel(testRegistryIDNotLoaded))
+		results, err := o.PredictModel(t.Context(), testRegistryIDNotLoaded, sample)
+		require.Error(t, err)
+		assert.Nil(t, results)
+		require.ErrorIs(t, err, ErrModelNotLoaded)
+		assert.Contains(t, err.Error(), notLoadedReasonUnloaded)
+	})
+
+	t.Run("deleted orchestrator", func(t *testing.T) {
+		mock := &mockModelInstance{id: testRegistryIDNotLoaded}
+		o := newTestOrchestrator(t, mock)
+		o.Delete()
+		results, err := o.PredictModel(t.Context(), testRegistryIDNotLoaded, sample)
+		require.Error(t, err)
+		assert.Nil(t, results)
+		require.ErrorIs(t, err, ErrModelNotLoaded)
+		assert.Contains(t, err.Error(), notLoadedReasonDeleted)
+	})
+
+	t.Run("registered and enabled but not yet loaded", func(t *testing.T) {
+		// Registered in ModelRegistry, resolved-enabled in settings, no failure and
+		// no tombstone: the model is simply still loading. This also exercises
+		// modelIDEnabled's positive (resolves-to-enabled) branch.
+		const (
+			regID = "__test_never_loaded__"
+			alias = "__test_never_alias__"
+		)
+		ModelRegistry[regID] = ModelInfo{ID: regID, ConfigAliases: []string{alias}}
+		t.Cleanup(func() { delete(ModelRegistry, regID) })
+		settings := conftest.GetTestSettings()
+		settings.Models.Enabled = []string{alias}
+		conftest.SetTestSettings(settings)
+		t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+		o := &Orchestrator{models: map[string]*modelEntry{}, modelRSS: make(map[string]int64), Settings: settings}
+		results, err := o.PredictModel(t.Context(), regID, sample)
+		require.Error(t, err)
+		assert.Nil(t, results)
+		require.ErrorIs(t, err, ErrModelNotLoaded)
+		assert.Contains(t, err.Error(), notLoadedReasonNeverLoaded)
+	})
 }
 
 func TestOrchestrator_PredictModel_SerializedInference(t *testing.T) {
@@ -674,4 +763,91 @@ func TestOrchestrator_LoadModel_FailureIncrementsLoadFailures(t *testing.T) {
 	failures = o.LoadFailures()
 	assert.Equal(t, int64(2), failures[testRegistryIDForLoadFailure],
 		"LoadFailures must be 2 after two failed LoadModel calls")
+}
+
+// TestOrchestrator_LoadAdditionalModels_RecordsLoadFailure verifies that a
+// startup (optional-model) loader failure is recorded in LoadFailures, so a later
+// "model not loaded" diagnosis can explain why the model is missing instead of
+// reporting a bare unknown-model error. Previously loadAdditionalModels only
+// logged the failure, leaving LoadFailures empty for a startup-failed model.
+func TestOrchestrator_LoadAdditionalModels_RecordsLoadFailure(t *testing.T) {
+	// Not parallel: mutates package-level ModelRegistry/modelLoaders and the
+	// global settings snapshot.
+	const alias = "__test_addl_alias__"
+	loaderErr := fmt.Errorf("injected additional-model loader failure")
+
+	ModelRegistry[testRegistryIDNotLoaded] = ModelInfo{ID: testRegistryIDNotLoaded, ConfigAliases: []string{alias}}
+	modelLoaders[testRegistryIDNotLoaded] = func(_ *Orchestrator, _ int) error { return loaderErr }
+	t.Cleanup(func() {
+		delete(ModelRegistry, testRegistryIDNotLoaded)
+		delete(modelLoaders, testRegistryIDNotLoaded)
+	})
+
+	settings := conftest.GetTestSettings()
+	settings.Models.Enabled = []string{alias}
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	o := &Orchestrator{Settings: settings, models: map[string]*modelEntry{}, modelRSS: make(map[string]int64)}
+	require.NoError(t, o.loadAdditionalModels(map[string]int{}))
+
+	assert.Equal(t, int64(1), o.LoadFailures()[testRegistryIDNotLoaded],
+		"a startup loader failure must be recorded so a later not-loaded diagnosis can explain it")
+
+	// The recorded failure now explains a subsequent predict on the missing model.
+	results, err := o.PredictModel(t.Context(), testRegistryIDNotLoaded, [][]float32{{0.1}})
+	require.Error(t, err)
+	assert.Nil(t, results)
+	require.ErrorIs(t, err, ErrModelNotLoaded)
+	assert.Contains(t, err.Error(), loaderErr.Error())
+}
+
+// TestOrchestrator_SuccessfulReload_ClearsStaleFailureError verifies that a
+// successful load clears the stored load error, so a model that failed to load
+// once, recovered, then was cleanly unloaded is diagnosed as "unloaded" rather
+// than mislabeled with the stale earlier failure. The cumulative LoadFailures
+// count must survive the successful load (it feeds the inference-status metric).
+func TestOrchestrator_SuccessfulReload_ClearsStaleFailureError(t *testing.T) {
+	// Not parallel: mutates package-level ModelRegistry/modelLoaders and the
+	// global settings snapshot.
+	const (
+		regID = "__test_recover__"
+		alias = "__test_recover_alias__"
+	)
+	ModelRegistry[regID] = ModelInfo{ID: regID, ConfigAliases: []string{alias}}
+	t.Cleanup(func() {
+		delete(ModelRegistry, regID)
+		delete(modelLoaders, regID)
+	})
+	settings := conftest.GetTestSettings()
+	settings.Models.Enabled = []string{alias}
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	o := &Orchestrator{Settings: settings, models: map[string]*modelEntry{}, modelRSS: make(map[string]int64)}
+
+	// 1. First load attempt fails: records a cumulative failure and a stored error.
+	loadErr := fmt.Errorf("transient startup failure")
+	modelLoaders[regID] = func(_ *Orchestrator, _ int) error { return loadErr }
+	require.NoError(t, o.loadAdditionalModels(map[string]int{}))
+	require.Equal(t, int64(1), o.LoadFailures()[regID])
+
+	// 2. Second attempt succeeds: the loader registers the model, which must clear
+	//    the stored error while the cumulative failure count survives.
+	modelLoaders[regID] = func(orc *Orchestrator, _ int) error {
+		orc.models[regID] = &modelEntry{instance: &mockModelInstance{id: regID}}
+		return nil
+	}
+	require.NoError(t, o.loadAdditionalModels(map[string]int{}))
+	require.True(t, o.IsModelLoaded(regID))
+	assert.Equal(t, int64(1), o.LoadFailures()[regID],
+		"the cumulative failure count survives a successful load")
+
+	// 3. Clean unload, then a race predict must report unloaded, not the stale failure.
+	require.NoError(t, o.UnloadModel(regID))
+	_, err := o.PredictModel(t.Context(), regID, [][]float32{{0.1}})
+	require.ErrorIs(t, err, ErrModelNotLoaded)
+	assert.Contains(t, err.Error(), notLoadedReasonUnloaded)
+	assert.NotContains(t, err.Error(), "failed to load",
+		"a model that recovered from an earlier failure and was then unloaded must report unloaded, not the stale failure")
 }
