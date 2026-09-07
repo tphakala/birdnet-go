@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -441,6 +442,101 @@ func TestEnabledModels(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// TestComputeThreadAllocation pins the returned thread-allocation MAP contract: every
+// distinct enabled+known model plus the primary gets the full budget (inference is
+// serialized by inferenceMu, so models never contend), and unknown IDs are skipped. The
+// returned map is keyed by registry ID, so duplicate, case-variant and primary-colliding
+// entries collapse via map-key semantics regardless of the seen-set; those cases assert
+// the resulting map is correct, not that the seen-set specifically ran (its only extra
+// effect is the model_count log line, which is outside this return contract).
+// computeThreadAllocation reads only settings and the package model registry (no o.mu,
+// no o.models, no model files), so it is exercised directly on a zero-value Orchestrator.
+func TestComputeThreadAllocation(t *testing.T) {
+	t.Parallel()
+
+	const (
+		unknownModelID      = "nope"     // resolves to no registry model
+		upperPerchV2ModelID = "PERCH_V2" // a case variant of conf.ModelIDPerchV2
+		fixedThreads        = 4
+	)
+
+	tests := []struct {
+		name      string
+		primaryID string
+		threads   int
+		enabled   []string
+		want      map[string]int
+	}{
+		{
+			name:      "primary only",
+			primaryID: BirdNET_V2_4,
+			threads:   fixedThreads,
+			enabled:   nil,
+			want:      map[string]int{BirdNET_V2_4: fixedThreads},
+		},
+		{
+			name:      "primary plus a distinct enabled model",
+			primaryID: BirdNET_V2_4,
+			threads:   fixedThreads,
+			enabled:   []string{conf.ModelIDPerchV2},
+			want:      map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
+		},
+		{
+			name:      "case variants collapse to one entry",
+			primaryID: BirdNET_V2_4,
+			threads:   fixedThreads,
+			enabled:   []string{conf.ModelIDPerchV2, upperPerchV2ModelID},
+			want:      map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
+		},
+		{
+			name:      "an enabled model resolving to the primary is not double counted",
+			primaryID: BirdNET_V2_4,
+			threads:   fixedThreads,
+			enabled:   []string{conf.ModelIDBirdNET},
+			want:      map[string]int{BirdNET_V2_4: fixedThreads},
+		},
+		{
+			name:      "unknown model IDs are skipped",
+			primaryID: BirdNET_V2_4,
+			threads:   fixedThreads,
+			enabled:   []string{unknownModelID, conf.ModelIDPerchV2},
+			want:      map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			settings := &conf.Settings{}
+			settings.Models.Enabled = tt.enabled
+			settings.BirdNET.Threads = tt.threads
+
+			o := &Orchestrator{}
+			got := o.computeThreadAllocation(settings, tt.primaryID)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestComputeThreadAllocation_NonPositiveThreadsUsesNumCPU covers the fallback: with
+// settings.BirdNET.Threads <= 0 every model receives runtime.NumCPU() threads. NumCPU is
+// not hardcoded; the test asserts each allocation is the uniform, positive fallback value.
+func TestComputeThreadAllocation_NonPositiveThreadsUsesNumCPU(t *testing.T) {
+	t.Parallel()
+	settings := &conf.Settings{}
+	settings.Models.Enabled = []string{conf.ModelIDPerchV2}
+	settings.BirdNET.Threads = 0
+
+	o := &Orchestrator{}
+	got := o.computeThreadAllocation(settings, BirdNET_V2_4)
+
+	want := runtime.NumCPU()
+	require.Len(t, got, 2)
+	assert.Positive(t, want)
+	assert.Equal(t, want, got[BirdNET_V2_4])
+	assert.Equal(t, want, got[RegistryIDPerchV2])
 }
 
 func TestOrchestrator_ModelSpecFor(t *testing.T) {

@@ -2557,6 +2557,19 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 	return nil
 }
 
+// RarityContext bundles everything a caller needs to compute a species' rarity from one
+// coherent settings generation: the probable-species scores, the two label vocabularies
+// used to interpret them, whether the range filter was active, and the settings snapshot
+// the scores were produced from. See GetRarityContext for the per-field semantics and the
+// consistency guarantees.
+type RarityContext struct {
+	Scores           []SpeciesScore
+	GeomodelLabels   []string
+	ClassifierLabels []string
+	FilterActive     bool
+	Settings         *conf.Settings
+}
+
 // GetRarityContext returns the primary model's probable-species scores together with
 // the two label vocabularies needed to interpret them, so a caller computing rarity
 // does not have to reassemble them from calls that can each observe a different model.
@@ -2589,7 +2602,16 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 // predictions; it is false when they are the synthetic all-zero fallback (no range
 // filter loaded, or no location configured), so a caller can avoid reporting a zero as
 // "very rare" (#3935).
-func (o *Orchestrator) GetRarityContext(date time.Time) (scores []SpeciesScore, geomodelLabels, classifierLabels []string, filterActive bool, err error) {
+//
+// The returned RarityContext bundles the settings snapshot the scores were produced from
+// together with the scores, the two vocabularies, and filterActive, so a caller
+// assembling rarity metadata (location, threshold, coordinates) derives every field from
+// the SAME settings generation as the score rather than taking a second,
+// independently-resolved CurrentSettings() read that a concurrent reload could
+// desynchronise from the score. Settings is non-nil whenever a primary exists or any
+// settings have been published (i.e. in a running app); it can be nil only for an
+// uninitialised orchestrator, so a caller that may run before startup must nil-check it.
+func (o *Orchestrator) GetRarityContext(date time.Time) (RarityContext, error) {
 	// Snapshot the primary once and drive every read below from it. Delegating to
 	// o.GetProbableSpecies would re-resolve o.primary under a fresh lock and could
 	// score against a different model than the labels describe.
@@ -2597,7 +2619,8 @@ func (o *Orchestrator) GetRarityContext(date time.Time) (scores []SpeciesScore, 
 	primary := o.primary
 	o.mu.RUnlock()
 	if primary == nil {
-		return nil, nil, nil, false, nil
+		// No primary, so no scores: hand back the orchestrator's current snapshot.
+		return RarityContext{Settings: o.CurrentSettings()}, nil
 	}
 
 	settings := primary.currentSettings()
@@ -2609,8 +2632,12 @@ func (o *Orchestrator) GetRarityContext(date time.Time) (scores []SpeciesScore, 
 	// filterActive=true with synthetic zeros, and it also covers the no-location case
 	// a bare rangeFilter!=nil check missed, so a caller never reports a synthetic zero
 	// as "very rare" (#3935).
-	scores, geomodelLabels, filterActive, err = primary.getProbableSpecies(date, 0.0, settings)
-	classifierLabels = slices.Clone(settings.BirdNET.Labels)
-
-	return scores, geomodelLabels, classifierLabels, filterActive, err
+	scores, geomodelLabels, filterActive, err := primary.getProbableSpecies(date, 0.0, settings)
+	return RarityContext{
+		Scores:           scores,
+		GeomodelLabels:   geomodelLabels,
+		ClassifierLabels: slices.Clone(settings.BirdNET.Labels),
+		FilterActive:     filterActive,
+		Settings:         settings,
+	}, err
 }

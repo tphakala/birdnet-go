@@ -176,9 +176,11 @@ func TestGetRarityContext_UniversalGeomodel(t *testing.T) {
 	bn, _ := newAliasedGeomodelBirdNET(t, 0.5)
 	orch := &Orchestrator{Settings: bn.Settings, ModelInfo: bn.ModelInfo, primary: bn}
 
-	scores, geomodelLabels, classifierLabels, filterActive, err := orch.GetRarityContext(time.Now())
+	rc, err := orch.GetRarityContext(time.Now())
 	require.NoError(t, err)
+	scores, geomodelLabels, classifierLabels, filterActive := rc.Scores, rc.GeomodelLabels, rc.ClassifierLabels, rc.FilterActive
 
+	assert.Same(t, bn.Settings, rc.Settings, "GetRarityContext returns the exact settings snapshot the scores were produced from")
 	assert.True(t, filterActive, "a loaded range filter reports active so rarity is honest (#3935)")
 	assert.NotEmpty(t, scores, "universal geomodel path should return scored species")
 	assert.Contains(t, geomodelLabels, aliasCanonicalLabel,
@@ -215,9 +217,11 @@ func TestGetRarityContext_NoGeomodel(t *testing.T) {
 	t.Cleanup(bn.Delete)
 	orch := &Orchestrator{Settings: settings, ModelInfo: bn.ModelInfo, primary: bn}
 
-	_, geomodelLabels, classifierLabels, filterActive, err := orch.GetRarityContext(time.Now())
+	rc, err := orch.GetRarityContext(time.Now())
 	require.NoError(t, err)
+	geomodelLabels, classifierLabels, filterActive := rc.GeomodelLabels, rc.ClassifierLabels, rc.FilterActive
 
+	assert.Same(t, settings, rc.Settings, "GetRarityContext returns the exact settings snapshot the scores were produced from")
 	// Location is unconfigured here, so getProbableSpecies returns synthetic zero
 	// scores even though a filter is loaded; filterActive must be false so rarity is
 	// reported as unknown rather than a bogus "very rare" (#3935).
@@ -227,12 +231,18 @@ func TestGetRarityContext_NoGeomodel(t *testing.T) {
 }
 
 func TestGetRarityContext_NilPrimary(t *testing.T) {
+	// Publish a distinct snapshot so the no-primary branch has a known settings value to
+	// return, and assert GetRarityContext hands back exactly that rather than nil or a
+	// stale generation.
+	distinct := &conf.Settings{}
+	publishTestSettings(t, distinct)
 	orch := &Orchestrator{}
 
-	scores, geomodelLabels, classifierLabels, filterActive, err := orch.GetRarityContext(time.Now())
+	rc, err := orch.GetRarityContext(time.Now())
 	require.NoError(t, err)
-	assert.False(t, filterActive, "no primary model means no active range filter")
-	assert.Nil(t, scores)
-	assert.Nil(t, geomodelLabels)
-	assert.Nil(t, classifierLabels)
+	assert.False(t, rc.FilterActive, "no primary model means no active range filter")
+	assert.Nil(t, rc.Scores)
+	assert.Nil(t, rc.GeomodelLabels)
+	assert.Nil(t, rc.ClassifierLabels)
+	assert.Same(t, distinct, rc.Settings, "with no primary, GetRarityContext returns the orchestrator's current settings snapshot")
 }

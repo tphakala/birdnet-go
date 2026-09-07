@@ -547,13 +547,15 @@ func computeRarity(filterActive bool, targetSci string, speciesScores []classifi
 func (c *Handler) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLabel string) (SpeciesRarityInfo, error) {
 	// Get current local date
 	today := conf.LocalNoon(time.Now())
-	settings := bn.CurrentSettings()
 
 	// Rarity is the geomodel occurrence probability, so use the geomodel-backed
 	// probable-species list, not the multi-model union: the union assigns synthetic
 	// always-active scores (1.0) to secondary-model species (bats, Perch) that have
 	// no real occurrence probability, which would misclassify them as "very common".
-	speciesScores, geomodelLabels, classifierLabels, filterActive, err := bn.GetRarityContext(today)
+	// GetRarityContext returns the settings snapshot it scored against, so location,
+	// threshold, coordinates and filterActive below all describe one settings generation;
+	// a concurrent reload cannot desynchronise the rarity number from its metadata.
+	rc, err := bn.GetRarityContext(today)
 	if err != nil {
 		return SpeciesRarityInfo{}, errors.New(err).
 			Category(errors.CategoryProcessing).
@@ -561,16 +563,28 @@ func (c *Handler) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLabel
 			Component("api-species").
 			Build()
 	}
+	// rc.Settings is the snapshot the scores were produced from, so every field below
+	// describes one settings generation. It is non-nil for a running orchestrator (this
+	// handler always has a primary); see GetRarityContext.
+	settings := rc.Settings
 
-	// Create rarity info
+	// location_based reports whether this rarity number is actually derived from the
+	// location-based range filter, so it tracks filterActive rather than merely whether
+	// coordinates are configured: with coordinates set but the filter inactive (e.g. the
+	// geomodel failed to load), computeRarity returns unknown, and reporting
+	// location_based=true would render "Unknown 0% - Based on location" and partially
+	// reintroduce the false 0% that #3935 removed. filterActive implies LocationConfigured
+	// within this one snapshot, so location_based=true always has coordinates to show.
 	rarityInfo := SpeciesRarityInfo{
 		Date:             today.Format(time.DateOnly),
-		LocationBased:    settings.BirdNET.LocationConfigured,
+		LocationBased:    rc.FilterActive,
 		ThresholdApplied: float64(settings.BirdNET.RangeFilter.Threshold),
 	}
 
-	// Add location if available
-	if rarityInfo.LocationBased {
+	// Surface the configured coordinates whenever a location is set, independent of
+	// whether the filter is currently active, so a client still learns the location is
+	// known even when the rarity itself is unknown.
+	if settings.BirdNET.LocationConfigured {
 		rarityInfo.Latitude = settings.BirdNET.Latitude
 		rarityInfo.Longitude = settings.BirdNET.Longitude
 	}
@@ -578,7 +592,7 @@ func (c *Handler) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLabel
 	// Resolve the score and status together; computeRarity documents how an absent
 	// species is split between "very rare" and "unknown" by geomodel coverage.
 	targetSci := detection.ExtractScientificName(speciesLabel)
-	rarityInfo.Score, rarityInfo.Status = computeRarity(filterActive, targetSci, speciesScores, geomodelLabels, classifierLabels)
+	rarityInfo.Score, rarityInfo.Status = computeRarity(rc.FilterActive, targetSci, rc.Scores, rc.GeomodelLabels, rc.ClassifierLabels)
 
 	return rarityInfo, nil
 }

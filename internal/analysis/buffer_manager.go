@@ -552,7 +552,13 @@ func (m *BufferManager) processMonitorTick(
 	beginTimeOffset := time.Duration(conf.Setting().Realtime.Audio.Export.PreCapture)*time.Second + detectionOffset
 	startTime := time.Now().Add(-beginTimeOffset)
 
-	if processErr := ProcessData(context.Background(), m.bn, m.bufferMgr, data, startTime, audioCapturedAt, cfg.sourceID, cfg.modelID); processErr != nil {
+	if processErr := ProcessData(context.Background(), m.bn, m.bufferMgr, &ProcessRequest{
+		Data:            data,
+		StartTime:       startTime,
+		AudioCapturedAt: audioCapturedAt,
+		Source:          cfg.sourceID,
+		ModelID:         cfg.modelID,
+	}); processErr != nil {
 		m.logger.Error("error processing data",
 			logger.String("source_id", cfg.sourceID),
 			logger.String("model_id", cfg.modelID),

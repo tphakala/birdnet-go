@@ -531,7 +531,7 @@ func (p *AudioPipelineService) restartAudioCapture() {
 		logger.String("operation", "restart_audio_capture"))
 
 	// Remove all existing sources.
-	p.removeAllSources("restart")
+	p.removeAllSources(operationRestart)
 
 	// Re-resolve the primary model's buffer dimensions from current settings
 	// before re-adding sources, so a hot-reloaded birdnet.overlap takes effect
@@ -540,7 +540,7 @@ func (p *AudioPipelineService) restartAudioCapture() {
 
 	// Re-add sources, register consumers, and update buffer monitors.
 	audioLevelChan := p.apiService.AudioLevelChan()
-	p.setupAudioSources(audioLevelChan, "restart")
+	p.setupAudioSources(audioLevelChan, operationRestart)
 }
 
 // applyPrimaryModelDims resolves the primary model's analysis-buffer dimensions
@@ -594,6 +594,10 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 	// under a fresh registry ID, so any retained "failed last pass" entry for the old
 	// ID is stale and would otherwise never be pruned (#4208).
 	delete(p.routeFailedLastPass, sourceID)
+	// Same reasoning for the model-not-registered suppression window: the old ID's
+	// entries would otherwise be orphaned once the source returns under a fresh ID
+	// (symmetric with the route-failure clear above and the removal-loop clears).
+	clearModelNotRegistered(sourceID)
 
 	// 3. Remove source from engine (stops capture, removes routes, deallocates buffers, unregisters).
 	if err := p.engine.RemoveSource(sourceID); err != nil {
@@ -671,6 +675,10 @@ func (p *AudioPipelineService) removeAllSources(operation string) {
 				logger.Error(err),
 				logger.String("operation", operation))
 		}
+		// The source is going away; drop its model-not-registered suppression window so
+		// a source reusing this ID later re-notifies instead of being silenced by a
+		// stale entry within the 6h window.
+		clearModelNotRegistered(src.ID)
 	}
 	// engine.RemoveSource removes router routes but has no knowledge of the
 	// soundlevel tracking map. Clear the map to keep it in sync with actual
@@ -1023,6 +1031,7 @@ func routeReportDecision(bufferRouteOK, failedLastPass, suppressTransient bool, 
 // classifier switch and the call sites that pass these values must share one vocabulary.
 const (
 	operationStart             = "start"
+	operationRestart           = "restart"
 	operationRestartSource     = "restart_source"
 	operationReconfigureDiff   = "reconfigure_diff"
 	operationReconfigureParams = "reconfigure_params"
@@ -1069,7 +1078,13 @@ func (p *AudioPipelineService) reportSourceRegistration(mm *classifier.ModelMana
 	} else {
 		p.routeFailedLastPass[sid] = true
 	}
-	reportUnregisteredModels(mm, sourceName, skipped, assigned, registered)
+	reportUnregisteredModels(mm, &modelRegistrationReport{
+		sourceID:   sid,
+		sourceName: sourceName,
+		skipped:    skipped,
+		resolved:   assigned,
+		allocated:  registered,
+	})
 }
 
 // registerConsumersForSources registers BufferConsumer and AudioLevelConsumer
@@ -1483,6 +1498,9 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		// Drop the route-failure memory too, so a source ID re-added later starts
 		// with a clean first-pass grace rather than a stale "failed last pass" (#4208).
 		delete(p.routeFailedLastPass, src.ID)
+		// Likewise drop the model-not-registered suppression window for the removed
+		// source so a later re-add re-notifies instead of being silenced by a stale entry.
+		clearModelNotRegistered(src.ID)
 	}
 
 	// Register consumers and monitors only for newly added sources.
@@ -1860,6 +1878,18 @@ func resolveModelTargets(configModelIDs []string, loadedModels map[string]classi
 	return targets, skipped
 }
 
+// modelRegistrationReport groups the per-source registration result that
+// reportUnregisteredModels inspects. mm stays a separate dependency parameter; grouping
+// the source and result payload keeps the call within the >3-parameters convention and
+// prevents positional-argument mistakes as this lifecycle payload grows.
+type modelRegistrationReport struct {
+	sourceID   string
+	sourceName string
+	skipped    []string               // config IDs that did not resolve/load
+	resolved   []classifier.ModelInfo // models the source assigns that did resolve
+	allocated  map[string]bool        // registry IDs whose analysis buffer was allocated
+}
+
 // reportUnregisteredModels raises a user-visible notification for models that a
 // source's configuration assigns but which will not receive its audio, either
 // because they never loaded (skipped) or because their analysis buffer could
@@ -1874,11 +1904,16 @@ func resolveModelTargets(configModelIDs []string, loadedModels map[string]classi
 // The shortfall is otherwise silent: detection keeps working for the models that
 // did register, so nothing looks broken, and the only trace is a warning in a
 // log file. Users have lost a model for days this way (GitHub #4201, #4204).
-func reportUnregisteredModels(mm *classifier.ModelManager, sourceName string, skipped []string, resolved []classifier.ModelInfo, allocated map[string]bool) {
-	notRegistered := unregisteredModelNames(mm, skipped, resolved, allocated)
+func reportUnregisteredModels(mm *classifier.ModelManager, report *modelRegistrationReport) {
+	notRegistered := unregisteredModelNames(mm, report.skipped, report.resolved, report.allocated)
 	if len(notRegistered) > 0 {
-		notifyModelsNotRegistered(sourceName, notRegistered)
+		notifyModelsNotRegistered(report.sourceID, report.sourceName, notRegistered)
+		return
 	}
+	// Every assigned model registered: clear any prior suppression window for this source
+	// so a later failure re-notifies immediately rather than being silenced for the rest
+	// of the 6h window (symmetric with the routeFailedLastPass recovery clear).
+	clearModelNotRegistered(report.sourceID)
 }
 
 // unregisteredModelNames returns the display names of models that will not
