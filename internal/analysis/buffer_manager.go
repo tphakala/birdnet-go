@@ -9,6 +9,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -40,10 +41,28 @@ type monitorTickState struct {
 	notLoadedWarned bool
 }
 
+// classifierBackend is the analysis package's view of *classifier.Orchestrator:
+// the exact set of methods BufferManager and ProcessData call on it. Declaring
+// the dependency as a consumer-side interface (accept interfaces, return concrete
+// types) lets buffer-manager tests inject a fake to drive the not-loaded ->
+// loaded and active/inactive transitions the monitor resume path depends on; a
+// real Orchestrator only reaches those states with fully loaded models, and its
+// models map and bat scheduler are package-private to internal/classifier.
+// *classifier.Orchestrator satisfies this in production.
+type classifierBackend interface {
+	IsModelLoaded(modelID string) bool
+	IsModelActive(modelID string) bool
+	ModelInfos() []classifier.ModelInfo
+	PrimaryModelInfo() classifier.ModelInfo
+	PredictModel(ctx context.Context, modelID string, sample [][]float32) ([]datastore.Results, error)
+	CurrentSettings() *conf.Settings
+	ModelSpecFor(modelID string) (classifier.ModelSpec, bool)
+}
+
 // BufferManager handles the lifecycle of analysis buffer monitors
 type BufferManager struct {
 	monitors  sync.Map // keyed by monitorKey -> chan struct{}
-	bn        *classifier.Orchestrator
+	bn        classifierBackend
 	bufferMgr *buffer.Manager
 	quitChan  chan struct{}
 	wg        *sync.WaitGroup

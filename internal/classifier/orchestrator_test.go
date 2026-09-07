@@ -376,6 +376,68 @@ func TestOrchestrator_LoadAdditionalModels_UnknownModelSkipped(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestEnabledModels(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		enabled []string
+		want    []enabledModel
+	}{
+		{
+			name:    "empty yields nothing",
+			enabled: nil,
+			want:    nil,
+		},
+		{
+			name:    "known IDs resolve in config order",
+			enabled: []string{conf.ModelIDPerchV2, conf.ModelIDBirdNET},
+			want: []enabledModel{
+				{configID: conf.ModelIDPerchV2, registryID: RegistryIDPerchV2, known: true},
+				{configID: conf.ModelIDBirdNET, registryID: BirdNET_V2_4, known: true},
+			},
+		},
+		{
+			name:    "unknown ID is yielded with known=false",
+			enabled: []string{"nope"},
+			want: []enabledModel{
+				{configID: "nope", registryID: "", known: false},
+			},
+		},
+		{
+			name:    "case variants are yielded without deduplication",
+			enabled: []string{conf.ModelIDPerchV2, "PERCH_V2"},
+			want: []enabledModel{
+				{configID: conf.ModelIDPerchV2, registryID: RegistryIDPerchV2, known: true},
+				{configID: "PERCH_V2", registryID: RegistryIDPerchV2, known: true},
+			},
+		},
+		{
+			name:    "mixed known and unknown preserves order across the boundary",
+			enabled: []string{conf.ModelIDBirdNET, "nope", conf.ModelIDPerchV2},
+			want: []enabledModel{
+				{configID: conf.ModelIDBirdNET, registryID: BirdNET_V2_4, known: true},
+				{configID: "nope", registryID: "", known: false},
+				{configID: conf.ModelIDPerchV2, registryID: RegistryIDPerchV2, known: true},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			settings := &conf.Settings{}
+			settings.Models.Enabled = tt.enabled
+
+			var got []enabledModel
+			for m := range enabledModels(settings) {
+				got = append(got, m)
+			}
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestOrchestrator_ModelSpecFor(t *testing.T) {
 	t.Parallel()
 

@@ -250,7 +250,7 @@ func SetProcessMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
 // bufMgr is the audiocore buffer manager owning the Float32Pool that the
 // 16-bit conversion hot path draws from. Must be non-nil; callers that reach
 // ProcessData without a manager have a plumbing bug.
-func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffer.Manager, data []byte, startTime, audioCapturedAt time.Time, source, modelID string) error {
+func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manager, data []byte, startTime, audioCapturedAt time.Time, source, modelID string) error {
 	if bufMgr == nil {
 		return errors.Newf("buffer manager must not be nil").
 			Component("analysis").
