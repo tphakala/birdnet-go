@@ -270,7 +270,7 @@ func TestSavePCMDataToWAV_HigherBitDepths(t *testing.T) {
 			audioFmt := binary.LittleEndian.Uint16(data[20:22])
 			assert.Equal(t, uint16(0xFFFE), audioFmt, "24/32-bit PCM should use WAVE_FORMAT_EXTENSIBLE")
 
-			info, decoded, err := wavpcm.DecodeInterleaved(data)
+			decoded, info, err := wavpcm.DecodeInterleavedBytes(data)
 			require.NoError(t, err)
 			assert.Equal(t, 48000, info.SampleRate, "sample rate round-trips")
 			assert.Equal(t, tc.bitDepth, info.BitDepth, "bit depth round-trips")
