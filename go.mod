@@ -8,7 +8,7 @@ require (
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/gen2brain/malgo v0.11.26
 	github.com/getsentry/sentry-go v0.49.0
-	github.com/go-sql-driver/mysql v1.10.0
+	github.com/go-sql-driver/mysql v1.10.1
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/sessions v1.4.0
@@ -20,13 +20,13 @@ require (
 	github.com/labstack/echo/v4 v4.15.4
 	github.com/labstack/gommon v0.5.0
 	github.com/markbates/goth v1.82.0
-	github.com/mattn/go-sqlite3 v1.14.50
-	github.com/moby/moby/api v1.55.0
-	github.com/nicholas-fedor/shoutrrr v0.18.0
+	github.com/mattn/go-sqlite3 v1.14.52
+	github.com/moby/moby/api v1.56.0
+	github.com/nicholas-fedor/shoutrrr v0.19.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/sftp v1.13.11
 	github.com/prometheus/client_golang v1.24.1
-	github.com/prometheus/client_model v0.6.2
+	github.com/prometheus/client_model v0.6.3
 	github.com/quasilyte/go-ruleguard/dsl v0.3.23
 	github.com/ringsaturn/tzf v1.2.5
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
@@ -43,22 +43,22 @@ require (
 	github.com/tphakala/go-audio-stream v0.5.0
 	github.com/tphakala/go-flac v1.1.0
 	github.com/tphakala/go-hls v0.1.0
-	github.com/tphakala/go-m4a v0.4.0
+	github.com/tphakala/go-m4a v0.5.0
 	github.com/tphakala/go-mp3 v0.1.0
 	github.com/tphakala/go-opus v1.1.0
 	github.com/tphakala/go-tflite v0.2.2-0.20260514101223-29408e53fff7
-	github.com/tphakala/go-wav v1.0.0
+	github.com/tphakala/go-wav v1.1.0
 	github.com/tphakala/simd v1.9.0
 	github.com/yalue/onnxruntime_go v1.30.1
 	go.uber.org/goleak v1.3.0
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.56.0
 	golang.org/x/net v0.58.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.22.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/text v0.41.0
 	golang.org/x/time v0.15.0
-	google.golang.org/api v0.295.0
+	google.golang.org/api v0.297.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/driver/sqlite v1.6.0
