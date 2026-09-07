@@ -111,8 +111,8 @@ func TestTitleCaseComponent(t *testing.T) {
 	}{
 		{
 			name:      "http prefix",
-			component: "httpcontroller",
-			expected:  "HTTP Controller",
+			component: "httphandler",
+			expected:  "HTTP Handler",
 		},
 		{
 			name:      "rtsp prefix",
@@ -186,8 +186,8 @@ func TestGenerateErrorTitle(t *testing.T) {
 		{
 			name:      "index out of range with http component",
 			err:       errors.New("runtime error: index out of range [5] with length 3"),
-			component: "httpcontroller",
-			expected:  "HTTP Controller: Index Out of Range",
+			component: "httphandler",
+			expected:  "HTTP Handler: Index Out of Range",
 		},
 		{
 			name:      "concurrent map write with api component",
@@ -240,8 +240,8 @@ func TestGenerateErrorTitleRealWorldExamples(t *testing.T) {
 		{
 			name:      "http handler panic",
 			err:       errors.New("panic: Handler.ServeHTTP panic"),
-			component: "httpcontroller",
-			expected:  "HTTP Controller: Panic: Handler.ServeHTTP panic",
+			component: "httphandler",
+			expected:  "HTTP Handler: Panic: Handler.ServeHTTP panic",
 		},
 		{
 			name:      "database connection error",

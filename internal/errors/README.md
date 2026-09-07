@@ -238,7 +238,7 @@ Components should match your package structure:
 - `suncalc`: Astronomical calculations
 - `birdnet`: AI model operations
 - `myaudio`: Audio processing
-- `http-controller`: HTTP API operations
+- `api`: HTTP API operations
 - `birdweather`: BirdWeather integration
 - `diskmanager`: Disk space management
 - `mqtt`: MQTT messaging

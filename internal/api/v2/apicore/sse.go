@@ -2,7 +2,6 @@ package apicore
 
 import (
 	"fmt"
-	"net/http"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -173,9 +172,7 @@ type SSEClient struct {
 	ID             string
 	Channel        chan SSEDetectionData
 	SoundLevelChan chan SSESoundLevelData
-	PendingChan    chan any // Channel for pending detection snapshots ([]SSEPendingDetection from processor)
-	Request        *http.Request
-	Response       http.ResponseWriter
+	PendingChan    chan any      // Channel for pending detection snapshots ([]SSEPendingDetection from processor)
 	Done           chan struct{} // Signal-only buffered channel to prevent blocking
 	StreamType     string        // StreamTypeDetections, StreamTypeSoundLevels, or StreamTypeAll
 

@@ -166,7 +166,6 @@ jobs:
                   "internal/birdweather"*) PACKAGE_LABELS+=",pkg:birdweather" ;;
                   "internal/security"*) PACKAGE_LABELS+=",pkg:security" ;;
                   "internal/conf"*) PACKAGE_LABELS+=",pkg:conf" ;;
-                  "internal/httpcontroller"*) PACKAGE_LABELS+=",pkg:httpcontroller" ;;
                   "internal/errors"*) PACKAGE_LABELS+=",pkg:errors" ;;
                   "internal/logging"*) PACKAGE_LABELS+=",pkg:logging" ;;
                   "internal/testing"*) PACKAGE_LABELS+=",pkg:testing" ;;

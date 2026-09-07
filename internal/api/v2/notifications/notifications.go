@@ -147,8 +147,6 @@ type UnifiedSSEEvent struct {
 type NotificationClient struct {
 	ID           string
 	Channel      chan *notification.Notification
-	Request      *http.Request
-	Response     http.ResponseWriter
 	Done         chan struct{} // Signal-only channel for shutdown notification
 	SubscriberCh <-chan *notification.Notification
 	Context      context.Context
@@ -516,8 +514,6 @@ func (c *Handler) setupNotificationSSEClient(ctx echo.Context) (*NotificationCli
 	client := &NotificationClient{
 		ID:           clientID,
 		Channel:      make(chan *notification.Notification, notificationChannelBuffer),
-		Request:      ctx.Request(),
-		Response:     ctx.Response(),
 		Done:         make(chan struct{}, 1), // Buffered signal channel to prevent deadlock during disconnect
 		SubscriberCh: notificationCh,
 		Context:      notificationCtx,
@@ -545,9 +541,18 @@ func (c *Handler) setupNotificationSSEClient(ctx echo.Context) (*NotificationCli
 
 // setupNotificationDisconnectHandler sets up client disconnect handling with timeout
 func (c *Handler) setupNotificationDisconnectHandler(ctx echo.Context, client *NotificationClient) {
+	// Capture request-scoped values on the request goroutine, before spawning the
+	// watcher. Echo pools and recycles the echo.Context (and rebinds its
+	// *http.Request) once the handler returns, so touching ctx from a goroutine
+	// that outlives the handler reads a recycled Request whose header map a new
+	// in-flight request is concurrently writing. That is a fatal
+	// "concurrent map read and map write" (issue #4292): ctx.RealIP() reads
+	// req.Header, so it must be evaluated here, not inside the goroutine.
+	reqCtx := ctx.Request().Context()
+	clientIP := ctx.RealIP()
 	go func() {
 		// Wait for client disconnect or timeout
-		<-ctx.Request().Context().Done()
+		<-reqCtx.Done()
 
 		// Client disconnected or timeout reached
 		select {
@@ -556,7 +561,7 @@ func (c *Handler) setupNotificationDisconnectHandler(ctx echo.Context, client *N
 		case <-time.After(eventLoopCheckInterval):
 			// Done channel might be blocked, continue
 		}
-		c.logNotificationConnection(client.ID, ctx.RealIP(), "", false)
+		c.logNotificationConnection(client.ID, clientIP, "", false)
 	}()
 }
 

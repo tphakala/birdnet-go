@@ -101,11 +101,9 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 }
 
 // createSSEClient creates a new SSE client with common settings
-func createSSEClient(clientID string, ctx echo.Context, streamType string) *apicore.SSEClient {
+func createSSEClient(clientID, streamType string) *apicore.SSEClient {
 	return &apicore.SSEClient{
 		ID:         clientID,
-		Request:    ctx.Request(),
-		Response:   ctx.Response(),
 		Done:       make(chan struct{}, sseDoneChannelBuffer), // Signal-only buffered channel to prevent blocking on cleanup
 		StreamType: streamType,
 	}
@@ -152,7 +150,7 @@ func (c *Handler) handleSSEStream(ctx echo.Context, streamType, message, logPref
 
 	// Generate client ID and create client
 	clientID := apicore.GenerateCorrelationID()
-	client := createSSEClient(clientID, ctx, streamType)
+	client := createSSEClient(clientID, streamType)
 
 	// Allow custom setup
 	if setupFunc != nil {

@@ -221,6 +221,23 @@ func runStreamingIntegrationTest[T any](
 			writeMu.Lock()
 			defer writeMu.Unlock()
 
+			// Re-check under the lock before touching ctx. The handler may have
+			// returned (encode error or client disconnect) while we were blocked
+			// acquiring writeMu; on those paths it closes doneChan / cancels
+			// testCtx before releasing the lock, so observing either here means
+			// the handler has gone. Writing to ctx after the handler returns
+			// touches a recycled echo.Context/Response and races with the next
+			// request that reuses it (issue #4292 bug class).
+			select {
+			case <-doneChan:
+				c.Debug("HTTP client disconnected, skipping final result")
+				return
+			case <-testCtx.Done():
+				c.Debug("Test context cancelled: %v", testCtx.Err())
+				return
+			default:
+			}
+
 			finalResult := map[string]any{
 				"elapsed_time_ms": elapsedTime,
 				"state":           "completed",
@@ -257,9 +274,14 @@ func runStreamingIntegrationTest[T any](
 				logger.String("integration", integrationName),
 				logger.Error(err),
 			)
-			writeMu.Unlock()
+			// Signal shutdown BEFORE releasing writeMu so a worker goroutine
+			// blocked on writeMu.Lock() observes the closed doneChan (and the
+			// cancelled testCtx) once it acquires the lock, and skips its final
+			// write instead of touching the recycled ctx after this handler
+			// returns (issue #4292 bug class).
 			safeDoneClose()
 			cancel()
+			writeMu.Unlock()
 			drainResultChan()
 			return nil
 		}
@@ -270,8 +292,19 @@ func runStreamingIntegrationTest[T any](
 		select {
 		case <-httpCtx.Done():
 			c.Debug("HTTP client disconnected during %s test", integrationName)
+			// Signal shutdown under writeMu, mirroring the encode-error path
+			// above. Acquiring the lock blocks until any in-progress worker
+			// final write finishes (so ctx is not recycled mid-write), and it
+			// establishes the happens-before that makes a worker later blocked
+			// on writeMu.Lock() observe the closed doneChan and skip its write.
+			// Signalling after the unlock instead would leave a window where the
+			// worker touches the recycled ctx after this handler returns, since
+			// testCtx cancellation propagates from httpCtx only after httpCtx's
+			// own Done channel is already closed (issue #4292 bug class).
+			writeMu.Lock()
 			safeDoneClose()
 			cancel()
+			writeMu.Unlock()
 			drainResultChan()
 			return nil
 		default:
