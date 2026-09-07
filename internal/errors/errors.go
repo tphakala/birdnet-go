@@ -663,8 +663,6 @@ func detectCategory(err error, component string) ErrorCategory {
 		return CategoryAudio
 	case "datastore":
 		return CategoryDatabase
-	case "http-controller":
-		return CategoryHTTP
 	case "imageprovider":
 		if strings.Contains(errorMsg, "cache") {
 			return CategoryImageCache
