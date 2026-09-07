@@ -5,6 +5,7 @@ package classifier
 import (
 	"context"
 	"fmt"
+	"iter"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -1819,6 +1820,15 @@ func (o *Orchestrator) Delete() {
 
 // IsModelLoaded returns true if a model with the given registry ID is
 // currently loaded in the orchestrator.
+//
+// This takes o.mu.RLock, unlike its sibling IsModelActive which is deliberately
+// lock-free: IsModelActive reads only the scheduler atomic.Pointer, while the
+// models map read here is mutable state guarded by o.mu (ReloadModel, Delete, and
+// the loaders all mutate it under the write lock). The asymmetry is intentional.
+// On the monitor tick the RLock is reached only once a full analysis window is
+// present and sits directly before a millisecond-scale inference, so it was
+// measured as negligible; a lock-free models map is not worth the copy-on-write
+// machinery it would require.
 func (o *Orchestrator) IsModelLoaded(registryID string) bool {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
@@ -2087,11 +2097,11 @@ func (o *Orchestrator) modelNotLoadedReason(modelID string) string {
 
 // modelIDEnabled reports whether registryID corresponds to a model the user has
 // enabled: an entry in settings.Models.Enabled once its config alias is resolved
-// to a registry ID. Mirrors loadAdditionalModels' own resolution so the two agree
-// on what "enabled" means.
+// to a registry ID. Uses the shared enabledModels walk, so it agrees with
+// computeThreadAllocation and loadAdditionalModels on what "enabled" means.
 func (o *Orchestrator) modelIDEnabled(registryID string) bool {
-	for _, configID := range o.currentSettings().Models.Enabled {
-		if resolved, known := ResolveConfigModelID(configID); known && resolved == registryID {
+	for m := range enabledModels(o.currentSettings()) {
+		if m.known && m.registryID == registryID {
 			return true
 		}
 	}
@@ -2395,6 +2405,33 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 	return infos
 }
 
+// enabledModel is one entry of settings.Models.Enabled resolved against the
+// model registry.
+type enabledModel struct {
+	configID   string // the raw ID as written in models.enabled
+	registryID string // the resolved registry ID (empty when known is false)
+	known      bool   // whether configID resolved to a registry model
+}
+
+// enabledModels yields each settings.Models.Enabled entry in config order,
+// resolved to its registry ID. It centralizes the settings.Models.Enabled ->
+// ResolveConfigModelID walk shared by modelIDEnabled, computeThreadAllocation,
+// and loadAdditionalModels so the three stay in step. Unknown config IDs are
+// yielded with known=false so each caller decides whether to warn or skip;
+// deduplication is left to the callers that need it (computeThreadAllocation
+// tracks a seen-set, loadAdditionalModels relies on the models-map existence
+// check), so the helper preserves each caller's existing behavior.
+func enabledModels(settings *conf.Settings) iter.Seq[enabledModel] {
+	return func(yield func(enabledModel) bool) {
+		for _, configID := range settings.Models.Enabled {
+			registryID, known := ResolveConfigModelID(configID)
+			if !yield(enabledModel{configID: configID, registryID: registryID, known: known}) {
+				return
+			}
+		}
+	}
+}
+
 // computeThreadAllocation pre-computes thread distribution for all models
 // that will be loaded. Inference is serialized by inferenceMu, so each model
 // gets the full thread budget (they never run simultaneously).
@@ -2403,13 +2440,12 @@ func (o *Orchestrator) computeThreadAllocation(settings *conf.Settings, primaryI
 	// case variants like ["perch_v2", "PERCH_V2"] that resolve to the same ID.
 	seen := map[string]bool{primaryID: true}
 	modelIDs := []string{primaryID}
-	for _, configID := range settings.Models.Enabled {
-		registryID, known := ResolveConfigModelID(configID)
-		if !known || seen[registryID] {
+	for m := range enabledModels(settings) {
+		if !m.known || seen[m.registryID] {
 			continue
 		}
-		seen[registryID] = true
-		modelIDs = append(modelIDs, registryID)
+		seen[m.registryID] = true
+		modelIDs = append(modelIDs, m.registryID)
 	}
 
 	total := settings.BirdNET.Threads
@@ -2466,13 +2502,13 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 	// o.Settings pointer, consistent with the per-model loaders (loadPerch/loadBat).
 	settings := o.currentSettings()
 
-	for _, configID := range settings.Models.Enabled {
-		registryID, known := ResolveConfigModelID(configID)
-		if !known {
+	for m := range enabledModels(settings) {
+		if !m.known {
 			log.Warn("skipping unknown model ID in models.enabled",
-				logger.String("model_id", configID))
+				logger.String("model_id", m.configID))
 			continue
 		}
+		registryID := m.registryID
 
 		// Closure with defer ensures the mutex is released even if a
 		// loader panics during model initialization.

@@ -31,7 +31,7 @@ func newCaptureLogger(t *testing.T) *bytes.Buffer {
 		capture,
 	)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = cl.Close() })
+	t.Cleanup(func() { assert.NoError(t, cl.Close()) })
 	prev := logger.Global()
 	logger.SetGlobal(cl)
 	t.Cleanup(func() { logger.SetGlobal(prev) })
