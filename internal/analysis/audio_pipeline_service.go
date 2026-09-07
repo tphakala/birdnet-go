@@ -1078,7 +1078,13 @@ func (p *AudioPipelineService) reportSourceRegistration(mm *classifier.ModelMana
 	} else {
 		p.routeFailedLastPass[sid] = true
 	}
-	reportUnregisteredModels(mm, sid, sourceName, skipped, assigned, registered)
+	reportUnregisteredModels(mm, &modelRegistrationReport{
+		sourceID:   sid,
+		sourceName: sourceName,
+		skipped:    skipped,
+		resolved:   assigned,
+		allocated:  registered,
+	})
 }
 
 // registerConsumersForSources registers BufferConsumer and AudioLevelConsumer
@@ -1872,6 +1878,18 @@ func resolveModelTargets(configModelIDs []string, loadedModels map[string]classi
 	return targets, skipped
 }
 
+// modelRegistrationReport groups the per-source registration result that
+// reportUnregisteredModels inspects. mm stays a separate dependency parameter; grouping
+// the source and result payload keeps the call within the >3-parameters convention and
+// prevents positional-argument mistakes as this lifecycle payload grows.
+type modelRegistrationReport struct {
+	sourceID   string
+	sourceName string
+	skipped    []string               // config IDs that did not resolve/load
+	resolved   []classifier.ModelInfo // models the source assigns that did resolve
+	allocated  map[string]bool        // registry IDs whose analysis buffer was allocated
+}
+
 // reportUnregisteredModels raises a user-visible notification for models that a
 // source's configuration assigns but which will not receive its audio, either
 // because they never loaded (skipped) or because their analysis buffer could
@@ -1886,16 +1904,16 @@ func resolveModelTargets(configModelIDs []string, loadedModels map[string]classi
 // The shortfall is otherwise silent: detection keeps working for the models that
 // did register, so nothing looks broken, and the only trace is a warning in a
 // log file. Users have lost a model for days this way (GitHub #4201, #4204).
-func reportUnregisteredModels(mm *classifier.ModelManager, sourceID, sourceName string, skipped []string, resolved []classifier.ModelInfo, allocated map[string]bool) {
-	notRegistered := unregisteredModelNames(mm, skipped, resolved, allocated)
+func reportUnregisteredModels(mm *classifier.ModelManager, report *modelRegistrationReport) {
+	notRegistered := unregisteredModelNames(mm, report.skipped, report.resolved, report.allocated)
 	if len(notRegistered) > 0 {
-		notifyModelsNotRegistered(sourceID, sourceName, notRegistered)
+		notifyModelsNotRegistered(report.sourceID, report.sourceName, notRegistered)
 		return
 	}
 	// Every assigned model registered: clear any prior suppression window for this source
 	// so a later failure re-notifies immediately rather than being silenced for the rest
 	// of the 6h window (symmetric with the routeFailedLastPass recovery clear).
-	clearModelNotRegistered(sourceID)
+	clearModelNotRegistered(report.sourceID)
 }
 
 // unregisteredModelNames returns the display names of models that will not
