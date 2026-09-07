@@ -27,9 +27,10 @@ type BirdNETV3 struct {
 	// CPU EP. Set once at construction; reported via RuntimeInfo().
 	device string
 	// backend is the live execution backend (BackendOpenVINO on the OV path, else
-	// BackendONNX), and precision is the effective runtime precision (FP16 on the OV
-	// path; the weight precision detected from the model filename on the ORT path).
-	// Both set once at construction; reported via RuntimeInfo().
+	// BackendONNX), and precision is the effective runtime precision (FP32 on the OV
+	// path, forced by openVINOPrecisionFor to avoid the f16 numeric instability in
+	// BIRDNET-GO-2H6; the weight precision detected from the model filename on the ORT
+	// path). Both set once at construction; reported via RuntimeInfo().
 	backend   string
 	precision string
 	// modelPath is the model file this instance actually loaded from (the resolved
@@ -102,12 +103,12 @@ func NewBirdNETV3(cfg *BirdNETV3Config) (*BirdNETV3, error) {
 	// tryBirdNETV3OpenVINO logs and swallows OV errors and returns ok=false. device
 	// records the compute device actually bound to (the OpenVINO device on the OV
 	// path, else the ONNX Runtime CPU EP).
-	classifier, device, ok := tryBirdNETV3OpenVINO(cfg, labels)
-	// The v3.0 OpenVINO path uses the backend default precision (f16 on every
-	// device; openVINOPrecisionFor returns "" for v3.0). The ORT path overrides both
-	// below.
+	classifier, device, precision, ok := tryBirdNETV3OpenVINO(cfg, labels)
+	// The OpenVINO path reports the precision it actually compiled at: FP32 for v3.0,
+	// which openVINOPrecisionFor forces on every device to avoid the f16 numeric
+	// instability (see BIRDNET-GO-2H6). The ORT fallback overrides backend, device,
+	// and precision below.
 	backend := BackendOpenVINO
-	precision := string(QuantizationFP16)
 	if !ok {
 		// Create the ONNX Runtime classifier (the runtime was initialized above).
 		var cerr error
@@ -152,13 +153,14 @@ func NewBirdNETV3(cfg *BirdNETV3Config) (*BirdNETV3, error) {
 }
 
 // tryBirdNETV3OpenVINO attempts to build an OpenVINO classifier for BirdNET v3.0.
-// It returns (classifier, device, true) on success or (nil, "", false) to fall
-// back to ORT, where device is the concrete OpenVINO device the classifier bound
-// to (inference.OVDeviceCPU/OVDeviceGPU). Any failure (gate denied,
-// init/compile/validation error) is logged and swallowed: OpenVINO must never make
-// BirdNET v3.0 fail to load. Unlike Perch there is no model-variant filename gate:
-// the v3.0 GPU-native model has no STFT op, so it compiles on OpenVINO directly.
-func tryBirdNETV3OpenVINO(cfg *BirdNETV3Config, labels []string) (inference.Classifier, string, bool) {
+// It returns (classifier, device, precision, true) on success or
+// (nil, "", "", false) to fall back to ORT, where device is the concrete OpenVINO
+// device the classifier bound to (inference.OVDeviceCPU/OVDeviceGPU) and precision is
+// the effective runtime precision label (FP16/FP32) for the compiled hint. Any failure
+// (gate denied, init/compile/validation error) is logged and swallowed: OpenVINO must
+// never make BirdNET v3.0 fail to load. Unlike Perch there is no model-variant filename
+// gate: the v3.0 GPU-native model has no STFT op, so it compiles on OpenVINO directly.
+func tryBirdNETV3OpenVINO(cfg *BirdNETV3Config, labels []string) (classifier inference.Classifier, device, precision string, ok bool) {
 	// openVINOPlanFor gates on the build tag, backend preference, and device
 	// availability without needing the output port, so run it first; only read the
 	// model metadata to resolve the predictions port once OpenVINO is actually in
@@ -167,7 +169,7 @@ func tryBirdNETV3OpenVINO(cfg *BirdNETV3Config, labels []string) (inference.Clas
 	plan, ok, reason := openVINOPlanFor(cfg.Backend, cfg.OpenVINODevice, RegistryIDBirdNETV3, cfg.OpenVINOPath, 0)
 	if !ok {
 		logOpenVINODeclined(RegistryIDBirdNETV3, cfg.Backend, reason)
-		return nil, "", false
+		return nil, "", "", false
 	}
 
 	log := GetLogger()
@@ -182,7 +184,7 @@ func tryBirdNETV3OpenVINO(cfg *BirdNETV3Config, labels []string) (inference.Clas
 		log.Warn("BirdNET v3.0 OpenVINO predictions-output detection failed; using ONNX Runtime",
 			logger.String("model_path", cfg.ModelPath),
 			logger.Error(err))
-		return nil, "", false
+		return nil, "", "", false
 	}
 	plan.outputIndex = outIdx
 
@@ -191,22 +193,22 @@ func tryBirdNETV3OpenVINO(cfg *BirdNETV3Config, labels []string) (inference.Clas
 	// here to cover it. A load failure means no usable OpenVINO; fall back to ORT.
 	if err := inference.InitOpenVINO(cfg.OpenVINOPath); err != nil {
 		log.Warn("BirdNET v3.0 OpenVINO init failed; using ONNX Runtime", logger.Error(err))
-		return nil, "", false
+		return nil, "", "", false
 	}
 
 	start := time.Now()
-	classifier, err := inference.NewOpenVINOClassifier(cfg.ModelPath, inference.OpenVINOClassifierOptions{
+	classifier, err = inference.NewOpenVINOClassifier(cfg.ModelPath, inference.OpenVINOClassifierOptions{
 		Labels:        labels,
 		Threads:       cfg.Threads,
 		Device:        plan.device,
 		OutputIndex:   plan.outputIndex,
-		PrecisionHint: plan.precision, // "" => f16 default; v3.0 f16 validated OK
+		PrecisionHint: plan.precision, // openVINOPrecisionFor forces f32 for v3.0 (f16 is numerically broken; see BIRDNET-GO-2H6)
 	})
 	if err != nil {
 		log.Warn("BirdNET v3.0 OpenVINO classifier init failed; using ONNX Runtime",
 			logger.String("device", plan.device),
 			logger.Error(err))
-		return nil, "", false
+		return nil, "", "", false
 	}
 
 	log.Info("BirdNET v3.0 model using OpenVINO backend",
@@ -214,7 +216,7 @@ func tryBirdNETV3OpenVINO(cfg *BirdNETV3Config, labels []string) (inference.Clas
 		logger.String("precision", openVINOPrecisionLabel(plan.precision)),
 		logger.Int("species", classifier.NumSpecies()),
 		logger.String("init_time", time.Since(start).String()))
-	return classifier, plan.device, true
+	return classifier, plan.device, openVINOEffectivePrecision(plan.precision), true
 }
 
 // Predict runs inference on the given audio samples.
@@ -306,9 +308,10 @@ func (b *BirdNETV3) Labels() []string {
 
 // RuntimeInfo returns the device, backend, and effective precision the BirdNET
 // v3.0 classifier bound to at construction: the OpenVINO device on the OV path
-// (else "CPU"); BackendOpenVINO on the OV path (else BackendONNX); FP16 on the OV
-// path or the weight precision detected from the model filename on the ORT path.
-// All three are set once and never mutated, so no lock is needed. Implements
+// (else "CPU"); BackendOpenVINO on the OV path (else BackendONNX); FP32 on the OV
+// path (forced by openVINOPrecisionFor to avoid the f16 numeric instability in
+// BIRDNET-GO-2H6) or the weight precision detected from the model filename on the ORT
+// path. All three are set once and never mutated, so no lock is needed. Implements
 // ModelInstance.
 func (b *BirdNETV3) RuntimeInfo() (device, backend, precision string) {
 	return b.device, b.backend, b.precision

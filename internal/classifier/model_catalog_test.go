@@ -243,6 +243,25 @@ func TestEmbeddedCatalog_HasFilesWithModelRole(t *testing.T) {
 	}
 }
 
+// TestEmbeddedCatalog_AllEntriesDeclareFiles guards against the class of bug in
+// BIRDNET-GO-2G2, where a released build shipped a birdnet-v3.0 catalog entry that
+// declared neither top-level Files nor Variants, so validateCatalogEntryFiles
+// rejected it and the whole catalog load failed on a user's machine. Every embedded
+// entry must pass the same validation the loader (catalog_loader.go) applies, so a
+// future entry that declares no files/variants, both, or a malformed variant fails
+// here at build time rather than in the field.
+func TestEmbeddedCatalog_AllEntriesDeclareFiles(t *testing.T) {
+	t.Parallel()
+	for i := range EmbeddedCatalog {
+		entry := EmbeddedCatalog[i]
+		t.Run(entry.ID, func(t *testing.T) {
+			t.Parallel()
+			require.NoError(t, validateCatalogEntryFiles(&entry),
+				"embedded catalog entry %q must pass validateCatalogEntryFiles (see BIRDNET-GO-2G2)", entry.ID)
+		})
+	}
+}
+
 func TestEmbeddedCatalog_ValidCategories(t *testing.T) {
 	t.Parallel()
 

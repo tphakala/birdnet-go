@@ -65,6 +65,23 @@ func TestOpenVINOPrecisionFor(t *testing.T) {
 			device:  inference.OVDeviceCPU,
 			want:    inference.OVPrecisionF32,
 		},
+		// BirdNET v3.0 (EfficientNetV2-S) is numerically unstable at f16 wherever
+		// genuine f16 kernels run (the Intel GPU, and the A76 CPU's native f16):
+		// fp16-weight regional tiles overflow to NaN and fp32-weight tiles silently
+		// inflate the scores. Like bat, it must be f32 on BOTH devices, not GPU-only.
+		// See BIRDNET-GO-2H6.
+		{
+			name:    "birdnet v3.0 on GPU is forced to f32",
+			modelID: RegistryIDBirdNETV3,
+			device:  inference.OVDeviceGPU,
+			want:    inference.OVPrecisionF32,
+		},
+		{
+			name:    "birdnet v3.0 on CPU is forced to f32 (A76 native f16 corrupts scores)",
+			modelID: RegistryIDBirdNETV3,
+			device:  inference.OVDeviceCPU,
+			want:    inference.OVPrecisionF32,
+		},
 	}
 
 	for _, tt := range tests {
@@ -78,13 +95,13 @@ func TestOpenVINOPrecisionFor(t *testing.T) {
 // TestOpenVINOEffectivePrecision verifies the mapping from an OpenVINO
 // INFERENCE_PRECISION_HINT to the display precision shown on the inference status
 // card. The empty default hint (f16) maps to FP16, and the explicit override
-// (OVPrecisionF32: BirdNET v2.4 and Perch v2 on the GPU, bat everywhere) maps to
-// FP32. Tag-agnostic
+// (OVPrecisionF32: BirdNET v2.4 and Perch v2 on the GPU, bat and BirdNET v3.0 on
+// every device) maps to FP32. Tag-agnostic
 // like openVINOEffectivePrecision itself, so it runs in the default suite.
 func TestOpenVINOEffectivePrecision(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, string(QuantizationFP16), openVINOEffectivePrecision(""),
 		"empty hint is the backend f16 default, shown as FP16")
 	assert.Equal(t, string(QuantizationFP32), openVINOEffectivePrecision(inference.OVPrecisionF32),
-		"the f32 hint (BirdNET v2.4 and Perch v2 on the GPU) is shown as FP32")
+		"the f32 hint (BirdNET v2.4 and Perch v2 on the GPU, bat and BirdNET v3.0 on every device) is shown as FP32")
 }
