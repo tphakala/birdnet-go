@@ -16,4 +16,4 @@ Out of scope: vulnerabilities in third-party dependencies that are not exploitab
 
 ## Supported versions
 
-Only the latest release receives security fixes. Releases are date tagged (YYYYMMDD); upgrade to the newest one. The `nightly` and `latest` container images track the default branch and receive fixes as they merge.
+Only the latest release receives security fixes. Stable releases are date-tagged (YYYYMMDD); upgrade to the newest one. The `nightly` and `latest` container images track the default branch and receive fixes as they merge.
