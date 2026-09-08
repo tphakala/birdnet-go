@@ -702,7 +702,12 @@ func TestComputeRarity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			gotScore, gotStatus := computeRarity(true, tt.targetSci, scores, geomodelLabels, classifierLabels)
+			gotScore, gotStatus := computeRarity(&classifier.RarityContext{
+				FilterActive:     true,
+				Scores:           scores,
+				GeomodelLabels:   geomodelLabels,
+				ClassifierLabels: classifierLabels,
+			}, tt.targetSci)
 			assert.InDelta(t, tt.wantScore, gotScore, 0.001)
 			assert.Equal(t, tt.wantStatus, gotStatus)
 		})
@@ -711,7 +716,7 @@ func TestComputeRarity(t *testing.T) {
 
 func TestComputeRarity_Empty(t *testing.T) {
 	t.Parallel()
-	gotScore, gotStatus := computeRarity(true, "Turdus migratorius", nil, nil, nil)
+	gotScore, gotStatus := computeRarity(&classifier.RarityContext{FilterActive: true}, "Turdus migratorius")
 	assert.InDelta(t, 0.0, gotScore, 0.001)
 	assert.Equal(t, RarityUnknown, gotStatus)
 }
@@ -730,7 +735,12 @@ func TestComputeRarity_InactiveFilterReportsUnknown(t *testing.T) {
 	// means the 0.0 score is synthetic and must report unknown, not very rare.
 	scores := []classifier.SpeciesScore{{Label: testSciName + "_" + testCommonName, Score: 0.0}}
 
-	score, status := computeRarity(false, testSciName, scores, labels, labels)
+	score, status := computeRarity(&classifier.RarityContext{
+		FilterActive:     false,
+		Scores:           scores,
+		GeomodelLabels:   labels,
+		ClassifierLabels: labels,
+	}, testSciName)
 	assert.InDelta(t, 0.0, score, 0.001)
 	assert.Equal(t, RarityUnknown, status, "an inactive range filter yields unknown rarity, not very rare (#3935)")
 }
@@ -748,11 +758,19 @@ func TestComputeRarity_GeomodelLabelsTakePrecedence(t *testing.T) {
 		testSciName + "_" + testCommonName,
 	}
 
-	_, status := computeRarity(true, testSciName, nil, geomodelLabels, classifierLabels)
+	_, status := computeRarity(&classifier.RarityContext{
+		FilterActive:     true,
+		GeomodelLabels:   geomodelLabels,
+		ClassifierLabels: classifierLabels,
+	}, testSciName)
 	assert.Equal(t, RarityUnknown, status,
 		"classifier-only species has no geomodel occurrence probability")
 
-	_, status = computeRarity(true, testCanonName, nil, geomodelLabels, classifierLabels)
+	_, status = computeRarity(&classifier.RarityContext{
+		FilterActive:     true,
+		GeomodelLabels:   geomodelLabels,
+		ClassifierLabels: classifierLabels,
+	}, testCanonName)
 	assert.Equal(t, RarityVeryRare, status,
 		"geomodel-covered species below threshold is very rare")
 }
@@ -795,7 +813,10 @@ func TestComputeRarity_NoGeomodelLabels(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			gotScore, gotStatus := computeRarity(true, tt.targetSci, nil, nil, classifierLabels)
+			gotScore, gotStatus := computeRarity(&classifier.RarityContext{
+				FilterActive:     true,
+				ClassifierLabels: classifierLabels,
+			}, tt.targetSci)
 			assert.InDelta(t, 0.0, gotScore, 0.001)
 			assert.Equal(t, tt.wantStatus, gotStatus)
 		})
@@ -853,11 +874,21 @@ func TestComputeRarity_CollidingSpecies(t *testing.T) {
 		{Label: collidingSciB + "_" + collidingCommonB, Score: 0.1},
 	}
 
-	gotScore, gotStatus := computeRarity(true, collidingSciB, scores, labels, labels)
+	gotScore, gotStatus := computeRarity(&classifier.RarityContext{
+		FilterActive:     true,
+		Scores:           scores,
+		GeomodelLabels:   labels,
+		ClassifierLabels: labels,
+	}, collidingSciB)
 	assert.InDelta(t, 0.1, gotScore, 0.001, "the merged species must keep its own score")
 	assert.Equal(t, RarityRare, gotStatus)
 
-	gotScore, gotStatus = computeRarity(true, collidingSciA, scores, labels, labels)
+	gotScore, gotStatus = computeRarity(&classifier.RarityContext{
+		FilterActive:     true,
+		Scores:           scores,
+		GeomodelLabels:   labels,
+		ClassifierLabels: labels,
+	}, collidingSciA)
 	assert.InDelta(t, 0.9, gotScore, 0.001)
 	assert.Equal(t, RarityVeryCommon, gotStatus)
 }
@@ -896,7 +927,12 @@ func TestComputeRarity_SyntheticScoresReportUnknown(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			scores := []classifier.SpeciesScore{{Label: unmappedSci + "_Brandt's Bat", Score: tt.score}}
-			gotScore, gotStatus := computeRarity(true, unmappedSci, scores, geomodelLabels, classifierLabels)
+			gotScore, gotStatus := computeRarity(&classifier.RarityContext{
+				FilterActive:     true,
+				Scores:           scores,
+				GeomodelLabels:   geomodelLabels,
+				ClassifierLabels: classifierLabels,
+			}, unmappedSci)
 			assert.Equal(t, RarityUnknown, gotStatus, tt.why)
 			assert.InDelta(t, 0.0, gotScore, 0.001)
 		})

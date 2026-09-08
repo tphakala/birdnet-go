@@ -37,7 +37,11 @@ func TestRouteReportDecision(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := routeReportDecision(tt.bufferRouteOK, tt.failedLastPass, tt.suppressTransient, allocated)
+			got := routeReportDecision(routeReportInputs{
+				bufferRouteOK:     tt.bufferRouteOK,
+				failedLastPass:    tt.failedLastPass,
+				suppressTransient: tt.suppressTransient,
+			}, allocated)
 			if tt.wantSuppressed {
 				assert.NotNil(t, got, "resolved models should be treated as registered (not reported)")
 				assert.Equal(t, allocated, got)
@@ -62,6 +66,7 @@ func TestIsReconfigureOperation(t *testing.T) {
 		{"reconfigure_params suppresses first failure", operationReconfigureParams, true},
 		{"gain_change suppresses first failure", operationGainChange, true},
 		{"model_change suppresses first failure", operationModelChange, true},
+		{"route_retry keeps reconfigure semantics", operationRouteRetry, true},
 		{"start reports immediately", operationStart, false},
 		{"restart reports immediately", operationRestart, false},
 		{"restart_source reports immediately", operationRestartSource, false},
@@ -114,4 +119,76 @@ func TestReportSourceRegistration_RouteFailureMemory(t *testing.T) {
 	p.reportSourceRegistration(nil, sid, sid, operationStart, false, nil, nil, alloc)
 	_, present = p.routeFailedLastPass[sid]
 	assert.False(t, present, "a start pass clears any stale reconfigure-failure entry")
+
+	// A route-retry pass that finally wires the route (bufferRouteOK) clears the memory:
+	// the persistent failure self-healed and must stop retrying/reporting.
+	p.routeFailedLastPass[sid] = true
+	p.reportSourceRegistration(nil, sid, sid, operationRouteRetry, true, nil, nil, alloc)
+	_, present = p.routeFailedLastPass[sid]
+	assert.False(t, present, "a route-retry pass that recovers the route clears the failure memory")
+
+	// A route-retry pass whose route is still down keeps the entry, so the next reconfigure
+	// retries again; because operationRouteRetry is a reconfigure op with failedLastPass set,
+	// routeReportDecision surfaces it as not-analyzing rather than suppressing it (see
+	// TestRouteReportDecision's "reconfigure failure surviving a pass reported" case).
+	p.routeFailedLastPass[sid] = true
+	p.reportSourceRegistration(nil, sid, sid, operationRouteRetry, false, nil, nil, alloc)
+	assert.True(t, p.routeFailedLastPass[sid], "a route-retry pass that is still down stays marked for the next retry")
+}
+
+func TestSourcesNeedingRouteRetry(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name          string
+		kept          []string
+		failed        map[string]bool
+		reRegistering map[string]bool
+		want          []string
+	}{
+		{
+			name:   "failed kept source not re-registered is retried",
+			kept:   []string{"mic-1"},
+			failed: map[string]bool{"mic-1": true},
+			want:   []string{"mic-1"},
+		},
+		{
+			name:   "healthy kept source is not retried",
+			kept:   []string{"mic-1"},
+			failed: nil,
+			want:   nil,
+		},
+		{
+			name:          "failed source already re-registered this pass is skipped",
+			kept:          []string{"mic-1"},
+			failed:        map[string]bool{"mic-1": true},
+			reRegistering: map[string]bool{"mic-1": true},
+			want:          nil,
+		},
+		{
+			name:          "only failed, kept, and not-re-registered survive, sorted",
+			kept:          []string{"mic-3", "mic-1", "mic-2", "mic-4"},
+			failed:        map[string]bool{"mic-1": true, "mic-3": true, "mic-4": true},
+			reRegistering: map[string]bool{"mic-4": true},
+			want:          []string{"mic-1", "mic-3"},
+		},
+		{
+			name:   "a failed source not among the kept sources is ignored",
+			kept:   []string{"mic-1"},
+			failed: map[string]bool{"mic-1": false, "mic-9": true},
+			want:   nil,
+		},
+		{
+			name:   "no kept sources yields no retries",
+			kept:   nil,
+			failed: map[string]bool{"mic-1": true},
+			want:   nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := sourcesNeedingRouteRetry(tt.kept, tt.failed, tt.reRegistering)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
