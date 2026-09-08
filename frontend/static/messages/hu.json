@@ -2368,7 +2368,19 @@
           "description": "A detektálást a földrajzi régióban valószínű fajokra korlátozza",
           "stationLocation": {
             "label": "Állomás helyszín",
-            "helpText": "Állomás helyszín, az időjárási adatokhoz és a madárfajoknak a régióban való valószínűségére való korlátozáshoz használva."
+            "helpText": "Állomás helyszín, az időjárási adatokhoz és a madárfajoknak a régióban való valószínűségére való korlátozáshoz használva.",
+            "automaticLocation": "Automatikus helymeghatározás",
+            "useCurrentLocation": "A böngésző helyének használata",
+            "locationHelp": "Kitölti a koordinátákat a böngésző helye alapján.",
+            "locating": "Helymeghatározás...",
+            "accuracy": "Becsült pontosság: {accuracy} m-en belül",
+            "locationDetected": "A böngésző helye meghatározva.",
+            "geolocationUnsupported": "Ez a böngésző nem támogatja az eszköz helymeghatározását. Adja meg kézzel a koordinátákat, vagy használja a térképet.",
+            "geolocationRequiresHttps": "A böngésző helymeghatározásához HTTPS vagy localhost szükséges. Adja meg kézzel a koordinátákat, vagy használja a térképet.",
+            "geolocationDenied": "A helyhozzáférési engedély meg lett tagadva. Adja meg kézzel a koordinátákat, vagy használja a térképet.",
+            "geolocationUnavailable": "Az eszköz nem tudta meghatározni a helyét. Adja meg kézzel a koordinátákat, vagy használja a térképet.",
+            "geolocationTimedOut": "A helymeghatározási kérés túllépte az időkorlátot. Próbálja újra, adja meg kézzel a koordinátákat, vagy használja a térképet.",
+            "geolocationFailed": "Nem sikerült meghatározni az eszköz helyét. Adja meg kézzel a koordinátákat, vagy használja a térképet."
           },
           "latitude": {
             "label": "Szélesség",

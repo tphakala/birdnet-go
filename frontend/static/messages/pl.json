@@ -2368,7 +2368,19 @@
           "description": "Ogranicz detekcję do gatunków prawdopodobnych w Twoim regionie geograficznym",
           "stationLocation": {
             "label": "Lokalizacja Stacji",
-            "helpText": "Lokalizacja stacji, używana do danych pogodowych i ograniczenia gatunków ptaków do tych prawdopodobnych w regionie."
+            "helpText": "Lokalizacja stacji, używana do danych pogodowych i ograniczenia gatunków ptaków do tych prawdopodobnych w regionie.",
+            "automaticLocation": "Automatyczna lokalizacja",
+            "useCurrentLocation": "Użyj lokalizacji przeglądarki",
+            "locationHelp": "Wypełnia współrzędne przy użyciu lokalizacji tej przeglądarki.",
+            "locating": "Ustalanie lokalizacji...",
+            "accuracy": "Szacowana dokładność: w promieniu {accuracy} m",
+            "locationDetected": "Ustalono lokalizację przeglądarki.",
+            "geolocationUnsupported": "Ta przeglądarka nie obsługuje lokalizacji urządzenia. Wprowadź współrzędne ręcznie lub użyj mapy.",
+            "geolocationRequiresHttps": "Lokalizacja przeglądarki wymaga HTTPS lub localhost. Wprowadź współrzędne ręcznie lub użyj mapy.",
+            "geolocationDenied": "Odmówiono dostępu do lokalizacji. Wprowadź współrzędne ręcznie lub użyj mapy.",
+            "geolocationUnavailable": "Urządzenie nie mogło określić swojej lokalizacji. Wprowadź współrzędne ręcznie lub użyj mapy.",
+            "geolocationTimedOut": "Upłynął limit czasu żądania lokalizacji. Spróbuj ponownie, wprowadź współrzędne ręcznie lub użyj mapy.",
+            "geolocationFailed": "Nie udało się określić lokalizacji urządzenia. Wprowadź współrzędne ręcznie lub użyj mapy."
           },
           "latitude": {
             "label": "Szerokość Geograficzna",

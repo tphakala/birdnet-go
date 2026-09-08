@@ -2368,7 +2368,19 @@
           "description": "Begrens deteksjon til arter som er sannsynlige i ditt geografiske område",
           "stationLocation": {
             "label": "Stasjonsposisjon",
-            "helpText": "Stasjonsposisjon, brukes for værdata og for å begrense fuglearter til de som er sannsynlige i regionen."
+            "helpText": "Stasjonsposisjon, brukes for værdata og for å begrense fuglearter til de som er sannsynlige i regionen.",
+            "automaticLocation": "Automatisk posisjon",
+            "useCurrentLocation": "Bruk nettleserposisjon",
+            "locationHelp": "Fyller ut koordinatene ved hjelp av posisjonen til denne nettleseren.",
+            "locating": "Finner posisjon...",
+            "accuracy": "Anslått nøyaktighet: innenfor {accuracy} m",
+            "locationDetected": "Nettleserens posisjon ble funnet.",
+            "geolocationUnsupported": "Denne nettleseren støtter ikke enhetsposisjon. Skriv inn koordinater manuelt eller bruk kartet.",
+            "geolocationRequiresHttps": "Nettleserposisjon krever HTTPS eller localhost. Skriv inn koordinater manuelt eller bruk kartet.",
+            "geolocationDenied": "Posisjonstillatelse ble avvist. Skriv inn koordinater manuelt eller bruk kartet.",
+            "geolocationUnavailable": "Enheten kunne ikke bestemme posisjonen sin. Skriv inn koordinater manuelt eller bruk kartet.",
+            "geolocationTimedOut": "Posisjonsforespørselen fikk tidsavbrudd. Prøv igjen, skriv inn koordinater manuelt eller bruk kartet.",
+            "geolocationFailed": "Kunne ikke bestemme enhetens posisjon. Skriv inn koordinater manuelt eller bruk kartet."
           },
           "latitude": {
             "label": "Breddegrad",

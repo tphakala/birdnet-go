@@ -2368,7 +2368,19 @@
           "description": "Limit detection to species probable in your geographic region",
           "stationLocation": {
             "label": "Station Location",
-            "helpText": "Station location, used for weather data and to limit bird species to those probable in the region."
+            "helpText": "Station location, used for weather data and to limit bird species to those probable in the region.",
+            "automaticLocation": "Automatic location",
+            "useCurrentLocation": "Use browser location",
+            "locationHelp": "Fills the coordinates using this browser's location.",
+            "locating": "Locating...",
+            "accuracy": "Estimated accuracy: within {accuracy} m",
+            "locationDetected": "Browser location detected.",
+            "geolocationUnsupported": "This browser does not support device location. Enter coordinates manually or use the map.",
+            "geolocationRequiresHttps": "Browser location requires HTTPS or localhost. Enter coordinates manually or use the map.",
+            "geolocationDenied": "Location permission was denied. Enter coordinates manually or use the map.",
+            "geolocationUnavailable": "Your device could not determine its location. Enter coordinates manually or use the map.",
+            "geolocationTimedOut": "The location request timed out. Try again, enter coordinates manually, or use the map.",
+            "geolocationFailed": "Could not determine your device location. Enter coordinates manually or use the map."
           },
           "latitude": {
             "label": "Latitude",

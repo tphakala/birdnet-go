@@ -34,6 +34,7 @@
   import type { Stage } from '$lib/desktop/components/ui/MultiStageOperation.types';
   import TestSuccessNote from '$lib/desktop/components/ui/TestSuccessNote.svelte';
   import SettingsButton from '$lib/desktop/features/settings/components/SettingsButton.svelte';
+  import CurrentLocationButton from '$lib/desktop/features/settings/components/CurrentLocationButton.svelte';
   import {
     settingsStore,
     settingsActions,
@@ -151,10 +152,12 @@
       {
         latitude: store.originalData.birdnet?.latitude,
         longitude: store.originalData.birdnet?.longitude,
+        locationConfigured: store.originalData.birdnet?.locationConfigured,
       },
       {
         latitude: store.formData.birdnet?.latitude,
         longitude: store.formData.birdnet?.longitude,
+        locationConfigured: store.formData.birdnet?.locationConfigured,
       }
     ) || hasSettingsChanged(store.originalData.realtime?.weather, store.formData.realtime?.weather)
   );
@@ -537,6 +540,15 @@
       longitude: lng,
       locationConfigured: true,
     });
+  }
+
+  // NumberField commits on change/blur. Track raw input separately so a
+  // pending browser-location result cannot overwrite text the user is still
+  // entering before that commit occurs.
+  let coordinateInputVersion = $state(0);
+
+  function handleCoordinateInput() {
+    coordinateInputVersion += 1;
   }
 
   function updateMarker(lat: number, lng: number) {
@@ -1039,14 +1051,19 @@
       originalData={{
         latitude: store.originalData.birdnet?.latitude,
         longitude: store.originalData.birdnet?.longitude,
+        locationConfigured: store.originalData.birdnet?.locationConfigured,
       }}
       currentData={{
         latitude: settings.birdnet.latitude,
         longitude: settings.birdnet.longitude,
+        locationConfigured: settings.birdnet.locationConfigured,
       }}
     >
       <!-- Coordinates -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+      <div
+        class="mb-4 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3"
+        oninput={handleCoordinateInput}
+      >
         <NumberField
           label={t('settings.main.sections.rangeFilter.latitude.label')}
           value={settings.birdnet.latitude}
@@ -1068,6 +1085,16 @@
           helpText={t('settings.main.sections.rangeFilter.longitude.helpText')}
           disabled={store.isLoading || store.isSaving}
         />
+
+        <div class="md:col-span-2 xl:col-span-1 xl:border-l xl:border-[var(--border-100)] xl:pl-6">
+          <CurrentLocationButton
+            latitude={settings.birdnet.latitude}
+            longitude={settings.birdnet.longitude}
+            {coordinateInputVersion}
+            onLocation={updateLocationSettings}
+            disabled={store.isLoading || store.isSaving}
+          />
+        </div>
       </div>
 
       <!-- Map -->

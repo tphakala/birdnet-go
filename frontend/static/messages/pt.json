@@ -2368,7 +2368,19 @@
           "description": "Limita a detecção a espécies prováveis em sua região geográfica",
           "stationLocation": {
             "label": "Localização da estação",
-            "helpText": "Localização da estação, usada para dados meteorológicos e para limitar as espécies de pássaros àquelas prováveis na região."
+            "helpText": "Localização da estação, usada para dados meteorológicos e para limitar as espécies de pássaros àquelas prováveis na região.",
+            "automaticLocation": "Localização automática",
+            "useCurrentLocation": "Usar localização do navegador",
+            "locationHelp": "Preenche as coordenadas usando a localização deste navegador.",
+            "locating": "A determinar a localização...",
+            "accuracy": "Precisão estimada: num raio de {accuracy} m",
+            "locationDetected": "Localização do navegador detetada.",
+            "geolocationUnsupported": "Este navegador não suporta a localização do dispositivo. Introduza as coordenadas manualmente ou use o mapa.",
+            "geolocationRequiresHttps": "A localização do navegador requer HTTPS ou localhost. Introduza as coordenadas manualmente ou use o mapa.",
+            "geolocationDenied": "A permissão de localização foi negada. Introduza as coordenadas manualmente ou use o mapa.",
+            "geolocationUnavailable": "O dispositivo não conseguiu determinar a localização. Introduza as coordenadas manualmente ou use o mapa.",
+            "geolocationTimedOut": "O pedido de localização excedeu o tempo limite. Tente novamente, introduza as coordenadas manualmente ou use o mapa.",
+            "geolocationFailed": "Não foi possível determinar a localização do dispositivo. Introduza as coordenadas manualmente ou use o mapa."
           },
           "latitude": {
             "label": "Latitude",
