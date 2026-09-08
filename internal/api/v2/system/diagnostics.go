@@ -19,6 +19,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/inferencestats"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/health/checks"
@@ -45,6 +46,17 @@ type diagnosticsStatusResponse struct {
 // leaving the check stuck at "Unknown" forever (#3939).
 type integrityResulter interface {
 	IntegrityResult() (string, bool)
+}
+
+// integrityCacheInvalidator is implemented by a datastore whose integrity result
+// is cached with a TTL and can be cleared on demand. An explicit diagnostics
+// refresh clears it so the run reflects current database integrity rather than a
+// result cached up to 24h earlier (#3939 follow-up). Datastores without a
+// TTL-expiring integrity cache (the legacy SQLiteStore refreshes on a schedule and
+// latches corruption via an atomic) do not implement it, and the type assertion
+// simply no-ops.
+type integrityCacheInvalidator interface {
+	InvalidateIntegrityCache()
 }
 
 // RegisterDiagnosticsRoutes initializes health check infrastructure and registers
@@ -687,6 +699,15 @@ func (c *Handler) RunDiagnostics(ctx echo.Context) error {
 		return c.HandleError(ctx, err, err.Error(), http.StatusBadRequest)
 	}
 
+	// An explicit refresh forces a fresh database integrity check. The integrity
+	// result is cached for up to 24h so the passive status page never re-runs the
+	// expensive PRAGMA quick_check on the single pinned SQLite connection; opt in
+	// here (refresh_integrity=true) so troubleshooting an unrelated subsystem does
+	// not trigger a multi-minute write stall, while a deliberate integrity refresh
+	// still reflects the current on-disk state (#3939 follow-up).
+	refresh, _ := strconv.ParseBool(ctx.QueryParam("refresh_integrity"))
+	refreshIntegrityCache(c.DS, refresh)
+
 	id := uuid.New().String()
 	startedAt := time.Now()
 
@@ -695,6 +716,20 @@ func (c *Handler) RunDiagnostics(ctx echo.Context) error {
 	c.healthReports.Save(report)
 
 	return ctx.JSON(http.StatusOK, report)
+}
+
+// refreshIntegrityCache clears a cached datastore integrity result when the
+// caller asked for a refresh and the datastore supports invalidation. Split from
+// RunDiagnostics so the opt-in wiring is unit-testable without standing up the
+// full health registry. A datastore that does not cache an integrity result (or a
+// nil one) is a no-op. See integrityCacheInvalidator for why the refresh is opt-in.
+func refreshIntegrityCache(ds datastore.Interface, refresh bool) {
+	if !refresh {
+		return
+	}
+	if inv, ok := ds.(integrityCacheInvalidator); ok {
+		inv.InvalidateIntegrityCache()
+	}
 }
 
 // GetDiagnosticsReport retrieves a stored diagnostics report by ID.

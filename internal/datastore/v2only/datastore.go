@@ -598,11 +598,29 @@ func (ds *Datastore) IntegrityResult() (string, bool) {
 	return result, result != integrityResultOK
 }
 
+// InvalidateIntegrityCache clears the cached PRAGMA quick_check result so the
+// next IntegrityResult call recomputes it. The only wired caller is the explicit
+// "run diagnostics" refresh (RunDiagnostics with refresh_integrity=true); a
+// restore-from-backup or a reconnect would be natural future triggers. Without it
+// a repaired database keeps reporting the cached corruption string, and corruption
+// that appears after a passing check stays hidden, for up to v2IntegrityCacheTTL
+// (#3939 follow-up). integrityMu is the same lock IntegrityResult recomputes
+// under, so clearing here is safe against a concurrent refresh.
+func (ds *Datastore) InvalidateIntegrityCache() {
+	ds.integrityMu.Lock()
+	defer ds.integrityMu.Unlock()
+	ds.integrityResult = ""
+	ds.integrityCheckedAt = time.Time{}
+}
+
 // runIntegrityQuickCheck executes PRAGMA quick_check on SQLite and returns the
 // result ("ok" or a "; "-joined corruption description) with ran=true. Non-SQLite
 // dialects have no quick_check equivalent, so it returns ("ok", true) to report
-// healthy. ran is false only when the check could not run at all (no DB handle or
-// a query error), which the caller maps to the "not run yet" state.
+// healthy. A query that errors with a corruption-class error (malformed image,
+// "file is not a database") is itself a corruption verdict, returned with
+// ran=true so the caller escalates it. ran is false only when the check could not
+// run at all (no DB handle, or a transient query error such as a timeout,
+// cancellation, or a locked db), which the caller maps to the "not run yet" state.
 func (ds *Datastore) runIntegrityQuickCheck() (result string, ran bool) {
 	db := ds.manager.DB()
 	if db == nil {
@@ -623,6 +641,15 @@ func (ds *Datastore) runIntegrityQuickCheck() (result string, ran bool) {
 	defer cancel()
 	var rows []string
 	if err := db.WithContext(ctx).Raw("PRAGMA quick_check").Scan(&rows).Error; err != nil {
+		// A corruption-class error is itself the verdict (surfaced, cached, and
+		// escalated to Critical); a transient error is "not run yet" and retried.
+		// classifyIntegrityQueryError documents the split.
+		if r, corrupt := classifyIntegrityQueryError(err); corrupt {
+			if ds.log != nil {
+				ds.log.Error("database integrity quick_check reports corruption", logger.Error(err))
+			}
+			return r, true
+		}
 		if ds.log != nil {
 			ds.log.Warn("database integrity quick_check failed to run", logger.Error(err))
 		}
@@ -633,6 +660,23 @@ func (ds *Datastore) runIntegrityQuickCheck() (result string, ran bool) {
 		return integrityResultOK, true
 	}
 	return joined, true
+}
+
+// classifyIntegrityQueryError maps a PRAGMA quick_check execution error to an
+// integrity verdict. A corruption-class error (malformed image, "file is not a
+// database") IS the verdict: it is returned as a non-"ok" result with corrupt=true
+// so the health check escalates to Critical, mirroring the legacy store which
+// returned err.Error() as the result string. Every other error (a context
+// timeout, a cancellation, a locked database) is transient and not an integrity
+// signal, so it reports corrupt=false and the caller treats it as "not run yet".
+// datastore.IsDatabaseCorruption matches only structural keywords (corrupt,
+// malformed, "file is not a database"), never locked/timeout/closed, so transient
+// failures never false-escalate.
+func classifyIntegrityQueryError(err error) (result string, corrupt bool) {
+	if datastore.IsDatabaseCorruption(err) {
+		return err.Error(), true
+	}
+	return "", false
 }
 
 // CountDetectionsSince returns the number of detections recorded since the given time.
