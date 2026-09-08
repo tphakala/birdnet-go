@@ -37,15 +37,15 @@ Props:
   let retainedData: Record<string, PendingDetection> = {};
   let removalTimers: Record<string, ReturnType<typeof setTimeout>> = {};
 
-  function detectionKey(d: PendingDetection): string {
-    return d.source + d.scientificName;
-  }
-
-  // Render/dedupe key for the keyed {#each}. Includes firstDetected so the key is
-  // stable across the newest-first re-sort (no re-mount or replayed fade transition,
-  // unlike appending the loop index) and unique per pending detection. Deduping by it
-  // prevents an each_key_duplicate crash (Sentry BIRDNET-GO-2HP) while collapsing only a re-delivered
-  // identical detection, not two genuinely distinct detections at different start times.
+  // Render/dedupe key for the keyed {#each}, and the retention key. Includes
+  // firstDetected so the key is stable across the newest-first re-sort (no re-mount or
+  // replayed fade transition, unlike appending the loop index) and unique per pending
+  // detection. Deduping by it prevents an each_key_duplicate crash (Sentry BIRDNET-GO-2HP) while
+  // collapsing only a re-delivered identical detection, not two genuinely distinct
+  // detections at different start times. Retention keys by this too, so two concurrent
+  // same-source same-species detections are held independently: keying retention by
+  // source+species alone let a still-active detection mask a completed twin and evict it
+  // immediately instead of holding it for TERMINAL_RETENTION_MS.
   function renderKey(d: PendingDetection): string {
     return `${d.source}_${d.scientificName}_${d.firstDetected}`;
   }
@@ -55,9 +55,9 @@ Props:
   // (this effect should only re-run when detections changes, not retainedKeys).
   $effect(() => {
     for (const d of detections) {
-      const key = detectionKey(d);
+      const key = renderKey(d);
       if ((d.status === 'approved' || d.status === 'rejected') && !(key in removalTimers)) {
-        /* eslint-disable security/detect-object-injection -- key is derived from detectionKey(), a controlled string */
+        /* eslint-disable security/detect-object-injection -- key is derived from renderKey(), a controlled string */
         retainedData[key] = d;
         removalTimers[key] = setTimeout(() => {
           delete retainedData[key];
@@ -77,14 +77,14 @@ Props:
     // Read retainedKeys to establish reactive dependency
     const retained = retainedKeys;
 
-    const incomingByKey = new Set<string>();
+    const incomingKeys = new Set<string>();
     for (const d of detections) {
-      incomingByKey.add(detectionKey(d));
+      incomingKeys.add(renderKey(d));
     }
 
     const result: PendingDetection[] = [...detections];
     for (const key of retained) {
-      if (!incomingByKey.has(key)) {
+      if (!incomingKeys.has(key)) {
         // eslint-disable-next-line security/detect-object-injection -- key is from retainedKeys, a controlled string array
         const data = retainedData[key];
         if (data) {
@@ -137,8 +137,8 @@ Props:
     void tick;
     const result: Record<string, string> = {};
     for (const d of displayDetections) {
-      // Key by renderKey, not detectionKey: two same-source/species detections at
-      // different start times now coexist (dedupe keeps them), so a source+species key
+      // Key by renderKey, not by source+species alone: two same-source/species detections
+      // at different start times now coexist (dedupe keeps them), so a source+species key
       // would collapse them and show both chips the same elapsed time.
       result[renderKey(d)] = getElapsedText(d.firstDetected);
     }

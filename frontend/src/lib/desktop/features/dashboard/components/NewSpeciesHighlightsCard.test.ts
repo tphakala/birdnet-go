@@ -49,4 +49,26 @@ describe('NewSpeciesHighlightsCard', () => {
 
     expect(getAllByText('Common Blackbird')).toHaveLength(1);
   });
+
+  // Regression: dedup used to consume the scientific_name key before the
+  // novelty qualification check, so a non-qualifying duplicate row dropped a later
+  // qualifying row for the same species. The key is now only consumed when a row qualifies.
+  it('keeps a qualifying row that follows a non-qualifying duplicate of the same species', () => {
+    const { getAllByText } = card.render({
+      props: {
+        data: [
+          // First row does not qualify as new in any tracked period (category === null).
+          summary({ is_new_species: false }),
+          // Second row for the same species qualifies (new species => lifetime).
+          summary({ is_new_species: true }),
+        ],
+        selectedDate: '2026-09-07',
+        isToday: true,
+      },
+    });
+
+    // The qualifying row must still surface as one tile; the non-qualifying duplicate must
+    // not have burned the key. (Before the fix the whole card rendered nothing.)
+    expect(getAllByText('Common Blackbird')).toHaveLength(1);
+  });
 });
