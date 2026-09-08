@@ -48,15 +48,15 @@ type integrityResulter interface {
 	IntegrityResult() (string, bool)
 }
 
-// integrityCacheInvalidator is implemented by a datastore whose integrity result
-// is cached with a TTL and can be cleared on demand. An explicit diagnostics
-// refresh clears it so the run reflects current database integrity rather than a
-// result cached up to 24h earlier (#3939 follow-up). Datastores without a
-// TTL-expiring integrity cache (the legacy SQLiteStore refreshes on a schedule and
-// latches corruption via an atomic) do not implement it, and the type assertion
-// simply no-ops.
-type integrityCacheInvalidator interface {
-	InvalidateIntegrityCache()
+// integrityCacheRefresher is implemented by a datastore whose integrity result is
+// cached with a TTL and can be refreshed on demand. An explicit diagnostics refresh
+// clears it (subject to a cooldown that coalesces rapid refreshes) so the run
+// reflects current database integrity rather than a result cached up to 24h earlier
+// (#3939 follow-up). Datastores without a TTL-expiring integrity cache (the legacy
+// SQLiteStore refreshes on a schedule and latches corruption via an atomic) do not
+// implement it, and the type assertion simply no-ops.
+type integrityCacheRefresher interface {
+	RefreshIntegrityCache() bool
 }
 
 // RegisterDiagnosticsRoutes initializes health check infrastructure and registers
@@ -704,8 +704,17 @@ func (c *Handler) RunDiagnostics(ctx echo.Context) error {
 	// expensive PRAGMA quick_check on the single pinned SQLite connection; opt in
 	// here (refresh_integrity=true) so troubleshooting an unrelated subsystem does
 	// not trigger a multi-minute write stall, while a deliberate integrity refresh
-	// still reflects the current on-disk state (#3939 follow-up).
-	refresh, _ := strconv.ParseBool(ctx.QueryParam("refresh_integrity"))
+	// still reflects the current on-disk state (#3939 follow-up). A present but
+	// unparseable value is a client error (mirroring the window param); an absent
+	// value defaults to no refresh.
+	refresh := false
+	if raw := ctx.QueryParam("refresh_integrity"); raw != "" {
+		parsed, perr := strconv.ParseBool(raw)
+		if perr != nil {
+			return c.HandleError(ctx, perr, "invalid refresh_integrity: expected a boolean", http.StatusBadRequest)
+		}
+		refresh = parsed
+	}
 	refreshIntegrityCache(c.DS, refresh)
 
 	id := uuid.New().String()
@@ -718,17 +727,18 @@ func (c *Handler) RunDiagnostics(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, report)
 }
 
-// refreshIntegrityCache clears a cached datastore integrity result when the
-// caller asked for a refresh and the datastore supports invalidation. Split from
-// RunDiagnostics so the opt-in wiring is unit-testable without standing up the
-// full health registry. A datastore that does not cache an integrity result (or a
-// nil one) is a no-op. See integrityCacheInvalidator for why the refresh is opt-in.
+// refreshIntegrityCache asks the datastore to refresh its cached integrity result
+// when the caller opted in, so the diagnostics run below reflects current database
+// integrity. The datastore coalesces rapid forced refreshes internally (see
+// RefreshIntegrityCache), so this cannot be used to hammer the expensive scan. A
+// datastore that does not cache an integrity result (or a nil one) is a no-op.
+// Split from RunDiagnostics so the opt-in wiring is unit-testable.
 func refreshIntegrityCache(ds datastore.Interface, refresh bool) {
 	if !refresh {
 		return
 	}
-	if inv, ok := ds.(integrityCacheInvalidator); ok {
-		inv.InvalidateIntegrityCache()
+	if r, ok := ds.(integrityCacheRefresher); ok {
+		r.RefreshIntegrityCache()
 	}
 }
 

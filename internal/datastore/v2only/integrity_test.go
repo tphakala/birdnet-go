@@ -142,53 +142,57 @@ func TestClassifyIntegrityQueryError(t *testing.T) {
 	}
 }
 
-// Compile-time assurance that *Datastore exposes the integrity-cache invalidation
-// hook the diagnostics refresh calls through (mirrors the integrityCacheInvalidator
+// Compile-time assurance that *Datastore exposes the integrity-cache refresh hook
+// the diagnostics refresh calls through (mirrors the integrityCacheRefresher
 // interface in internal/api/v2/system).
 var _ interface {
-	InvalidateIntegrityCache()
+	RefreshIntegrityCache() bool
 } = (*Datastore)(nil)
 
-// TestInvalidateIntegrityCache verifies the invalidation hook clears the cached
-// result so the next IntegrityResult recomputes it, rather than serving a stale
-// value for up to the 24h TTL (#3939 follow-up: a repaired database must stop
-// reporting the cached corruption string, and newly appeared corruption must not
-// stay hidden behind a passing check).
-func TestInvalidateIntegrityCache(t *testing.T) {
+// TestRefreshIntegrityCache_Cooldown verifies the forced-refresh hook clears the
+// cache when the cached result is older than the cooldown (so the next
+// IntegrityResult recomputes) but coalesces a second forced refresh inside the
+// cooldown, so a rapid caller cannot re-trigger the expensive quick_check scan
+// (#3939 follow-up; guards CWE-400 on the pinned SQLite connection).
+func TestRefreshIntegrityCache_Cooldown(t *testing.T) {
 	t.Parallel()
 	ds, cleanup := setupTestDatastore(t)
 	t.Cleanup(cleanup)
 
 	// Populate the cache with a first check.
 	result, corrupted := ds.IntegrityResult()
-	require.Equal(t, "ok", result)
+	require.Equal(t, integrityResultOK, result)
 	require.False(t, corrupted)
 
+	// A refresh within the cooldown is coalesced: the recent result is kept.
+	require.False(t, ds.RefreshIntegrityCache(), "a refresh within the cooldown must be coalesced")
 	ds.integrityMu.RLock()
-	firstCheckedAt := ds.integrityCheckedAt
+	kept := ds.integrityResult
 	ds.integrityMu.RUnlock()
-	require.False(t, firstCheckedAt.IsZero(), "first call must cache a result with a timestamp")
+	assert.Equal(t, integrityResultOK, kept, "a coalesced refresh keeps the cached result")
 
-	// Invalidate: both the result and its timestamp are cleared.
-	ds.InvalidateIntegrityCache()
+	// Age the cache past the cooldown; now a refresh clears both fields.
+	ds.integrityMu.Lock()
+	ds.integrityCheckedAt = time.Now().Add(-2 * v2IntegrityRefreshCooldown)
+	ds.integrityMu.Unlock()
 
+	require.True(t, ds.RefreshIntegrityCache(), "a refresh past the cooldown clears the cache")
 	ds.integrityMu.RLock()
 	clearedResult := ds.integrityResult
 	clearedAt := ds.integrityCheckedAt
 	ds.integrityMu.RUnlock()
-	assert.Empty(t, clearedResult, "invalidation clears the cached result string")
-	assert.True(t, clearedAt.IsZero(), "invalidation clears the cache timestamp so the fast path misses")
+	assert.Empty(t, clearedResult, "a refresh past the cooldown clears the cached result string")
+	assert.True(t, clearedAt.IsZero(), "a refresh past the cooldown clears the cache timestamp so the fast path misses")
 
 	// The next call recomputes and re-caches with a fresh timestamp.
 	result, corrupted = ds.IntegrityResult()
-	assert.Equal(t, "ok", result)
+	assert.Equal(t, integrityResultOK, result)
 	assert.False(t, corrupted)
 
 	ds.integrityMu.RLock()
-	secondCheckedAt := ds.integrityCheckedAt
+	recomputedAt := ds.integrityCheckedAt
 	ds.integrityMu.RUnlock()
-	assert.False(t, secondCheckedAt.IsZero(), "recompute after invalidation sets a new timestamp")
-	assert.False(t, secondCheckedAt.Before(firstCheckedAt), "recompute happens no earlier than the first check")
+	assert.False(t, recomputedAt.IsZero(), "recompute after a refresh sets a new timestamp")
 }
 
 // TestIntegrityResult_ServesCachedCorruption verifies the fast path returns a

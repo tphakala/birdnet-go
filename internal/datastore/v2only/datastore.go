@@ -540,6 +540,16 @@ const v2IntegrityCacheTTL = 24 * time.Hour
 // pathological hang (#3939).
 const v2IntegrityCheckTimeout = 2 * time.Minute
 
+// v2IntegrityRefreshCooldown coalesces forced integrity refreshes. A forced
+// refresh (an explicit "run diagnostics" refresh) only clears the cache when the
+// cached result is at least this old, so an authenticated client cannot repeatedly
+// force back-to-back multi-minute quick_check scans on the single pinned SQLite
+// connection (CWE-400). Within the window the recent result is reused. It is
+// longer than v2IntegrityCheckTimeout so a scan cannot be re-triggered before the
+// previous one could have finished; a legitimate re-check after a repair is
+// unaffected because the passive TTL keeps the prior result far older than this.
+const v2IntegrityRefreshCooldown = 5 * time.Minute
+
 const (
 	// integrityResultOK is the healthy PRAGMA quick_check result. DatabaseIntegrityCheck.Run
 	// maps any non-empty, non-"ok" result to a corruption status, so this exact value
@@ -598,19 +608,29 @@ func (ds *Datastore) IntegrityResult() (string, bool) {
 	return result, result != integrityResultOK
 }
 
-// InvalidateIntegrityCache clears the cached PRAGMA quick_check result so the
-// next IntegrityResult call recomputes it. The only wired caller is the explicit
-// "run diagnostics" refresh (RunDiagnostics with refresh_integrity=true); a
-// restore-from-backup or a reconnect would be natural future triggers. Without it
-// a repaired database keeps reporting the cached corruption string, and corruption
+// RefreshIntegrityCache clears the cached PRAGMA quick_check result so the next
+// IntegrityResult call recomputes it, and reports whether it did. It coalesces
+// rapid forced refreshes: within v2IntegrityRefreshCooldown of the last check it
+// keeps the recent result and returns false, so an authenticated client cannot
+// repeatedly force back-to-back multi-minute quick_check scans on the single
+// pinned SQLite connection (CWE-400). The only wired caller is the explicit "run
+// diagnostics" refresh (RunDiagnostics with refresh_integrity=true). Without it a
+// repaired database keeps reporting the cached corruption string, and corruption
 // that appears after a passing check stays hidden, for up to v2IntegrityCacheTTL
 // (#3939 follow-up). integrityMu is the same lock IntegrityResult recomputes
 // under, so clearing here is safe against a concurrent refresh.
-func (ds *Datastore) InvalidateIntegrityCache() {
+func (ds *Datastore) RefreshIntegrityCache() bool {
 	ds.integrityMu.Lock()
 	defer ds.integrityMu.Unlock()
+	// A cached, recent result is reused: only a result older than the cooldown (or
+	// no result yet) is worth re-scanning for. An empty result means "not run yet",
+	// so it is always eligible.
+	if ds.integrityResult != "" && time.Since(ds.integrityCheckedAt) < v2IntegrityRefreshCooldown {
+		return false
+	}
 	ds.integrityResult = ""
 	ds.integrityCheckedAt = time.Time{}
+	return true
 }
 
 // runIntegrityQuickCheck executes PRAGMA quick_check on SQLite and returns the
