@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/httpclient"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
@@ -292,7 +293,15 @@ func NewService(settings *conf.Settings, db datastore.Interface, weatherMetrics 
 	// One HTTP client is shared across every fetch cycle and retry attempt for
 	// the service's lifetime, replacing the per-request clients the providers
 	// used to allocate. It is injected into whichever provider is selected.
-	weatherClient := newDefaultHTTPClient()
+	//
+	// The client is SSRF-guarded: OpenWeather and Wunderground expose a
+	// user-configurable endpoint, so the periodic fetch must not be pointable at
+	// link-local / cloud-metadata targets. This also disables HTTP(S)_PROXY for
+	// weather fetches (the guard resolves and dials the target IP itself),
+	// matching the imageprovider client; loopback, on-LAN, and public hosts stay
+	// reachable. The nil-fallback in newUnguardedTestClient stays unguarded so the
+	// provider unit tests keep intercepting the default transport with httpmock.
+	weatherClient := httpclient.NewGuardedHTTPClient(RequestTimeout)
 
 	// Select weather provider based on configuration
 	switch conf.WeatherProvider(settings.Realtime.Weather.Provider) {

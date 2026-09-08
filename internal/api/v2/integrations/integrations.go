@@ -25,6 +25,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/httpclient"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/notification"
@@ -740,7 +741,7 @@ func (c *Handler) testWeatherAPIConnectivity(ctx context.Context, settings *conf
 		return "", fmt.Errorf("unsupported weather provider: %s", provider)
 	}
 
-	client := &http.Client{Timeout: integrationShortTimeout * time.Second}
+	client := httpclient.NewGuardedHTTPClient(integrationShortTimeout * time.Second)
 	req, err := http.NewRequestWithContext(ctx, "GET", testURL, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
@@ -774,7 +775,7 @@ func (c *Handler) testWeatherAuthentication(ctx context.Context, settings *conf.
 
 		testURL := fmt.Sprintf("%s?lat=0&lon=0&appid=%s", endpoint, apiKey)
 
-		client := &http.Client{Timeout: integrationShortTimeout * time.Second}
+		client := httpclient.NewGuardedHTTPClient(integrationShortTimeout * time.Second)
 		req, err := http.NewRequestWithContext(ctx, "GET", testURL, http.NoBody)
 		if err != nil {
 			// Scrub before wrapping: the *url.Error embeds testURL, which carries
@@ -812,14 +813,18 @@ func (c *Handler) testWeatherAuthentication(ctx context.Context, settings *conf.
 
 // testWeatherDataFetch tests fetching actual weather data
 func (c *Handler) testWeatherDataFetch(ctx context.Context, settings *conf.Settings) (string, error) {
+	// Inject the SSRF-guarded client so a user-configured OpenWeather/Wunderground
+	// endpoint cannot be pointed at link-local / cloud-metadata targets during the
+	// data-fetch test. Matches the guarded client the running service uses.
+	guarded := httpclient.NewGuardedHTTPClient(weather.RequestTimeout)
 	var provider weather.Provider
 	switch settings.Realtime.Weather.Provider {
 	case WeatherProviderYrno:
-		provider = weather.NewYrNoProvider(nil)
+		provider = weather.NewYrNoProvider(guarded)
 	case WeatherProviderOpenWeather:
-		provider = weather.NewOpenWeatherProvider(nil)
+		provider = weather.NewOpenWeatherProvider(guarded)
 	case WeatherProviderWunderground:
-		provider = weather.NewWundergroundProvider(nil)
+		provider = weather.NewWundergroundProvider(guarded)
 	default:
 		return "", fmt.Errorf("unsupported weather provider: %s", settings.Realtime.Weather.Provider)
 	}
@@ -1026,7 +1031,7 @@ func (c *Handler) TestEBirdConnection(ctx echo.Context) error {
 
 // testEBirdConnectivity tests basic connectivity to the eBird API
 func (c *Handler) testEBirdConnectivity(ctx context.Context) (string, error) {
-	client := &http.Client{Timeout: integrationShortTimeout * time.Second}
+	client := httpclient.NewGuardedHTTPClient(integrationShortTimeout * time.Second)
 	req, err := http.NewRequestWithContext(ctx, "HEAD", "https://api.ebird.org/v2/ref/taxonomy/ebird", http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
@@ -1055,7 +1060,7 @@ func (c *Handler) testEBirdConnectivity(ctx context.Context) (string, error) {
 
 // testEBirdAuthentication tests authentication with the eBird API using a small taxonomy request
 func (c *Handler) testEBirdAuthentication(ctx context.Context, apiKey, locale string) (string, error) {
-	client := &http.Client{Timeout: integrationShortTimeout * time.Second}
+	client := httpclient.NewGuardedHTTPClient(integrationShortTimeout * time.Second)
 
 	url := fmt.Sprintf("https://api.ebird.org/v2/ref/taxonomy/ebird?fmt=json&cat=species&maxResults=1&locale=%s", neturl.QueryEscape(locale))
 

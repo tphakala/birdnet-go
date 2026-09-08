@@ -33,6 +33,6 @@ func TestRegisterRoutesRegistration(t *testing.T) {
 		"PUT /api/v2/notifications/:id/acknowledge",
 		"DELETE /api/v2/notifications/:id",
 		"POST /api/v2/notifications/test/new-species",
-		"GET /api/v2/notifications/check-ntfy-server",
+		"POST /api/v2/notifications/check-ntfy-server",
 	})
 }
