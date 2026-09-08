@@ -523,21 +523,25 @@ func findSpeciesScore(targetSci string, speciesScores []classifier.SpeciesScore)
 //
 // A covered species present in the list is scored directly; one that is covered but
 // absent is below today's threshold and therefore genuinely very rare.
-func computeRarity(filterActive bool, targetSci string, speciesScores []classifier.SpeciesScore, geomodelLabels, classifierLabels []string) (float64, RarityStatus) {
+// It takes the whole RarityContext (by pointer, since it is a large struct) rather than
+// its fields spread positionally: the two label vocabularies are adjacent same-typed
+// []string fields on that struct, so passing them loose invited a silent
+// geomodel/classifier swap.
+func computeRarity(rc *classifier.RarityContext, targetSci string) (float64, RarityStatus) {
 	// Without an active range filter the probable-species list is synthetic zero
 	// scores for every label, so a covered species would score 0.0 and be
 	// misreported as "very rare" at "0%". The occurrence probability is genuinely
 	// unknown in that state (the geomodel could not load), so report unknown rather
 	// than a confident wrong answer (#3935).
-	if !filterActive {
+	if !rc.FilterActive {
 		return 0.0, RarityUnknown
 	}
 
-	if !speciesHasGeomodelCoverage(targetSci, geomodelLabels, classifierLabels) {
+	if !speciesHasGeomodelCoverage(targetSci, rc.GeomodelLabels, rc.ClassifierLabels) {
 		return 0.0, RarityUnknown
 	}
 
-	if score, found := findSpeciesScore(targetSci, speciesScores); found {
+	if score, found := findSpeciesScore(targetSci, rc.Scores); found {
 		return score, calculateRarityStatus(score)
 	}
 
@@ -592,7 +596,7 @@ func (c *Handler) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLabel
 	// Resolve the score and status together; computeRarity documents how an absent
 	// species is split between "very rare" and "unknown" by geomodel coverage.
 	targetSci := detection.ExtractScientificName(speciesLabel)
-	rarityInfo.Score, rarityInfo.Status = computeRarity(rc.FilterActive, targetSci, rc.Scores, rc.GeomodelLabels, rc.ClassifierLabels)
+	rarityInfo.Score, rarityInfo.Status = computeRarity(&rc, targetSci)
 
 	return rarityInfo, nil
 }
