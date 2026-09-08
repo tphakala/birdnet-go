@@ -2098,7 +2098,13 @@
         </div>
       {/if}
 
-      <SettingsTabs tabs={galleryTabs} bind:activeTab={galleryTab} showActions={false} />
+      <SettingsTabs
+        tabs={galleryTabs}
+        bind:activeTab={galleryTab}
+        queryParam="modelTab"
+        defaultTab="installed"
+        showActions={false}
+      />
     </SettingsSection>
 
     <SettingsSection

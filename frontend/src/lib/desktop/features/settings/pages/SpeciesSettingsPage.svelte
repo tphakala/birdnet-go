@@ -55,6 +55,7 @@
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
   import { api } from '$lib/utils/api';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { getLocalDateString } from '$lib/utils/date';
   import {
     buildSpeciesNameMaps,
@@ -1433,7 +1434,7 @@
                   'Set your location in Main Settings to see species available in your area. The range filter uses your location to determine which species are likely to be found nearby.'}
               </p>
               <a
-                href="/ui/settings/main"
+                href={buildAppUrl('/ui/settings/main?tab=location')}
                 class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-warning)] text-[var(--color-warning-content)] hover:bg-[var(--color-warning-hover)] transition-colors mt-3"
               >
                 {t('settings.species.activeSpecies.locationNotConfigured.action') ||
