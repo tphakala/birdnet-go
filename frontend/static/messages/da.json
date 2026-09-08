@@ -2906,6 +2906,7 @@
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
           "saveButton": "Gem udbyder",
+          "saveWaitingNtfyCheck": "Venter på, at ntfy-forbindelsestjekket bliver færdigt",
           "savingButton": "Gemmer...",
           "cancelButton": "Annullér",
           "testButton": "Test",
@@ -2977,6 +2978,7 @@
               "http": "HTTP fungerer - serveren bruger ikke HTTPS"
             },
             "connectionFailed": "Kunne ikke oprette forbindelse - kontrollér værtsnavn og serverstatus",
+            "checkError": "Kunne ikke verificere serveren - tjek adressen, eller genindlæs siden og prøv igen",
             "auth": {
               "label": "Godkendelse (valgfrit)",
               "username": {
@@ -5096,6 +5098,7 @@
       "notFound": "Notifikation ikke fundet",
       "hostRequired": "Host-parameter er påkrævet",
       "invalidHost": "Ugyldig host-parameter",
+      "invalidBody": "Ugyldigt anmodningsindhold",
       "rateLimit": "For mange forsøg på at oprette notifikationsstrøm, vent venligst før du prøver igen"
     },
     "streams": {

@@ -171,3 +171,41 @@ func TestUnguardedClientDoesNotUseGuard(t *testing.T) {
 	}
 	assert.False(t, errors.Is(err, ErrBlockedTarget), "unguarded client must not apply the SSRF policy")
 }
+
+// TestNewGuardedHTTPClient_AllowsLoopback verifies the standalone guarded
+// *http.Client constructor (used by the weather and ntfy probe sites) permits
+// loopback so on-LAN targets keep working.
+func TestNewGuardedHTTPClient_AllowsLoopback(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	client := NewGuardedHTTPClient(5 * time.Second)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL, http.NoBody)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+// TestNewGuardedHTTPClient_BlocksMetadataLiteral verifies the standalone guarded
+// *http.Client refuses the cloud metadata address at dial time with
+// ErrBlockedTarget, so the outbound probe sites that adopt it cannot be turned
+// into SSRF relays.
+func TestNewGuardedHTTPClient_BlocksMetadataLiteral(t *testing.T) {
+	t.Parallel()
+
+	client := NewGuardedHTTPClient(2 * time.Second)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://169.254.169.254/latest/meta-data/", http.NoBody)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	if resp != nil {
+		t.Cleanup(func() { _ = resp.Body.Close() })
+	}
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrBlockedTarget), "expected ErrBlockedTarget, got %v", err)
+}

@@ -2906,6 +2906,7 @@
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
           "saveButton": "Enregistrer le fournisseur",
+          "saveWaitingNtfyCheck": "En attente de la fin de la vérification de la connexion ntfy",
           "savingButton": "Enregistrement...",
           "cancelButton": "Annuler",
           "testButton": "Tester",
@@ -2977,6 +2978,7 @@
               "http": "HTTP fonctionne - le serveur n'utilise pas HTTPS"
             },
             "connectionFailed": "Impossible de se connecter - vérifiez le nom d'hôte et l'état du serveur",
+            "checkError": "Impossible de vérifier le serveur - vérifiez l'adresse ou rechargez la page et réessayez",
             "auth": {
               "label": "Authentification (facultatif)",
               "username": {
@@ -5096,6 +5098,7 @@
       "notFound": "Notification introuvable",
       "hostRequired": "Le paramètre host est requis",
       "invalidHost": "Paramètre host invalide",
+      "invalidBody": "Corps de requête invalide",
       "rateLimit": "Trop de tentatives de connexion au flux de notifications, veuillez patienter avant de réessayer"
     },
     "streams": {

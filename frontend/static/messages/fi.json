@@ -2906,6 +2906,7 @@
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
           "saveButton": "Tallenna palveluntarjoaja",
+          "saveWaitingNtfyCheck": "Odotetaan ntfy-yhteyden tarkistuksen valmistumista",
           "savingButton": "Tallennetaan...",
           "cancelButton": "Peruuta",
           "testButton": "Testaa",
@@ -2977,6 +2978,7 @@
               "http": "HTTP toimii - palvelin ei käytä HTTPS:ää"
             },
             "connectionFailed": "Yhteys epäonnistui - tarkista isäntänimi ja palvelimen tila",
+            "checkError": "Palvelimen tarkistus epäonnistui - tarkista osoite tai lataa sivu uudelleen ja yritä uudestaan",
             "auth": {
               "label": "Todennus (valinnainen)",
               "username": {
@@ -5096,6 +5098,7 @@
       "notFound": "Ilmoitusta ei löytynyt",
       "hostRequired": "Host-parametri on pakollinen",
       "invalidHost": "Virheellinen host-parametri",
+      "invalidBody": "Virheellinen pyynnön sisältö",
       "rateLimit": "Liian monta yhteysyritystä ilmoitusstriimiin, odota hetki ennen uutta yritystä"
     },
     "streams": {
