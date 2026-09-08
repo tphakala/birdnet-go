@@ -208,3 +208,32 @@ export function createNavigation(): NavigationStore {
 
 // Singleton instance
 export const navigation = createNavigation();
+
+/**
+ * Navigate an application anchor without reloading in-memory forms.
+ * Modified clicks, downloads and explicit browsing targets retain native behavior.
+ */
+export function handleAppLinkClick(event: MouseEvent): void {
+  const anchor = event.currentTarget;
+  if (
+    event.defaultPrevented ||
+    event.button !== 0 ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey ||
+    !(anchor instanceof window.HTMLAnchorElement) ||
+    (anchor.target && anchor.target !== '_self') ||
+    anchor.hasAttribute('download')
+  ) {
+    return;
+  }
+
+  const url = new URL(anchor.href);
+  if (url.origin !== window.location.origin || !UI_PATH_RE.test(stripProxyPrefix(url.pathname))) {
+    return;
+  }
+
+  event.preventDefault();
+  navigation.navigate(url.pathname + url.search + url.hash);
+}

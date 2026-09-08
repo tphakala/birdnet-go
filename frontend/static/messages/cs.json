@@ -4355,7 +4355,7 @@
       "dynamicThreshold": {
         "tabLabel": "Naučené",
         "title": "Naučené prahy",
-        "description": "Tato stránka zobrazuje runtime data dynamického prahu. Pokud je povolen v Hlavních nastaveních → Detekce, prahy se automaticky upravují na základě více detekcí s vysokou spolehlivostí. Druhy zde zobrazené se považují za existující na tomto místě.",
+        "description": "Tato stránka zobrazuje runtime data dynamického prahu. Pokud je povolen, prahy se automaticky upravují na základě více detekcí s vysokou spolehlivostí. Druhy zde zobrazené se považují za existující na tomto místě.",
         "stats": {
           "active": "Aktivní",
           "atMinimum": "Na minimu",

@@ -4355,7 +4355,7 @@
       "dynamicThreshold": {
         "tabLabel": "Aprendido",
         "title": "Umbrales aprendidos",
-        "description": "Esta página muestra datos de umbrales dinámicos en tiempo de ejecución. Cuando está habilitado en Ajustes principales → Detección, los umbrales se ajustan automáticamente mediante múltiples detecciones de alta confianza. Las especies mostradas aquí se asumen presentes en esta ubicación.",
+        "description": "Esta página muestra datos de umbrales dinámicos en tiempo de ejecución. Cuando está habilitado, los umbrales se ajustan automáticamente mediante múltiples detecciones de alta confianza. Las especies mostradas aquí se asumen presentes en esta ubicación.",
         "stats": {
           "active": "Activos",
           "atMinimum": "En mínimo",

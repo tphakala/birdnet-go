@@ -4355,7 +4355,7 @@
       "dynamicThreshold": {
         "tabLabel": "Geleerd",
         "title": "Geleerde drempels",
-        "description": "Deze pagina toont runtime data van dynamische drempels. Wanneer ingeschakeld in Hoofdinstellingen → Detectie, worden drempels automatisch aangepast door meerdere detecties met hoge betrouwbaarheid. Soorten die hier worden getoond, worden verondersteld op deze locatie te bestaan.",
+        "description": "Deze pagina toont runtime data van dynamische drempels. Wanneer ingeschakeld, worden drempels automatisch aangepast door meerdere detecties met hoge betrouwbaarheid. Soorten die hier worden getoond, worden verondersteld op deze locatie te bestaan.",
         "stats": {
           "active": "Actief",
           "atMinimum": "Op minimum",

@@ -34,6 +34,7 @@
   import { toastActions } from '$lib/stores/toast';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import { formatDateTime } from '$lib/utils/formatters';
   import SettingsNote from './SettingsNote.svelte';
   import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
@@ -230,6 +231,13 @@
 <div class="space-y-4">
   <!-- Description -->
   <p class="text-sm text-muted">{t('settings.species.dynamicThreshold.description')}</p>
+  <a
+    href={buildAppUrl('/ui/settings/analysis?tab=settings')}
+    onclick={handleAppLinkClick}
+    class="inline-block text-sm text-primary underline"
+  >
+    {t('settings.sections.analysis')} → {t('analysis.tabs.settings')}
+  </a>
 
   <!-- Stats Cards -->
   {#if stats}

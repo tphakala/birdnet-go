@@ -44,6 +44,8 @@
     type OAuthProviderConfig,
   } from '$lib/stores/settings';
   import { fetchRestartStatus } from '$lib/stores/restart.svelte';
+  import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { settingsAPI, type TLSCertificateInfo } from '$lib/utils/settingsApi';
   import { toastActions } from '$lib/stores/toast';
@@ -1042,6 +1044,13 @@
               <div>
                 <p class="font-medium">{t('settings.security.oauth.hostRequiredWarning')}</p>
                 <p class="text-xs mt-1">{t('settings.security.oauth.hostRequiredWarningDescription')}</p>
+                <a
+                  href={buildAppUrl('/ui/settings/security?tab=server')}
+                  onclick={handleAppLinkClick}
+                  class="inline-block mt-2 text-sm text-primary underline"
+                >
+                  {t('settings.security.serverConfiguration.title')}
+                </a>
               </div>
             {/snippet}
           </ErrorAlert>

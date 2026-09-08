@@ -18,6 +18,7 @@
   import { FitAddon } from '@xterm/addon-fit';
   import { t } from '$lib/i18n';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import { copyToClipboard, COPY_FEEDBACK_TIMEOUT_MS } from '$lib/utils/clipboard';
   import { settingsStore } from '$lib/stores/settings';
   import {
@@ -731,11 +732,18 @@
 <div class="flex flex-col h-full min-h-0">
   {#if !isEnabled}
     <!-- Disabled state -->
-    <div class="flex flex-col items-center justify-center h-full gap-4 opacity-60">
-      <WifiOff class="size-12" />
+    <div class="flex flex-col items-center justify-center h-full gap-4">
+      <WifiOff class="size-12 opacity-60" />
       <div class="text-center">
-        <p class="text-lg font-medium">{t('terminal.disabled')}</p>
-        <p class="text-sm mt-1">{t('terminal.disabledDescription')}</p>
+        <p class="text-lg font-medium opacity-60">{t('terminal.disabled')}</p>
+        <p class="text-sm mt-1 opacity-60">{t('terminal.disabledDescription')}</p>
+        <a
+          href={buildAppUrl('/ui/settings/security?tab=terminal')}
+          onclick={handleAppLinkClick}
+          class="inline-block mt-3 text-sm text-primary underline"
+        >
+          {t('settings.sections.security')} → {t('settings.security.terminal.title')}
+        </a>
       </div>
     </div>
   {:else if isDetached}

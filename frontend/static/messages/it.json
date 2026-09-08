@@ -4355,7 +4355,7 @@
       "dynamicThreshold": {
         "tabLabel": "Appreso",
         "title": "Soglie Apprese",
-        "description": "Questa pagina mostra dati runtime Soglia Dinamica. Quando abilitata in Impostazioni Principali → Rilevamento, soglie vengono regolate automaticamente da rilevamenti multipli alta confidenza. Specie mostrate qui si assume esistano in questa posizione.",
+        "description": "Questa pagina mostra dati runtime Soglia Dinamica. Quando abilitata, soglie vengono regolate automaticamente da rilevamenti multipli alta confidenza. Specie mostrate qui si assume esistano in questa posizione.",
         "stats": {
           "active": "Attivo",
           "atMinimum": "Al Minimo",

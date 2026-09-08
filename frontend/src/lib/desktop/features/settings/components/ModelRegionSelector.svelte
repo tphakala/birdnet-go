@@ -28,6 +28,8 @@
   } from '$lib/utils/variantSelection';
   import { loggers } from '$lib/utils/logger';
   import { birdnetSettings, settingsActions } from '$lib/stores/settings';
+  import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import type { ModelRegionsResponse, RegionOption } from '$lib/types/models';
   import RegionCard from './RegionCard.svelte';
 
@@ -359,6 +361,15 @@
             class="text-xs {autoWhy.warn ? 'text-warning' : 'text-base-content/70'}"
           >
             {t(AUTO_WHY[autoWhy.state], autoWhy.args)}
+            {#if autoWhy.state === 'noLocation'}
+              <a
+                href={buildAppUrl('/ui/settings/main?tab=location')}
+                onclick={handleAppLinkClick}
+                class="block mt-2 text-primary underline"
+              >
+                {t('settings.species.activeSpecies.locationNotConfigured.action')}
+              </a>
+            {/if}
           </div>
           {#if autoWhy.pins.length > 0}
             <div class="flex flex-wrap gap-2">

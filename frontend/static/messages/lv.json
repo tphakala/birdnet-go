@@ -4355,7 +4355,7 @@
       "dynamicThreshold": {
         "tabLabel": "Apgūtie",
         "title": "Apgūtie sliekšņi",
-        "description": "Šī lapa rāda dinamiskā sliekšņa izpildlaika datus. Kad iespējots galvenajos iestatījumos → Noteikšana, sliekšņi tiek automātiski pielāgoti, pamatojoties uz vairākām augstticamības noteikšanām. Šeit redzamās sugas tiek uzskatītas par esošām šajā atrašanās vietā.",
+        "description": "Šī lapa rāda dinamiskā sliekšņa izpildlaika datus. Kad iespējots, sliekšņi tiek automātiski pielāgoti, pamatojoties uz vairākām augstticamības noteikšanām. Šeit redzamās sugas tiek uzskatītas par esošām šajā atrašanās vietā.",
         "stats": {
           "active": "Aktīvs",
           "atMinimum": "Pie minimuma",

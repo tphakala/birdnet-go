@@ -4355,7 +4355,7 @@
       "dynamicThreshold": {
         "tabLabel": "Nauczone",
         "title": "Nauczone progi",
-        "description": "Ta strona pokazuje dane runtime progów dynamicznych. Gdy włączone w Ustawienia główne → Wykrywanie, progi są automatycznie dostosowywane przez wielokrotne wykrycia o wysokiej pewności. Gatunki pokazane tutaj są uznawane za istniejące w tej lokalizacji.",
+        "description": "Ta strona pokazuje dane runtime progów dynamicznych. Gdy włączone, progi są automatycznie dostosowywane przez wielokrotne wykrycia o wysokiej pewności. Gatunki pokazane tutaj są uznawane za istniejące w tej lokalizacji.",
         "stats": {
           "active": "Aktywne",
           "atMinimum": "Na minimum",

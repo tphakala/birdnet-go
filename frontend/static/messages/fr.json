@@ -4355,7 +4355,7 @@
       "dynamicThreshold": {
         "tabLabel": "Appris",
         "title": "Seuils appris",
-        "description": "Cette page affiche les données d'exécution des seuils dynamiques. Lorsque activés dans Paramètres principaux → Détection, les seuils sont automatiquement ajustés par plusieurs détections à haute confiance. Les espèces affichées ici sont supposées exister à cet emplacement.",
+        "description": "Cette page affiche les données d'exécution des seuils dynamiques. Lorsque activés, les seuils sont automatiquement ajustés par plusieurs détections à haute confiance. Les espèces affichées ici sont supposées exister à cet emplacement.",
         "stats": {
           "active": "Actifs",
           "atMinimum": "Au minimum",

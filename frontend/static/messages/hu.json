@@ -4355,7 +4355,7 @@
       "dynamicThreshold": {
         "tabLabel": "Tanult",
         "title": "Tanult küszöbértékek",
-        "description": "Ez az oldal a Dinamikus küszöbérték futásidejű adatait mutatja. Ha engedélyezve van a Fő beállítások → Detektálás menüpontban, a küszöbértékek több magas megbízhatóságú detektálás alapján automatikusan kerülnek beállításra. Az itt látható fajok feltételezhetően léteznek ezen a helyszínen.",
+        "description": "Ez az oldal a Dinamikus küszöbérték futásidejű adatait mutatja. Ha engedélyezve van, a küszöbértékek több magas megbízhatóságú detektálás alapján automatikusan kerülnek beállításra. Az itt látható fajok feltételezhetően léteznek ezen a helyszínen.",
         "stats": {
           "active": "Aktív",
           "atMinimum": "Minimumon",
