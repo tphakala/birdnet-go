@@ -271,6 +271,13 @@ func trimResultsToMax(results []datastore.Results, maxResults int) []datastore.R
 
 // getTopKResults returns the top k results without fully sorting the array.
 // Uses a partial sort algorithm that's more efficient than sorting all results.
+// It additionally retains the strongest human and dog vocalization classes even
+// when they rank below k, so the privacy and dog-bark filters downstream still
+// see them (see preserveFilterClasses); the returned slice can therefore hold up
+// to k+2 entries. The first k entries stay in descending-confidence order; any
+// appended filter class is below that minimum and the two appended entries are
+// not ordered relative to each other, so consumers must not assume the tail is
+// confidence-sorted (results[0] and the top-k order are unaffected).
 func getTopKResults(results []datastore.Results, k int) []datastore.Results {
 	if len(results) == 0 || k <= 0 {
 		return []datastore.Results{}
@@ -301,9 +308,16 @@ func getTopKResults(results []datastore.Results, k int) []datastore.Results {
 	// is small (defaultTopKResults = 10), so the copy is cheap and the upstream
 	// large-buffer reuse optimization stays intact: bn.resultsBuffer remains
 	// internal scratch that never escapes.
-	out := make([]datastore.Results, n)
+	// Room for the up-to-two appended filter classes so preserveFilterClasses does
+	// not reallocate when it retains a below-top-K human or dog class.
+	out := make([]datastore.Results, n, n+2)
 	copy(out, results[:n])
-	return out
+
+	// Retain the human and dog classes the privacy and dog-bark filters depend on
+	// even when they rank below the top-K, so a faint speech or bark prediction is
+	// not hidden from the filters by truncation (issue #4177). results still holds
+	// every prediction (the partial sort reordered but did not drop any).
+	return preserveFilterClasses(out, results)
 }
 
 // partialSort performs a partial sort to move the top k elements to the front.
