@@ -152,6 +152,7 @@ const (
 	MsgErrNotifNotFound           = "errors.notification.notFound"
 	MsgErrNotifHostRequired       = "errors.notification.hostRequired"
 	MsgErrNotifInvalidHost        = "errors.notification.invalidHost"
+	MsgErrNotifInvalidBody        = "errors.notification.invalidBody"
 	MsgErrNotifRateLimit          = "errors.notification.rateLimit"
 
 	// Debug errors

@@ -2906,6 +2906,7 @@
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
           "saveButton": "Provider opslaan",
+          "saveWaitingNtfyCheck": "Waiting for the ntfy connection check to finish",
           "savingButton": "Opslaan...",
           "cancelButton": "Annuleren",
           "testButton": "Test",
@@ -2977,6 +2978,7 @@
               "http": "HTTP werkt - server gebruikt geen HTTPS"
             },
             "connectionFailed": "Kan geen verbinding maken - controleer hostnaam en serverstatus",
+            "checkError": "Couldn't verify the server - check the address, or reload the page and try again",
             "auth": {
               "label": "Authenticatie (optioneel)",
               "username": {
@@ -5096,6 +5098,7 @@
       "notFound": "Melding niet gevonden",
       "hostRequired": "Hostparameter is vereist",
       "invalidHost": "Ongeldige hostparameter",
+      "invalidBody": "Invalid request body",
       "rateLimit": "Te veel verbindingspogingen met de meldingsstream, wacht even voor u het opnieuw probeert"
     },
     "streams": {

@@ -2906,6 +2906,7 @@
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
           "saveButton": "Uložiť poskytovateľa",
+          "saveWaitingNtfyCheck": "Waiting for the ntfy connection check to finish",
           "savingButton": "Ukladá sa...",
           "cancelButton": "Zrušiť",
           "testButton": "Testovať",
@@ -2977,6 +2978,7 @@
               "http": "HTTP funguje - server nepoužíva HTTPS"
             },
             "connectionFailed": "Nedá sa pripojiť - skontrolujte názov hostiteľa a stav servera",
+            "checkError": "Couldn't verify the server - check the address, or reload the page and try again",
             "auth": {
               "label": "Autentifikácia (voliteľné)",
               "username": {
@@ -5096,6 +5098,7 @@
       "notFound": "Oznámenie sa nenašlo",
       "hostRequired": "Parameter hostiteľa je povinný",
       "invalidHost": "Neplatný parameter hostiteľa",
+      "invalidBody": "Invalid request body",
       "rateLimit": "Príliš veľa pokusov o pripojenie k prúdu oznámení, počkajte chvíľu pred ďalším pokusom"
     },
     "streams": {

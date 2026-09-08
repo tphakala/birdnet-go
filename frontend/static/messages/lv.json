@@ -2906,6 +2906,7 @@
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
           "saveButton": "Saglabāt nodrošinātāju",
+          "saveWaitingNtfyCheck": "Waiting for the ntfy connection check to finish",
           "savingButton": "Saglabā...",
           "cancelButton": "Atcelt",
           "testButton": "Pārbaudīt",
@@ -2977,6 +2978,7 @@
               "http": "HTTP darbojas - serveris neizmanto HTTPS"
             },
             "connectionFailed": "Nevarēja izveidot savienojumu - pārbaudiet resursdatora nosaukumu un servera statusu",
+            "checkError": "Couldn't verify the server - check the address, or reload the page and try again",
             "auth": {
               "label": "Autentifikācija (neobligāta)",
               "username": {
@@ -5096,6 +5098,7 @@
       "notFound": "Paziņojums nav atrasts",
       "hostRequired": "Resursdatora parametrs ir obligāts",
       "invalidHost": "Nederīgs resursdatora parametrs",
+      "invalidBody": "Invalid request body",
       "rateLimit": "Pārāk daudz paziņojumu straumes pieslēgšanās mēģinājumu, lūdzu, uzgaidiet pirms atkārtota mēģinājuma"
     },
     "streams": {

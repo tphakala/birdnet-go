@@ -137,6 +137,45 @@ func DefaultConfig() Config {
 	}
 }
 
+// buildTransport constructs the tuned *http.Transport for a Config whose zero
+// values have already been defaulted. It is the single place that wires the
+// SSRF-guarded dial context and the accompanying proxy handling, so every
+// guarded client (the Client wrapper via New and the standalone
+// NewGuardedHTTPClient) shares one implementation and cannot drift.
+func buildTransport(c *Config) *http.Transport {
+	// Base dialer with tuned dial timeout and keep-alive.
+	baseDialer := &net.Dialer{
+		Timeout:   defaultDialTimeout,
+		KeepAlive: defaultDialKeepAlive,
+	}
+	dialContext := baseDialer.DialContext
+	proxy := http.ProxyFromEnvironment
+	if c.BlockLinkLocalAndMetadata {
+		dialContext = newGuardedDialContext(baseDialer)
+		// Disable environment proxies while the guard is active. A configured
+		// proxy would defeat the guard: the transport dials the proxy and lets
+		// it resolve the destination, so the target IP never reaches the guard
+		// (and with a loopback/private proxy the guard would reject the proxy
+		// itself). This mirrors the imageprovider SSRF client. Non-guarded
+		// clients keep normal ProxyFromEnvironment support.
+		proxy = nil
+	}
+
+	return &http.Transport{
+		Proxy:                 proxy,
+		DialContext:           dialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          c.MaxIdleConns,
+		MaxIdleConnsPerHost:   c.MaxIdleConnsPerHost,
+		IdleConnTimeout:       c.IdleConnTimeout,
+		TLSHandshakeTimeout:   c.TLSHandshakeTimeout,
+		ResponseHeaderTimeout: c.ResponseHeaderTimeout,
+		ExpectContinueTimeout: c.ExpectContinueTimeout,
+		DisableKeepAlives:     c.DisableKeepAlives,
+		DisableCompression:    c.DisableCompression,
+	}
+}
+
 // New creates a new HTTP client with the given configuration.
 // Accepts nil cfg (falls back to DefaultConfig) and does not mutate the caller's config.
 func New(cfg *Config) *Client {
@@ -173,38 +212,9 @@ func New(cfg *Config) *Client {
 		}
 	}
 
-	// Base dialer with tuned dial timeout and keep-alive.
-	baseDialer := &net.Dialer{
-		Timeout:   defaultDialTimeout,
-		KeepAlive: defaultDialKeepAlive,
-	}
-	dialContext := baseDialer.DialContext
-	proxy := http.ProxyFromEnvironment
-	if c.BlockLinkLocalAndMetadata {
-		dialContext = newGuardedDialContext(baseDialer)
-		// Disable environment proxies while the guard is active. A configured
-		// proxy would defeat the guard: the transport dials the proxy and lets
-		// it resolve the destination, so the target IP never reaches the guard
-		// (and with a loopback/private proxy the guard would reject the proxy
-		// itself). This mirrors the imageprovider SSRF client. Non-guarded
-		// clients keep normal ProxyFromEnvironment support.
-		proxy = nil
-	}
-
-	// Create transport with tuned settings
-	transport := &http.Transport{
-		Proxy:                 proxy,
-		DialContext:           dialContext,
-		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          c.MaxIdleConns,
-		MaxIdleConnsPerHost:   c.MaxIdleConnsPerHost,
-		IdleConnTimeout:       c.IdleConnTimeout,
-		TLSHandshakeTimeout:   c.TLSHandshakeTimeout,
-		ResponseHeaderTimeout: c.ResponseHeaderTimeout,
-		ExpectContinueTimeout: c.ExpectContinueTimeout,
-		DisableKeepAlives:     c.DisableKeepAlives,
-		DisableCompression:    c.DisableCompression,
-	}
+	// Build the tuned transport. buildTransport is the single place that wires
+	// the SSRF-guarded dialer and proxy handling, shared with NewGuardedHTTPClient.
+	transport := buildTransport(&c)
 
 	return &Client{
 		client: &http.Client{
@@ -213,6 +223,40 @@ func New(cfg *Config) *Client {
 		},
 		defaultTimeout: c.DefaultTimeout,
 		userAgent:      c.UserAgent,
+	}
+}
+
+// sharedGuardedTransport is the process-wide SSRF-guarded transport that backs
+// every client from NewGuardedHTTPClient. Like http.DefaultTransport it is built
+// once and reused, so the outbound probe and test-connection endpoints share one
+// connection pool instead of allocating a transport (pool + background
+// goroutines) per call. Built lazily to keep package initialization cheap.
+var sharedGuardedTransport = sync.OnceValue(func() *http.Transport {
+	cfg := DefaultConfig()
+	cfg.BlockLinkLocalAndMetadata = true
+	return buildTransport(&cfg)
+})
+
+// NewGuardedHTTPClient returns a standard *http.Client whose transport applies
+// the SSRF guard: it refuses link-local, unspecified, and known cloud-metadata
+// targets, pins the resolved IP to close the DNS-rebinding window, and disables
+// environment proxies so a configured proxy cannot resolve a blocked destination
+// on the client's behalf (see ssrf.go and Config.BlockLinkLocalAndMetadata).
+//
+// Use it as a drop-in for the bare &http.Client{} that outbound connectivity
+// probes and "test connection" endpoints would otherwise use, so those paths
+// cannot be turned into SSRF relays. Loopback and private RFC1918/ULA ranges stay
+// reachable so on-LAN targets keep working.
+//
+// The returned client shares one process-wide guarded transport (and its
+// connection pool), so callers must not call CloseIdleConnections on it. timeout
+// bounds each whole request via http.Client.Timeout; pass 0 to leave it unset.
+// The returned client itself is fresh, so callers may still set fields such as
+// CheckRedirect before the first request.
+func NewGuardedHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Transport: sharedGuardedTransport(),
+		Timeout:   timeout,
 	}
 }
 

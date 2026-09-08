@@ -2906,6 +2906,7 @@
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
           "saveButton": "Szolgáltató mentése",
+          "saveWaitingNtfyCheck": "Waiting for the ntfy connection check to finish",
           "savingButton": "Mentés...",
           "cancelButton": "Mégse",
           "testButton": "Teszt",
@@ -2977,6 +2978,7 @@
               "http": "A HTTP működik - a szerver nem HTTPS-t használ"
             },
             "connectionFailed": "Nem sikerült csatlakozni - ellenőrizze a hostnevet és a szerver állapotát",
+            "checkError": "Couldn't verify the server - check the address, or reload the page and try again",
             "auth": {
               "label": "Hitelesítés (opcionális)",
               "username": {
@@ -5096,6 +5098,7 @@
       "notFound": "Az értesítés nem található",
       "hostRequired": "A host paraméter kötelező",
       "invalidHost": "Érvénytelen host paraméter",
+      "invalidBody": "Invalid request body",
       "rateLimit": "Túl sok értesítési stream csatlakozási kísérlet, kérjük, várjon, mielőtt újra próbálkozik"
     },
     "streams": {

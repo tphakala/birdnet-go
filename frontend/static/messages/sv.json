@@ -2906,6 +2906,7 @@
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
           "saveButton": "Spara leverantör",
+          "saveWaitingNtfyCheck": "Waiting for the ntfy connection check to finish",
           "savingButton": "Sparar...",
           "cancelButton": "Avbryt",
           "testButton": "Testa",
@@ -2977,6 +2978,7 @@
               "http": "HTTP fungerar - servern använder inte HTTPS"
             },
             "connectionFailed": "Kunde inte ansluta - kontrollera värdnamn och serverstatus",
+            "checkError": "Couldn't verify the server - check the address, or reload the page and try again",
             "auth": {
               "label": "Autentisering (valfritt)",
               "username": {
@@ -5096,6 +5098,7 @@
       "notFound": "Avisering hittades inte",
       "hostRequired": "Värdparameter krävs",
       "invalidHost": "Ogiltig värdparameter",
+      "invalidBody": "Invalid request body",
       "rateLimit": "För många anslutningsförsök till aviseringsströmmen, vänta innan du försöker igen"
     },
     "streams": {
