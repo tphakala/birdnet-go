@@ -308,9 +308,9 @@ func getTopKResults(results []datastore.Results, k int) []datastore.Results {
 	// is small (defaultTopKResults = 10), so the copy is cheap and the upstream
 	// large-buffer reuse optimization stays intact: bn.resultsBuffer remains
 	// internal scratch that never escapes.
-	// Room for the up-to-two appended filter classes so preserveFilterClasses does
-	// not reallocate when it retains a below-top-K human or dog class.
-	out := make([]datastore.Results, n, n+2)
+	// Room for the appended filter classes so preserveFilterClasses does not
+	// reallocate when it retains a below-top-K human or dog class.
+	out := make([]datastore.Results, n, n+maxPreservedFilterClasses)
 	copy(out, results[:n])
 
 	// Retain the human and dog classes the privacy and dog-bark filters depend on

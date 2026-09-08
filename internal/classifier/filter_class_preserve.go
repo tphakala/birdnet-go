@@ -5,6 +5,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/labels/vocalization"
 )
 
+// maxPreservedFilterClasses is the most results preserveFilterClasses can append
+// past the top-K cut: one human class and one dog class. getTopKResults pre-sizes
+// its output slice by this amount so the appends never reallocate; keep the two in
+// sync.
+const maxPreservedFilterClasses = 2
+
 // preserveFilterClasses ensures the privacy and dog-bark filters still see the
 // human and dog classes they depend on after top-K truncation. Those filters run
 // in the analysis processor over the results the classifier returns, so a human
