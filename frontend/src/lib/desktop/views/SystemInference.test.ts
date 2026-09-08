@@ -424,6 +424,66 @@ describe('SystemInference', () => {
       expect(header).not.toBeNull();
       expect(container.textContent).not.toContain('system.inference.activityIdle');
     });
+
+    it('does NOT flap the header to not-analyzing when only some sources are down', async () => {
+      // One healthy source + one down source, no throughput (silence => isActive false).
+      // The model can still analyze via the healthy source, so the dominant header must
+      // read idle, not the red "not analyzing" attention state that used to appear
+      // whenever ANY source was down and then flip back to active on the next detection.
+      const model = makeModel({
+        paused: false,
+        sources: [
+          { id: 'a', name: 'Front Yard', type: 'soundcard', fallback: false },
+          { id: 'b', name: 'Back Yard', type: 'rtsp', fallback: false, notRunning: true },
+        ],
+      });
+      installApi(makeSnapshot([model]));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('Back Yard');
+      });
+
+      // Header shows idle, not the model-level not-analyzing alarm.
+      expect(
+        container.querySelector('[aria-label="system.inference.modelNotAnalyzingTooltip"]')
+      ).toBeNull();
+      expect(
+        container.querySelector('[aria-label="system.inference.activityIdle"]')
+      ).not.toBeNull();
+
+      // The specific down source is still flagged, and its help text still renders so the
+      // badge's aria-describedby resolves (no dangling reference).
+      const badges = notRunningBadges(container);
+      expect(badges).toHaveLength(1);
+      const helpId = badges[0].getAttribute('aria-describedby');
+      expect(helpId).toBeTruthy();
+      expect(container.querySelector(`[id="${helpId}"]`)).not.toBeNull();
+    });
+
+    it('still shows the header not-analyzing state when ALL sources are down', async () => {
+      // Every assigned source down + silence => genuinely not analyzing, so the alarm stays.
+      const model = makeModel({
+        paused: false,
+        sources: [
+          { id: 'a', name: 'Front Yard', type: 'soundcard', fallback: false, notRunning: true },
+          { id: 'b', name: 'Back Yard', type: 'rtsp', fallback: false, notRunning: true },
+        ],
+      });
+      installApi(makeSnapshot([model]));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('Back Yard');
+      });
+
+      expect(
+        container.querySelector('[aria-label="system.inference.modelNotAnalyzingTooltip"]')
+      ).not.toBeNull();
+      expect(container.textContent).not.toContain('system.inference.activityIdle');
+    });
   });
 
   // These tests run against the i18n stub in src/test/setup.ts, which returns the

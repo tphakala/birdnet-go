@@ -70,15 +70,19 @@ Shows up to 12 species, ordered by novelty category then detection count.
     // Guard against a null payload: the default [] only applies for undefined,
     // and the daily-summary endpoint can return a null body.
     if (!data) return result;
-    // Dedupe by scientific_name (first wins): the daily-summary payload can carry
-    // duplicate rows, which a bare scientific_name key would render as two tiles and,
+    // Dedupe by scientific_name (first qualifying row wins): the daily-summary payload can
+    // carry duplicate rows, which a bare scientific_name key would render as two tiles and,
     // worse, throw each_key_duplicate and white-screen the dashboard (Sentry BIRDNET-GO-2HP).
+    // Consume the key only when a row qualifies, so a non-qualifying duplicate row does not
+    // burn the key and drop a later qualifying row for the same species.
     const seen = new Set<string>();
     for (const species of data) {
       if (seen.has(species.scientific_name)) continue;
-      seen.add(species.scientific_name);
       const category = resolveNoveltyCategory(species, { infrequentThresholdDays, isToday });
-      if (category !== null) result.push({ species, category });
+      if (category !== null) {
+        seen.add(species.scientific_name);
+        result.push({ species, category });
+      }
     }
     result.sort((a, b) => {
       const rankDiff = categoryRank[a.category] - categoryRank[b.category];

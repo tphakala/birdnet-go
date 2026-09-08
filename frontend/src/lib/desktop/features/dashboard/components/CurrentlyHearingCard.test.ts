@@ -16,6 +16,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { flushSync } from 'svelte';
 import { cleanup } from '@testing-library/svelte';
 import { createComponentTestFactory } from '../../../../../test/render-helpers';
 import type { PendingDetection } from '$lib/types/pending.types';
@@ -27,6 +28,15 @@ const FI = new Map<string, string>([['Turdus migratorius', 'Punarinta']]);
 vi.mock('$lib/stores/speciesDictionary.svelte', () => ({
   localizeScientific: vi.fn((scientificName: string) => FI.get(scientificName)),
 }));
+
+// jsdom lacks the Web Animations API that svelte/transition's fade drives via
+// element.animate() when chips mount/unmount on a rerender. Stub fade to a zero-duration,
+// css-less transition so outros complete synchronously (removed chips actually leave the
+// DOM) without touching element.animate.
+vi.mock('svelte/transition', async importOriginal => {
+  const actual = await importOriginal<typeof import('svelte/transition')>();
+  return { ...actual, fade: () => ({ duration: 0 }) };
+});
 
 import CurrentlyHearingCard from './CurrentlyHearingCard.svelte';
 
@@ -129,6 +139,36 @@ describe('CurrentlyHearingCard species-name localization', () => {
         ],
       },
     });
+    expect(getAllByText('Eurasian Wren')).toHaveLength(2);
+  });
+
+  // Regression: the terminal-detection retention layer used to key by
+  // source+species (detectionKey) while rendering keyed by source+species+firstDetected
+  // (renderKey). Two concurrent same-source same-species detections then shared one
+  // retention key, so when one completed and dropped from the incoming SSE snapshot while
+  // the other was still active, the completed one was evicted instantly (its key was still
+  // "incoming" via the active twin) instead of being held for TERMINAL_RETENTION_MS.
+  it('retains a completed detection while a concurrent same-species detection is still active', async () => {
+    const base = {
+      species: 'Eurasian Wren',
+      scientificName: 'Troglodytes troglodytes',
+      source: 'mic-9',
+      sourceID: 'mic-9',
+    } as const;
+    // A completed (approved), B still active; same source and species, distinct start times.
+    const a = pending({ ...base, status: 'approved', firstDetected: 1_700_000_000 });
+    const b = pending({ ...base, status: 'active', firstDetected: 1_700_000_005 });
+
+    const { rerender, getAllByText } = card.render({ props: { detections: [a, b] } });
+    // Let the retention $effect record A's terminal state before the snapshot changes.
+    flushSync();
+
+    // Backend stops sending A (it completed) but keeps sending the still-active B.
+    await rerender({ detections: [b] });
+    flushSync();
+
+    // A must remain retained (held, not evicted) so both chips are still shown. With the
+    // old detectionKey the active B masked A as "still incoming" and A vanished immediately.
     expect(getAllByText('Eurasian Wren')).toHaveLength(2);
   });
 });

@@ -828,7 +828,7 @@
 
         The backend still returns `snapshot.audio` and its i18n keys are kept, so
         re-enabling is just a matter of restoring the markup. Tracked in the
-        Phase A spec (Forgejo #1144). Do NOT delete the audio types/fields.
+        internal Phase A spec. Do NOT delete the audio types/fields.
       -->
     </div>
 
@@ -1011,7 +1011,9 @@
             {@const throughputLatest =
               throughputSeries.length > 0 ? throughputSeries[throughputSeries.length - 1] : 0}
             {@const isActive = throughputSeries.length > 0 && throughputLatest > 0}
-            {@const notAnalyzing = model.sources.some(s => s.notRunning)}
+            {@const anySourceDown = model.sources.some(s => s.notRunning)}
+            {@const allSourcesDown =
+              model.sources.length > 0 && model.sources.every(s => s.notRunning)}
             <div
               class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col gap-3"
             >
@@ -1047,14 +1049,15 @@
                         >{/if}
                     </span>
                   </span>
-                {:else if notAnalyzing && !isActive}
-                  <!-- A source assigned to this model is not sending it audio AND the
-                       model is producing no throughput, so it is genuinely not analyzing.
-                       Surface it in the dominant header slot rather than a benign "Idle"
-                       (#4209). Gated on !isActive so a multi-source model still analyzing
-                       via another source reads "active", not a misleading blanket "not
-                       analyzing"; the specific down source is still flagged by its badge
-                       below. Precedence: paused > not-analyzing > active > idle. -->
+                {:else if allSourcesDown && !isActive}
+                  <!-- EVERY source assigned to this model is down AND the model is producing
+                       no throughput, so it is genuinely not analyzing. Surface it in the
+                       dominant header slot rather than a benign "Idle" (#4209). Gating on
+                       allSourcesDown (not "any source down") keeps a multi-source model with
+                       one healthy source out of this alarm: during silence it reads "idle"
+                       instead of flapping to "not analyzing" and back when a bird sings, and
+                       the specific down source is still flagged by its badge below.
+                       Precedence: paused > not-analyzing > active > idle. -->
                   <span
                     class="ml-auto flex items-center gap-1.5"
                     role="status"
@@ -1372,9 +1375,12 @@
                   <!-- Persistent, visible reason so keyboard and touch users get the
                        cause without a hover (frontend/CLAUDE.md: no ambiguous states).
                        Each not-analyzing badge references it via aria-describedby for
-                       screen readers. It points at this page, not the model gallery,
-                       which has no per-source liveness view (#4209). -->
-                  {#if notAnalyzing}
+                       screen readers. Gated on anySourceDown (not the header's
+                       allSourcesDown) so a single down source among healthy ones still
+                       renders the element every down-source badge points at, leaving no
+                       dangling aria-describedby. It points at this page, not the model
+                       gallery, which has no per-source liveness view (#4209). -->
+                  {#if anySourceDown}
                     <p
                       id={notAnalyzingHelpId}
                       class="text-xs text-red-600 dark:text-red-400 mt-1.5 leading-snug"
