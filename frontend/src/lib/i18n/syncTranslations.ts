@@ -197,6 +197,24 @@ class TranslationSync {
       }
     }
 
+    // Added keys are filled with the ENGLISH text as a placeholder, not a real
+    // translation. Surface that loudly and list the keys so the placeholders are
+    // not committed as-is and forgotten (see the i18n workflow in frontend/CLAUDE.md).
+    const distinctAddedKeys = [...new Set(results.flatMap(r => r.addedKeys))].sort();
+    if (distinctAddedKeys.length > 0) {
+      const verb = options.check ? 'would be' : 'were';
+      console.log(
+        `\n⚠️  ACTION REQUIRED: ${distinctAddedKeys.length} key(s) ${verb} filled with the English text as a placeholder.`
+      );
+      console.log(
+        '    These are NOT translations. Replace each with a real translation in every non-English'
+      );
+      console.log('    locale before committing. Keys needing translation:');
+      for (const key of distinctAddedKeys) {
+        console.log(`      - ${key}`);
+      }
+    }
+
     if (options.check) {
       console.log('\nRun without --check to apply changes.');
     }
@@ -217,9 +235,10 @@ Options:
   --verbose   List every added/removed key
   --help, -h  Show this help message
 
-In default mode, missing keys are filled with the English value as fallback,
-and orphaned keys (not in en.json) are removed. Existing translations are
-preserved. Key ordering matches en.json to reduce diff noise.
+In default mode, missing keys are filled with the English value as a placeholder
+(these are NOT translations; they are reported as ACTION REQUIRED so they can be
+translated before committing), and orphaned keys (not in en.json) are removed.
+Existing translations are preserved. Key ordering matches en.json to reduce diff noise.
 `);
     process.exit(0);
   }
