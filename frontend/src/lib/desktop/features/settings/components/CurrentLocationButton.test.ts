@@ -4,51 +4,6 @@ import { createComponentTestFactory } from '../../../../../test/render-helpers';
 import CurrentLocationButton from './CurrentLocationButton.svelte';
 import { toastActions } from '$lib/stores/toast';
 
-vi.mock('$lib/i18n', () => ({
-  t: vi.fn((key: string, params?: Record<string, unknown>) => {
-    const translations: Record<string, string> = {
-      'common.loading': 'Loading...',
-      'settings.main.sections.rangeFilter.stationLocation.useCurrentLocation':
-        'Use browser location',
-      'settings.main.sections.rangeFilter.stationLocation.automaticLocation': 'Automatic location',
-      'settings.main.sections.rangeFilter.stationLocation.locationHelp':
-        "Fills the coordinates using this browser's location.",
-      'settings.main.sections.rangeFilter.stationLocation.locating': 'Locating...',
-      'settings.main.sections.rangeFilter.stationLocation.accuracy':
-        'Estimated accuracy: within {accuracy} m',
-      'settings.main.sections.rangeFilter.stationLocation.locationDetected':
-        'Browser location detected.',
-      'settings.main.sections.rangeFilter.stationLocation.geolocationUnsupported':
-        'Device location is unsupported.',
-      'settings.main.sections.rangeFilter.stationLocation.geolocationRequiresHttps':
-        'Browser location requires HTTPS or localhost.',
-      'settings.main.sections.rangeFilter.stationLocation.geolocationDenied':
-        'Location permission was denied.',
-      'settings.main.sections.rangeFilter.stationLocation.geolocationUnavailable':
-        'The device could not determine its location.',
-      'settings.main.sections.rangeFilter.stationLocation.geolocationTimedOut':
-        'The location request timed out.',
-      'settings.main.sections.rangeFilter.stationLocation.geolocationFailed':
-        'Could not determine the device location.',
-    };
-
-    // eslint-disable-next-line security/detect-object-injection -- Controlled translation test data
-    let translated = translations[key] ?? key;
-    for (const [name, value] of Object.entries(params ?? {})) {
-      translated = translated.replace(`{${name}}`, String(value));
-    }
-    return translated;
-  }),
-}));
-
-vi.mock('$lib/stores/toast', () => ({
-  toastActions: {
-    success: vi.fn(),
-    warning: vi.fn(),
-    error: vi.fn(),
-  },
-}));
-
 const geolocationMock = {
   getCurrentPosition: vi.fn<Geolocation['getCurrentPosition']>(),
   watchPosition: vi.fn<Geolocation['watchPosition']>(),
@@ -191,7 +146,7 @@ describe('CurrentLocationButton', () => {
     expect(toastActions.error).not.toHaveBeenCalled();
   });
 
-  it('ignores a result after coordinate input starts before the value is committed', async () => {
+  it('ignores a result after coordinate intent starts before the value is committed', async () => {
     const onLocation = vi.fn();
     let respond: PositionCallback | undefined;
     geolocationMock.getCurrentPosition.mockImplementationOnce(success => {
@@ -201,7 +156,7 @@ describe('CurrentLocationButton', () => {
     const result = testFactory.render({
       latitude: 51,
       longitude: 5,
-      coordinateInputVersion: 0,
+      coordinateIntentVersion: 0,
       onLocation,
     });
     await fireEvent.click(screen.getByRole('button', { name: 'Use browser location' }));
@@ -209,7 +164,7 @@ describe('CurrentLocationButton', () => {
     await result.rerender({
       latitude: 51,
       longitude: 5,
-      coordinateInputVersion: 1,
+      coordinateIntentVersion: 1,
       onLocation,
     });
     await waitFor(() =>
@@ -295,6 +250,31 @@ describe('CurrentLocationButton', () => {
     expect(screen.getByRole('status')).toBeInTheDocument();
 
     await result.rerender({ latitude: 52.2, longitude: 4.3, onLocation });
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('hides accuracy when newer coordinate intent keeps the same values', async () => {
+    const onLocation = vi.fn();
+    geolocationMock.getCurrentPosition.mockImplementationOnce(success => {
+      success(createPosition(52.1, 4.3, 12));
+    });
+
+    const result = testFactory.render({ coordinateIntentVersion: 0, onLocation });
+    await fireEvent.click(screen.getByRole('button', { name: 'Use browser location' }));
+    await result.rerender({
+      latitude: 52.1,
+      longitude: 4.3,
+      coordinateIntentVersion: 0,
+      onLocation,
+    });
+    expect(screen.getByRole('status')).toBeInTheDocument();
+
+    await result.rerender({
+      latitude: 52.1,
+      longitude: 4.3,
+      coordinateIntentVersion: 1,
+      onLocation,
+    });
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 

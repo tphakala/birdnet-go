@@ -10,7 +10,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -31,11 +30,7 @@ func TestBrowserLocationSettingsRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 
 	e := echo.New()
-	controller := &Controller{
-		Core:                &apicore.Core{Echo: e},
-		controlChan:         make(chan string, testControlChanBuffer),
-		DisableSaveSettings: true,
-	}
+	controller := getTestController(t, e)
 	controller.Settings.Store(initial)
 
 	putRequest := httptest.NewRequest(http.MethodPut, "/api/v2/settings", bytes.NewReader(body))

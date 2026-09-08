@@ -17,6 +17,7 @@
   - tabs: Array of tab definitions
   - activeTab: Currently active tab ID (bindable)
   - onTabChange: Callback when tab changes
+  - onReset: Callback after all settings are reset
   - showActions: Whether to show the save/reset actions bar (default: true)
   - class: Additional CSS classes
 
@@ -41,6 +42,7 @@
     tabs: TabDefinition[];
     activeTab: string;
     onTabChange?: (_tabId: string) => void;
+    onReset?: () => void;
     showActions?: boolean;
     class?: string;
   }
@@ -49,6 +51,7 @@
     tabs,
     activeTab = $bindable(),
     onTabChange,
+    onReset,
     showActions = true,
     class: className,
   }: Props = $props();
@@ -180,7 +183,7 @@
 
   <!-- Integrated Save/Reset Actions -->
   {#if showActions}
-    <SettingsPageActions />
+    <SettingsPageActions {onReset} />
   {/if}
 </div>
 

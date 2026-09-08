@@ -15,7 +15,7 @@
   interface Props {
     latitude: number;
     longitude: number;
-    coordinateInputVersion?: number;
+    coordinateIntentVersion?: number;
     onLocation: (_latitude: number, _longitude: number) => void;
     disabled?: boolean;
   }
@@ -24,13 +24,14 @@
     latitude: number;
     longitude: number;
     accuracy: number | null;
+    coordinateIntentVersion: number;
   }
 
   interface PendingRequest {
     id: number;
     latitude: number;
     longitude: number;
-    coordinateInputVersion: number;
+    coordinateIntentVersion: number;
   }
 
   interface BrowserGeolocationPosition {
@@ -59,7 +60,7 @@
   let {
     latitude,
     longitude,
-    coordinateInputVersion = 0,
+    coordinateIntentVersion = 0,
     onLocation,
     disabled = false,
   }: Props = $props();
@@ -73,14 +74,15 @@
   let displayedAccuracy = $derived(
     detectedPosition &&
       detectedPosition.latitude === latitude &&
-      detectedPosition.longitude === longitude
+      detectedPosition.longitude === longitude &&
+      detectedPosition.coordinateIntentVersion === coordinateIntentVersion
       ? detectedPosition.accuracy
       : null
   );
 
-  // A manual/map edit or a save that starts after the request is newer user
-  // intent. The browser request cannot be cancelled, so invalidate it locally
-  // and ignore its eventual callbacks.
+  // A manual/map/reset action or a save that starts after the request is newer
+  // user intent. The browser request cannot be cancelled, so invalidate it
+  // locally and ignore its eventual callbacks.
   $effect(() => {
     const request = pendingRequest;
     if (
@@ -88,7 +90,7 @@
       (disabled ||
         latitude !== request.latitude ||
         longitude !== request.longitude ||
-        coordinateInputVersion !== request.coordinateInputVersion)
+        coordinateIntentVersion !== request.coordinateIntentVersion)
     ) {
       pendingRequest = null;
       locating = false;
@@ -158,26 +160,27 @@
   function handleGeolocationError(error: BrowserGeolocationError, requestId: number) {
     if (!finishRequest(requestId)) return;
 
-    logger.error('Browser geolocation failed', error);
-
     switch (error.code) {
       case GEOLOCATION_ERRORS.permissionDenied:
+        logger.warn('Browser geolocation permission denied', error);
         toastActions.warning(
           t('settings.main.sections.rangeFilter.stationLocation.geolocationDenied')
         );
         break;
       case GEOLOCATION_ERRORS.positionUnavailable:
+        logger.warn('Browser geolocation position unavailable', error);
         toastActions.error(
           t('settings.main.sections.rangeFilter.stationLocation.geolocationUnavailable')
         );
         break;
       case GEOLOCATION_ERRORS.timeout:
+        logger.warn('Browser geolocation request timed out', error);
         toastActions.error(
           t('settings.main.sections.rangeFilter.stationLocation.geolocationTimedOut')
         );
         break;
       default:
-        showUnexpectedFailure();
+        showUnexpectedFailure(error);
     }
   }
 
@@ -217,6 +220,7 @@
         latitude: roundedLatitude,
         longitude: roundedLongitude,
         accuracy: roundedAccuracy,
+        coordinateIntentVersion,
       };
       toastActions.success(
         t('settings.main.sections.rangeFilter.stationLocation.locationDetected')
@@ -244,7 +248,7 @@
     }
 
     const requestId = ++nextRequestId;
-    pendingRequest = { id: requestId, latitude, longitude, coordinateInputVersion };
+    pendingRequest = { id: requestId, latitude, longitude, coordinateIntentVersion };
     locating = true;
     detectedPosition = null;
 

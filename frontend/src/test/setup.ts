@@ -136,6 +136,27 @@ const translations: Record<string, string> = {
   'settings.species.customConfiguration.title': 'Custom Configuration',
   'settings.species.customConfiguration.description': 'Configure custom settings for species',
   'common.ui.loading': 'Loading...',
+  'settings.main.sections.rangeFilter.stationLocation.useCurrentLocation': 'Use browser location',
+  'settings.main.sections.rangeFilter.stationLocation.automaticLocation': 'Automatic location',
+  'settings.main.sections.rangeFilter.stationLocation.locationHelp':
+    "Fills the coordinates using this browser's location.",
+  'settings.main.sections.rangeFilter.stationLocation.locating': 'Locating...',
+  'settings.main.sections.rangeFilter.stationLocation.accuracy':
+    'Estimated accuracy: within {accuracy} m',
+  'settings.main.sections.rangeFilter.stationLocation.locationDetected':
+    'Browser location detected.',
+  'settings.main.sections.rangeFilter.stationLocation.geolocationUnsupported':
+    'Device location is unsupported.',
+  'settings.main.sections.rangeFilter.stationLocation.geolocationRequiresHttps':
+    'Browser location requires HTTPS or localhost.',
+  'settings.main.sections.rangeFilter.stationLocation.geolocationDenied':
+    'Location permission was denied.',
+  'settings.main.sections.rangeFilter.stationLocation.geolocationUnavailable':
+    'The device could not determine its location.',
+  'settings.main.sections.rangeFilter.stationLocation.geolocationTimedOut':
+    'The location request timed out.',
+  'settings.main.sections.rangeFilter.stationLocation.geolocationFailed':
+    'Could not determine the device location.',
   'common.close': 'Close',
   'common.confirm': 'Confirm',
   'common.cancel': 'Cancel',

@@ -533,8 +533,13 @@
     }
   }
 
-  // Centralized location update: marks locationConfigured and pushes coordinates to the store
-  function updateLocationSettings(lat: number, lng: number) {
+  // Every user-initiated coordinate update advances this version, including a
+  // map action whose rounded values equal the current coordinates. Track raw
+  // input separately so pending browser results also cannot overwrite text
+  // before a NumberField change/blur commit occurs.
+  let coordinateIntentVersion = $state(0);
+
+  function applyLocationSettings(lat: number, lng: number) {
     settingsActions.updateSection('birdnet', {
       latitude: lat,
       longitude: lng,
@@ -542,13 +547,17 @@
     });
   }
 
-  // NumberField commits on change/blur. Track raw input separately so a
-  // pending browser-location result cannot overwrite text the user is still
-  // entering before that commit occurs.
-  let coordinateInputVersion = $state(0);
+  function updateLocationSettings(lat: number, lng: number) {
+    advanceCoordinateIntentVersion();
+    applyLocationSettings(lat, lng);
+  }
 
-  function handleCoordinateInput() {
-    coordinateInputVersion += 1;
+  function updateBrowserLocation(lat: number, lng: number) {
+    applyLocationSettings(lat, lng);
+  }
+
+  function advanceCoordinateIntentVersion() {
+    coordinateIntentVersion += 1;
   }
 
   function updateMarker(lat: number, lng: number) {
@@ -1062,7 +1071,7 @@
       <!-- Coordinates -->
       <div
         class="mb-4 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3"
-        oninput={handleCoordinateInput}
+        oninput={advanceCoordinateIntentVersion}
       >
         <NumberField
           label={t('settings.main.sections.rangeFilter.latitude.label')}
@@ -1090,8 +1099,8 @@
           <CurrentLocationButton
             latitude={settings.birdnet.latitude}
             longitude={settings.birdnet.longitude}
-            {coordinateInputVersion}
-            onLocation={updateLocationSettings}
+            {coordinateIntentVersion}
+            onLocation={updateBrowserLocation}
             disabled={store.isLoading || store.isSaving}
           />
         </div>
@@ -1575,7 +1584,7 @@
 
 <!-- Main Content -->
 <main class="settings-page-content" aria-label="Main settings configuration">
-  <SettingsTabs {tabs} bind:activeTab />
+  <SettingsTabs {tabs} bind:activeTab onReset={advanceCoordinateIntentVersion} />
 </main>
 
 <!-- Map Modal -->

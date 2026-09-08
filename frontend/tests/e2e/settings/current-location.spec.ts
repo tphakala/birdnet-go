@@ -49,6 +49,34 @@ async function resolvePendingGeolocation(page: Page) {
   });
 }
 
+async function installLocationSettingsFixture(page: Page) {
+  await page.route('**/api/v2/settings', async (route: Route) => {
+    const request = route.request();
+    if (request.method() !== 'GET' || new URL(request.url()).pathname !== '/api/v2/settings') {
+      await route.continue();
+      return;
+    }
+
+    const response = await route.fetch();
+    const settings = (await response.json()) as {
+      birdnet: Record<string, unknown>;
+      [key: string]: unknown;
+    };
+    await route.fulfill({
+      response,
+      json: {
+        ...settings,
+        birdnet: {
+          ...settings.birdnet,
+          latitude: 51.501,
+          longitude: 5.501,
+          locationConfigured: false,
+        },
+      },
+    });
+  });
+}
+
 async function openLocationSettings(page: Page) {
   await page.goto('/ui/settings/main', { waitUntil: 'domcontentloaded' });
   await page.locator('#settings-tab-location').click();
@@ -189,6 +217,75 @@ test.describe('Browser location', () => {
     await resolvePendingGeolocation(page);
 
     await expect(latitudeField).toHaveValue('51.501');
+    await expect(longitudeField).toHaveValue(initialLongitude);
+    await expect(page.getByText('Browser location detected.', { exact: true })).toBeHidden();
+  });
+
+  test('keeps a newer map choice when rounded coordinates are unchanged', async ({ page }) => {
+    await installDeferredGeolocation(page);
+    await installLocationSettingsFixture(page);
+    await openLocationSettings(page);
+
+    const latitudeField = page.getByLabel('Latitude');
+    const longitudeField = page.getByLabel('Longitude');
+    const initialLatitude = await latitudeField.inputValue();
+    const initialLongitude = await longitudeField.inputValue();
+    const locationButton = page.getByRole('button', { name: 'Use browser location' });
+
+    await expect(page.getByRole('button', { name: 'Zoom in' })).toBeEnabled();
+    await locationButton.click();
+    await expect(page.getByRole('button', { name: 'Locating...' })).toBeDisabled();
+
+    const mapCanvas = page.locator('#location-map canvas');
+    const bounds = await mapCanvas.boundingBox();
+    if (!bounds) {
+      throw new Error('Location map has no rendered bounds');
+    }
+    await mapCanvas.click({
+      position: {
+        x: bounds.width / 2,
+        y: bounds.height / 2,
+      },
+    });
+
+    await expect(locationButton).toBeEnabled();
+    await expect(latitudeField).toHaveValue(initialLatitude);
+    await expect(longitudeField).toHaveValue(initialLongitude);
+
+    await resolvePendingGeolocation(page);
+
+    await expect(latitudeField).toHaveValue(initialLatitude);
+    await expect(longitudeField).toHaveValue(initialLongitude);
+    await expect(page.getByText('Browser location detected.', { exact: true })).toBeHidden();
+  });
+
+  test('ignores a pending result after all settings are reset', async ({ page }) => {
+    await installDeferredGeolocation(page);
+    await installLocationSettingsFixture(page);
+    await page.goto('/ui/settings/main', { waitUntil: 'domcontentloaded' });
+
+    const nodeNameField = page.getByLabel('Node Name');
+    const initialNodeName = await nodeNameField.inputValue();
+    await nodeNameField.fill(`${initialNodeName} changed`);
+    await nodeNameField.blur();
+
+    const resetButton = page.getByRole('button', { name: 'Reset all changes' });
+    await expect(resetButton).toBeVisible();
+    await page.locator('#settings-tab-location').click();
+
+    const latitudeField = page.getByLabel('Latitude');
+    const longitudeField = page.getByLabel('Longitude');
+    const initialLatitude = await latitudeField.inputValue();
+    const initialLongitude = await longitudeField.inputValue();
+    const locationButton = page.getByRole('button', { name: 'Use browser location' });
+    await locationButton.click();
+    await expect(page.getByRole('button', { name: 'Locating...' })).toBeDisabled();
+
+    await resetButton.click();
+    await expect(locationButton).toBeEnabled();
+    await resolvePendingGeolocation(page);
+
+    await expect(latitudeField).toHaveValue(initialLatitude);
     await expect(longitudeField).toHaveValue(initialLongitude);
     await expect(page.getByText('Browser location detected.', { exact: true })).toBeHidden();
   });
