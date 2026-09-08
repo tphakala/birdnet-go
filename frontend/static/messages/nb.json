@@ -2906,7 +2906,7 @@
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
           "saveButton": "Lagre leverandør",
-          "saveWaitingNtfyCheck": "Waiting for the ntfy connection check to finish",
+          "saveWaitingNtfyCheck": "Venter på at ntfy-tilkoblingssjekken skal fullføres",
           "savingButton": "Lagrer...",
           "cancelButton": "Avbryt",
           "testButton": "Test",
@@ -2978,7 +2978,7 @@
               "http": "HTTP fungerer - serveren bruker ikke HTTPS"
             },
             "connectionFailed": "Kan ikke koble til - sjekk vertsnavn og serverstatus",
-            "checkError": "Couldn't verify the server - check the address, or reload the page and try again",
+            "checkError": "Kunne ikke verifisere serveren - sjekk adressen, eller last inn siden på nytt og prøv igjen",
             "auth": {
               "label": "Autentisering (valgfritt)",
               "username": {
@@ -5098,7 +5098,7 @@
       "notFound": "Varsel ikke funnet",
       "hostRequired": "Vert-parameter er obligatorisk",
       "invalidHost": "Ugyldig vert-parameter",
-      "invalidBody": "Invalid request body",
+      "invalidBody": "Ugyldig forespørselstekst",
       "rateLimit": "For mange forsøk på å koble til varselstrøm, vent litt før du prøver igjen"
     },
     "streams": {
