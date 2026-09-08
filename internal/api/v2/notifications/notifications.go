@@ -306,11 +306,11 @@ func (c *Handler) CheckNtfyServer(ctx echo.Context) error {
 	}
 	host := body.Host
 	if host == "" {
-		return c.HandleErrorWithKey(ctx, nil, "host parameter is required", http.StatusBadRequest, notification.MsgErrNotifHostRequired, nil)
+		return c.HandleErrorWithKey(ctx, nil, "host is required", http.StatusBadRequest, notification.MsgErrNotifHostRequired, nil)
 	}
 
 	if !isValidNtfyHost(host) {
-		return c.HandleErrorWithKey(ctx, nil, "invalid host parameter", http.StatusBadRequest, notification.MsgErrNotifInvalidHost, nil)
+		return c.HandleErrorWithKey(ctx, nil, "invalid host", http.StatusBadRequest, notification.MsgErrNotifInvalidHost, nil)
 	}
 
 	// Resolve the per-scheme probe timeout. Production leaves the override at zero
