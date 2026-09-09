@@ -26,7 +26,7 @@ func TestWriteAndReadConsolidationState(t *testing.T) {
 	}
 
 	// Write state
-	err := WriteConsolidationState(tmpDir, state)
+	err := WriteConsolidationState(tmpDir, state, newTestLogger())
 	require.NoError(t, err)
 
 	// Verify file exists
@@ -173,7 +173,7 @@ func TestResumeConsolidation_AlreadyComplete(t *testing.T) {
 		ConfiguredPath: configuredPath,
 		StartedAt:      time.Now(),
 	}
-	err = WriteConsolidationState(tmpDir, state)
+	err = WriteConsolidationState(tmpDir, state, newTestLogger())
 	require.NoError(t, err)
 
 	// Resume should detect completion and clean up state file
@@ -216,7 +216,7 @@ func TestResumeConsolidation_ResumeFromStep8(t *testing.T) {
 		ConfiguredPath: configuredPath,
 		StartedAt:      time.Now(),
 	}
-	err = WriteConsolidationState(tmpDir, state)
+	err = WriteConsolidationState(tmpDir, state, newTestLogger())
 	require.NoError(t, err)
 
 	// Resume should complete the rename

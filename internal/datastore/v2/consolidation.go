@@ -27,7 +27,7 @@ type ConsolidationState struct {
 
 // WriteConsolidationState writes the consolidation state file atomically.
 // It writes to a temp file first, then renames to ensure atomic write.
-func WriteConsolidationState(dataDir string, state *ConsolidationState) error {
+func WriteConsolidationState(dataDir string, state *ConsolidationState, log logger.Logger) error {
 	stateFilePath := filepath.Join(dataDir, StateFileName)
 
 	data, err := json.MarshalIndent(state, "", "  ")
@@ -72,12 +72,21 @@ func WriteConsolidationState(dataDir string, state *ConsolidationState) error {
 	}
 
 	// Best-effort fsync of the parent directory so the rename (a directory-entry change) is
-	// itself durable across a power failure, not just the file contents. The rename already
-	// succeeded, so a failure here only weakens power-loss durability of the breadcrumb, which
-	// leaves the DB in its safe pre-consolidation state.
-	if dir, err := os.Open(dataDir); err == nil {
-		_ = dir.Sync()
-		_ = dir.Close()
+	// durable across a power failure, not just the file contents. The rename already succeeded,
+	// so a failure here does not fail the write, but log it so operators can see the breadcrumb
+	// may not survive power loss.
+	if dir, err := os.Open(dataDir); err != nil {
+		log.Warn("failed to open data dir to fsync consolidation state",
+			logger.String("dir", dataDir), logger.Error(err))
+	} else {
+		if syncErr := dir.Sync(); syncErr != nil {
+			log.Warn("failed to fsync data dir after consolidation state write",
+				logger.String("dir", dataDir), logger.Error(syncErr))
+		}
+		if closeErr := dir.Close(); closeErr != nil {
+			log.Warn("failed to close data dir after consolidation state fsync",
+				logger.String("dir", dataDir), logger.Error(closeErr))
+		}
 	}
 
 	return nil

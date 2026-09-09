@@ -879,21 +879,13 @@ func checkpointSQLiteWAL(dbPath string, log logger.Logger) error {
 
 // moveSQLiteDBFiles renames a SQLite database file together with its -wal and -shm
 // sidecars, so no committed WAL data is left behind or discarded during consolidation.
-// The move is all-or-nothing: it first refuses to clobber an existing destination, then
-// renames the main file, then each present sidecar; any failure (including a non-not-exist
-// stat error on a sidecar, which may hide live WAL data) rolls back every completed rename
-// and returns an error, so the caller never sees a half-moved database reported as success
-// (Forgejo #1580).
+// The move is all-or-nothing: the main file is renamed first, then each present sidecar;
+// any failure (including a non-not-exist stat error on a sidecar, which may hide live WAL
+// data) rolls back every completed rename and returns an error, so the caller never sees a
+// half-moved database reported as success (Forgejo #1580). It deliberately does NOT reject an
+// existing destination, so it can also serve as the rollback restore path (which must be able
+// to overwrite); a forward caller is responsible for ensuring its destination is free.
 func moveSQLiteDBFiles(from, to string, log logger.Logger) error {
-	// Refuse to overwrite an existing destination. os.Rename would silently replace it and a
-	// later revert could not restore it (e.g. a prior backup already at backupPath). Callers
-	// always pass a vacated or timestamp-unique destination, so an existing one is an
-	// unexpected collision. Lstat, not Stat, so a symlink at the destination also counts.
-	if _, err := os.Lstat(to); err == nil {
-		return fmt.Errorf("refusing to move SQLite database onto existing destination %q", to)
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("failed to stat destination %q: %w", to, err)
-	}
 	if err := os.Rename(from, to); err != nil {
 		return fmt.Errorf("failed to rename SQLite database %q to %q: %w", from, to, err)
 	}
@@ -1355,6 +1347,19 @@ func CheckAndConsolidateAtStartup(configuredPath string, log logger.Logger) (con
 	// Generate backup path for legacy database
 	backupPath := GenerateBackupPath(configuredPath)
 
+	// Refuse to overwrite an existing backup destination (main file or a -wal/-shm sidecar)
+	// before doing any work. GenerateBackupPath is timestamped, so a collision means a
+	// same-second re-run; the legacy->backup rename would otherwise clobber a prior backup that
+	// the rollback could not restore, so fail closed (Forgejo #1580). moveSQLiteDBFiles itself
+	// stays overwrite-capable so it can serve as the rollback restore path.
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		if _, statErr := os.Lstat(backupPath + suffix); statErr == nil {
+			return false, fmt.Errorf("consolidation aborted: backup destination %q already exists", backupPath+suffix)
+		} else if !os.IsNotExist(statErr) {
+			return false, fmt.Errorf("failed to stat backup destination %q: %w", backupPath+suffix, statErr)
+		}
+	}
+
 	// Write consolidation state file
 	state := &ConsolidationState{
 		LegacyPath:     configuredPath,
@@ -1363,7 +1368,7 @@ func CheckAndConsolidateAtStartup(configuredPath string, log logger.Logger) (con
 		ConfiguredPath: configuredPath,
 		StartedAt:      time.Now(),
 	}
-	if err := WriteConsolidationState(dataDir, state); err != nil {
+	if err := WriteConsolidationState(dataDir, state, log); err != nil {
 		reportConsolidationError("writeStateFile", err, configuredPath, v2MigrationPath)
 		diagnostics.RecordConsolidation(j, v2MigrationPath, configuredPath, backupPath, "failed")
 		return false, fmt.Errorf("failed to write consolidation state: %w", err)
