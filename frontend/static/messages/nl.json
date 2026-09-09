@@ -1781,6 +1781,8 @@
       "sourceNotRunning": "analyseert niet",
       "sourceNotRunningTooltip": "Deze bron is in de instellingen toegewezen aan het model, maar de audio bereikt het model niet, waardoor het geen detecties produceert. Controleer of de audiobron is verbonden en audio verzendt.",
       "modelNotAnalyzingTooltip": "Eén of meer aan dit model toegewezen audiobronnen verzenden er geen audio naar, waardoor het geen detecties produceert. Zie de hieronder vermelde bronnen.",
+      "sourcesDegraded": "{count} van {total} bronnen offline",
+      "sourcesDegradedTooltip": "Sommige, maar niet alle audiobronnen van dit model zijn offline, dus het analyseert nog steeds via de werkende bronnen. De specifieke offline bron en hoe dit op te lossen staan hieronder vermeld.",
       "notMeasured": "n/b",
       "unitMs": "ms",
       "unitKhz": "kHz",

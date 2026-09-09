@@ -1781,6 +1781,8 @@
       "sourceNotRunning": "ei analysoida",
       "sourceNotRunningTooltip": "Tämä lähde on liitetty malliin asetuksissa, mutta sen ääni ei tavoita mallia, joten se ei tuota havaintoja. Tarkista, että äänilähde on yhdistetty ja lähettää ääntä.",
       "modelNotAnalyzingTooltip": "Yksi tai useampi tähän malliin liitetyistä äänilähteistä ei lähetä sille ääntä, joten se ei tuota havaintoja. Katso alla luetellut lähteet.",
+      "sourcesDegraded": "{count}/{total} lähdettä alhaalla",
+      "sourcesDegradedTooltip": "Osa tämän mallin äänilähteistä on alhaalla, mutta ei kaikki, joten se analysoi edelleen toimivien kautta. Kyseinen alhaalla oleva lähde ja sen korjausohjeet on lueteltu alla.",
       "notMeasured": "-",
       "unitMs": "ms",
       "unitKhz": "kHz",

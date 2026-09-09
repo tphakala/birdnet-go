@@ -1781,6 +1781,8 @@
       "sourceNotRunning": "neanalizē",
       "sourceNotRunningTooltip": "Šis avots ir piešķirts modelim iestatījumos, bet tā audio nesasniedz modeli, tāpēc tas neveic noteikšanas. Pārbaudiet, vai audio avots ir pievienots un sūta audio.",
       "modelNotAnalyzingTooltip": "Viens vai vairāki šim modelim piešķirtie audio avoti nesūta tam audio, tāpēc tas neveic noteikšanas. Skatiet zemāk norādītos avotus.",
+      "sourcesDegraded": "{count} no {total} avotiem nedarbojas",
+      "sourcesDegradedTooltip": "Daži, bet ne visi šī modeļa audio avoti nedarbojas, tāpēc tas joprojām analizē, izmantojot strādājošos avotus. Konkrētais avots, kas nedarbojas, un kā to novērst, ir norādīti zemāk.",
       "notMeasured": "n/p",
       "unitMs": "ms",
       "unitKhz": "kHz",

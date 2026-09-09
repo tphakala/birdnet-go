@@ -1781,6 +1781,8 @@
       "sourceNotRunning": "analyserar inte",
       "sourceNotRunningTooltip": "Denna källa är tilldelad modellen i inställningarna, men dess ljud når inte modellen, så den producerar inga detektioner. Kontrollera att ljudkällan är ansluten och skickar ljud.",
       "modelNotAnalyzingTooltip": "En eller flera ljudkällor tilldelade denna modell skickar inte ljud till den, så den producerar inga detektioner. Se källorna som anges nedan.",
+      "sourcesDegraded": "{count} av {total} källor nere",
+      "sourcesDegradedTooltip": "Vissa, men inte alla av denna modells ljudkällor är nere, så den analyserar fortfarande via de fungerande. Den specifika källan som är nere och hur den åtgärdas anges nedan.",
       "notMeasured": "-",
       "unitMs": "ms",
       "unitKhz": "kHz",

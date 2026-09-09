@@ -1781,6 +1781,8 @@
       "sourceNotRunning": "nem elemzi",
       "sourceNotRunningTooltip": "Ez a forrás hozzá van rendelve a modellhez a beállításokban, de a hangja nem jut el a modellhez, így nem készít észleléseket. Ellenőrizze, hogy a hangforrás csatlakoztatva van-e és hangot küld-e.",
       "modelNotAnalyzingTooltip": "Egy vagy több, ehhez a modellhez hozzárendelt hangforrás nem küld neki hangot, így nem készít észleléseket. Lásd az alább felsorolt forrásokat.",
+      "sourcesDegraded": "{count}/{total} forrás leállt",
+      "sourcesDegradedTooltip": "A modell hangforrásai közül néhány leállt, de nem mindegyik, így a működő forrásokon keresztül továbbra is elemez. A konkrét leállt forrás és a hiba elhárításának módja az alábbiakban van felsorolva.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",

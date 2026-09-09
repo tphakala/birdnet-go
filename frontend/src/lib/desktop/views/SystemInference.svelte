@@ -862,7 +862,7 @@
                 <span class="text-xs text-muted">{t('system.inference.vad.disabled')}</span>
               {:else if !vad.available}
                 <TriangleAlert class="w-3 h-3 shrink-0 text-amber-500" aria-hidden="true" />
-                <span class="text-xs text-amber-600 dark:text-amber-400"
+                <span class="text-xs text-amber-700 dark:text-amber-400"
                   >{t('system.inference.vad.unavailable')}</span
                 >
               {:else if vad.loaded}
@@ -1011,9 +1011,9 @@
             {@const throughputLatest =
               throughputSeries.length > 0 ? throughputSeries[throughputSeries.length - 1] : 0}
             {@const isActive = throughputSeries.length > 0 && throughputLatest > 0}
-            {@const anySourceDown = model.sources.some(s => s.notRunning)}
-            {@const allSourcesDown =
-              model.sources.length > 0 && model.sources.every(s => s.notRunning)}
+            {@const downCount = model.sources.filter(s => s.notRunning).length}
+            {@const anySourceDown = downCount > 0}
+            {@const allSourcesDown = model.sources.length > 0 && downCount === model.sources.length}
             <div
               class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col gap-3"
             >
@@ -1033,6 +1033,31 @@
                     title={t('system.inference.deviceHelp')}
                   />
                 {/if}
+                {#if anySourceDown && !allSourcesDown}
+                  <!-- Partial degradation: at least one assigned source is down but not all,
+                       so the model still analyzes through its healthy source(s). Surface it in
+                       the header with a persistent amber chip driven purely by source health
+                       (not throughput/isActive), so it does not flap between silence and
+                       detections the way the old "any source down" alarm did (#4209). Mutually
+                       exclusive with the red not-analyzing state below, which requires ALL
+                       sources down. This chip lives outside the ml-auto activity slot so the
+                       live Active/Idle status still shows on the right; the specific down source
+                       and its remedy are in the per-source list further down. No aria-label, so
+                       screen readers announce the visible count rather than a generic label. -->
+                  <span
+                    class="flex items-center gap-1.5"
+                    role="status"
+                    title={t('system.inference.sourcesDegradedTooltip')}
+                  >
+                    <TriangleAlert class="w-3 h-3 shrink-0 text-amber-500" aria-hidden="true" />
+                    <span class="text-xs font-medium text-amber-700 dark:text-amber-400">
+                      {t('system.inference.sourcesDegraded', {
+                        count: downCount,
+                        total: model.sources.length,
+                      })}
+                    </span>
+                  </span>
+                {/if}
                 {#if model.paused}
                   <!-- Schedule-gated model that is currently off-schedule: explain the
                        flat latency line instead of showing a bare "idle" dash. -->
@@ -1043,7 +1068,7 @@
                     title={t('system.inference.pausedScheduleHelp')}
                   >
                     <Pause class="w-3 h-3 shrink-0 text-amber-500" aria-hidden="true" />
-                    <span class="text-xs text-amber-600 dark:text-amber-400">
+                    <span class="text-xs text-amber-700 dark:text-amber-400">
                       {t('system.inference.paused')}{#if model.scheduleLabel}<span
                           class="text-muted">&nbsp;({model.scheduleLabel})</span
                         >{/if}

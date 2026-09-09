@@ -1781,6 +1781,8 @@
       "sourceNotRunning": "no está analizando",
       "sourceNotRunningTooltip": "Esta fuente está asignada al modelo en la configuración, pero su audio no llega al modelo, por lo que no genera detecciones. Compruebe que la fuente de audio esté conectada y enviando audio.",
       "modelNotAnalyzingTooltip": "Una o más fuentes de audio asignadas a este modelo no le están enviando audio, por lo que no genera detecciones. Consulte las fuentes enumeradas a continuación.",
+      "sourcesDegraded": "{count} de {total} fuentes caídas",
+      "sourcesDegradedTooltip": "Algunas fuentes de audio de este modelo, pero no todas, están caídas, por lo que sigue analizando a través de las que funcionan correctamente. La fuente caída específica y cómo solucionarlo se enumeran a continuación.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",

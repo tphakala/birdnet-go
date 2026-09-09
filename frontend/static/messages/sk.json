@@ -1781,6 +1781,8 @@
       "sourceNotRunning": "neanalyzuje",
       "sourceNotRunningTooltip": "Tento zdroj je v nastaveniach priradený k modelu, ale jeho zvuk sa k modelu nedostáva, takže nevytvára žiadne detekcie. Skontrolujte, či je zdroj zvuku pripojený a odosiela zvuk.",
       "modelNotAnalyzingTooltip": "Jeden alebo viac zdrojov zvuku priradených k tomuto modelu mu neodosiela zvuk, takže nevytvára žiadne detekcie. Pozrite si zdroje uvedené nižšie.",
+      "sourcesDegraded": "{count} z {total} zdrojov mimo prevádzky",
+      "sourcesDegradedTooltip": "Niektoré, ale nie všetky zdroje zvuku tohto modelu sú mimo prevádzky, takže model stále analyzuje prostredníctvom tých funkčných. Konkrétny zdroj mimo prevádzky a spôsob, ako ho opraviť, sú uvedené nižšie.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",

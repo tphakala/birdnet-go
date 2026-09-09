@@ -282,8 +282,8 @@ func TestSpeciesInfoJSONSerialization(t *testing.T) {
 			Status:           RarityCommon,
 			Score:            0.65,
 			LocationBased:    true,
-			Latitude:         40.7128,
-			Longitude:        -74.006,
+			Latitude:         new(40.7128),
+			Longitude:        new(-74.006),
 			Date:             "2024-01-15",
 			ThresholdApplied: 0.03,
 		},
@@ -322,8 +322,8 @@ func TestSpeciesRarityInfoJSONSerialization(t *testing.T) {
 		Status:           RarityRare,
 		Score:            0.08,
 		LocationBased:    true,
-		Latitude:         60.1699,
-		Longitude:        24.9384,
+		Latitude:         new(60.1699),
+		Longitude:        new(24.9384),
 		Date:             "2024-06-15",
 		ThresholdApplied: 0.05,
 	}
@@ -341,6 +341,64 @@ func TestSpeciesRarityInfoJSONSerialization(t *testing.T) {
 	assert.InDelta(t, 24.9384, parsed["longitude"].(float64), 0.001)
 	assert.Equal(t, "2024-06-15", parsed["date"])
 	assert.InDelta(t, 0.05, parsed["threshold_applied"].(float64), 0.001)
+}
+
+// TestSpeciesRarityInfoZeroCoordinatesSerialized guards the fix for a station configured
+// at exactly 0.0 latitude or longitude (equator / prime meridian). With the old
+// float64+omitempty tag these keys were dropped at 0.0, and the frontend crashed calling
+// toFixed on the missing field. As *float64 they must be present and equal to 0.
+func TestSpeciesRarityInfoZeroCoordinatesSerialized(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "species")
+	t.Attr("type", "unit")
+	t.Attr("feature", "json-serialization")
+
+	info := SpeciesRarityInfo{
+		Status:        RarityRare,
+		Score:         0.08,
+		LocationBased: true,
+		Latitude:      new(0.0),
+		Longitude:     new(0.0),
+		Date:          "2024-06-15",
+	}
+
+	data, err := json.Marshal(info)
+	require.NoError(t, err)
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(data, &parsed))
+
+	// The keys must be present (not omitted) even though the value is exactly 0.
+	require.Contains(t, parsed, "latitude")
+	require.Contains(t, parsed, "longitude")
+	assert.InDelta(t, 0.0, parsed["latitude"].(float64), 0.0001)
+	assert.InDelta(t, 0.0, parsed["longitude"].(float64), 0.0001)
+}
+
+// TestSpeciesRarityInfoOmitsUnsetCoordinates verifies that when no location is configured
+// (nil coordinate pointers) the keys are omitted entirely, keeping the honest "no location"
+// semantics rather than emitting a misleading 0,0 (Null Island).
+func TestSpeciesRarityInfoOmitsUnsetCoordinates(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "species")
+	t.Attr("type", "unit")
+	t.Attr("feature", "json-serialization")
+
+	info := SpeciesRarityInfo{
+		Status:        RarityUnknown,
+		Score:         0,
+		LocationBased: false,
+		Date:          "2024-06-15",
+	}
+
+	data, err := json.Marshal(info)
+	require.NoError(t, err)
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(data, &parsed))
+
+	assert.NotContains(t, parsed, "latitude")
+	assert.NotContains(t, parsed, "longitude")
 }
 
 // TestTaxonomyHierarchyJSONSerialization tests that TaxonomyHierarchy serializes correctly.

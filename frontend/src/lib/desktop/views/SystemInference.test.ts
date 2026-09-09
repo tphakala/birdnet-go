@@ -486,6 +486,79 @@ describe('SystemInference', () => {
     });
   });
 
+  // A persistent amber chip surfaces partial multi-source degradation in the header (some
+  // but not all sources down), driven purely by source health so it never flaps as
+  // detections come and go. Mutually exclusive with the red all-sources-down alarm.
+  describe('partial degradation header chip', () => {
+    const DEGRADED_CHIP = '[title="system.inference.sourcesDegradedTooltip"]';
+    const NOT_ANALYZING_HEADER = '[aria-label="system.inference.modelNotAnalyzingTooltip"]';
+
+    it('shows the amber degraded chip when some but not all sources are down', async () => {
+      const model = makeModel({
+        paused: false,
+        sources: [
+          { id: 'a', name: 'Front Yard', type: 'soundcard', fallback: false },
+          { id: 'b', name: 'Back Yard', type: 'rtsp', fallback: false, notRunning: true },
+        ],
+      });
+      installApi(makeSnapshot([model]));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('Back Yard');
+      });
+
+      // The persistent degraded chip is present ...
+      expect(container.querySelector(DEGRADED_CHIP)).not.toBeNull();
+      expect(container.textContent).toContain('system.inference.sourcesDegraded');
+      // ... and it does NOT escalate to the red all-sources-down alarm.
+      expect(container.querySelector(NOT_ANALYZING_HEADER)).toBeNull();
+    });
+
+    it('hides the degraded chip when every source is healthy', async () => {
+      const model = makeModel({
+        paused: false,
+        sources: [
+          { id: 'a', name: 'Front Yard', type: 'soundcard', fallback: false },
+          { id: 'b', name: 'Back Yard', type: 'rtsp', fallback: false },
+        ],
+      });
+      installApi(makeSnapshot([model]));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('Back Yard');
+      });
+
+      expect(container.querySelector(DEGRADED_CHIP)).toBeNull();
+      expect(container.textContent).not.toContain('system.inference.sourcesDegraded');
+    });
+
+    it('hides the degraded chip when ALL sources are down (yields to the not-analyzing alarm)', async () => {
+      const model = makeModel({
+        paused: false,
+        sources: [
+          { id: 'a', name: 'Front Yard', type: 'soundcard', fallback: false, notRunning: true },
+          { id: 'b', name: 'Back Yard', type: 'rtsp', fallback: false, notRunning: true },
+        ],
+      });
+      installApi(makeSnapshot([model]));
+
+      const { container } = inferenceTest.render({});
+
+      await waitFor(() => {
+        expect(container.textContent).toContain('Back Yard');
+      });
+
+      // The degraded chip is suppressed; the red not-analyzing header owns the state.
+      expect(container.querySelector(DEGRADED_CHIP)).toBeNull();
+      expect(container.textContent).not.toContain('system.inference.sourcesDegraded');
+      expect(container.querySelector(NOT_ANALYZING_HEADER)).not.toBeNull();
+    });
+  });
+
   // These tests run against the i18n stub in src/test/setup.ts, which returns the
   // key for any unmapped string, so assertions target the rendered key names
   // (system.inference.vad.*) plus the data values, not the English text.

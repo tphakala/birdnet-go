@@ -1781,6 +1781,8 @@
       "sourceNotRunning": "non sta analizzando",
       "sourceNotRunningTooltip": "Questa sorgente è assegnata al modello nelle impostazioni, ma il suo audio non raggiunge il modello, quindi non produce rilevamenti. Verifica che la sorgente audio sia connessa e invii audio.",
       "modelNotAnalyzingTooltip": "Una o più sorgenti audio assegnate a questo modello non gli inviano audio, quindi non produce rilevamenti. Vedi le sorgenti elencate qui sotto.",
+      "sourcesDegraded": "{count} su {total} sorgenti non disponibili",
+      "sourcesDegradedTooltip": "Alcune sorgenti audio di questo modello, ma non tutte, non sono disponibili, quindi continua ad analizzare tramite quelle funzionanti. La sorgente non disponibile specifica e le indicazioni per risolvere il problema sono elencate qui sotto.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",
