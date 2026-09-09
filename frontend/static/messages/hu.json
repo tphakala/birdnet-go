@@ -999,7 +999,21 @@
     },
     "history": {
       "title": "Detektálás előzmények",
-      "comingSoon": "Az előzmények követése hamarosan..."
+      "firstHeard": "Először hallva",
+      "lastHeard": "Utoljára hallva",
+      "totalDetections": "Detektálások",
+      "dailyWindow": "Napi detektálások, 30 nap eddig: {date}",
+      "recentTitle": "Egyéb közelmúltbeli detektálások",
+      "viewAll": "Összes megtekintése ({count}) a Detektálásoknál",
+      "noOthers": "Ez eddig az egyetlen detektálása ennek a fajnak.",
+      "loading": "Faj előzményeinek betöltése...",
+      "loadError": "Nem sikerült betölteni a faj előzményeit.",
+      "unavailable": "Ehhez a detektáláshoz nem érhető el előzmény.",
+      "aria": {
+        "sparkline": "Napi detektálásszámok a(z) {date} napon végződő 30 napra",
+        "recentList": "Ennek a fajnak az egyéb közelmúltbeli detektálásai",
+        "openDetection": "Detektálás megnyitása innen: {timestamp}"
+      }
     },
     "notes": {
       "title": "Megjegyzések és kommentek",

@@ -21,17 +21,21 @@
   import VerificationBadges from '$lib/desktop/components/ui/VerificationBadges.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
-  import { t } from '$lib/i18n';
+  import { getLocale, t } from '$lib/i18n';
   import type { Detection, ImageAttribution } from '$lib/types/detection.types';
   import { hasReviewPermission, isAuthenticated } from '$lib/utils/auth';
   import { formatLocalDateTime } from '$lib/utils/date';
+  import { formatDate } from '$lib/utils/formatters';
   import { buildAppUrl, getCurrentPathWithQuery } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
+  import { useSpeciesHistory } from '$lib/desktop/features/detections/composables/useSpeciesHistory.svelte';
+  import Sparkline from '$lib/desktop/features/system/components/Sparkline.svelte';
   import {
     Download,
     Camera,
+    ChevronRight,
     Clock,
     History,
     StickyNote,
@@ -84,6 +88,9 @@
 
   // Constants
   const TAB_FOCUS_DELAY_MS = 50;
+  const HISTORY_SPARKLINE_WIDTH = 480;
+  const HISTORY_SPARKLINE_HEIGHT = 56;
+  const CONFIDENCE_PERCENT_SCALE = 100;
   type TabType = 'overview' | 'history' | 'notes' | 'review';
 
   interface Props {
@@ -98,6 +105,7 @@
 
   // State
   let activeTab = $state<TabType>('overview');
+  const speciesHistory = useSpeciesHistory();
 
   // Dynamic review component loading
   let ReviewCard: ReviewCardComponent | null = $state(null);
@@ -174,7 +182,17 @@
       taxonomyController?.abort();
       attributionController?.abort();
       cancelAttributionRetry();
+      speciesHistory.reset();
     };
+  });
+
+  // Load species history the first time the History tab is opened. The composable
+  // caches per (species, date), so switching tabs away and back does not refetch.
+  $effect(() => {
+    if (activeTab !== 'history') return;
+    const det = detection;
+    if (!det?.scientificName || !det.date) return;
+    void speciesHistory.load(det.scientificName, det.date, det.id);
   });
 
   // Fetch detection data
@@ -768,14 +786,114 @@
   </div>
 {/snippet}
 
-{#snippet historyTab()}
-  <section class="empty-state-section" aria-labelledby="history-heading">
-    <History class="empty-state-icon" />
-    <h3 id="history-heading" class="empty-state-heading">{t('detections.history.title')}</h3>
-    <p class="empty-state-text" role="status">
-      {t('detections.history.comingSoon')}
-    </p>
-  </section>
+{#snippet historyTab(det: Detection)}
+  {#if speciesHistory.isLoading}
+    <section class="empty-state-section" aria-labelledby="history-heading">
+      <History class="empty-state-icon" />
+      <h3 id="history-heading" class="empty-state-heading">{t('detections.history.title')}</h3>
+      <p class="empty-state-text" role="status">{t('detections.history.loading')}</p>
+    </section>
+  {:else if speciesHistory.error}
+    <ErrorAlert message={speciesHistory.error} />
+  {:else if speciesHistory.data}
+    {@const history = speciesHistory.data}
+    {@const windowEndLabel = formatDate(history.windowEnd)}
+    <section aria-labelledby="history-heading">
+      <h3 id="history-heading" class="section-heading">{t('detections.history.title')}</h3>
+
+      <dl class="history-stats content-panel">
+        <div class="history-stat">
+          <dt>{t('detections.history.firstHeard')}</dt>
+          <dd>
+            {history.firstHeard ? formatLocalDateTime(new Date(history.firstHeard), false) : '—'}
+          </dd>
+        </div>
+        <div class="history-stat">
+          <dt>{t('detections.history.lastHeard')}</dt>
+          <dd>
+            {history.lastHeard ? formatLocalDateTime(new Date(history.lastHeard), false) : '—'}
+          </dd>
+        </div>
+        <div class="history-stat">
+          <dt>{t('detections.history.totalDetections')}</dt>
+          <dd>{history.totalDetections.toLocaleString(getLocale())}</dd>
+        </div>
+      </dl>
+
+      <div class="history-chart content-panel">
+        <p class="history-chart-label">
+          {t('detections.history.dailyWindow', { date: windowEndLabel })}
+        </p>
+        <div
+          role="img"
+          aria-label={t('detections.history.aria.sparkline', { date: windowEndLabel })}
+        >
+          <Sparkline
+            data={history.dailyCounts}
+            viewWidth={HISTORY_SPARKLINE_WIDTH}
+            viewHeight={HISTORY_SPARKLINE_HEIGHT}
+            decorative
+          />
+        </div>
+      </div>
+
+      <h4 class="section-heading history-recent-heading">
+        {t('detections.history.recentTitle')}
+      </h4>
+      {#if history.recent.length > 0}
+        <ul class="history-recent" role="list" aria-label={t('detections.history.aria.recentList')}>
+          {#each history.recent as entry (entry.id)}
+            <li>
+              <a
+                class="history-recent-row"
+                href={buildAppUrl(`/ui/detections/${entry.id}`)}
+                aria-label={t('detections.history.aria.openDetection', {
+                  timestamp: formatLocalDateTime(new Date(entry.timestamp), false),
+                })}
+              >
+                <span class="history-recent-time">
+                  {formatLocalDateTime(new Date(entry.timestamp), false)}
+                </span>
+                <span class="history-recent-confidence">
+                  {Math.round(entry.confidence * CONFIDENCE_PERCENT_SCALE)}%
+                </span>
+                <ChevronRight class="history-recent-chevron" aria-hidden="true" />
+              </a>
+            </li>
+          {/each}
+        </ul>
+        {#if history.totalDetections > history.recent.length + 1}
+          <a
+            class="history-view-all"
+            href={buildAppUrl(
+              // queryType=search (not `species`) is deliberate: DetectionsPage only
+              // skips defaulting `date` to today for search, and this link must span
+              // the species' whole history. `search` carries the same species name so
+              // the destination heading has a query to render instead of a raw
+              // placeholder; it narrows nothing, since the species filter is stricter.
+              `/ui/detections?queryType=search&species=${encodeURIComponent(det.scientificName)}` +
+                `&search=${encodeURIComponent(det.scientificName)}`
+            )}
+          >
+            {t('detections.history.viewAll', {
+              count: history.totalDetections.toLocaleString(getLocale()),
+            })}
+          </a>
+        {/if}
+      {:else}
+        <p class="empty-state-text">{t('detections.history.noOthers')}</p>
+      {/if}
+    </section>
+  {:else}
+    <!-- Not loading, no error, no data: the loader's guard rejected this detection
+         (missing scientific name or date), so there is nothing to fetch. Say that
+         plainly rather than reusing the loading copy. -->
+    <section class="empty-state-section" aria-labelledby="history-heading">
+      <History class="empty-state-icon" />
+      <h3 id="history-heading" class="empty-state-heading">{t('detections.history.title')}</h3>
+      <p class="empty-state-text">{t('detections.history.unavailable')}</p>
+    </section>
+  {/if}
 {/snippet}
 
 {#snippet notesTab(det: Detection)}
@@ -986,7 +1104,7 @@
               aria-hidden="false"
               tabindex="0"
             >
-              {@render historyTab()}
+              {@render historyTab(detection)}
             </div>
           {:else if activeTab === 'notes'}
             <div
@@ -1383,6 +1501,103 @@
   .metadata-row dd {
     font-weight: 500;
     color: var(--color-base-content);
+  }
+
+  /* ----- History tab ----- */
+  .history-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  /* --text-muted, not base-content at 0.5 opacity: the faded variant measures
+     2.96:1 against the base-200 panel in light theme, below the WCAG AA 4.5:1
+     floor for normal text. Same token the equivalent uppercase micro-labels in
+     SystemInference use. */
+  .history-stat dt {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+  }
+
+  .history-stat dd {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--color-base-content);
+  }
+
+  .history-chart {
+    margin-bottom: 1.5rem;
+  }
+
+  /* Same contrast reasoning as .history-stat dt above. */
+  .history-chart-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+  }
+
+  .history-recent-heading {
+    margin-top: 1.5rem;
+  }
+
+  .history-recent {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .history-recent-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-field);
+    background-color: var(--color-base-200);
+    border: 1px solid var(--border-100);
+    font-size: 0.875rem;
+    color: var(--color-base-content);
+    text-decoration: none;
+    text-align: left;
+  }
+
+  .history-recent-row:hover {
+    background-color: var(--color-base-300);
+  }
+
+  .history-recent-time {
+    flex: 1;
+  }
+
+  .history-recent-confidence {
+    font-variant-numeric: tabular-nums;
+    opacity: 0.7;
+  }
+
+  .history-recent-chevron {
+    width: 1rem;
+    height: 1rem;
+    opacity: 0.4;
+  }
+
+  .history-view-all {
+    display: inline-block;
+    margin-top: 0.75rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--color-primary);
+    text-decoration: none;
+  }
+
+  .history-view-all:hover {
+    text-decoration: underline;
   }
 
   /* ----- Rarity display ----- */

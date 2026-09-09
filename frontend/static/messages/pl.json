@@ -999,7 +999,21 @@
     },
     "history": {
       "title": "Historia Detekcji",
-      "comingSoon": "Śledzenie historii już wkrótce..."
+      "firstHeard": "Pierwszy raz usłyszano",
+      "lastHeard": "Ostatni raz usłyszano",
+      "totalDetections": "Detekcje",
+      "dailyWindow": "Dzienne detekcje, 30 dni do {date}",
+      "recentTitle": "Inne ostatnie detekcje",
+      "viewAll": "Zobacz wszystkie ({count}) w Detekcjach",
+      "noOthers": "To jak dotąd jedyna detekcja tego gatunku.",
+      "loading": "Ładowanie historii gatunku...",
+      "loadError": "Nie udało się załadować historii tego gatunku.",
+      "unavailable": "Historia nie jest dostępna dla tej detekcji.",
+      "aria": {
+        "sparkline": "Dzienne liczby detekcji dla 30 dni kończących się {date}",
+        "recentList": "Inne ostatnie detekcje tego gatunku",
+        "openDetection": "Otwórz detekcję z {timestamp}"
+      }
     },
     "notes": {
       "title": "Notatki i Komentarze",

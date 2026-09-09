@@ -999,7 +999,21 @@
     },
     "history": {
       "title": "Histórico de detecção",
-      "comingSoon": "Rastreamento de histórico em breve..."
+      "firstHeard": "Ouvido pela primeira vez",
+      "lastHeard": "Ouvido pela última vez",
+      "totalDetections": "Detecções",
+      "dailyWindow": "Detecções diárias, 30 dias até {date}",
+      "recentTitle": "Outras detecções recentes",
+      "viewAll": "Ver todas as {count} em Detecções",
+      "noOthers": "Esta é até agora a única detecção desta espécie.",
+      "loading": "Carregando histórico da espécie...",
+      "loadError": "Não foi possível carregar o histórico desta espécie.",
+      "unavailable": "O histórico não está disponível para esta detecção.",
+      "aria": {
+        "sparkline": "Contagens diárias de detecções dos 30 dias que terminam em {date}",
+        "recentList": "Outras detecções recentes desta espécie",
+        "openDetection": "Abrir detecção de {timestamp}"
+      }
     },
     "notes": {
       "title": "Notas e comentários",

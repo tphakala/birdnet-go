@@ -999,7 +999,21 @@
     },
     "history": {
       "title": "Erkennungsverlauf",
-      "comingSoon": "Verlaufsverfolgung in Kürze verfügbar..."
+      "firstHeard": "Zuerst gehört",
+      "lastHeard": "Zuletzt gehört",
+      "totalDetections": "Erkennungen",
+      "dailyWindow": "Tägliche Erkennungen, 30 Tage bis {date}",
+      "recentTitle": "Andere kürzliche Erkennungen",
+      "viewAll": "Alle {count} in Erkennungen anzeigen",
+      "noOthers": "Dies ist bisher die einzige Erkennung dieser Art.",
+      "loading": "Artenverlauf wird geladen...",
+      "loadError": "Verlauf für diese Art konnte nicht geladen werden.",
+      "unavailable": "Für diese Erkennung ist kein Verlauf verfügbar.",
+      "aria": {
+        "sparkline": "Tägliche Erkennungszahlen für die 30 Tage bis {date}",
+        "recentList": "Andere kürzliche Erkennungen dieser Art",
+        "openDetection": "Erkennung vom {timestamp} öffnen"
+      }
     },
     "notes": {
       "title": "Notizen & Kommentare",

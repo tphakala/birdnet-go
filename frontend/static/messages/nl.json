@@ -999,7 +999,21 @@
     },
     "history": {
       "title": "Herkennings geschiedenis",
-      "comingSoon": "Geschiedenis (nog) niet beschikbaar ..."
+      "firstHeard": "Eerst gehoord",
+      "lastHeard": "Laatst gehoord",
+      "totalDetections": "Detecties",
+      "dailyWindow": "Dagelijkse detecties, 30 dagen tot {date}",
+      "recentTitle": "Andere recente detecties",
+      "viewAll": "Bekijk alle {count} in Herkend",
+      "noOthers": "Dit is tot nu toe de enige detectie van deze soort.",
+      "loading": "Soortgeschiedenis inlezen...",
+      "loadError": "Kon de geschiedenis van deze soort niet inlezen.",
+      "unavailable": "Geschiedenis is niet beschikbaar voor deze detectie.",
+      "aria": {
+        "sparkline": "Dagelijkse aantallen detecties voor de 30 dagen eindigend op {date}",
+        "recentList": "Andere recente detecties van deze soort",
+        "openDetection": "Detectie van {timestamp} openen"
+      }
     },
     "notes": {
       "title": "Notities & Aantekeningen",
