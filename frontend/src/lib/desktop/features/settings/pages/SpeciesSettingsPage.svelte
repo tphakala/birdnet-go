@@ -56,6 +56,7 @@
   import { safeGet } from '$lib/utils/security';
   import { api } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { SETTINGS_ROUTES } from '$lib/utils/settingsRoutes';
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import { getLocalDateString } from '$lib/utils/date';
   import {
@@ -1435,7 +1436,7 @@
                   'Set your location in Main Settings to see species available in your area. The range filter uses your location to determine which species are likely to be found nearby.'}
               </p>
               <a
-                href={buildAppUrl('/ui/settings/main?tab=location')}
+                href={buildAppUrl(SETTINGS_ROUTES.mainLocation)}
                 onclick={handleAppLinkClick}
                 class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-warning)] text-[var(--color-warning-content)] hover:bg-[var(--color-warning-hover)] transition-colors mt-3"
               >

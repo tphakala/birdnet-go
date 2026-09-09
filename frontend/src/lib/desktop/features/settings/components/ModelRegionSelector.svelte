@@ -30,6 +30,7 @@
   import { birdnetSettings, settingsActions } from '$lib/stores/settings';
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { SETTINGS_ROUTES } from '$lib/utils/settingsRoutes';
   import type { ModelRegionsResponse, RegionOption } from '$lib/types/models';
   import RegionCard from './RegionCard.svelte';
 
@@ -363,7 +364,7 @@
             {t(AUTO_WHY[autoWhy.state], autoWhy.args)}
             {#if autoWhy.state === 'noLocation'}
               <a
-                href={buildAppUrl('/ui/settings/main?tab=location')}
+                href={buildAppUrl(SETTINGS_ROUTES.mainLocation)}
                 onclick={handleAppLinkClick}
                 class="block mt-2 text-primary underline"
               >

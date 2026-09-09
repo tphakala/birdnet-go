@@ -34,6 +34,7 @@
   import { toastActions } from '$lib/stores/toast';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { SETTINGS_ROUTES } from '$lib/utils/settingsRoutes';
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import { formatDateTime } from '$lib/utils/formatters';
   import SettingsNote from './SettingsNote.svelte';
@@ -232,7 +233,7 @@
   <!-- Description -->
   <p class="text-sm text-muted">{t('settings.species.dynamicThreshold.description')}</p>
   <a
-    href={buildAppUrl('/ui/settings/analysis?tab=settings')}
+    href={buildAppUrl(SETTINGS_ROUTES.analysisSettings)}
     onclick={handleAppLinkClick}
     class="inline-block text-sm text-primary underline"
   >
