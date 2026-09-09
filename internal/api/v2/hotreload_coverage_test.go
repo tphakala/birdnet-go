@@ -235,6 +235,12 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	// -- SpeciesTracking --
 	"Realtime.SpeciesTracking": {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_species_tracking"},
 
+	// -- LifeList --
+	// Read live per detection via conf.CurrentOrFallback in getDefaultActions
+	// (Settings.HasLifeList / IsOnLifeList), so an edited list or toggle applies
+	// on the next detection with no reconfigure. No action needed.
+	"Realtime.LifeList": {categories: []hotReloadCategory{hotReloadFresh}},
+
 	// -- ExtendedCapture --
 	"Realtime.ExtendedCapture.Enabled":              {categories: []hotReloadCategory{hotReloadFresh}, action: "rebuild_extended_capture"},
 	"Realtime.ExtendedCapture.MaxDuration":          {categories: []hotReloadCategory{hotReloadFresh}, action: "rebuild_extended_capture"},
