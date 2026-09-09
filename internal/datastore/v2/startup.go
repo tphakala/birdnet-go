@@ -877,6 +877,11 @@ func checkpointSQLiteWAL(dbPath string, log logger.Logger) error {
 	return nil
 }
 
+// sqliteSidecarSuffixes are the SQLite auxiliary file suffixes that travel with a database
+// file (write-ahead log and shared-memory index). Shared so the consolidation preflight and
+// moveSQLiteDBFiles agree on exactly which sidecars accompany a move.
+var sqliteSidecarSuffixes = []string{"-wal", "-shm"}
+
 // moveSQLiteDBFiles renames a SQLite database file together with its -wal and -shm
 // sidecars, so no committed WAL data is left behind or discarded during consolidation.
 // The move is all-or-nothing: the main file is renamed first, then each present sidecar;
@@ -905,7 +910,7 @@ func moveSQLiteDBFiles(from, to string, log logger.Logger) error {
 			}
 		}
 	}
-	for _, suffix := range []string{"-wal", "-shm"} {
+	for _, suffix := range sqliteSidecarSuffixes {
 		src := from + suffix
 		dst := to + suffix
 		if _, err := os.Stat(src); err != nil {
@@ -1352,7 +1357,8 @@ func CheckAndConsolidateAtStartup(configuredPath string, log logger.Logger) (con
 	// same-second re-run; the legacy->backup rename would otherwise clobber a prior backup that
 	// the rollback could not restore, so fail closed (Forgejo #1580). moveSQLiteDBFiles itself
 	// stays overwrite-capable so it can serve as the rollback restore path.
-	for _, suffix := range []string{"", "-wal", "-shm"} {
+	// Check the primary file ("") plus each sidecar.
+	for _, suffix := range append([]string{""}, sqliteSidecarSuffixes...) {
 		if _, statErr := os.Lstat(backupPath + suffix); statErr == nil {
 			return false, fmt.Errorf("consolidation aborted: backup destination %q already exists", backupPath+suffix)
 		} else if !os.IsNotExist(statErr) {
@@ -1400,6 +1406,14 @@ func CheckAndConsolidateAtStartup(configuredPath string, log logger.Logger) (con
 			diagnostics.RecordConsolidation(j, v2MigrationPath, configuredPath, backupPath, "failed")
 			return false, fmt.Errorf("failed to rename legacy database: %w", err)
 		}
+	} else if !os.IsNotExist(err) {
+		// A non-not-exist stat error (permission/I/O) must not silently skip the legacy backup:
+		// the v2 -> configured move below would then rename over the still-present legacy
+		// database with no backup taken. Fail closed instead of clobbering it.
+		reportConsolidationError("startupStatLegacy", err, configuredPath)
+		_ = DeleteConsolidationState(dataDir)
+		diagnostics.RecordConsolidation(j, v2MigrationPath, configuredPath, backupPath, "failed")
+		return false, fmt.Errorf("failed to stat legacy database %q before backup: %w", configuredPath, err)
 	}
 
 	// Rename v2 → configured path, moving its -wal/-shm sidecars so the promoted
