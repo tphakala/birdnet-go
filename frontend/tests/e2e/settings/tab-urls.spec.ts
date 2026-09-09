@@ -1,5 +1,6 @@
 /* eslint playwright/expect-expect: ['warn', { assertFunctionNames: ['expect', 'expectTab', 'expectQuery'] }] */
 import { test, expect, type Page } from '@playwright/test';
+import type { SettingsFormData } from '../../../src/lib/stores/settings';
 
 const SETTINGS_BASE = `${process.env['SETTINGS_PROXY_PREFIX'] ?? ''}/ui/settings`;
 
@@ -207,28 +208,57 @@ test.describe('Settings tab URLs', () => {
     }
   });
 
-  test('Species Configure Location links to the Location tab and Back returns to Species', async ({
-    page,
-  }) => {
-    // Make the missing-location entry point available regardless of station config.
-    await page.route('**/api/v2/settings', async route => {
-      const response = await route.fetch();
-      const settings = await response.json();
-      settings.birdnet.locationConfigured = false;
-      return route.fulfill({
-        response,
-        json: settings,
+  for (const width of [1440, 390]) {
+    test(`Species Configure Location preserves unsaved tracking edits at ${width}px`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize({ width, height: 1000 });
+      // Expose the missing-location entry point and an editable Tracking field without saving.
+      await page.route('**/api/v2/settings', async route => {
+        const response = await route.fetch();
+        const settings: SettingsFormData = await response.json();
+        settings.birdnet.locationConfigured = false;
+        settings.realtime.speciesTracking = {
+          ...settings.realtime.speciesTracking,
+          enabled: true,
+          newSpeciesWindowDays: 7,
+        };
+        return route.fulfill({ response, json: settings });
       });
+
+      await page.goto(`${SETTINGS_BASE}/species?tab=tracking`);
+      const windowDays = page.locator('#new-species-window');
+      await expect(windowDays).toHaveValue('7');
+      await windowDays.fill('11');
+      await windowDays.press('Tab');
+      const reset = page.getByRole('button', { name: 'Reset all changes' });
+      await expect(reset).toBeVisible();
+      await page.locator('#settings-tab-active').click();
+      const link = page.getByRole('link', { name: 'Configure Location' });
+      await expect(link).toHaveAttribute('href', `${SETTINGS_BASE}/main?tab=location`);
+      await link.focus();
+      await page.screenshot({
+        path: testInfo.outputPath(`species-location-${width}.png`),
+        fullPage: true,
+        animations: 'disabled',
+      });
+      if (width === 1440) await link.click();
+      else await link.press('Enter');
+      await expectTab(page, 'location');
+      await expect(page.locator('#location-map canvas')).toBeVisible();
+      await expect(reset).toBeVisible();
+      await page.goBack();
+      await expectTab(page, 'active');
+      await page.goBack();
+      await expectTab(page, 'tracking');
+      await expect(windowDays).toHaveValue('11');
+      await page.goForward();
+      await expectTab(page, 'active');
+      await page.goForward();
+      await expectTab(page, 'location');
+      await expect(reset).toBeVisible();
     });
-    await page.goto(`${SETTINGS_BASE}/species`);
-    const link = page.getByRole('link', { name: 'Configure Location' });
-    await expect(link).toHaveAttribute('href', /\/ui\/settings\/main\?tab=location$/);
-    await link.click();
-    await expectTab(page, 'location');
-    await expect(page.locator('#location-map canvas')).toBeVisible();
-    await page.goBack();
-    await expectTab(page, 'active');
-  });
+  }
 
   for (const width of [1440, 390, 320]) {
     test(`keyboard and layout at ${width}px`, async ({ page }, testInfo) => {

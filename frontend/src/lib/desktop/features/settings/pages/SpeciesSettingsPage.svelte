@@ -56,6 +56,7 @@
   import { safeGet } from '$lib/utils/security';
   import { api } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import { getLocalDateString } from '$lib/utils/date';
   import {
     buildSpeciesNameMaps,
@@ -1435,6 +1436,7 @@
               </p>
               <a
                 href={buildAppUrl('/ui/settings/main?tab=location')}
+                onclick={handleAppLinkClick}
                 class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-warning)] text-[var(--color-warning-content)] hover:bg-[var(--color-warning-hover)] transition-colors mt-3"
               >
                 {t('settings.species.activeSpecies.locationNotConfigured.action') ||
