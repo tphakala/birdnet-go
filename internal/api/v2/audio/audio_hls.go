@@ -4,37 +4,31 @@ package audio
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"maps"
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	hls "github.com/tphakala/go-hls"
+
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
-	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
-	"github.com/tphakala/birdnet-go/internal/securefs"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -42,14 +36,12 @@ import (
 const (
 	// Timeouts
 	hlsStreamInactivityTimeout = 5 * time.Minute  // Cleanup inactive streams after this duration
-	hlsMaxStreamLifetime       = 6 * time.Hour    // Maximum stream lifetime regardless of activity
 	hlsPlaylistWaitTimeout     = 20 * time.Second // How long to wait for playlist file
 	hlsNewStreamGracePeriod    = 30 * time.Second // Grace period for new streams before cleanup
 
 	// Logging
 	hlsLogCooldown        = 60 * time.Second      // Only log client connections once per this duration
 	hlsVerboseEnvVar      = "HLS_VERBOSE_LOGGING" // Environment variable to enable verbose logging
-	hlsVerboseTimeout     = 5 * time.Minute       // Verbose logging window at startup
 	hlsClientLogRetention = 24 * time.Hour        // Retention period for client log timestamps
 
 	// Audio encoding
@@ -57,21 +49,10 @@ const (
 	hlsDefaultSegmentLen            = 2                // Default HLS segment length in seconds
 	hlsMinSegmentLen                = 1                // Minimum HLS segment length in seconds
 	hlsMaxSegmentLen                = 30               // Maximum HLS segment length in seconds
-	hlsAudioBitDepth                = 16               // Audio bit depth for encoding
 	hlsMinBitrate                   = 16               // Minimum audio bitrate in kbps
 	hlsMaxBitrate                   = 320              // Maximum audio bitrate in kbps
-	hlsDefaultSampleRate            = 48000            // Default audio sample rate in Hz
 	hlsCleanupDelay                 = 5                // Delay in seconds before cleanup
 	hlsPrematureDisconnectThreshold = 10 * time.Second // Ignore disconnects within this window
-
-	// fifoWriteTimeout is the maximum duration a single FIFO write can block
-	// before being considered hung. Normal writes complete in microseconds.
-	fifoWriteTimeout = 30 * time.Second
-
-	// fifoWriteSlowThreshold is the duration above which a FIFO write is
-	// considered slow and logged as a warning. Slow writes suggest FFmpeg is
-	// blocked (possibly on SD card I/O) and not consuming from the pipe fast enough.
-	fifoWriteSlowThreshold = 100 * time.Millisecond
 
 	// hlsDropLogInterval is the minimum interval between audio data drop log messages
 	// to avoid flooding the log when the channel is consistently full.
@@ -83,44 +64,48 @@ const (
 	// jitter in segment production timing.
 	hlsSegmentFreshnessMultiplier = 3
 
-	// hlsServeSlowThreshold is the duration above which serving a segment or
-	// playlist file is considered slow and logged. Slow reads suggest SD card
-	// I/O latency.
-	hlsServeSlowThreshold = 500 * time.Millisecond
-
 	// hlsFreshnessCheckInterval is the minimum interval between segment freshness
 	// checks to avoid adding I/O load on every playlist poll.
 	hlsFreshnessCheckInterval = 10 * time.Second
 
-	// Session ID validation
+	// hlsPlaylistPollInterval is how often stream creation checks whether enough
+	// segments exist to start playback. Set to catch the second segment promptly
+	// after the first.
+	hlsPlaylistPollInterval = 500 * time.Millisecond
 
-	// FFmpeg HLS muxer settings
-	hlsListSize        = 6          // Number of HLS segments to keep in playlist (must exceed HLS.js liveSyncDurationCount)
-	hlsAllowCache      = 1          // Allow client-side caching of HLS segments
-	hlsStartNumber     = 0          // Starting sequence number for HLS segments
-	hlsInitSegmentName = "init.mp4" // fMP4 initialization segment filename
+	// HLS muxer settings
+	hlsListSize = 6 // Number of HLS segments to keep in playlist (must exceed HLS.js liveSyncDurationCount)
+
+	// hlsConsumerChannels is the channel count the HLS consumer declares to the
+	// audio router. The capture pipeline is mono end to end and the muxer does
+	// not downmix, so naming it gives the muxer configuration something to be
+	// checked against rather than a second bare literal.
+	hlsConsumerChannels = 1
 )
 
-// HLSStreamInfo contains information about an active HLS streaming session
+// HLSStreamInfo contains information about an active HLS streaming session.
+//
+// Every live HLS stream is served by the in-process muxer (internal go-hls
+// Stream): there is no FFmpeg process, no FIFO and no output directory, and the
+// playlist and segments are served straight from memory.
 type HLSStreamInfo struct {
-	SourceID     string             // Original audio source identifier
-	FFmpegCmd    *exec.Cmd          // FFmpeg process handle
-	OutputDir    string             // Directory containing HLS files
-	PlaylistPath string             // Path to the m3u8 playlist file
-	FifoPipe     string             // Named pipe path (platform-specific)
-	logFile      *os.File           // FFmpeg log file (closed after process exits)
-	ctx          context.Context    // Stream lifecycle context
-	cancel       context.CancelFunc // Cancel function for cleanup
-	streamEpoch  time.Time          // Wall-clock time corresponding to HLS stream position 0
+	SourceID    string             // Original audio source identifier
+	ctx         context.Context    // Stream lifecycle context
+	cancel      context.CancelFunc // Cancel function for cleanup
+	streamEpoch time.Time          // Wall-clock time corresponding to HLS stream position 0
 
-	// pdtOffset corrects FFmpeg's PROGRAM_DATE_TIME timestamps to align with
-	// wall-clock time. FFmpeg sets the PDT epoch at process init (av_gettime),
-	// which is ~1.5s before audio data actually arrives. This offset is computed
-	// once from the first playlist and applied when serving all subsequent playlists.
-	pdtOffset         atomic.Int64 // Correction (nanoseconds) to add to FFmpeg's PDT values
-	pdtOffsetComputed atomic.Bool  // True once pdtOffset has been successfully computed
-	firstDataTime     atomic.Int64 // Wall-clock time (UnixNano) when first audio data was written to FIFO
-	initSegmentCache  atomic.Value // []byte; survives FFmpeg delete_segments removing init.mp4 from disk
+	// mux is the in-process muxer serving this stream. It is written once before
+	// the stream is published and never reassigned, so isNative (mux != nil) is a
+	// stable discriminator for a fully constructed stream.
+	mux *hls.Stream
+
+	// feedDone is closed when the feed goroutine has stopped, so teardown can
+	// close the muxer only once nothing can still write to it.
+	feedDone chan struct{}
+
+	// firstDataTime records the capture time (UnixNano) of the first audio frame
+	// the muxer encoded, for start-up diagnostics. Written once by the feed loop.
+	firstDataTime atomic.Int64
 }
 
 // HLSStreamStatus represents the current status of an HLS stream (API response)
@@ -340,7 +325,7 @@ func (c *Handler) StartHLSStream(ctx echo.Context) error {
 	forceRestart := ctx.QueryParam("force") == queryValueTrue
 
 	// Only allow force restart for authenticated users to prevent DoS
-	// (force kills the FFmpeg process and spawns a new one)
+	// (force tears down the muxer and rebuilds the stream from scratch)
 	if forceRestart && !c.isClientAuthenticated(ctx) {
 		forceRestart = false
 	}
@@ -496,37 +481,13 @@ func (c *Handler) buildHLSStreamResponse(ctx echo.Context, sourceID string, stre
 	})
 }
 
-// checkHLSPlaylistReady checks if the playlist file exists and is valid
+// checkHLSPlaylistReady reports whether the muxer has advertised enough segments
+// for immediate playback.
 func (c *Handler) checkHLSPlaylistReady(stream *HLSStreamInfo) bool {
-	if stream == nil || stream.PlaylistPath == "" {
+	if stream == nil || !stream.isNative() {
 		return false
 	}
-
-	hlsBaseDir, err := conf.GetHLSDirectory()
-	if err != nil {
-		return false
-	}
-
-	secFS, err := securefs.New(hlsBaseDir)
-	if err != nil {
-		return false
-	}
-	defer func() {
-		if err := secFS.Close(); err != nil {
-			apicore.GetLogger().Error("Failed to close secure filesystem", logger.Error(err))
-		}
-	}()
-
-	if !secFS.ExistsNoErr(stream.PlaylistPath) {
-		return false
-	}
-
-	data, err := secFS.ReadFile(stream.PlaylistPath)
-	if err != nil {
-		return false
-	}
-
-	return len(data) > 0 && strings.Contains(string(data), "#EXTM3U")
+	return stream.mux.Ready(hlsMinSegments)
 }
 
 // StopHLSStream stops an HLS stream for a specific client
@@ -658,210 +619,7 @@ func (c *Handler) ServeHLSPlaylist(ctx echo.Context) error {
 	// Update stream-level activity (no client registration - lifecycle managed by start/stop/heartbeat)
 	c.updateStreamActivity(sourceID)
 
-	// Get HLS base directory
-	hlsBaseDir, err := conf.GetHLSDirectory()
-	if err != nil {
-		return c.HandleError(ctx, err, "Server configuration error", http.StatusInternalServerError)
-	}
-
-	// Create secure filesystem
-	secFS, err := securefs.New(hlsBaseDir)
-	if err != nil {
-		return c.HandleError(ctx, err, "Server error", http.StatusInternalServerError)
-	}
-	defer func() {
-		if err := secFS.Close(); err != nil {
-			apicore.GetLogger().Error("Failed to close secure filesystem", logger.Error(err))
-		}
-	}()
-
-	// Set headers
-	c.setHLSHeaders(ctx)
-	ctx.Response().Header().Set("Content-Type", "application/vnd.apple.mpegurl")
-	ctx.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-
-	// Check if playlist exists
-	if !secFS.ExistsNoErr(stream.PlaylistPath) {
-		// Stream exists but playlist not ready yet
-		if !c.hlsStreamExists(sourceID) {
-			return c.HandleError(ctx, nil, "Stream no longer exists", http.StatusNotFound)
-		}
-
-		// Return temporary empty playlist with configured segment length
-		segmentLength := c.getEffectiveSegmentLength()
-		emptyPlaylist := fmt.Sprintf(`#EXTM3U
-#EXT-X-VERSION:3
-#EXT-X-TARGETDURATION:%d
-#EXT-X-MEDIA-SEQUENCE:0
-#EXT-X-PLAYLIST-TYPE:EVENT
-`, segmentLength)
-		ctx.Response().Header().Set("Retry-After", fmt.Sprintf("%d", segmentLength))
-		return ctx.String(http.StatusOK, emptyPlaylist)
-	}
-
-	// Check segment freshness: how old is the newest segment file?
-	// Stale segments suggest FFmpeg is blocked (possibly SD card I/O stall).
-	c.checkSegmentFreshness(stream.OutputDir, sourceID)
-
-	serveStart := time.Now()
-
-	// Read playlist and apply PDT correction if first audio data time is known.
-	// FFmpeg sets PROGRAM_DATE_TIME at process init (~1.5s before audio arrives),
-	// so we shift all PDT values forward by the measured offset.
-	data, err := secFS.ReadFile(stream.PlaylistPath)
-	if err != nil {
-		return c.HandleError(ctx, err, "Failed to read playlist", http.StatusInternalServerError)
-	}
-
-	corrected := c.correctPlaylistPDT(stream, string(data))
-
-	serveDuration := time.Since(serveStart)
-	if serveDuration > hlsServeSlowThreshold {
-		apicore.GetLogger().Warn("Slow playlist serve (disk read + PDT correction + network write)",
-			logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
-			logger.String("serve_duration", serveDuration.String()))
-	}
-
-	return ctx.String(http.StatusOK, corrected)
-}
-
-// correctPlaylistPDT adjusts PROGRAM_DATE_TIME tags in the playlist to compensate
-// for FFmpeg's process startup delay. On the first successful parse, it computes
-// the offset between FFmpeg's clock and wall time, then applies it to all PDT tags.
-func (c *Handler) correctPlaylistPDT(stream *HLSStreamInfo, playlist string) string {
-	// If we don't know when first audio data arrived, return unmodified
-	if stream.firstDataTime.Load() == 0 {
-		return playlist
-	}
-
-	// Compute the PDT offset once from the first playlist that has PDT tags.
-	// Uses atomic.Bool instead of sync.Once so we can retry if the first
-	// playlist has no segments yet (FFmpeg may not have written PDT tags).
-	if !stream.pdtOffsetComputed.Load() {
-		segments := parsePlaylistSegments(playlist)
-		if len(segments) == 0 {
-			return playlist
-		}
-		// The last segment's end-time (PDT + duration) should approximately
-		// equal "now" minus a small serving delay. Any difference is the offset.
-		last := segments[len(segments)-1]
-		hlsNow := last.pdt.Add(time.Duration(last.duration * float64(time.Second)))
-		wallNow := time.Now()
-		offset := wallNow.Sub(hlsNow)
-		// Only the first goroutine to succeed sets the offset
-		if stream.pdtOffsetComputed.CompareAndSwap(false, true) {
-			stream.pdtOffset.Store(int64(offset))
-			apicore.GetLogger().Info("HLS PDT correction computed",
-				logger.String("source_id", privacy.SanitizeRTSPUrl(stream.SourceID)),
-				logger.String("hls_head", hlsNow.UTC().Format(time.RFC3339Nano)),
-				logger.String("wall_clock", wallNow.UTC().Format(time.RFC3339Nano)),
-				logger.String("correction", offset.String()))
-		}
-	}
-
-	// No correction needed (zero offset or failed to parse)
-	correction := time.Duration(stream.pdtOffset.Load())
-	if correction == 0 {
-		return playlist
-	}
-
-	// Rewrite all PROGRAM_DATE_TIME tags with the correction
-	return rewritePDTTags(playlist, correction)
-}
-
-// hlsSegment holds a parsed segment from an HLS playlist.
-type hlsSegment struct {
-	pdt      time.Time
-	duration float64
-}
-
-// pdtLayouts lists time formats FFmpeg may use for PROGRAM_DATE_TIME.
-var pdtLayouts = []string{
-	"2006-01-02T15:04:05.000-0700",
-	"2006-01-02T15:04:05.000000-0700",
-	"2006-01-02T15:04:05-0700",
-	time.RFC3339,
-	time.RFC3339Nano,
-}
-
-// parsePDT parses a PROGRAM_DATE_TIME string using known FFmpeg formats.
-func parsePDT(s string) time.Time {
-	s = strings.TrimSpace(s)
-	for _, layout := range pdtLayouts {
-		if t, err := time.Parse(layout, s); err == nil {
-			return t
-		}
-	}
-	return time.Time{}
-}
-
-// parsePlaylistSegments extracts all segments with PDT and duration from a playlist.
-func parsePlaylistSegments(playlist string) []hlsSegment {
-	var segments []hlsSegment
-	var curDur float64
-	var curPDT time.Time
-	hasDur := false
-
-	for line := range strings.Lines(playlist) {
-		line = strings.TrimSpace(line)
-		switch {
-		case strings.HasPrefix(line, "#EXTINF:"):
-			durStr, _ := strings.CutPrefix(line, "#EXTINF:")
-			// Handle optional title: #EXTINF:<duration>,[<title>]
-			durStr, _, _ = strings.Cut(durStr, ",")
-			if d, err := strconv.ParseFloat(strings.TrimSpace(durStr), 64); err == nil {
-				curDur = d
-				hasDur = true
-			}
-		case strings.HasPrefix(line, "#EXT-X-PROGRAM-DATE-TIME:"):
-			if val, ok := strings.CutPrefix(line, "#EXT-X-PROGRAM-DATE-TIME:"); ok {
-				curPDT = parsePDT(val)
-			}
-		case line != "" && !strings.HasPrefix(line, "#"):
-			// Segment URI - flush
-			if hasDur && !curPDT.IsZero() {
-				segments = append(segments, hlsSegment{pdt: curPDT, duration: curDur})
-			}
-			curDur = 0
-			curPDT = time.Time{}
-			hasDur = false
-		}
-	}
-	return segments
-}
-
-// rewritePDTTags shifts all EXT-X-PROGRAM-DATE-TIME values by the given offset.
-func rewritePDTTags(playlist string, offset time.Duration) string {
-	const prefix = "#EXT-X-PROGRAM-DATE-TIME:"
-	var result strings.Builder
-	result.Grow(len(playlist) + 64)
-
-	lines := strings.Split(playlist, "\n")
-	for i, line := range lines {
-		if dtStr, ok := strings.CutPrefix(line, prefix); ok {
-			dtStr = strings.TrimSpace(dtStr)
-			corrected := false
-			for _, layout := range pdtLayouts {
-				t, err := time.Parse(layout, dtStr)
-				if err != nil {
-					continue
-				}
-				result.WriteString(prefix)
-				result.WriteString(t.Add(offset).Format(layout))
-				corrected = true
-				break
-			}
-			if !corrected {
-				result.WriteString(line)
-			}
-		} else {
-			result.WriteString(line)
-		}
-		if i < len(lines)-1 {
-			result.WriteByte('\n')
-		}
-	}
-	return result.String()
+	return c.serveNativePlaylist(ctx, sourceID, stream)
 }
 
 // ServeHLSContent serves HLS segment files
@@ -893,79 +651,7 @@ func (c *Handler) ServeHLSContent(ctx echo.Context) error {
 	// Log client connection (rate-limited)
 	c.logHLSClientConnection(sourceID, ctx.RealIP(), decodedPath)
 
-	// Get HLS base directory
-	hlsBaseDir, err := conf.GetHLSDirectory()
-	if err != nil {
-		return c.HandleError(ctx, err, "Server configuration error", http.StatusInternalServerError)
-	}
-
-	// Create secure filesystem
-	secFS, err := securefs.New(hlsBaseDir)
-	if err != nil {
-		return c.HandleError(ctx, err, "Server error", http.StatusInternalServerError)
-	}
-	defer func() {
-		if err := secFS.Close(); err != nil {
-			apicore.GetLogger().Error("Failed to close secure filesystem", logger.Error(err))
-		}
-	}()
-
-	// Validate and build segment path
-	cleanPath := filepath.Clean("/" + decodedPath)
-	// Use filepath.IsLocal for comprehensive path validation (prevents CVE-2023-45284, CVE-2023-45283)
-	if !filepath.IsLocal(cleanPath[1:]) || cleanPath == "/" {
-		return c.HandleError(ctx, nil, "Invalid segment path", http.StatusBadRequest)
-	}
-
-	safeRequestPath := cleanPath[1:] // Remove leading slash
-	segmentPath := filepath.Join(stream.OutputDir, safeRequestPath)
-
-	// Security check: ensure path is within stream directory
-	isWithin, err := securefs.IsPathWithinBase(stream.OutputDir, segmentPath)
-	if err != nil || !isWithin {
-		return c.HandleError(ctx, nil, "Invalid segment path", http.StatusBadRequest)
-	}
-
-	// For init.mp4, serve from memory once cached to avoid TOCTOU races where
-	// FFmpeg's delete_segments removes the file between the existence check and serve.
-	isInitSegment := safeRequestPath == hlsInitSegmentName
-
-	if isInitSegment {
-		if cached, _ := stream.initSegmentCache.Load().([]byte); len(cached) > 0 {
-			c.setHLSHeaders(ctx)
-			c.setHLSContentType(ctx, safeRequestPath)
-			return ctx.Blob(http.StatusOK, ctx.Response().Header().Get(echo.HeaderContentType), cached)
-		}
-
-		data, err := secFS.ReadFile(segmentPath)
-		if err != nil {
-			return c.HandleError(ctx, nil, "Segment file not found", http.StatusNotFound)
-		}
-
-		stream.initSegmentCache.Store(data)
-		c.setHLSHeaders(ctx)
-		c.setHLSContentType(ctx, safeRequestPath)
-		return ctx.Blob(http.StatusOK, ctx.Response().Header().Get(echo.HeaderContentType), data)
-	}
-
-	if !secFS.ExistsNoErr(segmentPath) {
-		return c.HandleError(ctx, nil, "Segment file not found", http.StatusNotFound)
-	}
-
-	// Set headers and content type
-	c.setHLSHeaders(ctx)
-	c.setHLSContentType(ctx, safeRequestPath)
-
-	serveStart := time.Now()
-	serveErr := secFS.ServeFile(ctx, segmentPath)
-	serveDuration := time.Since(serveStart)
-	if serveDuration > hlsServeSlowThreshold {
-		apicore.GetLogger().Warn("Slow segment serve (disk read + network write)",
-			logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
-			logger.String("serve_duration", serveDuration.String()),
-			logger.String("segment", safeRequestPath))
-	}
-	return serveErr
+	return c.serveNativeContent(ctx, stream, decodedPath)
 }
 
 // Helper methods
@@ -1005,23 +691,61 @@ func (c *Handler) generateClientID(ctx echo.Context) string {
 	return clientIP + "-" + clientType
 }
 
-// resolveClientID returns a client identifier, preferring session-based ID when available.
-// Session ID is validated as a UUID and prefixed with IP to prevent spoofing.
-// Invalid or missing session IDs fall back to IP+UA-based identification.
-func (c *Handler) resolveClientID(ctx echo.Context, sessionID string) string {
-	if sessionID != "" {
-		if _, err := uuid.Parse(sessionID); err == nil {
-			return c.extractRemoteAddr(ctx) + "-" + sessionID
+// hlsSessionIDMinLen and hlsSessionIDMaxLen bound the length of a client-supplied
+// HLS session identifier that resolveClientID will accept. The lower bound keeps
+// trivially short tokens out; the upper bound caps how much client-controlled data
+// can enter the client-tracking map.
+const (
+	hlsSessionIDMinLen = 8
+	hlsSessionIDMaxLen = 128
+)
+
+// hlsSessionClientPrefix namespaces client IDs derived from a client-supplied
+// session ID. Without it a crafted session ID could equal the User-Agent type
+// segment that generateClientID appends (for example "HLSPlayer"), letting a
+// session-based client collide with a fallback client on the same IP. The prefix
+// keeps the two identity spaces disjoint regardless of the fallback type strings.
+const hlsSessionClientPrefix = "sid"
+
+// isSafeSessionID reports whether a client-supplied session identifier is safe to
+// embed in a client ID. It accepts bounded-length tokens containing only
+// URL/filename-safe characters ([A-Za-z0-9._-]). This admits canonical UUIDs as
+// well as other unique tokens a client may send (an alternate or older client may
+// use a non-canonical but still unique token), while rejecting empty, oversized,
+// or structurally unexpected input.
+func isSafeSessionID(sessionID string) bool {
+	if len(sessionID) < hlsSessionIDMinLen || len(sessionID) > hlsSessionIDMaxLen {
+		return false
+	}
+	for _, ch := range sessionID {
+		switch {
+		case ch >= 'a' && ch <= 'z',
+			ch >= 'A' && ch <= 'Z',
+			ch >= '0' && ch <= '9',
+			ch == '.', ch == '_', ch == '-':
+			// allowed character
+		default:
+			return false
 		}
 	}
-	// Fallback for non-browser clients (VLC, FFmpeg, etc.) or invalid session IDs
-	return c.generateClientID(ctx)
+	return true
 }
 
-// generateFilesystemSafeName creates a filesystem-safe identifier from source ID
-func generateFilesystemSafeName(input string) string {
-	sum := sha256.Sum256([]byte(input))
-	return base64.RawURLEncoding.EncodeToString(sum[:])
+// resolveClientID returns a client identifier, preferring a client-supplied
+// session ID when it is present and safe. The session ID is prefixed with the
+// remote IP so a client can never impersonate another IP's clients, and it lets
+// multiple live-audio consumers on the same host (for example the HLS player and
+// the dashboard spectrogram) be tracked as distinct clients instead of collapsing
+// onto a single IP+UA identity. Missing or unsafe session IDs fall back to
+// IP+UA-based identification (used by non-browser clients such as VLC and FFmpeg).
+func (c *Handler) resolveClientID(ctx echo.Context, sessionID string) string {
+	if isSafeSessionID(sessionID) {
+		// Namespace session-derived IDs so a crafted session ID can never collide
+		// with a generateClientID fallback (see hlsSessionClientPrefix).
+		return c.extractRemoteAddr(ctx) + "-" + hlsSessionClientPrefix + "-" + sessionID
+	}
+	// Fallback for non-browser clients (VLC, FFmpeg, etc.) or unsafe session IDs
+	return c.generateClientID(ctx)
 }
 
 // setHLSHeaders sets common HLS response headers
@@ -1064,64 +788,11 @@ func (c *Handler) setHLSContentType(ctx echo.Context, path string) {
 // to avoid adding I/O load on every playlist poll.
 var lastFreshnessCheck sync.Map // sourceID → time.Time
 
-// checkSegmentFreshness checks the modification time of the newest segment file
-// in the output directory. If the newest segment is older than segmentLength * multiplier,
-// it logs a warning indicating FFmpeg may be blocked (e.g., SD card I/O stall).
-// The threshold is derived from the configured segment length to avoid false positives.
-// Rate-limited to avoid adding I/O load on every playlist poll.
-func (c *Handler) checkSegmentFreshness(outputDir, sourceID string) {
-	now := time.Now()
-	if v, ok := lastFreshnessCheck.Load(sourceID); ok {
-		if now.Sub(v.(time.Time)) < hlsFreshnessCheckInterval {
-			return
-		}
-	}
-	lastFreshnessCheck.Store(sourceID, now)
-
-	entries, err := os.ReadDir(outputDir)
-	if err != nil {
-		return // Don't log errors for diagnostics - the caller handles missing dirs
-	}
-
-	var newestMod time.Time
-	var newestName string
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		ext := filepath.Ext(e.Name())
-		if ext != ".m4s" && ext != ".ts" {
-			continue
-		}
-		info, err := e.Info()
-		if err != nil {
-			continue
-		}
-		if info.ModTime().After(newestMod) {
-			newestMod = info.ModTime()
-			newestName = e.Name()
-		}
-	}
-
-	if newestMod.IsZero() {
-		return // No segments yet
-	}
-
-	age := time.Since(newestMod)
-	freshnessThreshold := time.Duration(c.getEffectiveSegmentLength()*hlsSegmentFreshnessMultiplier) * time.Second
-	if age > freshnessThreshold {
-		apicore.GetLogger().Warn("Stale HLS segments detected (FFmpeg may be blocked on I/O)",
-			logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
-			logger.String("newest_segment", newestName),
-			logger.String("segment_age", age.Truncate(time.Millisecond).String()))
-	}
-}
-
 // Stream management methods
 
 // getOrCreateHLSStream gets existing stream or creates a new one.
 // Uses singleflight to serialize creation per sourceID, preventing concurrent
-// goroutines from racing on directory creation and FFmpeg spawning.
+// goroutines from racing on muxer construction and route registration.
 func (c *Handler) getOrCreateHLSStream(sourceID string) (*HLSStreamInfo, error) {
 	// Fast-path: existing stream (no singleflight overhead)
 	if stream := c.getHLSStream(sourceID); stream != nil {
@@ -1166,148 +837,27 @@ func (c *Handler) forceCreateHLSStream(sourceID string) (*HLSStreamInfo, error) 
 }
 
 // createHLSStream creates a new HLS stream (called under singleflight serialization).
+//
+// Every live HLS stream is served by the in-process muxer; there is no FFmpeg
+// alternative, so this delegates straight to the native constructor.
 func (c *Handler) createHLSStream(sourceID string) (*HLSStreamInfo, error) {
-	apicore.GetLogger().Info("Creating new HLS stream", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
+	return c.createNativeHLSStream(sourceID)
+}
 
-	// Generate filesystem-safe name
-	filesystemSafeID := generateFilesystemSafeName(sourceID)
-
-	// Create stream context from controller's lifecycle context, NOT from HTTP request context.
-	// Using request context would cause the stream to be cleaned up when the /start request completes.
-	// The stream must persist beyond the initial request lifetime.
-	streamCtx, streamCancel := context.WithCancel(c.Context())
-
-	// Get HLS directory
-	hlsBaseDir, err := conf.GetHLSDirectory()
-	if err != nil {
-		streamCancel()
-		return nil, fmt.Errorf("failed to get HLS directory: %w", err)
-	}
-
-	// Create secure filesystem
-	secFS, err := securefs.New(hlsBaseDir)
-	if err != nil {
-		streamCancel()
-		return nil, fmt.Errorf("failed to initialize secure filesystem: %w", err)
-	}
-	defer func() {
-		if err := secFS.Close(); err != nil {
-			apicore.GetLogger().Error("Failed to close secure filesystem", logger.Error(err))
-		}
-	}()
-
-	// Prepare output directory
-	outputDir, playlistPath, err := c.prepareHLSDirectory(secFS, hlsBaseDir, filesystemSafeID)
-	if err != nil {
-		streamCancel()
-		return nil, err
-	}
-
-	// Validate FFmpeg path (defense-in-depth against ingress path contamination, see #2195)
-	ffmpegPath := c.CurrentSettings().Realtime.Audio.FfmpegPath
-	if err := ffmpeg.ValidateFFmpegPath(ffmpegPath); err != nil {
-		streamCancel()
-		return nil, fmt.Errorf("invalid FFmpeg path: %w", err)
-	}
-
-	// Setup FIFO for audio streaming
-	fifoPath, pipeName, err := c.setupHLSFifo(secFS, hlsBaseDir, outputDir)
-	if err != nil {
-		if removeErr := secFS.RemoveAll(outputDir); removeErr != nil {
-			apicore.GetLogger().Error("Failed to remove output directory", logger.Error(removeErr))
-		}
-		streamCancel()
-		return nil, err
-	}
-
-	// Determine reader path based on platform.
-	// On Windows, setupWindowsAudioFeed writes audio data to FFmpeg's stdin,
-	// so FFmpeg must read from "pipe:0" (stdin) rather than the named pipe.
-	readerPath := fifoPath
-	if runtime.GOOS == osWindows {
-		readerPath = "pipe:0"
-	}
-
-	// Setup and start FFmpeg
-	cmd, err := c.setupHLSFFmpeg(streamCtx, ffmpegPath, readerPath, outputDir, playlistPath)
-	if err != nil {
-		streamCancel()
-		return nil, fmt.Errorf("failed to setup FFmpeg: %w", err)
-	}
-
-	// Setup Windows-specific stdin pipe handling
-	if runtime.GOOS == osWindows {
-		if err := c.setupWindowsAudioFeed(streamCtx, sourceID, cmd); err != nil {
-			streamCancel()
-			return nil, err
-		}
-	}
-
-	// On non-Windows platforms, prepare the audio feed BEFORE starting FFmpeg.
-	// This registers the audio callback and opens the FIFO so that audio data
-	// starts buffering in the channel immediately. When FFmpeg starts (below),
-	// its PROGRAM_DATE_TIME epoch aligns closely with the already-buffered audio,
-	// minimizing the PDT-to-wall-clock offset.
-	var feedResources *audioFeedResources
-	if runtime.GOOS != osWindows {
-		var prepErr error
-		feedResources, prepErr = c.prepareAudioFeed(sourceID, pipeName)
-		if prepErr != nil {
-			streamCancel()
-			return nil, fmt.Errorf("failed to prepare audio feed: %w", prepErr)
-		}
-	}
-
-	// Setup FFmpeg logging and start the process
-	logFile, err := c.setupFFmpegLogging(secFS, cmd, hlsBaseDir, outputDir)
-	if err != nil {
-		if feedResources != nil {
-			feedResources.cleanup()
-		}
-		streamCancel()
-		return nil, err
-	}
-
-	// Create stream info
-	stream := &HLSStreamInfo{
-		SourceID:     sourceID,
-		FFmpegCmd:    cmd,
-		OutputDir:    outputDir,
-		PlaylistPath: playlistPath,
-		FifoPipe:     pipeName,
-		logFile:      logFile,
-		ctx:          streamCtx,
-		cancel:       streamCancel,
-		streamEpoch:  time.Now(),
-	}
-
-	// Register the stream (singleflight guarantees no concurrent creation for this sourceID)
+// publishHLSStream registers the stream and seeds its activity tracking.
+// Singleflight guarantees no concurrent creation for this sourceID.
+func (c *Handler) publishHLSStream(sourceID string, stream *HLSStreamInfo) {
 	hlsMgr.streamsMu.Lock()
 	hlsMgr.streams[sourceID] = stream
 	hlsMgr.streamsMu.Unlock()
 
-	// Initialize activity
 	c.updateHLSActivity(sourceID, "", "stream_creation")
+}
 
-	// Start audio feed loop (non-Windows platforms).
-	// The audio callback and FIFO were already prepared above, so the feed
-	// goroutine starts writing buffered audio to FFmpeg immediately.
-	// If the feed goroutine exits abnormally (not due to context cancellation),
-	// cancel the stream context to trigger cleanup via the context goroutine below.
-	if runtime.GOOS != osWindows {
-		go func() {
-			c.runAudioFeedLoop(stream.ctx, sourceID, stream, feedResources)
-			if stream.ctx.Err() == nil {
-				apicore.GetLogger().Warn("Audio feed exited unexpectedly, cancelling stream",
-					logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
-				stream.cancel()
-			}
-		}()
-	}
-
-	// Start context cleanup goroutine - pass stream pointer to verify identity
-	// before cleanup, preventing a force-restarted stream from being killed
-	// by the old stream's context cancellation goroutine.
+// watchHLSStreamContext starts the goroutine that cleans up once the stream's
+// context is cancelled. It verifies stream identity before cleaning up, so a
+// force-restarted stream is not killed by the old stream's cancellation.
+func (c *Handler) watchHLSStreamContext(sourceID string, stream *HLSStreamInfo) {
 	go func(s *HLSStreamInfo) {
 		<-s.ctx.Done()
 		hlsMgr.streamsMu.Lock()
@@ -1321,262 +871,109 @@ func (c *Handler) createHLSStream(sourceID string) (*HLSStreamInfo, error) {
 			hlsMgr.streamsMu.Unlock()
 		}
 	}(stream)
-
-	return stream, nil
 }
 
-// prepareHLSDirectory creates and validates the output directory
-func (c *Handler) prepareHLSDirectory(secFS *securefs.SecureFS, hlsBaseDir, filesystemSafeID string) (outputDir, playlistPath string, err error) {
-	outputDir = filepath.Join(hlsBaseDir, fmt.Sprintf("stream_%s", filesystemSafeID))
-
-	// Verify output directory is within HLS base
-	isWithin, err := securefs.IsPathWithinBase(hlsBaseDir, outputDir)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to validate output directory: %w", err)
-	}
-	if !isWithin {
-		return "", "", fmt.Errorf("security error: output directory outside HLS base")
-	}
-
-	// Clean existing directory
-	if secFS.ExistsNoErr(outputDir) {
-		if err := secFS.RemoveAll(outputDir); err != nil {
-			return "", "", fmt.Errorf("failed to clean HLS directory: %w", err)
-		}
-	}
-
-	// Create directory
-	if err := secFS.MkdirAll(outputDir, filePermExecutable); err != nil {
-		return "", "", fmt.Errorf("failed to create HLS directory: %w", err)
-	}
-
-	playlistPath = filepath.Join(outputDir, "playlist.m3u8")
-
-	// Verify playlist path
-	isWithin, err = securefs.IsPathWithinBase(hlsBaseDir, playlistPath)
-	if err != nil || !isWithin {
-		return "", "", fmt.Errorf("security error: playlist path outside HLS base")
-	}
-
-	return outputDir, playlistPath, nil
+// audioChunk is one delivery of PCM from the router, carrying the capture time
+// alongside the samples.
+//
+// The timestamp lets the muxer anchor EXT-X-PROGRAM-DATE-TIME to when audio was
+// actually captured. Deriving that from the sample count instead would report
+// wall-clock times that never happened whenever a source stalls and resumes,
+// silently and permanently, because a stalled source produces no samples for the
+// gap.
+type audioChunk struct {
+	data      []byte
+	timestamp time.Time
 }
 
-// setupHLSFifo creates the FIFO pipe for audio streaming
-func (c *Handler) setupHLSFifo(secFS *securefs.SecureFS, hlsBaseDir, outputDir string) (fifoPath, pipeName string, err error) {
-	fifoPath = filepath.Join(outputDir, "audio.pcm")
+// audioFeed is the per-stream PCM queue between the router, which produces
+// chunks on its dispatch goroutine, and an HLS feed loop, which drains them.
+//
+// The queue is bounded by bytes of queued PCM rather than by chunk count,
+// because chunk size is a property of the producer, not of HLS: the FFmpeg
+// ingest path emits ffmpegBufferSize (32 KiB) per frame, a directly captured
+// sound card emits miniaudio's default 10 ms period (under 1 KiB at 48 kHz
+// mono), and a route whose source rate differs from the consumer rate has a
+// resampler in between that changes the size again. A chunk-count bound
+// therefore means a different memory ceiling and a different amount of buffered
+// audio for every source; one small enough to bound RTSP frames leaves a sound
+// card with a fraction of a second of slack. A byte budget gives every producer
+// the same ceiling and the same wall-clock depth.
+//
+// Chunks leave the queue two ways, and each one has to be accounted for. The
+// producer evicts the oldest to make room: in makeRoom when the byte budget is
+// exceeded, and in Write's overflow arm when the channel's slots fill before the
+// byte budget does (which is the only eviction path when there is no budget).
+// The consumer receives. The invariant is simply that every
+// path removing a chunk from ch calls release(len(chunk.data)) for it; skipping
+// it leaves the producer believing the queue holds bytes that are already gone,
+// and the queue eventually evicts on every write.
+type audioFeed struct {
+	ch chan audioChunk
 
-	isWithin, pathErr := securefs.IsPathWithinBase(hlsBaseDir, fifoPath)
-	if pathErr != nil || !isWithin {
-		return "", "", fmt.Errorf("security error: FIFO path outside HLS base")
-	}
+	// maxBytes is the byte budget. hlsFeedQueueUnbounded disables it and leaves
+	// the channel's slot count as the only bound.
+	maxBytes int64
 
-	if err = secFS.CreateFIFO(fifoPath); err != nil {
-		return "", "", fmt.Errorf("failed to create FIFO: %w", err)
-	}
-
-	pipeName = secFS.GetPipeName()
-	return fifoPath, pipeName, nil
+	// queued is the PCM currently sitting in ch. It is only ever advisory:
+	// nothing serializes a producer's enqueue against a consumer's release, so
+	// it can lag reality by a chunk in either direction. That is bounded and
+	// harmless, since one chunk of slack on a multi-second budget changes
+	// neither the memory ceiling nor the buffered depth in any way that matters.
+	queued atomic.Int64
 }
 
-// setupHLSFFmpeg creates the FFmpeg command
-func (c *Handler) setupHLSFFmpeg(ctx context.Context, ffmpegPath, inputSource, outputDir, playlistPath string) (*exec.Cmd, error) {
-	args := c.buildFFmpegArgs(inputSource, outputDir, playlistPath)
-	//nolint:gosec // G204: ffmpegPath is from admin config (Settings.Realtime.Audio.FfmpegPath), not user input
-	cmd := exec.CommandContext(ctx, ffmpegPath, args...)
-
-	// Graceful shutdown: send SIGINT first (lets FFmpeg flush output buffers),
-	// escalate to SIGKILL after WaitDelay if it hasn't exited.
-	// Windows doesn't support SIGINT; exec.CommandContext defaults to TerminateProcess.
-	if runtime.GOOS != osWindows {
-		cmd.Cancel = func() error {
-			if cmd.Process == nil {
-				return nil
-			}
-			return cmd.Process.Signal(syscall.SIGINT)
-		}
-	}
-	cmd.WaitDelay = 5 * time.Second
-
-	return cmd, nil
+// release reports that a chunk of n bytes has been taken off the queue.
+func (f *audioFeed) release(n int) {
+	f.queued.Add(-int64(n))
 }
 
-// buildFFmpegArgs constructs FFmpeg command line arguments
-func (c *Handler) buildFFmpegArgs(inputSource, outputDir, playlistPath string) []string {
-	settings := c.CurrentSettings().WebServer.LiveStream
-
-	// Apply defaults and limits
-	bitrate := 128
-	if settings.BitRate > 0 {
-		switch {
-		case settings.BitRate < hlsMinBitrate:
-			bitrate = hlsMinBitrate
-		case settings.BitRate > hlsMaxBitrate:
-			bitrate = hlsMaxBitrate
-		default:
-			bitrate = settings.BitRate
-		}
+// evictOldest drops the single oldest queued chunk if there is one, releasing
+// its bytes, and reports whether it evicted anything. It is the one place a
+// chunk leaves the queue on the producer side, so the receive and its matching
+// release stay welded together here rather than being repeated at each caller:
+// makeRoom's byte-budget loop and Write's slot-exhaustion arm both go through it.
+func (f *audioFeed) evictOldest() bool {
+	select {
+	case old := <-f.ch:
+		f.release(len(old.data))
+		return true
+	default:
+		return false
 	}
-
-	sampleRate := hlsDefaultSampleRate
-	if settings.SampleRate > 0 {
-		sampleRate = settings.SampleRate
-	}
-
-	segmentLength := hlsDefaultSegmentLen
-	if settings.SegmentLength > 0 {
-		switch {
-		case settings.SegmentLength < hlsMinSegmentLen:
-			segmentLength = hlsMinSegmentLen
-		case settings.SegmentLength > hlsMaxSegmentLen:
-			segmentLength = hlsMaxSegmentLen
-		default:
-			segmentLength = settings.SegmentLength
-		}
-	}
-
-	logLevel := logLevelWarning
-	if settings.FfmpegLogLevel != "" {
-		logLevel = settings.FfmpegLogLevel
-	}
-
-	args := []string{
-		"-f", "s16le",
-		"-ar", fmt.Sprintf("%d", sampleRate),
-		"-ac", "1",
-		"-i", inputSource,
-		"-y",
-		"-c:a", "aac",
-		"-b:a", fmt.Sprintf("%dk", bitrate),
-		"-f", "hls",
-		"-hls_time", fmt.Sprintf("%d", segmentLength),
-		"-hls_list_size", strconv.Itoa(hlsListSize),
-	}
-
-	// On Windows, FFmpeg reads from stdin (pipe:0) which is non-seekable.
-	// The fMP4 segment type requires FFmpeg to write a separate init.mp4 file,
-	// but FFmpeg fails to create it when reading from a non-seekable source.
-	// Use MPEG-TS segments on Windows which are self-contained and don't need
-	// a separate initialization segment.
-	if runtime.GOOS == osWindows {
-		args = append(args,
-			"-hls_flags", "delete_segments+program_date_time+independent_segments",
-			"-hls_segment_type", "mpegts",
-		)
-	} else {
-		args = append(args,
-			"-hls_flags", "delete_segments+temp_file+program_date_time+independent_segments",
-			"-hls_segment_type", "fmp4",
-			"-hls_fmp4_init_filename", hlsInitSegmentName,
-			"-movflags", "empty_moov+separate_moof+default_base_moof",
-		)
-	}
-
-	args = append(args,
-		"-hls_init_time", fmt.Sprintf("%d", segmentLength),
-		"-hls_allow_cache", strconv.Itoa(hlsAllowCache),
-		"-flush_packets", "1",
-		"-start_number", strconv.Itoa(hlsStartNumber),
-		"-loglevel", logLevel,
-	)
-
-	// Segment filename extension matches the segment type
-	segExt := "m4s"
-	if runtime.GOOS == osWindows {
-		segExt = "ts"
-	}
-	args = append(args,
-		"-hls_segment_filename", filepath.ToSlash(filepath.Join(outputDir, "segment%03d."+segExt)),
-		playlistPath,
-	)
-
-	return args
 }
 
-// setupWindowsAudioFeed sets up audio feeding via stdin for Windows
-func (c *Handler) setupWindowsAudioFeed(ctx context.Context, sourceID string, cmd *exec.Cmd) error {
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return fmt.Errorf("failed to create stdin pipe: %w", err)
+// makeRoom evicts the oldest chunks until n more bytes fit within the byte
+// budget, returning the number of chunks it dropped.
+//
+// Dropping the oldest is the right policy for a live stream: the queue only
+// grows when the encoder falls behind, and audio that far behind the live edge
+// is past the point where any player would still ask for it.
+//
+// It stops early when the queue runs empty, which happens when a single chunk
+// is larger than the whole budget. Refusing that chunk would silence the stream
+// permanently rather than briefly, so it is admitted and the budget is exceeded
+// by that one chunk.
+func (f *audioFeed) makeRoom(n int) int {
+	if f.maxBytes <= 0 {
+		return 0
 	}
-
-	go func() {
-		defer func() {
-			if err := stdin.Close(); err != nil {
-				apicore.GetLogger().Error("Failed to close stdin", logger.Error(err))
-			}
-		}()
-		apicore.GetLogger().Debug("Starting audio feed via stdin", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
-
-		audioChan, cleanup, err := c.setupAudioCallback(sourceID)
-		if err != nil {
-			apicore.GetLogger().Error("Error setting up audio callback", logger.Error(err))
-			return
+	dropped := 0
+	for f.queued.Load()+int64(n) > f.maxBytes {
+		if !f.evictOldest() {
+			return dropped
 		}
-		defer cleanup()
-
-		for {
-			select {
-			case <-ctx.Done():
-				apicore.GetLogger().Debug("Audio feed terminated due to context cancellation", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
-				return
-			case data, ok := <-audioChan:
-				if !ok {
-					apicore.GetLogger().Debug("Audio channel closed", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
-					return
-				}
-
-				written := 0
-				for written < len(data) {
-					n, err := stdin.Write(data[written:])
-					if err != nil {
-						apicore.GetLogger().Error("Error writing to FFmpeg stdin", logger.Error(err))
-						return
-					}
-					written += n
-				}
-			}
-		}
-	}()
-
-	return nil
-}
-
-// setupFFmpegLogging configures FFmpeg output logging and starts the FFmpeg process.
-// Returns the log file which must be closed by the caller after the process exits.
-// The caller is responsible for calling cmd.Wait() and then closing the returned file.
-func (c *Handler) setupFFmpegLogging(secFS *securefs.SecureFS, cmd *exec.Cmd, hlsBaseDir, outputDir string) (*os.File, error) {
-	logFilePath := filepath.Join(outputDir, "ffmpeg.log")
-
-	isWithin, err := securefs.IsPathWithinBase(hlsBaseDir, logFilePath)
-	if err != nil || !isWithin {
-		return nil, fmt.Errorf("security error: log file path outside HLS base")
+		dropped++
 	}
-
-	logFile, err := secFS.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, filePermReadWrite)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create ffmpeg log file: %w", err)
-	}
-
-	cmd.Stdout = logFile
-	cmd.Stderr = logFile
-
-	if err := cmd.Start(); err != nil {
-		if closeErr := logFile.Close(); closeErr != nil {
-			apicore.GetLogger().Error("Failed to close log file", logger.Error(closeErr))
-		}
-		return nil, fmt.Errorf("failed to start FFmpeg: %w", err)
-	}
-
-	apicore.GetLogger().Debug("FFmpeg process started", logger.String("output_dir", outputDir))
-	return logFile, nil
+	return dropped
 }
 
 // hlsConsumer implements audiocore.AudioConsumer for HLS streaming.
-// It forwards audio frames to a channel for FFmpeg encoding.
+// It forwards audio frames to a bounded feed queue (see audioFeed) for encoding.
 type hlsConsumer struct {
 	id       string
 	sourceID string
-	ch       chan []byte
+	feed     *audioFeed
 	rate     int
 	depth    int
 	channels int
@@ -1600,51 +997,66 @@ func (h *hlsConsumer) BitDepth() int { return h.depth }
 // Channels returns the expected channel count.
 func (h *hlsConsumer) Channels() int { return h.channels }
 
-// Write delivers audio frame data to the HLS channel.
+// Write delivers audio frame data to the HLS feed queue.
 //
 // The frame data is copied before being sent so the caller (the audio router)
-// may safely reuse or recycle the underlying slice after Write returns. FFmpeg
-// reads asynchronously from the channel, so any retained slice header would
-// race with the caller's buffer reuse.
+// may safely reuse or recycle the underlying slice after Write returns. The
+// feed loop reads asynchronously from the queue, so any retained slice header
+// would race with the caller's buffer reuse.
+//
+// The send never blocks. A feed loop that has fallen behind costs the stream
+// its oldest queued audio, not the router its dispatch goroutine.
 func (h *hlsConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocritic // hugeParam: signature required by AudioConsumer interface
 	if h.closed.Load() {
 		return audiocore.ErrConsumerClosed
 	}
 
-	// Copy once up front. Both select arms below need an owned slice.
-	buf := slices.Clone(frame.Data)
+	// Copy once up front. Every send arm below needs an owned slice.
+	chunk := audioChunk{data: slices.Clone(frame.Data), timestamp: frame.Timestamp}
+	chunkBytes := int64(len(chunk.data))
+
+	// Evict down to the byte budget first, so the queue is bounded by the PCM
+	// it holds rather than by the slot count of the channel behind it.
+	dropped := h.feed.makeRoom(len(chunk.data))
 
 	select {
-	case h.ch <- buf:
+	case h.feed.ch <- chunk:
+		h.feed.queued.Add(chunkBytes)
 	default:
-		// Channel full, drop oldest to make room
-		dropped := false
-		select {
-		case <-h.ch:
-			dropped = true
-		default:
+		// Slots exhausted while still inside the byte budget, which is what a
+		// stream of chunks far smaller than the budget looks like. Drop the
+		// oldest to make room, on the same reasoning as makeRoom.
+		if h.feed.evictOldest() {
+			dropped++
 		}
-		// Non-blocking send - drop if still full
 		select {
-		case h.ch <- buf:
+		case h.feed.ch <- chunk:
+			h.feed.queued.Add(chunkBytes)
 		default:
+			// Unreachable under the single-producer model (the eviction above,
+			// or the consumer draining, leaves a free slot before this retry),
+			// but count the loss rather than trust that invariant: if a second
+			// writer is ever added, the drop stays honest instead of silently
+			// under-reporting.
+			dropped++
 		}
+	}
 
-		if dropped {
-			h.dropMu.Lock()
-			h.dropCount++
-			now := time.Now()
-			if now.Sub(h.lastDropLog) >= hlsDropLogInterval {
-				sanitizedID := privacy.SanitizeRTSPUrl(h.sourceID)
-				apicore.GetLogger().Warn("HLS audio data dropped: channel full",
-					logger.String("source_id", sanitizedID),
-					logger.Int64("drops_since_last_log", h.dropCount),
-					logger.Int("channel_cap", defaultReadBufferSize))
-				h.dropCount = 0
-				h.lastDropLog = now
-			}
-			h.dropMu.Unlock()
+	if dropped > 0 {
+		h.dropMu.Lock()
+		h.dropCount += int64(dropped)
+		now := time.Now()
+		if now.Sub(h.lastDropLog) >= hlsDropLogInterval {
+			sanitizedID := privacy.SanitizeRTSPUrl(h.sourceID)
+			apicore.GetLogger().Warn("HLS audio data dropped: feed queue full",
+				logger.String("source_id", sanitizedID),
+				logger.Int64("drops_since_last_log", h.dropCount),
+				logger.Int64("queued_bytes", h.feed.queued.Load()),
+				logger.Int64("max_queued_bytes", h.feed.maxBytes))
+			h.dropCount = 0
+			h.lastDropLog = now
 		}
+		h.dropMu.Unlock()
 	}
 	return nil
 }
@@ -1655,25 +1067,38 @@ func (h *hlsConsumer) Close() error {
 	return nil
 }
 
-// setupAudioCallback sets up the audio callback channel using the AudioRouter.
-func (c *Handler) setupAudioCallback(sourceID string) (audioChan chan []byte, cleanup func(), err error) {
-	audioChan = make(chan []byte, defaultReadBufferSize)
+// setupAudioCallback sets up the audio feed queue using the AudioRouter.
+// sampleRate is the rate the consumer declares; the router inserts a resampler
+// whenever the source differs from it. maxQueuedBytes is the queue's byte
+// budget, or hlsFeedQueueUnbounded to leave the channel's slot count as the only
+// bound; see audioFeed for why the bound is in bytes rather than chunks.
+func (c *Handler) setupAudioCallback(sourceID string, sampleRate int, maxQueuedBytes int64) (feed *audioFeed, cleanup func(), err error) {
+	feed = &audioFeed{
+		ch:       make(chan audioChunk, defaultReadBufferSize),
+		maxBytes: maxQueuedBytes,
+	}
+
+	// hlsConsumerChannels is what this consumer declares to the router, and the
+	// native path derives its muxer sample-frame size from nativeHLSChannels.
+	// They must be equal, and the failure when they are not is silent rather
+	// than loud: with more consumer channels than muxer channels the interleaved
+	// frames still divide evenly into the smaller sample frame, so every write is
+	// ACCEPTED and the muxer reads L,R,L,R as consecutive mono samples. That
+	// plays at double speed an octave up with no error anywhere.
+	//
+	// Both subtractions are needed. One alone only rejects the direction that
+	// goes negative, which is the direction that would have failed loudly anyway.
+	const _ = uint(hlsConsumerChannels-nativeHLSChannels) + uint(nativeHLSChannels-hlsConsumerChannels)
 
 	consumerID := fmt.Sprintf("hls_%s_%s", privacy.SanitizeStreamUrl(sourceID), uuid.New().String()[:8])
-	// Use the configured live stream sample rate, falling back to the default HLS sample rate.
-	sampleRate := hlsDefaultSampleRate
-	liveStream := c.CurrentSettings().WebServer.LiveStream
-	if liveStream.SampleRate > 0 {
-		sampleRate = liveStream.SampleRate
-	}
 
 	consumer := &hlsConsumer{
 		id:       consumerID,
 		sourceID: sourceID,
-		ch:       audioChan,
+		feed:     feed,
 		rate:     sampleRate,
 		depth:    conf.BitDepth,
-		channels: 1,
+		channels: hlsConsumerChannels,
 	}
 
 	// Load the engine once for all registry/router operations in this section.
@@ -1716,183 +1141,14 @@ func (c *Handler) setupAudioCallback(sourceID string) (audioChan chan []byte, cl
 		apicore.GetLogger().Debug("Removed HLS audio route", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)), logger.String("consumer_id", consumerID))
 	}
 
-	return audioChan, cleanup, nil
+	return feed, cleanup, nil
 }
 
-// writeToFIFO performs a context-aware write to the FIFO pipe.
-// If the context is cancelled or the write exceeds fifoWriteTimeout,
-// it returns immediately. The orphaned write goroutine is cleaned up
-// when the caller's defer closes the FIFO (unblocking the write with an error).
-func writeToFIFO(ctx context.Context, fifo *os.File, data []byte) error {
-	done := make(chan error, 1)
-	go func() {
-		_, err := fifo.Write(data)
-		done <- err
-	}()
-
-	timer := time.NewTimer(fifoWriteTimeout)
-	defer timer.Stop()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case err := <-done:
-		return err
-	case <-timer.C:
-		return fmt.Errorf("FIFO write timeout: FFmpeg may be unresponsive")
-	}
-}
-
-// audioFeedResources holds the pre-initialized resources needed by the audio
-// feed loop. Created by prepareAudioFeed before FFmpeg starts so that the audio
-// callback is already registered and the FIFO is open when FFmpeg captures its
-// PROGRAM_DATE_TIME epoch.
+// audioFeedResources holds the resources the feed loop owns: the PCM queue
+// from the router and the cleanup that unregisters the route.
 type audioFeedResources struct {
-	audioChan chan []byte        // Buffered channel receiving audio chunks from the broadcast callback
-	fifo      *os.File           // FIFO pipe opened for writing to FFmpeg
-	secFS     *securefs.SecureFS // Secure filesystem (must be closed when done)
-	cleanup   func()             // Releases all resources (unregisters callback, closes FIFO and secFS)
-}
-
-// prepareAudioFeed initialises the audio callback and opens the FIFO pipe.
-// It must be called BEFORE FFmpeg starts so that audio data begins buffering
-// in the channel immediately. The returned resources are consumed by
-// runAudioFeedLoop, which should be started as a goroutine after cmd.Start().
-func (c *Handler) prepareAudioFeed(sourceID, pipePath string) (*audioFeedResources, error) {
-	sanitizedID := privacy.SanitizeRTSPUrl(sourceID)
-	apicore.GetLogger().Debug("Preparing audio feed", logger.String("source_id", sanitizedID), logger.String("pipe_path", pipePath))
-
-	hlsBaseDir, err := conf.GetHLSDirectory()
-	if err != nil {
-		return nil, fmt.Errorf("error getting HLS directory: %w", err)
-	}
-
-	secFS, err := securefs.New(hlsBaseDir)
-	if err != nil {
-		return nil, fmt.Errorf("error creating secure filesystem: %w", err)
-	}
-
-	// Register the audio callback first so audio chunks start buffering
-	// in the channel while we open the FIFO and before FFmpeg starts.
-	audioChan, callbackCleanup, err := c.setupAudioCallback(sourceID)
-	if err != nil {
-		if closeErr := secFS.Close(); closeErr != nil {
-			apicore.GetLogger().Error("Failed to close secure filesystem", logger.Error(closeErr))
-		}
-		return nil, fmt.Errorf("error setting up audio callback: %w", err)
-	}
-
-	// Open FIFO with O_RDWR to prevent blocking on open() if FFmpeg hasn't started
-	// or crashes before opening the read end. This is a well-known POSIX pattern:
-	// the opener becomes both reader and writer, so open() returns immediately.
-	// Writes still block when the pipe buffer is full (normal backpressure),
-	// and the goroutine responds to ctx.Done() via the select loop.
-	fifo, err := secFS.OpenFile(pipePath, os.O_RDWR, 0)
-	if err != nil {
-		callbackCleanup()
-		if closeErr := secFS.Close(); closeErr != nil {
-			apicore.GetLogger().Error("Failed to close secure filesystem", logger.Error(closeErr))
-		}
-		return nil, fmt.Errorf("error opening pipe: %w", err)
-	}
-
-	res := &audioFeedResources{
-		audioChan: audioChan,
-		fifo:      fifo,
-		secFS:     secFS,
-		cleanup: func() {
-			callbackCleanup()
-			if closeErr := fifo.Close(); closeErr != nil {
-				apicore.GetLogger().Error("Failed to close FIFO", logger.Error(closeErr))
-			}
-			if closeErr := secFS.Close(); closeErr != nil {
-				apicore.GetLogger().Error("Failed to close secure filesystem", logger.Error(closeErr))
-			}
-		},
-	}
-
-	apicore.GetLogger().Debug("Audio feed prepared, callback registered and FIFO open",
-		logger.String("source_id", sanitizedID))
-	return res, nil
-}
-
-// runAudioFeedLoop reads audio data from the pre-registered callback channel
-// and writes it to the FIFO pipe. It takes ownership of the audioFeedResources
-// and releases them on exit. Must be called as a goroutine after FFmpeg starts.
-func (c *Handler) runAudioFeedLoop(ctx context.Context, sourceID string, stream *HLSStreamInfo, res *audioFeedResources) {
-	defer res.cleanup()
-
-	sanitizedID := privacy.SanitizeRTSPUrl(sourceID)
-	apicore.GetLogger().Debug("Audio feed loop starting", logger.String("source_id", sanitizedID))
-
-	dataWritten := false
-	var totalWrites int64
-	var slowWrites int64
-	var maxWriteDuration time.Duration
-	var lastSlowWriteLog time.Time
-
-	// Always log exit stats regardless of how the feed stops
-	defer func() {
-		apicore.GetLogger().Debug("Audio feed stats on exit",
-			logger.String("source_id", sanitizedID),
-			logger.Int64("total_fifo_writes", totalWrites),
-			logger.Int64("slow_fifo_writes", slowWrites),
-			logger.String("max_write_duration", maxWriteDuration.String()))
-	}()
-
-	for {
-		select {
-		case <-ctx.Done():
-			apicore.GetLogger().Debug("Audio feed stopped due to context cancellation",
-				logger.String("source_id", sanitizedID))
-			return
-		case data, ok := <-res.audioChan:
-			if !ok {
-				apicore.GetLogger().Debug("Audio channel closed", logger.String("source_id", sanitizedID))
-				return
-			}
-
-			writeStart := time.Now()
-			if err := writeToFIFO(ctx, res.fifo, data); err != nil {
-				if ctx.Err() != nil {
-					apicore.GetLogger().Debug("Audio feed stopped due to context cancellation", logger.String("source_id", sanitizedID))
-				} else {
-					apicore.GetLogger().Error("Error writing to FIFO", logger.Error(err),
-						logger.String("write_duration", time.Since(writeStart).String()))
-				}
-				return
-			}
-			writeDuration := time.Since(writeStart)
-			totalWrites++
-
-			if writeDuration > maxWriteDuration {
-				maxWriteDuration = writeDuration
-			}
-
-			if writeDuration > fifoWriteSlowThreshold {
-				slowWrites++
-				// Rate-limit slow write warnings to avoid spamming logs
-				// during sustained I/O stalls (which would worsen the problem)
-				now := time.Now()
-				if now.Sub(lastSlowWriteLog) >= hlsDropLogInterval {
-					lastSlowWriteLog = now
-					apicore.GetLogger().Warn("Slow FIFO write detected (possible I/O stall)",
-						logger.String("source_id", sanitizedID),
-						logger.String("write_duration", writeDuration.String()),
-						logger.Int("data_bytes", len(data)),
-						logger.Int64("slow_writes_total", slowWrites),
-						logger.Int64("total_writes", totalWrites))
-				}
-			}
-
-			if !dataWritten {
-				stream.firstDataTime.Store(writeStart.UnixNano())
-				apicore.GetLogger().Debug("First audio data written", logger.String("source_id", sanitizedID),
-					logger.String("first_data_time", writeStart.UTC().Format(time.RFC3339Nano)))
-				dataWritten = true
-			}
-		}
-	}
+	feed    *audioFeed // Feed queue from the router (byte-budgeted; see audioFeed)
+	cleanup func()     // Releases resources (unregisters the router callback)
 }
 
 // Activity and client management
@@ -2005,50 +1261,14 @@ func (c *Handler) cleanupExistingHLSStream(sourceID string) {
 		stream.cancel()
 	}
 
-	var cmd *exec.Cmd
-	if stream.FFmpegCmd != nil && stream.FFmpegCmd.Process != nil {
-		cmd = stream.FFmpegCmd
-	}
-
-	outputDir := stream.OutputDir
-	logFile := stream.logFile
 	delete(hlsMgr.streams, sourceID)
 	removeStreamToken(sourceID)
 	hlsMgr.streamsMu.Unlock()
 
-	// Wait for process termination using cmd.Wait() (not cmd.Process.Wait())
-	// so that cmd.Cancel/cmd.WaitDelay escalation to SIGKILL works correctly.
-	if cmd != nil {
-		if err := cmd.Wait(); err != nil {
-			apicore.GetLogger().Debug("FFmpeg process exited during cleanup", logger.Error(err))
-		}
-	}
-
-	// Close log file after process exits (must be done after Wait())
-	if logFile != nil {
-		if closeErr := logFile.Close(); closeErr != nil {
-			apicore.GetLogger().Error("Failed to close log file", logger.Error(closeErr))
-		}
-	}
-
-	// Clean up directory
-	if outputDir != "" {
-		hlsBaseDir, err := conf.GetHLSDirectory()
-		if err == nil {
-			if secFS, err := securefs.New(hlsBaseDir); err == nil {
-				defer func() {
-					if closeErr := secFS.Close(); closeErr != nil {
-						apicore.GetLogger().Error("Failed to close secure filesystem", logger.Error(closeErr))
-					}
-				}()
-				if secFS.ExistsNoErr(outputDir) {
-					if removeErr := secFS.RemoveAll(outputDir); removeErr != nil {
-						apicore.GetLogger().Error("Failed to remove output directory", logger.Error(removeErr))
-					}
-				}
-			}
-		}
-	}
+	// Deleting the stream above means the context watcher will find a different
+	// (or missing) entry and skip performHLSCleanup, so the muxer has to be
+	// closed here or it is never closed at all.
+	closeNativeMux(sourceID, stream)
 }
 
 // RestartHLSStreams stops all active HLS streams so they restart with fresh settings.
@@ -2088,49 +1308,15 @@ func (c *Handler) performHLSCleanup(sourceID string, stream *HLSStreamInfo, reas
 		stream.cancel()
 	}
 
-	// Clean up FFmpeg process and log file
-	c.cleanupFFmpegProcess(sourceID, stream)
-
-	// Clean up output directory
-	cleanupStreamDirectory(stream.OutputDir)
+	// There is no process, FIFO or output directory: closing the muxer (which
+	// flushes the encoder tail) and dropping the tracking data is the whole of
+	// cleanup.
+	closeNativeMux(sourceID, stream)
 
 	// Clean up tracking data
 	c.cleanupStreamTracking(sourceID)
 
 	apicore.GetLogger().Debug("HLS stream cleanup completed", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
-}
-
-// cleanupFFmpegProcess terminates the FFmpeg process and closes the log file.
-// Waits synchronously for the process to exit so that callers can safely
-// remove the output directory afterward (cmd.WaitDelay caps the wait at 5s).
-func (c *Handler) cleanupFFmpegProcess(sourceID string, stream *HLSStreamInfo) {
-	if stream.FFmpegCmd != nil && stream.FFmpegCmd.Process != nil {
-		c.waitForFFmpegProcess(sourceID, stream.FFmpegCmd, stream.logFile)
-		return
-	}
-	// No process, just close log file if present
-	closeLogFile(stream.logFile)
-}
-
-// waitForFFmpegProcess waits for FFmpeg to exit and cleans up resources.
-// Uses cmd.Wait() (not cmd.Process.Wait()) so that cmd.Cancel/cmd.WaitDelay
-// escalation to SIGKILL works correctly.
-func (c *Handler) waitForFFmpegProcess(sourceID string, cmd *exec.Cmd, logFile *os.File) {
-	if err := cmd.Wait(); err != nil {
-		apicore.GetLogger().Debug("FFmpeg process exited", logger.Error(err))
-	}
-	closeLogFile(logFile)
-	apicore.GetLogger().Debug("FFmpeg process terminated", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
-}
-
-// closeLogFile safely closes a log file if it's not nil.
-func closeLogFile(f *os.File) {
-	if f == nil {
-		return
-	}
-	if err := f.Close(); err != nil {
-		apicore.GetLogger().Error("Failed to close log file", logger.Error(err))
-	}
 }
 
 // cleanupStreamTracking removes all tracking data for a stream.
@@ -2159,59 +1345,10 @@ func cleanupStreamTrackingData(sourceID string) {
 	lastFreshnessCheck.Delete(sourceID)
 }
 
-// waitForHLSPlaylist waits for the playlist file to be ready
+// waitForHLSPlaylist waits until the muxer advertises enough segments for
+// immediate playback.
 func (c *Handler) waitForHLSPlaylist(ctx echo.Context, sourceID string, stream *HLSStreamInfo) bool {
-	hlsBaseDir, err := conf.GetHLSDirectory()
-	if err != nil {
-		return false
-	}
-
-	secFS, err := securefs.New(hlsBaseDir)
-	if err != nil {
-		return false
-	}
-	defer func() {
-		if err := secFS.Close(); err != nil {
-			apicore.GetLogger().Error("Failed to close secure filesystem", logger.Error(err))
-		}
-	}()
-
-	playlistCtx, cancel := context.WithTimeout(ctx.Request().Context(), hlsPlaylistWaitTimeout)
-	defer cancel()
-
-	// Use ticker for polling, let context timeout control the overall duration.
-	// Poll at 500ms to catch the second segment quickly after the first.
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-
-	// Poll until playlist has enough segments for immediate playback.
-	// HLS.js requires MIN_FRAGMENTS_BEFORE_PLAY (2) fragments before calling play().
-	// If we return with only 1 segment, HLS.js must wait a full playlist reload cycle
-	// (targetDuration seconds) before discovering segment001, causing an audio gap.
-	// By waiting for 2+ segments here, HLS.js can buffer both immediately.
-	for {
-		if secFS.ExistsNoErr(stream.PlaylistPath) {
-			data, err := secFS.ReadFile(stream.PlaylistPath)
-			if err == nil && len(data) > 0 {
-				content := string(data)
-				if strings.Contains(content, "#EXTM3U") && strings.Count(content, "#EXTINF:") >= hlsMinSegments {
-					return true
-				}
-			}
-		}
-
-		if !c.hlsStreamExists(sourceID) {
-			return false
-		}
-
-		// Wait for next tick or context cancellation
-		select {
-		case <-playlistCtx.Done():
-			return false
-		case <-ticker.C:
-			// Continue polling
-		}
-	}
+	return stream.isNative() && c.waitForNativePlaylist(ctx, sourceID, stream)
 }
 
 // logHLSClientConnection logs client connections with rate limiting
@@ -2230,7 +1367,9 @@ func (c *Handler) logHLSClientConnection(sourceID, clientIP, requestPath string)
 
 	if shouldLog {
 		streamStartMsg := ""
-		if strings.HasPrefix(requestPath, "segment00") {
+		// The muxer emits unpadded segment names; sequence 0 is the first segment
+		// of the stream, so a request for it marks the start of streaming.
+		if seq, ok := hls.ParseSegmentName(requestPath); ok && seq == 0 {
 			streamStartMsg = " (streaming started)"
 		}
 		apicore.GetLogger().Info("HLS stream request",
@@ -2257,50 +1396,6 @@ func (c *Handler) CleanupAllHLSStreams() error {
 	// Cleanup each stream
 	for sourceID, stream := range streamsToClean {
 		c.performHLSCleanup(sourceID, stream, "server shutdown")
-	}
-
-	// Clean remaining directories
-	if err := c.cleanupHLSDirectories(); err != nil {
-		return err
-	}
-
-	if runtime.GOOS == osWindows {
-		securefs.CleanupNamedPipes()
-	}
-
-	return nil
-}
-
-// cleanupHLSDirectories removes all stream directories from the HLS base directory.
-func (c *Handler) cleanupHLSDirectories() error {
-	hlsBaseDir, err := conf.GetHLSDirectory()
-	if err != nil {
-		return fmt.Errorf("failed to get HLS directory: %w", err)
-	}
-
-	secFS, err := securefs.New(hlsBaseDir)
-	if err != nil {
-		return fmt.Errorf("failed to create secure filesystem: %w", err)
-	}
-	defer func() {
-		if closeErr := secFS.Close(); closeErr != nil {
-			apicore.GetLogger().Error("Failed to close secure filesystem", logger.Error(closeErr))
-		}
-	}()
-
-	entries, err := secFS.ReadDir(hlsBaseDir)
-	if err != nil {
-		return fmt.Errorf("failed to read HLS directory: %w", err)
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() && strings.HasPrefix(entry.Name(), "stream_") {
-			streamDir := filepath.Join(hlsBaseDir, entry.Name())
-			apicore.GetLogger().Debug("Removing HLS stream directory", logger.String("stream_dir", streamDir))
-			if removeErr := secFS.RemoveAll(streamDir); removeErr != nil {
-				apicore.GetLogger().Error("Failed to remove stream directory", logger.Error(removeErr))
-			}
-		}
 	}
 
 	return nil
@@ -2441,53 +1536,13 @@ func cleanupStream(s *HLSStreamInfo, sourceID string) {
 		s.cancel()
 	}
 
-	// Use cmd.Wait() (not cmd.Process.Wait()) so that cmd.Cancel/cmd.WaitDelay
-	// escalation to SIGKILL works correctly.
-	if s.FFmpegCmd != nil {
-		if err := s.FFmpegCmd.Wait(); err != nil {
-			apicore.GetLogger().Debug("FFmpeg process exited during cleanup", logger.Error(err))
-		}
-	}
-
-	// Close log file after process exits (must be done after Wait())
-	if s.logFile != nil {
-		if closeErr := s.logFile.Close(); closeErr != nil {
-			apicore.GetLogger().Error("Failed to close log file", logger.Error(closeErr))
-		}
-	}
-
-	cleanupStreamDirectory(s.OutputDir)
+	// The inactivity sweep removes the stream from the registry itself, so the
+	// context watcher skips performHLSCleanup and this is the only chance to
+	// release the muxer.
+	closeNativeMux(sourceID, s)
 
 	// Clean up tracking data (clients, activity) so stale entries don't persist
 	cleanupStreamTrackingData(sourceID)
 
 	apicore.GetLogger().Debug("Cleaned up inactive stream", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
-}
-
-// cleanupStreamDirectory removes the stream's output directory
-func cleanupStreamDirectory(outputDir string) {
-	if outputDir == "" {
-		return
-	}
-
-	hlsBaseDir, err := conf.GetHLSDirectory()
-	if err != nil {
-		apicore.GetLogger().Error("Failed to get HLS directory", logger.Error(err))
-		return
-	}
-
-	secFS, err := securefs.New(hlsBaseDir)
-	if err != nil {
-		apicore.GetLogger().Error("Failed to create secure filesystem", logger.Error(err))
-		return
-	}
-	defer func() {
-		if closeErr := secFS.Close(); closeErr != nil {
-			apicore.GetLogger().Error("Failed to close secure filesystem", logger.Error(closeErr))
-		}
-	}()
-
-	if removeErr := secFS.RemoveAll(outputDir); removeErr != nil {
-		apicore.GetLogger().Error("Failed to remove output directory", logger.Error(removeErr))
-	}
 }

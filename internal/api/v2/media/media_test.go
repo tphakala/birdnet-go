@@ -3,6 +3,7 @@
 package media
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -102,6 +104,32 @@ func assertAudioHeaders(t *testing.T, rec *httptest.ResponseRecorder, expectedCo
 	}
 	if shouldHaveAcceptRanges {
 		assert.Equal(t, "bytes", rec.Header().Get("Accept-Ranges"))
+	}
+}
+
+const testAudioAsyncTimeout = 5 * time.Second
+
+func requireAudioWaitStarted(t *testing.T, waitStarted <-chan struct{}, handlerErr <-chan error) {
+	t.Helper()
+
+	select {
+	case <-waitStarted:
+		return
+	case err := <-handlerErr:
+		require.Failf(t, "handler returned before entering audio wait", "handler error: %v", err)
+	case <-time.After(testAudioAsyncTimeout):
+		require.Fail(t, "handler did not enter audio wait before timeout")
+	}
+}
+
+func requireAudioHandlerSuccess(t *testing.T, handlerErr <-chan error) {
+	t.Helper()
+
+	select {
+	case err := <-handlerErr:
+		require.NoError(t, err)
+	case <-time.After(testAudioAsyncTimeout):
+		require.Fail(t, "audio handler did not complete before timeout")
 	}
 }
 
@@ -253,38 +281,70 @@ func TestServeAudioClip(t *testing.T) {
 	largeFilePath := filepath.Join(tempDir, largeFilename)
 	createLargeWAVFile(t, largeFilePath, 1100*1024)
 
+	standardClipFilename := "corvus_corax_74p_20260724T132919Z.wav"
+	require.NoError(t, createTestAudioFile(t, filepath.Join(tempDir, standardClipFilename)))
+	extendedClipFilename := "strix_uralensis_85p_20260724T231500Z_86s.wav"
+	require.NoError(t, createTestAudioFile(t, filepath.Join(tempDir, extendedClipFilename)))
+	spacedFilename := "my clip.wav"
+	require.NoError(t, createTestAudioFile(t, filepath.Join(tempDir, spacedFilename)))
+
 	// Test cases
 	testCases := []struct {
-		name           string
-		filename       string // Filename relative to SecureFS root
-		rangeHeader    string
-		expectedStatus int
-		expectedLength int64 // Use int64 for http.ServeContent
-		partialContent bool
+		name                string
+		filename            string // Filename relative to SecureFS root
+		rangeHeader         string
+		expectedStatus      int
+		expectedLength      int64 // Use int64 for http.ServeContent
+		partialContent      bool
+		expectedDisposition string
 	}{
 		{
-			name:           "Small file - full content",
-			filename:       smallFilename,
-			rangeHeader:    "",
-			expectedStatus: http.StatusOK,
-			expectedLength: 8864, // WAV header (44) + audio data (8820)
-			partialContent: false,
+			name:                "Small file - full content",
+			filename:            smallFilename,
+			rangeHeader:         "",
+			expectedStatus:      http.StatusOK,
+			expectedLength:      8864, // WAV header (44) + audio data (8820)
+			partialContent:      false,
+			expectedDisposition: "inline; filename*=UTF-8''small.wav",
 		},
 		{
-			name:           "Large file - full content",
-			filename:       largeFilename,
-			rangeHeader:    "",
-			expectedStatus: http.StatusOK,
-			expectedLength: 1100*1024 + 44, // Data size + WAV header
-			partialContent: false,
+			name:                "Large file - full content",
+			filename:            largeFilename,
+			rangeHeader:         "",
+			expectedStatus:      http.StatusOK,
+			expectedLength:      1100*1024 + 44, // Data size + WAV header
+			partialContent:      false,
+			expectedDisposition: "inline; filename*=UTF-8''large.wav",
 		},
 		{
-			name:           "Large file - partial content",
-			filename:       largeFilename,
-			rangeHeader:    "bytes=100-199",
-			expectedStatus: http.StatusPartialContent,
-			expectedLength: 100,
-			partialContent: true,
+			name:                "Large file - partial content",
+			filename:            largeFilename,
+			rangeHeader:         "bytes=100-199",
+			expectedStatus:      http.StatusPartialContent,
+			expectedLength:      100,
+			partialContent:      true,
+			expectedDisposition: "inline; filename*=UTF-8''large.wav",
+		},
+		{
+			name:                "Standard clip filename omits misleading UTC marker",
+			filename:            standardClipFilename,
+			expectedStatus:      http.StatusOK,
+			expectedLength:      8864,
+			expectedDisposition: "inline; filename*=UTF-8''corvus_corax_74p_20260724T132919.wav",
+		},
+		{
+			name:                "Extended clip filename omits misleading UTC marker",
+			filename:            extendedClipFilename,
+			expectedStatus:      http.StatusOK,
+			expectedLength:      8864,
+			expectedDisposition: "inline; filename*=UTF-8''strix_uralensis_85p_20260724T231500_86s.wav",
+		},
+		{
+			name:                "Filename spaces use RFC 5987 encoding",
+			filename:            spacedFilename,
+			expectedStatus:      http.StatusOK,
+			expectedLength:      8864,
+			expectedDisposition: "inline; filename*=UTF-8''my%20clip.wav",
 		},
 		{
 			name:           "Non-existent file",
@@ -306,7 +366,7 @@ func TestServeAudioClip(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			targetURL := "/api/v2/media/audio/" + tc.filename
+			targetURL := "/api/v2/media/audio/" + strings.ReplaceAll(tc.filename, " ", "%20")
 			req := httptest.NewRequest(http.MethodGet, targetURL, http.NoBody)
 			if tc.rangeHeader != "" {
 				req.Header.Set("Range", tc.rangeHeader)
@@ -316,6 +376,7 @@ func TestServeAudioClip(t *testing.T) {
 
 			isSmallFile := tc.filename == smallFilename
 			assertAudioClipResponse(t, rec, tc.expectedStatus, tc.expectedLength, tc.partialContent, isSmallFile)
+			assert.Equal(t, tc.expectedDisposition, rec.Header().Get("Content-Disposition"))
 		})
 	}
 }
@@ -893,7 +954,8 @@ func TestServeAudioByID(t *testing.T) {
 	e, controller, tempDir := setupMediaTestEnvironment(t)
 
 	// Create a test audio file
-	testFilename := "2024-01-15_14-30-45_Turdus_migratorius.wav"
+	testFilename := "turdus_migratorius_88p_20240115T143045Z.wav"
+	downloadFilename := "turdus_migratorius_88p_20240115T143045.wav"
 	filePath := filepath.Join(tempDir, testFilename)
 	testContent := "test audio content"
 	err := os.WriteFile(filePath, []byte(testContent), 0o600)
@@ -920,7 +982,7 @@ func TestServeAudioByID(t *testing.T) {
 			audioID:                "123",
 			expectedStatus:         http.StatusOK,
 			expectedContentType:    MimeTypeWAV,
-			expectedDisposition:    fmt.Sprintf("inline; filename*=UTF-8''%s", testFilename),
+			expectedDisposition:    fmt.Sprintf("inline; filename*=UTF-8''%s", downloadFilename),
 			shouldHaveAcceptRanges: true,
 		},
 		{
@@ -955,6 +1017,71 @@ func TestServeAudioByID(t *testing.T) {
 
 	// Note: Error cases are omitted as they are tested elsewhere and the main
 	// goal of this test is to verify Content-Disposition header functionality
+}
+
+func TestContentDispositionFilename(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		filename string
+		expected string
+	}{
+		{
+			name:     "standard local timestamp",
+			filename: "corvus_corax_74p_20260724T132919Z.m4a",
+			expected: "corvus_corax_74p_20260724T132919.m4a",
+		},
+		{
+			name:     "extended capture duration",
+			filename: "strix_uralensis_85p_20260724T231500Z_86s.wav",
+			expected: "strix_uralensis_85p_20260724T231500_86s.wav",
+		},
+		{
+			name:     "timestamp already has no zone marker",
+			filename: "corvus_corax_74p_20260724T132919.m4a",
+			expected: "corvus_corax_74p_20260724T132919.m4a",
+		},
+		{
+			name:     "unrecognized filename preserves legitimate Z",
+			filename: "recordingZ.m4a",
+			expected: "recordingZ.m4a",
+		},
+		{
+			name:     "custom UTC timestamp is unchanged",
+			filename: "recording_20240115T143045Z.wav",
+			expected: "recording_20240115T143045Z.wav",
+		},
+		{
+			name:     "invalid timestamp is unchanged",
+			filename: "corvus_corax_74p_20261399T999999Z.m4a",
+			expected: "corvus_corax_74p_20261399T999999Z.m4a",
+		},
+	}
+
+	for i := range tests {
+		t.Run(tests[i].name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tests[i].expected, contentDispositionFilename(tests[i].filename))
+		})
+	}
+}
+
+func TestTranslateAudioServeErrorClearsHeadersBeforeCommittedJSON(t *testing.T) {
+	e, controller, _ := setupMediaTestEnvironment(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/test.wav", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	ctx.Response().Header().Set(echo.HeaderContentType, MimeTypeWAV)
+	ctx.Response().Header().Set(echo.HeaderContentDisposition, "inline; filename*=UTF-8''test.wav")
+	ctx.Response().Header().Set(headerAcceptRanges, acceptRangesBytes)
+
+	require.NoError(t, controller.translateAudioServeError(ctx, errors.New("forced serve failure"), "Failed to serve audio"))
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	assert.Contains(t, rec.Header().Get(echo.HeaderContentType), echo.MIMEApplicationJSON)
+	assert.Empty(t, rec.Header().Get(echo.HeaderContentDisposition))
+	assert.Empty(t, rec.Header().Get(headerAcceptRanges))
 }
 
 // TestServeAudioByID_AudioFormats tests different audio format MIME type handling
@@ -1235,6 +1362,11 @@ func TestIsValidFilename(t *testing.T) {
 // TestSpeciesImageNotFound_Returns404 verifies that image endpoints return HTTP 404
 // (not 500) when the image provider has no image for a species.
 // Regression test for GitHub issue #2201.
+//
+// The negative cache entry is primed up front because the handlers no longer consult
+// a provider on the request goroutine: a species nothing is known about yet answers
+// 503 "not yet" (see TestSpeciesImageColdMiss_ReturnsPendingNot500) and only becomes
+// a 404 once the lookup has actually concluded there is no image.
 func TestSpeciesImageNotFound_Returns404(t *testing.T) {
 	t.Attr("component", "media")
 	t.Attr("type", "regression")
@@ -1251,6 +1383,11 @@ func TestSpeciesImageNotFound_Returns404(t *testing.T) {
 		},
 	}
 	controller.BirdImageCache.SetImageProvider(notFoundProvider)
+
+	// Resolve the species once so the negative entry exists, making the handler
+	// assertions below independent of background prefetch timing.
+	_, err := controller.BirdImageCache.Get("Nonexistus fictus")
+	require.ErrorIs(t, err, imageprovider.ErrImageNotFound)
 
 	tests := []struct {
 		name    string
@@ -1303,6 +1440,181 @@ func TestSpeciesImageNotFound_Returns404(t *testing.T) {
 	}
 }
 
+// TestSpeciesImageColdMiss_ReturnsPendingNot500 pins the cold-miss contract that the
+// whole de-blocking change rests on.
+//
+// A species nothing is cached for must answer immediately with 503 plus a Retry-After
+// and, critically, Cache-Control: no-store. An <img> error event carries no status
+// code, so no-store is the only thing that tells a retrying browser this failure is
+// transient: a cacheable 404 is served from its own HTTP cache without a network hop,
+// while this response is re-requested and can succeed once the background fetch lands.
+//
+// It must never be a 500. apicore reports every status >= 500 to Sentry, and a cold
+// dashboard requests dozens of uncached thumbnails at once.
+func TestSpeciesImageColdMiss_ReturnsPendingNot500(t *testing.T) {
+	t.Attr("component", "media")
+
+	e := echo.New()
+	controller := New(apitest.NewCore(t, apitest.WithEcho(e)))
+
+	// A provider that never returns lets the assertion prove the handler did not wait
+	// for it: if the fetch were still on the request path, this test would hang.
+	blocked := make(chan struct{})
+	t.Cleanup(func() { close(blocked) })
+	controller.BirdImageCache.SetImageProvider(&apitest.TestImageProvider{
+		FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
+			<-blocked
+			return imageprovider.BirdImage{}, imageprovider.ErrImageNotFound
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/media/image/Coldus%20missus", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetParamNames("scientific_name")
+	ctx.SetParamValues("Coldus missus")
+
+	require.NoError(t, controller.ServeSpeciesImageProxy(ctx))
+
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.Equal(t, strconv.Itoa(ImagePendingRetryAfterSeconds), rec.Header().Get("Retry-After"))
+	assert.Equal(t, "no-store", rec.Header().Get("Cache-Control"),
+		"a pending image must not be cached, or the client retry never reaches the server")
+	assert.Empty(t, rec.Header().Get("Location"),
+		"the proxy is a hard boundary and must never redirect to the upstream image host")
+}
+
+// TestSpeciesImageColdMiss_ConcurrentRequestsAllReturnPromptly is the shape that
+// actually reproduced the reported freeze: a dashboard asking for the same uncached
+// species from several connections at once.
+//
+// Every one of them must answer immediately. Queueing them behind the first request's
+// fetch is what exhausted the browser's per-host connection budget and starved
+// unrelated API calls and the SSE stream.
+func TestSpeciesImageColdMiss_ConcurrentRequestsAllReturnPromptly(t *testing.T) {
+	t.Attr("component", "media")
+
+	e := echo.New()
+	controller := New(apitest.NewCore(t, apitest.WithEcho(e)))
+
+	blocked := make(chan struct{})
+	t.Cleanup(func() { close(blocked) })
+	controller.BirdImageCache.SetImageProvider(&apitest.TestImageProvider{
+		FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
+			<-blocked
+			return imageprovider.BirdImage{}, imageprovider.ErrImageNotFound
+		},
+	})
+
+	const concurrency = 10
+	codes := make(chan int, concurrency)
+	var wg sync.WaitGroup
+	for range concurrency {
+		wg.Go(func() {
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/media/image/Coldus%20missus", http.NoBody)
+			rec := httptest.NewRecorder()
+			ctx := e.NewContext(req, rec)
+			ctx.SetParamNames("scientific_name")
+			ctx.SetParamValues("Coldus missus")
+			_ = controller.ServeSpeciesImageProxy(ctx)
+			codes <- rec.Code
+		})
+	}
+
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("concurrent cold-miss requests queued behind the provider fetch")
+	}
+
+	close(codes)
+	for code := range codes {
+		assert.Equal(t, http.StatusServiceUnavailable, code)
+	}
+
+	// Prefetch deduplication is asserted where it lives, in
+	// TestPrefetchAsync_DeduplicatesBySpecies. What this test owns is the handler
+	// contract: every concurrent request answers immediately instead of queueing
+	// behind one fetch, which is what exhausted the browser's connection budget.
+}
+
+// TestServeSpeciesImageProxy_NeverRedirects asserts the D2 boundary for a species that
+// IS resolved but whose bytes are not on disk. This used to 302 to the provider's own
+// URL, which handed clients an address whose availability this process does not
+// control and which API clients (unlike browsers) were refused outright.
+func TestServeSpeciesImageProxy_NeverRedirects(t *testing.T) {
+	t.Attr("component", "media")
+
+	e := echo.New()
+	controller := New(apitest.NewCore(t, apitest.WithEcho(e)))
+	controller.BirdImageCache.SetImageProvider(&apitest.TestImageProvider{
+		FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
+			return imageprovider.BirdImage{
+				URL:            "https://upload.wikimedia.org/does-not-matter.jpg",
+				ScientificName: scientificName,
+				SourceProvider: "wikimedia",
+			}, nil
+		},
+	})
+
+	// Resolve the metadata so the handler takes the "cached, but no bytes" branch.
+	_, err := controller.BirdImageCache.Get("Turdus merula")
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/media/image/Turdus%20merula", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetParamNames("scientific_name")
+	ctx.SetParamValues("Turdus merula")
+
+	require.NoError(t, controller.ServeSpeciesImageProxy(ctx))
+
+	// Pin the positive contract, not just "not a 302": NotEqual(302) would also pass
+	// for a 200 or a 500, so it cannot tell the boundary being held from the handler
+	// having failed some other way.
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
+	assert.Empty(t, rec.Header().Get("Location"),
+		"the proxy must never hand the client the upstream image host")
+	assert.NotContains(t, rec.Body.String(), "upload.wikimedia.org",
+		"the upstream URL must not leak to the client")
+}
+
+// TestGetSpeciesImageInfo_ColdMissReturnsPendingJSON covers the metadata endpoint's
+// half of the same contract. It differs from the image endpoint deliberately: this one
+// is consumed by fetch() rather than an <img>, so it must return a parseable body for
+// a client that reads every response as JSON.
+func TestGetSpeciesImageInfo_ColdMissReturnsPendingJSON(t *testing.T) {
+	t.Attr("component", "media")
+
+	e := echo.New()
+	controller := New(apitest.NewCore(t, apitest.WithEcho(e)))
+
+	blocked := make(chan struct{})
+	t.Cleanup(func() { close(blocked) })
+	controller.BirdImageCache.SetImageProvider(&apitest.TestImageProvider{
+		FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
+			<-blocked
+			return imageprovider.BirdImage{}, imageprovider.ErrImageNotFound
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/media/species-image/info?name=Coldus+missus", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, controller.GetSpeciesImageInfo(ctx))
+
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.Equal(t, strconv.Itoa(ImagePendingRetryAfterSeconds), rec.Header().Get("Retry-After"))
+	assert.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
+	assert.NotEmpty(t, rec.Body.String(), "a JSON endpoint must not answer with an empty body")
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+}
+
 // TestGetSpectrogramLogger tests that the spectrogram logger is never nil
 func TestGetSpectrogramLogger(t *testing.T) {
 	// Test that getSpectrogramLogger always returns a non-nil logger
@@ -1318,9 +1630,6 @@ func TestGetSpectrogramLogger(t *testing.T) {
 	}, "Logger methods should not panic")
 }
 
-// TestServeAudioClipWaitsForEncoding verifies that when an audio file is being
-// encoded (temp file exists), the server waits for the final file to appear
-// instead of immediately returning 503.
 // TestIsExportTempFor verifies the in-progress-encoding temp matcher accepts the
 // export temp formats and rejects unrelated sidecar temps that merely share the
 // clip's prefix and the ".temp" suffix (GitHub #3323).
@@ -1352,8 +1661,12 @@ func TestIsExportTempFor(t *testing.T) {
 	}
 }
 
+// TestServeAudioClipWaitsForEncoding verifies that when an audio file is being
+// encoded (temp file exists), the server waits for the final file to appear
+// instead of immediately returning 503.
 func TestServeAudioClipWaitsForEncoding(t *testing.T) {
 	e, controller, tempDir := setupMediaTestEnvironment(t)
+	controller.audioWaitTimeoutOverride = testAudioAsyncTimeout
 
 	audioFilename := "encoding-test.wav"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
@@ -1361,33 +1674,13 @@ func TestServeAudioClipWaitsForEncoding(t *testing.T) {
 	// exporters write, so this exercises the directory-scan detection in
 	// isAudioBeingEncoded rather than a fixed name that production never produces.
 	tempFilePath := audioFilePath + ".99999.1" + ffmpeg.TempExt
+	require.NoError(t, os.WriteFile(tempFilePath, []byte("temp encoding data"), 0o600))
 
-	// Create the temp file to simulate in-progress encoding
-	err := os.WriteFile(tempFilePath, []byte("temp encoding data"), 0o600)
-	require.NoError(t, err)
+	waitStarted := make(chan struct{})
+	controller.audioWaitStartedHook = func() {
+		close(waitStarted)
+	}
 
-	// Simulate the file appearing after a short delay (encoding completes).
-	// Use an error channel to propagate failures from the background goroutine.
-	errChan := make(chan error, 1)
-	go func() {
-		time.Sleep(500 * time.Millisecond)
-		// Create the final audio file
-		createErr := createTestAudioFile(t, audioFilePath)
-		if createErr != nil {
-			errChan <- createErr
-			return
-		}
-		// Remove the temp file to simulate FFmpeg completing
-		os.Remove(tempFilePath) //nolint:errcheck // best-effort cleanup in test
-		errChan <- nil
-	}()
-	t.Cleanup(func() {
-		if bgErr := <-errChan; bgErr != nil {
-			t.Errorf("Background goroutine failed: %v", bgErr)
-		}
-	})
-
-	// Make the request - should wait for the file and serve it
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/"+audioFilename, http.NoBody)
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
@@ -1395,19 +1688,59 @@ func TestServeAudioClipWaitsForEncoding(t *testing.T) {
 	ctx.SetParamNames("filename")
 	ctx.SetParamValues(audioFilename)
 
-	handlerErr := controller.ServeAudioClip(ctx)
+	handlerErr := make(chan error, 1)
+	go func() {
+		handlerErr <- controller.ServeAudioClip(ctx)
+	}()
 
-	// Should succeed (200) instead of 503
-	if handlerErr != nil {
-		// If there's an error, it should NOT be 503
-		if httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr); ok {
-			assert.NotEqual(t, http.StatusServiceUnavailable, httpErr.Code,
-				"Should not return 503 when file appears within timeout")
-		}
-	} else {
-		assert.Equal(t, http.StatusOK, rec.Code,
-			"Should serve the file successfully after waiting for encoding")
+	requireAudioWaitStarted(t, waitStarted, handlerErr)
+	require.NoError(t, createTestAudioFile(t, audioFilePath))
+	require.NoError(t, os.Remove(tempFilePath))
+	requireAudioHandlerSuccess(t, handlerErr)
+	assert.Equal(t, http.StatusOK, rec.Code,
+		"Should serve the file successfully after waiting for encoding")
+}
+
+// TestServeAudioByIDWaitsForEncodingPreservesHeaders verifies that the ID route
+// keeps its audio metadata when the initial 404 is recovered by a successful
+// encoding wait and retry.
+func TestServeAudioByIDWaitsForEncodingPreservesHeaders(t *testing.T) {
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+	controller.audioWaitTimeoutOverride = testAudioAsyncTimeout
+
+	audioFilename := "turdus_migratorius_88p_20260724T143045Z.wav"
+	audioFilePath := filepath.Join(tempDir, audioFilename)
+	tempFilePath := audioFilePath + ".99999.1" + ffmpeg.TempExt
+	require.NoError(t, os.WriteFile(tempFilePath, []byte("temp encoding data"), 0o600))
+
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.On("GetNoteClipPath", "42").Return(audioFilename, nil)
+	mockDS.On("Get", "42").Return(datastore.Note{ID: 42, EndTime: time.Now()}, nil).Maybe()
+	controller.DS = mockDS
+
+	waitStarted := make(chan struct{})
+	controller.audioWaitStartedHook = func() {
+		close(waitStarted)
 	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/audio/42", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetParamNames("id")
+	ctx.SetParamValues("42")
+
+	handlerErr := make(chan error, 1)
+	go func() {
+		handlerErr <- controller.ServeAudioByID(ctx)
+	}()
+
+	requireAudioWaitStarted(t, waitStarted, handlerErr)
+	require.NoError(t, createTestAudioFile(t, audioFilePath))
+	require.NoError(t, os.Remove(tempFilePath))
+	requireAudioHandlerSuccess(t, handlerErr)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assertAudioHeaders(t, rec, MimeTypeWAV,
+		"inline; filename*=UTF-8''turdus_migratorius_88p_20260724T143045.wav", true)
 }
 
 // TestServeAudioClipReturns503AfterTimeout verifies that the server returns 503
@@ -1454,6 +1787,8 @@ func TestServeAudioClipReturns503AfterTimeout(t *testing.T) {
 	}
 	assert.Equal(t, audioRetryAfterSeconds, rec.Header().Get("Retry-After"),
 		"Should include Retry-After header")
+	assert.Empty(t, rec.Header().Get("Content-Disposition"),
+		"JSON error response should not advertise an audio filename")
 }
 
 // TestServeAudioClipNoTempFileReturns404 verifies that a missing file without
@@ -1582,17 +1917,10 @@ func TestServeAudioClipGraceWaitServesFile(t *testing.T) {
 	audioFilename := "grace-wait-test.wav"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
 
-	// No temp file - only the final file appears after a short delay.
-	// This simulates the race window where FFmpeg hasn't started yet.
-	// Delay is derived from audioGracePeriod to stay aligned with production timing.
-	var wg sync.WaitGroup
-	wg.Go(func() {
-		time.Sleep(audioGracePeriod / 2)
-		if err := createTestAudioFile(t, audioFilePath); err != nil {
-			t.Errorf("Background goroutine failed: %v", err)
-		}
-	})
-	t.Cleanup(wg.Wait)
+	waitStarted := make(chan struct{})
+	controller.audioWaitStartedHook = func() {
+		close(waitStarted)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/"+audioFilename, http.NoBody)
 	rec := httptest.NewRecorder()
@@ -1601,18 +1929,17 @@ func TestServeAudioClipGraceWaitServesFile(t *testing.T) {
 	ctx.SetParamNames("filename")
 	ctx.SetParamValues(audioFilename)
 
-	handlerErr := controller.ServeAudioClip(ctx)
+	handlerErr := make(chan error, 1)
+	go func() {
+		handlerErr <- controller.ServeAudioClip(ctx)
+	}()
 
-	// Should succeed - grace wait should pick up the file
-	if handlerErr != nil {
-		if httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr); ok {
-			assert.NotEqual(t, http.StatusNotFound, httpErr.Code,
-				"Should not return 404 when file appears within grace period")
-		}
-	} else {
-		assert.Equal(t, http.StatusOK, rec.Code,
-			"Should serve the file successfully after grace wait")
-	}
+	requireAudioWaitStarted(t, waitStarted, handlerErr)
+	require.NoError(t, createTestAudioFile(t, audioFilePath))
+	requireAudioHandlerSuccess(t, handlerErr)
+	assert.Equal(t, http.StatusOK, rec.Code,
+		"Should serve the file successfully after grace wait")
+	assert.Equal(t, "inline; filename*=UTF-8''grace-wait-test.wav", rec.Header().Get(echo.HeaderContentDisposition))
 }
 
 // TestBuildStyleSuffix tests that spectrogram style and dynamic range are correctly

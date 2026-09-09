@@ -327,11 +327,16 @@ func ResumeConsolidation(dataDir string, log logger.Logger) (resumed bool, newPa
 	if backupExists && v2Exists && !configuredExists {
 		log.Info("resuming consolidation: renaming v2 to configured path")
 
-		// Clean up any WAL/SHM files
-		cleanupWALFiles(state.V2Path)
-		cleanupWALFiles(state.ConfiguredPath)
+		// Fold any pending v2 WAL content into the main file before renaming, then move
+		// the -wal/-shm sidecars alongside the database instead of deleting them. Blindly
+		// removing the WAL here would discard transactions committed since the last
+		// checkpoint if the original consolidation was interrupted by an unclean shutdown
+		// (issue #3991), the same hazard fixed in CheckAndConsolidateAtStartup.
+		if err := checkpointSQLiteWAL(state.V2Path, log); err != nil {
+			log.Warn("failed to checkpoint v2 WAL before resuming consolidation", logger.Error(err))
+		}
 
-		if err := os.Rename(state.V2Path, state.ConfiguredPath); err != nil {
+		if err := moveSQLiteDBFiles(state.V2Path, state.ConfiguredPath, log); err != nil {
 			return false, "", fmt.Errorf("failed to resume: rename v2 to configured path: %w", err)
 		}
 

@@ -40,7 +40,12 @@ func TestCurrentSettings_ReturnsGlobalWhenPublished(t *testing.T) {
 	assert.InDelta(t, 0.99, got.BirdNET.Threshold, 0.001)
 }
 
-func TestRecalculateDynamicThresholds_ReadsGlobalSettings(t *testing.T) {
+// TestDynamicThreshold_AppliesLiveBaseWithoutRecalc verifies that a base-threshold
+// change takes effect immediately at the next detection with no recalculation step.
+// The applied value is derived at read time from the caller's live per-model base and
+// the shared level, so the recalc machinery that previously rewrote stored absolute
+// values is no longer needed.
+func TestDynamicThreshold_AppliesLiveBaseWithoutRecalc(t *testing.T) {
 	// Start with base threshold 0.80
 	initial := &conf.Settings{
 		BirdNET: conf.BirdNETConfig{Threshold: 0.80},
@@ -59,16 +64,20 @@ func TestRecalculateDynamicThresholds_ReadsGlobalSettings(t *testing.T) {
 		pendingResets:     make(map[string]struct{}),
 	}
 
-	// Add a species at level 1 (75% of base)
-	key := dynamicThresholdKey("model1", "species_a")
-	p.DynamicThresholds[key] = &DynamicThreshold{
+	// Add a species at level 1. BaseThreshold is display metadata; the applied value
+	// comes from the caller's live base, not this stored field.
+	p.DynamicThresholds["species_a"] = &DynamicThreshold{
 		Level:          1,
-		CurrentValue:   0.60, // 75% of 0.80
+		BaseThreshold:  0.80,
 		Timer:          time.Now().Add(1 * time.Hour),
 		ScientificName: "Speciesus testus",
 	}
 
-	// Simulate UI changing threshold to 0.40 via global settings
+	// Before: with the caller's base at 0.80, level 1 applies 75% -> 0.60.
+	assert.InDelta(t, 0.60, p.getAdjustedConfidenceThreshold("species_a", 0.80, false), 0.01,
+		"expected 75% of base 0.80 = 0.60")
+
+	// Simulate the UI lowering the threshold to 0.40 via global settings.
 	updated := &conf.Settings{
 		BirdNET:  conf.BirdNETConfig{Threshold: 0.40},
 		Realtime: initial.Realtime,
@@ -76,11 +85,10 @@ func TestRecalculateDynamicThresholds_ReadsGlobalSettings(t *testing.T) {
 	conf.StoreSettings(updated)
 	t.Cleanup(func() { conf.StoreSettings(nil) })
 
-	// Recalculate should use the NEW base (0.40), not old (0.80)
-	p.RecalculateDynamicThresholds()
-
-	assert.InDelta(t, 0.30, p.DynamicThresholds[key].CurrentValue, 0.01,
-		"expected 75% of new base 0.40 = 0.30")
+	// After: the next read with the new base (0.40) applies 75% -> 0.30 immediately,
+	// with no recalculation call.
+	assert.InDelta(t, 0.30, p.getAdjustedConfidenceThreshold("species_a", 0.40, false), 0.01,
+		"expected 75% of new base 0.40 = 0.30 with no recalc step")
 }
 
 func TestCalculateMinDetections_ReadsGlobalSettings(t *testing.T) {

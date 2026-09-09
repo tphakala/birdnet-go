@@ -907,10 +907,12 @@
                           )}
                           alt={displayName || t('search.detailsPanel.unknownSpecies')}
                           class="w-full h-full object-cover"
+                          onload={e => {
+                            (e.currentTarget as HTMLImageElement).classList.remove('p-2');
+                          }}
                           onerror={e => {
-                            const target = e.currentTarget as HTMLImageElement;
-                            target.src = buildAppUrl('/ui/assets/bird-placeholder.svg');
-                            target.classList.add('p-2');
+                            (e.currentTarget as HTMLImageElement).classList.add('p-2');
+                            handleBirdImageError(e);
                           }}
                           loading="lazy"
                           decoding="async"
@@ -1114,10 +1116,12 @@
                                 )}
                                 alt={displayName || t('search.detailsPanel.unknownSpecies')}
                                 class="w-full h-full object-cover"
+                                onload={e => {
+                                  (e.currentTarget as HTMLImageElement).classList.remove('p-2');
+                                }}
                                 onerror={e => {
-                                  const target = e.currentTarget as HTMLImageElement;
-                                  target.src = buildAppUrl('/ui/assets/bird-placeholder.svg');
-                                  target.classList.add('p-2');
+                                  (e.currentTarget as HTMLImageElement).classList.add('p-2');
+                                  handleBirdImageError(e);
                                 }}
                                 loading="lazy"
                                 decoding="async"

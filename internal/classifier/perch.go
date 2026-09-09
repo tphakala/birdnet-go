@@ -17,6 +17,9 @@ const perchDatasetMarker = "inat2024_fsd50k"
 // Empty lines are skipped. Returns the list of scientific names.
 func ParsePerchLabels(data []byte) ([]string, error) {
 	scanner := bufio.NewScanner(bytes.NewReader(data))
+	// Grow past bufio's default 64 KiB line cap so an overlong or newline-free
+	// label file does not fail with "bufio.Scanner: token too long".
+	scanner.Buffer(make([]byte, 0, labelScannerInitialBufBytes), labelScannerMaxLineBytes)
 	var labels []string
 	firstLine := true
 

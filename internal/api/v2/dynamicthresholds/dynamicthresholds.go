@@ -62,7 +62,6 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 type DynamicThresholdResponse struct {
 	SpeciesName    string    `json:"speciesName"`
 	ScientificName string    `json:"scientificName"`
-	ModelName      string    `json:"modelName,omitempty"`
 	Level          int       `json:"level"`
 	CurrentValue   float64   `json:"currentValue"`
 	BaseThreshold  float64   `json:"baseThreshold"`
@@ -78,7 +77,6 @@ type DynamicThresholdResponse struct {
 type ThresholdEventResponse struct {
 	ID            uint      `json:"id"`
 	SpeciesName   string    `json:"speciesName"`
-	ModelName     string    `json:"modelName,omitempty"`
 	PreviousLevel int       `json:"previousLevel"`
 	NewLevel      int       `json:"newLevel"`
 	PreviousValue float64   `json:"previousValue"`
@@ -142,15 +140,24 @@ func (c *Handler) requireProcessor(ctx echo.Context) (*processor.Processor, erro
 // applyMemoryOverlay updates a threshold response with in-memory data.
 // This centralizes the logic for overlaying current processor state onto
 // database records, ensuring API responses reflect the most current state.
-func applyMemoryOverlay(response *DynamicThresholdResponse, level, highConfCount int, currentValue float64, expiresAt time.Time, isActive bool, scientificName string) {
-	response.Level = level
-	response.CurrentValue = currentValue
-	response.HighConfCount = highConfCount
-	response.ExpiresAt = expiresAt
-	response.IsActive = isActive
+func applyMemoryOverlay(response *DynamicThresholdResponse, md *processor.DynamicThresholdData) {
+	response.Level = md.Level
+	response.CurrentValue = md.CurrentValue
+	response.HighConfCount = md.HighConfCount
+	response.ExpiresAt = md.ExpiresAt
+	response.IsActive = md.IsActive
+	// Real per-entry timestamps and trigger count from memory (#4195); non-zero only
+	// once the fields have been populated by learning, so keep any DB value otherwise.
+	if !md.FirstCreated.IsZero() {
+		response.FirstCreated = md.FirstCreated
+	}
+	if !md.LastTriggered.IsZero() {
+		response.LastTriggered = md.LastTriggered
+	}
+	response.TriggerCount = md.TriggerCount
 	// Use scientific name from memory if it's missing in the database response.
-	if response.ScientificName == "" && scientificName != "" {
-		response.ScientificName = scientificName
+	if response.ScientificName == "" && md.ScientificName != "" {
+		response.ScientificName = md.ScientificName
 	}
 }
 
@@ -221,12 +228,11 @@ func (c *Handler) addDatabaseThresholds(thresholdMap map[string]*DynamicThreshol
 	now := time.Now()
 	for i := range dbThresholds {
 		dt := &dbThresholds[i]
-		// Use composite key to prevent overwrite when multiple models have thresholds for the same species.
-		mapKey := strings.ToLower(dt.ModelName) + ":" + strings.ToLower(dt.SpeciesName)
+		// Keyed per species (tracking is per species, not per model).
+		mapKey := strings.ToLower(dt.SpeciesName)
 		thresholdMap[mapKey] = &DynamicThresholdResponse{
 			SpeciesName:    dt.SpeciesName,
 			ScientificName: dt.ScientificName,
-			ModelName:      dt.ModelName,
 			Level:          dt.Level,
 			CurrentValue:   dt.CurrentValue,
 			BaseThreshold:  dt.BaseThreshold,
@@ -248,24 +254,28 @@ func (c *Handler) addMemoryThresholds(thresholdMap map[string]*DynamicThresholdR
 		return
 	}
 	memoryData := proc.GetDynamicThresholdData()
-	baseThreshold := c.CurrentSettings().BirdNET.Threshold
 
-	for _, dt := range memoryData {
-		key := strings.ToLower(dt.ModelName) + ":" + strings.ToLower(dt.SpeciesName)
+	for i := range memoryData {
+		dt := &memoryData[i]
+		key := strings.ToLower(dt.SpeciesName)
 		if existing, exists := thresholdMap[key]; exists {
 			// Update existing entry with in-memory values
-			applyMemoryOverlay(existing, dt.Level, dt.HighConfCount, dt.CurrentValue, dt.ExpiresAt, dt.IsActive, dt.ScientificName)
+			applyMemoryOverlay(existing, dt)
 		} else {
-			// Add new entry from memory
+			// Add new entry from memory. BaseThreshold and CurrentValue are display-only
+			// (the base of whichever model last learned this species); the applied
+			// threshold is computed live per model during detection (#4173, #4195).
 			thresholdMap[key] = &DynamicThresholdResponse{
 				SpeciesName:    dt.SpeciesName,
 				ScientificName: dt.ScientificName,
-				ModelName:      dt.ModelName,
 				Level:          dt.Level,
 				CurrentValue:   dt.CurrentValue,
-				BaseThreshold:  float64(baseThreshold),
+				BaseThreshold:  dt.BaseThreshold,
 				HighConfCount:  dt.HighConfCount,
 				ExpiresAt:      dt.ExpiresAt,
+				FirstCreated:   dt.FirstCreated,
+				LastTriggered:  dt.LastTriggered,
+				TriggerCount:   dt.TriggerCount,
 				IsActive:       dt.IsActive,
 			}
 		}
@@ -318,9 +328,8 @@ func (c *Handler) GetDynamicThreshold(ctx echo.Context) error {
 		return err
 	}
 
-	// Try to get from database; optional model query param scopes the lookup
-	model := ctx.QueryParam("model")
-	dt, err := c.DS.GetDynamicThreshold(species, model)
+	// Thresholds are tracked per species; look up the single row for this species.
+	dt, err := c.DS.GetDynamicThreshold(species)
 	if err != nil {
 		return c.HandleErrorWithNotFound(ctx, err, "Threshold not found", "Failed to get threshold")
 	}
@@ -328,7 +337,6 @@ func (c *Handler) GetDynamicThreshold(ctx echo.Context) error {
 	response := DynamicThresholdResponse{
 		SpeciesName:    dt.SpeciesName,
 		ScientificName: dt.ScientificName,
-		ModelName:      dt.ModelName,
 		Level:          dt.Level,
 		CurrentValue:   dt.CurrentValue,
 		BaseThreshold:  dt.BaseThreshold,
@@ -344,9 +352,11 @@ func (c *Handler) GetDynamicThreshold(ctx echo.Context) error {
 	// Snapshot c.Processor to avoid a TOCTOU race between the nil check and usage.
 	proc := c.Processor
 	if proc != nil {
-		for _, md := range proc.GetDynamicThresholdData() {
+		memData := proc.GetDynamicThresholdData()
+		for i := range memData {
+			md := &memData[i]
 			if strings.EqualFold(md.SpeciesName, species) {
-				applyMemoryOverlay(&response, md.Level, md.HighConfCount, md.CurrentValue, md.ExpiresAt, md.IsActive, md.ScientificName)
+				applyMemoryOverlay(&response, md)
 				break
 			}
 		}
@@ -377,7 +387,6 @@ func (c *Handler) GetThresholdEvents(ctx echo.Context) error {
 		response[i] = ThresholdEventResponse{
 			ID:            events[i].ID,
 			SpeciesName:   events[i].SpeciesName,
-			ModelName:     events[i].ModelName,
 			PreviousLevel: events[i].PreviousLevel,
 			NewLevel:      events[i].NewLevel,
 			PreviousValue: events[i].PreviousValue,

@@ -23,7 +23,13 @@
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import BaseChart from './BaseChart.svelte';
   import { createLinearScale } from './utils/scales';
-  import { createAxis, styleAxis, addAxisLabel, createHourAxisFormatter } from './utils/axes';
+  import {
+    createAxis,
+    styleAxis,
+    addAxisLabel,
+    createHourAxisFormatter,
+    hourAxisTickValues,
+  } from './utils/axes';
   import { ChartTooltip } from './utils/interactions';
   import type { ChartTheme } from './utils/theme';
   import { fitTextNode } from './utils/labels';
@@ -158,7 +164,13 @@
 
     // x: density index -> px. All series share the same length (24 hours / N bins); use the widest.
     const xLen = Math.max(1, ...rows.map(r => r.density.length));
-    const xScale = createLinearScale({ domain: [0, xLen - 1], range: [0, innerWidth] });
+    // nice: false - the bin domain is exact; rounding it outward would leave the last bin short of
+    // the right edge and open a gap the ridges never reach.
+    const xScale = createLinearScale({
+      domain: [0, xLen - 1],
+      range: [0, innerWidth],
+      nice: false,
+    });
 
     // Shared amplitude scale: global-max density -> layout.amplitude px above the baseline.
     const ampScale = scaleLinear()
@@ -172,7 +184,7 @@
       tickFormat: (d: AxisDomain) => tickFmt(Number(d)),
     });
     const step = Math.max(1, xTickStep);
-    xAxis.tickValues(Array.from({ length: Math.ceil(xLen / step) }, (_, i) => i * step));
+    xAxis.tickValues(hourAxisTickValues(xLen - 1, step));
     const xAxisGroup = chartGroup
       .append('g')
       .attr('class', 'x-axis')

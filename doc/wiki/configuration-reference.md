@@ -73,6 +73,8 @@ BirdNET configuration
 | `birdnet.openvinopath` | string | path to libopenvino_c shared library (OpenVINO image variants only) |
 | `birdnet.backend` | string | inference backend preference: "auto" (default), "onnx", or "openvino" |
 | `birdnet.openvinodevice` | string | OpenVINO device preference: "auto" (default), "cpu", or "gpu" |
+| `birdnet.huggingfaceendpoint` | string | model download host, e.g. "https://hf-mirror.com" where huggingface.co is blocked; empty falls back to $HF_ENDPOINT then https://huggingface.co |
+| `birdnet.modelregion` | string | regional model preference: "auto" (resolve from coordinates, default), "global" (always global models), or a region slug pin (e.g. "iberia"); empty is treated as "auto" |
 
 ## perch
 
@@ -82,8 +84,21 @@ PerchConfig holds configuration for the Google Perch v2 model.
 |---------|------|-------------|
 | `perch.modelpath` | string | path to Perch v2 ONNX model file |
 | `perch.labelpath` | string | path to Perch v2 label CSV file |
-| `perch.threshold` | number | confidence threshold for detections |
+| `perch.overridethreshold` | boolean | when true, gate Perch detections on Threshold instead of following BirdNET.Threshold |
+| `perch.threshold` | number | confidence threshold for detections (applied only when OverrideThreshold is true) |
 | `perch.locale` | string | locale for species label translation |
+
+## birdnetv3
+
+BirdNETV3Config holds configuration for the BirdNET v3.0 acoustic classifier.
+
+| Setting | Type | Description |
+|---------|------|-------------|
+| `birdnetv3.modelpath` | string | path to BirdNET v3.0 ONNX model file |
+| `birdnetv3.labelpath` | string | path to BirdNET v3.0 label file |
+| `birdnetv3.overridethreshold` | boolean | when true, gate BirdNET v3.0 detections on Threshold instead of following BirdNET.Threshold |
+| `birdnetv3.threshold` | number | confidence threshold for detections (applied only when OverrideThreshold is true) |
+| `birdnetv3.locale` | string | locale for species label translation |
 
 ## bat
 
@@ -236,7 +251,10 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.ebird.locale` | string | locale for eBird data (e.g., "en", "es") |
 | `realtime.privacyfilter.debug` | boolean | true to enable debug mode |
 | `realtime.privacyfilter.enabled` | boolean | true to enable privacy filter |
-| `realtime.privacyfilter.confidence` | number | confidence threshold for human detection |
+| `realtime.privacyfilter.confidence` | number | confidence threshold for label-based human detection |
+| `realtime.privacyfilter.vad.enabled` | boolean | true to enable the VAD speech gate (opt-in, default false) |
+| `realtime.privacyfilter.vad.threshold` | number | speech-probability gate in (0,1]; default 0.35 |
+| `realtime.privacyfilter.vad.modelpath` | string | optional override for the embedded silero .onnx; must be a sequence-export model (inputs input/h/c), not the stock upstream frame model; empty uses the embedded model |
 | `realtime.dogbarkfilter.debug` | boolean | true to enable debug mode |
 | `realtime.dogbarkfilter.enabled` | boolean | true to enable dog bark filter |
 | `realtime.dogbarkfilter.confidence` | number | confidence threshold for dog bark detection |
@@ -296,16 +314,18 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.weather.wunderground.endpoint` | string | WeatherUnderground API endpoint |
 | `realtime.weather.wunderground.units` | string | units of measurement: "e" (imperial), "m" (metric), "h" (UK hybrid) |
 | `realtime.speciestracking.enabled` | boolean | true to enable new species tracking |
-| `realtime.speciestracking.newspecieswindowdays` | integer | Days to consider a species "new" (default: 14) |
+| `realtime.speciestracking.newspecieswindowdays` | integer | Days to consider a species "new" (default: 7) |
 | `realtime.speciestracking.syncintervalminutes` | integer | Interval to sync with database (default: 60) |
 | `realtime.speciestracking.notificationsuppressionhours` | integer | Hours to suppress duplicate notifications (default: 168) |
 | `realtime.speciestracking.yearlytracking.enabled` | boolean | true to enable yearly tracking |
 | `realtime.speciestracking.yearlytracking.resetmonth` | integer | Month to reset yearly tracking (1=January, default: 1) |
 | `realtime.speciestracking.yearlytracking.resetday` | integer | Day to reset yearly tracking (default: 1) |
-| `realtime.speciestracking.yearlytracking.windowdays` | integer | Days to show "new this year" indicator (default: 30) |
+| `realtime.speciestracking.yearlytracking.windowdays` | integer | Days to show "new this year" indicator (default: 7) |
 | `realtime.speciestracking.seasonaltracking.enabled` | boolean | true to enable seasonal tracking |
-| `realtime.speciestracking.seasonaltracking.windowdays` | integer | Days to show "new this season" indicator (default: 21) |
+| `realtime.speciestracking.seasonaltracking.windowdays` | integer | Days to show "new this season" indicator (default: 7) |
 | `realtime.speciestracking.seasonaltracking.seasons` | any |  |
+| `realtime.speciestracking.infrequenttracking.enabled` | boolean | true to enable infrequent species tracking |
+| `realtime.speciestracking.infrequenttracking.absencedays` | integer | Days since last detection before a return is flagged "infrequent" (default: 14) |
 | `realtime.extendedcapture.enabled` | boolean |  |
 | `realtime.extendedcapture.maxduration` | integer |  |
 | `realtime.extendedcapture.capturebufferseconds` | integer |  |
@@ -383,6 +403,17 @@ SentrySettings contains settings for Sentry error tracking
 | `sentry.enabled` | boolean | true to enable Sentry error tracking (opt-in) |
 | `sentry.debug` | boolean | true to enable transparent telemetry logging |
 
+## diagnostics
+
+DiagnosticsConfig groups the developer-facing diagnostics features.
+
+| Setting | Type | Description |
+|---------|------|-------------|
+| `diagnostics.profiling.enabled` | boolean | true to serve /debug/pprof/* on the web server |
+| `diagnostics.profiling.token` | string | secret required when no auth provider is configured; generated automatically |
+| `diagnostics.profiling.blockrate` | integer | nanoseconds of blocked time per sample; 0 disables. Independent of enabled: sampling costs CPU continuously whether or not a profile is ever fetched, so 0 is the only free setting and a very coarse rate still pays most of the cost. Recommended starting point: 10000. Values above 1e15 nanoseconds, about 11 days per sample, are clamped to that ceiling; no useful configuration reaches it. Hot-reloadable via the settings API. |
+| `diagnostics.profiling.mutexfraction` | integer | reports one sampled event per this many contention events; 0 disables. Independent of enabled: sampling costs CPU continuously whether or not a profile is ever fetched. Recommended starting point: 100. Hot-reloadable via the settings API. |
+
 ## output
 
 | Setting | Type | Description |
@@ -404,9 +435,7 @@ BackupConfig contains backup-related configuration
 |---------|------|-------------|
 | `backup.enabled` | boolean | Global flag to enable or disable the entire backup system. If false, no backups (manual or scheduled) will occur. |
 | `backup.debug` | boolean | If true, enables detailed debug logging for backup operations. |
-| `backup.encryption` | boolean | If true, enables encryption for backup archives. Requires EncryptionKey to be set. |
-| `backup.encryption_key` | string | Base64-encoded encryption key used for AES-256-GCM encryption of backup archives. Must be kept secret and safe. |
-| `backup.sanitize_config` | boolean | If true, sensitive information (like passwords, API keys) will be removed from the configuration file copy that is included in the backup archive. |
+| `backup.encryption` | boolean | If true, enables encryption for backup archives. The AES-256-GCM key is generated and managed automatically in encryption.key in the config directory; there is no key to configure. |
 | `backup.retention.maxage` | string | Duration string for the maximum age of backups to keep (e.g., "30d" for 30 days, "6m" for 6 months, "1y" for 1 year). Backups older than this may be deleted. |
 | `backup.retention.maxbackups` | integer | Maximum total number of backups to keep for a given source. If 0, no limit by count (only by age or MinBackups). |
 | `backup.retention.minbackups` | integer | Minimum number of recent backups to keep for a given source, regardless of their age. This ensures a baseline number of backups are always available. |

@@ -111,7 +111,11 @@ func TestHasNativeRangeFilter(t *testing.T) {
 		modelID string
 		want    bool
 	}{
-		{name: "BirdNET v2.4 has embedded TFLite range filter", modelID: "BirdNET_V2.4", want: true},
+		// The embedded MData range filter is a TFLite artifact, so v2.4 only has a
+		// native fallback when the TFLite backend is linked. Under the notflite tag
+		// hasNativeRangeFilter returns false, so the expectation tracks the backend
+		// rather than asserting true unconditionally (same notflite hygiene as #1553).
+		{name: "BirdNET v2.4 has embedded TFLite range filter", modelID: "BirdNET_V2.4", want: tfliteBackendAvailable},
 		{name: "Perch v2 has no native range filter", modelID: RegistryIDPerchV2, want: false},
 		{name: "BirdNET v3.0 has no native range filter", modelID: RegistryIDBirdNETV3, want: false},
 	}

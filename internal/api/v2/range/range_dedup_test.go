@@ -171,3 +171,90 @@ func TestSpeciesScoreHigher(t *testing.T) {
 	assert.True(t, speciesScoreHigher(dto.RangeFilterSpecies{Score: new(0.0)}, dto.RangeFilterSpecies{}))
 	assert.False(t, speciesScoreHigher(dto.RangeFilterSpecies{}, dto.RangeFilterSpecies{}))
 }
+
+// TestDedupeSpeciesForDisplay_UnionsProvenanceFlags covers the badge flags across the
+// collapse. Only the label the user's override actually resolved to carries a flag, and
+// that label is not necessarily the row that wins on score: two taxonomic synonyms
+// localize to one common name here, so without an explicit union the surviving row
+// would silently drop the badge its twin was carrying.
+func TestDedupeSpeciesForDisplay_UnionsProvenanceFlags(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		in                []dto.RangeFilterSpecies
+		wantLabel         string
+		wantCustomConfig  bool
+		wantManualInclude bool
+	}{
+		{
+			// The flagged row also wins on score: the common case, where the
+			// override copy sits at the always-active 1.0 sentinel.
+			name: "flagged row wins on score",
+			in: []dto.RangeFilterSpecies{
+				{Label: "Parus major_Talitiainen", CommonName: "talitiainen", Score: new(1.0), HasCustomConfig: new(true)},
+				{Label: "Parus major_Great Tit", CommonName: "talitiainen", Score: new(0.42)},
+			},
+			wantLabel:        "Parus major_Talitiainen",
+			wantCustomConfig: true,
+		},
+		{
+			// The flagged row LOSES on score. This is the case the union exists for:
+			// the winning row carries no flag of its own, so the badge has to be
+			// carried over rather than inherited from the survivor.
+			name: "flagged row loses on score",
+			in: []dto.RangeFilterSpecies{
+				{Label: "Eptesicus nilssonii", CommonName: "pohjanlepakko", Score: new(0.42), HasCustomConfig: new(true)},
+				{Label: "Cnephaeus nilssonii", CommonName: "pohjanlepakko", Score: new(1.0)},
+			},
+			// First occurrence keeps its position but the higher-scored variant surfaces.
+			wantLabel:        "Cnephaeus nilssonii",
+			wantCustomConfig: true,
+		},
+		{
+			// Each row carries a different flag; both must survive the collapse.
+			name: "distinct flags on each row both survive",
+			in: []dto.RangeFilterSpecies{
+				{Label: "Corvus corax_Korppi", CommonName: "korppi", Score: new(1.0), IsManuallyIncluded: new(true)},
+				{Label: "Corvus corax_Common Raven", CommonName: "korppi", Score: new(0.42), HasCustomConfig: new(true)},
+			},
+			wantLabel:         "Corvus corax_Korppi",
+			wantCustomConfig:  true,
+			wantManualInclude: true,
+		},
+		{
+			// No provenance anywhere: the flags must stay omitted rather than being
+			// materialized as an explicit false.
+			name: "no provenance stays omitted",
+			in: []dto.RangeFilterSpecies{
+				{Label: "Pica pica_Harakka", CommonName: "harakka", Score: new(1.0)},
+				{Label: "Pica pica_Eurasian Magpie", CommonName: "harakka", Score: new(0.42)},
+			},
+			wantLabel: "Pica pica_Harakka",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := dedupeSpeciesForDisplay(tt.in)
+			require.Len(t, got, 1, "both rows resolve to one common name")
+			assert.Equal(t, tt.wantLabel, got[0].Label)
+
+			if tt.wantCustomConfig {
+				require.NotNil(t, got[0].HasCustomConfig, "the configured badge must survive the collapse")
+				assert.True(t, *got[0].HasCustomConfig)
+			} else {
+				assert.Nil(t, got[0].HasCustomConfig, "an unset flag must stay omitted")
+			}
+
+			if tt.wantManualInclude {
+				require.NotNil(t, got[0].IsManuallyIncluded, "the included badge must survive the collapse")
+				assert.True(t, *got[0].IsManuallyIncluded)
+			} else {
+				assert.Nil(t, got[0].IsManuallyIncluded, "an unset flag must stay omitted")
+			}
+		})
+	}
+}

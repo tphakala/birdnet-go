@@ -13,8 +13,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/inferencestats"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/cpuspec"
+	"github.com/tphakala/birdnet-go/internal/hwprofile"
 	"github.com/tphakala/birdnet-go/internal/inference"
+	"github.com/tphakala/birdnet-go/internal/inference/vad"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
@@ -31,20 +32,130 @@ const eventInferenceTopologyChanged = "system.inference_topology_changed"
 
 // InferenceStatusResponse is the top-level payload for GET /api/v2/system/inference.
 type InferenceStatusResponse struct {
-	Hardware             HardwareInfo           `json:"hardware"`
-	Backends             BackendsInfo           `json:"backends"`
-	Models               []InferenceModelStatus `json:"models"`
-	Audio                AudioMetricsInfo       `json:"audio"`
-	RuntimeBaselineBytes int64                  `json:"runtimeBaselineBytes,omitempty"`
-	SnapshotAtUnix       int64                  `json:"snapshotAtUnix"`
+	Hardware HardwareInfo           `json:"hardware"`
+	Backends BackendsInfo           `json:"backends"`
+	Models   []InferenceModelStatus `json:"models"`
+	Audio    AudioMetricsInfo       `json:"audio"`
+	// VAD is the privacy-filter Silero VAD speech-gate status. Present only when
+	// the privacy filter is enabled (nil hides the dashboard panel entirely).
+	VAD                  *VADStatusInfo `json:"vad,omitempty"`
+	RuntimeBaselineBytes int64          `json:"runtimeBaselineBytes,omitempty"`
+	SnapshotAtUnix       int64          `json:"snapshotAtUnix"`
+}
+
+// VADStatusInfo reports the privacy-filter Silero VAD speech gate for the
+// inference dashboard. Stats are lifetime totals that survive session reloads.
+type VADStatusInfo struct {
+	// Enabled is the configured VAD gate toggle (realtime.privacyfilter.vad.enabled).
+	Enabled bool `json:"enabled"`
+	// Available reports whether a model source resolves (an embedded model is
+	// present, or a modelpath override is set). When false the gate is inert even
+	// if Enabled is true (e.g. a noembed build with no modelpath).
+	Available bool `json:"available"`
+	// Loaded is true when a session is currently held (loaded and scoring). It is
+	// set on a successful load and cleared on unload or an inference error.
+	Loaded bool `json:"loaded"`
+	// Threshold is the configured speech-probability gate threshold.
+	Threshold float64 `json:"threshold"`
+	// ModelSource is "embedded", "path" or "" (unloaded); never the on-disk path.
+	ModelSource string `json:"modelSource,omitempty"`
+	// Strategy is the active windowing strategy ("sequence"),
+	// empty when unloaded.
+	Strategy string `json:"strategy,omitempty"`
+	// SampleRate is the native sample rate of the loaded Silero VAD model (16 kHz),
+	// 0 when unloaded.
+	SampleRate int `json:"sampleRate,omitempty"`
+	// Stats holds lifetime inference counters for the gate.
+	Stats VADStatsInfo `json:"stats"`
+	// LastSpeechAtUnix is the Unix timestamp (seconds) of the most recent speech
+	// hit, 0 when none since start.
+	LastSpeechAtUnix int64 `json:"lastSpeechAtUnix,omitempty"`
+	// LastSpeechProbability is the VAD speech probability [0,1] of the most recent
+	// speech hit (pairs with LastSpeechAtUnix); 0 when none since start.
+	LastSpeechProbability float64 `json:"lastSpeechProbability,omitempty"`
+	// RecentHits is the newest-first history of recent speech hits (up to 10),
+	// always present (empty when none) so the frontend renders a stable feed.
+	RecentHits []VADHitInfo `json:"recentHits"`
+}
+
+// VADStatsInfo holds lifetime inference statistics for the VAD speech gate.
+type VADStatsInfo struct {
+	// Invocations is the total number of VAD inference calls performed.
+	Invocations int64 `json:"invocations"`
+	// AvgMs is the lifetime average inference time in milliseconds.
+	AvgMs float64 `json:"avgMs"`
+	// MaxMs is the lifetime peak inference time in milliseconds.
+	MaxMs float64 `json:"maxMs"`
+	// SpeechHits is the total number of chunks scored at or above the threshold.
+	SpeechHits int64 `json:"speechHits"`
+}
+
+// VADHitInfo is one recent VAD speech hit in the dashboard history feed.
+type VADHitInfo struct {
+	// AtUnix is the Unix timestamp (seconds) of the speech hit.
+	AtUnix int64 `json:"atUnix"`
+	// Probability is the VAD speech probability [0,1] that tripped the gate.
+	Probability float64 `json:"probability"`
+	// Source is the display name of the audio source; may be empty.
+	Source string `json:"source,omitempty"`
 }
 
 // HardwareInfo describes the host CPU/environment reported at snapshot time.
+// The first four fields predate the hardware profile and keep their names,
+// types and sources; everything below them is additive and omitted when the
+// probe found nothing to report.
 type HardwareInfo struct {
 	Arch        string `json:"arch"`
 	CPUModel    string `json:"cpuModel"`
 	Environment string `json:"environment"`
 	FP16        bool   `json:"fp16"`
+	// Board identifies the single-board computer this runs on, absent on hosts
+	// with no device tree (every PC).
+	Board *BoardInfo `json:"board,omitempty"`
+	// Accelerators lists the GPUs present on the host, whether or not this build
+	// can use them, so the UI can explain an unusable one instead of hiding it.
+	Accelerators []AcceleratorInfo `json:"accelerators,omitempty"`
+	// TotalRamBytes is the effective memory ceiling, host RAM clamped by any
+	// cgroup limit.
+	TotalRAMBytes int64 `json:"totalRamBytes,omitempty"`
+	// PhysicalCores is the physical core count.
+	PhysicalCores int `json:"physicalCores,omitempty"`
+	// Capabilities are the capability tokens this host matches, in the same
+	// vocabulary the published model manifests use.
+	Capabilities []string `json:"capabilities,omitempty"`
+}
+
+// BoardInfo identifies the host board as named by its device tree.
+type BoardInfo struct {
+	// Kind is the board family ("raspberry-pi", "generic").
+	Kind string `json:"kind"`
+	// Model is the device-tree model string.
+	Model string `json:"model,omitempty"`
+	// SoC is the system-on-chip identifier, e.g. "bcm2712".
+	SoC string `json:"soc,omitempty"`
+	// Tier is the performance band ("pi5", "pi4", "pi3"), empty for boards the
+	// model catalog does not distinguish.
+	Tier string `json:"tier,omitempty"`
+}
+
+// AcceleratorInfo describes one GPU the host exposes.
+type AcceleratorInfo struct {
+	// Kind is "igpu" or "dgpu".
+	Kind string `json:"kind"`
+	// Vendor is "intel", "amd" or "nvidia".
+	Vendor string `json:"vendor"`
+	// Name is a display name pairing the vendor with the PCI IDs. It is not
+	// unique: two identical cards produce the same name, so no client may key
+	// off it.
+	Name string `json:"name,omitempty"`
+	// Accessible reports whether the server can reach the device's DRM render
+	// node. It is not a prediction that inference will run here; which device a
+	// model actually runs on is reported per model in the models list.
+	Accessible bool `json:"accessible"`
+	// Reasons lists every reason code explaining why this GPU is not an
+	// inference target, most fundamental first. The frontend renders them
+	// through the i18n catalog.
+	Reasons []string `json:"reasons,omitempty"`
 }
 
 // BackendsInfo groups availability status for all supported inference backends.
@@ -143,6 +254,14 @@ type ModelSourceInfo struct {
 	Name     string `json:"name"`
 	Type     string `json:"type,omitempty"`
 	Fallback bool   `json:"fallback,omitempty"`
+	// NotRunning marks a source that the configuration assigns to this model but
+	// whose audio does not actually reach it, because the audio router has no
+	// analysis buffer for the pair. That happens when the model failed to load or
+	// its buffer allocation failed, and it used to be invisible: the status
+	// reported the model as attached purely because the config said so, so the UI
+	// showed a model running while it analyzed nothing (GitHub #4201, #4204).
+	// Omitted when the source really is attached.
+	NotRunning bool `json:"notRunning,omitempty"`
 }
 
 // ModelMetricKeys carries the Prometheus-style metric key names for a model's
@@ -325,17 +444,9 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 		SnapshotAtUnix: time.Now().Unix(),
 	}
 
-	// Hardware.
-	envType, _ := sysinfo.GetEnvironment() // detail (sub-type) intentionally omitted in Phase 1
-	resp.Hardware = HardwareInfo{
-		Arch:        sysinfo.GetCPUArch(),
-		CPUModel:    sysinfo.GetCPUModel(),
-		Environment: envType,
-		FP16:        cpuspec.HasNativeF16(),
-	}
-
 	// Backends: TFLite is always compiled in; ORT and OpenVINO are probed.
-	resp.Backends.TFLite = BackendStatus{Available: true}
+	// Probed before hardware because the ORT result feeds capability derivation.
+	resp.Backends.TFLite = BackendStatus{Available: hwprofile.TFLiteLinked()}
 	ort := inference.CheckORTAvailability(settings.BirdNET.ONNXRuntimePath)
 	resp.Backends.ONNX = BackendStatus{Available: ort.Available, Initialized: ort.Initialized, Version: ort.Version}
 	ov := inference.CheckOpenVINOAvailability()
@@ -347,6 +458,28 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 			}
 		}
 	}
+
+	// Hardware. The backends probed just above are the authoritative ones: they
+	// honour the user-configured ONNX Runtime path, which hwprofile cannot see
+	// because it carries no settings dependency. Handing them to the profile
+	// rather than letting it probe again keeps one probe behind every field of
+	// this response, so the backends card and the capability tokens cannot
+	// disagree, and halves the per-request OpenVINO device queries.
+	profile := hwprofile.Hardware().WithBackends(hwprofile.Backends{
+		TFLite: hwprofile.BackendStatus{Available: resp.Backends.TFLite.Available},
+		ONNX: hwprofile.BackendStatus{
+			Available:   ort.Available,
+			Initialized: ort.Initialized,
+			Version:     ort.Version,
+		},
+		OpenVINO: hwprofile.OpenVINOStatus{
+			Supported: ov.Supported,
+			Active:    ov.Active,
+			Devices:   resp.Backends.OpenVINO.Devices,
+		},
+	})
+	envType, _ := sysinfo.GetEnvironment() // detail (sub-type) intentionally omitted in Phase 1
+	resp.Hardware = buildHardwareInfo(profile, envType)
 
 	// Models: fetch loaded model list, RSS, and inference counters.
 	var infos []classifier.ModelInfo
@@ -369,7 +502,7 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 		loadFailures = orch.LoadFailures()
 	}
 	counters := classifier.GetInferenceCounters().PeekAll()
-	attachments := buildSourceAttachments(settings, infos, primaryID)
+	attachments := buildSourceAttachments(settings, infos, primaryID, c.runningModelsBySource())
 
 	// Compute per-model device, backend, precision, and schedule status from the
 	// live orchestrator. The device/backend/precision triplet is read in one
@@ -448,6 +581,44 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 		MetricKeys:         AudioMetricKeys{QueueDepth: observability.MetricKeyAudioQueueDepthAggregate},
 	}
 
+	// Privacy-filter Silero VAD speech gate. Reported only when the privacy filter
+	// is enabled; a nil VAD block hides the dashboard panel. The runtime stats come
+	// from the processor's always-on counters (independent of Prometheus), so the
+	// panel works with telemetry disabled.
+	if settings.Realtime.PrivacyFilter.Enabled {
+		vadCfg := settings.Realtime.PrivacyFilter.VAD
+		info := &VADStatusInfo{
+			Enabled:   vadCfg.Enabled,
+			Available: vad.HasEmbeddedModel() || vadCfg.ModelPath != "",
+			Threshold: vadCfg.Threshold,
+		}
+		if c.Processor != nil {
+			st := c.Processor.VADStatus()
+			info.Loaded = st.Loaded
+			info.ModelSource = st.Source
+			info.Strategy = st.Strategy
+			info.SampleRate = st.SampleRate
+			info.Stats = VADStatsInfo{
+				Invocations: st.Invocations,
+				AvgMs:       st.AvgMs,
+				MaxMs:       st.MaxMs,
+				SpeechHits:  st.SpeechHits,
+			}
+			info.LastSpeechAtUnix = st.LastSpeechUnix
+			info.LastSpeechProbability = st.LastSpeechProbability
+			if len(st.RecentHits) > 0 {
+				info.RecentHits = make([]VADHitInfo, len(st.RecentHits))
+				for i, h := range st.RecentHits {
+					info.RecentHits[i] = VADHitInfo{AtUnix: h.AtUnix, Probability: h.Probability, Source: h.Source}
+				}
+			}
+		}
+		if info.RecentHits == nil {
+			info.RecentHits = []VADHitInfo{}
+		}
+		resp.VAD = info
+	}
+
 	resp.Models = make([]InferenceModelStatus, 0, len(infos))
 	for i := range infos {
 		id := infos[i].ID
@@ -476,6 +647,51 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, resp)
 }
 
+// buildHardwareInfo maps a hardware profile onto the API payload. It is a pure
+// function with no side effects, so the mapping can be asserted without a live
+// host. environment stays a parameter rather than being read off the profile so
+// a test can vary it independently of everything else the profile carries.
+//
+//nolint:gocritic // hugeParam: the value parameter keeps this a pure mapper.
+func buildHardwareInfo(profile hwprofile.Profile, environment string) HardwareInfo {
+	info := HardwareInfo{
+		Arch:          profile.CPUArch,
+		CPUModel:      profile.CPUModel,
+		Environment:   environment,
+		FP16:          profile.HasNativeF16,
+		TotalRAMBytes: profile.TotalRAMBytes,
+		PhysicalCores: profile.PhysicalCores,
+		Capabilities:  profile.Capabilities(),
+	}
+
+	// A board is reported only when the device tree named one. Every PC would
+	// otherwise carry an empty "generic" row that tells the user nothing.
+	if profile.Board.Model != "" || profile.Board.SoC != "" {
+		info.Board = &BoardInfo{
+			Kind:  profile.Board.Kind,
+			Model: profile.Board.Model,
+			SoC:   profile.Board.SoC,
+			Tier:  profile.Board.Tier,
+		}
+	}
+
+	if len(profile.Accelerators) > 0 {
+		info.Accelerators = make([]AcceleratorInfo, 0, len(profile.Accelerators))
+		for i := range profile.Accelerators {
+			accelerator := profile.Accelerators[i]
+			info.Accelerators = append(info.Accelerators, AcceleratorInfo{
+				Kind:       accelerator.Kind,
+				Vendor:     accelerator.Vendor,
+				Name:       accelerator.Name,
+				Accessible: accelerator.Accessible,
+				Reasons:    accelerator.Reasons,
+			})
+		}
+	}
+
+	return info
+}
+
 // sortInferenceModelsByName orders model statuses by display name
 // (case-insensitive), tie-broken by ID, so the API returns a deterministic
 // order regardless of the orchestrator's map iteration order.
@@ -489,11 +705,20 @@ func sortInferenceModelsByName(models []InferenceModelStatus) {
 }
 
 // buildSourceAttachments computes, per loaded model registry ID, the audio
-// sources attached to it from configuration. A source whose Models resolve to a
-// loaded model attaches there; a source with no resolvable model falls back to
-// the primary model with Fallback=true. Live registry enrichment (DisplayName,
-// State) is deferred to Phase 2; Phase 1 uses config identity.
-func buildSourceAttachments(settings *conf.Settings, models []classifier.ModelInfo, primaryID string) map[string][]ModelSourceInfo {
+// sources attached to it. A source whose Models resolve to a loaded model
+// attaches there; a source with no resolvable model falls back to the primary
+// model with Fallback=true.
+//
+// running carries the audio router's actual per-source model set, keyed by
+// source display name (see (*Handler).runningModelsBySource). Configuration
+// alone is not evidence that a model analyzes a source: the router fans a
+// source out only to the models it has allocated an analysis buffer for, and a
+// model can be configured, loaded, and still receive nothing. Reporting from
+// config alone is what let the UI show Perch running while it analyzed no audio
+// (GitHub #4201, #4204). When running is nil the audio engine is not available
+// (the pipeline has not started, or this is a test), and the config-derived
+// view is the best answer available, so it is used unmarked.
+func buildSourceAttachments(settings *conf.Settings, models []classifier.ModelInfo, primaryID string, running map[string]map[string]bool) map[string][]ModelSourceInfo {
 	loaded := make(map[string]bool, len(models))
 	for i := range models {
 		loaded[models[i].ID] = true
@@ -504,19 +729,41 @@ func buildSourceAttachments(settings *conf.Settings, models []classifier.ModelIn
 		// A source can feed several models at once. The runtime fans its audio out
 		// to every assigned+loaded model (see analysis.resolveModelTargets), so the
 		// status view must attach the source to all of them, not just the first.
-		matched := false
+		live, haveLive := running[name]
+		resolvedToLoaded := false
 		for _, cm := range configModels {
 			regID, ok := classifier.ResolveConfigModelID(cm)
 			if !ok || !loaded[regID] {
 				continue
 			}
-			out[regID] = append(out[regID], ModelSourceInfo{ID: name, Name: name, Type: sourceType, Fallback: false})
-			matched = true
+			// A configured model that resolves to a loaded model is a target,
+			// regardless of whether it currently has an analysis buffer. This mirrors
+			// the pipeline: resolveModelTargets filters on loaded, so a loaded target
+			// here is exactly what stops registerConsumersForSources from falling back.
+			resolvedToLoaded = true
+			// Surface the source either way, but say which it is: a model the router
+			// really feeds, or one the config assigns that gets no audio.
+			notRunning := haveLive && !live[regID]
+			out[regID] = append(out[regID], ModelSourceInfo{
+				ID: name, Name: name, Type: sourceType, Fallback: false, NotRunning: notRunning,
+			})
 		}
-		// No assigned model resolved to a loaded one: the primary model analyzes the
-		// source as the runtime fallback, so surface it there with Fallback=true.
-		if !matched && primaryID != "" {
-			out[primaryID] = append(out[primaryID], ModelSourceInfo{ID: name, Name: name, Type: sourceType, Fallback: true})
+		// The runtime falls back to the primary model only when a source resolves to
+		// NO loaded target (see registerConsumersForSources). Liveness does not enter
+		// that decision: a configured model that is loaded but currently has no
+		// analysis buffer is still the resolved target (surfaced with NotRunning
+		// above), not replaced by a primary-fallback row the runtime never creates.
+		// Keying the fallback on resolvedToLoaded restores parity with the pipeline.
+		if !resolvedToLoaded && primaryID != "" {
+			// The fallback row describes the primary model that actually analyzes this
+			// source, so it carries the same liveness verdict as a resolved row. A
+			// primary whose own analysis buffer is absent is not analyzing either, and
+			// reporting it as healthy is the "looks running while analyzing nothing"
+			// state this endpoint exists to remove.
+			out[primaryID] = append(out[primaryID], ModelSourceInfo{
+				ID: name, Name: name, Type: sourceType, Fallback: true,
+				NotRunning: haveLive && !live[primaryID],
+			})
 		}
 	}
 
@@ -527,6 +774,87 @@ func buildSourceAttachments(settings *conf.Settings, models []classifier.ModelIn
 	for i := range settings.Realtime.RTSP.Streams {
 		st := settings.Realtime.RTSP.Streams[i]
 		attach(st.Name, st.Type, st.Models)
+	}
+	return out
+}
+
+// runningModelsBySource reports which models the audio router actually feeds,
+// keyed by source display name then registry model ID.
+//
+// The buffer manager is the ground truth here, not the router's route table:
+// the router holds a single multiplexing BufferConsumer per source and cannot
+// say which models sit behind it, whereas an analysis buffer exists for exactly
+// the (source, model) pairs currently set up to analyze. The invariant: a buffer
+// exists for (source, model) iff that model is configured to analyze that source
+// and is loaded. Buffers are created by bufMgr.AllocateAnalysis (three call
+// sites: the initial per-source registration, a later model-change reconfigure,
+// and the engine's own pre-allocation of the primary model's buffer in
+// AddSource) and removed by deallocateStaleAnalysisBuffers. That is the same
+// state sourceModelsChanged diffs, so the status view and the pipeline's own
+// reconfigure decision agree on what is running.
+//
+// Two source states are reported as "no live evidence" (the key is left absent,
+// so the caller keeps the unmarked config-derived view) rather than as negative:
+//   - A DisplayName shared by more than one registry source. DisplayName is
+//     unique only within audio.sources and within rtsp.streams, never across
+//     them; on a collision a live set cannot be mapped to one config entry, so
+//     the key is dropped rather than risk marking a healthy model not running.
+//   - An empty buffer set. A source is in the registry from AddSource before its
+//     buffers are allocated, so an empty set is INDETERMINATE ("not yet"), not a
+//     claim that the source runs nothing.
+//
+// Returns nil when the audio engine is not wired up (before the pipeline starts,
+// or in tests), which the caller reads as "no live evidence available".
+func (c *Handler) runningModelsBySource() map[string]map[string]bool {
+	if c == nil || c.Core == nil {
+		return nil
+	}
+	eng := c.Engine.Load()
+	if eng == nil {
+		return nil
+	}
+	registry := eng.Registry()
+	bufMgr := eng.BufferManager()
+	if registry == nil || bufMgr == nil {
+		return nil
+	}
+
+	sources := registry.List()
+
+	// Count DisplayName occurrences first so a name shared by more than one
+	// registry source can be dropped entirely below (see the doc comment).
+	nameCounts := make(map[string]int, len(sources))
+	for _, src := range sources {
+		if src == nil {
+			continue
+		}
+		nameCounts[src.DisplayName]++
+	}
+
+	out := make(map[string]map[string]bool, len(sources))
+	for _, src := range sources {
+		if src == nil {
+			continue
+		}
+		// Collision: cannot map a live set to a single config entry, so omit it.
+		if nameCounts[src.DisplayName] > 1 {
+			continue
+		}
+		// Key by DisplayName: it is what the registry carries for both audio
+		// sources and RTSP streams, and it is what the config-side attachment
+		// above uses as the source name.
+		models := make(map[string]bool)
+		for modelID := range bufMgr.AnalysisBuffers(src.ID) {
+			models[modelID] = true
+		}
+		// An empty buffer set is indeterminate (source registered, buffers not yet
+		// allocated), so omit the source: the caller then reads haveLive=false for
+		// it and keeps the unmarked config-derived view rather than reporting every
+		// assigned model as not running.
+		if len(models) == 0 {
+			continue
+		}
+		out[src.DisplayName] = models
 	}
 	return out
 }

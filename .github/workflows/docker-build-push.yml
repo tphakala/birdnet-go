@@ -62,7 +62,18 @@ permissions:
   packages: write
 
 jobs:
+  # Ensure the heavy runtime base image exists before the app build. Content-
+  # addressed on the Dockerfile, so this is a no-op (manifest exists) on a normal
+  # release and only builds when the base recipe changed or was never published.
+  # Building it here (rather than on push-to-main) means the app build can never
+  # race a missing base, and there is no separate trigger to keep two concurrent
+  # app builds from regenerating the same base tag.
+  base:
+    uses: ./.github/workflows/base-image.yml
+    secrets: inherit
+
   build:
+    needs: base
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ inputs.version }}
@@ -80,7 +91,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
 
       - name: Generate repository names
         id: repo-names
@@ -145,8 +156,8 @@ jobs:
           #
           # Invariant: GHCR is both the build target and the Docker Hub mirror
           # source, so push-to-ghcr must be true whenever Docker Hub is enabled.
-          # All callers (nightly-build.yml, release-build.yml, docker-build.yml)
-          # set push-to-ghcr true.
+          # All callers (release-build.yml, docker-build.yml) set push-to-ghcr
+          # true.
           DATE=$(date +'%Y%m%d')
 
           acc=""
@@ -248,6 +259,7 @@ jobs:
             BUILD_VERSION=${{ inputs.version }}
             SENTRY_DSN=${{ secrets.SENTRY_DSN }}
             BUILDKIT_INLINE_CACHE=1
+            BASE_IMAGE=${{ needs.base.outputs.base-ref }}
           tags: ${{ steps.tags.outputs.ghcr-tags }}
           # OCI image labels. Set on the GHCR build; the Docker Hub mirror copies
           # the image config, so the Docker Hub tags inherit these automatically.

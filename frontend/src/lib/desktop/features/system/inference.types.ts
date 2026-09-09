@@ -9,12 +9,78 @@
  * omitempty.
  */
 
+/**
+ * Single-board computer the host runs on, as named by its device tree. Absent
+ * on hosts with no device tree, which is every PC.
+ */
+export interface InferenceBoard {
+  /** Board family, e.g. "raspberry-pi" or "generic". */
+  kind: string;
+  /** Device-tree model string, e.g. "Raspberry Pi 5 Model B Rev 1.0". */
+  model?: string;
+  /** System-on-chip identifier, e.g. "bcm2712". */
+  soc?: string;
+  /** Performance band ("pi5", "pi4", "pi3"); absent for undistinguished boards. */
+  tier?: string;
+}
+
+/** Reason codes the server can attach to an accelerator. */
+export type GpuReasonCode = 'render-node-unavailable' | 'render-node-permission' | 'no-runtime';
+
+/**
+ * A GPU present on the host. Reported whether or not it can be reached, so the
+ * panel can explain an unreachable one instead of hiding it.
+ */
+export interface InferenceAccelerator {
+  /** "igpu" or "dgpu". */
+  kind: string;
+  /** "intel", "amd" or "nvidia". */
+  vendor: string;
+  /**
+   * Display name pairing the vendor with the PCI IDs. Not unique: two identical
+   * cards produce the same name, so it must never be used as a list key.
+   */
+  name?: string;
+  /**
+   * Whether the server can open this device's DRM render node. This is not a
+   * prediction that inference will run here; the device a model actually uses
+   * is reported per model in `models[].device`.
+   */
+  accessible: boolean;
+  /**
+   * Every reason code explaining why this GPU is not an inference target, most
+   * fundamental first. Each is rendered by `gpuReasonLabel`, which maps it to a
+   * flat `system.inference.gpuReason<Code>` translation key.
+   *
+   * A list because the blockers stack: a card can be both unreachable and of a
+   * vendor no build supports, and learning that one restart at a time is the
+   * outcome worth avoiding.
+   */
+  reasons?: GpuReasonCode[];
+}
+
 /** Host hardware and runtime environment the models run on. */
 export interface InferenceHardware {
   arch: string;
   cpuModel: string;
   environment: string;
   fp16: boolean;
+  board?: InferenceBoard;
+  accelerators?: InferenceAccelerator[];
+  /** Effective memory ceiling: host RAM clamped by any cgroup limit. */
+  totalRamBytes?: number;
+  physicalCores?: number;
+  /**
+   * Capability tokens this host matches, in the model manifests' vocabulary.
+   *
+   * Rendered by SystemInference's Advanced disclosure on the hardware card. Most
+   * tokens duplicate a fact the card already states, but two do not and are only
+   * visible here: `low-ram` (set below the RAM threshold in
+   * internal/hwprofile/capabilities.go) and `openvino-gpu-intel-gen<N>` (the
+   * per-generation Intel GPU token). Do not delete this without dropping the Go
+   * field too (internal/api/v2/system/inference_status.go).
+   */
+  capabilities?: string[];
 }
 
 /** Availability state for a compiled-in inference backend. */
@@ -66,6 +132,13 @@ export interface ModelSource {
   name: string;
   type?: string;
   fallback?: boolean;
+  /**
+   * True when settings assign this source to the model but the audio router is
+   * not actually feeding it, so the model produces no detections for it. The
+   * status used to report attachment from configuration alone, which showed a
+   * model as running while it analyzed nothing.
+   */
+  notRunning?: boolean;
 }
 
 /** Ring-buffer metric keys used to look up per-model time series. */
@@ -141,12 +214,68 @@ export interface InferenceAudio {
   metricKeys: InferenceAudioMetricKeys;
 }
 
+/** Lifetime inference statistics for the VAD speech gate. */
+export interface InferenceVADStats {
+  invocations: number;
+  avgMs: number;
+  maxMs: number;
+  speechHits: number;
+}
+
+/** One recent VAD speech hit in the dashboard history feed. */
+export interface InferenceVADHit {
+  /** Unix seconds of the speech hit. */
+  atUnix: number;
+  /** VAD speech probability [0,1] that tripped the gate. */
+  probability: number;
+  /** Display name of the audio source; may be absent. */
+  source?: string;
+}
+
+/**
+ * Privacy-filter Silero VAD speech-gate status. Present only when the privacy
+ * filter is enabled (see internal/api/v2/system/inference_status.go); a nil `vad`
+ * hides the dashboard panel. Stats are lifetime totals that survive detector
+ * reloads and are sourced from always-on counters, so they populate even with
+ * Prometheus telemetry disabled.
+ */
+export interface InferenceVAD {
+  /** The configured VAD gate toggle (realtime.privacyfilter.vad.enabled). */
+  enabled: boolean;
+  /**
+   * Whether a model source resolves (an embedded model is present, or a modelpath
+   * override is set). When false the gate is inert even if enabled (e.g. a noembed
+   * build with no modelpath).
+   */
+  available: boolean;
+  /** True when a detector is currently held (loaded and scoring). */
+  loaded: boolean;
+  /** Configured speech-probability gate threshold. */
+  threshold: number;
+  /** "embedded", "path", or absent when unloaded. Never the on-disk path. */
+  modelSource?: string;
+  /** Active windowing strategy ("sequence"); absent when unloaded. */
+  strategy?: string;
+  /** Native sample rate of the loaded Silero VAD model (16 kHz); absent when unloaded. */
+  sampleRate?: number;
+  stats: InferenceVADStats;
+  /** Unix seconds of the most recent speech hit; absent when none since start. */
+  lastSpeechAtUnix?: number;
+  /** Probability [0,1] of the most recent speech hit (pairs with lastSpeechAtUnix); absent when none since start. */
+  lastSpeechProbability?: number;
+  /** Newest-first history of recent speech hits (up to 10). The backend always
+   * sends it (empty when none); optional here so partial fixtures stay valid. */
+  recentHits?: InferenceVADHit[];
+}
+
 /** Full inference status snapshot. `models` is the single source of truth. */
 export interface InferenceStatusResponse {
   hardware: InferenceHardware;
   backends: InferenceBackends;
   models: InferenceModel[];
   audio?: InferenceAudio;
+  /** Privacy-filter VAD speech gate; absent when the privacy filter is off. */
+  vad?: InferenceVAD;
   runtimeBaselineBytes?: number;
   snapshotAtUnix: number;
 }

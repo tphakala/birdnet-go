@@ -62,6 +62,7 @@ import (
 const issuanceDeadline = 45 * time.Second
 
 func TestAutoTLS_Pebble_EndToEnd(t *testing.T) {
+	containers.SkipIfContainerRuntimeUnavailable(t)
 	acmeHost := containers.DefaultPebbleChallengeHost
 	httpPort := mustGetFreePort(t)
 	tlsPort := mustGetFreePort(t)

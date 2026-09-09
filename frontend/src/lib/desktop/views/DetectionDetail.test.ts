@@ -123,3 +123,45 @@ describe('DetectionDetail stale-response race (#978)', () => {
     expect(container.textContent).not.toContain(STALE_SCIENTIFIC);
   });
 });
+
+describe('DetectionDetail audio download', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it('uses the ID-based endpoint when downloading the original audio', async () => {
+    const detection = makeDetection({
+      id: 1239,
+      scientificName: 'Phalaenoptilus nuttallii',
+      commonName: 'Common Poorwill',
+      clipName: 'phalaenoptilus_nuttallii_88p_20260720T051601Z.m4a',
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        if (String(input).includes('/api/v2/detections/1239')) {
+          return Promise.resolve(jsonResponse(detection));
+        }
+        return Promise.resolve(jsonResponse({}));
+      })
+    );
+
+    const { container } = detailTest.render({ detectionId: '1239' });
+
+    await waitFor(() => {
+      expect(container.querySelector('a.meta-download')).not.toBeNull();
+    });
+
+    const downloadLink = container.querySelector<HTMLAnchorElement>('a.meta-download');
+    expect(downloadLink?.getAttribute('href')).toBe('/api/v2/audio/1239');
+    // Keep the attribute valueless so the response's Content-Disposition header
+    // supplies the canonical filename and extension.
+    expect(downloadLink).toHaveAttribute('download', '');
+  });
+});

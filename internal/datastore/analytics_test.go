@@ -286,6 +286,49 @@ func TestGetSpeciesSummaryData(t *testing.T) {
 		assert.Empty(t, nsCommon.CommonName, "NULL common_name should be converted to empty string")
 		assert.Equal(t, "nulcom", nsCommon.SpeciesCode)
 	})
+
+	t.Run("NULL confidence handling", func(t *testing.T) {
+		t.Parallel()
+		ds := setupTestDB(t)
+
+		// A species whose only detection has a NULL confidence makes AVG()/MAX()
+		// return NULL for that GROUP BY group. Scanning NULL into a plain float64
+		// fails with "converting NULL to float64 is unsupported", which aborts the
+		// entire summary, not just the affected species. Regression test for the
+		// avg_confidence/max_confidence COALESCE guard.
+		result := ds.DB.Exec(`
+			INSERT INTO notes (date, time, scientific_name, common_name, species_code, confidence)
+			VALUES (?, ?, ?, ?, ?, NULL)
+		`, "2024-01-22", "10:00:00", "Nullus confidencia", "Null Confidence Bird", "nulcon")
+		require.NoError(t, result.Error)
+
+		// A normal note with real confidence alongside it.
+		err := ds.DB.Create(&Note{
+			Date:           "2024-01-22",
+			Time:           "11:00:00",
+			ScientificName: "Normal species",
+			CommonName:     "Normal Bird",
+			SpeciesCode:    "norbird",
+			Confidence:     0.85,
+		}).Error
+		require.NoError(t, err)
+
+		summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "")
+		require.NoError(t, err, "Query should handle NULL confidence without error")
+		require.Len(t, summaries, 2)
+
+		nullConf := findSpeciesByScientificName(summaries, "Nullus confidencia")
+		require.NotNil(t, nullConf)
+		assert.Equal(t, 1, nullConf.Count)
+		assert.InDelta(t, 0.0, nullConf.AvgConfidence, 0.001, "NULL avg_confidence should default to 0")
+		assert.InDelta(t, 0.0, nullConf.MaxConfidence, 0.001, "NULL max_confidence should default to 0")
+
+		// The normal species must still report its real values.
+		normal := findSpeciesByScientificName(summaries, "Normal species")
+		require.NotNil(t, normal)
+		assert.InDelta(t, 0.85, normal.AvgConfidence, 0.001)
+		assert.InDelta(t, 0.85, normal.MaxConfidence, 0.001)
+	})
 }
 
 // TestGetSpeciesSummaryDataTimeFormat tests that the time parsing works correctly
@@ -563,7 +606,7 @@ func TestGetBatchHourlyOccurrences_ScientificNameKey(t *testing.T) {
 		require.NoError(t, ds.DB.Create(&notes[i]).Error)
 	}
 
-	counts, err := ds.GetBatchHourlyOccurrences(t.Context(), "2024-01-15",
+	counts, err := ds.GetBatchHourlyOccurrences(t.Context(), "2024-01-15", "2024-01-15",
 		[]string{"Barbastella barbastellus", "Turdus merula"}, 0.0)
 	require.NoError(t, err)
 

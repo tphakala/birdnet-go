@@ -28,6 +28,12 @@ The app opened a fresh, empty database instead of your real one. Your old detect
 
 No. `install.sh` supports Debian, Ubuntu, and Raspberry Pi OS only. Use a manual binary install on macOS (see the [Installation Guide](installation.md)).
 
+### install.sh fails on WSL ("requires systemd" or "Docker cannot be accessed")
+
+Two things trip people up under WSL. First, the installer manages BirdNET-Go as a systemd service, so systemd has to be the init system (PID 1). Enable it by adding a `[boot]` section with `systemd=true` to `/etc/wsl.conf`, then run `wsl --shutdown` from Windows and reopen the distro. Second, "Docker cannot be accessed by user" means the `docker info` check failed, usually because your user isn't in the `docker` group yet (group changes need a fresh login, and on WSL that means another `wsl --shutdown`) or the Docker service isn't running (`sudo systemctl enable --now docker`). The full step-by-step is in [Troubleshooting install.sh](installation.md#troubleshooting-installsh).
+
+Worth knowing: BirdNET-Go also runs natively on Windows with no Docker and no WSL, so if WSL is more hassle than it's worth, just download the Windows archive from the [releases page](https://github.com/tphakala/birdnet-go/releases) and run `birdnet-go.exe`.
+
 ### I installed as root. How do I move to a normal user without losing data?
 
 Run `install.sh` as your normal user; it detects the root install and offers to migrate it automatically. After migrating, the old `/root/birdnet-go-app` is left in place so you can verify, which makes the installer keep re-offering migration. Once you have confirmed everything works, remove it:
@@ -156,7 +162,11 @@ They were intentionally removed from the UI. They are values that should be left
 
 ### The model download fails (e.g. Hugging Face is blocked here)
 
-You can install a model manually. The exact names matter: the folder must be `perch-v2`, the model file `perch_v2.onnx`, and a `perch_v2_labels.txt` alongside it (rename Hugging Face's `labels.txt`). Place the folder under your models directory (logged at startup as `models_dir=...`). The mirror `hf-mirror.com` uses the same path layout.
+Point the downloads at a mirror. Go to **Settings > Analysis > Models > Download Source** and set the endpoint to `https://hf-mirror.com`, which serves the same path layout. It applies to the next download, so no restart is needed, and you can then install models from the gallery as normal. If you already set the `HF_ENDPOINT` environment variable for the Hugging Face Python tooling, BirdNET-Go picks that up automatically and you do not need to fill the field in.
+
+A value that is not a valid `http` or `https` address is ignored and the default host is used instead; you will see a warning about it at startup.
+
+Failing that, you can still install a model manually. The exact names matter: the folder must be `perch-v2`, the model file `perch_v2.onnx`, and a `perch_v2_labels.txt` alongside it (rename Hugging Face's `labels.txt`). Place the folder under your models directory (logged at startup as `models_dir=...`).
 
 ## Improving accuracy and reducing false positives
 

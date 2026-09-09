@@ -11,6 +11,7 @@
     Container,
   } from '@lucide/svelte';
   import { formatUptimeCompact } from '$lib/utils/formatters';
+  import { isContainerEnvironment } from '$lib/desktop/features/system/environment';
 
   interface Props {
     osDisplay: string;
@@ -50,8 +51,7 @@
     environment && virtualization ? `${environment} (${virtualization})` : (environment ?? '')
   );
 
-  const containerTypes = ['Docker', 'Podman', 'LXC', 'Container', 'systemd-nspawn'];
-  let isContainer = $derived(containerTypes.some(ct => environment?.startsWith(ct) ?? false));
+  let isContainer = $derived(isContainerEnvironment(environment));
 </script>
 
 <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">

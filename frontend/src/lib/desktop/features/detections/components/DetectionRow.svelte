@@ -123,7 +123,12 @@
     thumbnailLoader.setLoading(false);
   }
 
-  function handleThumbnailError() {
+  // `retryPending` comes from handleBirdImageError, which retries a thumbnail a
+  // bounded number of times. Blacklisting the URL removes the <img> from the DOM,
+  // which would cancel those retries: a species whose image is still being fetched
+  // server-side would then show the broken-image state until a hard refresh.
+  function handleThumbnailError(retryPending: boolean) {
+    if (retryPending) return;
     const currentUrl = getThumbnailUrl(detection.scientificName);
     thumbnailLoader.markUrlFailed(currentUrl);
   }
@@ -252,8 +257,7 @@
             class:opacity-0={thumbnailLoader.loading}
             onload={handleThumbnailLoad}
             onerror={e => {
-              handleThumbnailError();
-              handleBirdImageError(e);
+              handleThumbnailError(handleBirdImageError(e));
             }}
           />
         {/if}

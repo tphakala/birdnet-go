@@ -3,6 +3,7 @@ package alerting
 import (
 	"maps"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -79,6 +80,9 @@ func (b *DetectionAlertBridge) ProcessDetectionEvent(event events.DetectionEvent
 
 	isLifer, _ := meta[events.DetectionMetadataIsLifer].(bool)
 
+	isInfrequent := isInfrequentDetection(properties)
+	properties[PropertyIsInfrequent] = isInfrequent
+
 	// Lifer takes precedence over the per-install "new species" signal: when a
 	// detection is both, emit only detection.lifer so the user gets one alert
 	// (the more significant one), not a duplicate new-species alert.
@@ -90,6 +94,11 @@ func (b *DetectionAlertBridge) ProcessDetectionEvent(event events.DetectionEvent
 	var liferProps map[string]any
 	if isLifer {
 		liferProps = maps.Clone(properties)
+	}
+
+	var infrequentProps map[string]any
+	if isInfrequent {
+		infrequentProps = maps.Clone(properties)
 	}
 
 	TryPublish(&AlertEvent{
@@ -117,5 +126,42 @@ func (b *DetectionAlertBridge) ProcessDetectionEvent(event events.DetectionEvent
 		})
 	}
 
+	if infrequentProps != nil {
+		TryPublish(&AlertEvent{
+			ObjectType: ObjectTypeDetection,
+			EventName:  EventDetectionInfrequentSpecies,
+			Properties: infrequentProps,
+			Timestamp:  event.GetTimestamp(),
+		})
+	}
+
 	return nil
+}
+
+// isInfrequentDetection reports whether a returning detection qualifies as
+// "infrequent": tracking enabled and the pre-return absence gap exceeds the
+// configured threshold. days_since_last_seen is absent for first-ever
+// detections and 0 for same-day repeats, so neither qualifies. Lifetime-new
+// detections (is_new_species) take precedence and never also qualify as
+// infrequent. Year/season novelty are dashboard-only badges with no alert
+// event of their own, so they are not suppressed here: a returning visitor
+// that is also "new this year/season" can still emit an infrequent alert
+// while the dashboard shows the higher-precedence badge.
+func isInfrequentDetection(properties map[string]any) bool {
+	if isNew, ok := properties[PropertyIsNewSpecies].(bool); ok && isNew {
+		return false
+	}
+	settings := conf.GetSettings()
+	if settings == nil {
+		return false
+	}
+	if !settings.Realtime.SpeciesTracking.Enabled {
+		return false
+	}
+	infrequent := settings.Realtime.SpeciesTracking.InfrequentTracking
+	if !infrequent.Enabled {
+		return false
+	}
+	days, ok := properties[PropertyDaysSinceLastSeen].(int)
+	return ok && days > infrequent.AbsenceDays
 }

@@ -3,10 +3,16 @@ package processor
 
 import (
 	"math"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
+
+// birdBaseClipLength is the BirdNET reference analysis-clip length. Models with a
+// different clip (e.g. Perch 5s) derive their false-positive step from their own
+// clip instead of the 3s bird default.
+const birdBaseClipLength = 3 * time.Second
 
 // getMinimumOverlapForLevel returns the minimum overlap required for each filtering level.
 // Higher levels require higher overlap to generate more detections for filtering.
@@ -112,35 +118,73 @@ func getRecommendedLevelForOverlap(overlap float64) (level int, overlapSufficien
 }
 
 // calculateMinDetectionsForModel routes to the correct minDetections calculation
-// based on the model ID. Bat models use a fixed 50% overlap instead of the
-// user-configurable BirdNET overlap, and read from a separate filter config.
+// based on the model ID. Bat models use a fixed 50% overlap (1.5s step) instead
+// of the user-configurable BirdNET overlap, and read from a separate filter
+// config. For the 3s BirdNET model the bird path's step (3.0 - overlap) matches
+// the buffer's cadence, which now honors birdnet.overlap (issue #4096).
 func calculateMinDetectionsForModel(settings *conf.Settings, modelID string) int {
 	if modelID == classifier.RegistryIDBat {
 		return calculateBatMinDetections(settings)
 	}
+	// For a model whose analysis clip differs from the 3s BirdNET base (e.g. Perch
+	// 5s), derive the step from the model's own clip and effective overlap so the
+	// confirmation window matches the buffer cadence. The 3s bird path (and its
+	// overlap-validation warnings) is preserved unchanged.
+	if info, ok := classifier.ModelRegistry[modelID]; ok && info.Spec.ClipLength > 0 && info.Spec.ClipLength != birdBaseClipLength {
+		step := info.Spec.BufferInterval(classifier.ResolveModelOverlap(modelID, info.Spec, settings)).Seconds()
+		return minDetectionsForSegment(step, settings.Realtime.FalsePositiveFilter.Level)
+	}
 	return calculateMinDetectionsFromSettings(settings)
 }
 
-// calculateBatMinDetections computes the minimum detection count for bat models.
-// The bat model's buffer overlap is fixed at 50% (hardcoded in BufferDimensions),
-// giving a 1.5-second step for a 3-second clip. Within a 6-second reference
-// window, this yields 4 possible detections.
-func calculateBatMinDetections(settings *conf.Settings) int {
-	const chunkDurationSeconds = 3.0
-	const referenceWindowSeconds = 6.0
-	const batOverlapSeconds = 1.5 // fixed 50% of 3s clip
-	const epsilon = 1e-9
+// Shared constants for the false-positive confirmation-count math.
+const (
+	// fpReferenceWindowSeconds is the typical duration of a bird vocalization;
+	// minDetections is how many analysis windows within this window must confirm.
+	fpReferenceWindowSeconds = 6.0
+	// fpMinSegmentLength floors the analysis step to avoid dividing by ~0.
+	fpMinSegmentLength = 0.1
+	// fpEpsilon absorbs floating-point rounding before Ceil (e.g. 5.0000000003).
+	fpEpsilon = 1e-9
+	// batClipSeconds is the bat model's analysis clip length (3s). batOverlapSeconds
+	// is its fixed 50% overlap, giving a 1.5s analysis step. The bat model's fixed
+	// overlap is applied by classifier.ResolveModelOverlap (RegistryIDBat ->
+	// ClipLength/2); these constants keep the FP confirmation math in step with it.
+	batClipSeconds    = 3.0
+	batOverlapSeconds = 1.5
+)
 
-	level := settings.Bat.FalsePositiveFilter.Level
+// minDetectionsForSegment computes the minimum number of confirming detections
+// required within the reference vocalization window, given the analysis step
+// (segmentSeconds, i.e. how often a new analysis window is produced) and the
+// filter level. Level 0 disables filtering (always 1). This is the single source
+// of truth for the confirmation-count formula shared by the bird and bat paths.
+func minDetectionsForSegment(segmentSeconds float64, level int) int {
 	if level == 0 {
 		return 1
 	}
-
-	segmentLength := chunkDurationSeconds - batOverlapSeconds
-	maxDetections := referenceWindowSeconds / segmentLength
-	threshold := getThresholdForLevel(level)
-	required := maxDetections*threshold - epsilon
+	// fpMinSegmentLength (0.1s) is coarser than the buffer's minAnalysisStep (1ms),
+	// so the FP-assumed step and the real buffer step diverge once the step drops
+	// below 0.1s, i.e. overlap > 2.9s on the 3s base clip. Overlap is driven by the
+	// false-positive filter level, which caps at 2.8s (getMinimumOverlapForLevel(5)),
+	// so the operational range never reaches that divergence; and it is conservative
+	// (fewer confirmations required than windows produced), so no valid detection is
+	// wrongly dropped even if it did.
+	if segmentSeconds < fpMinSegmentLength {
+		segmentSeconds = fpMinSegmentLength
+	}
+	maxDetections := fpReferenceWindowSeconds / segmentSeconds
+	required := maxDetections*getThresholdForLevel(level) - fpEpsilon
 	return int(math.Max(1, math.Ceil(required)))
+}
+
+// calculateBatMinDetections computes the minimum detection count for bat models.
+// The bat model's buffer overlap is fixed at 50% (by classifier.ResolveModelOverlap,
+// which returns ClipLength/2 for RegistryIDBat), giving a 1.5-second step for a
+// 3-second clip. Within a 6-second reference window, this yields 4 possible
+// detections.
+func calculateBatMinDetections(settings *conf.Settings) int {
+	return minDetectionsForSegment(batClipSeconds-batOverlapSeconds, settings.Bat.FalsePositiveFilter.Level)
 }
 
 // visibilityThresholds holds precomputed per-model visibility thresholds.

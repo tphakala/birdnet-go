@@ -140,9 +140,9 @@ func (c *Handler) GetAppConfig(ctx echo.Context) error {
 	ctx.Response().Header().Set("Pragma", "no-cache")
 	ctx.Response().Header().Set("Expires", "0")
 
-	// Ensure CSRF token is available, generating one if the middleware didn't.
-	// Echo v4.15.0's Sec-Fetch-Site optimization may skip token generation for
-	// same-origin requests, but this endpoint must always provide a token.
+	// Ensure a CSRF token is available for the SPA. The CSRF middleware forces
+	// Echo's token path (GHSA-9fhj-f35q-w532), so a real token is normally already
+	// in context; EnsureCSRFToken is the backstop that always returns one here.
 	csrfToken, err := middleware.EnsureCSRFToken(ctx)
 	if err != nil {
 		c.LogWarnIfEnabled("Failed to generate CSRF token", logger.Error(err))
@@ -166,7 +166,7 @@ func (c *Handler) GetAppConfig(ctx echo.Context) error {
 	}
 
 	// Determine if any security method is enabled
-	securityEnabled := settings.Security.BasicAuth.Enabled || len(enabledProviders) > 0
+	securityEnabled := settings.IsAuthProviderConfigured()
 
 	// Determine if access is currently allowed
 	accessAllowed := c.determineAccessAllowed(ctx, securityEnabled)
@@ -327,7 +327,7 @@ func (c *Handler) isExistingInstall(ctx context.Context, settings *conf.Settings
 	if len(settings.Realtime.Audio.Sources) > 0 {
 		return true
 	}
-	if settings.Security.BasicAuth.Enabled || len(settings.GetEnabledOAuthProviders()) > 0 {
+	if settings.IsAuthProviderConfigured() {
 		return true
 	}
 	if !c.hasZeroDetections(ctx) {

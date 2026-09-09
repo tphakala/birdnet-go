@@ -22,8 +22,10 @@ import (
 
 // SpeciesScore holds a species label and its associated score.
 type SpeciesScore struct {
-	Score float64
-	Label string
+	Score              float64
+	Label              string
+	HasCustomConfig    bool
+	IsManuallyIncluded bool
 }
 
 // ByScore implements sort.Interface for []SpeciesScore based on the Score field.
@@ -284,16 +286,49 @@ func canonicalOverrideLabels(speciesName string, geoLabels, classifierLabels []s
 	return matchingLabels(classifierLabels, speciesName)
 }
 
-// overrideSpeciesNames returns the user's force-include overrides: the
-// realtime.species.include entries followed by the realtime.species.config keys.
-func overrideSpeciesNames(settings *conf.Settings) []string {
-	names := make([]string, 0, len(settings.Realtime.Species.Include)+len(settings.Realtime.Species.Config))
-	names = append(names, settings.Realtime.Species.Include...)
+// overrideSource records which user setting named an override entry. A species
+// can be listed in realtime.species.include and keyed in realtime.species.config
+// at the same time, so the two flags are independent rather than exclusive.
+type overrideSource struct {
+	manuallyIncluded bool
+	customConfig     bool
+}
+
+// overrideSpeciesEntry pairs a raw user override entry with the setting that named it.
+type overrideSpeciesEntry struct {
+	name   string
+	source overrideSource
+}
+
+// overrideSpeciesEntries returns the user's force-include overrides in canonical
+// order (the realtime.species.include entries, then the realtime.species.config
+// keys) together with the setting each one came from. The provenance is what lets
+// the settings UI tell an "Included" badge from a "Configured" one after alias
+// resolution has replaced the user's key with a canonical model label (issue #3974).
+func overrideSpeciesEntries(settings *conf.Settings) []overrideSpeciesEntry {
 	// Sort the config keys: Go map iteration is non-deterministic, and the override
 	// order flows into the inclusion working set, debug logs, and the species-list API.
 	configKeys := slices.Collect(maps.Keys(settings.Realtime.Species.Config))
 	slices.Sort(configKeys)
-	names = append(names, configKeys...)
+
+	entries := make([]overrideSpeciesEntry, 0, len(settings.Realtime.Species.Include)+len(configKeys))
+	for _, name := range settings.Realtime.Species.Include {
+		entries = append(entries, overrideSpeciesEntry{name: name, source: overrideSource{manuallyIncluded: true}})
+	}
+	for _, name := range configKeys {
+		entries = append(entries, overrideSpeciesEntry{name: name, source: overrideSource{customConfig: true}})
+	}
+	return entries
+}
+
+// overrideSpeciesNames returns the user's force-include overrides: the
+// realtime.species.include entries followed by the realtime.species.config keys.
+func overrideSpeciesNames(settings *conf.Settings) []string {
+	entries := overrideSpeciesEntries(settings)
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.name)
+	}
 	return names
 }
 
@@ -310,34 +345,81 @@ func overrideSpeciesNames(settings *conf.Settings) []string {
 // resolution for every otherwise-unresolved entry is batched into one dataset scan,
 // keeping the cost off the per-entry path on the (cold) range-filter rebuild.
 func resolveOverrideLabels(settings *conf.Settings, geoLabels []string) []string {
-	names := overrideSpeciesNames(settings)
-	out := make([]string, 0, len(names))
-	var unresolved []string
-	for _, name := range names {
-		if labels := canonicalOverrideLabels(name, geoLabels, settings.BirdNET.Labels); len(labels) > 0 {
-			out = append(out, labels...)
-		} else {
-			unresolved = append(unresolved, name)
+	labels, _ := resolveOverrideLabelsWithSource(settings, geoLabels)
+	return labels
+}
+
+// resolveOverrideLabelsWithSource is resolveOverrideLabels plus provenance: it
+// additionally reports, per resolved label, whether the label was reached from
+// realtime.species.include, from a realtime.species.config key, or from both.
+// Resolution is otherwise identical, so the returned label slice matches
+// resolveOverrideLabels exactly, order included, and the OpenFauna reverse lookup
+// stays batched into the single dataset scan shared by both lists.
+func resolveOverrideLabelsWithSource(settings *conf.Settings, geoLabels []string) (labels []string, sources map[string]overrideSource) {
+	entries := overrideSpeciesEntries(settings)
+	labels = make([]string, 0, len(entries))
+	sources = make(map[string]overrideSource, len(entries))
+
+	// mark unions the provenance rather than overwriting it: the same label can be
+	// reached from both lists, either because the user named the species in both or
+	// because two different entries resolve to one canonical label.
+	mark := func(label string, src overrideSource) {
+		existing := sources[label]
+		existing.manuallyIncluded = existing.manuallyIncluded || src.manuallyIncluded
+		existing.customConfig = existing.customConfig || src.customConfig
+		sources[label] = existing
+	}
+
+	// collect appends every resolved label for one entry and records its provenance.
+	collect := func(resolved []string, src overrideSource) {
+		for _, label := range resolved {
+			labels = append(labels, label)
+			mark(label, src)
 		}
 	}
+
+	var unresolved []overrideSpeciesEntry
+	for _, entry := range entries {
+		resolved := canonicalOverrideLabels(entry.name, geoLabels, settings.BirdNET.Labels)
+		if len(resolved) == 0 {
+			unresolved = append(unresolved, entry)
+			continue
+		}
+		collect(resolved, entry.source)
+	}
+
 	if len(unresolved) > 0 {
-		reverse := openfauna.LookupScientificNames(unresolved, settings.BirdNET.Locale)
-		for _, name := range unresolved {
-			if sci := reverse[name]; len(sci) > 0 {
-				out = append(out, sci...)
-			} else {
-				out = append(out, name)
+		names := make([]string, len(unresolved))
+		for i := range unresolved {
+			names[i] = unresolved[i].name
+		}
+		reverse := openfauna.LookupScientificNames(names, settings.BirdNET.Locale)
+		for _, entry := range unresolved {
+			// An entry OpenFauna cannot reverse-resolve is kept verbatim, so the name
+			// resolver still reports a genuinely unresolvable entry to the user.
+			resolved := reverse[entry.name]
+			if len(resolved) == 0 {
+				resolved = []string{entry.name}
 			}
+			collect(resolved, entry.source)
 		}
 	}
-	return out
+	return labels, sources
 }
 
 // addUserOverrideSpeciesScores appends species from the explicit include list
 // and species with configured actions to a SpeciesScore slice with score 1.0.
 // Used by the universal geomodel path in getProbableSpecies. Each entry is
-// canonicalized via resolveOverrideLabels so localized common names enter the
-// set as their canonical model labels rather than the raw user string.
+// canonicalized via resolveOverrideLabelsWithSource so localized common names
+// enter the set as their canonical model labels rather than the raw user string.
+//
+// Every entry the overrides name also carries its provenance
+// (HasCustomConfig/IsManuallyIncluded), including entries the range filter had
+// already scored, which are flagged in place without disturbing their score.
+// Once an alias resolves to a canonical label the user's original key is gone,
+// so the settings UI cannot recover that provenance by string-matching the
+// displayed names against the settings; carrying it here is what keeps the
+// "Configured" and "Included" badges correct (issue #3974).
 //
 // Dedup here is by exact label and intentionally narrow: it only avoids
 // re-appending a label already present verbatim. A force-included species that
@@ -348,16 +430,37 @@ func resolveOverrideLabels(settings *conf.Settings, geoLabels []string) []string
 // the display boundary (dedupeSpeciesForDisplay in internal/api/v2/range/range.go),
 // not here, so the functional inclusion set keeps every scientific name.
 func addUserOverrideSpeciesScores(bn *BirdNET, speciesScores *[]SpeciesScore, settings *conf.Settings, geoLabels []string) {
+	labels, sources := resolveOverrideLabelsWithSource(settings, geoLabels)
+
+	// Flag the entries the range filter already scored. An override does not
+	// re-append those, but the settings UI still has to badge them, and the score
+	// they carry must survive untouched.
 	seen := make(map[string]bool, len(*speciesScores))
-	for _, ss := range *speciesScores {
-		seen[ss.Label] = true
-	}
-	for _, label := range resolveOverrideLabels(settings, geoLabels) {
-		if !seen[label] {
-			bn.Debug("Adding override species with max score: %s", label)
-			*speciesScores = append(*speciesScores, SpeciesScore{Score: 1.0, Label: label})
-			seen[label] = true
+	for i := range *speciesScores {
+		label := (*speciesScores)[i].Label
+		seen[label] = true
+		src := sources[label]
+		if src.customConfig {
+			(*speciesScores)[i].HasCustomConfig = true
 		}
+		if src.manuallyIncluded {
+			(*speciesScores)[i].IsManuallyIncluded = true
+		}
+	}
+
+	for _, label := range labels {
+		if seen[label] {
+			continue
+		}
+		src := sources[label]
+		bn.Debug("Adding override species with max score: %s", label)
+		*speciesScores = append(*speciesScores, SpeciesScore{
+			Score:              1.0,
+			Label:              label,
+			HasCustomConfig:    src.customConfig,
+			IsManuallyIncluded: src.manuallyIncluded,
+		})
+		seen[label] = true
 	}
 }
 
@@ -386,7 +489,7 @@ func addUserOverrideSpecies(includedSpecies *[]string, settings *conf.Settings, 
 // so that UI changes to coordinates, threshold, or LocationConfigured take
 // effect immediately without restarting the service.
 func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesScore, error) {
-	scores, _, err := bn.getProbableSpecies(date, week, bn.currentSettings())
+	scores, _, _, err := bn.getProbableSpecies(date, week, bn.currentSettings())
 	return scores, err
 }
 
@@ -396,7 +499,7 @@ func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesSc
 // publishing temporary values into the global settings, eliminating the race
 // where a concurrent BuildRangeFilter could pick up test data.
 func (bn *BirdNET) GetProbableSpeciesWithSettings(date time.Time, week float32, settings *conf.Settings) ([]SpeciesScore, error) {
-	scores, _, err := bn.getProbableSpecies(date, week, settings)
+	scores, _, _, err := bn.getProbableSpecies(date, week, settings)
 	return scores, err
 }
 
@@ -414,7 +517,16 @@ func (bn *BirdNET) GetProbableSpeciesWithSettings(date time.Time, week float32, 
 // the universal path. Returning it here lets callers that need both avoid a
 // second lock that could observe a different range-filter instance after a
 // concurrent ReloadRangeFilter.
-func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *conf.Settings) ([]SpeciesScore, []string, error) {
+//
+// The third return value, realScores, is true only when the returned scores are
+// genuine location-based predictions. It is false whenever the scores are the
+// synthetic all-zero fallback (no range-filter backend loaded, or no location
+// configured). Because it is decided inside the same locked section that produced
+// the scores, a caller can trust that "the filter was active" and "these scores"
+// describe one consistent snapshot, with no separate read that could race a
+// concurrent unload (used by GetRarityContext to avoid reporting a synthetic zero
+// as "very rare", #3935).
+func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *conf.Settings) (probableSpecies []SpeciesScore, geomodelLabels []string, filterActive bool, err error) {
 	bn.Debug("Applying range filter")
 
 	// Build the exclude matcher once: it reverse-resolves localized common-name exclude
@@ -422,20 +534,14 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 	// zeroScoresForAllLabels) stay off the dataset scan.
 	excluder := newExcludeMatcher(settings.Realtime.Species.Exclude, settings.BirdNET.Locale)
 
-	// Skip filtering if range filter backend is not initialized.
-	// Read under lock to avoid data race with Delete().
-	bn.mu.Lock()
-	hasRangeFilter := bn.rangeFilter != nil
-	bn.mu.Unlock()
-	if !hasRangeFilter {
-		bn.Debug("Range filter model not loaded, returning zero scores for all labels")
-		return zeroScoresForAllLabels(settings.BirdNET.Labels, excluder), nil, nil
-	}
-
-	// Skip filtering if location is not configured
+	// Skip filtering if location is not configured. This reads only the settings
+	// snapshot (no bn state), so it needs no lock and is checked before acquiring bn.mu.
+	// A nil range filter and an unconfigured location both return identical synthetic
+	// zero scores, so the order between the two checks is not observable beyond which
+	// debug line is logged when both hold.
 	if !settings.BirdNET.LocationConfigured {
 		bn.Debug("Location not configured, not using location based prediction filter")
-		return zeroScoresForAllLabels(settings.BirdNET.Labels, excluder), nil, nil
+		return zeroScoresForAllLabels(settings.BirdNET.Labels, excluder), nil, false, nil
 	}
 
 	threshold := settings.BirdNET.RangeFilter.Threshold
@@ -450,14 +556,29 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 		week = getWeekForFilter(date)
 	}
 
+	// Resolve the range-filter backend and run the universal-path prediction under a
+	// SINGLE lock hold: the nil check and the UniversalSpeciesPredictor assertion must
+	// observe the same backend instance. Splitting them across two lock acquisitions (as
+	// before) let a concurrent Delete()/reload nil-out or swap the backend between the
+	// check and the assertion, which then fell through to the legacy path and surfaced a
+	// "range filter was closed during prediction" error instead of clean synthetic zeros
+	// with filterActive=false (#3935 follow-up). Holding bn.mu across PredictSpeciesScores
+	// is intentional and pre-existing: the backend is not goroutine-safe, and Delete()
+	// takes the same lock, so it cannot free the backend mid-prediction.
+	bn.mu.Lock()
+	rf := bn.rangeFilter
+	if rf == nil {
+		bn.mu.Unlock()
+		bn.Debug("Range filter model not loaded, returning zero scores for all labels")
+		return zeroScoresForAllLabels(settings.BirdNET.Labels, excluder), nil, false, nil
+	}
+
 	// Try the universal geomodel path first: predict from the geomodel's
 	// own label set so that all 12K species are covered.
-	bn.mu.Lock()
-	up, isUniversal := bn.rangeFilter.(UniversalSpeciesPredictor)
-	if isUniversal {
+	if up, isUniversal := rf.(UniversalSpeciesPredictor); isUniversal {
 		allGeoLabels := up.GeomodelLabels()
 		var cachedMapping []int
-		if mrf, ok := bn.rangeFilter.(*mappedRangeFilter); ok {
+		if mrf, ok := rf.(*mappedRangeFilter); ok {
 			cachedMapping = mrf.classifierToGeo
 		}
 		scores, err := up.PredictSpeciesScores(
@@ -469,7 +590,7 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 		bn.mu.Unlock()
 
 		if err != nil {
-			return nil, nil, errors.New(err).
+			return nil, nil, false, errors.New(err).
 				Category(errors.CategoryValidation).
 				Context("date", date.Format(time.DateOnly)).
 				Context("week", week).
@@ -511,14 +632,20 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 		}
 
 		sort.Sort(ByScore(speciesScores))
-		return speciesScores, allGeoLabels, nil
+		return speciesScores, allGeoLabels, true, nil
 	}
 	bn.mu.Unlock()
 
-	// Legacy path: map geomodel scores to the classifier's label set.
+	// Legacy path: map geomodel scores to the classifier's label set. predictFilter
+	// re-acquires bn.mu and re-checks nil itself, so a Delete() racing between this
+	// unlock and that re-lock still returns a "range filter was closed during
+	// prediction" error for the legacy TFLite backend. That residual race is accepted:
+	// this path is not the default (the universal geomodel path above is), and closing
+	// it would mean threading the snapshotted backend through predictFilter, which still
+	// needs its own lock across the non-goroutine-safe Predict call.
 	filters, err := bn.predictFilter(date, week, settings, threshold)
 	if err != nil {
-		return nil, nil, errors.New(err).
+		return nil, nil, false, errors.New(err).
 			Category(errors.CategoryValidation).
 			Context("date", date.Format(time.DateOnly)).
 			Context("week", week).
@@ -543,7 +670,7 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 	addUserOverrideSpeciesScores(bn, &speciesScores, settings, nil)
 
 	sort.Sort(ByScore(speciesScores))
-	return speciesScores, nil, nil
+	return speciesScores, nil, true, nil
 }
 
 // zeroScoresForAllLabels creates a slice of SpeciesScore with zero scores for all provided labels,

@@ -70,10 +70,45 @@ vars:
   OPENVINO_HEADERS_DIR: '{{.ROOT_DIR}}/.cache/openvino'
   CGO_FLAGS: CGO_ENABLED=1 CGO_CFLAGS="-I{{.TENSORFLOW_HEADERS_DIR}} -I{{.OPENVINO_HEADERS_DIR}}/include"
   EXTRA_BUILD_TAGS: '{{.EXTRA_BUILD_TAGS | default ""}}'
+  # Extra build tags folded into every artifact we ship, independent of the
+  # caller-supplied EXTRA_BUILD_TAGS. Every build path that produces a shipped
+  # binary folds these in, so a target cannot silently ship a different binary
+  # than the rest. (tools/dbexport is deliberately exempt: it never reaches
+  # go-aac.)
+  #
+  # Currently empty. go-aac enables its SIMD kernels by DEFAULT now: runtime CPU
+  # dispatch via github.com/tphakala/simd (AVX2/AVX/SSE2 on amd64, NEON on arm64)
+  # with a pure-Go fallback when the feature bit is absent, and `-tags noasm` as
+  # the opt-out. birdnet-go wants that default, so no go-aac tag is needed. The
+  # old opt-in `goaac_simd` tag was removed upstream in go-aac v0.5.0; passing it
+  # now selects nothing (Go ignores an unused tag), so it has been dropped here
+  # and from CI rather than left as misleading dead config.
+  #
+  # A future opt-in tag that must reach every shipped binary goes here. CI does
+  # not enforce parity automatically, so if this becomes non-empty, add the tag
+  # to the same lanes in lockstep. None of these workflows carries a go-aac tag
+  # any more; the note after each says how to re-wire one:
+  #   .github/workflows/cross-platform-build.yml  (re-add an env: BASE_BUILD_TAGS block)
+  #   .github/workflows/golangci-test.yml         (re-add an env: BASE_BUILD_TAGS block)
+  #   .github/workflows/golangci-lint.yml         (put it in the literal -tags; it is a
+  #                                                workflow_call target and does not
+  #                                                inherit the caller's env)
+  #   .github/workflows/macos-test.yml            (literal -tags)
+  #   .github/workflows/windows-test.yml          (literal -tags)
+  BASE_BUILD_TAGS: ''
+  # Emits nothing when the joined list is empty, mirroring the ${BUILD_TAGS:+...}
+  # guard on the linux_amd64 / linux_arm64 build lines. (noembed_build needs no
+  # such guard: its list always contains noembed.) Without this, overriding
+  # BASE_BUILD_TAGS to empty would emit a bare `-tags`, which then swallows the
+  # following -ldflags and fails with a confusing "flag provided but not defined".
   BUILD_TAGS_FLAG:
     sh: |
-      if [ -n "{{.EXTRA_BUILD_TAGS}}" ]; then
-        echo "-tags {{.EXTRA_BUILD_TAGS}}"
+      TAGS="{{.BASE_BUILD_TAGS}}"
+      EXTRA="{{.EXTRA_BUILD_TAGS}}"
+      TAGS="${TAGS:+${TAGS},}${EXTRA}"
+      TAGS="${TAGS%,}"
+      if [ -n "${TAGS}" ]; then
+        echo "-tags ${TAGS}"
       fi
   LDFLAGS: -ldflags "-s -w -X 'main.buildDate={{.BUILD_DATE}}' -X 'main.version={{.VERSION}}' -X 'github.com/tphakala/birdnet-go/internal/telemetry.sentryDSN={{.SENTRY_DSN}}' -X 'github.com/tphakala/birdnet-go/internal/branding.projectName={{.PROJECT_NAME}}' -X 'github.com/tphakala/birdnet-go/internal/branding.projectRepoURL={{.PROJECT_REPO_URL}}' -X 'github.com/tphakala/birdnet-go/internal/branding.projectCommunityURL={{.PROJECT_COMMUNITY_URL}}'"
   BUILD_FLAGS: '{{.BUILD_TAGS_FLAG}} {{.LDFLAGS}}'
@@ -90,10 +125,12 @@ tasks:
   test:
     desc: Run tests for the application
     cmds:
-      # Use noembed,skipfrontend tags to skip model and frontend embedding for faster tests
+      # Use noembed,skipfrontend tags to skip model and frontend embedding for faster tests.
+      # BASE_BUILD_TAGS keeps the local run on the same kernels CI and the shipped
+      # binaries use, so a tag-specific failure cannot pass here and fail in CI.
       # CGO_FLAGS supplies CGO_ENABLED=1 and the TensorFlow header include path;
       # -race needs CGO so it must stay enabled here.
-      - '{{.CGO_FLAGS}} go test -tags noembed,skipfrontend -race ./... {{.TEST_FLAGS}}'
+      - '{{.CGO_FLAGS}} go test -tags noembed,skipfrontend{{if .BASE_BUILD_TAGS}},{{.BASE_BUILD_TAGS}}{{end}} -race ./... {{.TEST_FLAGS}}'
     vars:
       TEST_FLAGS: '{{default "" .CLI_ARGS}}'
 
@@ -111,7 +148,7 @@ tasks:
       - mkdir -p coverage
       # Use noembed,skipfrontend tags to skip model and frontend embedding for faster tests
       # Keep -race in sync with the test task so coverage runs catch data races too.
-      - '{{.CGO_FLAGS}} go test -tags noembed,skipfrontend -race ./... -coverprofile=coverage/coverage.out {{.TEST_FLAGS}}'
+      - '{{.CGO_FLAGS}} go test -tags noembed,skipfrontend{{if .BASE_BUILD_TAGS}},{{.BASE_BUILD_TAGS}}{{end}} -race ./... -coverprofile=coverage/coverage.out {{.TEST_FLAGS}}'
       - go tool cover -html=coverage/coverage.out -o coverage/coverage.html
     vars:
       TEST_FLAGS: '{{default "" .CLI_ARGS}}'
@@ -130,7 +167,7 @@ tasks:
         esac
         # Use noembed,skipfrontend tags to skip model and frontend embedding for faster linting
         {{.CGO_FLAGS}} CGO_LDFLAGS="-L${LIB_DIR} -ltensorflowlite_c" \
-        golangci-lint run --build-tags=noembed,skipfrontend {{.CLI_ARGS}}
+        golangci-lint run --build-tags=noembed,skipfrontend{{if .BASE_BUILD_TAGS}},{{.BASE_BUILD_TAGS}}{{end}} {{.CLI_ARGS}}
     vars:
       CLI_ARGS: '{{default "-v" .CLI_ARGS}}'
 
@@ -153,6 +190,75 @@ tasks:
         fi
     status:
       - '[ -f "{{.AVICOMMONS_JSON_FILE}}" ]'
+
+  sync-region-snapshots:
+    desc: Refresh the embedded region snapshots, coverage maps, and vendored model manifests from a sibling acoustic-models checkout
+    vars:
+      ACOUSTIC_MODELS_DIR: '{{.ACOUSTIC_MODELS_DIR | default "../acoustic-models"}}'
+      REGION_DATA_DIR: internal/classifier/region/data
+      MAPS_DIR: internal/classifier/region/data/maps
+      GEN_MANIFESTS_DIR: internal/classifier/gen/manifests
+    cmds:
+      - |
+        SRC="{{.ACOUSTIC_MODELS_DIR}}/models/manifests"
+        if [ ! -d "$SRC" ]; then
+          echo "acoustic-models manifests not found at $SRC" >&2
+          echo "Set ACOUSTIC_MODELS_DIR to your acoustic-models checkout." >&2
+          exit 1
+        fi
+        # Embedded region tables (bbox / tier / countries) read at runtime.
+        for f in Perch-v2-Models.regions.json BirdNET-v3.0-Models.regions.json; do
+          cp "$SRC/$f" "{{.REGION_DATA_DIR}}/$f"
+          echo "synced $f"
+        done
+        # Vendored model manifests the catalog generator reads. These MUST be
+        # refreshed in lockstep with the region tables above: "go generate
+        # ./internal/classifier" joins models.json against regions.json, so a
+        # stale models.json here silently regenerates the catalog against the old
+        # region set (the two inputs disagree on which tiles exist).
+        for f in Perch-v2-Models.models.json BirdNET-v3.0-Models.models.json; do
+          cp "$SRC/$f" "{{.GEN_MANIFESTS_DIR}}/$f"
+          echo "synced $f"
+        done
+        echo "Refreshed region snapshots and model manifests. Next: run"
+        echo "  go run ./gen -update-labels-checksums   (from internal/classifier; networked)"
+        echo "  go generate ./internal/classifier"
+        echo "and if tiers changed, update golden_tier_test.go."
+      - |
+        # Sync per-region coverage maps (SVG). The geometry is model-family-agnostic,
+        # so a tile's coverage.svg is byte-identical across families; we embed ONE set
+        # keyed by slug and cmp each primary map against its twin to enforce that
+        # invariant loudly (a future upstream divergence must fail here, not silently).
+        AM="{{.ACOUSTIC_MODELS_DIR}}"
+        PRIMARY="$AM/models/birdnet-v3.0-regional"
+        TWIN="$AM/models/perch-v2-regional"
+        if [ ! -d "$PRIMARY" ] || [ ! -d "$TWIN" ]; then
+          echo "regional model tree not found for both model families ($PRIMARY, $TWIN)" >&2
+          exit 1
+        fi
+        mkdir -p "{{.MAPS_DIR}}"
+        rm -f "{{.MAPS_DIR}}"/*.svg
+        count=0
+        for d in "$PRIMARY"/*/; do
+          slug="$(basename "$d")"
+          src="$d/coverage.svg"
+          [ -f "$src" ] || continue
+          twin="$TWIN/$slug/coverage.svg"
+          # The twin must exist AND be byte-identical: the slug-keyed embed serves
+          # one map per slug for both families, so a missing or divergent twin
+          # would silently break that invariant.
+          if [ ! -f "$twin" ]; then
+            echo "coverage.svg for '$slug' is missing from the Perch family; both families must ship it" >&2
+            exit 1
+          fi
+          if ! cmp -s "$src" "$twin"; then
+            echo "coverage.svg for '$slug' differs between families; the slug-keyed embed assumes they are identical" >&2
+            exit 1
+          fi
+          cp "$src" "{{.MAPS_DIR}}/$slug.svg"
+          count=$((count + 1))
+        done
+        echo "synced $count coverage maps"
 
   generate-species-dict:
     desc: Regenerate per-locale species dictionaries from the OpenFauna dataset
@@ -514,7 +620,7 @@ tasks:
         if ! command -v golangci-lint >/dev/null 2>&1; then
           echo "📥 Installing golangci-lint..."
           # Add timeout for install script download and execution
-          if ! timeout 120 bash -c "curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b \$(go env GOPATH)/bin v2.12.2"; then
+          if ! timeout 120 bash -c "curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b \$(go env GOPATH)/bin v2.13.2"; then
             echo "❌ Failed to install golangci-lint"
             echo "   Check your internet connection and try again"
             exit 1
@@ -1183,9 +1289,9 @@ tasks:
         mkdir -p {{.TFLITE_LIB_DIR}}
         # openvino adds the OpenVINO inference backend (dlopen'd at runtime, ORT
         # fallback); headers are provided by the check-openvino task above.
-        BUILD_TAGS=""
+        BUILD_TAGS="{{.BASE_BUILD_TAGS}}"
         if [ "{{.OPENVINO}}" = "true" ]; then
-          BUILD_TAGS="openvino"
+          BUILD_TAGS="${BUILD_TAGS:+${BUILD_TAGS},}openvino"
         fi
         # go-task exposes EXTRA_BUILD_TAGS as a template var, not a shell env var,
         # so read it via templating (works for both `task ... EXTRA_BUILD_TAGS=x`
@@ -1225,9 +1331,9 @@ tasks:
         fi
         # openvino adds the OpenVINO inference backend (dlopen'd at runtime, ORT
         # fallback); headers are provided by the check-openvino task above.
-        BUILD_TAGS=""
+        BUILD_TAGS="{{.BASE_BUILD_TAGS}}"
         if [ "{{.OPENVINO}}" = "true" ]; then
-          BUILD_TAGS="openvino"
+          BUILD_TAGS="${BUILD_TAGS:+${BUILD_TAGS},}openvino"
         fi
         # go-task exposes EXTRA_BUILD_TAGS as a template var, not a shell env var,
         # so read it via templating (works for both `task ... EXTRA_BUILD_TAGS=x`
@@ -1356,7 +1462,8 @@ tasks:
         {{else if .CC}}
         export CC={{.CC}}
         {{end}}
-        BUILD_TAGS="noembed"
+        BUILD_TAGS="{{.BASE_BUILD_TAGS}}"
+        BUILD_TAGS="${BUILD_TAGS:+${BUILD_TAGS},}noembed"
         # notflite produces an ONNX-only binary that does not link libtensorflowlite_c.
         if [ "{{.NOTFLITE}}" = "true" ]; then
           BUILD_TAGS="${BUILD_TAGS},notflite"

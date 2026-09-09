@@ -34,7 +34,15 @@ const cgroupV1UnlimitedThreshold int64 = 1 << 62
 // The cgroup check matters inside containers (e.g. Docker --memory=512m), where
 // host RAM reporting would otherwise mask the real limit.
 func DetectTotalMemory() int64 {
-	return effectiveTotal(hostTotalMemory(), detectCgroupLimit("/"))
+	return DetectTotalMemoryAt("/")
+}
+
+// DetectTotalMemoryAt is DetectTotalMemory with the filesystem root
+// parameterized so a caller can probe a fixture tree instead of the live
+// system. Host RAM still comes from the running kernel; only the cgroup limit
+// is read from under root.
+func DetectTotalMemoryAt(root string) int64 {
+	return effectiveTotal(hostTotalMemory(), detectCgroupLimit(root))
 }
 
 // hostTotalMemory returns total physical RAM in bytes via gopsutil, or 0 on error.
@@ -88,7 +96,12 @@ func detectCgroupLimit(root string) int64 {
 // found is true when any memory.max file exists (v2 is the active hierarchy); a
 // returned limit of 0 then means no limit is set at any level.
 func cgroupV2Limit(root, sub string) (limit int64, found bool) {
-	if sub == "" {
+	// The ancestor walk terminates on sub == "/", so a relative path would never
+	// reach it: path.Dir("docker/abc") descends to "." and then stays there,
+	// spinning on a ReadFile forever. The kernel always writes an absolute path
+	// on the "0::" line, but the root is caller-supplied, so anything that is
+	// not absolute is normalised to the mount root rather than trusted.
+	if sub == "" || !strings.HasPrefix(sub, "/") {
 		sub = "/"
 	}
 	for {

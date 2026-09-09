@@ -10,6 +10,7 @@ services:
       - BIRDNET_UID=${BIRDNET_UID:-1000}
       - BIRDNET_GID=${BIRDNET_GID:-1000}
       # - SKIP_CHOWN=true                            # Skip ownership changes at startup (for NFS mounts)
+      # - SKIP_DEVICE_PERMS=true                     # Skip /dev/snd and /dev/dri permission fixups
       # Optional: uncomment to configure via environment variables
       # BirdNET Configuration
       # - BIRDNET_LOCALE=en-us                      # Locale code (2-10 chars, e.g., "en" or "en-us")
@@ -64,7 +65,7 @@ services:
     # Add any host mappings needed
     extra_hosts:
       - "host.docker.internal:host-gateway"
- 
+
   # Optional: Add Cloudflared for secure internet access through Cloudflare Tunnel
   # cloudflared:
   #   image: cloudflare/cloudflared:latest
@@ -81,7 +82,7 @@ services:
   #   #   - ./cloudflared:/etc/cloudflared
   #   depends_on:
   #     - birdnet-go
-      
+
 volumes:
   config:
     driver: local

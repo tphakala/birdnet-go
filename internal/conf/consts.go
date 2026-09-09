@@ -5,10 +5,22 @@ import "time"
 
 const (
 	// Model IDs identify the inference backends available for detection.
-	ModelIDBirdNET = "birdnet"
-	ModelIDPerchV2 = "perch_v2"
-	ModelIDBat     = "bat"
-	ModelIDBSG     = "bsg"
+	ModelIDBirdNET   = "birdnet"
+	ModelIDBirdNETV3 = "birdnet_v3.0"
+	ModelIDPerchV2   = "perch_v2"
+	ModelIDBat       = "bat"
+	ModelIDBSG       = "bsg"
+
+	// Catalog-style model IDs mirror the hyphenated model *catalog* entry IDs
+	// (classifier/model_catalog.go) and are accepted as aliases for the canonical
+	// underscore IDs above, so a config that carries the catalog-style spelling
+	// still validates. Keep in sync with the secondary ConfigAliases in
+	// classifier/model_registry.go. See Sentry BIRDNET-GO-2FZ (a config with
+	// "perch-v2" was rejected as an unknown model ID).
+	ModelIDBirdNETCatalog   = "birdnet-v2.4"
+	ModelIDBirdNETV3Catalog = "birdnet-v3.0"
+	ModelIDPerchV2Catalog   = "perch-v2"
+	ModelIDBSGCatalog       = "bsg-finland"
 
 	SampleRate     = 48000 // Sample rate of the audio fed to BirdNET Analyzer
 	BitDepth       = 16    // Bit depth of the audio fed to BirdNET Analyzer
@@ -48,7 +60,42 @@ const (
 
 	// DefaultWeatherPollInterval is the default weather poll interval in minutes.
 	DefaultWeatherPollInterval = 60
+
+	// The viper defaults, named so defaults.go and the incomplete-feature
+	// normalization cannot drift apart. Most are applied by normalizeIncompleteFeatures
+	// when a feature is switched on and the field was left at its zero value;
+	// DefaultNotificationSuppressionHours is the exception, because zero is a legal
+	// value there rather than an unwritten one, so only viper uses it.
+	DefaultWebServerPort                = "8080"
+	DefaultTelemetryListen              = "0.0.0.0:8090"
+	DefaultSoundLevelInterval           = 10
+	DefaultDynamicThresholdValidHours   = 24
+	DefaultNewSpeciesWindowDays         = 7
+	DefaultSpeciesSyncIntervalMinutes   = 60
+	DefaultYearlyTrackingResetMonth     = 1
+	DefaultYearlyTrackingResetDay       = 1
+	DefaultYearlyTrackingWindowDays     = 7
+	DefaultSeasonalTrackingWindowDays   = 7
+	DefaultNotificationSuppressionHours = 168
+	DefaultAudioExportLength            = 15
+	DefaultAudioExportBitrate           = "96k"
+	DefaultNormalizationTargetLUFS      = -23.0
+	DefaultRetentionMaxAge              = "30d"
+	DefaultRetentionMaxUsage            = "80%"
+	DefaultRetryBackoffMultiplier       = 2.0
+
+	// DefaultEQQFactor is the Q factor applied to an equalizer filter whose q was
+	// never set. eqfilter_config.go offers it as the settings UI's default too, so a
+	// filter created in the UI and one repaired here get the same value. 0.707 is the
+	// conventional rounding of the Butterworth 1/sqrt(2).
+	DefaultEQQFactor = 0.707
 )
 
 // DefaultSessionDuration is the default session duration (7 days).
 const DefaultSessionDuration = 168 * time.Hour
+
+// The two runtime profiling sampling rates are NOT here, and not named Default*,
+// because they are not what an unset key resolves to: unset means off. They live
+// in profiling.go as RecommendedBlockProfileRate and
+// RecommendedMutexProfileFraction. This pointer exists because consts.go is
+// where a reader looks first.

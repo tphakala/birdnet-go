@@ -50,6 +50,67 @@ func TestBuildSourceConfigsWithModels_RTSPStreamCarriesGain(t *testing.T) {
 	assert.InDelta(t, 7.5, cfg.Gain, 1e-9, "per-stream gain should flow to the pipeline")
 }
 
+// TestBuildSourceConfigsWithModels_RTSPStreamCarriesTransport verifies the
+// per-stream transport flows from the config into the built RTSP SourceConfig,
+// so the initial stream start honors it rather than only the engine-wide
+// default (issue #4240).
+func TestBuildSourceConfigsWithModels_RTSPStreamCarriesTransport(t *testing.T) {
+	prev := conf.CloneSettings(conf.GetSettings())
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
+
+	settings := &conf.Settings{}
+	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
+		{
+			Name:      "udp-stream",
+			URL:       "rtsp://cam-udp",
+			Enabled:   true,
+			Type:      conf.StreamTypeRTSP,
+			Transport: transportUDP,
+			Models:    []string{"birdnet"},
+		},
+	}
+	conftest.SetTestSettings(settings)
+
+	p := &AudioPipelineService{}
+	configs := p.buildSourceConfigsWithModels()
+
+	require.Len(t, configs, 1)
+	cfg := findConfigByConnection(configs, "rtsp://cam-udp")
+	require.NotNil(t, cfg, "rtsp stream config should be present")
+	assert.Equal(t, transportUDP, cfg.Transport, "per-stream transport should flow to the pipeline")
+}
+
+// TestBuildSourceConfigsWithModels_RTSPStreamResolvesGlobalTransport verifies a
+// stream with no per-stream transport resolves to the global default in the built
+// config, so the pipeline diff and the engine agree on one concrete value even
+// when the global is not the built-in "tcp" default (issue #4240).
+func TestBuildSourceConfigsWithModels_RTSPStreamResolvesGlobalTransport(t *testing.T) {
+	prev := conf.CloneSettings(conf.GetSettings())
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
+
+	settings := &conf.Settings{}
+	settings.Realtime.RTSP.Transport = transportUDP // global default
+	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
+		{
+			Name:    "no-transport-stream",
+			URL:     "rtsp://cam-global",
+			Enabled: true,
+			Type:    conf.StreamTypeRTSP,
+			// Transport intentionally empty: must resolve to the global "udp".
+			Models: []string{"birdnet"},
+		},
+	}
+	conftest.SetTestSettings(settings)
+
+	p := &AudioPipelineService{}
+	configs := p.buildSourceConfigsWithModels()
+
+	require.Len(t, configs, 1)
+	cfg := findConfigByConnection(configs, "rtsp://cam-global")
+	require.NotNil(t, cfg, "rtsp stream config should be present")
+	assert.Equal(t, transportUDP, cfg.Transport, "unset per-stream transport must resolve to the global default")
+}
+
 // TestBuildSourceConfigsWithModels_StreamURLInAudioSources verifies that a
 // stream URL misplaced under audio.sources is emitted as a stream-typed
 // SourceConfig (not an ALSA audio card) with its gain carried.

@@ -25,6 +25,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/httpclient"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/notification"
@@ -221,6 +222,23 @@ func runStreamingIntegrationTest[T any](
 			writeMu.Lock()
 			defer writeMu.Unlock()
 
+			// Re-check under the lock before touching ctx. The handler may have
+			// returned (encode error or client disconnect) while we were blocked
+			// acquiring writeMu; on those paths it closes doneChan / cancels
+			// testCtx before releasing the lock, so observing either here means
+			// the handler has gone. Writing to ctx after the handler returns
+			// touches a recycled echo.Context/Response and races with the next
+			// request that reuses it (issue #4292 bug class).
+			select {
+			case <-doneChan:
+				c.Debug("HTTP client disconnected, skipping final result")
+				return
+			case <-testCtx.Done():
+				c.Debug("Test context cancelled: %v", testCtx.Err())
+				return
+			default:
+			}
+
 			finalResult := map[string]any{
 				"elapsed_time_ms": elapsedTime,
 				"state":           "completed",
@@ -257,9 +275,14 @@ func runStreamingIntegrationTest[T any](
 				logger.String("integration", integrationName),
 				logger.Error(err),
 			)
-			writeMu.Unlock()
+			// Signal shutdown BEFORE releasing writeMu so a worker goroutine
+			// blocked on writeMu.Lock() observes the closed doneChan (and the
+			// cancelled testCtx) once it acquires the lock, and skips its final
+			// write instead of touching the recycled ctx after this handler
+			// returns (issue #4292 bug class).
 			safeDoneClose()
 			cancel()
+			writeMu.Unlock()
 			drainResultChan()
 			return nil
 		}
@@ -270,8 +293,19 @@ func runStreamingIntegrationTest[T any](
 		select {
 		case <-httpCtx.Done():
 			c.Debug("HTTP client disconnected during %s test", integrationName)
+			// Signal shutdown under writeMu, mirroring the encode-error path
+			// above. Acquiring the lock blocks until any in-progress worker
+			// final write finishes (so ctx is not recycled mid-write), and it
+			// establishes the happens-before that makes a worker later blocked
+			// on writeMu.Lock() observe the closed doneChan and skip its write.
+			// Signalling after the unlock instead would leave a window where the
+			// worker touches the recycled ctx after this handler returns, since
+			// testCtx cancellation propagates from httpCtx only after httpCtx's
+			// own Done channel is already closed (issue #4292 bug class).
+			writeMu.Lock()
 			safeDoneClose()
 			cancel()
+			writeMu.Unlock()
 			drainResultChan()
 			return nil
 		default:
@@ -707,7 +741,7 @@ func (c *Handler) testWeatherAPIConnectivity(ctx context.Context, settings *conf
 		return "", fmt.Errorf("unsupported weather provider: %s", provider)
 	}
 
-	client := &http.Client{Timeout: integrationShortTimeout * time.Second}
+	client := httpclient.NewGuardedHTTPClient(integrationShortTimeout * time.Second)
 	req, err := http.NewRequestWithContext(ctx, "GET", testURL, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
@@ -741,7 +775,7 @@ func (c *Handler) testWeatherAuthentication(ctx context.Context, settings *conf.
 
 		testURL := fmt.Sprintf("%s?lat=0&lon=0&appid=%s", endpoint, apiKey)
 
-		client := &http.Client{Timeout: integrationShortTimeout * time.Second}
+		client := httpclient.NewGuardedHTTPClient(integrationShortTimeout * time.Second)
 		req, err := http.NewRequestWithContext(ctx, "GET", testURL, http.NoBody)
 		if err != nil {
 			// Scrub before wrapping: the *url.Error embeds testURL, which carries
@@ -779,14 +813,18 @@ func (c *Handler) testWeatherAuthentication(ctx context.Context, settings *conf.
 
 // testWeatherDataFetch tests fetching actual weather data
 func (c *Handler) testWeatherDataFetch(ctx context.Context, settings *conf.Settings) (string, error) {
+	// Inject the SSRF-guarded client so a user-configured OpenWeather/Wunderground
+	// endpoint cannot be pointed at link-local / cloud-metadata targets during the
+	// data-fetch test. Matches the guarded client the running service uses.
+	guarded := httpclient.NewGuardedHTTPClient(weather.RequestTimeout)
 	var provider weather.Provider
 	switch settings.Realtime.Weather.Provider {
 	case WeatherProviderYrno:
-		provider = weather.NewYrNoProvider(nil)
+		provider = weather.NewYrNoProvider(guarded)
 	case WeatherProviderOpenWeather:
-		provider = weather.NewOpenWeatherProvider(nil)
+		provider = weather.NewOpenWeatherProvider(guarded)
 	case WeatherProviderWunderground:
-		provider = weather.NewWundergroundProvider(nil)
+		provider = weather.NewWundergroundProvider(guarded)
 	default:
 		return "", fmt.Errorf("unsupported weather provider: %s", settings.Realtime.Weather.Provider)
 	}
@@ -993,7 +1031,7 @@ func (c *Handler) TestEBirdConnection(ctx echo.Context) error {
 
 // testEBirdConnectivity tests basic connectivity to the eBird API
 func (c *Handler) testEBirdConnectivity(ctx context.Context) (string, error) {
-	client := &http.Client{Timeout: integrationShortTimeout * time.Second}
+	client := httpclient.NewGuardedHTTPClient(integrationShortTimeout * time.Second)
 	req, err := http.NewRequestWithContext(ctx, "HEAD", "https://api.ebird.org/v2/ref/taxonomy/ebird", http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
@@ -1022,7 +1060,7 @@ func (c *Handler) testEBirdConnectivity(ctx context.Context) (string, error) {
 
 // testEBirdAuthentication tests authentication with the eBird API using a small taxonomy request
 func (c *Handler) testEBirdAuthentication(ctx context.Context, apiKey, locale string) (string, error) {
-	client := &http.Client{Timeout: integrationShortTimeout * time.Second}
+	client := httpclient.NewGuardedHTTPClient(integrationShortTimeout * time.Second)
 
 	url := fmt.Sprintf("https://api.ebird.org/v2/ref/taxonomy/ebird?fmt=json&cat=species&maxResults=1&locale=%s", neturl.QueryEscape(locale))
 

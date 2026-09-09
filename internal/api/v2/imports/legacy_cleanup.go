@@ -12,6 +12,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
+	"github.com/tphakala/birdnet-go/internal/formatutil"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"gorm.io/gorm"
@@ -404,7 +405,7 @@ func (c *Handler) StartLegacyCleanup(ctx echo.Context) error {
 		} else {
 			c.LogInfoIfEnabled("Legacy cleanup completed successfully",
 				logger.Int64("space_reclaimed_bytes", sizeBytes),
-				logger.String("space_reclaimed", formatBytes(sizeBytes)))
+				logger.String("space_reclaimed", formatutil.Bytes(sizeBytes)))
 			c.cleanupStatus.Set(CleanupStateCompleted, "", nil, sizeBytes)
 			c.sendCleanupNotification(true, sizeBytes, "")
 		}
@@ -602,11 +603,11 @@ func (c *Handler) sendCleanupNotification(success bool, spaceReclaimed int64, er
 	if success {
 		title = "Legacy Database Cleanup Complete"
 		body = fmt.Sprintf("Successfully removed legacy database. %s disk space reclaimed.",
-			formatBytes(spaceReclaimed))
+			formatutil.Bytes(spaceReclaimed))
 		priority = notification.PriorityMedium
 		titleKey = notification.MsgCleanupCompleteTitle
 		messageKey = notification.MsgCleanupCompleteMessage
-		messageParams = map[string]any{"space": formatBytes(spaceReclaimed)}
+		messageParams = map[string]any{"space": formatutil.Bytes(spaceReclaimed)}
 	} else {
 		title = "Legacy Database Cleanup Failed"
 		body = fmt.Sprintf("Failed to remove legacy database: %s", errMsg)
@@ -629,18 +630,4 @@ func (c *Handler) sendCleanupNotification(success bool, spaceReclaimed int64, er
 	if err := notifService.CreateWithMetadata(notif); err != nil {
 		c.LogWarnIfEnabled("Failed to send cleanup notification", logger.Error(err))
 	}
-}
-
-// formatBytes converts bytes to human-readable format.
-func formatBytes(bytes int64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }

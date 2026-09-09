@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 )
 
 func TestExtractErrorContext_ConnectionTimeout(t *testing.T) {
@@ -96,7 +98,7 @@ func TestExtractErrorContext_EmptyString(t *testing.T) {
 }
 
 func TestFormatForConsole(t *testing.T) {
-	ctx := &ErrorContext{
+	ctx := &audiocore.StreamErrorContext{
 		ErrorType:      "connection_timeout",
 		PrimaryMessage: "Connection timed out",
 		TargetHost:     "192.168.1.1",
@@ -149,7 +151,7 @@ func TestFormatForConsole(t *testing.T) {
 
 // TestFormatForConsole_NoTroubleshooting tests formatting when no troubleshooting steps are provided.
 func TestFormatForConsole_NoTroubleshooting(t *testing.T) {
-	ctx := &ErrorContext{
+	ctx := &audiocore.StreamErrorContext{
 		ErrorType:       "unknown",
 		PrimaryMessage:  "Unknown error",
 		UserFacingMsg:   "An unknown error occurred",
@@ -193,7 +195,7 @@ func TestErrorContext_ShouldOpenCircuit(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.description, func(t *testing.T) {
-			ctx := &ErrorContext{ErrorType: tt.errorType}
+			ctx := &audiocore.StreamErrorContext{ErrorType: tt.errorType}
 			assert.Equal(t, tt.shouldOpen, ctx.ShouldOpenCircuit(), tt.description)
 		})
 	}
@@ -221,7 +223,7 @@ func TestErrorContext_ShouldRestart(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.description, func(t *testing.T) {
-			ctx := &ErrorContext{ErrorType: tt.errorType}
+			ctx := &audiocore.StreamErrorContext{ErrorType: tt.errorType}
 			assert.Equal(t, tt.shouldRestart, ctx.ShouldRestart(), tt.description)
 		})
 	}
@@ -481,15 +483,17 @@ Error opening input file rtsp://user:p@ssw0rd!@host.local:8554/live`,
 			require.NotNil(t, ctx, "Expected error context, got nil")
 			assert.Equal(t, tt.expectedType, ctx.ErrorType)
 
-			// Check that RawFFmpegOutput is sanitized.
-			assert.NotContains(t, ctx.RawFFmpegOutput, "password", "RawFFmpegOutput contains unsanitized 'password'")
-			assert.NotContains(t, ctx.RawFFmpegOutput, "secret", "RawFFmpegOutput contains unsanitized 'secret'")
-			assert.NotContains(t, ctx.RawFFmpegOutput, "p@ssw0rd", "RawFFmpegOutput contains unsanitized 'p@ssw0rd'")
+			// Check that RawProducerOutput is sanitized.
+			assert.NotContains(t, ctx.RawProducerOutput, "password", "RawProducerOutput contains unsanitized 'password'")
+			assert.NotContains(t, ctx.RawProducerOutput, "secret", "RawProducerOutput contains unsanitized 'secret'")
+			assert.NotContains(t, ctx.RawProducerOutput, "p@ssw0rd", "RawProducerOutput contains unsanitized 'p@ssw0rd'")
 
-			// Check that credentials should be replaced with ***.
-			if !strings.Contains(ctx.RawFFmpegOutput, "***") {
-				t.Log("Note: RawFFmpegOutput should contain *** placeholders for credentials")
-			}
+			// SanitizeFFmpegError strips the user:pass@ credentials from the URL
+			// rather than masking them, so the sanitized output keeps the scheme
+			// and host but not the secret. Assert the URL line survived as a
+			// non-vacuous positive control for the credential-absence checks above.
+			assert.Contains(t, ctx.RawProducerOutput, "rtsp://",
+				"sanitized output should retain the stream URL, not be emptied")
 
 			// Check TargetHost is clean.
 			if tt.checkHost {

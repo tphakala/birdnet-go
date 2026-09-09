@@ -744,7 +744,7 @@ func TestGetByHour_PaginationHonored(t *testing.T) {
 	repo := &detectionRepository{db: db}
 
 	const hourStart = int64(1_700_000_000)
-	for i := int64(0); i < 5; i++ {
+	for i := range int64(5) {
 		createTestDetection(t, db, hourStart+i*60)
 	}
 

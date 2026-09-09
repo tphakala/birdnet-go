@@ -155,7 +155,7 @@ func (m *ActionMockDatastore) GetAllNotes() ([]datastore.Note, error) {
 func (m *ActionMockDatastore) GetTopBirdsData(_ context.Context, _ string, _ float64, _ int) ([]datastore.Note, error) {
 	return nil, nil
 }
-func (m *ActionMockDatastore) GetBatchHourlyOccurrences(_ context.Context, _ string, _ []string, _ float64) (map[string][24]int, error) {
+func (m *ActionMockDatastore) GetBatchHourlyOccurrences(_ context.Context, _, _ string, _ []string, _ float64) (map[string][24]int, error) {
 	return make(map[string][24]int), nil
 }
 func (m *ActionMockDatastore) SpeciesDetections(_, _, _ string, _ int, _ bool, _, _ int) ([]datastore.Note, error) {
@@ -329,7 +329,7 @@ func (m *ActionMockDatastore) SearchDetections(_ *datastore.SearchFilters) ([]da
 func (m *ActionMockDatastore) SaveDynamicThreshold(_ *datastore.DynamicThreshold) error {
 	return nil
 }
-func (m *ActionMockDatastore) GetDynamicThreshold(_, _ string) (*datastore.DynamicThreshold, error) {
+func (m *ActionMockDatastore) GetDynamicThreshold(_ string) (*datastore.DynamicThreshold, error) {
 	// Returns ErrNoteReviewNotFound as a generic "not found" sentinel.
 	// This stub method is not exercised by action execution tests.
 	return nil, datastore.ErrNoteReviewNotFound

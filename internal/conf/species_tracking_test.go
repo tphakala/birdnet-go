@@ -57,6 +57,46 @@ func TestSpeciesTrackingSettings_Validate(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "infrequent tracking enabled with valid absence days",
+			settings: SpeciesTrackingSettings{
+				Enabled:              true,
+				NewSpeciesWindowDays: 14,
+				SyncIntervalMinutes:  60,
+				InfrequentTracking:   InfrequentTrackingSettings{Enabled: true, AbsenceDays: 14},
+			},
+			wantErr: false,
+		},
+		{
+			name: "infrequent absence days too small",
+			settings: SpeciesTrackingSettings{
+				Enabled:              true,
+				NewSpeciesWindowDays: 14,
+				SyncIntervalMinutes:  60,
+				InfrequentTracking:   InfrequentTrackingSettings{Enabled: true, AbsenceDays: 0},
+			},
+			wantErr: true,
+		},
+		{
+			name: "infrequent absence days too large",
+			settings: SpeciesTrackingSettings{
+				Enabled:              true,
+				NewSpeciesWindowDays: 14,
+				SyncIntervalMinutes:  60,
+				InfrequentTracking:   InfrequentTrackingSettings{Enabled: true, AbsenceDays: 366},
+			},
+			wantErr: true,
+		},
+		{
+			name: "infrequent disabled skips absence-days validation",
+			settings: SpeciesTrackingSettings{
+				Enabled:              true,
+				NewSpeciesWindowDays: 14,
+				SyncIntervalMinutes:  60,
+				InfrequentTracking:   InfrequentTrackingSettings{Enabled: false, AbsenceDays: 0},
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {

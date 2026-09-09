@@ -150,6 +150,8 @@ func buildRangeFilterSpecies(scores []classifier.SpeciesScore, resolveName func(
 			ScientificName: detection.ExtractScientificName(s.Label),
 			Score:          &score,
 		}
+		entry.HasCustomConfig = trueOrOmitted(s.HasCustomConfig)
+		entry.IsManuallyIncluded = trueOrOmitted(s.IsManuallyIncluded)
 		if resolveName != nil {
 			entry.CommonName = resolveName(s.Label)
 		}
@@ -221,18 +223,46 @@ func dedupeSpeciesForDisplay(species []dto.RangeFilterSpecies) []dto.RangeFilter
 			continue
 		}
 		if idx, ok := indexByKey[key]; ok {
+			// The badge flags are unioned across the collapsed rows, independently
+			// of which row wins on score. Only the label the user's override
+			// resolved to carries the flag, and that is not necessarily the
+			// highest-scored variant: two taxonomic synonyms localize to one common
+			// name here, so the surviving row would otherwise silently drop the
+			// "Configured" badge its twin was carrying.
+			hasCustomConfig := isTrue(sp.HasCustomConfig) || isTrue(deduped[idx].HasCustomConfig)
+			isManuallyIncluded := isTrue(sp.IsManuallyIncluded) || isTrue(deduped[idx].IsManuallyIncluded)
+
 			if speciesScoreHigher(sp, deduped[idx]) {
 				// Preserve the first occurrence's position, but surface the
 				// higher-scored variant (defensive: the input is already sorted
 				// score-descending, so this rarely triggers).
 				deduped[idx] = sp
 			}
+			deduped[idx].HasCustomConfig = trueOrOmitted(hasCustomConfig)
+			deduped[idx].IsManuallyIncluded = trueOrOmitted(isManuallyIncluded)
 			continue
 		}
 		indexByKey[key] = len(deduped)
 		deduped = append(deduped, sp)
 	}
 	return deduped
+}
+
+// trueOrOmitted encodes an optional badge flag for the wire. The flags are
+// absent-or-true: a false is returned as nil so omitempty drops the field
+// entirely, which is what lets an older client (and the current one, via its
+// nullish-coalescing fallback) tell "this backend did not resolve provenance"
+// apart from "this species has none".
+func trueOrOmitted(b bool) *bool {
+	if !b {
+		return nil
+	}
+	return new(true)
+}
+
+// isTrue reports whether an optional badge flag is present and set.
+func isTrue(b *bool) bool {
+	return b != nil && *b
 }
 
 // speciesScoreHigher reports whether a has a strictly higher score than b. A nil

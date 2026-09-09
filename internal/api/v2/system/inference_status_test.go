@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/inferencestats"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/hwprofile"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
@@ -45,7 +47,7 @@ func TestBuildSourceAttachments(t *testing.T) {
 		{Name: "Cam1", Type: "rtsp", Models: []string{"unknown_model"}}, // unresolved: falls back to primary
 	}
 
-	got := buildSourceAttachments(settings, models, primaryID)
+	got := buildSourceAttachments(settings, models, primaryID, nil)
 
 	// Perch_V2 should have exactly Front Yard, attached without fallback.
 	perch := got[classifier.RegistryIDPerchV2]
@@ -82,7 +84,7 @@ func TestBuildSourceAttachments_ResolvesButNotLoaded(t *testing.T) {
 		{Name: "Studio", Models: []string{conf.ModelIDPerchV2}},
 	}
 
-	got := buildSourceAttachments(settings, models, primaryID)
+	got := buildSourceAttachments(settings, models, primaryID, nil)
 
 	// Perch_V2 should have NO attachments (not loaded).
 	perch := got[classifier.RegistryIDPerchV2]
@@ -118,7 +120,7 @@ func TestBuildSourceAttachments_MultiModelSourceAttachesAll(t *testing.T) {
 		{Name: "Äänikortti", Models: []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2, conf.ModelIDBat}},
 	}
 
-	got := buildSourceAttachments(settings, models, primaryID)
+	got := buildSourceAttachments(settings, models, primaryID, nil)
 
 	// Every assigned, loaded model must show the source, none as a fallback.
 	for _, id := range []string{primaryID, classifier.RegistryIDPerchV2, classifier.RegistryIDBat} {
@@ -207,9 +209,10 @@ func TestApplyRuntimeBackend(t *testing.T) {
 }
 
 // TestGetInferenceStatus_HTTP200 verifies that GetInferenceStatus returns HTTP
-// 200 and a valid InferenceStatusResponse with TFLite marked available. It uses
-// an apitest.NewCore-backed Handler over httptest to exercise the handler
-// without starting any background goroutines.
+// 200 and a valid InferenceStatusResponse whose TFLite backend availability
+// tracks the compiled-in state (true by default, false under the notflite build
+// tag). It uses an apitest.NewCore-backed Handler over httptest to exercise the
+// handler without starting any background goroutines.
 func TestGetInferenceStatus_HTTP200(t *testing.T) {
 	// NOT parallel: apitest.NewCore publishes settings to the process-global snapshot.
 	e := echo.New()
@@ -224,7 +227,7 @@ func TestGetInferenceStatus_HTTP200(t *testing.T) {
 
 	var resp InferenceStatusResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp), "response body must unmarshal to InferenceStatusResponse")
-	assert.True(t, resp.Backends.TFLite.Available, "TFLite backend must always report Available=true")
+	assert.Equal(t, hwprofile.TFLiteLinked(), resp.Backends.TFLite.Available, "TFLite backend availability must match the compiled-in state (false under the notflite build tag)")
 	assert.NotZero(t, resp.SnapshotAtUnix, "SnapshotAtUnix must be a non-zero Unix timestamp")
 }
 
@@ -255,6 +258,57 @@ func TestGetInferenceStatus_AudioBlock(t *testing.T) {
 	assert.Equal(t, audiocore.RouteInboxCapacity, resp.Audio.QueueCapacity,
 		"audio.queueCapacity must equal RouteInboxCapacity")
 	assert.GreaterOrEqual(t, resp.Audio.QueueDepth, 0, "audio.queueDepth must be non-negative")
+}
+
+// TestVADStatusInfo_JSONContract pins the wire field names of the VAD block and
+// the omitempty behaviour the frontend InferenceVAD type depends on.
+func TestVADStatusInfo_JSONContract(t *testing.T) {
+	t.Parallel()
+
+	loaded := VADStatusInfo{
+		Enabled:     true,
+		Available:   true,
+		Loaded:      true,
+		Threshold:   0.35,
+		ModelSource: "embedded",
+		Strategy:    "sequence",
+		SampleRate:  16000,
+		Stats: VADStatsInfo{
+			Invocations: 42,
+			AvgMs:       2.5,
+			MaxMs:       9.1,
+			SpeechHits:  3,
+		},
+		LastSpeechAtUnix:      1_700_000_000,
+		LastSpeechProbability: 0.87,
+		RecentHits: []VADHitInfo{
+			{AtUnix: 1_700_000_000, Probability: 0.87, Source: "Front Yard"},
+		},
+	}
+	raw, err := json.Marshal(loaded)
+	require.NoError(t, err)
+	for _, key := range []string{
+		`"enabled":true`, `"available":true`, `"loaded":true`, `"threshold":0.35`,
+		`"modelSource":"embedded"`, `"strategy":"sequence"`, `"sampleRate":16000`,
+		`"invocations":42`, `"avgMs":2.5`, `"maxMs":9.1`, `"speechHits":3`,
+		`"lastSpeechAtUnix":1700000000`, `"lastSpeechProbability":0.87`,
+		`"recentHits":[`, `"atUnix":1700000000`, `"probability":0.87`, `"source":"Front Yard"`,
+	} {
+		assert.Contains(t, string(raw), key, "VAD JSON must carry %s", key)
+	}
+
+	// A disabled/unloaded gate omits the optional descriptors so the panel renders
+	// a clean "disabled" state without stale strategy/source/last-speech values.
+	off := VADStatusInfo{Enabled: false, Available: false}
+	rawOff, err := json.Marshal(off)
+	require.NoError(t, err)
+	for _, absent := range []string{"modelSource", "strategy", "sampleRate", "lastSpeechAtUnix", "lastSpeechProbability"} {
+		assert.NotContains(t, string(rawOff), absent, "disabled VAD must omit %s", absent)
+	}
+	// The pointer field on the parent response omits entirely when nil.
+	rawResp, err := json.Marshal(InferenceStatusResponse{})
+	require.NoError(t, err)
+	assert.NotContains(t, string(rawResp), `"vad"`, "nil VAD must be omitted so the panel hides")
 }
 
 // TestBuildModelStatus_MetricKeys verifies that buildModelStatus populates
@@ -417,4 +471,396 @@ func TestSortInferenceModelsByName(t *testing.T) {
 func TestEventInferenceTopologyChangedNameContract(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, eventInferenceTopologyChangedName, eventInferenceTopologyChanged)
+}
+
+// TestBuildHardwareInfo verifies the mapping from a hardware profile onto the
+// API payload, including the two shapes that decide whether a field appears at
+// all: a board is reported only when the device tree named one, and an
+// accelerator list is reported only when a GPU was found.
+func TestBuildHardwareInfo(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		profile hwprofile.Profile
+		assert  func(t *testing.T, info HardwareInfo)
+	}{
+		{
+			name: "raspberry pi 5 reports its board and tier",
+			profile: hwprofile.Profile{
+				Arch:          "arm64",
+				CPUArch:       "aarch64",
+				CPUModel:      "Cortex-A76",
+				PhysicalCores: 4,
+				TotalRAMBytes: 4 * 1024 * 1024 * 1024,
+				HasNativeF16:  true,
+				Board: hwprofile.Board{
+					Kind:  hwprofile.BoardRaspberryPi,
+					Model: "Raspberry Pi 5 Model B Rev 1.0",
+					SoC:   "bcm2712",
+					Tier:  hwprofile.TierPi5,
+				},
+				Backends: hwprofile.Backends{TFLite: hwprofile.BackendStatus{Available: true}},
+			},
+			assert: func(t *testing.T, info HardwareInfo) {
+				t.Helper()
+				assert.Equal(t, "aarch64", info.Arch)
+				assert.Equal(t, "Cortex-A76", info.CPUModel)
+				assert.True(t, info.FP16)
+				assert.Equal(t, 4, info.PhysicalCores)
+				require.NotNil(t, info.Board)
+				assert.Equal(t, hwprofile.TierPi5, info.Board.Tier)
+				assert.Equal(t, "bcm2712", info.Board.SoC)
+				assert.Nil(t, info.Accelerators)
+				assert.Equal(t,
+					[]string{hwprofile.CapAArch64, hwprofile.CapAArch64A76, hwprofile.CapTFLite, hwprofile.CapFP16Native},
+					info.Capabilities)
+			},
+		},
+		{
+			name: "generic amd64 host reports no board but does report its gpu",
+			profile: hwprofile.Profile{
+				Arch:          "amd64",
+				CPUArch:       "x86_64",
+				PhysicalCores: 8,
+				Board:         hwprofile.Board{Kind: hwprofile.BoardGeneric},
+				Backends:      hwprofile.Backends{TFLite: hwprofile.BackendStatus{Available: true}},
+				Accelerators: []hwprofile.Accelerator{{
+					Kind:       hwprofile.AcceleratorIGPU,
+					Vendor:     hwprofile.VendorIntel,
+					Name:       "Intel Graphics [8086:46a6]",
+					Generation: 12,
+					Reasons:    []string{hwprofile.ReasonRenderNodeUnavailable},
+				}},
+			},
+			assert: func(t *testing.T, info HardwareInfo) {
+				t.Helper()
+				// A "generic" board row would tell the user nothing, so it is
+				// omitted rather than sent empty.
+				assert.Nil(t, info.Board)
+				require.Len(t, info.Accelerators, 1)
+				assert.False(t, info.Accelerators[0].Accessible)
+				assert.Equal(t,
+					[]string{hwprofile.ReasonRenderNodeUnavailable},
+					info.Accelerators[0].Reasons,
+					"every blocker must survive the mapping, not just the first")
+				// Fields the earlier mapping silently dropped.
+				assert.Equal(t, hwprofile.AcceleratorIGPU, info.Accelerators[0].Kind)
+				assert.Equal(t, hwprofile.VendorIntel, info.Accelerators[0].Vendor)
+				assert.Equal(t, "Intel Graphics [8086:46a6]", info.Accelerators[0].Name)
+			},
+		},
+		{
+			name:    "an unprobed profile produces an empty payload rather than wrong values",
+			profile: hwprofile.Profile{},
+			assert: func(t *testing.T, info HardwareInfo) {
+				t.Helper()
+				assert.Nil(t, info.Board)
+				assert.Nil(t, info.Accelerators)
+				assert.Zero(t, info.TotalRAMBytes)
+				assert.Zero(t, info.PhysicalCores)
+				assert.Empty(t, info.Capabilities)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			info := buildHardwareInfo(tt.profile, "Docker")
+
+			assert.Equal(t, "Docker", info.Environment, "environment always comes from the caller")
+			tt.assert(t, info)
+		})
+	}
+}
+
+// TestHardwareInfo_JSONContract pins the wire names. The first four fields
+// predate the hardware profile and the frontend already reads them, so the
+// extension has to be additive: renaming or retyping any of them is a breaking
+// change this test is here to catch.
+// TestGetInferenceStatus_TFLiteFollowsTheBuildTag pins the endpoint to the
+// compile-time fact rather than a hardcoded true. Hardcoding it fed straight
+// into capability derivation, which would have offered a notflite build models
+// it cannot execute.
+func TestGetInferenceStatus_TFLiteFollowsTheBuildTag(t *testing.T) {
+	t.Parallel()
+
+	e := echo.New()
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(httptest.NewRequest(http.MethodGet, "/api/v2/system/inference", http.NoBody), rec)
+	h := &Handler{Core: apitest.NewCore(t)}
+
+	require.NoError(t, h.GetInferenceStatus(ctx))
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp InferenceStatusResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, hwprofile.TFLiteLinked(), resp.Backends.TFLite.Available)
+	assert.Equal(t, hwprofile.TFLiteLinked(),
+		slices.Contains(resp.Hardware.Capabilities, hwprofile.CapTFLite),
+		"the capability token must agree with the backend the build actually links")
+}
+
+func TestHardwareInfo_JSONContract(t *testing.T) {
+	t.Parallel()
+
+	info := HardwareInfo{
+		Arch:          "x86_64",
+		CPUModel:      "12th Gen Intel(R) Core(TM) i7-1260P",
+		Environment:   "Docker",
+		FP16:          false,
+		TotalRAMBytes: 32 * 1024 * 1024 * 1024,
+		PhysicalCores: 12,
+		Capabilities:  []string{"x86-64", "tflite"},
+		Board:         &BoardInfo{Kind: "raspberry-pi", Model: "Raspberry Pi 5 Model B Rev 1.0", SoC: "bcm2712", Tier: "pi5"},
+		Accelerators: []AcceleratorInfo{{
+			Kind:       "igpu",
+			Vendor:     "intel",
+			Name:       "Intel Graphics [8086:46a6]",
+			Accessible: false,
+			Reasons:    []string{"render-node-unavailable"},
+		}},
+	}
+
+	raw, err := json.Marshal(info)
+	require.NoError(t, err)
+	var m map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(raw, &m))
+
+	for _, key := range []string{"arch", "cpuModel", "environment", "fp16"} {
+		require.Contains(t, m, key, "pre-existing key %q must keep its name", key)
+	}
+	assert.JSONEq(t, `"x86_64"`, string(m["arch"]))
+	assert.JSONEq(t, `false`, string(m["fp16"]))
+
+	for _, key := range []string{"board", "accelerators", "totalRamBytes", "physicalCores", "capabilities"} {
+		require.Contains(t, m, key, "added key %q missing", key)
+	}
+	assert.JSONEq(t, `{"kind":"raspberry-pi","model":"Raspberry Pi 5 Model B Rev 1.0","soc":"bcm2712","tier":"pi5"}`, string(m["board"]))
+	assert.JSONEq(t, `[{"kind":"igpu","vendor":"intel","name":"Intel Graphics [8086:46a6]","accessible":false,"reasons":["render-node-unavailable"]}]`, string(m["accelerators"]))
+
+	// An unprobed host omits every added key, so a client that only knows the
+	// original four fields sees exactly the payload it saw before.
+	rawEmpty, err := json.Marshal(HardwareInfo{Arch: "x86_64", Environment: "Bare Metal"})
+	require.NoError(t, err)
+	var empty map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(rawEmpty, &empty))
+	for _, key := range []string{"board", "accelerators", "totalRamBytes", "physicalCores", "capabilities"} {
+		assert.NotContains(t, empty, key, "added key %q must be omitted when unset", key)
+	}
+}
+
+// TestBuildSourceAttachments_LiveRouterState verifies that the status view
+// reports what the audio router is actually doing rather than what the config
+// asks for. A model that is loaded and assigned but that receives no audio must
+// be marked NotRunning instead of being presented as running: reporting it as
+// running is what hid the model-loading failure behind GitHub #4201 and #4204
+// for days.
+func TestBuildSourceAttachments_LiveRouterState(t *testing.T) {
+	t.Parallel()
+
+	const primaryID = classifier.DefaultModelVersion
+	models := []classifier.ModelInfo{
+		{ID: primaryID},
+		{ID: classifier.RegistryIDPerchV2},
+	}
+
+	settings := &conf.Settings{}
+	settings.Realtime.Audio.Sources = []conf.AudioSourceConfig{
+		{Name: "Front Yard", Models: []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2}},
+	}
+
+	t.Run("assigned but not routed is marked not running", func(t *testing.T) {
+		t.Parallel()
+
+		// The router feeds only BirdNET, though the config assigns Perch too.
+		running := map[string]map[string]bool{
+			"Front Yard": {primaryID: true},
+		}
+
+		got := buildSourceAttachments(settings, models, primaryID, running)
+
+		perch := got[classifier.RegistryIDPerchV2]
+		require.Len(t, perch, 1)
+		assert.True(t, perch[0].NotRunning,
+			"a model that receives no audio must not be reported as running")
+
+		prim := got[primaryID]
+		require.Len(t, prim, 1)
+		assert.False(t, prim[0].NotRunning, "BirdNET really is routed")
+		assert.False(t, prim[0].Fallback,
+			"BirdNET is genuinely assigned here, so it is not a fallback attachment")
+	})
+
+	t.Run("routed models are reported as running", func(t *testing.T) {
+		t.Parallel()
+
+		running := map[string]map[string]bool{
+			"Front Yard": {primaryID: true, classifier.RegistryIDPerchV2: true},
+		}
+
+		got := buildSourceAttachments(settings, models, primaryID, running)
+
+		perch := got[classifier.RegistryIDPerchV2]
+		require.Len(t, perch, 1)
+		assert.False(t, perch[0].NotRunning)
+	})
+
+	t.Run("assigned models loaded but idle do not invent a primary fallback", func(t *testing.T) {
+		t.Parallel()
+
+		// The source is known to the router but has no analysis buffers at all, so
+		// both assigned models are idle. Both still resolve to LOADED models, so the
+		// runtime does NOT fall back to the primary: registerConsumersForSources
+		// falls back only when a source resolves to no loaded target. The status
+		// must not invent a fallback row the runtime never creates.
+		running := map[string]map[string]bool{"Front Yard": {}}
+
+		got := buildSourceAttachments(settings, models, primaryID, running)
+
+		prim := got[primaryID]
+		require.Len(t, prim, 1, "only the genuine BirdNET assignment, no invented fallback row")
+		assert.True(t, prim[0].NotRunning, "BirdNET is assigned but idle")
+		assert.False(t, prim[0].Fallback,
+			"BirdNET is a genuine assignment here, not a runtime fallback")
+
+		perch := got[classifier.RegistryIDPerchV2]
+		require.Len(t, perch, 1)
+		assert.True(t, perch[0].NotRunning, "Perch is assigned but idle")
+	})
+
+	t.Run("nil live state keeps the config-derived view unmarked", func(t *testing.T) {
+		t.Parallel()
+
+		got := buildSourceAttachments(settings, models, primaryID, nil)
+
+		perch := got[classifier.RegistryIDPerchV2]
+		require.Len(t, perch, 1)
+		assert.False(t, perch[0].NotRunning,
+			"without live evidence nothing may be claimed to be broken")
+	})
+
+	t.Run("source absent from a non-nil running map stays unmarked", func(t *testing.T) {
+		t.Parallel()
+
+		// running is non-nil but does not contain "Front Yard": the branch a
+		// DisplayName collision or an omitted (empty-buffer) source lands in. Without
+		// live evidence for THIS source, nothing may be marked not running, even
+		// though live evidence exists for a different source.
+		running := map[string]map[string]bool{"A Different Source": {primaryID: true}}
+
+		got := buildSourceAttachments(settings, models, primaryID, running)
+
+		perch := got[classifier.RegistryIDPerchV2]
+		require.Len(t, perch, 1)
+		assert.False(t, perch[0].NotRunning,
+			"a source absent from a non-nil running map has no live evidence")
+
+		prim := got[primaryID]
+		require.Len(t, prim, 1)
+		assert.False(t, prim[0].NotRunning)
+	})
+}
+
+// TestBuildSourceAttachments_RTSPStream covers an RTSP stream source (the
+// reporters run RTSP; only audio.sources were covered before). An assigned model
+// that the router does not feed for the stream is marked NotRunning.
+func TestBuildSourceAttachments_RTSPStream(t *testing.T) {
+	t.Parallel()
+
+	const primaryID = classifier.DefaultModelVersion
+	models := []classifier.ModelInfo{
+		{ID: primaryID},
+		{ID: classifier.RegistryIDPerchV2},
+	}
+
+	settings := &conf.Settings{}
+	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
+		{Name: "Cam1", Type: "rtsp", Models: []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2}},
+	}
+
+	// The router feeds only BirdNET for this stream; Perch is assigned but idle.
+	running := map[string]map[string]bool{"Cam1": {primaryID: true}}
+
+	got := buildSourceAttachments(settings, models, primaryID, running)
+
+	perch := got[classifier.RegistryIDPerchV2]
+	require.Len(t, perch, 1)
+	assert.Equal(t, "Cam1", perch[0].Name)
+	assert.Equal(t, "rtsp", perch[0].Type)
+	assert.True(t, perch[0].NotRunning, "the assigned but unrouted Perch model on the RTSP stream")
+
+	prim := got[primaryID]
+	require.Len(t, prim, 1)
+	assert.False(t, prim[0].NotRunning, "BirdNET is genuinely routed for the stream")
+}
+
+// TestBuildSourceAttachments_FallbackRowCarriesLiveness pins that the
+// primary-fallback attachment is subject to the same liveness verdict as an
+// explicitly assigned row. A source that resolves to no loaded target is
+// analyzed by the primary model, so if the primary's own analysis buffer is
+// absent the source is not being analyzed at all. Reporting that row as healthy
+// reproduces the "looks running while analyzing nothing" state this endpoint
+// exists to remove, just on the fallback branch. Caught on PR review.
+func TestBuildSourceAttachments_FallbackRowCarriesLiveness(t *testing.T) {
+	t.Parallel()
+
+	const primaryID = classifier.DefaultModelVersion
+	// Only the primary is loaded, so a source assigning Perch resolves to nothing
+	// and takes the primary-fallback branch.
+	models := []classifier.ModelInfo{{ID: primaryID}}
+
+	settings := &conf.Settings{}
+	settings.Realtime.Audio.Sources = []conf.AudioSourceConfig{
+		{Name: "Front Yard", Models: []string{conf.ModelIDPerchV2}},
+	}
+
+	t.Run("fallback row is marked not running when the primary has no buffer", func(t *testing.T) {
+		t.Parallel()
+
+		// The router knows this source and feeds some other model on it, but not the
+		// primary, so live evidence exists and it says the primary is not fed.
+		running := map[string]map[string]bool{
+			"Front Yard": {"SomeOtherModel": true},
+		}
+
+		got := buildSourceAttachments(settings, models, primaryID, running)
+
+		prim := got[primaryID]
+		require.Len(t, prim, 1)
+		assert.True(t, prim[0].Fallback, "this row is the primary fallback")
+		assert.True(t, prim[0].NotRunning,
+			"the primary analyzes this source, so an absent primary buffer means it is not analyzing")
+	})
+
+	t.Run("fallback row is running when the primary is routed", func(t *testing.T) {
+		t.Parallel()
+
+		running := map[string]map[string]bool{
+			"Front Yard": {primaryID: true},
+		}
+
+		got := buildSourceAttachments(settings, models, primaryID, running)
+
+		prim := got[primaryID]
+		require.Len(t, prim, 1)
+		assert.True(t, prim[0].Fallback)
+		assert.False(t, prim[0].NotRunning,
+			"the primary really is routed for this source")
+	})
+
+	t.Run("fallback row makes no claim without live evidence", func(t *testing.T) {
+		t.Parallel()
+
+		// A nil router map means the pipeline has not reported yet. Absence of
+		// evidence must not be rendered as a failure.
+		got := buildSourceAttachments(settings, models, primaryID, nil)
+
+		prim := got[primaryID]
+		require.Len(t, prim, 1)
+		assert.True(t, prim[0].Fallback)
+		assert.False(t, prim[0].NotRunning,
+			"with no live evidence the row must not assert that the model is failing")
+	})
 }

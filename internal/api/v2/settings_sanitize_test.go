@@ -53,8 +53,7 @@ func settingsWithSecrets(t *testing.T) *conf.Settings {
 	// eBird
 	s.Realtime.EBird.APIKey = "ebird-api-key-789"
 
-	// Backup encryption
-	s.Backup.EncryptionKey = "base64-encryption-key"
+	// Backup target credentials
 	s.Backup.Targets = []conf.BackupTarget{
 		{
 			Type:    "ftp",
@@ -101,6 +100,8 @@ func settingsWithSecrets(t *testing.T) *conf.Settings {
 		},
 	}
 
+	s.Diagnostics.Profiling.Token = "diagnostics-token-secret"
+
 	return s
 }
 
@@ -145,8 +146,10 @@ func TestSanitizeSettingsForAPI_RedactsAllSecrets(t *testing.T) {
 	// --- eBird ---
 	assert.Equal(t, redactedValue, sanitized.Realtime.EBird.APIKey, "ebird.apiKey must be redacted")
 
+	// --- Diagnostics ---
+	assert.Equal(t, redactedValue, sanitized.Diagnostics.Profiling.Token, "diagnostics.profiling.token must be redacted")
+
 	// --- Backup ---
-	assert.Equal(t, redactedValue, sanitized.Backup.EncryptionKey, "backup.encryptionKey must be redacted")
 	require.Len(t, sanitized.Backup.Targets, 2)
 	assert.Equal(t, redactedValue, sanitized.Backup.Targets[0].Settings["password"], "ftp password must be redacted")
 	assert.Equal(t, "ftp.local", sanitized.Backup.Targets[0].Settings["host"], "ftp host should be preserved")
@@ -206,7 +209,6 @@ func TestSanitizeSettingsForAPI_EmptySecretsStayEmpty(t *testing.T) {
 	assert.Empty(t, sanitized.Output.MySQL.Password, "empty mysql password should stay empty")
 	assert.Empty(t, sanitized.Realtime.Weather.OpenWeather.APIKey, "empty openweather key should stay empty")
 	assert.Empty(t, sanitized.Realtime.EBird.APIKey, "empty ebird key should stay empty")
-	assert.Empty(t, sanitized.Backup.EncryptionKey, "empty encryption key should stay empty")
 }
 
 // TestSanitizeSettingsForAPI_JSONOutputHasNoSecrets performs an end-to-end
@@ -237,7 +239,6 @@ func TestSanitizeSettingsForAPI_JSONOutputHasNoSecrets(t *testing.T) {
 		"ow-api-key-123",
 		"wu-api-key-456",
 		"ebird-api-key-789",
-		"base64-encryption-key",
 		"ftp-password",
 		"s3-secret-key",
 		"bearer-token-secret",
@@ -274,7 +275,6 @@ func TestRestoreRedactedSecrets_PreservesRealValues(t *testing.T) {
 	incoming.Output.MySQL.Password = redactedValue
 	incoming.Realtime.Weather.OpenWeather.APIKey = redactedValue
 	incoming.Realtime.EBird.APIKey = redactedValue
-	incoming.Backup.EncryptionKey = redactedValue
 	incoming.Security.OAuthProviders[0].ClientSecret = redactedValue
 	incoming.Notification.Push.Providers[0].Endpoints[0].Auth.Token = redactedValue
 
@@ -289,7 +289,6 @@ func TestRestoreRedactedSecrets_PreservesRealValues(t *testing.T) {
 	assert.Equal(t, "db-password", incoming.Output.MySQL.Password)
 	assert.Equal(t, "ow-api-key-123", incoming.Realtime.Weather.OpenWeather.APIKey)
 	assert.Equal(t, "ebird-api-key-789", incoming.Realtime.EBird.APIKey)
-	assert.Equal(t, "base64-encryption-key", incoming.Backup.EncryptionKey)
 	assert.Equal(t, "goog-secret", incoming.Security.OAuthProviders[0].ClientSecret)
 	assert.Equal(t, "bearer-token-secret", incoming.Notification.Push.Providers[0].Endpoints[0].Auth.Token)
 }

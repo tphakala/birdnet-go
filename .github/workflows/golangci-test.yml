@@ -115,6 +115,9 @@ jobs:
           # `go list` order is deterministic for a given checkout, so the split is
           # stable, and new packages are picked up automatically (no hand-curated
           # lists to maintain). noembed,skipfrontend skip model/frontend embedding.
+          # Tags are kept identical to the `go test` step below so the enumerated
+          # package set cannot drift from the tested one if a package ever becomes
+          # build-tag conditional.
           go list -tags noembed,skipfrontend ./... \
             | awk -v n="${UNIT_SHARDS}" -v s="${{ matrix.shard }}" 'NR % n == s' \
             > shard_pkgs.txt

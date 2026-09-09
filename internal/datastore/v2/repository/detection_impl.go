@@ -1623,7 +1623,7 @@ func (r *detectionRepository) GetSpeciesSummary(ctx context.Context, start, end 
 
 // buildAnalyticsBaseQuery creates a base query with JOIN and WHERE clauses for analytics.
 // This helper reduces duplication between analytics query methods.
-func (r *detectionRepository) buildAnalyticsBaseQuery(ctx context.Context, start, end int64, labelID, modelID *uint) *gorm.DB {
+func (r *detectionRepository) buildAnalyticsBaseQuery(ctx context.Context, start, end int64, labelIDs []uint, modelID *uint) *gorm.DB {
 	detTable := r.tableName()
 	revTable := r.reviewsTable()
 	query := r.db.WithContext(ctx).Table(fmt.Sprintf("%s d", detTable)).
@@ -1631,8 +1631,10 @@ func (r *detectionRepository) buildAnalyticsBaseQuery(ctx context.Context, start
 		Where("d.detected_at >= ? AND d.detected_at < ?", start, end).
 		Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive))
 
-	if labelID != nil {
-		query = query.Where("d.label_id = ?", *labelID)
+	// A species has one label per model, so a species filter is a set of label IDs, not one:
+	// filtering on a single label silently dropped every detection made by the other models.
+	if len(labelIDs) > 0 {
+		query = query.Where("d.label_id IN ?", labelIDs)
 	}
 	if modelID != nil {
 		query = query.Where("d.model_id = ?", *modelID)
@@ -1642,13 +1644,13 @@ func (r *detectionRepository) buildAnalyticsBaseQuery(ctx context.Context, start
 }
 
 // GetHourlyDistribution returns detection counts by hour.
-func (r *detectionRepository) GetHourlyDistribution(ctx context.Context, start, end int64, tzOffsetSeconds int, labelID, modelID *uint) ([]HourlyDistributionData, error) {
+func (r *detectionRepository) GetHourlyDistribution(ctx context.Context, start, end int64, tzOffsetSeconds int, labelIDs []uint, modelID *uint) ([]HourlyDistributionData, error) {
 	var results []HourlyDistributionData
 
 	// Bucket by wall-clock hour in the configured timezone via hourFromUnixExpr.
 	// Exclude detections marked as false_positive
 	hourExpr := r.hourFromUnixExpr("d.detected_at", tzOffsetSeconds)
-	query := r.buildAnalyticsBaseQuery(ctx, start, end, labelID, modelID).
+	query := r.buildAnalyticsBaseQuery(ctx, start, end, labelIDs, modelID).
 		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourExpr)).
 		Group("hour").
 		Order("hour ASC")
@@ -1660,23 +1662,23 @@ func (r *detectionRepository) GetHourlyDistribution(ctx context.Context, start, 
 // GetDetectionTimestamps returns raw detected_at epochs for [start, end), false positives
 // excluded, in no particular order. See the interface doc for why bucketing happens in Go,
 // not SQL.
-func (r *detectionRepository) GetDetectionTimestamps(ctx context.Context, start, end int64, labelID *uint) ([]int64, error) {
+func (r *detectionRepository) GetDetectionTimestamps(ctx context.Context, start, end int64, labelIDs []uint) ([]int64, error) {
 	var timestamps []int64
 	// No ORDER BY: the caller buckets timestamps into a map and sorts the resulting cells
 	// itself, so ordering (potentially millions of) rows in SQL would be wasted work.
-	err := r.buildAnalyticsBaseQuery(ctx, start, end, labelID, nil).
+	err := r.buildAnalyticsBaseQuery(ctx, start, end, labelIDs, nil).
 		Pluck("d.detected_at", &timestamps).Error
 	return timestamps, err
 }
 
 // GetDailyAnalytics returns daily statistics.
-func (r *detectionRepository) GetDailyAnalytics(ctx context.Context, start, end int64, tzOffsetSeconds int, labelID, modelID *uint) ([]DailyAnalyticsData, error) {
+func (r *detectionRepository) GetDailyAnalytics(ctx context.Context, start, end int64, tzOffsetSeconds int, labelIDs []uint, modelID *uint) ([]DailyAnalyticsData, error) {
 	var results []DailyAnalyticsData
 
 	// Group by wall-clock date in the configured timezone (offset-adjusted).
 	// Exclude detections marked as false_positive
 	dateExpr := r.dateFromUnixExpr("d.detected_at", tzOffsetSeconds)
-	query := r.buildAnalyticsBaseQuery(ctx, start, end, labelID, modelID).
+	query := r.buildAnalyticsBaseQuery(ctx, start, end, labelIDs, modelID).
 		Select(fmt.Sprintf(`
 			%s as date,
 			COUNT(*) as total_detections,
@@ -1708,7 +1710,8 @@ func (r *detectionRepository) GetDetectionTrends(ctx context.Context, period str
 	return r.GetDailyAnalytics(ctx, startTime, now, tzOffsetSeconds, nil, modelID)
 }
 
-// GetNewSpecies returns species detected for the first time ever within the range.
+// GetNewSpecies returns species detected for the first time ever within the range, false positives
+// excluded, so a species whose qualifying detections were all reviewed away is not reported as new.
 // Groups by scientific_name to aggregate across all models for the same species.
 // Uses MIN(id) as tie-breaker to avoid duplicates when multiple detections share the same timestamp.
 func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int64, limit, offset int) ([]NewSpeciesData, error) {
@@ -1718,8 +1721,12 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 	// This finds species where their lifetime first detection is within the requested range.
 	//
 	// Approach: Use a derived table to compute lifetime first detection per species,
-	// then filter and join back to get detection details. This is O(n) instead of
-	// the O(n²) correlated subquery approach.
+	// The species_first derived table finds each species' lifetime first detection with one
+	// grouped scan; the outer join then picks the representative detection at that timestamp.
+	// count_in_period is a correlated subquery evaluated once per reported species (a handful per
+	// window, each an index lookup by label and time), joined on scientific_name so it counts the
+	// species across every model's label, not just the label of the first detection.
+	fpFilter := string(entities.VerificationFalsePositive)
 	rawSQL := fmt.Sprintf(`
 		SELECT
 			MIN(d.label_id) as label_id,
@@ -1727,7 +1734,16 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 			species_first.lifetime_first as first_detected,
 			species_first.lifetime_last as last_detected,
 			MIN(d.id) as detection_id,
-			MAX(d.confidence) as confidence
+			MAX(d.confidence) as confidence,
+			(
+				SELECT COUNT(*)
+				FROM %s d3
+				JOIN %s l3 ON l3.id = d3.label_id
+				LEFT JOIN %s dr3 ON dr3.detection_id = d3.id
+				WHERE l3.scientific_name = species_first.scientific_name
+					AND d3.detected_at >= ? AND d3.detected_at < ?
+					AND (dr3.verified IS NULL OR dr3.verified != ?)
+			) as count_in_period
 		FROM (
 			SELECT
 				l2.scientific_name,
@@ -1735,17 +1751,23 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 				MAX(d2.detected_at) as lifetime_last
 			FROM %s d2
 			JOIN %s l2 ON l2.id = d2.label_id
+			LEFT JOIN %s dr2 ON dr2.detection_id = d2.id
+			WHERE (dr2.verified IS NULL OR dr2.verified != ?)
 			GROUP BY l2.scientific_name
 			HAVING MIN(d2.detected_at) >= ? AND MIN(d2.detected_at) < ?
 		) species_first
 		JOIN %s l ON l.scientific_name = species_first.scientific_name
 		JOIN %s d ON d.label_id = l.id AND d.detected_at = species_first.lifetime_first
-		GROUP BY species_first.scientific_name, species_first.lifetime_first
+		LEFT JOIN %s dr ON dr.detection_id = d.id
+		WHERE (dr.verified IS NULL OR dr.verified != ?)
+		GROUP BY species_first.scientific_name, species_first.lifetime_first, species_first.lifetime_last
 		ORDER BY first_detected DESC
 		LIMIT ? OFFSET ?
-	`, r.tableName(), r.labelsTable(), r.labelsTable(), r.tableName())
+	`, r.tableName(), r.labelsTable(), r.reviewsTable(), r.tableName(), r.labelsTable(), r.reviewsTable(), r.labelsTable(), r.tableName(), r.reviewsTable())
 
-	err := r.db.WithContext(ctx).Raw(rawSQL, start, end, limit, offset).Scan(&results).Error
+	// Placeholders in text order: the count_in_period subquery in the SELECT list, then the
+	// species_first derived table, then the outer WHERE, then LIMIT/OFFSET.
+	err := r.db.WithContext(ctx).Raw(rawSQL, start, end, fpFilter, fpFilter, start, end, fpFilter, limit, offset).Scan(&results).Error
 	return results, err
 }
 

@@ -26,7 +26,6 @@ import (
 	"net"
 	"net/http"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -37,6 +36,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/httpclient"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
@@ -147,8 +147,6 @@ type UnifiedSSEEvent struct {
 type NotificationClient struct {
 	ID           string
 	Channel      chan *notification.Notification
-	Request      *http.Request
-	Response     http.ResponseWriter
 	Done         chan struct{} // Signal-only channel for shutdown notification
 	SubscriberCh <-chan *notification.Notification
 	Context      context.Context
@@ -251,16 +249,19 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 	// routes ("/:id"), so /unread/count and /stream always win over the
 	// /:id routes registered in the auth group below. Register these on
 	// the parent group g so they are NOT wrapped by c.AuthMiddleware.
-	// (/check-ntfy-server is intentionally NOT public; see the auth group
-	// registration later in this function, kept authed to prevent SSRF.)
+	// (/check-ntfy-server is intentionally NOT public; it is registered in the
+	// auth group later in this function. It is additionally a POST (CSRF-protected)
+	// and dials through the SSRF-guarded client, so it cannot be driven cross-site
+	// or used as an internal-SSRF relay.)
 	g.GET("/notifications", c.GetNotifications, c.requireNotificationService)
 	g.GET("/notifications/unread/count", c.GetUnreadCount, c.requireNotificationService)
 	g.GET("/notifications/stream", c.StreamNotifications,
 		c.requireNotificationService, middleware.RateLimiterWithConfig(rateLimiterConfig))
 
 	// Auth-protected endpoints: per-item read, mutations, the test-notification
-	// trigger, and the NTFY connectivity probe (kept authed to avoid being
-	// used as an SSRF relay by unauthenticated callers).
+	// trigger, and the NTFY connectivity probe. The probe is additionally a POST
+	// (so the CSRF middleware requires a token) and dials through the SSRF-guarded
+	// client, closing the cross-site blind-SSRF path on top of the auth gate.
 	notificationsGroup := g.Group("/notifications", c.AuthMiddleware)
 
 	notifServiceGroup := notificationsGroup.Group("", c.requireNotificationService)
@@ -271,18 +272,14 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 	notifServiceGroup.DELETE("/:id", c.DeleteNotification)
 	notifServiceGroup.POST("/test/new-species", c.CreateTestNewSpeciesNotification)
 
-	notificationsGroup.GET("/check-ntfy-server", c.CheckNtfyServer)
+	// POST (not GET) so the CSRF middleware requires a token: this endpoint makes
+	// a side-effecting outbound probe, and a CSRF-exempt safe-method GET could be
+	// driven cross-site to relay a blind internal request.
+	notificationsGroup.POST("/check-ntfy-server", c.CheckNtfyServer)
 }
 
 // ntfyServerCheckTimeout is the per-scheme timeout for the connectivity probe.
 const ntfyServerCheckTimeout = 5 * time.Second
-
-// blockedNtfyHosts contains IP addresses that must not be probed.
-// These are cloud metadata service addresses unrelated to ntfy servers.
-var blockedNtfyHosts = []string{
-	"169.254.169.254", // AWS/GCP/Azure instance metadata service
-	"fd00:ec2::254",   // AWS IPv6 metadata service
-}
 
 // hostnameLabelPattern validates a single DNS hostname label (RFC 952 / RFC 1123).
 var hostnameLabelPattern = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$`)
@@ -296,15 +293,24 @@ type NtfyServerCheckResponse struct {
 
 // CheckNtfyServer probes an NTFY server host for HTTPS and HTTP connectivity.
 // It tries HTTPS first; on failure it falls back to HTTP.
-// GET /api/v2/notifications/check-ntfy-server?host=<hostname[:port]>
+// POST /api/v2/notifications/check-ntfy-server with JSON body {"host":"<hostname[:port]>"}.
+// POST (a CSRF-protected method) is used deliberately: the probe issues a
+// side-effecting outbound request, so it must not be reachable through a
+// CSRF-exempt safe-method GET that a cross-site page could trigger.
 func (c *Handler) CheckNtfyServer(ctx echo.Context) error {
-	host := ctx.QueryParam("host")
+	var body struct {
+		Host string `json:"host"`
+	}
+	if err := ctx.Bind(&body); err != nil {
+		return c.HandleErrorWithKey(ctx, err, "invalid request body", http.StatusBadRequest, notification.MsgErrNotifInvalidBody, nil)
+	}
+	host := body.Host
 	if host == "" {
-		return c.HandleErrorWithKey(ctx, nil, "host parameter is required", http.StatusBadRequest, notification.MsgErrNotifHostRequired, nil)
+		return c.HandleErrorWithKey(ctx, nil, "host is required", http.StatusBadRequest, notification.MsgErrNotifHostRequired, nil)
 	}
 
 	if !isValidNtfyHost(host) {
-		return c.HandleErrorWithKey(ctx, nil, "invalid host parameter", http.StatusBadRequest, notification.MsgErrNotifInvalidHost, nil)
+		return c.HandleErrorWithKey(ctx, nil, "invalid host", http.StatusBadRequest, notification.MsgErrNotifInvalidHost, nil)
 	}
 
 	// Resolve the per-scheme probe timeout. Production leaves the override at zero
@@ -319,8 +325,13 @@ func (c *Handler) CheckNtfyServer(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, resp)
 }
 
-// isValidNtfyHost returns true if host is a safe, valid hostname or IP (with optional port).
-// It uses net.SplitHostPort for port handling and net.ParseIP / hostname pattern for the host part.
+// isValidNtfyHost returns true if host is a syntactically valid hostname or IP
+// (with optional port). It rejects embedded schemes, malformed host:port pairs,
+// and invalid hostname labels. It deliberately does NOT decide whether the
+// resolved IP is safe to reach: refusing link-local, cloud-metadata, IPv6
+// transition, and DNS-rebinding targets is handled at dial time by the
+// SSRF-guarded client in probeNtfyServer (httpclient.NewGuardedHTTPClient),
+// which is strictly more complete than a literal denylist here.
 func isValidNtfyHost(host string) bool {
 	if host == "" || len(host) > 260 {
 		return false
@@ -328,17 +339,6 @@ func isValidNtfyHost(host string) bool {
 
 	// Reject if a scheme is included; we expect a bare host or host:port
 	if strings.Contains(host, "://") {
-		return false
-	}
-
-	// Strip port and brackets (if any) before comparing against blocked hosts
-	hostOnly := host
-	if h, _, err := net.SplitHostPort(host); err == nil {
-		hostOnly = h
-	}
-	// Strip brackets from bare IPv6 (e.g. [fd00:ec2::254] → fd00:ec2::254)
-	hostOnly = strings.TrimPrefix(strings.TrimSuffix(hostOnly, "]"), "[")
-	if slices.Contains(blockedNtfyHosts, hostOnly) {
 		return false
 	}
 
@@ -416,12 +416,14 @@ func probeNtfyServer(ctx context.Context, host string, timeout time.Duration) Nt
 		}
 	}
 
-	client := &http.Client{
-		Timeout: timeout,
-		// Don't follow redirects: the ntfy health endpoint does not redirect
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
+	// Route the probe through the SSRF-guarded client so a user-supplied host
+	// cannot turn this endpoint into a relay to link-local / cloud-metadata
+	// targets; the guard also pins the resolved IP against DNS rebinding.
+	// Loopback and on-LAN ntfy servers stay reachable.
+	client := httpclient.NewGuardedHTTPClient(timeout)
+	// Don't follow redirects: the ntfy health endpoint does not redirect.
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
 	}
 
 	tryURL := func(rawURL string) bool {
@@ -516,8 +518,6 @@ func (c *Handler) setupNotificationSSEClient(ctx echo.Context) (*NotificationCli
 	client := &NotificationClient{
 		ID:           clientID,
 		Channel:      make(chan *notification.Notification, notificationChannelBuffer),
-		Request:      ctx.Request(),
-		Response:     ctx.Response(),
 		Done:         make(chan struct{}, 1), // Buffered signal channel to prevent deadlock during disconnect
 		SubscriberCh: notificationCh,
 		Context:      notificationCtx,
@@ -545,9 +545,18 @@ func (c *Handler) setupNotificationSSEClient(ctx echo.Context) (*NotificationCli
 
 // setupNotificationDisconnectHandler sets up client disconnect handling with timeout
 func (c *Handler) setupNotificationDisconnectHandler(ctx echo.Context, client *NotificationClient) {
+	// Capture request-scoped values on the request goroutine, before spawning the
+	// watcher. Echo pools and recycles the echo.Context (and rebinds its
+	// *http.Request) once the handler returns, so touching ctx from a goroutine
+	// that outlives the handler reads a recycled Request whose header map a new
+	// in-flight request is concurrently writing. That is a fatal
+	// "concurrent map read and map write" (issue #4292): ctx.RealIP() reads
+	// req.Header, so it must be evaluated here, not inside the goroutine.
+	reqCtx := ctx.Request().Context()
+	clientIP := ctx.RealIP()
 	go func() {
 		// Wait for client disconnect or timeout
-		<-ctx.Request().Context().Done()
+		<-reqCtx.Done()
 
 		// Client disconnected or timeout reached
 		select {
@@ -556,7 +565,7 @@ func (c *Handler) setupNotificationDisconnectHandler(ctx echo.Context, client *N
 		case <-time.After(eventLoopCheckInterval):
 			// Done channel might be blocked, continue
 		}
-		c.logNotificationConnection(client.ID, ctx.RealIP(), "", false)
+		c.logNotificationConnection(client.ID, clientIP, "", false)
 	}()
 }
 

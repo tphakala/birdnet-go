@@ -28,6 +28,7 @@ tmp
 *.exe
 *.off
 *.local.md
+/AGENTS.override.md
 model/labels_en.txt
 model/labels_fi.txt
 output/soundscape.wav.txt
@@ -67,3 +68,6 @@ __pycache__/
 # Release-notes drafts are transient working files (deleted after each release);
 # they must never be committed. See the drafting-release-changelog skill.
 RELEASE_NOTES_DRAFT.md
+
+# Compiled Go test binaries (`go test -c`), which are easy to sweep in with `git add -A`
+*.test

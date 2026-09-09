@@ -9,6 +9,13 @@ APP_USER="birdnet"
 # SKIP_CHOWN: set to "true" to skip all ownership changes (useful for NFS mounts)
 SKIP_CHOWN="$(echo "${SKIP_CHOWN:-false}" | tr '[:upper:]' '[:lower:]')"
 
+# SKIP_DEVICE_PERMS: set to "true" to skip all /dev/snd and /dev/dri permission
+# and group adjustments. Useful when the container runtime already grants device
+# access (for example rootless Podman with --userns=keep-id --group-add
+# keep-groups), or to skip the device fixups entirely (for example on read-only
+# device mounts).
+SKIP_DEVICE_PERMS="$(echo "${SKIP_DEVICE_PERMS:-false}" | tr '[:upper:]' '[:lower:]')"
+
 echo "Starting BirdNET-Go with UID:$APP_UID, GID:$APP_GID"
 
 # Check ownership of a path and chown only if it differs from expected UID:GID.
@@ -36,11 +43,35 @@ check_and_chown() {
     fi
 }
 
+# Kernel UID mapping table for the current process, read by is_rootless_userns below.
+PROC_UID_MAP="/proc/self/uid_map"
+
+# Detect whether "root" is only root inside a user namespace, i.e. rootless
+# Podman/Docker (or dockerd with userns-remap). Such a namespaced fake root has
+# no capability over host-owned device nodes, so a chmod on the host-owned
+# /dev/snd nodes always fails with EPERM and only spams errors. Real (rootful)
+# root maps "0 0 4294967295" in uid_map; a namespaced root maps container UID 0
+# to a nonzero host UID. If uid_map is unreadable we assume real root and keep
+# the previous behavior.
+is_rootless_userns() {
+    local host_uid_for_root
+    host_uid_for_root=$(awk '$1 == 0 { print $2; exit }' "$PROC_UID_MAP" 2>/dev/null) || true
+    [ -n "$host_uid_for_root" ] && [ "$host_uid_for_root" != "0" ]
+}
+
 # Detect if we're running as root or in rootless mode
 CURRENT_UID=$(id -u)
 RUNNING_AS_ROOT=false
 if [ "$CURRENT_UID" -eq 0 ]; then
     RUNNING_AS_ROOT=true
+fi
+
+# True when UID 0 is a namespaced fake root (rootless Podman/Docker). Only
+# meaningful when RUNNING_AS_ROOT is true; an arbitrary non-zero UID never
+# reaches the privileged device paths below.
+ROOTLESS_USERNS=false
+if [ "$RUNNING_AS_ROOT" = true ] && is_rootless_userns; then
+    ROOTLESS_USERNS=true
 fi
 
 # Only perform privileged operations if running as root
@@ -167,21 +198,43 @@ else
     echo "No TZ environment variable set, using container default (UTC)"
 fi
 
-# If audio device present, ensure permissions are correct
+# If audio device present, ensure permissions are correct. Only real (rootful)
+# root can chmod the host-owned nodes; a rootless user namespace cannot (skipped
+# below), and a plain non-root UID (--userns=keep-id or a K8s arbitrary UID)
+# relies on host audio-group membership from --group-add keep-groups, so it
+# matches no branch here and is a deliberate no-op.
 if [ -d "/dev/snd" ]; then
-    if [ "$RUNNING_AS_ROOT" = true ]; then
-        # Add user to audio group
+    if [ "$SKIP_DEVICE_PERMS" = "true" ]; then
+        echo "SKIP_DEVICE_PERMS is set, skipping /dev/snd permission setup"
+    elif [ "$RUNNING_AS_ROOT" = true ] && [ "$ROOTLESS_USERNS" = false ]; then
+        # Rootful root: add the app user to the audio group and open the nodes.
         if getent group audio >/dev/null; then
             adduser "$USER_NAME" audio || true
         fi
         # Make device accessible
         chmod -R a+rw /dev/snd || true
+    elif [ "$ROOTLESS_USERNS" = true ]; then
+        # A namespaced fake root cannot chmod host-owned /dev/snd nodes; attempting
+        # it only prints "Operation not permitted" for every node. Skip it and tell
+        # the user the invocation that actually grants audio in rootless Podman.
+        echo "Note: rootless container detected; skipping /dev/snd permission setup."
+        echo "      For sound card access in rootless Podman, run the container with:"
+        echo "        --userns=keep-id --group-add keep-groups --device /dev/snd"
+        echo "      and make sure your host user is a member of the 'audio' group."
     fi
 fi
 
 # If Intel GPU device present, add user to render group for OpenVINO iGPU inference
 if [ -d "/dev/dri" ]; then
-    if [ "$RUNNING_AS_ROOT" = true ]; then
+    if [ "$SKIP_DEVICE_PERMS" = "true" ]; then
+        echo "SKIP_DEVICE_PERMS is set, skipping /dev/dri group setup"
+    elif [ "$RUNNING_AS_ROOT" = true ]; then
+        # Unlike the /dev/snd chmod above, these addgroup/adduser operations edit
+        # the container's own group database, need no capability over the host
+        # device node, and stay silent under a rootless user namespace, so they
+        # are intentionally NOT gated on ROOTLESS_USERNS. Under dockerd
+        # userns-remap this setup can still grant the render group that OpenVINO
+        # iGPU offload relies on.
         # Detect the actual GID of the first render node on the host; it varies
         # across distributions (105, 109, 44, 989 …) and Docker preserves the
         # host GID when passing --device /dev/dri. Using a hardcoded GID would
@@ -207,10 +260,12 @@ if [ -d "/dev/dri" ]; then
             fi
         fi
     else
-        # Rootless: cannot create or join groups. Intel iGPU access still works if
-        # the container user was started already in the host render group (e.g. via
-        # --group-add on docker run). This is a heads-up, not an error.
-        echo "Note: /dev/dri present but running rootless; relying on pre-set render group membership for Intel iGPU access"
+        # Non-root UID (--userns=keep-id or a K8s arbitrary UID): cannot create or
+        # join groups. Intel iGPU access still works if the container user was
+        # started already in the host render group (e.g. via --group-add
+        # keep-groups or --group-add on the run command). This is a heads-up, not
+        # an error.
+        echo "Note: /dev/dri present but running as a non-root user; relying on pre-set render group membership for Intel iGPU access"
     fi
 fi
 

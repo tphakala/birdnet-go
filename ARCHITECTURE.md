@@ -37,10 +37,12 @@ This document provides a comprehensive overview of BirdNET-Go's architecture, te
     - [API v2 (Active)](#api-v2-active)
   - [Security Architecture](#security-architecture)
     - [Authentication](#authentication)
+    - [Authentication Flow](#authentication-flow)
     - [Authorization](#authorization)
-    - [Content Security Policy](#content-security-policy)
-    - [Input Validation](#input-validation)
+    - [Security Features](#security-features)
+    - [Configuration](#configuration)
     - [Privacy by Design](#privacy-by-design)
+    - [API v2 Authentication Architecture](#api-v2-authentication-architecture)
   - [Performance Considerations](#performance-considerations)
     - [Memory Management](#memory-management)
     - [Concurrency](#concurrency)
@@ -51,10 +53,6 @@ This document provides a comprehensive overview of BirdNET-Go's architecture, te
     - [Pre-Commit Hooks](#pre-commit-hooks)
     - [Debugging](#debugging)
     - [Documentation](#documentation)
-  - [Future Architecture Considerations](#future-architecture-considerations)
-    - [Planned Improvements](#planned-improvements)
-    - [Scalability](#scalability)
-  - [Conclusion](#conclusion)
 
 ---
 
@@ -590,7 +588,7 @@ Audio Source → Capture → Buffer → Analyze → Detect → Store → Notify
 FFmpeg is used for:
 
 - **RTSP Stream Ingestion**: Capturing audio from IP cameras and network streams
-- **Audio Format Conversion**: PCM to MP3 at the audio export/save stage, and to AAC and Opus while their native encoders remain opt-in. WAV and FLAC are always encoded natively.
+- **Audio Format Conversion**: PCM to MP3 at the audio export/save stage, and to AAC while its native encoder remains opt-in. WAV, FLAC, and Opus are encoded natively (FFmpeg encodes Opus only as a fallback for the rare clip shapes go-opus cannot carry).
 - **On-demand Clip Transcoding**: Re-encoding already-saved clips for the web player (the v2 media API), which is the only remaining user of the `loudnorm` filter
 - **Gain Application**: `volume` filter for dB boost/cut. On the clip export path the value it applies is the EBU R128 gain measured in Go by `internal/audiocore/audionorm`; FFmpeg no longer measures or normalises loudness there.
 
@@ -2516,17 +2514,22 @@ See [.husky/pre-commit](.husky/pre-commit) for complete implementation.
 
 ```bash
 # Run with debug logging
-LOG_LEVEL=debug birdnet-go realtime
+birdnet-go serve --debug
 
-# Run with profiling
-go run -race ./cmd/birdnet/
+# Run from source with the race detector
+go run -race . serve
 
+# Profiling requires diagnostics.profiling.enabled in config.yaml. The endpoints
+# are on the web server port, behind its authentication; where no auth provider
+# is configured, pass the token generated into diagnostics.profiling.token.
 # Profile CPU
-go tool pprof http://localhost:8080/debug/pprof/profile
+go tool pprof "http://localhost:8080/debug/pprof/profile?token=$BIRDNET_PROFILING_TOKEN"
 
 # Profile memory
-go tool pprof http://localhost:8080/debug/pprof/heap
+go tool pprof "http://localhost:8080/debug/pprof/heap?token=$BIRDNET_PROFILING_TOKEN"
 ```
+
+See [doc/PROFILING.md](doc/PROFILING.md) for the full profiling workflow.
 
 ### Documentation
 

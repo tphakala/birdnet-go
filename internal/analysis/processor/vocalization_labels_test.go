@@ -8,122 +8,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
-	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
 )
 
-func TestIsHumanVocalization(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		rawLabel string
-		want     bool
-	}{
-		// BirdNET v2.4 classes, English (matched via the locale-stable prefix).
-		{"BirdNET human vocal", "Human vocal_Human vocal", true},
-		{"BirdNET human non-vocal", "Human non-vocal_Human non-vocal", true},
-		{"BirdNET human whistle", "Human whistle_Human whistle", true},
-		// BirdNET v2.4 classes, non-English locale. The common name is localized
-		// ("Mensch Stimme"), so only raw-label matching catches these.
-		{"BirdNET human vocal (de)", "Human vocal_Mensch Stimme", true},
-		{"BirdNET human non-vocal (de)", "Human non-vocal_Mensch Geräusch", true},
-		{"BirdNET human whistle (de)", "Human whistle_Mensch Pfeifen", true},
-		// Perch v2 speech/voice classes (exact raw-label match).
-		{"Perch Speech", "Speech", true},
-		{"Perch Human_voice", "Human_voice", true},
-		{"Perch male speech", "Male_speech_and_man_speaking", true},
-		{"Perch female speech", "Female_speech_and_woman_speaking", true},
-		{"Perch child speech", "Child_speech_and_kid_speaking", true},
-		{"Perch Conversation", "Conversation", true},
-		{"Perch Chatter", "Chatter", true},
-		{"Perch Whispering", "Whispering", true},
-		{"Perch Speech_synthesizer", "Speech_synthesizer", true},
-		{"Perch Human_group_actions", "Human_group_actions", true},
-		{"Perch Screaming", "Screaming", true},
-		{"Perch Shout", "Shout", true},
-		// Perch v2 other vocalizations.
-		{"Perch Singing", "Singing", true},
-		{"Perch Laughter", "Laughter", true},
-		{"Perch Crying_and_sobbing", "Crying_and_sobbing", true},
-		{"Perch Sigh", "Sigh", true},
-		// Perch v2 non-vocal human sounds and actions.
-		{"Perch Cough", "Cough", true},
-		{"Perch Breathing", "Breathing", true},
-		{"Perch Fart", "Fart", true},
-		{"Perch Applause", "Applause", true},
-		{"Perch Clapping", "Clapping", true},
-		{"Perch Crowd", "Crowd", true},
-		{"Perch Walk_and_footsteps", "Walk_and_footsteps", true},
-		{"Perch Run", "Run", true},
-		// Human taxon (the human species itself).
-		{"Perch Homo sapiens", "Homo sapiens", true},
-		// Case-insensitive matching (custom/future label files may vary casing).
-		{"Perch speech lowercase", "speech", true},
-		{"Perch HUMAN_VOICE uppercase", "HUMAN_VOICE", true},
-		{"BirdNET human prefix lowercase", "human vocal_human vocal", true},
-		// Negatives: bird binomials that merely contain the substring "human".
-		{"cicada Pacarina schumanni", "Pacarina schumanni", false},
-		{"warbler Phylloscopus humei", "Phylloscopus humei", false},
-		{"BirdNET American Robin", "Turdus migratorius_American Robin", false},
-		// Negatives: non-human FSD50K classes that co-occur with people.
-		{"Perch Thump_and_thud", "Thump_and_thud", false},
-		{"Perch Car_passing_by", "Car_passing_by", false},
-		// Negatives: dog labels are not human.
-		{"Perch Bark is not human", "Bark", false},
-		{"Perch Dog is not human", "Dog", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tt.want, isHumanVocalization(tt.rawLabel))
-		})
-	}
-}
-
-func TestIsDogDetection(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		rawLabel string
-		want     bool
-	}{
-		// BirdNET v2.4 dog class, English and a non-English locale.
-		{"BirdNET Dog (en)", "Dog_Dog", true},
-		{"BirdNET Dog (de)", "Dog_Hund", true},
-		// Perch v2 dog sound classes and the domestic dog taxon.
-		{"Perch Dog", "Dog", true},
-		{"Perch Bark", "Bark", true},
-		{"Perch Growling", "Growling", true},
-		{"Perch Canis familiaris", "Canis familiaris", true},
-		// Case-insensitive matching.
-		{"Perch bark lowercase", "bark", true},
-		{"BirdNET DOG_DOG uppercase", "DOG_DOG", true},
-		// Negatives: bird/insect binomials that merely contain the substring "dog".
-		// Tachyspiza rhodogaster is a real bird (Vinous-breasted Sparrowhawk); the
-		// old "dog" substring match would have wrongly filtered it.
-		{"hawk Tachyspiza rhodogaster", "Tachyspiza rhodogaster", false},
-		{"katydid Poecilimon doga", "Poecilimon doga", false},
-		{"cicada Cicada mordoganensis", "Cicada mordoganensis", false},
-		{"cricket Lepidogryllus comparatus", "Lepidogryllus comparatus", false},
-		{"cricket Lepidogryllus parvulus", "Lepidogryllus parvulus", false},
-		// Negatives: wild canids stay detectable as wildlife.
-		{"wolf Canis lupus", "Canis lupus", false},
-		{"coyote Canis latrans", "Canis latrans", false},
-		{"jackal Canis aureus", "Canis aureus", false},
-		// Negatives: humans and birds are not dogs.
-		{"Perch Speech is not dog", "Speech", false},
-		{"bird Turdus merula", "Turdus merula", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tt.want, isDogDetection(tt.rawLabel))
-		})
-	}
-}
+// The raw-label classification logic (isHumanVocalization / isDogDetection) is
+// tested in internal/labels/vocalization. The tests here cover the processor
+// call sites that consume it: the recording handlers and the save filter.
 
 // TestDetectionHandlers_RecordTimestamp proves both recording handlers store a
 // detection timestamp for the labels the old substring match missed (Perch v2
@@ -172,7 +61,7 @@ func TestDetectionHandlers_RecordTimestamp(t *testing.T) {
 			tt.enable(settings)
 
 			p := &Processor{
-				LastHumanDetection: make(map[string]time.Time),
+				LastHumanDetection: make(map[string]HumanDetection),
 				LastDogDetection:   make(map[string]time.Time),
 			}
 			item := classifier.Results{StartTime: start}
@@ -181,84 +70,29 @@ func TestDetectionHandlers_RecordTimestamp(t *testing.T) {
 
 			tt.record(p, settings, item, result)
 
-			target, other := p.LastHumanDetection, p.LastDogDetection
-			if !tt.isHuman {
-				target, other = p.LastDogDetection, p.LastHumanDetection
+			// The two maps carry different value types (human entries also record
+			// the trigger), so assert each branch against its own map rather than a
+			// shared target/other alias.
+			if tt.isHuman {
+				got, ok := p.LastHumanDetection[source]
+				assert.Equal(t, tt.wantStored, ok, "unexpected record state in human map")
+				if tt.wantStored {
+					assert.Equal(t, start, got.Time)
+				}
+				assert.Empty(t, p.LastDogDetection, "human handler must not write the dog map")
+			} else {
+				got, ok := p.LastDogDetection[source]
+				assert.Equal(t, tt.wantStored, ok, "unexpected record state in dog map")
+				if tt.wantStored {
+					assert.Equal(t, start, got)
+				}
+				assert.Empty(t, p.LastHumanDetection, "dog handler must not write the human map")
 			}
-
-			got, ok := target[source]
-			assert.Equal(t, tt.wantStored, ok, "unexpected record state in target map")
-			if tt.wantStored {
-				assert.Equal(t, start, got)
-			}
-			assert.Empty(t, other, "handler must not write the other filter's map")
 		})
 	}
 }
 
-// TestPerchHumanLabelsParityWithNonbird verifies that every key previously in
-// perchHumanLabels (except "homo sapiens", which is the iNaturalist taxon
-// preserved in perchHumanExtraLabels) is classified as CategoryHuman by the
-// shared nonbird package. A failure here means a coverage regression: a label
-// that used to engage the privacy filter would silently stop doing so.
-func TestPerchHumanLabelsParityWithNonbird(t *testing.T) {
-	t.Parallel()
-
-	// The complete former perchHumanLabels key set (37 entries minus "homo sapiens").
-	// "homo sapiens" is excluded: it is an iNaturalist taxon, not an AudioSet/FSD50K
-	// sound class, so nonbird does not include it. It lives in perchHumanExtraLabels.
-	oldAudioSetKeys := []string{
-		"speech",
-		"speech_synthesizer",
-		"male_speech_and_man_speaking",
-		"female_speech_and_woman_speaking",
-		"child_speech_and_kid_speaking",
-		"conversation",
-		"chatter",
-		"human_voice",
-		"human_group_actions",
-		"whispering",
-		"shout",
-		"yell",
-		"screaming",
-		"singing",
-		"male_singing",
-		"female_singing",
-		"laughter",
-		"giggle",
-		"chuckle_and_chortle",
-		"crying_and_sobbing",
-		"gasp",
-		"sigh",
-		"cough",
-		"sneeze",
-		"breathing",
-		"respiratory_sounds",
-		"burping_and_eructation",
-		"fart",
-		"chewing_and_mastication",
-		"crowd",
-		"cheering",
-		"applause",
-		"clapping",
-		"finger_snapping",
-		"hands",
-		"walk_and_footsteps",
-		"run",
-	}
-
-	for _, key := range oldAudioSetKeys {
-		t.Run(key, func(t *testing.T) {
-			t.Parallel()
-			cat, ok := nonbird.CategoryOf(key)
-			assert.True(t, ok, "nonbird.CategoryOf(%q) must find the key", key)
-			assert.Equal(t, nonbird.CategoryHuman, cat,
-				"nonbird.CategoryOf(%q) must return CategoryHuman", key)
-		})
-	}
-}
-
-// TestShouldFilterDetection_DropsHumanLabels covers the third changed call site:
+// TestShouldFilterDetection_DropsHumanLabels covers the save filter call site:
 // shouldFilterDetection must drop a human-labeled detection from being saved
 // (Perch v2 class and a localized BirdNET class), while letting a normal bird
 // through.

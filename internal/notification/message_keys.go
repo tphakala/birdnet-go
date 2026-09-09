@@ -35,11 +35,11 @@ const (
 	MsgSettingsUpdatingIntervals              = "notifications.content.settings.updatingIntervals"
 	MsgSettingsReconfiguringMqtt              = "notifications.content.settings.reconfiguringMqtt"
 	MsgSettingsReconfiguringBirdweather       = "notifications.content.settings.reconfiguringBirdweather"
+	MsgSettingsReconfiguringEbird             = "notifications.content.settings.reconfiguringEbird"
 	MsgSettingsReconfiguringStreams           = "notifications.content.settings.reconfiguringStreams"
 	MsgSettingsReconfiguringTelemetry         = "notifications.content.settings.reconfiguringTelemetry"
 	MsgSettingsReconfiguringSpeciesTracking   = "notifications.content.settings.reconfiguringSpeciesTracking"
 	MsgSettingsReconfiguringPushNotifications = "notifications.content.settings.reconfiguringPushNotifications"
-	MsgSettingsRecalculatingThresholds        = "notifications.content.settings.recalculatingThresholds"
 	MsgSettingsReconfiguringDynamicThresholds = "notifications.content.settings.reconfiguringDynamicThresholds"
 	MsgSettingsWebserverRestart               = "notifications.content.settings.webserverRestartRequired"
 	MsgSettingsOauthRestart                   = "notifications.content.settings.oauthRestartRequired"
@@ -152,6 +152,7 @@ const (
 	MsgErrNotifNotFound           = "errors.notification.notFound"
 	MsgErrNotifHostRequired       = "errors.notification.hostRequired"
 	MsgErrNotifInvalidHost        = "errors.notification.invalidHost"
+	MsgErrNotifInvalidBody        = "errors.notification.invalidBody"
 	MsgErrNotifRateLimit          = "errors.notification.rateLimit"
 
 	// Debug errors
@@ -171,4 +172,45 @@ const (
 	// ONNX Runtime availability notifications
 	MsgORTUnavailableTitle   = "notifications.content.ort.unavailableTitle"
 	MsgORTUnavailableMessage = "notifications.content.ort.unavailableMessage"
+
+	// Model region staleness notifications (coordinate change makes an installed
+	// regional model variant stale; recommend-only, never auto-switches a model)
+	MsgModelRegionStaleTitle         = "notifications.content.region.staleTitle"
+	MsgModelRegionStaleMessage       = "notifications.content.region.staleMessage"
+	MsgModelRegionStaleGlobalMessage = "notifications.content.region.staleGlobalMessage"
+
+	// Model path reconciliation notifications (a configured model file path
+	// pointed at a file that no longer exists and was repaired to the installed
+	// gallery model)
+	MsgModelPathReconciledTitle   = "notifications.content.modelPath.reconciledTitle"
+	MsgModelPathReconciledMessage = "notifications.content.modelPath.reconciledMessage"
+
+	// Model path substitution notifications (a configured model file path pointed
+	// at a file that no longer exists; the installed gallery model was used at
+	// runtime instead, but the configuration was deliberately left unchanged
+	// because the path is user-owned)
+	MsgModelPathSubstitutedTitle   = "notifications.content.modelPath.substitutedTitle"
+	MsgModelPathSubstitutedMessage = "notifications.content.modelPath.substitutedMessage"
+
+	// Model path unreadable notifications (a configured model file could not be
+	// read for a reason OTHER than absence: a permissions change, an I/O error, a
+	// half-initialised mount). The installed gallery model is used at runtime, and
+	// the configuration is never rewritten, because a transient failure must not be
+	// made permanent. Worded separately from the substituted pair above: telling a
+	// user their file "was not found" when it is present but unreadable sends them
+	// looking in the wrong place.
+	MsgModelPathUnreadableTitle   = "notifications.content.modelPath.unreadableTitle"
+	MsgModelPathUnreadableMessage = "notifications.content.modelPath.unreadableMessage"
+
+	// Model path built-in fallback notification (a configured model file is
+	// confirmed absent AND no installed model exists to replace it, so the built-in
+	// model is used instead). Shares MsgModelPathSubstitutedTitle, since the title
+	// ("was not found") is accurate for this case too; only the body differs,
+	// because there is no installed model path to name.
+	MsgModelPathBuiltinMessage = "notifications.content.modelPath.builtinMessage"
+
+	// Model registration notifications (a model assigned to an audio source is
+	// not receiving audio, so it produces no detections)
+	MsgModelNotRegisteredTitle   = "notifications.content.modelPath.notRegisteredTitle"
+	MsgModelNotRegisteredMessage = "notifications.content.modelPath.notRegisteredMessage"
 )

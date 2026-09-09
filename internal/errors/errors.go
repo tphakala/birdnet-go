@@ -396,6 +396,7 @@ func init() {
 	RegisterComponent("myaudio", "myaudio")
 	RegisterComponent("ffmpeg-manager", "ffmpeg-manager")
 	RegisterComponent("ffmpeg-stream", "ffmpeg-stream")
+	RegisterComponent("audiocore/stream.", "native-stream")
 	RegisterComponent("datastore", "datastore")
 	RegisterComponent("imageprovider", "imageprovider")
 	RegisterComponent("diskmanager", "diskmanager")
@@ -409,6 +410,7 @@ func init() {
 	RegisterComponent("notification", "notification")
 	RegisterComponent("securefs", "securefs")
 	RegisterComponent("secrets", "secrets")
+	RegisterComponent("httpclient", "httpclient")
 	RegisterComponent("monitor", "monitor")
 	RegisterComponent("app", "app")
 	RegisterComponent("api", "api")
@@ -524,12 +526,23 @@ func lookupComponent(funcName string) string {
 	registryMutex.RLock()
 	defer registryMutex.RUnlock()
 
-	// Check registered patterns, rejecting matches inside hyphenated words
-	// (e.g. "birdnet" must not match the module name "birdnet-go").
+	// Choose the most specific registered pattern that matches, rejecting matches
+	// inside hyphenated words (e.g. "birdnet" must not match the module path
+	// "birdnet-go"). The longest matching pattern wins so a specific registration
+	// (e.g. "audiocore/stream.") beats a broader one ("audiocore"); a string
+	// comparison breaks length ties so the randomized map-iteration order cannot
+	// make the result nondeterministic.
+	best, bestComponent := "", ""
 	for pattern, component := range componentRegistry {
-		if matchesPathSegment(funcName, pattern) {
-			return component
+		if !matchesPathSegment(funcName, pattern) {
+			continue
 		}
+		if len(pattern) > len(best) || (len(pattern) == len(best) && pattern > best) {
+			best, bestComponent = pattern, component
+		}
+	}
+	if best != "" {
+		return bestComponent
 	}
 
 	// Fallback: extract from package path
@@ -567,16 +580,43 @@ func matchesPathSegment(s, pattern string) bool {
 	}
 }
 
-// detectCategory automatically detects error category based on error message and component
-func detectCategory(err error, component string) ErrorCategory {
-	// First check if the error implements CategorizedError interface
-	if catErr, ok := stderrors.AsType[CategorizedError](err); ok {
-		return catErr.ErrorCategory()
+// CategoryOf returns the category an error already carries, or the empty
+// category when it carries none.
+//
+// This accessor exists because "return the category this error already carries"
+// kept being rewritten. (*EnhancedError).GetCategory reads one error's own
+// field and returns a string; this is package-level, unwraps the chain, honours
+// the CategorizedError interface, and returns the typed ErrorCategory, which is
+// what a caller preserving a cause's category across a wrap actually needs.
+// Preserving it matters because
+// telemetry suppression and category-based matching both key on it: re-tagging a
+// network throttle as an image-fetch failure turns a suppressed transient into a
+// per-species Sentry event.
+func CategoryOf(err error) ErrorCategory {
+	if err == nil {
+		return ""
 	}
 
-	// Check if it's already an EnhancedError with a category
+	// The interface comes first: a cause can carry a category without being an
+	// *EnhancedError.
+	if catErr, ok := stderrors.AsType[CategorizedError](err); ok {
+		if category := catErr.ErrorCategory(); category != "" {
+			return category
+		}
+	}
+
 	if enhErr, ok := stderrors.AsType[*EnhancedError](err); ok && enhErr.Category != "" {
 		return enhErr.Category
+	}
+
+	return ""
+}
+
+// detectCategory automatically detects error category based on error message and component
+func detectCategory(err error, component string) ErrorCategory {
+	// An error that already carries a category keeps it.
+	if category := CategoryOf(err); category != "" {
+		return category
 	}
 
 	// Fall back to string-based heuristics
@@ -623,7 +663,7 @@ func detectCategory(err error, component string) ErrorCategory {
 		return CategoryAudio
 	case "datastore":
 		return CategoryDatabase
-	case "http-controller":
+	case "api":
 		return CategoryHTTP
 	case "imageprovider":
 		if strings.Contains(errorMsg, "cache") {

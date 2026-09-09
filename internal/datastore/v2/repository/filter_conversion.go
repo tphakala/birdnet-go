@@ -6,6 +6,7 @@ import (
 	"context"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -267,6 +268,32 @@ func ConfidenceFilterToMinMax(cf *datastore.ConfidenceFilter) (minConf, maxConf 
 // "no filter applied" (nil).
 var sentinelNoMatchIDs = []uint{0}
 
+// mergeUniqueIDs combines label-ID sets while preserving first-seen order.
+// Common-name and explicit-scientific resolution often identify the same label;
+// keeping the IN-list unique avoids redundant query parameters.
+func mergeUniqueIDs(groups ...[]uint) []uint {
+	total := 0
+	for _, group := range groups {
+		total += len(group)
+	}
+	if total == 0 {
+		return nil
+	}
+
+	merged := make([]uint, 0, total)
+	seen := make(map[uint]struct{}, total)
+	for _, group := range groups {
+		for _, id := range group {
+			if _, exists := seen[id]; exists {
+				continue
+			}
+			seen[id] = struct{}{}
+			merged = append(merged, id)
+		}
+	}
+	return merged
+}
+
 // FilterLookupDeps contains dependencies for filter entity lookups.
 type FilterLookupDeps struct {
 	LabelRepo  LabelRepository
@@ -281,7 +308,7 @@ type FilterLookupDeps struct {
 }
 
 // ResolveSpeciesToLabelIDs converts species names to label IDs.
-// Accepts scientific names (looked up via GetLabelIDsByScientificName for cross-model support).
+// Accepts scientific names and resolves the full list in one cross-model batch.
 // If species is non-empty but no labels are found, returns sentinel []uint{0}
 // to ensure the query returns zero results (rather than ignoring the filter).
 // Returns nil if species is empty.
@@ -293,14 +320,21 @@ func ResolveSpeciesToLabelIDs(ctx context.Context, deps *FilterLookupDeps, speci
 		return nil, nil
 	}
 
+	labelsByName, err := deps.LabelRepo.GetByScientificNames(ctx, species)
+	if err != nil {
+		return nil, err
+	}
+
 	labelIDs := make([]uint, 0, len(species))
+	seen := make(map[uint]struct{}, len(species))
 	for _, name := range species {
-		// Use cross-model lookup to get all label IDs for this species
-		ids, err := deps.LabelRepo.GetLabelIDsByScientificName(ctx, name)
-		if err != nil {
-			return nil, err
+		for _, label := range labelsByName[name] {
+			if _, duplicate := seen[label.ID]; duplicate {
+				continue
+			}
+			seen[label.ID] = struct{}{}
+			labelIDs = append(labelIDs, label.ID)
 		}
-		labelIDs = append(labelIDs, ids...)
 	}
 
 	// If input was non-empty but we found nothing, use sentinel
@@ -309,6 +343,83 @@ func ResolveSpeciesToLabelIDs(ctx context.Context, deps *FilterLookupDeps, speci
 	}
 
 	return labelIDs, nil
+}
+
+// ResolveSourcesToSourceIDs maps the public source filter values to audio source IDs. Each value
+// is the source's numeric ID (as /analytics/sources lists it) or a name, which goes through the
+// same matching as the search endpoint's device filter (ResolveDeviceToSourceIDs: node name,
+// display name or source URI, case-insensitively, exact before substring). Returns nil for an
+// empty filter and sentinelNoMatchIDs when nothing matches, so an unknown source yields no rows
+// rather than every row. Without a source repository only numeric IDs can match.
+func ResolveSourcesToSourceIDs(ctx context.Context, deps *FilterLookupDeps, sources []string) ([]uint, error) {
+	if len(sources) == 0 {
+		return nil, nil
+	}
+	// Numeric IDs need no lookup, so a filter is still applied when no source repository is
+	// wired; names then match nothing rather than being dropped, so the response is never
+	// silently unfiltered.
+	haveRepo := deps != nil && deps.SourceRepo != nil
+	var groups [][]uint
+	for _, want := range sources {
+		want = strings.TrimSpace(want)
+		if want == "" {
+			continue
+		}
+		if id, ok := parseSourceID(want); ok {
+			groups = append(groups, []uint{id})
+			continue
+		}
+		if !haveRepo {
+			continue
+		}
+		ids, err := ResolveDeviceToSourceIDs(ctx, deps, want)
+		if err != nil {
+			return nil, err
+		}
+		if len(ids) > 0 && ids[0] != sentinelNoMatchIDs[0] {
+			groups = append(groups, ids)
+		}
+	}
+	merged := mergeUniqueIDs(groups...)
+	if len(merged) == 0 {
+		return sentinelNoMatchIDs, nil
+	}
+	return merged, nil
+}
+
+// parseSourceID reports whether s is a positive decimal integer and returns it.
+func parseSourceID(s string) (id uint, ok bool) {
+	n, err := strconv.ParseUint(s, 10, 32)
+	if err != nil || n == 0 {
+		return 0, false
+	}
+	return uint(n), true
+}
+
+// intersectSourceIDs combines the location and source filters: nil means "no filter" on either
+// side, so the other side wins; when both are set only sources in both survive, and an empty
+// intersection becomes the no-match sentinel.
+func intersectSourceIDs(a, b []uint) []uint {
+	if a == nil {
+		return b
+	}
+	if b == nil {
+		return a
+	}
+	inB := make(map[uint]struct{}, len(b))
+	for _, id := range b {
+		inB[id] = struct{}{}
+	}
+	out := make([]uint, 0, len(a))
+	for _, id := range a {
+		if _, ok := inB[id]; ok {
+			out = append(out, id)
+		}
+	}
+	if len(out) == 0 {
+		return sentinelNoMatchIDs
+	}
+	return out
 }
 
 // ResolveLocationsToSourceIDs converts location/node names to audio source IDs.
@@ -682,7 +793,7 @@ func ConvertSearchFilters(
 			if sciErr != nil {
 				return nil, sciErr
 			}
-			sf.CommonLabelIDs = append(sf.CommonLabelIDs, sciLabelIDs...)
+			sf.CommonLabelIDs = mergeUniqueIDs(sf.CommonLabelIDs, sciLabelIDs)
 		}
 
 		// Convert device string to audio source IDs
@@ -737,6 +848,11 @@ func ConvertAdvancedFilters(
 
 	// Map SortBy string to v2 sort field constants
 	switch strings.ToLower(filters.SortBy) {
+	case datastore.SortBySearchDefault:
+		// SearchNotes historically sorts the normalized datastore by detection
+		// time, so preserve that contract when simple search needs exact-name ORs.
+		sf.SortBy = SortFieldDetectedAt
+		sf.SortDesc = true
 	case "date_asc":
 		sf.SortBy = SortFieldDetectedAt
 		sf.SortDesc = false
@@ -794,11 +910,27 @@ func ConvertAdvancedFilters(
 			return nil, err
 		}
 
+		// Exact scientific names resolved by the API are OR-ed into the same
+		// label-ID branch as common-name matches. This preserves the raw substring
+		// query while covering names whose stored/indexed common name is stale.
+		if len(filters.SpeciesScientific) > 0 {
+			sciLabelIDs, sciErr := ResolveSpeciesToLabelIDs(ctx, deps, filters.SpeciesScientific)
+			if sciErr != nil {
+				return nil, sciErr
+			}
+			sf.CommonLabelIDs = mergeUniqueIDs(sf.CommonLabelIDs, sciLabelIDs)
+		}
+
 		// Convert location names to audio source IDs
 		sf.AudioSourceIDs, err = ResolveLocationsToSourceIDs(ctx, deps, filters.Location)
 		if err != nil {
 			return nil, err
 		}
+		sourceIDs, err := ResolveSourcesToSourceIDs(ctx, deps, filters.Source)
+		if err != nil {
+			return nil, err
+		}
+		sf.AudioSourceIDs = intersectSourceIDs(sf.AudioSourceIDs, sourceIDs)
 	}
 
 	return sf, nil

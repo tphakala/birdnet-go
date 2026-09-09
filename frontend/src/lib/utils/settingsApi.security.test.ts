@@ -196,7 +196,6 @@ describe('Settings API - Secret redaction contract', () => {
     },
     backup: {
       enabled: true,
-      encryptionKey: REDACTED,
       targets: [
         {
           type: 'ftp',
@@ -261,7 +260,6 @@ describe('Settings API - Secret redaction contract', () => {
       'realtime.ebird.apiKey',
       'realtime.weather.openWeather.apiKey',
       'realtime.weather.wunderground.apiKey',
-      'backup.encryptionKey',
     ];
 
     const leaked: Array<{ path: string; value: unknown }> = [];
@@ -286,7 +284,7 @@ describe('Settings API - Secret redaction contract', () => {
 
     const leaked = findLeakedSecrets(
       settings,
-      new Set(['sessionSecret', 'clientSecret', 'encryptionKey', 'secretaccesskey'])
+      new Set(['sessionSecret', 'clientSecret', 'secretaccesskey'])
     );
 
     expect(

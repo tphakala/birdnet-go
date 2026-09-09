@@ -1,0 +1,153 @@
+name: Container base image
+
+# Builds and publishes ghcr.io/<repo>-base, the heavy, rarely-changing runtime
+# library layer (Debian packages, ONNX Runtime, TFLite C, OpenVINO runtime, Intel
+# NEO/IGC) that the application image stacks on top of via `FROM ${BASE_IMAGE}`.
+#
+# The base tag is content-addressed from the Dockerfile itself
+# (base-<sha256(Dockerfile)[:12]>), so any change to the base recipe or its pins
+# yields a new tag and forces a rebuild, while unchanged recipes always resolve to
+# an already-published tag. Application releases dedup against the immutable base
+# blobs regardless of BuildKit cache state, which is the whole point of the split.
+#
+# Triggers:
+#   - workflow_call (build-if-missing): the app publish pipeline
+#     (docker-build-push.yml) calls this before building so a release can never
+#     race a missing base. NOT triggered on push-to-main, which avoids two app
+#     builds concurrently regenerating the same base tag.
+#   - schedule (monthly) / workflow_dispatch (force): refreshes the base so Debian
+#     and ffmpeg security updates flow into a freshly built base at least monthly
+#     even when the recipe (and thus the tag) is unchanged. This is the one
+#     intentional, announced base-layer churn; between refreshes the base is stable
+#     so app releases pull only the small app-specific layers (the arch-selected
+#     models, the helper scripts, and the birdnet-go binary), not the heavy base.
+
+on:
+  workflow_call:
+    inputs:
+      force:
+        description: "Rebuild and push even if the content-addressed tag already exists"
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      base-ref:
+        description: "Digest-pinned base image reference (ghcr.io/<repo>-base@sha256:...)"
+        value: ${{ jobs.base.outputs.base-ref }}
+  workflow_dispatch:
+  schedule:
+    # 04:00 UTC on the 1st of every month: refresh OS/library security patches.
+    - cron: "0 4 1 * *"
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  # Serialize base builds so a scheduled refresh and a workflow_call bootstrap
+  # cannot push the same tag concurrently with divergent (non-reproducible apt)
+  # layer digests.
+  group: base-image-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  base:
+    runs-on: ubuntu-24.04
+    outputs:
+      base-ref: ${{ steps.resolve.outputs.base-ref }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+
+      - name: Compute base repo and content-addressed tag
+        id: meta
+        run: |
+          # Lowercase the owner/repo for a valid image ref, and append -base.
+          BASE_REPO="ghcr.io/${GITHUB_REPOSITORY,,}-base"
+          # Content-address the tag on the Dockerfile. Any recipe/pin change yields
+          # a new tag; an unchanged Dockerfile always resolves to the same tag so
+          # normal app releases reuse the already-published base.
+          TAG="base-$(sha256sum Dockerfile | cut -c1-12)"
+          echo "base-repo=${BASE_REPO}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Base image: ${BASE_REPO}:${TAG}"
+
+      - name: Login to GitHub Container Registry
+        run: |
+          for attempt in 1 2 3; do
+            if echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin; then
+              echo "GHCR login succeeded"; exit 0
+            fi
+            echo "GHCR login attempt $attempt/3 failed, retrying in 15s..."; sleep 15
+          done
+          echo "GHCR login failed after 3 attempts"; exit 1
+
+      - name: Check whether base tag already exists
+        id: exists
+        env:
+          # A scheduled or manually-dispatched run always rebuilds (refresh OS /
+          # library security patches into the existing tag). A workflow_call run
+          # rebuilds only when the caller passes force, otherwise build-if-missing.
+          FORCE: ${{ inputs.force }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          REF="${{ steps.meta.outputs.base-repo }}:${{ steps.meta.outputs.tag }}"
+          if [ "$FORCE" = "true" ] || [ "$EVENT" = "schedule" ] || [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "forced rebuild (event=${EVENT}); will rebuild ${REF}"
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          elif docker manifest inspect "$REF" >/dev/null 2>&1; then
+            echo "Base ${REF} already published; skipping build"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Base ${REF} missing; will build"
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push base image
+        if: steps.exists.outputs.build == 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          # Build only the heavy runtime-base stage; buildx skips buildenv/build
+          # (the Go compile) because runtime-base does not depend on them.
+          target: runtime-base
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.base-repo }}:${{ steps.meta.outputs.tag }}
+          # A scheduled/dispatched/forced refresh MUST bypass the layer cache,
+          # otherwise BuildKit cache-hits the unchanged `apt-get` (and download)
+          # RUN layers and the "refresh" ships byte-identical old packages, so the
+          # monthly Debian/ffmpeg security update never lands. A workflow_call
+          # build-if-missing (force=false) keeps the cache for a fast bootstrap of
+          # an unchanged recipe.
+          no-cache: ${{ inputs.force == true || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+          # Durable, base-only registry cache (never LRU-evicted like the GHA cache):
+          # keeps base layer blobs byte-stable across rebuilds when the recipe is
+          # unchanged, so a rebuild triggered by an unrelated Dockerfile edit does
+          # not churn the layers users have already pulled. cache-to still exports
+          # on a no-cache refresh, so the durable cache tracks the freshly patched
+          # layers for the next content-addressed (non-refresh) build.
+          cache-from: type=registry,ref=${{ steps.meta.outputs.base-repo }}:buildcache
+          cache-to: type=registry,ref=${{ steps.meta.outputs.base-repo }}:buildcache,mode=max
+          provenance: false
+
+      - name: Resolve digest-pinned base reference
+        id: resolve
+        run: |
+          # Pin app builds to the exact base manifest-list digest for build
+          # reproducibility: a later monthly refresh moving the tag cannot silently
+          # change what an already-built app image was built against, while the
+          # identical blobs still dedup on pull.
+          REF="${{ steps.meta.outputs.base-repo }}:${{ steps.meta.outputs.tag }}"
+          DIGEST=$(docker buildx imagetools inspect "$REF" --format '{{.Manifest.Digest}}')
+          if [ -z "$DIGEST" ]; then
+            echo "Failed to resolve digest for ${REF}" >&2; exit 1
+          fi
+          BASE_REF="${{ steps.meta.outputs.base-repo }}@${DIGEST}"
+          echo "base-ref=${BASE_REF}" >> "$GITHUB_OUTPUT"
+          echo "Resolved base reference: ${BASE_REF}"

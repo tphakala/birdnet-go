@@ -105,11 +105,13 @@ type Interface interface {
 	// GetTopBirdsData returns daily detection summaries, ordered by detection count descending.
 	// The limit parameter (if > 0) restricts the number of unique species returned.
 	GetTopBirdsData(ctx context.Context, selectedDate string, minConfidenceNormalized float64, limit int) ([]Note, error)
-	// GetBatchHourlyOccurrences retrieves hourly detection counts for multiple species on a given date.
+	// GetBatchHourlyOccurrences retrieves hourly detection counts for multiple species over the
+	// inclusive [startDate, endDate] calendar-date range, summed across every day in the range.
+	// Pass the same date for both to cover a single day.
 	// The species slice holds scientific names; the returned map is keyed by scientific name.
 	// Keying on scientific name keeps the result robust across models and locales.
 	// This batches the per-species hourly lookups into a single query for performance.
-	GetBatchHourlyOccurrences(ctx context.Context, date string, species []string, minConfidence float64) (map[string][24]int, error)
+	GetBatchHourlyOccurrences(ctx context.Context, startDate, endDate string, species []string, minConfidence float64) (map[string][24]int, error)
 	SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit int, offset int) ([]Note, error)
 	GetLastDetections(numDetections int) ([]Note, error)
 	GetAllDetectedSpecies() ([]Note, error)
@@ -245,7 +247,7 @@ type Interface interface {
 	SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error)
 	// Dynamic Threshold methods
 	SaveDynamicThreshold(threshold *DynamicThreshold) error
-	GetDynamicThreshold(speciesName, modelName string) (*DynamicThreshold, error)
+	GetDynamicThreshold(speciesName string) (*DynamicThreshold, error)
 	GetAllDynamicThresholds(limit ...int) ([]DynamicThreshold, error) // Optional limit parameter
 	DeleteDynamicThreshold(speciesName string) error
 	DeleteExpiredDynamicThresholds(before time.Time) (int64, error) // Returns count deleted
@@ -355,24 +357,18 @@ func New(settings *conf.Settings) Interface {
 	case settings.Output.SQLite.Enabled:
 		return &SQLiteStore{
 			Settings: settings,
-			DataStore: DataStore{
-				SunCalc: sunCalc,
-			},
+			SunCalc:  sunCalc,
 		}
 	case settings.Output.MySQL.Enabled:
 		return &MySQLStore{
 			Settings: settings,
-			DataStore: DataStore{
-				SunCalc: sunCalc,
-			},
+			SunCalc:  sunCalc,
 		}
 	default:
 		// No database explicitly enabled — default to SQLite
 		return &SQLiteStore{
 			Settings: settings,
-			DataStore: DataStore{
-				SunCalc: sunCalc,
-			},
+			SunCalc:  sunCalc,
 		}
 	}
 }
@@ -700,6 +696,7 @@ func (ds *DataStore) GetTopBirdsData(ctx context.Context, selectedDate string, m
 		Confidence     float64
 		Date           string
 		Time           string
+		FirstTime      string
 	}
 
 	var results []SpeciesCount
@@ -714,7 +711,7 @@ func (ds *DataStore) GetTopBirdsData(ctx context.Context, selectedDate string, m
 	// Exclude detections marked as false_positive
 	query := ds.DB.WithContext(ctx).Table("notes").
 		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
-		Select("notes.common_name, notes.scientific_name, notes.species_code, COUNT(*) as count, MAX(notes.confidence) as confidence, notes.date, MAX(notes.time) as time").
+		Select("notes.common_name, notes.scientific_name, notes.species_code, COUNT(*) as count, MAX(notes.confidence) as confidence, notes.date, MAX(notes.time) as time, MIN(notes.time) as first_time").
 		Where("notes.date = ? AND notes.confidence >= ?", selectedDate, minConfidenceNormalized).
 		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", string(entities.VerificationFalsePositive)).
 		Group("notes.common_name, notes.scientific_name, notes.species_code, notes.date").
@@ -742,6 +739,7 @@ func (ds *DataStore) GetTopBirdsData(ctx context.Context, selectedDate string, m
 			Confidence:     result.Confidence,
 			Date:           result.Date,
 			Time:           result.Time,
+			FirstTime:      result.FirstTime,
 		}
 
 		// Add this note to our results
@@ -854,11 +852,13 @@ func (ds *DataStore) GetDateFormat(columnName string) string {
 	}
 }
 
-// GetBatchHourlyOccurrences retrieves hourly detection counts for multiple species on a given date.
+// GetBatchHourlyOccurrences retrieves hourly detection counts for multiple species over the
+// inclusive [startDate, endDate] calendar-date range, summed across every day in the range (pass
+// the same date for both to cover a single day).
 // The species parameter holds scientific names, and the returned map is keyed by
 // scientific name. Keying on scientific name (rather than the localized common
 // name) keeps the daily summary robust across models and locales.
-func (ds *DataStore) GetBatchHourlyOccurrences(ctx context.Context, date string, species []string, minConfidence float64) (map[string][24]int, error) {
+func (ds *DataStore) GetBatchHourlyOccurrences(ctx context.Context, startDate, endDate string, species []string, minConfidence float64) (map[string][24]int, error) {
 	if len(species) == 0 {
 		return make(map[string][24]int), nil
 	}
@@ -875,7 +875,8 @@ func (ds *DataStore) GetBatchHourlyOccurrences(ctx context.Context, date string,
 	err := ds.DB.WithContext(ctx).Model(&Note{}).
 		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
 		Select(fmt.Sprintf("notes.scientific_name, %s as hour, COUNT(*) as count", hourFormat)).
-		Where("notes.scientific_name IN ? AND notes.date = ? AND notes.confidence >= ?", species, date, minConfidence).
+		Where("notes.scientific_name IN ? AND notes.date >= ? AND notes.date <= ? AND notes.confidence >= ?",
+			species, startDate, endDate, minConfidence).
 		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", string(entities.VerificationFalsePositive)).
 		Group(fmt.Sprintf("notes.scientific_name, %s", hourFormat)).
 		Order("notes.scientific_name, hour").
@@ -886,7 +887,8 @@ func (ds *DataStore) GetBatchHourlyOccurrences(ctx context.Context, date string,
 			Component("datastore").
 			Category(errors.CategoryDatabase).
 			Context("operation", "get_batch_hourly_occurrences").
-			Context("date", date).
+			Context("start_date", startDate).
+			Context("end_date", endDate).
 			Context("species_count", len(species)).
 			Build()
 	}
@@ -2135,10 +2137,9 @@ func (ds *DataStore) CountHourlyDetections(date, hour string, duration int) (int
 // SearchFilters defines parameters for filtering detection records
 type SearchFilters struct {
 	Species string
-	// SpeciesScientific holds exact scientific names the client already resolved
-	// (e.g. in the browser from a per-visitor name dictionary). They are resolved
-	// to label IDs and OR-ed into the species match, so an ambiguous localized
-	// common name can match multiple species without server-locale resolution.
+	// SpeciesScientific holds exact scientific names resolved before the datastore
+	// query, either by the client dictionary or the API's active-locale common-name
+	// substring resolver. They are OR-ed into the free-text species match.
 	SpeciesScientific []string
 	DateStart         string
 	DateEnd           string
@@ -2218,8 +2219,7 @@ func (f *SearchFilters) sanitise() error {
 //
 // filters.Species is a free-text substring match on the scientific or common name.
 // filters.SpeciesScientific is an exact match on any of the listed scientific names,
-// used when the client already resolved the term (e.g. in the browser from the
-// per-visitor name dictionary, which sends scientific names with an empty Species).
+// used when either the API or client dictionary resolved common-name alternatives.
 // When both are present they are OR-ed so the result is their union, mirroring the
 // v2 search path. Without the SpeciesScientific branch a dictionary-resolved search
 // (empty Species) would match every species on the legacy datastore.

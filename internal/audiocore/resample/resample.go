@@ -89,18 +89,12 @@ func (r *Resampler) EstimateOutputBytes(inputBytes int) int {
 	return r.inner.EstimateOutput(inputBytes/bytesPerSample) * bytesPerSample
 }
 
-// ResampleTo resamples the raw 16-bit PCM bytes in input and writes the
-// result into dst, returning the number of bytes written. Callers should
-// use dst[:n] for the audio data. dst must be at least
-// EstimateOutputBytes(len(input)) bytes long; if it is too small,
-// an error is returned without advancing resampler state.
-//
-// input must contain an even number of bytes (each sample is two bytes).
-func (r *Resampler) ResampleTo(input, dst []byte) (int, error) {
-	if len(input) == 0 {
-		return 0, nil
-	}
-
+// prepareFloatInput validates input, converts the 16-bit PCM bytes into
+// normalised float32 in r.inFloats, and grows r.outFloats to hold the maximum
+// possible resampled length. It returns that maximum length (needed) in samples.
+// It does NOT run the resampler, so callers can perform their own pre-checks
+// (e.g. a destination-buffer size check) before advancing resampler state.
+func (r *Resampler) prepareFloatInput(input []byte) (needed int, err error) {
 	if len(input)%bytesPerSample != 0 {
 		return 0, errors.Newf("input length %d is not a multiple of %d (16-bit PCM requires even byte count)", len(input), bytesPerSample).
 			Component("audiocore/resample").
@@ -124,11 +118,31 @@ func (r *Resampler) ResampleTo(input, dst []byte) (int, error) {
 	}
 
 	// Grow output float scratch buffer if needed.
-	needed := r.inner.EstimateOutput(sampleCount)
+	needed = r.inner.EstimateOutput(sampleCount)
 	if cap(r.outFloats) < needed {
 		r.outFloats = make([]float32, needed)
 	}
 	r.outFloats = r.outFloats[:needed]
+
+	return needed, nil
+}
+
+// ResampleTo resamples the raw 16-bit PCM bytes in input and writes the
+// result into dst, returning the number of bytes written. Callers should
+// use dst[:n] for the audio data. dst must be at least
+// EstimateOutputBytes(len(input)) bytes long; if it is too small,
+// an error is returned without advancing resampler state.
+//
+// input must contain an even number of bytes (each sample is two bytes).
+func (r *Resampler) ResampleTo(input, dst []byte) (int, error) {
+	if len(input) == 0 {
+		return 0, nil
+	}
+
+	needed, err := r.prepareFloatInput(input)
+	if err != nil {
+		return 0, err
+	}
 
 	// Verify dst can hold the maximum possible output before advancing
 	// resampler state, so a too-small buffer fails without consuming input
@@ -151,7 +165,7 @@ func (r *Resampler) ResampleTo(input, dst []byte) (int, error) {
 			Category(errors.CategoryAudio).
 			Context("from_rate", r.fromRate).
 			Context("to_rate", r.toRate).
-			Context("input_samples", sampleCount).
+			Context("input_samples", len(input)/bytesPerSample).
 			Build()
 	}
 
@@ -193,6 +207,39 @@ func (r *Resampler) ResampleInto(input []byte) ([]byte, error) {
 		return nil, err
 	}
 	return r.outBuf[:n], nil
+}
+
+// ResampleFloat32Into resamples the raw 16-bit PCM bytes in input and returns
+// the resampled signal as normalised float32 samples in [-1.0, 1.0].
+//
+// Unlike ResampleInto, it returns float32 directly from the internal float32
+// resampler engine, skipping the intermediate PCM16 re-encoding. This avoids a
+// needless float32 → int16 → float32 round-trip (and its re-quantisation) for
+// consumers that need float32 input, such as ONNX inference.
+//
+// The returned slice aliases the internal scratch buffer and is only valid
+// until the next call to any Resample method or Close on this Resampler.
+// input must contain an even number of bytes (each sample is two bytes).
+func (r *Resampler) ResampleFloat32Into(input []byte) ([]float32, error) {
+	if len(input) == 0 {
+		return []float32{}, nil
+	}
+
+	if _, err := r.prepareFloatInput(input); err != nil {
+		return nil, err
+	}
+
+	n, err := r.inner.ProcessInto(r.inFloats, r.outFloats)
+	if err != nil {
+		return nil, errors.Newf("resampler process failed: %w", err).
+			Component("audiocore/resample").
+			Category(errors.CategoryAudio).
+			Context("from_rate", r.fromRate).
+			Context("to_rate", r.toRate).
+			Build()
+	}
+
+	return r.outFloats[:n], nil
 }
 
 // FromRate returns the input sample rate in Hz.

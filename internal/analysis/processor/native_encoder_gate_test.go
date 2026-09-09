@@ -37,24 +37,22 @@ func newGateTestAction(t *testing.T, bitrate string) *SaveAudioAction {
 	}
 }
 
-// With the gate unset, AAC and Opus must resolve to the FFmpeg path. This is
-// the default every existing install runs, so it is the case that must not
-// change while the native encoders are still proving themselves.
+// With the AAC gate unset, AAC must resolve to the FFmpeg path. This is the
+// default every existing install runs, so it is the case that must not change
+// while the AAC encoder is still proving itself. Opus is no longer gated, so it
+// stays native here regardless.
 func TestEncodeClip_GateUnsetKeepsFFmpegRouting(t *testing.T) {
 	t.Setenv(conf.EnvNativeAACEncoder, "")
-	t.Setenv(conf.EnvNativeOpusEncoder, "")
 
 	assert.False(t, nativeAACSelected(conf.SampleRate), "AAC must stay on FFmpeg by default")
-	assert.False(t, nativeOpusSelected(conf.SampleRate), "Opus must stay on FFmpeg by default")
+	assert.True(t, nativeOpusSelected(conf.SampleRate), "Opus is native by default, no gate")
 }
 
 func TestEncodeClip_GateSelectsNativeAAC(t *testing.T) {
 	t.Setenv(conf.EnvNativeAACEncoder, "native")
-	t.Setenv(conf.EnvNativeOpusEncoder, "")
 
 	a := newGateTestAction(t, "96k")
 	require.True(t, nativeAACSelected(conf.SampleRate))
-	assert.False(t, nativeOpusSelected(conf.SampleRate), "the AAC gate must not enable Opus")
 
 	out := filepath.Join(t.TempDir(), "clip.m4a")
 	encoder, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatAAC, out)
@@ -64,13 +62,11 @@ func TestEncodeClip_GateSelectsNativeAAC(t *testing.T) {
 	assertNonEmptyFileWithMagic(t, out, 4, "ftyp")
 }
 
-func TestEncodeClip_GateSelectsNativeOpus(t *testing.T) {
-	t.Setenv(conf.EnvNativeAACEncoder, "")
-	t.Setenv(conf.EnvNativeOpusEncoder, "native")
-
+// Opus is encoded natively by default (go-opus), with no environment variable
+// involved, and produces an Ogg container.
+func TestEncodeClip_NativeOpusIsDefault(t *testing.T) {
 	a := newGateTestAction(t, "64k")
 	require.True(t, nativeOpusSelected(conf.SampleRate))
-	assert.False(t, nativeAACSelected(conf.SampleRate), "the Opus gate must not enable AAC")
 
 	out := filepath.Join(t.TempDir(), "clip.opus")
 	encoder, err := a.encodeClip(t.Context(), conf.SampleRate, ffmpeg.FormatOpus, out)
@@ -80,13 +76,12 @@ func TestEncodeClip_GateSelectsNativeOpus(t *testing.T) {
 	assertNonEmptyFileWithMagic(t, out, 0, "OggS")
 }
 
-// An opted-in clip the native encoder cannot carry falls back to FFmpeg rather
-// than failing, so an unusual capture rate never costs a recording. 22050 Hz is
+// A clip the native encoder cannot carry falls back to FFmpeg rather than
+// failing, so an unusual capture rate never costs a recording. 22050 Hz is
 // rejected by both encoders; 44100 additionally separates them, since go-aac
-// accepts it and go-opus does not.
+// accepts it and go-opus does not. Opus needs no gate; AAC still does.
 func TestEncodeClip_UnsupportedRateFallsBackToFFmpeg(t *testing.T) {
 	t.Setenv(conf.EnvNativeAACEncoder, "native")
-	t.Setenv(conf.EnvNativeOpusEncoder, "native")
 
 	assert.False(t, nativeAACSelected(22050), "22.05 kHz is not an AAC input rate")
 	assert.False(t, nativeOpusSelected(22050), "22.05 kHz is not an Opus input rate")
@@ -96,10 +91,9 @@ func TestEncodeClip_UnsupportedRateFallsBackToFFmpeg(t *testing.T) {
 }
 
 // FLAC and WAV are unconditionally native and must not be affected by the
-// lossy-format gates in either direction.
+// AAC gate in either direction.
 func TestEncodeClip_GatesDoNotAffectFLACOrWAV(t *testing.T) {
 	t.Setenv(conf.EnvNativeAACEncoder, "native")
-	t.Setenv(conf.EnvNativeOpusEncoder, "native")
 
 	a := newGateTestAction(t, "96k")
 	dir := t.TempDir()
@@ -116,7 +110,6 @@ func TestEncodeClip_GatesDoNotAffectFLACOrWAV(t *testing.T) {
 // Static Export.Gain must reach the native lossy encoders, not just FLAC.
 func TestEncodeClip_NativeLossyAppliesStaticGain(t *testing.T) {
 	t.Setenv(conf.EnvNativeAACEncoder, "native")
-	t.Setenv(conf.EnvNativeOpusEncoder, "native")
 
 	a := newGateTestAction(t, "96k")
 	a.Settings.Realtime.Audio.Export.Gain = -6
@@ -294,7 +287,6 @@ func flacSampleRate(t *testing.T, path string) int {
 func TestEncodeClip_UltrasonicRatesUnaffectedByLossyGates(t *testing.T) {
 	// Not parallel: t.Setenv.
 	t.Setenv(conf.EnvNativeAACEncoder, "native")
-	t.Setenv(conf.EnvNativeOpusEncoder, "native")
 
 	for _, rate := range []int{48000, 96000, 192000, 256000, 384000} {
 		for _, tc := range []struct {
@@ -329,7 +321,6 @@ func TestEncodeClip_UltrasonicRatesUnaffectedByLossyGates(t *testing.T) {
 func TestEncodeClip_UltrasonicRatesWithNormalization(t *testing.T) {
 	// Not parallel: t.Setenv.
 	t.Setenv(conf.EnvNativeAACEncoder, "native")
-	t.Setenv(conf.EnvNativeOpusEncoder, "native")
 
 	for _, rate := range []int{96000, 192000, 384000} {
 		t.Run(fmt.Sprintf("flac_%dHz", rate), func(t *testing.T) {
@@ -376,46 +367,46 @@ func TestEncodeClip_UltrasonicRatesWithNormalization(t *testing.T) {
 	}
 }
 
-// Opting a format into its native encoder stops config validation downgrading it
-// to WAV when FFmpeg is absent. If the native encoder then turns out not to
-// accept the clip's shape, there is no encoder left at all, and without this
-// fallback the export would call FFmpeg with an empty path and lose the
-// recording. The format must resolve to WAV, and the clip path must be corrected
-// with it so the file on disk matches the name recorded in the database.
+// A clip with no encoder left still falls back to WAV so the recording survives.
+// A non-bat sub-48k clip now resamples to 48k instead of stranding (see
+// TestResolveExportParams_SubRateResamplesForNativeEncoder), so the remaining
+// strand cases are a bat clip (never resampled: ultrasonic handling is out of
+// scope) whose format cannot carry its rate. The format must resolve to WAV, and
+// the clip path must be corrected with it so the file on disk matches the name
+// recorded in the database.
 func TestResolveExportParams_StrandedClipFallsBackToWAV(t *testing.T) {
 	// Not parallel: t.Setenv.
 	tests := []struct {
 		name       string
-		envVar     string
+		envVar     string // native gate to set; empty for the ungated Opus cases
+		modelName  string // a bat classifier name opts the clip out of resampling
 		format     string
+		inExt      string // the input clip extension (the configured format's), so the .wav rewrite is genuinely exercised
 		ffmpegPath string
 		rate       int
 		wantFormat string
 		wantExt    string
 	}{
 		{
-			name:   "opus at an unsupported rate with no ffmpeg strands the clip",
-			envVar: conf.EnvNativeOpusEncoder, format: ffmpeg.FormatOpus,
+			// A bat clip is never resampled, so a sub-48k bat clip the native encoder
+			// cannot carry still strands to WAV rather than being converted. The input
+			// is .opus so the rewrite to .wav is actually exercised, not a no-op.
+			name:      "bat opus at an unsupported sub-48k rate with no ffmpeg strands the clip",
+			modelName: batModelName, format: ffmpeg.FormatOpus, inExt: ".opus",
 			ffmpegPath: "", rate: 44100,
-			wantFormat: "wav", wantExt: ".wav",
-		},
-		{
-			name:   "aac at an unsupported rate with no ffmpeg strands the clip",
-			envVar: conf.EnvNativeAACEncoder, format: ffmpeg.FormatAAC,
-			ffmpegPath: "", rate: 22050,
 			wantFormat: "wav", wantExt: ".wav",
 		},
 		{
 			// FFmpeg present: it can still take the clip, so keep the format.
 			name:   "opus at an unsupported rate keeps opus when ffmpeg exists",
-			envVar: conf.EnvNativeOpusEncoder, format: ffmpeg.FormatOpus,
+			format: ffmpeg.FormatOpus, inExt: ".opus",
 			ffmpegPath: "/usr/bin/ffmpeg", rate: 44100,
 			wantFormat: ffmpeg.FormatOpus, wantExt: ".opus",
 		},
 		{
 			// Supported rate: the native encoder carries it, no fallback needed.
 			name:   "opus at a supported rate with no ffmpeg keeps opus",
-			envVar: conf.EnvNativeOpusEncoder, format: ffmpeg.FormatOpus,
+			format: ffmpeg.FormatOpus, inExt: ".opus",
 			ffmpegPath: "", rate: conf.SampleRate,
 			wantFormat: ffmpeg.FormatOpus, wantExt: ".opus",
 		},
@@ -424,19 +415,141 @@ func TestResolveExportParams_StrandedClipFallsBackToWAV(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv(conf.EnvNativeAACEncoder, "")
-			t.Setenv(conf.EnvNativeOpusEncoder, "")
-			t.Setenv(tt.envVar, "native")
+			if tt.envVar != "" {
+				t.Setenv(tt.envVar, "native")
+			}
+
+			a := newGateTestAction(t, "96k")
+			a.modelName = tt.modelName
+			a.sourceSampleRate = tt.rate
+			a.Settings.Realtime.Audio.Export.Type = tt.format
+			a.Settings.Realtime.Audio.FfmpegPath = tt.ffmpegPath
+
+			_, format, path := a.resolveExportParams("/clips/2026/07/19/clip" + tt.inExt)
+			assert.Equal(t, tt.wantFormat, format)
+			assert.Equal(t, tt.wantExt, filepath.Ext(path),
+				"the clip path extension must follow the resolved format")
+		})
+	}
+}
+
+// A non-bat clip whose source rate is below 48kHz and whose lossy native encoder
+// cannot carry that rate is resampled UP to 48kHz (accepted by every native lossy
+// encoder) instead of stranding to WAV, so the configured format is preserved.
+// A rate the encoder already supports is kept as-is (no needless resample), and an
+// install that still has FFmpeg lets FFmpeg take the source rate directly.
+func TestResolveExportParams_SubRateResamplesForNativeEncoder(t *testing.T) {
+	// Not parallel: t.Setenv.
+	tests := []struct {
+		name       string
+		envVar     string // native gate to set; empty for the ungated Opus cases
+		format     string
+		ffmpegPath string
+		rate       int
+		wantRate   int
+		wantFormat string
+	}{
+		// Above 48k (non-bat): downsampled to 48k, format kept (the sibling branch).
+		{"opus 96k downsamples to 48k", "", ffmpeg.FormatOpus, "", 96000, conf.SampleRate, ffmpeg.FormatOpus},
+		// Unsupported sub-48k rate + no FFmpeg: resample up to 48k, keep the format.
+		{"opus 44.1k resamples to 48k", "", ffmpeg.FormatOpus, "", 44100, conf.SampleRate, ffmpeg.FormatOpus},
+		{"aac 22.05k resamples to 48k", conf.EnvNativeAACEncoder, ffmpeg.FormatAAC, "", 22050, conf.SampleRate, ffmpeg.FormatAAC},
+		{"mp3 22.05k resamples to 48k", conf.EnvNativeMP3Encoder, ffmpeg.FormatMP3, "", 22050, conf.SampleRate, ffmpeg.FormatMP3},
+		// Rate the native encoder already supports: encode at the source rate.
+		{"opus 8k stays at source", "", ffmpeg.FormatOpus, "", 8000, 8000, ffmpeg.FormatOpus},
+		{"opus 16k stays at source", "", ffmpeg.FormatOpus, "", 16000, 16000, ffmpeg.FormatOpus},
+		{"aac 44.1k stays at source", conf.EnvNativeAACEncoder, ffmpeg.FormatAAC, "", 44100, 44100, ffmpeg.FormatAAC},
+		{"mp3 32k stays at source", conf.EnvNativeMP3Encoder, ffmpeg.FormatMP3, "", 32000, 32000, ffmpeg.FormatMP3},
+		{"mp3 44.1k stays at source", conf.EnvNativeMP3Encoder, ffmpeg.FormatMP3, "", 44100, 44100, ffmpeg.FormatMP3},
+		// FFmpeg present: it carries the source rate, so nothing is resampled.
+		{"opus 44.1k with ffmpeg stays at source", "", ffmpeg.FormatOpus, "/usr/bin/ffmpeg", 44100, 44100, ffmpeg.FormatOpus},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(conf.EnvNativeAACEncoder, "")
+			t.Setenv(conf.EnvNativeMP3Encoder, "")
+			if tt.envVar != "" {
+				t.Setenv(tt.envVar, "native")
+			}
+			resetNativeSkipOnce()
 
 			a := newGateTestAction(t, "96k")
 			a.sourceSampleRate = tt.rate
 			a.Settings.Realtime.Audio.Export.Type = tt.format
 			a.Settings.Realtime.Audio.FfmpegPath = tt.ffmpegPath
 
-			rate, format, path := a.resolveExportParams("/clips/2026/07/19/clip" + filepath.Ext("x"+tt.wantExt))
-			_ = rate
-			assert.Equal(t, tt.wantFormat, format)
-			assert.Equal(t, tt.wantExt, filepath.Ext(path),
-				"the clip path extension must follow the resolved format")
+			rate, format, _ := a.resolveExportParams("/clips/2026/07/19/clip")
+			assert.Equal(t, tt.wantRate, rate, "resolved sample rate")
+			assert.Equal(t, tt.wantFormat, format, "the configured lossy format must not be downgraded to WAV")
 		})
 	}
+}
+
+// End to end: a sub-48k clip that resolveExportParams resamples up to 48k must then
+// actually encode in the configured native format and produce a non-empty file, not
+// merely avoid the WAV downgrade.
+func TestResolveExportParams_ResampledSubRateEncodesNatively(t *testing.T) {
+	// Not parallel: t.Setenv.
+	tests := []struct {
+		name    string
+		envVar  string
+		format  string
+		ext     string
+		rate    int
+		wantEnc string
+	}{
+		{"opus 44.1k encodes native opus", "", ffmpeg.FormatOpus, ".opus", 44100, clipenc.NativeOpus},
+		{"aac 22.05k encodes native aac", conf.EnvNativeAACEncoder, ffmpeg.FormatAAC, ".m4a", 22050, clipenc.NativeAAC},
+		{"mp3 22.05k encodes native mp3", conf.EnvNativeMP3Encoder, ffmpeg.FormatMP3, ".mp3", 22050, clipenc.NativeMP3},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(conf.EnvNativeAACEncoder, "")
+			t.Setenv(conf.EnvNativeMP3Encoder, "")
+			if tt.envVar != "" {
+				t.Setenv(tt.envVar, "native")
+			}
+			resetNativeSkipOnce()
+
+			a := newGateTestAction(t, "96k")
+			a.sourceSampleRate = tt.rate
+			a.Settings.Realtime.Audio.Export.Type = tt.format
+			a.Settings.Realtime.Audio.FfmpegPath = ""
+
+			out := filepath.Join(t.TempDir(), "clip"+tt.ext)
+			rate, format, path := a.resolveExportParams(out)
+			require.Equal(t, conf.SampleRate, rate, "the sub-48k clip must be resampled to 48k")
+			require.Equal(t, tt.format, format, "the configured format must be kept")
+
+			enc, err := a.encodeClip(t.Context(), rate, format, path)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantEnc, enc.Encoder, "the resampled clip must encode with the native encoder")
+
+			info, statErr := os.Stat(path)
+			require.NoError(t, statErr)
+			assert.Positive(t, info.Size(), "the encoded clip must not be empty")
+		})
+	}
+}
+
+// When resampling a sub-48k clip up to 48k fails, the export must fall through to
+// the WAV safety net so the recording survives rather than being lost. An odd byte
+// count is not whole 16-bit samples, so ResampleBytes rejects it deterministically,
+// exercising the resampleExportTo failure path for the upsample branch.
+func TestResolveExportParams_SubRateResampleFailureStrandsToWAV(t *testing.T) {
+	// Not parallel: touches package-level log guards shared with sibling tests.
+	resetNativeSkipOnce()
+
+	a := newGateTestAction(t, "96k")
+	a.pcmData = []byte{0x01, 0x02, 0x03} // odd length: ResampleBytes returns an error
+	a.sourceSampleRate = 44100           // go-opus cannot carry 44.1k, so an upsample is attempted
+	a.Settings.Realtime.Audio.Export.Type = ffmpeg.FormatOpus
+	a.Settings.Realtime.Audio.FfmpegPath = "" // native only: no FFmpeg to take the source rate
+
+	rate, format, path := a.resolveExportParams("/clips/2026/07/19/clip.opus")
+	assert.Equal(t, 44100, rate, "a failed resample leaves the clip at its source rate")
+	assert.Equal(t, ffmpeg.FormatWAV, format, "a failed resample must strand to WAV, not lose the recording")
+	assert.Equal(t, ".wav", filepath.Ext(path), "the clip path extension must follow the WAV fallback")
 }

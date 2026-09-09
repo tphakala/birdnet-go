@@ -31,11 +31,29 @@
   import Badge from '$lib/desktop/components/ui/Badge.svelte';
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import Sparkline from '$lib/desktop/features/system/components/Sparkline.svelte';
-  import { Brain, Cpu, MemoryStick, Activity, Minus, Pause, MapPinOff } from '@lucide/svelte';
+  import {
+    Brain,
+    Binary,
+    CircuitBoard,
+    Container,
+    Cpu,
+    Grid2x2,
+    MemoryStick,
+    Microchip,
+    Server,
+    Activity,
+    Minus,
+    Pause,
+    MapPinOff,
+    ShieldCheck,
+    TriangleAlert,
+  } from '@lucide/svelte';
+  import { isContainerEnvironment } from '$lib/desktop/features/system/environment';
   import type {
     InferenceStatusResponse,
     InferenceModel,
     InferenceLastDetection,
+    InferenceVAD,
     BackendStatus,
     OpenVINOBackendStatus,
   } from '$lib/desktop/features/system/inference.types';
@@ -77,6 +95,13 @@
 
   // Rows per column in the two-column Last-heard layout (backend retains 2x this).
   const LAST_HEARD_COLUMN_ROWS = 10;
+
+  // Ties the compute-precision label to its sr-only description. Named because
+  // aria-describedby and the target id must agree, and a literal repeated in two
+  // places can drift apart silently: the reference just stops resolving, with no
+  // error anywhere and nothing visible to a sighted reader.
+  const FP16_HELP_ID = 'help-fp16';
+  const HARDWARE_CAPABILITIES_HELP_ID = 'hw-capabilities-help';
 
   interface MetricPoint {
     timestamp: string;
@@ -385,6 +410,27 @@
     snapshot ? snapshot.backends.openvino : null
   );
 
+  // Reason codes are produced by the backend hardware probe (the Reason*
+  // constants in internal/hwprofile/hwprofile.go). The mapping is an explicit
+  // switch rather than a key built from the code, so every translation key
+  // stays a literal the i18n tooling can find.
+  //
+  // The default arm is load-bearing: a server newer than this bundle can emit a
+  // code that is not here yet, and a generic sentence is better than a blank
+  // bullet.
+  function gpuReasonLabel(reason: string): string {
+    switch (reason) {
+      case 'render-node-unavailable':
+        return t('system.inference.gpuReasonRenderNodeUnavailable');
+      case 'render-node-permission':
+        return t('system.inference.gpuReasonRenderNodePermission');
+      case 'no-runtime':
+        return t('system.inference.gpuReasonNoRuntime');
+      default:
+        return t('system.inference.gpuReasonUnknown');
+    }
+  }
+
   // Spec line for a model: sample rate in kHz, segment length in seconds.
   function sampleRateKhz(hz: number): string {
     return (hz / HZ_PER_KHZ).toFixed(hz % HZ_PER_KHZ === 0 ? 0 : 1);
@@ -427,6 +473,15 @@
     const current = series[series.length - 1] ?? 0;
     const peak = Math.max(...series);
     return `${current.toFixed(1)} ${t('system.inference.unitMs')} · ${t('system.inference.peak')} ${peak.toFixed(1)}`;
+  }
+
+  // Plain-English explanation of the current VAD gate state, so a disabled / no-model
+  // / idle indicator is never ambiguous (frontend/CLAUDE.md: never ship ambiguous states).
+  function vadStateHelp(v: InferenceVAD): string {
+    if (!v.enabled) return t('system.inference.vad.disabledHelp');
+    if (!v.available) return t('system.inference.vad.unavailableHelp');
+    if (v.loaded) return t('system.inference.vad.activeHelp');
+    return t('system.inference.vad.idleHelp');
   }
 
   // Short names of other loaded models whose feed contains the same species within
@@ -490,7 +545,10 @@
   {:else if snapshot}
     <!-- Top context row: hardware and inference backends as compact cards.
          The Audio pipeline card is intentionally hidden for now (see below). -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+    <!-- items-start: without it the shorter card stretches to the taller one and
+         shows dead space inside its border. Hardware grows past Backends as soon
+         as a GPU carries reason text, or in the locales whose strings run long. -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
       <!-- Hardware -->
       <div
         class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm"
@@ -498,53 +556,191 @@
         <h3 class="text-xs font-semibold uppercase tracking-wider mb-3 text-muted">
           {t('system.inference.sectionHardware')}
         </h3>
-        <div class="space-y-2.5">
+        <!-- Two real columns (term, definition) rather than a stack of
+             independent flex rows: the auto term track sizes to the widest
+             term, so every value starts at the same x instead of wherever its
+             own label happened to end. Absent facts emit no grid children at
+             all, so they leave no gap.
+
+             Each row's icon lives INSIDE its <dt>, never as a direct child of
+             the <dl>: the only content a <dl> permits is <dt>/<dd> groups or
+             <div> wrappers around them, so a bare <svg> sibling is invalid
+             markup and breaks the term/definition grouping for assistive
+             technology. The <dt> is therefore a flex row of icon + label, which
+             keeps the icons in a visual column without spending a grid track. -->
+        <dl class="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2.5">
           {#if snapshot.hardware.arch}
-            <div class="flex items-center gap-3">
-              <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
-              <span class="text-sm text-muted">{t('system.inference.architecture')}</span>
-              <span class="text-sm font-mono tabular-nums truncate" title={snapshot.hardware.arch}
-                >{snapshot.hardware.arch}</span
-              >
-            </div>
+            <dt class="flex items-center gap-3 text-sm text-muted">
+              <Binary class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              {t('system.inference.architecture')}
+            </dt>
+            <dd
+              class="text-sm font-mono tabular-nums truncate min-w-0"
+              title={snapshot.hardware.arch}
+            >
+              {snapshot.hardware.arch}
+            </dd>
           {/if}
           {#if snapshot.hardware.cpuModel}
-            <div class="flex items-center gap-3">
-              <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
-              <span class="text-sm text-muted">{t('system.inference.cpu')}</span>
-              <span class="text-sm truncate" title={snapshot.hardware.cpuModel}
-                >{snapshot.hardware.cpuModel}</span
-              >
-            </div>
+            <dt class="flex items-center gap-3 text-sm text-muted">
+              <Cpu class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              {t('system.inference.cpu')}
+            </dt>
+            <dd class="text-sm truncate min-w-0" title={snapshot.hardware.cpuModel}>
+              {snapshot.hardware.cpuModel}
+            </dd>
+          {/if}
+          <!-- Gated on the board object, not on board.model: the server sends a
+               board whenever it resolved a model OR an SoC, and a device tree
+               that exposes only `compatible` yields the SoC alone. Gating on the
+               model would silently drop the one fact the probe recovered. -->
+          {#if snapshot.hardware.board}
+            <dt class="flex items-center gap-3 text-sm text-muted">
+              <CircuitBoard class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              {t('system.inference.board')}
+            </dt>
+            <dd class="flex items-center gap-3 min-w-0">
+              {#if snapshot.hardware.board.model}
+                <span class="text-sm truncate min-w-0" title={snapshot.hardware.board.model}
+                  >{snapshot.hardware.board.model}</span
+                >
+              {/if}
+              {#if snapshot.hardware.board.soc}
+                <span class="text-xs text-muted font-mono shrink-0">
+                  {t('system.inference.soc')}: {snapshot.hardware.board.soc}
+                </span>
+              {/if}
+            </dd>
+          {/if}
+          {#if snapshot.hardware.physicalCores}
+            <dt class="flex items-center gap-3 text-sm text-muted">
+              <Grid2x2 class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              {t('system.inference.cores')}
+            </dt>
+            <dd class="text-sm font-mono tabular-nums">
+              {formatNumber(snapshot.hardware.physicalCores)}
+            </dd>
+          {/if}
+          {#if snapshot.hardware.totalRamBytes}
+            <dt class="flex items-center gap-3 text-sm text-muted">
+              <MemoryStick class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              {t('system.inference.memory')}
+            </dt>
+            <dd class="text-sm font-mono tabular-nums">
+              {formatBytesCompact(snapshot.hardware.totalRamBytes)}
+            </dd>
           {/if}
           {#if snapshot.hardware.environment}
-            <div class="flex items-center gap-3">
-              <span class="text-sm text-muted">{t('system.inference.environment')}</span>
-              <span class="text-sm truncate" title={snapshot.hardware.environment}
-                >{snapshot.hardware.environment}</span
-              >
-            </div>
+            <dt class="flex items-center gap-3 text-sm text-muted">
+              <!-- Container vs host, resolved by the same predicate the Overview's
+                   SystemDetailsCard uses, so the two pages never disagree about
+                   what the one environment string means. -->
+              {#if isContainerEnvironment(snapshot.hardware.environment)}
+                <Container class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              {:else}
+                <Server class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              {/if}
+              {t('system.inference.environment')}
+            </dt>
+            <dd class="text-sm truncate min-w-0" title={snapshot.hardware.environment}>
+              {snapshot.hardware.environment}
+            </dd>
           {/if}
-          <div class="flex items-center gap-3">
-            <span
-              class="text-sm text-muted"
-              title={t('system.inference.fp16Help')}
-              aria-describedby="help-fp16"
-            >
-              {t('system.inference.fp16')}
-            </span>
-            <span id="help-fp16" class="sr-only">{t('system.inference.fp16Help')}</span>
-            {#if snapshot.hardware.fp16}
-              <StatusPill variant="success" label={t('system.inference.fp16Supported')} size="xs" />
-            {:else}
-              <StatusPill
-                variant="neutral"
-                label={t('system.inference.fp16Unsupported')}
-                size="xs"
-              />
-            {/if}
-          </div>
-        </div>
+
+          <!-- Accelerators. Listed whether or not this build can reach them, so
+               a user whose GPU is present but unusable is told why rather than
+               shown nothing. The common case is the default Docker install:
+               the stock image has no OpenVINO and often no /dev/dri mapping. -->
+          <!-- Deliberately unkeyed. The only candidate key is the name, and two
+               identical cards produce the same one, which makes Svelte throw
+               each_key_duplicate and take the whole page down (it throws in
+               production too, and there is no error boundary above this). These
+               rows hold no per-item state, so index reconciliation is correct.
+               role="group" ties each GPU to its own reason list for a screen
+               reader, which DOM order alone does not do once there are two. It
+               goes on a div INSIDE the <dd>, never on the <dd> itself: a <dd>
+               carries an implicit `definition` role, and overriding that with
+               `group` strips the pairing so the <dt> is announced as a term
+               with no definition. -->
+          {#each snapshot.hardware.accelerators ?? [] as accelerator}
+            <dt class="flex items-center gap-3 text-sm text-muted self-start">
+              <Microchip class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              {t('system.inference.gpu')}
+            </dt>
+            <dd class="min-w-0">
+              <!-- `||` rather than `??` on purpose: vendor is a required string,
+                   so a probe that recovered no vendor yields "" rather than
+                   undefined, and `??` would keep it and label the group with an
+                   empty string. Falling through to the generic term is better
+                   than an unnamed group. -->
+              <div
+                role="group"
+                aria-label={accelerator.name || accelerator.vendor || t('system.inference.gpu')}
+                class="space-y-1"
+              >
+                <div class="flex items-center gap-3 flex-wrap">
+                  <span
+                    class="text-sm truncate min-w-0"
+                    title={accelerator.name ?? accelerator.vendor}
+                    >{accelerator.name ?? accelerator.vendor}</span
+                  >
+                  {#if accelerator.accessible}
+                    <StatusPill
+                      variant="success"
+                      label={t('system.inference.gpuReachable')}
+                      size="xs"
+                    />
+                  {:else}
+                    <StatusPill
+                      variant="neutral"
+                      label={t('system.inference.gpuNotReachable')}
+                      size="xs"
+                    />
+                  {/if}
+                </div>
+                <!-- Shown whenever present, not only when unreachable: a card can
+                     be perfectly reachable and still be one no build supports. -->
+                {#if accelerator.reasons?.length}
+                  <ul class="list-disc ps-4 space-y-1 text-xs text-muted">
+                    {#each accelerator.reasons as reason}
+                      <li>{gpuReasonLabel(reason)}</li>
+                    {/each}
+                  </ul>
+                {/if}
+              </div>
+            </dd>
+          {/each}
+        </dl>
+
+        <!-- Advanced: the raw capability tokens this host matches in the model
+             manifests' vocabulary. Collapsed by default, it is token soup for a
+             casual user, but the low-ram and per-generation Intel GPU tokens are
+             not derivable from any other fact on this card, so this is the only
+             place a user can see the tokens that decided which model was picked. -->
+        {#if snapshot.hardware.capabilities?.length}
+          <details class="mt-3 pt-3 border-t border-[var(--border-100)]">
+            <summary class="text-sm text-muted cursor-pointer">
+              {t('system.inference.advanced')}
+            </summary>
+            <div class="mt-2 flex items-start gap-3">
+              <span
+                class="text-sm text-muted shrink-0"
+                title={t('system.inference.capabilitiesHelp')}
+                aria-describedby={HARDWARE_CAPABILITIES_HELP_ID}
+              >
+                {t('system.inference.capabilities')}
+              </span>
+              <span id={HARDWARE_CAPABILITIES_HELP_ID} class="sr-only"
+                >{t('system.inference.capabilitiesHelp')}</span
+              >
+              <div class="flex flex-wrap items-center gap-2">
+                {#each snapshot.hardware.capabilities as capability}
+                  <Badge variant="neutral" size="sm" text={capability} />
+                {/each}
+              </div>
+            </div>
+          </details>
+        {/if}
       </div>
 
       <!-- Inference backends -->
@@ -590,11 +786,34 @@
               {/if}
               {#if openvino.supported && openvino.devices && openvino.devices.length > 0}
                 <span class="text-xs text-muted">{t('system.inference.devices')}:</span>
-                {#each openvino.devices as device (device)}
+                {#each openvino.devices as device}
                   <Badge variant="neutral" size="sm" text={device} />
                 {/each}
               {/if}
             </div>
+          {/if}
+        </div>
+
+        <!-- Card-scoped, below a divider, rather than a fourth row in the list
+             above: FP16 here is hwprofile's Profile.HasNativeF16, a property of
+             the CPU every one of these backends executes on, not a backend of
+             its own. It sits here because it is what lets a model's
+             quantization badge below read FP16 at full speed. -->
+        <div
+          class="mt-3 pt-3 border-t border-[var(--border-100)] flex items-center gap-3 flex-wrap"
+        >
+          <span
+            class="text-sm min-w-32"
+            title={t('system.inference.fp16Help')}
+            aria-describedby={FP16_HELP_ID}
+          >
+            {t('system.inference.fp16')}
+          </span>
+          <span id={FP16_HELP_ID} class="sr-only">{t('system.inference.fp16Help')}</span>
+          {#if snapshot.hardware.fp16}
+            <StatusPill variant="success" label={t('system.inference.fp16Supported')} size="xs" />
+          {:else}
+            <StatusPill variant="neutral" label={t('system.inference.fp16Unsupported')} size="xs" />
           {/if}
         </div>
       </div>
@@ -609,9 +828,162 @@
 
         The backend still returns `snapshot.audio` and its i18n keys are kept, so
         re-enabling is just a matter of restoring the markup. Tracked in the
-        Phase A spec (Forgejo #1144). Do NOT delete the audio types/fields.
+        internal Phase A spec. Do NOT delete the audio types/fields.
       -->
     </div>
+
+    <!-- Privacy VAD speech gate: shown only when the privacy filter is enabled. -->
+    {#if snapshot.vad}
+      {@const vad = snapshot.vad}
+      <div>
+        <h3 class="text-xs font-semibold uppercase tracking-wider mb-3 text-muted">
+          {t('system.inference.vad.section')}
+        </h3>
+        <div
+          class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col gap-3"
+          data-testid="vad-card"
+        >
+          <!-- Header mirrors the model cards: icon + name + backend badge, with a
+               runtime-state indicator pinned right (same idiom as the model card's
+               active/idle/paused indicator, not a bespoke pill). -->
+          <div class="flex items-center gap-2 flex-wrap">
+            <ShieldCheck class="w-4 h-4 shrink-0 text-muted" aria-hidden="true" />
+            <span class="text-sm font-semibold truncate">{t('system.inference.vad.title')}</span>
+            <Badge variant="primary" size="sm" text="ONNX" />
+            <Badge variant="info" size="sm" text="CPU" />
+            <span
+              class="ml-auto flex items-center gap-1.5"
+              role="status"
+              aria-label={vadStateHelp(vad)}
+              title={vadStateHelp(vad)}
+            >
+              {#if !vad.enabled}
+                <Minus class="w-3 h-3 shrink-0 text-base-content/30" aria-hidden="true" />
+                <span class="text-xs text-muted">{t('system.inference.vad.disabled')}</span>
+              {:else if !vad.available}
+                <TriangleAlert class="w-3 h-3 shrink-0 text-amber-500" aria-hidden="true" />
+                <span class="text-xs text-amber-600 dark:text-amber-400"
+                  >{t('system.inference.vad.unavailable')}</span
+                >
+              {:else if vad.loaded}
+                <Activity
+                  class="w-3 h-3 shrink-0 text-green-500 animate-pulse motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
+                <span class="text-xs text-green-600 dark:text-green-400"
+                  >{t('system.inference.vad.active')}</span
+                >
+              {:else}
+                <Minus class="w-3 h-3 shrink-0 text-base-content/30" aria-hidden="true" />
+                <span class="text-xs text-muted">{t('system.inference.vad.idle')}</span>
+              {/if}
+            </span>
+          </div>
+
+          <!-- One-line purpose description, so a home user knows what this model is
+               and why it is here. -->
+          <p class="text-xs text-muted leading-snug">{t('system.inference.vad.description')}</p>
+
+          <!-- Spec line mirrors the model card's spec line: sample rate + threshold. -->
+          <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+            <span class="text-muted">
+              {t('system.inference.sampleRate')}:
+              <span class="font-mono tabular-nums text-base-content">
+                {#if vad.sampleRate != null}
+                  {sampleRateKhz(vad.sampleRate)}
+                  {t('system.inference.unitKhz')}
+                {:else}
+                  -
+                {/if}
+              </span>
+            </span>
+            <span class="text-muted">
+              {t('system.inference.vad.threshold')}:
+              <span class="font-mono tabular-nums text-base-content"
+                >{vad.threshold.toFixed(2)}</span
+              >
+            </span>
+          </div>
+
+          <!-- Stats line mirrors the model card's stats line: text-xs muted
+               "label: value" spans with mono values, wrapping. -->
+          <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+            <span class="text-muted">
+              {t('system.inference.invocations')}:
+              <span class="font-mono tabular-nums text-base-content"
+                >{formatNumber(vad.stats.invocations)}</span
+              >
+            </span>
+            <span class="text-muted">
+              {t('system.inference.avgLatency')}:
+              <span class="font-mono tabular-nums text-base-content">
+                {vad.stats.invocations > 0
+                  ? `${vad.stats.avgMs.toFixed(1)} ${t('system.inference.unitMs')}`
+                  : '-'}
+              </span>
+            </span>
+            <span class="text-muted">
+              {t('system.inference.maxLatency')}:
+              <span class="font-mono tabular-nums text-base-content">
+                {vad.stats.invocations > 0
+                  ? `${vad.stats.maxMs.toFixed(1)} ${t('system.inference.unitMs')}`
+                  : '-'}
+              </span>
+            </span>
+            <span class="text-muted">
+              {t('system.inference.vad.speechHits')}:
+              <span class="font-mono tabular-nums text-base-content"
+                >{formatNumber(vad.stats.speechHits)}</span
+              >
+            </span>
+          </div>
+
+          <!-- Recent-speech history: a newest-first feed of recent gate hits,
+               mirroring the model cards' "Last heard" table but shorter (up to 10)
+               and single-stream (when + probability + source). -->
+          <div>
+            <div class="text-xs text-muted mb-1">{t('system.inference.vad.recentTitle')}</div>
+            {#if vad.recentHits && vad.recentHits.length > 0}
+              <table class="w-full text-xs table-fixed">
+                <thead class="text-muted">
+                  <tr>
+                    <th class="text-left font-normal py-0.5 w-16 whitespace-nowrap"
+                      >{t('system.inference.vad.colWhen')}</th
+                    >
+                    <th class="text-left font-normal py-0.5 w-20 whitespace-nowrap"
+                      >{t('system.inference.vad.colProbability')}</th
+                    >
+                    <th class="text-left font-normal py-0.5"
+                      >{t('system.inference.vad.colSource')}</th
+                    >
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each vad.recentHits as hit}
+                    <tr class="border-t border-[var(--border-100)]">
+                      <td
+                        class="py-0.5 font-mono tabular-nums text-base-content whitespace-nowrap"
+                        title={formatLocalDateTime(new Date(hit.atUnix * 1000))}
+                      >
+                        {getLocalTimeString(new Date(hit.atUnix * 1000))}
+                      </td>
+                      <td class="py-0.5 font-mono tabular-nums text-base-content">
+                        {Math.round(hit.probability * 100)}%
+                      </td>
+                      <td class="py-0.5 text-base-content truncate min-w-0" title={hit.source}>
+                        {hit.source}
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            {:else}
+              <div class="text-xs text-muted">{t('system.inference.vad.recentEmpty')}</div>
+            {/if}
+          </div>
+        </div>
+      </div>
+    {/if}
 
     <!-- Models -->
     <div>
@@ -639,6 +1011,9 @@
             {@const throughputLatest =
               throughputSeries.length > 0 ? throughputSeries[throughputSeries.length - 1] : 0}
             {@const isActive = throughputSeries.length > 0 && throughputLatest > 0}
+            {@const anySourceDown = model.sources.some(s => s.notRunning)}
+            {@const allSourcesDown =
+              model.sources.length > 0 && model.sources.every(s => s.notRunning)}
             <div
               class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col gap-3"
             >
@@ -674,21 +1049,48 @@
                         >{/if}
                     </span>
                   </span>
+                {:else if allSourcesDown && !isActive}
+                  <!-- EVERY source assigned to this model is down AND the model is producing
+                       no throughput, so it is genuinely not analyzing. Surface it in the
+                       dominant header slot rather than a benign "Idle" (#4209). Gating on
+                       allSourcesDown (not "any source down") keeps a multi-source model with
+                       one healthy source out of this alarm: during silence it reads "idle"
+                       instead of flapping to "not analyzing" and back when a bird sings, and
+                       the specific down source is still flagged by its badge below.
+                       Precedence: paused > not-analyzing > active > idle. -->
+                  <span
+                    class="ml-auto flex items-center gap-1.5"
+                    role="status"
+                    aria-label={t('system.inference.modelNotAnalyzingTooltip')}
+                    title={t('system.inference.modelNotAnalyzingTooltip')}
+                  >
+                    <TriangleAlert class="w-3 h-3 shrink-0 text-red-500" aria-hidden="true" />
+                    <span class="text-xs font-medium text-red-600 dark:text-red-400"
+                      >{t('system.inference.sourceNotRunning')}</span
+                    >
+                  </span>
                 {:else}
                   <span
-                    class="ml-auto flex items-center gap-1"
+                    class="ml-auto flex items-center gap-1.5"
                     role="status"
                     aria-label={isActive
+                      ? t('system.inference.activityActive')
+                      : t('system.inference.activityIdle')}
+                    title={isActive
                       ? t('system.inference.activityActive')
                       : t('system.inference.activityIdle')}
                   >
                     {#if isActive}
                       <Activity
-                        class="w-3 h-3 text-green-500 animate-pulse motion-reduce:animate-none"
+                        class="w-3 h-3 shrink-0 text-green-500 animate-pulse motion-reduce:animate-none"
                         aria-hidden="true"
                       />
+                      <span class="text-xs text-green-600 dark:text-green-400"
+                        >{t('system.inference.active')}</span
+                      >
                     {:else}
-                      <Minus class="w-3 h-3 text-base-content/30" aria-hidden="true" />
+                      <Minus class="w-3 h-3 shrink-0 text-base-content/30" aria-hidden="true" />
+                      <span class="text-xs text-muted">{t('system.inference.activityIdle')}</span>
                     {/if}
                   </span>
                 {/if}
@@ -841,7 +1243,7 @@
                       </tr>
                     </thead>
                     <tbody>
-                      {#each rows as d (`${d.scientificName || d.species}-${d.atUnix}`)}
+                      {#each rows as d}
                         {@const coNames = coDetectingModels(model.id, d)}
                         <tr class="border-t border-[var(--border-100)]">
                           <td class="py-0.5 pr-2 text-base-content">
@@ -940,19 +1342,52 @@
                 {#if model.sources.length === 0}
                   <span class="text-xs text-muted">{t('system.inference.noSources')}</span>
                 {:else}
+                  {@const notAnalyzingHelpId = `model-not-analyzing-${model.id}`}
                   <div class="flex flex-wrap gap-1.5">
-                    {#each model.sources as source (source.id)}
-                      <Badge variant="ghost" size="sm">
+                    {#each model.sources as source}
+                      <!-- notRunning uses the filled (not outline) error variant: the
+                           outline variant's transparent background failed WCAG AA
+                           contrast at this size (#4209). -->
+                      <Badge
+                        variant={source.notRunning ? 'error' : 'ghost'}
+                        size="sm"
+                        title={source.notRunning
+                          ? t('system.inference.sourceNotRunningTooltip')
+                          : undefined}
+                        aria-describedby={source.notRunning ? notAnalyzingHelpId : undefined}
+                      >
                         {source.name}{#if source.type}
-                          <span class="text-muted ml-1">({source.type})</span>
+                          <span class={source.notRunning ? 'ml-1' : 'text-muted ml-1'}
+                            >({source.type})</span
+                          >
                         {/if}{#if source.fallback}
                           <span class="text-muted ml-1">
                             - {t('system.inference.primaryFallback')}
+                          </span>
+                        {/if}{#if source.notRunning}
+                          <span class="ml-1">
+                            - {t('system.inference.sourceNotRunning')}
                           </span>
                         {/if}
                       </Badge>
                     {/each}
                   </div>
+                  <!-- Persistent, visible reason so keyboard and touch users get the
+                       cause without a hover (frontend/CLAUDE.md: no ambiguous states).
+                       Each not-analyzing badge references it via aria-describedby for
+                       screen readers. Gated on anySourceDown (not the header's
+                       allSourcesDown) so a single down source among healthy ones still
+                       renders the element every down-source badge points at, leaving no
+                       dangling aria-describedby. It points at this page, not the model
+                       gallery, which has no per-source liveness view (#4209). -->
+                  {#if anySourceDown}
+                    <p
+                      id={notAnalyzingHelpId}
+                      class="text-xs text-red-600 dark:text-red-400 mt-1.5 leading-snug"
+                    >
+                      {t('system.inference.sourceNotRunningTooltip')}
+                    </p>
+                  {/if}
                 {/if}
               </div>
             </div>

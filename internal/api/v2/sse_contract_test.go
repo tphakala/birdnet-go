@@ -309,7 +309,10 @@ func TestSSEContract_DetectionPayload_FieldNames(t *testing.T) {
 		birdImage, ok := payload[sseContractFields.BirdImage].(map[string]any)
 		require.True(t, ok, "birdImage must be an object")
 
-		assert.Equal(t, "https://example.com/bird.jpg", birdImage[sseContractFields.BirdImageURL],
+		// The stream publishes the media-proxy URL, not the provider's upstream URL,
+		// so a species renders identically here and through the REST API and cannot
+		// be left pointing at a host whose availability this process does not control.
+		assert.Equal(t, imageprovider.ProxyImageURL("Parus major"), birdImage[sseContractFields.BirdImageURL],
 			"SSE API CONTRACT: birdImage.url value mismatch")
 		assert.Equal(t, "CC BY-SA 4.0", birdImage[sseContractFields.BirdImageLicenseName],
 			"SSE API CONTRACT: birdImage.licenseName value mismatch")
@@ -380,7 +383,7 @@ func TestSSEContract_FrontendAccessPaths(t *testing.T) {
 
 		url, exists := birdImage["url"]
 		require.True(t, exists, "FRONTEND BROKEN: Cannot access data.birdImage.url")
-		assert.Equal(t, "https://example.com/bird.jpg", url)
+		assert.Equal(t, imageprovider.ProxyImageURL("Parus major"), url)
 	})
 
 	t.Run("Frontend can access detection ID", func(t *testing.T) {
@@ -943,8 +946,10 @@ func TestSSEContract_BirdImage_AllSubFields(t *testing.T) {
 		birdImage, ok := birdImageRaw.(map[string]any)
 		require.True(t, ok, "SSE API CONTRACT: birdImage must be an object")
 
-		// Verify all fields are present and have correct values
-		assert.Equal(t, "https://example.com/bird.jpg", birdImage["url"],
+		// Verify all fields are present and have correct values. The URL is the
+		// media-proxy URL, not the provider's upstream address: see the note on the
+		// nil-image case below.
+		assert.Equal(t, imageprovider.ProxyImageURL("Parus major"), birdImage["url"],
 			"SSE API CONTRACT: birdImage.url value must match")
 		assert.Equal(t, "Parus major", birdImage["scientificName"],
 			"SSE API CONTRACT: birdImage.scientificName value must match")
@@ -1009,11 +1014,16 @@ func TestSSEContract_BirdImage_AllSubFields(t *testing.T) {
 		birdImage, ok := birdImageRaw.(map[string]any)
 		require.True(t, ok, "SSE API CONTRACT: birdImage must be an object")
 
-		// url field should be present but empty (no omitempty on url)
+		// The URL is now derived from the detection's scientific name rather than from
+		// the resolved image, so it is present even when no image has been resolved
+		// yet. That is deliberate: since the proxy stopped fetching on the request
+		// path, "not resolved yet" is the normal state at broadcast time, and an empty
+		// URL would tell the client there is no image rather than not yet. The proxy
+		// answers 404 for a species that genuinely has none.
 		urlVal, urlExists := birdImage["url"]
-		assert.True(t, urlExists, "SSE API CONTRACT: birdImage.url key must exist even when empty")
-		assert.Empty(t, urlVal,
-			"SSE API CONTRACT: birdImage.url must be empty when no image provided")
+		assert.True(t, urlExists, "SSE API CONTRACT: birdImage.url key must exist")
+		assert.Equal(t, imageprovider.ProxyImageURL("Parus major"), urlVal,
+			"SSE API CONTRACT: birdImage.url must be the media-proxy URL even with no image resolved")
 	})
 }
 
@@ -1156,7 +1166,7 @@ func TestSSEContract_AllFieldValues_RoundTrip(t *testing.T) {
 		bi, ok := payload["birdImage"].(map[string]any)
 		require.True(t, ok, "birdImage must be an object")
 
-		assert.Equal(t, "https://example.com/bird.jpg", bi["url"])
+		assert.Equal(t, imageprovider.ProxyImageURL("Parus major"), bi["url"])
 		assert.Equal(t, "Parus major", bi["scientificName"])
 		assert.Equal(t, "CC BY-SA 4.0", bi["licenseName"])
 		assert.Equal(t, "https://creativecommons.org/licenses/by-sa/4.0/", bi["licenseURL"])

@@ -158,7 +158,7 @@
     ntfyUsername: string;
     ntfyPassword: string;
     ntfyCheckHost: string;
-    ntfyCheckStatus: 'idle' | 'checking' | 'https' | 'http' | 'unreachable';
+    ntfyCheckStatus: 'idle' | 'checking' | 'https' | 'http' | 'unreachable' | 'checkError';
     gotifyServer: string;
     gotifyToken: string;
     gotifyProtocol: 'https' | 'http';
@@ -274,6 +274,7 @@
     'detectionUrl',
     'imageUrl',
     'daysSinceFirstSeen',
+    'daysSinceLastSeen',
   ] as const;
 
   const templateFieldNames: Record<(typeof templateFieldKeys)[number], string> = {
@@ -291,6 +292,7 @@
     detectionUrl: 'DetectionURL',
     imageUrl: 'ImageURL',
     daysSinceFirstSeen: 'DaysSinceFirstSeen',
+    daysSinceLastSeen: 'DaysSinceLastSeen',
   };
 
   let templateFields = $derived(
@@ -1019,8 +1021,11 @@
     serviceFormData.ntfyCheckStatus = 'checking';
 
     try {
-      const result = await api.get<{ recommended: string; https: boolean; http: boolean }>(
-        `/api/v2/notifications/check-ntfy-server?host=${encodeURIComponent(host)}`
+      // POST (not GET) so the request carries the CSRF token: the endpoint runs a
+      // side-effecting outbound probe and must not be a CSRF-exempt safe GET.
+      const result = await api.post<{ recommended: string; https: boolean; http: boolean }>(
+        '/api/v2/notifications/check-ntfy-server',
+        { host }
       );
 
       if (serviceFormData.ntfyCheckHost !== host) return;
@@ -1032,10 +1037,13 @@
       } else {
         serviceFormData.ntfyCheckStatus = 'unreachable';
       }
-    } catch {
-      if (serviceFormData.ntfyCheckHost === host) {
-        serviceFormData.ntfyCheckStatus = 'unreachable';
-      }
+    } catch (error) {
+      if (serviceFormData.ntfyCheckHost !== host) return;
+      // A genuine network/timeout failure means the server is unreachable. An HTTP
+      // error (an invalid host rejected by the API, or a session/CSRF problem) means
+      // the check could not be completed - a distinct state, not "unreachable".
+      serviceFormData.ntfyCheckStatus =
+        error instanceof ApiError && !error.isNetworkError ? 'checkError' : 'unreachable';
     }
   }
 
@@ -1643,6 +1651,10 @@
                           <span class="text-xs text-[var(--color-error)]"
                             >{t('settings.notifications.push.services.ntfy.connectionFailed')}</span
                           >
+                        {:else if serviceFormData.ntfyCheckStatus === 'checkError'}
+                          <span class="text-xs text-[var(--color-warning)]"
+                            >{t('settings.notifications.push.services.ntfy.checkError')}</span
+                          >
                         {/if}
                       </div>
 
@@ -2005,17 +2017,23 @@
                   <!-- Form Actions -->
                   <div class="flex gap-2 justify-end">
                     <button
+                      type="button"
                       onclick={closeProviderForm}
                       class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-base-content)] focus-visible:ring-offset-2 transition-colors"
                     >
                       {t('settings.notifications.push.form.cancelButton')}
                     </button>
                     <button
+                      type="button"
                       onclick={saveProvider}
                       class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       disabled={!isServiceFormValid ||
                         (selectedService === 'ntfy' &&
                           (serviceFormData.ntfyCheckStatus === 'checking' || !!ntfyCheckPromise))}
+                      title={selectedService === 'ntfy' &&
+                      (serviceFormData.ntfyCheckStatus === 'checking' || !!ntfyCheckPromise)
+                        ? t('settings.notifications.push.form.saveWaitingNtfyCheck')
+                        : undefined}
                     >
                       {t('settings.notifications.push.form.saveButton')}
                     </button>
@@ -2033,6 +2051,7 @@
               </h3>
               {#if !showProviderForm}
                 <button
+                  type="button"
                   onclick={openAddProviderForm}
                   class="inline-flex items-center justify-center gap-1 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors"
                 >
@@ -2082,6 +2101,7 @@
                               : t('settings.notifications.push.providers.typeBadge.shoutrrr')}
                           </span>
                           <button
+                            type="button"
                             onclick={() => openEditProviderForm(index)}
                             class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-black/5 dark:hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             title={t('settings.notifications.push.providers.editButton')}
@@ -2091,6 +2111,7 @@
                             <Pencil class="size-3.5" />
                           </button>
                           <button
+                            type="button"
                             onclick={() => deleteProvider(index)}
                             class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-[var(--color-error)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             title={t('settings.notifications.push.providers.deleteButton')}
@@ -2214,6 +2235,7 @@
 
                 <div class="flex gap-2 justify-end">
                   <button
+                    type="button"
                     onclick={resetTemplates}
                     class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-base-content)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={savingTemplate || generating}
@@ -2221,6 +2243,7 @@
                     {t('settings.notifications.templates.resetButton')}
                   </button>
                   <button
+                    type="button"
                     onclick={saveTemplateConfig}
                     class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed {hasTemplateChanges
                       ? 'bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 focus-visible:ring-[var(--color-primary)]'
@@ -2241,6 +2264,7 @@
                     {/if}
                   </button>
                   <button
+                    type="button"
                     onclick={sendTestNewSpeciesNotification}
                     disabled={generating || savingTemplate}
                     class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-secondary)] text-[var(--color-secondary-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-secondary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -2503,6 +2527,7 @@
           <!-- Action buttons -->
           <div class="flex items-center gap-1 flex-shrink-0">
             <button
+              type="button"
               class="inline-flex items-center justify-center size-7 rounded-md text-[var(--color-base-content)]/70 hover:bg-[var(--color-base-200)] hover:text-[var(--color-base-content)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               title={t('settings.alerts.actionLabels.test')}
               aria-label={t('settings.alerts.actionLabels.test')}
@@ -2512,6 +2537,7 @@
               <Play class="size-3.5" />
             </button>
             <button
+              type="button"
               class="inline-flex items-center justify-center size-7 rounded-md text-[var(--color-base-content)]/70 hover:bg-[var(--color-base-200)] hover:text-[var(--color-base-content)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               title={t('settings.alerts.actionLabels.edit')}
               aria-label={t('settings.alerts.actionLabels.edit')}

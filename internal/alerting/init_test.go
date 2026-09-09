@@ -287,6 +287,19 @@ func TestRenderDetectionTemplates_WithConfiguredTemplates(t *testing.T) {
 	assert.Contains(t, message, "95%")
 }
 
+func TestRenderDetectionTemplates_DaysSinceLastSeen(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	settings.Notification.Templates.NewSpecies.Message = "Returned after {{.DaysSinceLastSeen}} days"
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	props := validDetectionProps()
+	props[PropertyDaysSinceLastSeen] = 20
+
+	_, message := renderDetectionTemplates(props)
+	assert.Equal(t, "Returned after 20 days", message)
+}
+
 func TestRenderDetectionTemplates_EmptyTemplates(t *testing.T) {
 	settings := conftest.GetTestSettings()
 	conftest.SetTestSettings(settings)

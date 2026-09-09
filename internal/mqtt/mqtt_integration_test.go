@@ -31,6 +31,9 @@ const integrationTestTopic = "birdnet-go/integration-test"
 var mqttBroker *containers.MosquittoContainer
 
 func TestMain(m *testing.M) {
+	if code, skip := containers.SkipTestMainIfContainerRuntimeUnavailable(); skip {
+		os.Exit(code)
+	}
 	ctx := context.Background() //nolint:gocritic // TestMain has no *testing.T for t.Context()
 
 	var err error

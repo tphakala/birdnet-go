@@ -31,7 +31,7 @@ func newCaptureLogger(t *testing.T) *bytes.Buffer {
 		capture,
 	)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = cl.Close() })
+	t.Cleanup(func() { assert.NoError(t, cl.Close()) })
 	prev := logger.Global()
 	logger.SetGlobal(cl)
 	t.Cleanup(func() { logger.SetGlobal(prev) })
@@ -110,10 +110,11 @@ func TestTryBatOpenVINO_FallsBackWithoutTag(t *testing.T) {
 		Backend:        conf.BackendPrefOpenVINO,
 		OpenVINODevice: conf.OVDeviceGPU,
 	}
-	ext, device, ok := tryBatOpenVINO(cfg, 1024)
+	ext, device, precision, ok := tryBatOpenVINO(cfg, 1024)
 	assert.False(t, ok, "without the openvino tag, the bat OV path must decline")
 	assert.Nil(t, ext, "a declined OV path must return a nil extractor (no typed-nil trap)")
 	assert.Empty(t, device)
+	assert.Empty(t, precision, "a declined OV path reports no precision; NewBat's ORT branch sets it")
 }
 
 // TestOpenVINOPlanForBat_NotBuilt verifies that in the default (no-tag) build the
@@ -121,7 +122,9 @@ func TestTryBatOpenVINO_FallsBackWithoutTag(t *testing.T) {
 // logs why OpenVINO was declined rather than falling back silently.
 func TestOpenVINOPlanForBat_NotBuilt(t *testing.T) {
 	t.Parallel()
-	_, ok, reason := openVINOPlanFor(conf.BackendPrefOpenVINO, conf.OVDeviceGPU, RegistryIDBat, "", batEmbeddingOutputIndex)
+	// Output index 1 is the 2-output backbone's embedding port; its exact value is
+	// immaterial here since the no-tag planner declines before using it.
+	_, ok, reason := openVINOPlanFor(conf.BackendPrefOpenVINO, conf.OVDeviceGPU, RegistryIDBat, "", 1)
 	assert.False(t, ok)
 	assert.Equal(t, ovReasonNotBuilt, reason)
 }

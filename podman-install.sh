@@ -958,6 +958,12 @@ QUADLET_DIR="$HOME/.config/containers/systemd"
 AUDIO_ENV="--device /dev/snd:/dev/snd"
 # Flag for fresh installation
 FRESH_INSTALL="false"
+# Whether a user config already exists at startup. Captured here, before any
+# install step writes the default config, so it is a reliable "fresh vs update"
+# signal for the data-affecting rootless-audio decision. FRESH_INSTALL is set
+# later in run_installation, but its detection also flips true for existing
+# installs (an unrelated pre-existing quirk), so it must not gate that decision.
+if [ -e "$CONFIG_FILE" ]; then INSTALL_HAD_CONFIG="true"; else INSTALL_HAD_CONFIG="false"; fi
 # Configured timezone (will be set during configuration)
 CONFIGURED_TZ=""
 
@@ -1712,6 +1718,15 @@ create_quadlet_service() {
     local quadlet_source=""
     local quadlet_target="$QUADLET_DIR/birdnet-go.container"
     local network_target="$QUADLET_DIR/birdnet-go.network"
+
+    # Remember whether the current unit already had rootless audio enabled, so
+    # regenerating it on an update does not silently revert a prior opt-in (either
+    # a fresh-install auto-enable or a manual one). Checked before the template is
+    # copied over the target below.
+    local had_rootless_audio=false
+    if [ -f "$quadlet_target" ] && grep -q '^UserNS=keep-id' "$quadlet_target"; then
+        had_rootless_audio=true
+    fi
     
     # Copy network configuration
     if [ -f "Podman/quadlet/birdnet-go.network" ]; then
@@ -1790,9 +1805,13 @@ PublishPort=${WEB_PORT}:8080
 Environment=TZ=${CONFIGURED_TZ:-UTC}
 Environment=BIRDNET_UID=\$(id -u)
 Environment=BIRDNET_GID=\$(id -g)
-Device=/dev/snd:/dev/snd
+AddDevice=-/dev/snd:/dev/snd
+# Rootless audio (opt-in): uncomment to reach the sound card under rootless
+# Podman. A fresh install enables this automatically (see below).
+#UserNS=keep-id
+#GroupAdd=keep-groups
 Network=birdnet-bridge
-Tmpfs=/config/hls:exec,size=50M,uid=\$(id -u),gid=\$(id -g),mode=0755
+Tmpfs=/config/hls:exec,size=50M,mode=1777
 
 [Service]
 Restart=always
@@ -1802,6 +1821,43 @@ TimeoutStartSec=900
 WantedBy=default.target
 EOF
         log_message "INFO" "Created default Quadlet container configuration"
+    fi
+
+    # Enable rootless audio on a genuinely fresh install (no pre-existing user
+    # config to strand), or when a prior unit already had it enabled so an update
+    # preserves the opt-in. INSTALL_HAD_CONFIG is captured at startup before the
+    # default config is written, so it is the reliable fresh-vs-update signal for
+    # this data-affecting decision. An existing install that never opted in is
+    # left untouched: its /config and /data are owned by a subuid, and switching
+    # to keep-id would run the app as the host UID and lose access to those files.
+    if [ "$INSTALL_HAD_CONFIG" = "false" ] || [ "$had_rootless_audio" = "true" ]; then
+        # keep-groups only works under the crun OCI runtime; runc silently ignores
+        # it (the container starts but without the host audio group, so the sound
+        # card stays inaccessible). The podman package pulls runc on some distros
+        # (e.g. Debian 13), so install crun; Podman then prefers it.
+        if ! command -v crun >/dev/null 2>&1; then
+            log_message "INFO" "Installing crun (required for rootless audio via keep-groups)"
+            sudo apt-get update -qq >/dev/null 2>&1 || true
+            sudo apt-get install -qq -y crun >/dev/null 2>&1 || true
+        fi
+        # Enable keep-id/keep-groups when preserving a prior opt-in (reverting it
+        # would break volumes already re-owned to the host UID), or on a fresh
+        # install when crun is available. On a fresh install without crun, leave
+        # the default (subuid) mode instead: keep-groups would be a no-op, so
+        # switching the app to the host UID would gain nothing.
+        if [ "$had_rootless_audio" = "true" ] || command -v crun >/dev/null 2>&1; then
+            sed -i 's|^#UserNS=keep-id|UserNS=keep-id|; s|^#GroupAdd=keep-groups|GroupAdd=keep-groups|' "$quadlet_target"
+            if command -v crun >/dev/null 2>&1; then
+                log_message "INFO" "Enabled rootless audio (keep-id + keep-groups + crun) in Quadlet unit"
+                print_message "🔊 Rootless audio enabled (keep-id + keep-groups + crun): sound card works out of the box" "$GREEN"
+            else
+                log_message "WARN" "Kept rootless audio (keep-id) enabled but crun is missing; audio needs crun"
+                print_message "⚠️  Rootless audio (keep-id) kept enabled, but crun is missing so the sound card will not work until you install it (see Podman/README.md)" "$YELLOW"
+            fi
+        else
+            log_message "WARN" "crun unavailable; left rootless audio disabled (see Podman/README.md)"
+            print_message "⚠️  crun is unavailable, so rootless audio was not enabled (see Podman/README.md)" "$YELLOW"
+        fi
     fi
     
     # Reload systemd to recognize new Quadlet files

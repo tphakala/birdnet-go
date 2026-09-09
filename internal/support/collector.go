@@ -785,7 +785,7 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 // map is nil-and-omitted on the overwhelmingly common install where no gate is
 // set, instead of adding a block of empty strings to every dump. os.Getenv
 // cannot tell those two states apart, and for these gates nothing does: an
-// empty value fails nativeEncoderSelected exactly as an unset one does, so a
+// empty value fails nativeSelected exactly as an unset one does, so a
 // dump loses no triage signal by collapsing them.
 //
 // Values are redacted by key even though the allowlist is supposed to make that

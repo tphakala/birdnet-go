@@ -78,16 +78,6 @@ func NewAnalysisBuffer(capacity, overlapSize, readSize int, sourceID string, log
 			Context("source_id", sourceID).
 			Build()
 	}
-	if readSize < overlapSize {
-		return nil, errors.Newf("read size %d must be >= overlap size %d", readSize, overlapSize).
-			Component("audiocore").
-			Category(errors.CategoryValidation).
-			Context("operation", "new_analysis_buffer").
-			Context("source_id", sourceID).
-			Context("read_size", readSize).
-			Context("overlap_size", overlapSize).
-			Build()
-	}
 	if capacity < readSize {
 		return nil, errors.Newf("capacity %d must be >= read size %d", capacity, readSize).
 			Component("audiocore").
@@ -229,13 +219,15 @@ func (ab *AnalysisBuffer) Read() (window []byte, release func(), err error) {
 		if ab.prevData == nil {
 			ab.prevData = make([]byte, ab.overlapSize)
 		}
-		freshEnd := ab.overlapSize + n
-		if n >= ab.overlapSize {
-			copy(ab.prevData, window[freshEnd-ab.overlapSize:freshEnd])
-		} else {
-			clear(ab.prevData)
-			copy(ab.prevData[ab.overlapSize-n:], window[ab.overlapSize:freshEnd])
-		}
+		// Carry the window's last overlapSize valid bytes forward as the next
+		// window's overlap. Those bytes are window[n : overlapSize+n]: on a full
+		// read n == readSize, so this is window[readSize : windowSize], the correct
+		// overlap region for ANY overlap ratio, including overlap > readSize (more
+		// than 50% of the window). The slice stays within the valid region because
+		// overlapSize+n <= overlapSize+readSize == windowSize. It correctly retains
+		// the older overlap that carried in from window[:overlapSize], which the
+		// previous readSize-vs-overlapSize split dropped.
+		copy(ab.prevData, window[n:ab.overlapSize+n])
 	}
 
 	pool := ab.windowPool

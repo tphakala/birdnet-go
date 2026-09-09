@@ -14,6 +14,7 @@ func Command(settings *conf.Settings) *cobra.Command {
 
 	// Add subcommands here
 	supportCmd.AddCommand(CollectCommand())
+	supportCmd.AddCommand(OpenVINOProbeCommand(settings))
 
 	return supportCmd
 }

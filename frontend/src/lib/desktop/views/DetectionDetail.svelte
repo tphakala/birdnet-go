@@ -173,6 +173,7 @@
       speciesController?.abort();
       taxonomyController?.abort();
       attributionController?.abort();
+      cancelAttributionRetry();
     };
   });
 
@@ -258,11 +259,34 @@
     }
   }
 
+  /**
+   * Delays before re-requesting attribution that answered "not resolved yet".
+   * Deliberately shorter and fewer than the thumbnail's own schedule: attribution is
+   * supporting detail, and the image itself is what the user is waiting on.
+   */
+  const ATTRIBUTION_RETRY_DELAYS_MS = [5000, 15000, 40000];
+
+  /**
+   * Pending 503 retry. Tracked separately from attributionController because the
+   * controller is released as soon as its request settles: without this the scheduled
+   * retry would still fire after the view was unmounted or navigated to a different
+   * detection, since aborting the (already-nulled) controller could no longer reach it.
+   */
+  let attributionRetryTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+
+  function cancelAttributionRetry() {
+    if (attributionRetryTimer !== undefined) {
+      globalThis.clearTimeout(attributionRetryTimer);
+      attributionRetryTimer = undefined;
+    }
+  }
+
   // Fetch image attribution metadata
-  async function fetchImageAttribution() {
+  async function fetchImageAttribution(attempt = 0) {
     if (!detection?.scientificName?.trim()) return;
 
     attributionController?.abort();
+    cancelAttributionRetry();
     const controller = new AbortController();
     attributionController = controller;
     const { signal } = controller;
@@ -277,6 +301,22 @@
         const data = await response.json();
         if (signal.aborted) return;
         imageAttribution = data as ImageAttribution;
+        return;
+      }
+      // 503 means the image is still being resolved in the background, not that it
+      // has no attribution. Without a retry the CC-BY/CC-BY-SA photo that the
+      // thumbnail's own retry recovers seconds later would be displayed with no
+      // author or licence credit, which is a licensing problem and not merely a
+      // cosmetic one.
+      if (response.status === 503 && attempt < ATTRIBUTION_RETRY_DELAYS_MS.length) {
+        const delay = ATTRIBUTION_RETRY_DELAYS_MS.at(attempt) ?? 0;
+        attributionRetryTimer = globalThis.setTimeout(() => {
+          attributionRetryTimer = undefined;
+          if (!signal.aborted) void fetchImageAttribution(attempt + 1);
+        }, delay);
+        // Return before the finally block releases the controller, so this request's
+        // signal stays reachable and an abort can still cancel the pending retry.
+        return;
       }
     } catch (error) {
       if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) return;
@@ -650,7 +690,7 @@
       {#if det.clipName}
         <div class="meta-section">
           <a
-            href={buildAppUrl(`/api/v2/media/audio/${det.clipName}`)}
+            href={buildAppUrl(`/api/v2/audio/${det.id}`)}
             download
             class="meta-download"
             aria-label={t('detections.detail.aria.downloadAudioClip', { name: displayName })}

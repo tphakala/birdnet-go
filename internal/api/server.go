@@ -455,15 +455,13 @@ func (s *Server) setupMiddleware() {
 	// CORS middleware
 	s.echo.Use(mw.NewCORS(securityConfig))
 
-	// CSRF protection middleware (uses centralized logger)
+	// CSRF protection middleware (uses centralized logger). NewCSRF neutralizes
+	// Echo v4.15's Sec-Fetch-Site short-circuit so every non-skipped state-changing
+	// request is token-validated, and Echo's token path refreshes the cookie's
+	// expiry on each request (GHSA-9fhj-f35q-w532).
 	s.echo.Use(mw.NewCSRF(&mw.CSRFConfig{
 		SecureCookie: s.config.TLSEnabled,
 	}))
-
-	// Refresh CSRF cookie expiration on every API request.
-	// Echo v4.15's Sec-Fetch-Site check short-circuits before the built-in
-	// cookie refresh code, so the cookie expires after 30 minutes without this.
-	s.echo.Use(mw.CSRFCookieRefresh(nil))
 
 	// Body limit middleware
 	s.echo.Use(mw.NewBodyLimit(s.config.BodyLimit))
@@ -488,6 +486,10 @@ func (s *Server) setupRoutes() error {
 	// Social OAuth routes (Google, GitHub, Microsoft)
 	// These must be at /auth/:provider to match frontend expectations
 	s.registerOAuthRoutes()
+
+	// pprof endpoints, registered unconditionally and gated per request so the
+	// setting hot-reloads. They are refused with 404 until profiling is enabled.
+	s.registerPprofRoutes()
 
 	// Initialize static file server for frontend assets (uses centralized logger)
 	s.staticServer = NewStaticFileServer()

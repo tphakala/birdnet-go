@@ -2,131 +2,15 @@ package middleware
 
 import (
 	"crypto/tls"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// newTestContextWithCookie creates an Echo context with a CSRF cookie pre-set.
-func newTestContextWithCookie(t *testing.T, method, path, cookieValue string) (echo.Context, *httptest.ResponseRecorder) {
-	t.Helper()
-	e := echo.New()
-	req := httptest.NewRequest(method, path, http.NoBody)
-	if cookieValue != "" {
-		req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: cookieValue})
-	}
-	rec := httptest.NewRecorder()
-	return e.NewContext(req, rec), rec
-}
-
-func TestCSRFCookieRefresh_RefreshesCookieWhenPresent(t *testing.T) {
-	t.Parallel()
-
-	c, rec := newTestContextWithCookie(t, http.MethodGet, "/api/v2/detections/1", "test-token-value")
-
-	handler := CSRFCookieRefresh(nil)(func(c echo.Context) error {
-		return nil
-	})
-
-	err := handler(c)
-	require.NoError(t, err)
-
-	cookies := rec.Result().Cookies()
-	require.Len(t, cookies, 1, "expected exactly one Set-Cookie header")
-	assert.Equal(t, csrfCookieName, cookies[0].Name)
-	assert.Equal(t, "test-token-value", cookies[0].Value)
-	assert.Equal(t, csrfCookieMaxAge, cookies[0].MaxAge)
-}
-
-func TestCSRFCookieRefresh_NoCookiePresent(t *testing.T) {
-	t.Parallel()
-
-	c, rec := newTestContext(t, http.MethodGet, "/api/v2/detections/1")
-
-	handler := CSRFCookieRefresh(nil)(func(c echo.Context) error {
-		return nil
-	})
-
-	err := handler(c)
-	require.NoError(t, err)
-
-	cookies := rec.Result().Cookies()
-	assert.Empty(t, cookies, "should not set cookie when none exists")
-}
-
-func TestCSRFCookieRefresh_SkipsStaticAssets(t *testing.T) {
-	t.Parallel()
-
-	skippedPaths := []string{
-		"/assets/style.css",
-		"/ui/assets/app.js",
-		"/health",
-		"/api/v2/media/clip.mp3",
-		"/api/v2/spectrogram/123",
-		"/api/v2/audio/456",
-	}
-
-	for _, path := range skippedPaths {
-		t.Run(path, func(t *testing.T) {
-			t.Parallel()
-
-			c, rec := newTestContextWithCookie(t, http.MethodGet, path, "test-token")
-
-			handler := CSRFCookieRefresh(nil)(func(c echo.Context) error {
-				return nil
-			})
-
-			err := handler(c)
-			require.NoError(t, err)
-
-			cookies := rec.Result().Cookies()
-			assert.Empty(t, cookies, "skipped path %s should not refresh cookie", path)
-		})
-	}
-}
-
-func TestCSRFCookieRefresh_EmptyCookieValue(t *testing.T) {
-	t.Parallel()
-
-	// AddCookie with empty value directly since helper skips empty values
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/1", http.NoBody)
-	req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: ""})
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	handler := CSRFCookieRefresh(nil)(func(c echo.Context) error {
-		return nil
-	})
-
-	err := handler(c)
-	require.NoError(t, err)
-
-	cookies := rec.Result().Cookies()
-	assert.Empty(t, cookies, "should not refresh cookie with empty value")
-}
-
-func TestCSRFCookieRefresh_DoesNotRefreshOnError(t *testing.T) {
-	t.Parallel()
-
-	c, rec := newTestContextWithCookie(t, http.MethodPost, "/api/v2/detections/1/review", "test-token")
-
-	handlerErr := errors.New("handler failed")
-	handler := CSRFCookieRefresh(nil)(func(c echo.Context) error {
-		return handlerErr
-	})
-
-	err := handler(c)
-	require.ErrorIs(t, err, handlerErr)
-
-	cookies := rec.Result().Cookies()
-	assert.Empty(t, cookies, "should not refresh cookie on handler error")
-}
 
 func TestDefaultCSRFSkipper(t *testing.T) {
 	t.Parallel()
@@ -169,6 +53,16 @@ func TestDefaultCSRFSkipper(t *testing.T) {
 
 		// Logout — skipped (must work even with expired CSRF tokens)
 		{"POST auth logout", http.MethodPost, "/api/v2/auth/logout", true},
+
+		// pprof — always skipped. go tool pprof POSTs to /symbol with no CSRF
+		// token, and the handlers are read-only and separately gated (auth
+		// middleware, or a secret query token a cross-site request cannot supply).
+		{"GET pprof index", http.MethodGet, "/debug/pprof", true},
+		{"GET pprof heap", http.MethodGet, "/debug/pprof/heap", true},
+		{"POST pprof symbol", http.MethodPost, "/debug/pprof/symbol", true},
+
+		// A path that merely starts with the same characters is not pprof.
+		{"POST debug lookalike", http.MethodPost, "/debug/pprofiler", false},
 
 		// Regular API paths — never skipped
 		{"GET detections", http.MethodGet, "/api/v2/detections/1", false},
@@ -326,4 +220,182 @@ func TestIsTrustedRemote(t *testing.T) {
 			assert.Equal(t, tt.expected, isTrustedRemote(tt.remoteAddr))
 		})
 	}
+}
+
+// --- GHSA-9fhj-f35q-w532: Sec-Fetch-Site CSRF bypass ---------------------------
+
+// newCSRFTestServer builds an Echo server wired with the production NewCSRF
+// middleware plus representative routes, so tests can drive real requests
+// through the middleware and Echo's HTTP error handler.
+func newCSRFTestServer() *echo.Echo {
+	e := echo.New()
+	e.Use(NewCSRF(&CSRFConfig{}))
+
+	// Non-skipped state-changing route (any method).
+	e.Any("/api/v2/settings", func(c echo.Context) error {
+		return c.String(http.StatusOK, "ok")
+	})
+	// Non-skipped token-provider route (mirrors /api/v2/app/config).
+	e.GET("/api/v2/app/config", func(c echo.Context) error {
+		token, err := EnsureCSRFToken(c)
+		if err != nil {
+			return err
+		}
+		return c.String(http.StatusOK, token)
+	})
+	// Skipper-exempt route (login must work before a CSRF token exists).
+	e.POST("/api/v2/auth/login", func(c echo.Context) error {
+		return c.String(http.StatusOK, "login")
+	})
+	return e
+}
+
+// TestNewCSRF_SecFetchSiteBypassBlocked verifies that a state-changing request
+// without a CSRF token is rejected regardless of the Sec-Fetch-Site header.
+// Before the fix, Sec-Fetch-Site: same-origin or none caused Echo v4.15 to skip
+// token validation entirely, letting a non-browser client that forged the header
+// call CSRF-protected routes without a token (GHSA-9fhj-f35q-w532).
+func TestNewCSRF_SecFetchSiteBypassBlocked(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		secFetchSite string
+	}{
+		{"no Sec-Fetch-Site (control)", ""},
+		{"same-origin", "same-origin"},
+		{"none", "none"},
+		{"cross-site", "cross-site"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			e := newCSRFTestServer()
+			req := httptest.NewRequest(http.MethodPost, "/api/v2/settings", http.NoBody)
+			if tt.secFetchSite != "" {
+				req.Header.Set(echo.HeaderSecFetchSite, tt.secFetchSite)
+			}
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, req)
+
+			assert.Equal(t, http.StatusForbidden, rec.Code,
+				"state-changing request without a token must be rejected for Sec-Fetch-Site=%q", tt.secFetchSite)
+		})
+	}
+}
+
+// TestNewCSRF_BypassBlockedAcrossMethods confirms the strip is method-agnostic:
+// every unsafe method is forced through token validation under a forged
+// Sec-Fetch-Site: same-origin, not just POST.
+func TestNewCSRF_BypassBlockedAcrossMethods(t *testing.T) {
+	t.Parallel()
+
+	for _, method := range []string{http.MethodPut, http.MethodPatch, http.MethodDelete} {
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+
+			e := newCSRFTestServer()
+			req := httptest.NewRequest(method, "/api/v2/settings", http.NoBody)
+			req.Header.Set(echo.HeaderSecFetchSite, "same-origin")
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, req)
+
+			assert.Equal(t, http.StatusForbidden, rec.Code,
+				"%s without a token must be rejected under Sec-Fetch-Site: same-origin", method)
+		})
+	}
+}
+
+// TestNewCSRF_MismatchedTokenRejected confirms a present-but-wrong token is
+// rejected, proving the token is actually compared against the cookie rather
+// than merely required to be present.
+func TestNewCSRF_MismatchedTokenRejected(t *testing.T) {
+	t.Parallel()
+
+	e := newCSRFTestServer()
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/settings", http.NoBody)
+	req.Header.Set(echo.HeaderSecFetchSite, "same-origin")
+	req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: "cookie-token-value"})
+	req.Header.Set("X-CSRF-Token", "a-different-token")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusForbidden, rec.Code,
+		"a token not matching the cookie must be rejected")
+}
+
+// TestNewCSRF_LegitTokenFlow verifies the SPA flow still works: the config
+// endpoint mints a real (non-sentinel) token backed by a cookie, and a
+// subsequent state-changing request presenting that token succeeds even with
+// Sec-Fetch-Site: same-origin.
+func TestNewCSRF_LegitTokenFlow(t *testing.T) {
+	t.Parallel()
+
+	e := newCSRFTestServer()
+
+	// 1. Fetch the token as a browser would (same-origin GET).
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	getReq.Header.Set(echo.HeaderSecFetchSite, "same-origin")
+	getRec := httptest.NewRecorder()
+	e.ServeHTTP(getRec, getReq)
+
+	require.Equal(t, http.StatusOK, getRec.Code)
+	token := getRec.Body.String()
+	require.NotEmpty(t, token)
+	require.NotEqual(t, middleware.CSRFUsingSecFetchSite, token,
+		"config endpoint must return a real token, not Echo's Sec-Fetch-Site sentinel")
+
+	var csrfCookie *http.Cookie
+	for _, ck := range getRec.Result().Cookies() {
+		if ck.Name == csrfCookieName {
+			csrfCookie = ck
+		}
+	}
+	require.NotNil(t, csrfCookie, "config endpoint must set a CSRF cookie")
+	require.Equal(t, token, csrfCookie.Value, "returned token must match the cookie value")
+
+	// 2. Use that token on a state-changing request (same-origin).
+	postReq := httptest.NewRequest(http.MethodPost, "/api/v2/settings", http.NoBody)
+	postReq.Header.Set(echo.HeaderSecFetchSite, "same-origin")
+	postReq.Header.Set("X-CSRF-Token", token)
+	postReq.AddCookie(csrfCookie)
+	postRec := httptest.NewRecorder()
+	e.ServeHTTP(postRec, postReq)
+
+	assert.Equal(t, http.StatusOK, postRec.Code, "valid token must be accepted")
+}
+
+// TestNewCSRF_SkippedRouteUnaffected verifies skipper-exempt routes still bypass
+// CSRF (login must work before a token exists), even with Sec-Fetch-Site set.
+func TestNewCSRF_SkippedRouteUnaffected(t *testing.T) {
+	t.Parallel()
+
+	e := newCSRFTestServer()
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/auth/login", http.NoBody)
+	req.Header.Set(echo.HeaderSecFetchSite, "same-origin")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code, "skipped login route must not require a CSRF token")
+}
+
+// TestEnsureCSRFToken_IgnoresSentinel verifies EnsureCSRFToken never returns
+// Echo's Sec-Fetch-Site sentinel as if it were a usable token; it mints a real
+// token and cookie instead (GHSA-9fhj-f35q-w532 defense in depth).
+func TestEnsureCSRFToken_IgnoresSentinel(t *testing.T) {
+	t.Parallel()
+
+	c, rec := newTestContext(t, http.MethodGet, "/api/v2/app/config")
+	c.Set(CSRFContextKey, middleware.CSRFUsingSecFetchSite)
+
+	token, err := EnsureCSRFToken(c)
+	require.NoError(t, err)
+	assert.NotEqual(t, middleware.CSRFUsingSecFetchSite, token)
+	assert.NotEmpty(t, token)
+
+	cookies := rec.Result().Cookies()
+	require.Len(t, cookies, 1, "should mint a fresh CSRF cookie")
+	assert.Equal(t, token, cookies[0].Value)
 }

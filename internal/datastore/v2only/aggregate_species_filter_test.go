@@ -10,6 +10,74 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 )
 
+// TestV2OnlyDatastore_SplitByZoneOffset verifies the hourly range is divided at DST transitions.
+//
+// SQL hour bucketing applies one fixed UTC offset per query. That is exact for a single day, but
+// once the time-of-day chart began requesting a whole range, a span crossing a DST change bucketed
+// every detection after the transition an hour out. Splitting lets each part use the offset that
+// was actually in effect.
+func TestV2OnlyDatastore_SplitByZoneOffset(t *testing.T) {
+	t.Parallel()
+	ds, cleanup := setupTestDatastore(t)
+	t.Cleanup(cleanup)
+
+	newYork, err := time.LoadLocation("America/New_York")
+	require.NoError(t, err)
+	ds.timezone = newYork
+
+	const (
+		estOffset = -5 * 60 * 60 // winter
+		edtOffset = -4 * 60 * 60 // summer
+	)
+
+	t.Run("range inside one zone period yields a single segment", func(t *testing.T) {
+		t.Parallel()
+		start := time.Date(2026, 1, 10, 0, 0, 0, 0, newYork).Unix()
+		end := time.Date(2026, 1, 20, 0, 0, 0, 0, newYork).Unix()
+
+		segments := ds.splitByZoneOffset(start, end)
+		require.Len(t, segments, 1, "no transition in range, so one query")
+		assert.Equal(t, estOffset, segments[0].offset)
+		assert.Equal(t, start, segments[0].start)
+		assert.Equal(t, end, segments[0].end)
+	})
+
+	t.Run("range crossing spring-forward splits at the transition", func(t *testing.T) {
+		t.Parallel()
+		// US DST begins 2026-03-08 02:00 local.
+		start := time.Date(2026, 3, 1, 0, 0, 0, 0, newYork).Unix()
+		end := time.Date(2026, 3, 15, 0, 0, 0, 0, newYork).Unix()
+
+		segments := ds.splitByZoneOffset(start, end)
+		require.Len(t, segments, 2, "one transition splits the range in two")
+
+		assert.Equal(t, estOffset, segments[0].offset, "before the change it is still EST")
+		assert.Equal(t, edtOffset, segments[1].offset, "after the change it is EDT")
+
+		// The segments tile the range exactly: no gap, no overlap, no lost detections.
+		assert.Equal(t, start, segments[0].start)
+		assert.Equal(t, segments[0].end, segments[1].start)
+		assert.Equal(t, end, segments[1].end)
+
+		// The split lands on the real transition instant, not a day boundary. Expressed in UTC on
+		// purpose: 02:00 local does not exist on this date (clocks jump 02:00 -> 03:00), so building
+		// it in New York time normalizes to the wrong side of the transition.
+		transition := time.Date(2026, 3, 8, 7, 0, 0, 0, time.UTC).Unix() // 02:00 EST -> 03:00 EDT
+		assert.Equal(t, transition, segments[0].end)
+	})
+
+	t.Run("a year covers both transitions", func(t *testing.T) {
+		t.Parallel()
+		start := time.Date(2026, 1, 1, 0, 0, 0, 0, newYork).Unix()
+		end := time.Date(2026, 12, 31, 0, 0, 0, 0, newYork).Unix()
+
+		segments := ds.splitByZoneOffset(start, end)
+		require.Len(t, segments, 3, "EST -> EDT -> EST")
+		assert.Equal(t, []int{estOffset, edtOffset, estOffset},
+			[]int{segments[0].offset, segments[1].offset, segments[2].offset})
+	})
+}
+
 // TestV2OnlyDatastore_HourlyChartsMultiLabelSelection reproduces the "N species selected, fewer
 // drawn" bug. A species can own several model labels, and GetTopSpecies groups/limits by label ROW.
 // When the caller limits to the selection size, a high-volume species' extra label rows exhaust the
@@ -164,5 +232,99 @@ func TestV2OnlyDatastore_HourlyChartsSpeciesFilter(t *testing.T) {
 		require.Len(t, got, 2)
 		assert.Equal(t, "Turdus merula", got[0].ScientificName) // volume 2 outranks wren's 1
 		assert.Equal(t, "Troglodytes troglodytes", got[1].ScientificName)
+	})
+}
+
+// TestV2OnlyDatastore_SpeciesFilterSpansModels pins the species filter of the single-species
+// time analytics (daily counts, hourly counts, activity heatmap, dawn-chorus onset) to every
+// label of the species, not just the first one.
+//
+// A species has one label per AI model, and each detection references the label of the model
+// that made it. On a multi-model station the first label for a name typically belongs to the
+// permanently installed primary model, which may have no streams assigned; resolving the filter
+// to that single label returned empty results for every species even while the other models
+// were detecting it all day.
+func TestV2OnlyDatastore_SpeciesFilterSpansModels(t *testing.T) {
+	t.Parallel()
+	ds, cleanup := setupTestDatastore(t)
+	t.Cleanup(cleanup)
+	ds.timezone = time.UTC
+	ctx := t.Context()
+
+	const (
+		species   = "Megascops asio"
+		startDate = "2026-03-01"
+		endDate   = "2026-03-02"
+	)
+
+	// The default (primary) model gets the label first, and never detects the species.
+	_, err := ds.label.GetOrCreate(ctx, species, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
+	require.NoError(t, err)
+
+	// A second model, the one actually listening, owns every detection.
+	otherModel, err := ds.model.GetOrCreate(ctx, "Perch", "1.0", "default", entities.ModelTypeBird, nil)
+	require.NoError(t, err)
+	otherLabel, err := ds.label.GetOrCreate(ctx, species, otherModel.ID, ds.speciesLabelTypeID, ds.avesClassID)
+	require.NoError(t, err)
+	const calls = 4
+	for i := range calls {
+		require.NoError(t, ds.detection.Save(ctx, &entities.Detection{
+			ModelID:    otherModel.ID,
+			LabelID:    otherLabel.ID,
+			DetectedAt: time.Date(2026, 3, 1, 5, 10*i, 0, 0, time.UTC).Unix(),
+			Confidence: 0.9,
+		}))
+	}
+
+	t.Run("daily counts", func(t *testing.T) {
+		t.Parallel()
+		got, err := ds.GetDailyAnalyticsData(ctx, startDate, endDate, species)
+		require.NoError(t, err)
+		require.Len(t, got, 1)
+		assert.Equal(t, calls, got[0].Count)
+	})
+
+	t.Run("hourly counts", func(t *testing.T) {
+		t.Parallel()
+		got, err := ds.GetHourlyAnalyticsData(ctx, startDate, species)
+		require.NoError(t, err)
+		total := 0
+		for _, h := range got {
+			total += h.Count
+		}
+		assert.Equal(t, calls, total)
+	})
+
+	t.Run("hourly distribution", func(t *testing.T) {
+		t.Parallel()
+		got, err := ds.GetHourlyDistribution(ctx, startDate, endDate, species)
+		require.NoError(t, err)
+		total := 0
+		for _, h := range got {
+			total += h.Count
+		}
+		assert.Equal(t, calls, total)
+	})
+
+	t.Run("activity heatmap", func(t *testing.T) {
+		t.Parallel()
+		got, err := ds.GetActivityHeatmap(ctx, startDate, endDate, species)
+		require.NoError(t, err)
+		total := 0
+		for _, c := range got.CellCount {
+			total += c
+		}
+		assert.Equal(t, calls, total)
+	})
+
+	t.Run("dawn chorus onset", func(t *testing.T) {
+		t.Parallel()
+		got, err := ds.GetDailyActivityOnset(ctx, startDate, endDate, species)
+		require.NoError(t, err)
+		counted := 0
+		for _, d := range got {
+			counted += d.DetectionCount
+		}
+		assert.Equal(t, calls, counted)
 	})
 }

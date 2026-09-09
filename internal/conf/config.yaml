@@ -161,6 +161,7 @@ birdnet:
       threshold: 0.01     # rangefilter species occurrence threshold
   modelpath: ""           # path to external model file (empty for embedded)
   labelpath: ""           # path to external label file (empty for embedded)
+  modelregion: auto       # regional model preference: auto (from coordinates), global (all species), or a region slug (e.g. iberia)
   usexnnpack: true        # true to use XNNPACK delegate for inference acceleration
 
 # Optional taxonomy synonym overrides for image lookups.
@@ -222,7 +223,7 @@ realtime:
   dashboard:
     thumbnails:
       debug: false        # true to enable debug mode for image provider
-      summary: false      # show thumbnails on summary table
+      summary: true       # show thumbnails on summary table
       recent: true        # show thumbnails on recent table
       imageprovider: avicommons # preferred image provider: avicommons, wikimedia, auto
       fallbackpolicy: none # fallback policy: none (no fallback), all (try all available providers)
@@ -458,6 +459,24 @@ output:
 # Sentry telemetry configuration (opt-in, respects EU privacy laws)
 sentry:
   enabled: false          # false by default, must be explicitly enabled by user (opt-in)
+
+# Developer diagnostics, off by default
+diagnostics:
+  profiling:
+    enabled: false        # true to serve Go pprof endpoints at /debug/pprof/ on the web server
+    # The pprof routes sit behind the web server's authentication. When no auth
+    # provider is configured, a token is generated here automatically once
+    # profiling is enabled, and must then be passed as ?token=... Keep it secret.
+    # token: ""
+
+    # Runtime sampling rates for the block and mutex profiles, both off by
+    # default and independent of the endpoint above: sampling costs CPU on the
+    # audio path whether or not anyone ever fetches a profile. The two use
+    # different units, and both sample less as the number grows. Edited here
+    # they apply at the next restart; changed through the settings API they
+    # apply immediately. See doc/PROFILING.md.
+    blockrate: 0          # ns of blocked time per sample; 0 disables. Try 10000
+    mutexfraction: 0      # report 1 in N contention events; 0 disables. Try 100
 
 # Notification settings
 notification:

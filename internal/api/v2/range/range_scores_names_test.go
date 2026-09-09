@@ -4,6 +4,7 @@
 package rangeapi
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -67,4 +68,54 @@ func TestBuildRangeFilterSpecies_WithResolver(t *testing.T) {
 	assert.Equal(t, "COMMON", got[0].CommonName)
 	assert.Equal(t, "COMMON", got[1].CommonName)
 	assert.Equal(t, []string{"Turdus merula_Eurasian Blackbird", "Parus major_Great Tit"}, seen)
+}
+
+// TestBuildRangeFilterSpecies_ProvenanceFlags covers the wire encoding of the badge
+// flags. They are absent-or-true: a species with no provenance must omit the fields
+// entirely rather than send an explicit false, because the client uses "field absent"
+// to decide whether to fall back to matching the displayed names against the settings.
+func TestBuildRangeFilterSpecies_ProvenanceFlags(t *testing.T) {
+	t.Parallel()
+
+	scores := []classifier.SpeciesScore{
+		{Label: "Parus major_Great Tit", Score: 1.0, HasCustomConfig: true},
+		{Label: "Turdus merula_Eurasian Blackbird", Score: 1.0, IsManuallyIncluded: true},
+		{Label: "Corvus corax_Common Raven", Score: 1.0, HasCustomConfig: true, IsManuallyIncluded: true},
+		{Label: "Pica pica_Eurasian Magpie", Score: 0.5},
+	}
+
+	got := buildRangeFilterSpecies(scores, nil)
+	require.Len(t, got, 4)
+
+	require.NotNil(t, got[0].HasCustomConfig)
+	assert.True(t, *got[0].HasCustomConfig)
+	assert.Nil(t, got[0].IsManuallyIncluded, "an unset flag must be omitted, not sent as false")
+
+	assert.Nil(t, got[1].HasCustomConfig, "an unset flag must be omitted, not sent as false")
+	require.NotNil(t, got[1].IsManuallyIncluded)
+	assert.True(t, *got[1].IsManuallyIncluded)
+
+	require.NotNil(t, got[2].HasCustomConfig)
+	require.NotNil(t, got[2].IsManuallyIncluded)
+	assert.True(t, *got[2].HasCustomConfig)
+	assert.True(t, *got[2].IsManuallyIncluded)
+
+	assert.Nil(t, got[3].HasCustomConfig)
+	assert.Nil(t, got[3].IsManuallyIncluded)
+}
+
+// TestBuildRangeFilterSpecies_ProvenanceFlagsOmittedFromJSON pins the omitempty
+// behavior at the JSON layer, which is what the client actually observes.
+func TestBuildRangeFilterSpecies_ProvenanceFlagsOmittedFromJSON(t *testing.T) {
+	t.Parallel()
+
+	got := buildRangeFilterSpecies([]classifier.SpeciesScore{
+		{Label: "Pica pica_Eurasian Magpie", Score: 0.5},
+	}, nil)
+	require.Len(t, got, 1)
+
+	encoded, err := json.Marshal(got[0])
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), "hasCustomConfig")
+	assert.NotContains(t, string(encoded), "isManuallyIncluded")
 }

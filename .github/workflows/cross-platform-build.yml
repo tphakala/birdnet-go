@@ -94,7 +94,11 @@ jobs:
         run: |
           # Compile + link every non-test package for the target GOOS. noembed and
           # skipfrontend skip model/frontend embedding, so no dist/models are
-          # required and the frontend build is not pulled in.
+          # required and the frontend build is not pulled in. This smoke build is
+          # NOT the release configuration (releases embed models and add openvino
+          # on linux), but it compiles the same go-aac SIMD kernels the release
+          # artifacts ship: those are enabled by default upstream, so no build tag
+          # is needed to include them.
           GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
           CGO_ENABLED=1 CC=${{ matrix.cc }} \
           CGO_CFLAGS="-I${{ github.workspace }}/.cache/tensorflow" \

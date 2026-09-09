@@ -1,14 +1,152 @@
 package analysis
 
 import (
+	"bytes"
+	"io"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
+
+// TestProcessMonitorTick_SkipsWhenModelNotLoaded verifies the monitor-layer guard
+// that stops the "model not loaded" error storm (Sentry BIRDNET-GO-2G6 / 1S1). A
+// monitor whose model was unloaded (or never registered) must skip the inference
+// window with a single warning instead of dispatching to ProcessData, which would
+// log "error processing data" on every window during the reconfigure gap.
+func TestProcessMonitorTick_SkipsWhenModelNotLoaded(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sourceID = "src"
+		modelID  = "Perch_V2"
+		readSize = 480
+	)
+
+	mgr := buffer.NewManager(logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC))
+	require.NoError(t, mgr.AllocateAnalysis(sourceID, modelID, readSize*2, 0, readSize))
+	ab, err := mgr.AnalysisBuffer(sourceID, modelID)
+	require.NoError(t, err)
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+
+	var logBuf bytes.Buffer
+	bm := &BufferManager{
+		bn:        &classifier.Orchestrator{}, // no models loaded, so IsModelLoaded is false
+		bufferMgr: mgr,
+		logger:    logger.NewSlogLogger(&logBuf, logger.LogLevelDebug, time.UTC),
+	}
+
+	cfg := &monitorConfig{sourceID: sourceID, modelID: modelID, readSize: readSize}
+	quit := make(chan struct{})
+	state := &monitorTickState{}
+
+	keepRunning := bm.processMonitorTick(quit, cfg, readSize, 0, state, 1)
+	require.True(t, keepRunning, "the monitor keeps running so a reinstall can resume it")
+	assert.Contains(t, logBuf.String(), "model not loaded, skipping inference window")
+	assert.NotContains(t, logBuf.String(), "error processing data",
+		"a not-loaded model must not reach ProcessData")
+	assert.True(t, state.notLoadedWarned, "the warn-once latch is set after the first skip")
+
+	// A second full window on the next tick must not repeat the warning and must
+	// still never dispatch to ProcessData.
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+	logBuf.Reset()
+	keepRunning = bm.processMonitorTick(quit, cfg, readSize, 0, state, 2)
+	require.True(t, keepRunning)
+	assert.NotContains(t, logBuf.String(), "error processing data")
+	assert.NotContains(t, logBuf.String(), "model not loaded, skipping inference window",
+		"the warning is emitted once per monitor, not on every tick")
+}
+
+// scriptedModelState is a classifierBackend fake that drives processMonitorTick
+// through the not-loaded -> loaded resume transition a real Orchestrator only
+// reaches with fully loaded models (its models map and bat scheduler are
+// package-private to internal/classifier). The embedded interface is nil: only
+// IsModelLoaded and IsModelActive are exercised by this test; the remaining
+// classifierBackend methods would panic if called, which they never are because
+// the model is kept inactive so ProcessData is not reached.
+type scriptedModelState struct {
+	classifierBackend
+	loaded     []bool // IsModelLoaded return per call; the final entry repeats
+	loadedCall int
+	active     bool // IsModelActive return
+}
+
+func (s *scriptedModelState) IsModelLoaded(string) bool {
+	if len(s.loaded) == 0 {
+		return false
+	}
+	i := s.loadedCall
+	if i >= len(s.loaded) {
+		i = len(s.loaded) - 1
+	}
+	s.loadedCall++
+	return s.loaded[i]
+}
+
+func (s *scriptedModelState) IsModelActive(string) bool { return s.active }
+
+// TestProcessMonitorTick_ResumesWhenModelReloads covers the resume/recovery path:
+// once a monitor has warned that its model is not loaded, a later tick that finds
+// the model loaded again must log the resume line exactly once and clear the
+// warn-once latch. IsModelActive is false so the tick returns before ProcessData,
+// exercising the resume block without driving the full inference pipeline.
+func TestProcessMonitorTick_ResumesWhenModelReloads(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sourceID = "src"
+		modelID  = "Perch_V2"
+		readSize = 480
+	)
+
+	mgr := buffer.NewManager(logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC))
+	require.NoError(t, mgr.AllocateAnalysis(sourceID, modelID, readSize*2, 0, readSize))
+	ab, err := mgr.AnalysisBuffer(sourceID, modelID)
+	require.NoError(t, err)
+
+	var logBuf bytes.Buffer
+	// loaded=false on tick 1 (model unloaded), true afterwards. active=false so the
+	// resume block is reached but ProcessData is never dispatched.
+	state := &scriptedModelState{loaded: []bool{false, true}, active: false}
+	bm := &BufferManager{
+		bn:        state,
+		bufferMgr: mgr,
+		logger:    logger.NewSlogLogger(&logBuf, logger.LogLevelDebug, time.UTC),
+	}
+
+	cfg := &monitorConfig{sourceID: sourceID, modelID: modelID, readSize: readSize}
+	quit := make(chan struct{})
+	tickState := &monitorTickState{}
+
+	// Tick 1: model not loaded -> warn once, latch set, no dispatch.
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+	require.True(t, bm.processMonitorTick(quit, cfg, readSize, 0, tickState, 1))
+	assert.Contains(t, logBuf.String(), "model not loaded, skipping inference window")
+	assert.True(t, tickState.notLoadedWarned, "the warn-once latch is set after the first skip")
+
+	// Tick 2: model came back -> resume log fires once and the latch resets.
+	logBuf.Reset()
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+	require.True(t, bm.processMonitorTick(quit, cfg, readSize, 0, tickState, 2))
+	assert.Contains(t, logBuf.String(), "model loaded again, resuming inference",
+		"the resume log fires when the model reloads")
+	assert.False(t, tickState.notLoadedWarned, "the warn-once latch resets on resume")
+	assert.NotContains(t, logBuf.String(), "buffer monitor dispatching to ProcessData",
+		"an inactive model must not dispatch to ProcessData")
+
+	// Tick 3: still loaded and inactive, latch already clear -> no repeated resume log.
+	logBuf.Reset()
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+	require.True(t, bm.processMonitorTick(quit, cfg, readSize, 0, tickState, 3))
+	assert.NotContains(t, logBuf.String(), "model loaded again, resuming inference",
+		"the resume log fires once, not on every subsequent tick")
+}
 
 func TestMonitorConfig_ReadSize(t *testing.T) {
 	t.Parallel()

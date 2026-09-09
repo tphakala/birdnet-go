@@ -46,6 +46,23 @@ func NewEndpoint(settings *conf.Settings, metrics *Metrics) (*Endpoint, error) {
 	}, nil
 }
 
+// buildMux assembles the telemetry listener's routing table.
+//
+// It exists so tests can assert against the mux this listener actually serves
+// rather than reassembling an equivalent one. That distinction is the whole
+// point here: this mux is served with no middleware of any kind, so anything
+// registered on it is reachable unauthenticated on every interface, and a
+// re-added pprof handler would win over the breadcrumb's subtree pattern under
+// Go 1.22+ precedence rules while a test that builds its own mux stayed green.
+func (e *Endpoint) buildMux() *http.ServeMux {
+	mux := http.NewServeMux()
+	e.metrics.RegisterHandlers(mux)
+	// This listener serves Prometheus metrics only. pprof moved to the
+	// authenticated web server; all that is left here is the breadcrumb.
+	RegisterMovedDebugHandler(mux)
+	return mux
+}
+
 // Start initializes and runs the HTTP server for the telemetry endpoint.
 //
 // It sets up the necessary routes, starts the server in a separate goroutine,
@@ -55,9 +72,7 @@ func NewEndpoint(settings *conf.Settings, metrics *Metrics) (*Endpoint, error) {
 //   - wg: A pointer to a WaitGroup for coordinating goroutine completion.
 //   - quitChan: A channel for receiving the quit signal.
 func (e *Endpoint) Start(wg *sync.WaitGroup, quitChan <-chan struct{}) {
-	mux := http.NewServeMux()
-	e.metrics.RegisterHandlers(mux)
-	RegisterDebugHandlers(mux)
+	mux := e.buildMux()
 
 	e.server = &http.Server{
 		Addr:    e.listenAddress,

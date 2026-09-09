@@ -342,7 +342,10 @@ func formatMetricValue(v float64) string {
 }
 
 func isDetectionEvent(eventName string) bool {
-	return eventName == EventDetectionNewSpecies || eventName == EventDetectionLifer || eventName == EventDetectionOccurred
+	return eventName == EventDetectionNewSpecies ||
+		eventName == EventDetectionLifer ||
+		eventName == EventDetectionInfrequentSpecies ||
+		eventName == EventDetectionOccurred
 }
 
 func isErrorEvent(eventName string) bool {

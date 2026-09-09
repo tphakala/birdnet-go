@@ -96,6 +96,24 @@ func ValidateSoxPath(soxPath string) error {
 	return nil
 }
 
+// pcmSampleBytes returns the size in bytes of one PCM sample in the output
+// format GetFFmpegFormat selects for the given bit depth: 16 maps to s16le,
+// 24 to s24le, 32 to s32le, and anything else falls back to s16le.
+//
+// This is the byte-size twin of GetFFmpegFormat's format switch. The two are
+// kept in agreement by TestPCMSampleBytesMatchesFFmpegFormat, which derives the
+// expected byte size from the format string itself, so adding a bit depth to
+// one without the other fails the build's tests rather than silently making
+// stream readers frame on the wrong unit.
+func pcmSampleBytes(bitDepth int) int {
+	switch bitDepth {
+	case 16, 24, 32:
+		return bitDepth / bitsPerByte
+	default:
+		return defaultPCMSampleBytes
+	}
+}
+
 // GetFFmpegFormat converts audio configuration values to FFmpeg-compatible format strings.
 // Returns sampleRateStr (e.g. "48000"), channelsStr (e.g. "1"), and formatStr (e.g. "s16le").
 // Supported bit depths: 16 → "s16le", 24 → "s24le", 32 → "s32le". Defaults to "s16le".

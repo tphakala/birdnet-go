@@ -1,8 +1,8 @@
 name: VirusTotal Scan
 
 # Scans the release tarballs and appends the results to the release body.
-# Invoked as a downstream job of release-build.yml / nightly-build.yml AFTER the
-# assets are attached (workflow_call), so it never races the build and finds an
+# Invoked as a downstream job of release-build.yml AFTER the assets are
+# attached (workflow_call), so it never races the build and finds an
 # asset-less release. workflow_dispatch remains for a manual re-scan of the
 # latest release. The release:published trigger was removed because it fired the
 # moment the release was created, before the build attached any tarballs, which
@@ -31,10 +31,10 @@ jobs:
         run: |
           # Prefer the release that triggered the calling pipeline; fall back to
           # the most recently created release for a caller without a release
-          # event (the workflow_dispatch nightly flow) or a standalone manual
-          # dispatch. Use the list endpoint, NOT releases/latest: the latter
-          # excludes prereleases, so it would resolve the wrong release for the
-          # prerelease nightly flow (flagged by CodeRabbit and Sentry).
+          # event, or for a standalone manual dispatch. Use the list endpoint,
+          # NOT releases/latest: the latter excludes prereleases, so it would
+          # resolve the wrong release whenever the newest one is a prerelease
+          # (flagged by CodeRabbit and Sentry).
           RID="${EVENT_RELEASE_ID}"
           if [ -z "$RID" ]; then
             RID=$(gh api "repos/${REPO}/releases?per_page=1" --jq '.[0].id')

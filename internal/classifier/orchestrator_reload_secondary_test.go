@@ -2,6 +2,7 @@ package classifier
 
 import (
 	"context"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -29,9 +30,10 @@ const fakeModelVersion = "1.0"
 // reloadFakeModel is a ModelInstance that records Close calls so tests can assert
 // the old instance is torn down after a swap.
 type reloadFakeModel struct {
-	id      string
-	closes  atomic.Int32
-	onClose func()
+	id           string
+	closes       atomic.Int32
+	onClose      func()
+	resolvedPath string
 }
 
 func (m *reloadFakeModel) Predict(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
@@ -53,6 +55,7 @@ func (m *reloadFakeModel) Close() error {
 func (m *reloadFakeModel) RuntimeInfo() (device, backend, precision string) {
 	return deviceCPU, BackendONNX, ""
 }
+func (m *reloadFakeModel) ResolvedModelPath() string { return m.resolvedPath }
 
 // registerTestSecondaryBuilder adds a builder under id for the duration of the
 // test, restoring the global map on cleanup. The map is a package global, so the
@@ -104,6 +107,90 @@ func TestReloadSecondaryModels_SwapsAndClosesOld(t *testing.T) {
 	assert.Equal(t, int32(0), newInst.closes.Load(), "new instance must not be closed")
 	assert.Equal(t, secondaryBackendKey{backend: "openvino", ovDevice: "gpu", ovPath: "/opt/ov"}, o.models[testSecondaryID].backend,
 		"entry triplet should advance to the new backend")
+}
+
+// TestReloadSecondaryModels_ThreadCountChangeForcesRebuild verifies that a runtime
+// change to the CPU thread budget (birdnet.threads) rebuilds an OV-capable secondary
+// even when the backend, device, and OpenVINO path are unchanged, so a secondary
+// re-applies the new thread count live exactly as the primary model does. Before the
+// fix the per-entry gate keyed only on backend/device/path, so a pure thread-count
+// change was silently skipped and secondaries kept their old thread count until a
+// restart. Mutation check: this fails if `threads` is dropped from secondaryBackendKey.
+func TestReloadSecondaryModels_ThreadCountChangeForcesRebuild(t *testing.T) {
+	// CPU device so INFERENCE_NUM_THREADS is meaningful; only Threads differs from
+	// the loaded entry below.
+	s := conftest.GetTestSettings()
+	s.BirdNET.Backend = "openvino"
+	s.BirdNET.OpenVINODevice = "cpu"
+	s.BirdNET.OpenVINOPath = "/opt/ov"
+	s.BirdNET.Threads = 1
+	conftest.SetTestSettings(s)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	old := &reloadFakeModel{id: testSecondaryID}
+	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
+	o.ModelInfo.ID = permanentRegistryID
+	// Loaded with the SAME backend/device/path but a different thread count (4).
+	o.models[testSecondaryID] = &modelEntry{instance: old, backend: secondaryBackendKey{
+		backend: "openvino", ovDevice: "cpu", ovPath: "/opt/ov", threads: 4,
+	}}
+
+	var built atomic.Int32
+	var gotThreads atomic.Int32
+	newInst := &reloadFakeModel{id: testSecondaryID}
+	registerTestSecondaryBuilder(t, testSecondaryID, func(_ *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
+		built.Add(1)
+		gotThreads.Store(int32(threads)) //nolint:gosec // small test thread count
+		assert.Equal(t, 1, settings.BirdNET.Threads, "builder must see the new thread count")
+		return newInst, nil
+	})
+
+	require.NoError(t, o.ReloadSecondaryModels())
+
+	assert.Equal(t, int32(1), built.Load(), "a thread-count change must rebuild the secondary")
+	assert.Same(t, ModelInstance(newInst), o.models[testSecondaryID].instance, "new instance should be swapped in")
+	assert.Equal(t, int32(1), old.closes.Load(), "old instance should be closed once")
+	assert.Equal(t, int32(1), gotThreads.Load(), "builder should receive the new per-model thread budget")
+	assert.Equal(t, secondaryBackendKey{backend: "openvino", ovDevice: "cpu", ovPath: "/opt/ov", threads: 1},
+		o.models[testSecondaryID].backend, "entry key should advance to the new thread count")
+}
+
+// TestReloadSecondaryModels_NoOpWhenThreadsUnchangedNonZero verifies the skip
+// direction of the thread-aware gate at a NON-ZERO thread count: when the entry
+// was already built with the same backend/device/path AND the same thread count,
+// an unrelated reload_birdnet trigger must NOT rebuild it. The sibling
+// TestReloadSecondaryModels_NoOpWhenTripletUnchanged only exercises the zero-value
+// (threads:0) match; this brackets the new `threads` field at a real value so a
+// regression that made every reload rebuild (e.g. comparing against a zero-value
+// key) is caught.
+func TestReloadSecondaryModels_NoOpWhenThreadsUnchangedNonZero(t *testing.T) {
+	s := conftest.GetTestSettings()
+	s.BirdNET.Backend = "openvino"
+	s.BirdNET.OpenVINODevice = "cpu"
+	s.BirdNET.OpenVINOPath = "/opt/ov"
+	s.BirdNET.Threads = 4
+	conftest.SetTestSettings(s)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	old := &reloadFakeModel{id: testSecondaryID}
+	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
+	o.ModelInfo.ID = permanentRegistryID
+	// Already built with the exact current key, including threads:4.
+	o.models[testSecondaryID] = &modelEntry{instance: old, backend: secondaryBackendKey{
+		backend: "openvino", ovDevice: "cpu", ovPath: "/opt/ov", threads: 4,
+	}}
+
+	var built atomic.Int32
+	registerTestSecondaryBuilder(t, testSecondaryID, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
+		built.Add(1)
+		return &reloadFakeModel{id: testSecondaryID}, nil
+	})
+
+	require.NoError(t, o.ReloadSecondaryModels())
+
+	assert.Equal(t, int32(0), built.Load(), "unchanged threads (and backend/device/path) must NOT rebuild")
+	assert.Same(t, ModelInstance(old), o.models[testSecondaryID].instance, "instance must be left in place")
+	assert.Equal(t, int32(0), old.closes.Load(), "old instance must not be closed")
 }
 
 // TestReloadSecondaryModels_WarmupHoldsInferenceMu verifies that the hot-reload
@@ -413,4 +500,82 @@ func TestReloadSecondaryModels_PerEntryTripletRebuildsOnlyStale(t *testing.T) {
 	assert.Same(t, ModelInstance(newStale), o.models[testSecondaryID2].instance, "stale instance must be swapped in")
 	assert.Equal(t, int32(1), stale.closes.Load(), "stale old instance must be closed")
 	assert.Equal(t, currentTriplet, o.models[testSecondaryID2].backend, "stale entry triplet must advance to current")
+}
+
+// TestReloadSecondaryModels_DiscardsPathResolution pins that the hot-reload path
+// queues no configuration repair.
+//
+// Scope, stated precisely because an earlier version of this test overclaimed:
+// it pins ReloadSecondaryModels ITSELF, not the bare `_` inside the three real
+// closures in openvinoCapableSecondaryBuilders. Those closures discard the
+// resolution on their SUCCESS path, which needs a real ONNX model and a real
+// ONNX Runtime, so no unit test can reach it. The builder-ran assertion closes
+// the "no rebuild happened" vacuity mode; it does not close that one.
+// TestBuildPerch_DoesNotQueuePathCorrection below covers the adjacent half that
+// IS reachable: that resolving is separated from queueing, so only a loader can
+// queue.
+func TestReloadSecondaryModels_DiscardsPathResolution(t *testing.T) {
+	setGlobalBackend(t, "openvino", "gpu", "/opt/ov")
+
+	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
+	o.ModelInfo.ID = permanentRegistryID
+	o.models[testSecondaryID] = &modelEntry{
+		instance: &reloadFakeModel{id: testSecondaryID},
+		backend:  secondaryBackendKey{backend: "onnx"},
+	}
+
+	var built atomic.Int32
+	registerTestSecondaryBuilder(t, testSecondaryID, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
+		built.Add(1)
+		return &reloadFakeModel{id: testSecondaryID}, nil
+	})
+
+	require.NoError(t, o.ReloadSecondaryModels())
+
+	require.Equal(t, int32(1), built.Load(),
+		"the rebuild must actually run, or an empty queue proves nothing")
+	assert.Empty(t, o.pendingPathCorrections,
+		"a hot reload must never queue a config repair: a backend or device swap is not a stale path")
+}
+
+// TestBuildPerch_DoesNotQueuePathCorrection pins the separation the reload path
+// depends on: build* RESOLVES but never QUEUES, so only a loader can turn a
+// resolution into a config rewrite. Moving queuePathCorrection into buildPerch
+// (the shape that would make ReloadSecondaryModels start rewriting the user's
+// paths on a backend swap) fails here.
+//
+// The build itself is expected to fail: there is no real ONNX model or runtime
+// here. The resolution runs first, which is the part under test.
+func TestBuildPerch_DoesNotQueuePathCorrection(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok)
+
+	modelsDir := filepath.Join(t.TempDir(), "models")
+	installedModel := writeVariantModelFile(t, modelsDir, &entry, "fp32")
+	installedLabels := writeVariantLabelsFile(t, modelsDir, &entry, "fp32")
+
+	o := &Orchestrator{}
+	o.SetModelsDir(modelsDir)
+
+	// A stale gallery-shaped configured set: the resolution substitutes and is
+	// repairable, so anything that queued would queue here.
+	staleDir := filepath.Join(t.TempDir(), "models", entry.ID)
+	settings := &conf.Settings{}
+	settings.Perch.ModelPath = filepath.Join(staleDir, filepath.Base(installedModel))
+	settings.Perch.LabelPath = filepath.Join(staleDir, filepath.Base(installedLabels))
+
+	res := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
+		model:  settings.Perch.ModelPath,
+		labels: settings.Perch.LabelPath,
+	}, false)
+	require.True(t, res.substituted, "fixture must produce a substituting resolution, or the test proves nothing")
+	require.True(t, res.repairable)
+
+	_, _, err := o.buildPerch(settings, 1)
+	require.Error(t, err, "no real ONNX runtime here; the resolution before the failure is the subject")
+
+	assert.Empty(t, o.pendingPathCorrections,
+		"build* must never queue: only a loader may turn a resolution into a config rewrite")
 }

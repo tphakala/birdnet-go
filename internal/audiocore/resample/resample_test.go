@@ -295,6 +295,95 @@ func TestResampleTo_HighRatio(t *testing.T) {
 		"output sample count should be approximately %d (got %d)", expectedSamples, outputSamples)
 }
 
+// TestResampleFloat32Into_Downsamples verifies the float32-native path produces
+// a plausible downsampled length with all samples in the normalised [-1,1] range.
+func TestResampleFloat32Into_Downsamples(t *testing.T) {
+	const fromRate = 48000
+	const toRate = 16000
+	const inputSamples = 4800 // 100 ms at 48 kHz
+
+	r, err := NewResampler(fromRate, toRate)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	t.Cleanup(func() { require.NoError(t, r.Close()) })
+
+	input := makePCM16(t, inputSamples)
+	out, err := r.ResampleFloat32Into(input)
+	require.NoError(t, err)
+
+	// 48k -> 16k is a 3:1 ratio, so the ideal output is inputSamples/3. A single
+	// independent resample also swallows the polyphase filter's warmup latency,
+	// so the first (and only) call returns somewhat fewer samples. Assert a sane
+	// range rather than an exact count: non-empty, never more than ideal.
+	ideal := inputSamples * toRate / fromRate
+	assert.NotEmpty(t, out, "output must be non-empty")
+	assert.LessOrEqual(t, len(out), ideal, "output must not exceed the ideal ratio length")
+	assert.Greater(t, len(out), ideal*3/4, "output should be within warmup latency of the ideal length")
+
+	for i, f := range out {
+		require.GreaterOrEqual(t, f, float32(-1.0), "sample %d below -1.0", i)
+		require.LessOrEqual(t, f, float32(1.0), "sample %d above 1.0", i)
+	}
+}
+
+// TestResampleFloat32Into_MatchesResampleInto asserts the float32 output is
+// byte-for-byte equivalent to ResampleInto once re-quantised with the same
+// scale/clamp, confirming the two paths share the same resampler math.
+func TestResampleFloat32Into_MatchesResampleInto(t *testing.T) {
+	const fromRate = 48000
+	const toRate = 16000
+	const inputSamples = 3200
+
+	input := makePCM16(t, inputSamples)
+
+	rf, err := NewResampler(fromRate, toRate)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, rf.Close()) })
+	floats, err := rf.ResampleFloat32Into(input)
+	require.NoError(t, err)
+
+	rb, err := NewResampler(fromRate, toRate)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, rb.Close()) })
+	bytesOut, err := rb.ResampleInto(input)
+	require.NoError(t, err)
+
+	require.Len(t, bytesOut, len(floats)*bytesPerSample,
+		"float32 length must match PCM16 byte length / 2")
+
+	for i, f := range floats {
+		if f > 1.0 {
+			f = 1.0
+		} else if f < -1.0 {
+			f = -1.0
+		}
+		want := int16(f * pcm16MaxPositive)                              //nolint:gosec // G115: matches production PCM16 conversion
+		got := int16(uint16(bytesOut[i*2]) | uint16(bytesOut[i*2+1])<<8) //nolint:gosec // G115: little-endian PCM16 decode
+		assert.Equal(t, want, got, "sample %d mismatch between float32 and PCM16 paths", i)
+	}
+}
+
+// TestResampleFloat32Into_EmptyInput returns an empty slice without error.
+func TestResampleFloat32Into_EmptyInput(t *testing.T) {
+	r, err := NewResampler(48000, 16000)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, r.Close()) })
+
+	out, err := r.ResampleFloat32Into(nil)
+	require.NoError(t, err)
+	assert.Empty(t, out)
+}
+
+// TestResampleFloat32Into_OddByteInput rejects a non-even byte count.
+func TestResampleFloat32Into_OddByteInput(t *testing.T) {
+	r, err := NewResampler(48000, 16000)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, r.Close()) })
+
+	_, err = r.ResampleFloat32Into([]byte{0x01, 0x02, 0x03})
+	require.Error(t, err)
+}
+
 // resampleBenchCases defines the rate pairs used across benchmarks.
 var resampleBenchCases = []struct {
 	name     string

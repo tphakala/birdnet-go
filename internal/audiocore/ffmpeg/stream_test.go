@@ -8,7 +8,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -152,6 +151,18 @@ func (s *Stream) getTotalBytesReceivedForTest() int64 {
 	s.bytesReceivedMu.RLock()
 	defer s.bytesReceivedMu.RUnlock()
 	return s.totalBytesReceived
+}
+
+func (s *Stream) getRestartCountForTest() int {
+	s.restartCountMu.Lock()
+	defer s.restartCountMu.Unlock()
+	return s.restartCount
+}
+
+func (s *Stream) setRestartCountForTest(count int) {
+	s.restartCountMu.Lock()
+	defer s.restartCountMu.Unlock()
+	s.restartCount = count
 }
 
 func (s *Stream) getStreamCreatedAtForTest() time.Time {
@@ -454,44 +465,6 @@ func TestStream_CircuitBreakerCooldown(t *testing.T) {
 	assert.Equal(t, 0, stream.getConsecutiveFailures())
 }
 
-func TestStream_DataRateCalculation(t *testing.T) {
-	// getRate divides total bytes by the time span between the first and last
-	// sample, returning 0 when that span is zero (div-by-zero guard). On
-	// coarse-timer platforms (Windows, ~15ms resolution) three back-to-back
-	// addSample calls can share a timestamp, making the span zero and the rate
-	// zero. Use synctest's fake clock advanced by time.Sleep so the samples get
-	// distinct timestamps deterministically on every platform.
-	synctest.Test(t, func(t *testing.T) {
-		calc := newDataRateCalculator(dataRateWindowSize)
-
-		calc.addSample(1024)
-		time.Sleep(time.Millisecond)
-		calc.addSample(2048)
-		time.Sleep(time.Millisecond)
-		calc.addSample(1536)
-
-		rate := calc.getRate()
-		assert.Greater(t, rate, 0.0)
-	})
-}
-
-func TestStream_DataRateCalculator_EmptyRate(t *testing.T) {
-	t.Parallel()
-
-	calc := newDataRateCalculator(dataRateWindowSize)
-	assert.InDelta(t, 0.0, calc.getRate(), 0.001)
-}
-
-func TestStream_DataRateCalculator_SingleSampleRate(t *testing.T) {
-	t.Parallel()
-
-	calc := newDataRateCalculator(dataRateWindowSize)
-	calc.addSample(1024)
-
-	rate := calc.getRate()
-	assert.InDelta(t, 1024.0, rate, 0.01, "Single recent sample should return instantaneous rate")
-}
-
 func TestStream_HealthTracking(t *testing.T) {
 	t.Parallel()
 
@@ -728,14 +701,20 @@ func TestStream_ConditionalFailureReset(t *testing.T) {
 
 	stream := newTestStream(t)
 
-	// Set up: failures, process start time, and bytes.
+	// Set up: failures, restart count, process start time, and bytes.
 	stream.setConsecutiveFailures(5)
+	stream.setRestartCountForTest(4)
 	stream.setProcessStartTimeForTest(time.Now().Add(-circuitBreakerMinStabilityTime - time.Second))
 	stream.setTotalBytesReceivedForTest(circuitBreakerMinStabilityBytes + 1)
 
 	stream.conditionalFailureReset(stream.getTotalBytesReceivedForTest())
 
 	assert.Equal(t, 0, stream.getConsecutiveFailures(), "Failures should be reset after stable operation")
+	// The restart count drives the escalating restart backoff. It must be reset
+	// alongside the circuit breaker after sustained stable operation, otherwise
+	// widely-spaced transient stalls keep escalating the backoff even though each
+	// fault recovered cleanly (issue #4080).
+	assert.Equal(t, 0, stream.getRestartCountForTest(), "Restart count should be reset after stable operation")
 }
 
 func TestStream_ConditionalFailureReset_NotEnoughTime(t *testing.T) {
@@ -744,12 +723,14 @@ func TestStream_ConditionalFailureReset_NotEnoughTime(t *testing.T) {
 	stream := newTestStream(t)
 
 	stream.setConsecutiveFailures(5)
+	stream.setRestartCountForTest(4)
 	stream.setProcessStartTimeForTest(time.Now().Add(-5 * time.Second))
 	stream.setTotalBytesReceivedForTest(circuitBreakerMinStabilityBytes + 1)
 
 	stream.conditionalFailureReset(stream.getTotalBytesReceivedForTest())
 
 	assert.Equal(t, 5, stream.getConsecutiveFailures(), "Failures should NOT be reset without enough runtime")
+	assert.Equal(t, 4, stream.getRestartCountForTest(), "Restart count should NOT be reset without enough runtime")
 }
 
 func TestStream_ConditionalFailureReset_NotEnoughBytes(t *testing.T) {
@@ -758,12 +739,107 @@ func TestStream_ConditionalFailureReset_NotEnoughBytes(t *testing.T) {
 	stream := newTestStream(t)
 
 	stream.setConsecutiveFailures(5)
+	stream.setRestartCountForTest(4)
 	stream.setProcessStartTimeForTest(time.Now().Add(-circuitBreakerMinStabilityTime - time.Second))
 	stream.setTotalBytesReceivedForTest(100)
 
 	stream.conditionalFailureReset(100)
 
 	assert.Equal(t, 5, stream.getConsecutiveFailures(), "Failures should NOT be reset without enough bytes")
+	assert.Equal(t, 4, stream.getRestartCountForTest(), "Restart count should NOT be reset without enough bytes")
+}
+
+// TestStream_ConditionalFailureReset_RestartCount is the focused regression for
+// issue #4080: the restart backoff escalates across widely-spaced transient
+// stalls because the circuit breaker's failure counter is reset on stable
+// recovery while the restart count that drives the backoff duration is not.
+// conditionalFailureReset must clear the restart count under the same stability
+// gate, and independently of whether the circuit breaker still has failures to
+// clear (the circuit-breaker cooldown and normal process exits can drive
+// consecutiveFailures to zero while the restart count stays high).
+func TestStream_ConditionalFailureReset_RestartCount(t *testing.T) {
+	t.Parallel()
+
+	const stableAge = -circuitBreakerMinStabilityTime - time.Second
+	const unstableAge = -5 * time.Second
+
+	tests := []struct {
+		name                 string
+		processStartAge      time.Duration
+		processStartZero     bool
+		totalBytes           int64
+		initialRestartCount  int
+		initialFailures      int
+		wantRestartCount     int
+		wantConsecutiveFails int
+	}{
+		{
+			name:                 "stable operation resets restart count and failures",
+			processStartAge:      stableAge,
+			totalBytes:           circuitBreakerMinStabilityBytes + 1,
+			initialRestartCount:  4,
+			initialFailures:      3,
+			wantRestartCount:     0,
+			wantConsecutiveFails: 0,
+		},
+		{
+			name:                 "stable operation resets restart count even when failures already zero",
+			processStartAge:      stableAge,
+			totalBytes:           circuitBreakerMinStabilityBytes + 1,
+			initialRestartCount:  4,
+			initialFailures:      0,
+			wantRestartCount:     0,
+			wantConsecutiveFails: 0,
+		},
+		{
+			name:                 "not enough runtime leaves restart count untouched",
+			processStartAge:      unstableAge,
+			totalBytes:           circuitBreakerMinStabilityBytes + 1,
+			initialRestartCount:  4,
+			initialFailures:      3,
+			wantRestartCount:     4,
+			wantConsecutiveFails: 3,
+		},
+		{
+			name:                 "not enough bytes leaves restart count untouched",
+			processStartAge:      stableAge,
+			totalBytes:           circuitBreakerMinStabilityBytes - 1,
+			initialRestartCount:  4,
+			initialFailures:      3,
+			wantRestartCount:     4,
+			wantConsecutiveFails: 3,
+		},
+		{
+			name:                 "zero process start time is a no-op",
+			processStartZero:     true,
+			totalBytes:           circuitBreakerMinStabilityBytes + 1,
+			initialRestartCount:  4,
+			initialFailures:      3,
+			wantRestartCount:     4,
+			wantConsecutiveFails: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			stream := newTestStream(t)
+
+			stream.setConsecutiveFailures(tt.initialFailures)
+			stream.setRestartCountForTest(tt.initialRestartCount)
+			if tt.processStartZero {
+				stream.setProcessStartTimeForTest(time.Time{})
+			} else {
+				stream.setProcessStartTimeForTest(time.Now().Add(tt.processStartAge))
+			}
+			stream.setTotalBytesReceivedForTest(tt.totalBytes)
+
+			stream.conditionalFailureReset(tt.totalBytes)
+
+			assert.Equal(t, tt.wantRestartCount, stream.getRestartCountForTest(), "restart count")
+			assert.Equal(t, tt.wantConsecutiveFails, stream.getConsecutiveFailures(), "consecutive failures")
+		})
+	}
 }
 
 func TestValidateTimeout(t *testing.T) {
@@ -1124,8 +1200,8 @@ func TestStream_ErrorContextTracking(t *testing.T) {
 	assert.Nil(t, stream.getLastErrorContext())
 	assert.Empty(t, stream.getErrorContexts())
 
-	ctx1 := &ErrorContext{ErrorType: ErrTypeConnectionTimeout, PrimaryMessage: "test1"}
-	ctx2 := &ErrorContext{ErrorType: ErrTypeConnectionRefused, PrimaryMessage: "test2"}
+	ctx1 := &audiocore.StreamErrorContext{ErrorType: audiocore.ErrTypeConnectionTimeout, PrimaryMessage: "test1"}
+	ctx2 := &audiocore.StreamErrorContext{ErrorType: audiocore.ErrTypeConnectionRefused, PrimaryMessage: "test2"}
 
 	stream.recordErrorContext(ctx1)
 	assert.Equal(t, ctx1, stream.getLastErrorContext())
@@ -1457,7 +1533,10 @@ func TestProcessAudio_ResponsiveToRestart(t *testing.T) {
 func TestProcessAudio_DataFlowsThroughReaderGoroutine(t *testing.T) {
 	t.Parallel()
 
-	testData := []byte("audio-payload-12345")
+	// An even byte count: readStdout emits whole PCM frames only and holds a
+	// trailing partial frame back for the next read, so an odd payload would
+	// arrive one byte short here. See TestReadStdout_EmitsWholeFrames.
+	testData := []byte("audio-payload-123456")
 	var received []byte
 
 	cfg := newTestConfig()
@@ -1808,7 +1887,10 @@ func TestStream_ReadStdout_AttachesRefWhenPooled(t *testing.T) {
 	cfg := newTestConfig()
 	stream := NewStream(&cfg, nil, nil, nil, bufMgr)
 
-	reader := io.NopCloser(bytes.NewReader([]byte{1, 2, 3}))
+	// A whole number of PCM frames: readStdout holds a trailing partial frame
+	// back for the next read, so an odd payload would arrive short here for
+	// reasons unrelated to what this test is about. See TestReadStdout_EmitsWholeFrames.
+	reader := io.NopCloser(bytes.NewReader([]byte{1, 2, 3, 4}))
 	readCh := make(chan readResult, 1)
 	readerDone := make(chan struct{})
 	t.Cleanup(func() { close(readerDone) })
@@ -1819,7 +1901,7 @@ func TestStream_ReadStdout_AttachesRefWhenPooled(t *testing.T) {
 	case result := <-readCh:
 		require.NoError(t, result.err)
 		require.NotNil(t, result.ref, "pooled readStdout must attach a FrameRef to every readResult")
-		assert.Equal(t, []byte{1, 2, 3}, result.data)
+		assert.Equal(t, []byte{1, 2, 3, 4}, result.data)
 		result.ref.Release()
 	case <-time.After(time.Second):
 		t.Fatal("readStdout did not produce a readResult within 1s")
@@ -1835,7 +1917,8 @@ func TestStream_ReadStdout_NilRefWhenNoBufMgr(t *testing.T) {
 	cfg := newTestConfig()
 	stream := NewStream(&cfg, nil, nil, nil, nil)
 
-	reader := io.NopCloser(bytes.NewReader([]byte{1, 2, 3}))
+	// Whole PCM frames, for the same reason as the pooled test above.
+	reader := io.NopCloser(bytes.NewReader([]byte{1, 2, 3, 4}))
 	readCh := make(chan readResult, 1)
 	readerDone := make(chan struct{})
 	t.Cleanup(func() { close(readerDone) })
@@ -1846,7 +1929,7 @@ func TestStream_ReadStdout_NilRefWhenNoBufMgr(t *testing.T) {
 	case result := <-readCh:
 		require.NoError(t, result.err)
 		assert.Nil(t, result.ref, "non-pooled readStdout must dispatch nil ref")
-		assert.Equal(t, []byte{1, 2, 3}, result.data)
+		assert.Equal(t, []byte{1, 2, 3, 4}, result.data)
 	case <-time.After(time.Second):
 		t.Fatal("readStdout did not produce a readResult within 1s")
 	}

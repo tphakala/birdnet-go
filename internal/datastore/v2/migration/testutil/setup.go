@@ -171,9 +171,9 @@ func (ctx *TestContext) setupV2DB(t *testing.T, tmpDir string) {
 
 	// Create V2 manager
 	mgr, err := datastoreV2.NewSQLiteManager(datastoreV2.Config{
-		DataDir: tmpDir,
-		Debug:   false,
-		Logger:  ctx.Logger,
+		ConfiguredPath: filepath.Join(tmpDir, "birdnet.db"),
+		Debug:          false,
+		Logger:         ctx.Logger,
 	})
 	require.NoError(t, err, "failed to create V2 manager")
 
@@ -194,7 +194,7 @@ func (ctx *TestContext) setupV2DB(t *testing.T, tmpDir string) {
 	ctx.SourceRepo = repository.NewAudioSourceRepository(db, nil, false, false)
 	ctx.WeatherRepo = repository.NewWeatherRepository(db, nil, false, false)
 	ctx.ImageCacheRepo = repository.NewImageCacheRepository(db, nil, ctx.LabelRepo, false, false)
-	ctx.ThresholdRepo = repository.NewDynamicThresholdRepository(db, nil, ctx.LabelRepo, false, false)
+	ctx.ThresholdRepo = repository.NewDynamicThresholdRepository(db, nil, false, false)
 	ctx.NotificationRepo = repository.NewNotificationHistoryRepository(db, nil, ctx.LabelRepo, false, false)
 
 	// Populate lookup tables for V2 normalized schema
@@ -681,7 +681,7 @@ func (s *testLegacyInterface) GetAllNotes() ([]datastore.Note, error)           
 func (s *testLegacyInterface) GetTopBirdsData(_ context.Context, _ string, _ float64, _ int) ([]datastore.Note, error) {
 	return nil, nil
 }
-func (s *testLegacyInterface) GetBatchHourlyOccurrences(_ context.Context, _ string, _ []string, _ float64) (map[string][24]int, error) {
+func (s *testLegacyInterface) GetBatchHourlyOccurrences(_ context.Context, _, _ string, _ []string, _ float64) (map[string][24]int, error) {
 	return make(map[string][24]int), nil
 }
 func (s *testLegacyInterface) SpeciesDetections(_, _, _ string, _ int, _ bool, _, _ int) ([]datastore.Note, error) {
@@ -800,7 +800,7 @@ func (s *testLegacyInterface) SearchDetections(_ *datastore.SearchFilters) ([]da
 	return nil, 0, nil
 }
 func (s *testLegacyInterface) SaveDynamicThreshold(_ *datastore.DynamicThreshold) error { return nil }
-func (s *testLegacyInterface) GetDynamicThreshold(_, _ string) (*datastore.DynamicThreshold, error) {
+func (s *testLegacyInterface) GetDynamicThreshold(_ string) (*datastore.DynamicThreshold, error) {
 	return nil, nil //nolint:nilnil // stub
 }
 func (s *testLegacyInterface) DeleteDynamicThreshold(_ string) error { return nil }

@@ -2,7 +2,7 @@
 // /api/v2/species/* and /api/v2/taxonomy/* endpoints (species info, rarity, the
 // all-species picker list, the species dictionary, thumbnails, and genus/family/
 // tree taxonomy lookups). The Handler embeds *apicore.Core by pointer so the
-// shared dependencies and helpers (Processor, TaxonomyDB, EBirdClient,
+// shared dependencies and helpers (Processor, TaxonomyDB, the EBird() accessor,
 // BirdImageCache, CurrentLocale, HandleError, the logging helpers) promote onto
 // it; the facade constructs one Handler and calls RegisterRoutes to wire the
 // routes in their existing order.
@@ -35,6 +35,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/openfauna"
 )
 
 // Handler serves the species domain endpoints. It embeds *apicore.Core BY
@@ -102,11 +103,11 @@ const (
 
 // SpeciesInfo represents extended information about a bird species
 type SpeciesInfo struct {
-	ScientificName string              `json:"scientific_name"`
-	CommonName     string              `json:"common_name"`
-	Rarity         *SpeciesRarityInfo  `json:"rarity,omitempty"`
-	Taxonomy       *ebird.TaxonomyTree `json:"taxonomy,omitempty"`
-	Metadata       map[string]any      `json:"metadata,omitempty"`
+	ScientificName string             `json:"scientific_name"`
+	CommonName     string             `json:"common_name"`
+	Rarity         SpeciesRarityInfo  `json:"rarity,omitzero"`
+	Taxonomy       ebird.TaxonomyTree `json:"taxonomy,omitzero"`
+	Metadata       map[string]any     `json:"metadata,omitempty"`
 }
 
 // SpeciesRarityInfo contains rarity information for a species
@@ -126,9 +127,43 @@ type taxonomyLookupResult struct {
 	source string
 }
 
+// lookupTaxonomyEitherName looks the species up under both of the names it may be known
+// by, returning the first hit. The embedded taxonomy database is a frozen snapshot that
+// holds some species under their legacy name and others under the current one, and
+// neither the request nor the matched model label is reliably the indexed form: of the
+// 236 alias pairs BirdNET v2.4 ships under the legacy name, 153 are in the database
+// under both, 56 only under the current name and 27 only under the legacy one. Trying
+// one name alone therefore drops the taxonomy block for a knowable species.
+func (c *Handler) lookupTaxonomyEitherName(ctx context.Context, primary, secondary string) *taxonomyLookupResult {
+	// Load the eBird client once so both name attempts use the same snapshot; it can
+	// be swapped concurrently by a settings hot-reload (ReconfigureEBird), and a
+	// per-call reload could otherwise make the second attempt use a different client.
+	client := c.EBird()
+	if result := c.lookupTaxonomyTree(ctx, client, primary); result != nil {
+		return result
+	}
+	if strings.EqualFold(primary, secondary) {
+		return nil
+	}
+	return c.lookupTaxonomyTree(ctx, client, secondary)
+}
+
+// resolveEitherName localizes a common name under whichever of the two scientific names
+// the resolver's working set is keyed on, for the reason lookupTaxonomyEitherName
+// documents.
+func (c *Handler) resolveEitherName(bn *classifier.Orchestrator, primary, secondary string) string {
+	if resolved := bn.ResolveName(primary, c.CurrentLocale()); resolved != "" {
+		return resolved
+	}
+	if strings.EqualFold(primary, secondary) {
+		return ""
+	}
+	return bn.ResolveName(secondary, c.CurrentLocale())
+}
+
 // lookupTaxonomyTree attempts to find taxonomy for a species, trying local DB first then eBird.
 // Returns nil result (not error) if taxonomy is unavailable from both sources.
-func (c *Handler) lookupTaxonomyTree(ctx context.Context, scientificName string) *taxonomyLookupResult {
+func (c *Handler) lookupTaxonomyTree(ctx context.Context, client *ebird.Client, scientificName string) *taxonomyLookupResult {
 	// Try local taxonomy database first (fast, no network)
 	if c.TaxonomyDB != nil {
 		tree, err := c.TaxonomyDB.BuildFamilyTree(scientificName)
@@ -139,9 +174,9 @@ func (c *Handler) lookupTaxonomyTree(ctx context.Context, scientificName string)
 		c.Debug("Local taxonomy lookup failed for %s: %v, falling back to eBird API", scientificName, err)
 	}
 
-	// Fall back to eBird API
-	if c.EBirdClient != nil {
-		tree, err := c.EBirdClient.BuildFamilyTree(ctx, scientificName)
+	// Fall back to eBird API using the client snapshot the caller loaded.
+	if client != nil {
+		tree, err := client.BuildFamilyTree(ctx, scientificName)
 		if err != nil {
 			c.Debug("Failed to get taxonomy info from eBird for species %s: %v", scientificName, err)
 			return nil
@@ -259,6 +294,38 @@ func (c *Handler) allModelLabels() []string {
 	return nil
 }
 
+// resolveSpeciesLabel finds the "Scientific_Common" label denoting targetSci in a label
+// set, returning the label and its common name, or empty strings when no label denotes
+// the species.
+//
+// An exact scientific-name match is tried across the whole set before any alias match,
+// so a species that exists under its own name is never shadowed by a synonym. That
+// ordering is load-bearing: OpenFauna's alias map merges pairs the classifier ships as
+// separate species (BirdNET v2.4 carries both Dicrurus adsimilis and D. divaricatus,
+// and both Mirafra javanica and M. cantillans), so an alias-first match would answer a
+// request for one of them with the other's label and common name.
+//
+// This keeps the pair distinct whenever both are in the set. It cannot when only one is:
+// the alias fallback then answers a request for the absent member with the present one's
+// label, which is the same behaviour any alias resolution has and is still better than
+// reporting nothing, but it is not a guarantee that the two never cross.
+func resolveSpeciesLabel(targetSci string, allLabels []string) (matchedLabel, commonName string) {
+	for _, label := range allLabels {
+		if strings.EqualFold(detection.ExtractScientificName(label), targetSci) {
+			return label, detection.ParseSpeciesString(label).CommonName
+		}
+	}
+	// No label carries this exact name, so fall back to the taxonomic alias and let a
+	// request naming a species by a legacy synonym resolve to its current name.
+	canonicalTarget := openfauna.CanonicalName(targetSci)
+	for _, label := range allLabels {
+		if labelMatchesSpecies(label, canonicalTarget) {
+			return label, detection.ParseSpeciesString(label).CommonName
+		}
+	}
+	return "", ""
+}
+
 // GetSpeciesInfo retrieves extended information about a bird species
 func (c *Handler) GetSpeciesInfo(ctx echo.Context) error {
 	// Get scientific name from query parameter
@@ -302,31 +369,10 @@ func (c *Handler) getSpeciesInfo(ctx context.Context, scientificName string) (*S
 
 	bn := proc.Bn
 
-	// Find the full label for this species from BirdNET labels
-	var matchedLabel string
-	var commonName string
-
 	// Search the full multi-model label union (primary plus secondary models such
 	// as the bat/Perch classifiers) so a secondary-model scientific name resolves
 	// instead of 404ing.
-	for _, label := range bn.AllLabels() {
-		sp := detection.ParseSpeciesString(label)
-		if strings.EqualFold(sp.ScientificName, scientificName) {
-			matchedLabel = label
-			commonName = sp.CommonName
-			break
-		}
-	}
-
-	// Secondary-model labels (bats, Perch) are scientific-only, so ParseSpeciesString
-	// reports CommonName == ScientificName for them. Treat that (and an empty common
-	// name) as "needs localizing" and resolve through the orchestrator's
-	// OpenFauna-authoritative resolver, passing the configured locale explicitly.
-	if matchedLabel != "" && (commonName == "" || strings.EqualFold(commonName, scientificName)) {
-		if resolved := bn.ResolveName(scientificName, c.CurrentLocale()); resolved != "" {
-			commonName = resolved
-		}
-	}
+	matchedLabel, commonName := resolveSpeciesLabel(scientificName, bn.AllLabels())
 
 	// If species not found in any loaded model's labels, return error
 	if matchedLabel == "" {
@@ -337,7 +383,27 @@ func (c *Handler) getSpeciesInfo(ctx context.Context, scientificName string) (*S
 			Build()
 	}
 
-	// Create basic species info
+	// The request name and the matched label's name differ whenever one of them is a
+	// taxonomic synonym of the other, and neither is reliably the one a downstream
+	// backend is keyed on: detections are canonicalized at ingestion so the request
+	// usually carries the current name, while BirdNET v2.4's labels carry the legacy
+	// one, and the embedded taxonomy database is a frozen snapshot holding some species
+	// under each. Downstream lookups therefore try both rather than picking one.
+	matchedSci := detection.ExtractScientificName(matchedLabel)
+
+	// Secondary-model labels (bats, Perch) are scientific-only, so ParseSpeciesString
+	// reports CommonName == ScientificName for them. Treat that (and an empty common
+	// name) as "needs localizing" and resolve through the orchestrator's
+	// OpenFauna-authoritative resolver, passing the configured locale explicitly.
+	if commonName == "" || strings.EqualFold(commonName, matchedSci) {
+		if resolved := c.resolveEitherName(bn, matchedSci, scientificName); resolved != "" {
+			commonName = resolved
+		}
+	}
+
+	// Report the name the caller asked for. Echoing the matched label's name instead
+	// would hand back the legacy synonym for a request made with the current name, which
+	// is the form the rest of the API uses since detections are canonicalized on write.
 	info := &SpeciesInfo{
 		ScientificName: scientificName,
 		CommonName:     commonName,
@@ -354,89 +420,183 @@ func (c *Handler) getSpeciesInfo(ctx context.Context, scientificName string) (*S
 		info.Rarity = rarityInfo
 	}
 
-	// Get taxonomy/family tree information using fallback pattern
-	if result := c.lookupTaxonomyTree(ctx, scientificName); result != nil {
-		info.Taxonomy = result.tree
+	// Get taxonomy/family tree information using fallback pattern. Both backends return
+	// a non-nil tree whenever they report no error, so the tree guard is defensive: the
+	// field is a value, so a backend that ever returned (nil, nil) would panic the
+	// handler rather than yield an empty tree.
+	if result := c.lookupTaxonomyEitherName(ctx, matchedSci, scientificName); result != nil {
+		if result.tree != nil {
+			info.Taxonomy = *result.tree
+		}
 		info.Metadata["source"] = result.source
 	}
 
 	return info, nil
 }
 
-// getSpeciesRarityInfo calculates the rarity status for a species
-// speciesHasGeomodelCoverage reports whether the scientific name is in the primary
-// model's label set, i.e. the geomodel's classifiable vocabulary. Secondary-model-only
-// species (e.g. bats) are absent from it and therefore have no geomodel occurrence
-// probability to base a rarity on.
-func speciesHasGeomodelCoverage(bn *classifier.Orchestrator, scientificName string) bool {
-	for _, label := range bn.Labels() {
-		if strings.EqualFold(detection.ExtractScientificName(label), scientificName) {
+// labelMatchesSpecies reports whether a "Scientific_Common" label denotes the same
+// taxon as canonicalTarget, which the caller must have already passed through
+// openfauna.CanonicalName. Both sides are canonicalized so a legacy synonym in the
+// label (or in the request) matches the current name, and compared case-insensitively
+// because CanonicalName preserves the input's case for names it has no alias for.
+func labelMatchesSpecies(label, canonicalTarget string) bool {
+	return strings.EqualFold(openfauna.CanonicalName(detection.ExtractScientificName(label)), canonicalTarget)
+}
+
+// speciesHasGeomodelCoverage reports whether the active range filter can produce an
+// occurrence probability for the scientific name. It answers against the geomodel's own
+// vocabulary, which for the universal geomodel is much larger than the primary
+// classifier's (it spans birds, bats, other mammals and insects), so a species the
+// classifier cannot name still gets a real rarity.
+//
+// geomodelLabels is empty for every backend other than the universal geomodel: the
+// TFLite meta model and the plain ONNX range filter are keyed to the classifier's own
+// labels, so falling back to classifierLabels is the correct vocabulary for those, not a
+// degraded approximation.
+//
+// It is also empty in two states where the fallback grants nominal coverage to every
+// classifier species even though nothing is scoring them, so each reports "very rare" at
+// score 0: no location configured, and no range filter loaded. Only the first is visible
+// to a client, via SpeciesRarityInfo.LocationBased; a range filter that failed to load
+// leaves LocationBased true, so a caller cannot currently distinguish that state from a
+// genuine result. That predates this function's signature and is not something callers
+// can guard against today.
+//
+// A species in neither vocabulary (a secondary-model-only species the geomodel does not
+// cover) has no occurrence probability to base a rarity on.
+func speciesHasGeomodelCoverage(targetSci string, geomodelLabels, classifierLabels []string) bool {
+	labels := geomodelLabels
+	if len(labels) == 0 {
+		labels = classifierLabels
+	}
+	canonicalTarget := openfauna.CanonicalName(targetSci)
+	for _, label := range labels {
+		if labelMatchesSpecies(label, canonicalTarget) {
 			return true
 		}
 	}
 	return false
 }
 
-func (c *Handler) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLabel string) (*SpeciesRarityInfo, error) {
+// findSpeciesScore returns the occurrence score for targetSci from a probable-species
+// list. It matches on the exact scientific name across the whole list before trying any
+// alias, for the reason resolveSpeciesLabel documents: the alias map merges pairs the
+// classifier ships as separate species, and an alias-first match would report one bird's
+// occurrence probability for the other. As there, the separation holds only while both
+// members are in the list; the probable-species list carries only species above today's
+// threshold, so one member being absent is the common case.
+func findSpeciesScore(targetSci string, speciesScores []classifier.SpeciesScore) (float64, bool) {
+	for _, ss := range speciesScores {
+		if strings.EqualFold(detection.ExtractScientificName(ss.Label), targetSci) {
+			return ss.Score, true
+		}
+	}
+	canonicalTarget := openfauna.CanonicalName(targetSci)
+	for _, ss := range speciesScores {
+		if labelMatchesSpecies(ss.Label, canonicalTarget) {
+			return ss.Score, true
+		}
+	}
+	return 0, false
+}
+
+// computeRarity resolves a species to its occurrence score and rarity status.
+//
+// filterActive gates everything: when the range filter produced no real scores (no
+// backend loaded, or no location configured), the probable-species list is synthetic
+// zeros, so rarity is reported unknown regardless of coverage (#3935).
+//
+// Coverage decides next. A species the range filter cannot score has no occurrence
+// probability at all, so it is reported as unknown even when it does appear in the
+// probable-species list, because PassUnmappedSpecies injects species with no geomodel
+// match at score 0.0 purely so they survive the filter. Reading that synthetic zero as a
+// rarity reported "very rare" for a species the geomodel has no data on, and made the
+// badge depend on whether an unrelated toggle was enabled.
+//
+// This does NOT cover the other synthetic score. addUserOverrideSpeciesScores injects
+// force-included species at 1.0, but resolveOverrideLabels resolves an override against
+// the geomodel labels first, so a force-included species the geomodel knows is inside the
+// coverage vocabulary and still reads as "very common" off that injected 1.0. Only an
+// override for a species outside the geomodel's vocabulary reaches the unknown path here.
+// Distinguishing a real score from an injected one needs the range filter to tag
+// synthetic entries; membership in a vocabulary cannot express it.
+//
+// A covered species present in the list is scored directly; one that is covered but
+// absent is below today's threshold and therefore genuinely very rare.
+// It takes the whole RarityContext (by pointer, since it is a large struct) rather than
+// its fields spread positionally: the two label vocabularies are adjacent same-typed
+// []string fields on that struct, so passing them loose invited a silent
+// geomodel/classifier swap.
+func computeRarity(rc *classifier.RarityContext, targetSci string) (float64, RarityStatus) {
+	// Without an active range filter the probable-species list is synthetic zero
+	// scores for every label, so a covered species would score 0.0 and be
+	// misreported as "very rare" at "0%". The occurrence probability is genuinely
+	// unknown in that state (the geomodel could not load), so report unknown rather
+	// than a confident wrong answer (#3935).
+	if !rc.FilterActive {
+		return 0.0, RarityUnknown
+	}
+
+	if !speciesHasGeomodelCoverage(targetSci, rc.GeomodelLabels, rc.ClassifierLabels) {
+		return 0.0, RarityUnknown
+	}
+
+	if score, found := findSpeciesScore(targetSci, rc.Scores); found {
+		return score, calculateRarityStatus(score)
+	}
+
+	return 0.0, RarityVeryRare
+}
+
+func (c *Handler) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLabel string) (SpeciesRarityInfo, error) {
 	// Get current local date
 	today := conf.LocalNoon(time.Now())
-	settings := bn.CurrentSettings()
 
 	// Rarity is the geomodel occurrence probability, so use the geomodel-backed
 	// probable-species list, not the multi-model union: the union assigns synthetic
 	// always-active scores (1.0) to secondary-model species (bats, Perch) that have
 	// no real occurrence probability, which would misclassify them as "very common".
-	speciesScores, err := bn.GetProbableSpecies(today, 0.0)
+	// GetRarityContext returns the settings snapshot it scored against, so location,
+	// threshold, coordinates and filterActive below all describe one settings generation;
+	// a concurrent reload cannot desynchronise the rarity number from its metadata.
+	rc, err := bn.GetRarityContext(today)
 	if err != nil {
-		return nil, errors.New(err).
+		return SpeciesRarityInfo{}, errors.New(err).
 			Category(errors.CategoryProcessing).
 			Context("species_label", speciesLabel).
 			Component("api-species").
 			Build()
 	}
+	// rc.Settings is the snapshot the scores were produced from, so every field below
+	// describes one settings generation. It is non-nil for a running orchestrator (this
+	// handler always has a primary); see GetRarityContext.
+	settings := rc.Settings
 
-	// Create rarity info
-	rarityInfo := &SpeciesRarityInfo{
+	// location_based reports whether this rarity number is actually derived from the
+	// location-based range filter, so it tracks filterActive rather than merely whether
+	// coordinates are configured: with coordinates set but the filter inactive (e.g. the
+	// geomodel failed to load), computeRarity returns unknown, and reporting
+	// location_based=true would render "Unknown 0% - Based on location" and partially
+	// reintroduce the false 0% that #3935 removed. filterActive implies LocationConfigured
+	// within this one snapshot, so location_based=true always has coordinates to show.
+	rarityInfo := SpeciesRarityInfo{
 		Date:             today.Format(time.DateOnly),
-		LocationBased:    settings.BirdNET.LocationConfigured,
+		LocationBased:    rc.FilterActive,
 		ThresholdApplied: float64(settings.BirdNET.RangeFilter.Threshold),
 	}
 
-	// Add location if available
-	if rarityInfo.LocationBased {
+	// Surface the configured coordinates whenever a location is set, independent of
+	// whether the filter is currently active, so a client still learns the location is
+	// known even when the rarity itself is unknown.
+	if settings.BirdNET.LocationConfigured {
 		rarityInfo.Latitude = settings.BirdNET.Latitude
 		rarityInfo.Longitude = settings.BirdNET.Longitude
 	}
 
-	// Find the species score
-	var score float64
-	found := false
+	// Resolve the score and status together; computeRarity documents how an absent
+	// species is split between "very rare" and "unknown" by geomodel coverage.
 	targetSci := detection.ExtractScientificName(speciesLabel)
-	for _, ss := range speciesScores {
-		if strings.EqualFold(detection.ExtractScientificName(ss.Label), targetSci) {
-			score = ss.Score
-			found = true
-			break
-		}
-	}
-
-	// Not in today's probable list. A species the geomodel can classify but that is
-	// below threshold today is genuinely very rare; a species with no geomodel
-	// coverage at all (secondary-model-only species such as bats) has no occurrence
-	// probability, so report it as unknown rather than a misleading rarity.
-	if !found {
-		if speciesHasGeomodelCoverage(bn, targetSci) {
-			rarityInfo.Status = RarityVeryRare
-		} else {
-			rarityInfo.Status = RarityUnknown
-		}
-		rarityInfo.Score = 0.0
-		return rarityInfo, nil
-	}
-
-	// Set score and calculate rarity status
-	rarityInfo.Score = score
-	rarityInfo.Status = calculateRarityStatus(score)
+	rarityInfo.Score, rarityInfo.Status = computeRarity(&rc, targetSci)
 
 	return rarityInfo, nil
 }
@@ -459,14 +619,14 @@ func calculateRarityStatus(score float64) RarityStatus {
 
 // TaxonomyInfo represents detailed taxonomy information for a species
 type TaxonomyInfo struct {
-	ScientificName     string             `json:"scientific_name"`
-	SpeciesCode        string             `json:"species_code,omitempty"`
-	Taxonomy           *TaxonomyHierarchy `json:"taxonomy,omitempty"`
-	Subspecies         []SubspeciesInfo   `json:"subspecies,omitempty"`
-	Synonyms           []string           `json:"synonyms,omitempty"`
-	ConservationStatus string             `json:"conservation_status,omitempty"`
-	NativeRegions      []string           `json:"native_regions,omitempty"`
-	Metadata           map[string]any     `json:"metadata,omitempty"`
+	ScientificName     string            `json:"scientific_name"`
+	SpeciesCode        string            `json:"species_code,omitempty"`
+	Taxonomy           TaxonomyHierarchy `json:"taxonomy,omitzero"`
+	Subspecies         []SubspeciesInfo  `json:"subspecies,omitempty"`
+	Synonyms           []string          `json:"synonyms,omitempty"`
+	ConservationStatus string            `json:"conservation_status,omitempty"`
+	NativeRegions      []string          `json:"native_regions,omitempty"`
+	Metadata           map[string]any    `json:"metadata,omitempty"`
 }
 
 // TaxonomyHierarchy represents the full taxonomic classification
@@ -527,14 +687,20 @@ func (c *Handler) GetSpeciesTaxonomy(ctx echo.Context) error {
 // getDetailedTaxonomy retrieves detailed taxonomy information
 // Tries local database first, falls back to eBird API if needed
 func (c *Handler) getDetailedTaxonomy(ctx context.Context, scientificName, locale string, includeSubspecies, includeHierarchy bool) (*TaxonomyInfo, error) {
+	// Load the eBird client once for the whole request and thread it through the
+	// helpers below. The client can be swapped concurrently by a settings
+	// hot-reload (ReconfigureEBird); re-reading it in each helper would risk a
+	// nil-after-check TOCTOU across method boundaries.
+	client := c.EBird()
+
 	// Try local taxonomy database first
-	if info := c.tryLocalTaxonomy(ctx, scientificName, locale, includeSubspecies, includeHierarchy); info != nil {
+	if info := c.tryLocalTaxonomy(ctx, client, scientificName, locale, includeSubspecies, includeHierarchy); info != nil {
 		return info, nil
 	}
 
 	// Fall back to eBird API
-	if c.EBirdClient != nil {
-		return c.getEBirdTaxonomy(ctx, scientificName, locale, includeSubspecies)
+	if client != nil {
+		return c.getEBirdTaxonomy(ctx, client, scientificName, locale, includeSubspecies)
 	}
 
 	// Neither local DB nor eBird API available
@@ -548,7 +714,7 @@ func (c *Handler) getDetailedTaxonomy(ctx context.Context, scientificName, local
 
 // tryLocalTaxonomy attempts to retrieve taxonomy from the local database.
 // Returns nil if local DB is unavailable or lookup fails.
-func (c *Handler) tryLocalTaxonomy(ctx context.Context, scientificName, locale string, includeSubspecies, includeHierarchy bool) *TaxonomyInfo {
+func (c *Handler) tryLocalTaxonomy(ctx context.Context, client *ebird.Client, scientificName, locale string, includeSubspecies, includeHierarchy bool) *TaxonomyInfo {
 	if c.TaxonomyDB == nil {
 		return nil
 	}
@@ -573,14 +739,14 @@ func (c *Handler) tryLocalTaxonomy(ctx context.Context, scientificName, locale s
 	}
 
 	// Enhance with eBird data if needed
-	c.enhanceWithEBirdData(ctx, info, scientificName, locale, includeSubspecies)
+	c.enhanceWithEBirdData(ctx, client, info, scientificName, locale, includeSubspecies)
 
 	return info
 }
 
 // convertToTaxonomyHierarchy converts an ebird.TaxonomyTree to TaxonomyHierarchy.
-func convertToTaxonomyHierarchy(tree *ebird.TaxonomyTree) *TaxonomyHierarchy {
-	return &TaxonomyHierarchy{
+func convertToTaxonomyHierarchy(tree *ebird.TaxonomyTree) TaxonomyHierarchy {
+	return TaxonomyHierarchy{
 		Kingdom:       tree.Kingdom,
 		Phylum:        tree.Phylum,
 		Class:         tree.Class,
@@ -594,13 +760,13 @@ func convertToTaxonomyHierarchy(tree *ebird.TaxonomyTree) *TaxonomyHierarchy {
 }
 
 // enhanceWithEBirdData adds subspecies and locale data from eBird API to local taxonomy info.
-func (c *Handler) enhanceWithEBirdData(ctx context.Context, info *TaxonomyInfo, scientificName, locale string, includeSubspecies bool) {
-	if c.EBirdClient == nil || (!includeSubspecies && locale == "") {
+func (c *Handler) enhanceWithEBirdData(ctx context.Context, client *ebird.Client, info *TaxonomyInfo, scientificName, locale string, includeSubspecies bool) {
+	if client == nil || (!includeSubspecies && locale == "") {
 		return
 	}
 
 	c.Debug("Enhancing local taxonomy data with eBird API for subspecies/locale")
-	ebirdInfo, err := c.getEBirdTaxonomy(ctx, scientificName, locale, includeSubspecies)
+	ebirdInfo, err := c.getEBirdTaxonomy(ctx, client, scientificName, locale, includeSubspecies)
 	if err != nil {
 		return
 	}
@@ -618,9 +784,9 @@ func (c *Handler) enhanceWithEBirdData(ctx context.Context, info *TaxonomyInfo, 
 }
 
 // getEBirdTaxonomy retrieves taxonomy information from eBird API
-func (c *Handler) getEBirdTaxonomy(ctx context.Context, scientificName, locale string, includeSubspecies bool) (*TaxonomyInfo, error) {
+func (c *Handler) getEBirdTaxonomy(ctx context.Context, client *ebird.Client, scientificName, locale string, includeSubspecies bool) (*TaxonomyInfo, error) {
 	// Get full taxonomy data with locale if specified
-	taxonomyData, err := c.EBirdClient.GetTaxonomy(ctx, locale)
+	taxonomyData, err := client.GetTaxonomy(ctx, locale)
 	if err != nil {
 		return nil, err
 	}
@@ -660,7 +826,7 @@ func (c *Handler) getEBirdTaxonomy(ctx context.Context, scientificName, locale s
 		genus = parts[0]
 	}
 
-	info.Taxonomy = &TaxonomyHierarchy{
+	info.Taxonomy = TaxonomyHierarchy{
 		Kingdom:       "Animalia", // All birds are in kingdom Animalia
 		Phylum:        "Chordata", // All birds are in phylum Chordata
 		Class:         "Aves",     // All entries are birds
