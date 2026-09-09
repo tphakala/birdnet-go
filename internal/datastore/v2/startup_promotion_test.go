@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -322,6 +323,94 @@ func TestMoveSQLiteDBFiles_PreservesSidecars(t *testing.T) {
 	shmBytes, err := os.ReadFile(to + "-shm") //nolint:gosec // test-controlled path
 	require.NoError(t, err)
 	assert.Equal(t, "shm-index", string(shmBytes))
+}
+
+// TestMoveSQLiteDBFiles_RemovesStaleDestinationSidecar proves that when the source has no
+// sidecars (the normal post-checkpoint path), a stale sidecar left at the destination is
+// removed so it is not wrongly paired with the moved database (Forgejo #1580).
+func TestMoveSQLiteDBFiles_RemovesStaleDestinationSidecar(t *testing.T) {
+	dir := t.TempDir()
+	from := filepath.Join(dir, "src.db")
+	to := filepath.Join(dir, "dst.db")
+
+	require.NoError(t, os.WriteFile(from, []byte("main-db"), 0o600))
+	// No source sidecars, but a stale -wal sits at the destination from a prior database.
+	require.NoError(t, os.WriteFile(to+"-wal", []byte("stale-wal"), 0o600))
+
+	require.NoError(t, moveSQLiteDBFiles(from, to, testStartupLogger()))
+
+	assert.FileExists(t, to)
+	assert.NoFileExists(t, to+"-wal", "stale destination WAL must be removed, not left paired with the moved DB")
+	assert.NoFileExists(t, to+"-shm")
+}
+
+// TestMoveSQLiteDBFiles_FailsClosedAndRevertsOnSidecarFailure proves that a sidecar rename
+// failure is reported (not swallowed as success) and that the already-renamed main file is
+// rolled back, so the caller never sees a half-moved database (Forgejo #1580).
+func TestMoveSQLiteDBFiles_FailsClosedAndRevertsOnSidecarFailure(t *testing.T) {
+	dir := t.TempDir()
+	from := filepath.Join(dir, "src.db")
+	to := filepath.Join(dir, "dst.db")
+
+	require.NoError(t, os.WriteFile(from, []byte("main-db"), 0o600))
+	require.NoError(t, os.WriteFile(from+"-wal", []byte("wal-frames"), 0o600))
+	// Make the destination -wal an existing non-empty directory so renaming the source
+	// -wal file onto it fails, exercising the fail-closed + revert path.
+	require.NoError(t, os.Mkdir(to+"-wal", 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(to+"-wal", "blocker"), []byte("x"), 0o600))
+
+	err := moveSQLiteDBFiles(from, to, testStartupLogger())
+	require.Error(t, err, "a sidecar rename failure must be reported, not swallowed")
+
+	// Revert restored the pre-move state.
+	assert.FileExists(t, from, "main db must be reverted to the source path")
+	assert.FileExists(t, from+"-wal", "source WAL must remain at the source path")
+	assert.NoFileExists(t, to, "destination main db must be rolled back after the failure")
+}
+
+// TestMoveSQLiteDBFiles_FailsClosedOnUnreadableSidecar proves that a non-not-exist stat
+// error on a sidecar is treated as fail-closed (the sidecar may hide live WAL data), not as
+// "absent": the move returns an error and reverts (Forgejo #1580). A self-referential symlink
+// makes os.Stat fail with ELOOP, which is independent of privileges (unlike a chmod, which
+// root bypasses).
+func TestMoveSQLiteDBFiles_FailsClosedOnUnreadableSidecar(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink-based stat error is not portable to Windows")
+	}
+	dir := t.TempDir()
+	from := filepath.Join(dir, "src.db")
+	to := filepath.Join(dir, "dst.db")
+
+	require.NoError(t, os.WriteFile(from, []byte("main-db"), 0o600))
+	require.NoError(t, os.Symlink(from+"-wal", from+"-wal")) // self-loop -> os.Stat returns ELOOP
+
+	err := moveSQLiteDBFiles(from, to, testStartupLogger())
+	require.Error(t, err, "a non-not-exist stat error on a sidecar must fail closed")
+	require.NotErrorIs(t, err, os.ErrNotExist, "the stat error must not be swallowed as absent")
+
+	assert.FileExists(t, from, "main db must be reverted to the source path")
+	assert.NoFileExists(t, to, "destination main db must be rolled back")
+}
+
+// TestMoveSQLiteDBFiles_FailsClosedWhenStaleSidecarRemovalFails proves that when the source
+// has no sidecars but the stale destination sidecar cannot be removed, the move fails closed
+// and reverts rather than silently leaving a mispaired sidecar (Forgejo #1580).
+func TestMoveSQLiteDBFiles_FailsClosedWhenStaleSidecarRemovalFails(t *testing.T) {
+	dir := t.TempDir()
+	from := filepath.Join(dir, "src.db")
+	to := filepath.Join(dir, "dst.db")
+
+	require.NoError(t, os.WriteFile(from, []byte("main-db"), 0o600))
+	// A non-empty directory sits where the stale destination -wal would be, so os.Remove(dst)
+	// fails with a non-not-exist error.
+	require.NoError(t, os.Mkdir(to+"-wal", 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(to+"-wal", "blocker"), []byte("x"), 0o600))
+
+	err := moveSQLiteDBFiles(from, to, testStartupLogger())
+	require.Error(t, err, "a failed stale-sidecar removal must fail closed")
+
+	assert.FileExists(t, from, "main db must be reverted to the source path")
+	assert.NoFileExists(t, to, "destination main db must be rolled back")
 }
 
 // TestCheckpointSQLiteWAL_FoldsWALIntoMainFile proves that checkpointing folds

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -22,12 +23,19 @@ import (
 )
 
 // readOnlyDSN appends mode=ro to a SQLite path, using the correct query separator.
-func readOnlyDSN(dbPath string) string {
+// dsnAppendParams appends SQLite DSN query parameters to a database path, choosing "?" or
+// "&" depending on whether the path already carries a query string (e.g. a shared-cache
+// in-memory DSN used in tests).
+func dsnAppendParams(dbPath, params string) string {
 	sep := "?"
 	if strings.Contains(dbPath, "?") {
 		sep = "&"
 	}
-	return dbPath + sep + "mode=ro"
+	return dbPath + sep + params
+}
+
+func readOnlyDSN(dbPath string) string {
+	return dsnAppendParams(dbPath, "mode=ro")
 }
 
 // reportStartupError reports a startup state check failure to Sentry telemetry.
@@ -560,20 +568,6 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	}
 }
 
-// IsV2OnlyModeAvailable returns true if the system can run in v2-only mode.
-// This is true when migration is completed and v2 database is available.
-func IsV2OnlyModeAvailable(settings *conf.Settings) bool {
-	state := CheckMigrationStateBeforeStartup(settings)
-	return state.MigrationStatus == entities.MigrationStatusCompleted && state.V2Available
-}
-
-// ShouldSkipLegacyDatabase returns true if the legacy database should not be opened.
-// This happens when migration is complete and we're running in v2-only mode.
-func ShouldSkipLegacyDatabase(settings *conf.Settings) bool {
-	state := CheckMigrationStateBeforeStartup(settings)
-	return !state.LegacyRequired && state.MigrationStatus == entities.MigrationStatusCompleted
-}
-
 // HasUnmigratedLegacyRecords reports whether the migration is complete but some
 // legacy records are not yet safely present in v2. This detects data loss from
 // hard crashes (kill -9, power loss, OOM) during the tail sync window, and (issue
@@ -855,7 +849,12 @@ func checkpointSQLiteWAL(dbPath string, log logger.Logger) error {
 		return err
 	}
 
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+	// Open with busy_timeout in the DSN so the checkpoint waits for a briefly-held lock (a
+	// loaded runner or a slow shutdown) instead of failing immediately with SQLITE_BUSY. The
+	// DSN applies the timeout to every pooled connection, matching the package-wide value used
+	// for normal connections (manager.go).
+	dsn := dsnAppendParams(dbPath, fmt.Sprintf("_busy_timeout=%d", sqliteBusyTimeoutMs))
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	if err != nil {
@@ -880,28 +879,54 @@ func checkpointSQLiteWAL(dbPath string, log logger.Logger) error {
 
 // moveSQLiteDBFiles renames a SQLite database file together with its -wal and -shm
 // sidecars, so no committed WAL data is left behind or discarded during consolidation.
-// The main file rename is authoritative and its failure is returned; sidecar moves are
-// best-effort and only logged, because after a successful checkpoint the sidecars are
-// empty and after an unclean shutdown moving them alongside preserves their data.
+// The move is all-or-nothing: the main file is renamed first, then each present sidecar;
+// any failure (including a non-not-exist stat error on a sidecar, which may hide live WAL
+// data) rolls back every completed rename and returns an error, so the caller never sees a
+// half-moved database reported as success (Forgejo #1580).
 func moveSQLiteDBFiles(from, to string, log logger.Logger) error {
 	if err := os.Rename(from, to); err != nil {
-		return err
+		return fmt.Errorf("failed to rename SQLite database %q to %q: %w", from, to, err)
+	}
+	// Track completed renames so a later failure can undo them in reverse, keeping the move
+	// all-or-nothing. The main file is renamed first, so any failure below must revert it;
+	// otherwise the source database is stranded without its uncheckpointed WAL while the
+	// caller still believes the pre-move state can be cleanly rolled back.
+	type movedFile struct{ src, dst string }
+	done := []movedFile{{src: from, dst: to}}
+	revert := func() {
+		for _, m := range slices.Backward(done) {
+			if rbErr := os.Rename(m.dst, m.src); rbErr != nil {
+				log.Error("failed to roll back SQLite file move; database files may be inconsistent",
+					logger.String("from", m.dst),
+					logger.String("to", m.src),
+					logger.Error(rbErr))
+			}
+		}
 	}
 	for _, suffix := range []string{"-wal", "-shm"} {
 		src := from + suffix
+		dst := to + suffix
 		if _, err := os.Stat(src); err != nil {
-			// Source sidecar absent (e.g. checkpoint truncated it and SQLite removed the
-			// file). Remove any stale sidecar left at the destination so it is not wrongly
-			// paired with the moved database when it is next opened.
-			_ = os.Remove(to + suffix)
-			continue
+			if os.IsNotExist(err) {
+				// Source sidecar genuinely absent (a checkpoint truncated it and SQLite removed
+				// the file). Remove any stale sidecar left at the destination so it is not wrongly
+				// paired with the moved database when it is next opened.
+				if rmErr := os.Remove(dst); rmErr != nil && !os.IsNotExist(rmErr) {
+					revert()
+					return fmt.Errorf("failed to remove stale destination sidecar %q: %w", dst, rmErr)
+				}
+				continue
+			}
+			// A non-not-exist stat error (permission, I/O) must not be treated as "absent": the
+			// sidecar may still hold live WAL data. Fail closed and roll back.
+			revert()
+			return fmt.Errorf("failed to stat SQLite sidecar %q: %w", src, err)
 		}
-		if err := os.Rename(src, to+suffix); err != nil {
-			log.Warn("failed to move SQLite sidecar file during consolidation",
-				logger.String("from", src),
-				logger.String("to", to+suffix),
-				logger.Error(err))
+		if err := os.Rename(src, dst); err != nil {
+			revert()
+			return fmt.Errorf("failed to move SQLite sidecar %q to %q: %w", src, dst, err)
 		}
+		done = append(done, movedFile{src: src, dst: dst})
 	}
 	return nil
 }

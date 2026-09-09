@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/tphakala/birdnet-go/internal/datastore"
-	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
@@ -31,22 +29,45 @@ type ConsolidationState struct {
 // It writes to a temp file first, then renames to ensure atomic write.
 func WriteConsolidationState(dataDir string, state *ConsolidationState) error {
 	stateFilePath := filepath.Join(dataDir, StateFileName)
-	tempFilePath := stateFilePath + ".tmp"
 
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal consolidation state: %w", err)
 	}
 
-	// Write to temp file first
-	if err := os.WriteFile(tempFilePath, data, 0o600); err != nil {
-		return fmt.Errorf("failed to write temp state file: %w", err)
+	// Write to a uniquely-named temp file, fsync it, then atomically rename into place. A
+	// unique name avoids colliding with a concurrent writer's temp file, and the fsync makes
+	// the contents durable before the rename so a crash mid-write cannot leave a truncated or
+	// missing breadcrumb behind an intact filename.
+	// Remove any temp files orphaned by a crash between CreateTemp and Rename in a prior run so
+	// they cannot accumulate. Startup is single-threaded, so no concurrent writer races this.
+	if stale, _ := filepath.Glob(filepath.Join(dataDir, StateFileName+".*.tmp")); len(stale) > 0 {
+		for _, f := range stale {
+			_ = os.Remove(f)
+		}
 	}
 
-	// Atomic rename
+	tempFile, err := os.CreateTemp(dataDir, StateFileName+".*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temp state file: %w", err)
+	}
+	tempFilePath := tempFile.Name()
+	// Best-effort cleanup if we return before the rename removes the temp file.
+	defer func() { _ = os.Remove(tempFilePath) }()
+
+	if _, err := tempFile.Write(data); err != nil {
+		_ = tempFile.Close()
+		return fmt.Errorf("failed to write temp state file: %w", err)
+	}
+	if err := tempFile.Sync(); err != nil {
+		_ = tempFile.Close()
+		return fmt.Errorf("failed to sync temp state file: %w", err)
+	}
+	if err := tempFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp state file: %w", err)
+	}
+
 	if err := os.Rename(tempFilePath, stateFilePath); err != nil {
-		// Clean up temp file on failure
-		_ = os.Remove(tempFilePath)
 		return fmt.Errorf("failed to rename state file: %w", err)
 	}
 
@@ -124,159 +145,6 @@ func reportConsolidationError(operation string, err error, paths ...string) {
 			"datastore-consolidation",
 		)
 	})
-}
-
-// Consolidate performs the database consolidation after migration completes.
-// It renames the legacy database to .old and moves v2 to the configured path.
-//
-// The consolidation sequence is:
-//  1. Write consolidation state file (atomic marker)
-//  2. Checkpoint WAL on v2 (TRUNCATE)
-//  3. Close v2 connection
-//  4. Checkpoint WAL on legacy (TRUNCATE)
-//  5. Close legacy connection
-//  6. Delete any leftover WAL/SHM files (defensive cleanup)
-//  7. Rename: legacy → legacy.TIMESTAMP.old
-//  8. Rename: v2 → configured path
-//  9. Delete consolidation state file
-//  10. Reopen v2 at configured path
-//  11. Mark migration state as COMPLETED in database
-//
-// Parameters:
-//   - v2Manager: the v2 database manager (will be closed and reopened)
-//   - legacyStore: the legacy datastore interface (will be closed)
-//   - configuredPath: the target path for the consolidated database
-//   - dataDir: directory for state file
-//   - log: logger for progress
-//
-// Returns the reopened v2 manager at the new path, or error.
-func Consolidate(
-	v2Manager *SQLiteManager,
-	legacyStore datastore.Interface,
-	configuredPath string,
-	dataDir string,
-	log logger.Logger,
-) (*SQLiteManager, error) {
-	if log == nil {
-		return nil, fmt.Errorf("logger is required")
-	}
-
-	v2Path := v2Manager.Path()
-	backupPath := GenerateBackupPath(configuredPath)
-
-	log.Info("starting database consolidation",
-		logger.String("v2_path", v2Path),
-		logger.String("configured_path", configuredPath),
-		logger.String("backup_path", backupPath))
-
-	// Step 1: Write consolidation state file
-	state := &ConsolidationState{
-		LegacyPath:     configuredPath,
-		V2Path:         v2Path,
-		BackupPath:     backupPath,
-		ConfiguredPath: configuredPath,
-		StartedAt:      time.Now(),
-	}
-	if err := WriteConsolidationState(dataDir, state); err != nil {
-		reportConsolidationError("writeStateFile", err, configuredPath, v2Path)
-		return nil, fmt.Errorf("failed to write consolidation state: %w", err)
-	}
-
-	// Step 2: Checkpoint WAL on v2
-	log.Debug("checkpointing v2 database WAL")
-	if err := v2Manager.CheckpointWAL(); err != nil {
-		reportConsolidationError("v2WalCheckpoint", err, v2Path)
-		_ = DeleteConsolidationState(dataDir)
-		return nil, fmt.Errorf("failed to checkpoint v2 WAL: %w", err)
-	}
-
-	// Step 3: Close v2 connection
-	log.Debug("closing v2 database connection")
-	if err := v2Manager.Close(); err != nil {
-		reportConsolidationError("closeV2", err, v2Path)
-		_ = DeleteConsolidationState(dataDir)
-		return nil, fmt.Errorf("failed to close v2 database: %w", err)
-	}
-
-	// Step 4: Checkpoint WAL on legacy (via type assertion)
-	log.Debug("checkpointing legacy database WAL")
-	if sqliteStore, ok := legacyStore.(*datastore.SQLiteStore); ok {
-		if err := sqliteStore.CheckpointWAL(); err != nil {
-			reportConsolidationError("legacyWalCheckpoint", err, configuredPath)
-			_ = DeleteConsolidationState(dataDir)
-			return nil, fmt.Errorf("failed to checkpoint legacy WAL: %w", err)
-		}
-	}
-
-	// Step 5: Close legacy connection
-	log.Debug("closing legacy database connection")
-	if err := legacyStore.Close(); err != nil {
-		reportConsolidationError("closeLegacy", err, configuredPath)
-		_ = DeleteConsolidationState(dataDir)
-		return nil, fmt.Errorf("failed to close legacy database: %w", err)
-	}
-
-	// Step 6: Delete any leftover WAL/SHM files (defensive cleanup)
-	log.Debug("cleaning up WAL/SHM files")
-	cleanupWALFiles(configuredPath) // legacy
-	cleanupWALFiles(v2Path)         // v2
-
-	// Step 7: Rename legacy → backup
-	log.Debug("renaming legacy database to backup",
-		logger.String("from", configuredPath),
-		logger.String("to", backupPath))
-	if err := os.Rename(configuredPath, backupPath); err != nil {
-		reportConsolidationError("renameLegacyToBackup", err, configuredPath, backupPath)
-		_ = DeleteConsolidationState(dataDir)
-		return nil, fmt.Errorf("failed to rename legacy database to backup: %w", err)
-	}
-
-	// Step 8: Rename v2 → configured path
-	log.Debug("renaming v2 database to configured path",
-		logger.String("from", v2Path),
-		logger.String("to", configuredPath))
-	if err := os.Rename(v2Path, configuredPath); err != nil {
-		reportConsolidationError("renameV2ToConfigured", err, v2Path, configuredPath)
-		// Rollback: restore legacy from backup
-		log.Warn("v2 rename failed, rolling back legacy rename",
-			logger.Error(err))
-		if rollbackErr := os.Rename(backupPath, configuredPath); rollbackErr != nil {
-			reportConsolidationError("rollbackFailed", rollbackErr, backupPath, configuredPath)
-			log.Error("rollback failed - manual intervention required",
-				logger.Error(rollbackErr),
-				logger.String("backup_path", backupPath),
-				logger.String("configured_path", configuredPath))
-			return nil, errors.Join(
-				fmt.Errorf("failed to rename v2 database: %w", err),
-				fmt.Errorf("rollback also failed: %w", rollbackErr),
-			)
-		}
-		_ = DeleteConsolidationState(dataDir)
-		return nil, fmt.Errorf("failed to rename v2 database (rolled back): %w", err)
-	}
-
-	// Step 9: Delete consolidation state file
-	log.Debug("deleting consolidation state file")
-	if err := DeleteConsolidationState(dataDir); err != nil {
-		// Log warning but continue - orphaned state file is harmless
-		log.Warn("failed to delete consolidation state file",
-			logger.Error(err))
-	}
-
-	// Step 10: Reopen v2 at configured path
-	log.Debug("reopening v2 database at configured path",
-		logger.String("path", configuredPath))
-	newManager, err := NewSQLiteManager(Config{DirectPath: configuredPath})
-	if err != nil {
-		reportConsolidationError("reopenV2", err, configuredPath)
-		return nil, fmt.Errorf("failed to reopen v2 database at configured path: %w", err)
-	}
-
-	log.Info("database consolidation completed successfully",
-		logger.String("database_path", configuredPath),
-		logger.String("backup_path", backupPath))
-
-	return newManager, nil
 }
 
 // ResumeConsolidation checks for interrupted consolidation and resumes if needed.

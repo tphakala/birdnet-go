@@ -74,24 +74,31 @@ func (s *SQLiteStore) GetEngineDetails() (EngineDetails, error) {
 	return EngineDetails{SQLite: details}, nil
 }
 
+// ResolveCachedTableStats returns per-table stats via the dbstat virtual table when it is
+// available, caching availability in `available` (0=unchecked, 1=available, -1=unavailable)
+// so an absent dbstat table is probed once instead of on every refresh (which also avoids
+// repeated WARN logs when SQLITE_ENABLE_DBSTAT_VTAB is not compiled in). It falls back to
+// `estimate` when dbstat is unavailable or the probe fails. Shared by the legacy and v2-only
+// SQLite inspectors so the caching logic cannot drift.
+func ResolveCachedTableStats(available *atomic.Int32, viaDBStat, estimate func() ([]TableStats, error)) ([]TableStats, error) {
+	if available.Load() == -1 {
+		return estimate()
+	}
+	stats, err := viaDBStat()
+	if err == nil {
+		available.Store(1)
+		return stats, nil
+	}
+	available.Store(-1)
+	return estimate()
+}
+
 // GetTableStats returns per-table row counts and sizes for all user tables.
 // Tries the dbstat virtual table first; falls back to row-count proportional estimation.
 // Caches dbstat availability to avoid repeated WARN logs when the virtual table
 // is not compiled in (requires SQLITE_ENABLE_DBSTAT_VTAB).
 func (s *SQLiteStore) GetTableStats() ([]TableStats, error) {
-	cached := atomic.LoadInt32(&s.dbstatAvailable)
-	if cached == -1 {
-		return s.getTableStatsEstimated()
-	}
-
-	stats, err := s.getTableStatsViaDBStat()
-	if err == nil {
-		atomic.StoreInt32(&s.dbstatAvailable, 1)
-		return stats, nil
-	}
-
-	atomic.StoreInt32(&s.dbstatAvailable, -1)
-	return s.getTableStatsEstimated()
+	return ResolveCachedTableStats(&s.dbstatAvailable, s.getTableStatsViaDBStat, s.getTableStatsEstimated)
 }
 
 // getTableStatsViaDBStat uses the dbstat virtual table (requires SQLITE_ENABLE_DBSTAT_VTAB).

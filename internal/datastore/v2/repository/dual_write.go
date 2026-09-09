@@ -188,6 +188,30 @@ func (dw *DualWriteRepository) StartReconciliation() {
 	})
 }
 
+// ReconcileDeletedGhost removes from v2 a detection whose legacy row no longer exists and
+// clears its dirty marker. During dual-write legacy is the source of truth and its row is
+// deleted before the v2 row (DualWriteRepository.Delete), so a missing legacy row means the
+// detection was deleted; a surviving v2 row is an orphan that would resurrect after v2
+// promotion (Forgejo #1581). A row already absent from v2 (ErrDetectionNotFound) needs no
+// delete. A locked, user-verified v2 row (ErrDetectionLocked) is never force-deleted; its
+// marker is still cleared so the id does not linger in the dirty set and block migration
+// validation forever, and the protected row is left in place. Any other delete error leaves
+// the marker for a later retry (a non-nil return); it returns nil once the marker is cleared
+// or the row was already gone.
+//
+// This is shared by the runtime reconciler (reconcileDirtyIDs) and the migration catch-up
+// worker so the two paths cannot drift.
+func ReconcileDeletedGhost(ctx context.Context, v2Repo DetectionRepository, sm *v2.StateManager, id uint) error {
+	if v2Repo == nil || sm == nil {
+		return fmt.Errorf("reconcile deleted ghost %d: nil repository or state manager", id)
+	}
+	if delErr := v2Repo.Delete(ctx, id); delErr != nil &&
+		!errors.Is(delErr, ErrDetectionNotFound) && !errors.Is(delErr, ErrDetectionLocked) {
+		return delErr
+	}
+	return sm.RemoveDirtyID(id)
+}
+
 // reconcileDirtyIDs processes a batch of dirty IDs using legacy as source of truth.
 func (dw *DualWriteRepository) reconcileDirtyIDs() {
 	count, err := dw.stateManager.GetDirtyIDCount()
@@ -224,17 +248,12 @@ func (dw *DualWriteRepository) reconcileDirtyIDs() {
 			result, err := dw.legacy.Get(ctx, idStr)
 			if err != nil {
 				if errors.IsNotFound(err) {
-					// Record genuinely deleted from legacy — remove v2 ghost
-					if delErr := dw.v2.Delete(ctx, id); delErr != nil && !errors.Is(delErr, ErrDetectionNotFound) {
-						dw.logger.Warn("reconciliation: v2 delete failed", logger.Uint64("id", uint64(id)), logger.Error(delErr))
+					// Record deleted from legacy: reconcile the v2 side and clear the marker.
+					if recErr := ReconcileDeletedGhost(ctx, dw.v2, dw.stateManager, id); recErr != nil {
+						dw.logger.Warn("reconciliation: failed to reconcile deleted detection in v2", logger.Uint64("id", uint64(id)), logger.Error(recErr))
 						return
 					}
-					// Ghost removed (or never existed in v2) — clear dirty ID
-					if rmErr := dw.stateManager.RemoveDirtyID(id); rmErr != nil {
-						dw.logger.Warn("reconciliation: failed to remove dirty ID", logger.Uint64("id", uint64(id)), logger.Error(rmErr))
-					} else {
-						reconciled++
-					}
+					reconciled++
 					return
 				}
 				// Transient legacy error — skip, retry next cycle
