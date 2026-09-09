@@ -71,6 +71,15 @@ func WriteConsolidationState(dataDir string, state *ConsolidationState) error {
 		return fmt.Errorf("failed to rename state file: %w", err)
 	}
 
+	// Best-effort fsync of the parent directory so the rename (a directory-entry change) is
+	// itself durable across a power failure, not just the file contents. The rename already
+	// succeeded, so a failure here only weakens power-loss durability of the breadcrumb, which
+	// leaves the DB in its safe pre-consolidation state.
+	if dir, err := os.Open(dataDir); err == nil {
+		_ = dir.Sync()
+		_ = dir.Close()
+	}
+
 	return nil
 }
 

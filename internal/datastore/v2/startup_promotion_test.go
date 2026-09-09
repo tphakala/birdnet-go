@@ -413,6 +413,27 @@ func TestMoveSQLiteDBFiles_FailsClosedWhenStaleSidecarRemovalFails(t *testing.T)
 	assert.NoFileExists(t, to, "destination main db must be rolled back")
 }
 
+// TestMoveSQLiteDBFiles_RefusesToClobberExistingDestination proves the move fails closed
+// rather than overwriting an existing destination database. os.Rename would silently replace
+// it and the revert could not restore it (e.g. a prior backup already at backupPath), so the
+// move must reject the collision and leave both files intact (Forgejo #1580 follow-up).
+func TestMoveSQLiteDBFiles_RefusesToClobberExistingDestination(t *testing.T) {
+	dir := t.TempDir()
+	from := filepath.Join(dir, "src.db")
+	to := filepath.Join(dir, "dst.db")
+
+	require.NoError(t, os.WriteFile(from, []byte("source"), 0o600))
+	require.NoError(t, os.WriteFile(to, []byte("existing-destination"), 0o600))
+
+	err := moveSQLiteDBFiles(from, to, testStartupLogger())
+	require.Error(t, err, "move must refuse to overwrite an existing destination")
+
+	assert.FileExists(t, from, "source must not be moved when the destination already exists")
+	dstBytes, readErr := os.ReadFile(to) //nolint:gosec // test-controlled path
+	require.NoError(t, readErr)
+	assert.Equal(t, "existing-destination", string(dstBytes), "existing destination must be preserved")
+}
+
 // TestCheckpointSQLiteWAL_FoldsWALIntoMainFile proves that checkpointing folds
 // uncheckpointed WAL frames into the main database file (so a later rename of the main
 // file alone carries the data) and truncates the WAL to zero bytes.

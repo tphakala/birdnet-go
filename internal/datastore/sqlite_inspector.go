@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 )
@@ -78,18 +79,28 @@ func (s *SQLiteStore) GetEngineDetails() (EngineDetails, error) {
 // available, caching availability in `available` (0=unchecked, 1=available, -1=unavailable)
 // so an absent dbstat table is probed once instead of on every refresh (which also avoids
 // repeated WARN logs when SQLITE_ENABLE_DBSTAT_VTAB is not compiled in). It falls back to
-// `estimate` when dbstat is unavailable or the probe fails. Shared by the legacy and v2-only
-// SQLite inspectors so the caching logic cannot drift.
-func ResolveCachedTableStats(available *atomic.Int32, viaDBStat, estimate func() ([]TableStats, error)) ([]TableStats, error) {
+// `estimate` when dbstat is unavailable or the probe fails. A transient lock error
+// (SQLITE_BUSY/LOCKED) does NOT poison the cache: only a genuine failure marks dbstat
+// unavailable, so a momentary lock cannot permanently disable exact stats for the process.
+// Shared by the legacy and v2-only SQLite inspectors so the caching logic cannot drift.
+func ResolveCachedTableStats(available *atomic.Int32, viaDBStat, estimate func() ([]TableStats, error)) (stats []TableStats, err error) {
+	if available == nil || viaDBStat == nil || estimate == nil {
+		return nil, errors.Newf("ResolveCachedTableStats: nil argument").Build()
+	}
 	if available.Load() == -1 {
 		return estimate()
 	}
-	stats, err := viaDBStat()
+	stats, err = viaDBStat()
 	if err == nil {
 		available.Store(1)
 		return stats, nil
 	}
-	available.Store(-1)
+	// Cache unavailability only on a genuine error (e.g. the dbstat vtab is not compiled in).
+	// A transient lock must not permanently disable dbstat, so leave the cache unchanged and
+	// fall back to estimation just for this call.
+	if !IsTransientDBError(err) {
+		available.Store(-1)
+	}
 	return estimate()
 }
 

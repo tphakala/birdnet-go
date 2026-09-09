@@ -879,11 +879,21 @@ func checkpointSQLiteWAL(dbPath string, log logger.Logger) error {
 
 // moveSQLiteDBFiles renames a SQLite database file together with its -wal and -shm
 // sidecars, so no committed WAL data is left behind or discarded during consolidation.
-// The move is all-or-nothing: the main file is renamed first, then each present sidecar;
-// any failure (including a non-not-exist stat error on a sidecar, which may hide live WAL
-// data) rolls back every completed rename and returns an error, so the caller never sees a
-// half-moved database reported as success (Forgejo #1580).
+// The move is all-or-nothing: it first refuses to clobber an existing destination, then
+// renames the main file, then each present sidecar; any failure (including a non-not-exist
+// stat error on a sidecar, which may hide live WAL data) rolls back every completed rename
+// and returns an error, so the caller never sees a half-moved database reported as success
+// (Forgejo #1580).
 func moveSQLiteDBFiles(from, to string, log logger.Logger) error {
+	// Refuse to overwrite an existing destination. os.Rename would silently replace it and a
+	// later revert could not restore it (e.g. a prior backup already at backupPath). Callers
+	// always pass a vacated or timestamp-unique destination, so an existing one is an
+	// unexpected collision. Lstat, not Stat, so a symlink at the destination also counts.
+	if _, err := os.Lstat(to); err == nil {
+		return fmt.Errorf("refusing to move SQLite database onto existing destination %q", to)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("failed to stat destination %q: %w", to, err)
+	}
 	if err := os.Rename(from, to); err != nil {
 		return fmt.Errorf("failed to rename SQLite database %q to %q: %w", from, to, err)
 	}
@@ -908,6 +918,13 @@ func moveSQLiteDBFiles(from, to string, log logger.Logger) error {
 		dst := to + suffix
 		if _, err := os.Stat(src); err != nil {
 			if os.IsNotExist(err) {
+				// os.Stat follows symlinks, so a broken/dangling symlink also reports not-exist.
+				// If the link entry itself exists, fail closed rather than treat it as "absent":
+				// silently skipping it would leave it behind and break the all-or-nothing move.
+				if _, lerr := os.Lstat(src); lerr == nil {
+					revert()
+					return fmt.Errorf("SQLite sidecar %q is a broken symlink; refusing to leave it behind", src)
+				}
 				// Source sidecar genuinely absent (a checkpoint truncated it and SQLite removed
 				// the file). Remove any stale sidecar left at the destination so it is not wrongly
 				// paired with the moved database when it is next opened.
