@@ -47,7 +47,9 @@
     score: number;
     location_based: boolean;
     // Optional: the API omits these when no location is configured (they are *float64
-    // with omitempty server-side). They are present whenever location_based is true.
+    // with omitempty server-side). The backend sends them whenever location_based is
+    // true, but callers must still guard before toFixed() as defense in depth against
+    // a contract violation.
     latitude?: number;
     longitude?: number;
   }
