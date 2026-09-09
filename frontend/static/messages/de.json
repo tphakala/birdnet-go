@@ -1781,6 +1781,8 @@
       "sourceNotRunning": "analysiert nicht",
       "sourceNotRunningTooltip": "Diese Quelle ist dem Modell in den Einstellungen zugewiesen, aber ihre Audiodaten erreichen das Modell nicht, sodass keine Erkennungen erzeugt werden. Überprüfen Sie, ob die Audioquelle verbunden ist und Audio sendet.",
       "modelNotAnalyzingTooltip": "Eine oder mehrere diesem Modell zugewiesene Audioquellen senden ihm kein Audio, sodass keine Erkennungen erzeugt werden. Siehe die unten aufgeführten Quellen.",
+      "sourcesDegraded": "{count} von {total} Quellen ausgefallen",
+      "sourcesDegradedTooltip": "Einige, aber nicht alle Audioquellen dieses Modells sind ausgefallen, sodass es weiterhin über die funktionierenden analysiert. Die jeweilige ausgefallene Quelle und wie der Fehler behoben werden kann, sind unten aufgeführt.",
       "notMeasured": "n.v.",
       "unitMs": "ms",
       "unitKhz": "kHz",

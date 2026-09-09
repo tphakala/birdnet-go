@@ -1781,6 +1781,8 @@
       "sourceNotRunning": "nie analizuje",
       "sourceNotRunningTooltip": "To źródło jest przypisane do modelu w ustawieniach, ale jego dźwięk nie dociera do modelu, więc nie generuje detekcji. Sprawdź, czy źródło audio jest podłączone i wysyła dźwięk.",
       "modelNotAnalyzingTooltip": "Jedno lub więcej źródeł audio przypisanych do tego modelu nie wysyła do niego dźwięku, więc nie generuje detekcji. Zobacz źródła wymienione poniżej.",
+      "sourcesDegraded": "{count} z {total} źródeł niedostępnych",
+      "sourcesDegradedTooltip": "Niektóre, ale nie wszystkie źródła audio tego modelu są niedostępne, więc nadal analizuje on przez sprawne źródła. Konkretne niedostępne źródło i sposób naprawy są wymienione poniżej.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",

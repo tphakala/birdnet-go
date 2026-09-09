@@ -1781,6 +1781,8 @@
       "sourceNotRunning": "n'analyse pas",
       "sourceNotRunningTooltip": "Cette source est assignée au modèle dans les paramètres, mais son audio ne parvient pas au modèle, elle ne produit donc aucune détection. Vérifiez que la source audio est connectée et envoie de l'audio.",
       "modelNotAnalyzingTooltip": "Une ou plusieurs sources audio assignées à ce modèle ne lui envoient pas d'audio, il ne produit donc aucune détection. Voir les sources listées ci-dessous.",
+      "sourcesDegraded": "{count} sur {total} sources hors service",
+      "sourcesDegradedTooltip": "Certaines sources audio de ce modèle, mais pas toutes, sont hors service, il continue donc d'analyser via celles qui fonctionnent. La source hors service spécifique et la façon d'y remédier sont listées ci-dessous.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",

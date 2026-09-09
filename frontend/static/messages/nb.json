@@ -1781,6 +1781,8 @@
       "sourceNotRunning": "analyserer ikke",
       "sourceNotRunningTooltip": "Denne kilden er tilordnet modellen i innstillingene, men lyden når ikke modellen, så den produserer ingen registreringer. Sjekk at lydkilden er tilkoblet og sender lyd.",
       "modelNotAnalyzingTooltip": "Én eller flere lydkilder tilordnet denne modellen sender ikke lyd til den, så den produserer ingen registreringer. Se kildene oppført nedenfor.",
+      "sourcesDegraded": "{count} av {total} kilder nede",
+      "sourcesDegradedTooltip": "Noen, men ikke alle av denne modellens lydkilder er nede, så den analyserer fortsatt via de fungerende. Den spesifikke kilden som er nede og hvordan det løses, er oppført nedenfor.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",

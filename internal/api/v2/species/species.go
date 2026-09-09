@@ -112,13 +112,18 @@ type SpeciesInfo struct {
 
 // SpeciesRarityInfo contains rarity information for a species
 type SpeciesRarityInfo struct {
-	Status           RarityStatus `json:"status"`
-	Score            float64      `json:"score"`
-	LocationBased    bool         `json:"location_based"`
-	Latitude         float64      `json:"latitude,omitempty"`
-	Longitude        float64      `json:"longitude,omitempty"`
-	Date             string       `json:"date"`
-	ThresholdApplied float64      `json:"threshold_applied"`
+	Status        RarityStatus `json:"status"`
+	Score         float64      `json:"score"`
+	LocationBased bool         `json:"location_based"`
+	// Latitude and Longitude are pointers so a configured coordinate of exactly 0.0
+	// (equator or prime meridian) still serializes: omitempty on a *float64 omits only
+	// when the pointer is nil (no location configured), not when it points to 0.0. A bare
+	// float64 with omitempty would drop the 0.0 value, and the frontend, which reads these
+	// under location_based and calls toFixed on them, would then crash on the missing field.
+	Latitude         *float64 `json:"latitude,omitempty"`
+	Longitude        *float64 `json:"longitude,omitempty"`
+	Date             string   `json:"date"`
+	ThresholdApplied float64  `json:"threshold_applied"`
 }
 
 // taxonomyLookupResult holds the result of a taxonomy lookup with source info.
@@ -589,8 +594,12 @@ func (c *Handler) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLabel
 	// whether the filter is currently active, so a client still learns the location is
 	// known even when the rarity itself is unknown.
 	if settings.BirdNET.LocationConfigured {
-		rarityInfo.Latitude = settings.BirdNET.Latitude
-		rarityInfo.Longitude = settings.BirdNET.Longitude
+		// new(expr) copies the value into a fresh heap allocation, so this never
+		// aliases the shared settings snapshot. A configured 0.0 coordinate is
+		// preserved because the pointer is non-nil (see the Latitude/Longitude
+		// field comment).
+		rarityInfo.Latitude = new(settings.BirdNET.Latitude)
+		rarityInfo.Longitude = new(settings.BirdNET.Longitude)
 	}
 
 	// Resolve the score and status together; computeRarity documents how an absent

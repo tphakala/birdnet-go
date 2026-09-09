@@ -1378,6 +1378,8 @@ export type TranslationKey =
   | 'system.inference.sourceNotRunning'
   | 'system.inference.sourceNotRunningTooltip'
   | 'system.inference.modelNotAnalyzingTooltip'
+  | 'system.inference.sourcesDegraded' // params: count, total
+  | 'system.inference.sourcesDegradedTooltip'
   | 'system.inference.notMeasured'
   | 'system.inference.unitMs'
   | 'system.inference.unitKhz'
@@ -4403,6 +4405,7 @@ export type TranslationParams = {
   };
   'system.database.migration.prerequisites.criticalCount': { count: string | number };
   'system.database.migration.prerequisites.warningCount': { count: string | number };
+  'system.inference.sourcesDegraded': { count: string | number; total: string | number };
   'system.inference.coDetectedHelp': { seconds: string | number };
   'analytics.hub.card.notEnoughDataHint': { min: string | number };
   'analytics.advanced.speciesSelection': { count: string | number; max: string | number };
