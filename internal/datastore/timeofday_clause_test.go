@@ -143,7 +143,15 @@ func TestBuildTimeOfDayClause_MatchesClassifier(t *testing.T) {
 				want := suncalc.ClassifyTimeOfDay(cand, sun)
 
 				for _, cat := range categories {
-					q, a, ok := buildTimeOfDayClause(cat, dateStr, sunriseStr, sunsetStr, sunriseStart, sunriseEnd, sunsetStart, sunsetEnd)
+					q, a, ok := buildTimeOfDayClause(cat, &timeOfDayBounds{
+						date:         dateStr,
+						sunrise:      sunriseStr,
+						sunset:       sunsetStr,
+						sunriseStart: sunriseStart,
+						sunriseEnd:   sunriseEnd,
+						sunsetStart:  sunsetStart,
+						sunsetEnd:    sunsetEnd,
+					})
 					require.True(t, ok, "category %s must be recognized", cat)
 					matched := evalTimeClause(t, q, a, candStr)
 					if cat == want {
@@ -161,7 +169,15 @@ func TestBuildTimeOfDayClause_MatchesClassifier(t *testing.T) {
 // reported as not-ok with no clause, so the caller skips it.
 func TestBuildTimeOfDayClause_UnknownCategory(t *testing.T) {
 	t.Parallel()
-	q, a, ok := buildTimeOfDayClause("bogus", "2025-07-15", "06:00:00", "21:00:00", "05:30:00", "06:30:00", "20:30:00", "21:30:00")
+	q, a, ok := buildTimeOfDayClause("bogus", &timeOfDayBounds{
+		date:         "2025-07-15",
+		sunrise:      "06:00:00",
+		sunset:       "21:00:00",
+		sunriseStart: "05:30:00",
+		sunriseEnd:   "06:30:00",
+		sunsetStart:  "20:30:00",
+		sunsetEnd:    "21:30:00",
+	})
 	assert.False(t, ok)
 	assert.Empty(t, q)
 	assert.Nil(t, a)
