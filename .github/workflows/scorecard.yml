@@ -63,6 +63,6 @@ jobs:
 
       # Surface the findings in the Security > Code scanning tab.
       - name: Upload to code-scanning
-        uses: github/codeql-action/upload-sarif@4e94bd11f71e507f7f87df81788dff88d1dacbfb # v4.31.0
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
           sarif_file: results.sarif
