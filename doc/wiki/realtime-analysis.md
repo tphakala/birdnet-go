@@ -38,23 +38,17 @@ Make sure that recording device is set to 16 bit 48000 Hz mode, 2 channel source
 
 ![windows_recording_properties](https://github.com/tphakala/birdnet-go/assets/7030001/f994f01a-7614-428d-b7e5-eca274261889)
 
-## Node and BirdNET settings
+## Main and BirdNET settings
 
 ```yaml
-node:
+main:
   name: BirdNET-Go
-  locale: en
-  threads: 0
   timeas24h: true
 ```
 
-Value of (**node name**) is saved in database for each detection which allows identifying source node in multi node setups sharing same database.
+Value of (**main name**) is saved in database for each detection which allows identifying source node in multi node setups sharing same database.
 
-Setting (**node locale**) controls which translations are used for common names of birds in output. Valid locales are documented here [Supported Languages](guide.md#supported-languages-for-species-labels)
-
-Setting (**node threads**) controls the number of CPU threads used by the TensorFlow Lite runtime. A setting of 0 utilizes all available CPU threads. Valid values range from 1 to the number of CPU cores on the system. If the value exceeds the number of CPU cores available on the system, it is capped at the system's CPU count.
-
-Setting (**node timeas24h: true**) ensures that output timestamps are in the 24-hour format. Setting it to false is intended to use the 12-hour format, but this feature is not yet implemented.
+Setting (**main timeas24h: true**) ensures that output timestamps are in the 24-hour format. Setting it to false uses the 12-hour format.
 
 ```yaml
 birdnet:
@@ -63,7 +57,13 @@ birdnet:
   overlap: 0.0
   latitude: 00.000
   longitude: 00.000
+  locale: en
+  threads: 0
 ```
+
+Setting (**birdnet locale**) controls which translations are used for common names of birds in output. Valid locales are documented here [Supported Languages](guide.md#supported-languages-for-species-labels)
+
+Setting (**birdnet threads**) controls the number of CPU threads used by the TensorFlow Lite runtime. A setting of 0 utilizes all available CPU threads. Valid values range from 1 to the number of CPU cores on the system. If the value exceeds the number of CPU cores available on the system, it is capped at the system's CPU count.
 
 Setting (**birdnet sensitivity**) controls sigmoid sensitivity of prediction in BirdNET model, valid values are from 0.0 to 1.5, higher value makes model more sensitive.
 
@@ -81,10 +81,11 @@ Configuration file has few settings which controls output of real-time detection
 realtime:
   interval: 15
   processingtime: false
-  audioexport:
-    enabled: true
-    path: clips/
-    type: wav
+  audio:
+    export:
+      enabled: true
+      path: clips/
+      type: wav
   log:
     enabled: true
     path: birdnet.txt
@@ -94,14 +95,12 @@ Interval setting reduces log flooding by setting a minimum interval, in seconds,
 
 Setting (**processingtime: true**) prints the time it took for BirdNET analysis to process a 3-second audio chunk. These values should range from 50ms to 550ms, depending on the hardware you are running BirdNET-Go on. As long as the processingtime is less than 1500ms, audio is processed quickly enough to keep up with real-time capture and analysis.
 
-Setting (**audioexport enabled: true**) allows 3-second audio clips containing identified bird calls to be saved to disk. Only WAV audio format type is supported for now. The default path for audio clip exports is **clips**, which is relative to the directory where BirdNET-Go is executed.
+Setting (**audio export enabled: true**) allows 3-second audio clips containing identified bird calls to be saved to disk. Supported audio types are **wav** and **flac** (lossless), and **mp3**, **aac** and **opus** (lossy). The default path for audio clip exports is **clips**, which is relative to the directory where BirdNET-Go is executed.
 
 Setting (**log enabled: true**) saves the timestamp and common name of identified birds to a log file, which can be used as a chat log overlay in OBS. 
 
 ```yaml
 output:
-  file:
-    enabled: false
   sqlite:
     enabled: true
     path: birdnet.db
@@ -113,8 +112,6 @@ output:
     host: localhost
     port: 3306
 ```
-
-Setting (**output file enabled**) does not apply to real-time detection.
 
 Enabling the SQLite option (**sqlite enabled: true**) allows real-time detection results to be stored in a SQLite database. The (**sqlite path**) setting determines the location of the SQLite database. By default, the location is birdnet.db in the directory where BirdNET-Go is executed.
 
