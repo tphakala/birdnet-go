@@ -2370,7 +2370,19 @@
           "description": "Limiter la détection aux espèces probables dans votre région géographique",
           "stationLocation": {
             "label": "Emplacement de la station",
-            "helpText": "Emplacement de la station, utilisé pour les données météorologiques et pour limiter les espèces d'oiseaux à celles probables dans la région."
+            "helpText": "Emplacement de la station, utilisé pour les données météorologiques et pour limiter les espèces d'oiseaux à celles probables dans la région.",
+            "automaticLocation": "Localisation automatique",
+            "useCurrentLocation": "Utiliser la position du navigateur",
+            "locationHelp": "Renseigne les coordonnées à partir de la position de ce navigateur.",
+            "locating": "Localisation en cours...",
+            "accuracy": "Précision estimée : dans un rayon de {accuracy} m",
+            "locationDetected": "Position du navigateur détectée.",
+            "geolocationUnsupported": "Ce navigateur ne prend pas en charge la localisation de l'appareil. Saisissez les coordonnées manuellement ou utilisez la carte.",
+            "geolocationRequiresHttps": "La localisation du navigateur nécessite HTTPS ou localhost. Saisissez les coordonnées manuellement ou utilisez la carte.",
+            "geolocationDenied": "L'autorisation d'accès à la position a été refusée. Saisissez les coordonnées manuellement ou utilisez la carte.",
+            "geolocationUnavailable": "Votre appareil n'a pas pu déterminer sa position. Saisissez les coordonnées manuellement ou utilisez la carte.",
+            "geolocationTimedOut": "La demande de localisation a expiré. Réessayez, saisissez les coordonnées manuellement ou utilisez la carte.",
+            "geolocationFailed": "Impossible de déterminer la position de votre appareil. Saisissez les coordonnées manuellement ou utilisez la carte."
           },
           "latitude": {
             "label": "Latitude",

@@ -2370,7 +2370,19 @@
           "description": "Begränsa detektion till arter som är sannolika i ditt geografiska område",
           "stationLocation": {
             "label": "Stationsplats",
-            "helpText": "Stationsplats, används för väderdata och för att begränsa fågelarter till de som är sannolika i regionen."
+            "helpText": "Stationsplats, används för väderdata och för att begränsa fågelarter till de som är sannolika i regionen.",
+            "automaticLocation": "Automatisk plats",
+            "useCurrentLocation": "Använd webbläsarens plats",
+            "locationHelp": "Fyller i koordinaterna med hjälp av den här webbläsarens plats.",
+            "locating": "Söker plats...",
+            "accuracy": "Uppskattad noggrannhet: inom {accuracy} m",
+            "locationDetected": "Webbläsarens plats hittades.",
+            "geolocationUnsupported": "Den här webbläsaren stöder inte enhetspositionering. Ange koordinater manuellt eller använd kartan.",
+            "geolocationRequiresHttps": "Webbläsarens platsbestämning kräver HTTPS eller localhost. Ange koordinater manuellt eller använd kartan.",
+            "geolocationDenied": "Platsbehörighet nekades. Ange koordinater manuellt eller använd kartan.",
+            "geolocationUnavailable": "Enheten kunde inte fastställa sin plats. Ange koordinater manuellt eller använd kartan.",
+            "geolocationTimedOut": "Platsbegäran överskred tidsgränsen. Försök igen, ange koordinater manuellt eller använd kartan.",
+            "geolocationFailed": "Det gick inte att fastställa enhetens plats. Ange koordinater manuellt eller använd kartan."
           },
           "latitude": {
             "label": "Latitud",

@@ -2370,7 +2370,19 @@
           "description": "Obmedziť detekciu na druhy pravdepodobné vo vašom geografickom regióne",
           "stationLocation": {
             "label": "Poloha stanice",
-            "helpText": "Poloha stanice, používaná pre údaje o počasí a na obmedzenie druhov vtákov na tie, ktoré sú v regióne pravdepodobné."
+            "helpText": "Poloha stanice, používaná pre údaje o počasí a na obmedzenie druhov vtákov na tie, ktoré sú v regióne pravdepodobné.",
+            "automaticLocation": "Automatické určenie polohy",
+            "useCurrentLocation": "Použiť polohu prehliadača",
+            "locationHelp": "Vyplní súradnice pomocou polohy tohto prehliadača.",
+            "locating": "Zisťovanie polohy...",
+            "accuracy": "Odhadovaná presnosť: do {accuracy} m",
+            "locationDetected": "Poloha prehliadača bola zistená.",
+            "geolocationUnsupported": "Tento prehliadač nepodporuje určovanie polohy zariadenia. Zadajte súradnice ručne alebo použite mapu.",
+            "geolocationRequiresHttps": "Určovanie polohy prehliadača vyžaduje HTTPS alebo localhost. Zadajte súradnice ručne alebo použite mapu.",
+            "geolocationDenied": "Prístup k polohe bol zamietnutý. Zadajte súradnice ručne alebo použite mapu.",
+            "geolocationUnavailable": "Zariadenie nedokázalo určiť svoju polohu. Zadajte súradnice ručne alebo použite mapu.",
+            "geolocationTimedOut": "Vypršal časový limit požiadavky na polohu. Skúste to znova, zadajte súradnice ručne alebo použite mapu.",
+            "geolocationFailed": "Polohu zariadenia sa nepodarilo určiť. Zadajte súradnice ručne alebo použite mapu."
           },
           "latitude": {
             "label": "Zemepisná šírka",

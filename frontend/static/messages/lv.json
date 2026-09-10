@@ -2370,7 +2370,19 @@
           "description": "Ierobežot noteikšanu līdz sugām, kas ir iespējamas jūsu ģeogrāfiskajā reģionā",
           "stationLocation": {
             "label": "Stacijas atrašanās vieta",
-            "helpText": "Stacijas atrašanās vieta, ko izmanto laikapstākļu datiem un putnu sugu ierobežošanai līdz reģionā iespējamām."
+            "helpText": "Stacijas atrašanās vieta, ko izmanto laikapstākļu datiem un putnu sugu ierobežošanai līdz reģionā iespējamām.",
+            "automaticLocation": "Automātiska atrašanās vieta",
+            "useCurrentLocation": "Izmantot pārlūkprogrammas atrašanās vietu",
+            "locationHelp": "Aizpilda koordinātas, izmantojot šīs pārlūkprogrammas atrašanās vietu.",
+            "locating": "Nosaka atrašanās vietu...",
+            "accuracy": "Aptuvenā precizitāte: {accuracy} m robežās",
+            "locationDetected": "Pārlūkprogrammas atrašanās vieta noteikta.",
+            "geolocationUnsupported": "Šī pārlūkprogramma neatbalsta ierīces atrašanās vietas noteikšanu. Ievadiet koordinātas manuāli vai izmantojiet karti.",
+            "geolocationRequiresHttps": "Pārlūkprogrammas atrašanās vietas noteikšanai nepieciešams HTTPS vai localhost. Ievadiet koordinātas manuāli vai izmantojiet karti.",
+            "geolocationDenied": "Atrašanās vietas atļauja tika liegta. Ievadiet koordinātas manuāli vai izmantojiet karti.",
+            "geolocationUnavailable": "Ierīce nevarēja noteikt savu atrašanās vietu. Ievadiet koordinātas manuāli vai izmantojiet karti.",
+            "geolocationTimedOut": "Atrašanās vietas pieprasījumam beidzās laiks. Mēģiniet vēlreiz, ievadiet koordinātas manuāli vai izmantojiet karti.",
+            "geolocationFailed": "Neizdevās noteikt ierīces atrašanās vietu. Ievadiet koordinātas manuāli vai izmantojiet karti."
           },
           "latitude": {
             "label": "Platums",

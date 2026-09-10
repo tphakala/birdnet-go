@@ -2370,7 +2370,19 @@
           "description": "Omezit detekci na druhy pravděpodobné ve vašem geografickém regionu",
           "stationLocation": {
             "label": "Poloha stanice",
-            "helpText": "Poloha stanice, používaná pro data o počasí a k omezení druhů ptáků na ty, které jsou v regionu pravděpodobné."
+            "helpText": "Poloha stanice, používaná pro data o počasí a k omezení druhů ptáků na ty, které jsou v regionu pravděpodobné.",
+            "automaticLocation": "Automatické určení polohy",
+            "useCurrentLocation": "Použít polohu prohlížeče",
+            "locationHelp": "Vyplní souřadnice pomocí polohy tohoto prohlížeče.",
+            "locating": "Zjišťování polohy...",
+            "accuracy": "Odhadovaná přesnost: do {accuracy} m",
+            "locationDetected": "Poloha prohlížeče byla zjištěna.",
+            "geolocationUnsupported": "Tento prohlížeč nepodporuje určování polohy zařízení. Zadejte souřadnice ručně nebo použijte mapu.",
+            "geolocationRequiresHttps": "Určování polohy prohlížeče vyžaduje HTTPS nebo localhost. Zadejte souřadnice ručně nebo použijte mapu.",
+            "geolocationDenied": "Přístup k poloze byl zamítnut. Zadejte souřadnice ručně nebo použijte mapu.",
+            "geolocationUnavailable": "Zařízení nedokázalo určit svou polohu. Zadejte souřadnice ručně nebo použijte mapu.",
+            "geolocationTimedOut": "Vypršel časový limit požadavku na polohu. Zkuste to znovu, zadejte souřadnice ručně nebo použijte mapu.",
+            "geolocationFailed": "Polohu zařízení se nepodařilo určit. Zadejte souřadnice ručně nebo použijte mapu."
           },
           "latitude": {
             "label": "Zeměpisná šířka",

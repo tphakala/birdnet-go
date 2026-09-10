@@ -2370,7 +2370,19 @@
           "description": "Erkennungen auf wahrscheinliche Arten in Ihrer geografischen Region beschränken",
           "stationLocation": {
             "label": "Stationsstandort",
-            "helpText": "Stationsstandort, wird zur Abrufung von Wetterdaten und zur Begrenzung von Vogelarten auf die in der Region wahrscheinlichen verwendet."
+            "helpText": "Stationsstandort, wird zur Abrufung von Wetterdaten und zur Begrenzung von Vogelarten auf die in der Region wahrscheinlichen verwendet.",
+            "automaticLocation": "Automatische Standortbestimmung",
+            "useCurrentLocation": "Browserstandort verwenden",
+            "locationHelp": "Füllt die Koordinaten mit dem Standort dieses Browsers aus.",
+            "locating": "Standort wird ermittelt...",
+            "accuracy": "Geschätzte Genauigkeit: innerhalb von {accuracy} m",
+            "locationDetected": "Browserstandort wurde ermittelt.",
+            "geolocationUnsupported": "Dieser Browser unterstützt die Gerätestandortbestimmung nicht. Geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte.",
+            "geolocationRequiresHttps": "Die Browser-Standortbestimmung erfordert HTTPS oder localhost. Geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte.",
+            "geolocationDenied": "Die Standortberechtigung wurde verweigert. Geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte.",
+            "geolocationUnavailable": "Ihr Gerät konnte seinen Standort nicht bestimmen. Geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte.",
+            "geolocationTimedOut": "Die Standortanfrage hat das Zeitlimit überschritten. Versuchen Sie es erneut, geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte.",
+            "geolocationFailed": "Der Gerätestandort konnte nicht bestimmt werden. Geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte."
           },
           "latitude": {
             "label": "Breitengrad",

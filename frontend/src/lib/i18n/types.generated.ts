@@ -1827,6 +1827,18 @@ export type TranslationKey =
   | 'settings.main.sections.rangeFilter.description'
   | 'settings.main.sections.rangeFilter.stationLocation.label'
   | 'settings.main.sections.rangeFilter.stationLocation.helpText'
+  | 'settings.main.sections.rangeFilter.stationLocation.automaticLocation'
+  | 'settings.main.sections.rangeFilter.stationLocation.useCurrentLocation'
+  | 'settings.main.sections.rangeFilter.stationLocation.locationHelp'
+  | 'settings.main.sections.rangeFilter.stationLocation.locating'
+  | 'settings.main.sections.rangeFilter.stationLocation.accuracy' // params: accuracy
+  | 'settings.main.sections.rangeFilter.stationLocation.locationDetected'
+  | 'settings.main.sections.rangeFilter.stationLocation.geolocationUnsupported'
+  | 'settings.main.sections.rangeFilter.stationLocation.geolocationRequiresHttps'
+  | 'settings.main.sections.rangeFilter.stationLocation.geolocationDenied'
+  | 'settings.main.sections.rangeFilter.stationLocation.geolocationUnavailable'
+  | 'settings.main.sections.rangeFilter.stationLocation.geolocationTimedOut'
+  | 'settings.main.sections.rangeFilter.stationLocation.geolocationFailed'
   | 'settings.main.sections.rangeFilter.latitude.label'
   | 'settings.main.sections.rangeFilter.latitude.helpText'
   | 'settings.main.sections.rangeFilter.longitude.label'
@@ -4470,6 +4482,7 @@ export type TranslationParams = {
   };
   'settings.main.sections.falsePositiveFilter.overlapAdjusted': { overlap: string | number };
   'settings.main.sections.falsePositiveFilter.overlapReduced': { overlap: string | number };
+  'settings.main.sections.rangeFilter.stationLocation.accuracy': { accuracy: string | number };
   'settings.support.supportReport.githubRequired.description': { createIssueLink: string | number };
   'settings.support.supportReport.githubIssue.helper': {
     viewIssuesLink: string | number;

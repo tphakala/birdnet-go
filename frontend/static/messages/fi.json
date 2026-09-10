@@ -2370,7 +2370,19 @@
           "description": "Rajoita tunnistus lajeihin, jotka ovat todennäköisiä maantieteellisellä alueellasi",
           "stationLocation": {
             "label": "Aseman sijainti",
-            "helpText": "Aseman sijainti, jota käytetään säätietoihin ja lintulajien rajoittamiseen alueella todennäköisiin lajeihin."
+            "helpText": "Aseman sijainti, jota käytetään säätietoihin ja lintulajien rajoittamiseen alueella todennäköisiin lajeihin.",
+            "automaticLocation": "Automaattinen sijainti",
+            "useCurrentLocation": "Käytä selaimen sijaintia",
+            "locationHelp": "Täyttää koordinaatit tämän selaimen sijainnin perusteella.",
+            "locating": "Paikannetaan...",
+            "accuracy": "Arvioitu tarkkuus: {accuracy} m:n sisällä",
+            "locationDetected": "Selaimen sijainti havaittu.",
+            "geolocationUnsupported": "Tämä selain ei tue laitteen paikannusta. Anna koordinaatit manuaalisesti tai käytä karttaa.",
+            "geolocationRequiresHttps": "Selaimen paikannus vaatii HTTPS-yhteyden tai localhostin. Anna koordinaatit manuaalisesti tai käytä karttaa.",
+            "geolocationDenied": "Sijaintilupa evättiin. Anna koordinaatit manuaalisesti tai käytä karttaa.",
+            "geolocationUnavailable": "Laite ei pystynyt määrittämään sijaintiaan. Anna koordinaatit manuaalisesti tai käytä karttaa.",
+            "geolocationTimedOut": "Sijaintipyyntö aikakatkaistiin. Yritä uudelleen, anna koordinaatit manuaalisesti tai käytä karttaa.",
+            "geolocationFailed": "Laitteen sijaintia ei voitu määrittää. Anna koordinaatit manuaalisesti tai käytä karttaa."
           },
           "latitude": {
             "label": "Leveysaste",

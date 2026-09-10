@@ -19,6 +19,7 @@
   - queryParam: URL parameter for this tab group (default: tab)
   - defaultTab: Fallback when the URL has no valid tab (defaults to initial activeTab)
   - onTabChange: Callback when tab changes
+  - onReset: Callback after all settings are reset
   - showActions: Whether to show the save/reset actions bar (default: true)
   - class: Additional CSS classes
 
@@ -47,6 +48,7 @@
     queryParam?: string;
     defaultTab?: string;
     onTabChange?: (_tabId: string) => void;
+    onReset?: () => void;
     showActions?: boolean;
     class?: string;
   }
@@ -57,6 +59,7 @@
     queryParam = 'tab',
     defaultTab,
     onTabChange,
+    onReset,
     showActions = true,
     class: className,
   }: Props = $props();
@@ -210,7 +213,7 @@
 
   <!-- Integrated Save/Reset Actions -->
   {#if showActions}
-    <SettingsPageActions />
+    <SettingsPageActions {onReset} />
   {/if}
 </div>
 
