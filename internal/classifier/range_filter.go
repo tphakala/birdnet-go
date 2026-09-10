@@ -20,6 +20,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/openfauna"
 )
 
+const syntheticOverrideScore = 1.0
+
 // SpeciesScore holds a species label, its associated score, and override provenance.
 // Synthetic provenance distinguishes score-1.0 rows appended solely to admit user
 // overrides from native geomodel scores.
@@ -458,7 +460,7 @@ func addUserOverrideSpeciesScores(bn *BirdNET, speciesScores *[]SpeciesScore, se
 		src := sources[label]
 		bn.Debug("Adding override species with max score: %s", label)
 		*speciesScores = append(*speciesScores, SpeciesScore{
-			Score:               1.0,
+			Score:               syntheticOverrideScore,
 			Label:               label,
 			HasCustomConfig:     src.customConfig,
 			IsManuallyIncluded:  src.manuallyIncluded,
