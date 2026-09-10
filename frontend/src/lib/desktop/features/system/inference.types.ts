@@ -244,8 +244,8 @@ export interface InferenceVAD {
   enabled: boolean;
   /**
    * Whether a model source resolves (an embedded model is present, or a modelpath
-   * override is set). When false the gate is inert even if enabled (e.g. a noembed
-   * build with no modelpath).
+   * override is set). The embedded model ships in every build, so this is
+   * effectively always true; it is false only if no model source resolves at all.
    */
   available: boolean;
   /** True when a detector is currently held (loaded and scoring). */
