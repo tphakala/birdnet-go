@@ -729,11 +729,14 @@ Performance Optimizations:
         {#if accessAllowed}
           <div class="relative">
             <button
+              type="button"
               onclick={handleLogout}
               onmouseenter={e => isCollapsed && showTooltip(e, t('auth.logout'))}
               onmouseleave={hideTooltip}
+              onfocus={e => isCollapsed && showTooltip(e, t('auth.logout'))}
+              onblur={hideTooltip}
               class={cn(
-                'flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-[var(--color-base-content)]/90 hover:text-[var(--color-base-content)] hover:bg-[var(--color-base-content)]/5 transition-colors duration-150',
+                'flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-[var(--color-base-content)]/90 hover:text-[var(--color-base-content)] hover:bg-[var(--color-base-content)]/5 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-base-100)]',
                 isCollapsed && 'justify-center'
               )}
               aria-label={t('auth.logout')}
@@ -747,11 +750,14 @@ Performance Optimizations:
         {:else}
           <div class="relative">
             <button
+              type="button"
               onclick={handleLogin}
-              onmouseenter={e => isCollapsed && showTooltip(e, t('auth.login'))}
+              onmouseenter={e => isCollapsed && showTooltip(e, t('auth.openLoginModal'))}
               onmouseleave={hideTooltip}
+              onfocus={e => isCollapsed && showTooltip(e, t('auth.openLoginModal'))}
+              onblur={hideTooltip}
               class={cn(
-                'flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-[var(--color-base-content)]/90 hover:text-[var(--color-base-content)] hover:bg-[var(--color-base-content)]/5 transition-colors duration-150',
+                'flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-[var(--color-base-content)]/90 hover:text-[var(--color-base-content)] hover:bg-[var(--color-base-content)]/5 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-base-100)]',
                 isCollapsed && 'justify-center'
               )}
               aria-label={t('auth.openLoginModal')}
