@@ -1345,31 +1345,9 @@ func (ds *Datastore) calculateTimeOfDay(timestamp time.Time, lat, lon float64) s
 		return datastore.TimeOfDayAny
 	}
 
-	// Define 30-minute window around sunrise/sunset
-	window := 30 * time.Minute
-
-	// Get detection time as string for comparison (format: "15:04:05")
-	detTime := timestamp.Format(time.TimeOnly)
-
-	// Calculate window boundaries
-	sunriseStart := sunEvents.Sunrise.Add(-window).Format(time.TimeOnly)
-	sunriseEnd := sunEvents.Sunrise.Add(window).Format(time.TimeOnly)
-	sunsetStart := sunEvents.Sunset.Add(-window).Format(time.TimeOnly)
-	sunsetEnd := sunEvents.Sunset.Add(window).Format(time.TimeOnly)
-	sunriseTime := sunEvents.Sunrise.Format(time.TimeOnly)
-	sunsetTime := sunEvents.Sunset.Format(time.TimeOnly)
-
-	// Determine time of day
-	switch {
-	case detTime >= sunriseStart && detTime <= sunriseEnd:
-		return datastore.TimeOfDaySunrise
-	case detTime >= sunsetStart && detTime <= sunsetEnd:
-		return datastore.TimeOfDaySunset
-	case detTime >= sunriseTime && detTime < sunsetTime:
-		return datastore.TimeOfDayDay
-	default:
-		return datastore.TimeOfDayNight
-	}
+	// Delegate the sunrise/sunset/day/night classification to the shared,
+	// midnight-safe helper so every call site stays in lockstep.
+	return suncalc.ClassifyTimeOfDay(timestamp, &sunEvents)
 }
 
 // GetAllNotes retrieves all notes.
