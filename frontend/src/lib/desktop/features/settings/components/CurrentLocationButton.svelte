@@ -10,6 +10,7 @@
   import { t } from '$lib/i18n';
   import { toastActions } from '$lib/stores/toast';
   import { loggers } from '$lib/utils/logger';
+  import { formatNumber } from '$lib/utils/formatters';
   import SettingsButton from './SettingsButton.svelte';
 
   interface Props {
@@ -51,6 +52,10 @@
   const GEOLOCATION_TIMEOUT_MS = 10_000;
   const EARTH_RADIUS_METERS = 6_371_000;
   const DEGREES_TO_RADIANS = Math.PI / 180;
+  const MIN_LATITUDE = -90;
+  const MAX_LATITUDE = 90;
+  const MIN_LONGITUDE = -180;
+  const MAX_LONGITUDE = 180;
   const GEOLOCATION_ERRORS = {
     permissionDenied: 1,
     positionUnavailable: 2,
@@ -192,10 +197,10 @@
     if (
       !Number.isFinite(detectedLatitude) ||
       !Number.isFinite(detectedLongitude) ||
-      detectedLatitude < -90 ||
-      detectedLatitude > 90 ||
-      detectedLongitude < -180 ||
-      detectedLongitude > 180
+      detectedLatitude < MIN_LATITUDE ||
+      detectedLatitude > MAX_LATITUDE ||
+      detectedLongitude < MIN_LONGITUDE ||
+      detectedLongitude > MAX_LONGITUDE
     ) {
       finishRequest(requestId);
       showUnexpectedFailure(new Error('Browser returned invalid coordinates'));
@@ -294,9 +299,9 @@
     </SettingsButton>
 
     {#if displayedAccuracy !== null}
-      <span class="help-text" role="status" aria-live="polite" aria-atomic="true">
+      <span class="help-text" role="status" aria-atomic="true">
         {t('settings.main.sections.rangeFilter.stationLocation.accuracy', {
-          accuracy: displayedAccuracy,
+          accuracy: formatNumber(displayedAccuracy),
         })}
       </span>
     {:else}

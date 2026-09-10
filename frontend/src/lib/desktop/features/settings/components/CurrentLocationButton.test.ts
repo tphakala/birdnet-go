@@ -327,17 +327,48 @@ describe('CurrentLocationButton', () => {
     }
   );
 
-  it('leaves coordinates untouched when the browser returns invalid coordinates', async () => {
+  it.each([
+    ['NaN latitude', Number.NaN, 4.9],
+    ['NaN longitude', 52.1, Number.NaN],
+    ['latitude above the maximum', 91, 4.9],
+    ['latitude below the minimum', -91, 4.9],
+    ['longitude above the maximum', 52.1, 181],
+    ['longitude below the minimum', 52.1, -181],
+  ] as const)(
+    'leaves coordinates untouched when the browser returns invalid coordinates (%s)',
+    async (_label, latitude, longitude) => {
+      const onLocation = vi.fn();
+      geolocationMock.getCurrentPosition.mockImplementationOnce(success => {
+        success(createPosition(latitude, longitude, 10));
+      });
+      testFactory.render({ latitude: 51, longitude: 5, onLocation });
+
+      await fireEvent.click(screen.getByRole('button', { name: 'Use browser location' }));
+
+      expect(onLocation).not.toHaveBeenCalled();
+      expect(toastActions.error).toHaveBeenCalledWith('Could not determine the device location.');
+    }
+  );
+
+  it('accepts the coordinates but omits the accuracy readout when accuracy is not finite', async () => {
     const onLocation = vi.fn();
     geolocationMock.getCurrentPosition.mockImplementationOnce(success => {
-      success(createPosition(Number.NaN, 4.9, 10));
+      success(createPosition(52.1, 4.3, Number.POSITIVE_INFINITY));
     });
-    testFactory.render({ latitude: 51, longitude: 5, onLocation });
 
+    const result = testFactory.render({ onLocation });
     await fireEvent.click(screen.getByRole('button', { name: 'Use browser location' }));
 
-    expect(onLocation).not.toHaveBeenCalled();
-    expect(toastActions.error).toHaveBeenCalledWith('Could not determine the device location.');
+    expect(onLocation).toHaveBeenCalledWith(52.1, 4.3);
+    expect(toastActions.success).toHaveBeenCalledWith('Browser location detected.');
+
+    // A non-finite accuracy resolves to null, so the accuracy status line stays hidden
+    // and the standard help text remains visible.
+    await result.rerender({ latitude: 52.1, longitude: 4.3, onLocation });
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Fills the coordinates using this browser's location.")
+    ).toBeInTheDocument();
   });
 
   it('recovers when the browser API throws synchronously', async () => {
