@@ -309,7 +309,8 @@ func (m *AuxiliaryMigrator) migrateImageCaches(ctx context.Context, result *Auxi
 }
 
 // migrateDynamicThresholds migrates all dynamic thresholds and their events.
-// Resolves scientific names to label IDs for the normalized schema.
+// Thresholds are keyed per species (lowercase common name) and model-independent
+// (#4195), so this is a direct 1:1 copy from the legacy store; no label resolution.
 func (m *AuxiliaryMigrator) migrateDynamicThresholds(ctx context.Context, result *AuxiliaryMigrationResult) {
 	if m.thresholdRepo == nil {
 		m.logger.Debug("threshold repo not configured, skipping")
@@ -330,56 +331,39 @@ func (m *AuxiliaryMigrator) migrateDynamicThresholds(ctx context.Context, result
 		return
 	}
 
-	// Batch resolve all labels to avoid N+1 queries
-	speciesSet := make(map[string]struct{})
-	for i := range legacyThresholds {
-		speciesSet[legacyThresholds[i].ScientificName] = struct{}{}
-	}
-	speciesNames := slices.Collect(maps.Keys(speciesSet))
-
-	labelMap, err := m.labelRepo.BatchGetOrCreate(ctx, speciesNames, m.defaultModelID, m.speciesLabelTypeID, m.avesClassID)
-	if err != nil {
-		m.logger.Warn("failed to batch resolve labels for thresholds", logger.Error(err))
-		result.Thresholds.Error = err
-		return
-	}
-
 	for i := range legacyThresholds {
 		threshold := &legacyThresholds[i]
-
-		// Look up label from pre-resolved map
-		label, ok := labelMap[threshold.ScientificName]
-		if !ok {
-			m.logger.Warn("label not found after batch creation",
-				logger.String("species", threshold.SpeciesName),
-				logger.String("scientific_name", threshold.ScientificName))
+		speciesName := strings.ToLower(threshold.SpeciesName)
+		if speciesName == "" {
+			m.logger.Warn("skipping legacy threshold with empty species name")
 			result.Thresholds.Skipped++
 			continue
 		}
 
 		v2Threshold := entities.DynamicThreshold{
-			LabelID:       label.ID,
-			Level:         threshold.Level,
-			CurrentValue:  threshold.CurrentValue,
-			BaseThreshold: threshold.BaseThreshold,
-			HighConfCount: threshold.HighConfCount,
-			ValidHours:    threshold.ValidHours,
-			ExpiresAt:     threshold.ExpiresAt,
-			LastTriggered: threshold.LastTriggered,
-			FirstCreated:  threshold.FirstCreated,
-			TriggerCount:  threshold.TriggerCount,
+			SpeciesName:    speciesName,
+			ScientificName: threshold.ScientificName,
+			Level:          threshold.Level,
+			CurrentValue:   threshold.CurrentValue,
+			BaseThreshold:  threshold.BaseThreshold,
+			HighConfCount:  threshold.HighConfCount,
+			ValidHours:     threshold.ValidHours,
+			ExpiresAt:      threshold.ExpiresAt,
+			LastTriggered:  threshold.LastTriggered,
+			FirstCreated:   threshold.FirstCreated,
+			TriggerCount:   threshold.TriggerCount,
 		}
 		if err := m.thresholdRepo.SaveDynamicThreshold(ctx, &v2Threshold); err != nil {
 			m.logger.Warn("failed to migrate threshold",
-				logger.String("species", threshold.SpeciesName),
+				logger.String("species", speciesName),
 				logger.Error(err))
 			result.Thresholds.Skipped++
 			continue
 		}
 		result.Thresholds.Migrated++
 
-		// Migrate threshold events for this species using the resolved label ID
-		m.migrateThresholdEvents(ctx, threshold.SpeciesName, label.ID, result)
+		// Migrate threshold events for this species
+		m.migrateThresholdEvents(ctx, threshold.SpeciesName, result)
 	}
 
 	m.logger.Info("dynamic threshold migration completed",
@@ -388,9 +372,8 @@ func (m *AuxiliaryMigrator) migrateDynamicThresholds(ctx context.Context, result
 		logger.Int("skipped", result.Thresholds.Skipped))
 }
 
-// migrateThresholdEvents migrates threshold events for a species.
-// Uses the pre-resolved labelID to avoid repeated label lookups.
-func (m *AuxiliaryMigrator) migrateThresholdEvents(ctx context.Context, speciesName string, labelID uint, result *AuxiliaryMigrationResult) {
+// migrateThresholdEvents migrates threshold events for a species (1:1 copy, #4195).
+func (m *AuxiliaryMigrator) migrateThresholdEvents(ctx context.Context, speciesName string, result *AuxiliaryMigrationResult) {
 	// Get events from legacy (limit to 100 most recent)
 	legacyEvents, err := m.legacyStore.GetThresholdEvents(speciesName, 100)
 	if err != nil {
@@ -404,18 +387,24 @@ func (m *AuxiliaryMigrator) migrateThresholdEvents(ctx context.Context, speciesN
 		return
 	}
 
+	lower := strings.ToLower(speciesName)
+	if lower == "" {
+		return
+	}
+
 	result.ThresholdEvents.Total += len(legacyEvents)
 	for i := range legacyEvents {
 		event := &legacyEvents[i]
 		v2Event := &entities.ThresholdEvent{
-			LabelID:       labelID,
-			PreviousLevel: event.PreviousLevel,
-			NewLevel:      event.NewLevel,
-			PreviousValue: event.PreviousValue,
-			NewValue:      event.NewValue,
-			ChangeReason:  event.ChangeReason,
-			Confidence:    event.Confidence,
-			CreatedAt:     event.CreatedAt,
+			SpeciesName:    lower,
+			ScientificName: event.ScientificName,
+			PreviousLevel:  event.PreviousLevel,
+			NewLevel:       event.NewLevel,
+			PreviousValue:  event.PreviousValue,
+			NewValue:       event.NewValue,
+			ChangeReason:   event.ChangeReason,
+			Confidence:     event.Confidence,
+			CreatedAt:      event.CreatedAt,
 		}
 		if err := m.thresholdRepo.SaveThresholdEvent(ctx, v2Event); err != nil {
 			m.logger.Warn("failed to migrate threshold event",

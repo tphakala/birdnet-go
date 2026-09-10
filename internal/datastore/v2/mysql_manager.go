@@ -110,6 +110,14 @@ func (m *MySQLManager) Initialize() error {
 	// fell back to legacy mode due to the PR #2165 table name mismatch.
 	m.cleanupLegacySchemaContamination()
 
+	// Re-key threshold tables on species_name if they still carry the legacy label_id
+	// column; AutoMigrate cannot drop it, so recreate them (#4195). Rows are discarded.
+	// The GORM migrator respects the v2_ NamingStrategy prefix when resolving table names.
+	if err := dropStaleThresholdTables(m.db, m.log); err != nil {
+		reportInitFailure("mysql", "dropStaleThresholdTables", err, m.config.Host, m.config.Database, m.config.Username)
+		return err
+	}
+
 	// Run GORM auto-migrations for all entities using the shared canonical list.
 	// Tables will be created with v2_ prefix due to NamingStrategy.
 	err := m.db.AutoMigrate(v2Entities()...)
@@ -254,7 +262,8 @@ func (m *MySQLManager) Delete() error {
 		prefix + "alert_actions",
 		prefix + "alert_conditions",
 		prefix + "alert_rules",
-		// Auxiliary tables that reference labels (must drop before labels)
+		// Auxiliary tables dropped before labels. image_caches and notification_histories
+		// reference labels; threshold tables no longer do since #4195 but stay grouped here.
 		prefix + "image_caches",
 		prefix + "threshold_events",
 		prefix + "dynamic_thresholds",

@@ -7,8 +7,13 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -236,4 +241,53 @@ func TestReconciliation_ShutdownWithoutStart(t *testing.T) {
 	assert.NotPanics(t, func() {
 		dw.Shutdown()
 	})
+}
+
+// TestReconcileDirtyIDs_DeletesGhostWhenLegacyDeleted exercises the runtime reconciler's
+// call site of ReconcileDeletedGhost: a dirty id whose legacy row is gone must have its
+// orphaned v2 row deleted and its dirty marker cleared, so the deleted detection cannot
+// resurrect after v2 promotion (Forgejo #1581).
+func TestReconcileDirtyIDs_DeletesGhostWhenLegacyDeleted(t *testing.T) {
+	t.Parallel()
+
+	db := setupDetectionTestDB(t)
+	require.NoError(t, db.AutoMigrate(&entities.MigrationDirtyID{}))
+	v2Repo := NewDetectionRepository(db, nil, false, false)
+	sm := datastoreV2.NewStateManager(db)
+
+	const ghostID = uint(4242)
+	require.NoError(t, v2Repo.SaveWithID(t.Context(), &entities.Detection{
+		ID:         ghostID,
+		ModelID:    1,
+		LabelID:    1,
+		DetectedAt: time.Now().Unix(),
+		Confidence: 0.9,
+	}))
+	require.NoError(t, sm.AddDirtyID(ghostID))
+
+	// Legacy reports the row as deleted (source of truth during dual-write).
+	mockLegacy := mocks.NewMockDetectionRepository(t)
+	mockLegacy.EXPECT().
+		Get(mock.Anything, mock.Anything).
+		Return(nil, errors.Newf("detection %d not found", ghostID).Category(errors.CategoryNotFound).Build()).
+		Once()
+
+	dw := &DualWriteRepository{
+		legacy:       mockLegacy,
+		v2:           v2Repo,
+		stateManager: sm,
+		logger:       testLogger(),
+		shutdownCh:   make(chan struct{}),
+		semaphore:    make(chan struct{}, defaultMaxConcurrentWrites),
+		writeTimeout: defaultWriteTimeout,
+	}
+
+	dw.reconcileDirtyIDs()
+
+	_, getErr := v2Repo.Get(t.Context(), ghostID)
+	require.ErrorIs(t, getErr, ErrDetectionNotFound, "reconciler must delete the orphaned v2 ghost")
+
+	count, err := sm.GetDirtyIDCount()
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), count, "reconciler must clear the dirty marker after deleting the ghost")
 }

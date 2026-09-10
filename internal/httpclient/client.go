@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/branding"
 )
 
 const (
@@ -34,9 +36,24 @@ const (
 	defaultDialTimeout           = 30 * time.Second
 	defaultDialKeepAlive         = 30 * time.Second
 
-	// Default User-Agent
-	defaultUserAgent = "BirdNET-Go"
+	// userAgentName is the leading token of the default User-Agent.
+	//
+	// Do not "correct" this to the hyphenated project name. Wikimedia's edge
+	// refuses any User-Agent whose leading token is "birdnet-go",
+	// case-insensitively, on both upload.wikimedia.org and api.php, even when
+	// the rest of the header is fully policy-compliant with a version and a
+	// contact URL. Nothing routes Wikimedia traffic through this client today,
+	// so the hyphenated form was a latent trap rather than an active bug: any
+	// future code that did would get a hard 403 with a confusing symptom.
+	userAgentName = "BirdNETGo"
 )
+
+// defaultUserAgent returns the User-Agent used when a Config does not set one.
+// The contact URL follows the same robot-policy convention as the image
+// provider's, and resolves to a fork's own repository when rebranded.
+func defaultUserAgent() string {
+	return userAgentName + " (" + branding.RepoURL() + ")"
+}
 
 // Client is a production-grade HTTP client with context management and timeouts.
 // It wraps the standard http.Client with additional features for reliability.
@@ -91,13 +108,24 @@ type Config struct {
 
 	// DisableCompression disables transparent gzip compression (default: false)
 	DisableCompression bool
+
+	// BlockLinkLocalAndMetadata installs an SSRF guard on the dialer that
+	// refuses connections to link-local addresses (including the
+	// 169.254.169.254 cloud metadata endpoint), the unspecified address, and
+	// known cloud metadata IPs. Loopback and private RFC1918 ranges stay
+	// reachable so on-LAN targets keep working. See ssrf.go for the policy.
+	//
+	// Enabling this also disables environment-proxy support for the client, so
+	// a configured HTTP(S)_PROXY cannot resolve the destination on the client's
+	// behalf and bypass the guard.
+	BlockLinkLocalAndMetadata bool
 }
 
 // DefaultConfig returns a Config with sensible production defaults.
 func DefaultConfig() Config {
 	return Config{
 		DefaultTimeout:        DefaultTimeout,
-		UserAgent:             defaultUserAgent,
+		UserAgent:             defaultUserAgent(),
 		MaxIdleConns:          defaultMaxIdleConns,
 		MaxIdleConnsPerHost:   defaultMaxIdleConnsPerHost,
 		IdleConnTimeout:       defaultIdleConnTimeout,
@@ -106,6 +134,45 @@ func DefaultConfig() Config {
 		ExpectContinueTimeout: defaultExpectContinueTimeout,
 		DisableKeepAlives:     false,
 		DisableCompression:    false,
+	}
+}
+
+// buildTransport constructs the tuned *http.Transport for a Config whose zero
+// values have already been defaulted. It is the single place that wires the
+// SSRF-guarded dial context and the accompanying proxy handling, so every
+// guarded client (the Client wrapper via New and the standalone
+// NewGuardedHTTPClient) shares one implementation and cannot drift.
+func buildTransport(c *Config) *http.Transport {
+	// Base dialer with tuned dial timeout and keep-alive.
+	baseDialer := &net.Dialer{
+		Timeout:   defaultDialTimeout,
+		KeepAlive: defaultDialKeepAlive,
+	}
+	dialContext := baseDialer.DialContext
+	proxy := http.ProxyFromEnvironment
+	if c.BlockLinkLocalAndMetadata {
+		dialContext = newGuardedDialContext(baseDialer)
+		// Disable environment proxies while the guard is active. A configured
+		// proxy would defeat the guard: the transport dials the proxy and lets
+		// it resolve the destination, so the target IP never reaches the guard
+		// (and with a loopback/private proxy the guard would reject the proxy
+		// itself). This mirrors the imageprovider SSRF client. Non-guarded
+		// clients keep normal ProxyFromEnvironment support.
+		proxy = nil
+	}
+
+	return &http.Transport{
+		Proxy:                 proxy,
+		DialContext:           dialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          c.MaxIdleConns,
+		MaxIdleConnsPerHost:   c.MaxIdleConnsPerHost,
+		IdleConnTimeout:       c.IdleConnTimeout,
+		TLSHandshakeTimeout:   c.TLSHandshakeTimeout,
+		ResponseHeaderTimeout: c.ResponseHeaderTimeout,
+		ExpectContinueTimeout: c.ExpectContinueTimeout,
+		DisableKeepAlives:     c.DisableKeepAlives,
+		DisableCompression:    c.DisableCompression,
 	}
 }
 
@@ -123,7 +190,7 @@ func New(cfg *Config) *Client {
 			c.DefaultTimeout = DefaultTimeout
 		}
 		if c.UserAgent == "" {
-			c.UserAgent = defaultUserAgent
+			c.UserAgent = defaultUserAgent()
 		}
 		if c.MaxIdleConns == 0 {
 			c.MaxIdleConns = defaultMaxIdleConns
@@ -145,23 +212,9 @@ func New(cfg *Config) *Client {
 		}
 	}
 
-	// Create transport with tuned settings
-	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   defaultDialTimeout,
-			KeepAlive: defaultDialKeepAlive,
-		}).DialContext,
-		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          c.MaxIdleConns,
-		MaxIdleConnsPerHost:   c.MaxIdleConnsPerHost,
-		IdleConnTimeout:       c.IdleConnTimeout,
-		TLSHandshakeTimeout:   c.TLSHandshakeTimeout,
-		ResponseHeaderTimeout: c.ResponseHeaderTimeout,
-		ExpectContinueTimeout: c.ExpectContinueTimeout,
-		DisableKeepAlives:     c.DisableKeepAlives,
-		DisableCompression:    c.DisableCompression,
-	}
+	// Build the tuned transport. buildTransport is the single place that wires
+	// the SSRF-guarded dialer and proxy handling, shared with NewGuardedHTTPClient.
+	transport := buildTransport(&c)
 
 	return &Client{
 		client: &http.Client{
@@ -170,6 +223,40 @@ func New(cfg *Config) *Client {
 		},
 		defaultTimeout: c.DefaultTimeout,
 		userAgent:      c.UserAgent,
+	}
+}
+
+// sharedGuardedTransport is the process-wide SSRF-guarded transport that backs
+// every client from NewGuardedHTTPClient. Like http.DefaultTransport it is built
+// once and reused, so the outbound probe and test-connection endpoints share one
+// connection pool instead of allocating a transport (pool + background
+// goroutines) per call. Built lazily to keep package initialization cheap.
+var sharedGuardedTransport = sync.OnceValue(func() *http.Transport {
+	cfg := DefaultConfig()
+	cfg.BlockLinkLocalAndMetadata = true
+	return buildTransport(&cfg)
+})
+
+// NewGuardedHTTPClient returns a standard *http.Client whose transport applies
+// the SSRF guard: it refuses link-local, unspecified, and known cloud-metadata
+// targets, pins the resolved IP to close the DNS-rebinding window, and disables
+// environment proxies so a configured proxy cannot resolve a blocked destination
+// on the client's behalf (see ssrf.go and Config.BlockLinkLocalAndMetadata).
+//
+// Use it as a drop-in for the bare &http.Client{} that outbound connectivity
+// probes and "test connection" endpoints would otherwise use, so those paths
+// cannot be turned into SSRF relays. Loopback and private RFC1918/ULA ranges stay
+// reachable so on-LAN targets keep working.
+//
+// The returned client shares one process-wide guarded transport (and its
+// connection pool), so callers must not call CloseIdleConnections on it. timeout
+// bounds each whole request via http.Client.Timeout; pass 0 to leave it unset.
+// The returned client itself is fresh, so callers may still set fields such as
+// CheckRedirect before the first request.
+func NewGuardedHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Transport: sharedGuardedTransport(),
+		Timeout:   timeout,
 	}
 }
 

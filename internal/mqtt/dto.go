@@ -104,6 +104,12 @@ func NewMQTTEventDTO(r *detection.Result) *MQTTEventDTO {
 }
 
 // SetBirdImage adds bird image data to the DTO.
+//
+// The URL published is the provider's upstream address, not the media-proxy URL the
+// REST API and SSE stream use. An MQTT subscriber is not a browser with an origin to
+// resolve a root-relative path against, and it may be off the LAN entirely, so the
+// proxy URL would be unusable. An absent URL means no image is known, which is a
+// truthful signal a subscriber can act on.
 func (dto *MQTTEventDTO) SetBirdImage(img *imageprovider.BirdImage) {
 	if img == nil || img.URL == "" {
 		return

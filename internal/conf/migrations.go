@@ -2,6 +2,7 @@ package conf
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"reflect"
 	"strings"
@@ -23,6 +24,35 @@ func persistMigration(settings *Settings, label string) {
 	} else {
 		GetLogger().Info("Saved migrated "+label+" configuration", logger.String("path", configFile))
 	}
+}
+
+// migrateEmptyLossyExportBitrate fills the documented default into a lossy export
+// whose bitrate was left blank on disk (an explicit `bitrate: ""` from a save made
+// while export was disabled, or a hand-edit), returning whether it changed anything.
+//
+// viper reads the blank as "", so without a persisted repair the default would be
+// re-applied only in memory on every load, re-emitting the same telemetry warning on
+// every restart because nothing writes it back. Healing it here, before the file is
+// saved, writes the default to disk once. The warning is recorded here (once, on the
+// healing load, when the export is enabled); the persisted default then stops it
+// firing on later loads.
+//
+// It runs from Load before normalizeIncompleteFeatures on purpose: a persistMigration
+// of the returned change writes the file with every feature's on-disk enabled state
+// intact. The incomplete-feature pass disables switched-on-but-unconfigured
+// integrations only in memory, and those disables must never reach disk.
+func (s *Settings) migrateEmptyLossyExportBitrate() bool {
+	export := &s.Realtime.Audio.Export
+	if !isLossyExportFormat(export.Type) || export.Bitrate != "" {
+		return false
+	}
+	export.Bitrate = DefaultAudioExportBitrate
+	if export.Enabled {
+		s.recordValidationWarning(warnComponentAudio,
+			"audio export is enabled with the lossy format %s but no bitrate is set; using the default %s",
+			export.Type, DefaultAudioExportBitrate)
+	}
+	return true
 }
 
 // migrateStreamEnabledDefaults materializes missing enabled fields for legacy
@@ -219,12 +249,14 @@ func inferStreamType(url string) string {
 
 // MigrateRTSPConfig migrates legacy URLs []string to Streams []StreamConfig.
 // This migration:
-// - Skips if Streams already has entries (already migrated)
-// - Only migrates if URLs has data
-// - Trims whitespace and skips empty URLs
-// - Infers stream type from URL scheme
-// - Preserves the global Transport setting for RTSP/RTMP streams
-// - Returns true if migration occurred, false if skipped
+//   - Skips if Streams already has entries (already migrated)
+//   - Only migrates if URLs has data
+//   - Trims whitespace and skips empty URLs
+//   - Infers stream type from URL scheme
+//   - Copies the global Transport into each RTSP/RTMP stream entry AND keeps the
+//     global Transport in place, because the startup path reads the global value
+//     as the engine-wide default
+//   - Returns true if migration occurred, false if skipped
 func (s *Settings) MigrateRTSPConfig() bool {
 	rtsp := &s.Realtime.RTSP
 
@@ -238,11 +270,8 @@ func (s *Settings) MigrateRTSPConfig() bool {
 		return false
 	}
 
-	// Get global transport, default to tcp
-	globalTransport := rtsp.Transport
-	if globalTransport == "" {
-		globalTransport = DefaultTransport
-	}
+	// Get global transport via the single resolution owner (global else default).
+	globalTransport := rtsp.ResolveTransport("")
 
 	// Preallocate streams slice with capacity and track seen URLs for deduplication
 	rtsp.Streams = make([]StreamConfig, 0, len(rtsp.URLs))
@@ -288,9 +317,13 @@ func (s *Settings) MigrateRTSPConfig() bool {
 		return false
 	}
 
-	// Clear legacy fields
+	// Clear the legacy URLs list now that it has been migrated to Streams.
+	// Keep rtsp.Transport: it is copied into each per-stream entry above, but
+	// the startup path (cmd/serve/serve.go) still reads the global value as the
+	// engine-wide default transport. Clearing it made FFmpeg receive an empty
+	// -rtsp_transport and fail to open the stream on the next start (the value
+	// is present-but-empty, so the Viper default no longer applies).
 	rtsp.URLs = nil
-	rtsp.Transport = ""
 
 	GetLogger().Info("Migrated RTSP configuration to new streams format",
 		logger.Int("stream_count", len(rtsp.Streams)))
@@ -384,9 +417,7 @@ func normalizeRTSPStreamEnabledDefaults(rawStreams any) ([]any, bool) {
 		}
 
 		copied := make(map[string]any, len(streamMap)+1)
-		for key, value := range streamMap {
-			copied[key] = value
-		}
+		maps.Copy(copied, streamMap)
 		copied["enabled"] = true
 		normalized[i] = copied
 		migrated = true
@@ -397,6 +428,96 @@ func normalizeRTSPStreamEnabledDefaults(rawStreams any) ([]any, bool) {
 	}
 
 	return normalized, true
+}
+
+// catalogModelIDAliases maps a hyphenated model *catalog* entry ID
+// (classifier/model_catalog.go) to its canonical config-level ID. Keys are
+// lowercase for case-insensitive matching. Bat is intentionally absent: it has
+// many regional catalog IDs mapping to one registry entry, so there is no
+// single canonical spelling to normalize toward.
+var catalogModelIDAliases = map[string]string{
+	ModelIDBirdNETCatalog:   ModelIDBirdNET,
+	ModelIDBirdNETV3Catalog: ModelIDBirdNETV3,
+	ModelIDPerchV2Catalog:   ModelIDPerchV2,
+	ModelIDBSGCatalog:       ModelIDBSG,
+}
+
+// canonicalizeModelID returns the canonical config ID for a catalog-style
+// (hyphenated) model ID, or the input unchanged when it is not an alias.
+// Matching is case-insensitive; the returned canonical form preserves the
+// registry's own casing.
+func canonicalizeModelID(id string) string {
+	if canonical, ok := catalogModelIDAliases[strings.ToLower(id)]; ok {
+		return canonical
+	}
+	return id
+}
+
+// normalizeModelIDList rewrites catalog-style model IDs to their canonical form
+// and drops any case-insensitive duplicate that the rewrite (or a pre-existing
+// mixed-spelling config) produced, preserving first-seen order. Returns the
+// normalized slice and whether anything changed.
+func normalizeModelIDList(ids []string) ([]string, bool) {
+	if len(ids) == 0 {
+		return ids, false
+	}
+	out := make([]string, 0, len(ids))
+	seen := make(map[string]bool, len(ids))
+	changed := false
+	for _, id := range ids {
+		canonical := canonicalizeModelID(id)
+		if canonical != id {
+			changed = true
+		}
+		key := strings.ToLower(canonical)
+		if seen[key] {
+			changed = true // a duplicate was collapsed
+			continue
+		}
+		seen[key] = true
+		out = append(out, canonical)
+	}
+	return out, changed
+}
+
+// MigrateModelIDAliases canonicalizes catalog-style (hyphenated) model IDs in
+// models.enabled and in every source/stream model list to their underscore/
+// short config IDs. A user who hand-edits a config with the catalog spelling
+// (e.g. "perch-v2") is otherwise left with an entry that validation and
+// resolution accept as an alias but that model install/uninstall bookkeeping
+// (which keys on the canonical alias) would duplicate on install and fail to
+// remove on uninstall. Normalizing at load keeps a single canonical spelling
+// persisted so that lifecycle code stays consistent. Returns true if any value
+// changed. See Sentry BIRDNET-GO-2FZ.
+func (s *Settings) MigrateModelIDAliases() bool {
+	changed := false
+
+	if normalized, did := normalizeModelIDList(s.Models.Enabled); did {
+		s.Models.Enabled = normalized
+		changed = true
+	}
+
+	for i := range s.Realtime.Audio.Sources {
+		src := &s.Realtime.Audio.Sources[i]
+		if canonical := canonicalizeModelID(src.Model); canonical != src.Model {
+			src.Model = canonical
+			changed = true
+		}
+		if normalized, did := normalizeModelIDList(src.Models); did {
+			src.Models = normalized
+			changed = true
+		}
+	}
+
+	for i := range s.Realtime.RTSP.Streams {
+		stream := &s.Realtime.RTSP.Streams[i]
+		if normalized, did := normalizeModelIDList(stream.Models); did {
+			stream.Models = normalized
+			changed = true
+		}
+	}
+
+	return changed
 }
 
 // ValidateModelConfig checks model-related configuration for errors and
@@ -450,11 +571,15 @@ func (s *Settings) ValidateModelConfig(knownIDs map[string]bool, checkSourceRefs
 // errors are collected and returned together so the user can fix them in
 // one pass.
 func (s *Settings) applyModelValidation() error {
-	// Default known IDs - matches classifier.KnownConfigIDs() at compile time.
-	// This fallback is used during config loading before the classifier package
-	// is available. The orchestrator re-validates with the authoritative list.
-	knownIDs := map[string]bool{ModelIDBirdNET: true, ModelIDBirdNETV3: true, ModelIDPerchV2: true, ModelIDBat: true, ModelIDBSG: true}
-	modelIssues := s.ValidateModelConfig(knownIDs, false)
+	// Fallback known-ID set used during config loading before the classifier
+	// package is available; the orchestrator re-validates with the authoritative
+	// classifier.KnownConfigIDs() later. Reuse ValidAudioModels (the same
+	// canonical + catalog-alias set, kept in lockstep with the registry by
+	// TestKnownConfigIDs_MatchesConfValidAudioModels) rather than hand-maintaining
+	// a third copy that could drift. The extra "" default key is harmless here
+	// because models.enabled never contains an empty entry. ValidateModelConfig
+	// only reads the map.
+	modelIssues := s.ValidateModelConfig(ValidAudioModels, false)
 	var fatalErrors []string
 	for _, issue := range modelIssues {
 		if strings.HasPrefix(issue, "error:") {
@@ -745,6 +870,11 @@ func (s *Settings) mergeSourceIntoStream(src *AudioSourceConfig, stream *StreamC
 // ever gains a non-comparable field this returns false so the merge is skipped
 // rather than risking a runtime panic.
 func quietHoursComparable() bool {
+	// Keep reflect.TypeOf here, not reflect.TypeFor[QuietHoursConfig](): the
+	// generic form trips a Go linker bug (R_USEIFACE ... references type:.eqfunc
+	// which is not a type or itab) during deadcode elimination for this
+	// comparable-struct check.
+	//nolint:modernize // reflect.TypeOf is intentional; reflect.TypeFor breaks the linker here (see above)
 	return reflect.TypeOf(QuietHoursConfig{}).Comparable()
 }
 

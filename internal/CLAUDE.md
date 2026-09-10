@@ -2,8 +2,8 @@
 
 ## Project Requirements
 
-- **Go Version**: 1.26
-- **Release Notes**: [https://go.dev/doc/go1.26](https://go.dev/doc/go1.26)
+- **Go Version**: 1.27
+- **Release Notes**: [https://go.dev/doc/go1.27](https://go.dev/doc/go1.27)
 
 ## Quick Reference
 

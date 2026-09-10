@@ -17,6 +17,10 @@ func TestSettings_MigrateRTSPConfig(t *testing.T) {
 		expectMigrated bool
 		expectedCount  int
 		expectedNames  []string
+		// expectedTransport is the global rtsp.transport value expected AFTER
+		// migration. The migration keeps the global (the startup path reads it
+		// as the engine-wide default), so it must equal the input value.
+		expectedTransport string
 	}{
 		{
 			name: "migrate legacy URLs to streams",
@@ -28,9 +32,10 @@ func TestSettings_MigrateRTSPConfig(t *testing.T) {
 					},
 				},
 			},
-			expectMigrated: true,
-			expectedCount:  2,
-			expectedNames:  []string{"Stream 1", "Stream 2"},
+			expectMigrated:    true,
+			expectedCount:     2,
+			expectedNames:     []string{"Stream 1", "Stream 2"},
+			expectedTransport: "tcp",
 		},
 		{
 			name: "skip migration if streams already exist",
@@ -72,6 +77,9 @@ func TestSettings_MigrateRTSPConfig(t *testing.T) {
 			},
 			expectMigrated: true,
 			expectedCount:  1,
+			// Input global was empty; migration does not backfill the global
+			// (only per-stream entries get the default), so it stays empty.
+			expectedTransport: "",
 		},
 		{
 			name: "preserve udp transport from legacy",
@@ -83,8 +91,9 @@ func TestSettings_MigrateRTSPConfig(t *testing.T) {
 					},
 				},
 			},
-			expectMigrated: true,
-			expectedCount:  1,
+			expectMigrated:    true,
+			expectedCount:     1,
+			expectedTransport: "udp",
 		},
 	}
 
@@ -97,9 +106,12 @@ func TestSettings_MigrateRTSPConfig(t *testing.T) {
 			assert.Len(t, tt.settings.Realtime.RTSP.Streams, tt.expectedCount)
 
 			if tt.expectMigrated {
-				// Verify legacy fields are cleared
+				// Verify the legacy URLs list is cleared.
 				assert.Empty(t, tt.settings.Realtime.RTSP.URLs)
-				assert.Empty(t, tt.settings.Realtime.RTSP.Transport)
+				// The global transport is preserved, not cleared: the startup
+				// path reads it as the engine-wide default. Clearing it made
+				// FFmpeg receive an empty -rtsp_transport and fail (issue #4240).
+				assert.Equal(t, tt.expectedTransport, tt.settings.Realtime.RTSP.Transport)
 			}
 
 			// Verify names if expected

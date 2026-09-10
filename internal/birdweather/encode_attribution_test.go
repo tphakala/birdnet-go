@@ -1,7 +1,6 @@
 package birdweather
 
 import (
-	"bytes"
 	"log/slog"
 	"strings"
 	"testing"
@@ -11,36 +10,8 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
-
-// captureUploadLogs redirects the global logger to a buffer at Info level, which
-// is the level a default support dump actually contains. Anything the tests here
-// require must therefore be emitted at Info or above; a field only present at
-// Debug is not available to triage. It swaps process-wide state, so tests using
-// it must not run with t.Parallel().
-func captureUploadLogs(t *testing.T) *bytes.Buffer {
-	t.Helper()
-
-	var buf bytes.Buffer
-	capture := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})
-	cl, err := logger.NewCentralLogger(
-		&logger.LoggingConfig{
-			Console:      &logger.ConsoleOutput{Enabled: false},
-			FileOutput:   &logger.FileOutput{Enabled: false},
-			DefaultLevel: "info",
-		},
-		capture,
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, cl.Close()) })
-
-	prev := logger.Global()
-	logger.SetGlobal(cl)
-	t.Cleanup(func() { logger.SetGlobal(prev) })
-
-	return &buf
-}
 
 // TestEncodeWithNativeFLAC_LogsEncoderAttribution covers the gap that made
 // "my BirdWeather uploads are too quiet" unanswerable from a default-level
@@ -48,7 +19,11 @@ func captureUploadLogs(t *testing.T) *bytes.Buffer {
 // upload path recorded neither the encoder that ran nor the gain it applied
 // anywhere above Debug.
 func TestEncodeWithNativeFLAC_LogsEncoderAttribution(t *testing.T) {
-	logs := captureUploadLogs(t)
+	// Capture at Info, not Debug: this test's whole purpose is to prove the
+	// encoder and gain land at Info (the level a default support dump retains).
+	// A Debug capture would still see fields accidentally downgraded to Debug
+	// and hide exactly the regression this guards (GitHub #4059 supportability).
+	logs := logtest.CaptureBufferAt(t, slog.LevelInfo)
 
 	client := &BwClient{Settings: &conf.Settings{}}
 	res, err := client.encodeWithNativeFLAC(sinePCM(conf.SampleRate, -30), testTimestamp)

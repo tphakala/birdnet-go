@@ -2,8 +2,10 @@ package processor
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -1001,6 +1003,81 @@ func TestGetBaseConfidenceThreshold_CustomOverridesModel(t *testing.T) {
 	assert.InDelta(t, 0.5, float64(threshold), 0.001, "custom species threshold should override bat global threshold")
 }
 
+// TestModelGlobalConfidenceThreshold verifies the per-model base threshold
+// selection: Bat always uses its own threshold, Perch v2 and BirdNET v3.0 use
+// theirs only when their override toggle is on, and everything else follows the
+// primary BirdNET threshold.
+func TestModelGlobalConfidenceThreshold(t *testing.T) {
+	t.Parallel()
+
+	newSettings := func() *conf.Settings {
+		s := &conf.Settings{}
+		s.BirdNET.Threshold = 0.8
+		s.Bat.Threshold = 0.3
+		s.Perch.Threshold = 0.5
+		s.BirdNETV3.Threshold = 0.6
+		return s
+	}
+
+	tests := []struct {
+		name          string
+		modelID       string
+		perchOverride bool
+		v3Override    bool
+		want          float64
+	}{
+		{"birdnet primary uses birdnet threshold", "BirdNET_V2.4", false, false, 0.8},
+		{"bat always uses bat threshold", classifier.RegistryIDBat, false, false, 0.3},
+		{"perch without override follows birdnet", classifier.RegistryIDPerchV2, false, false, 0.8},
+		{"perch with override uses perch threshold", classifier.RegistryIDPerchV2, true, false, 0.5},
+		{"birdnetv3 without override follows birdnet", classifier.RegistryIDBirdNETV3, false, false, 0.8},
+		{"birdnetv3 with override uses its threshold", classifier.RegistryIDBirdNETV3, false, true, 0.6},
+		{"unknown model follows birdnet", "SomeOtherModel", true, true, 0.8},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			settings := newSettings()
+			settings.Perch.OverrideThreshold = tt.perchOverride
+			settings.BirdNETV3.OverrideThreshold = tt.v3Override
+
+			got := modelGlobalConfidenceThreshold(settings, tt.modelID)
+			assert.InDelta(t, tt.want, float64(got), 0.001)
+		})
+	}
+}
+
+// TestGetBaseConfidenceThreshold_PerchOverride verifies Perch v2 detections
+// follow the BirdNET threshold unless the Perch override toggle is enabled, and
+// that a per-species custom threshold still wins regardless of the toggle.
+func TestGetBaseConfidenceThreshold_PerchOverride(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.BirdNET.Threshold = 0.8
+	settings.Perch.Threshold = 0.5
+
+	p := &Processor{Settings: settings}
+
+	// Override off: Perch follows BirdNET.
+	settings.Perch.OverrideThreshold = false
+	off := p.getBaseConfidenceThreshold(settings, "American Robin", "Turdus migratorius", classifier.RegistryIDPerchV2)
+	assert.InDelta(t, 0.8, float64(off), 0.001, "perch without override should follow BirdNET threshold")
+
+	// Override on: Perch uses its own threshold.
+	settings.Perch.OverrideThreshold = true
+	on := p.getBaseConfidenceThreshold(settings, "American Robin", "Turdus migratorius", classifier.RegistryIDPerchV2)
+	assert.InDelta(t, 0.5, float64(on), 0.001, "perch with override should use Perch threshold")
+
+	// Per-species custom threshold wins even with the override on.
+	settings.Realtime.Species.Config = map[string]conf.SpeciesConfig{
+		"american robin": {Threshold: 0.42},
+	}
+	custom := p.getBaseConfidenceThreshold(settings, "American Robin", "Turdus migratorius", classifier.RegistryIDPerchV2)
+	assert.InDelta(t, 0.42, float64(custom), 0.001, "custom species threshold should override the perch override")
+}
+
 // TestValidateAndLogBatFilterConfig verifies that invalid bat FP filter levels
 // are reset to 0 and valid levels are accepted.
 func TestValidateAndLogBatFilterConfig(t *testing.T) {
@@ -1029,4 +1106,75 @@ func TestValidateAndLogBatFilterConfig(t *testing.T) {
 		validateAndLogBatFilterConfig(settings)
 		assert.Equal(t, 0, settings.Bat.FalsePositiveFilter.Level)
 	})
+}
+
+// TestFPInterval_MatchesBufferInterval is the regression guard for issue #4096:
+// the analysis step the false-positive filter assumes when computing
+// minDetections must equal the step the allocated analysis buffer actually
+// advances by (ModelSpec.BufferInterval with the resolved overlap). Before the
+// fix the buffer was hardcoded at 50% while the FP math used the configured
+// overlap, so the two diverged and legitimate detections were discarded.
+func TestFPInterval_MatchesBufferInterval(t *testing.T) {
+	t.Parallel()
+
+	birdSpec := classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second}
+
+	// BirdNET (3s clip): the FP filter's assumed segment is (3.0 - overlap)s.
+	// The buffer step is BufferInterval(ResolveModelOverlap), which must match.
+	for _, overlap := range []float64{0.0, 1.0, 1.5, 2.0, 2.4, 2.9} {
+		s := &conf.Settings{}
+		s.BirdNET.Overlap = overlap
+		resolved := classifier.ResolveModelOverlap("BirdNET_V2.4", birdSpec, s)
+		bufferStep := birdSpec.BufferInterval(resolved).Seconds()
+		fpSegment := 3.0 - overlap // the segment length calculateMinDetectionsFromSettings uses
+		assert.InDelta(t, fpSegment, bufferStep, 1e-6,
+			"overlap %.1f: FP segment %.3fs != buffer step %.3fs", overlap, fpSegment, bufferStep)
+	}
+
+	// Bat: fixed 50% overlap -> fixed 1.5s step, matching calculateBatMinDetections.
+	batSpec := classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second, RawSampleRate: 256000}
+	s := &conf.Settings{}
+	s.BirdNET.Overlap = 2.4 // ignored for bat
+	batStep := batSpec.BufferInterval(classifier.ResolveModelOverlap(classifier.RegistryIDBat, batSpec, s)).Seconds()
+	assert.InDelta(t, 1.5, batStep, 1e-6, "bat step must stay fixed at 1.5s regardless of overlap")
+}
+
+// TestCalculateBatMinDetections_AllLevels pins the bat model's minDetections
+// (fixed 1.5s step -> 4 possible detections in the 6s window) before the shared
+// formula refactor, so any behavior drift surfaces as a failure.
+func TestCalculateBatMinDetections_AllLevels(t *testing.T) {
+	t.Parallel()
+	cases := map[int]int{0: 1, 1: 1, 2: 2, 3: 2, 4: 3, 5: 3}
+	for level, want := range cases {
+		s := &conf.Settings{}
+		s.Bat.FalsePositiveFilter.Level = level
+		assert.Equal(t, want, calculateBatMinDetections(s), "bat level %d", level)
+	}
+}
+
+// TestCalculateMinDetectionsForModel_PerModelClip verifies that the runtime flush
+// path (calculateMinDetectionsForModel) aligns the FP confirmation window with the
+// buffer cadence per model: BirdNET (3s) stays identical to the bird default,
+// while a 5s model (Perch) derives its step from its own clip and overlap so the
+// two subsystems agree (issue #4096).
+func TestCalculateMinDetectionsForModel_PerModelClip(t *testing.T) {
+	t.Parallel()
+
+	for _, overlap := range []float64{0.0, 1.5, 2.4} {
+		s := &conf.Settings{}
+		s.Realtime.FalsePositiveFilter.Level = 3
+		s.BirdNET.Overlap = overlap
+
+		// BirdNET 3s: routed path must equal the unchanged bird default.
+		assert.Equal(t, calculateMinDetectionsFromSettings(s),
+			calculateMinDetectionsForModel(s, "BirdNET_V2.4"),
+			"BirdNET routed minDetections must match the bird default (overlap %.1f)", overlap)
+
+		// Perch 5s: FP step must equal the model's buffer step (ratio-scaled overlap).
+		perchSpec := classifier.ModelRegistry[classifier.RegistryIDPerchV2].Spec
+		wantStep := perchSpec.BufferInterval(classifier.ResolveModelOverlap(classifier.RegistryIDPerchV2, perchSpec, s)).Seconds()
+		wantMin := minDetectionsForSegment(wantStep, 3)
+		assert.Equal(t, wantMin, calculateMinDetectionsForModel(s, classifier.RegistryIDPerchV2),
+			"Perch routed minDetections must derive from its 5s buffer step (overlap %.1f)", overlap)
+	}
 }

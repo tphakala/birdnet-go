@@ -140,7 +140,13 @@ func TestBirdNET_SetModelsDirConcurrentWithCoverage_NoRace(t *testing.T) {
 	v3.BirdNET.RangeFilter.Model = "v3"
 	v3.BirdNET.Labels = []string{"Turdus merula_Common Blackbird"}
 	conftest.SetTestSettings(v3)
-	t.Cleanup(func() { conftest.SetTestSettings(conftest.GetTestSettings()) })
+	// Restore the clean nil state, NOT GetTestSettings(): GetTestSettings() allocates
+	// a fresh default *conf.Settings, so the old cleanup re-published a non-nil default
+	// snapshot rather than clearing the global. A non-nil global snapshot makes
+	// conf.CurrentOrFallback prefer it over the local settings a later -shuffle-ordered
+	// test passes in (e.g. TestNewBirdNET_LocaleNormalization would then read the global
+	// locale instead of its own). Clearing to nil lets each later test's own settings win.
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 	bn := &BirdNET{
 		Settings:     v3,

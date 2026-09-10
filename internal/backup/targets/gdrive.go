@@ -689,12 +689,10 @@ func (t *GDriveTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 				}
 
 				backups = append(backups, backup.BackupInfo{
-					Target: file.Name,
-					Metadata: backup.Metadata{
-						ID:        file.Id,
-						Timestamp: createdTime,
-						Size:      file.Size,
-					},
+					Target:    file.Name,
+					ID:        file.Id,
+					Timestamp: createdTime,
+					Size:      file.Size,
 				})
 			}
 

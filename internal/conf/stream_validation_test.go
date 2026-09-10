@@ -513,6 +513,32 @@ func TestApplyStreamDefaults(t *testing.T) {
 	}
 }
 
+// TestRTSPSettings_ResolveTransport verifies the single owner of the
+// "per-stream else global else default" transport rule (issue #4240).
+func TestRTSPSettings_ResolveTransport(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		globalT    string
+		perStreamT string
+		want       string
+	}{
+		{name: "per-stream wins over global", globalT: "tcp", perStreamT: "udp", want: "udp"},
+		{name: "empty per-stream uses global", globalT: "udp", perStreamT: "", want: "udp"},
+		{name: "empty per-stream and empty global uses default", globalT: "", perStreamT: "", want: DefaultTransport},
+		{name: "per-stream used when global empty", globalT: "", perStreamT: "tcp", want: "tcp"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := &RTSPSettings{Transport: tt.globalT}
+			assert.Equal(t, tt.want, r.ResolveTransport(tt.perStreamT))
+		})
+	}
+}
+
 // streamModeCase is one enum-mode validation case: the raw value to set and
 // whether StreamConfig.Validate must reject it.
 type streamModeCase struct {

@@ -362,3 +362,24 @@ func TestManager_Float64PoolFor_NonPositiveReturnsNil(t *testing.T) {
 	assert.Nil(t, m.Float64PoolFor(0))
 	assert.Nil(t, m.Float64PoolFor(-1))
 }
+
+// TestManager_AllocateAnalysis_HighOverlap reproduces the exact dimensions the
+// analysis pipeline allocates for a 3s / 48kHz BirdNET clip at birdnet.overlap
+// 2.4s (a false-positive filter level value): clip 288000, overlap 230400, read
+// 57600 -- an 80% overlap where readSize < overlapSize. This must allocate
+// successfully; rejecting it left every model idle (no analysis buffer).
+func TestManager_AllocateAnalysis_HighOverlap(t *testing.T) {
+	t.Parallel()
+	m := buffer.NewManager(newTestLogger())
+
+	const (
+		clipBytes    = 48000 * 3 * 1 * 2 // 288000
+		overlapBytes = 230400            // 2.4s * 48000 * 2
+		readSize     = clipBytes - overlapBytes
+	)
+	require.Less(t, readSize, overlapBytes, "test premise: overlap exceeds 50%%")
+
+	err := m.AllocateAnalysis("src-1", "BirdNET_V2.4", clipBytes, overlapBytes, readSize)
+	require.NoError(t, err, "high-overlap analysis buffer allocation must succeed")
+	assert.True(t, m.HasAnalysis("src-1", "BirdNET_V2.4"))
+}

@@ -65,6 +65,7 @@ const (
 const (
 	headerAcceptRanges = "Accept-Ranges"
 	acceptRangesBytes  = "bytes"
+	requestTimeoutMsg  = "Request timed out"
 )
 
 // Cache duration in seconds for HTTP Cache-Control headers on media responses.
@@ -77,6 +78,12 @@ const (
 
 	// SpectrogramCacheSeconds is the cache duration for spectrograms in seconds
 	SpectrogramCacheSeconds = 2592000 // 30 days
+
+	// ImagePendingRetryAfterSeconds is the Retry-After advertised when a species
+	// image is not cached yet and a background fetch has been scheduled. It is short
+	// because the common case is a fast provider hit; a species queued behind the
+	// provider's rate limiter simply needs more than one retry.
+	ImagePendingRetryAfterSeconds = 5
 )
 
 // isClipNotFoundErr reports whether err indicates the audio clip or its parent
@@ -198,6 +205,10 @@ var (
 	// Image errors
 	ErrImageProviderNotAvailable = errors.NewStd("image provider not available")
 
+	// ErrImageNotResolvedYet reports that a species image is being fetched in the
+	// background and is not available yet. It is a transient condition, not a failure.
+	ErrImageNotResolvedYet = errors.NewStd("species image is not resolved yet")
+
 	// Sentinel errors for nilnil cases
 	ErrSpectrogramExists       = errors.NewStd("spectrogram already exists")
 	ErrSpectrogramNotGenerated = errors.NewStd("spectrogram not generated")
@@ -275,6 +286,20 @@ type ProcessAudioRequest struct {
 	GainDB    float64 `json:"gain_db"`
 }
 
+// AudibleBatsRequest defines the request body for POST /api/v2/audio/:id/audible-bats.
+type AudibleBatsRequest struct {
+	// Expansion is the time-expansion factor (5, 10, 16, or 20).
+	Expansion int `json:"expansion"`
+	// Normalize enables loudness normalization applied after time expansion.
+	Normalize bool `json:"normalize"`
+	// GainDB is the volume adjustment in dB applied to the derived clip.
+	GainDB float64 `json:"gain_db"`
+}
+
+// modelTypeBat is the ai_models.model_type value identifying bat-detection
+// models. Audible-bats playback is only offered for these detections.
+const modelTypeBat = "bat"
+
 // RegisterRoutes registers the media domain routes. It is called by the facade
 // in the deterministic initRoutes order, at the same slot the former
 // initMediaRoutes occupied, so the registered route set stays byte-identical.
@@ -314,16 +339,28 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 
 	// ID-based routes using SFS. Registered on c.Echo (not the group); the
 	// GET /api/v2/audio/:id route is greedy and catches all /api/v2/audio/* paths.
-	c.Echo.GET("/api/v2/audio/:id", c.ServeAudioByID)
-	c.Echo.GET("/api/v2/spectrogram/:id", c.ServeSpectrogramByID)
-	c.Echo.GET("/api/v2/spectrogram/:id/status", c.GetSpectrogramStatus)
-	c.Echo.POST("/api/v2/spectrogram/:id/generate", c.GenerateSpectrogramByID)
+	//
+	// PrivateModeAuth is attached per-route here because these routes live on
+	// c.Echo, not the v2 group, so they do NOT inherit the group-level
+	// c.Group.Use(c.PrivateModeAuth) gate (Echo group middleware wraps only routes
+	// registered through that group). Without it, stored detection audio and
+	// spectrograms are reachable unauthenticated even when Private Mode is enabled
+	// (GHSA-c7jx-552f-94hh). PrivateModeAuth, not AuthMiddleware, is used so these
+	// read routes stay publicly reachable when Private Mode is off, matching the
+	// grouped /media/* aliases that serve the same media through the group.
+	c.Echo.GET("/api/v2/audio/:id", c.ServeAudioByID, c.PrivateModeAuth)
+	c.Echo.GET("/api/v2/spectrogram/:id", c.ServeSpectrogramByID, c.PrivateModeAuth)
+	c.Echo.GET("/api/v2/spectrogram/:id/status", c.GetSpectrogramStatus, c.PrivateModeAuth)
+	c.Echo.POST("/api/v2/spectrogram/:id/generate", c.GenerateSpectrogramByID, c.PrivateModeAuth)
 
 	// Clip extraction (requires authentication)
 	c.Echo.POST("/api/v2/audio/:id/clip", c.ExtractAudioClipByID, c.AuthMiddleware)
 
 	// Audio processing / preview (requires authentication)
 	c.Echo.POST("/api/v2/audio/:id/process", c.ProcessAudioByID, c.AuthMiddleware)
+
+	// Audible bats derived playback (requires authentication)
+	c.Echo.POST("/api/v2/audio/:id/audible-bats", c.AudibleBatsByID, c.AuthMiddleware)
 
 	// Processed spectrogram preview (requires authentication)
 	c.Echo.POST("/api/v2/spectrogram/:id/process", c.ProcessedSpectrogramByID, c.AuthMiddleware)
@@ -332,6 +369,31 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 	g.GET("/media/audio", c.ServeAudioByQueryID)
 
 	c.LogInfoIfEnabled("Media routes initialized successfully")
+}
+
+// mediaCacheVisibility returns the Cache-Control visibility token for a served
+// media response: "private" when Private Mode is enabled, otherwise "public".
+// In Private Mode the media is access-controlled, so "private" keeps shared or
+// proxy caches from retaining it and re-serving it to unauthenticated clients
+// (GHSA-c7jx-552f-94hh). Read per request via CurrentSettings() so a hot-reload
+// toggle of Private Mode takes effect without a restart.
+func (c *Handler) mediaCacheVisibility() string {
+	if c.CurrentSettings().Security.PrivateMode {
+		return "private"
+	}
+	return "public"
+}
+
+// setPrivateAudioCacheControl marks an audio response private when Private Mode
+// is enabled so shared/proxy caches never retain access-controlled detection
+// audio, which can contain sensitive ambient speech (GHSA-c7jx-552f-94hh).
+// Audio responses carry no Cache-Control otherwise, so this is a no-op in public
+// mode and preserves the prior behavior; "private" (not "no-store") still lets
+// the requesting browser cache the clip, so playback and seeking are unaffected.
+func (c *Handler) setPrivateAudioCacheControl(ctx echo.Context) {
+	if c.CurrentSettings().Security.PrivateMode {
+		ctx.Response().Header().Set("Cache-Control", "private")
+	}
 }
 
 // translateSecureFSError handles SecureFS errors consistently across handler methods.
@@ -425,7 +487,7 @@ func (c *Handler) translateSecureFSError(ctx echo.Context, err error, userMsg st
 			logger.Bool("tunneled", isTunneled),
 			logger.String("tunnel_provider", tunnelProvider),
 		)
-		return c.HandleError(ctx, err, "Request timed out", http.StatusRequestTimeout)
+		return c.HandleError(ctx, err, requestTimeoutMsg, http.StatusRequestTimeout)
 	case errors.Is(err, context.Canceled):
 		c.LogInfoIfEnabled("Request canceled by client",
 			logger.Error(err),
@@ -455,6 +517,21 @@ func (c *Handler) translateSecureFSError(ctx echo.Context, err error, userMsg st
 func (c *Handler) translateAudioServeError(ctx echo.Context, err error, userMsg string) error {
 	clearAudioResponseHeaders(ctx)
 	return c.translateSecureFSError(ctx, err, userMsg)
+}
+
+// handleRequestContextError distinguishes a disconnected client from a request
+// deadline. Canceled requests need no response, while server-side deadlines must
+// remain visible as timeout failures.
+func (c *Handler) handleRequestContextError(ctx echo.Context) (bool, error) {
+	requestErr := ctx.Request().Context().Err()
+	switch {
+	case errors.Is(requestErr, context.Canceled):
+		return true, nil
+	case errors.Is(requestErr, context.DeadlineExceeded):
+		return true, c.translateSecureFSError(ctx, requestErr, requestTimeoutMsg)
+	default:
+		return false, nil
+	}
 }
 
 // parseRawParameter parses the raw query parameter for spectrogram generation.
@@ -795,6 +872,9 @@ func (c *Handler) ServeAudioClip(ctx echo.Context) error {
 
 	setAudioContentDisposition(ctx, filepath.Base(normalizedFilename))
 
+	// In Private Mode, keep shared/proxy caches from retaining this clip.
+	c.setPrivateAudioCacheControl(ctx)
+
 	// Serve the file using SecureFS. It handles path validation and serves the file.
 	// ServeRelativeFile is expected to return appropriate echo.HTTPErrors (400, 404, 500).
 	err = c.SFS.ServeRelativeFile(ctx, normalizedFilename)
@@ -894,6 +974,9 @@ func (c *Handler) ServeAudioByID(ctx echo.Context) error {
 
 	// Ensure Accept-Ranges header is set for iOS Safari.
 	ctx.Response().Header().Set(headerAcceptRanges, acceptRangesBytes)
+
+	// In Private Mode, keep shared/proxy caches from retaining this clip.
+	c.setPrivateAudioCacheControl(ctx)
 
 	// Serve the file using SecureFS.
 	err = c.SFS.ServeRelativeFile(ctx, normalizedClipPath)
@@ -1078,8 +1161,8 @@ func (c *Handler) ExtractAudioClipByID(ctx echo.Context) error {
 		FFmpegPath: c.CurrentSettings().Realtime.Audio.FfmpegPath,
 	})
 	if err != nil {
-		if ctx.Request().Context().Err() != nil {
-			return nil // Client disconnected
+		if handled, contextErr := c.handleRequestContextError(ctx); handled {
+			return contextErr
 		}
 		c.logTranscodeFailure(noteID, "media_clip_transcode_failed", req.Format, filters, err)
 		return c.HandleError(ctx, err, "Failed to extract audio clip", http.StatusInternalServerError)
@@ -1220,8 +1303,8 @@ func (c *Handler) ProcessAudioByID(ctx echo.Context) error {
 
 	if err := ffmpeg.ProcessAudioToFile(ctx.Request().Context(), absolutePath,
 		c.CurrentSettings().Realtime.Audio.FfmpegPath, filters, tmpPath); err != nil {
-		if ctx.Request().Context().Err() != nil {
-			return nil // Client disconnected
+		if handled, contextErr := c.handleRequestContextError(ctx); handled {
+			return contextErr
 		}
 		c.logTranscodeFailure(noteID, "media_processed_audio_failed", processedAudioFormat, &filters, err)
 		return c.HandleError(ctx, err, "Failed to process audio", http.StatusInternalServerError)
@@ -1242,6 +1325,202 @@ func (c *Handler) ProcessAudioByID(ctx echo.Context) error {
 		}
 	}
 
+	return ctx.Blob(http.StatusOK, MimeTypeWAV, wavData)
+}
+
+// resolveBatClipFile confirms noteID refers to a bat detection and returns the
+// absolute, validated path to its source audio clip, following the same
+// path-resolution pattern as ProcessAudioByID. When ok is false it has already
+// written the HTTP error response and the caller must return respErr unchanged
+// (respErr is nil once the JSON error body is written successfully).
+func (c *Handler) resolveBatClipFile(ctx echo.Context, noteID string) (absolutePath string, ok bool, respErr error) {
+	// Audible-bats playback only applies to bat detections.
+	modelType, err := c.DS.GetNoteModelType(noteID)
+	if err != nil {
+		if isClipNotFoundErr(err) {
+			return "", false, c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
+		}
+		return "", false, c.HandleError(ctx, err, "Failed to resolve detection model type", http.StatusInternalServerError)
+	}
+	if modelType != modelTypeBat {
+		return "", false, c.HandleError(ctx, fmt.Errorf("model type %q is not a bat model", modelType),
+			"Audible bats mode is only available for bat detections", http.StatusBadRequest)
+	}
+
+	// Resolve and validate clip path (same pattern as ProcessAudioByID).
+	clipPath, err := c.DS.GetNoteClipPath(noteID)
+	if err != nil {
+		if isClipNotFoundErr(err) {
+			return "", false, c.HandleError(ctx, err, "No audio clip available", http.StatusNotFound)
+		}
+		return "", false, c.HandleError(ctx, err, "Failed to get clip path", http.StatusInternalServerError)
+	}
+	if clipPath == "" {
+		return "", false, c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available", http.StatusNotFound)
+	}
+	normalizedPath, err := c.normalizeAndValidatePathWithLogger(clipPath, c.APILogger)
+	if err != nil {
+		return "", false, c.HandleError(ctx, err, "Invalid clip path", http.StatusBadRequest)
+	}
+	absolutePath = filepath.Join(c.SFS.BaseDir(), normalizedPath)
+	if _, statErr := c.SFS.StatRel(normalizedPath); statErr != nil {
+		return "", false, c.HandleError(ctx, statErr, "Audio clip not found", http.StatusNotFound)
+	}
+	return absolutePath, true, nil
+}
+
+// AudibleBatsByID generates a derived "audible bats" review clip from a bat
+// detection's full audio. The ultrasonic clip is time-expanded (slowed and
+// pitched down) into the human hearing range and resampled to 48 kHz, then
+// optionally loudness-normalized (after conversion) and gain-adjusted. The
+// result is returned as WAV for browser playback and cached ephemerally; the
+// original recording and AI pipeline are never touched. Requires authentication.
+//
+// POST /api/v2/audio/:id/audible-bats
+// Body: {"expansion": 10, "normalize": true, "gain_db": 6.0}
+func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
+	// Defense in depth: RegisterRoutes skips registering this handler when the
+	// datastore is disabled, but guard the c.DS dereferences below anyway.
+	if err := c.RequireDatastore(ctx); err != nil {
+		return err
+	}
+
+	noteID := ctx.Param("id")
+	if noteID == "" {
+		return c.HandleError(ctx, fmt.Errorf("missing ID"), "Note ID is required", http.StatusBadRequest)
+	}
+	if _, err := strconv.ParseUint(noteID, 10, 64); err != nil {
+		return c.HandleError(ctx, fmt.Errorf("invalid note ID: %s", noteID), "Note ID must be a numeric value", http.StatusBadRequest)
+	}
+
+	var req AudibleBatsRequest
+	if err := ctx.Bind(&req); err != nil {
+		return c.HandleError(ctx, err, "Invalid request body", http.StatusBadRequest)
+	}
+	if !ffmpeg.IsValidBatExpansionFactor(req.Expansion) {
+		return c.HandleError(ctx, fmt.Errorf("invalid expansion factor: %d", req.Expansion),
+			"Time expansion must be 5, 10, 16, or 20", http.StatusBadRequest)
+	}
+	if !ffmpeg.IsValidGainDB(req.GainDB) {
+		return c.HandleError(ctx, fmt.Errorf("gain_db out of range: %f", req.GainDB),
+			"Gain must be between -60 and 60 dB", http.StatusBadRequest)
+	}
+
+	// Confirm this is a bat detection and resolve its validated source clip path.
+	// When ok is false the helper has already written the HTTP error response.
+	absolutePath, ok, respErr := c.resolveBatClipFile(ctx, noteID)
+	if !ok {
+		return respErr
+	}
+
+	// Serve from the ephemeral cache when available.
+	cacheKey := audibleBatsCacheKey(noteID, req.Expansion, req.Normalize, req.GainDB)
+	if c.processingCache != nil {
+		if cached := c.processingCache.get(cacheKey); cached != nil {
+			ctx.Response().Header().Set("Cache-Control", "no-store")
+			return ctx.Blob(http.StatusOK, MimeTypeWAV, cached)
+		}
+	}
+
+	// Limit concurrent processing (non-blocking, returns 503 if full).
+	select {
+	case c.processingSemaphore <- struct{}{}:
+		defer func() { <-c.processingSemaphore }()
+	default:
+		return c.HandleError(ctx, fmt.Errorf("processing queue full"),
+			"Server busy, try again later", http.StatusServiceUnavailable)
+	}
+
+	ffmpegPath := c.CurrentSettings().Realtime.Audio.FfmpegPath
+
+	// Probe the native capture rate so time expansion maps ultrasonic content
+	// into the audible band correctly regardless of the original sample rate.
+	sampleRate, err := ffmpeg.ProbeFileSampleRate(ctx.Request().Context(), absolutePath)
+	if err != nil {
+		if ctx.Request().Context().Err() != nil {
+			return nil // Client disconnected
+		}
+		// A source with no audio streams (a corrupt or video-only file) is a
+		// client-side problem, not a server fault: report 422 like the stream
+		// test handler rather than a generic 500.
+		if errors.Is(err, ffmpeg.ErrNoAudioStreamsFound) {
+			return c.HandleError(ctx, err, "Source audio has no audio track", http.StatusUnprocessableEntity)
+		}
+		return c.HandleError(ctx, err, "Failed to probe audio sample rate", http.StatusInternalServerError)
+	}
+	// Sources below the minimum bat capture rate cannot carry ultrasonic content,
+	// so a derived "audible bats" clip would have nothing meaningful to reveal.
+	// Reject before spending CPU on time expansion.
+	if sampleRate < ffmpeg.MinBatSampleRate {
+		return c.HandleError(ctx,
+			fmt.Errorf("sample rate %d below minimum %d", sampleRate, ffmpeg.MinBatSampleRate),
+			fmt.Sprintf("Source audio must be at least %d Hz for audible bats mode", ffmpeg.MinBatSampleRate),
+			http.StatusUnprocessableEntity,
+		)
+	}
+
+	// Temp working directory under the SecureFS root (container-friendly with a
+	// read-only rootfs), reusing the existing processing temp dir.
+	tmpDir := filepath.Join(c.SFS.BaseDir(), ".tmp-processing")
+	if err := os.MkdirAll(tmpDir, 0o700); err != nil {
+		return c.HandleError(ctx, err, "Failed to create temp directory", http.StatusInternalServerError)
+	}
+
+	// Pass 1: full-clip time expansion + 48 kHz resample (all-or-nothing; no
+	// detection-window clipping).
+	expandedFile, err := os.CreateTemp(tmpDir, "bat-expanded-*.wav")
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to create temp file", http.StatusInternalServerError)
+	}
+	expandedPath := expandedFile.Name()
+	_ = expandedFile.Close()
+	defer func() { _ = os.Remove(expandedPath) }()
+
+	if err := ffmpeg.TimeExpandBatAudio(ctx.Request().Context(), absolutePath, ffmpegPath,
+		req.Expansion, sampleRate, expandedPath); err != nil {
+		if ctx.Request().Context().Err() != nil {
+			return nil // Client disconnected
+		}
+		return c.HandleError(ctx, err, "Failed to generate audible bats audio", http.StatusInternalServerError)
+	}
+
+	// Pass 2: apply normalization (after conversion) and gain to the derived clip.
+	finalPath := expandedPath
+	filters := ffmpeg.AudioFilters{Normalize: req.Normalize, GainDB: req.GainDB}
+	if filters.HasFilters() {
+		finalFile, err := os.CreateTemp(tmpDir, "bat-audible-*.wav")
+		if err != nil {
+			return c.HandleError(ctx, err, "Failed to create temp file", http.StatusInternalServerError)
+		}
+		processedPath := finalFile.Name()
+		_ = finalFile.Close()
+		defer func() { _ = os.Remove(processedPath) }()
+
+		if err := ffmpeg.ProcessAudioToFile(ctx.Request().Context(), expandedPath, ffmpegPath, filters, processedPath); err != nil {
+			if ctx.Request().Context().Err() != nil {
+				return nil // Client disconnected
+			}
+			return c.HandleError(ctx, err, "Failed to process audible bats audio", http.StatusInternalServerError)
+		}
+		finalPath = processedPath
+	}
+
+	wavData, err := os.ReadFile(finalPath)
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to read audible bats audio", http.StatusInternalServerError)
+	}
+
+	// Cache the result (non-fatal on failure).
+	if c.processingCache != nil {
+		if err := c.processingCache.put(cacheKey, wavData); err != nil {
+			c.LogAPIRequest(ctx, logger.LogLevelWarn, "Failed to cache audible bats audio",
+				logger.String("cache_key", cacheKey),
+				logger.Error(err),
+			)
+		}
+	}
+
+	ctx.Response().Header().Set("Cache-Control", "no-store")
 	return ctx.Blob(http.StatusOK, MimeTypeWAV, wavData)
 }
 
@@ -1338,8 +1617,8 @@ func (c *Handler) ProcessedSpectrogramByID(ctx echo.Context) error {
 
 	if err := ffmpeg.ProcessAudioToFile(ctx.Request().Context(), absolutePath,
 		c.CurrentSettings().Realtime.Audio.FfmpegPath, filters, tmpPath); err != nil {
-		if ctx.Request().Context().Err() != nil {
-			return nil // Client disconnected
+		if handled, contextErr := c.handleRequestContextError(ctx); handled {
+			return contextErr
 		}
 		c.logTranscodeFailure(noteID, "media_processed_spectrogram_failed", processedAudioFormat, &filters, err)
 		return c.HandleError(ctx, err, "Failed to process audio", http.StatusInternalServerError)
@@ -1361,8 +1640,8 @@ func (c *Handler) ProcessedSpectrogramByID(ctx echo.Context) error {
 	profileOpt := spectrogram.WithFrequencyProfile(c.resolveDetectionFrequencyProfile(noteID))
 
 	if err := c.spectrogramGenerator.GenerateFromFile(ctx.Request().Context(), tmpPath, tmpSpectrogramPath, params.width, params.raw, profileOpt); err != nil {
-		if ctx.Request().Context().Err() != nil {
-			return nil
+		if handled, contextErr := c.handleRequestContextError(ctx); handled {
+			return contextErr
 		}
 		return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
 	}
@@ -1542,7 +1821,7 @@ func (c *Handler) handleUserRequestedMode(ctx echo.Context, noteID, clipPath str
 				logger.String("path", ctx.Request().URL.Path),
 				logger.String("ip", ctx.RealIP()))
 
-			ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", SpectrogramCacheSeconds))
+			ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("%s, max-age=%d, immutable", c.mediaCacheVisibility(), SpectrogramCacheSeconds))
 			err = c.SFS.ServeRelativeFile(ctx, relSpectrogramPath)
 			if err != nil {
 				if !ctx.Response().Committed {
@@ -1648,7 +1927,7 @@ func (c *Handler) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath str
 	// Set cache headers before serving - spectrograms are deterministic (same clip + params = same image)
 	// and never change once generated. This allows browsers to serve from disk cache on reload,
 	// avoiding HTTP/1.1 connection exhaustion when loading many detection cards simultaneously.
-	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", SpectrogramCacheSeconds))
+	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("%s, max-age=%d, immutable", c.mediaCacheVisibility(), SpectrogramCacheSeconds))
 
 	// Serve the generated spectrogram using SecureFS
 	serveStart := time.Now()
@@ -1838,7 +2117,7 @@ func (c *Handler) ServeSpectrogram(ctx echo.Context) error {
 	}
 
 	// Serve the generated spectrogram using SecureFS with cache headers
-	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", SpectrogramCacheSeconds))
+	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("%s, max-age=%d, immutable", c.mediaCacheVisibility(), SpectrogramCacheSeconds))
 	err = c.SFS.ServeRelativeFile(ctx, spectrogramPath)
 	if err != nil {
 		if !ctx.Response().Committed {
@@ -3447,13 +3726,13 @@ func (c *Handler) GetSpeciesImageInfo(ctx echo.Context) error {
 		return c.HandleError(ctx, ErrImageProviderNotAvailable, "Image service unavailable", http.StatusServiceUnavailable)
 	}
 
-	birdImage, err := cache.Get(scientificName)
-	if err != nil {
-		if errors.Is(err, imageprovider.ErrImageNotFound) {
-			ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", NotFoundCacheSeconds))
-			return c.HandleError(ctx, err, "Image not found for species", http.StatusNotFound)
-		}
-		return c.HandleError(ctx, err, "Failed to fetch species image info", http.StatusInternalServerError)
+	birdImage, found, negative := cache.GetCached(scientificName)
+	switch {
+	case negative:
+		return c.respondImageNotFound(ctx)
+	case !found:
+		cache.PrefetchAsync(scientificName)
+		return c.respondImagePendingJSON(ctx, scientificName)
 	}
 
 	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", ImageCacheSeconds))
@@ -3467,10 +3746,64 @@ func (c *Handler) GetSpeciesImageInfo(ctx echo.Context) error {
 	})
 }
 
+// respondImageNotFound answers "this species has no image", cacheable by the browser.
+// A cached 404 is what keeps a species that genuinely has no image from re-requesting
+// on every render, and it is what makes the client-side retry cheap: the retry is
+// served from the browser's own HTTP cache without reaching the network.
+func (c *Handler) respondImageNotFound(ctx echo.Context) error {
+	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", NotFoundCacheSeconds))
+	return c.HandleError(ctx, imageprovider.ErrImageNotFound, "Image not found for species", http.StatusNotFound)
+}
+
+// respondImagePending answers "not yet, try again shortly" for a species whose image
+// is being resolved on a background goroutine.
+//
+// Deliberately not routed through HandleError: that reports every status >= 500 to
+// Sentry, and a cold dashboard requesting thirty uncached thumbnails would emit
+// thirty events for what is ordinary first-load behaviour.
+//
+// no-store is load-bearing. It is the only thing that distinguishes this response
+// from the cacheable 404 above for a client that cannot read a status code from an
+// <img> error event: a retry of a pending image reaches the server, a retry of a
+// missing image does not.
+func (c *Handler) respondImagePending(ctx echo.Context, scientificName string) error {
+	return c.respondImagePendingWithBody(ctx, scientificName, false)
+}
+
+// respondImagePendingJSON is respondImagePending for the JSON metadata endpoint, which
+// returns the project-standard ErrorResponse body so a client parsing every response
+// as JSON gets a document to back off on rather than a parse error.
+func (c *Handler) respondImagePendingJSON(ctx echo.Context, scientificName string) error {
+	return c.respondImagePendingWithBody(ctx, scientificName, true)
+}
+
+func (c *Handler) respondImagePendingWithBody(ctx echo.Context, scientificName string, withJSONBody bool) error {
+	c.LogDebugIfEnabled("Species image not cached yet, background fetch scheduled",
+		logger.String("scientific_name", scientificName))
+	header := ctx.Response().Header()
+	header.Set("Retry-After", strconv.Itoa(ImagePendingRetryAfterSeconds))
+	header.Set("Cache-Control", "no-store")
+	if withJSONBody {
+		return ctx.JSON(http.StatusServiceUnavailable,
+			c.NewErrorResponse(ErrImageNotResolvedYet, "Image is not resolved yet", http.StatusServiceUnavailable))
+	}
+	return ctx.NoContent(http.StatusServiceUnavailable)
+}
+
 // ServeSpeciesImageProxy serves a cached bird image by scientific name.
-// If the image is cached locally, it serves the file with browser cache headers.
-// If not cached, it fetches from the provider, caches, and serves.
-// Falls back to 302 redirect to external URL if local fetch fails.
+//
+// The proxy is a hard boundary: it serves bytes from the local cache or it says
+// "not found" / "not yet", but it never redirects a client to the upstream image
+// host. That keeps every consumer (browser, MQTT subscriber, notification target)
+// pointed at one URL whose availability this process controls.
+//
+// It never contacts an image provider on the request goroutine. BirdImageCache.Get
+// is uncancellable and, for a cold species, bounded only by the provider's retry and
+// rate-limit budget (worst case minutes); running it here is what froze the UI, since
+// ~30 queued thumbnail requests also exhaust the browser's per-host connection
+// budget and starve unrelated API calls and the SSE stream. A cold miss instead
+// schedules a background fetch and returns 503 immediately.
+//
 // Route: GET /media/image/:scientific_name
 // Route: GET /media/bird-image/:scientific_name (alias)
 func (c *Handler) ServeSpeciesImageProxy(ctx echo.Context) error {
@@ -3494,27 +3827,21 @@ func (c *Handler) ServeSpeciesImageProxy(ctx echo.Context) error {
 		return c.HandleError(ctx, ErrImageProviderNotAvailable, "Image service unavailable", http.StatusServiceUnavailable)
 	}
 
-	// Look up metadata to know which provider owns this image
-	birdImage, err := cache.Get(scientificName)
-	if err != nil {
-		if errors.Is(err, imageprovider.ErrImageNotFound) {
-			ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", NotFoundCacheSeconds))
-			return c.HandleError(ctx, err, "Image not found for species", http.StatusNotFound)
-		}
-		return c.HandleError(ctx, err, "Failed to fetch species image", http.StatusInternalServerError)
+	// Cached-only lookup: never contacts a provider, so this cannot block.
+	birdImage, found, negative := cache.GetCached(scientificName)
+	switch {
+	case negative:
+		return c.respondImageNotFound(ctx)
+	case !found:
+		cache.PrefetchAsync(scientificName)
+		return c.respondImagePending(ctx, scientificName)
 	}
 
-	// Negative cache entries have no real image URL
-	if birdImage.IsNegativeEntry() || birdImage.URL == "" {
-		ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", NotFoundCacheSeconds))
-		return c.HandleError(ctx, imageprovider.ErrImageNotFound, "Image not found for species", http.StatusNotFound)
-	}
-
-	// Get the file cache from the BirdImageCache
 	fileCache := cache.GetFileCache()
 	if fileCache == nil {
-		// No file cache configured, redirect to external URL
-		return ctx.Redirect(http.StatusFound, birdImage.URL)
+		// Without a file cache the proxy has no bytes to serve and, as a hard
+		// boundary, will not hand the client an external URL instead.
+		return c.respondImagePending(ctx, scientificName)
 	}
 
 	provider := birdImage.SourceProvider
@@ -3535,29 +3862,21 @@ func (c *Handler) ServeSpeciesImageProxy(ctx echo.Context) error {
 		return c.serveImageFile(ctx, cachedPath, contentType)
 	}
 
-	// File not cached or stale - download it
-	newPath, newCT, dlErr := fileCache.DownloadAndStore(ctx.Request().Context(), provider, scientificName, birdImage.URL)
-	if dlErr != nil {
-		// Graceful degradation: serve stale file if available, otherwise redirect
-		if cachedPath != "" {
-			c.LogDebugIfEnabled("Download failed, serving stale cached image",
-				logger.String("scientific_name", scientificName),
-				logger.String("path", cachedPath),
-				logger.Error(dlErr))
-			return c.serveImageFile(ctx, cachedPath, contentType)
-		}
-		c.LogInfoIfEnabled("File cache download failed, redirecting to external URL",
+	// The bytes are missing or stale. Downloading them here would put the request
+	// back on the network path the rest of this handler exists to avoid, and
+	// DownloadAndStore runs its shared work on the first caller's context, so one
+	// aborted tab would cancel the download for every concurrent waiter. Schedule it
+	// on the cache's own goroutine instead.
+	cache.PrefetchAsync(scientificName)
+
+	if cachedPath != "" {
+		c.LogDebugIfEnabled("Serving stale cached image while refreshing in the background",
 			logger.String("scientific_name", scientificName),
-			logger.String("url", birdImage.URL),
-			logger.Error(dlErr))
-		return ctx.Redirect(http.StatusFound, birdImage.URL)
+			logger.String("path", cachedPath))
+		return c.serveImageFile(ctx, cachedPath, contentType)
 	}
 
-	c.LogDebugIfEnabled("Serving freshly downloaded image",
-		logger.String("scientific_name", scientificName),
-		logger.String("path", newPath),
-		logger.String("content_type", newCT))
-	return c.serveImageFile(ctx, newPath, newCT)
+	return c.respondImagePending(ctx, scientificName)
 }
 
 // serveImageFile serves a cached image file with appropriate cache headers.
@@ -3577,6 +3896,11 @@ func (c *Handler) serveImageFile(ctx echo.Context, filePath, contentType string)
 	if contentType != "" {
 		ctx.Response().Header().Set("Content-Type", contentType)
 	}
+	// Species images are public bird reference photos keyed by scientific name
+	// (identical for every user), not access-controlled detection media, so they
+	// stay publicly cacheable even in Private Mode. Unlike the spectrogram/audio
+	// serves they are intentionally NOT routed through mediaCacheVisibility()
+	// (GHSA-c7jx-552f-94hh); this "public" is deliberate, not a missed site.
 	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", ImageCacheSeconds))
 
 	// ETag based on modification time and size

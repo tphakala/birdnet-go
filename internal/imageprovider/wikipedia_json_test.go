@@ -13,7 +13,7 @@ func TestWikiAPIResponseThumbnailDecode(t *testing.T) {
 
 	body := []byte(`{"query":{"pages":[{
 		"title":"Turdus merula",
-		"thumbnail":{"source":"https://upload.wikimedia.org/x.jpg","width":400,"height":300},
+		"thumbnail":{"source":"https://127.0.0.1/x.jpg","width":400,"height":300},
 		"pageimage":"Common_Blackbird.jpg"
 	}]}}`)
 
@@ -24,7 +24,7 @@ func TestWikiAPIResponseThumbnailDecode(t *testing.T) {
 
 	page := resp.Query.Pages[0]
 	require.NotNil(t, page.Thumbnail)
-	assert.Equal(t, "https://upload.wikimedia.org/x.jpg", page.Thumbnail.Source)
+	assert.Equal(t, "https://127.0.0.1/x.jpg", page.Thumbnail.Source)
 	assert.Equal(t, "Common_Blackbird.jpg", page.PageImage)
 }
 
@@ -98,8 +98,11 @@ func TestWikiAPIResponseErrorDecode(t *testing.T) {
 func TestWikiAPIResponseRedirectsNormalizedDecode(t *testing.T) {
 	t.Parallel()
 
-	// redirects/normalized are only used by len() in diagnostics, but the json
-	// tags must stay correct so the counts are non-zero when present.
+	// Normalized is only counted, for diagnostics. Redirects is decoded for its
+	// TARGET, which decides whether the answered page is still about the species
+	// we asked for, so its field tags are asserted: a wrong tag would leave the
+	// length at 1 while every target read as empty, silently disabling the
+	// redirect guard rather than failing anything.
 	body := []byte(`{"query":{
 		"redirects":[{"from":"Parus caeruleus","to":"Cyanistes caeruleus"}],
 		"normalized":[{"from":"parus","to":"Parus"}],
@@ -109,8 +112,30 @@ func TestWikiAPIResponseRedirectsNormalizedDecode(t *testing.T) {
 	var resp wikiAPIResponse
 	require.NoError(t, json.Unmarshal(body, &resp))
 	require.NotNil(t, resp.Query)
-	assert.Len(t, resp.Query.Redirects, 1)
+	require.Len(t, resp.Query.Redirects, 1)
+	assert.Equal(t, "Parus caeruleus", resp.Query.Redirects[0].From, "the redirects[].from tag must decode")
+	assert.Equal(t, "Cyanistes caeruleus", resp.Query.Redirects[0].To, "the redirects[].to tag must decode")
 	assert.Len(t, resp.Query.Normalized, 1)
+}
+
+// TestWikiAPIResponseMissingFlag pins the decode of the field that separates a
+// genuinely absent article, which is cached as a durable negative entry, from a
+// structured API error, which must not be.
+func TestWikiAPIResponseMissingFlag(t *testing.T) {
+	t.Parallel()
+
+	var resp wikiAPIResponse
+	require.NoError(t, json.Unmarshal([]byte(
+		`{"query":{"pages":[{"title":"Nonexistent species","missing":true}]}}`), &resp))
+	require.NotNil(t, resp.Query)
+	require.Len(t, resp.Query.Pages, 1)
+	assert.True(t, resp.Query.Pages[0].Missing, "the pages[].missing tag must decode")
+
+	var present wikiAPIResponse
+	require.NoError(t, json.Unmarshal([]byte(
+		`{"query":{"pages":[{"title":"Turdus merula"}]}}`), &present))
+	require.Len(t, present.Query.Pages, 1)
+	assert.False(t, present.Query.Pages[0].Missing, "an ordinary page must not decode as missing")
 }
 
 func TestWikiAPIResponseMissingFields(t *testing.T) {

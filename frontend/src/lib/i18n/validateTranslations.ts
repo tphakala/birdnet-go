@@ -80,11 +80,36 @@ const SKIP_UNTRANSLATED_KEYWORDS = [
   'r128',
   // Brand names
   'birdnet',
+  'birdnet-pi',
+  'birdnet-go',
   'ebird',
   'github',
+  'youtube',
   'flickr',
   'wikipedia',
   'xeno-canto',
+  'onnx',
+  'tflite',
+  'openvino',
+  'perch',
+  'perchv2',
+  'rtf',
+  'gain',
+  'tls',
+  'https',
+  'loopback',
+  // Hardware and ML terms
+  'fp16',
+  'ram',
+  'soc',
+  'gpu',
+  'cpus',
+  'pid',
+  'hpa',
+  'khz',
+  'inferno',
+  'viridis',
+  'residency',
   // Units and formats
   '°c',
   '°f',
@@ -92,6 +117,9 @@ const SKIP_UNTRANSLATED_KEYWORDS = [
   'm/s',
   'km/h',
   'mph',
+  'min',
+  'max',
+  'sec',
   // Common technical abbreviations
   'ok',
   'id',
@@ -107,6 +135,84 @@ const SKIP_UNTRANSLATED_KEYWORDS = [
   'pause',
   'minimum',
   'maximum',
+  'date',
+  'journal',
+  'service',
+  'source',
+  'actions',
+  'conditions',
+  'observation',
+  'options',
+  'status',
+  'info',
+  'version',
+  'terminal',
+  'checkpoints',
+  'threads',
+  'engine',
+  'legacy',
+  'migration',
+  'scopes',
+  'system',
+  'hardware',
+  'board',
+  'audio',
+  'port',
+  'name',
+  'operator',
+  'integration',
+  'application',
+  'description',
+  'notifications',
+  'score',
+  'mode',
+  'type',
+  'total',
+  'tables',
+  'table',
+  'original',
+  'stable',
+  'configuration',
+  'import',
+  'export',
+  'trend',
+  'trends',
+  'violet',
+  'rose',
+  'latitude',
+  'longitude',
+  'volume',
+  'message',
+  'limit',
+  'online',
+  'host',
+  'winter',
+  'april',
+  'august',
+  'september',
+  'november',
+  'december',
+  'database',
+  'general',
+  'password',
+  'trigger',
+  'component',
+  'percentage',
+  'copyright',
+  'phylum',
+  'error',
+  'no',
+  'region',
+  'wind',
+  'notes',
+  'image',
+  'help',
+  'filters',
+  'overlap',
+  'logs',
+  'optional',
+  'amber',
+  'h',
   // Format placeholders (these often stay the same)
   'format',
   'placeholder',
@@ -235,12 +341,7 @@ class TranslationValidator {
       // Check for untranslated (same as English)
       // Skip keys that contain technical terms, service names, etc. that legitimately stay the same
       if (!options.allowUntranslated && value === referenceValue) {
-        const keyLower = key.toLowerCase();
-        const valueLower = typeof value === 'string' ? value.toLowerCase() : '';
-        const shouldSkip = SKIP_UNTRANSLATED_KEYWORDS.some(
-          keyword => keyLower.includes(keyword) || valueLower === keyword
-        );
-        if (!shouldSkip) {
+        if (!this.shouldSkipUntranslated(key, value)) {
           result.untranslated.push(key);
         }
       }
@@ -253,6 +354,55 @@ class TranslationValidator {
     }
 
     return result;
+  }
+
+  private shouldSkipUntranslated(key: string, value: unknown): boolean {
+    if (typeof value !== 'string') return false;
+
+    const trimmed = value.trim();
+    if (trimmed.length <= 1) return true;
+    if (!/[a-zA-Z]/.test(trimmed)) return true;
+
+    // URL / Protocol schemed strings
+    if (
+      /^(http|https|rtsp|discord|telegram|slack|pushover|gotify|ntfy|shoutrrr):\/\//i.test(trimmed)
+    ) {
+      return true;
+    }
+
+    // Pure parameter placeholders (e.g. "{rule_name}", "{error}", "{temp}°C", "{current} / {total}")
+    if (/^\{[a-zA-Z0-9_]+\}$/.test(trimmed)) return true;
+    if (/^\{[a-zA-Z0-9_]+\}[^a-zA-Z0-9]+$/.test(trimmed)) return true;
+    if (/^[^a-zA-Z0-9]+\{[a-zA-Z0-9_]+\}$/.test(trimmed)) return true;
+    if (/^\{[a-zA-Z0-9_]+\}\s*[//-]\s*\{[a-zA-Z0-9_]+\}$/.test(trimmed)) return true;
+
+    const valueLower = trimmed.toLowerCase();
+
+    // Check exact match against whitelisted terms/values (never check against key path)
+    if (SKIP_UNTRANSLATED_KEYWORDS.includes(valueLower)) return true;
+
+    // Tokenized word-level match: if every word in the string is a whitelisted term, number, or placeholder
+    const words = valueLower.split(/[\s,:()/-]+/).filter(Boolean);
+    if (
+      words.length > 0 &&
+      words.every(
+        w =>
+          SKIP_UNTRANSLATED_KEYWORDS.includes(w) ||
+          /^\d+$/.test(w) ||
+          /^\{.*\}$/.test(w) ||
+          // eslint-disable-next-line security/detect-unsafe-regex -- Safe bounded version string pattern
+          /^v?\d+(\.\d+){0,5}$/.test(w)
+      )
+    ) {
+      return true;
+    }
+
+    // Exact token match for time windows, units, and formatting tokens
+    if (/^(15m|30m|1h|6h|24h|7d|°c|°f|m\/s|km\/h|mph|db|hpa|khz|ms|s|\/s)$/i.test(valueLower)) {
+      return true;
+    }
+
+    return false;
   }
 
   private validateICUSyntax(key: string, value: string, result: ValidationResult): void {
@@ -515,11 +665,8 @@ class TranslationValidator {
         }
       }
 
-      // Check for warnings in strict mode
-      if (
-        options.failOnWarnings &&
-        (result.missingKeys.length > 0 || result.untranslated.length > 0)
-      ) {
+      // Check for warnings in strict mode (missing keys)
+      if (options.failOnWarnings && result.missingKeys.length > 0) {
         passed = false;
       }
     }

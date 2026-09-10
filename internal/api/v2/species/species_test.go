@@ -298,8 +298,8 @@ func TestSpeciesInfoJSONSerialization(t *testing.T) {
 			Status:           RarityCommon,
 			Score:            0.65,
 			LocationBased:    true,
-			Latitude:         40.7128,
-			Longitude:        -74.006,
+			Latitude:         new(40.7128),
+			Longitude:        new(-74.006),
 			Date:             "2024-01-15",
 			ThresholdApplied: 0.03,
 		},
@@ -338,8 +338,8 @@ func TestSpeciesRarityInfoJSONSerialization(t *testing.T) {
 		Status:           RarityRare,
 		Score:            0.08,
 		LocationBased:    true,
-		Latitude:         60.1699,
-		Longitude:        24.9384,
+		Latitude:         new(60.1699),
+		Longitude:        new(24.9384),
 		Date:             "2024-06-15",
 		ThresholdApplied: 0.05,
 	}
@@ -357,6 +357,64 @@ func TestSpeciesRarityInfoJSONSerialization(t *testing.T) {
 	assert.InDelta(t, 24.9384, parsed["longitude"].(float64), 0.001)
 	assert.Equal(t, "2024-06-15", parsed["date"])
 	assert.InDelta(t, 0.05, parsed["threshold_applied"].(float64), 0.001)
+}
+
+// TestSpeciesRarityInfoZeroCoordinatesSerialized guards the fix for a station configured
+// at exactly 0.0 latitude or longitude (equator / prime meridian). With the old
+// float64+omitempty tag these keys were dropped at 0.0, and the frontend crashed calling
+// toFixed on the missing field. As *float64 they must be present and equal to 0.
+func TestSpeciesRarityInfoZeroCoordinatesSerialized(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "species")
+	t.Attr("type", "unit")
+	t.Attr("feature", "json-serialization")
+
+	info := SpeciesRarityInfo{
+		Status:        RarityRare,
+		Score:         0.08,
+		LocationBased: true,
+		Latitude:      new(0.0),
+		Longitude:     new(0.0),
+		Date:          "2024-06-15",
+	}
+
+	data, err := json.Marshal(info)
+	require.NoError(t, err)
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(data, &parsed))
+
+	// The keys must be present (not omitted) even though the value is exactly 0.
+	require.Contains(t, parsed, "latitude")
+	require.Contains(t, parsed, "longitude")
+	assert.InDelta(t, 0.0, parsed["latitude"].(float64), 0.0001)
+	assert.InDelta(t, 0.0, parsed["longitude"].(float64), 0.0001)
+}
+
+// TestSpeciesRarityInfoOmitsUnsetCoordinates verifies that when no location is configured
+// (nil coordinate pointers) the keys are omitted entirely, keeping the honest "no location"
+// semantics rather than emitting a misleading 0,0 (Null Island).
+func TestSpeciesRarityInfoOmitsUnsetCoordinates(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "species")
+	t.Attr("type", "unit")
+	t.Attr("feature", "json-serialization")
+
+	info := SpeciesRarityInfo{
+		Status:        RarityUnknown,
+		Score:         0,
+		LocationBased: false,
+		Date:          "2024-06-15",
+	}
+
+	data, err := json.Marshal(info)
+	require.NoError(t, err)
+
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(data, &parsed))
+
+	assert.NotContains(t, parsed, "latitude")
+	assert.NotContains(t, parsed, "longitude")
 }
 
 // TestTaxonomyHierarchyJSONSerialization tests that TaxonomyHierarchy serializes correctly.
@@ -718,7 +776,12 @@ func TestComputeRarity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			gotScore, gotStatus := computeRarity(tt.targetSci, scores, geomodelLabels, classifierLabels)
+			gotScore, gotStatus := computeRarity(&classifier.RarityContext{
+				FilterActive:     true,
+				Scores:           scores,
+				GeomodelLabels:   geomodelLabels,
+				ClassifierLabels: classifierLabels,
+			}, tt.targetSci)
 			assert.InDelta(t, tt.wantScore, gotScore, 0.001)
 			assert.Equal(t, tt.wantStatus, gotStatus)
 		})
@@ -727,9 +790,33 @@ func TestComputeRarity(t *testing.T) {
 
 func TestComputeRarity_Empty(t *testing.T) {
 	t.Parallel()
-	gotScore, gotStatus := computeRarity("Turdus migratorius", nil, nil, nil)
+	gotScore, gotStatus := computeRarity(&classifier.RarityContext{FilterActive: true}, "Turdus migratorius")
 	assert.InDelta(t, 0.0, gotScore, 0.001)
 	assert.Equal(t, RarityUnknown, gotStatus)
+}
+
+// TestComputeRarity_InactiveFilterReportsUnknown pins #3935: when the range filter
+// is not active, GetRarityContext yields synthetic zero scores for every label, so a
+// covered species would otherwise be misreported as "very rare" at 0%. With the
+// filter inactive the occurrence probability is unknown regardless of coverage or
+// any score present in the list.
+func TestComputeRarity_InactiveFilterReportsUnknown(t *testing.T) {
+	t.Parallel()
+
+	labels := []string{testSciName + "_" + testCommonName}
+	// The species is present in both the geomodel vocabulary and the score list, so
+	// with an active filter this would resolve to a real rarity. An inactive filter
+	// means the 0.0 score is synthetic and must report unknown, not very rare.
+	scores := []classifier.SpeciesScore{{Label: testSciName + "_" + testCommonName, Score: 0.0}}
+
+	score, status := computeRarity(&classifier.RarityContext{
+		FilterActive:     false,
+		Scores:           scores,
+		GeomodelLabels:   labels,
+		ClassifierLabels: labels,
+	}, testSciName)
+	assert.InDelta(t, 0.0, score, 0.001)
+	assert.Equal(t, RarityUnknown, status, "an inactive range filter yields unknown rarity, not very rare (#3935)")
 }
 
 // TestComputeRarity_GeomodelLabelsTakePrecedence pins the reported bug. Coverage is
@@ -745,11 +832,19 @@ func TestComputeRarity_GeomodelLabelsTakePrecedence(t *testing.T) {
 		testSciName + "_" + testCommonName,
 	}
 
-	_, status := computeRarity(testSciName, nil, geomodelLabels, classifierLabels)
+	_, status := computeRarity(&classifier.RarityContext{
+		FilterActive:     true,
+		GeomodelLabels:   geomodelLabels,
+		ClassifierLabels: classifierLabels,
+	}, testSciName)
 	assert.Equal(t, RarityUnknown, status,
 		"classifier-only species has no geomodel occurrence probability")
 
-	_, status = computeRarity(testCanonName, nil, geomodelLabels, classifierLabels)
+	_, status = computeRarity(&classifier.RarityContext{
+		FilterActive:     true,
+		GeomodelLabels:   geomodelLabels,
+		ClassifierLabels: classifierLabels,
+	}, testCanonName)
 	assert.Equal(t, RarityVeryRare, status,
 		"geomodel-covered species below threshold is very rare")
 }
@@ -792,7 +887,10 @@ func TestComputeRarity_NoGeomodelLabels(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			gotScore, gotStatus := computeRarity(tt.targetSci, nil, nil, classifierLabels)
+			gotScore, gotStatus := computeRarity(&classifier.RarityContext{
+				FilterActive:     true,
+				ClassifierLabels: classifierLabels,
+			}, tt.targetSci)
 			assert.InDelta(t, 0.0, gotScore, 0.001)
 			assert.Equal(t, tt.wantStatus, gotStatus)
 		})
@@ -850,11 +948,21 @@ func TestComputeRarity_CollidingSpecies(t *testing.T) {
 		{Label: collidingSciB + "_" + collidingCommonB, Score: 0.1},
 	}
 
-	gotScore, gotStatus := computeRarity(collidingSciB, scores, labels, labels)
+	gotScore, gotStatus := computeRarity(&classifier.RarityContext{
+		FilterActive:     true,
+		Scores:           scores,
+		GeomodelLabels:   labels,
+		ClassifierLabels: labels,
+	}, collidingSciB)
 	assert.InDelta(t, 0.1, gotScore, 0.001, "the merged species must keep its own score")
 	assert.Equal(t, RarityRare, gotStatus)
 
-	gotScore, gotStatus = computeRarity(collidingSciA, scores, labels, labels)
+	gotScore, gotStatus = computeRarity(&classifier.RarityContext{
+		FilterActive:     true,
+		Scores:           scores,
+		GeomodelLabels:   labels,
+		ClassifierLabels: labels,
+	}, collidingSciA)
 	assert.InDelta(t, 0.9, gotScore, 0.001)
 	assert.Equal(t, RarityVeryCommon, gotStatus)
 }
@@ -890,7 +998,12 @@ func TestComputeRarity_SyntheticScoresReportUnknown(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			scores := []classifier.SpeciesScore{{Label: unmappedSci + "_Brandt's Bat", Score: tt.score}}
-			gotScore, gotStatus := computeRarity(unmappedSci, scores, geomodelLabels, classifierLabels)
+			gotScore, gotStatus := computeRarity(&classifier.RarityContext{
+				FilterActive:     true,
+				Scores:           scores,
+				GeomodelLabels:   geomodelLabels,
+				ClassifierLabels: classifierLabels,
+			}, unmappedSci)
 			assert.Equal(t, RarityUnknown, gotStatus, tt.why)
 			assert.InDelta(t, 0.0, gotScore, 0.001)
 		})

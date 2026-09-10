@@ -92,9 +92,9 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 
 | Method | Route                                 | Handler                    | Auth | Description                        |
 | ------ | ------------------------------------- | -------------------------- | ---- | ---------------------------------- |
-| GET    | `/analytics/species/daily`            | `GetDailySpeciesSummary`   | ❌   | Daily species detection summary    |
+| GET    | `/analytics/species/daily`            | `GetDailySpeciesSummary`   | ❌   | Daily species detection summary (`first_heard` earliest, `latest_heard` latest call of the day) |
 | GET    | `/analytics/species/summary`          | `GetSpeciesSummary`        | ❌   | Overall species statistics         |
-| GET    | `/analytics/species/detections/new`   | `GetNewSpeciesDetections`  | ❌   | Recently detected new species      |
+| GET    | `/analytics/species/detections/new`   | `GetNewSpeciesDetections`  | ❌   | Recently detected new species, with the non-false-positive detection count in `count_in_period` |
 | GET    | `/analytics/species/thumbnails`       | `GetSpeciesThumbnails`     | ❌   | Species thumbnail images           |
 | GET    | `/analytics/species/accumulation`     | `GetSpeciesAccumulation`   | ❌   | Species accumulation curve (biodiversity collector's curve): per calendar day, the cumulative count of distinct species first detected within the range (false positives excluded; "first seen" is bounded to the window, not lifetime). All-species (no species filter). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days) |
 | GET    | `/analytics/species/phenology`        | `GetSpeciesPhenology`      | ❌   | Arrival/departure phenology (residency-bar Gantt): per species, the first and last detection date (station-local, false positives excluded) plus the in-range detection count, for the top-N species by volume. All-species top-N (no species filter). `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); `limit` optional (default 12, max 20) |
@@ -135,7 +135,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 
 | Method | Route                         | Handler                 | Auth | Description                                |
 | ------ | ----------------------------- | ----------------------- | ---- | ------------------------------------------ |
-| GET    | `/detections`                 | `GetDetections`         | ❌   | List bird detections                       |
+| GET    | `/detections`                 | `GetDetections`         | ❌   | List bird detections; `source` (id from `/analytics/sources`, display name, node name or URI) restricts to an audio source |
 | GET    | `/detections/:id`             | `GetDetection`          | ❌   | Get specific detection                     |
 | GET    | `/detections/recent`          | `GetRecentDetections`   | ❌   | Recent detections                          |
 | GET    | `/detections/:id/time-of-day` | `GetDetectionTimeOfDay` | ❌   | Detection time context                     |
@@ -175,8 +175,24 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | GET    | `/media/species-image/info`          | `GetSpeciesImageInfo`    | ❌   | Get species image attribution      |
 | GET    | `/media/image/:scientific_name`      | `ServeSpeciesImageProxy` | ❌   | Serve cached bird image (proxy)    |
 | GET    | `/media/bird-image/:scientific_name` | `ServeSpeciesImageProxy` | ❌   | Alias for image proxy endpoint     |
+| GET    | `/audio/:id`                         | `ServeAudioByID`         | ❌   | Serve detection audio clip by ID   |
+| GET    | `/spectrogram/:id`                   | `ServeSpectrogramByID`   | ❌   | Serve detection spectrogram by ID  |
+| POST   | `/spectrogram/:id/generate`          | `GenerateSpectrogramByID` | ❌   | Trigger spectrogram generation     |
 | GET    | `/spectrogram/:id/status`            | `GetSpectrogramStatus`   | ❌   | Get spectrogram generation status  |
 | POST   | `/audio/:id/clip`                    | `ExtractAudioClipByID`   | ✅   | Extract audio clip from time range |
+| POST   | `/audio/:id/audible-bats`            | `AudibleBatsByID`        | ✅   | Time-expand bat clip into audible range |
+
+**Pending species image (`503 + Retry-After`).** The image endpoints never contact an
+image provider on the request goroutine: a cold species can take minutes to resolve
+through the provider chain, and thirty queued thumbnail requests also exhaust a
+browser's per-host connection budget, which is what made the whole UI appear frozen. A
+species whose image is not cached yet therefore answers **503** with `Retry-After: 5`
+and `Cache-Control: no-store`, and a background fetch is scheduled; a species that is
+known to have no image answers **404** with a long `max-age`. The two cache directives
+are load-bearing: an `<img>` error event exposes no status code, so the browser's own
+HTTP cache is what lets a client retry cheaply (the 404 is served from cache with no
+network hop, the 503 reaches the server). The proxy is a hard boundary and never
+redirects a client to the upstream image host.
 
 **Pending clip handling (`503 + Retry-After`).** A detection's DB record and SSE
 broadcast are emitted before its audio clip is written, and with Extended Capture the
@@ -202,7 +218,7 @@ reported to telemetry, since they are expected, self-resolving backpressure.
 | DELETE | `/notifications/:id`               | `DeleteNotification`               | ✅   | Delete notification                                                                                                 |
 | GET    | `/notifications/unread/count`      | `GetUnreadCount`                   | ❌   | Count unread notifications (public read-only). Used by dashboard NotificationBell.                                  |
 | POST   | `/notifications/test/new-species`  | `CreateTestNewSpeciesNotification` | ✅   | Create test new-species notification                                                                                |
-| GET    | `/notifications/check-ntfy-server` | `CheckNtfyServer`                  | ✅   | Probe NTFY host for HTTPS/HTTP connectivity (authenticated to prevent SSRF relay). Query: `host=<hostname[:port]>`. |
+| POST   | `/notifications/check-ntfy-server` | `CheckNtfyServer`                  | ✅   | Probe NTFY host for HTTPS/HTTP connectivity. POST (CSRF-protected) with JSON body `{"host":"<hostname[:port]>"}`; the probe is SSRF-guarded so it cannot relay to link-local/metadata targets. |
 
 ### Range Filter (`range/range.go`)
 
@@ -239,17 +255,11 @@ The `GET /settings/dashboard` endpoint is intentionally public so that unauthent
 
 **Restart-required signal:** `PUT /settings` and `PATCH /settings/:section` responses include `restart_required` (bool) and `restart_reasons` (string[]), reflecting the global restart state also served by `GET /system/restart-status`. Settings bound once at startup that cannot hot-reload set this flag: web server / TLS settings, database (`output`), logging, and TLS certificate operations. `restart_reasons` carries i18n message keys (e.g. `restart.reasons.database`), not English text; the SPA resolves them via the translation catalog. The flag is sticky (it clears when the process actually restarts) and is not cleared by reverting the change.
 
-**Blocked fields:** a set of fields can never be written through the settings API, on either write path. `PUT /settings` skips them during its field walk; `PATCH /settings/:section` merges the request and then restores them from the pre-update snapshot. Sending such a field is not an error: the rest of the request is applied normally and only the blocked values are reverted.
+**Blocked fields:** a set of fields can never be written through the settings API, on either write path. Both `PUT /settings` and `PATCH /settings/:section` merge the request into the current settings and then restore the blocked fields from the pre-update snapshot. Sending such a field is not an error: the rest of the request is applied normally and only the blocked values are reverted.
 
 The set covers generated credentials (`Security.SessionSecret`, `Security.BasicAuth.ClientID`/`ClientSecret`, `Diagnostics.Profiling.Token`), the session and OAuth2 lifetimes (`Security.SessionDuration`, `Security.BasicAuth.AuthCodeExp`/`AccessTokenExp`), the server-validated ffmpeg/sox tool paths and the sox format list (`Realtime.Audio.FfmpegPath`/`SoxPath`/`SoxAudioTypes`), the range-filter model selection (`BirdNET.RangeFilter.Model`), and runtime state the process populates for itself (`Version`, `BuildDate`, `SystemID`, `ValidationWarnings`, `Input`, `BirdNET.Labels`, `BirdNET.RangeFilter.Species`/`LastUpdated`). Note that several of these are ordinary `config.yaml` keys: they are settable by editing the config file, just not through the API.
 
-The two verbs report differently under the same `skippedFields` response key, so do not treat a non-empty list from `PUT` as a rejection:
-
-| | `PATCH /settings/:section` | `PUT /settings` |
-| --- | --- | --- |
-| Contents | only the paths whose value the request actually changed, sorted (every blocked field is reverted regardless; the list is the subset that differed) | every blocked path the walk passed, plus every `yaml:"-"` field as `<path> (runtime-only)` |
-| Depends on the request | yes | no |
-| Empty when nothing was rejected | yes (`[]`) | never (a no-op request returns ~25 entries) |
+Both verbs report identically under the `skippedFields` response key: it lists only the blocked paths whose value the request actually changed, sorted (every blocked field is reverted regardless; the list is the subset that differed), and it is an empty array (`[]`) when nothing was reverted. Do not treat a non-empty list as a request failure. Because the frontend sends the whole settings object on every save, a `PUT` that carries the blanked `Security.BasicAuth.ClientID`/`ClientSecret` reports those two whenever BasicAuth is configured; that is expected and the rest of the save still applies.
 
 **Quiet Hours** (`settings_audio.go`): The `realtime` settings section includes quiet hours configuration for both individual RTSP streams (`realtime.rtsp.streams[].quietHours`) and the sound card (`realtime.audio.quietHours`). Each `QuietHoursConfig` supports:
 
@@ -532,6 +542,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 **Query Parameters:**
 
 - All insights endpoints accept optional `model_id` query parameter to filter by BirdNET model
+- `/insights/dawn-chorus` also accepts `period_days` (default 30, 1 to 365) and `min_days` (default 3, clamped to `period_days`); the response echoes both as `period_days` and `min_days`
 
 ### Models (`models/models.go`)
 
@@ -539,8 +550,10 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 | ------ | ------------------------------ | ----------------------- | ---- | ----------------------------------------------------- |
 | GET    | `/models`                      | `ListModels`            | ❌   | List available classifier models                      |
 | GET    | `/models/catalog`              | `GetModelCatalog`       | ❌   | Model gallery catalog with install status             |
+| GET    | `/models/regions`              | `GetModelRegions`       | ✅   | Region selector data: selectable regions, the auto-resolved region for the configured coordinates, and per-family resolution (auth-gated; never echoes raw coordinates) |
+| GET    | `/models/regions/:slug/map`    | `GetRegionCoverageMap`  | ❌   | Embedded SVG coverage map for a region slug (public static asset; strong ETag, honors If-None-Match; 404 when no map exists for the slug) |
 | GET    | `/models/installed`            | `GetInstalledModels`    | ❌   | List downloaded models                                |
-| POST   | `/models/install/:id`          | `InstallModel`          | ✅   | Download and install a catalog model                  |
+| POST   | `/models/install/:id`          | `InstallModel`          | ✅   | Download and install a catalog variant; body `{variantId?, allowIncompatible?}`. A variant incompatible with the detected hardware is rejected with 409 unless `allowIncompatible:true` |
 | POST   | `/models/reinstall/:id`        | `ReinstallModel`        | ✅   | Re-download missing/corrupt files for installed model |
 | DELETE | `/models/installed/:id`        | `UninstallModel`        | ✅   | Remove an installed model from disk                   |
 | GET    | `/models/install/:id/progress` | `StreamInstallProgress` | ❌   | SSE stream for install/reinstall progress             |
@@ -609,7 +622,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
 **GET /api/v2/system/diagnostics/status** - Returns the overall health status and per-category breakdown from the most recent diagnostic run. Returns `{"status": "unknown"}` if no diagnostics have been run yet.
 
-**POST /api/v2/system/diagnostics/run** - Executes all registered health checks in parallel (31 checks across 8 categories: system, audio, analysis, streams, database, network, config, logs). Returns a full `DiagnosticsReport` with per-check results, timing, and summary.
+**POST /api/v2/system/diagnostics/run** - Executes all registered health checks in parallel (31 checks across 8 categories: system, audio, analysis, streams, database, network, config, logs). Returns a full `DiagnosticsReport` with per-check results, timing, and summary. Optional query params: `window` (analysis time window) and `refresh_integrity=true`, which clears the cached database integrity result so this run re-runs the SQLite `PRAGMA quick_check` instead of reusing a result cached up to 24h (a present but unparseable value returns 400). Leave `refresh_integrity` unset for the passive status page: `quick_check` runs on the single pinned SQLite connection and can stall writes on a large database. Forced refreshes are coalesced with a short cooldown, so repeated requests cannot re-trigger back-to-back scans.
 
 **GET /api/v2/system/diagnostics/report/:id** - Retrieves a previously completed diagnostics report by its UUID. Up to 10 reports are cached in memory.
 
@@ -620,7 +633,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 - ✅ = Authentication required
 - ✅ publicLiveAudio = Authentication required unless `PublicAccess.LiveAudio` is enabled (dynamic per-request check)
 - 🔑 token = Token-based access - the crypto-random `stream_token` returned by `/start` acts as the credential
-- ❌ = No authentication required
+- ❌ = No authentication required in normal mode. When `Security.PrivateMode` is enabled these routes still require authentication: the whole API is gated by `PrivateModeAuth`, except the bootstrap/auth/live-audio entries in `isPrivateModeExempt`.
 - ⚡ = Rate limited
 - 🔒 = Admin only (subset of authenticated)
 

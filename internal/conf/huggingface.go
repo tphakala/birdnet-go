@@ -45,11 +45,8 @@ const (
 //
 // The result never ends in a slash, so callers can append "/" + path.
 func ResolveHuggingFaceEndpoint(configured string) string {
-	raw, source := configured, endpointSourceSettings
-	if strings.TrimSpace(raw) == "" {
-		raw, source = os.Getenv(HuggingFaceEndpointEnvVar), HuggingFaceEndpointEnvVar
-	}
-	if strings.TrimSpace(raw) == "" {
+	raw, source, hasValue := huggingFaceOverrideSource(configured)
+	if !hasValue {
 		return DefaultHuggingFaceEndpoint
 	}
 
@@ -66,6 +63,23 @@ func ResolveHuggingFaceEndpoint(configured string) string {
 		return DefaultHuggingFaceEndpoint
 	}
 	return endpoint
+}
+
+// huggingFaceOverrideSource returns the raw HuggingFace endpoint override in
+// effect and where it came from, preferring the configured settings value over
+// the HuggingFaceEndpointEnvVar environment variable. hasValue is false when
+// neither is set (after trimming), so the caller applies its own default. raw is
+// returned untrimmed so a caller can echo the exact rejected value in a log or
+// error; normalizeHuggingFaceEndpoint trims internally. Centralizing the
+// settings-then-env precedence here keeps ResolveHuggingFaceEndpoint and
+// ResolveHuggingFaceEndpointChain from silently diverging if the precedence
+// order ever changes.
+func huggingFaceOverrideSource(configured string) (raw, source string, hasValue bool) {
+	raw, source = configured, endpointSourceSettings
+	if strings.TrimSpace(raw) == "" {
+		raw, source = os.Getenv(HuggingFaceEndpointEnvVar), HuggingFaceEndpointEnvVar
+	}
+	return raw, source, strings.TrimSpace(raw) != ""
 }
 
 // normalizeHuggingFaceEndpoint trims and validates an endpoint override,

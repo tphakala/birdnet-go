@@ -74,6 +74,18 @@ func ValidateBirdNETSettings(cfg *BirdNETConfig) ValidationResult {
 			fmt.Sprintf("BirdNET openvinodevice '%s' is not recognised; must be 'auto', 'cpu', or 'gpu' - will use 'auto'", cfg.OpenVINODevice))
 	}
 
+	// ModelRegion must be "auto", "global", or a well-formed region slug when
+	// non-empty. Validation is syntactic only: a well-formed but unknown slug is
+	// accepted (the per-family resolver degrades it to coordinates then global,
+	// and it may be valid for a family added later). A malformed value normalizes
+	// to "auto" so an aged or hand-edited config never blocks startup.
+	if cfg.ModelRegion != "" && cfg.ModelRegion != ModelRegionAuto && cfg.ModelRegion != ModelRegionGlobal &&
+		!ModelRegionSlugPattern.MatchString(cfg.ModelRegion) {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("BirdNET modelregion '%s' is not a valid region; must be 'auto', 'global', or a region slug - will use 'auto'", cfg.ModelRegion))
+		normalized.ModelRegion = ModelRegionAuto
+	}
+
 	checkRange(&result, cfg.RangeFilter.Threshold, 0, 1, "RangeFilter threshold must be between 0 and 1")
 
 	// Locale validation and normalization (pure transformation)

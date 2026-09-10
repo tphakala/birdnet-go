@@ -247,7 +247,7 @@ type Interface interface {
 	SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error)
 	// Dynamic Threshold methods
 	SaveDynamicThreshold(threshold *DynamicThreshold) error
-	GetDynamicThreshold(speciesName, modelName string) (*DynamicThreshold, error)
+	GetDynamicThreshold(speciesName string) (*DynamicThreshold, error)
 	GetAllDynamicThresholds(limit ...int) ([]DynamicThreshold, error) // Optional limit parameter
 	DeleteDynamicThreshold(speciesName string) error
 	DeleteExpiredDynamicThresholds(before time.Time) (int64, error) // Returns count deleted
@@ -356,24 +356,18 @@ func New(settings *conf.Settings) Interface {
 	case settings.Output.SQLite.Enabled:
 		return &SQLiteStore{
 			Settings: settings,
-			DataStore: DataStore{
-				SunCalc: sunCalc,
-			},
+			SunCalc:  sunCalc,
 		}
 	case settings.Output.MySQL.Enabled:
 		return &MySQLStore{
 			Settings: settings,
-			DataStore: DataStore{
-				SunCalc: sunCalc,
-			},
+			SunCalc:  sunCalc,
 		}
 	default:
 		// No database explicitly enabled — default to SQLite
 		return &SQLiteStore{
 			Settings: settings,
-			DataStore: DataStore{
-				SunCalc: sunCalc,
-			},
+			SunCalc:  sunCalc,
 		}
 	}
 }
@@ -701,6 +695,7 @@ func (ds *DataStore) GetTopBirdsData(ctx context.Context, selectedDate string, m
 		Confidence     float64
 		Date           string
 		Time           string
+		FirstTime      string
 	}
 
 	var results []SpeciesCount
@@ -715,7 +710,7 @@ func (ds *DataStore) GetTopBirdsData(ctx context.Context, selectedDate string, m
 	// Exclude detections marked as false_positive
 	query := ds.DB.WithContext(ctx).Table("notes").
 		Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id").
-		Select("notes.common_name, notes.scientific_name, notes.species_code, COUNT(*) as count, MAX(notes.confidence) as confidence, notes.date, MAX(notes.time) as time").
+		Select("notes.common_name, notes.scientific_name, notes.species_code, COUNT(*) as count, MAX(notes.confidence) as confidence, notes.date, MAX(notes.time) as time, MIN(notes.time) as first_time").
 		Where("notes.date = ? AND notes.confidence >= ?", selectedDate, minConfidenceNormalized).
 		Where("(note_reviews.verified IS NULL OR note_reviews.verified != ?)", string(entities.VerificationFalsePositive)).
 		Group("notes.common_name, notes.scientific_name, notes.species_code, notes.date").
@@ -743,6 +738,7 @@ func (ds *DataStore) GetTopBirdsData(ctx context.Context, selectedDate string, m
 			Confidence:     result.Confidence,
 			Date:           result.Date,
 			Time:           result.Time,
+			FirstTime:      result.FirstTime,
 		}
 
 		// Add this note to our results
@@ -2140,10 +2136,9 @@ func (ds *DataStore) CountHourlyDetections(date, hour string, duration int) (int
 // SearchFilters defines parameters for filtering detection records
 type SearchFilters struct {
 	Species string
-	// SpeciesScientific holds exact scientific names the client already resolved
-	// (e.g. in the browser from a per-visitor name dictionary). They are resolved
-	// to label IDs and OR-ed into the species match, so an ambiguous localized
-	// common name can match multiple species without server-locale resolution.
+	// SpeciesScientific holds exact scientific names resolved before the datastore
+	// query, either by the client dictionary or the API's active-locale common-name
+	// substring resolver. They are OR-ed into the free-text species match.
 	SpeciesScientific []string
 	DateStart         string
 	DateEnd           string
@@ -2223,8 +2218,7 @@ func (f *SearchFilters) sanitise() error {
 //
 // filters.Species is a free-text substring match on the scientific or common name.
 // filters.SpeciesScientific is an exact match on any of the listed scientific names,
-// used when the client already resolved the term (e.g. in the browser from the
-// per-visitor name dictionary, which sends scientific names with an empty Species).
+// used when either the API or client dictionary resolved common-name alternatives.
 // When both are present they are OR-ed so the result is their union, mirroring the
 // v2 search path. Without the SpeciesScientific branch a dictionary-resolved search
 // (empty Species) would match every species on the legacy datastore.

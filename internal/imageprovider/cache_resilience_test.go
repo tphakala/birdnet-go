@@ -23,7 +23,7 @@ type emptyNameProvider struct {
 func (p *emptyNameProvider) Fetch(scientificName string) (imageprovider.BirdImage, error) {
 	p.fetchCount.Add(1)
 	return imageprovider.BirdImage{
-		URL:         fmt.Sprintf("http://example.com/%s.jpg", scientificName),
+		URL:         fmt.Sprintf("http://127.0.0.1/%s.jpg", scientificName),
 		LicenseName: "CC BY 4.0",
 		AuthorName:  "Test Author",
 		CachedAt:    time.Now(),
@@ -85,9 +85,7 @@ type mockCorruptStore struct {
 
 func newMockCorruptStore() *mockCorruptStore {
 	return &mockCorruptStore{
-		mockStore: mockStore{
-			images: make(map[string]*datastore.ImageCache),
-		},
+		images: make(map[string]*datastore.ImageCache),
 	}
 }
 

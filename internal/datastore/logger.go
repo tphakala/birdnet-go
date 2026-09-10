@@ -35,14 +35,23 @@ type GormLogger struct {
 	SlowThreshold time.Duration
 	LogLevel      gormlogger.LogLevel
 	metrics       *Metrics
+	// dialect names the SQL backend ("sqlite", "mysql") so a failed-query log
+	// line says which engine produced the error. Some SQL faults are dialect
+	// specific (e.g. a MySQL-only syntax error, GitHub #3833); without this the
+	// triager cannot tell the MySQL path from the SQLite path. Empty for a
+	// dialect-agnostic logger (management/index operations), in which case the
+	// field is omitted from the log line.
+	dialect string
 }
 
-// NewGormLogger creates a new GORM logger instance
-func NewGormLogger(slowThreshold time.Duration, logLevel gormlogger.LogLevel, metrics *Metrics) *GormLogger {
+// NewGormLogger creates a new GORM logger instance. dialect names the SQL
+// backend ("sqlite"/"mysql"); pass "" for a dialect-agnostic logger.
+func NewGormLogger(slowThreshold time.Duration, logLevel gormlogger.LogLevel, metrics *Metrics, dialect string) *GormLogger {
 	return &GormLogger{
 		SlowThreshold: slowThreshold,
 		LogLevel:      logLevel,
 		metrics:       metrics,
+		dialect:       dialect,
 	}
 }
 
@@ -125,21 +134,36 @@ func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 		// Sanitize SQL for logging (collapse whitespace)
 		sanitized := sanitizeSQL(sql)
 
-		// Log and create enhanced error
-		enhancedErr := errors.New(err).
+		// Log and create enhanced error. Carry the dialect and the parsed
+		// operation/table so a dialect-specific SQL fault (GitHub #3833: a
+		// MySQL-only syntax error) is attributable to its engine and query
+		// without a live reproduction.
+		errBuilder := errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).
 			Context("operation", "sql_query").
+			Context("sql_operation", operation).
+			Context("sql_table", table).
 			Context("sql", sanitized).
 			Context("duration_ms", elapsed.Milliseconds()).
-			Context("original_error_type", fmt.Sprintf("%T", err)).
-			Build()
+			Context("original_error_type", fmt.Sprintf("%T", err))
+		if l.dialect != "" {
+			errBuilder = errBuilder.Context("dialect", l.dialect)
+		}
+		enhancedErr := errBuilder.Build()
 
-		GetLogger().Error("Database query failed",
+		errFields := []logger.Field{
 			logger.Error(enhancedErr),
 			logger.String("sql", sanitized),
+			logger.String("sql_operation", operation),
+			logger.String("sql_table", table),
 			logger.Duration("duration", elapsed),
-			logger.Int64("rows_affected", rows))
+			logger.Int64("rows_affected", rows),
+		}
+		if l.dialect != "" {
+			errFields = append(errFields, logger.String("dialect", l.dialect))
+		}
+		GetLogger().Error("Database query failed", errFields...)
 
 		// Record error metric
 		if l.metrics != nil {

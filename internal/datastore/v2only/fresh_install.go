@@ -124,7 +124,7 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger, speciesC
 	sourceRepo := repository.NewAudioSourceRepository(db, nil, useV2Prefix, isMySQL)
 	weatherRepo := repository.NewWeatherRepository(db, nil, useV2Prefix, isMySQL)
 	imageCacheRepo := repository.NewImageCacheRepository(db, nil, labelRepo, useV2Prefix, isMySQL)
-	thresholdRepo := repository.NewDynamicThresholdRepository(db, nil, labelRepo, useV2Prefix, isMySQL)
+	thresholdRepo := repository.NewDynamicThresholdRepository(db, nil, useV2Prefix, isMySQL)
 	notificationRepo := repository.NewNotificationHistoryRepository(db, nil, labelRepo, useV2Prefix, isMySQL)
 	appEventRepo := repository.NewAppEventRepository(db, nil, useV2Prefix, isMySQL)
 	labelTypeRepo := repository.NewLabelTypeRepository(db, nil, useV2Prefix)

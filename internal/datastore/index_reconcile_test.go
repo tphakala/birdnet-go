@@ -35,7 +35,9 @@ func openSQLiteTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, err, "retrieve *sql.DB from gorm")
 	sqlDB.SetMaxOpenConns(1)
 	t.Cleanup(func() {
-		_ = sqlDB.Close()
+		// assert, not require: a failing require calls runtime.Goexit from the
+		// cleanup goroutine and would abort any remaining t.Cleanup functions.
+		assert.NoError(t, sqlDB.Close(), "close in-memory sqlite")
 	})
 	return db
 }
@@ -55,17 +57,61 @@ func sqliteIndexNames(t *testing.T, db *gorm.DB, table string) []string {
 	return names
 }
 
-// TestReconcileLegacyUniqueIndexes_SQLite_DropsStaleSpeciesName verifies the
-// reconciler drops a pre-multi-model UNIQUE(species_name) index on
-// dynamic_thresholds (the exact legacy shape behind the SQLite
-// UNIQUE-constraint insert failures).
-func TestReconcileLegacyUniqueIndexes_SQLite_DropsStaleSpeciesName(t *testing.T) {
+// TestReconcileLegacyUniqueIndexes_SQLite_DropsStalePrecursor verifies the
+// reconciler drops a pre-composite single-column unique index when an entity
+// declares a composite unique index (such as NotificationHistory on
+// scientific_name + notification_type).
+func TestReconcileLegacyUniqueIndexes_SQLite_DropsStalePrecursor(t *testing.T) {
 	t.Parallel()
 
 	db := openSQLiteTestDB(t)
 
-	// Seed the legacy-shaped table: DynamicThreshold columns + a stale single-column
-	// unique index on species_name (no composite idx_dt_species_model yet).
+	// Seed the legacy-shaped table: NotificationHistory columns + a stale single-column
+	// unique index on scientific_name (no composite idx_notification_history_species_type yet).
+	require.NoError(t, db.Exec(`
+		CREATE TABLE notification_histories (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			scientific_name TEXT NOT NULL,
+			notification_type TEXT NOT NULL DEFAULT 'new_species',
+			last_sent DATETIME NOT NULL,
+			expires_at DATETIME NOT NULL,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL
+		)
+	`).Error)
+	require.NoError(t, db.Exec(`CREATE UNIQUE INDEX idx_nh_species_legacy ON notification_histories(scientific_name)`).Error)
+
+	// Run the reconciler against the current NotificationHistory entity definition.
+	require.NoError(t, reconcileLegacyUniqueIndexes(db, "sqlite", "", []any{&NotificationHistory{}}))
+
+	// Stale single-column unique index must be gone.
+	indexes := sqliteIndexNames(t, db, "notification_histories")
+	assert.NotContains(t, indexes, "idx_nh_species_legacy",
+		"reconciler should have dropped legacy single-column precursor index")
+}
+
+// TestReconcileLegacyUniqueIndexes_SQLite_PreservesDeclared verifies the
+// reconciler leaves the declared unique index alone.
+func TestReconcileLegacyUniqueIndexes_SQLite_PreservesDeclared(t *testing.T) {
+	t.Parallel()
+
+	db := openSQLiteTestDB(t)
+	require.NoError(t, db.AutoMigrate(&DynamicThreshold{}))
+
+	require.NoError(t, reconcileLegacyUniqueIndexes(db, "sqlite", "", []any{&DynamicThreshold{}}))
+
+	indexes := sqliteIndexNames(t, db, "dynamic_thresholds")
+	assert.Contains(t, indexes, "idx_dynamic_thresholds_species_name",
+		"declared unique index must survive reconciliation")
+}
+
+// TestReconcileLegacyUniqueIndexes_SQLite_PreservesCompositeSuperset verifies the
+// reconciler leaves a live composite idx_dt_species_model alone since it is an
+// undeclared superset of the declared single-column species_name index.
+func TestReconcileLegacyUniqueIndexes_SQLite_PreservesCompositeSuperset(t *testing.T) {
+	t.Parallel()
+
+	db := openSQLiteTestDB(t)
 	require.NoError(t, db.Exec(`
 		CREATE TABLE dynamic_thresholds (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -84,48 +130,13 @@ func TestReconcileLegacyUniqueIndexes_SQLite_DropsStaleSpeciesName(t *testing.T)
 			trigger_count INTEGER NOT NULL DEFAULT 0
 		)
 	`).Error)
-	require.NoError(t, db.Exec(`CREATE UNIQUE INDEX idx_dt_species_legacy ON dynamic_thresholds(species_name)`).Error)
-
-	// Run the reconciler against the current DynamicThreshold entity definition.
-	require.NoError(t, reconcileLegacyUniqueIndexes(db, "sqlite", "", []any{&DynamicThreshold{}}))
-
-	// Stale single-column unique index must be gone.
-	indexes := sqliteIndexNames(t, db, "dynamic_thresholds")
-	assert.NotContains(t, indexes, "idx_dt_species_legacy",
-		"reconciler should have dropped legacy UNIQUE(species_name) index")
-}
-
-// TestReconcileLegacyUniqueIndexes_SQLite_PreservesComposite verifies the
-// reconciler leaves the declared composite idx_dt_species_model alone.
-func TestReconcileLegacyUniqueIndexes_SQLite_PreservesComposite(t *testing.T) {
-	t.Parallel()
-
-	db := openSQLiteTestDB(t)
-	require.NoError(t, db.AutoMigrate(&DynamicThreshold{}))
+	require.NoError(t, db.Exec(`CREATE UNIQUE INDEX idx_dt_species_model ON dynamic_thresholds(species_name, model_name)`).Error)
 
 	require.NoError(t, reconcileLegacyUniqueIndexes(db, "sqlite", "", []any{&DynamicThreshold{}}))
 
 	indexes := sqliteIndexNames(t, db, "dynamic_thresholds")
 	assert.Contains(t, indexes, "idx_dt_species_model",
-		"declared composite unique index must survive reconciliation")
-}
-
-// TestReconcileLegacyUniqueIndexes_SQLite_DropsStaleModelName covers the
-// alternative legacy shape where the stale unique index was on model_name
-// alone (paranoia: the MySQL 1062 error displays 'BirdNET' as the duplicate
-// value, hinting this layout is possible in the wild).
-func TestReconcileLegacyUniqueIndexes_SQLite_DropsStaleModelName(t *testing.T) {
-	t.Parallel()
-
-	db := openSQLiteTestDB(t)
-	require.NoError(t, db.AutoMigrate(&DynamicThreshold{}))
-	require.NoError(t, db.Exec(`CREATE UNIQUE INDEX idx_dt_model_legacy ON dynamic_thresholds(model_name)`).Error)
-
-	require.NoError(t, reconcileLegacyUniqueIndexes(db, "sqlite", "", []any{&DynamicThreshold{}}))
-
-	indexes := sqliteIndexNames(t, db, "dynamic_thresholds")
-	assert.NotContains(t, indexes, "idx_dt_model_legacy")
-	assert.Contains(t, indexes, "idx_dt_species_model")
+		"composite unique index must be left alone as undeclared superset")
 }
 
 // TestReconcileLegacyUniqueIndexes_SQLite_FreshInstall verifies the
@@ -193,7 +204,7 @@ func TestReconcileLegacyUniqueIndexes_SQLite_IgnoresAutoIndex(t *testing.T) {
 
 // TestReconcileLegacyUniqueIndexes_SQLite_PreservesSuperset verifies the
 // reconciler does NOT drop a stricter admin-added unique index whose
-// column set is a superset of a declared composite. Preserving such
+// column set is a superset of a declared unique index. Preserving such
 // constraints is required so the reconciler cannot relax uniqueness rules
 // the operator explicitly imposed.
 func TestReconcileLegacyUniqueIndexes_SQLite_PreservesSuperset(t *testing.T) {
@@ -202,10 +213,10 @@ func TestReconcileLegacyUniqueIndexes_SQLite_PreservesSuperset(t *testing.T) {
 	db := openSQLiteTestDB(t)
 	require.NoError(t, db.AutoMigrate(&DynamicThreshold{}))
 	// Simulated admin-added stricter constraint: composite over declared
-	// (species_name, model_name) plus an extra column.
+	// species_name plus an extra column (scientific_name).
 	require.NoError(t, db.Exec(`
 		CREATE UNIQUE INDEX idx_dt_admin_superset
-		ON dynamic_thresholds(species_name, model_name, scientific_name)
+		ON dynamic_thresholds(species_name, scientific_name)
 	`).Error)
 
 	require.NoError(t, reconcileLegacyUniqueIndexes(db, "sqlite", "", []any{&DynamicThreshold{}}))
@@ -213,8 +224,8 @@ func TestReconcileLegacyUniqueIndexes_SQLite_PreservesSuperset(t *testing.T) {
 	indexes := sqliteIndexNames(t, db, "dynamic_thresholds")
 	assert.Contains(t, indexes, "idx_dt_admin_superset",
 		"superset unique index must be preserved (not a legacy precursor)")
-	assert.Contains(t, indexes, "idx_dt_species_model",
-		"declared composite must still be present")
+	assert.Contains(t, indexes, "idx_dynamic_thresholds_species_name",
+		"declared unique index must still be present")
 }
 
 // TestReconcileLegacyUniqueIndexes_SQLite_PreservesUnrelated verifies the

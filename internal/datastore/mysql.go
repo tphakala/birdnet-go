@@ -67,10 +67,10 @@ func (store *MySQLStore) Open() (retErr error) {
 	var gormLogger gormlogger.Interface
 	if store.Settings.Debug {
 		// Use debug log level
-		gormLogger = NewGormLogger(1*time.Second, gormlogger.Info, store.metrics)
+		gormLogger = NewGormLogger(1*time.Second, gormlogger.Info, store.metrics, "mysql")
 	} else {
 		// Use default settings with metrics
-		gormLogger = NewGormLogger(1*time.Second, gormlogger.Warn, store.metrics)
+		gormLogger = NewGormLogger(1*time.Second, gormlogger.Warn, store.metrics, "mysql")
 	}
 
 	// Open the MySQL database

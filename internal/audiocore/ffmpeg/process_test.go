@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // TestBuildFFmpegArgs_RTSP verifies that BuildFFmpegArgs produces the correct
@@ -62,6 +63,35 @@ func TestBuildFFmpegArgs_RTSP(t *testing.T) {
 	assert.Contains(t, args, "-ac")
 	assert.Contains(t, args, "-f")
 	assert.Contains(t, args, "-vn")
+}
+
+// TestBuildFFmpegArgs_RTSPEmptyTransportFallsBackToDefault guards issue #4240:
+// an RTSP stream whose Transport is empty (e.g. a migrated config that cleared
+// the global transport) must never emit -rtsp_transport "". FFmpeg cannot parse
+// an empty value and the stream fails to open. The builder falls back to the
+// default transport instead.
+func TestBuildFFmpegArgs_RTSPEmptyTransportFallsBackToDefault(t *testing.T) {
+	t.Parallel()
+
+	cfg := &StreamConfig{
+		URL:        "rtsp://camera.example.com/live",
+		Type:       "rtsp",
+		SampleRate: 48000,
+		BitDepth:   16,
+		Channels:   1,
+		Transport:  "", // empty: migration cleared it, engine default was also empty
+		LogLevel:   "error",
+		MediaMode:  "auto",
+	}
+
+	args := BuildFFmpegArgs(cfg, nil)
+
+	rtspIdx := slices.Index(args, "-rtsp_transport")
+	require.NotEqual(t, -1, rtspIdx, "expected -rtsp_transport flag")
+	require.Less(t, rtspIdx+1, len(args), "-rtsp_transport must have a value")
+	assert.Equal(t, conf.DefaultTransport, args[rtspIdx+1],
+		"empty transport must fall back to the default, never an empty string")
+	assert.NotEmpty(t, args[rtspIdx+1], "-rtsp_transport value must not be empty")
 }
 
 // TestBuildFFmpegArgs_MediaModes verifies the audio-only request tracks the

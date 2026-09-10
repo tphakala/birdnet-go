@@ -44,6 +44,55 @@ CREATE TABLE migration_states (
 """
 
 
+_HOURLY_WEATHERS_COLUMNS = [
+    "id INTEGER PRIMARY KEY AUTOINCREMENT",
+    "daily_events_id INTEGER NOT NULL DEFAULT 0",
+    "time DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00'",
+    "temperature REAL NOT NULL DEFAULT 0",
+    "feels_like REAL NOT NULL DEFAULT 0",
+    "temp_min REAL NOT NULL DEFAULT 0",
+    "temp_max REAL NOT NULL DEFAULT 0",
+    "pressure INTEGER NOT NULL DEFAULT 0",
+    "humidity INTEGER NOT NULL DEFAULT 0",
+    "visibility INTEGER NOT NULL DEFAULT 0",
+    "wind_speed REAL NOT NULL DEFAULT 0",
+    "wind_deg INTEGER NOT NULL DEFAULT 0",
+    "wind_gust REAL NOT NULL DEFAULT 0",
+    "clouds INTEGER NOT NULL DEFAULT 0",
+    "weather_main TEXT NOT NULL DEFAULT ''",
+    "weather_desc TEXT NOT NULL DEFAULT ''",
+    "weather_icon TEXT NOT NULL DEFAULT ''",
+    "created_at DATETIME",
+]
+
+# Added to entities.HourlyWeather in #3495; absent from pre-#3495 databases.
+_HOURLY_WEATHERS_PRECIPITATION_COLUMNS = [
+    "precipitation REAL NOT NULL DEFAULT 0",
+    "precipitation_type TEXT NOT NULL DEFAULT ''",
+]
+
+
+def _build_hourly_weathers(path, *, with_precipitation):
+    """Create an hourly_weathers table with one row, with or without precipitation."""
+    columns = list(_HOURLY_WEATHERS_COLUMNS)
+    if with_precipitation:
+        columns += _HOURLY_WEATHERS_PRECIPITATION_COLUMNS
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute(
+            "CREATE TABLE hourly_weathers (\n    "
+            + ",\n    ".join(columns)
+            + "\n)"
+        )
+        conn.execute(
+            "INSERT INTO hourly_weathers (daily_events_id, time, temperature) "
+            "VALUES (1, '2026-07-01 10:00:00', 12.5)"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def _build_db(path, *, state, with_detections, detection_rows=0, note_rows=None):
     """Create a minimal SQLite db with a migration_states row and optional tables."""
     conn = sqlite3.connect(path)
@@ -157,6 +206,80 @@ class MigrationStateFixTest(unittest.TestCase):
         finally:
             verify.close()
         self.assertEqual(state, "idle")
+
+
+class HourlyWeatherSchemaTest(unittest.TestCase):
+    """Covers GitHub #4052: the precipitation columns added in #3495.
+
+    A v2 database carrying `precipitation` / `precipitation_type` must not be
+    reported as contaminated, and a pre-#3495 database missing them must be
+    repairable via the ALTER TABLE ADD COLUMN path.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.path = os.path.join(self._tmp.name, "birdnet.db")
+
+    def _run_contamination_check(self, report=None):
+        doctor = db_doctor.DatabaseDoctor(self.path)
+        report = report or db_doctor.DiagnosticReport(db_path=self.path)
+        ro = sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)
+        try:
+            report.tables_present = doctor._get_tables(ro)
+            report.schema_version = "v2"
+            check = doctor._check_schema_contamination(ro, report)
+        finally:
+            ro.close()
+        return doctor, report, check
+
+    def test_precipitation_columns_pass_contamination_check(self):
+        _build_hourly_weathers(self.path, with_precipitation=True)
+
+        _, _, check = self._run_contamination_check()
+
+        self.assertEqual(check.status, "pass")
+
+    def test_missing_precipitation_columns_are_added_by_fix(self):
+        _build_hourly_weathers(self.path, with_precipitation=False)
+
+        doctor, report, check = self._run_contamination_check()
+        self.assertEqual(check.status, "fail")
+        self.assertTrue(check.fixable)
+        report.checks.append(check)
+
+        conn = sqlite3.connect(self.path)
+        try:
+            fix = doctor._fix_schema_contamination(conn, report)
+            columns = {
+                row[1]: row for row in conn.execute(
+                    "PRAGMA table_info(hourly_weathers)"
+                )
+            }
+            rows = conn.execute("SELECT COUNT(*) FROM hourly_weathers").fetchone()[0]
+            values = conn.execute(
+                "SELECT precipitation, precipitation_type FROM hourly_weathers"
+            ).fetchone()
+        finally:
+            conn.close()
+
+        self.assertEqual(fix.status, "applied")
+
+        # PRAGMA table_info columns: (cid, name, type, notnull, dflt_value, pk)
+        self.assertEqual(columns["precipitation"][2], "REAL")
+        self.assertEqual(columns["precipitation"][3], 1)
+        self.assertEqual(columns["precipitation"][4], "0")
+        self.assertEqual(columns["precipitation_type"][2], "TEXT")
+        self.assertEqual(columns["precipitation_type"][3], 1)
+        self.assertEqual(columns["precipitation_type"][4], "''")
+
+        # Existing rows survive and pick up the column defaults.
+        self.assertEqual(rows, 1)
+        self.assertEqual(values, (0.0, ""))
+
+        # The repaired schema is clean on a re-check.
+        _, _, recheck = self._run_contamination_check()
+        self.assertEqual(recheck.status, "pass")
 
 
 if __name__ == "__main__":

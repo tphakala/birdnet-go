@@ -6,8 +6,9 @@
 // and the same
 // enhanced-error conventions. Gain is applied in Go before encoding.
 //
-// This path is gated at the call site (see internal/conf/native_encoders.go); Opus
-// clip export still defaults to FFmpeg.
+// go-opus is the default encoder for .opus clip export; FFmpeg is used only as a
+// fallback for a clip go-opus cannot carry (see the encoder selection in
+// internal/analysis/processor).
 package opus
 
 import (

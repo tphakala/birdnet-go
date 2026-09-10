@@ -3,6 +3,7 @@
 package media
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -1360,6 +1362,11 @@ func TestIsValidFilename(t *testing.T) {
 // TestSpeciesImageNotFound_Returns404 verifies that image endpoints return HTTP 404
 // (not 500) when the image provider has no image for a species.
 // Regression test for GitHub issue #2201.
+//
+// The negative cache entry is primed up front because the handlers no longer consult
+// a provider on the request goroutine: a species nothing is known about yet answers
+// 503 "not yet" (see TestSpeciesImageColdMiss_ReturnsPendingNot500) and only becomes
+// a 404 once the lookup has actually concluded there is no image.
 func TestSpeciesImageNotFound_Returns404(t *testing.T) {
 	t.Attr("component", "media")
 	t.Attr("type", "regression")
@@ -1376,6 +1383,11 @@ func TestSpeciesImageNotFound_Returns404(t *testing.T) {
 		},
 	}
 	controller.BirdImageCache.SetImageProvider(notFoundProvider)
+
+	// Resolve the species once so the negative entry exists, making the handler
+	// assertions below independent of background prefetch timing.
+	_, err := controller.BirdImageCache.Get("Nonexistus fictus")
+	require.ErrorIs(t, err, imageprovider.ErrImageNotFound)
 
 	tests := []struct {
 		name    string
@@ -1426,6 +1438,181 @@ func TestSpeciesImageNotFound_Returns404(t *testing.T) {
 				"Response body should indicate image was not found")
 		})
 	}
+}
+
+// TestSpeciesImageColdMiss_ReturnsPendingNot500 pins the cold-miss contract that the
+// whole de-blocking change rests on.
+//
+// A species nothing is cached for must answer immediately with 503 plus a Retry-After
+// and, critically, Cache-Control: no-store. An <img> error event carries no status
+// code, so no-store is the only thing that tells a retrying browser this failure is
+// transient: a cacheable 404 is served from its own HTTP cache without a network hop,
+// while this response is re-requested and can succeed once the background fetch lands.
+//
+// It must never be a 500. apicore reports every status >= 500 to Sentry, and a cold
+// dashboard requests dozens of uncached thumbnails at once.
+func TestSpeciesImageColdMiss_ReturnsPendingNot500(t *testing.T) {
+	t.Attr("component", "media")
+
+	e := echo.New()
+	controller := New(apitest.NewCore(t, apitest.WithEcho(e)))
+
+	// A provider that never returns lets the assertion prove the handler did not wait
+	// for it: if the fetch were still on the request path, this test would hang.
+	blocked := make(chan struct{})
+	t.Cleanup(func() { close(blocked) })
+	controller.BirdImageCache.SetImageProvider(&apitest.TestImageProvider{
+		FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
+			<-blocked
+			return imageprovider.BirdImage{}, imageprovider.ErrImageNotFound
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/media/image/Coldus%20missus", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetParamNames("scientific_name")
+	ctx.SetParamValues("Coldus missus")
+
+	require.NoError(t, controller.ServeSpeciesImageProxy(ctx))
+
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.Equal(t, strconv.Itoa(ImagePendingRetryAfterSeconds), rec.Header().Get("Retry-After"))
+	assert.Equal(t, "no-store", rec.Header().Get("Cache-Control"),
+		"a pending image must not be cached, or the client retry never reaches the server")
+	assert.Empty(t, rec.Header().Get("Location"),
+		"the proxy is a hard boundary and must never redirect to the upstream image host")
+}
+
+// TestSpeciesImageColdMiss_ConcurrentRequestsAllReturnPromptly is the shape that
+// actually reproduced the reported freeze: a dashboard asking for the same uncached
+// species from several connections at once.
+//
+// Every one of them must answer immediately. Queueing them behind the first request's
+// fetch is what exhausted the browser's per-host connection budget and starved
+// unrelated API calls and the SSE stream.
+func TestSpeciesImageColdMiss_ConcurrentRequestsAllReturnPromptly(t *testing.T) {
+	t.Attr("component", "media")
+
+	e := echo.New()
+	controller := New(apitest.NewCore(t, apitest.WithEcho(e)))
+
+	blocked := make(chan struct{})
+	t.Cleanup(func() { close(blocked) })
+	controller.BirdImageCache.SetImageProvider(&apitest.TestImageProvider{
+		FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
+			<-blocked
+			return imageprovider.BirdImage{}, imageprovider.ErrImageNotFound
+		},
+	})
+
+	const concurrency = 10
+	codes := make(chan int, concurrency)
+	var wg sync.WaitGroup
+	for range concurrency {
+		wg.Go(func() {
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/media/image/Coldus%20missus", http.NoBody)
+			rec := httptest.NewRecorder()
+			ctx := e.NewContext(req, rec)
+			ctx.SetParamNames("scientific_name")
+			ctx.SetParamValues("Coldus missus")
+			_ = controller.ServeSpeciesImageProxy(ctx)
+			codes <- rec.Code
+		})
+	}
+
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("concurrent cold-miss requests queued behind the provider fetch")
+	}
+
+	close(codes)
+	for code := range codes {
+		assert.Equal(t, http.StatusServiceUnavailable, code)
+	}
+
+	// Prefetch deduplication is asserted where it lives, in
+	// TestPrefetchAsync_DeduplicatesBySpecies. What this test owns is the handler
+	// contract: every concurrent request answers immediately instead of queueing
+	// behind one fetch, which is what exhausted the browser's connection budget.
+}
+
+// TestServeSpeciesImageProxy_NeverRedirects asserts the D2 boundary for a species that
+// IS resolved but whose bytes are not on disk. This used to 302 to the provider's own
+// URL, which handed clients an address whose availability this process does not
+// control and which API clients (unlike browsers) were refused outright.
+func TestServeSpeciesImageProxy_NeverRedirects(t *testing.T) {
+	t.Attr("component", "media")
+
+	e := echo.New()
+	controller := New(apitest.NewCore(t, apitest.WithEcho(e)))
+	controller.BirdImageCache.SetImageProvider(&apitest.TestImageProvider{
+		FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
+			return imageprovider.BirdImage{
+				URL:            "https://upload.wikimedia.org/does-not-matter.jpg",
+				ScientificName: scientificName,
+				SourceProvider: "wikimedia",
+			}, nil
+		},
+	})
+
+	// Resolve the metadata so the handler takes the "cached, but no bytes" branch.
+	_, err := controller.BirdImageCache.Get("Turdus merula")
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/media/image/Turdus%20merula", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetParamNames("scientific_name")
+	ctx.SetParamValues("Turdus merula")
+
+	require.NoError(t, controller.ServeSpeciesImageProxy(ctx))
+
+	// Pin the positive contract, not just "not a 302": NotEqual(302) would also pass
+	// for a 200 or a 500, so it cannot tell the boundary being held from the handler
+	// having failed some other way.
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
+	assert.Empty(t, rec.Header().Get("Location"),
+		"the proxy must never hand the client the upstream image host")
+	assert.NotContains(t, rec.Body.String(), "upload.wikimedia.org",
+		"the upstream URL must not leak to the client")
+}
+
+// TestGetSpeciesImageInfo_ColdMissReturnsPendingJSON covers the metadata endpoint's
+// half of the same contract. It differs from the image endpoint deliberately: this one
+// is consumed by fetch() rather than an <img>, so it must return a parseable body for
+// a client that reads every response as JSON.
+func TestGetSpeciesImageInfo_ColdMissReturnsPendingJSON(t *testing.T) {
+	t.Attr("component", "media")
+
+	e := echo.New()
+	controller := New(apitest.NewCore(t, apitest.WithEcho(e)))
+
+	blocked := make(chan struct{})
+	t.Cleanup(func() { close(blocked) })
+	controller.BirdImageCache.SetImageProvider(&apitest.TestImageProvider{
+		FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
+			<-blocked
+			return imageprovider.BirdImage{}, imageprovider.ErrImageNotFound
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/media/species-image/info?name=Coldus+missus", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, controller.GetSpeciesImageInfo(ctx))
+
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.Equal(t, strconv.Itoa(ImagePendingRetryAfterSeconds), rec.Header().Get("Retry-After"))
+	assert.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
+	assert.NotEmpty(t, rec.Body.String(), "a JSON endpoint must not answer with an empty body")
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 }
 
 // TestGetSpectrogramLogger tests that the spectrogram logger is never nil

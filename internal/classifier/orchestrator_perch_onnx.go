@@ -15,22 +15,24 @@ import (
 //
 // The settings snapshot is passed in (rather than read inside) so the caller
 // builds with the exact settings it gated the reload decision on.
-func (o *Orchestrator) buildPerch(settings *conf.Settings, threads int) (*Perch, error) {
-	modelPath := settings.Perch.ModelPath
-	labelPath := settings.Perch.LabelPath
+//
+// The path resolution is returned alongside the instance so loadPerch can decide
+// whether to repair a stale configuration without resolving a second time (see
+// pathResolution). ReloadSecondaryModels discards it, which is what keeps a
+// backend or device swap from rewriting the user's paths.
+//
+// The returned resolution is meaningful only when err == nil; every error return
+// yields the zero pathResolution{}.
+func (o *Orchestrator) buildPerch(settings *conf.Settings, threads int) (*Perch, pathResolution, error) {
+	res := o.resolveFamilyPaths(RegistryIDPerchV2, modelFileSet{
+		model:  settings.Perch.ModelPath,
+		labels: settings.Perch.LabelPath,
+	}, false)
+	modelPath := res.resolved.model
+	labelPath := res.resolved.labels
 
 	if modelPath == "" || labelPath == "" {
-		m, l, _ := o.resolveInstalledPaths(RegistryIDPerchV2)
-		if modelPath == "" {
-			modelPath = m
-		}
-		if labelPath == "" {
-			labelPath = l
-		}
-	}
-
-	if modelPath == "" || labelPath == "" {
-		return nil, errors.Newf("Perch v2 model files not installed or configured").
+		return nil, pathResolution{}, errors.Newf("Perch v2 model files not installed or configured").
 			Component("classifier.orchestrator").
 			Category(errors.CategoryModelInit).
 			Context("model", RegistryIDPerchV2).
@@ -38,7 +40,7 @@ func (o *Orchestrator) buildPerch(settings *conf.Settings, threads int) (*Perch,
 	}
 
 	if err := checkORTOrFail(settings.BirdNET.ONNXRuntimePath, "Perch v2", RegistryIDPerchV2, "classifier.orchestrator"); err != nil {
-		return nil, err
+		return nil, pathResolution{}, err
 	}
 
 	cfg := PerchConfig{
@@ -53,14 +55,14 @@ func (o *Orchestrator) buildPerch(settings *conf.Settings, threads int) (*Perch,
 
 	perch, err := NewPerch(&cfg)
 	if err != nil {
-		return nil, errors.New(err).
+		return nil, pathResolution{}, errors.New(err).
 			Component("classifier.orchestrator").
 			Category(errors.CategoryModelInit).
 			Context("model", RegistryIDPerchV2).
 			Build()
 	}
 
-	return perch, nil
+	return perch, res, nil
 }
 
 // loadPerch creates and registers a Perch v2 model instance from settings.
@@ -73,7 +75,7 @@ func (o *Orchestrator) loadPerch(threads int) error {
 	// when the backend/device actually changes (Forgejo #1119).
 	settings := o.currentSettings()
 	before := o.captureRSSBefore()
-	perch, err := o.buildPerch(settings, threads)
+	perch, res, err := o.buildPerch(settings, threads)
 	if err != nil {
 		return err
 	}
@@ -82,6 +84,12 @@ func (o *Orchestrator) loadPerch(threads int) error {
 		instance: perch,
 		backend:  secondaryTripletFor(settings),
 	}
+	// Queue a config repair when the model loaded from the gallery fallback
+	// because the configured path was stale. Uses the resolution the build
+	// already performed, so the repair can only ever persist the paths this
+	// instance was actually built from. Drained after o.mu is released.
+	o.queuePathCorrection(RegistryIDPerchV2, res)
+
 	// Defer the warm-up + RSS measurement until the caller releases o.mu, so the
 	// warm-up inference runs via the serialized inference path instead of stalling
 	// live inference on o.mu. The entry is registered above first

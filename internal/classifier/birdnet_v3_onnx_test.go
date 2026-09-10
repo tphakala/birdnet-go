@@ -117,8 +117,8 @@ func TestBirdNETV3_LoaderRegistered(t *testing.T) {
 	assert.True(t, ok, "BirdNET v3.0 must have an OpenVINO-capable secondary builder")
 }
 
-// TestBirdNETV3_CatalogEntry guards the catalog entry shape: correct repo, hidden
-// during preview, and the expected model/labels/geomodel/taxonomy companion files.
+// TestBirdNETV3_CatalogEntry guards the catalog entry shape: correct repo, visible
+// in the gallery, and the expected model/labels/geomodel/taxonomy companion files.
 func TestBirdNETV3_CatalogEntry(t *testing.T) {
 	t.Parallel()
 
@@ -127,8 +127,22 @@ func TestBirdNETV3_CatalogEntry(t *testing.T) {
 
 	assert.Equal(t, RegistryIDBirdNETV3, entry.RegistryID)
 	assert.Equal(t, "tphakala/BirdNET-v3.0-Models", entry.HuggingFaceRepo)
-	assert.True(t, entry.Hidden, "v3.0 stays hidden until GA (private HF repo, no final checksums)")
+	assert.False(t, entry.Hidden, "v3.0 is visible in the gallery (public HF repo, pinned checksums, RAM-floor gated)")
 	assert.True(t, entry.RequiresONNX)
+
+	// v3.0 ships as a developer preview: the gallery flags it as not the GA build
+	// and surfaces the build tag (which otherwise lives only in the file paths).
+	assert.Equal(t, ChannelPreview, entry.Channel, "v3.0 is a developer-preview release")
+	assert.Equal(t, "preview3.1", entry.BuildLabel, "v3.0 surfaces its preview build tag")
+
+	// A stable (GA) sibling must leave Channel/BuildLabel empty, so its on-disk JSON
+	// stays byte-identical and adding these omitempty fields does not shift the
+	// stable entry's contribution to catalogChecksum (the invariant model_catalog.go
+	// documents). Guards against a stray Channel: "stable" being added to a GA entry.
+	perch, ok := GetCatalogEntry("perch-v2")
+	require.True(t, ok, "perch-v2 catalog entry must exist")
+	assert.Empty(t, perch.Channel, "a stable entry must not set Channel (omitempty byte-identity)")
+	assert.Empty(t, perch.BuildLabel, "a stable entry must not set BuildLabel")
 
 	roles := map[string]int{}
 	for _, f := range entry.Files {
@@ -188,4 +202,27 @@ func TestBirdNETV3_Close(t *testing.T) {
 
 	_, err := b.Predict(t.Context(), [][]float32{{0.1}})
 	require.Error(t, err, "Predict after Close must fail via the nil-classifier guard")
+}
+
+// TestBirdNETV3Predict_RejectsNonFiniteScores verifies that a backend returning a
+// NaN or Inf score fails the window instead of handing a non-finite confidence to
+// the processor, where it would bypass the threshold filter. BirdNET v3.0 runs
+// the OpenVINO f16 GPU path that produced all-NaN Perch logits on Intel Arc, so
+// it needs the same guard.
+func TestBirdNETV3Predict_RejectsNonFiniteScores(t *testing.T) {
+	t.Parallel()
+	labels := []string{"Aaa aaa_Alpha", "Bbb bbb_Beta", "Ccc ccc_Gamma"}
+	for name, scores := range map[string][]float32{
+		"NaN":  {0.9, float32(math.NaN()), 0.1},
+		"+Inf": {float32(math.Inf(1)), 0.2, 0.1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			b := newTestBirdNETV3(&predTelemetryClassifier{logits: scores}, labels)
+			results, err := b.Predict(t.Context(), [][]float32{{0.1, 0.2, 0.3}})
+			require.Error(t, err)
+			assert.Nil(t, results)
+			assert.Contains(t, err.Error(), "non-finite score")
+		})
+	}
 }

@@ -1,13 +1,13 @@
 package audio
 
-// Native HLS: the in-process path that replaces the FFmpeg process entirely.
+// Native HLS: the in-process path that is the only live HLS encoder.
 //
-// It lives in its own file rather than as branches inside audio_hls.go because
-// the two paths share almost nothing below the handler. There is no subprocess,
-// no FIFO, no output directory and no securefs here: PCM goes straight from the
-// audio router into internal/audiocore/hlsmux, and the playlist and segments are
-// served out of memory. audio_hls.go keeps its branch points to one line each and
-// is otherwise untouched, so the FFmpeg fallback stays exactly as it was.
+// It lives in its own file rather than folded into audio_hls.go because the
+// muxer feed and the serving logic share almost nothing with the handler's
+// routing and lifecycle plumbing. There is no subprocess, no FIFO, no output
+// directory and no securefs here: PCM goes straight from the audio router into
+// github.com/tphakala/go-hls, and the playlist and segments are served out of
+// memory. audio_hls.go owns the routes, tokens, client tracking and cleanup.
 
 import (
 	"bytes"
@@ -20,9 +20,10 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	hls "github.com/tphakala/go-hls"
+	"github.com/tphakala/go-hls/aachls"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
-	"github.com/tphakala/birdnet-go/internal/audiocore/hlsmux"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
@@ -48,7 +49,7 @@ const (
 	nativeHLSChannels = 1
 
 	// nativeHLSBytesPerSample is the width of one sample of one channel. The
-	// capture pipeline is 16-bit end to end, which hlsmux also assumes.
+	// capture pipeline is 16-bit end to end, which go-hls also assumes.
 	nativeHLSBytesPerSample = 2
 
 	// nativeHLSFeedQueueBytes is the byte budget for the PCM queued between the
@@ -71,8 +72,6 @@ const (
 	nativeHLSFeedQueueBytes = 512 * 1024
 
 	// nativeHLSDefaultBitrate is the target in kbps when the setting is unset.
-	// The FFmpeg path resolves its own default through the same helper, so the
-	// two encoders cannot drift apart.
 	nativeHLSDefaultBitrate = 128
 
 	// nativeFeedDrainTimeout bounds how long teardown waits for the feed
@@ -86,25 +85,33 @@ const (
 	// would expire during an ordinary stop and report a wedged feed that is
 	// merely inside a teardown with a larger budget.
 	nativeFeedDrainTimeout = 8 * time.Second
+
+	// nativeFeedHeartbeatInterval is how often the feed loop emits a debug-level
+	// throughput-and-muxer-health snapshot while running. It exists purely for
+	// troubleshooting a live stream that is up but misbehaving (a source running
+	// slow, segments drifting). The 30s cadence keeps it free on a Pi Zero 2: the
+	// snapshot is built once per interval per stream, not per audio chunk.
+	nativeFeedHeartbeatInterval = 30 * time.Second
 )
 
-// isNative reports whether this stream is served by the in-process muxer rather
-// than by an FFmpeg process.
+// isNative reports whether this stream has a constructed in-process muxer. It
+// stays as the guard for a fully published stream (mux is written once before
+// publish and never cleared), and as a nil-safe check on teardown paths.
 func (s *HLSStreamInfo) isNative() bool { return s != nil && s.mux != nil }
 
 // closeNativeMux stops the feed goroutine and closes the in-process muxer.
 //
-// It is a no-op on an FFmpeg-path stream and safe to call more than once, since
-// hlsmux.Stream.Close is idempotent. Every teardown path must call it: the muxer
-// owns an encoder, and the paths that delete a stream from the registry
-// themselves (a force restart, the inactivity sweep) bypass the context watcher
-// that would otherwise do the cleanup.
+// It is safe to call more than once, since the go-hls Stream.Close is
+// idempotent. Every teardown path must call it: the muxer owns an encoder, and
+// the paths that delete a stream from the registry themselves (a force restart,
+// the inactivity sweep) bypass the context watcher that would otherwise do the
+// cleanup.
 //
 // Waiting for the feed goroutine before closing is load-bearing, not politeness.
 // Every caller cancels the stream context first, but cancellation only makes the
 // ctx.Done() arm of the feed's select ready; Go picks uniformly between ready
 // arms, so a queued chunk would otherwise let the feed call Write on a muxer
-// this function just closed. hlsmux rejects that write and reports it through
+// this function just closed. go-hls rejects that write and reports it through
 // internal/errors, whose Build() forwards to telemetry, so the race would fire a
 // spurious Sentry event on roughly half of all clean stream stops.
 func closeNativeMux(sourceID string, stream *HLSStreamInfo) {
@@ -152,8 +159,7 @@ func closeNativeMuxGuarded(sourceID string, stream *HLSStreamInfo) {
 }
 
 // effectiveBitrateKbps resolves the configured live-stream bitrate, applying the
-// default and the same clamp for both encoders, so switching between them does
-// not silently change the audio quality a listener gets.
+// default and clamp before it is handed to the muxer.
 func (c *Handler) effectiveBitrateKbps() int {
 	bitrate := c.CurrentSettings().WebServer.LiveStream.BitRate
 	switch {
@@ -187,8 +193,8 @@ func (c *Handler) createNativeHLSStream(sourceID string) (*HLSStreamInfo, error)
 	segmentDuration := time.Duration(c.getEffectiveSegmentLength()) * time.Second
 	bitrate := c.effectiveBitrateKbps()
 
-	mux, err := hlsmux.New(&hlsmux.Config{
-		Codec:           hlsmux.AACLC(),
+	mux, err := hls.New(&hls.Config{
+		Codec:           aachls.AACLC(),
 		SampleRate:      nativeHLSSampleRate,
 		Channels:        nativeHLSChannels,
 		BitrateKbps:     bitrate,
@@ -196,7 +202,7 @@ func (c *Handler) createNativeHLSStream(sourceID string) (*HLSStreamInfo, error)
 		WindowSize:      hlsListSize,
 	})
 	if err != nil {
-		// Plain wrap, not another errors.Build(): hlsmux already terminated this
+		// Plain wrap, not another errors.Build(): go-hls already terminated this
 		// error with Build(), which reported it to telemetry. Rebuilding would
 		// fire the reporter a second time for one failure, under a different
 		// component and category.
@@ -237,7 +243,7 @@ func (c *Handler) createNativeHLSStream(sourceID string) (*HLSStreamInfo, error)
 	go func() {
 		// The encoder now runs in this process rather than in an FFmpeg
 		// subprocess, so the process boundary that used to contain a codec crash
-		// is gone. An unrecovered panic in go-aac, go-m4a or hlsmux would take
+		// is gone. An unrecovered panic in go-aac, go-m4a or go-hls would take
 		// down detection and the web server along with the stream, so it is
 		// contained here and turned into a stream teardown.
 		defer func() {
@@ -260,16 +266,19 @@ func (c *Handler) createNativeHLSStream(sourceID string) (*HLSStreamInfo, error)
 
 	apicore.GetLogger().Info("Native HLS stream created",
 		logger.String("source_id", sanitizedID),
+		logger.String("codec", "aac-lc"),
 		logger.Int("sample_rate", nativeHLSSampleRate),
+		logger.Int("channels", nativeHLSChannels),
 		logger.Int("bitrate_kbps", bitrate),
-		logger.String("segment_duration", segmentDuration.String()))
+		logger.String("segment_duration", segmentDuration.String()),
+		logger.Int("window_size", hlsListSize))
 
 	return stream, nil
 }
 
-// prepareNativeAudioFeed registers the audio route. Unlike the FFmpeg path there
-// is no FIFO to open and no secure filesystem to hold, so the resources are just
-// the feed queue and the route cleanup.
+// prepareNativeAudioFeed registers the audio route. There is no FIFO to open and
+// no secure filesystem to hold, so the resources are just the feed queue and the
+// route cleanup.
 func (c *Handler) prepareNativeAudioFeed(sourceID string) (*audioFeedResources, error) {
 	feed, callbackCleanup, err := c.setupAudioCallback(sourceID, nativeHLSSampleRate, nativeHLSFeedQueueBytes)
 	if err != nil {
@@ -324,12 +333,34 @@ func (c *Handler) runNativeAudioFeedLoop(ctx context.Context, sourceID string, s
 			logger.Int64("chunks_rejected", rejected))
 	}()
 
+	// Heartbeat: a coarse periodic snapshot of throughput and muxer health, so a
+	// stream that is up but misbehaving is diagnosable without waiting for the
+	// stall warning or a client complaint. lastHeartbeatSegments lets each tick
+	// report segments cut in the interval rather than only the running total.
+	heartbeat := time.NewTicker(nativeFeedHeartbeatInterval)
+	defer heartbeat.Stop()
+	var lastHeartbeatSegments uint64
+
 	for {
 		select {
 		case <-ctx.Done():
 			apicore.GetLogger().Debug("Native audio feed stopped due to context cancellation",
 				logger.String("source_id", sanitizedID))
 			return
+		case <-heartbeat.C:
+			stats := stream.mux.Stats()
+			apicore.GetLogger().Debug("Native HLS feed heartbeat",
+				logger.String("source_id", sanitizedID),
+				logger.Int64("frames_written", framesWritten),
+				logger.Int64("bytes_written", bytesWritten),
+				logger.Int64("chunks_rejected", rejected),
+				logger.Uint64("segments_total", stats.Segments),
+				logger.Uint64("segments_since_last", stats.Segments-lastHeartbeatSegments),
+				logger.Int("segments_retained", stats.Retained),
+				logger.Uint64("discontinuities", stats.Discontinuities),
+				logger.String("drift_correction", stats.DriftCorrection.Round(time.Millisecond).String()),
+				logger.Bool("encode_failed", stats.Failed))
+			lastHeartbeatSegments = stats.Segments
 		case chunk, ok := <-res.feed.ch:
 			if !ok {
 				apicore.GetLogger().Debug("Audio channel closed", logger.String("source_id", sanitizedID))
@@ -387,7 +418,7 @@ func (c *Handler) runNativeAudioFeedLoop(ctx context.Context, sourceID string, s
 // handleNativeWriteError classifies a muxer write failure and reports whether
 // the feed must stop.
 //
-// Only two of hlsmux.Write's rejections latch the stream (an encoder error and a
+// Only two of the muxer's Write rejections latch the stream (an encoder error and a
 // failed segment cut); the rest are per-call validation rejections that leave the
 // muxer able to accept the next well-formed chunk. Treating all of them as fatal
 // would let one malformed chunk destroy a live stream and force the client to
@@ -396,6 +427,9 @@ func (c *Handler) handleNativeWriteError(
 	ctx context.Context, sanitizedID string, stream *HLSStreamInfo,
 	err error, rejected *int64, lastRejectLog *time.Time,
 ) (stop bool) {
+	// One lock-free snapshot for the whole decision, so the Failed guard and its
+	// log do not each rebuild it.
+	stats := stream.mux.Stats()
 	switch {
 	case ctx.Err() != nil:
 		// Teardown in flight. Reaching a rejected write here is the expected
@@ -404,9 +438,21 @@ func (c *Handler) handleNativeWriteError(
 			logger.String("source_id", sanitizedID))
 		return true
 
-	case stream.mux.Stats().Failed:
+	case errors.Is(err, hls.ErrClosed):
+		// The muxer was closed under us during teardown, before ctx cancellation
+		// propagated to this loop. Stop cleanly rather than logging a spurious
+		// rejected-chunk warning for what is a normal stop.
+		apicore.GetLogger().Debug("Native audio feed stopped after muxer close",
+			logger.String("source_id", sanitizedID))
+		return true
+
+	case stats.Failed:
 		apicore.GetLogger().Error("Native HLS encode failed, stopping feed",
-			logger.String("source_id", sanitizedID), logger.Error(err))
+			logger.String("source_id", sanitizedID),
+			logger.Error(err),
+			logger.Uint64("segments_cut", stats.Segments),
+			logger.Uint64("discontinuities", stats.Discontinuities),
+			logger.String("last_segment_pdt", stats.LastSegmentPDT.UTC().Format(time.RFC3339Nano)))
 		return true
 
 	default:
@@ -426,9 +472,9 @@ func (c *Handler) handleNativeWriteError(
 
 // serveNativePlaylist writes the muxer's current media playlist.
 //
-// Unlike the FFmpeg path there is no PDT rewriting: program-date-time is
-// anchored to the capture timestamp of each segment's first sample, so it is
-// already correct when rendered and there is nothing to correct after the fact.
+// There is no PDT rewriting: go-hls anchors program-date-time to the capture
+// timestamp of each segment's first sample, so it is already correct when
+// rendered and there is nothing to correct after the fact.
 func (c *Handler) serveNativePlaylist(ctx echo.Context, sourceID string, stream *HLSStreamInfo) error {
 	c.setHLSHeaders(ctx)
 	ctx.Response().Header().Set("Content-Type", "application/vnd.apple.mpegurl")
@@ -443,8 +489,7 @@ func (c *Handler) serveNativePlaylist(ctx echo.Context, sourceID string, stream 
 
 	c.checkNativeStreamFreshness(sourceID, &stats)
 
-	// Tell a client polling before the first segment how long to wait, matching
-	// what the FFmpeg path does with its placeholder playlist.
+	// Tell a client polling before the first segment how long to wait.
 	if stats.Retained == 0 {
 		ctx.Response().Header().Set("Retry-After", strconv.Itoa(c.getEffectiveSegmentLength()))
 	}
@@ -452,20 +497,19 @@ func (c *Handler) serveNativePlaylist(ctx echo.Context, sourceID string, stream 
 	return ctx.String(http.StatusOK, playlist)
 }
 
-// checkNativeStreamFreshness warns when a stream has stopped producing segments,
-// which is the native equivalent of the FFmpeg path's checkSegmentFreshness.
+// checkNativeStreamFreshness warns when a stream has stopped producing segments.
 //
 // It keys on LastSegmentPDT rather than on Stats.Failed, because Failed reports
 // only a latched encode error. The failure this exists to catch is the opposite
 // one: a source that goes quiet produces no error at all, so the muxer stays
 // healthy while the playlist silently stops advancing.
-func (c *Handler) checkNativeStreamFreshness(sourceID string, stats *hlsmux.Stats) {
+func (c *Handler) checkNativeStreamFreshness(sourceID string, stats *hls.Stats) {
 	if stats.LastSegmentPDT.IsZero() {
 		return // no segment cut yet; the stream is still starting up
 	}
 
-	// Rate limited on the same interval and through the same map as the FFmpeg
-	// path, so a polling client cannot turn this into a per-request warning.
+	// Rate limited through the shared lastFreshnessCheck map, so a polling client
+	// cannot turn this into a per-request warning.
 	now := time.Now()
 	if last, ok := lastFreshnessCheck.Load(sourceID); ok {
 		if lastTime, isTime := last.(time.Time); isTime && now.Sub(lastTime) < hlsFreshnessCheckInterval {
@@ -505,19 +549,24 @@ func (c *Handler) serveNativeContent(ctx echo.Context, stream *HLSStreamInfo, re
 		return c.HandleError(ctx, nil, "Invalid segment path", http.StatusBadRequest)
 	}
 
-	if requestPath == hlsmux.InitSegmentName {
+	if requestPath == hls.InitSegmentName {
 		return c.serveNativeBytes(ctx, requestPath, stream.mux.InitSegment(), stream.streamEpoch)
 	}
 
-	seq, ok := hlsmux.ParseSegmentName(requestPath)
+	seq, ok := hls.ParseSegmentName(requestPath)
 	if !ok {
 		return c.HandleError(ctx, nil, "Invalid segment path", http.StatusBadRequest)
 	}
 
 	segment, ok := stream.mux.Segment(seq)
 	if !ok {
-		// The segment has scrolled out of the window, which is what a client
-		// that fell too far behind should see.
+		// The segment has scrolled out of the window (or is not cut yet), which is
+		// what a client that fell too far behind should see. Logged at debug so a
+		// client that keeps requesting evicted segments is diagnosable.
+		apicore.GetLogger().Debug("Native HLS segment not available (client fell behind the window)",
+			logger.String("source_id", privacy.SanitizeRTSPUrl(stream.SourceID)),
+			logger.Uint64("requested_seq", seq),
+			logger.Uint64("segments_total", stream.mux.Stats().Segments))
 		return c.HandleError(ctx, nil, "Segment no longer available", http.StatusNotFound)
 	}
 
@@ -529,17 +578,12 @@ func (c *Handler) serveNativeContent(ctx echo.Context, stream *HLSStreamInfo, re
 	return c.serveNativeBytes(ctx, requestPath, segment.Data, stream.streamEpoch)
 }
 
-// serveNativeBytes writes one in-memory artifact with the same HTTP semantics
-// the disk path gets from securefs.
+// serveNativeBytes writes one in-memory artifact over HTTP.
 //
 // http.ServeContent rather than a plain blob write, so range and conditional
-// requests are answered. That is parity with how the FFmpeg path serves its
-// media segments (securefs.ServeFile wraps the same function), not a fix for a
-// known break: the FFmpeg path serves its INIT segment with a plain 200 and
-// plays on iOS today, so a 200-only handler is evidently tolerated. Range
-// support is worth having because AVFoundation does issue byte-range requests
-// for fMP4 and the frontend falls back to native HLS there, but treat it as
-// matching the stricter of the two existing behaviours rather than as a fix.
+// requests are answered. Range support is worth having because AVFoundation
+// issues byte-range requests for fMP4 and the frontend falls back to native HLS
+// (Safari/iOS) there.
 //
 // modTime is the caller's choice of validator; see the call sites for why it is
 // the stream epoch rather than per-segment capture time.
@@ -551,8 +595,8 @@ func (c *Handler) serveNativeBytes(ctx echo.Context, name string, data []byte, m
 }
 
 // waitForNativePlaylist polls until the muxer advertises enough segments for
-// immediate playback, mirroring the FFmpeg path's wait but reading the muxer's
-// published snapshot instead of a file that this path never writes.
+// immediate playback, reading the muxer's published snapshot rather than any
+// file on disk.
 //
 // The segment count matters: hls.js needs two fragments before it calls play(),
 // so returning after one costs the client a full playlist reload cycle, which

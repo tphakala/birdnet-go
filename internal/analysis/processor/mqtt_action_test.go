@@ -30,6 +30,8 @@ type MockMQTTClient struct {
 	publishErr       error
 	connectErr       error
 	publishCalls     int
+	reconnectLoops   int
+	disconnectCalls  int
 }
 
 // NewMockMQTTClient creates a new mock MQTT client.
@@ -72,12 +74,33 @@ func (m *MockMQTTClient) IsConnected() bool {
 func (m *MockMQTTClient) Disconnect() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.disconnectCalls++
 	m.connected = false
+}
+
+func (m *MockMQTTClient) StartReconnectLoop() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.reconnectLoops++
 }
 
 func (m *MockMQTTClient) TestConnection(_ context.Context, _ chan<- mqtt.TestResult) {}
 func (m *MockMQTTClient) SetControlChannel(_ chan string)                            {}
 func (m *MockMQTTClient) RegisterOnConnectHandler(_ mqtt.OnConnectHandler)           {}
+
+// ReconnectLoopStarts returns how many times StartReconnectLoop was called.
+func (m *MockMQTTClient) ReconnectLoopStarts() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.reconnectLoops
+}
+
+// DisconnectCalls returns how many times Disconnect was called.
+func (m *MockMQTTClient) DisconnectCalls() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.disconnectCalls
+}
 
 // GetPublishedPayload returns the last published payload.
 func (m *MockMQTTClient) GetPublishedPayload() string {

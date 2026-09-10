@@ -85,7 +85,7 @@ func newTestSQLiteStore(t *testing.T) *SQLiteStore {
 	settings.Output.SQLite.Path = "test.db"
 
 	return &SQLiteStore{
-		Settings:  settings,
-		DataStore: DataStore{DB: db},
+		Settings: settings,
+		DB:       db,
 	}
 }

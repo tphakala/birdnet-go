@@ -17,8 +17,15 @@ const utf8BOM = "\uFEFF"
 // Label scanner buffer sizes. Labels are short ("SciName_CommonName"), but the
 // buffer is grown beyond bufio's default 64 KiB line cap defensively.
 const (
-	labelScannerInitialBufBytes = 64 * 1024   // initial scan buffer (64 KiB)
-	labelScannerMaxLineBytes    = 1024 * 1024 // max label line length (1 MiB)
+	// maxLabelLineBytes is the largest label line we support (1 MiB).
+	maxLabelLineBytes           = 1024 * 1024
+	labelScannerInitialBufBytes = 64 * 1024 // initial scan buffer (64 KiB)
+	// labelScannerMaxLineBytes is the bufio.Scanner token cap. It is
+	// maxLabelLineBytes + 2 because Scanner needs its max strictly greater than
+	// the longest token (it must read past the line, or hit EOF, to terminate
+	// it): a line of exactly maxLabelLineBytes, with or without a CR/LF
+	// terminator, otherwise fails with "bufio.Scanner: token too long".
+	labelScannerMaxLineBytes = maxLabelLineBytes + 2
 )
 
 // ParseBirdNETV3Labels parses a BirdNET v3.0 label file.

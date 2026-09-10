@@ -23,7 +23,6 @@ import (
 	"maps"
 	"math"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -165,10 +164,17 @@ type Datastore struct {
 
 	// dbstatAvailable caches whether the dbstat virtual table exists.
 	// 0 = unchecked, 1 = available, -1 = not available.
-	dbstatAvailable int32
+	dbstatAvailable atomic.Int32
 
 	// dbCounters tracks atomic query latency counters for metrics collection.
 	dbCounters *dbstats.Counters
+
+	// Cached PRAGMA quick_check result for the Database Integrity health check
+	// (#3939). integrityMu is dedicated to this cache only, never a broader
+	// datastore lock, because quick_check can be slow and must not block Save.
+	integrityMu        sync.RWMutex
+	integrityResult    string    // "ok", a corruption description, or "" until first run
+	integrityCheckedAt time.Time // when integrityResult was last computed
 }
 
 // Config configures the Datastore.
@@ -194,7 +200,7 @@ type Config struct {
 	ChiropteraClassID  *uint // "Chiroptera" taxonomic class ID (optional)
 
 	// Labels provides species label mappings in "ScientificName_CommonName" format.
-	// Used to build speciesMap for GetThresholdEvents workaround. See issue #1907.
+	// Used to build the species name map for common<->scientific name resolution.
 	Labels []string
 
 	// SpeciesCodeMap maps scientific names to eBird species codes.
@@ -349,8 +355,7 @@ func New(cfg *Config) (*Datastore, error) {
 }
 
 // buildNameMaps parses BirdNET labels ("ScientificName_CommonName" format)
-// into lookup maps for common name resolution.
-// See issue #1907 for context on species map usage.
+// into lookup maps for common<->scientific name resolution.
 // When resolver is non-nil, each label's common name is overridden by the
 // resolver (authoritative/localized); labels the resolver does not cover keep
 // their embedded common name. This keeps the reverse (search) maps consistent
@@ -521,6 +526,177 @@ func (ds *Datastore) PingWithLatency(ctx context.Context) (time.Duration, error)
 		return 0, fmt.Errorf("database ping failed: %w", err)
 	}
 	return time.Since(start), nil
+}
+
+// v2IntegrityCacheTTL bounds how long a PRAGMA quick_check result is reused
+// before the Database Integrity health check recomputes it. quick_check can be
+// slow on a large database, so the on-demand health check reads a cached result.
+const v2IntegrityCacheTTL = 24 * time.Hour
+
+// v2IntegrityCheckTimeout caps a single PRAGMA quick_check run. quick_check scans
+// every page on the single pinned SQLite connection, so an unbounded run would
+// block writes for its full duration; the timeout is generous enough for a
+// legitimate scan to complete (and then be cached for the TTL) while capping a
+// pathological hang (#3939).
+const v2IntegrityCheckTimeout = 2 * time.Minute
+
+// v2IntegrityRefreshCooldown coalesces forced integrity refreshes. A forced
+// refresh (an explicit "run diagnostics" refresh) only clears the cache when the
+// cached result is at least this old, so an authenticated client cannot repeatedly
+// force back-to-back multi-minute quick_check scans on the single pinned SQLite
+// connection (CWE-400). Within the window the recent result is reused. It is
+// longer than v2IntegrityCheckTimeout so a scan cannot be re-triggered before the
+// previous one could have finished; a legitimate re-check after a repair is
+// unaffected because the passive TTL keeps the prior result far older than this.
+const v2IntegrityRefreshCooldown = 5 * time.Minute
+
+const (
+	// integrityResultOK is the healthy PRAGMA quick_check result. DatabaseIntegrityCheck.Run
+	// maps any non-empty, non-"ok" result to a corruption status, so this exact value
+	// is the integrity-result contract shared across cache reads, writes and the
+	// non-SQLite path.
+	integrityResultOK = "ok"
+	// sqliteDialectName is gorm's dialect name for SQLite (db.Name()); other dialects
+	// have no PRAGMA quick_check equivalent.
+	sqliteDialectName = "sqlite"
+)
+
+// IntegrityResult reports the cached database integrity result and whether the
+// database is corrupted, for the Database Integrity health check (#3939). It
+// mirrors the legacy SQLiteStore accessor so the check can read integrity through
+// a shared interface instead of asserting the concrete legacy type; on v2 installs
+// that assertion failed, leaving the check stuck at "Unknown" forever.
+//
+// The result is "ok" for a healthy SQLite database (and for any non-SQLite dialect,
+// where PRAGMA quick_check does not apply), a quick_check corruption description
+// when corruption is found, or "" when a check could not be run yet. The health
+// check treats a non-"ok", non-empty result as corruption, so a dialect without
+// quick_check must report "ok", never a "skipped"-style sentinel.
+func (ds *Datastore) IntegrityResult() (string, bool) {
+	// Fast path: a fresh cached result needs only a read lock and runs no query.
+	ds.integrityMu.RLock()
+	cached := ds.integrityResult
+	fresh := cached != "" && time.Since(ds.integrityCheckedAt) < v2IntegrityCacheTTL
+	ds.integrityMu.RUnlock()
+	if fresh {
+		return cached, cached != integrityResultOK
+	}
+
+	// Slow path: recompute under the write lock so concurrent callers with a cold or
+	// expired cache do not all run PRAGMA quick_check at once (thundering herd).
+	// integrityMu is dedicated to this cache and is never taken by Save or any query
+	// path, so holding it across the check serializes only integrity reads and cannot
+	// block writes; the single SQLite connection, not this mutex, is what the query
+	// occupies for its duration (#3939).
+	ds.integrityMu.Lock()
+	defer ds.integrityMu.Unlock()
+	// Re-check under the write lock: another caller may have refreshed it while we
+	// waited for the lock.
+	if ds.integrityResult != "" && time.Since(ds.integrityCheckedAt) < v2IntegrityCacheTTL {
+		return ds.integrityResult, ds.integrityResult != integrityResultOK
+	}
+
+	result, ran := ds.runIntegrityQuickCheck()
+	if !ran {
+		// Could not run the check (no DB handle, timeout, or query error); report
+		// "not run yet" rather than a false corruption alarm, and do not cache so the
+		// next health run retries.
+		return "", false
+	}
+	ds.integrityResult = result
+	ds.integrityCheckedAt = time.Now()
+	return result, result != integrityResultOK
+}
+
+// RefreshIntegrityCache clears the cached PRAGMA quick_check result so the next
+// IntegrityResult call recomputes it, and reports whether it did. It coalesces
+// rapid forced refreshes: within v2IntegrityRefreshCooldown of the last check it
+// keeps the recent result and returns false, so an authenticated client cannot
+// repeatedly force back-to-back multi-minute quick_check scans on the single
+// pinned SQLite connection (CWE-400). The only wired caller is the explicit "run
+// diagnostics" refresh (RunDiagnostics with refresh_integrity=true). Without it a
+// repaired database keeps reporting the cached corruption string, and corruption
+// that appears after a passing check stays hidden, for up to v2IntegrityCacheTTL
+// (#3939 follow-up). integrityMu is the same lock IntegrityResult recomputes
+// under, so clearing here is safe against a concurrent refresh.
+func (ds *Datastore) RefreshIntegrityCache() bool {
+	ds.integrityMu.Lock()
+	defer ds.integrityMu.Unlock()
+	// A cached, recent result is reused: only a result older than the cooldown (or
+	// no result yet) is worth re-scanning for. An empty result means "not run yet",
+	// so it is always eligible.
+	if ds.integrityResult != "" && time.Since(ds.integrityCheckedAt) < v2IntegrityRefreshCooldown {
+		return false
+	}
+	ds.integrityResult = ""
+	ds.integrityCheckedAt = time.Time{}
+	return true
+}
+
+// runIntegrityQuickCheck executes PRAGMA quick_check on SQLite and returns the
+// result ("ok" or a "; "-joined corruption description) with ran=true. Non-SQLite
+// dialects have no quick_check equivalent, so it returns ("ok", true) to report
+// healthy. A query that errors with a corruption-class error (malformed image,
+// "file is not a database") is itself a corruption verdict, returned with
+// ran=true so the caller escalates it. ran is false only when the check could not
+// run at all (no DB handle, or a transient query error such as a timeout,
+// cancellation, or a locked db), which the caller maps to the "not run yet" state.
+func (ds *Datastore) runIntegrityQuickCheck() (result string, ran bool) {
+	db := ds.manager.DB()
+	if db == nil {
+		return "", false
+	}
+	// PRAGMA quick_check is SQLite-specific; other engines (e.g. MySQL/InnoDB)
+	// self-check and have no equivalent, so report healthy rather than tripping
+	// the corruption branch of the health check. db.Name() is the dialect name
+	// ("sqlite"/"mysql"), promoted from gorm.DB's embedded Dialector.
+	if db.Name() != sqliteDialectName {
+		return integrityResultOK, true
+	}
+	// Bound the scan: quick_check reads every page and runs on the single pinned
+	// SQLite connection, so an unbounded run would block writes for its full
+	// duration. A context timeout interrupts it (the SQLite driver honors
+	// cancellation), capping the worst-case write stall (#3939).
+	ctx, cancel := context.WithTimeout(context.Background(), v2IntegrityCheckTimeout)
+	defer cancel()
+	var rows []string
+	if err := db.WithContext(ctx).Raw("PRAGMA quick_check").Scan(&rows).Error; err != nil {
+		// A corruption-class error is itself the verdict (surfaced, cached, and
+		// escalated to Critical); a transient error is "not run yet" and retried.
+		// classifyIntegrityQueryError documents the split.
+		if r, corrupt := classifyIntegrityQueryError(err); corrupt {
+			if ds.log != nil {
+				ds.log.Error("database integrity quick_check reports corruption", logger.Error(err))
+			}
+			return r, true
+		}
+		if ds.log != nil {
+			ds.log.Warn("database integrity quick_check failed to run", logger.Error(err))
+		}
+		return "", false
+	}
+	joined := strings.Join(rows, "; ")
+	if joined == "" {
+		return integrityResultOK, true
+	}
+	return joined, true
+}
+
+// classifyIntegrityQueryError maps a PRAGMA quick_check execution error to an
+// integrity verdict. A corruption-class error (malformed image, "file is not a
+// database") IS the verdict: it is returned as a non-"ok" result with corrupt=true
+// so the health check escalates to Critical, mirroring the legacy store which
+// returned err.Error() as the result string. Every other error (a context
+// timeout, a cancellation, a locked database) is transient and not an integrity
+// signal, so it reports corrupt=false and the caller treats it as "not run yet".
+// datastore.IsDatabaseCorruption matches only structural keywords (corrupt,
+// malformed, "file is not a database"), never locked/timeout/closed, so transient
+// failures never false-escalate.
+func classifyIntegrityQueryError(err error) (result string, corrupt bool) {
+	if datastore.IsDatabaseCorruption(err) {
+		return err.Error(), true
+	}
+	return "", false
 }
 
 // CountDetectionsSince returns the number of detections recorded since the given time.
@@ -1241,6 +1417,7 @@ func (ds *Datastore) GetTopBirdsData(ctx context.Context, selectedDate string, m
 		Count          int     `gorm:"column:count"`
 		MaxConfidence  float64 `gorm:"column:max_confidence"`
 		LatestTime     int64   `gorm:"column:latest_time"`
+		FirstTime      int64   `gorm:"column:first_time"`
 	}
 
 	var results []speciesAggregate
@@ -1257,7 +1434,8 @@ func (ds *Datastore) GetTopBirdsData(ctx context.Context, selectedDate string, m
 			l.scientific_name,
 			COUNT(d.id) as count,
 			MAX(d.confidence) as max_confidence,
-			MAX(d.detected_at) as latest_time
+			MAX(d.detected_at) as latest_time,
+			MIN(d.detected_at) as first_time
 		`).
 		Joins(fmt.Sprintf("JOIN %slabels l ON d.label_id = l.id", prefix)).
 		Joins(fmt.Sprintf("LEFT JOIN %sdetection_reviews dr ON d.id = dr.detection_id", prefix)).
@@ -1278,6 +1456,7 @@ func (ds *Datastore) GetTopBirdsData(ctx context.Context, selectedDate string, m
 	for _, r := range results {
 		// Format the latest time as HH:MM:SS
 		latestTime := time.Unix(r.LatestTime, 0).In(ds.timezone)
+		firstTime := time.Unix(r.FirstTime, 0).In(ds.timezone)
 
 		// Labels may contain legacy concatenated "ScientificName_CommonName" format,
 		// so extract only the scientific name portion.
@@ -1293,6 +1472,7 @@ func (ds *Datastore) GetTopBirdsData(ctx context.Context, selectedDate string, m
 			Confidence:     r.MaxConfidence,
 			Date:           selectedDate,
 			Time:           latestTime.Format(time.TimeOnly),
+			FirstTime:      firstTime.Format(time.TimeOnly),
 		}
 		notes = append(notes, note)
 	}
@@ -2729,7 +2909,7 @@ func (ds *Datastore) GetHourlyAnalyticsData(ctx context.Context, date, species s
 		return nil, err
 	}
 
-	labelID, err := ds.resolveLabelID(ctx, species)
+	labelIDs, err := ds.resolveLabelIDs(ctx, species)
 	if err != nil {
 		if errors.Is(err, errNotFound) {
 			return []datastore.HourlyAnalyticsData{}, nil
@@ -2737,7 +2917,7 @@ func (ds *Datastore) GetHourlyAnalyticsData(ctx context.Context, date, species s
 		return nil, err
 	}
 
-	v2Data, err := ds.detection.GetHourlyDistribution(ctx, start, end, ds.zoneOffsetSeconds(start), labelID, nil)
+	v2Data, err := ds.detection.GetHourlyDistribution(ctx, start, end, ds.zoneOffsetSeconds(start), labelIDs, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2752,16 +2932,19 @@ func (ds *Datastore) GetHourlyAnalyticsData(ctx context.Context, date, species s
 	return result, nil
 }
 
-// resolveLabelID looks up a label ID for a species name.
-// Returns (nil, nil) if species is empty (no filter).
-// Returns (nil, errNotFound) if species not found.
-// Returns (&id, nil) if found.
-// Returns (nil, err) for other errors.
+// errNotFound is returned by resolveLabelIDs when no label carries the species name.
 var errNotFound = errors.NewStd("species not found")
 
-func (ds *Datastore) resolveLabelID(ctx context.Context, species string) (*uint, error) {
+// resolveLabelIDs returns every label ID carrying the species' scientific name. A species has one
+// label per AI model, and detections reference the label of the model that made them, so a species
+// filter must span all of its labels: picking one (the first, which on a multi-model station is
+// typically the permanently installed primary model's) silently excluded every detection from the
+// models actually assigned to the audio streams.
+//
+// Returns (nil, nil) for an empty species (no filter), (nil, errNotFound) when no label matches.
+func (ds *Datastore) resolveLabelIDs(ctx context.Context, species string) ([]uint, error) {
 	if species == "" {
-		return nil, nil //nolint:nilnil // nil means no filter, which is valid
+		return nil, nil
 	}
 	labelIDs, err := ds.label.GetLabelIDsByScientificName(ctx, species)
 	if err != nil {
@@ -2770,7 +2953,7 @@ func (ds *Datastore) resolveLabelID(ctx context.Context, species string) (*uint,
 	if len(labelIDs) == 0 {
 		return nil, errNotFound
 	}
-	return &labelIDs[0], nil
+	return labelIDs, nil
 }
 
 // GetDailyAnalyticsData retrieves daily analytics data.
@@ -2780,7 +2963,7 @@ func (ds *Datastore) GetDailyAnalyticsData(ctx context.Context, startDate, endDa
 		return nil, err
 	}
 
-	labelID, err := ds.resolveLabelID(ctx, species)
+	labelIDs, err := ds.resolveLabelIDs(ctx, species)
 	if err != nil {
 		if errors.Is(err, errNotFound) {
 			return []datastore.DailyAnalyticsData{}, nil
@@ -2790,7 +2973,7 @@ func (ds *Datastore) GetDailyAnalyticsData(ctx context.Context, startDate, endDa
 
 	// Bucket dates by the configured timezone, anchored to a query boundary (start, or end for a
 	// left-open range) so an end-only historical query buckets stably regardless of run time.
-	v2Data, err := ds.detection.GetDailyAnalytics(ctx, start, end, ds.zoneOffsetSeconds(dateRangeOffsetAnchor(start, end)), labelID, nil)
+	v2Data, err := ds.detection.GetDailyAnalytics(ctx, start, end, ds.zoneOffsetSeconds(dateRangeOffsetAnchor(start, end)), labelIDs, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2830,7 +3013,7 @@ func (ds *Datastore) GetHourlyDistribution(ctx context.Context, startDate, endDa
 		return nil, err
 	}
 
-	labelID, err := ds.resolveLabelID(ctx, species)
+	labelIDs, err := ds.resolveLabelIDs(ctx, species)
 	if err != nil {
 		if errors.Is(err, errNotFound) {
 			return []datastore.HourlyDistributionData{}, nil
@@ -2838,7 +3021,7 @@ func (ds *Datastore) GetHourlyDistribution(ctx context.Context, startDate, endDa
 		return nil, err
 	}
 
-	v2Data, err := ds.detection.GetHourlyDistribution(ctx, start, end, ds.zoneOffsetSeconds(start), labelID, nil)
+	v2Data, err := ds.detection.GetHourlyDistribution(ctx, start, end, ds.zoneOffsetSeconds(start), labelIDs, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2859,6 +3042,7 @@ type speciesFirstSeenInfo struct {
 	ScientificName string
 	FirstDetected  int64
 	LastDetected   int64
+	CountInPeriod  int // detections inside the queried window; only the lifetime-first query fills it
 }
 
 // convertToNewSpeciesData converts species first-seen data to NewSpeciesData with common name resolution.
@@ -2891,7 +3075,7 @@ func (ds *Datastore) convertToNewSpeciesData(_ context.Context, data []speciesFi
 			CommonName:     commonName,
 			FirstSeenDate:  firstSeenDate,
 			LastSeenDate:   lastSeenDate,
-			CountInPeriod:  0,
+			CountInPeriod:  d.CountInPeriod,
 		})
 	}
 	return result
@@ -2917,6 +3101,7 @@ func (ds *Datastore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 			ScientificName: d.ScientificName,
 			FirstDetected:  d.FirstDetected,
 			LastDetected:   d.LastDetected,
+			CountInPeriod:  d.CountInPeriod,
 		}
 	}
 
@@ -3141,7 +3326,7 @@ func (ds *Datastore) GetActivityHeatmap(ctx context.Context, startDate, endDate,
 		return datastore.ActivityHeatmapData{}, err
 	}
 
-	labelID, err := ds.resolveLabelID(ctx, species)
+	labelIDs, err := ds.resolveLabelIDs(ctx, species)
 	if err != nil {
 		if errors.Is(err, errNotFound) {
 			return buildActivityHeatmap(nil, ds.timezone, startDate, endDate)
@@ -3149,7 +3334,7 @@ func (ds *Datastore) GetActivityHeatmap(ctx context.Context, startDate, endDate,
 		return datastore.ActivityHeatmapData{}, err
 	}
 
-	timestamps, err := ds.detection.GetDetectionTimestamps(ctx, start, end, labelID)
+	timestamps, err := ds.detection.GetDetectionTimestamps(ctx, start, end, labelIDs)
 	if err != nil {
 		return datastore.ActivityHeatmapData{}, err
 	}
@@ -3274,7 +3459,7 @@ func (ds *Datastore) GetDailyActivityOnset(ctx context.Context, startDate, endDa
 
 	dawn := ds.civilDawnMinuteLookup()
 
-	labelID, err := ds.resolveLabelID(ctx, species)
+	labelIDs, err := ds.resolveLabelIDs(ctx, species)
 	if err != nil {
 		if errors.Is(err, errNotFound) {
 			return buildDailyActivityOnset(nil, ds.timezone, startDate, endDate, onsetDetectionRank, minOnsetDetections, dawn)
@@ -3282,7 +3467,7 @@ func (ds *Datastore) GetDailyActivityOnset(ctx context.Context, startDate, endDa
 		return nil, err
 	}
 
-	timestamps, err := ds.detection.GetDetectionTimestamps(ctx, start, end, labelID)
+	timestamps, err := ds.detection.GetDetectionTimestamps(ctx, start, end, labelIDs)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
@@ -3539,23 +3724,18 @@ func (ds *Datastore) civilDawnMinuteLookup() civilDawnMinuteLookup {
 // Dynamic Threshold Methods
 // ============================================================
 
-// thresholdScientificName extracts the scientific name from a threshold's label.
-func thresholdScientificName(t *entities.DynamicThreshold) string {
-	if t.Label != nil && t.Label.ScientificName != "" {
-		return detection.ExtractScientificName(t.Label.ScientificName)
+// displayScientificName returns the scientific name for display metadata, preferring
+// the stored column and falling back to resolving it from the species (common) name
+// when empty. Scientific name is display-only metadata since #4195; thresholds and
+// events are keyed by species (lowercase common name), not by a model-scoped label.
+func (ds *Datastore) displayScientificName(speciesName, stored string) string {
+	if stored != "" {
+		return stored
+	}
+	if resolved := ds.resolveToScientificName(speciesName); resolved != speciesName {
+		return resolved
 	}
 	return ""
-}
-
-// labelModelName constructs the classifier-style model ID ("Name_VVersion") from a
-// label's associated AIModel, used for both threshold records and threshold events.
-// Requires the caller's query to preload Label.Model; falls back to the default
-// BirdNET model identifier when the label or model is absent.
-func labelModelName(l *entities.Label) string {
-	if l != nil && l.Model != nil && l.Model.Name != "" {
-		return l.Model.Name + "_V" + l.Model.Version
-	}
-	return detection.DefaultModelName + "_V" + detection.DefaultModelVersion
 }
 
 // resolveCommonName maps a scientific name to its common name using the
@@ -3615,45 +3795,39 @@ func (ds *Datastore) resolveToScientificName(name string) string {
 	return name
 }
 
-// SaveDynamicThreshold saves a dynamic threshold.
-// Resolves the scientific name to a label ID before saving.
+// SaveDynamicThreshold saves a dynamic threshold, keyed by species (lowercase common
+// name). Model-independent: no label resolution (#4195).
 func (ds *Datastore) SaveDynamicThreshold(threshold *datastore.DynamicThreshold) error {
 	if ds.threshold == nil {
 		return fmt.Errorf("threshold repository not configured")
 	}
 	ctx := context.Background()
 
-	// Resolve scientific name to label ID using default model
-	label, err := ds.label.GetOrCreate(ctx, threshold.ScientificName, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
-	if err != nil {
-		return fmt.Errorf("failed to resolve label for threshold: %w", err)
-	}
-
 	v2Threshold := &entities.DynamicThreshold{
-		LabelID:       label.ID,
-		Level:         threshold.Level,
-		CurrentValue:  threshold.CurrentValue,
-		BaseThreshold: threshold.BaseThreshold,
-		HighConfCount: threshold.HighConfCount,
-		ValidHours:    threshold.ValidHours,
-		ExpiresAt:     threshold.ExpiresAt,
-		LastTriggered: threshold.LastTriggered,
-		FirstCreated:  threshold.FirstCreated,
-		TriggerCount:  threshold.TriggerCount,
+		SpeciesName:    strings.ToLower(threshold.SpeciesName),
+		ScientificName: threshold.ScientificName,
+		Level:          threshold.Level,
+		CurrentValue:   threshold.CurrentValue,
+		BaseThreshold:  threshold.BaseThreshold,
+		HighConfCount:  threshold.HighConfCount,
+		ValidHours:     threshold.ValidHours,
+		ExpiresAt:      threshold.ExpiresAt,
+		LastTriggered:  threshold.LastTriggered,
+		FirstCreated:   threshold.FirstCreated,
+		TriggerCount:   threshold.TriggerCount,
 	}
 	return ds.threshold.SaveDynamicThreshold(ctx, v2Threshold)
 }
 
-// GetDynamicThreshold retrieves a dynamic threshold by scientific name and model.
-// Note: modelName is accepted for interface compatibility but not used in the v2 schema
-// because v2 thresholds are scoped through LabelID (which is already per-model).
-func (ds *Datastore) GetDynamicThreshold(speciesName, _ string) (*datastore.DynamicThreshold, error) {
+// GetDynamicThreshold retrieves a dynamic threshold by species name.
+// Thresholds are keyed by species (lowercase common name); model-independent (#4195).
+func (ds *Datastore) GetDynamicThreshold(speciesName string) (*datastore.DynamicThreshold, error) {
 	if ds.threshold == nil {
 		return nil, fmt.Errorf("threshold repository not configured")
 	}
 	ctx := context.Background()
-	// Resolve to scientific name in case caller passes a common name
-	t, err := ds.threshold.GetDynamicThreshold(ctx, ds.resolveToScientificName(speciesName))
+	// Thresholds are keyed by species (lowercase common name); look up directly.
+	t, err := ds.threshold.GetDynamicThreshold(ctx, strings.ToLower(speciesName))
 	if err != nil {
 		// Not-found is a benign result, not a DB fault. Wrap it as a CategoryNotFound
 		// EnhancedError (never CategoryDatabase, so it is not surfaced to Sentry as a
@@ -3676,12 +3850,10 @@ func (ds *Datastore) GetDynamicThreshold(speciesName, _ string) (*datastore.Dyna
 			Context("operation", "get_dynamic_threshold").
 			Build()
 	}
-	scientificName := thresholdScientificName(t)
 	return &datastore.DynamicThreshold{
 		ID:             t.ID,
-		SpeciesName:    strings.ToLower(ds.resolveCommonName(scientificName)),
-		ScientificName: scientificName,
-		ModelName:      labelModelName(t.Label),
+		SpeciesName:    t.SpeciesName,
+		ScientificName: ds.displayScientificName(t.SpeciesName, t.ScientificName),
 		Level:          t.Level,
 		CurrentValue:   t.CurrentValue,
 		BaseThreshold:  t.BaseThreshold,
@@ -3712,12 +3884,10 @@ func (ds *Datastore) GetAllDynamicThresholds(limit ...int) ([]datastore.DynamicT
 	result := make([]datastore.DynamicThreshold, 0, len(v2Thresholds))
 	for i := range v2Thresholds {
 		t := &v2Thresholds[i]
-		scientificName := thresholdScientificName(t)
 		result = append(result, datastore.DynamicThreshold{
 			ID:             t.ID,
-			SpeciesName:    strings.ToLower(ds.resolveCommonName(scientificName)),
-			ScientificName: scientificName,
-			ModelName:      labelModelName(t.Label),
+			SpeciesName:    t.SpeciesName,
+			ScientificName: ds.displayScientificName(t.SpeciesName, t.ScientificName),
 			Level:          t.Level,
 			CurrentValue:   t.CurrentValue,
 			BaseThreshold:  t.BaseThreshold,
@@ -3739,7 +3909,7 @@ func (ds *Datastore) DeleteDynamicThreshold(speciesName string) error {
 		return fmt.Errorf("threshold repository not configured")
 	}
 	ctx := context.Background()
-	return ds.threshold.DeleteDynamicThreshold(ctx, ds.resolveToScientificName(speciesName))
+	return ds.threshold.DeleteDynamicThreshold(ctx, strings.ToLower(speciesName))
 }
 
 // DeleteExpiredDynamicThresholds deletes expired thresholds.
@@ -3757,11 +3927,11 @@ func (ds *Datastore) UpdateDynamicThresholdExpiry(speciesName string, expiresAt 
 		return fmt.Errorf("threshold repository not configured")
 	}
 	ctx := context.Background()
-	return ds.threshold.UpdateDynamicThresholdExpiry(ctx, ds.resolveToScientificName(speciesName), expiresAt)
+	return ds.threshold.UpdateDynamicThresholdExpiry(ctx, strings.ToLower(speciesName), expiresAt)
 }
 
-// BatchSaveDynamicThresholds saves multiple thresholds.
-// Resolves scientific names to label IDs before saving.
+// BatchSaveDynamicThresholds saves multiple thresholds, keyed by species
+// (lowercase common name); model-independent, no label resolution (#4195).
 func (ds *Datastore) BatchSaveDynamicThresholds(thresholds []datastore.DynamicThreshold) error {
 	if ds.threshold == nil {
 		return fmt.Errorf("threshold repository not configured")
@@ -3771,40 +3941,22 @@ func (ds *Datastore) BatchSaveDynamicThresholds(thresholds []datastore.DynamicTh
 	}
 	ctx := context.Background()
 
-	// Collect all scientific names for batch resolution
-	names := make([]string, 0, len(thresholds))
-	for i := range thresholds {
-		if thresholds[i].ScientificName != "" {
-			names = append(names, thresholds[i].ScientificName)
-		}
-	}
-
-	// Batch resolve all labels in one operation using default model
-	labels, err := ds.label.BatchGetOrCreate(ctx, names, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
-	if err != nil {
-		return fmt.Errorf("failed to resolve labels for thresholds: %w", err)
-	}
-
-	// Build v2 thresholds with resolved label IDs
+	// Build v2 thresholds keyed by species (lowercase common name); model-independent (#4195).
 	v2Thresholds := make([]entities.DynamicThreshold, 0, len(thresholds))
 	for i := range thresholds {
 		t := &thresholds[i]
-		label := labels[t.ScientificName]
-		if label == nil {
-			return fmt.Errorf("label not found for threshold %s", t.ScientificName)
-		}
-
 		v2Thresholds = append(v2Thresholds, entities.DynamicThreshold{
-			LabelID:       label.ID,
-			Level:         t.Level,
-			CurrentValue:  t.CurrentValue,
-			BaseThreshold: t.BaseThreshold,
-			HighConfCount: t.HighConfCount,
-			ValidHours:    t.ValidHours,
-			ExpiresAt:     t.ExpiresAt,
-			LastTriggered: t.LastTriggered,
-			FirstCreated:  t.FirstCreated,
-			TriggerCount:  t.TriggerCount,
+			SpeciesName:    strings.ToLower(t.SpeciesName),
+			ScientificName: t.ScientificName,
+			Level:          t.Level,
+			CurrentValue:   t.CurrentValue,
+			BaseThreshold:  t.BaseThreshold,
+			HighConfCount:  t.HighConfCount,
+			ValidHours:     t.ValidHours,
+			ExpiresAt:      t.ExpiresAt,
+			LastTriggered:  t.LastTriggered,
+			FirstCreated:   t.FirstCreated,
+			TriggerCount:   t.TriggerCount,
 		})
 	}
 	return ds.threshold.BatchSaveDynamicThresholds(ctx, v2Thresholds)
@@ -3840,126 +3992,59 @@ func (ds *Datastore) GetDynamicThresholdStats() (totalCount, activeCount, atMini
 // Threshold Event Methods
 // ============================================================
 
-// eventSpeciesName extracts the species name from an event's label.
-// Handles legacy concatenated "ScientificName_CommonName" format.
-func eventSpeciesName(e *entities.ThresholdEvent) string {
-	if e.Label != nil && e.Label.ScientificName != "" {
-		return detection.ExtractScientificName(e.Label.ScientificName)
-	}
-	return ""
-}
-
-// SaveThresholdEvent saves a threshold event.
-// Uses event.ScientificName (if provided) for correct label resolution in V2 schema.
-// Falls back to event.SpeciesName (common name) for backward compatibility with
-// events created before #1907 fix.
+// SaveThresholdEvent saves a threshold event, keyed by species (lowercase common
+// name); model-independent (#4195). ScientificName is stored as display metadata.
 func (ds *Datastore) SaveThresholdEvent(event *datastore.ThresholdEvent) error {
 	if ds.threshold == nil {
 		return fmt.Errorf("threshold repository not configured")
 	}
 	ctx := context.Background()
 
-	// Use ScientificName if available (new behavior after #1907 fix),
-	// otherwise fall back to SpeciesName (common name) for backward compatibility.
-	labelName := event.ScientificName
-	if labelName == "" {
-		// Fallback for events without ScientificName populated.
-		// This creates incorrect labels but maintains backward compatibility.
-		labelName = event.SpeciesName
-	}
-
-	label, err := ds.label.GetOrCreate(ctx, labelName, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
-	if err != nil {
-		return fmt.Errorf("failed to resolve label for event: %w", err)
-	}
-
 	v2Event := &entities.ThresholdEvent{
-		LabelID:       label.ID,
-		PreviousLevel: event.PreviousLevel,
-		NewLevel:      event.NewLevel,
-		PreviousValue: event.PreviousValue,
-		NewValue:      event.NewValue,
-		ChangeReason:  event.ChangeReason,
-		Confidence:    event.Confidence,
-		CreatedAt:     event.CreatedAt,
+		SpeciesName:    strings.ToLower(event.SpeciesName),
+		ScientificName: event.ScientificName,
+		PreviousLevel:  event.PreviousLevel,
+		NewLevel:       event.NewLevel,
+		PreviousValue:  event.PreviousValue,
+		NewValue:       event.NewValue,
+		ChangeReason:   event.ChangeReason,
+		Confidence:     event.Confidence,
+		CreatedAt:      event.CreatedAt,
 	}
 	return ds.threshold.SaveThresholdEvent(ctx, v2Event)
 }
 
-// GetThresholdEvents retrieves threshold events for a species.
-// WORKAROUND(#1907): Prior to the fix, events were saved with labels created from common names
-// (e.g., "american robin" stored as scientific_name). After the fix, events are saved with
-// correct scientific names (e.g., "Turdus migratorius"). This method queries both label types
-// to return all events during the transition period.
-// TODO: Remove this workaround when legacy database support is dropped. At that point,
-// clean up orphaned common-name labels and simplify to a single query using scientific name.
+// GetThresholdEvents retrieves threshold events for a species (lowercase common name).
+// Events are keyed by species and ordered/limited by the repository (#4195).
 func (ds *Datastore) GetThresholdEvents(speciesName string, limit int) ([]datastore.ThresholdEvent, error) {
 	if ds.threshold == nil {
 		return []datastore.ThresholdEvent{}, nil
 	}
 	ctx := context.Background()
 
-	// Query 1: Try with the provided name (common name) - finds legacy/incorrectly saved events
-	v2Events, err := ds.threshold.GetThresholdEvents(ctx, speciesName, limit)
+	v2Events, err := ds.threshold.GetThresholdEvents(ctx, strings.ToLower(speciesName), limit)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).
 			Context("operation", "get_threshold_events").
-			Context("query_type", "common_name").
 			Build()
 	}
 
-	// Query 2: If we can resolve to scientific name, also query with that
-	// This finds correctly saved events (after #1907 fix)
-	// Resolve through resolveToScientificName so this shares the reverse map's NFC-folded
-	// normalization; a decomposed (NFD) localized name must match the NFC-folded keys.
-	if scientificName := ds.resolveToScientificName(speciesName); scientificName != speciesName {
-		sciEvents, err := ds.threshold.GetThresholdEvents(ctx, scientificName, limit)
-		if err != nil {
-			return nil, errors.New(err).
-				Component("datastore").
-				Category(errors.CategoryDatabase).
-				Context("operation", "get_threshold_events").
-				Context("query_type", "scientific_name").
-				Build()
-		}
-		v2Events = append(v2Events, sciEvents...)
-	}
-
-	// Note: Deduplication not needed - each event has exactly one LabelID,
-	// so queries for different labels return disjoint result sets.
-	uniqueEvents := v2Events
-
-	// Sort by CreatedAt DESC (most recent first). Tie-break on ID so events sharing a
-	// timestamp truncate deterministically when the limit is applied below.
-	sort.Slice(uniqueEvents, func(i, j int) bool {
-		if uniqueEvents[i].CreatedAt.Equal(uniqueEvents[j].CreatedAt) {
-			return uniqueEvents[i].ID > uniqueEvents[j].ID
-		}
-		return uniqueEvents[i].CreatedAt.After(uniqueEvents[j].CreatedAt)
-	})
-
-	// Apply limit after merge
-	if limit > 0 && len(uniqueEvents) > limit {
-		uniqueEvents = uniqueEvents[:limit]
-	}
-
-	// Convert to datastore.ThresholdEvent
-	result := make([]datastore.ThresholdEvent, 0, len(uniqueEvents))
-	for i := range uniqueEvents {
-		e := &uniqueEvents[i]
+	result := make([]datastore.ThresholdEvent, 0, len(v2Events))
+	for i := range v2Events {
+		e := &v2Events[i]
 		result = append(result, datastore.ThresholdEvent{
-			ID:            e.ID,
-			SpeciesName:   eventSpeciesName(e),
-			ModelName:     labelModelName(e.Label),
-			PreviousLevel: e.PreviousLevel,
-			NewLevel:      e.NewLevel,
-			PreviousValue: e.PreviousValue,
-			NewValue:      e.NewValue,
-			ChangeReason:  e.ChangeReason,
-			Confidence:    e.Confidence,
-			CreatedAt:     e.CreatedAt,
+			ID:             e.ID,
+			SpeciesName:    e.SpeciesName,
+			ScientificName: ds.displayScientificName(e.SpeciesName, e.ScientificName),
+			PreviousLevel:  e.PreviousLevel,
+			NewLevel:       e.NewLevel,
+			PreviousValue:  e.PreviousValue,
+			NewValue:       e.NewValue,
+			ChangeReason:   e.ChangeReason,
+			Confidence:     e.Confidence,
+			CreatedAt:      e.CreatedAt,
 		})
 	}
 	return result, nil
@@ -3983,56 +4068,33 @@ func (ds *Datastore) GetRecentThresholdEvents(limit int) ([]datastore.ThresholdE
 	for i := range v2Events {
 		e := &v2Events[i]
 		result = append(result, datastore.ThresholdEvent{
-			ID:            e.ID,
-			SpeciesName:   eventSpeciesName(e),
-			ModelName:     labelModelName(e.Label),
-			PreviousLevel: e.PreviousLevel,
-			NewLevel:      e.NewLevel,
-			PreviousValue: e.PreviousValue,
-			NewValue:      e.NewValue,
-			ChangeReason:  e.ChangeReason,
-			Confidence:    e.Confidence,
-			CreatedAt:     e.CreatedAt,
+			ID:             e.ID,
+			SpeciesName:    e.SpeciesName,
+			ScientificName: ds.displayScientificName(e.SpeciesName, e.ScientificName),
+			PreviousLevel:  e.PreviousLevel,
+			NewLevel:       e.NewLevel,
+			PreviousValue:  e.PreviousValue,
+			NewValue:       e.NewValue,
+			ChangeReason:   e.ChangeReason,
+			Confidence:     e.Confidence,
+			CreatedAt:      e.CreatedAt,
 		})
 	}
 	return result, nil
 }
 
-// DeleteThresholdEvents deletes threshold events for a species.
-// WORKAROUND(#1907): mirrors GetThresholdEvents' dual lookup. It deletes events saved
-// under BOTH the provided name (legacy common-name labels) AND the resolved scientific
-// name (post-#1907 labels). Without the common-name pass, legacy events survive the
-// delete and GetThresholdEvents resurfaces them on the next read.
-// TODO: Collapse to a single scientific-name delete when the #1907 workaround is removed
-// (after legacy common-name labels have been migrated).
+// DeleteThresholdEvents deletes threshold events for a species (lowercase common name).
 func (ds *Datastore) DeleteThresholdEvents(speciesName string) error {
 	if ds.threshold == nil {
 		return nil
 	}
 	ctx := context.Background()
-
-	// Delete by the provided name first - matches legacy/incorrectly saved events
-	// whose label scientific_name actually holds the common name.
-	if err := ds.threshold.DeleteThresholdEvents(ctx, speciesName); err != nil {
+	if err := ds.threshold.DeleteThresholdEvents(ctx, strings.ToLower(speciesName)); err != nil {
 		return errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).
 			Context("operation", "delete_threshold_events").
-			Context("query_type", "common_name").
 			Build()
-	}
-
-	// Also delete by the resolved scientific name when it differs - matches
-	// correctly saved events (after the #1907 fix).
-	if scientificName := ds.resolveToScientificName(speciesName); scientificName != speciesName {
-		if err := ds.threshold.DeleteThresholdEvents(ctx, scientificName); err != nil {
-			return errors.New(err).
-				Component("datastore").
-				Category(errors.CategoryDatabase).
-				Context("operation", "delete_threshold_events").
-				Context("query_type", "scientific_name").
-				Build()
-		}
 	}
 	return nil
 }

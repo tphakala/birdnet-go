@@ -24,7 +24,7 @@ OpenVINO is applied per model, only where it is known to be correct and faster. 
 | Model                                         | OpenVINO eligible | GPU precision | Notes                                                                                                                                   |
 | --------------------------------------------- | :---------------: | :-----------: | --------------------------------------------------------------------------------------------------------------------------------------- |
 | BirdNET v2.4 (stock classifier)               |        Yes        |      f32      | The GPU f16 kernel miscompiles this model, so it is forced to f32 on the iGPU (still faster than ORT CPU). f16 on the ARM A76 CPU path. |
-| Perch v2 (`no_dft` variant)                   |        Yes        |      f16      | Runs its own OpenVINO path. The stock `perch_v2.onnx` (with the DFT layer) is **not** OpenVINO-eligible; the `no_dft` variant is.       |
+| Perch v2 (`no_dft` variant)                   |        Yes        |      f32      | Forced to f32 on the GPU: the GPU f16 kernel returns NaN logits on Intel Arc. f16 on the ARM A76 CPU path. The stock `perch_v2.onnx` (with the DFT layer) is **not** OpenVINO-eligible; the `no_dft` variant is. |
 | BattyBirdNET (bat embedding)                  |        Yes        |      f32      | Forced to f32 on every device (its embedding head overflows at f16).                                                                    |
 | INT8 models (e.g. the arm64 INT8-ARM default) |        No         |       -       | INT8 stays on ONNX Runtime CPU.                                                                                                         |
 | Custom / other models                         |        No         |       -       | Fall back to ONNX Runtime.                                                                                                              |
@@ -213,7 +213,7 @@ With Perch v2 or BirdNET v2.4 on the iGPU you will see the **Render/3D** (or **C
 
 ## Performance Expectations
 
-- **amd64 + Intel iGPU:** offloading FP32 models to the iGPU is faster than CPU inference and, more importantly, moves the load off the CPU. On a 12th-gen Core with an Iris Xe iGPU, Perch v2 runs around 45 ms on the iGPU versus about 67 ms on four CPU threads, while leaving those CPU cores free for other streams.
+- **amd64 + Intel iGPU:** offloading FP32 models to the iGPU is faster than CPU inference and, more importantly, moves the load off the CPU. On a 12th-gen Core with an Iris Xe iGPU, Perch v2 ran around 45 ms on the iGPU (measured at f16, before the f32 override; expect somewhat more at f32) versus about 67 ms on four CPU threads, while leaving those CPU cores free for other streams. On an Intel Arc A380, Perch v2 at f32 runs around 19 ms.
 - **Raspberry Pi 5 (A76):** the OpenVINO f16 CPU path can beat ONNX Runtime for FP32 models. Results vary by model.
 - **Raspberry Pi 4 and older ARM (no native f16):** OpenVINO is slower, uses more memory, and loads more slowly than ONNX Runtime. Do not enable it; keep the default `onnx`/INT8-ARM path.
 

@@ -155,16 +155,17 @@ func (p *Processor) SnapshotVisiblePending() []SSEPendingDetection {
 	return result
 }
 
-// getThumbnailURL returns the thumbnail URL for a species from the bird image cache.
-// Returns empty string if the cache is unavailable or the species has no image.
+// getThumbnailURL returns the media-proxy URL for a species thumbnail.
+//
+// The URL is emitted unconditionally, matching every REST producer
+// (analytics.buildThumbnailURL). It used to call BirdImageCache.Get purely as an
+// existence predicate, choosing between this same URL and an empty string. That
+// probe was a synchronous, uncancellable provider fetch running under
+// pendingMutex.RLock and, via the caller at processor.go, under the exclusive Lock
+// that a 1s ticker drives, so one cold species could stall pending-detection
+// processing for as long as the provider took. The proxy already answers "not found"
+// for a species with no image, which is where that decision belongs.
 func (p *Processor) getThumbnailURL(scientificName string) string {
-	if p.BirdImageCache == nil {
-		return ""
-	}
-	img, err := p.BirdImageCache.Get(scientificName)
-	if err != nil || img.IsNegativeEntry() || img.URL == "" {
-		return ""
-	}
 	return imageprovider.ProxyImageURL(scientificName)
 }
 

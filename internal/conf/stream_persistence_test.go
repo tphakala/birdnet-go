@@ -537,9 +537,10 @@ transport: "tcp"
 	assert.Equal(t, StreamTypeHLS, settings.Realtime.RTSP.Streams[2].Type)
 	assert.Empty(t, settings.Realtime.RTSP.Streams[2].Transport, "HLS streams should not have transport")
 
-	// Legacy fields should be cleared
+	// The legacy URLs list is cleared, but the global transport is preserved:
+	// the startup path reads it as the engine-wide default (issue #4240).
 	assert.Empty(t, settings.Realtime.RTSP.URLs)
-	assert.Empty(t, settings.Realtime.RTSP.Transport)
+	assert.Equal(t, "tcp", settings.Realtime.RTSP.Transport)
 
 	// Now save the migrated config and verify it can be reloaded
 	migratedData, err := yaml.Marshal(&settings.Realtime.RTSP)

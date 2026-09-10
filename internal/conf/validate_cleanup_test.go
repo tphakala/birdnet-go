@@ -216,34 +216,48 @@ func TestApplyFfmpegFormatFallback_NativeGate(t *testing.T) {
 			input: AudioExportTypeAAC, want: AudioExportTypeAAC,
 		},
 		{
-			name:  "opus without the gate falls back to WAV",
-			input: AudioExportTypeOPUS, want: AudioExportTypeWAV,
-		},
-		{
-			name: "opus with the gate keeps opus", envVar: EnvNativeOpusEncoder, envValue: "native",
+			// Opus is native by default (go-opus), so it is never downgraded even
+			// when FFmpeg is missing. No gate is involved.
+			name:  "opus is kept without FFmpeg (native default)",
 			input: AudioExportTypeOPUS, want: AudioExportTypeOPUS,
 		},
 		{
-			// The gates are per codec: the AAC gate must not rescue Opus.
-			name: "the aac gate does not keep opus", envVar: EnvNativeAACEncoder, envValue: "native",
-			input: AudioExportTypeOPUS, want: AudioExportTypeWAV,
+			// The AAC gate is per codec and must not affect Opus, which is native
+			// regardless of any gate.
+			name: "the aac gate does not disturb opus", envVar: EnvNativeAACEncoder, envValue: "native",
+			input: AudioExportTypeOPUS, want: AudioExportTypeOPUS,
 		},
 		{
-			// MP3 has no native encoder, so it is downgraded even when a gate is set.
-			name: "mp3 falls back with the aac gate set", envVar: EnvNativeAACEncoder, envValue: "native",
+			// The AAC gate is per codec: it does not enable MP3, which has its own.
+			name: "mp3 falls back with only the aac gate set", envVar: EnvNativeAACEncoder, envValue: "native",
 			input: AudioExportTypeMP3, want: AudioExportTypeWAV,
 		},
 		{
-			name: "mp3 falls back with the opus gate set", envVar: EnvNativeOpusEncoder, envValue: "native",
+			// Disabled export is never rewritten, gate or no gate.
+			name: "disabled mp3 is kept without the gate", disabled: true,
+			input: AudioExportTypeMP3, want: AudioExportTypeMP3,
+		},
+		{
+			name:  "mp3 without the gate falls back to WAV",
 			input: AudioExportTypeMP3, want: AudioExportTypeWAV,
+		},
+		{
+			name: "mp3 with the gate keeps mp3", envVar: EnvNativeMP3Encoder, envValue: "native",
+			input: AudioExportTypeMP3, want: AudioExportTypeMP3,
+		},
+		{
+			// The MP3 gate is per codec and must not affect AAC, which stays
+			// downgraded without its own gate.
+			name: "the mp3 gate does not disturb aac", envVar: EnvNativeMP3Encoder, envValue: "native",
+			input: AudioExportTypeAAC, want: AudioExportTypeWAV,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Clear both gates, then set only the one under test, so a leaked
-			// value from the environment cannot make a case pass.
+			// Clear both native-encoder gates, then set only the one under test, so
+			// a leaked value from the environment cannot make a case pass.
 			t.Setenv(EnvNativeAACEncoder, "")
-			t.Setenv(EnvNativeOpusEncoder, "")
+			t.Setenv(EnvNativeMP3Encoder, "")
 			if tt.envVar != "" {
 				t.Setenv(tt.envVar, tt.envValue)
 			}

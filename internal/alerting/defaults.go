@@ -24,6 +24,21 @@ func DefaultRules() []entities.AlertRule {
 			},
 		},
 		{
+			Name:           "Infrequent species detected",
+			Description:    "Notifies when a species returns after a long absence",
+			NameKey:        RuleKeyInfrequentName,
+			DescriptionKey: RuleKeyInfrequentDesc,
+			Enabled:        true,
+			BuiltIn:        true,
+			ObjectType:     ObjectTypeDetection,
+			TriggerType:    TriggerTypeEvent,
+			EventName:      EventDetectionInfrequentSpecies,
+			CooldownSec:    60,
+			Actions: []entities.AlertAction{
+				{Target: TargetBell, SortOrder: 0},
+			},
+		},
+		{
 			Name:           "Audio stream disconnected",
 			Description:    "Notifies when an RTSP or audio stream loses connection",
 			NameKey:        RuleKeyStreamDiscName,

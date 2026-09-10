@@ -47,6 +47,7 @@ package conf
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -68,6 +69,7 @@ const (
 	warnComponentLowMemory    = "lowmemory"
 	warnComponentModels       = "models"
 	warnComponentStreams      = "streams"
+	warnComponentDiagnostics  = "diagnostics"
 )
 
 // recordValidationWarning logs a non-fatal configuration finding and records it on
@@ -106,6 +108,54 @@ func normalizeIncompleteFeatures(s *Settings) {
 	s.normalizeRealtimeFeatures()
 	s.normalizeSpeciesTracking()
 	s.normalizeWebServer()
+	s.normalizeProfiling()
+	s.normalizeModelThresholds()
+}
+
+// normalizeModelThresholds resets an out-of-range per-model confidence threshold
+// (bat, perch, birdnetv3) to the documented default on load, recording a warning.
+// Unlike a never-written zero, an out-of-range or NaN/Inf threshold changes
+// detection gating, so ValidateSettings rejects it. But ValidateSettings is fatal
+// on Load (storage.go), and refusing to boot over a threshold takes away the web
+// UI that is the only practical way to fix it, crash-looping a headless install.
+// A value could reach config.yaml from a hand-edit or from the raw settings API
+// before it validated these fields. So, as with normalizeProfiling, the Load path
+// repairs the value to a working default and warns; the settings API path (which
+// does not run this pass) still rejects it outright so the operator sees the error.
+func (s *Settings) normalizeModelThresholds() {
+	reset := func(name string, v *float64) {
+		if math.IsNaN(*v) || math.IsInf(*v, 0) || *v < minModelThreshold || *v > maxModelThreshold {
+			s.recordValidationWarning(warnComponentModels,
+				"%s threshold %v is outside [%.2f, %.2f]; using the default %.2f (set a value in range to use it)",
+				name, *v, minModelThreshold, maxModelThreshold, defaultModelThreshold)
+			*v = defaultModelThreshold
+		}
+	}
+	reset("bat", &s.Bat.Threshold)
+	reset("perch", &s.Perch.Threshold)
+	reset("birdnetv3", &s.BirdNETV3.Threshold)
+}
+
+// normalizeProfiling zeroes negative pprof sampling rates on load. A negative rate
+// is a value the runtime already ignores: ResolvedBlockRate and
+// ResolvedMutexFraction treat any value <= 0 as "off", so a stored negative is
+// inert. Following the file policy for values the runtime ignores (rule 3),
+// normalize it to the 0 it effectively means, recording a warning, rather than
+// refusing to boot over it. The settings API still rejects a negative outright via
+// validateProfilingSettings, because there the operator can act on the error; this
+// pass runs only on Load.
+func (s *Settings) normalizeProfiling() {
+	p := &s.Diagnostics.Profiling
+	if p.BlockRate < 0 {
+		s.recordValidationWarning(warnComponentDiagnostics,
+			"profiling block rate %d is negative and does nothing; using 0 (disabled)", p.BlockRate)
+		p.BlockRate = 0
+	}
+	if p.MutexFraction < 0 {
+		s.recordValidationWarning(warnComponentDiagnostics,
+			"profiling mutex fraction %d is negative and does nothing; using 0 (disabled)", p.MutexFraction)
+		p.MutexFraction = 0
+	}
 }
 
 // normalizeOAuthProviders disables OAuth providers that cannot authenticate anyone.
@@ -366,6 +416,10 @@ func (s *Settings) normalizeIntegrations() {
 // and viper drops a nested default whenever the parent key is present but the child
 // is not, so an unfinished edit here is the likeliest way to meet this whole class
 // of failure.
+//
+// A blank lossy bitrate is not repaired here: it is healed and persisted by
+// migrateEmptyLossyExportBitrate in Load (before this pass), so the fix reaches
+// disk and the warning fires at most once instead of on every load.
 func (s *Settings) normalizeAudioExport() {
 	export := &s.Realtime.Audio.Export
 	if !export.Enabled {
@@ -377,16 +431,6 @@ func (s *Settings) normalizeAudioExport() {
 		s.recordValidationWarning(warnComponentAudio,
 			"audio export is enabled but no clip length is set; using the default %d seconds",
 			DefaultAudioExportLength)
-	}
-
-	switch export.Type {
-	case AudioExportTypeAAC, AudioExportTypeOPUS, AudioExportTypeMP3:
-		if export.Bitrate == "" {
-			export.Bitrate = DefaultAudioExportBitrate
-			s.recordValidationWarning(warnComponentAudio,
-				"audio export is enabled with the lossy format %s but no bitrate is set; using the default %s",
-				export.Type, DefaultAudioExportBitrate)
-		}
 	}
 
 	// Only targetLufs needs this: zero is outside its supported range, while zero

@@ -17,9 +17,10 @@ import (
 // fakeModelInstance is a minimal ModelInstance for testing orchestrator logic
 // without loading real models.
 type fakeModelInstance struct {
-	id     string
-	name   string
-	labels []string
+	id           string
+	name         string
+	labels       []string
+	resolvedPath string
 }
 
 func (f *fakeModelInstance) Predict(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
@@ -35,6 +36,7 @@ func (f *fakeModelInstance) Close() error         { return nil }
 func (f *fakeModelInstance) RuntimeInfo() (device, backend, precision string) {
 	return deviceCPU, BackendONNX, ""
 }
+func (f *fakeModelInstance) ResolvedModelPath() string { return f.resolvedPath }
 
 func TestShouldAutoSelectV3Geomodel(t *testing.T) {
 	t.Parallel()
@@ -513,6 +515,13 @@ const testV24TFLiteModelPath = "data/BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite"
 func TestNewBirdNET_LocaleNormalization(t *testing.T) {
 	t.Parallel()
 
+	// This test constructs a TFLite v2.4 model to exercise locale normalization.
+	// A notflite build has no TFLite backend, so construction errors instead of
+	// running; skip so those builds stay green. See #1553.
+	if !tfliteBackendAvailable {
+		t.Skip("TFLite backend not linked (notflite build); locale normalization uses a TFLite v2.4 model")
+	}
+
 	tests := []struct {
 		name       string
 		input      string
@@ -544,7 +553,9 @@ func TestNewBirdNET_LocaleNormalization(t *testing.T) {
 			settings.BirdNET.Version = "2.4"
 			settings.BirdNET.ModelPath = testV24TFLiteModelPath
 
-			bn, err := NewBirdNET(settings, nil)
+			// nil resolver: no orchestrator here, so the configured path is used
+			// verbatim, which is exactly the pre-recovery behaviour this test asserts.
+			bn, err := NewBirdNET(settings, nil, nil)
 			if bn != nil {
 				t.Cleanup(bn.Delete)
 			}

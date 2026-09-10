@@ -19,8 +19,9 @@ const (
 )
 
 // ModelSpec describes a model's fixed audio requirements.
-// Overlap is NOT included - it comes from user configuration
-// (the false positive filter has multiple levels with specific overlap values).
+// Overlap is NOT a field here: it comes from user configuration and is resolved
+// per model by ResolveModelOverlap (bat is fixed at 50%; other models honor
+// birdnet.overlap, ratio-scaled), then passed to BufferDimensions/BufferInterval.
 type ModelSpec struct {
 	SampleRate            int           // Hz: 48000 (BirdNET v2.4), 32000 (v3.0, Perch)
 	ClipLength            time.Duration // 3s (BirdNET v2.4), 5s (v3.0, Perch)
@@ -36,20 +37,37 @@ func (s ModelSpec) ClipSizeBytes() int {
 	return s.SampleRate * int(s.ClipLength.Seconds()) * conf.NumChannels * conf.BytesPerSample
 }
 
-// BufferDimensions returns the analysis buffer dimensions for this model
-// with 50% overlap: (clipBytes, overlapBytes, readSize).
-func (s ModelSpec) BufferDimensions() (clipBytes, overlapBytes, readSize int) {
+// BufferDimensions returns the analysis buffer dimensions for this model given
+// the effective analysis-window overlap: (clipBytes, overlapBytes, readSize).
+// overlap is the per-model overlap already resolved by ResolveModelOverlap
+// (the bat model's fixed 50% or the ratio-scaled user overlap). overlapBytes is
+// aligned to a whole sample frame, and readSize is kept positive (at least one
+// frame) for any spec with a non-empty clip (all registered models); a
+// degenerate spec with clipBytes == 0 yields readSize 0.
+func (s ModelSpec) BufferDimensions(overlap time.Duration) (clipBytes, overlapBytes, readSize int) {
 	clipBytes = s.ClipSizeBytes()
-	overlapBytes = clipBytes / 2
+	overlapBytes = overlapToBytes(overlap, s.SampleRate)
+	frame := conf.NumChannels * conf.BytesPerSample
+	if frame <= 0 {
+		frame = 1
+	}
+	// Guarantee at least one frame of read size so the buffer never stalls.
+	if maxOverlap := clipBytes - frame; overlapBytes > maxOverlap {
+		overlapBytes = maxOverlap
+	}
+	if overlapBytes < 0 {
+		overlapBytes = 0
+	}
 	readSize = clipBytes - overlapBytes
 	return
 }
 
-// BufferInterval returns how often a new analysis window is produced,
-// derived from 50% overlap: ClipLength / 2. If inference exceeds this
-// interval the pipeline falls behind real-time input.
-func (s ModelSpec) BufferInterval() time.Duration {
-	return s.ClipLength / 2
+// BufferInterval returns how often a new analysis window is produced given the
+// effective overlap: ClipLength - overlap, floored at minAnalysisStep. If
+// inference exceeds this interval the pipeline falls behind real-time input.
+// overlap is the per-model overlap resolved by ResolveModelOverlap.
+func (s ModelSpec) BufferInterval(overlap time.Duration) time.Duration {
+	return max(s.ClipLength-overlap, minAnalysisStep)
 }
 
 // EffectiveSampleRate returns the sample rate the model expects to receive
@@ -108,6 +126,16 @@ type ModelInstance interface {
 	// All three reflect the real chosen path, never the static ModelInfo file-type
 	// metadata.
 	RuntimeInfo() (device, backend, precision string)
+
+	// ResolvedModelPath returns the model file this instance is actually running,
+	// which after a stale-path recovery differs from the path configured in
+	// settings. Empty means the model's built-in/default source is running rather
+	// than a file the user named. The value is fixed at construction (secondaries)
+	// or published lock-free alongside the identity snapshot (the primary), so the
+	// read takes no lock. Consumers that need "which variant is loaded" (the model
+	// gallery scan, telemetry) must read this rather than the settings field, which
+	// can name a file that is not loaded.
+	ResolvedModelPath() string
 
 	// Close releases resources held by the model.
 	Close() error

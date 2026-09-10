@@ -175,13 +175,19 @@ type DeferredMessage struct {
 const maxDeferredMessages = 100
 
 // sentryInitialized tracks whether Sentry has been initialized
+// testMode state values. testMode lets tests bypass settings checks.
+const (
+	testModeDisabled int32 = 0
+	testModeEnabled  int32 = 1
+)
+
 var (
 	sentryInitialized      bool
 	deferredMessages       []DeferredMessage
 	deferredMutex          sync.Mutex
 	deferredOverflowLogged bool
 	attachmentUploader     *AttachmentUploader
-	testMode               int32 // testMode allows tests to bypass settings checks (0=false, 1=true)
+	testMode               atomic.Int32 // testMode allows tests to bypass settings checks
 )
 
 // shouldSkipTelemetry returns true if telemetry should be skipped.
@@ -190,7 +196,7 @@ var (
 // This helper reduces code duplication across telemetry functions.
 func shouldSkipTelemetry() bool {
 	// In test mode, never skip (telemetry is always "enabled" for testing)
-	if atomic.LoadInt32(&testMode) == 1 {
+	if testMode.Load() == testModeEnabled {
 		return false
 	}
 	settings := conf.GetSettings()

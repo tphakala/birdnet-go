@@ -84,7 +84,18 @@ type Client interface {
 	IsConnected() bool
 
 	// Disconnect closes the connection to the MQTT broker.
+	// It also cancels any reconnect loop armed by StartReconnectLoop.
 	Disconnect()
+
+	// StartReconnectLoop arms the background reconnect timer so the client keeps
+	// retrying with exponential backoff until the broker becomes reachable.
+	// Publishes are suppressed while disconnected, so callers can retain and use
+	// the client immediately.
+	//
+	// This is only needed after Connect returns an error. A connection that drops
+	// after Connect succeeded already re-arms the loop on its own, via the
+	// connection-lost handler.
+	StartReconnectLoop()
 
 	// TestConnection performs a multi-stage test of the MQTT connection and functionality.
 	// It streams test results through the provided channel.

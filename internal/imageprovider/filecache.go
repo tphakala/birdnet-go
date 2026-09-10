@@ -10,8 +10,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/httpclient"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"golang.org/x/sync/singleflight"
@@ -29,6 +32,12 @@ const (
 
 	// defaultFileCacheTTL is the default time-to-live for cached image files.
 	defaultFileCacheTTL = 30 * 24 * time.Hour
+
+	// imageDownloadBlockDuration is how long the byte-download path stops issuing
+	// requests to a provider after it refuses one. Defined AS the MediaWiki API path's
+	// User-Agent breaker rather than as a copy of its value, so a single policy block
+	// backs both paths off for the same length of time and the two cannot drift.
+	imageDownloadBlockDuration = circuitBreakerUserAgentDuration
 )
 
 // knownExtensions lists the file extensions tried when looking up cached images.
@@ -102,6 +111,58 @@ type ImageFileCache struct {
 	basePath    string
 	downloadSem chan struct{}      // limits concurrent external downloads
 	sfGroup     singleflight.Group // deduplicates concurrent fetches for same species
+	// httpClient performs the image byte downloads. imageHTTPClient's DialContext
+	// rejects loopback and private IPs as SSRF protection, so tests override this to
+	// reach an httptest server, which binds 127.0.0.1.
+	httpClient *http.Client
+	// rejectionLogged suppresses repeat escalations of a permanent host rejection.
+	// Scoped per cache and cleared by a successful download, mirroring how
+	// wikiMediaProvider.networkErrorLogged is cleared by resetCircuit: a
+	// never-reset process-global latch would hide a second block entirely.
+	rejectionLogged atomic.Bool
+	// blockedUntil holds a per-provider cooldown deadline (provider -> time.Time)
+	// after the image host refuses a download. Unlike the MediaWiki API path, which
+	// opens a circuit on a policy rejection, the byte-download path had no breaker
+	// at all: a blanket 403 meant one guaranteed-failing request per uncached
+	// species on every page load, forever, which is the traffic profile that earns
+	// a block in the first place.
+	blockedUntil sync.Map
+}
+
+// ErrImageDownloadBlocked is returned instead of issuing a request while the
+// per-provider download cooldown is open.
+var ErrImageDownloadBlocked = errors.Newf("image downloads are cooling down after a host rejection").
+	Component("imageprovider").
+	Category(errors.CategoryNetwork).
+	Build()
+
+// downloadBlockedUntil reports the open cooldown deadline for a provider, if any.
+func (c *ImageFileCache) downloadBlockedUntil(provider string) (deadline time.Time, open bool) {
+	val, ok := c.blockedUntil.Load(provider)
+	if !ok {
+		return time.Time{}, false
+	}
+	deadline, ok = val.(time.Time)
+	if !ok || !time.Now().Before(deadline) {
+		return time.Time{}, false
+	}
+	return deadline, true
+}
+
+// openDownloadCooldown suppresses further downloads for a provider after a refusal.
+// Only statuses that indicate the host is refusing us rather than missing one file
+// arm it: a 404 is about a single image and must not stop the rest.
+func (c *ImageFileCache) openDownloadCooldown(statusCode int, provider string) {
+	switch statusCode {
+	case http.StatusUnauthorized, http.StatusForbidden, http.StatusTooManyRequests:
+	default:
+		return
+	}
+	c.blockedUntil.Store(provider, time.Now().Add(imageDownloadBlockDuration))
+	GetLogger().Warn("Suppressing image downloads after a host refusal",
+		logger.String("provider", provider),
+		logger.Int("status", statusCode),
+		logger.Duration("cooldown", imageDownloadBlockDuration))
 }
 
 // NewImageFileCache creates a new ImageFileCache rooted at basePath.
@@ -109,7 +170,66 @@ func NewImageFileCache(basePath string) *ImageFileCache {
 	return &ImageFileCache{
 		basePath:    basePath,
 		downloadSem: make(chan struct{}, maxConcurrentDownloads),
+		httpClient:  imageHTTPClient,
 	}
+}
+
+// logPermanentImageRejection escalates a 401/403 from the image host to Error, at most
+// once until the next successful download.
+//
+// A 401 or 403 is treated as a policy or credential rejection rather than a transient
+// fault. Callers log download failures at Info on purpose, so that ordinary upstream
+// errors (404s, throttling) do not inflate the diagnostics error count. The side effect
+// was that a blanket condition such as a User-Agent block, which fails every species on
+// every request, was reported at the level chosen for transient faults and so never
+// stood out. Escalating once preserves the low-noise property while making a blanket
+// rejection visible.
+//
+// Note this is a heuristic: Wikimedia's edge also answers 403 for transient bot
+// challenges, so a single escalation is a signal to investigate, not proof of a block.
+// userAgent must be the value actually sent on the rejected request, not a fresh
+// lookup: re-deriving it could report a different string if the memoized value latched
+// between the request and the log, which is exactly the wrong thing to do in a
+// diagnostic about which User-Agent was refused.
+func (c *ImageFileCache) logPermanentImageRejection(statusCode int, provider, scientificName, imageURL, userAgent string) {
+	// Narrower than openDownloadCooldown's {401, 403, 429} on purpose: 429 is the
+	// host asking us to slow down, which the cooldown handles quietly, while 401
+	// and 403 are the host refusing us and are worth one escalated log.
+	if statusCode != http.StatusForbidden && statusCode != http.StatusUnauthorized {
+		return
+	}
+	if !c.rejectionLogged.CompareAndSwap(false, true) {
+		return
+	}
+	GetLogger().Error("Image host rejected the download; treating as a permanent condition, not a transient failure",
+		logger.String("provider", provider),
+		logger.String("species", scientificName),
+		logger.Int("status", statusCode),
+		logger.String("user_agent", userAgent),
+		logger.String("url", imageURL),
+	)
+}
+
+// cacheFileError wraps a disk-cache filesystem failure, which is the one class
+// of failure in this file worth reporting.
+//
+// A permanently empty image cache used to reach Sentry as nothing at all, since
+// every error here was a bare fmt.Errorf and the only signal was a log line.
+// The transient paths - DNS, dial, HTTP status, the download cooldown - are
+// deliberately NOT built through this: ErrorBuilder.Build reports to telemetry
+// whenever reporting is active, so doing so would emit one event per attempt for
+// exactly the
+// throttling and blanket-refusal conditions that already have a cooldown and a
+// once-per-cache escalated log. It would also stack two or three reports on one
+// failure, since a wrapped EnhancedError is reported again by each wrap.
+func cacheFileError(err error, operation, provider, scientificName string) error {
+	return errors.New(err).
+		Component("imageprovider").
+		Category(errors.CategoryImageCache).
+		Context("provider", provider).
+		Context("scientific_name", scientificName).
+		Context("operation", operation).
+		Build()
 }
 
 // normalizeSpeciesName converts a species name to a filesystem-safe form:
@@ -180,7 +300,7 @@ func (c *ImageFileCache) Store(provider, scientificName string, data []byte, sou
 	}
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", "", fmt.Errorf("create cache directory: %w", err)
+		return "", "", cacheFileError(err, "create_cache_directory", provider, scientificName)
 	}
 
 	// Prefer upstream Content-Type; fall back to sniffing if missing or generic.
@@ -194,23 +314,24 @@ func (c *ImageFileCache) Store(provider, scientificName string, data []byte, sou
 	// Atomic write: write to temp file then rename.
 	tmpFile, err := os.CreateTemp(dir, namePrefix+"-*.tmp")
 	if err != nil {
-		return "", "", fmt.Errorf("create temp file: %w", err)
+		return "", "", cacheFileError(err, "create_temp_file", provider, scientificName)
 	}
 	tmpPath := tmpFile.Name()
+	// Unconditional cleanup rather than one removal per error branch: after a
+	// successful rename the path no longer exists and this is a no-op, while a
+	// branch added later cannot silently start orphaning temp files.
+	defer func() { _ = os.Remove(tmpPath) }()
 
 	if _, writeErr := tmpFile.Write(data); writeErr != nil {
 		_ = tmpFile.Close()
-		_ = os.Remove(tmpPath)
-		return "", "", fmt.Errorf("write temp file: %w", writeErr)
+		return "", "", cacheFileError(writeErr, "write_temp_file", provider, scientificName)
 	}
 	if closeErr := tmpFile.Close(); closeErr != nil {
-		_ = os.Remove(tmpPath)
-		return "", "", fmt.Errorf("close temp file: %w", closeErr)
+		return "", "", cacheFileError(closeErr, "close_temp_file", provider, scientificName)
 	}
 
 	if renameErr := os.Rename(tmpPath, finalPath); renameErr != nil {
-		_ = os.Remove(tmpPath)
-		return "", "", fmt.Errorf("rename temp file: %w", renameErr)
+		return "", "", cacheFileError(renameErr, "rename_temp_file", provider, scientificName)
 	}
 
 	// Remove stale files with different extensions (e.g. old .png when new file is .jpg).
@@ -303,10 +424,35 @@ type downloadResult struct {
 // DownloadAndStore fetches image bytes from imageURL, stores to disk, deduplicating concurrent requests.
 // The provided context is used for the HTTP request and semaphore acquisition, enabling cancellation.
 // Returns the cached file path and the resolved content type.
+//
+// IMPORTANT: singleflight runs the shared work on the FIRST caller's context, so
+// every waiter inherits that caller's cancellation. Only pass a context that outlives
+// a single consumer: a detached background context, never a request context. If an
+// HTTP handler ever calls this directly again, one browser aborting a thumbnail
+// cancels the download for every other waiter on the same species.
 func (fc *ImageFileCache) DownloadAndStore(ctx context.Context, provider, scientificName, imageURL string) (filePath, contentType string, err error) {
 	key := provider + "/" + normalizeSpeciesName(scientificName)
 
 	result, err, _ := fc.sfGroup.Do(key, func() (any, error) {
+		// A refused host stays refused for the cooldown. Checked before anything
+		// else so a blanket rejection costs neither a request nor a semaphore slot.
+		if deadline, open := fc.downloadBlockedUntil(provider); open {
+			return nil, fmt.Errorf("%w: retry after %s", ErrImageDownloadBlocked, deadline.UTC().Format(time.RFC3339))
+		}
+
+		// Build the User-Agent before taking a semaphore slot. It can reach
+		// conf.Setting(), whose slow path takes a package-global lock and can read from
+		// disk, and doing that while holding one of only five download slots would
+		// serialize unrelated downloads behind it.
+		userAgent := appUserAgent()
+
+		// An already-cancelled context must not acquire a slot and issue a request.
+		// With a free semaphore both select cases are ready and the choice is random,
+		// so check first rather than relying on the select.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
+
 		// Acquire semaphore to limit concurrent downloads, respecting context cancellation.
 		select {
 		case fc.downloadSem <- struct{}{}:
@@ -319,13 +465,17 @@ func (fc *ImageFileCache) DownloadAndStore(ctx context.Context, provider, scient
 		if err != nil {
 			return nil, fmt.Errorf("failed to create image request: %w", err)
 		}
-		resp, err := imageHTTPClient.Do(req)
+		// Required: Wikimedia rejects Go's default User-Agent with 403.
+		req.Header.Set("User-Agent", userAgent)
+		resp, err := fc.httpClient.Do(req)
 		if err != nil {
 			return nil, fmt.Errorf("failed to download image: %w", err)
 		}
 		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode != http.StatusOK {
+			fc.logPermanentImageRejection(resp.StatusCode, provider, scientificName, imageURL, userAgent)
+			fc.openDownloadCooldown(resp.StatusCode, provider)
 			return nil, fmt.Errorf("non-200 status downloading image: %d", resp.StatusCode)
 		}
 
@@ -344,12 +494,21 @@ func (fc *ImageFileCache) DownloadAndStore(ctx context.Context, provider, scient
 		if storeErr != nil {
 			return nil, storeErr
 		}
+
+		// A success means any earlier rejection is over, so re-arm the escalated log
+		// and lift the cooldown rather than waiting out its remaining time.
+		fc.rejectionLogged.Store(false)
+		fc.blockedUntil.Delete(provider)
+
 		return &downloadResult{path: path, contentType: ct}, nil
 	})
 
 	if err != nil {
 		return "", "", err
 	}
-	dr := result.(*downloadResult)
+	dr, ok := result.(*downloadResult)
+	if !ok {
+		return "", "", fmt.Errorf("unexpected download result type %T", result)
+	}
 	return dr.path, dr.contentType, nil
 }

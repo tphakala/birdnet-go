@@ -16,6 +16,7 @@ const testMQTTTopic = "birdnet/detections"
 // Test controller constants
 const (
 	testControlChanBuffer = 10       // Buffer size for control channel in tests
+	testNewYorkLatitude   = 40.7128  // New York City latitude for test data
 	testNewYorkLongitude  = -74.0060 // New York City longitude for test data
 	// testFailFastTimeout is a short timeout injected into deliberate-failure
 	// waits (unreachable ntfy host, audio file that never appears) so those
@@ -68,7 +69,7 @@ func getTestSettings(t *testing.T) *conf.Settings {
 	settings.Realtime.MQTT.Topic = testMQTTTopic
 
 	// BirdNET settings
-	settings.BirdNET.Latitude = 40.7128
+	settings.BirdNET.Latitude = testNewYorkLatitude
 	settings.BirdNET.Longitude = testNewYorkLongitude
 	settings.BirdNET.Sensitivity = 1.0
 	settings.BirdNET.Threshold = 0.8

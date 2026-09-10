@@ -14,8 +14,8 @@ import (
 // CSRF configuration constants used by both csrf.go and csrf_token.go.
 // These are unexported since they're only used within the middleware package.
 const (
-	// CSRFContextKey is the key used to store CSRF token in the context.
-	// This must match what spa.go expects when retrieving the token.
+	// CSRFContextKey is the key used to store the CSRF token in the Echo context.
+	// EnsureCSRFToken reads it to hand the token to the SPA via /api/v2/app/config.
 	CSRFContextKey = "csrf"
 
 	// csrfCookieName is the name of the CSRF cookie.
@@ -26,6 +26,13 @@ const (
 
 	// csrfTokenLength is the length of the generated CSRF token in bytes.
 	csrfTokenLength = 32
+
+	// secFetchSiteSameOrigin and secFetchSiteNone are the Sec-Fetch-Site header
+	// values that Echo v4.15 treats as already-safe, returning before it compares
+	// the CSRF token (GHSA-9fhj-f35q-w532). NewCSRF strips these values on
+	// non-skipped requests so Echo always validates the token.
+	secFetchSiteSameOrigin = "same-origin"
+	secFetchSiteNone       = "none"
 )
 
 // pprofBasePath is the URL prefix under which the api package mounts the Go
@@ -114,12 +121,11 @@ type CSRFConfig struct {
 	// Default is 1800 (30 minutes).
 	CookieMaxAge int
 
-	// SecureCookie sets the Secure flag on the initial CSRF cookie set by Echo's
-	// middleware. Set to true when the server is configured with TLS directly.
-	// For reverse-proxy deployments (TLS terminated upstream, TLSEnabled=false),
-	// CSRFCookieRefresh overwrites the cookie with the correct Secure flag via
-	// IsSecureRequest() on every successful response, so the initial value here
-	// is only relevant for the first request before CSRFCookieRefresh runs.
+	// SecureCookie sets the Secure flag on the CSRF cookie Echo's middleware sets.
+	// Set to true when the server terminates TLS directly. For reverse-proxy
+	// deployments that terminate TLS upstream (TLSEnabled=false), the cookie is
+	// not marked Secure; making that flag request-aware (via IsSecureRequest) is a
+	// separate, pre-existing improvement tracked outside this change.
 	SecureCookie bool
 }
 
@@ -195,39 +201,6 @@ func DefaultCSRFSkipper(c echo.Context) bool {
 	return false
 }
 
-// CSRFCookieRefresh returns a middleware that refreshes the CSRF cookie expiration
-// on every non-skipped API request. The skipper should match the one used by
-// NewCSRF to ensure consistent skip behavior. If nil, DefaultCSRFSkipper is used.
-//
-// Echo v4.15.0+ introduced Sec-Fetch-Site header checks that short-circuit the
-// CSRF middleware before it reaches the cookie-setting code. This means the
-// cookie's max-age is never extended during normal same-origin browsing, causing
-// it to expire after 30 minutes. This middleware fixes that by refreshing the
-// cookie independently of the token validation path.
-func CSRFCookieRefresh(skipper middleware.Skipper) echo.MiddlewareFunc {
-	if skipper == nil {
-		skipper = DefaultCSRFSkipper
-	}
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			if skipper(c) {
-				return next(c)
-			}
-
-			err := next(c)
-
-			// On success, refresh the CSRF cookie if one exists
-			if err == nil {
-				if cookie, cookieErr := c.Cookie(csrfCookieName); cookieErr == nil && cookie.Value != "" {
-					setCSRFCookie(c, cookie.Value)
-				}
-			}
-
-			return err
-		}
-	}
-}
-
 // NewCSRF creates a CSRF middleware with the given configuration.
 // If config is nil, sensible defaults are used that match the legacy implementation.
 func NewCSRF(config *CSRFConfig) echo.MiddlewareFunc {
@@ -261,7 +234,7 @@ func NewCSRF(config *CSRFConfig) echo.MiddlewareFunc {
 		cookieMaxAge = csrfCookieMaxAge
 	}
 
-	return middleware.CSRFWithConfig(middleware.CSRFConfig{
+	echoCSRF := middleware.CSRFWithConfig(middleware.CSRFConfig{
 		Skipper:        skipper,
 		TokenLength:    tokenLength,
 		TokenLookup:    tokenLookup,
@@ -282,4 +255,26 @@ func NewCSRF(config *CSRFConfig) echo.MiddlewareFunc {
 			return echo.NewHTTPError(http.StatusForbidden, "Invalid CSRF token")
 		},
 	})
+
+	// Defense in depth against GHSA-9fhj-f35q-w532. Echo v4.15's CSRF middleware
+	// treats a request as already safe, skipping token comparison entirely, when
+	// it carries Sec-Fetch-Site: same-origin or none. Browsers forbid scripts from
+	// setting Sec-Fetch-Site, but a non-browser client that already holds a session
+	// cookie can forge it and reach state-changing routes without a token. For
+	// requests the skipper does not exempt, strip those two values before Echo
+	// inspects them so Echo always falls through to token validation, then restore
+	// the header afterward so the request is left as received. same-site and
+	// cross-site are left intact, preserving Echo's explicit cross-site block.
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		guarded := echoCSRF(next)
+		return func(c echo.Context) error {
+			if !skipper(c) {
+				if secFetchSite := c.Request().Header.Get(echo.HeaderSecFetchSite); secFetchSite == secFetchSiteSameOrigin || secFetchSite == secFetchSiteNone {
+					c.Request().Header.Del(echo.HeaderSecFetchSite)
+					defer c.Request().Header.Set(echo.HeaderSecFetchSite, secFetchSite)
+				}
+			}
+			return guarded(c)
+		}
+	}
 }

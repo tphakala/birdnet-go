@@ -14,11 +14,12 @@ import (
 
 // fakeInstance is a minimal ModelInstance for warm-up/RSS tests.
 type fakeInstance struct {
-	id         string
-	sampleRate int
-	clip       time.Duration
-	predictedN int
-	predictErr error
+	id           string
+	sampleRate   int
+	clip         time.Duration
+	predictedN   int
+	predictErr   error
+	resolvedPath string
 }
 
 func (f *fakeInstance) Predict(_ context.Context, samples [][]float32) ([]datastore.Results, error) {
@@ -39,6 +40,7 @@ func (f *fakeInstance) Close() error         { return nil }
 func (f *fakeInstance) RuntimeInfo() (device, backend, precision string) {
 	return deviceCPU, BackendONNX, ""
 }
+func (f *fakeInstance) ResolvedModelPath() string { return f.resolvedPath }
 
 func TestWarmupAndRecordRSS_RecordsNonNegativeDelta(t *testing.T) {
 	t.Parallel()

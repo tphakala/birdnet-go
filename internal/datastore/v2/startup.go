@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -22,12 +23,19 @@ import (
 )
 
 // readOnlyDSN appends mode=ro to a SQLite path, using the correct query separator.
-func readOnlyDSN(dbPath string) string {
+// dsnAppendParams appends SQLite DSN query parameters to a database path, choosing "?" or
+// "&" depending on whether the path already carries a query string (e.g. a shared-cache
+// in-memory DSN used in tests).
+func dsnAppendParams(dbPath, params string) string {
 	sep := "?"
 	if strings.Contains(dbPath, "?") {
 		sep = "&"
 	}
-	return dbPath + sep + "mode=ro"
+	return dbPath + sep + params
+}
+
+func readOnlyDSN(dbPath string) string {
+	return dsnAppendParams(dbPath, "mode=ro")
 }
 
 // reportStartupError reports a startup state check failure to Sentry telemetry.
@@ -560,29 +568,26 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	}
 }
 
-// IsV2OnlyModeAvailable returns true if the system can run in v2-only mode.
-// This is true when migration is completed and v2 database is available.
-func IsV2OnlyModeAvailable(settings *conf.Settings) bool {
-	state := CheckMigrationStateBeforeStartup(settings)
-	return state.MigrationStatus == entities.MigrationStatusCompleted && state.V2Available
-}
-
-// ShouldSkipLegacyDatabase returns true if the legacy database should not be opened.
-// This happens when migration is complete and we're running in v2-only mode.
-func ShouldSkipLegacyDatabase(settings *conf.Settings) bool {
-	state := CheckMigrationStateBeforeStartup(settings)
-	return !state.LegacyRequired && state.MigrationStatus == entities.MigrationStatusCompleted
-}
-
-// HasUnmigratedLegacyRecords checks whether legacy records exist beyond the last
-// migrated ID after migration completed. This detects data loss from hard crashes
-// (kill -9, power loss, OOM) during the tail sync window.
+// HasUnmigratedLegacyRecords reports whether the migration is complete but some
+// legacy records are not yet safely present in v2. This detects data loss from
+// hard crashes (kill -9, power loss, OOM) during the tail sync window, and (issue
+// #3991) distinguishes that genuine straggler case from the normal, harmless
+// dual-write residue that keeps legacy notes growing after completion.
 //
-// When unmigrated records are found, the caller should:
+// It answers the question by primary key rather than by row count: because the v2
+// Detection.ID equals the originating legacy notes.id, a legacy tail record is
+// "unmigrated" only when it is actually absent from v2 (or still pending in the
+// dirty-ID set). A busy install that dual-wrote every tail record into v2 is
+// therefore reported as fully reconciled and free to promote this boot.
+//
+// When it returns true, the caller should:
 //  1. Skip database consolidation (keep files in place)
 //  2. Override v2-only mode so the worker can tail-sync the stragglers
 //
-// Best-effort: returns false on any error to avoid blocking startup.
+// It only inspects a COMPLETED migration; every earlier state and every
+// missing-database case returns false (there is nothing to promote yet). Once the
+// COMPLETED marker is confirmed, verification failures fail CLOSED (return true)
+// so an unverifiable state keeps dual-write running rather than promoting blindly.
 func HasUnmigratedLegacyRecords(settings *conf.Settings, log logger.Logger) bool {
 	if settings.Output.MySQL.Enabled {
 		return hasUnmigratedLegacyMySQL(settings, log)
@@ -655,21 +660,15 @@ func hasUnmigratedLegacySQLite(settings *conf.Settings, log logger.Logger) bool 
 	}
 	defer func() { _ = legacySQL.Close() }()
 
-	// Count legacy notes beyond the last migrated ID
-	var count int64
-	if err := legacyDB.Raw("SELECT COUNT(*) FROM notes WHERE id > ?", state.LastMigratedID).Scan(&count).Error; err != nil {
-		log.Warn("reconciliation: failed to count unmigrated legacy records", logger.Error(err))
-		return false
-	}
-
-	if count > 0 {
-		log.Warn("found unmigrated legacy records after potential crash recovery",
-			logger.Int64("count", count),
-			logger.Uint64("last_migrated_id", uint64(state.LastMigratedID)))
-		return true
-	}
-
-	return false
+	// A completed migration keeps dual-writing to legacy notes, so a raw count of
+	// notes.id > LastMigratedID is always non-zero on a busy install and is NOT a
+	// reliable signal of data loss (issue #3991). During dual-write every detection
+	// is written to BOTH legacy and v2, and the v2 Detection.ID equals the legacy
+	// notes.id, so the authoritative question is whether any legacy tail record is
+	// actually ABSENT from v2. Answer it with a targeted primary-key membership check
+	// plus the dirty-ID set. Only genuinely unreconciled records defer promotion.
+	dirtyTable := resolveSQLiteTableName(v2DB, "migration_dirty_ids", "migration_dirty_id")
+	return !legacyTailReconciledInV2(legacyDB, v2DB, state.LastMigratedID, "notes", "detections", dirtyTable, log)
 }
 
 // hasUnmigratedLegacyMySQL checks for unmigrated records in a MySQL legacy database.
@@ -716,21 +715,234 @@ func hasUnmigratedLegacyMySQL(settings *conf.Settings, log logger.Logger) bool {
 		return false
 	}
 
-	// Count legacy notes beyond the last migrated ID
-	var count int64
-	if err := db.Raw("SELECT COUNT(*) FROM notes WHERE id > ?", state.LastMigratedID).Scan(&count).Error; err != nil {
-		log.Warn("reconciliation: failed to count unmigrated MySQL legacy records", logger.Error(err))
+	// Same reasoning as the SQLite path (issue #3991): dual-write keeps legacy notes
+	// growing after completion, so a raw count is meaningless. Verify the legacy tail
+	// against v2 by primary key (v2 Detection.ID == legacy notes.id) and check the
+	// dirty-ID set. MySQL keeps both schemas in one database, so a single connection
+	// serves both the legacy and v2 queries; v2 tables carry the v2_ prefix.
+	dirtyTable := resolveMySQLTableName(db, settings.Output.MySQL.Database,
+		v2TablePrefix+"migration_dirty_ids", v2TablePrefix+"migration_dirty_id")
+	return !legacyTailReconciledInV2(db, db, state.LastMigratedID, "notes", v2TablePrefix+"detections", dirtyTable, log)
+}
+
+// tailScanBatchSize bounds how many legacy tail IDs are compared against v2 per
+// round trip. Keyset pagination over this batch keeps memory flat regardless of how
+// far the legacy tail runs past the migration watermark.
+const tailScanBatchSize = 500
+
+// tailScanMaxBatches caps the keyset scan as a defensive stop against a logic error;
+// the scan terminates naturally at the end of the (static, read-only) legacy table
+// long before this on any real database. Hitting the cap fails closed.
+const tailScanMaxBatches = 100_000
+
+// legacyTailReconciledInV2 reports whether every legacy detection beyond the
+// migration watermark is already present in v2 AND no dual-write records are still
+// pending reconciliation. It is the safe precondition for ending dual-write and
+// consolidating to v2 (issue #3991).
+//
+// legacyDB and v2DB may be the same handle (MySQL keeps both schemas in one
+// database) or two handles (SQLite keeps v2 in a separate file). dirtyTable may be
+// empty when the dirty-ID table does not exist (older schema), in which case only
+// the membership check applies. It fails CLOSED: any verification error returns
+// false so an unverifiable state keeps dual-write running rather than promoting.
+func legacyTailReconciledInV2(legacyDB, v2DB *gorm.DB, lastMigratedID uint, notesTable, detectionsTable, dirtyTable string, log logger.Logger) bool {
+	// Outstanding dirty IDs mean dual-write failed to sync some records to v2 and the
+	// worker has not reconciled them yet. Tail sync can advance LastMigratedID past a
+	// record it failed to migrate, so the membership check below would not see those;
+	// the dirty-ID set catches them.
+	if dirtyTable != "" {
+		var dirty int64
+		if err := v2DB.Table(dirtyTable).Count(&dirty).Error; err != nil {
+			log.Warn("reconciliation: failed to count dirty IDs, keeping dual-write", logger.Error(err))
+			return false
+		}
+		if dirty > 0 {
+			log.Warn("legacy tail not reconciled: dual-write records pending sync to v2",
+				logger.Int64("dirty_ids", dirty),
+				logger.Uint64("last_migrated_id", uint64(lastMigratedID)))
+			return false
+		}
+	}
+
+	missing, err := legacyTailMissingFromV2(legacyDB, v2DB, lastMigratedID, notesTable, detectionsTable)
+	if err != nil {
+		log.Warn("reconciliation: failed to verify legacy tail against v2, keeping dual-write", logger.Error(err))
 		return false
 	}
+	if missing {
+		log.Warn("legacy tail not reconciled: records absent from v2 after migration completed",
+			logger.Uint64("last_migrated_id", uint64(lastMigratedID)))
+		return false
+	}
+	return true
+}
 
-	if count > 0 {
-		log.Warn("found unmigrated legacy records after potential crash recovery (MySQL)",
-			logger.Int64("count", count),
-			logger.Uint64("last_migrated_id", uint64(state.LastMigratedID)))
-		return true
+// legacyTailMissingFromV2 reports whether any legacy notesTable.id greater than
+// lastMigratedID is absent from the v2 detectionsTable. Because the v2 Detection.ID
+// is set to the originating legacy notes.id during migration, membership is a direct
+// primary-key comparison. It iterates in keyset batches so it never loads the whole
+// tail into memory, and short-circuits on the first missing id, so a genuinely
+// behind install returns immediately. Table names come from fixed internal
+// constants, never user input.
+func legacyTailMissingFromV2(legacyDB, v2DB *gorm.DB, lastMigratedID uint, notesTable, detectionsTable string) (bool, error) {
+	cursor := lastMigratedID
+	for range tailScanMaxBatches {
+		var ids []uint
+		if err := legacyDB.Table(notesTable).
+			Where("id > ?", cursor).
+			Order("id ASC").
+			Limit(tailScanBatchSize).
+			Pluck("id", &ids).Error; err != nil {
+			return false, err
+		}
+		if len(ids) == 0 {
+			return false, nil // reached the end of the tail, nothing missing
+		}
+
+		var existing []uint
+		if err := v2DB.Table(detectionsTable).
+			Where("id IN ?", ids).
+			Pluck("id", &existing).Error; err != nil {
+			return false, err
+		}
+		if len(existing) < len(ids) {
+			return true, nil // at least one tail record is not in v2
+		}
+
+		cursor = ids[len(ids)-1]
+		if len(ids) < tailScanBatchSize {
+			return false, nil // last (partial) batch, all present
+		}
+	}
+	// Exceeded the defensive batch cap without confirming the tail is covered. Fail
+	// closed: report missing so promotion is deferred rather than risking data loss.
+	return true, nil
+}
+
+// resolveMySQLTableName returns the first of the given table names that exists in the
+// MySQL database, or empty string if none do. It mirrors resolveSQLiteTableName for
+// the MySQL information_schema, handling the migration_dirty_id -> migration_dirty_ids
+// rename from PR #2165.
+func resolveMySQLTableName(db *gorm.DB, database string, names ...string) string {
+	for _, name := range names {
+		var count int64
+		if err := db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ?",
+			database, name).Scan(&count).Error; err == nil && count > 0 {
+			return name
+		}
+	}
+	return ""
+}
+
+// checkpointSQLiteWAL folds any pending write-ahead-log content back into the main
+// database file at dbPath so a subsequent rename carries a complete database. It runs
+// PRAGMA wal_checkpoint(TRUNCATE), which copies all WAL frames into the main file and
+// truncates the WAL to zero bytes. It opens the database read-write (a TRUNCATE
+// checkpoint needs write access) and closes it again, so it must only be called when
+// no other connection holds the file, i.e. at startup before any manager opens it.
+// A missing file is not an error (nothing to checkpoint).
+func checkpointSQLiteWAL(dbPath string, log logger.Logger) error {
+	if _, err := os.Stat(dbPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
 	}
 
-	return false
+	// Open with busy_timeout in the DSN so the checkpoint waits for a briefly-held lock (a
+	// loaded runner or a slow shutdown) instead of failing immediately with SQLITE_BUSY. The
+	// DSN applies the timeout to every pooled connection, matching the package-wide value used
+	// for normal connections (manager.go).
+	dsn := dsnAppendParams(dbPath, fmt.Sprintf("_busy_timeout=%d", sqliteBusyTimeoutMs))
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	if err != nil {
+		return err
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closeErr := sqlDB.Close(); closeErr != nil {
+			log.Warn("failed to close database after WAL checkpoint",
+				logger.String("path", dbPath), logger.Error(closeErr))
+		}
+	}()
+
+	if err := db.Exec("PRAGMA wal_checkpoint(TRUNCATE)").Error; err != nil {
+		return fmt.Errorf("WAL checkpoint failed: %w", err)
+	}
+	return nil
+}
+
+// sqliteSidecarSuffixes are the SQLite auxiliary file suffixes that travel with a database
+// file (write-ahead log and shared-memory index). Shared so the consolidation preflight and
+// moveSQLiteDBFiles agree on exactly which sidecars accompany a move.
+var sqliteSidecarSuffixes = []string{"-wal", "-shm"}
+
+// moveSQLiteDBFiles renames a SQLite database file together with its -wal and -shm
+// sidecars, so no committed WAL data is left behind or discarded during consolidation.
+// The move is all-or-nothing: the main file is renamed first, then each present sidecar;
+// any failure (including a non-not-exist stat error on a sidecar, which may hide live WAL
+// data) rolls back every completed rename and returns an error, so the caller never sees a
+// half-moved database reported as success (Forgejo #1580). It deliberately does NOT reject an
+// existing destination, so it can also serve as the rollback restore path (which must be able
+// to overwrite); a forward caller is responsible for ensuring its destination is free.
+func moveSQLiteDBFiles(from, to string, log logger.Logger) error {
+	if err := os.Rename(from, to); err != nil {
+		return fmt.Errorf("failed to rename SQLite database %q to %q: %w", from, to, err)
+	}
+	// Track completed renames so a later failure can undo them in reverse, keeping the move
+	// all-or-nothing. The main file is renamed first, so any failure below must revert it;
+	// otherwise the source database is stranded without its uncheckpointed WAL while the
+	// caller still believes the pre-move state can be cleanly rolled back.
+	type movedFile struct{ src, dst string }
+	done := []movedFile{{src: from, dst: to}}
+	revert := func() {
+		for _, m := range slices.Backward(done) {
+			if rbErr := os.Rename(m.dst, m.src); rbErr != nil {
+				log.Error("failed to roll back SQLite file move; database files may be inconsistent",
+					logger.String("from", m.dst),
+					logger.String("to", m.src),
+					logger.Error(rbErr))
+			}
+		}
+	}
+	for _, suffix := range sqliteSidecarSuffixes {
+		src := from + suffix
+		dst := to + suffix
+		if _, err := os.Stat(src); err != nil {
+			if os.IsNotExist(err) {
+				// os.Stat follows symlinks, so a broken/dangling symlink also reports not-exist.
+				// If the link entry itself exists, fail closed rather than treat it as "absent":
+				// silently skipping it would leave it behind and break the all-or-nothing move.
+				if _, lerr := os.Lstat(src); lerr == nil {
+					revert()
+					return fmt.Errorf("SQLite sidecar %q is a broken symlink; refusing to leave it behind", src)
+				}
+				// Source sidecar genuinely absent (a checkpoint truncated it and SQLite removed
+				// the file). Remove any stale sidecar left at the destination so it is not wrongly
+				// paired with the moved database when it is next opened.
+				if rmErr := os.Remove(dst); rmErr != nil && !os.IsNotExist(rmErr) {
+					revert()
+					return fmt.Errorf("failed to remove stale destination sidecar %q: %w", dst, rmErr)
+				}
+				continue
+			}
+			// A non-not-exist stat error (permission, I/O) must not be treated as "absent": the
+			// sidecar may still hold live WAL data. Fail closed and roll back.
+			revert()
+			return fmt.Errorf("failed to stat SQLite sidecar %q: %w", src, err)
+		}
+		if err := os.Rename(src, dst); err != nil {
+			revert()
+			return fmt.Errorf("failed to move SQLite sidecar %q to %q: %w", src, dst, err)
+		}
+		done = append(done, movedFile{src: src, dst: dst})
+	}
+	return nil
 }
 
 // CheckSQLiteHasV2Schema checks if a SQLite database at the given path is a fully initialized v2 database.
@@ -1140,6 +1352,20 @@ func CheckAndConsolidateAtStartup(configuredPath string, log logger.Logger) (con
 	// Generate backup path for legacy database
 	backupPath := GenerateBackupPath(configuredPath)
 
+	// Refuse to overwrite an existing backup destination (main file or a -wal/-shm sidecar)
+	// before doing any work. GenerateBackupPath is timestamped, so a collision means a
+	// same-second re-run; the legacy->backup rename would otherwise clobber a prior backup that
+	// the rollback could not restore, so fail closed (Forgejo #1580). moveSQLiteDBFiles itself
+	// stays overwrite-capable so it can serve as the rollback restore path.
+	// Check the primary file ("") plus each sidecar.
+	for _, suffix := range append([]string{""}, sqliteSidecarSuffixes...) {
+		if _, statErr := os.Lstat(backupPath + suffix); statErr == nil {
+			return false, fmt.Errorf("consolidation aborted: backup destination %q already exists", backupPath+suffix)
+		} else if !os.IsNotExist(statErr) {
+			return false, fmt.Errorf("failed to stat backup destination %q: %w", backupPath+suffix, statErr)
+		}
+	}
+
 	// Write consolidation state file
 	state := &ConsolidationState{
 		LegacyPath:     configuredPath,
@@ -1148,41 +1374,61 @@ func CheckAndConsolidateAtStartup(configuredPath string, log logger.Logger) (con
 		ConfiguredPath: configuredPath,
 		StartedAt:      time.Now(),
 	}
-	if err := WriteConsolidationState(dataDir, state); err != nil {
+	if err := WriteConsolidationState(dataDir, state, log); err != nil {
 		reportConsolidationError("writeStateFile", err, configuredPath, v2MigrationPath)
 		diagnostics.RecordConsolidation(j, v2MigrationPath, configuredPath, backupPath, "failed")
 		return false, fmt.Errorf("failed to write consolidation state: %w", err)
 	}
 
-	// Clean up any WAL/SHM files (defensive)
-	cleanupWALFiles(configuredPath)
-	cleanupWALFiles(v2MigrationPath)
+	// Fold any pending WAL content into the main database files BEFORE renaming, so a
+	// rename carries every committed transaction. Blindly deleting -wal/-shm (the old
+	// behaviour here) discards data written since the last checkpoint after an unclean
+	// shutdown, and this promotion fix makes consolidation actually run on busy 24/7
+	// installs where an uncheckpointed WAL is likely (issue #3991). Best-effort: log
+	// and continue, because the sidecar-preserving rename below is the real safety net.
+	if err := checkpointSQLiteWAL(configuredPath, log); err != nil {
+		log.Warn("failed to checkpoint legacy WAL before consolidation", logger.Error(err))
+	}
+	if err := checkpointSQLiteWAL(v2MigrationPath, log); err != nil {
+		log.Warn("failed to checkpoint v2 WAL before consolidation", logger.Error(err))
+	}
 
-	// Rename legacy → backup (if legacy exists)
+	// Rename legacy → backup (if legacy exists), moving its -wal/-shm sidecars along so
+	// no committed WAL data is left behind even if the checkpoint above did not fully
+	// drain it.
 	if _, err := os.Stat(configuredPath); err == nil {
 		log.Debug("renaming legacy database to backup",
 			logger.String("from", configuredPath),
 			logger.String("to", backupPath))
-		if err := os.Rename(configuredPath, backupPath); err != nil {
+		if err := moveSQLiteDBFiles(configuredPath, backupPath, log); err != nil {
 			reportConsolidationError("startupRenameLegacy", err, configuredPath, backupPath)
 			_ = DeleteConsolidationState(dataDir)
 			diagnostics.RecordConsolidation(j, v2MigrationPath, configuredPath, backupPath, "failed")
 			return false, fmt.Errorf("failed to rename legacy database: %w", err)
 		}
+	} else if !os.IsNotExist(err) {
+		// A non-not-exist stat error (permission/I/O) must not silently skip the legacy backup:
+		// the v2 -> configured move below would then rename over the still-present legacy
+		// database with no backup taken. Fail closed instead of clobbering it.
+		reportConsolidationError("startupStatLegacy", err, configuredPath)
+		_ = DeleteConsolidationState(dataDir)
+		diagnostics.RecordConsolidation(j, v2MigrationPath, configuredPath, backupPath, "failed")
+		return false, fmt.Errorf("failed to stat legacy database %q before backup: %w", configuredPath, err)
 	}
 
-	// Rename v2 → configured path
+	// Rename v2 → configured path, moving its -wal/-shm sidecars so the promoted
+	// database carries any transactions still resident in its WAL.
 	log.Debug("renaming v2 database to configured path",
 		logger.String("from", v2MigrationPath),
 		logger.String("to", configuredPath))
-	if err := os.Rename(v2MigrationPath, configuredPath); err != nil {
+	if err := moveSQLiteDBFiles(v2MigrationPath, configuredPath, log); err != nil {
 		reportConsolidationError("startupRenameV2", err, v2MigrationPath, configuredPath)
 		rolledBack := false
 		// Rollback: restore legacy from backup if it existed
 		if _, statErr := os.Stat(backupPath); statErr == nil {
 			log.Warn("v2 rename failed, rolling back",
 				logger.Error(err))
-			if rollbackErr := os.Rename(backupPath, configuredPath); rollbackErr != nil {
+			if rollbackErr := moveSQLiteDBFiles(backupPath, configuredPath, log); rollbackErr != nil {
 				reportConsolidationError("rollbackFailed", rollbackErr, backupPath, configuredPath)
 				log.Error("rollback failed - manual intervention required",
 					logger.Error(rollbackErr))

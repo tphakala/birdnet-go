@@ -55,6 +55,9 @@
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
   import { api } from '$lib/utils/api';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { SETTINGS_ROUTES } from '$lib/utils/settingsRoutes';
+  import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import { getLocalDateString } from '$lib/utils/date';
   import {
     compareActiveSpeciesForExport,
@@ -145,6 +148,10 @@
       enabled: false,
       windowDays: 7,
       seasons: SEASON_DEFAULTS,
+    },
+    infrequentTracking: {
+      enabled: false,
+      absenceDays: 14,
     },
   } as const;
 
@@ -452,6 +459,10 @@
         windowDays?: number;
         seasons?: Record<string, { startMonth: number; startDay: number }>;
       };
+      infrequentTracking: {
+        enabled?: boolean;
+        absenceDays?: number;
+      };
     }>
   ) {
     settingsActions.updateSection('realtime', {
@@ -506,6 +517,18 @@
                 SEASON_DEFAULTS,
             }
           : (trackingSettings?.seasonalTracking ?? { ...TRACKING_DEFAULTS.seasonalTracking }),
+        infrequentTracking: updates.infrequentTracking
+          ? {
+              enabled:
+                updates.infrequentTracking.enabled ??
+                trackingSettings?.infrequentTracking?.enabled ??
+                TRACKING_DEFAULTS.infrequentTracking.enabled,
+              absenceDays:
+                updates.infrequentTracking.absenceDays ??
+                trackingSettings?.infrequentTracking?.absenceDays ??
+                TRACKING_DEFAULTS.infrequentTracking.absenceDays,
+            }
+          : (trackingSettings?.infrequentTracking ?? { ...TRACKING_DEFAULTS.infrequentTracking }),
       },
     });
   }
@@ -1433,7 +1456,8 @@
                   'Set your location in Main Settings to see species available in your area. The range filter uses your location to determine which species are likely to be found nearby.'}
               </p>
               <a
-                href="/ui/settings/main"
+                href={buildAppUrl(SETTINGS_ROUTES.mainLocation)}
+                onclick={handleAppLinkClick}
                 class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-warning)] text-[var(--color-warning-content)] hover:bg-[var(--color-warning-hover)] transition-colors mt-3"
               >
                 {t('settings.species.activeSpecies.locationNotConfigured.action') ||
@@ -2004,6 +2028,61 @@
               <SettingsNote>
                 {t('settings.species.tracking.seasonal.seasons.hemisphereNote')}
               </SettingsNote>
+            </div>
+          {/if}
+        </div>
+      </SettingsSection>
+
+      <!-- Infrequent Tracking Settings -->
+      <SettingsSection
+        title={t('settings.species.tracking.infrequent.title')}
+        description={t('settings.species.tracking.infrequent.description')}
+        defaultOpen={false}
+      >
+        <div class="space-y-4">
+          <!-- Enable Infrequent Tracking -->
+          <Checkbox
+            checked={trackingSettings?.infrequentTracking?.enabled ?? false}
+            label={t('settings.species.tracking.infrequent.enabled.label')}
+            helpText={t('settings.species.tracking.infrequent.enabled.helpText')}
+            disabled={store.isLoading || store.isSaving}
+            onchange={value => updateTrackingSettings({ infrequentTracking: { enabled: value } })}
+          />
+
+          {#if trackingSettings?.infrequentTracking?.enabled}
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <!-- Absence Days -->
+              <div>
+                <label class="flex items-center py-2" for="infrequent-absence-days">
+                  <span class="text-sm font-medium">
+                    {t('settings.species.tracking.infrequent.absenceDays.label')}
+                  </span>
+                </label>
+                <div class="flex">
+                  <input
+                    id="infrequent-absence-days"
+                    type="number"
+                    min={TRACKING_LIMITS.days.min}
+                    max={TRACKING_LIMITS.days.max}
+                    value={trackingSettings?.infrequentTracking?.absenceDays ??
+                      TRACKING_DEFAULTS.infrequentTracking.absenceDays}
+                    onchange={createNumberInputHandler(
+                      TRACKING_LIMITS.days,
+                      TRACKING_DEFAULTS.infrequentTracking.absenceDays,
+                      v => updateTrackingSettings({ infrequentTracking: { absenceDays: v } })
+                    )}
+                    class="flex-1 h-9 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={store.isLoading || store.isSaving}
+                  />
+                  <span
+                    class="inline-flex items-center justify-center h-9 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-100)] bg-[var(--surface-200)] text-muted"
+                    >{t('settings.species.tracking.units.days')}</span
+                  >
+                </div>
+                <p class="text-xs text-muted mt-1">
+                  {t('settings.species.tracking.infrequent.absenceDays.helpText')}
+                </p>
+              </div>
             </div>
           {/if}
         </div>

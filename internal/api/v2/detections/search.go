@@ -18,19 +18,19 @@ import (
 const defaultSearchTimeout = 60 * time.Second
 const defaultPerPage = 20
 
-// maxSearchSpeciesScientific caps how many client-resolved scientific names a
-// single search may carry. The endpoint is public and each name triggers a label
-// lookup, so this bounds the work an anonymous caller can request. A reverse
-// dictionary match for an ambiguous or substring name stays well under this.
+// maxSearchSpeciesScientific caps how many resolved scientific names a single
+// search may carry. The endpoint is public, so this bounds the batched label
+// lookup and resulting query parameter list an anonymous caller can request.
 const maxSearchSpeciesScientific = 100
 
 // SearchRequest defines the structure of the search API request
 type SearchRequest struct {
 	Species string `json:"species"`
-	// SpeciesScientific carries exact scientific names the client resolved in the
-	// browser from the per-visitor name dictionary (e.g. an ambiguous localized
-	// common name resolving to several species). When set, these are matched in
-	// addition to the free-text Species term. The list is capped server-side.
+	// SpeciesScientific carries exact scientific names to match in addition to the
+	// free-text Species term. The client may supply names resolved from its
+	// per-visitor dictionary; HandleSearch also adds all server-side common-name
+	// substring matches from the active species locale. The combined list is capped
+	// server-side.
 	SpeciesScientific []string `json:"speciesScientific,omitempty"`
 	DateStart         string   `json:"dateStart"`
 	DateEnd           string   `json:"dateEnd"`
@@ -70,26 +70,31 @@ func (c *Handler) HandleSearch(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Invalid search parameters", http.StatusBadRequest)
 	}
 
-	// Bound and clean the client-resolved scientific name list before it reaches
-	// the datastore (public endpoint; each name is a label lookup).
-	req.SpeciesScientific = sanitizeSpeciesScientific(req.SpeciesScientific)
-
-	originalSpecies := req.Species
-	resolved, hit := c.resolveSpeciesToScientific(req.Species)
-	req.Species = resolved
-	if hit {
-		c.LogDebugIfEnabled("Resolved common-name query to scientific name",
-			logger.String("input", originalSpecies),
-			logger.String("resolved", req.Species),
+	// Keep the raw text for the datastore's scientific/common-name substring path,
+	// and independently expand the active-locale common-name map into exact
+	// scientific alternatives. The expansion cannot be delegated solely to the
+	// datastore: legacy rows may contain historical common names, while normalized
+	// datastore modes may not have the facade's current name-map snapshot. For
+	// example, "Barn Owl" must include both Tyto alba and American Barn Owl's
+	// Tyto furcata after the taxonomic split.
+	req.Species = strings.TrimSpace(req.Species)
+	resolvedScientific := c.resolveCommonNameSubstrings(req.Species)
+	req.SpeciesScientific = mergeSpeciesScientific(
+		resolvedScientific,
+		sanitizeSpeciesScientific(req.SpeciesScientific),
+	)
+	if len(resolvedScientific) > 0 {
+		c.LogDebugIfEnabled("Resolved common-name substring query to scientific names",
+			logger.String("input", req.Species),
+			logger.Int("resolved_count", len(resolvedScientific)),
 			logger.String("path", path),
 			logger.String("ip", ip),
 		)
-	} else if originalSpecies != "" {
-		// The species term did not map to a known scientific name; the query falls
-		// back to substring/LIKE. Log it so "unresolvable name" is distinguishable
-		// from "resolved but no detections" when triaging an empty result.
-		c.LogDebugIfEnabled("Species query did not resolve to a scientific name, using substring search",
-			logger.String("input", originalSpecies),
+	} else if req.Species != "" {
+		// No active-locale common names matched; the raw query still falls back to
+		// the datastore's scientific/common-name substring path.
+		c.LogDebugIfEnabled("Species query did not match the active common-name map, using raw substring search",
+			logger.String("input", req.Species),
 			logger.String("path", path),
 			logger.String("ip", ip),
 		)
@@ -183,9 +188,9 @@ func (c *Handler) buildSearchFilters(req *SearchRequest, ctxTimeout context.Cont
 }
 
 // sanitizeSpeciesScientific trims, drops empties, de-duplicates, and caps the
-// client-supplied scientific name list. The search endpoint is public and each
-// name triggers a label lookup, so the cap bounds the work an anonymous caller
-// can request. Insertion order of the kept entries is preserved.
+// client-supplied scientific name list. The search endpoint is public, so the cap
+// bounds the batched lookup and query parameter list an anonymous caller can
+// request. Insertion order of the kept entries is preserved.
 func sanitizeSpeciesScientific(in []string) []string {
 	if len(in) == 0 {
 		return nil
@@ -206,6 +211,64 @@ func sanitizeSpeciesScientific(in []string) []string {
 		out = append(out, name)
 		if len(out) >= maxSearchSpeciesScientific {
 			break
+		}
+	}
+	return out
+}
+
+// resolveCommonNameSubstrings returns the scientific names whose common name in
+// the active server locale contains input. The facade pre-folds common names when
+// the locale/model map changes, avoiding repeated Unicode normalization on this
+// public search path. Sorting before capping makes broad searches deterministic
+// despite randomized map iteration.
+func (c *Handler) resolveCommonNameSubstrings(input string) []string {
+	needle := apicore.NormalizeForLookup(strings.TrimSpace(input))
+	if needle == "" || c.loadFoldedCommonNameMap == nil {
+		return nil
+	}
+
+	matches := make([]string, 0, 8)
+	for scientific, foldedCommon := range c.loadFoldedCommonNameMap() {
+		if strings.Contains(foldedCommon, needle) {
+			matches = append(matches, scientific)
+		}
+	}
+	if len(matches) == 0 {
+		return nil
+	}
+
+	slices.Sort(matches)
+	if len(matches) > maxSearchSpeciesScientific {
+		matches = matches[:maxSearchSpeciesScientific]
+	}
+	return matches
+}
+
+// mergeSpeciesScientific combines trusted server matches with the sanitized
+// client list, de-duplicating while preserving priority and the public endpoint's
+// lookup cap. Server matches come first because they are derived from the raw
+// query and active server locale; remaining capacity keeps client-dictionary
+// matches for per-visitor localization.
+func mergeSpeciesScientific(serverMatches, clientMatches []string) []string {
+	if len(serverMatches) == 0 && len(clientMatches) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, min(len(serverMatches)+len(clientMatches), maxSearchSpeciesScientific))
+	out := make([]string, 0, min(len(serverMatches)+len(clientMatches), maxSearchSpeciesScientific))
+	for _, names := range [][]string{serverMatches, clientMatches} {
+		for _, name := range names {
+			if name == "" {
+				continue
+			}
+			if _, duplicate := seen[name]; duplicate {
+				continue
+			}
+			seen[name] = struct{}{}
+			out = append(out, name)
+			if len(out) == maxSearchSpeciesScientific {
+				return out
+			}
 		}
 	}
 	return out

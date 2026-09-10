@@ -31,18 +31,100 @@ func isFieldSkipped(skippedFields []any, expectedSkip string) bool {
 	return false
 }
 
-// verifySkippedFields checks that all expected fields were skipped.
-func verifySkippedFields(t *testing.T, response map[string]any, shouldSkip []string) {
+// verifySkippedFields asserts that every field in shouldSkip appears in the
+// response's skippedFields list, and that no field in shouldNotSkip does. A field
+// tagged json:"-" is never carried through the PATCH merge, so it is silently
+// ignored rather than reverted, and must therefore NOT appear in skippedFields;
+// such fields belong in shouldNotSkip.
+func verifySkippedFields(t *testing.T, response map[string]any, shouldSkip, shouldNotSkip []string) {
 	t.Helper()
-	skippedFields, ok := response["skippedFields"].([]any)
-	if !ok || len(shouldSkip) == 0 {
-		return
+
+	skippedRaw, present := response["skippedFields"]
+	skippedFields, isList := skippedRaw.([]any)
+
+	// When we expect skips, the field must be present and a list. When we only
+	// assert absence, an empty or missing list is a valid (passing) state.
+	if len(shouldSkip) > 0 {
+		require.True(t, present, "response is missing skippedFields")
+		require.True(t, isList, "skippedFields is not a list, got %T", skippedRaw)
 	}
-	t.Logf("Skipped fields: %v", skippedFields)
-	for _, expectedSkip := range shouldSkip {
-		if !isFieldSkipped(skippedFields, expectedSkip) {
-			t.Logf("Expected field %s to be skipped but it wasn't", expectedSkip)
-		}
+
+	for _, expected := range shouldSkip {
+		assert.True(t, isFieldSkipped(skippedFields, expected),
+			"expected field %q to be skipped, got %v", expected, skippedFields)
+	}
+	for _, unexpected := range shouldNotSkip {
+		assert.False(t, isFieldSkipped(skippedFields, unexpected),
+			"field %q must not be reported as skipped (json:%q fields are ignored, not reverted), got %v",
+			unexpected, "-", skippedFields)
+	}
+}
+
+// TestDiagnosticsProfilingRateValidation is the HTTP-boundary regression for the
+// diagnostics validator gap: a PATCH carrying a negative profiling rate used to
+// return 200 and persist the negative to config.yaml. It must now be rejected,
+// while a valid rate still succeeds.
+func TestDiagnosticsProfilingRateValidation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		payload      map[string]any
+		wantRejected bool
+	}{
+		{
+			name:         "negative block rate rejected",
+			payload:      map[string]any{"profiling": map[string]any{"blockRate": -1}},
+			wantRejected: true,
+		},
+		{
+			name:         "negative mutex fraction rejected",
+			payload:      map[string]any{"profiling": map[string]any{"mutexFraction": -5}},
+			wantRejected: true,
+		},
+		{
+			name:         "valid rates accepted",
+			payload:      map[string]any{"profiling": map[string]any{"blockRate": 10000, "mutexFraction": 100}},
+			wantRejected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			e := echo.New()
+			controller := getTestController(t, e)
+
+			body, err := json.Marshal(tt.payload)
+			require.NoError(t, err)
+
+			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/diagnostics",
+				bytes.NewReader(body))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			ctx := e.NewContext(req, rec)
+			ctx.SetParamNames("section")
+			ctx.SetParamValues("diagnostics")
+
+			err = controller.UpdateSectionSettings(ctx)
+			if tt.wantRejected {
+				// A rejection is either a returned error or a non-2xx response;
+				// HandleError writes a 400 and returns nil today. Assert the update
+				// was NOT accepted unconditionally, so a future refactor that returns
+				// the error instead of writing it cannot make this branch vacuous.
+				accepted := err == nil && rec.Code == http.StatusOK
+				assert.Falsef(t, accepted,
+					"out-of-range rate must be rejected (err=%v, code=%d)", err, rec.Code)
+				if err == nil {
+					assert.Equal(t, http.StatusBadRequest, rec.Code,
+						"negative rate should be rejected with 400")
+				}
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, http.StatusOK, rec.Code, "valid rate should be accepted")
+			}
+		})
 	}
 }
 
@@ -300,45 +382,49 @@ func TestFieldPermissionEnforcement(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name        string
-		section     string
-		update      any
-		description string
-		shouldSkip  []string
+		name          string
+		section       string
+		update        any
+		description   string
+		shouldSkip    []string
+		shouldNotSkip []string
 	}{
 		{
-			name:    "Runtime fields in BirdNET",
+			name:    "Labels is ignored, not skipped",
 			section: "birdnet",
 			update: map[string]any{
-				"labels": []string{"test1", "test2"}, // Runtime field
+				"labels": []string{"test1", "test2"}, // Runtime field, json:"-"
 			},
-			description: "Should skip runtime-only fields",
-			shouldSkip:  []string{"Labels"},
+			// Labels is tagged json:"-", so the PATCH merge never carries it and it
+			// is never reverted: it must NOT appear in skippedFields. (A PUT walk
+			// would list it as runtime-only; a PATCH cannot.)
+			description:   "json:\"-\" field is silently ignored on PATCH",
+			shouldNotSkip: []string{"Labels"},
 		},
 		{
 			name:    "RangeFilter runtime fields",
 			section: "birdnet",
 			update: map[string]any{
 				"rangeFilter": map[string]any{
-					"species":     []string{"test species"}, // Runtime field
-					"lastUpdated": "2024-01-01T00:00:00Z",   // Runtime field
+					"species":     []string{"test species"}, // Runtime field (yaml:"-", json present)
+					"lastUpdated": "2024-01-01T00:00:00Z",   // Runtime field (yaml:"-", json present)
 					"threshold":   0.05,                     // Allowed field
 				},
 			},
-			description: "Should skip runtime fields in nested objects",
+			description: "reachable runtime fields are reverted and reported as skipped",
 			shouldSkip:  []string{"Species", "LastUpdated"},
 		},
 		{
-			name:    "Audio runtime fields",
+			name:    "SoxAudioTypes is ignored, not skipped",
 			section: "audio",
 			update: map[string]any{
-				"soxAudioTypes": []string{"wav", "mp3"}, // Runtime field
+				"soxAudioTypes": []string{"wav", "mp3"}, // Runtime field, json:"-"
 				"export": map[string]any{
 					"enabled": true, // Allowed field
 				},
 			},
-			description: "Should skip SoxAudioTypes runtime field",
-			shouldSkip:  []string{"SoxAudioTypes"},
+			description:   "json:\"-\" field is silently ignored on PATCH",
+			shouldNotSkip: []string{"SoxAudioTypes"},
 		},
 	}
 
@@ -361,11 +447,7 @@ func TestFieldPermissionEnforcement(t *testing.T) {
 			ctx.SetParamValues(tt.section)
 
 			err = controller.UpdateSectionSettings(ctx)
-
-			if err != nil {
-				t.Logf("Update failed: %v", err)
-				return
-			}
+			require.NoError(t, err, "UpdateSectionSettings returned an error")
 
 			assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -373,7 +455,7 @@ func TestFieldPermissionEnforcement(t *testing.T) {
 			err = json.Unmarshal(rec.Body.Bytes(), &response)
 			require.NoError(t, err)
 
-			verifySkippedFields(t, response, tt.shouldSkip)
+			verifySkippedFields(t, response, tt.shouldSkip, tt.shouldNotSkip)
 		})
 	}
 }

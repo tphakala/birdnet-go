@@ -1586,34 +1586,28 @@ func TestJobTypeStatistics(t *testing.T) {
 
 	// Configure actions with descriptions
 	successAction := &SuccessActionType{
-		MockAction: MockAction{
-			Description: "Success Action",
-		},
+		Description: "Success Action",
 	}
 
 	failAction := &FailActionType{
-		MockAction: MockAction{
-			Description: "Fail Action",
-			ExecuteFunc: func(data any) error {
-				return errors.New("simulated failure")
-			},
+		Description: "Fail Action",
+		ExecuteFunc: func(data any) error {
+			return errors.New("simulated failure")
 		},
 	}
 
 	// Create a counter for retry attempts
 	retryCounter := 0
 	retryAction := &RetryActionType{
-		MockAction: MockAction{
-			Description: "Retry Action",
-			ExecuteFunc: func(data any) error {
-				// Increment counter and check
-				retryCounter++
-				// Fail on first attempt, succeed on retry
-				if retryCounter == 1 {
-					return errors.New("simulated failure for retry")
-				}
-				return nil
-			},
+		Description: "Retry Action",
+		ExecuteFunc: func(data any) error {
+			// Increment counter and check
+			retryCounter++
+			// Fail on first attempt, succeed on retry
+			if retryCounter == 1 {
+				return errors.New("simulated failure for retry")
+			}
+			return nil
 		},
 	}
 

@@ -52,6 +52,7 @@ const (
 	errTypeClassifierNil       = "classifier_nil"
 	errTypeInvokeFailed        = "invoke_failed"
 	errTypeLabelMismatch       = "label_mismatch"
+	errTypeNonFiniteLogits     = "non_finite_logits"
 	errTypeEmbeddingExtraction = "embedding_extraction"
 	errTypeNilEmbeddings       = "nil_embeddings"
 	errTypeBatClassification   = "bat_classification"

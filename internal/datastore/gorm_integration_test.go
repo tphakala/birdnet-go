@@ -542,6 +542,41 @@ func TestSearchNotesAdvanced_MinID_CursorVisitsAllRecords(t *testing.T) {
 	assert.Less(t, iterations, maxIterations, "should complete without hitting iteration safety limit")
 }
 
+// TestSearchNotesAdvanced_TextAndScientificUnion verifies that API-resolved
+// scientific alternatives expand free-text results instead of narrowing them.
+// The Tyto furcata row deliberately carries a historical/non-English common name
+// to prove the exact scientific branch is needed alongside the raw text branch.
+func TestSearchNotesAdvanced_TextAndScientificUnion(t *testing.T) {
+	t.Parallel()
+
+	db := openSQLiteTestDB(t)
+	require.NoError(t, db.AutoMigrate(&Note{}, &NoteReview{}, &NoteLock{}, &NoteComment{}))
+
+	ds := &DataStore{DB: db}
+	notes := []Note{
+		{Date: "2026-07-25", Time: "10:00:00", ScientificName: "Tyto alba", CommonName: "Barn Owl", Confidence: 0.9},
+		{Date: "2026-07-25", Time: "10:01:00", ScientificName: "Tyto furcata", CommonName: "Schleiereule", Confidence: 0.9},
+		{Date: "2026-07-25", Time: "10:02:00", ScientificName: "Corvus corax", CommonName: "Common Raven", Confidence: 0.9},
+	}
+	for i := range notes {
+		require.NoError(t, db.Create(&notes[i]).Error)
+	}
+
+	results, total, err := ds.SearchNotesAdvanced(&AdvancedSearchFilters{
+		TextQuery:         "barn owl",
+		SpeciesScientific: []string{"Tyto furcata"},
+		Limit:             10,
+		SortBy:            SortBySearchDefault,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), total)
+	require.Len(t, results, 2)
+	assert.Equal(t, []string{"Tyto furcata", "Tyto alba"}, []string{
+		results[0].ScientificName,
+		results[1].ScientificName,
+	}, "simple-search compatibility order should remain ID descending")
+}
+
 // TestDataStore_Save_SetsNoteID verifies that DataStore.Save() correctly sets
 // the Note's ID field after GORM Create with a real SQLite database.
 // This is the foundation of the MQTT detection ID chain — if this fails,

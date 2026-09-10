@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -54,8 +55,12 @@ func GenerateCSRFToken() (string, error) {
 //  2. Use token from existing CSRF cookie
 //  3. Generate a new token and set the cookie
 func EnsureCSRFToken(ctx echo.Context) (string, error) {
-	// First, check if middleware already set a token
-	if token, ok := ctx.Get(CSRFContextKey).(string); ok && token != "" {
+	// First, check if middleware already set a real token. Echo v4.15 stores the
+	// sentinel middleware.CSRFUsingSecFetchSite in this key when it accepts a
+	// request via Sec-Fetch-Site without minting a token. NewCSRF strips that
+	// header so the sentinel should never reach here, but guard against handing it
+	// to the SPA as if it were a usable token (GHSA-9fhj-f35q-w532).
+	if token, ok := ctx.Get(CSRFContextKey).(string); ok && token != "" && token != middleware.CSRFUsingSecFetchSite {
 		return token, nil
 	}
 

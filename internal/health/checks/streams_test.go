@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/health"
 )
 
@@ -31,8 +32,8 @@ func TestFFmpegHealthCheck_NoStreams(t *testing.T) {
 func TestFFmpegHealthCheck_AllRunning(t *testing.T) {
 	t.Parallel()
 	streams := []StreamHealthInfo{
-		{URL: "rtsp://a", ProcessState: "running"},
-		{URL: "rtsp://b", ProcessState: "running"},
+		{URL: "rtsp://a", State: audiocore.StreamStateConnected},
+		{URL: "rtsp://b", State: audiocore.StreamStateConnected},
 	}
 	check := NewFFmpegHealthCheck(streamProvider(streams))
 	result := check.Run(t.Context())
@@ -45,13 +46,12 @@ func TestFFmpegHealthCheck_AllRunning(t *testing.T) {
 }
 
 // TestFFmpegHealthCheck_StoppedOnly covers a permanently stopped (terminal)
-// process, the most severe state. "stopped" is the string ProcessState.String()
-// actually returns for StateStopped.
+// stream, the most severe state, reported as audiocore.StreamStateStopped.
 func TestFFmpegHealthCheck_StoppedOnly(t *testing.T) {
 	t.Parallel()
 	streams := []StreamHealthInfo{
-		{URL: "rtsp://a", ProcessState: "stopped"},
-		{URL: "rtsp://b", ProcessState: "running"},
+		{URL: "rtsp://a", State: audiocore.StreamStateStopped},
+		{URL: "rtsp://b", State: audiocore.StreamStateConnected},
 	}
 	check := NewFFmpegHealthCheck(streamProvider(streams))
 	result := check.Run(t.Context())
@@ -69,8 +69,8 @@ func TestFFmpegHealthCheck_StoppedOnly(t *testing.T) {
 func TestFFmpegHealthCheck_NotRunningOnly(t *testing.T) {
 	t.Parallel()
 	streams := []StreamHealthInfo{
-		{URL: "rtsp://a", ProcessState: "starting"},
-		{URL: "rtsp://b", ProcessState: "running"},
+		{URL: "rtsp://a", State: audiocore.StreamStateStarting},
+		{URL: "rtsp://b", State: audiocore.StreamStateConnected},
 	}
 	check := NewFFmpegHealthCheck(streamProvider(streams))
 	result := check.Run(t.Context())
@@ -87,10 +87,10 @@ func TestFFmpegHealthCheck_NotRunningOnly(t *testing.T) {
 func TestFFmpegHealthCheck_StoppedAndNotRunning(t *testing.T) {
 	t.Parallel()
 	streams := []StreamHealthInfo{
-		{URL: "rtsp://a", ProcessState: "stopped"},
-		{URL: "rtsp://b", ProcessState: "stopped"},
-		{URL: "rtsp://c", ProcessState: "starting"},
-		{URL: "rtsp://d", ProcessState: "running"},
+		{URL: "rtsp://a", State: audiocore.StreamStateStopped},
+		{URL: "rtsp://b", State: audiocore.StreamStateStopped},
+		{URL: "rtsp://c", State: audiocore.StreamStateStarting},
+		{URL: "rtsp://d", State: audiocore.StreamStateConnected},
 	}
 	check := NewFFmpegHealthCheck(streamProvider(streams))
 	result := check.Run(t.Context())

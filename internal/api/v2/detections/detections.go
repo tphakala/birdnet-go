@@ -23,6 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -223,22 +224,24 @@ type TimeOfDayResponse struct {
 
 // detectionQueryParams holds all query parameters for detection requests
 type detectionQueryParams struct {
-	Date       string
-	Hour       string
-	Duration   int
-	Species    string
-	Search     string
-	StartDate  string
-	EndDate    string
-	NumResults int
-	Offset     int
-	QueryType  string
+	Date             string
+	Hour             string
+	Duration         int
+	Species          string
+	Search           string
+	SearchScientific []string
+	StartDate        string
+	EndDate          string
+	NumResults       int
+	Offset           int
+	QueryType        string
 	// Advanced filter parameters
 	Confidence string
 	TimeOfDay  string
 	HourRange  string
 	Verified   string
 	Location   string
+	Source     string
 	Locked     string
 	// Sorting
 	SortBy string
@@ -247,13 +250,15 @@ type detectionQueryParams struct {
 }
 
 // advancedSearchCacheKey generates a deterministic cache key for advanced search queries.
-// Includes all filter parameters to avoid cache collisions.
+// Includes all filter parameters to avoid cache collisions. Free-text values (search text,
+// species, location, source, which may be URIs) are quoted so a delimiter inside a value
+// cannot make two different requests share a key.
 func (p *detectionQueryParams) advancedSearchCacheKey() string {
-	return fmt.Sprintf("adv_search:%s:%d:%d:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%s:%d",
-		p.Search, p.NumResults, p.Offset,
+	return fmt.Sprintf("adv_search:%q:%q:%d:%d:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%d",
+		p.Search, strings.Join(p.SearchScientific, "\x00"), p.NumResults, p.Offset,
 		p.Confidence, p.TimeOfDay, p.HourRange,
-		p.Verified, p.Location, p.Locked,
-		p.Species, p.Date, p.StartDate+":"+p.EndDate,
+		p.Verified, p.Location, p.Source, p.Locked,
+		p.Species, p.Date, p.StartDate, p.EndDate,
 		p.SortBy, p.QueryType, p.Hour, p.Duration)
 }
 
@@ -273,6 +278,7 @@ func (c *Handler) parseDetectionQueryParams(ctx echo.Context) (*detectionQueryPa
 		HourRange:  ctx.QueryParam("hourRange"),
 		Verified:   ctx.QueryParam("verified"),
 		Location:   ctx.QueryParam("location"),
+		Source:     ctx.QueryParam("source"),
 		Locked:     ctx.QueryParam("locked"),
 		// Sorting
 		SortBy: ctx.QueryParam("sortBy"),
@@ -588,7 +594,7 @@ func (c *Handler) GetDetections(ctx echo.Context) error {
 func (p *detectionQueryParams) needsAdvancedRouting() bool {
 	if p.Confidence != "" || p.TimeOfDay != "" ||
 		p.HourRange != "" || p.Verified != "" ||
-		p.Location != "" || p.Locked != "" ||
+		p.Location != "" || p.Source != "" || p.Locked != "" ||
 		p.StartDate != "" || p.EndDate != "" {
 		return true
 	}
@@ -619,14 +625,19 @@ func (p *detectionQueryParams) needsAdvancedRouting() bool {
 
 // getDetectionsByQueryType retrieves detections based on the query type
 func (c *Handler) getDetectionsByQueryType(params *detectionQueryParams) ([]datastore.Note, int64, error) {
-	// Resolve locale common names to scientific names before routing so every
-	// query type benefits without per-case duplication.
+	// Species filtering is exact, so an unambiguous common name can be replaced
+	// with its scientific name directly.
 	if resolved, hit := c.resolveSpeciesToScientific(params.Species); hit {
 		params.Species = resolved
 	}
-	if resolved, hit := c.resolveSpeciesToScientific(params.Search); hit {
-		params.Search = resolved
-	}
+
+	// Free-text search is different: an exact common name can also be a substring
+	// of another species (Barn Owl / American Barn Owl). Keep the raw text and add
+	// every active-locale common-name substring match as an OR-ed scientific-name
+	// alternative. Replacing the raw term with one exact resolution would silently
+	// narrow the result set.
+	params.Search = strings.TrimSpace(params.Search)
+	params.SearchScientific = c.resolveCommonNameSubstrings(params.Search)
 
 	switch params.QueryType {
 	case queryTypeHourly:
@@ -643,7 +654,7 @@ func (c *Handler) getDetectionsByQueryType(params *detectionQueryParams) ([]data
 		if params.needsAdvancedRouting() {
 			return c.getSearchDetectionsAdvanced(params)
 		}
-		return c.getSearchDetections(params.Search, params.NumResults, params.Offset)
+		return c.getSearchDetections(params.Search, params.SearchScientific, params.NumResults, params.Offset)
 	default:
 		if params.needsAdvancedRouting() {
 			return c.getSearchDetectionsAdvanced(params)
@@ -1034,8 +1045,9 @@ func (c *Handler) getSearchDetectionsAdvanced(params *detectionQueryParams) ([]d
 
 	notes, totalCount, err := c.DS.SearchNotesAdvanced(&filters)
 	if err != nil {
+		// Filters carry request text, and a source value may be a URI with credentials.
 		c.LogErrorIfEnabled("Failed to perform advanced search",
-			logger.String("filters", fmt.Sprintf("%+v", filters)),
+			logger.String("filters", privacy.ScrubMessage(fmt.Sprintf("%+v", filters))),
 			logger.Error(err),
 		)
 		return nil, 0, err
@@ -1052,10 +1064,11 @@ func (c *Handler) getSearchDetectionsAdvanced(params *detectionQueryParams) ([]d
 // buildAdvancedSearchFilters constructs search filters from query parameters
 func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams) datastore.AdvancedSearchFilters {
 	filters := datastore.AdvancedSearchFilters{
-		TextQuery:     params.Search,
-		Limit:         params.NumResults,
-		Offset:        params.Offset,
-		SortAscending: false,
+		TextQuery:         params.Search,
+		SpeciesScientific: params.SearchScientific,
+		Limit:             params.NumResults,
+		Offset:            params.Offset,
+		SortAscending:     false,
 	}
 
 	// Apply confidence filter using shared helper
@@ -1102,6 +1115,9 @@ func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams) datas
 	if params.Location != "" {
 		filters.Location = []string{params.Location}
 	}
+	if params.Source != "" {
+		filters.Source = []string{params.Source}
+	}
 
 	// Apply boolean filters
 	if params.Verified != "" {
@@ -1119,10 +1135,11 @@ func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams) datas
 	return filters
 }
 
-// getSearchDetections handles search query type logic
-func (c *Handler) getSearchDetections(search string, numResults, offset int) ([]datastore.Note, int64, error) {
+// getSearchDetections returns cached or datastore results for raw text, unioning
+// any resolved scientific-name alternatives through advanced search.
+func (c *Handler) getSearchDetections(search string, scientific []string, numResults, offset int) ([]datastore.Note, int64, error) {
 	// Generate a cache key based on parameters
-	cacheKey := fmt.Sprintf("search:%s:%d:%d", search, numResults, offset)
+	cacheKey := fmt.Sprintf("search:%s:%s:%d:%d", search, strings.Join(scientific, "\x00"), numResults, offset)
 
 	// Check if data is in cache
 	if cachedData, found := c.DetectionCache.Get(cacheKey); found {
@@ -1133,8 +1150,23 @@ func (c *Handler) getSearchDetections(search string, numResults, offset int) ([]
 		return cachedResult.Notes, cachedResult.Total, nil
 	}
 
-	// If not in cache, query the database
-	notes, totalCount, err := c.DS.SearchNotes(search, false, numResults, offset)
+	// If the active common-name map found scientific alternatives, use the
+	// advanced datastore path that can OR them with the raw text. Otherwise retain
+	// the lightweight legacy call for ordinary scientific/unknown text queries.
+	var notes []datastore.Note
+	var totalCount int64
+	var err error
+	if len(scientific) > 0 {
+		notes, totalCount, err = c.DS.SearchNotesAdvanced(&datastore.AdvancedSearchFilters{
+			TextQuery:         search,
+			SpeciesScientific: scientific,
+			Limit:             numResults,
+			Offset:            offset,
+			SortBy:            datastore.SortBySearchDefault,
+		})
+	} else {
+		notes, totalCount, err = c.DS.SearchNotes(search, false, numResults, offset)
+	}
 	if err != nil {
 		c.LogErrorIfEnabled("Failed to search notes",
 			logger.String("query", search),

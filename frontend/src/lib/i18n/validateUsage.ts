@@ -20,6 +20,12 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { DEFAULT_LOCALE } from './config.js';
 
+// grep -rn 't(' over the whole src/ tree emits far more than Node's 1 MiB
+// default execSync buffer. Without this the spawn throws ENOBUFS; that error was
+// previously swallowed, so the check silently scanned nothing and still exited 0.
+// 64 MiB leaves generous headroom as the codebase grows.
+const GREP_MAX_BUFFER_BYTES = 64 * 1024 * 1024;
+
 interface UsageResult {
   usedKeys: Map<string, string[]>; // key -> [file paths]
   missingInTranslations: string[];
@@ -107,11 +113,15 @@ class UsageValidator {
       const output = execSync(`grep -rn 't(' src/ --include="*.svelte" --include="*.ts" || true`, {
         cwd: process.cwd(),
         encoding: 'utf-8',
+        maxBuffer: GREP_MAX_BUFFER_BYTES,
       });
 
       if (!output.trim()) {
-        console.log('   No translation keys found in codebase\n');
-        return;
+        // t() is ubiquitous across the codebase; an empty scan means grep itself
+        // failed, not that the code uses no translations. Fail loudly instead.
+        throw new Error(
+          'i18n usage scan produced no output; the grep scan of src/ is broken. Refusing to report a passing validation on zero scanned files.'
+        );
       }
 
       // Parse grep output: filename:linenum:content
@@ -155,12 +165,27 @@ class UsageValidator {
         }
       }
 
+      if (this.usedKeys.size === 0) {
+        // Output was non-empty but nothing parsed out as a key: the parser or the
+        // false-positive filters are broken. Fail rather than silently pass.
+        throw new Error(
+          'i18n usage scan matched grep output but extracted zero translation keys; the parser is broken. Refusing to report a passing validation.'
+        );
+      }
+
       console.log(
         `   Found ${this.usedKeys.size} unique keys in ${this.countUniqueFiles()} files\n`
       );
     } catch (error) {
-      console.error('Error scanning codebase:', error);
-      console.log('   No translation keys found in codebase\n');
+      // Never swallow: a failed scan previously reported "0 files" and still exited
+      // 0, so i18n:check-usage gave no real coverage. Surface it loudly.
+      if (error instanceof Error && error.message.startsWith('i18n usage scan')) {
+        throw error;
+      }
+      throw new Error(
+        `i18n usage scan failed: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error }
+      );
     }
   }
 

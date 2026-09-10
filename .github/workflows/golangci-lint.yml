@@ -38,7 +38,7 @@ jobs:
           # Require: The version of golangci-lint to use.
           # When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
           # When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
-          version: v2.12.2
+          version: v2.13.2
           # Show only new issues by default
           only-new-issues: false
           # Additional args for better output (v2.5.0+ syntax). noembed,skipfrontend skip
@@ -52,9 +52,9 @@ jobs:
           # change. Linting only compiles, so the missing ffmpeg is irrelevant here.
           # No non-test file is gated on !integration, so this stays a strict superset of
           # the plain noembed,skipfrontend view and reports into the same summary below.
-          # goaac_simd matches BASE_BUILD_TAGS in Taskfile.yml (and `task lint`), so
-          # this lane and a local pre-push lint compile the same configuration.
-          args: --build-tags=integration,pebble_e2e,noembed,skipfrontend,normcompare,goaac_simd --output.checkstyle.path=golangci-lint-report.xml
+          # These build tags match `task lint` in the Taskfile, so this lane and a
+          # local pre-push lint compile the same configuration.
+          args: --build-tags=integration,pebble_e2e,noembed,skipfrontend,normcompare --output.checkstyle.path=golangci-lint-report.xml
 
       - name: Generate lint summary
         if: always()

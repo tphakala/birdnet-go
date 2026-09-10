@@ -105,7 +105,7 @@
         retain: false,
         tls: {
           enabled: false,
-          skipVerify: false,
+          insecureSkipVerify: false,
         },
         homeAssistant: {
           enabled: false,
@@ -374,9 +374,12 @@
     });
   }
 
-  function updateMQTTTLSSkipVerify(skipVerify: boolean) {
+  function updateMQTTTLSInsecureSkipVerify(insecureSkipVerify: boolean) {
     settingsActions.updateSection('realtime', {
-      mqtt: { ...settings.mqtt!, tls: { ...settings.mqtt!.tls, skipVerify } },
+      mqtt: {
+        ...settings.mqtt!,
+        tls: { ...settings.mqtt!.tls, insecureSkipVerify },
+      },
     });
   }
 
@@ -756,7 +759,7 @@
         password: currentMqtt.password || '',
         retain: (currentMqtt as MQTTSettings).retain || false,
         tls: {
-          insecureSkipVerify: currentMqtt.tls?.skipVerify || false,
+          insecureSkipVerify: currentMqtt.tls?.insecureSkipVerify ?? false,
           caCert: '',
           clientCert: '',
           clientKey: '',
@@ -1284,10 +1287,10 @@
 
               {#if settings.mqtt?.tls?.enabled}
                 <Checkbox
-                  checked={settings.mqtt?.tls?.skipVerify ?? false}
+                  checked={settings.mqtt?.tls?.insecureSkipVerify ?? false}
                   label={t('settings.integration.mqtt.tls.skipVerify')}
                   disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
-                  onchange={updateMQTTTLSSkipVerify}
+                  onchange={updateMQTTTLSInsecureSkipVerify}
                 />
 
                 <!-- Certificate Management -->

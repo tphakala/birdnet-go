@@ -21,7 +21,13 @@
     getSpeciesDictVersion,
   } from './lib/stores/appState.svelte';
   import { navigation } from './lib/stores/navigation.svelte';
-  import { resolveAnalyticsRedirect } from './lib/desktop/features/analytics/registry/analyticsRouting';
+  import {
+    resolveAnalyticsRedirect,
+    stripTrailingSlash,
+  } from './lib/desktop/features/analytics/registry/analyticsRouting';
+  // Type-only import (erased at build time, so GenericErrorPage stays lazily loaded via
+  // dynamic import below) used to type the dynamic component precisely instead of `any`.
+  import type GenericErrorPageComponent from './lib/desktop/views/GenericErrorPage.svelte';
   import { settingsActions } from './lib/stores/settings.js';
   import { activateWatchdog } from './lib/stores/connectionState.svelte';
   import WizardDialog from './lib/desktop/features/wizard/WizardDialog.svelte';
@@ -64,7 +70,7 @@
   let ErrorPage = $state<Component | null>(null);
   let ServerErrorPage = $state<Component | null>(null);
   let LiveStream = $state<Component | null>(null);
-  let GenericErrorPage = $state<any>(null);
+  let GenericErrorPage = $state<typeof GenericErrorPageComponent | null>(null);
 
   let currentRoute = $state<string>('');
   let currentPage = $state<string>('');
@@ -504,6 +510,13 @@
   }
 
   function handleRouting(path: string): void {
+    // Canonicalize a trailing slash up front so the analytics redirect check, the
+    // detection-detail split, the system/settings subpage matching, and the normal
+    // pathToRouteMap lookup all operate on the same slashless path. The map keys are
+    // slashless, so /ui/analytics/nocturnal/ (a manually typed or bookmarked URL)
+    // would otherwise miss the map and 404. stripTrailingSlash preserves the root.
+    path = stripTrailingSlash(path);
+
     // Analytics routes: redirect the bare hub, the retired /advanced path, and
     // legacy ?tab= deep links onto the per-view routes (single hop), preserving
     // other query params. resolveAnalyticsRedirect returns null when canonical.
@@ -532,8 +545,8 @@
 
     // Handle system and settings subpages
     if (UI_SYSTEM_PREFIX_RE.test(path)) {
-      const normalizedPath = path.endsWith('/') && path.length > 1 ? path.slice(0, -1) : path;
-      const exactMatch = pathToRouteMap.get(normalizedPath);
+      // path is already trailing-slash-normalized at the top of handleRouting.
+      const exactMatch = pathToRouteMap.get(path);
       if (exactMatch) {
         currentRoute = exactMatch.route;
         currentPage = exactMatch.page;
@@ -582,7 +595,8 @@
       currentPage = 'error-generic';
       // For dynamic error titles from URL, we use a generic error key
       pageTitleKey = 'common.error';
-      dynamicErrorCode = errorCode || '500';
+      // errorCode is already truthy in this branch, so no '500' fallback is needed.
+      dynamicErrorCode = errorCode;
       loadComponent('error-generic');
     } else {
       // Unknown route, default to 404

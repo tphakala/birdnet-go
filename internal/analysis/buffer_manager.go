@@ -9,6 +9,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -30,10 +31,38 @@ type monitorConfig struct {
 	overlapSize int // bytes, scaled from user config, PCM-aligned
 }
 
+// monitorTickState is the per-monitor state threaded across processMonitorTick
+// calls by analysisBufferMonitor. hasReadBuffer flips the "buffer removed" log
+// level once the buffer has been seen at least once; notLoadedWarned is the
+// warn-once latch for the model-not-loaded skip, so a monitor that outlives its
+// model during a reconfigure logs one warning rather than one per window.
+type monitorTickState struct {
+	hasReadBuffer   bool
+	notLoadedWarned bool
+}
+
+// classifierBackend is the analysis package's view of *classifier.Orchestrator:
+// the exact set of methods BufferManager and ProcessData call on it. Declaring
+// the dependency as a consumer-side interface (accept interfaces, return concrete
+// types) lets buffer-manager tests inject a fake to drive the not-loaded ->
+// loaded and active/inactive transitions the monitor resume path depends on; a
+// real Orchestrator only reaches those states with fully loaded models, and its
+// models map and bat scheduler are package-private to internal/classifier.
+// *classifier.Orchestrator satisfies this in production.
+type classifierBackend interface {
+	IsModelLoaded(modelID string) bool
+	IsModelActive(modelID string) bool
+	ModelInfos() []classifier.ModelInfo
+	PrimaryModelInfo() classifier.ModelInfo
+	PredictModel(ctx context.Context, modelID string, sample [][]float32) ([]datastore.Results, error)
+	CurrentSettings() *conf.Settings
+	ModelSpecFor(modelID string) (classifier.ModelSpec, bool)
+}
+
 // BufferManager handles the lifecycle of analysis buffer monitors
 type BufferManager struct {
 	monitors  sync.Map // keyed by monitorKey -> chan struct{}
-	bn        *classifier.Orchestrator
+	bn        classifierBackend
 	bufferMgr *buffer.Manager
 	quitChan  chan struct{}
 	wg        *sync.WaitGroup
@@ -392,7 +421,7 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg *monit
 	const pollInterval = 100 * time.Millisecond
 
 	analysisWindowBytes := cfg.readSize
-	hasReadBuffer := false
+	var state monitorTickState
 	var tickCount int64
 
 	ticker := time.NewTicker(pollInterval)
@@ -404,9 +433,7 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg *monit
 			return
 		case <-ticker.C:
 			tickCount++
-			keepRunning, newHasReadBuffer := m.processMonitorTick(quitChan, cfg, analysisWindowBytes, detectionOffset, hasReadBuffer, tickCount)
-			hasReadBuffer = newHasReadBuffer
-			if !keepRunning {
+			if !m.processMonitorTick(quitChan, cfg, analysisWindowBytes, detectionOffset, &state, tickCount) {
 				return
 			}
 		}
@@ -418,9 +445,10 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg *monit
 // and dispatches it to ProcessData when a full readSize window is present.
 //
 // Returns keepRunning=false when the buffer was not found OR the goroutine was
-// asked to shut down during a backoff. The updated hasReadBuffer flag is
-// propagated back so the caller can toggle its "once seen, log on later loss"
-// log-level preference across ticks.
+// asked to shut down during a backoff. The per-monitor state (see
+// monitorTickState) is updated in place across ticks so the caller can toggle its
+// "once seen, log on later loss" log-level preference and hold the model-not-loaded
+// warn-once latch.
 //
 // The window's backing slice is always returned to its pool via a
 // "defer release()" immediately after Read, so every exit path including the
@@ -430,12 +458,12 @@ func (m *BufferManager) processMonitorTick(
 	cfg *monitorConfig,
 	analysisWindowBytes int,
 	detectionOffset time.Duration,
-	hasReadBuffer bool,
+	state *monitorTickState,
 	tickCount int64,
-) (keepRunning, updatedHasReadBuffer bool) {
+) (keepRunning bool) {
 	ab, err := m.bufferMgr.AnalysisBuffer(cfg.sourceID, cfg.modelID)
 	if err != nil {
-		if hasReadBuffer {
+		if state.hasReadBuffer {
 			m.logger.Info("analysis buffer removed, stopping monitor",
 				logger.String("source_id", cfg.sourceID),
 				logger.String("model_id", cfg.modelID))
@@ -444,9 +472,9 @@ func (m *BufferManager) processMonitorTick(
 				logger.String("source_id", cfg.sourceID),
 				logger.String("model_id", cfg.modelID))
 		}
-		return false, hasReadBuffer
+		return false
 	}
-	hasReadBuffer = true
+	state.hasReadBuffer = true
 
 	data, release, readErr := ab.Read()
 	defer release()
@@ -457,9 +485,9 @@ func (m *BufferManager) processMonitorTick(
 			logger.Error(readErr))
 		select {
 		case <-time.After(1 * time.Second):
-			return true, hasReadBuffer
+			return true
 		case <-quitChan:
-			return false, hasReadBuffer
+			return false
 		}
 	}
 
@@ -471,14 +499,48 @@ func (m *BufferManager) processMonitorTick(
 				logger.Int("data_len", len(data)),
 				logger.Int("expected", analysisWindowBytes))
 		}
-		return true, hasReadBuffer
+		return true
+	}
+
+	// Skip inference when the model is not loaded in the orchestrator. A monitor
+	// can briefly outlive its model's registration: UnloadModel (uninstall,
+	// reinstall, variant switch) removes the model immediately, but monitor
+	// teardown is asynchronous (the topology-reconfigure debounce). Dispatching in
+	// that window would hand the orchestrator a model it no longer has, producing a
+	// stream of "model not loaded" errors (Sentry BIRDNET-GO-2G6 / 1S1). Skip
+	// quietly instead, warning once per monitor so a genuinely stuck reconfigure is
+	// still visible; the window was already read and is released by the defer above.
+	// The monitor keeps running rather than stopping, so a reinstall or variant
+	// switch that re-registers the same registry ID resumes inference immediately,
+	// while UpdateMonitors still removes it if the model is gone for good.
+	if !m.bn.IsModelLoaded(cfg.modelID) {
+		switch {
+		case !state.notLoadedWarned:
+			m.logger.Warn("model not loaded, skipping inference window (a model reconfigure or reinstall may be in progress)",
+				logger.String("source_id", cfg.sourceID),
+				logger.String("model_id", cfg.modelID))
+			state.notLoadedWarned = true
+		case tickCount%bufferMonitorDebugEveryTicks == 0:
+			m.logger.Debug("model still not loaded, skipping inference window",
+				logger.String("source_id", cfg.sourceID),
+				logger.String("model_id", cfg.modelID))
+		}
+		return true
+	}
+	if state.notLoadedWarned {
+		// The model came back (a reinstall or variant switch re-registered the same
+		// registry ID). Resume inference and reset the warn-once latch.
+		m.logger.Info("model loaded again, resuming inference",
+			logger.String("source_id", cfg.sourceID),
+			logger.String("model_id", cfg.modelID))
+		state.notLoadedWarned = false
 	}
 
 	// Skip inference for models that are currently inactive (e.g., bat model
 	// during daytime when nighttime-only scheduling is enabled). The buffered
 	// audio data is released by the existing defer release().
 	if !m.bn.IsModelActive(cfg.modelID) {
-		return true, hasReadBuffer
+		return true
 	}
 
 	m.logger.Debug("buffer monitor dispatching to ProcessData",
@@ -490,13 +552,19 @@ func (m *BufferManager) processMonitorTick(
 	beginTimeOffset := time.Duration(conf.Setting().Realtime.Audio.Export.PreCapture)*time.Second + detectionOffset
 	startTime := time.Now().Add(-beginTimeOffset)
 
-	if processErr := ProcessData(context.Background(), m.bn, m.bufferMgr, data, startTime, audioCapturedAt, cfg.sourceID, cfg.modelID); processErr != nil {
+	if processErr := ProcessData(context.Background(), m.bn, m.bufferMgr, &ProcessRequest{
+		Data:            data,
+		StartTime:       startTime,
+		AudioCapturedAt: audioCapturedAt,
+		Source:          cfg.sourceID,
+		ModelID:         cfg.modelID,
+	}); processErr != nil {
 		m.logger.Error("error processing data",
 			logger.String("source_id", cfg.sourceID),
 			logger.String("model_id", cfg.modelID),
 			logger.Error(processErr))
 	}
-	return true, hasReadBuffer
+	return true
 }
 
 // buildMonitorConfig builds a monitorConfig from a ModelInfo.

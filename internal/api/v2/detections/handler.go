@@ -8,7 +8,7 @@
 // AuthMiddleware, the HandleError/logging helpers, and the settings accessors)
 // promote onto it.
 //
-// Seven members are injected from the facade because they live on facade-owned
+// Eight members are injected from the facade because they live on facade-owned
 // subsystems that have not been extracted into their own domains yet:
 //   - settingsMutex / getSettingsOrFallback / publishAndSaveSettings /
 //     handleSettingsChanges: the facade settings-save machinery, used by the
@@ -19,9 +19,9 @@
 //   - isClientAuthenticated: the auth-service check (audio_level.go), read per
 //     request so public detection/search responses can strip source metadata for
 //     unauthenticated callers.
-//   - loadCommonNameMap / loadCommonToScientificMap: the cached BirdNET name maps
-//     (insights.go) used to resolve and localize species names in responses and
-//     in the search resolver (the species precedent injects loadCommonNameMap).
+//   - loadCommonNameMap / loadFoldedCommonNameMap /
+//     loadCommonToScientificMap: the cached BirdNET name maps (name_maps.go) used
+//     to resolve and localize species names in responses and search.
 package detections
 
 import (
@@ -69,6 +69,7 @@ type Handler struct {
 	handleSettingsChanges     func(oldSettings, currentSettings *conf.Settings) error
 	isClientAuthenticated     func(ctx echo.Context) bool
 	loadCommonNameMap         func() map[string]string
+	loadFoldedCommonNameMap   func() map[string]string
 	loadCommonToScientificMap func() map[string]string
 }
 
@@ -87,6 +88,7 @@ func New(
 	handleSettingsChanges func(oldSettings, currentSettings *conf.Settings) error,
 	isClientAuthenticated func(ctx echo.Context) bool,
 	loadCommonNameMap func() map[string]string,
+	loadFoldedCommonNameMap func() map[string]string,
 	loadCommonToScientificMap func() map[string]string,
 ) *Handler {
 	return &Handler{
@@ -97,6 +99,7 @@ func New(
 		handleSettingsChanges:     handleSettingsChanges,
 		isClientAuthenticated:     isClientAuthenticated,
 		loadCommonNameMap:         loadCommonNameMap,
+		loadFoldedCommonNameMap:   loadFoldedCommonNameMap,
 		loadCommonToScientificMap: loadCommonToScientificMap,
 	}
 }

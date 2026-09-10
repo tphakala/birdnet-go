@@ -36,8 +36,6 @@ const (
 	managerShutdownTimeout = 30 * time.Second
 )
 
-// FrameCallback is invoked for each chunk of audio data received from a stream.
-// sourceID identifies the stream and data contains the raw audio bytes.
 // FrameCallback is invoked by a Stream for every chunk of audio data received.
 // The AudioFrame is fully populated with source metadata (ID, name, sample rate,
 // bit depth, channels, timestamp).
@@ -64,10 +62,19 @@ type Manager struct {
 	// pool their read buffers via FrameRef. May be nil (legacy allocation).
 	bufMgr *buffer.Manager
 
+	// opts carries manager-level defaults applied to every stream this manager
+	// starts (see withManagerDefaults). The zero value reproduces the historic
+	// behaviour, so NewManager callers are unaffected.
+	opts Options
+
 	// Watchdog state: tracks when each stream was last force-reset.
 	lastForceReset   map[string]time.Time
 	lastForceResetMu sync.Mutex
 }
+
+// Manager implements the producer-neutral audiocore.StreamManager seam so the
+// engine can drive it through the interface.
+var _ audiocore.StreamManager = (*Manager)(nil)
 
 // NewManager creates a new Manager.
 //
@@ -86,6 +93,15 @@ type Manager struct {
 // attach a FrameRef whose release closure returns the slice. When nil, streams
 // fall back to per-iteration allocation.
 func NewManager(ctx context.Context, onFrame FrameCallback, onReset func(sourceID string), log logger.Logger, bufMgr *buffer.Manager) *Manager {
+	return NewManagerWithOptions(ctx, onFrame, onReset, log, bufMgr, Options{})
+}
+
+// NewManagerWithOptions is NewManager with manager-level defaults. The extra
+// Options argument carries settings that apply to every stream the manager
+// starts. NewManager delegates here with a zero Options, so the two constructors
+// behave identically unless a non-zero option is supplied. See Options for the
+// available knobs.
+func NewManagerWithOptions(ctx context.Context, onFrame FrameCallback, onReset func(sourceID string), log logger.Logger, bufMgr *buffer.Manager, opts Options) *Manager { //nolint:gocritic // hugeParam: Options is a startup config struct passed once per manager; by-value keeps the call sites literal
 	if log == nil {
 		log = audiocore.GetLogger()
 	}
@@ -98,12 +114,14 @@ func NewManager(ctx context.Context, onFrame FrameCallback, onReset func(sourceI
 		onReset:        onReset,
 		logger:         log,
 		bufMgr:         bufMgr,
+		opts:           opts,
+		metrics:        opts.Metrics,
 		lastForceReset: make(map[string]time.Time),
 	}
 }
 
 // SetOnFrame registers a callback invoked for each chunk of audio data
-// received from any managed stream. Thread-safe — can be called while the
+// received from any managed stream. Thread-safe; can be called while the
 // manager is running.
 func (m *Manager) SetOnFrame(fn FrameCallback) {
 	m.onFrameMu.Lock()
@@ -113,32 +131,71 @@ func (m *Manager) SetOnFrame(fn FrameCallback) {
 
 // SetOnStreamReset registers a callback invoked after a stream starts or is
 // force-reset by the watchdog. The callback receives the sourceID of the
-// newly-started stream. Thread-safe — can be called while the manager is running.
+// newly-started stream. Thread-safe; can be called while the manager is running.
 func (m *Manager) SetOnStreamReset(fn func(sourceID string)) {
 	m.onResetMu.Lock()
 	defer m.onResetMu.Unlock()
 	m.onReset = fn
 }
 
-// StartStream starts a new FFmpeg stream using the given config.
-// cfg.SourceID is used as the map key; it must be non-empty and unique.
-// The per-stream onFrame callback is taken from the manager's onFrame field,
-// which is set via the constructor or SetOnFrame.
-func (m *Manager) StartStream(cfg *StreamConfig) error {
-	if cfg == nil {
-		return errors.Newf("StreamConfig must not be nil").
+// streamConfigFromSpec builds the internal StreamConfig for a stream from the
+// protocol-neutral StreamSpec plus the manager-level FFmpeg options (binary
+// path, extra parameters, log level). SilenceTimeout is left unset here and
+// applied by withManagerDefaults.
+func (m *Manager) streamConfigFromSpec(spec *audiocore.StreamSpec) *StreamConfig {
+	return &StreamConfig{
+		URL:                  spec.URL,
+		SourceID:             spec.SourceID,
+		SourceName:           spec.SourceName,
+		Type:                 string(spec.Type),
+		SampleRate:           spec.SampleRate,
+		SourceSampleRate:     spec.SourceSampleRate,
+		BitDepth:             spec.BitDepth,
+		Channels:             spec.Channels,
+		SourceChannels:       spec.SourceChannels,
+		ChannelMode:          spec.ChannelMode,
+		MediaMode:            spec.MediaMode,
+		Transport:            spec.Transport,
+		HealthyDataThreshold: spec.HealthyDataThreshold,
+		Debug:                spec.Debug,
+		FFmpegPath:           m.opts.FFmpegPath,
+		FFmpegParameters:     m.opts.FFmpegParameters,
+		LogLevel:             m.opts.LogLevel,
+	}
+}
+
+// StartStream starts a new FFmpeg stream from the given protocol-neutral spec.
+// spec.SourceID is used as the map key; it must be non-empty and unique. The
+// per-stream onFrame callback is taken from the manager's onFrame field, which
+// is set via the constructor or SetOnFrame.
+func (m *Manager) StartStream(spec *audiocore.StreamSpec) error {
+	if spec == nil {
+		return errors.Newf("StreamSpec must not be nil").
 			Category(errors.CategoryValidation).
 			Component("ffmpeg-manager").
 			Context("operation", "start_stream").
 			Build()
 	}
-	if cfg.SourceID == "" {
+	if spec.SourceID == "" {
 		return errors.Newf("sourceID must not be empty").
 			Category(errors.CategoryValidation).
 			Component("ffmpeg-manager").
 			Context("operation", "start_stream").
 			Build()
 	}
+
+	// Build the internal StreamConfig from the protocol-neutral spec plus the
+	// manager-level FFmpeg options, then start it.
+	return m.startStreamWithConfig(m.streamConfigFromSpec(spec))
+}
+
+// startStreamWithConfig starts a stream from a fully-built internal StreamConfig.
+// StartStream builds the config from a StreamSpec; the manager's own restart and
+// reconfigure paths reuse an existing stream's config directly.
+func (m *Manager) startStreamWithConfig(cfg *StreamConfig) error {
+	// Apply manager-level defaults (e.g. a shortened silence timeout for tests)
+	// before constructing the stream, without mutating the caller's config.
+	cfg = m.withManagerDefaults(cfg)
 
 	// Hold the lock only for the map check and insertion.
 	stream := NewStream(cfg, m.dispatchFrame, m.notifyReset, m.metrics, m.bufMgr)
@@ -220,8 +277,14 @@ func (m *Manager) StopStream(sourceID string) error {
 	delete(m.streams, sourceID)
 	m.mu.Unlock()
 
-	// Stop the stream outside the lock — Stop() can block.
+	// Stop the stream outside the lock; Stop() can block.
 	stream.Stop()
+
+	// Remove the stream's metric series once it is stopped, so a stopped source
+	// stops being exported instead of lingering (e.g. reading healthy forever).
+	if m.metrics != nil {
+		m.metrics.DeleteStream(sourceID)
+	}
 
 	// Clean up watchdog tracking.
 	m.lastForceResetMu.Lock()
@@ -290,7 +353,7 @@ func (m *Manager) ReconfigureStream(sourceID string, cfg *StreamConfig) error {
 			Build()
 	}
 
-	if err := m.StartStream(cfg); err != nil {
+	if err := m.startStreamWithConfig(cfg); err != nil {
 		return errors.New(err).
 			Component("ffmpeg-manager").
 			Context("operation", "reconfigure_stream_start").
@@ -308,7 +371,7 @@ func (m *Manager) ReconfigureStream(sourceID string, cfg *StreamConfig) error {
 }
 
 // StreamHealth returns health information for the stream identified by sourceID.
-func (m *Manager) StreamHealth(sourceID string) (*StreamHealth, error) {
+func (m *Manager) StreamHealth(sourceID string) (*audiocore.StreamHealth, error) {
 	m.mu.RLock()
 	stream, exists := m.streams[sourceID]
 	m.mu.RUnlock()
@@ -327,11 +390,11 @@ func (m *Manager) StreamHealth(sourceID string) (*StreamHealth, error) {
 }
 
 // AllStreamHealth returns health information for all active streams.
-func (m *Manager) AllStreamHealth() map[string]*StreamHealth {
+func (m *Manager) AllStreamHealth() map[string]*audiocore.StreamHealth {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	result := make(map[string]*StreamHealth, len(m.streams))
+	result := make(map[string]*audiocore.StreamHealth, len(m.streams))
 	for id, stream := range m.streams {
 		h := stream.GetHealth()
 		result[id] = &h
@@ -378,7 +441,7 @@ func (m *Manager) ShutdownWithContext(ctx context.Context) error {
 
 	for i, id := range sourceIDs {
 		if ctx.Err() != nil {
-			m.logger.Warn("skipping remaining stream stops — context expired",
+			m.logger.Warn("skipping remaining stream stops; context expired",
 				logger.Int("remaining", len(sourceIDs)-i),
 				logger.String("component", "ffmpeg-manager"),
 				logger.String("operation", "shutdown"))
@@ -510,7 +573,7 @@ func (m *Manager) checkForStuckStreams() {
 			logger.String("url", privacy.SanitizeStreamUrl(cfgCopy.URL)),
 			logger.Float64("unhealthy_seconds", unhealthyFor.Seconds()),
 			logger.Int("restart_count", h.RestartCount),
-			logger.String("process_state", h.ProcessState.String()),
+			logger.String("process_state", h.ProcessStateName()),
 			logger.String("component", "ffmpeg-manager"),
 			logger.String("operation", "watchdog_force_reset"))
 
@@ -541,7 +604,7 @@ func (m *Manager) checkForStuckStreams() {
 			return
 		}
 
-		if err := m.StartStream(&cfgCopy); err != nil {
+		if err := m.startStreamWithConfig(&cfgCopy); err != nil {
 			m.logger.Error("watchdog: failed to restart stuck stream",
 				logger.String("source_id", id),
 				logger.String("url", privacy.SanitizeStreamUrl(cfgCopy.URL)),

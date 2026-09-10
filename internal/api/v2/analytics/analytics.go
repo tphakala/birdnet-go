@@ -465,6 +465,16 @@ func (c *Handler) aggregateDailySpeciesData(ctx context.Context, notes []datasto
 	return aggregatedData, nil
 }
 
+// noteFirstTime returns the earliest detection time a per-species summary note carries. The
+// summary queries return one note per species with Time set to the latest detection and
+// FirstTime to the earliest; a note without FirstTime (any other read path) has one time.
+func noteFirstTime(note *datastore.Note) string {
+	if note.FirstTime != "" {
+		return note.FirstTime
+	}
+	return note.Time
+}
+
 // updateAggregatedData updates the aggregated map with note data
 func (c *Handler) updateAggregatedData(aggregatedData map[string]aggregatedBirdInfo, note *datastore.Note, hourlyCounts *[24]int) {
 	birdKey := note.ScientificName
@@ -480,7 +490,7 @@ func (c *Handler) updateAggregatedData(aggregatedData map[string]aggregatedBirdI
 			CommonName:     note.CommonName,
 			ScientificName: note.ScientificName,
 			SpeciesCode:    note.SpeciesCode,
-			First:          note.Time,
+			First:          noteFirstTime(note),
 			Latest:         note.Time,
 		}
 	}
@@ -492,8 +502,8 @@ func (c *Handler) updateAggregatedData(aggregatedData map[string]aggregatedBirdI
 	// across notes defensively in case multiple notes for a species are aggregated.
 	data.MaxConfidence = max(data.MaxConfidence, note.Confidence)
 
-	if note.Time < data.First {
-		data.First = note.Time
+	if first := noteFirstTime(note); first < data.First {
+		data.First = first
 	}
 	if note.Time > data.Latest {
 		data.Latest = note.Time
