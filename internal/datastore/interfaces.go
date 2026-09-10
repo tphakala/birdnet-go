@@ -2443,14 +2443,6 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 	return conditions, nil
 }
 
-// buildTimeOfDayClause builds the parameterized WHERE fragment selecting rows on
-// dateStr whose notes.time falls in the given time-of-day category. Boundary
-// values are "HH:MM:SS" strings, which are lexicographically ordered to match the
-// stored notes.time format. A window whose start is later than its end has crossed
-// midnight (for example a high-latitude summer sunset window [23:20, 00:20]); in
-// that case the between/outside test switches to its wraparound form so detections
-// in the after-midnight tail are still matched, consistent with the per-row
-// classifier suncalc.ClassifyTimeOfDay. It returns ok=false for an unknown category.
 // timeOfDayBounds carries the "HH:MM:SS" clock strings buildTimeOfDayClause needs
 // for one date's sun events: the date, the sunrise and sunset event times, and
 // their +/- SunEventWindow boundaries. Grouping them into a struct avoids a long
@@ -2466,6 +2458,15 @@ type timeOfDayBounds struct {
 	sunsetEnd    string
 }
 
+// buildTimeOfDayClause builds the parameterized WHERE fragment selecting rows on
+// the given date whose notes.time falls in the requested time-of-day category.
+// Boundary values are "HH:MM:SS" strings, which are lexicographically ordered to
+// match the stored notes.time format. A window whose start is later than its end
+// has crossed midnight (for example a high-latitude summer sunset window
+// [23:20, 00:20]); in that case the between/outside test switches to its
+// wraparound form so detections in the after-midnight tail are still matched,
+// consistent with the per-row classifier suncalc.ClassifyTimeOfDay. It returns
+// ok=false for an unknown category.
 func buildTimeOfDayClause(timeOfDay string, b *timeOfDayBounds) (query string, args []any, ok bool) {
 	sunriseWin, sunriseArgs := betweenTimeFragment(b.sunriseStart, b.sunriseEnd)
 	sunsetWin, sunsetArgs := betweenTimeFragment(b.sunsetStart, b.sunsetEnd)
