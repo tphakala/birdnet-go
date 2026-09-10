@@ -87,8 +87,8 @@ func TestVAD_SequenceSessionIO(t *testing.T) {
 }
 
 // TestVAD_EmbeddedModelLoads exercises the production default path: loading the
-// model embedded in the binary via the in-memory bytes API. It skips when the
-// build has no embedded model (-tags noembed) or when ONNX Runtime is not
+// model embedded in the binary via the in-memory bytes API. The model is embedded
+// in every build, so in practice this skips only when ONNX Runtime is not
 // available on the host. VAD_TEST_ORT_LIB may point at the ORT shared library.
 func TestVAD_EmbeddedModelLoads(t *testing.T) {
 	if !HasEmbeddedModel() {
@@ -370,8 +370,8 @@ func BenchmarkVADStreamer1s(b *testing.B) {
 // fixture: it drives the embedded sequence model with a synthetic voiced signal
 // (whose syllable modulation the model scores as speech) and asserts that the
 // streaming path detects the same speech peak as the full-chunk path on real
-// ONNX Runtime. It skips on a noembed build or when ONNX Runtime is unavailable,
-// so it exercises the real streamer+model tensor plumbing wherever CI has ORT
+// ONNX Runtime. It skips when ONNX Runtime is unavailable (the model is always
+// embedded), so it exercises the real streamer+model tensor plumbing wherever CI has ORT
 // linked while the stub-session unit tests pin the bookkeeping everywhere else.
 // The stronger time-resolved coverage parity lives in TestVAD_StreamingCoverageParity
 // (real speech clip, run locally), since a synthetic signal's amplitude envelope

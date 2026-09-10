@@ -55,8 +55,9 @@ var (
 // allocation.
 var zeroLSTMState [stateWidth]float32
 
-// EmbeddedModelData returns the embedded Silero VAD model bytes, or nil if the
-// binary was built without embedded models (-tags noembed).
+// EmbeddedModelData returns the embedded Silero VAD model bytes. The model is
+// compiled into every build (it is embedded unconditionally), so this is always
+// non-empty.
 func EmbeddedModelData() []byte { return embeddedModel }
 
 // HasEmbeddedModel reports whether an embedded VAD model is available in this build.
