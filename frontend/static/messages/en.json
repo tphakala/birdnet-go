@@ -4357,7 +4357,7 @@
       "dynamicThreshold": {
         "tabLabel": "Learned",
         "title": "Learned Thresholds",
-        "description": "This page shows Dynamic Threshold runtime data. When enabled in Main Settings → Detection, thresholds are automatically adjusted by multiple high-confidence detections. Species shown here are assumed to exist at this location.",
+        "description": "This page shows Dynamic Threshold runtime data. When enabled, thresholds are automatically adjusted by multiple high-confidence detections. Species shown here are assumed to exist at this location.",
         "stats": {
           "active": "Active",
           "atMinimum": "At Minimum",

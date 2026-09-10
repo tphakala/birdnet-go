@@ -4357,7 +4357,7 @@
       "dynamicThreshold": {
         "tabLabel": "Indlærte",
         "title": "Indlærte tærskler",
-        "description": "Denne side viser kørselstidsdata for dynamiske tærskler. Når det er aktiveret under Hovedindstillinger → Registrering, justeres tærskler automatisk ved flere registreringer med høj tillid. Arter vist her antages at forekomme på denne placering.",
+        "description": "Denne side viser kørselstidsdata for dynamiske tærskler. Når det er aktiveret, justeres tærskler automatisk ved flere registreringer med høj tillid. Arter vist her antages at forekomme på denne placering.",
         "stats": {
           "active": "Aktive",
           "atMinimum": "Ved minimum",

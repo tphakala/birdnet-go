@@ -4357,7 +4357,7 @@
       "dynamicThreshold": {
         "tabLabel": "Aprendido",
         "title": "Limiares aprendidos",
-        "description": "Esta página mostra dados de execução dos limiares dinâmicos. Quando ativado em Configurações principais → Detecção, os limiares são ajustados automaticamente por múltiplas detecções de alta confiança. As espécies mostradas aqui são consideradas existentes nesta localização.",
+        "description": "Esta página mostra dados de execução dos limiares dinâmicos. Quando ativado, os limiares são ajustados automaticamente por múltiplas detecções de alta confiança. As espécies mostradas aqui são consideradas existentes nesta localização.",
         "stats": {
           "active": "Ativos",
           "atMinimum": "No mínimo",

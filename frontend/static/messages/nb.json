@@ -4357,7 +4357,7 @@
       "dynamicThreshold": {
         "tabLabel": "Lært",
         "title": "Lærte terskler",
-        "description": "Denne siden viser kjøretidsdata for dynamisk terskel. Når aktivert i Hovedinnstillinger → Deteksjon, justeres terskler automatisk av flere høysikkerhetsregistreringer. Arter som vises her antas å eksistere på dette stedet.",
+        "description": "Denne siden viser kjøretidsdata for dynamisk terskel. Når aktivert, justeres terskler automatisk av flere høysikkerhetsregistreringer. Arter som vises her antas å eksistere på dette stedet.",
         "stats": {
           "active": "Aktiv",
           "atMinimum": "På minimum",

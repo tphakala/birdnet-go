@@ -4357,7 +4357,7 @@
       "dynamicThreshold": {
         "tabLabel": "Gelernt",
         "title": "Gelernte Schwellenwerte",
-        "description": "Diese Seite zeigt dynamische Schwellenwert-Laufzeitdaten. Wenn in Haupteinstellungen → Erkennung aktiviert, werden Schwellenwerte automatisch durch mehrere hochkonfidente Erkennungen angepasst. Hier gezeigte Arten werden an diesem Standort als vorhanden angenommen.",
+        "description": "Diese Seite zeigt dynamische Schwellenwert-Laufzeitdaten. Wenn aktiviert, werden Schwellenwerte automatisch durch mehrere hochkonfidente Erkennungen angepasst. Hier gezeigte Arten werden an diesem Standort als vorhanden angenommen.",
         "stats": {
           "active": "Aktiv",
           "atMinimum": "Am Minimum",
