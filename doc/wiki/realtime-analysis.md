@@ -46,7 +46,7 @@ main:
   timeas24h: true
 ```
 
-Value of (**main name**) is saved in database for each detection which allows identifying source node in multi node setups sharing same database.
+Value of (**main name**) is saved in database for each detection which allows identifying source node in multi-node setups sharing same database.
 
 Setting (**main timeas24h: true**) ensures that output timestamps are in the 24-hour format. Setting it to false uses the 12-hour format.
 
@@ -63,7 +63,7 @@ birdnet:
 
 Setting (**birdnet locale**) controls which translations are used for common names of birds in output. Valid locales are documented here [Supported Languages](guide.md#supported-languages-for-species-labels)
 
-Setting (**birdnet threads**) controls the number of CPU threads used by the TensorFlow Lite runtime. A setting of 0 utilizes all available CPU threads. Valid values range from 1 to the number of CPU cores on the system. If the value exceeds the number of CPU cores available on the system, it is capped at the system's CPU count.
+Setting (**birdnet threads**) controls the number of CPU threads used by the TensorFlow Lite runtime. Valid values are 0, which automatically selects a thread count for the system (all available CPU threads on most systems, performance cores on hybrid CPUs), or 1 up to the number of CPU cores on the system. If the value exceeds the number of CPU cores available on the system, it is capped at the system's CPU count.
 
 Setting (**birdnet sensitivity**) controls sigmoid sensitivity of prediction in BirdNET model, valid values are from 0.0 to 1.5, higher value makes model more sensitive.
 
