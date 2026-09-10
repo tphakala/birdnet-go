@@ -39,9 +39,8 @@ func (e *dateValidationError) Error() string { return e.message }
 
 // Detection constants (file-local)
 const (
-	defaultNumResults     = 100  // Default number of results
-	maxNumResults         = 1000 // Maximum number of results
-	sunEventWindowMinutes = 30   // Minutes before/after sunrise/sunset
+	defaultNumResults = 100  // Default number of results
+	maxNumResults     = 1000 // Maximum number of results
 
 	// queryType values for detection queries
 	queryTypeHourly  = "hourly"
@@ -833,7 +832,7 @@ func (c *Handler) calculateDetectionTimeOfDay(detectionTime time.Time) string {
 	if err != nil {
 		return ""
 	}
-	return calculateTimeOfDay(detectionTime, &sunTimes)
+	return suncalc.ClassifyTimeOfDay(detectionTime, &sunTimes)
 }
 
 // getWeatherForDetectionTime retrieves weather data for a detection time
@@ -1852,7 +1851,7 @@ func (c *Handler) GetDetectionTimeOfDay(ctx echo.Context) error {
 	dateTimeStr := fmt.Sprintf("%s %s", note.Date, note.Time)
 	layout := "2006-01-02 15:04:05" // Adjust based on your actual date/time format
 
-	detectionTime, err := time.Parse(layout, dateTimeStr)
+	detectionTime, err := time.ParseInLocation(layout, dateTimeStr, time.Local)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to parse detection time", http.StatusInternalServerError)
 	}
@@ -1869,37 +1868,12 @@ func (c *Handler) GetDetectionTimeOfDay(ctx echo.Context) error {
 	}
 
 	// Determine time of day based on the detection time and sun events
-	timeOfDay := calculateTimeOfDay(detectionTime, &sunEvents)
+	timeOfDay := suncalc.ClassifyTimeOfDay(detectionTime, &sunEvents)
 
 	// Return the time of day
 	return ctx.JSON(http.StatusOK, TimeOfDayResponse{
 		TimeOfDay: timeOfDay,
 	})
-}
-
-// calculateTimeOfDay determines the time of day based on the detection time and sun events
-func calculateTimeOfDay(detectionTime time.Time, sunEvents *suncalc.SunEventTimes) string {
-	// Convert all times to the same format for comparison
-	detTime := detectionTime.Format(time.TimeOnly)
-	sunriseTime := sunEvents.Sunrise.Format(time.TimeOnly)
-	sunsetTime := sunEvents.Sunset.Format(time.TimeOnly)
-
-	// Define sunrise/sunset window (30 minutes before and after)
-	sunriseStart := sunEvents.Sunrise.Add(-sunEventWindowMinutes * time.Minute).Format(time.TimeOnly)
-	sunriseEnd := sunEvents.Sunrise.Add(sunEventWindowMinutes * time.Minute).Format(time.TimeOnly)
-	sunsetStart := sunEvents.Sunset.Add(-sunEventWindowMinutes * time.Minute).Format(time.TimeOnly)
-	sunsetEnd := sunEvents.Sunset.Add(sunEventWindowMinutes * time.Minute).Format(time.TimeOnly)
-
-	switch {
-	case detTime >= sunriseStart && detTime <= sunriseEnd:
-		return datastore.TimeOfDaySunrise
-	case detTime >= sunsetStart && detTime <= sunsetEnd:
-		return datastore.TimeOfDaySunset
-	case detTime >= sunriseTime && detTime < sunsetTime:
-		return datastore.TimeOfDayDay
-	default:
-		return datastore.TimeOfDayNight
-	}
 }
 
 // getWeatherUnits returns the temperature display unit based on user preference.

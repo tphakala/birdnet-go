@@ -36,9 +36,6 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
-// sunriseSetWindowMinutes defines the time window (in minutes) around sunrise and sunset
-const sunriseSetWindowMinutes = 30
-
 // Database dialect constants.
 // NOTE: These must be lowercase to match GORM's dialector.Name() output.
 const (
@@ -2400,7 +2397,7 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 	// Pre-allocate conditions slice based on date range
 	dayCount := int(endDate.Sub(startDate).Hours()/24) + 1
 	conditions := make([]*gorm.DB, 0, dayCount)
-	window := time.Duration(sunriseSetWindowMinutes) * time.Minute // Define window for sunrise/sunset
+	window := suncalc.SunEventWindow // sunrise/sunset transition half-width (single source of truth)
 
 	// Optimization: Group dates by week and calculate sun times once per week
 	// Store weekly sun calculations
@@ -2467,28 +2464,22 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 
 		// Calculate all time boundaries once before the switch statement
 		// This reduces code duplication and makes maintenance easier
+		sunriseStr := sunTimes.Sunrise.Format(time.TimeOnly)
+		sunsetStr := sunTimes.Sunset.Format(time.TimeOnly)
 		sunriseStart := sunTimes.Sunrise.Add(-window).Format(time.TimeOnly)
 		sunriseEnd := sunTimes.Sunrise.Add(window).Format(time.TimeOnly)
 		sunsetStart := sunTimes.Sunset.Add(-window).Format(time.TimeOnly)
 		sunsetEnd := sunTimes.Sunset.Add(window).Format(time.TimeOnly)
 
-		var condition *gorm.DB
-		switch filters.TimeOfDay {
-		case TimeOfDayDay:
-			// Time should be after sunrise window but before sunset window
-			condition = db.Where("notes.date = ? AND notes.time > ? AND notes.time < ?", dateStr, sunriseEnd, sunsetStart)
-		case TimeOfDayNight:
-			// Time should be before sunrise window or after sunset window
-			condition = db.Where("notes.date = ? AND (notes.time < ? OR notes.time > ?)", dateStr, sunriseStart, sunsetEnd)
-		case TimeOfDaySunrise:
-			condition = db.Where("notes.date = ? AND notes.time >= ? AND notes.time <= ?", dateStr, sunriseStart, sunriseEnd)
-		case TimeOfDaySunset:
-			condition = db.Where("notes.date = ? AND notes.time >= ? AND notes.time <= ?", dateStr, sunsetStart, sunsetEnd)
-		default:
+		// buildTimeOfDayClause handles windows and daytime spans that cross midnight
+		// (for example a high-latitude summer sunset whose local wall-clock falls after
+		// 00:00), which a naive start<=end range test silently drops or inverts.
+		query, args, ok := buildTimeOfDayClause(filters.TimeOfDay, dateStr, sunriseStr, sunsetStr, sunriseStart, sunriseEnd, sunsetStart, sunsetEnd)
+		if !ok {
 			// Should not happen due to sanitise, but skip if it does
 			continue
 		}
-		conditions = append(conditions, condition)
+		conditions = append(conditions, db.Where(query, args...))
 	}
 
 	// Log summary of how many conditions were created
@@ -2497,6 +2488,76 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 		logger.Int("day_range", int(endDate.Sub(startDate).Hours()/24)+1))
 
 	return conditions, nil
+}
+
+// buildTimeOfDayClause builds the parameterized WHERE fragment selecting rows on
+// dateStr whose notes.time falls in the given time-of-day category. Boundary
+// values are "HH:MM:SS" strings, which are lexicographically ordered to match the
+// stored notes.time format. A window whose start is later than its end has crossed
+// midnight (for example a high-latitude summer sunset window [23:20, 00:20]); in
+// that case the between/outside test switches to its wraparound form so detections
+// in the after-midnight tail are still matched, consistent with the per-row
+// classifier suncalc.ClassifyTimeOfDay. It returns ok=false for an unknown category.
+func buildTimeOfDayClause(timeOfDay, dateStr, sunrise, sunset, sunriseStart, sunriseEnd, sunsetStart, sunsetEnd string) (query string, args []any, ok bool) {
+	sunriseWin, sunriseArgs := betweenTimeFragment(sunriseStart, sunriseEnd)
+	sunsetWin, sunsetArgs := betweenTimeFragment(sunsetStart, sunsetEnd)
+	dayArc, dayArgs := forwardArcFragment(sunrise, sunset)
+	switch timeOfDay {
+	case TimeOfDaySunrise:
+		return "notes.date = ? AND " + sunriseWin, append([]any{dateStr}, sunriseArgs...), true
+	case TimeOfDaySunset:
+		// Exclude the sunrise window: the per-row classifier gives sunrise priority,
+		// so a timestamp inside both windows (possible when the two overlap at extreme
+		// high latitude) is sunrise, not sunset. Without this the sunset filter would
+		// over-match those rows.
+		clauseArgs := append([]any{dateStr}, sunsetArgs...)
+		clauseArgs = append(clauseArgs, sunriseArgs...)
+		return "notes.date = ? AND " + sunsetWin + " AND NOT " + sunriseWin, clauseArgs, true
+	case TimeOfDayDay:
+		// On the daytime arc [sunrise, sunset) but outside both transition windows.
+		// The arc wraps past midnight when the local sunset falls after 00:00 (high
+		// latitude summer, e.g. Iceland/Norway near the solstice); the window
+		// exclusions keep this consistent with the classifier, which checks the
+		// sunrise and sunset windows before the daytime span.
+		clauseArgs := append([]any{dateStr}, dayArgs...)
+		clauseArgs = append(clauseArgs, sunriseArgs...)
+		clauseArgs = append(clauseArgs, sunsetArgs...)
+		return "notes.date = ? AND " + dayArc + " AND NOT " + sunriseWin + " AND NOT " + sunsetWin, clauseArgs, true
+	case TimeOfDayNight:
+		// The complement: outside both transition windows and off the daytime arc.
+		// This matches the classifier's else-branch by construction in every regime
+		// (normal, a sub-hour day or night with overlapping windows, and days whose
+		// local sunset falls after midnight).
+		clauseArgs := append([]any{dateStr}, sunriseArgs...)
+		clauseArgs = append(clauseArgs, sunsetArgs...)
+		clauseArgs = append(clauseArgs, dayArgs...)
+		return "notes.date = ? AND NOT " + sunriseWin + " AND NOT " + sunsetWin + " AND NOT " + dayArc, clauseArgs, true
+	default:
+		return "", nil, false
+	}
+}
+
+// betweenTimeFragment builds the notes.time predicate for an inclusive [start,
+// end] clock window, using the wraparound form (an OR rather than an AND) when the
+// window crosses midnight, i.e. start is lexicographically later than end (for
+// example a high-latitude sunset window [23:20, 00:20]).
+func betweenTimeFragment(start, end string) (frag string, args []any) {
+	if start <= end {
+		return "(notes.time >= ? AND notes.time <= ?)", []any{start, end}
+	}
+	return "(notes.time >= ? OR notes.time <= ?)", []any{start, end}
+}
+
+// forwardArcFragment builds the notes.time predicate for the forward arc from
+// start (inclusive) to end (exclusive) on the 24-hour clock: the plain interval
+// [start, end) when start <= end, or the wraparound form when start > end (a
+// daytime span whose local sunset falls after midnight). Mirrors suncalc's
+// inForwardArc so the SQL filter and the per-row classifier agree.
+func forwardArcFragment(start, end string) (frag string, args []any) {
+	if start <= end {
+		return "(notes.time >= ? AND notes.time < ?)", []any{start, end}
+	}
+	return "(notes.time >= ? OR notes.time < ?)", []any{start, end}
 }
 
 // SearchDetections retrieves detections based on the given filters
@@ -2547,20 +2608,23 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 	}
 	// --- End Count Query ---
 
-	// Apply sorting to the main query
+	// Apply sorting to the main query. Every sort appends notes.id as a final
+	// tiebreaker: the primary keys (common_name, confidence, even date+time) are
+	// not unique, and without a total order LIMIT/OFFSET pagination can silently
+	// skip and duplicate rows across pages.
 	switch filters.SortBy {
 	case "date_asc":
-		query = query.Order("notes.date ASC, notes.time ASC")
+		query = query.Order("notes.date ASC, notes.time ASC, notes.id DESC")
 	case "species_asc":
-		query = query.Order("notes.common_name ASC")
+		query = query.Order("notes.common_name ASC, notes.id DESC")
 	case "species_desc":
-		query = query.Order("notes.common_name DESC")
+		query = query.Order("notes.common_name DESC, notes.id DESC")
 	case "confidence_asc":
-		query = query.Order("notes.confidence ASC")
+		query = query.Order("notes.confidence ASC, notes.id DESC")
 	case "confidence_desc":
-		query = query.Order("notes.confidence DESC")
+		query = query.Order("notes.confidence DESC, notes.id DESC")
 	default:
-		query = query.Order("notes.date DESC, notes.time DESC")
+		query = query.Order("notes.date DESC, notes.time DESC, notes.id DESC")
 	}
 
 	// Apply pagination (PerPage and Page are already sanitised)
@@ -2628,34 +2692,12 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 		// Calculate time of day
 		timeOfDay := TimeOfDayUnknown
 		if ds.SunCalc != nil {
-			// Get date string for cache key
-			dateStr := scanned.Date
-
-			// Get or calculate sun times for this date
-			sunEvents, err := ds.getSunEventsForDate(dateStr, timestamp)
+			// Get or calculate sun times for this date, then delegate the
+			// sunrise/sunset/day/night classification to the shared,
+			// midnight-safe helper so every call site stays in lockstep.
+			sunEvents, err := ds.getSunEventsForDate(scanned.Date, timestamp)
 			if err == nil {
-				// Convert all times to the same format for comparison
-				detTime := timestamp.Format(time.TimeOnly)
-				sunriseTime := sunEvents.Sunrise.Format(time.TimeOnly)
-				sunsetTime := sunEvents.Sunset.Format(time.TimeOnly)
-
-				// Define sunrise/sunset window (using constant)
-				window := time.Duration(sunriseSetWindowMinutes) * time.Minute
-				sunriseStart := sunEvents.Sunrise.Add(-window).Format(time.TimeOnly)
-				sunriseEnd := sunEvents.Sunrise.Add(window).Format(time.TimeOnly)
-				sunsetStart := sunEvents.Sunset.Add(-window).Format(time.TimeOnly)
-				sunsetEnd := sunEvents.Sunset.Add(window).Format(time.TimeOnly)
-
-				switch {
-				case detTime >= sunriseStart && detTime <= sunriseEnd:
-					timeOfDay = TimeOfDaySunrise
-				case detTime >= sunsetStart && detTime <= sunsetEnd:
-					timeOfDay = TimeOfDaySunset
-				case detTime >= sunriseTime && detTime < sunsetTime:
-					timeOfDay = TimeOfDayDay
-				default:
-					timeOfDay = TimeOfDayNight
-				}
+				timeOfDay = suncalc.ClassifyTimeOfDay(timestamp, &sunEvents)
 			}
 		}
 

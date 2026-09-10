@@ -5,10 +5,10 @@ import (
 	"maps"
 	"net/http"
 	"slices"
-	"strings"
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/region"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -129,31 +129,10 @@ func (c *Handler) GetRegionCoverageMap(ctx echo.Context) error {
 	h := ctx.Response().Header()
 	h.Set("Cache-Control", coverageMapCacheControl)
 	h.Set("ETag", etag)
-	if ifNoneMatch(ctx.Request().Header.Get("If-None-Match"), etag) {
+	if apicore.MatchIfNoneMatch(ctx.Request().Header.Get("If-None-Match"), etag) {
 		return ctx.NoContent(http.StatusNotModified)
 	}
 	return ctx.Blob(http.StatusOK, svgContentType, svg)
-}
-
-// ifNoneMatch reports whether an If-None-Match request header matches etag,
-// honoring the "*" wildcard and a comma-separated list of candidate tags. It
-// also accepts the weak form W/"...": reverse proxies and CDNs commonly weaken a
-// strong ETag before it reaches the client, which then echoes the weakened tag
-// back on revalidation, so comparing against the de-weakened candidate still
-// yields the correct 304 instead of re-sending the whole SVG (RFC 7232).
-func ifNoneMatch(header, etag string) bool {
-	if header == "" {
-		return false
-	}
-	if strings.TrimSpace(header) == "*" {
-		return true
-	}
-	for candidate := range strings.SplitSeq(header, ",") {
-		if strings.TrimPrefix(strings.TrimSpace(candidate), "W/") == etag {
-			return true
-		}
-	}
-	return false
 }
 
 // representativeTable picks a deterministic table from the embedded set (lowest
