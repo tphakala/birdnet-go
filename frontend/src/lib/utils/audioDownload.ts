@@ -1,9 +1,8 @@
 /**
  * audioDownload.ts
  *
- * Shared helper for downloading a detection's audio clip. Used by the dashboard
- * DetectionCard and the mobile DetectionCardMobile so the filename logic lives
- * in one place.
+ * Shared helper for downloading a detection's audio clip from detection cards
+ * and action menus, so the filename logic lives in one place.
  *
  * The actual bytes are served by GET /api/v2/audio/{id}; the `download`
  * attribute only hints the saved filename, so the sanitization here is for a

@@ -14,7 +14,7 @@
   - Confidence circle visualization
   - Status badges (verified, false positive, etc.)
   - Weather condition display
-  - Action menu wired to parent-owned handlers (review/lock/ignore/delete)
+  - Action menu wired to parent-owned handlers plus direct audio download
   - Thumbnail image support
   - Responsive design
 
@@ -40,6 +40,7 @@
   import { loggers } from '$lib/utils/logger';
   import { navigation } from '$lib/stores/navigation.svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { downloadDetectionAudio } from '$lib/utils/audioDownload';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
 
   const logger = loggers.ui;
@@ -315,6 +316,7 @@
     {onToggleSpecies}
     {onToggleLock}
     {onDelete}
+    onDownload={detection.clipName ? () => downloadDetectionAudio(detection) : undefined}
   />
 </td>
 
