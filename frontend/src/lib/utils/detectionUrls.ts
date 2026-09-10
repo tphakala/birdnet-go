@@ -57,6 +57,25 @@ export function buildSpeciesDetectionUrl(
  * Builds a detection-list URL filtered to a species within a specific hour window.
  * Used by the dashboard per-species hourly cells.
  */
+/**
+ * Internal path for a species detections search (no proxy/basepath prefix).
+ * Use with navigation.navigate(); buildSpeciesSearchUrl wraps this for hrefs.
+ */
+export function buildSpeciesSearchPath(searchTerm: string): string {
+  const params = new URLSearchParams({ search: searchTerm });
+  return `/ui/detections?${params.toString()}`;
+}
+
+/**
+ * Builds a detection-list URL that searches for a species across all dates.
+ * Used by analytics species cards/rows (search mode omits the date default on
+ * the detections page). The search term should be the visitor-localized common
+ * name when available so it matches what the user sees in the UI.
+ */
+export function buildSpeciesSearchUrl(searchTerm: string): string {
+  return buildAppUrl(buildSpeciesSearchPath(searchTerm));
+}
+
 export function buildSpeciesHourUrl(
   scientificName: string,
   date: string,

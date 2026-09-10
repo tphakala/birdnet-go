@@ -3,6 +3,8 @@ import {
   buildHourlyDetectionUrl,
   buildSpeciesDetectionUrl,
   buildSpeciesHourUrl,
+  buildSpeciesSearchPath,
+  buildSpeciesSearchUrl,
 } from '../detectionUrls';
 import { resetBasePath, setBasePath } from '../urlHelpers';
 
@@ -74,6 +76,30 @@ describe('detectionUrls', () => {
       expect(url).toBe(
         `/ui/detections?queryType=species&species=Turdus+merula&date=${TEST_DATE}&numResults=50&offset=10`
       );
+    });
+  });
+
+  describe('buildSpeciesSearchPath', () => {
+    it('returns SPA navigation path without queryType or date', () => {
+      expect(buildSpeciesSearchPath('Common Babbler')).toBe('/ui/detections?search=Common+Babbler');
+    });
+  });
+
+  describe('buildSpeciesSearchUrl', () => {
+    it('returns unprefixed search URL without queryType or date', () => {
+      const url = buildSpeciesSearchUrl('Common Babbler');
+      expect(url).toBe('/ui/detections?search=Common+Babbler');
+    });
+
+    it('prepends basepath when set', () => {
+      setBasePath(TEST_BASE_PATH);
+      const url = buildSpeciesSearchUrl(TEST_SPECIES);
+      expect(url).toBe(`${TEST_BASE_PATH}/ui/detections?search=Turdus+merula`);
+    });
+
+    it('encodes species names with non-ASCII characters', () => {
+      const url = buildSpeciesSearchUrl('Pöllö lajinimi');
+      expect(url).toBe('/ui/detections?search=P%C3%B6ll%C3%B6+lajinimi');
     });
   });
 
