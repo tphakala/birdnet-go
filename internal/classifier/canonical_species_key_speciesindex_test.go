@@ -52,7 +52,10 @@ func TestCanonicalSpeciesKeyMatchesSpeciesindex(t *testing.T) {
 		"Tachyspiza badia",
 		"Turdus merula_Blackbird",
 	} {
-		assert.Equalf(t, canonicalSpeciesKey(label), snap.CanonicalKey(label),
-			"canonical key mismatch (compute) for %q", label)
+		t.Run(label, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, canonicalSpeciesKey(label), snap.CanonicalKey(label),
+				"canonical key must match between classifier and speciesindex")
+		})
 	}
 }

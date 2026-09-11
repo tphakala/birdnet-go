@@ -34,7 +34,8 @@ var forbiddenImports = []struct {
 			strings.HasPrefix(d, "github.com/tphakala/birdnet-go/internal/classifier/")
 	}},
 	{"internal/api", func(d string) bool {
-		return strings.HasPrefix(d, "github.com/tphakala/birdnet-go/internal/api/")
+		return d == "github.com/tphakala/birdnet-go/internal/api" ||
+			strings.HasPrefix(d, "github.com/tphakala/birdnet-go/internal/api/")
 	}},
 	{"internal/analysis", func(d string) bool {
 		return d == "github.com/tphakala/birdnet-go/internal/analysis" ||
