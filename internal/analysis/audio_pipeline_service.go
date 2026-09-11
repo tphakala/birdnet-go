@@ -89,6 +89,19 @@ type AudioPipelineService struct {
 	// active for that source. Populated by registerSoundLevelConsumers, drained
 	// by removeAllSoundLevelConsumers.
 	soundLevelConsumers map[string]string
+
+	// routeFailedLastPass records source IDs whose buffer route failed to come up on
+	// the previous reconfigure pass. It implements the "survives a reconfigure"
+	// suppression for #4208 (see routeReportDecision): a transient AddRoute failure
+	// during a reconfigure is not reported as "not analyzing" on its first
+	// occurrence, only if the route is still down on the next reconfigure pass. An
+	// entry is dropped when a source's route recovers and the whole map is cleared
+	// when all sources are torn down (removeAllSources). Every access is either on the
+	// startup pass (single-threaded) or under sourcesMu: the writes in
+	// reportSourceRegistration and the reads/deletes in retryPersistentRouteFailures,
+	// RestartSource and the reconfigure removal loop all hold it, so it needs no lock of
+	// its own.
+	routeFailedLastPass map[string]bool
 }
 
 // NewAudioPipelineService creates a new AudioPipelineService with the given dependencies.
@@ -246,7 +259,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 
 	// Add audio sources, register consumers, and start buffer monitors.
 	apiAudioLevelChan := p.apiService.AudioLevelChan()
-	sourceIDs := p.setupAudioSources(apiAudioLevelChan, "start")
+	sourceIDs := p.setupAudioSources(apiAudioLevelChan, operationStart)
 
 	if len(sourceIDs) == 0 {
 		audiocore.GetLogger().Warn("starting without active audio sources",
@@ -520,7 +533,7 @@ func (p *AudioPipelineService) restartAudioCapture() {
 		logger.String("operation", "restart_audio_capture"))
 
 	// Remove all existing sources.
-	p.removeAllSources("restart")
+	p.removeAllSources(operationRestart)
 
 	// Re-resolve the primary model's buffer dimensions from current settings
 	// before re-adding sources, so a hot-reloaded birdnet.overlap takes effect
@@ -529,7 +542,7 @@ func (p *AudioPipelineService) restartAudioCapture() {
 
 	// Re-add sources, register consumers, and update buffer monitors.
 	audioLevelChan := p.apiService.AudioLevelChan()
-	p.setupAudioSources(audioLevelChan, "restart")
+	p.setupAudioSources(audioLevelChan, operationRestart)
 }
 
 // applyPrimaryModelDims resolves the primary model's analysis-buffer dimensions
@@ -561,7 +574,7 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 	log := audiocore.GetLogger()
 	log.Info("restarting single audio source",
 		logger.String("source_id", sourceID),
-		logger.String("operation", "restart_source"))
+		logger.String("operation", operationRestartSource))
 
 	registry := p.engine.Registry()
 
@@ -579,12 +592,21 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 	// 2. Untrack sound level consumer (engine.RemoveSource removes the route).
 	p.untrackSoundLevelConsumer(sourceID)
 
+	// Drop the route-failure memory for the old ID: RestartSource re-adds the source
+	// under a fresh registry ID, so any retained "failed last pass" entry for the old
+	// ID is stale and would otherwise never be pruned (#4208).
+	delete(p.routeFailedLastPass, sourceID)
+	// Same reasoning for the model-not-registered suppression window: the old ID's
+	// entries would otherwise be orphaned once the source returns under a fresh ID
+	// (symmetric with the route-failure clear above and the removal-loop clears).
+	clearModelNotRegistered(sourceID)
+
 	// 3. Remove source from engine (stops capture, removes routes, deallocates buffers, unregisters).
 	if err := p.engine.RemoveSource(sourceID); err != nil {
 		log.Error("failed to remove source during restart",
 			logger.String("source_id", sourceID),
 			logger.Error(err),
-			logger.String("operation", "restart_source"))
+			logger.String("operation", operationRestartSource))
 		return fmt.Errorf("restart source: remove failed: %w", err)
 	}
 
@@ -600,7 +622,7 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 	if targetConfig == nil {
 		log.Warn("source config no longer in settings after removal",
 			logger.String("source_id", sourceID),
-			logger.String("operation", "restart_source"))
+			logger.String("operation", operationRestartSource))
 		return fmt.Errorf("restart source: config for %s no longer exists in settings", sourceID)
 	}
 
@@ -609,7 +631,7 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 		log.Error("failed to re-add source during restart",
 			logger.String("source_id", sourceID),
 			logger.Error(err),
-			logger.String("operation", "restart_source"))
+			logger.String("operation", operationRestartSource))
 		return fmt.Errorf("restart source: add failed: %w", err)
 	}
 
@@ -623,15 +645,15 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 	// 7. Re-register consumers and monitors.
 	audioLevelChan := p.apiService.AudioLevelChan()
 	sourceModelMap := map[string][]string{newSourceID: targetConfig.modelIDs}
-	p.registerConsumersForSources([]string{newSourceID}, sourceModelMap, audioLevelChan, "restart_source")
-	p.registerSoundLevelConsumers([]string{newSourceID}, "restart_source")
+	p.registerConsumersForSources([]string{newSourceID}, sourceModelMap, audioLevelChan, operationRestartSource)
+	p.registerSoundLevelConsumers([]string{newSourceID}, operationRestartSource)
 
 	// Update buffer monitors.
 	if monErr := p.bufferMgr.AddMonitor(newSourceID); monErr != nil {
 		log.Warn("buffer monitor update failed during source restart",
 			logger.String("source_id", newSourceID),
 			logger.Error(monErr),
-			logger.String("operation", "restart_source"))
+			logger.String("operation", operationRestartSource))
 	}
 
 	// Reset dispatch timestamp so watchdog starts fresh.
@@ -640,7 +662,7 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 	log.Info("single source restart complete",
 		logger.String("old_source_id", sourceID),
 		logger.String("new_source_id", newSourceID),
-		logger.String("operation", "restart_source"))
+		logger.String("operation", operationRestartSource))
 
 	return nil
 }
@@ -655,12 +677,20 @@ func (p *AudioPipelineService) removeAllSources(operation string) {
 				logger.Error(err),
 				logger.String("operation", operation))
 		}
+		// The source is going away; drop its model-not-registered suppression window so
+		// a source reusing this ID later re-notifies instead of being silenced by a
+		// stale entry within the 6h window.
+		clearModelNotRegistered(src.ID)
 	}
 	// engine.RemoveSource removes router routes but has no knowledge of the
 	// soundlevel tracking map. Clear the map to keep it in sync with actual
 	// router state so the next registerSoundLevelConsumers call (e.g. after
 	// restartAudioCapture) does not skip sources due to stale entries.
 	p.untrackAllSoundLevelConsumers()
+	// Drop the per-source route-failure memory: all sources are gone, so any
+	// retained "failed last pass" entry is stale and would otherwise defeat the
+	// first-pass grace for a source ID that later returns (#4208).
+	clear(p.routeFailedLastPass)
 	ResetOverrunTrackers()
 }
 
@@ -971,6 +1001,131 @@ func (p *AudioPipelineService) wireSourceBufferRoute(sid, sourceName string, sou
 	return true, true
 }
 
+// routeReportInputs names the three booleans routeReportDecision weighs. Grouping them
+// in a struct with explicit field names keeps a call site from silently inverting the
+// not-analyzing decision by passing them in the wrong order, since positionally they are
+// three adjacent, interchangeable bools.
+type routeReportInputs struct {
+	bufferRouteOK     bool // the source's buffer (analysis) route came up this pass
+	failedLastPass    bool // the route was already down on the previous reconfigure pass
+	suppressTransient bool // this pass is a reconfigure, where a first transient failure is expected
+}
+
+// routeReportDecision returns the allocated-model set that reportUnregisteredModels
+// should treat as registered for a source, given whether its buffer route came up
+// this pass (bufferRouteOK), whether that route was already down on the previous
+// pass (failedLastPass), and whether this pass is a reconfigure where a transient
+// AddRoute failure is expected (suppressTransient). It implements the "survives a
+// reconfigure" suppression for #4208:
+//   - route up: report normally (a per-model allocation miss still surfaces);
+//   - route down on a reconfigure pass, first time: suppress the alarm this pass,
+//     because the next reconfigure usually repairs a transient AddRoute race;
+//   - route down and either not a reconfigure (a start/restart failure is a genuine
+//     outage) or still down on a later pass: surface every resolved model.
+//
+// Scoping the suppression to reconfigure passes is essential: a route that fails on
+// the startup pass has no preceding reconfigure churn to be a transient of, and on a
+// stable config no later pass revisits it, so suppressing it there would silence a
+// permanent model outage forever (the #4201/#4204 class). Pure, so the policy is
+// unit-tested without standing up the audio engine.
+func routeReportDecision(in routeReportInputs, allocated map[string]bool) map[string]bool {
+	if in.bufferRouteOK {
+		return allocated
+	}
+	if in.suppressTransient && !in.failedLastPass {
+		return allocated // first transient reconfigure failure: suppress the alarm this pass
+	}
+	return nil // report the resolved models as not-analyzing
+}
+
+// Audio-source registration operations. Each labels a registration pass and, via
+// isReconfigureOperation, drives transient-route-failure suppression (#4208), so the
+// classifier switch and the call sites that pass these values must share one vocabulary.
+const (
+	operationStart             = "start"
+	operationRestart           = "restart"
+	operationRestartSource     = "restart_source"
+	operationReconfigureDiff   = "reconfigure_diff"
+	operationReconfigureParams = "reconfigure_params"
+	operationGainChange        = "gain_change"
+	operationModelChange       = "model_change"
+	operationRouteRetry        = "route_retry"
+)
+
+// isReconfigureOperation reports whether a registerConsumersForSources pass was
+// driven by a settings-change reconfigure, where a transient AddRoute failure can
+// occur and is repaired by the next pass, as opposed to a start or explicit restart
+// where a route failure is a genuine outage to report immediately (see
+// routeReportDecision, #4208). These operations originate in reconfigureChangedSources.
+// operationRouteRetry is included: it is the pass that re-wires a route left down by an
+// earlier reconfigure, so it keeps the reconfigure semantics (a route still down on the
+// retry has failedLastPass set and is reported, not suppressed forever).
+func isReconfigureOperation(operation string) bool {
+	switch operation {
+	case operationReconfigureDiff, operationReconfigureParams, operationGainChange, operationModelChange, operationRouteRetry:
+		return true
+	default:
+		return false
+	}
+}
+
+// sourcesNeedingRouteRetry returns the kept source IDs whose buffer route was still down
+// after a prior reconfigure (failed[id]) and that are not already being re-registered
+// this pass (reRegistering[id]). reconfigureChangedSources re-registers only sources
+// whose config changed, so without this a route that fails on a source later left
+// untouched is never retried, never surfaces its models as not-analyzing, and keeps a
+// stale routeFailedLastPass entry forever (#4208 follow-up). The result is sorted so the
+// retry order and its logs are deterministic. Pure, so the selection is unit-tested
+// without standing up the audio engine.
+func sourcesNeedingRouteRetry(kept []string, failed, reRegistering map[string]bool) []string {
+	var retry []string
+	for _, id := range kept {
+		if failed[id] && !reRegistering[id] {
+			retry = append(retry, id)
+		}
+	}
+	slices.Sort(retry)
+	return retry
+}
+
+// reportSourceRegistration reports the models that will not analyze sourceName and
+// updates the per-source route-failure memory for the "survives a reconfigure"
+// suppression (#4208). A transient route-build failure during a reconfigure is not
+// alarmed on its first occurrence; a start/restart failure, genuinely unresolvable
+// (skipped) models, and per-model allocation misses are reported immediately.
+// Extracted from registerConsumersForSources to keep it within the
+// cognitive-complexity budget. registerConsumersForSources runs single-threaded on
+// the startup pass and under sourcesMu on every later pass, so routeFailedLastPass
+// needs no lock of its own.
+func (p *AudioPipelineService) reportSourceRegistration(mm *classifier.ModelManager, sid, sourceName, operation string, bufferRouteOK bool, skipped []string, assigned []classifier.ModelInfo, allocated map[string]bool) {
+	if p.routeFailedLastPass == nil {
+		p.routeFailedLastPass = make(map[string]bool)
+	}
+	// routeFailedLastPass tracks failures ACROSS RECONFIGURE PASSES only. A start or
+	// restart failure is reported immediately (suppressTransient=false below) and must
+	// not populate this memory, or the next reconfigure's first (transient) failure
+	// would see failedLastPass=true and be reported instead of suppressed (#4208). So
+	// only a reconfigure failure records state; every other pass clears it.
+	reconfigure := isReconfigureOperation(operation)
+	registered := routeReportDecision(routeReportInputs{
+		bufferRouteOK:     bufferRouteOK,
+		failedLastPass:    reconfigure && p.routeFailedLastPass[sid],
+		suppressTransient: reconfigure,
+	}, allocated)
+	if bufferRouteOK || !reconfigure {
+		delete(p.routeFailedLastPass, sid)
+	} else {
+		p.routeFailedLastPass[sid] = true
+	}
+	reportUnregisteredModels(mm, &modelRegistrationReport{
+		sourceID:   sid,
+		sourceName: sourceName,
+		skipped:    skipped,
+		resolved:   assigned,
+		allocated:  registered,
+	})
+}
+
 // registerConsumersForSources registers BufferConsumer and AudioLevelConsumer
 // on the AudioRouter for each source ID. The sourceModelMap carries the
 // config-level model IDs for each source so that buffer consumers fan out to
@@ -1076,16 +1231,6 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 		consumerOK, bufferRouteOK := p.wireSourceBufferRoute(
 			sid, sourceName, sourceSampleRate, gainDB, targets, currentSettings, operation)
 
-		// Report models the source assigns but that will not analyze it, AFTER the
-		// buffer consumer and its route are attached, so a consumer- or route-build
-		// failure is included rather than silently missed. When the buffer route did
-		// not come up, no target on this source runs, so report every resolved model;
-		// otherwise report only the ones that did not register (unresolved, or buffer
-		// allocation failed).
-		registered := allocatedModels
-		if !bufferRouteOK {
-			registered = nil
-		}
 		// Report only models the configuration actually assigns. When the source
 		// resolved to no loaded target and fell back to the primary, the user
 		// assigned nothing here, so naming the built-in primary as "assigned to this
@@ -1096,7 +1241,11 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 		if usedPrimaryFallback {
 			assigned = nil
 		}
-		reportUnregisteredModels(modelMgr, sourceName, skippedModels, assigned, registered)
+		// Report models that will not analyze this source, AFTER the buffer consumer
+		// and its route are attached so a consumer- or route-build failure is included.
+		// Also updates the per-source route-failure memory that implements the
+		// "survives a reconfigure" suppression (#4208).
+		p.reportSourceRegistration(modelMgr, sid, sourceName, operation, bufferRouteOK, skippedModels, assigned, allocatedModels)
 
 		if !consumerOK {
 			// The buffer consumer never came up; skip wiring the audio-level route,
@@ -1281,7 +1430,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 				logger.String("source_name", src.DisplayName),
 				logger.String("models", strings.Join(scm.modelIDs, ", ")),
 				logger.Int("model_count", len(scm.modelIDs)),
-				logger.String("operation", "reconfigure_diff"))
+				logger.String("operation", operationReconfigureDiff))
 
 			// Classify the kind of change needed, from most to least
 			// disruptive. Model changes are checked before gain-only
@@ -1296,7 +1445,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 					logger.Int("new_sample_rate", scm.config.SampleRate),
 					logger.Int("old_bit_depth", src.BitDepth),
 					logger.Int("new_bit_depth", scm.config.BitDepth),
-					logger.String("operation", "reconfigure_diff"))
+					logger.String("operation", operationReconfigureDiff))
 				if src.Gain != scm.config.Gain {
 					registry.UpdateGain(src.ID, scm.config.Gain)
 				}
@@ -1305,7 +1454,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 					log.Error("failed to reconfigure source",
 						logger.String("source_id", src.ID),
 						logger.Error(err),
-						logger.String("operation", "reconfigure_diff"))
+						logger.String("operation", operationReconfigureDiff))
 				} else {
 					reconfiguredIDs = append(reconfiguredIDs, src.ID)
 				}
@@ -1319,7 +1468,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 				}
 				log.Info("model assignment changed for kept source, rebuilding consumers",
 					logger.String("source_id", src.ID),
-					logger.String("operation", "reconfigure_diff"))
+					logger.String("operation", operationReconfigureDiff))
 				modelChangedIDs = append(modelChangedIDs, src.ID)
 
 			case src.Gain != scm.config.Gain:
@@ -1328,7 +1477,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 					logger.String("source_id", src.ID),
 					logger.Float64("old_gain_db", src.Gain),
 					logger.Float64("new_gain_db", scm.config.Gain),
-					logger.String("operation", "reconfigure_diff"))
+					logger.String("operation", operationReconfigureDiff))
 				registry.UpdateGain(src.ID, scm.config.Gain)
 				gainChangedIDs = append(gainChangedIDs, src.ID)
 			}
@@ -1341,7 +1490,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 			// New source - add it.
 			log.Info("adding new stream from config",
 				logger.String("connection", privacy.SanitizeStreamUrl(connStr)),
-				logger.String("operation", "reconfigure_diff"))
+				logger.String("operation", operationReconfigureDiff))
 			if err := p.engine.AddSource(scm.config); err != nil {
 				log.Warn("failed to add source during reconfigure",
 					logger.String("connection", privacy.SanitizeStreamUrl(connStr)),
@@ -1373,7 +1522,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		removedCount++
 		log.Info("removing stream no longer in config",
 			logger.String("source_id", src.ID),
-			logger.String("operation", "reconfigure_diff"))
+			logger.String("operation", operationReconfigureDiff))
 		if err := p.engine.RemoveSource(src.ID); err != nil {
 			log.Warn("failed to remove source during reconfigure",
 				logger.String("source_id", src.ID),
@@ -1385,35 +1534,32 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		// source is re-added later.
 		p.untrackSoundLevelConsumer(src.ID)
 		RemoveOverrunTrackers(src.ID)
+		// Drop the route-failure memory too, so a source ID re-added later starts
+		// with a clean first-pass grace rather than a stale "failed last pass" (#4208).
+		delete(p.routeFailedLastPass, src.ID)
+		// Likewise drop the model-not-registered suppression window for the removed
+		// source so a later re-add re-notifies instead of being silenced by a stale entry.
+		clearModelNotRegistered(src.ID)
 	}
 
 	// Register consumers and monitors only for newly added sources.
 	if len(newSourceIDs) > 0 {
-		p.registerConsumersForSources(newSourceIDs, sourceModelMap, audioLevelChan, "reconfigure_diff")
-		p.registerSoundLevelConsumers(newSourceIDs, "reconfigure_diff")
+		p.registerConsumersForSources(newSourceIDs, sourceModelMap, audioLevelChan, operationReconfigureDiff)
+		p.registerSoundLevelConsumers(newSourceIDs, operationReconfigureDiff)
 	}
 
 	// Rebuild routes for sources whose audio params changed. ReconfigureSource
 	// removed all routes and reallocated buffers; consumers must be re-created.
 	if len(reconfiguredIDs) > 0 {
-		p.registerConsumersForSources(reconfiguredIDs, sourceModelMap, audioLevelChan, "reconfigure_params")
-		p.registerSoundLevelConsumers(reconfiguredIDs, "reconfigure_params")
+		p.registerConsumersForSources(reconfiguredIDs, sourceModelMap, audioLevelChan, operationReconfigureParams)
+		p.registerSoundLevelConsumers(reconfiguredIDs, operationReconfigureParams)
 	}
 
 	// Rebuild routes for sources whose gain changed. The capture device
 	// stays running; only the routes are torn down and re-created so
 	// drainRoute picks up the new gainLinear value.
 	if len(gainChangedIDs) > 0 {
-		for _, sid := range gainChangedIDs {
-			p.engine.Router().RemoveAllRoutes(sid)
-			// RemoveAllRoutes also removes the soundlevel route, so drop the
-			// tracking entry. Without this, the registerSoundLevelConsumers
-			// call below would skip the source (idempotency check) and leave
-			// it permanently without sound level monitoring.
-			p.untrackSoundLevelConsumer(sid)
-		}
-		p.registerConsumersForSources(gainChangedIDs, sourceModelMap, audioLevelChan, "gain_change")
-		p.registerSoundLevelConsumers(gainChangedIDs, "gain_change")
+		p.rebuildRoutesForSources(gainChangedIDs, sourceModelMap, audioLevelChan, operationGainChange)
 	}
 
 	// Rebuild routes for sources whose model assignment changed (e.g.,
@@ -1427,9 +1573,18 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 			desiredSet := resolveDesiredModelSet(sourceModelMap[sid], loadedModels, primaryModelID)
 			deallocateStaleAnalysisBuffers(bufMgr, sid, desiredSet)
 		}
-		p.registerConsumersForSources(modelChangedIDs, sourceModelMap, audioLevelChan, "model_change")
-		p.registerSoundLevelConsumers(modelChangedIDs, "model_change")
+		p.registerConsumersForSources(modelChangedIDs, sourceModelMap, audioLevelChan, operationModelChange)
+		p.registerSoundLevelConsumers(modelChangedIDs, operationModelChange)
 	}
+
+	// Retry sources whose buffer route stayed down after a prior reconfigure but whose
+	// config did not change this pass, so the re-register blocks above skipped them.
+	// Without this a route that fails on a source later left untouched is never retried
+	// and its models never surface as not-analyzing (#4208 follow-up).
+	routeRetryIDs := p.retryPersistentRouteFailures(
+		alreadyRunning,
+		[][]string{newSourceIDs, reconfiguredIDs, gainChangedIDs, modelChangedIDs},
+		sourceModelMap, audioLevelChan)
 
 	// Sync monitors for ALL active sources (kept + new) so UpdateMonitors
 	// receives the full desired state and removes stale monitors correctly.
@@ -1450,7 +1605,54 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		logger.Int("removed", removedCount),
 		logger.Int("gain_changed", len(gainChangedIDs)),
 		logger.Int("model_changed", len(modelChangedIDs)),
-		logger.String("operation", "reconfigure_diff"))
+		logger.Int("route_retried", len(routeRetryIDs)),
+		logger.String("operation", operationReconfigureDiff))
+}
+
+// rebuildRoutesForSources tears down and re-creates the buffer, audio-level and
+// soundlevel routes for the given kept sources WITHOUT restarting capture:
+// Router().RemoveAllRoutes touches only the router, so the capture device keeps running.
+// Shared by the reconfigure paths that keep a source running but must rewire it (gain
+// change and persistent-route-failure retry), so the teardown+re-register sequence lives
+// in one place.
+func (p *AudioPipelineService) rebuildRoutesForSources(ids []string, sourceModelMap map[string][]string, audioLevelChan chan audiocore.AudioLevelData, operation string) {
+	for _, sid := range ids {
+		p.engine.Router().RemoveAllRoutes(sid)
+		// RemoveAllRoutes also removes the soundlevel route, so drop the tracking entry.
+		// Without this, the registerSoundLevelConsumers call below would skip the source
+		// (idempotency check) and leave it permanently without sound level monitoring.
+		p.untrackSoundLevelConsumer(sid)
+	}
+	p.registerConsumersForSources(ids, sourceModelMap, audioLevelChan, operation)
+	p.registerSoundLevelConsumers(ids, operation)
+}
+
+// retryPersistentRouteFailures re-wires the buffer route for kept sources whose route
+// stayed down after an earlier reconfigure (routeFailedLastPass) and that were not
+// already re-registered this pass. reconfigureChangedSources re-registers only sources
+// whose config changed, so without this a route that fails on a source later left
+// untouched is never retried, its models never surface as not-analyzing, and the failure
+// memory keeps a stale entry forever (#4208 follow-up). reRegistered lists the ID slices
+// already handled this pass so a source is not rebuilt twice; the rebuild clears the
+// failure memory on recovery or reports the models as not-analyzing when the route is
+// still down. Returns the retried IDs for the completion log. Runs under sourcesMu (held
+// by the caller), which serialises the routeFailedLastPass read.
+func (p *AudioPipelineService) retryPersistentRouteFailures(alreadyRunning map[string]string, reRegistered [][]string, sourceModelMap map[string][]string, audioLevelChan chan audiocore.AudioLevelData) []string {
+	reRegistering := make(map[string]bool)
+	for _, ids := range reRegistered {
+		for _, id := range ids {
+			reRegistering[id] = true
+		}
+	}
+	routeRetryIDs := sourcesNeedingRouteRetry(slices.Collect(maps.Values(alreadyRunning)), p.routeFailedLastPass, reRegistering)
+	if len(routeRetryIDs) == 0 {
+		return nil
+	}
+	audiocore.GetLogger().Info("retrying buffer route for sources with a persistent route failure",
+		logger.Int("count", len(routeRetryIDs)),
+		logger.String("operation", operationRouteRetry))
+	p.rebuildRoutesForSources(routeRetryIDs, sourceModelMap, audioLevelChan, operationRouteRetry)
+	return routeRetryIDs
 }
 
 // sourceConfigWithModels pairs an audiocore.SourceConfig with the config-level
@@ -1762,6 +1964,18 @@ func resolveModelTargets(configModelIDs []string, loadedModels map[string]classi
 	return targets, skipped
 }
 
+// modelRegistrationReport groups the per-source registration result that
+// reportUnregisteredModels inspects. mm stays a separate dependency parameter; grouping
+// the source and result payload keeps the call within the >3-parameters convention and
+// prevents positional-argument mistakes as this lifecycle payload grows.
+type modelRegistrationReport struct {
+	sourceID   string
+	sourceName string
+	skipped    []string               // config IDs that did not resolve/load
+	resolved   []classifier.ModelInfo // models the source assigns that did resolve
+	allocated  map[string]bool        // registry IDs whose analysis buffer was allocated
+}
+
 // reportUnregisteredModels raises a user-visible notification for models that a
 // source's configuration assigns but which will not receive its audio, either
 // because they never loaded (skipped) or because their analysis buffer could
@@ -1776,11 +1990,16 @@ func resolveModelTargets(configModelIDs []string, loadedModels map[string]classi
 // The shortfall is otherwise silent: detection keeps working for the models that
 // did register, so nothing looks broken, and the only trace is a warning in a
 // log file. Users have lost a model for days this way (GitHub #4201, #4204).
-func reportUnregisteredModels(mm *classifier.ModelManager, sourceName string, skipped []string, resolved []classifier.ModelInfo, allocated map[string]bool) {
-	notRegistered := unregisteredModelNames(mm, skipped, resolved, allocated)
+func reportUnregisteredModels(mm *classifier.ModelManager, report *modelRegistrationReport) {
+	notRegistered := unregisteredModelNames(mm, report.skipped, report.resolved, report.allocated)
 	if len(notRegistered) > 0 {
-		notifyModelsNotRegistered(sourceName, notRegistered)
+		notifyModelsNotRegistered(report.sourceID, report.sourceName, notRegistered)
+		return
 	}
+	// Every assigned model registered: clear any prior suppression window for this source
+	// so a later failure re-notifies immediately rather than being silenced for the rest
+	// of the 6h window (symmetric with the routeFailedLastPass recovery clear).
+	clearModelNotRegistered(report.sourceID)
 }
 
 // unregisteredModelNames returns the display names of models that will not

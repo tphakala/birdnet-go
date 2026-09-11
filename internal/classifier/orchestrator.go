@@ -4,6 +4,8 @@ package classifier
 
 import (
 	"context"
+	"fmt"
+	"iter"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -20,6 +22,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/openfauna"
+	"github.com/tphakala/birdnet-go/internal/speciesindex"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -78,12 +81,15 @@ type secondaryBackendKey struct {
 // Delete/UnloadModel acquire mu + entry.mu but NOT inferenceMu.
 type Orchestrator struct {
 	// Public fields, same layout as BirdNET for drop-in caller migration.
-	Settings        *conf.Settings // Deprecated: use CurrentSettings() instead.
-	settingsAtomic  atomic.Pointer[conf.Settings]
-	ModelInfo       ModelInfo
-	TaxonomyMap     TaxonomyMap
-	TaxonomyPath    string
-	ScientificIndex ScientificNameIndex
+	Settings       *conf.Settings // Deprecated: use CurrentSettings() instead.
+	settingsAtomic atomic.Pointer[conf.Settings]
+	ModelInfo      ModelInfo
+
+	// taxonomy is the orchestrator-owned eBird taxonomy service, built once in
+	// NewOrchestrator and read-only afterwards. It replaces the taxonomy maps the
+	// primary model used to own, so a species-code lookup no longer depends on which
+	// acoustic model is loaded (model de-privilege epic, Phase 2a).
+	taxonomy *taxonomyService
 
 	// Name resolution chain. Resolvers are tried in order; first non-empty wins.
 	nameResolvers []NameResolver
@@ -92,6 +98,30 @@ type Orchestrator struct {
 	// typed handle so refresh triggers can Rebuild its sparse index on
 	// range-filter/model/locale change. Always also present in nameResolvers.
 	openfauna *openfauna.Resolver
+
+	// names is the single process-wide species-name index. The orchestrator is its
+	// only writer, rebuilding it from the union of every loaded model's labels
+	// (AllLabels) on model load, unload, reload, range-filter rebuild and locale
+	// change. The datastore and the api/v2 facade hold pointers to this same
+	// service; readers use Snapshot() lock-free (model de-privilege epic, Phase 2a).
+	names *speciesindex.Service
+
+	// rebuildMu serializes the name-service rebuild (rebuildSpeciesIndex and
+	// RebuildNameResolver) so a working set taken by one trigger cannot be published
+	// after a newer one's. It sits ABOVE o.mu in the lock order (o.rebuildMu -> o.mu
+	// -> entry.mu -> bn.mu): the rebuild calls AllLabels (which takes o.mu.RLock and
+	// each entry.mu) while holding it, so it must never be taken with any other
+	// orchestrator lock already held.
+	rebuildMu sync.Mutex
+
+	// includedSpecies is the last range-filter inclusion list handed to
+	// RebuildNameResolver. It is unioned with AllLabels() to form the species-index
+	// working set on every rebuild, so the model-topology triggers (load, unload,
+	// reload) rebuild the index from the same set the range filter last established
+	// rather than dropping the inclusion list; the resolver working set (rebuilt only
+	// by RebuildNameResolver) is always a subset of it, so an inclusion-list species
+	// can never be in the resolver yet missing from the index. Guarded by rebuildMu.
+	includedSpecies []string
 
 	// Model management.
 	// NOTE: models map is keyed by ModelInfo.ID at construction time. If ReloadModel
@@ -127,6 +157,19 @@ type Orchestrator struct {
 	// ID. Uses sync.Map to avoid holding o.mu for reads (see LoadFailures).
 	// Values are *atomic.Int64.
 	modelLoadFailures sync.Map
+
+	// modelLoadErrors records the last load error string per registry ID
+	// (registryID -> string), set alongside modelLoadFailures by recordLoadFailure
+	// so modelNotLoadedReason can explain why a model is missing. Lock-free.
+	modelLoadErrors sync.Map
+
+	// modelUnloaded is a tombstone set (registryID -> struct{}{}) marking models
+	// removed by UnloadModel and not yet reloaded. The unloaded case is the benign
+	// cause of the transient not-loaded predict during the topology-reconfigure
+	// debounce window (Sentry BIRDNET-GO-2G6 / 1S1): the tombstone lets
+	// modelNotLoadedReason report "unloaded, reconfigure in progress" instead of
+	// conflating it with a model that never loaded. Lock-free.
+	modelUnloaded sync.Map
 
 	// pendingWarmups queues deferred warm-ups recorded by model loaders while
 	// they hold o.mu (write lock). Drained by runPendingWarmups after o.mu is
@@ -248,6 +291,15 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// construction and keeps it for its hot-reload path, so both resolve the same
 	// way. Passing the bound method rather than a precomputed value is what keeps
 	// the reload from re-deriving the identity off the raw configured string.
+	// Build the orchestrator-owned taxonomy service before the primary model. It
+	// loads the same embedded eBird taxonomy the primary used to load, via the same
+	// LoadTaxonomyData path, so a load failure aborts construction exactly as before.
+	taxonomy, err := newTaxonomyService("")
+	if err != nil {
+		return nil, err
+	}
+	o.taxonomy = taxonomy
+
 	bn, err := NewBirdNET(settings, nil, o.primaryPathResolverFor(settings))
 	if err != nil {
 		return nil, err
@@ -278,16 +330,23 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 
 	// Populate the remaining fields now that bn is available.
 	o.ModelInfo = bn.ModelInfo
-	o.TaxonomyMap = bn.TaxonomyMap
-	o.TaxonomyPath = bn.TaxonomyPath
-	o.ScientificIndex = bn.ScientificIndex
 	// OpenFauna first so it overrides label/taxonomy names everywhere
 	// ResolveName is consulted (display + inference).
 	o.nameResolvers = []NameResolver{ofResolver, resolver}
 	o.openfauna = ofResolver
+	// The orchestrator owns the single species-name index and is its only writer.
+	// Seed it with the orchestrator's OpenFauna resolver (the same resolver the old
+	// startup wiring handed the datastore and facade); rebuildSpeciesIndex below
+	// (and every topology trigger) republishes it from the union of loaded labels.
+	o.names = speciesindex.New(ofResolver)
 	o.models[bn.ModelInfo.ID] = &modelEntry{instance: bn}
 	o.primary = bn
 	o.settingsAtomic.Store(settings)
+
+	// Log any labels missing from the taxonomy at debug level, reproducing the
+	// diagnostics BirdNET used to emit from loadLabels now that the taxonomy is
+	// orchestrator-owned.
+	o.logMissingTaxonomyCodes(bn, bn.Labels())
 
 	// Each OV-capable secondary records the startup triplet on its own modelEntry
 	// when its loader registers it below (see loadPerch), so the first
@@ -310,6 +369,12 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 		o.Delete()
 		return nil, err
 	}
+
+	// Publish the initial species-name snapshot from the union of every loaded
+	// model's labels. Kept here (rather than relying on the first BuildRangeFilter)
+	// so cmd/benchmark and cmd/rangefilter, which build an orchestrator and never
+	// call BuildRangeFilter, still get a populated index.
+	o.rebuildSpeciesIndex()
 
 	return o, nil
 }
@@ -695,9 +760,11 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 	o.mu.RUnlock()
 
 	if !ok {
-		log.Error("PredictModel unknown model",
-			logger.String("model_id", modelID))
-		return nil, errors.Newf("unknown model: %s", modelID).
+		reason := o.modelNotLoadedReason(modelID)
+		log.Error("PredictModel model not loaded",
+			logger.String("model_id", modelID),
+			logger.String("reason", reason))
+		return nil, errors.Newf("%w: %s (%s)", ErrModelNotLoaded, modelID, reason).
 			Component("classifier.orchestrator").
 			Category(errors.CategoryValidation).
 			Context("model_id", modelID).
@@ -794,19 +861,33 @@ func (o *Orchestrator) RebuildNameResolver(includedSpecies []string) error {
 	if o == nil || o.openfauna == nil {
 		return nil
 	}
-	sciNames := scientificNamesFromLabels(includedSpecies)
-	if len(sciNames) == 0 {
-		// Snapshot primary under the read lock so a concurrent Delete (which sets
-		// o.primary = nil) cannot race the Labels() read.
-		o.mu.RLock()
-		primary := o.primary
-		o.mu.RUnlock()
-		if primary != nil {
-			sciNames = scientificNamesFromLabels(primary.Labels())
-		}
-	}
+	o.rebuildMu.Lock()
+	defer o.rebuildMu.Unlock()
+	// The working set is the union of every loaded model's labels plus this inclusion
+	// list (design 5.4): a superset of the previous seed (the inclusion list, or the
+	// primary's labels when it was empty), so every species pre-indexed before stays
+	// pre-indexed, and secondary-model species stop falling to the on-demand Lookup
+	// path.
+	working := unionLabels(o.AllLabels(), includedSpecies)
 	locale := o.CurrentSettings().BirdNET.Locale
-	return o.openfauna.Rebuild(sciNames, locale)
+	// This is the only path that refreshes the OpenFauna resolver working set;
+	// openfauna.Rebuild decompresses the embedded dataset, so the cheaper
+	// model-topology triggers deliberately skip it and rebuild only the index.
+	// Rebuild the resolver first: the index built next reads its localized names.
+	// The returned resolver-rebuild error is this method's contract.
+	if err := o.openfauna.Rebuild(scientificNamesFromLabels(working), locale); err != nil {
+		return err
+	}
+	// Record the inclusion list only after the resolver has adopted it, so a failed
+	// rebuild does not leave o.includedSpecies ahead of the resolver working set (the
+	// model-topology triggers union it into the index, so it must not reference
+	// species the resolver never took). Defensive copy: the caller may reuse the slice.
+	o.includedSpecies = slices.Clone(includedSpecies)
+	// Publish the index from the same union so the resolver and index stay in sync.
+	if o.names != nil {
+		o.names.Rebuild(working, locale)
+	}
+	return nil
 }
 
 // scientificNamesFromLabels extracts the scientific-name portion of each
@@ -968,7 +1049,7 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 	// ReloadRangeFilter cannot desync them. geoLabels is non-nil only on the
 	// universal (v3 geomodel) path, where it covers every scientific name the
 	// geomodel knows regardless of threshold.
-	scores, geoLabels, err := primary.getProbableSpecies(date, week, settings)
+	scores, geoLabels, _, err := primary.getProbableSpecies(date, week, settings)
 	if err != nil {
 		return nil, err
 	}
@@ -1215,38 +1296,48 @@ func (o *Orchestrator) AllLabels() []string {
 	return unionLabels(sets...)
 }
 
-// GetSpeciesCode returns the eBird species code for a given label.
+// logMissingTaxonomyCodes emits, at debug level, the labels absent from the
+// taxonomy, reproducing BirdNET.logMissingTaxonomyCodes now that the taxonomy is
+// orchestrator-owned. primary supplies the "custom model/labels" phrasing; a nil
+// taxonomy or primary is a no-op.
+func (o *Orchestrator) logMissingTaxonomyCodes(primary *BirdNET, labels []string) {
+	if o == nil || o.taxonomy == nil || primary == nil {
+		return
+	}
+	s := o.currentSettings()
+	customModelOrLabels := primary.configuredModelPath() != "" || s.BirdNET.LabelPath != ""
+	o.taxonomy.logMissingCodes(labels, customModelOrLabels, s.BirdNET.Debug)
+}
+
+// GetSpeciesCode returns the eBird species code for a given label. The taxonomy is
+// orchestrator-owned and immutable, so this needs no lock and no primary model; it
+// keeps answering after Delete releases the primary (a shutdown-only state).
 func (o *Orchestrator) GetSpeciesCode(label string) (string, bool) {
-	o.mu.RLock()
-	primary := o.primary
-	o.mu.RUnlock()
-	if primary == nil {
+	if o == nil || o.taxonomy == nil {
 		return "", false
 	}
-	return primary.GetSpeciesCode(label)
+	return o.taxonomy.speciesCode(label)
 }
 
 // GetSpeciesNameFromCode returns the species name for a given eBird species code.
-// The second return value reports whether the code was found in the TaxonomyMap
-// by calling GetSpeciesNameFromCode(o.TaxonomyMap, code).
+// The second return value reports whether the code was found in the orchestrator-
+// owned taxonomy, which is immutable and so needs no lock; like GetSpeciesCode it
+// keeps answering after Delete (a shutdown-only state).
 func (o *Orchestrator) GetSpeciesNameFromCode(code string) (string, bool) {
-	o.mu.RLock()
-	defer o.mu.RUnlock()
-	return GetSpeciesNameFromCode(o.TaxonomyMap, code)
+	if o == nil || o.taxonomy == nil {
+		return "", false
+	}
+	return o.taxonomy.nameFromCode(code)
 }
 
 // GetSpeciesWithScientificAndCommonName returns the scientific and common name for a label.
-// OpenFauna (chain[0]) is authoritative: its localized name overrides the
-// primary's label-derived common name whenever the resolver chain has one.
+// The common name is label-derived (via SplitSpeciesName); OpenFauna (chain[0]) is
+// authoritative and overrides it whenever the resolver chain has a localized name.
 func (o *Orchestrator) GetSpeciesWithScientificAndCommonName(label string) (scientific, common string) {
-	// Snapshot primary under read lock to avoid racing with Delete().
-	o.mu.RLock()
-	primary := o.primary
-	o.mu.RUnlock()
-	if primary == nil {
+	if o == nil {
 		return "", ""
 	}
-	scientific, common = primary.GetSpeciesWithScientificAndCommonName(label)
+	scientific, common = SplitSpeciesName(label)
 	if scientific != "" {
 		if resolved := o.ResolveName(scientific, ""); resolved != "" {
 			common = resolved
@@ -1256,19 +1347,25 @@ func (o *Orchestrator) GetSpeciesWithScientificAndCommonName(label string) (scie
 }
 
 // EnrichResultWithTaxonomy adds taxonomy information to a detection result.
-// OpenFauna (chain[0]) is authoritative: the resolver chain overrides the
-// label-derived common name whenever it has a name, even if the primary already
-// produced one. This localizes names and fixes scientific-only/bat labels. Only
-// the primary's name is kept when the chain returns nothing.
+// The common name is label-derived (via SplitSpeciesName); OpenFauna (chain[0]) is
+// authoritative and overrides it whenever the resolver chain has a localized name,
+// which localizes names and fixes scientific-only/bat labels. The label-derived
+// name is kept only when the chain returns nothing.
 func (o *Orchestrator) EnrichResultWithTaxonomy(speciesLabel string) (scientific, common, code string) {
-	// Snapshot primary under read lock to avoid racing with Delete().
-	o.mu.RLock()
-	primary := o.primary
-	o.mu.RUnlock()
-	if primary == nil {
+	if o == nil {
 		return "", "", ""
 	}
-	scientific, common, code = primary.EnrichResultWithTaxonomy(speciesLabel)
+	scientific, common = SplitSpeciesName(speciesLabel)
+	if o.taxonomy != nil {
+		var exists bool
+		code, exists = o.taxonomy.speciesCode(speciesLabel)
+		// Gate the debug format on the debug flag so the placeholder-code args are not
+		// built (and o.Debug's lock not taken) on the taxonomy-miss path when debug is
+		// off, matching the old bn.Debug call site which was wrapped in the same check.
+		if !exists && o.currentSettings().BirdNET.Debug {
+			o.Debug("Species '%s' not found in taxonomy, using generated placeholder code: %s", speciesLabel, code)
+		}
+	}
 
 	if scientific != "" {
 		if resolved := o.ResolveName(scientific, ""); resolved != "" {
@@ -1432,7 +1529,13 @@ func (o *Orchestrator) RunFilterProcess(dateStr string, week float32) {
 // Acquires the per-model lock before reload to prevent concurrent inference,
 // then the write lock to re-key the models map.
 func (o *Orchestrator) ReloadModel() error {
-	return o.reloadPrimaryModel(func(primary *BirdNET) error { return primary.ReloadModel() })
+	if err := o.reloadPrimaryModel(func(primary *BirdNET) error { return primary.ReloadModel() }); err != nil {
+		return err
+	}
+	// Rebuild after reloadPrimaryModel returns: it holds o.mu.Lock via defer through
+	// step 2, and rebuildSpeciesIndex must run with no orchestrator lock held.
+	o.rebuildSpeciesIndex()
+	return nil
 }
 
 // ReloadPrimaryForVariantSwap reloads the primary classifier in place for a
@@ -1444,7 +1547,12 @@ func (o *Orchestrator) ReloadModel() error {
 // the re-key is a no-op in practice. Transactional rollback to the previous model
 // lives in reloadModelInternal, so a failed swap leaves the previous variant serving.
 func (o *Orchestrator) ReloadPrimaryForVariantSwap() error {
-	return o.reloadPrimaryModel(func(primary *BirdNET) error { return primary.reloadForVariantSwap() })
+	if err := o.reloadPrimaryModel(func(primary *BirdNET) error { return primary.reloadForVariantSwap() }); err != nil {
+		return err
+	}
+	// See ReloadModel: rebuild only after reloadPrimaryModel released o.mu.
+	o.rebuildSpeciesIndex()
+	return nil
 }
 
 // reloadPrimaryModel performs the shared locking, per-instance reload, shared-state
@@ -1499,15 +1607,12 @@ func (o *Orchestrator) reloadPrimaryModel(reload func(primary *BirdNET) error) e
 			Build()
 	}
 
-	info, taxMap, taxPath, sciIndex := o.primary.ReloadSnapshot()
+	info := o.primary.ReloadSnapshot()
 	// The reloaded primary is a fresh instance: drop its streak, and the previous
 	// ID's when the reload changed it, so neither lingers.
 	dropInferenceFailureStreak(o.ModelInfo.ID)
 	dropInferenceFailureStreak(info.ID)
 	o.ModelInfo = info
-	o.TaxonomyMap = taxMap
-	o.TaxonomyPath = taxPath
-	o.ScientificIndex = sciIndex
 
 	// Re-key the models map in case the model ID changed after reload (Forgejo #270).
 	//
@@ -1536,6 +1641,11 @@ func (o *Orchestrator) reloadPrimaryModel(reload func(primary *BirdNET) error) e
 
 	// Update settings atomically
 	o.updateSettings(o.primary.currentSettings())
+
+	// Re-emit the missing-taxonomy diagnostics for the reloaded label set (e.g. a
+	// locale change), reproducing what BirdNET.loadLabels logged before the taxonomy
+	// moved to the orchestrator.
+	o.logMissingTaxonomyCodes(o.primary, o.primary.Labels())
 
 	return nil
 }
@@ -1631,6 +1741,9 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 	// o.mu. See resolveSiblingSet for the full rationale on this lock-free read.
 
 	var firstErr error
+	// swapped tracks whether any entry's instance was actually replaced, so the
+	// species-name index is rebuilt at most once, after the loop.
+	swapped := false
 	for _, ref := range refs {
 		// Per-entry gate: read the triplet this entry's instance was built against
 		// under entry.mu and skip the rebuild when it already matches the current
@@ -1732,6 +1845,7 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 		ref.entry.backend = triplet
 		dropInferenceFailureStreak(ref.id) // fresh instance, fresh streak
 		ref.entry.mu.Unlock()
+		swapped = true
 
 		// Close the old instance after releasing entry.mu: native teardown can be
 		// slow, and no goroutine can reach the old instance once the swap is
@@ -1749,6 +1863,15 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 			logger.String("backend", triplet.backend),
 			logger.String("ov_device", triplet.ovDevice),
 			logger.Int("threads", triplet.threads))
+	}
+
+	// Rebuild once if any instance was swapped, with no orchestrator lock held.
+	// A backend/device/threads swap keeps the label set, so the union is
+	// unchanged; the rebuild keeps the "last trigger in a reload sequence
+	// republishes with the newest-locale resolver" ordering guarantee cheap and
+	// uniform across triggers.
+	if swapped {
+		o.rebuildSpeciesIndex()
 	}
 
 	return firstErr
@@ -1803,6 +1926,15 @@ func (o *Orchestrator) Delete() {
 
 // IsModelLoaded returns true if a model with the given registry ID is
 // currently loaded in the orchestrator.
+//
+// This takes o.mu.RLock, unlike its sibling IsModelActive which is deliberately
+// lock-free: IsModelActive reads only the scheduler atomic.Pointer, while the
+// models map read here is mutable state guarded by o.mu (ReloadModel, Delete, and
+// the loaders all mutate it under the write lock). The asymmetry is intentional.
+// On the monitor tick the RLock is reached only once a full analysis window is
+// present and sits directly before a millisecond-scale inference, so it was
+// measured as negligible; a lock-free models map is not worth the copy-on-write
+// machinery it would require.
 func (o *Orchestrator) IsModelLoaded(registryID string) bool {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
@@ -1951,9 +2083,15 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 			logger.Int("threads", dynamicThreads))
 
 		if err := loader(o, dynamicThreads); err != nil {
-			o.incLoadFailure(registryID)
+			o.recordLoadFailure(registryID, err)
 			return err
 		}
+		// The model registered successfully; clear any stale unload tombstone and the
+		// stored load error so a later not-loaded diagnosis reports the model's actual
+		// current state rather than a now-superseded unload or failure. The cumulative
+		// modelLoadFailures count is intentionally kept for the LoadFailures metric.
+		o.modelUnloaded.Delete(registryID)
+		o.modelLoadErrors.Delete(registryID)
 
 		log.Info("Model loaded dynamically",
 			logger.String("registry_id", registryID))
@@ -1975,14 +2113,25 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 		return err
 	}
 
+	// Republish the species-name index from the new union now that this model's
+	// labels are loaded. Runs after the locked closure released o.mu, and before
+	// the deferred warm-up and path-correction drains (neither reads the index, so
+	// the order relative to them is immaterial).
+	o.rebuildSpeciesIndex()
+
 	return nil
 }
 
-// incLoadFailure atomically increments the load-failure counter for registryID.
-// Safe to call concurrently; does not require o.mu.
-func (o *Orchestrator) incLoadFailure(registryID string) {
+// recordLoadFailure atomically increments the load-failure counter for registryID
+// and records the last error text, so a later "model not loaded" diagnosis
+// (modelNotLoadedReason) can explain why the model is missing. Safe to call
+// concurrently; does not require o.mu.
+func (o *Orchestrator) recordLoadFailure(registryID string, err error) {
 	v, _ := o.modelLoadFailures.LoadOrStore(registryID, new(atomic.Int64))
 	v.(*atomic.Int64).Add(1)
+	if err != nil {
+		o.modelLoadErrors.Store(registryID, err.Error())
+	}
 }
 
 // LoadFailures returns a snapshot of the per-model load-failure counts accumulated
@@ -1995,6 +2144,80 @@ func (o *Orchestrator) LoadFailures() map[string]int64 {
 		return true
 	})
 	return result
+}
+
+// ErrModelNotLoaded is returned by PredictModel when the requested model is not
+// in the loaded set. It wraps a per-call reason (see modelNotLoadedReason);
+// callers match it with errors.Is. Plain sentinel: no telemetry registered at
+// package init.
+var ErrModelNotLoaded = errors.NewStd("model not loaded")
+
+// Reasons a model can be absent from o.models when PredictModel is called.
+// modelNotLoadedReason returns the most specific, most actionable one so a
+// transient not-loaded predict (Sentry BIRDNET-GO-2G6 / 1S1, the monitor that
+// outlives an unload during the topology-reconfigure debounce) is legible rather
+// than a bare "unknown model".
+const (
+	notLoadedReasonDeleted         = "the orchestrator has been shut down"
+	notLoadedReasonUnknownRegistry = "no model with this ID is registered"
+	notLoadedReasonNotEnabled      = "the model is not enabled in settings"
+	notLoadedReasonUnloaded        = "the model was unloaded (a model reconfigure or reinstall is in progress)"
+	notLoadedReasonNeverLoaded     = "the model has not finished loading"
+	// notLoadedReasonFailedFormat renders the load-failure count and last error.
+	notLoadedReasonFailedFormat = "the model failed to load %d time(s), last error: %s"
+)
+
+// modelNotLoadedReason explains why modelID is absent from o.models, turning the
+// bare "unknown model" into an actionable diagnosis. Safe to call without holding
+// o.mu: it takes its own read lock only for the map-nil check (PredictModel has
+// already released the lock at this point) and otherwise reads lock-free
+// sync.Maps and the published settings snapshot. The most specific, most
+// actionable cause wins.
+func (o *Orchestrator) modelNotLoadedReason(modelID string) string {
+	o.mu.RLock()
+	deleted := o.models == nil
+	o.mu.RUnlock()
+	if deleted {
+		return notLoadedReasonDeleted
+	}
+	if _, registered := ModelRegistry[modelID]; !registered {
+		return notLoadedReasonUnknownRegistry
+	}
+	// A stored error means the model's most recent load attempt failed and has not
+	// since succeeded: a successful load clears the error (see LoadModel /
+	// loadAdditionalModels), so gate on the error's PRESENCE rather than the
+	// modelLoadFailures count, which is a cumulative lifetime counter (kept for the
+	// LoadFailures metric) that survives a later success. Without this gate, a model
+	// that failed once, recovered, then was cleanly unloaded would be misreported as
+	// "failed to load" with a stale error instead of "unloaded".
+	if e, ok := o.modelLoadErrors.Load(modelID); ok {
+		lastErr, _ := e.(string)
+		count := int64(0)
+		if v, ok := o.modelLoadFailures.Load(modelID); ok {
+			count = v.(*atomic.Int64).Load()
+		}
+		return fmt.Sprintf(notLoadedReasonFailedFormat, count, lastErr)
+	}
+	if _, unloaded := o.modelUnloaded.Load(modelID); unloaded {
+		return notLoadedReasonUnloaded
+	}
+	if !o.modelIDEnabled(modelID) {
+		return notLoadedReasonNotEnabled
+	}
+	return notLoadedReasonNeverLoaded
+}
+
+// modelIDEnabled reports whether registryID corresponds to a model the user has
+// enabled: an entry in settings.Models.Enabled once its config alias is resolved
+// to a registry ID. Uses the shared enabledModels walk, so it agrees with
+// computeThreadAllocation and loadAdditionalModels on what "enabled" means.
+func (o *Orchestrator) modelIDEnabled(registryID string) bool {
+	for m := range enabledModels(o.currentSettings()) {
+		if m.known && m.registryID == registryID {
+			return true
+		}
+	}
+	return false
 }
 
 // UnloadModel removes a model from the Orchestrator and releases its resources.
@@ -2038,6 +2261,10 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 	// Remove from map while holding the write lock so no new PredictModel
 	// calls can obtain this entry.
 	delete(o.models, registryID)
+	// Tombstone the model so a predict that races the asynchronous monitor
+	// teardown (the topology-reconfigure debounce window) is diagnosed as
+	// "unloaded" rather than a bare unknown model. Cleared on the next load.
+	o.modelUnloaded.Store(registryID, struct{}{})
 	if registryID == RegistryIDBat {
 		if s := o.scheduler.Load(); s != nil {
 			s.stop()
@@ -2045,32 +2272,41 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 	}
 	o.mu.Unlock()
 
-	// Close the model instance outside the map lock. Acquire the per-model
-	// lock to wait for any in-flight inference to complete before deleting
-	// the counter (prevents re-creation by in-flight RecordInvoke).
-	entry.mu.Lock()
-	defer entry.mu.Unlock()
+	// Close the model instance outside the map lock, in an inner func so entry.mu
+	// is released before rebuildSpeciesIndex runs. Acquire the per-model lock to
+	// wait for any in-flight inference to complete before deleting the counter
+	// (prevents re-creation by in-flight RecordInvoke). Rebuilding while still
+	// holding entry.mu would take entry.mu -> o.mu (via AllLabels), inverting the
+	// documented o.mu -> entry.mu order.
+	func() {
+		entry.mu.Lock()
+		defer entry.mu.Unlock()
 
-	globalInferenceCounters.Delete(registryID)
-	dropInferenceFailureStreak(registryID)
+		globalInferenceCounters.Delete(registryID)
+		dropInferenceFailureStreak(registryID)
 
-	o.rssMu.Lock()
-	delete(o.modelRSS, registryID)
-	o.rssMu.Unlock()
+		o.rssMu.Lock()
+		delete(o.modelRSS, registryID)
+		o.rssMu.Unlock()
 
-	if entry.instance != nil {
-		modelID := entry.instance.ModelID()
-		if err := entry.instance.Close(); err != nil {
-			log.Warn("failed to close model instance during unload",
-				logger.String("model_id", modelID),
-				logger.Error(err))
+		if entry.instance != nil {
+			modelID := entry.instance.ModelID()
+			if err := entry.instance.Close(); err != nil {
+				log.Warn("failed to close model instance during unload",
+					logger.String("model_id", modelID),
+					logger.Error(err))
+			}
+			entry.instance = nil
+
+			log.Info("Model unloaded",
+				logger.String("registry_id", registryID),
+				logger.String("model_id", modelID))
 		}
-		entry.instance = nil
+	}()
 
-		log.Info("Model unloaded",
-			logger.String("registry_id", registryID),
-			logger.String("model_id", modelID))
-	}
+	// Republish the species-name index from the new (smaller) union now that this
+	// model's labels are gone, with no orchestrator lock held.
+	o.rebuildSpeciesIndex()
 
 	return nil
 }
@@ -2290,6 +2526,33 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 	return infos
 }
 
+// enabledModel is one entry of settings.Models.Enabled resolved against the
+// model registry.
+type enabledModel struct {
+	configID   string // the raw ID as written in models.enabled
+	registryID string // the resolved registry ID (empty when known is false)
+	known      bool   // whether configID resolved to a registry model
+}
+
+// enabledModels yields each settings.Models.Enabled entry in config order,
+// resolved to its registry ID. It centralizes the settings.Models.Enabled ->
+// ResolveConfigModelID walk shared by modelIDEnabled, computeThreadAllocation,
+// and loadAdditionalModels so the three stay in step. Unknown config IDs are
+// yielded with known=false so each caller decides whether to warn or skip;
+// deduplication is left to the callers that need it (computeThreadAllocation
+// tracks a seen-set, loadAdditionalModels relies on the models-map existence
+// check), so the helper preserves each caller's existing behavior.
+func enabledModels(settings *conf.Settings) iter.Seq[enabledModel] {
+	return func(yield func(enabledModel) bool) {
+		for _, configID := range settings.Models.Enabled {
+			registryID, known := ResolveConfigModelID(configID)
+			if !yield(enabledModel{configID: configID, registryID: registryID, known: known}) {
+				return
+			}
+		}
+	}
+}
+
 // computeThreadAllocation pre-computes thread distribution for all models
 // that will be loaded. Inference is serialized by inferenceMu, so each model
 // gets the full thread budget (they never run simultaneously).
@@ -2298,13 +2561,12 @@ func (o *Orchestrator) computeThreadAllocation(settings *conf.Settings, primaryI
 	// case variants like ["perch_v2", "PERCH_V2"] that resolve to the same ID.
 	seen := map[string]bool{primaryID: true}
 	modelIDs := []string{primaryID}
-	for _, configID := range settings.Models.Enabled {
-		registryID, known := ResolveConfigModelID(configID)
-		if !known || seen[registryID] {
+	for m := range enabledModels(settings) {
+		if !m.known || seen[m.registryID] {
 			continue
 		}
-		seen[registryID] = true
-		modelIDs = append(modelIDs, registryID)
+		seen[m.registryID] = true
+		modelIDs = append(modelIDs, m.registryID)
 	}
 
 	total := settings.BirdNET.Threads
@@ -2361,13 +2623,13 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 	// o.Settings pointer, consistent with the per-model loaders (loadPerch/loadBat).
 	settings := o.currentSettings()
 
-	for _, configID := range settings.Models.Enabled {
-		registryID, known := ResolveConfigModelID(configID)
-		if !known {
+	for m := range enabledModels(settings) {
+		if !m.known {
 			log.Warn("skipping unknown model ID in models.enabled",
-				logger.String("model_id", configID))
+				logger.String("model_id", m.configID))
 			continue
 		}
+		registryID := m.registryID
 
 		// Closure with defer ensures the mutex is released even if a
 		// loader panics during model initialization.
@@ -2388,9 +2650,19 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 
 			// Hold the lock through the loader call because loaders write
 			// directly to o.models (e.g., loadPerch, loadBat).
-			return loader(o, threadAlloc[registryID])
+			if err := loader(o, threadAlloc[registryID]); err != nil {
+				return err
+			}
+			// The model registered; clear any stale unload tombstone and stored load
+			// error (the cumulative failure count is kept for the LoadFailures metric).
+			o.modelUnloaded.Delete(registryID)
+			o.modelLoadErrors.Delete(registryID)
+			return nil
 		}()
 		if loadErr != nil {
+			// Record the failure (not just log it) so a later not-loaded predict on
+			// this model can report why it is missing instead of a bare unknown model.
+			o.recordLoadFailure(registryID, loadErr)
 			log.Warn("optional model failed to load, will retry after gallery scan",
 				logger.String("registry_id", registryID),
 				logger.Error(loadErr))
@@ -2404,6 +2676,19 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 	}
 
 	return nil
+}
+
+// RarityContext bundles everything a caller needs to compute a species' rarity from one
+// coherent settings generation: the probable-species scores, the two label vocabularies
+// used to interpret them, whether the range filter was active, and the settings snapshot
+// the scores were produced from. See GetRarityContext for the per-field semantics and the
+// consistency guarantees.
+type RarityContext struct {
+	Scores           []SpeciesScore
+	GeomodelLabels   []string
+	ClassifierLabels []string
+	FilterActive     bool
+	Settings         *conf.Settings
 }
 
 // GetRarityContext returns the primary model's probable-species scores together with
@@ -2433,7 +2718,21 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 // TFLite meta model and the plain ONNX range filter, and when no range filter or
 // location is configured; in every one of those cases the scores are labeled with the
 // classifier's own vocabulary, so callers must fall back to classifierLabels.
-func (o *Orchestrator) GetRarityContext(date time.Time) (scores []SpeciesScore, geomodelLabels, classifierLabels []string, err error) {
+//
+// filterActive is true only when the returned scores are genuine location-based
+// predictions; it is false when they are the synthetic all-zero fallback (no range
+// filter loaded, or no location configured), so a caller can avoid reporting a zero as
+// "very rare" (#3935).
+//
+// The returned RarityContext bundles the settings snapshot the scores were produced from
+// together with the scores, the two vocabularies, and filterActive, so a caller
+// assembling rarity metadata (location, threshold, coordinates) derives every field from
+// the SAME settings generation as the score rather than taking a second,
+// independently-resolved CurrentSettings() read that a concurrent reload could
+// desynchronise from the score. Settings is non-nil whenever a primary exists or any
+// settings have been published (i.e. in a running app); it can be nil only for an
+// uninitialised orchestrator, so a caller that may run before startup must nil-check it.
+func (o *Orchestrator) GetRarityContext(date time.Time) (RarityContext, error) {
 	// Snapshot the primary once and drive every read below from it. Delegating to
 	// o.GetProbableSpecies would re-resolve o.primary under a fresh lock and could
 	// score against a different model than the labels describe.
@@ -2441,12 +2740,25 @@ func (o *Orchestrator) GetRarityContext(date time.Time) (scores []SpeciesScore, 
 	primary := o.primary
 	o.mu.RUnlock()
 	if primary == nil {
-		return nil, nil, nil, nil
+		// No primary, so no scores: hand back the orchestrator's current snapshot.
+		return RarityContext{Settings: o.CurrentSettings()}, nil
 	}
 
 	settings := primary.currentSettings()
-	scores, geomodelLabels, err = primary.getProbableSpecies(date, 0.0, settings)
-	classifierLabels = slices.Clone(settings.BirdNET.Labels)
-
-	return scores, geomodelLabels, classifierLabels, err
+	// filterActive is decided inside getProbableSpecies, in the same locked section
+	// that produced the scores: it is false whenever those scores are the synthetic
+	// all-zero fallback (no range-filter backend loaded, OR no location configured).
+	// Deriving it here rather than from a separate rangeFilterRuntimeState() read
+	// closes a TOCTOU where a concurrent unload between the two reads could pair
+	// filterActive=true with synthetic zeros, and it also covers the no-location case
+	// a bare rangeFilter!=nil check missed, so a caller never reports a synthetic zero
+	// as "very rare" (#3935).
+	scores, geomodelLabels, filterActive, err := primary.getProbableSpecies(date, 0.0, settings)
+	return RarityContext{
+		Scores:           scores,
+		GeomodelLabels:   geomodelLabels,
+		ClassifierLabels: slices.Clone(settings.BirdNET.Labels),
+		FilterActive:     filterActive,
+		Settings:         settings,
+	}, err
 }

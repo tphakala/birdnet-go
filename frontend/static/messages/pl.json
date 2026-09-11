@@ -473,7 +473,7 @@
         "unreadableMessage": "Skonfigurowany plik modelu dla {modelName} istnieje, ale nie udało się go odczytać, dlatego zamiast niego używany jest zainstalowany model w lokalizacji {modelPath}. Twoja konfiguracja pozostała niezmieniona. Sprawdź uprawnienia pliku oraz to, czy pamięć masowa jest zamontowana.",
         "builtinMessage": "Skonfigurowany plik modelu dla {modelName} nie został znaleziony na dysku i żaden zainstalowany model nie jest dostępny, aby go zastąpić, dlatego zamiast niego używany jest wbudowany model. Twoja konfiguracja pozostała niezmieniona.",
         "notRegisteredTitle": "Żaden model nie analizuje {sourceName}",
-        "notRegisteredMessage": "Żaden dźwięk nie dociera do {models} na źródle audio \"{sourceName}\", więc nie są generowane żadne detekcje. Otwórz galerię modeli w Ustawieniach, aby sprawdzić stan."
+        "notRegisteredMessage": "Żaden dźwięk nie dociera do {models} na źródle audio \"{sourceName}\", więc nie są generowane żadne detekcje. Otwórz System > Modele AI, aby sprawdzić jego stan dla poszczególnych źródeł, i potwierdź, że źródło audio jest podłączone i wysyła dźwięk."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1780,7 +1780,10 @@
       "noSources": "Brak podłączonych źródeł",
       "primaryFallback": "podstawowy (zapasowy)",
       "sourceNotRunning": "nie analizuje",
-      "sourceNotRunningTooltip": "To źródło jest przypisane do modelu w ustawieniach, ale jego dźwięk nie dociera do modelu, więc nie generuje detekcji. Otwórz galerię modeli w Ustawieniach, aby sprawdzić jego stan.",
+      "sourceNotRunningTooltip": "To źródło jest przypisane do modelu w ustawieniach, ale jego dźwięk nie dociera do modelu, więc nie generuje detekcji. Sprawdź, czy źródło audio jest podłączone i wysyła dźwięk.",
+      "modelNotAnalyzingTooltip": "Jedno lub więcej źródeł audio przypisanych do tego modelu nie wysyła do niego dźwięku, więc nie generuje detekcji. Zobacz źródła wymienione poniżej.",
+      "sourcesDegraded": "{count} z {total} źródeł niedostępnych",
+      "sourcesDegradedTooltip": "Niektóre, ale nie wszystkie źródła audio tego modelu są niedostępne, więc nadal analizuje on przez sprawne źródła. Konkretne niedostępne źródło i sposób naprawy są wymienione poniżej.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",
@@ -2429,7 +2432,19 @@
           "description": "Ogranicz detekcję do gatunków prawdopodobnych w Twoim regionie geograficznym",
           "stationLocation": {
             "label": "Lokalizacja Stacji",
-            "helpText": "Lokalizacja stacji, używana do danych pogodowych i ograniczenia gatunków ptaków do tych prawdopodobnych w regionie."
+            "helpText": "Lokalizacja stacji, używana do danych pogodowych i ograniczenia gatunków ptaków do tych prawdopodobnych w regionie.",
+            "automaticLocation": "Automatyczna lokalizacja",
+            "useCurrentLocation": "Użyj lokalizacji przeglądarki",
+            "locationHelp": "Wypełnia współrzędne przy użyciu lokalizacji tej przeglądarki.",
+            "locating": "Ustalanie lokalizacji...",
+            "accuracy": "Szacowana dokładność: w promieniu {accuracy} m",
+            "locationDetected": "Ustalono lokalizację przeglądarki.",
+            "geolocationUnsupported": "Ta przeglądarka nie obsługuje lokalizacji urządzenia. Wprowadź współrzędne ręcznie lub użyj mapy.",
+            "geolocationRequiresHttps": "Lokalizacja przeglądarki wymaga HTTPS lub localhost. Wprowadź współrzędne ręcznie lub użyj mapy.",
+            "geolocationDenied": "Odmówiono dostępu do lokalizacji. Wprowadź współrzędne ręcznie lub użyj mapy.",
+            "geolocationUnavailable": "Urządzenie nie mogło określić swojej lokalizacji. Wprowadź współrzędne ręcznie lub użyj mapy.",
+            "geolocationTimedOut": "Upłynął limit czasu żądania lokalizacji. Spróbuj ponownie, wprowadź współrzędne ręcznie lub użyj mapy.",
+            "geolocationFailed": "Nie udało się określić lokalizacji urządzenia. Wprowadź współrzędne ręcznie lub użyj mapy."
           },
           "latitude": {
             "label": "Szerokość Geograficzna",
@@ -2967,6 +2982,7 @@
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
           "saveButton": "Zapisz dostawcę",
+          "saveWaitingNtfyCheck": "Oczekiwanie na zakończenie sprawdzania połączenia ntfy",
           "savingButton": "Zapisywanie...",
           "cancelButton": "Anuluj",
           "testButton": "Test",
@@ -3038,6 +3054,7 @@
               "http": "HTTP działa - serwer nie używa HTTPS"
             },
             "connectionFailed": "Nie można połączyć - sprawdź nazwę hosta i stan serwera",
+            "checkError": "Nie udało się zweryfikować serwera - sprawdź adres lub odśwież stronę i spróbuj ponownie",
             "auth": {
               "label": "Uwierzytelnianie (opcjonalne)",
               "username": {
@@ -4414,7 +4431,7 @@
       "dynamicThreshold": {
         "tabLabel": "Nauczone",
         "title": "Nauczone progi",
-        "description": "Ta strona pokazuje dane runtime progów dynamicznych. Gdy włączone w Ustawienia główne → Wykrywanie, progi są automatycznie dostosowywane przez wielokrotne wykrycia o wysokiej pewności. Gatunki pokazane tutaj są uznawane za istniejące w tej lokalizacji.",
+        "description": "Ta strona pokazuje dane runtime progów dynamicznych. Gdy włączone, progi są automatycznie dostosowywane przez wielokrotne wykrycia o wysokiej pewności. Gatunki pokazane tutaj są uznawane za istniejące w tej lokalizacji.",
         "stats": {
           "active": "Aktywne",
           "atMinimum": "Na minimum",
@@ -5202,6 +5219,7 @@
       "notFound": "Powiadomienie nie zostało znalezione",
       "hostRequired": "Parametr hosta jest wymagany",
       "invalidHost": "Nieprawidłowy parametr hosta",
+      "invalidBody": "Nieprawidłowa treść żądania",
       "rateLimit": "Zbyt wiele prób połączenia ze strumieniem powiadomień, poczekaj chwilę przed ponowną próbą"
     },
     "speciesGuide": {

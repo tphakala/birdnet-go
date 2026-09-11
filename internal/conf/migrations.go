@@ -270,11 +270,8 @@ func (s *Settings) MigrateRTSPConfig() bool {
 		return false
 	}
 
-	// Get global transport, default to tcp
-	globalTransport := rtsp.Transport
-	if globalTransport == "" {
-		globalTransport = DefaultTransport
-	}
+	// Get global transport via the single resolution owner (global else default).
+	globalTransport := rtsp.ResolveTransport("")
 
 	// Preallocate streams slice with capacity and track seen URLs for deduplication
 	rtsp.Streams = make([]StreamConfig, 0, len(rtsp.URLs))

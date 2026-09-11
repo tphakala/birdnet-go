@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveAnalyticsRedirect } from './analyticsRouting';
+import { resolveAnalyticsRedirect, stripTrailingSlash } from './analyticsRouting';
 
 describe('resolveAnalyticsRedirect', () => {
   it('maps legacy ?tab= values to the new routes and strips tab', () => {
@@ -64,5 +64,32 @@ describe('resolveAnalyticsRedirect', () => {
     expect(resolveAnalyticsRedirect('/ui/analytics', '?tab=soundscape')).toBe(
       '/ui/analytics/summary'
     );
+  });
+});
+
+describe('stripTrailingSlash', () => {
+  it('strips a single trailing slash from a canonical route (the #1278 404 case)', () => {
+    expect(stripTrailingSlash('/ui/analytics/nocturnal/')).toBe('/ui/analytics/nocturnal');
+    expect(stripTrailingSlash('/ui/search/')).toBe('/ui/search');
+    expect(stripTrailingSlash('/ui/settings/audio/')).toBe('/ui/settings/audio');
+  });
+
+  it('preserves the root "/" so it never collapses to an empty string', () => {
+    // The length > 1 guard is load-bearing: without it "/" would become "" and the
+    // dashboard root would 404. This test reddens if that guard is dropped.
+    expect(stripTrailingSlash('/')).toBe('/');
+  });
+
+  it('reduces the /ui/ root to the slashless key the route map also carries', () => {
+    expect(stripTrailingSlash('/ui/')).toBe('/ui');
+  });
+
+  it('leaves an already-slashless path unchanged', () => {
+    expect(stripTrailingSlash('/ui/analytics/nocturnal')).toBe('/ui/analytics/nocturnal');
+    expect(stripTrailingSlash('/ui')).toBe('/ui');
+  });
+
+  it('removes only the final slash (repeated trailing slashes are not the reported case)', () => {
+    expect(stripTrailingSlash('/ui/analytics/summary//')).toBe('/ui/analytics/summary/');
   });
 });

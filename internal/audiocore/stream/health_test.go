@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -128,4 +129,124 @@ func TestClassifyConnClosed(t *testing.T) {
 	assert.Equal(t, errTypeConnectionReset, classifyConnClosed(fmt.Errorf("peer went away")), "non-dial close is a reset")
 	readErr := &net.OpError{Op: "read", Err: fmt.Errorf("reset by peer")}
 	assert.Equal(t, errTypeConnectionReset, classifyConnClosed(readErr), "read OpError is a reset")
+}
+
+// TestAggregateTrackStats verifies that the per-track go-audio-stream counters
+// are summed across the live tracks, that SourceFiltered (added with the v0.5.0
+// bump) is aggregated like its siblings, and that the newest valid RTCP Sender
+// Report wins for the SenderClock age.
+func TestAggregateTrackStats(t *testing.T) {
+	t.Parallel()
+
+	base := time.Now()
+	stats := audiostream.Stats{
+		CapturedAt: base.Add(10 * time.Second),
+		Tracks: map[int]audiostream.TrackStats{
+			0: {
+				Packets:        100,
+				PayloadBytes:   4000,
+				WireBytes:      5000,
+				SeqGaps:        2,
+				Duplicates:     1,
+				Malformed:      3,
+				SSRCResets:     1,
+				SourceFiltered: 7,
+				LastFrameAt:    base.Add(5 * time.Second),
+				SenderClock:    audiostream.SenderClock{Valid: true, ReceivedAt: base.Add(2 * time.Second)},
+			},
+			1: {
+				Packets:        50,
+				PayloadBytes:   2000,
+				WireBytes:      2500,
+				SeqGaps:        4,
+				Duplicates:     0,
+				Malformed:      1,
+				SSRCResets:     2,
+				SourceFiltered: 11,
+				LastFrameAt:    base.Add(8 * time.Second),
+				SenderClock:    audiostream.SenderClock{Valid: true, ReceivedAt: base.Add(6 * time.Second)},
+			},
+			2: {
+				// A newer but INVALID sender report must not win: the .Valid guard
+				// keeps the newest VALID report (track 1) as the clock source, so
+				// senderClockAge stays 4s rather than following this 9s report.
+				SenderClock: audiostream.SenderClock{Valid: false, ReceivedAt: base.Add(9 * time.Second)},
+			},
+		},
+	}
+
+	agg := aggregateTrackStats(stats)
+
+	assert.Equal(t, uint64(150), agg.packets, "packets summed across tracks")
+	assert.Equal(t, uint64(6000), agg.payload, "payload bytes summed across tracks")
+	assert.Equal(t, uint64(7500), agg.wire, "wire bytes summed across tracks")
+	assert.Equal(t, uint64(6), agg.seqGaps, "seq gaps summed across tracks")
+	assert.Equal(t, uint64(1), agg.duplicates, "duplicates summed across tracks")
+	assert.Equal(t, uint64(4), agg.malformed, "malformed summed across tracks")
+	assert.Equal(t, uint64(3), agg.ssrcResets, "ssrc resets summed across tracks")
+	assert.Equal(t, uint64(18), agg.sourceFiltered, "source-filtered datagrams summed across tracks")
+	assert.WithinDuration(t, base.Add(8*time.Second), agg.lastFrameAt, time.Millisecond, "newest frame time wins")
+	assert.True(t, agg.senderClockValid, "sender clock is valid when any track reports one")
+	assert.Equal(t, 4*time.Second, agg.senderClockAge, "sender clock age measured from the newest report against CapturedAt")
+}
+
+// TestAggregateTrackStats_SenderClockGuards exercises the guard branches of the
+// sender-clock age calculation: a report newer than the capture time (the age>0
+// guard), a zero capture time (the !CapturedAt.IsZero() guard), and a newer valid
+// report that wins the clock while carrying a non-positive age (which must not
+// retain an earlier report's age). Every case must mark the clock valid yet leave
+// the age at zero rather than producing a negative or stale value.
+func TestAggregateTrackStats_SenderClockGuards(t *testing.T) {
+	t.Parallel()
+
+	base := time.Now()
+	const (
+		shortOffset   = 2 * time.Second
+		captureOffset = 10 * time.Second
+		// newerOffset lands after the capture (derived from it), so its report is the
+		// newest yet carries a non-positive age against the capture time.
+		newerOffset = captureOffset + shortOffset
+	)
+
+	tests := []struct {
+		name       string
+		capturedAt time.Time
+		tracks     map[int]audiostream.TrackStats
+	}{
+		{
+			name:       "report newer than capture yields no age",
+			capturedAt: base,
+			tracks: map[int]audiostream.TrackStats{
+				0: {SenderClock: audiostream.SenderClock{Valid: true, ReceivedAt: base.Add(shortOffset)}},
+			},
+		},
+		{
+			name:       "zero capture time yields no age",
+			capturedAt: time.Time{},
+			tracks: map[int]audiostream.TrackStats{
+				0: {SenderClock: audiostream.SenderClock{Valid: true, ReceivedAt: base}},
+			},
+		},
+		{
+			// The older valid report (before capture) is selected first; the newer
+			// valid report then wins newestSR but sits after the capture. Computing the
+			// age once after the loop keeps it at zero rather than the older report's
+			// positive age, so the result does not depend on map iteration order.
+			name:       "newer selected report with no positive age does not retain an older age",
+			capturedAt: base.Add(captureOffset),
+			tracks: map[int]audiostream.TrackStats{
+				0: {SenderClock: audiostream.SenderClock{Valid: true, ReceivedAt: base.Add(shortOffset)}},
+				1: {SenderClock: audiostream.SenderClock{Valid: true, ReceivedAt: base.Add(newerOffset)}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			agg := aggregateTrackStats(audiostream.Stats{CapturedAt: tt.capturedAt, Tracks: tt.tracks})
+			assert.True(t, agg.senderClockValid, "a valid report still marks the clock valid")
+			assert.Zero(t, agg.senderClockAge, "a guard case must leave the age at zero, not stale or negative")
+		})
+	}
 }

@@ -478,12 +478,13 @@ type primaryPathResolver func(configured string) pathResolution
 // NewBirdNET fail outright, so there is no analysis at all rather than one
 // missing optional model.
 //
-// The primary is deliberately NOT a modelFileSet family. Its label set is
-// embedded and identical across v2.4 variants, which is why
-// applyConfigForPrimarySwap writes BirdNET.ModelPath alone and documents that it
-// never touches BirdNET.LabelPath: a user-configured custom label path must
-// survive a variant swap. So there is exactly one path to resolve and no
-// cross-variant pairing hazard to protect against.
+// The primary resolves a model path only: its label set is embedded and identical
+// across v2.4 variants, which is why applyConfigForVariantSwap writes
+// BirdNET.ModelPath alone and a user-configured custom label path must survive a
+// variant swap. This function never populates resolved.labels or resolved.embeddings,
+// which is exactly what lets planPathCorrection skip the primary's label field even
+// though familyFields now exposes its Labels pointer. So there is one path to resolve
+// and no cross-variant pairing hazard to protect against.
 func (o *Orchestrator) resolvePrimaryModelPath(configured string) pathResolution {
 	if configured == "" {
 		// No configured path at all: the Tier-4 default (the embedded model, or the

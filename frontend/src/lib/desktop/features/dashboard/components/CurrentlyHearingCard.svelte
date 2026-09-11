@@ -86,8 +86,17 @@ Props:
   let retainedData: Record<string, PendingDetection> = {};
   let removalTimers: Record<string, ReturnType<typeof setTimeout>> = {};
 
-  function detectionKey(d: PendingDetection): string {
-    return d.source + d.scientificName;
+  // Render/dedupe key for the keyed {#each}, and the retention key. Includes
+  // firstDetected so the key is stable across the newest-first re-sort (no re-mount or
+  // replayed fade transition, unlike appending the loop index) and unique per pending
+  // detection. Deduping by it prevents an each_key_duplicate crash (Sentry BIRDNET-GO-2HP) while
+  // collapsing only a re-delivered identical detection, not two genuinely distinct
+  // detections at different start times. Retention keys by this too, so two concurrent
+  // same-source same-species detections are held independently: keying retention by
+  // source+species alone let a still-active detection mask a completed twin and evict it
+  // immediately instead of holding it for TERMINAL_RETENTION_MS.
+  function renderKey(d: PendingDetection): string {
+    return `${d.source}_${d.scientificName}_${d.firstDetected}`;
   }
 
   // Track terminal detections and schedule their removal.
@@ -95,9 +104,9 @@ Props:
   // (this effect should only re-run when detections changes, not retainedKeys).
   $effect(() => {
     for (const d of detections) {
-      const key = detectionKey(d);
+      const key = renderKey(d);
       if ((d.status === 'approved' || d.status === 'rejected') && !(key in removalTimers)) {
-        /* eslint-disable security/detect-object-injection -- key is derived from detectionKey(), a controlled string */
+        /* eslint-disable security/detect-object-injection -- key is derived from renderKey(), a controlled string */
         retainedData[key] = d;
         removalTimers[key] = setTimeout(() => {
           delete retainedData[key];
@@ -117,14 +126,14 @@ Props:
     // Read retainedKeys to establish reactive dependency
     const retained = retainedKeys;
 
-    const incomingByKey = new Set<string>();
+    const incomingKeys = new Set<string>();
     for (const d of detections) {
-      incomingByKey.add(detectionKey(d));
+      incomingKeys.add(renderKey(d));
     }
 
     const result: PendingDetection[] = [...detections];
     for (const key of retained) {
-      if (!incomingByKey.has(key)) {
+      if (!incomingKeys.has(key)) {
         // eslint-disable-next-line security/detect-object-injection -- key is from retainedKeys, a controlled string array
         const data = retainedData[key];
         if (data) {
@@ -135,7 +144,19 @@ Props:
 
     // Sort newest first so new detections appear on the left
     result.sort((a, b) => b.firstDetected - a.firstDetected);
-    return result;
+
+    // Dedupe by the stable render key so the keyed {#each} can never see a duplicate
+    // key (each_key_duplicate white-screens the whole dashboard, Sentry BIRDNET-GO-2HP). First wins;
+    // only a re-delivered identical detection collapses, distinct start times survive.
+    const seen = new Set<string>();
+    const deduped: PendingDetection[] = [];
+    for (const d of result) {
+      const k = renderKey(d);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      deduped.push(d);
+    }
+    return deduped;
   });
 
   let hasDisplayDetections = $derived(displayDetections.length > 0);
@@ -165,7 +186,10 @@ Props:
     void tick;
     const result: Record<string, string> = {};
     for (const d of displayDetections) {
-      result[detectionKey(d)] = getElapsedText(d.firstDetected);
+      // Key by renderKey, not by source+species alone: two same-source/species detections
+      // at different start times now coexist (dedupe keeps them), so a source+species key
+      // would collapse them and show both chips the same elapsed time.
+      result[renderKey(d)] = getElapsedText(d.firstDetected);
     }
     return result;
   });
@@ -212,8 +236,12 @@ Props:
   <!-- Card Content -->
   {#if hasDisplayDetections}
     <div class="flex flex-wrap gap-3 p-4">
-      {#each displayDetections as detection (`${detection.source}_${detection.scientificName}`)}
-        {@const key = detection.source + detection.scientificName}
+      <!-- Keyed by a stable composite (source + species + firstDetected).
+           displayDetections is deduped by the same key, so it is unique (no
+           each_key_duplicate crash, Sentry BIRDNET-GO-2HP) and stable across the newest-first re-sort,
+           so existing chips move without re-mounting or replaying their fade. -->
+      {#each displayDetections as detection (renderKey(detection))}
+        {@const key = renderKey(detection)}
         {@const elapsedText = getElapsedForKey(key)}
         <!-- Localized common name in the visitor's UI locale; falls back to the
              server-provided common name, then the scientific name. Keeps the

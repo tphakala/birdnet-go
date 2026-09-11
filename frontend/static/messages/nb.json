@@ -473,7 +473,7 @@
         "unreadableMessage": "Modellfilen som er konfigurert for {modelName}, finnes, men kunne ikke leses, så den installerte modellen på {modelPath} brukes i stedet. Konfigurasjonen din ble ikke endret. Sjekk filens tillatelser og at lagringen er montert.",
         "builtinMessage": "Modellfilen som er konfigurert for {modelName}, ble ikke funnet på disken, og ingen installert modell er tilgjengelig for å erstatte den, så den innebygde modellen brukes i stedet. Konfigurasjonen din ble ikke endret.",
         "notRegisteredTitle": "Ingen modell analyserer {sourceName}",
-        "notRegisteredMessage": "Ingen lyd når {models} på lydkilden \"{sourceName}\", så det produseres ingen registreringer. Åpne modellgalleriet i Innstillinger for å sjekke status."
+        "notRegisteredMessage": "Ingen lyd når {models} på lydkilden \"{sourceName}\", så det produseres ingen registreringer. Åpne System > AI-modeller for å sjekke dens status per kilde, og bekreft at lydkilden er tilkoblet og sender lyd."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1780,7 +1780,10 @@
       "noSources": "Ingen kilder tilkoblet",
       "primaryFallback": "primær (fallback)",
       "sourceNotRunning": "analyserer ikke",
-      "sourceNotRunningTooltip": "Denne kilden er tilordnet modellen i innstillingene, men lyden når ikke modellen, så den produserer ingen registreringer. Åpne modellgalleriet i Innstillinger for å sjekke statusen.",
+      "sourceNotRunningTooltip": "Denne kilden er tilordnet modellen i innstillingene, men lyden når ikke modellen, så den produserer ingen registreringer. Sjekk at lydkilden er tilkoblet og sender lyd.",
+      "modelNotAnalyzingTooltip": "Én eller flere lydkilder tilordnet denne modellen sender ikke lyd til den, så den produserer ingen registreringer. Se kildene oppført nedenfor.",
+      "sourcesDegraded": "{count} av {total} kilder nede",
+      "sourcesDegradedTooltip": "Noen, men ikke alle av denne modellens lydkilder er nede, så den analyserer fortsatt via de fungerende. Den spesifikke kilden som er nede og hvordan det løses, er oppført nedenfor.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",
@@ -2429,7 +2432,19 @@
           "description": "Begrens deteksjon til arter som er sannsynlige i ditt geografiske område",
           "stationLocation": {
             "label": "Stasjonsposisjon",
-            "helpText": "Stasjonsposisjon, brukes for værdata og for å begrense fuglearter til de som er sannsynlige i regionen."
+            "helpText": "Stasjonsposisjon, brukes for værdata og for å begrense fuglearter til de som er sannsynlige i regionen.",
+            "automaticLocation": "Automatisk posisjon",
+            "useCurrentLocation": "Bruk nettleserposisjon",
+            "locationHelp": "Fyller ut koordinatene ved hjelp av posisjonen til denne nettleseren.",
+            "locating": "Finner posisjon...",
+            "accuracy": "Anslått nøyaktighet: innenfor {accuracy} m",
+            "locationDetected": "Nettleserens posisjon ble funnet.",
+            "geolocationUnsupported": "Denne nettleseren støtter ikke enhetsposisjon. Skriv inn koordinater manuelt eller bruk kartet.",
+            "geolocationRequiresHttps": "Nettleserposisjon krever HTTPS eller localhost. Skriv inn koordinater manuelt eller bruk kartet.",
+            "geolocationDenied": "Posisjonstillatelse ble avvist. Skriv inn koordinater manuelt eller bruk kartet.",
+            "geolocationUnavailable": "Enheten kunne ikke bestemme posisjonen sin. Skriv inn koordinater manuelt eller bruk kartet.",
+            "geolocationTimedOut": "Posisjonsforespørselen fikk tidsavbrudd. Prøv igjen, skriv inn koordinater manuelt eller bruk kartet.",
+            "geolocationFailed": "Kunne ikke bestemme enhetens posisjon. Skriv inn koordinater manuelt eller bruk kartet."
           },
           "latitude": {
             "label": "Breddegrad",
@@ -2967,6 +2982,7 @@
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
           "saveButton": "Lagre leverandør",
+          "saveWaitingNtfyCheck": "Venter på at ntfy-tilkoblingssjekken skal fullføres",
           "savingButton": "Lagrer...",
           "cancelButton": "Avbryt",
           "testButton": "Test",
@@ -3038,6 +3054,7 @@
               "http": "HTTP fungerer - serveren bruker ikke HTTPS"
             },
             "connectionFailed": "Kan ikke koble til - sjekk vertsnavn og serverstatus",
+            "checkError": "Kunne ikke verifisere serveren - sjekk adressen, eller last inn siden på nytt og prøv igjen",
             "auth": {
               "label": "Autentisering (valgfritt)",
               "username": {
@@ -4414,7 +4431,7 @@
       "dynamicThreshold": {
         "tabLabel": "Lært",
         "title": "Lærte terskler",
-        "description": "Denne siden viser kjøretidsdata for dynamisk terskel. Når aktivert i Hovedinnstillinger → Deteksjon, justeres terskler automatisk av flere høysikkerhetsregistreringer. Arter som vises her antas å eksistere på dette stedet.",
+        "description": "Denne siden viser kjøretidsdata for dynamisk terskel. Når aktivert, justeres terskler automatisk av flere høysikkerhetsregistreringer. Arter som vises her antas å eksistere på dette stedet.",
         "stats": {
           "active": "Aktiv",
           "atMinimum": "På minimum",
@@ -5202,6 +5219,7 @@
       "notFound": "Varsel ikke funnet",
       "hostRequired": "Vert-parameter er obligatorisk",
       "invalidHost": "Ugyldig vert-parameter",
+      "invalidBody": "Ugyldig forespørselstekst",
       "rateLimit": "For mange forsøk på å koble til varselstrøm, vent litt før du prøver igjen"
     },
     "speciesGuide": {

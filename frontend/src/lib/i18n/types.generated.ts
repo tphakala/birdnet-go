@@ -1378,6 +1378,9 @@ export type TranslationKey =
   | 'system.inference.primaryFallback'
   | 'system.inference.sourceNotRunning'
   | 'system.inference.sourceNotRunningTooltip'
+  | 'system.inference.modelNotAnalyzingTooltip'
+  | 'system.inference.sourcesDegraded' // params: count, total
+  | 'system.inference.sourcesDegradedTooltip'
   | 'system.inference.notMeasured'
   | 'system.inference.unitMs'
   | 'system.inference.unitKhz'
@@ -1874,6 +1877,18 @@ export type TranslationKey =
   | 'settings.main.sections.rangeFilter.description'
   | 'settings.main.sections.rangeFilter.stationLocation.label'
   | 'settings.main.sections.rangeFilter.stationLocation.helpText'
+  | 'settings.main.sections.rangeFilter.stationLocation.automaticLocation'
+  | 'settings.main.sections.rangeFilter.stationLocation.useCurrentLocation'
+  | 'settings.main.sections.rangeFilter.stationLocation.locationHelp'
+  | 'settings.main.sections.rangeFilter.stationLocation.locating'
+  | 'settings.main.sections.rangeFilter.stationLocation.accuracy' // params: accuracy
+  | 'settings.main.sections.rangeFilter.stationLocation.locationDetected'
+  | 'settings.main.sections.rangeFilter.stationLocation.geolocationUnsupported'
+  | 'settings.main.sections.rangeFilter.stationLocation.geolocationRequiresHttps'
+  | 'settings.main.sections.rangeFilter.stationLocation.geolocationDenied'
+  | 'settings.main.sections.rangeFilter.stationLocation.geolocationUnavailable'
+  | 'settings.main.sections.rangeFilter.stationLocation.geolocationTimedOut'
+  | 'settings.main.sections.rangeFilter.stationLocation.geolocationFailed'
   | 'settings.main.sections.rangeFilter.latitude.label'
   | 'settings.main.sections.rangeFilter.latitude.helpText'
   | 'settings.main.sections.rangeFilter.longitude.label'
@@ -2208,6 +2223,7 @@ export type TranslationKey =
   | 'settings.notifications.push.form.urlFormats.moreServices'
   | 'settings.notifications.push.form.urlFormats.shoutrrrDocs'
   | 'settings.notifications.push.form.saveButton'
+  | 'settings.notifications.push.form.saveWaitingNtfyCheck'
   | 'settings.notifications.push.form.savingButton'
   | 'settings.notifications.push.form.cancelButton'
   | 'settings.notifications.push.form.testButton'
@@ -2254,6 +2270,7 @@ export type TranslationKey =
   | 'settings.notifications.push.services.ntfy.connectionOk.https'
   | 'settings.notifications.push.services.ntfy.connectionOk.http'
   | 'settings.notifications.push.services.ntfy.connectionFailed'
+  | 'settings.notifications.push.services.ntfy.checkError'
   | 'settings.notifications.push.services.ntfy.auth.label'
   | 'settings.notifications.push.services.ntfy.auth.username.label'
   | 'settings.notifications.push.services.ntfy.auth.username.placeholder'
@@ -3801,6 +3818,7 @@ export type TranslationKey =
   | 'errors.notification.notFound'
   | 'errors.notification.hostRequired'
   | 'errors.notification.invalidHost'
+  | 'errors.notification.invalidBody'
   | 'errors.notification.rateLimit'
   | 'errors.speciesGuide.rateLimit'
   | 'errors.streams.test.invalidBody'
@@ -4473,6 +4491,7 @@ export type TranslationParams = {
   };
   'system.database.migration.prerequisites.criticalCount': { count: string | number };
   'system.database.migration.prerequisites.warningCount': { count: string | number };
+  'system.inference.sourcesDegraded': { count: string | number; total: string | number };
   'system.inference.coDetectedHelp': { seconds: string | number };
   'analytics.hub.card.notEnoughDataHint': { min: string | number };
   'analytics.species.notes.tooLong': { max: string | number };
@@ -4542,6 +4561,7 @@ export type TranslationParams = {
   };
   'settings.main.sections.falsePositiveFilter.overlapAdjusted': { overlap: string | number };
   'settings.main.sections.falsePositiveFilter.overlapReduced': { overlap: string | number };
+  'settings.main.sections.rangeFilter.stationLocation.accuracy': { accuracy: string | number };
   'settings.support.supportReport.githubRequired.description': { createIssueLink: string | number };
   'settings.support.supportReport.githubIssue.helper': {
     viewIssuesLink: string | number;

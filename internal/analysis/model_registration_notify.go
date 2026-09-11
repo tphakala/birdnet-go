@@ -17,7 +17,21 @@ import (
 // that reconnects in a loop would bury the notification list.
 const modelNotRegisteredRenotifyInterval = 6 * time.Hour
 
-var modelNotRegisteredSeen sync.Map // key: source + models, value: time.Time of last notification
+var modelNotRegisteredSeen sync.Map // key: modelNotRegisteredKey(sourceID, models), value: time.Time of last notification
+
+// modelNotRegisteredKeySep separates the source ID from the model list in a
+// suppression-map key. It is a NUL byte so it cannot occur inside a source ID (RTSP
+// URLs and device IDs never contain NUL), which keeps a source-ID prefix an unambiguous
+// match in clearModelNotRegistered.
+const modelNotRegisteredKeySep = "\x00"
+
+// modelNotRegisteredKey composes the suppression-map key for a source and its
+// unregistered-model list. notifyModelsNotRegistered (which writes keys) and
+// clearModelNotRegistered (which matches them by source-ID prefix) both build their keys
+// from this one definition, so the two key formats cannot drift apart.
+func modelNotRegisteredKey(sourceID, models string) string {
+	return sourceID + modelNotRegisteredKeySep + models
+}
 
 // notifyModelsNotRegistered reports that models assigned to an audio source are
 // not receiving its audio, either because they never loaded or because their
@@ -29,7 +43,7 @@ var modelNotRegisteredSeen sync.Map // key: source + models, value: time.Time of
 // healthy while analyzing with fewer models than configured. The reporters of
 // GitHub #4201 and #4204 each lost a model for days before noticing by
 // accident.
-func notifyModelsNotRegistered(sourceName string, modelIDs []string) {
+func notifyModelsNotRegistered(sourceID, sourceName string, modelIDs []string) {
 	if len(modelIDs) == 0 {
 		return
 	}
@@ -39,7 +53,11 @@ func notifyModelsNotRegistered(sourceName string, modelIDs []string) {
 	}
 
 	models := strings.Join(modelIDs, ", ")
-	key := sourceName + "\x00" + models
+	// Key the suppression window by the unique source ID, not the display name: display
+	// names can collide (two streams both named "Backyard"), and a shared key would let
+	// one source's recovery clear another's window, or one source's failure gate another's
+	// notification. The human-readable sourceName is used only for the notification text.
+	key := modelNotRegisteredKey(sourceID, models)
 	now := time.Now()
 	if last, ok := modelNotRegisteredSeen.Load(key); ok {
 		if t, isTime := last.(time.Time); isTime && now.Sub(t) < modelNotRegisteredRenotifyInterval {
@@ -57,7 +75,8 @@ func notifyModelsNotRegistered(sourceName string, modelIDs []string) {
 		// primary-fallback case where it could tell the user the built-in BirdNET
 		// model is not installed.
 		fmt.Sprintf("%s is assigned to audio source %q but is not currently receiving audio, so it is not "+
-			"producing detections. Open the model gallery in Settings to check its status.", models, sourceName),
+			"producing detections. Open System > AI Models to check its per-source status, and confirm the "+
+			"audio source is connected and sending audio.", models, sourceName),
 	).
 		WithComponent("analysis.audio_pipeline").
 		WithTitleKey(notification.MsgModelNotRegisteredTitle, map[string]any{
@@ -81,4 +100,21 @@ func notifyModelsNotRegistered(sourceName string, modelIDs []string) {
 		return
 	}
 	modelNotRegisteredSeen.Store(key, now)
+}
+
+// clearModelNotRegistered drops every suppression entry for a source, so the next genuine
+// "model not analyzing" condition re-notifies immediately instead of being silenced for the
+// remainder of the 6h window. Call it when a source registers all its assigned models
+// successfully (recovery) and when a source is removed. The suppression key is
+// sourceID + "\x00" + models and the previously reported model set is not known here, so
+// every entry under the sourceID prefix is cleared. Deleting during Range is safe for
+// sync.Map.
+func clearModelNotRegistered(sourceID string) {
+	prefix := sourceID + modelNotRegisteredKeySep
+	modelNotRegisteredSeen.Range(func(k, _ any) bool {
+		if key, ok := k.(string); ok && strings.HasPrefix(key, prefix) {
+			modelNotRegisteredSeen.Delete(key)
+		}
+		return true
+	})
 }

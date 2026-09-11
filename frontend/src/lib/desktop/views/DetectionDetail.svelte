@@ -50,8 +50,12 @@
     status: string;
     score: number;
     location_based: boolean;
-    latitude: number;
-    longitude: number;
+    // Optional: the API omits these when no location is configured (they are *float64
+    // with omitempty server-side). The backend sends them whenever location_based is
+    // true, but callers must still guard before toFixed() as defense in depth against
+    // a contract violation.
+    latitude?: number;
+    longitude?: number;
   }
 
   interface SpeciesInfo {
@@ -734,7 +738,7 @@
               {(speciesInfo.rarity.score * 100).toFixed(0)}%
             </span>
           </div>
-          {#if speciesInfo.rarity.location_based}
+          {#if speciesInfo.rarity.location_based && speciesInfo.rarity.latitude != null && speciesInfo.rarity.longitude != null}
             <p class="text-xs text-[var(--color-base-content)]/40">
               {t('species.rarity.basedOnLocation', {
                 latitude: speciesInfo.rarity.latitude.toFixed(2),
@@ -981,6 +985,7 @@
         <div class="tab-nav" role="tablist" aria-label={t('detections.detail.aria.tabList')}>
           {#each ['overview', 'history', 'notes'] as tab (tab)}
             <button
+              type="button"
               id="tab-{tab}"
               role="tab"
               class="tab-button"
@@ -996,6 +1001,7 @@
           {/each}
           {#if canReview}
             <button
+              type="button"
               id="tab-review"
               role="tab"
               class="tab-button"

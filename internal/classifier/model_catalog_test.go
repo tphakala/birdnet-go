@@ -3,11 +3,49 @@ package classifier
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"maps"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestCatalog_EntriesSharingRegistryIDShareCategoryAndRoles pins the assumption the
+// registry-keyed uninstall re-point depends on: any two catalog entries that write the
+// same settings family (same RegistryID) must share a Category and carry the same set
+// of file roles, so re-pointing config from one to the other produces a complete,
+// compatible set. Today the only multi-entry family is bat.
+func TestCatalog_EntriesSharingRegistryIDShareCategoryAndRoles(t *testing.T) {
+	t.Parallel()
+
+	type registryGroup struct {
+		category string
+		roles    []string // sorted, deduplicated
+	}
+	seen := map[string]registryGroup{}
+
+	for _, entry := range ActiveCatalog() {
+		if entry.RegistryID == "" {
+			continue // loader not implemented; no settings family to re-point
+		}
+		roleSet := map[string]struct{}{}
+		for _, f := range entry.Files {
+			roleSet[f.Role] = struct{}{}
+		}
+		roles := slices.Sorted(maps.Keys(roleSet))
+
+		first, ok := seen[entry.RegistryID]
+		if !ok {
+			seen[entry.RegistryID] = registryGroup{category: entry.Category, roles: roles}
+			continue
+		}
+		assert.Equalf(t, first.category, entry.Category,
+			"entries sharing RegistryID %q must share a Category; the re-point keys on RegistryID and asserts Category as belt-and-braces", entry.RegistryID)
+		assert.Equalf(t, first.roles, roles,
+			"entries sharing RegistryID %q must carry the same file roles so a re-point writes a complete, compatible set", entry.RegistryID)
+	}
+}
 
 func TestVariantFilesByID(t *testing.T) {
 	t.Parallel()
@@ -240,6 +278,25 @@ func TestEmbeddedCatalog_HasFilesWithModelRole(t *testing.T) {
 		}
 
 		assert.True(t, hasModelRoleFile(entry.Files), "catalog entry %q has no file with role \"model\"", entry.ID)
+	}
+}
+
+// TestEmbeddedCatalog_AllEntriesDeclareFiles guards against the class of bug in
+// BIRDNET-GO-2G2, where a released build shipped a birdnet-v3.0 catalog entry that
+// declared neither top-level Files nor Variants, so validateCatalogEntryFiles
+// rejected it and the whole catalog load failed on a user's machine. Every embedded
+// entry must pass the same validation the loader (catalog_loader.go) applies, so a
+// future entry that declares no files/variants, both, or a malformed variant fails
+// here at build time rather than in the field.
+func TestEmbeddedCatalog_AllEntriesDeclareFiles(t *testing.T) {
+	t.Parallel()
+	for i := range EmbeddedCatalog {
+		entry := EmbeddedCatalog[i]
+		t.Run(entry.ID, func(t *testing.T) {
+			t.Parallel()
+			require.NoError(t, validateCatalogEntryFiles(&entry),
+				"embedded catalog entry %q must pass validateCatalogEntryFiles (see BIRDNET-GO-2G2)", entry.ID)
+		})
 	}
 }
 

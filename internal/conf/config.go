@@ -618,8 +618,16 @@ const (
 	StreamTypeUDP  = "udp"  // UDP/RTP - Low-latency LAN
 )
 
+// Transport protocol identifiers for RTSP/RTMP streams.
+const (
+	// TransportTCP is the TCP interleaved RTP transport.
+	TransportTCP = "tcp"
+	// TransportUDP is the UDP RTP transport.
+	TransportUDP = "udp"
+)
+
 // DefaultTransport is the default RTSP/RTMP transport protocol
-const DefaultTransport = "tcp"
+const DefaultTransport = TransportTCP
 
 // ChannelMode controls how multi-channel audio is handled before analysis.
 type ChannelMode string
@@ -1959,6 +1967,20 @@ type Settings struct {
 	Notification NotificationConfig `yaml:"notification" json:"notification"` // Configuration for push notifications
 
 	Alerting AlertSettings `yaml:"alerting" json:"alerting"` // Alerting rules engine settings
+}
+
+// RangeFilterConfig returns a pointer to the range filter settings block. The block
+// is stored under birdnet.rangefilter for historical reasons; callers use this
+// accessor rather than naming BirdNET.RangeFilter directly so the storage location
+// can move in a later phase without touching them. It returns nil for a nil
+// receiver. The pointer aliases the receiver's own field, so a write through it
+// mutates that Settings value; callers that must not disturb the published snapshot
+// take the accessor on a clone (clone-mutate-publish).
+func (s *Settings) RangeFilterConfig() *RangeFilterSettings {
+	if s == nil {
+		return nil
+	}
+	return &s.BirdNET.RangeFilter
 }
 
 // ResolveEQOverride returns the per-source or per-stream EQ override for the

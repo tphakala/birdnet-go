@@ -473,7 +473,7 @@
         "unreadableMessage": "El archivo de modelo configurado para {modelName} existe pero no se pudo leer, por lo que en su lugar se está usando el modelo instalado en {modelPath}. Su configuración no se modificó. Compruebe los permisos del archivo y que su almacenamiento esté montado.",
         "builtinMessage": "El archivo de modelo configurado para {modelName} no se encontró en el disco y no hay ningún modelo instalado disponible para reemplazarlo, por lo que en su lugar se está usando el modelo integrado. Su configuración no se modificó.",
         "notRegisteredTitle": "Ningún modelo está analizando {sourceName}",
-        "notRegisteredMessage": "No llega audio a {models} en la fuente de audio \"{sourceName}\", por lo que no se generan detecciones. Abra la galería de modelos en Configuración para comprobar el estado."
+        "notRegisteredMessage": "No llega audio a {models} en la fuente de audio \"{sourceName}\", por lo que no se generan detecciones. Abra Sistema > Modelos de IA para comprobar su estado por fuente y confirmar que la fuente de audio esté conectada y enviando audio."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1780,7 +1780,10 @@
       "noSources": "No hay fuentes conectadas",
       "primaryFallback": "principal (respaldo)",
       "sourceNotRunning": "no está analizando",
-      "sourceNotRunningTooltip": "Esta fuente está asignada al modelo en la configuración, pero su audio no llega al modelo, por lo que no genera detecciones. Abra la galería de modelos en Configuración para comprobar su estado.",
+      "sourceNotRunningTooltip": "Esta fuente está asignada al modelo en la configuración, pero su audio no llega al modelo, por lo que no genera detecciones. Compruebe que la fuente de audio esté conectada y enviando audio.",
+      "modelNotAnalyzingTooltip": "Una o más fuentes de audio asignadas a este modelo no le están enviando audio, por lo que no genera detecciones. Consulte las fuentes enumeradas a continuación.",
+      "sourcesDegraded": "{count} de {total} fuentes caídas",
+      "sourcesDegradedTooltip": "Algunas fuentes de audio de este modelo, pero no todas, están caídas, por lo que sigue analizando a través de las que funcionan correctamente. La fuente caída específica y cómo solucionarlo se enumeran a continuación.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",
@@ -2429,7 +2432,19 @@
           "description": "Limitar la detección a especies probables en su región geográfica",
           "stationLocation": {
             "label": "Ubicación de la estación",
-            "helpText": "Ubicación de la estación, utilizada para obtener datos meteorológicos y limitar las especies de aves a las probables en la región."
+            "helpText": "Ubicación de la estación, utilizada para obtener datos meteorológicos y limitar las especies de aves a las probables en la región.",
+            "automaticLocation": "Ubicación automática",
+            "useCurrentLocation": "Usar ubicación del navegador",
+            "locationHelp": "Rellena las coordenadas usando la ubicación de este navegador.",
+            "locating": "Obteniendo ubicación...",
+            "accuracy": "Precisión estimada: dentro de {accuracy} m",
+            "locationDetected": "Se detectó la ubicación del navegador.",
+            "geolocationUnsupported": "Este navegador no admite la ubicación del dispositivo. Introduzca las coordenadas manualmente o use el mapa.",
+            "geolocationRequiresHttps": "La ubicación del navegador requiere HTTPS o localhost. Introduzca las coordenadas manualmente o use el mapa.",
+            "geolocationDenied": "Se denegó el permiso de ubicación. Introduzca las coordenadas manualmente o use el mapa.",
+            "geolocationUnavailable": "El dispositivo no pudo determinar su ubicación. Introduzca las coordenadas manualmente o use el mapa.",
+            "geolocationTimedOut": "La solicitud de ubicación agotó el tiempo de espera. Inténtelo de nuevo, introduzca las coordenadas manualmente o use el mapa.",
+            "geolocationFailed": "No se pudo determinar la ubicación del dispositivo. Introduzca las coordenadas manualmente o use el mapa."
           },
           "latitude": {
             "label": "Latitud",
@@ -2967,6 +2982,7 @@
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
           "saveButton": "Guardar proveedor",
+          "saveWaitingNtfyCheck": "Esperando a que finalice la comprobación de conexión de ntfy",
           "savingButton": "Guardando...",
           "cancelButton": "Cancelar",
           "testButton": "Probar",
@@ -3038,6 +3054,7 @@
               "http": "HTTP funciona - el servidor no usa HTTPS"
             },
             "connectionFailed": "No se pudo conectar - verifica el nombre de host y el estado del servidor",
+            "checkError": "No se pudo verificar el servidor: comprueba la dirección o vuelve a cargar la página e inténtalo de nuevo",
             "auth": {
               "label": "Autenticación (opcional)",
               "username": {
@@ -4414,7 +4431,7 @@
       "dynamicThreshold": {
         "tabLabel": "Aprendido",
         "title": "Umbrales aprendidos",
-        "description": "Esta página muestra datos de umbrales dinámicos en tiempo de ejecución. Cuando está habilitado en Ajustes principales → Detección, los umbrales se ajustan automáticamente mediante múltiples detecciones de alta confianza. Las especies mostradas aquí se asumen presentes en esta ubicación.",
+        "description": "Esta página muestra datos de umbrales dinámicos en tiempo de ejecución. Cuando está habilitado, los umbrales se ajustan automáticamente mediante múltiples detecciones de alta confianza. Las especies mostradas aquí se asumen presentes en esta ubicación.",
         "stats": {
           "active": "Activos",
           "atMinimum": "En mínimo",
@@ -5202,6 +5219,7 @@
       "notFound": "Notificación no encontrada",
       "hostRequired": "El parámetro de host es obligatorio",
       "invalidHost": "Parámetro de host no válido",
+      "invalidBody": "Cuerpo de solicitud no válido",
       "rateLimit": "Demasiados intentos de conexión al flujo de notificaciones, espere un momento antes de intentar de nuevo"
     },
     "speciesGuide": {

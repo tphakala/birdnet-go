@@ -16,7 +16,10 @@
   Props:
   - tabs: Array of tab definitions
   - activeTab: Currently active tab ID (bindable)
+  - queryParam: URL parameter for this tab group (default: tab)
+  - defaultTab: Fallback when the URL has no valid tab (defaults to initial activeTab)
   - onTabChange: Callback when tab changes
+  - onReset: Callback after all settings are reset
   - showActions: Whether to show the save/reset actions bar (default: true)
   - class: Additional CSS classes
 
@@ -25,6 +28,8 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import type { Snippet, Component } from 'svelte';
+  import { untrack } from 'svelte';
+  import { navigation } from '$lib/stores/navigation.svelte';
   import type { IconProps } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import SettingsPageActions from './SettingsPageActions.svelte';
@@ -40,7 +45,10 @@
   interface Props {
     tabs: TabDefinition[];
     activeTab: string;
+    queryParam?: string;
+    defaultTab?: string;
     onTabChange?: (_tabId: string) => void;
+    onReset?: () => void;
     showActions?: boolean;
     class?: string;
   }
@@ -48,14 +56,38 @@
   let {
     tabs,
     activeTab = $bindable(),
+    queryParam = 'tab',
+    defaultTab,
     onTabChange,
+    onReset,
     showActions = true,
     class: className,
   }: Props = $props();
 
-  // Handle tab selection
+  // Capture the page default once, so a missing URL value never reuses the
+  // previous history entry's selection. Audio retains its legacy fallback.
+  const initialTab = untrack(() => defaultTab ?? activeTab);
+  const selectedTab = $derived.by(() => {
+    const requested = new URLSearchParams(navigation.currentSearch).get(queryParam);
+    return (
+      tabs.find(tab => tab.id === requested)?.id ??
+      tabs.find(tab => tab.id === initialTab)?.id ??
+      tabs[0]?.id ??
+      ''
+    );
+  });
+
+  // Parents use the binding for tab-specific work (e.g. mounting the location map).
+  $effect(() => {
+    activeTab = selectedTab;
+  });
+
+  // Only explicit selection writes history; restoring a URL must not push entries.
   function selectTab(tabId: string) {
-    activeTab = tabId;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get(queryParam) === tabId) return;
+    url.searchParams.set(queryParam, tabId);
+    navigation.navigate(url.pathname + url.search + url.hash);
     onTabChange?.(tabId);
   }
 
@@ -121,11 +153,12 @@
     aria-label={t('settings.tabs.navigation')}
   >
     {#each tabs as tab, index (tab.id)}
-      {@const isActive = activeTab === tab.id}
+      {@const isActive = selectedTab === tab.id}
       <button
         id="settings-tab-{tab.id}"
         type="button"
         role="tab"
+        aria-label={tab.label}
         class={cn(
           'tab gap-2 transition-all duration-200 font-medium -mb-px',
           'hover:text-[color:var(--color-primary)]',
@@ -163,7 +196,7 @@
 
   <!-- Tab Panels -->
   {#each tabs as tab (tab.id)}
-    {@const isActive = activeTab === tab.id}
+    {@const isActive = selectedTab === tab.id}
     <div
       id="settings-tabpanel-{tab.id}"
       role="tabpanel"
@@ -180,7 +213,7 @@
 
   <!-- Integrated Save/Reset Actions -->
   {#if showActions}
-    <SettingsPageActions />
+    <SettingsPageActions {onReset} />
   {/if}
 </div>
 

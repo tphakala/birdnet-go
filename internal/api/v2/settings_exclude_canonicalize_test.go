@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
 // clearExcludedSpeciesList resets the species exclude list for a clean test start.
@@ -32,10 +33,9 @@ const (
 // name, mirroring the detection-side localized-name tests.
 func installExcludeTestResolver(t *testing.T, c *Controller) {
 	t.Helper()
-	c.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
+	seedNames(t, c, &analyticsBatchFakeResolver{batch: map[string]string{
 		testExcludeScientificName: testExcludeLocalizedName,
-	}})
-	c.UpdateCommonNameMap([]string{testExcludeScientificName})
+	}}, []string{testExcludeScientificName})
 }
 
 // patchSection drives UpdateSectionSettings for an arbitrary section. It asserts
@@ -78,6 +78,7 @@ func TestCanonicalizeExcludeList(t *testing.T) {
 	t.Parallel()
 
 	c := &Controller{Core: &apicore.Core{}}
+	c.names = speciesindex.New(nil)
 	installExcludeTestResolver(t, c)
 
 	tests := []struct {

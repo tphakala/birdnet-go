@@ -209,7 +209,11 @@ var EmbeddedCatalog = []CatalogEntry{
 				SpeciesCount: 11560,
 				Default:      true,
 				// RAM floor and benchmarks sourced from the acoustic-models
-				// BirdNET-v3.0-Models.models.json manifest.
+				// BirdNET-v3.0-Models.models.json manifest, measured under f16
+				// compilation. Post-#4289 v3.0 runs f32 on OpenVINO (openVINOPrecisionFor
+				// forces it; see BIRDNET-GO-2H6), which raises the real activation
+				// footprint, but the f32-on-OpenVINO RSS is unmeasured, so this floor is
+				// left as sourced. See the fp16 variant's note before changing either.
 				Requirements: VariantRequirements{MinRAMMB: 800},
 				Backends: map[string]BackendSupport{
 					"onnxruntime-cpu": {Supported: true, Recommended: true},
@@ -234,7 +238,13 @@ var EmbeddedCatalog = []CatalogEntry{
 				Precision:    "fp16",
 				SpeciesCount: 11560,
 				// RAM floor, exclude token and benchmarks sourced from the
-				// acoustic-models BirdNET-v3.0-Models.models.json manifest.
+				// acoustic-models BirdNET-v3.0-Models.models.json manifest, measured
+				// under f16 compilation. Post-#4289 both v3.0 variants run f32 on
+				// OpenVINO (openVINOPrecisionFor forces it; see BIRDNET-GO-2H6), which
+				// raises the real activation footprint, but no f32-on-OpenVINO RSS has
+				// been measured for either variant, so neither floor is changed without
+				// one. 1100 already carries headroom over the worst measured RSS (929 on
+				// the A72 ONNX Runtime path) and is 300 above the fp32 variant's floor.
 				Requirements: VariantRequirements{MinRAMMB: 1100, Excludes: []string{"openvino-gpu-intel-gen12"}},
 				Backends: map[string]BackendSupport{
 					"openvino-gpu":    {Supported: true, Recommended: true},
@@ -624,6 +634,30 @@ func HasGeomodelFiles(entry *CatalogEntry) bool {
 	}
 	for _, f := range entry.Files {
 		if isGeomodelRole(f.Role) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasGeomodelTuple reports whether a catalog entry carries BOTH geomodel role files (model
+// and labels), i.e. a complete geomodel range-filter tuple. HasGeomodelFiles is satisfied by
+// either role alone; a range-filter survivor needs both, because the config sets ModelPath
+// and LabelsPath independently and a half-tuple survivor would leave the other path pointing
+// at an uninstalled entry's absent file.
+func hasGeomodelTuple(entry *CatalogEntry) bool {
+	if entry == nil {
+		return false
+	}
+	var hasModel, hasLabels bool
+	for _, f := range entry.Files {
+		switch f.Role {
+		case RoleGeomodelModel:
+			hasModel = true
+		case RoleGeomodelLabels:
+			hasLabels = true
+		}
+		if hasModel && hasLabels {
 			return true
 		}
 	}

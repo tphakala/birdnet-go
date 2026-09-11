@@ -473,7 +473,7 @@
         "unreadableMessage": "Het voor {modelName} geconfigureerde modelbestand bestaat, maar kon niet worden gelezen, dus wordt in plaats daarvan het geïnstalleerde model op {modelPath} gebruikt. Uw configuratie is ongewijzigd gebleven. Controleer de bestandsmachtigingen en of de opslag is gekoppeld.",
         "builtinMessage": "Het voor {modelName} geconfigureerde modelbestand is niet op de schijf gevonden en er is geen geïnstalleerd model beschikbaar om het te vervangen, dus wordt in plaats daarvan het ingebouwde model gebruikt. Uw configuratie is ongewijzigd gebleven.",
         "notRegisteredTitle": "Geen model analyseert {sourceName}",
-        "notRegisteredMessage": "Er bereikt geen audio {models} op audiobron \"{sourceName}\", waardoor er geen detecties worden geproduceerd. Open de modellengalerij in Instellingen om de status te controleren."
+        "notRegisteredMessage": "Er bereikt geen audio {models} op audiobron \"{sourceName}\", waardoor er geen detecties worden geproduceerd. Open Systeem > AI-modellen om de status per bron te controleren, en bevestig dat de audiobron is verbonden en audio verzendt."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1780,7 +1780,10 @@
       "noSources": "Geen bronnen verbonden",
       "primaryFallback": "primair (fallback)",
       "sourceNotRunning": "analyseert niet",
-      "sourceNotRunningTooltip": "Deze bron is in de instellingen toegewezen aan het model, maar de audio bereikt het model niet, waardoor het geen detecties produceert. Open de modellengalerij in Instellingen om de status te controleren.",
+      "sourceNotRunningTooltip": "Deze bron is in de instellingen toegewezen aan het model, maar de audio bereikt het model niet, waardoor het geen detecties produceert. Controleer of de audiobron is verbonden en audio verzendt.",
+      "modelNotAnalyzingTooltip": "Eén of meer aan dit model toegewezen audiobronnen verzenden er geen audio naar, waardoor het geen detecties produceert. Zie de hieronder vermelde bronnen.",
+      "sourcesDegraded": "{count} van {total} bronnen offline",
+      "sourcesDegradedTooltip": "Sommige, maar niet alle audiobronnen van dit model zijn offline, dus het analyseert nog steeds via de werkende bronnen. De specifieke offline bron en hoe dit op te lossen staan hieronder vermeld.",
       "notMeasured": "n/b",
       "unitMs": "ms",
       "unitKhz": "kHz",
@@ -2429,7 +2432,19 @@
           "description": "Beperk detectie tot soorten die waarschijnlijk voorkomen in uw geografische regio",
           "stationLocation": {
             "label": "Station Locatie",
-            "helpText": "Station locatie, gebruikt voor weersgegevens en om vogelsoorten te beperken tot diegenen die waarschijnlijk voorkomen in de regio."
+            "helpText": "Station locatie, gebruikt voor weersgegevens en om vogelsoorten te beperken tot diegenen die waarschijnlijk voorkomen in de regio.",
+            "automaticLocation": "Automatische locatie",
+            "useCurrentLocation": "Browserlocatie gebruiken",
+            "locationHelp": "Vult de coördinaten in met de locatie van deze browser.",
+            "locating": "Locatie bepalen...",
+            "accuracy": "Geschatte nauwkeurigheid: binnen {accuracy} m",
+            "locationDetected": "Browserlocatie bepaald.",
+            "geolocationUnsupported": "Deze browser ondersteunt apparaatlocatie niet. Voer coördinaten handmatig in of gebruik de kaart.",
+            "geolocationRequiresHttps": "Browserlocatie vereist HTTPS of localhost. Voer coördinaten handmatig in of gebruik de kaart.",
+            "geolocationDenied": "Toestemming voor locatie is geweigerd. Voer coördinaten handmatig in of gebruik de kaart.",
+            "geolocationUnavailable": "Uw apparaat kon de locatie niet bepalen. Voer coördinaten handmatig in of gebruik de kaart.",
+            "geolocationTimedOut": "Het locatieverzoek duurde te lang. Probeer het opnieuw, voer coördinaten handmatig in of gebruik de kaart.",
+            "geolocationFailed": "De locatie van uw apparaat kon niet worden bepaald. Voer coördinaten handmatig in of gebruik de kaart."
           },
           "latitude": {
             "label": "Breedtegraad",
@@ -2967,6 +2982,7 @@
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
           "saveButton": "Provider opslaan",
+          "saveWaitingNtfyCheck": "Wachten tot de ntfy-verbindingscontrole is voltooid",
           "savingButton": "Opslaan...",
           "cancelButton": "Annuleren",
           "testButton": "Test",
@@ -3038,6 +3054,7 @@
               "http": "HTTP werkt - server gebruikt geen HTTPS"
             },
             "connectionFailed": "Kan geen verbinding maken - controleer hostnaam en serverstatus",
+            "checkError": "Kan de server niet verifiëren - controleer het adres of herlaad de pagina en probeer het opnieuw",
             "auth": {
               "label": "Authenticatie (optioneel)",
               "username": {
@@ -4414,7 +4431,7 @@
       "dynamicThreshold": {
         "tabLabel": "Geleerd",
         "title": "Geleerde drempels",
-        "description": "Deze pagina toont runtime data van dynamische drempels. Wanneer ingeschakeld in Hoofdinstellingen → Detectie, worden drempels automatisch aangepast door meerdere detecties met hoge betrouwbaarheid. Soorten die hier worden getoond, worden verondersteld op deze locatie te bestaan.",
+        "description": "Deze pagina toont runtime data van dynamische drempels. Wanneer ingeschakeld, worden drempels automatisch aangepast door meerdere detecties met hoge betrouwbaarheid. Soorten die hier worden getoond, worden verondersteld op deze locatie te bestaan.",
         "stats": {
           "active": "Actief",
           "atMinimum": "Op minimum",
@@ -5202,6 +5219,7 @@
       "notFound": "Melding niet gevonden",
       "hostRequired": "Hostparameter is vereist",
       "invalidHost": "Ongeldige hostparameter",
+      "invalidBody": "Ongeldige aanvraaginhoud",
       "rateLimit": "Te veel verbindingspogingen met de meldingsstream, wacht even voor u het opnieuw probeert"
     },
     "speciesGuide": {

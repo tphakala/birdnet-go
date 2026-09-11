@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
 )
 
@@ -86,18 +87,34 @@ func TestVAD_SequenceSessionIO(t *testing.T) {
 	}
 }
 
+// skipIfORTUnavailable skips the test when err is the ONNX Runtime initialisation
+// failure (Context stage=ort_init), the one New() failure that depends on the host
+// rather than the code. Any other non-nil error is a real defect in the embedded
+// model path and fails the test rather than being masked by a skip.
+func skipIfORTUnavailable(t *testing.T, err error) {
+	t.Helper()
+	if err == nil {
+		return
+	}
+	var ee *errors.EnhancedError
+	if errors.As(err, &ee) {
+		if stage, ok := ee.GetContext()["stage"]; ok && stage == "ort_init" {
+			t.Skipf("ONNX Runtime unavailable; skipping: %v", err)
+		}
+	}
+	require.NoError(t, err)
+}
+
 // TestVAD_EmbeddedModelLoads exercises the production default path: loading the
-// model embedded in the binary via the in-memory bytes API. It skips when the
-// build has no embedded model (-tags noembed) or when ONNX Runtime is not
+// model embedded in the binary via the in-memory bytes API. The model is embedded
+// in every build, so in practice this skips only when ONNX Runtime is not
 // available on the host. VAD_TEST_ORT_LIB may point at the ORT shared library.
 func TestVAD_EmbeddedModelLoads(t *testing.T) {
 	if !HasEmbeddedModel() {
 		t.Skip("no embedded model in this build")
 	}
 	d, err := New(Config{ModelData: EmbeddedModelData(), LibraryPath: os.Getenv("VAD_TEST_ORT_LIB")})
-	if err != nil {
-		t.Skipf("ONNX Runtime unavailable; skipping embedded-model test: %v", err)
-	}
+	skipIfORTUnavailable(t, err)
 	t.Cleanup(func() { assert.NoError(t, d.Close()) })
 
 	prob, err := d.SpeechProbability(silence16k(1), sampleRate16k)
@@ -370,8 +387,8 @@ func BenchmarkVADStreamer1s(b *testing.B) {
 // fixture: it drives the embedded sequence model with a synthetic voiced signal
 // (whose syllable modulation the model scores as speech) and asserts that the
 // streaming path detects the same speech peak as the full-chunk path on real
-// ONNX Runtime. It skips on a noembed build or when ONNX Runtime is unavailable,
-// so it exercises the real streamer+model tensor plumbing wherever CI has ORT
+// ONNX Runtime. It skips when ONNX Runtime is unavailable (the model is always
+// embedded), so it exercises the real streamer+model tensor plumbing wherever CI has ORT
 // linked while the stub-session unit tests pin the bookkeeping everywhere else.
 // The stronger time-resolved coverage parity lives in TestVAD_StreamingCoverageParity
 // (real speech clip, run locally), since a synthetic signal's amplitude envelope
@@ -382,9 +399,7 @@ func TestVAD_EmbeddedStreamingParity(t *testing.T) {
 	}
 	cfg := Config{ModelData: EmbeddedModelData(), LibraryPath: os.Getenv("VAD_TEST_ORT_LIB")}
 	probe, err := New(cfg)
-	if err != nil {
-		t.Skipf("ONNX Runtime unavailable; skipping embedded streaming parity: %v", err)
-	}
+	skipIfORTUnavailable(t, err)
 	require.NoError(t, probe.Close())
 
 	pcm := speechLikePCM16(6, sampleRate16k)

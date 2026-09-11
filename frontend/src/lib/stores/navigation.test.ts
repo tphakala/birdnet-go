@@ -26,7 +26,7 @@ describe('navigation store', () => {
     vi.spyOn(window.history, 'replaceState').mockImplementation(() => {});
     // Reset location mock
     Object.defineProperty(window, 'location', {
-      value: { pathname: '/ui/dashboard' },
+      value: { pathname: '/ui/dashboard', search: '', hash: '' },
       writable: true,
       configurable: true,
     });
@@ -42,6 +42,16 @@ describe('navigation store', () => {
   });
 
   describe('navigate', () => {
+    it('exposes same-page query changes independently of the route', () => {
+      const nav = createNavigation();
+      nav.navigate('/ui/settings/main?tab=general');
+      nav.navigate('/ui/settings/main?tab=location&source=species#map');
+      expect(nav.currentPath).toBe('/ui/settings/main');
+      expect(nav.currentSearch).toBe('?tab=location&source=species');
+      nav.navigate('/ui/settings/main#map');
+      expect(nav.currentSearch).toBe('');
+    });
+
     it('should update currentPath', () => {
       const nav = createNavigation();
       nav.navigate('/ui/settings');
@@ -148,6 +158,14 @@ describe('navigation store', () => {
   });
 
   describe('redirect', () => {
+    it('updates reactive search on query-only redirects', () => {
+      const nav = createNavigation();
+      nav.navigate('/ui/settings/main?tab=general');
+      nav.redirect('/ui/settings/main?tab=location#map');
+      expect(nav.currentSearch).toBe('?tab=location');
+      expect(nav.currentPath).toBe('/ui/settings/main');
+    });
+
     it('should update currentPath and replace (not push) the history entry', () => {
       const nav = createNavigation();
       nav.redirect('/ui/analytics?tab=patterns');
@@ -170,10 +188,26 @@ describe('navigation store', () => {
   });
 
   describe('handlePopState', () => {
+    it('restores query-only history entries and bare URLs', () => {
+      const nav = createNavigation();
+      nav.navigate('/ui/settings/main?tab=location');
+      Object.defineProperty(window, 'location', {
+        value: { pathname: '/ui/settings/main', search: '?tab=database', hash: '#details' },
+        writable: true,
+        configurable: true,
+      });
+      nav.handlePopState();
+      expect(nav.currentPath).toBe('/ui/settings/main');
+      expect(nav.currentSearch).toBe('?tab=database');
+      window.location.search = '';
+      nav.handlePopState();
+      expect(nav.currentSearch).toBe('');
+    });
+
     it('should update currentPath from window.location', () => {
       const nav = createNavigation();
       Object.defineProperty(window, 'location', {
-        value: { pathname: '/ui/about' },
+        value: { pathname: '/ui/about', search: '', hash: '' },
         writable: true,
         configurable: true,
       });
@@ -184,7 +218,7 @@ describe('navigation store', () => {
     it('should normalize root path on popstate', () => {
       const nav = createNavigation();
       Object.defineProperty(window, 'location', {
-        value: { pathname: '/' },
+        value: { pathname: '/', search: '', hash: '' },
         writable: true,
         configurable: true,
       });
@@ -195,7 +229,7 @@ describe('navigation store', () => {
     it('should handle /ui path on popstate', () => {
       const nav = createNavigation();
       Object.defineProperty(window, 'location', {
-        value: { pathname: '/ui' },
+        value: { pathname: '/ui', search: '', hash: '' },
         writable: true,
         configurable: true,
       });
@@ -205,9 +239,25 @@ describe('navigation store', () => {
   });
 
   describe('initial state', () => {
+    it('restores the query on load and preserves suffixes when normalizing', () => {
+      Object.defineProperty(window, 'location', {
+        value: { pathname: '/settings/main', search: '?tab=location', hash: '#map' },
+        writable: true,
+        configurable: true,
+      });
+      const nav = createNavigation();
+      expect(nav.currentPath).toBe('/ui/settings/main');
+      expect(nav.currentSearch).toBe('?tab=location');
+      expect(window.history.replaceState).toHaveBeenCalledWith(
+        {},
+        '',
+        '/ui/settings/main?tab=location#map'
+      );
+    });
+
     it('should initialize with normalized path', () => {
       Object.defineProperty(window, 'location', {
-        value: { pathname: '/ui/dashboard' },
+        value: { pathname: '/ui/dashboard', search: '', hash: '' },
         writable: true,
         configurable: true,
       });
@@ -217,7 +267,7 @@ describe('navigation store', () => {
 
     it('should normalize root path on initialization', () => {
       Object.defineProperty(window, 'location', {
-        value: { pathname: '/' },
+        value: { pathname: '/', search: '', hash: '' },
         writable: true,
         configurable: true,
       });
@@ -253,7 +303,7 @@ describe('navigation store with proxy prefix', () => {
     vi.mocked(buildAppUrl).mockImplementation((path: string) => `/proxy${path}`);
 
     Object.defineProperty(window, 'location', {
-      value: { pathname: '/proxy/ui/dashboard' },
+      value: { pathname: '/proxy/ui/dashboard', search: '', hash: '' },
       writable: true,
       configurable: true,
     });
@@ -272,7 +322,7 @@ describe('navigation store with proxy prefix', () => {
     vi.mocked(buildAppUrl).mockImplementation((path: string) => `/proxy${path}`);
 
     Object.defineProperty(window, 'location', {
-      value: { pathname: '/proxy/ui/dashboard' },
+      value: { pathname: '/proxy/ui/dashboard', search: '', hash: '' },
       writable: true,
       configurable: true,
     });

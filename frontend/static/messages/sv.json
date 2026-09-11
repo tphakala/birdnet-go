@@ -473,7 +473,7 @@
         "unreadableMessage": "Modellfilen som konfigurerats för {modelName} finns men kunde inte läsas, så den installerade modellen på {modelPath} används i stället. Din konfiguration lämnades oförändrad. Kontrollera filens behörigheter och att dess lagring är monterad.",
         "builtinMessage": "Modellfilen som konfigurerats för {modelName} hittades inte på disken och det finns ingen installerad modell tillgänglig att ersätta den med, så den inbyggda modellen används i stället. Din konfiguration lämnades oförändrad.",
         "notRegisteredTitle": "Ingen modell analyserar {sourceName}",
-        "notRegisteredMessage": "Inget ljud når {models} på ljudkällan \"{sourceName}\", så det produceras inga detektioner. Öppna modellgalleriet i Inställningar för att kontrollera status."
+        "notRegisteredMessage": "Inget ljud når {models} på ljudkällan \"{sourceName}\", så det produceras inga detektioner. Öppna System > AI-modeller för att kontrollera dess status per källa, och bekräfta att ljudkällan är ansluten och skickar ljud."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1780,7 +1780,10 @@
       "noSources": "Inga källor anslutna",
       "primaryFallback": "primär (reserv)",
       "sourceNotRunning": "analyserar inte",
-      "sourceNotRunningTooltip": "Denna källa är tilldelad modellen i inställningarna, men dess ljud når inte modellen, så den producerar inga detektioner. Öppna modellgalleriet i Inställningar för att kontrollera dess status.",
+      "sourceNotRunningTooltip": "Denna källa är tilldelad modellen i inställningarna, men dess ljud når inte modellen, så den producerar inga detektioner. Kontrollera att ljudkällan är ansluten och skickar ljud.",
+      "modelNotAnalyzingTooltip": "En eller flera ljudkällor tilldelade denna modell skickar inte ljud till den, så den producerar inga detektioner. Se källorna som anges nedan.",
+      "sourcesDegraded": "{count} av {total} källor nere",
+      "sourcesDegradedTooltip": "Vissa, men inte alla av denna modells ljudkällor är nere, så den analyserar fortfarande via de fungerande. Den specifika källan som är nere och hur den åtgärdas anges nedan.",
       "notMeasured": "-",
       "unitMs": "ms",
       "unitKhz": "kHz",
@@ -2429,7 +2432,19 @@
           "description": "Begränsa detektion till arter som är sannolika i ditt geografiska område",
           "stationLocation": {
             "label": "Stationsplats",
-            "helpText": "Stationsplats, används för väderdata och för att begränsa fågelarter till de som är sannolika i regionen."
+            "helpText": "Stationsplats, används för väderdata och för att begränsa fågelarter till de som är sannolika i regionen.",
+            "automaticLocation": "Automatisk plats",
+            "useCurrentLocation": "Använd webbläsarens plats",
+            "locationHelp": "Fyller i koordinaterna med hjälp av den här webbläsarens plats.",
+            "locating": "Söker plats...",
+            "accuracy": "Uppskattad noggrannhet: inom {accuracy} m",
+            "locationDetected": "Webbläsarens plats hittades.",
+            "geolocationUnsupported": "Den här webbläsaren stöder inte enhetspositionering. Ange koordinater manuellt eller använd kartan.",
+            "geolocationRequiresHttps": "Webbläsarens platsbestämning kräver HTTPS eller localhost. Ange koordinater manuellt eller använd kartan.",
+            "geolocationDenied": "Platsbehörighet nekades. Ange koordinater manuellt eller använd kartan.",
+            "geolocationUnavailable": "Enheten kunde inte fastställa sin plats. Ange koordinater manuellt eller använd kartan.",
+            "geolocationTimedOut": "Platsbegäran överskred tidsgränsen. Försök igen, ange koordinater manuellt eller använd kartan.",
+            "geolocationFailed": "Det gick inte att fastställa enhetens plats. Ange koordinater manuellt eller använd kartan."
           },
           "latitude": {
             "label": "Latitud",
@@ -2967,6 +2982,7 @@
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
           "saveButton": "Spara leverantör",
+          "saveWaitingNtfyCheck": "Väntar på att ntfy-anslutningskontrollen ska slutföras",
           "savingButton": "Sparar...",
           "cancelButton": "Avbryt",
           "testButton": "Testa",
@@ -3038,6 +3054,7 @@
               "http": "HTTP fungerar - servern använder inte HTTPS"
             },
             "connectionFailed": "Kunde inte ansluta - kontrollera värdnamn och serverstatus",
+            "checkError": "Det gick inte att verifiera servern - kontrollera adressen eller ladda om sidan och försök igen",
             "auth": {
               "label": "Autentisering (valfritt)",
               "username": {
@@ -4414,7 +4431,7 @@
       "dynamicThreshold": {
         "tabLabel": "Inlärda",
         "title": "Inlärda tröskelvärden",
-        "description": "Denna sida visar körtidsdata för dynamiska tröskelvärden. När aktiverad i Huvudinställningar -> Detektering justeras tröskelvärden automatiskt av flera högkonfidensdetekteringar. Arter som visas här antas finnas på denna plats.",
+        "description": "Denna sida visar körtidsdata för dynamiska tröskelvärden. När aktiverad justeras tröskelvärden automatiskt av flera högkonfidensdetekteringar. Arter som visas här antas finnas på denna plats.",
         "stats": {
           "active": "Aktiva",
           "atMinimum": "Vid minimum",
@@ -5202,6 +5219,7 @@
       "notFound": "Avisering hittades inte",
       "hostRequired": "Värdparameter krävs",
       "invalidHost": "Ogiltig värdparameter",
+      "invalidBody": "Ogiltig förfrågningstext",
       "rateLimit": "För många anslutningsförsök till aviseringsströmmen, vänta innan du försöker igen"
     },
     "speciesGuide": {

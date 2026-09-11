@@ -49,8 +49,9 @@ type VADStatusInfo struct {
 	// Enabled is the configured VAD gate toggle (realtime.privacyfilter.vad.enabled).
 	Enabled bool `json:"enabled"`
 	// Available reports whether a model source resolves (an embedded model is
-	// present, or a modelpath override is set). When false the gate is inert even
-	// if Enabled is true (e.g. a noembed build with no modelpath).
+	// present, or a modelpath override is set). The embedded model ships in every
+	// build, so this is effectively always true; it is false only if no model
+	// source resolves at all.
 	Available bool `json:"available"`
 	// Loaded is true when a session is currently held (loaded and scoring). It is
 	// set on a successful load and cleared on unload or an inference error.

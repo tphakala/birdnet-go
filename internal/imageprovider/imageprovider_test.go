@@ -378,9 +378,7 @@ func (m *mockStore) DeleteExpiredNotificationHistory(_ context.Context, before t
 	return 0, nil
 }
 
-func (m *mockStore) SchemaVersion() string                           { return datastore.SchemaVersionLegacy }
-func (m *mockStore) UpdateNameMaps(_ []string)                       {}
-func (m *mockStore) SetNameResolver(_ datastore.SpeciesNameResolver) {}
+func (m *mockStore) SchemaVersion() string { return datastore.SchemaVersionLegacy }
 func (m *mockStore) GetDatabaseStats(_ context.Context) (*datastore.DatabaseStats, error) {
 	return &datastore.DatabaseStats{
 		Type:      "mock",

@@ -532,6 +532,13 @@ func (s *Server) setupRoutes() error {
 	if s.healthErrors != nil {
 		v2Opts = append(v2Opts, apiv2.WithHealthErrorBuffer(s.healthErrors))
 	}
+	// Share the orchestrator-owned species-name index with the facade so it reads
+	// the same snapshot the orchestrator rebuilds from the union of loaded labels,
+	// rather than a facade-owned copy seeded only from the primary's labels. Without
+	// a processor (and thus an orchestrator) the facade keeps its own fallback.
+	if s.processor != nil && s.processor.Bn != nil {
+		v2Opts = append(v2Opts, apiv2.WithSpeciesIndex(s.processor.Bn.SpeciesIndex()))
+	}
 	if s.guideCache != nil {
 		v2Opts = append(v2Opts, apiv2.WithGuideCache(s.guideCache))
 	}

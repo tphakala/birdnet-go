@@ -168,13 +168,10 @@ func TestOrchestrator_ConcurrentResolverRegistrationAndResolve_NoRace(t *testing
 }
 
 // TestOrchestrator_ConcurrentReloadSnapshot_NoRace verifies that calling ReloadSnapshot
-// on the primary model concurrently with writes to its ModelInfo / Taxonomy fields does not race.
+// on the primary model concurrently with writes to its ModelInfo does not race.
 func TestOrchestrator_ConcurrentReloadSnapshot_NoRace(t *testing.T) {
 	bn := &BirdNET{}
 	bn.ModelInfo = ModelInfo{ID: "BirdNET_V3", Name: "BirdNET v3.0"}
-	bn.TaxonomyMap = TaxonomyMap{"test": "test"}
-	bn.TaxonomyPath = "path/to/taxonomy"
-	bn.ScientificIndex = ScientificNameIndex{"test": "test"}
 
 	start := make(chan struct{})
 	const iterations = 500
@@ -186,9 +183,6 @@ func TestOrchestrator_ConcurrentReloadSnapshot_NoRace(t *testing.T) {
 		for range iterations {
 			bn.mu.Lock()
 			bn.ModelInfo = ModelInfo{ID: "BirdNET_V3", Name: "BirdNET v3.0"}
-			bn.TaxonomyMap = TaxonomyMap{"test": "test"}
-			bn.TaxonomyPath = "path/to/taxonomy"
-			bn.ScientificIndex = ScientificNameIndex{"test": "test"}
 			bn.mu.Unlock()
 		}
 	})
@@ -197,11 +191,8 @@ func TestOrchestrator_ConcurrentReloadSnapshot_NoRace(t *testing.T) {
 	wg.Go(func() {
 		<-start
 		for range iterations {
-			info, taxMap, taxPath, sciIndex := bn.ReloadSnapshot()
+			info := bn.ReloadSnapshot()
 			_ = info
-			_ = taxMap
-			_ = taxPath
-			_ = sciIndex
 		}
 	})
 
@@ -240,8 +231,8 @@ func TestBirdNET_ConcurrentSettingsReadsAndWrites_NoRace(t *testing.T) {
 		}
 	})
 
-	// Reader: concurrently calls currentSettings, Debug, EnrichResultWithTaxonomy,
-	// and GetProbableSpecies. GetProbableSpecies is the path that previously read
+	// Reader: concurrently calls currentSettings, Debug, Labels, and
+	// GetProbableSpecies. GetProbableSpecies is the path that previously read
 	// bn.Settings without synchronization; it now reads via the atomic accessor
 	// and this exercises that fix under -race.
 	wg.Go(func() {
@@ -250,7 +241,7 @@ func TestBirdNET_ConcurrentSettingsReadsAndWrites_NoRace(t *testing.T) {
 		for range iterations {
 			_ = bn.currentSettings()
 			bn.Debug("test debug message")
-			_, _, _ = bn.EnrichResultWithTaxonomy("Turdus merula_Common Blackbird")
+			_ = bn.Labels()
 			_, _ = bn.GetProbableSpecies(now, 0)
 		}
 	})

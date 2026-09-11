@@ -90,12 +90,9 @@ type BirdNET struct {
 	rangeFilterFellBack bool
 	Settings            *conf.Settings // Deprecated: use settingsAtomic instead. Kept for struct-literal compatibility in tests.
 	settingsAtomic      atomic.Pointer[conf.Settings]
-	ModelInfo           ModelInfo           // Information about the current model
-	TaxonomyMap         TaxonomyMap         // Mapping of species codes to names and vice versa
-	ScientificIndex     ScientificNameIndex // Index for fast scientific name lookups
-	TaxonomyPath        string              // Path to custom taxonomy file, if used
-	modelVersion        string              // Human-readable model version string (per-instance to avoid shared global state)
-	modelsDir           string              // base directory for gallery-installed models (set by Orchestrator)
+	ModelInfo           ModelInfo // Information about the current model
+	modelVersion        string    // Human-readable model version string (per-instance to avoid shared global state)
+	modelsDir           string    // base directory for gallery-installed models (set by Orchestrator)
 	// primaryPath is the outcome of resolving settings.BirdNET.ModelPath for this
 	// instance: which primary classifier model file it actually loads from, and
 	// whether that differs from what the user configured. resolved.model differs
@@ -227,7 +224,6 @@ func resolvePrimaryOrConfigured(resolve primaryPathResolver, configured string) 
 func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo, resolvePrimary primaryPathResolver) (*BirdNET, error) {
 	bn := &BirdNET{
 		Settings:       settings,
-		TaxonomyPath:   "", // Default to embedded taxonomy
 		modelVersion:   defaultModelVersionString,
 		speciesCache:   make(map[string]*speciesCacheEntry),
 		resolvePrimary: resolvePrimary,
@@ -243,7 +239,6 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo, resolvePrimary pr
 	bn.primaryPath = resolvePrimaryOrConfigured(resolvePrimary, settings.BirdNET.ModelPath)
 
 	// Resolve model identity via the resolution chain
-	var err error
 	switch {
 	case modelInfo != nil:
 		// Tier 1: caller provided (orchestrator path)
@@ -289,17 +284,6 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo, resolvePrimary pr
 	// Device defaults to CPU; each init path republishes the real load-time device
 	// (the OV path may bind GPU), backend, and effective runtime precision.
 	bn.setRuntimeInfo(deviceCPU, bn.ModelInfo.Backend, string(bn.ModelInfo.Quantization))
-
-	// Load taxonomy data
-	bn.TaxonomyMap, bn.ScientificIndex, err = LoadTaxonomyData(bn.TaxonomyPath)
-	if err != nil {
-		return nil, errors.New(err).
-			Component("birdnet").
-			Category(errors.CategoryModelInit).
-			Context("operation", "load_taxonomy").
-			Context("taxonomy_path", bn.TaxonomyPath).
-			Build()
-	}
 
 	// Normalize and validate the locale before anything reads it. An unsupported
 	// locale is reported as an error but NormalizeLocale still returns
@@ -626,7 +610,8 @@ func resolveRangeFilterBackend(rf *conf.RangeFilterSettings) rangeFilterBackend 
 // must surface as unhealthy rather than silently filtering against the v2.4 labels.
 func (bn *BirdNET) hasNativeRangeFilter() bool {
 	// ONNX-only builds (notflite) have no embedded TFLite range filter to fall back to.
-	return tfliteBackendAvailable && isBirdNETV24Family(bn.ModelInfo.ID)
+	// Only the v2.4 MData-compatible classifier has an embedded native filter.
+	return tfliteBackendAvailable && rangeFilterCompatFor(bn.ModelInfo.ID) == rangeFilterCompatMDataV24
 }
 
 func (bn *BirdNET) initializeMetaModel(settings *conf.Settings) error {
@@ -840,9 +825,6 @@ func (bn *BirdNET) loadEmbeddedLabels() error {
 			Build()
 	}
 
-	// Check and log species missing from taxonomy
-	bn.logMissingTaxonomyCodes()
-
 	return nil
 }
 
@@ -896,41 +878,7 @@ func (bn *BirdNET) loadExternalLabels() error {
 			Build()
 	}
 
-	// Check and log species missing from taxonomy
-	bn.logMissingTaxonomyCodes()
-
 	return nil
-}
-
-// logMissingTaxonomyCodes checks labels against the taxonomy map and logs information about missing species
-func (bn *BirdNET) logMissingTaxonomyCodes() {
-	// Validate labels against taxonomy
-	complete, missing := IsTaxonomyComplete(bn.TaxonomyMap, bn.Settings.BirdNET.Labels)
-	if !complete {
-		// For custom models, provide more detailed information about missing taxonomy codes
-		// The resolved path: after a recovery to the built-in baseline nothing custom
-		// is loaded any more, so calling it a custom model would misdescribe it.
-		if bn.configuredModelPath() != "" || bn.Settings.BirdNET.LabelPath != "" {
-			bn.Debug("Custom model/labels detected: %d species are missing from the taxonomy data", len(missing))
-			bn.Debug("Placeholder taxonomy codes will be generated for these species")
-		} else {
-			bn.Debug("Warning: %d species are missing from the taxonomy data", len(missing))
-		}
-
-		if bn.Settings.BirdNET.Debug {
-			for i, species := range missing {
-				if i < 10 { // Only show the first 10 to avoid flooding logs
-					code := GeneratePlaceholderCode(species)
-					scientific, common := SplitSpeciesName(species)
-					bn.Debug("Missing taxonomy for '%s' (Sci: '%s', Common: '%s') - using placeholder code: %s",
-						species, scientific, common, code)
-				} else if i == 10 {
-					bn.Debug("... and %d more", len(missing)-10)
-					break
-				}
-			}
-		}
-	}
 }
 
 func (bn *BirdNET) loadLabelsFromText(file *os.File) error {
@@ -1457,8 +1405,6 @@ func (bn *BirdNET) reloadModelInternal(allowPathChange bool) error {
 	oldRangeFilter := bn.rangeFilter
 	oldFellBack := bn.rangeFilterFellBack
 	oldModelInfo := bn.ModelInfo
-	oldTaxonomyMap := bn.TaxonomyMap
-	oldScientificIndex := bn.ScientificIndex
 	// initializeModel republishes the runtime triplet (and modelVersion on the
 	// TFLite custom-path branch) before the later reload steps (meta model,
 	// validation) that can still fail, so snapshot them too; otherwise a
@@ -1495,8 +1441,6 @@ func (bn *BirdNET) reloadModelInternal(allowPathChange bool) error {
 		// reload does not leave the health report claiming the geomodel is active.
 		bn.rangeFilterFellBack = oldFellBack
 		bn.ModelInfo = oldModelInfo
-		bn.TaxonomyMap = oldTaxonomyMap
-		bn.ScientificIndex = oldScientificIndex
 		// Restore the runtime triplet and model-version string alongside the
 		// classifier so RuntimeInfo / ModelVersion describe the restored model
 		// rather than the failed attempt.
@@ -1635,20 +1579,6 @@ func (bn *BirdNET) reloadModelInternal(allowPathChange bool) error {
 		bn.ModelInfo = stockPrimaryModelInfo()
 	}
 
-	// Reload taxonomy data if needed
-	var err error
-	bn.TaxonomyMap, bn.ScientificIndex, err = LoadTaxonomyData(bn.TaxonomyPath)
-	if err != nil {
-		rollback()
-		return errors.New(err).
-			Component("birdnet").
-			Category(errors.CategoryModelInit).
-			Context("operation", "reload_model").
-			Context("step", "reload_taxonomy").
-			Build()
-	}
-	bn.Debug("Taxonomy data reloaded successfully")
-
 	// Reload labels before model initialization; ONNX models require labels
 	// at construction time for output dimension validation.
 	if err := bn.loadLabels(); err != nil {
@@ -1727,20 +1657,6 @@ func (bn *BirdNET) reloadModelInternal(allowPathChange bool) error {
 
 	bn.Debug("Model reload completed successfully")
 	return nil
-}
-
-// GetSpeciesCode returns the eBird species code for a given label
-func (bn *BirdNET) GetSpeciesCode(label string) (string, bool) {
-	bn.mu.Lock()
-	taxMap := bn.TaxonomyMap
-	sciIndex := bn.ScientificIndex
-	bn.mu.Unlock()
-	return GetSpeciesCodeFromName(taxMap, sciIndex, label)
-}
-
-// GetSpeciesWithScientificAndCommonName returns the scientific name and common name for a label
-func (bn *BirdNET) GetSpeciesWithScientificAndCommonName(label string) (scientific, common string) {
-	return SplitSpeciesName(label)
 }
 
 // Debug prints debug messages if debug mode is enabled.
@@ -1905,12 +1821,12 @@ func (bn *BirdNET) RuntimeInfo() (device, backend, precision string) {
 	return ri.device, ri.backend, ri.precision
 }
 
-// ReloadSnapshot returns a copy of the model metadata and taxonomy maps safely under bn.mu.
-// Used by the Orchestrator to update its shared state after a model reload.
-func (bn *BirdNET) ReloadSnapshot() (info ModelInfo, taxMap TaxonomyMap, taxPath string, sciIndex ScientificNameIndex) {
+// ReloadSnapshot returns a copy of the model metadata safely under bn.mu. Used by
+// the Orchestrator to refresh its shared state after a model reload.
+func (bn *BirdNET) ReloadSnapshot() ModelInfo {
 	bn.mu.Lock()
 	defer bn.mu.Unlock()
-	return bn.ModelInfo, maps.Clone(bn.TaxonomyMap), bn.TaxonomyPath, maps.Clone(bn.ScientificIndex)
+	return bn.ModelInfo
 }
 
 // Close releases resources held by the BirdNET model.
@@ -1918,28 +1834,6 @@ func (bn *BirdNET) ReloadSnapshot() (info ModelInfo, taxMap TaxonomyMap, taxPath
 func (bn *BirdNET) Close() error {
 	bn.Delete()
 	return nil
-}
-
-// EnrichResultWithTaxonomy adds taxonomy information to a detection result
-// Returns scientific name, common name, and eBird code if available
-func (bn *BirdNET) EnrichResultWithTaxonomy(speciesLabel string) (scientific, common, code string) {
-	scientific, common = SplitSpeciesName(speciesLabel)
-
-	bn.mu.Lock()
-	taxMap := bn.TaxonomyMap
-	sciIndex := bn.ScientificIndex
-	bn.mu.Unlock()
-
-	// Try to get the eBird code
-	code, exists := GetSpeciesCodeFromName(taxMap, sciIndex, speciesLabel)
-	if !exists {
-		// We got a placeholder code for a species not in our taxonomy
-		if bn.currentSettings().BirdNET.Debug {
-			bn.Debug("Species '%s' not found in taxonomy, using generated placeholder code: %s", speciesLabel, code)
-		}
-	}
-
-	return scientific, common, code
 }
 
 // GeomodelStatus holds metadata about the active geomodel.
@@ -2060,10 +1954,10 @@ func shouldAutoSelectV3Geomodel(modelID, modelsDir string) bool {
 	if modelsDir == "" {
 		return false
 	}
-	switch modelID {
-	case RegistryIDPerchV2, RegistryIDBirdNETV3:
-		// eligible classifier; check files below
-	default:
+	// Only classifiers whose label space fits the mapped geomodel v3 backend qualify.
+	// Looking up by ID (not a copied ModelInfo) keeps this identical to the previous
+	// explicit {Perch_V2, BirdNET_V3.0} switch, including for Custom and unknown IDs.
+	if rangeFilterCompatFor(modelID) != rangeFilterCompatGeomodel {
 		return false
 	}
 	sharedDir := filepath.Join(modelsDir, sharedDirName)

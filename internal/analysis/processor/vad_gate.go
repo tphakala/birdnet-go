@@ -371,14 +371,16 @@ func (p *Processor) runVADGate(settings *conf.Settings, item *classifier.Results
 
 	cfg, cacheKey := resolveVADModel(&pf.VAD, settings.BirdNET.ONNXRuntimePath)
 	if cacheKey == "" {
-		// Enabled but no model resolves (a noembed build with no modelpath set, or
-		// a modelpath that was cleared after the session had loaded). Unload any
-		// held session so a removed model source does not leak its ONNX session,
-		// then warn once so the misconfiguration is visible rather than silently inert.
+		// Enabled but no model resolves. The embedded model is compiled into every
+		// build and an unset modelpath falls through to it, so this branch is now
+		// effectively unreachable and stays only as defensive handling. If it is ever
+		// hit, unload any held session so a removed model source does not leak its ONNX
+		// session, then warn once so the misconfiguration is visible rather than
+		// silently inert.
 		p.vadGate.close()
 		if p.vadGate.warnedNoModel.CompareAndSwap(false, true) {
 			GetLogger().Warn("privacy VAD enabled but no model available; speech gate inert",
-				logger.String("hint", "set realtime.privacyfilter.vad.modelpath or use a build with the embedded model"),
+				logger.String("hint", "set realtime.privacyfilter.vad.modelpath to a Silero sequence-export .onnx, or unset it to use the embedded model"),
 				logger.String("operation", "privacy_filter_vad"))
 		}
 		return
@@ -437,8 +439,9 @@ func (p *Processor) runVADGate(settings *conf.Settings, item *classifier.Results
 // resolveVADModel selects the VAD model source. An explicit ModelPath override
 // takes precedence; otherwise the model embedded in the binary is used. It
 // returns the session config and a stable cache key ("path:<file>" or
-// "embedded") used to detect a source change; an empty key means no model is
-// available (a noembed build with no configured path).
+// "embedded") used to detect a source change; an empty key means no model source
+// is available (only reachable if the embedded model is absent and no modelpath
+// is configured).
 func resolveVADModel(cfg *conf.VADSettings, libraryPath string) (detCfg vad.Config, cacheKey string) {
 	if cfg.ModelPath != "" {
 		return vad.Config{ModelPath: cfg.ModelPath, LibraryPath: libraryPath}, "path:" + cfg.ModelPath

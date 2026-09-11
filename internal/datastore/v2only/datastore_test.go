@@ -16,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
 // buildTestConfig constructs the shared repositories and Config for in-memory test datastores.
@@ -112,7 +113,7 @@ func setupTestDatastore(t *testing.T) (ds *Datastore, cleanup func()) {
 	cfg, cfgCleanup := buildTestConfig(t, nil)
 	ds, err := New(cfg)
 	require.NoError(t, err)
-	return ds, func() { _ = ds.Close(); cfgCleanup() }
+	return ds, func() { assert.NoError(t, ds.Close()); cfgCleanup() } // nolint:testifylint // assert not require: cfgCleanup must still run if Close errors; require would Goexit and skip it
 }
 
 // setupTestDatastoreWithLabels creates a V2OnlyDatastore with species label mappings for testing.
@@ -123,7 +124,7 @@ func setupTestDatastoreWithLabels(t *testing.T, labels []string) (ds *Datastore,
 	cfg, cfgCleanup := buildTestConfig(t, labels)
 	ds, err := New(cfg)
 	require.NoError(t, err)
-	return ds, func() { _ = ds.Close(); cfgCleanup() }
+	return ds, func() { assert.NoError(t, ds.Close()); cfgCleanup() } // nolint:testifylint // assert not require: cfgCleanup must still run if Close errors; require would Goexit and skip it
 }
 
 // seedDetection creates (or reuses) a label for sciName and inserts one detection
@@ -1526,7 +1527,7 @@ func TestGetTopBirdsData_SpeciesCode(t *testing.T) {
 	cfg.SpeciesCodeMap = speciesCodeMap
 	ds, err := New(cfg)
 	require.NoError(t, err)
-	defer func() { _ = ds.Close(); cfgCleanup() }()
+	t.Cleanup(func() { assert.NoError(t, ds.Close()); cfgCleanup() }) // nolint:testifylint // assert not require: cfgCleanup must still run if Close errors; require would Goexit and skip it
 
 	now := time.Now().UTC()
 	dateStr := now.Format(time.DateOnly)
@@ -1687,7 +1688,7 @@ func TestGetSpeciesSummaryData_NoDateFilter(t *testing.T) {
 	cfg.SpeciesCodeMap = speciesCodeMap
 	ds, err := New(cfg)
 	require.NoError(t, err)
-	defer func() { _ = ds.Close(); cfgCleanup() }()
+	t.Cleanup(func() { assert.NoError(t, ds.Close()); cfgCleanup() }) // nolint:testifylint // assert not require: cfgCleanup must still run if Close errors; require would Goexit and skip it
 
 	now := time.Now().UTC()
 
@@ -1742,10 +1743,10 @@ func TestGetSpeciesSummaryData_WithDateFilter(t *testing.T) {
 	assert.Empty(t, summaries, "should return empty for dates with no detections")
 }
 
-func TestV2OnlyDatastore_UpdateNameMaps(t *testing.T) {
+func TestV2OnlyDatastore_SetSpeciesIndex_SwapsSnapshot(t *testing.T) {
 	t.Parallel()
 
-	// Start with English labels
+	// Start with English labels; New() seeds the fallback index from cfg.Labels.
 	englishLabels := []string{
 		"Turdus merula_Common Blackbird",
 		"Parus major_Great Tit",
@@ -1753,41 +1754,76 @@ func TestV2OnlyDatastore_UpdateNameMaps(t *testing.T) {
 	ds, cleanup := setupTestDatastoreWithLabels(t, englishLabels)
 	t.Cleanup(cleanup)
 
-	// Verify initial English resolution
+	// Verify initial English resolution off the fallback seed.
 	assert.Equal(t, "Common Blackbird", ds.resolveCommonName("Turdus merula"))
 	assert.Equal(t, "Great Tit", ds.resolveCommonName("Parus major"))
 	assert.Equal(t, "Turdus merula", ds.resolveToScientificName("common blackbird"))
 
-	// Switch to Finnish labels
-	finnishLabels := []string{
+	// Inject a shared index rebuilt with Finnish labels, the way the orchestrator
+	// hands the datastore its service in APIServerService.Start.
+	finnish := speciesindex.New(nil)
+	finnish.Rebuild([]string{
 		"Turdus merula_mustarastas",
 		"Parus major_talitiainen",
 		"Strix aluco_lehtopöllö",
-	}
-	ds.UpdateNameMaps(finnishLabels)
+	}, "")
+	ds.SetSpeciesIndex(finnish)
 
-	// Verify Finnish resolution
+	// Verify Finnish resolution after the swap.
 	assert.Equal(t, "mustarastas", ds.resolveCommonName("Turdus merula"))
 	assert.Equal(t, "talitiainen", ds.resolveCommonName("Parus major"))
 	assert.Equal(t, "lehtopöllö", ds.resolveCommonName("Strix aluco"))
 
-	// Verify reverse lookup works with new locale
+	// Verify reverse lookup works with the new locale.
 	assert.Equal(t, "Turdus merula", ds.resolveToScientificName("mustarastas"))
 
-	// Verify old English names no longer resolve
+	// Verify old English names no longer resolve.
 	assert.Equal(t, "common blackbird", ds.resolveToScientificName("common blackbird"),
 		"Old English common name should no longer resolve to scientific name")
 
-	// Verify unknown species still falls back to scientific name
+	// Verify unknown species still falls back to scientific name.
 	assert.Equal(t, "Unknown species", ds.resolveCommonName("Unknown species"))
 }
 
-func TestV2OnlyDatastore_UpdateNameMaps_ConcurrentAccess(t *testing.T) {
+// TestV2OnlyDatastore_FallbackSeedWithoutSharedIndex pins that New seeds the
+// fallback index from cfg.Labels for a datastore that is never handed the shared
+// service (file-analysis commands, fresh install, tests), byte-identical to Phase 1.
+func TestV2OnlyDatastore_FallbackSeedWithoutSharedIndex(t *testing.T) {
+	t.Parallel()
+
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Turdus merula_Common Blackbird"})
+	t.Cleanup(cleanup)
+
+	// No SetSpeciesIndex call: resolution must still work off the constructor seed.
+	assert.Equal(t, "Common Blackbird", ds.resolveCommonName("Turdus merula"))
+	assert.Equal(t, "Turdus merula", ds.resolveToScientificName("common blackbird"))
+}
+
+// TestV2OnlyDatastore_SetSpeciesIndex_NilIgnored pins that a nil service is ignored,
+// leaving the existing (fallback) index in place rather than clearing it.
+func TestV2OnlyDatastore_SetSpeciesIndex_NilIgnored(t *testing.T) {
+	t.Parallel()
+
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{"Turdus merula_Common Blackbird"})
+	t.Cleanup(cleanup)
+
+	ds.SetSpeciesIndex(nil)
+	assert.Equal(t, "Common Blackbird", ds.resolveCommonName("Turdus merula"),
+		"a nil SetSpeciesIndex must leave the existing index in place")
+}
+
+func TestV2OnlyDatastore_SetSpeciesIndex_ConcurrentAccess(t *testing.T) {
 	t.Parallel()
 
 	labels := []string{"Turdus merula_Common Blackbird"}
 	ds, cleanup := setupTestDatastoreWithLabels(t, labels)
 	t.Cleanup(cleanup)
+
+	// Prebuild the two shared snapshots the writer swaps between.
+	english := speciesindex.New(nil)
+	english.Rebuild([]string{"Turdus merula_Common Blackbird"}, "")
+	finnish := speciesindex.New(nil)
+	finnish.Rebuild([]string{"Turdus merula_mustarastas"}, "")
 
 	var wg sync.WaitGroup
 	const goroutines = 50
@@ -1810,7 +1846,7 @@ func TestV2OnlyDatastore_UpdateNameMaps_ConcurrentAccess(t *testing.T) {
 	for range goroutines / 2 {
 		wg.Go(func() {
 			for range iterations {
-				// Both snapshots map some common name → "Turdus merula",
+				// Both snapshots map some common name to "Turdus merula",
 				// so the scientific name should always resolve correctly
 				sci := ds.resolveToScientificName("common blackbird")
 				if sci != "common blackbird" {
@@ -1824,61 +1860,22 @@ func TestV2OnlyDatastore_UpdateNameMaps_ConcurrentAccess(t *testing.T) {
 		})
 	}
 
-	// Concurrent writer
+	// Concurrent writer swapping the shared index (atomic pointer Store).
 	wg.Go(func() {
 		for range iterations {
-			ds.UpdateNameMaps([]string{"Turdus merula_mustarastas"})
-			ds.UpdateNameMaps([]string{"Turdus merula_Common Blackbird"})
+			ds.SetSpeciesIndex(finnish)
+			ds.SetSpeciesIndex(english)
 		}
 	})
 
 	wg.Wait()
 }
 
-// batchFakeResolver misses ResolveLocal (the cold-path branch) and resolves only via the
-// batch seam, like the real resolver does for out-of-working-set bats.
-type batchFakeResolver struct{ batch map[string]string }
-
-func (b *batchFakeResolver) Resolve(string, string) string      { return "" }
-func (b *batchFakeResolver) ResolveLocal(string) (string, bool) { return "", false }
-func (b *batchFakeResolver) ResolveLocalizedBatch(names []string) map[string]string {
-	out := make(map[string]string, len(names))
-	for _, n := range names {
-		if v, ok := b.batch[n]; ok {
-			out[n] = v
-		}
-	}
-	return out
-}
-
-func TestBuildNameMaps_SecondaryModelScientificOnlyLabelIsReverseSearchable(t *testing.T) {
-	t.Parallel()
-
-	r := &batchFakeResolver{batch: map[string]string{"Barbastella barbastellus": "mopsilepakko"}}
-	nm := buildNameMaps([]string{"Barbastella barbastellus"}, r)
-
-	// Reverse exact map is NFC-folded, lowercased.
-	assert.Equal(t, "Barbastella barbastellus", nm.species["mopsilepakko"])
-	// Forward + substring maps present too.
-	assert.Equal(t, "mopsilepakko", nm.common["Barbastella barbastellus"])
-	assert.Equal(t, "mopsilepakko", nm.commonFolded["Barbastella barbastellus"])
-}
-
-func TestBuildNameMaps_AmbiguousCommonNameDeletedNotLastWriterWins(t *testing.T) {
-	t.Parallel()
-
-	// Two scientific names sharing one common name must not silently route to an
-	// arbitrary winner; the ambiguous reverse key is dropped.
-	nm := buildNameMaps([]string{"Strix aluco_Owl", "Bubo bubo_Owl"}, nil)
-	_, ok := nm.species["owl"]
-	assert.False(t, ok, "ambiguous common name must be deleted from the exact reverse map")
-
-	// The forward display maps must still contain both species so their common names
-	// are shown correctly in the UI. Ambiguity handling must only drop the reverse
-	// lookup key, not the forward display names.
-	assert.Equal(t, "Owl", nm.common["Strix aluco"], "forward map must retain common name for Strix aluco")
-	assert.Equal(t, "Owl", nm.common["Bubo bubo"], "forward map must retain common name for Bubo bubo")
-}
+// Note: the name-map builder behaviors previously exercised here through
+// buildNameMaps directly (scientific-only labels reverse-searchable via the batch
+// seam, and the ambiguous-common-name drop) now live in internal/speciesindex,
+// where the shared builder is owned and golden-tested against both former
+// builders.
 
 // TestUnixTimeOrZero verifies that a non-positive epoch yields the zero time (so the
 // API renders an empty timestamp) instead of the 1970 epoch origin, while a positive

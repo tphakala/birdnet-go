@@ -24,8 +24,6 @@ type BirdNET struct {
     RangeInterpreter    *tflite.Interpreter  // Interpreter for the range filter model
     Settings            *conf.Settings       // Application configuration settings
     ModelInfo           ModelInfo            // Information about the current model
-    TaxonomyMap         TaxonomyMap          // Mapping of species codes to names and vice versa
-    TaxonomyPath        string               // Path to custom taxonomy file, if used
     mu                  sync.Mutex           // Mutex for thread safety
 }
 ```
@@ -35,7 +33,6 @@ type BirdNET struct {
 The package provides methods for analyzing audio samples and producing detection results:
 
 - `Predict()` - Performs inference on audio samples to detect bird species
-- `EnrichResultWithTaxonomy()` - Adds taxonomy information to detection results
 
 ### Model Registry
 
@@ -95,12 +92,12 @@ Key functions:
 - `GetSpeciesCodeFromName()` - Gets eBird code for a species name
 - `GetSpeciesNameFromCode()` - Gets species name for an eBird code
 - `SplitSpeciesName()` - Splits species name into scientific and common parts
-- `EnrichResultWithTaxonomy()` - Adds taxonomy information to detection results
+- `Orchestrator.EnrichResultWithTaxonomy()` - Adds taxonomy information to detection results (taxonomy is owned by the orchestrator, not the primary model)
 
 Example usage of taxonomy enrichment:
 
 ```go
-scientific, common, code := bn.EnrichResultWithTaxonomy(result.Species)
+scientific, common, code := orchestrator.EnrichResultWithTaxonomy(result.Species)
 fmt.Printf("Species: %s (%s), eBird code: %s, Confidence: %.2f\n",
     common, scientific, code, result.Confidence)
 ```
@@ -146,21 +143,21 @@ The package embeds several key resources:
 A typical usage pattern involves:
 
 ```go
-// Create new BirdNET instance
-bn, err := birdnet.NewBirdNET(settings)
+// Create new classifier orchestrator
+orchestrator, err := birdnet.NewOrchestrator(settings)
 if err != nil {
     // Handle error
 }
 
 // Process audio chunk
-results, err := bn.Predict(audioSample)
+results, err := orchestrator.Predict(audioSample)
 if err != nil {
     // Handle error
 }
 
 // Process results with taxonomy information
 for _, result := range results {
-    scientific, common, code := bn.EnrichResultWithTaxonomy(result.Species)
+    scientific, common, code := orchestrator.EnrichResultWithTaxonomy(result.Species)
     fmt.Printf("Species: %s (%s), eBird code: %s, Confidence: %.2f\n",
         common, scientific, code, result.Confidence)
 }

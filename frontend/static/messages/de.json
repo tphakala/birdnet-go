@@ -473,7 +473,7 @@
         "unreadableMessage": "Die für {modelName} konfigurierte Modelldatei ist vorhanden, konnte aber nicht gelesen werden, daher wird stattdessen das installierte Modell unter {modelPath} verwendet. Ihre Konfiguration wurde nicht verändert. Überprüfen Sie die Dateiberechtigungen und ob der Speicher eingebunden ist.",
         "builtinMessage": "Die für {modelName} konfigurierte Modelldatei wurde nicht auf dem Datenträger gefunden und es ist kein installiertes Modell als Ersatz verfügbar, daher wird stattdessen das integrierte Modell verwendet. Ihre Konfiguration wurde nicht verändert.",
         "notRegisteredTitle": "Kein Modell analysiert {sourceName}",
-        "notRegisteredMessage": "Kein Audio erreicht {models} an der Audioquelle \"{sourceName}\", sodass keine Erkennungen erzeugt werden. Öffnen Sie die Modellgalerie unter Einstellungen, um den Status zu überprüfen."
+        "notRegisteredMessage": "Kein Audio erreicht {models} an der Audioquelle \"{sourceName}\", sodass keine Erkennungen erzeugt werden. Öffnen Sie System > KI-Modelle, um den Status pro Quelle zu überprüfen, und stellen Sie sicher, dass die Audioquelle verbunden ist und Audio sendet."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1780,7 +1780,10 @@
       "noSources": "Keine Quellen verbunden",
       "primaryFallback": "Primär (Fallback)",
       "sourceNotRunning": "analysiert nicht",
-      "sourceNotRunningTooltip": "Diese Quelle ist dem Modell in den Einstellungen zugewiesen, aber ihre Audiodaten erreichen das Modell nicht, sodass keine Erkennungen erzeugt werden. Öffnen Sie die Modellgalerie unter Einstellungen, um den Status zu überprüfen.",
+      "sourceNotRunningTooltip": "Diese Quelle ist dem Modell in den Einstellungen zugewiesen, aber ihre Audiodaten erreichen das Modell nicht, sodass keine Erkennungen erzeugt werden. Überprüfen Sie, ob die Audioquelle verbunden ist und Audio sendet.",
+      "modelNotAnalyzingTooltip": "Eine oder mehrere diesem Modell zugewiesene Audioquellen senden ihm kein Audio, sodass keine Erkennungen erzeugt werden. Siehe die unten aufgeführten Quellen.",
+      "sourcesDegraded": "{count} von {total} Quellen ausgefallen",
+      "sourcesDegradedTooltip": "Einige, aber nicht alle Audioquellen dieses Modells sind ausgefallen, sodass es weiterhin über die funktionierenden analysiert. Die jeweilige ausgefallene Quelle und wie der Fehler behoben werden kann, sind unten aufgeführt.",
       "notMeasured": "n.v.",
       "unitMs": "ms",
       "unitKhz": "kHz",
@@ -2429,7 +2432,19 @@
           "description": "Erkennungen auf wahrscheinliche Arten in Ihrer geografischen Region beschränken",
           "stationLocation": {
             "label": "Stationsstandort",
-            "helpText": "Stationsstandort, wird zur Abrufung von Wetterdaten und zur Begrenzung von Vogelarten auf die in der Region wahrscheinlichen verwendet."
+            "helpText": "Stationsstandort, wird zur Abrufung von Wetterdaten und zur Begrenzung von Vogelarten auf die in der Region wahrscheinlichen verwendet.",
+            "automaticLocation": "Automatische Standortbestimmung",
+            "useCurrentLocation": "Browserstandort verwenden",
+            "locationHelp": "Füllt die Koordinaten mit dem Standort dieses Browsers aus.",
+            "locating": "Standort wird ermittelt...",
+            "accuracy": "Geschätzte Genauigkeit: innerhalb von {accuracy} m",
+            "locationDetected": "Browserstandort wurde ermittelt.",
+            "geolocationUnsupported": "Dieser Browser unterstützt die Gerätestandortbestimmung nicht. Geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte.",
+            "geolocationRequiresHttps": "Die Browser-Standortbestimmung erfordert HTTPS oder localhost. Geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte.",
+            "geolocationDenied": "Die Standortberechtigung wurde verweigert. Geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte.",
+            "geolocationUnavailable": "Ihr Gerät konnte seinen Standort nicht bestimmen. Geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte.",
+            "geolocationTimedOut": "Die Standortanfrage hat das Zeitlimit überschritten. Versuchen Sie es erneut, geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte.",
+            "geolocationFailed": "Der Gerätestandort konnte nicht bestimmt werden. Geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte."
           },
           "latitude": {
             "label": "Breitengrad",
@@ -2967,6 +2982,7 @@
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
           "saveButton": "Anbieter speichern",
+          "saveWaitingNtfyCheck": "Warten auf den Abschluss der ntfy-Verbindungsprüfung",
           "savingButton": "Speichern...",
           "cancelButton": "Abbrechen",
           "testButton": "Testen",
@@ -3038,6 +3054,7 @@
               "http": "HTTP funktioniert - Server verwendet kein HTTPS"
             },
             "connectionFailed": "Verbindung fehlgeschlagen - Hostname und Serverstatus prüfen",
+            "checkError": "Server konnte nicht überprüft werden - prüfe die Adresse oder lade die Seite neu und versuche es erneut",
             "auth": {
               "label": "Authentifizierung (optional)",
               "username": {
@@ -4414,7 +4431,7 @@
       "dynamicThreshold": {
         "tabLabel": "Gelernt",
         "title": "Gelernte Schwellenwerte",
-        "description": "Diese Seite zeigt dynamische Schwellenwert-Laufzeitdaten. Wenn in Haupteinstellungen → Erkennung aktiviert, werden Schwellenwerte automatisch durch mehrere hochkonfidente Erkennungen angepasst. Hier gezeigte Arten werden an diesem Standort als vorhanden angenommen.",
+        "description": "Diese Seite zeigt dynamische Schwellenwert-Laufzeitdaten. Wenn aktiviert, werden Schwellenwerte automatisch durch mehrere hochkonfidente Erkennungen angepasst. Hier gezeigte Arten werden an diesem Standort als vorhanden angenommen.",
         "stats": {
           "active": "Aktiv",
           "atMinimum": "Am Minimum",
@@ -5202,6 +5219,7 @@
       "notFound": "Benachrichtigung nicht gefunden",
       "hostRequired": "Host-Parameter ist erforderlich",
       "invalidHost": "Ungültiger Host-Parameter",
+      "invalidBody": "Ungültiger Anfragetext",
       "rateLimit": "Zu viele Verbindungsversuche zum Benachrichtigungsstream, bitte warten Sie einen Moment"
     },
     "speciesGuide": {

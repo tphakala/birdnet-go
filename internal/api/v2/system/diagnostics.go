@@ -38,6 +38,27 @@ type diagnosticsStatusResponse struct {
 	LastRun    *time.Time                        `json:"last_run"`
 }
 
+// integrityResulter is implemented by any datastore that can report a cached
+// database integrity result (PRAGMA quick_check) for the Database Integrity
+// health check. Both the legacy *datastore.SQLiteStore and the v2 datastore
+// satisfy it, so the check reads through this interface instead of asserting a
+// concrete datastore type. The old concrete assertion failed on v2 installs,
+// leaving the check stuck at "Unknown" forever (#3939).
+type integrityResulter interface {
+	IntegrityResult() (string, bool)
+}
+
+// integrityCacheRefresher is implemented by a datastore whose integrity result is
+// cached with a TTL and can be refreshed on demand. An explicit diagnostics refresh
+// clears it (subject to a cooldown that coalesces rapid refreshes) so the run
+// reflects current database integrity rather than a result cached up to 24h earlier
+// (#3939 follow-up). Datastores without a TTL-expiring integrity cache (the legacy
+// SQLiteStore refreshes on a schedule and latches corruption via an atomic) do not
+// implement it, and the type assertion simply no-ops.
+type integrityCacheRefresher interface {
+	RefreshIntegrityCache() bool
+}
+
 // RegisterDiagnosticsRoutes initializes health check infrastructure and registers
 // the diagnostics API endpoints, preserving the exact routes and auth middleware
 // from the original initDiagnosticsRoutes.
@@ -192,11 +213,14 @@ func (c *Handler) registerHealthChecks() {
 			if ds == nil {
 				return "", false
 			}
-			sqliteStore, ok := ds.(*datastore.SQLiteStore)
-			if !ok || sqliteStore == nil {
-				return "", false
+			// Read integrity from whichever datastore exposes it (the legacy
+			// SQLiteStore or the v2 datastore) via a consumer-side interface. The
+			// old *datastore.SQLiteStore assertion failed on v2 installs, leaving
+			// the check stuck at "Unknown" (#3939).
+			if ir, ok := ds.(integrityResulter); ok {
+				return ir.IntegrityResult()
 			}
-			return sqliteStore.IntegrityResult()
+			return "", false
 		}),
 
 		// Network checks
@@ -452,6 +476,7 @@ func (c *Handler) buildStreamHealthProvider() func() []checks.StreamHealthInfo {
 				Duplicates:         sh.Duplicates,
 				Malformed:          sh.Malformed,
 				SSRCResets:         sh.SSRCResets,
+				SourceFiltered:     sh.SourceFiltered,
 			})
 		}
 		return infos
@@ -674,6 +699,24 @@ func (c *Handler) RunDiagnostics(ctx echo.Context) error {
 		return c.HandleError(ctx, err, err.Error(), http.StatusBadRequest)
 	}
 
+	// An explicit refresh forces a fresh database integrity check. The integrity
+	// result is cached for up to 24h so the passive status page never re-runs the
+	// expensive PRAGMA quick_check on the single pinned SQLite connection; opt in
+	// here (refresh_integrity=true) so troubleshooting an unrelated subsystem does
+	// not trigger a multi-minute write stall, while a deliberate integrity refresh
+	// still reflects the current on-disk state (#3939 follow-up). A present but
+	// unparseable value is a client error (mirroring the window param); an absent
+	// value defaults to no refresh.
+	refresh := false
+	if raw := ctx.QueryParam("refresh_integrity"); raw != "" {
+		parsed, perr := strconv.ParseBool(raw)
+		if perr != nil {
+			return c.HandleError(ctx, perr, "invalid refresh_integrity: expected a boolean", http.StatusBadRequest)
+		}
+		refresh = parsed
+	}
+	refreshIntegrityCache(c.DS, refresh)
+
 	id := uuid.New().String()
 	startedAt := time.Now()
 
@@ -682,6 +725,21 @@ func (c *Handler) RunDiagnostics(ctx echo.Context) error {
 	c.healthReports.Save(report)
 
 	return ctx.JSON(http.StatusOK, report)
+}
+
+// refreshIntegrityCache asks the datastore to refresh its cached integrity result
+// when the caller opted in, so the diagnostics run below reflects current database
+// integrity. The datastore coalesces rapid forced refreshes internally (see
+// RefreshIntegrityCache), so this cannot be used to hammer the expensive scan. A
+// datastore that does not cache an integrity result (or a nil one) is a no-op.
+// Split from RunDiagnostics so the opt-in wiring is unit-testable.
+func refreshIntegrityCache(ds datastore.Interface, refresh bool) {
+	if !refresh {
+		return
+	}
+	if r, ok := ds.(integrityCacheRefresher); ok {
+		r.RefreshIntegrityCache()
+	}
 }
 
 // GetDiagnosticsReport retrieves a stored diagnostics report by ID.

@@ -473,7 +473,7 @@
         "unreadableMessage": "A(z) {modelName} modellhez beállított modellfájl létezik, de nem sikerült beolvasni, ezért helyette a(z) {modelPath} helyen telepített modell van használatban. A konfigurációja változatlan maradt. Ellenőrizze a fájl jogosultságait és azt, hogy a tárolója csatolva van-e.",
         "builtinMessage": "A(z) {modelName} modellhez beállított modellfájl nem található a lemezen, és nem érhető el telepített modell a helyettesítésére, ezért helyette a beépített modell van használatban. A konfigurációja változatlan maradt.",
         "notRegisteredTitle": "Egyetlen modell sem elemzi a következőt: {sourceName}",
-        "notRegisteredMessage": "Nem jut el hang a(z) {models} számára a(z) \"{sourceName}\" hangforráson, így nem jönnek létre detektálások. Nyissa meg a modellgalériát a Beállításokban az állapot ellenőrzéséhez."
+        "notRegisteredMessage": "Nem jut el hang a(z) {models} számára a(z) \"{sourceName}\" hangforráson, így nem jönnek létre detektálások. Nyissa meg a Rendszer > AI Modellek menüpontot a forrásonkénti állapot ellenőrzéséhez, és győződjön meg róla, hogy a hangforrás csatlakoztatva van és hangot küld."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1780,7 +1780,10 @@
       "noSources": "Nincs csatlakoztatott hangforrás",
       "primaryFallback": "elsődleges (tartalék)",
       "sourceNotRunning": "nem elemzi",
-      "sourceNotRunningTooltip": "Ez a forrás hozzá van rendelve a modellhez a beállításokban, de a hangja nem jut el a modellhez, így nem készít észleléseket. Nyissa meg a modellgalériát a Beállításokban az állapotának ellenőrzéséhez.",
+      "sourceNotRunningTooltip": "Ez a forrás hozzá van rendelve a modellhez a beállításokban, de a hangja nem jut el a modellhez, így nem készít észleléseket. Ellenőrizze, hogy a hangforrás csatlakoztatva van-e és hangot küld-e.",
+      "modelNotAnalyzingTooltip": "Egy vagy több, ehhez a modellhez hozzárendelt hangforrás nem küld neki hangot, így nem készít észleléseket. Lásd az alább felsorolt forrásokat.",
+      "sourcesDegraded": "{count}/{total} forrás leállt",
+      "sourcesDegradedTooltip": "A modell hangforrásai közül néhány leállt, de nem mindegyik, így a működő forrásokon keresztül továbbra is elemez. A konkrét leállt forrás és a hiba elhárításának módja az alábbiakban van felsorolva.",
       "notMeasured": "n/a",
       "unitMs": "ms",
       "unitKhz": "kHz",
@@ -2429,7 +2432,19 @@
           "description": "A detektálást a földrajzi régióban valószínű fajokra korlátozza",
           "stationLocation": {
             "label": "Állomás helyszín",
-            "helpText": "Állomás helyszín, az időjárási adatokhoz és a madárfajoknak a régióban való valószínűségére való korlátozáshoz használva."
+            "helpText": "Állomás helyszín, az időjárási adatokhoz és a madárfajoknak a régióban való valószínűségére való korlátozáshoz használva.",
+            "automaticLocation": "Automatikus helymeghatározás",
+            "useCurrentLocation": "A böngésző helyének használata",
+            "locationHelp": "Kitölti a koordinátákat a böngésző helye alapján.",
+            "locating": "Helymeghatározás...",
+            "accuracy": "Becsült pontosság: {accuracy} m-en belül",
+            "locationDetected": "A böngésző helye meghatározva.",
+            "geolocationUnsupported": "Ez a böngésző nem támogatja az eszköz helymeghatározását. Adja meg kézzel a koordinátákat, vagy használja a térképet.",
+            "geolocationRequiresHttps": "A böngésző helymeghatározásához HTTPS vagy localhost szükséges. Adja meg kézzel a koordinátákat, vagy használja a térképet.",
+            "geolocationDenied": "A helyhozzáférési engedély meg lett tagadva. Adja meg kézzel a koordinátákat, vagy használja a térképet.",
+            "geolocationUnavailable": "Az eszköz nem tudta meghatározni a helyét. Adja meg kézzel a koordinátákat, vagy használja a térképet.",
+            "geolocationTimedOut": "A helymeghatározási kérés túllépte az időkorlátot. Próbálja újra, adja meg kézzel a koordinátákat, vagy használja a térképet.",
+            "geolocationFailed": "Nem sikerült meghatározni az eszköz helyét. Adja meg kézzel a koordinátákat, vagy használja a térképet."
           },
           "latitude": {
             "label": "Szélesség",
@@ -2967,6 +2982,7 @@
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
           "saveButton": "Szolgáltató mentése",
+          "saveWaitingNtfyCheck": "Várakozás az ntfy-kapcsolat ellenőrzésének befejezésére",
           "savingButton": "Mentés...",
           "cancelButton": "Mégse",
           "testButton": "Teszt",
@@ -3038,6 +3054,7 @@
               "http": "A HTTP működik - a szerver nem HTTPS-t használ"
             },
             "connectionFailed": "Nem sikerült csatlakozni - ellenőrizze a hostnevet és a szerver állapotát",
+            "checkError": "A szervert nem sikerült ellenőrizni - ellenőrizd a címet, vagy töltsd újra az oldalt, és próbáld újra",
             "auth": {
               "label": "Hitelesítés (opcionális)",
               "username": {
@@ -4414,7 +4431,7 @@
       "dynamicThreshold": {
         "tabLabel": "Tanult",
         "title": "Tanult küszöbértékek",
-        "description": "Ez az oldal a Dinamikus küszöbérték futásidejű adatait mutatja. Ha engedélyezve van a Fő beállítások → Detektálás menüpontban, a küszöbértékek több magas megbízhatóságú detektálás alapján automatikusan kerülnek beállításra. Az itt látható fajok feltételezhetően léteznek ezen a helyszínen.",
+        "description": "Ez az oldal a Dinamikus küszöbérték futásidejű adatait mutatja. Ha engedélyezve van, a küszöbértékek több magas megbízhatóságú detektálás alapján automatikusan kerülnek beállításra. Az itt látható fajok feltételezhetően léteznek ezen a helyszínen.",
         "stats": {
           "active": "Aktív",
           "atMinimum": "Minimumon",
@@ -5202,6 +5219,7 @@
       "notFound": "Az értesítés nem található",
       "hostRequired": "A host paraméter kötelező",
       "invalidHost": "Érvénytelen host paraméter",
+      "invalidBody": "Érvénytelen kéréstörzs",
       "rateLimit": "Túl sok értesítési stream csatlakozási kísérlet, kérjük, várjon, mielőtt újra próbálkozik"
     },
     "speciesGuide": {

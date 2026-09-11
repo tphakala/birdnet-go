@@ -158,6 +158,12 @@ Performance Optimizations:
     tooltipVisible = false;
   }
 
+  // Shared class for the collapsed-sidebar footer auth buttons. Login and logout are
+  // otherwise identical, so the full Tailwind arbitrary-value class lives in one named
+  // literal; the per-button collapsed state (justify-center) is composed via cn().
+  const authFooterButtonClass =
+    'flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-[var(--color-base-content)]/90 hover:text-[var(--color-base-content)] hover:bg-[var(--color-base-content)]/5 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-base-100)]';
+
   function toggleFlyout(sectionId: string) {
     activeFlyout = activeFlyout === sectionId ? null : sectionId;
   }
@@ -729,13 +735,13 @@ Performance Optimizations:
         {#if accessAllowed}
           <div class="relative">
             <button
+              type="button"
               onclick={handleLogout}
               onmouseenter={e => isCollapsed && showTooltip(e, t('auth.logout'))}
               onmouseleave={hideTooltip}
-              class={cn(
-                'flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-[var(--color-base-content)]/90 hover:text-[var(--color-base-content)] hover:bg-[var(--color-base-content)]/5 transition-colors duration-150',
-                isCollapsed && 'justify-center'
-              )}
+              onfocus={e => isCollapsed && showTooltip(e, t('auth.logout'))}
+              onblur={hideTooltip}
+              class={cn(authFooterButtonClass, isCollapsed && 'justify-center')}
               aria-label={t('auth.logout')}
             >
               <LogOut class="size-4" />
@@ -747,13 +753,13 @@ Performance Optimizations:
         {:else}
           <div class="relative">
             <button
+              type="button"
               onclick={handleLogin}
-              onmouseenter={e => isCollapsed && showTooltip(e, t('auth.login'))}
+              onmouseenter={e => isCollapsed && showTooltip(e, t('auth.openLoginModal'))}
               onmouseleave={hideTooltip}
-              class={cn(
-                'flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-[var(--color-base-content)]/90 hover:text-[var(--color-base-content)] hover:bg-[var(--color-base-content)]/5 transition-colors duration-150',
-                isCollapsed && 'justify-center'
-              )}
+              onfocus={e => isCollapsed && showTooltip(e, t('auth.openLoginModal'))}
+              onblur={hideTooltip}
+              class={cn(authFooterButtonClass, isCollapsed && 'justify-center')}
               aria-label={t('auth.openLoginModal')}
             >
               <LogIn class="size-4" />

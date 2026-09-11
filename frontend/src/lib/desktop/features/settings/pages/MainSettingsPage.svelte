@@ -34,6 +34,7 @@
   import type { Stage } from '$lib/desktop/components/ui/MultiStageOperation.types';
   import TestSuccessNote from '$lib/desktop/components/ui/TestSuccessNote.svelte';
   import SettingsButton from '$lib/desktop/features/settings/components/SettingsButton.svelte';
+  import CurrentLocationButton from '$lib/desktop/features/settings/components/CurrentLocationButton.svelte';
   import {
     settingsStore,
     settingsActions,
@@ -151,10 +152,12 @@
       {
         latitude: store.originalData.birdnet?.latitude,
         longitude: store.originalData.birdnet?.longitude,
+        locationConfigured: store.originalData.birdnet?.locationConfigured,
       },
       {
         latitude: store.formData.birdnet?.latitude,
         longitude: store.formData.birdnet?.longitude,
+        locationConfigured: store.formData.birdnet?.locationConfigured,
       }
     ) || hasSettingsChanged(store.originalData.realtime?.weather, store.formData.realtime?.weather)
   );
@@ -530,13 +533,31 @@
     }
   }
 
-  // Centralized location update: marks locationConfigured and pushes coordinates to the store
-  function updateLocationSettings(lat: number, lng: number) {
+  // Every user-initiated coordinate update advances this version, including a
+  // map action whose rounded values equal the current coordinates. Track raw
+  // input separately so pending browser results also cannot overwrite text
+  // before a NumberField change/blur commit occurs.
+  let coordinateIntentVersion = $state(0);
+
+  function applyLocationSettings(lat: number, lng: number) {
     settingsActions.updateSection('birdnet', {
       latitude: lat,
       longitude: lng,
       locationConfigured: true,
     });
+  }
+
+  function updateLocationSettings(lat: number, lng: number) {
+    advanceCoordinateIntentVersion();
+    applyLocationSettings(lat, lng);
+  }
+
+  function updateBrowserLocation(lat: number, lng: number) {
+    applyLocationSettings(lat, lng);
+  }
+
+  function advanceCoordinateIntentVersion() {
+    coordinateIntentVersion += 1;
   }
 
   function updateMarker(lat: number, lng: number) {
@@ -1039,14 +1060,19 @@
       originalData={{
         latitude: store.originalData.birdnet?.latitude,
         longitude: store.originalData.birdnet?.longitude,
+        locationConfigured: store.originalData.birdnet?.locationConfigured,
       }}
       currentData={{
         latitude: settings.birdnet.latitude,
         longitude: settings.birdnet.longitude,
+        locationConfigured: settings.birdnet.locationConfigured,
       }}
     >
       <!-- Coordinates -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+      <div
+        class="mb-4 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3"
+        oninput={advanceCoordinateIntentVersion}
+      >
         <NumberField
           label={t('settings.main.sections.rangeFilter.latitude.label')}
           value={settings.birdnet.latitude}
@@ -1068,6 +1094,16 @@
           helpText={t('settings.main.sections.rangeFilter.longitude.helpText')}
           disabled={store.isLoading || store.isSaving}
         />
+
+        <div class="md:col-span-2 xl:col-span-1 xl:border-l xl:border-[var(--border-100)] xl:pl-6">
+          <CurrentLocationButton
+            latitude={settings.birdnet.latitude}
+            longitude={settings.birdnet.longitude}
+            {coordinateIntentVersion}
+            onLocation={updateBrowserLocation}
+            disabled={store.isLoading || store.isSaving}
+          />
+        </div>
       </div>
 
       <!-- Map -->
@@ -1548,7 +1584,7 @@
 
 <!-- Main Content -->
 <main class="settings-page-content" aria-label="Main settings configuration">
-  <SettingsTabs {tabs} bind:activeTab />
+  <SettingsTabs {tabs} bind:activeTab onReset={advanceCoordinateIntentVersion} />
 </main>
 
 <!-- Map Modal -->

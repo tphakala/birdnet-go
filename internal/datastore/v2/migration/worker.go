@@ -622,7 +622,8 @@ func (w *Worker) completeValidation(_ context.Context) runAction {
 // Dirty IDs are records that failed migration previously and are the most likely
 // cause of count mismatches. Iterates over batches until all dirty IDs are
 // processed or no progress is made (to avoid infinite loops on persistent errors).
-// Returns the number of records successfully migrated.
+// Returns the number of dirty IDs reconciled (migrated from legacy, or removed from v2 when
+// the legacy row was deleted).
 // Returns ctx.Err() if the context is cancelled during processing.
 func (w *Worker) processDirtyIDs(ctx context.Context) (int64, error) {
 	var totalCaught int64
@@ -655,8 +656,9 @@ func (w *Worker) processDirtyIDs(ctx context.Context) (int64, error) {
 	return totalCaught, nil
 }
 
-// processDirtyIDsBatch processes a single batch of dirty IDs, migrating each
-// from legacy to v2. Returns the count of successfully migrated records.
+// processDirtyIDsBatch processes a single batch of dirty IDs, migrating each from legacy to
+// v2. Returns the count of dirty IDs reconciled in this batch: records migrated, plus ghosts
+// removed from v2 when their legacy row was deleted (both count as forward progress).
 func (w *Worker) processDirtyIDsBatch(ctx context.Context, dirtyIDs []uint) (int64, error) {
 	var caught int64
 	for _, dirtyID := range dirtyIDs {
@@ -685,13 +687,22 @@ func (w *Worker) processDirtyIDsBatch(ctx context.Context, dirtyIDs []uint) (int
 			continue
 		}
 		if len(results) == 0 || results[0].ID != dirtyID {
-			w.logger.Warn("dirty ID not found in legacy, removing",
-				logger.Uint64("id", uint64(dirtyID)))
-			if removeErr := w.stateManager.RemoveDirtyID(dirtyID); removeErr != nil {
-				w.logger.Warn("failed to remove stale dirty ID",
+			// The legacy row for this dirty ID is gone, so the detection was deleted and any
+			// surviving v2 row is an orphan that would resurrect after v2 promotion (Forgejo
+			// #1581). Reconcile the v2 side and clear the marker via the same shared helper the
+			// runtime reconciler (DualWriteRepository.reconcileDirtyIDs) uses, so the two paths
+			// cannot drift. On any error other than not-found/locked, leave the id dirty for retry.
+			if recErr := repository.ReconcileDeletedGhost(ctx, w.v2Detection, w.stateManager, dirtyID); recErr != nil {
+				w.logger.Warn("failed to reconcile deleted dirty ID in v2, will retry",
 					logger.Uint64("id", uint64(dirtyID)),
-					logger.Error(removeErr))
+					logger.Error(recErr))
+				continue
 			}
+			// Count the reconciled ghost as progress so processDirtyIDs does not stop early
+			// when a batch contained only deletions.
+			w.logger.Debug("dirty ID missing from legacy, reconciled deletion in v2",
+				logger.Uint64("id", uint64(dirtyID)))
+			caught++
 			continue
 		}
 

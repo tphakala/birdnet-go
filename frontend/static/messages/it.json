@@ -473,7 +473,7 @@
         "unreadableMessage": "Il file del modello configurato per {modelName} esiste ma non è stato possibile leggerlo, quindi viene utilizzato il modello installato in {modelPath}. La tua configurazione non è stata modificata. Controlla i permessi del file e che il suo spazio di archiviazione sia montato.",
         "builtinMessage": "Il file del modello configurato per {modelName} non è stato trovato sul disco e nessun modello installato è disponibile per sostituirlo, quindi viene utilizzato il modello integrato. La tua configurazione non è stata modificata.",
         "notRegisteredTitle": "Nessun modello sta analizzando {sourceName}",
-        "notRegisteredMessage": "Nessun audio raggiunge {models} sulla sorgente audio \"{sourceName}\", quindi non vengono prodotti rilevamenti. Apri la galleria dei modelli in Impostazioni per verificare lo stato."
+        "notRegisteredMessage": "Nessun audio raggiunge {models} sulla sorgente audio \"{sourceName}\", quindi non vengono prodotti rilevamenti. Apri Sistema > Modelli IA per verificarne lo stato per sorgente e confermare che la sorgente audio sia connessa e invii audio."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -1780,7 +1780,10 @@
       "noSources": "Nessuna sorgente collegata",
       "primaryFallback": "principale (fallback)",
       "sourceNotRunning": "non sta analizzando",
-      "sourceNotRunningTooltip": "Questa sorgente è assegnata al modello nelle impostazioni, ma il suo audio non raggiunge il modello, quindi non produce rilevamenti. Apri la galleria dei modelli in Impostazioni per verificarne lo stato.",
+      "sourceNotRunningTooltip": "Questa sorgente è assegnata al modello nelle impostazioni, ma il suo audio non raggiunge il modello, quindi non produce rilevamenti. Verifica che la sorgente audio sia connessa e invii audio.",
+      "modelNotAnalyzingTooltip": "Una o più sorgenti audio assegnate a questo modello non gli inviano audio, quindi non produce rilevamenti. Vedi le sorgenti elencate qui sotto.",
+      "sourcesDegraded": "{count} su {total} sorgenti non disponibili",
+      "sourcesDegradedTooltip": "Alcune sorgenti audio di questo modello, ma non tutte, non sono disponibili, quindi continua ad analizzare tramite quelle funzionanti. La sorgente non disponibile specifica e le indicazioni per risolvere il problema sono elencate qui sotto.",
       "notMeasured": "n/d",
       "unitMs": "ms",
       "unitKhz": "kHz",
@@ -2429,7 +2432,19 @@
           "description": "Limita il rilevamento alle specie probabili nella tua regione geografica",
           "stationLocation": {
             "label": "Posizione Stazione",
-            "helpText": "Posizione della stazione, usata per dati meteo e per limitare le specie di uccelli a quelle probabili nella regione."
+            "helpText": "Posizione della stazione, usata per dati meteo e per limitare le specie di uccelli a quelle probabili nella regione.",
+            "automaticLocation": "Posizione automatica",
+            "useCurrentLocation": "Usa la posizione del browser",
+            "locationHelp": "Compila le coordinate usando la posizione di questo browser.",
+            "locating": "Localizzazione in corso...",
+            "accuracy": "Precisione stimata: entro {accuracy} m",
+            "locationDetected": "Posizione del browser rilevata.",
+            "geolocationUnsupported": "Questo browser non supporta la posizione del dispositivo. Inserisci le coordinate manualmente o usa la mappa.",
+            "geolocationRequiresHttps": "La posizione del browser richiede HTTPS o localhost. Inserisci le coordinate manualmente o usa la mappa.",
+            "geolocationDenied": "L'autorizzazione alla posizione è stata negata. Inserisci le coordinate manualmente o usa la mappa.",
+            "geolocationUnavailable": "Il dispositivo non ha potuto determinare la propria posizione. Inserisci le coordinate manualmente o usa la mappa.",
+            "geolocationTimedOut": "La richiesta di posizione è scaduta. Riprova, inserisci le coordinate manualmente o usa la mappa.",
+            "geolocationFailed": "Impossibile determinare la posizione del dispositivo. Inserisci le coordinate manualmente o usa la mappa."
           },
           "latitude": {
             "label": "Latitudine",
@@ -2967,6 +2982,7 @@
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
           "saveButton": "Salva Fornitore",
+          "saveWaitingNtfyCheck": "In attesa del completamento del controllo della connessione ntfy",
           "savingButton": "Salvataggio...",
           "cancelButton": "Annulla",
           "testButton": "Test",
@@ -3038,6 +3054,7 @@
               "http": "HTTP funziona - il server non usa HTTPS"
             },
             "connectionFailed": "Impossibile connettersi - controlla hostname e stato del server",
+            "checkError": "Impossibile verificare il server: controlla l'indirizzo oppure ricarica la pagina e riprova",
             "auth": {
               "label": "Autenticazione (opzionale)",
               "username": {
@@ -4414,7 +4431,7 @@
       "dynamicThreshold": {
         "tabLabel": "Appreso",
         "title": "Soglie Apprese",
-        "description": "Questa pagina mostra dati runtime Soglia Dinamica. Quando abilitata in Impostazioni Principali → Rilevamento, soglie vengono regolate automaticamente da rilevamenti multipli alta confidenza. Specie mostrate qui si assume esistano in questa posizione.",
+        "description": "Questa pagina mostra dati runtime Soglia Dinamica. Quando abilitata, soglie vengono regolate automaticamente da rilevamenti multipli alta confidenza. Specie mostrate qui si assume esistano in questa posizione.",
         "stats": {
           "active": "Attivo",
           "atMinimum": "Al Minimo",
@@ -5202,6 +5219,7 @@
       "notFound": "Notifica non trovata",
       "hostRequired": "Il parametro host è obbligatorio",
       "invalidHost": "Parametro host non valido",
+      "invalidBody": "Corpo della richiesta non valido",
       "rateLimit": "Troppi tentativi di connessione al flusso di notifiche, attendere prima di riprovare"
     },
     "speciesGuide": {
