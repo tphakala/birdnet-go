@@ -933,7 +933,7 @@
         },
         "type": {
           "type": "string",
-          "description": "audio file type, wav, mp3 or flac"
+          "description": "audio file type, wav, flac, mp3, aac or opus"
         },
         "bitrate": {
           "type": "string",
