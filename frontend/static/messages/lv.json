@@ -3293,7 +3293,8 @@
             "none": "Nav",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3314,6 +3315,16 @@
             "helpText": "Izvēlieties mērvienības temperatūrai un vēja ātrumam (m = metriskā, e = imperiālā, h = Apvienotās Karalistes hibrīda)."
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "Pirate Weather API atslēga",
+            "helpText": "Ievadiet savu Pirate Weather API atslēgu. Nepieciešama laikapstākļu datiem."
+          },
+          "endpoint": {
+            "label": "API galapunkts",
+            "helpText": "Pārrakstīt noklusējuma Pirate Weather API galapunktu, ja nepieciešams. Noklusējums ir https://api.pirateweather.net/forecast, ja atstāts tukšs."
+          }
+        },
         "notes": {
           "none": "Laikapstākļu dati netiks iegūti.",
           "yrno": {
@@ -3321,7 +3332,8 @@
             "freeService": "Yr ir bezmaksas laikapstākļu datu pakalpojums. Plašākai informācijai apmeklējiet <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "OpenWeather izmantošanai nepieciešama API atslēga. Reģistrējieties bezmaksas API atslēgai <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Nepieciešama Weather Underground API atslēga un derīgs PWS stacijas ID. Skatiet <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> detaļām."
+          "wunderground": "Nepieciešama Weather Underground API atslēga un derīgs PWS stacijas ID. Skatiet <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> detaļām.",
+          "pirateweather": "Pirate Weather izmantošanai nepieciešama API atslēga, reģistrējieties vietnē <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
         },
         "apiKey": {
           "label": "API atslēga",
@@ -5103,6 +5115,7 @@
       "birdweatherClientFailed": "Neizdevās izveidot BirdWeather klientu",
       "noWeatherProvider": "Nav izvēlēts laikapstākļu pakalpojuma sniedzējs",
       "openWeatherKeyRequired": "Nepieciešama OpenWeather API atslēga",
+      "pirateWeatherKeyRequired": "Nepieciešama Pirate Weather API atslēga",
       "processorUnavailable": "Procesors nav pieejams",
       "discoveryFailed": "Neizdevās aktivizēt Home Assistant atklāšanu"
     },

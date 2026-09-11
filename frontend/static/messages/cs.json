@@ -3293,7 +3293,8 @@
             "none": "Žádný",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3314,6 +3315,16 @@
             "helpText": "Vyberte jednotky pro teplotu a rychlost větru (m = metrické, e = imperiální, h = UK hybridní)."
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "API klíč Pirate Weather",
+            "helpText": "Zadejte svůj API klíč Pirate Weather. Vyžaduje se pro data o počasí."
+          },
+          "endpoint": {
+            "label": "API endpoint",
+            "helpText": "V případě potřeby přepište výchozí endpoint API Pirate Weather. Pokud zůstane prázdný, použije se ve výchozím nastavení https://api.pirateweather.net/forecast."
+          }
+        },
         "notes": {
           "none": "Nebudou získávána žádná data o počasí.",
           "yrno": {
@@ -3321,7 +3332,8 @@
             "freeService": "Yr je bezplatná služba dat o počasí. Pro více informací navštivte <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "Použití OpenWeather vyžaduje API klíč, zaregistrujte se pro bezplatný API klíč na <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Vyžaduje API klíč Weather Underground a platné ID stanice PWS. Podrobnosti najdete na <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a>."
+          "wunderground": "Vyžaduje API klíč Weather Underground a platné ID stanice PWS. Podrobnosti najdete na <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a>.",
+          "pirateweather": "Použití Pirate Weather vyžaduje API klíč, zaregistrujte se na <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
         },
         "apiKey": {
           "label": "API klíč",
@@ -5103,6 +5115,7 @@
       "birdweatherClientFailed": "BirdWeather klienta se nepodařilo vytvořit",
       "noWeatherProvider": "Není vybrán žádný poskytovatel počasí",
       "openWeatherKeyRequired": "API klíč OpenWeather je povinný",
+      "pirateWeatherKeyRequired": "Je vyžadován API klíč Pirate Weather",
       "processorUnavailable": "Procesor není k dispozici",
       "discoveryFailed": "Objevování zařízení Home Assistant se nepodařilo spustit"
     },

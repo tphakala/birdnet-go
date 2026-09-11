@@ -1527,6 +1527,21 @@
       "type": "object",
       "description": "PerchConfig holds configuration for the Google Perch v2 model."
     },
+    "PirateWeatherSettings": {
+      "properties": {
+        "apikey": {
+          "type": "string",
+          "description": "Pirate Weather API key"
+        },
+        "endpoint": {
+          "type": "string",
+          "description": "Pirate Weather API endpoint"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "PirateWeatherSettings contains settings for Pirate Weather integration."
+    },
     "PrivacyFilterSettings": {
       "properties": {
         "debug": {
@@ -2729,7 +2744,7 @@
       "properties": {
         "provider": {
           "type": "string",
-          "description": "\"none\", \"yrno\", \"openweather\", or \"wunderground\""
+          "description": "\"none\", \"yrno\", \"openweather\", \"wunderground\", or \"pirateweather\""
         },
         "pollinterval": {
           "type": "integer",
@@ -2746,6 +2761,10 @@
         "wunderground": {
           "$ref": "#/$defs/WundergroundSettings",
           "description": "WeatherUnderground integration settings"
+        },
+        "pirateweather": {
+          "$ref": "#/$defs/PirateWeatherSettings",
+          "description": "Pirate Weather integration settings"
         }
       },
       "additionalProperties": false,

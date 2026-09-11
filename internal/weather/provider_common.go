@@ -3,6 +3,7 @@ package weather
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -167,6 +168,50 @@ func sleepWithContext(ctx context.Context, d time.Duration) error {
 // surface sentinel errors (e.g. ErrWeatherAuthFailed, ErrWeatherDataNotModified)
 // that errors.Is must still match upstream. The handler owns closing resp.Body.
 type weatherResponseHandler func(resp *http.Response, attemptLog logger.Logger, isLastAttempt bool) (body []byte, retry bool, err error)
+
+// standardHandleResponse builds a weatherResponseHandler for providers whose
+// response classification needs nothing beyond the provider name: HTTP 401
+// maps to the auth-failed sentinel without retrying, any other non-200
+// retries until the final attempt, and 200 returns the body. Shared by
+// OpenWeather and Pirate Weather (Wunderground has its own richer error-body
+// parsing, so it does not use this).
+func standardHandleResponse(provider string) weatherResponseHandler {
+	return func(resp *http.Response, attemptLog logger.Logger, isLastAttempt bool) (body []byte, retry bool, err error) {
+		// Close the body on every return path; the error-status branches still drain
+		// it first so the shared keep-alive connection can be reused. This also keeps
+		// the body closed if a read panics, matching WundergroundProvider.executeRequest.
+		defer func() { _ = resp.Body.Close() }()
+
+		// HTTP 401/403: authentication failed — don't retry, return sentinel.
+		// 403 is included alongside 401 since some providers (e.g. an
+		// over-quota or access-restricted key) signal auth problems that way.
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			_, _ = io.ReadAll(resp.Body)
+			attemptLog.Error("Weather API authentication failed — check your API key")
+			return nil, false, ErrWeatherAuthFailed
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			_, _ = io.ReadAll(resp.Body)
+			attemptLog.Warn("Received non-OK status code", logger.Int("status_code", resp.StatusCode))
+			if isLastAttempt {
+				return nil, false, newWeatherErrorWithRetries(
+					fmt.Errorf("received non-200 response (%d)", resp.StatusCode),
+					errors.CategoryNetwork,
+					"weather_api_response",
+					provider,
+				)
+			}
+			return nil, true, nil
+		}
+
+		body, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, false, newWeatherError(err, errors.CategoryNetwork, "read_response_body", provider)
+		}
+		return body, false, nil
+	}
+}
 
 // executeWeatherRequest runs req through up to MaxRetries attempts with the
 // injected client, delegating per-status handling to handle. It centralizes the

@@ -3293,7 +3293,8 @@
             "none": "Ingen",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3314,6 +3315,16 @@
             "helpText": "Välj enheter för temperatur och vindhastighet (m = Metrisk, e = Imperial, h = UK Hybrid)."
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "Pirate Weather API-nyckel",
+            "helpText": "Ange din Pirate Weather API-nyckel. Krävs för väderdata."
+          },
+          "endpoint": {
+            "label": "API-slutpunkt",
+            "helpText": "Åsidosätt standardslutpunkten för Pirate Weather API vid behov. Använder https://api.pirateweather.net/forecast som standard om det lämnas tomt."
+          }
+        },
         "notes": {
           "none": "Ingen väderdata kommer att hämtas.",
           "yrno": {
@@ -3321,7 +3332,8 @@
             "freeService": "Yr är en gratis väderdatatjänst. För mer information, besök <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "Användning av OpenWeather kräver en API-nyckel, registrera dig för en gratis API-nyckel på <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Kräver en Weather Underground API-nyckel och ett giltigt PWS-stations-ID. Se <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> för detaljer."
+          "wunderground": "Kräver en Weather Underground API-nyckel och ett giltigt PWS-stations-ID. Se <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> för detaljer.",
+          "pirateweather": "Användning av Pirate Weather kräver en API-nyckel, registrera dig på <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
         },
         "apiKey": {
           "label": "API-nyckel",
@@ -5103,6 +5115,7 @@
       "birdweatherClientFailed": "Kunde inte skapa BirdWeather-klient",
       "noWeatherProvider": "Ingen väderleverantör vald",
       "openWeatherKeyRequired": "OpenWeather API-nyckel krävs",
+      "pirateWeatherKeyRequired": "Pirate Weather API-nyckel krävs",
       "processorUnavailable": "Processor inte tillgänglig",
       "discoveryFailed": "Kunde inte utlösa Home Assistant-upptäckt"
     },

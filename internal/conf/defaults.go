@@ -269,6 +269,10 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.weather.wunderground.endpoint", "https://api.weather.com/v2/pws/observations/current")
 	viper.SetDefault("realtime.weather.wunderground.units", "m") // m=metric, e=imperial, h=UK hybrid
 
+	// Pirate Weather specific configuration
+	viper.SetDefault("realtime.weather.pirateweather.apikey", "")
+	viper.SetDefault("realtime.weather.pirateweather.endpoint", "https://api.pirateweather.net/forecast")
+
 	// RTSP configuration
 	viper.SetDefault("realtime.rtsp.urls", []string{})
 	viper.SetDefault("realtime.rtsp.transport", DefaultTransport)
