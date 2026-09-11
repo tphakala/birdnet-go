@@ -31,13 +31,13 @@ var _ inference.Classifier = (*rollbackFakeClassifier)(nil)
 // 0% unit-covered (NewOrchestrator skips without a real model, and the primary-swap
 // tests exercise the orchestrator==nil path). No native model is needed:
 //
-//   - The two early-failure subtests inject a failure at the FIRST fallible step (a
-//     nonexistent TaxonomyPath makes LoadTaxonomyData fail), which runs before a new
-//     backend is installed. They exercise the rollback of the state mutated up front,
-//     each assertion genuinely contingent on rollback: ModelInfo (reassigned by the
-//     switch), TaxonomyMap (set to nil by the failed multi-return load), and Settings
-//     (swapped to a clone at entry). Both entry points are covered: the variant-swap
-//     path (allowPathChange=true) and the settings-reload path (allowPathChange=false).
+//   - The two early-failure subtests inject a failure at the first fallible step (an
+//     unreadable external LabelPath makes loadLabels fail), which runs after the
+//     identity switch but before a new backend is installed. They exercise the
+//     rollback of the state mutated up front, each assertion genuinely contingent on
+//     rollback: ModelInfo (reassigned by the switch) and Settings (swapped to a clone
+//     at entry). Both entry points are covered: the variant-swap path
+//     (allowPathChange=true) and the settings-reload path (allowPathChange=false).
 //   - The post-init subtest uses the reloadInitFn seam to install a NEW backend and
 //     republish the runtime triplet + modelVersion (as the real initializeModel does),
 //     then fail. This is the only way to reach the rollback branch that tears down the
@@ -54,48 +54,42 @@ func TestReloadModelInternal_RollbackRestoresPreviousModel(t *testing.T) {
 	)
 
 	// newServingBirdNET builds a struct-literal BirdNET that models a live,
-	// previously-serving primary: a fake classifier, a distinguishable ModelInfo,
-	// a published identity + runtime triplet, and a sentinel taxonomy map. The
-	// reload it drives always fails at the taxonomy step (badTaxonomyPath), so the
-	// caller can assert every snapshot field was rolled back.
-	newServingBirdNET := func(t *testing.T, oldInfo ModelInfo) (*BirdNET, *rollbackFakeClassifier, *conf.Settings, TaxonomyMap) {
+	// previously-serving primary: a fake classifier, a distinguishable ModelInfo, and
+	// a published identity + runtime triplet. Each caller sets an unreadable external
+	// LabelPath in the (conftest-global) settings so the reload always fails at the
+	// load-labels step, letting the caller assert every snapshot field was rolled back.
+	newServingBirdNET := func(t *testing.T, oldInfo ModelInfo) (*BirdNET, *rollbackFakeClassifier, *conf.Settings) {
 		t.Helper()
 		fake := &rollbackFakeClassifier{}
 		// A distinct pointer from both the global settings and the reload's internal
-		// clone, so restoration can be asserted by pointer identity.
+		// clone, so restoration can be asserted by pointer identity. It inherits the
+		// caller's unreadable LabelPath, which is what makes the reload fail.
 		oldSettings := conf.CloneSettings(conftest.GetTestSettings())
-		oldTax := TaxonomyMap{"Turdus merula": "turmer"}
-		badTaxonomyPath := filepath.Join(t.TempDir(), "does-not-exist-taxonomy.json")
 
 		bn := &BirdNET{
-			classifier:      fake,
-			rangeFilter:     nil,
-			Settings:        oldSettings,
-			ModelInfo:       oldInfo,
-			TaxonomyMap:     oldTax,
-			ScientificIndex: ScientificNameIndex{"turmer": "Turdus merula"},
-			TaxonomyPath:    badTaxonomyPath,
-			modelVersion:    staleVersion,
-			speciesCache:    make(map[string]*speciesCacheEntry),
+			classifier:   fake,
+			rangeFilter:  nil,
+			Settings:     oldSettings,
+			ModelInfo:    oldInfo,
+			modelVersion: staleVersion,
+			speciesCache: make(map[string]*speciesCacheEntry),
 		}
 		bn.settingsAtomic.Store(oldSettings)
 		bn.setRuntimeInfo(devDevice, devBackend, devPrecision)
 		bn.publishIdentity()
-		return bn, fake, oldSettings, oldTax
+		return bn, fake, oldSettings
 	}
 
 	// assertEarlyFailureRolledBack checks the two early-failure subtests. It asserts
-	// the three fields mutated BEFORE the taxonomy step, each genuinely contingent on
+	// the two fields mutated BEFORE the load-labels step, each genuinely contingent on
 	// rollback (delete rollback() and each flips), plus the serving-backend guard.
 	assertEarlyFailureRolledBack := func(t *testing.T, bn *BirdNET, fake *rollbackFakeClassifier,
-		oldSettings *conf.Settings, oldTax TaxonomyMap, oldInfo ModelInfo,
+		oldSettings *conf.Settings, oldInfo ModelInfo,
 	) {
 		t.Helper()
-		// Contingent on rollback: ModelInfo (reassigned by the switch), TaxonomyMap
-		// (set to nil by the failed multi-return load), and Settings (swapped to a
-		// clone at entry) are all mutated before the taxonomy failure.
+		// Contingent on rollback: ModelInfo (reassigned by the switch) and Settings
+		// (swapped to a clone at entry) are both mutated before the load-labels failure.
 		assert.Equal(t, oldInfo, bn.ModelInfo, "ModelInfo must be restored to the previous model")
-		assert.Equal(t, oldTax, bn.TaxonomyMap, "taxonomy map must be restored (not the nil returned by the failed load)")
 		assert.Same(t, oldSettings, bn.Settings, "settings pointer must be restored")
 
 		// Serving-backend guard: on an early failure the classifier is never swapped,
@@ -109,7 +103,7 @@ func TestReloadModelInternal_RollbackRestoresPreviousModel(t *testing.T) {
 	t.Run("variant-swap path (allowPathChange=true)", func(t *testing.T) {
 		// Empty Version and ModelPath drive the cleared-path variant-swap branch,
 		// which re-resolves the stock embedded identity: ModelInfo IS reassigned
-		// before the taxonomy step, so its restoration is meaningfully exercised.
+		// before the load-labels step, so its restoration is meaningfully exercised.
 		settings := conftest.GetTestSettings()
 		settings.BirdNET.Version = ""
 		settings.BirdNET.ModelPath = ""
@@ -117,20 +111,27 @@ func TestReloadModelInternal_RollbackRestoresPreviousModel(t *testing.T) {
 		t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 		oldInfo := ModelInfo{ID: "TEST_PREV_MODEL", Name: staleName}
-		bn, fake, oldSettings, oldTax := newServingBirdNET(t, oldInfo)
+		bn, fake, oldSettings := newServingBirdNET(t, oldInfo)
+
+		// Point the reload (which reads the global settings) at a missing label file
+		// AFTER the previously-serving snapshot is captured, so oldSettings stays
+		// healthy and the scenario is coherent: a healthy model whose next reload
+		// fails at the load-labels step.
+		settings.BirdNET.LabelPath = filepath.Join(t.TempDir(), "does-not-exist-labels.txt")
+		conftest.SetTestSettings(settings)
 
 		err := bn.reloadModelInternal(true)
 
-		require.Error(t, err, "reload must fail when the taxonomy file cannot be read")
-		assert.Contains(t, err.Error(), "taxonomy", "error must identify the failed taxonomy step")
-		assertEarlyFailureRolledBack(t, bn, fake, oldSettings, oldTax, oldInfo)
+		require.Error(t, err, "reload must fail when the label file cannot be read")
+		assert.Contains(t, err.Error(), "does-not-exist-labels", "error must identify the failed load-labels step")
+		assertEarlyFailureRolledBack(t, bn, fake, oldSettings, oldInfo)
 	})
 
 	t.Run("settings-reload path (allowPathChange=false)", func(t *testing.T) {
 		// A configured ModelPath drives the birdnet-slot branch. The previous
 		// model's CustomPath matches the configured path, so the reload is accepted
 		// in place (not refused as a restart-required change) and ModelInfo is
-		// reassigned from the path before the taxonomy step fails.
+		// reassigned from the path before the load-labels step fails.
 		modelPath := filepath.Join(t.TempDir(), "birdnet-v2.4.tflite")
 		settings := conftest.GetTestSettings()
 		settings.BirdNET.Version = ""
@@ -139,13 +140,18 @@ func TestReloadModelInternal_RollbackRestoresPreviousModel(t *testing.T) {
 		t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 		oldInfo := ModelInfo{ID: "TEST_PREV_MODEL", Name: staleName, CustomPath: modelPath}
-		bn, fake, oldSettings, oldTax := newServingBirdNET(t, oldInfo)
+		bn, fake, oldSettings := newServingBirdNET(t, oldInfo)
+
+		// Point the reload at a missing label file AFTER capturing the healthy
+		// previously-serving snapshot (see the variant-swap subtest).
+		settings.BirdNET.LabelPath = filepath.Join(t.TempDir(), "does-not-exist-labels.txt")
+		conftest.SetTestSettings(settings)
 
 		err := bn.reloadModelInternal(false)
 
-		require.Error(t, err, "reload must fail when the taxonomy file cannot be read")
-		assert.Contains(t, err.Error(), "taxonomy", "error must identify the failed taxonomy step")
-		assertEarlyFailureRolledBack(t, bn, fake, oldSettings, oldTax, oldInfo)
+		require.Error(t, err, "reload must fail when the label file cannot be read")
+		assert.Contains(t, err.Error(), "does-not-exist-labels", "error must identify the failed load-labels step")
+		assertEarlyFailureRolledBack(t, bn, fake, oldSettings, oldInfo)
 	})
 
 	// The strongest case: a failure AFTER a new backend has been installed. The
@@ -162,11 +168,10 @@ func TestReloadModelInternal_RollbackRestoresPreviousModel(t *testing.T) {
 		t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 		oldInfo := ModelInfo{ID: "TEST_PREV_MODEL", Name: staleName}
-		bn, oldFake, oldSettings, _ := newServingBirdNET(t, oldInfo)
-		// Embedded taxonomy + labels so the reload proceeds past those steps to the
-		// model-init seam (the variant-swap branch resolves the stock identity, whose
-		// embedded labels load without a native model).
-		bn.TaxonomyPath = ""
+		bn, oldFake, oldSettings := newServingBirdNET(t, oldInfo)
+		// Embedded labels load (no LabelPath set) so the reload proceeds past the
+		// load-labels step to the model-init seam (the variant-swap branch resolves
+		// the stock identity, whose embedded labels load without a native model).
 
 		newFake := &rollbackFakeClassifier{}
 		bn.reloadInitFn = func() error {

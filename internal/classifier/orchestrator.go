@@ -80,12 +80,15 @@ type secondaryBackendKey struct {
 // Delete/UnloadModel acquire mu + entry.mu but NOT inferenceMu.
 type Orchestrator struct {
 	// Public fields, same layout as BirdNET for drop-in caller migration.
-	Settings        *conf.Settings // Deprecated: use CurrentSettings() instead.
-	settingsAtomic  atomic.Pointer[conf.Settings]
-	ModelInfo       ModelInfo
-	TaxonomyMap     TaxonomyMap
-	TaxonomyPath    string
-	ScientificIndex ScientificNameIndex
+	Settings       *conf.Settings // Deprecated: use CurrentSettings() instead.
+	settingsAtomic atomic.Pointer[conf.Settings]
+	ModelInfo      ModelInfo
+
+	// taxonomy is the orchestrator-owned eBird taxonomy service, built once in
+	// NewOrchestrator and read-only afterwards. It replaces the taxonomy maps the
+	// primary model used to own, so a species-code lookup no longer depends on which
+	// acoustic model is loaded (model de-privilege epic, Phase 2a).
+	taxonomy *taxonomyService
 
 	// Name resolution chain. Resolvers are tried in order; first non-empty wins.
 	nameResolvers []NameResolver
@@ -263,6 +266,15 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// construction and keeps it for its hot-reload path, so both resolve the same
 	// way. Passing the bound method rather than a precomputed value is what keeps
 	// the reload from re-deriving the identity off the raw configured string.
+	// Build the orchestrator-owned taxonomy service before the primary model. It
+	// loads the same embedded eBird taxonomy the primary used to load, via the same
+	// LoadTaxonomyData path, so a load failure aborts construction exactly as before.
+	taxonomy, err := newTaxonomyService("")
+	if err != nil {
+		return nil, err
+	}
+	o.taxonomy = taxonomy
+
 	bn, err := NewBirdNET(settings, nil, o.primaryPathResolverFor(settings))
 	if err != nil {
 		return nil, err
@@ -293,9 +305,6 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 
 	// Populate the remaining fields now that bn is available.
 	o.ModelInfo = bn.ModelInfo
-	o.TaxonomyMap = bn.TaxonomyMap
-	o.TaxonomyPath = bn.TaxonomyPath
-	o.ScientificIndex = bn.ScientificIndex
 	// OpenFauna first so it overrides label/taxonomy names everywhere
 	// ResolveName is consulted (display + inference).
 	o.nameResolvers = []NameResolver{ofResolver, resolver}
@@ -303,6 +312,11 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	o.models[bn.ModelInfo.ID] = &modelEntry{instance: bn}
 	o.primary = bn
 	o.settingsAtomic.Store(settings)
+
+	// Log any labels missing from the taxonomy at debug level, reproducing the
+	// diagnostics BirdNET used to emit from loadLabels now that the taxonomy is
+	// orchestrator-owned.
+	o.logMissingTaxonomyCodes(bn, bn.Labels())
 
 	// Each OV-capable secondary records the startup triplet on its own modelEntry
 	// when its loader registers it below (see loadPerch), so the first
@@ -1232,38 +1246,46 @@ func (o *Orchestrator) AllLabels() []string {
 	return unionLabels(sets...)
 }
 
-// GetSpeciesCode returns the eBird species code for a given label.
+// logMissingTaxonomyCodes emits, at debug level, the labels absent from the
+// taxonomy, reproducing BirdNET.logMissingTaxonomyCodes now that the taxonomy is
+// orchestrator-owned. primary supplies the "custom model/labels" phrasing; a nil
+// taxonomy or primary is a no-op.
+func (o *Orchestrator) logMissingTaxonomyCodes(primary *BirdNET, labels []string) {
+	if o == nil || o.taxonomy == nil || primary == nil {
+		return
+	}
+	s := o.currentSettings()
+	customModelOrLabels := primary.configuredModelPath() != "" || s.BirdNET.LabelPath != ""
+	o.taxonomy.logMissingCodes(labels, customModelOrLabels, s.BirdNET.Debug)
+}
+
+// GetSpeciesCode returns the eBird species code for a given label. The taxonomy is
+// orchestrator-owned and immutable, so this needs no lock and no primary model.
 func (o *Orchestrator) GetSpeciesCode(label string) (string, bool) {
-	o.mu.RLock()
-	primary := o.primary
-	o.mu.RUnlock()
-	if primary == nil {
+	if o == nil || o.taxonomy == nil {
 		return "", false
 	}
-	return primary.GetSpeciesCode(label)
+	return o.taxonomy.speciesCode(label)
 }
 
 // GetSpeciesNameFromCode returns the species name for a given eBird species code.
-// The second return value reports whether the code was found in the TaxonomyMap
-// by calling GetSpeciesNameFromCode(o.TaxonomyMap, code).
+// The second return value reports whether the code was found in the orchestrator-
+// owned taxonomy, which is immutable and so needs no lock.
 func (o *Orchestrator) GetSpeciesNameFromCode(code string) (string, bool) {
-	o.mu.RLock()
-	defer o.mu.RUnlock()
-	return GetSpeciesNameFromCode(o.TaxonomyMap, code)
+	if o == nil || o.taxonomy == nil {
+		return "", false
+	}
+	return o.taxonomy.nameFromCode(code)
 }
 
 // GetSpeciesWithScientificAndCommonName returns the scientific and common name for a label.
-// OpenFauna (chain[0]) is authoritative: its localized name overrides the
-// primary's label-derived common name whenever the resolver chain has one.
+// The common name is label-derived (via SplitSpeciesName); OpenFauna (chain[0]) is
+// authoritative and overrides it whenever the resolver chain has a localized name.
 func (o *Orchestrator) GetSpeciesWithScientificAndCommonName(label string) (scientific, common string) {
-	// Snapshot primary under read lock to avoid racing with Delete().
-	o.mu.RLock()
-	primary := o.primary
-	o.mu.RUnlock()
-	if primary == nil {
+	if o == nil {
 		return "", ""
 	}
-	scientific, common = primary.GetSpeciesWithScientificAndCommonName(label)
+	scientific, common = SplitSpeciesName(label)
 	if scientific != "" {
 		if resolved := o.ResolveName(scientific, ""); resolved != "" {
 			common = resolved
@@ -1273,19 +1295,25 @@ func (o *Orchestrator) GetSpeciesWithScientificAndCommonName(label string) (scie
 }
 
 // EnrichResultWithTaxonomy adds taxonomy information to a detection result.
-// OpenFauna (chain[0]) is authoritative: the resolver chain overrides the
-// label-derived common name whenever it has a name, even if the primary already
-// produced one. This localizes names and fixes scientific-only/bat labels. Only
-// the primary's name is kept when the chain returns nothing.
+// The common name is label-derived (via SplitSpeciesName); OpenFauna (chain[0]) is
+// authoritative and overrides it whenever the resolver chain has a localized name,
+// which localizes names and fixes scientific-only/bat labels. The label-derived
+// name is kept only when the chain returns nothing.
 func (o *Orchestrator) EnrichResultWithTaxonomy(speciesLabel string) (scientific, common, code string) {
-	// Snapshot primary under read lock to avoid racing with Delete().
-	o.mu.RLock()
-	primary := o.primary
-	o.mu.RUnlock()
-	if primary == nil {
+	if o == nil {
 		return "", "", ""
 	}
-	scientific, common, code = primary.EnrichResultWithTaxonomy(speciesLabel)
+	scientific, common = SplitSpeciesName(speciesLabel)
+	if o.taxonomy != nil {
+		var exists bool
+		code, exists = o.taxonomy.speciesCode(speciesLabel)
+		// Gate the debug format on the debug flag so the placeholder-code args are not
+		// built (and o.Debug's lock not taken) on the taxonomy-miss path when debug is
+		// off, matching the old bn.Debug call site which was wrapped in the same check.
+		if !exists && o.currentSettings().BirdNET.Debug {
+			o.Debug("Species '%s' not found in taxonomy, using generated placeholder code: %s", speciesLabel, code)
+		}
+	}
 
 	if scientific != "" {
 		if resolved := o.ResolveName(scientific, ""); resolved != "" {
@@ -1516,15 +1544,12 @@ func (o *Orchestrator) reloadPrimaryModel(reload func(primary *BirdNET) error) e
 			Build()
 	}
 
-	info, taxMap, taxPath, sciIndex := o.primary.ReloadSnapshot()
+	info := o.primary.ReloadSnapshot()
 	// The reloaded primary is a fresh instance: drop its streak, and the previous
 	// ID's when the reload changed it, so neither lingers.
 	dropInferenceFailureStreak(o.ModelInfo.ID)
 	dropInferenceFailureStreak(info.ID)
 	o.ModelInfo = info
-	o.TaxonomyMap = taxMap
-	o.TaxonomyPath = taxPath
-	o.ScientificIndex = sciIndex
 
 	// Re-key the models map in case the model ID changed after reload (Forgejo #270).
 	//
@@ -1553,6 +1578,11 @@ func (o *Orchestrator) reloadPrimaryModel(reload func(primary *BirdNET) error) e
 
 	// Update settings atomically
 	o.updateSettings(o.primary.currentSettings())
+
+	// Re-emit the missing-taxonomy diagnostics for the reloaded label set (e.g. a
+	// locale change), reproducing what BirdNET.loadLabels logged before the taxonomy
+	// moved to the orchestrator.
+	o.logMissingTaxonomyCodes(o.primary, o.primary.Labels())
 
 	return nil
 }
