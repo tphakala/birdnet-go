@@ -1260,7 +1260,8 @@ func (o *Orchestrator) logMissingTaxonomyCodes(primary *BirdNET, labels []string
 }
 
 // GetSpeciesCode returns the eBird species code for a given label. The taxonomy is
-// orchestrator-owned and immutable, so this needs no lock and no primary model.
+// orchestrator-owned and immutable, so this needs no lock and no primary model; it
+// keeps answering after Delete releases the primary (a shutdown-only state).
 func (o *Orchestrator) GetSpeciesCode(label string) (string, bool) {
 	if o == nil || o.taxonomy == nil {
 		return "", false
@@ -1270,7 +1271,8 @@ func (o *Orchestrator) GetSpeciesCode(label string) (string, bool) {
 
 // GetSpeciesNameFromCode returns the species name for a given eBird species code.
 // The second return value reports whether the code was found in the orchestrator-
-// owned taxonomy, which is immutable and so needs no lock.
+// owned taxonomy, which is immutable and so needs no lock; like GetSpeciesCode it
+// keeps answering after Delete (a shutdown-only state).
 func (o *Orchestrator) GetSpeciesNameFromCode(code string) (string, bool) {
 	if o == nil || o.taxonomy == nil {
 		return "", false

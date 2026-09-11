@@ -143,14 +143,14 @@ The package embeds several key resources:
 A typical usage pattern involves:
 
 ```go
-// Create new BirdNET instance
-bn, err := birdnet.NewBirdNET(settings)
+// Create new classifier orchestrator
+orchestrator, err := birdnet.NewOrchestrator(settings)
 if err != nil {
     // Handle error
 }
 
 // Process audio chunk
-results, err := bn.Predict(audioSample)
+results, err := orchestrator.Predict(audioSample)
 if err != nil {
     // Handle error
 }

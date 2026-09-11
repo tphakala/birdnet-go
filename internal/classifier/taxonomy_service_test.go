@@ -111,7 +111,9 @@ func TestOrchestrator_TaxonomyAccessors_AfterDelete(t *testing.T) {
 
 	const label = "Turdus merula_Eurasian Blackbird"
 	wantCode, wantCodeOK := o.GetSpeciesCode(label)
+	require.True(t, wantCodeOK, "a known species must resolve to a real code, not a placeholder")
 	wantName, wantNameOK := o.GetSpeciesNameFromCode(wantCode)
+	require.True(t, wantNameOK, "the resolved code must round-trip to a name before Delete")
 
 	o.Delete()
 
@@ -143,9 +145,9 @@ func TestOrchestrator_TaxonomyWrappers(t *testing.T) {
 	sci, _, code := o.EnrichResultWithTaxonomy(known)
 	assert.Equal(t, "Turdus merula", sci, "scientific name must be split from the label")
 	require.NotEmpty(t, code, "a known species must resolve to a code")
-	if name, ok := o.GetSpeciesNameFromCode(code); ok {
-		assert.NotEmpty(t, name, "a resolvable code must map to a non-empty name")
-	}
+	name, ok := o.GetSpeciesNameFromCode(code)
+	require.True(t, ok, "a known species's code must round-trip through GetSpeciesNameFromCode")
+	assert.NotEmpty(t, name, "a resolvable code must map to a non-empty name")
 
 	// A species absent from the taxonomy still splits and gets the deterministic
 	// placeholder code (never empty), matching the free function.
