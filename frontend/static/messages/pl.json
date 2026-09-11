@@ -2019,6 +2019,8 @@
       "subtitle": "Kompleksowa lista wszystkich wykrytych gatunków ptaków",
       "speciesList": "Lista Gatunków",
       "switchToGrid": "Przełącz na widok siatki",
+      "openAllAboutBirds": "Zobacz ten gatunek na All About Birds",
+      "openWikipedia": "Zobacz ten gatunek w Wikipedii",
       "switchToList": "Przełącz na widok listy",
       "noSpeciesFound": "Nie znaleziono gatunków pasujących do twoich filtrów.",
       "headers": {

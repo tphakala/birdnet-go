@@ -6,6 +6,7 @@ import SpeciesDetailModal from './SpeciesDetailModal.svelte';
 
 // Mock the i18n module
 vi.mock('$lib/i18n', () => ({
+  getLocale: vi.fn(() => 'en'),
   t: vi.fn((key: string) => {
     const translations: Record<string, string> = {
       'common.aria.closeModal': 'Close modal',
@@ -14,6 +15,8 @@ vi.mock('$lib/i18n', () => ({
       'analytics.species.card.confidence': 'Confidence',
       'analytics.species.headers.firstDetected': 'First detected',
       'analytics.species.headers.lastDetected': 'Last detected',
+      'analytics.species.openAllAboutBirds': 'View this species on All About Birds',
+      'analytics.species.openWikipedia': 'View this species on Wikipedia',
     };
     // eslint-disable-next-line security/detect-object-injection -- Test mock with controlled translation data
     return translations[key] ?? key;
@@ -53,6 +56,18 @@ describe('SpeciesDetailModal', () => {
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('House Sparrow')).toBeInTheDocument();
+  });
+
+  it('renders reference links for the species', () => {
+    const { container } = modalTest.render({
+      props: { isOpen: true, species: mockSpecies },
+    });
+
+    const links = Array.from(container.querySelectorAll('a'));
+    expect(links.map(link => link.getAttribute('href'))).toEqual([
+      'https://www.allaboutbirds.org/guide/House_Sparrow/id',
+      'https://en.wikipedia.org/wiki/House_Sparrow',
+    ]);
   });
 
   it('is not visible when isOpen is false', () => {

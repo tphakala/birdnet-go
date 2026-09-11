@@ -2019,6 +2019,8 @@
       "subtitle": "Lista completa de todas as espécies de pássaros que foram detectadas",
       "speciesList": "Lista de espécies",
       "switchToGrid": "Mudar para visualização em grade",
+      "openAllAboutBirds": "Ver esta espécie no All About Birds",
+      "openWikipedia": "Ver esta espécie na Wikipédia",
       "switchToList": "Mudar para visualização em lista",
       "noSpeciesFound": "Nenhuma espécie encontrada que corresponda aos seus filtros.",
       "headers": {

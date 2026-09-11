@@ -2019,6 +2019,8 @@
       "subtitle": "Kattava luettelo kaikista havaituista lintulajeista",
       "speciesList": "Lajiluettelo",
       "switchToGrid": "Vaihda ruudukkonäkymään",
+      "openAllAboutBirds": "Näytä tämä laji All About Birds -sivustolla",
+      "openWikipedia": "Näytä tämä laji Wikipediassa",
       "switchToList": "Vaihda listanäkymään",
       "noSpeciesFound": "Suodattimia vastaavia lajeja ei löytynyt.",
       "headers": {

@@ -2019,6 +2019,8 @@
       "subtitle": "Az összes észlelt madárfaj átfogó listája",
       "speciesList": "Fajlista",
       "switchToGrid": "Rács nézetre váltás",
+      "openAllAboutBirds": "Faj megtekintése az All About Birds oldalon",
+      "openWikipedia": "Faj megtekintése a Wikipédián",
       "switchToList": "Lista nézetre váltás",
       "noSpeciesFound": "A szűrőknek megfelelő faj nem található.",
       "headers": {
