@@ -2020,6 +2020,8 @@
       "speciesList": "Species List",
       "switchToGrid": "Switch to grid view",
       "switchToList": "Switch to list view",
+      "openAllAboutBirds": "View this species on All About Birds",
+      "openWikipedia": "View this species on Wikipedia",
       "noSpeciesFound": "No species found matching your filters.",
       "headers": {
         "species": "Species",

@@ -2019,6 +2019,8 @@
       "subtitle": "Kompletný zoznam všetkých vtáčích druhov, ktoré boli zistené",
       "speciesList": "Zoznam druhov",
       "switchToGrid": "Prepnúť na mriežku",
+      "openAllAboutBirds": "Zobraziť tento druh na All About Birds",
+      "openWikipedia": "Zobraziť tento druh na Wikipédii",
       "switchToList": "Prepnúť na zoznam",
       "noSpeciesFound": "Nenašli sa žiadne druhy zodpovedajúce vašim filtrom.",
       "headers": {

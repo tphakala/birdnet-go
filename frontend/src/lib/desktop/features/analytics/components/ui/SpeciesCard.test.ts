@@ -4,11 +4,14 @@ import SpeciesCard from './SpeciesCard.svelte';
 
 // Mock the i18n module (mirrors SpeciesCardMobile.test.ts).
 vi.mock('$lib/i18n', () => ({
+  getLocale: vi.fn(() => 'en'),
   t: vi.fn((key: string) => {
     const translations: Record<string, string> = {
       'analytics.species.card.detections': 'Detections',
       'analytics.species.card.confidence': 'Confidence',
       'analytics.species.card.first': 'First',
+      'analytics.species.openAllAboutBirds': 'View this species on All About Birds',
+      'analytics.species.openWikipedia': 'View this species on Wikipedia',
     };
     // eslint-disable-next-line security/detect-object-injection -- Test mock with controlled translation data
     return translations[key] ?? key;
@@ -45,6 +48,17 @@ describe('SpeciesCard', () => {
     const img = container.querySelector('img');
     expect(img).not.toBeNull();
     expect(img).toHaveAttribute('src', '/api/v2/media/image/Passer%20domesticus');
+  });
+
+  it('renders localized reference links for the species', () => {
+    const { container } = render(SpeciesCard, { props: { species: mockSpecies } });
+
+    const links = Array.from(container.querySelectorAll('a'));
+    expect(links.map(link => link.getAttribute('href'))).toEqual([
+      'https://www.allaboutbirds.org/guide/House_Sparrow/id',
+      'https://en.wikipedia.org/wiki/House_Sparrow',
+    ]);
+    expect(links.every(link => link.getAttribute('target') === '_blank')).toBe(true);
   });
 
   it('swaps to the bird placeholder on load error', async () => {

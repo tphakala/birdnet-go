@@ -2019,6 +2019,8 @@
       "subtitle": "Fullstendig liste over alle fuglearter som er registrert",
       "speciesList": "Artsliste",
       "switchToGrid": "Bytt til rutenettvisning",
+      "openAllAboutBirds": "Vis denne arten på All About Birds",
+      "openWikipedia": "Vis denne arten på Wikipedia",
       "switchToList": "Bytt til listevisning",
       "noSpeciesFound": "Ingen arter funnet som matcher filtrene dine.",
       "headers": {

@@ -2019,6 +2019,8 @@
       "subtitle": "Beknopte lijst van alle herkende vogel soorten",
       "speciesList": "Soorten lijst",
       "switchToGrid": "Wissel naar tegel overzicht",
+      "openAllAboutBirds": "Bekijk deze soort op All About Birds",
+      "openWikipedia": "Bekijk deze soort op Wikipedia",
       "switchToList": "Wissel naar lijst overzicht",
       "noSpeciesFound": "Geen soorten gevonden voor jouw filters.",
       "headers": {

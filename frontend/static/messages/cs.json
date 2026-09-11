@@ -2019,6 +2019,8 @@
       "subtitle": "Kompletní seznam všech ptačích druhů, které byly detekovány",
       "speciesList": "Seznam druhů",
       "switchToGrid": "Přepnout na mřížku",
+      "openAllAboutBirds": "Zobrazit tento druh na All About Birds",
+      "openWikipedia": "Zobrazit tento druh na Wikipedii",
       "switchToList": "Přepnout na seznam",
       "noSpeciesFound": "Nebyly nalezeny žádné druhy odpovídající vašim filtrům.",
       "headers": {
