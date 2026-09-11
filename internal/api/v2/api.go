@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -48,6 +47,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/speciesindex"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -268,14 +268,14 @@ type Controller struct {
 	// WithAuthService / WithNotificationService (see NewWithOptions).
 	appHandler *app.Handler
 
-	// Cached BirdNET name maps (facade-owned; see name_maps.go). They are shared
-	// infrastructure: the analytics, detections, and species domains read them via
-	// injected accessors, and internal/analysis drives them through
-	// UpdateCommonNameMap/SetNameResolver on *Controller.
-	nameMaps atomic.Value // stores *nameMaps; see internal/api/v2/name_maps.go
-	// nameResolver is the authoritative localized name source shared with the
-	// classifier orchestrator. Overrides label-derived names in the cached maps.
-	nameResolver atomic.Pointer[datastore.SpeciesNameResolver]
+	// names owns the facade's BirdNET name index (the scientific<->common maps
+	// plus the authoritative resolver; see name_maps.go). Shared infrastructure:
+	// the analytics, detections, and species domains read it via injected
+	// accessors, and internal/analysis drives it through
+	// UpdateCommonNameMap/SetNameResolver on *Controller. Constructed in
+	// NewWithOptions; the accessors treat a nil service (a bare-struct test) as an
+	// empty index.
+	names *speciesindex.Service
 
 	// analytics serves the /api/v2/analytics/* species/time/confidence/sun/sources
 	// endpoints, the geographic /range/heatmap endpoint, the /insights/* +
@@ -420,6 +420,12 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		controlChan:   controlChan,
 		isGlobalOwner: settings == conf.GetSettings(),
 	}
+
+	// Initialize the facade-owned species-name index before constructing any
+	// domain handler, since several capture the name-map accessors as bound
+	// methods. It stays empty until initInsightsRoutes / UpdateCommonNameMap seeds
+	// it from the current labels.
+	c.names = speciesindex.New(nil)
 
 	// Construct domain handlers around the shared core. They hold the same
 	// *apicore.Core pointer and register their routes in initRoutes.
