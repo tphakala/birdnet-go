@@ -2174,7 +2174,7 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 	updated := conf.CloneSettings(conf.GetSettings())
 
 	// Set only the non-empty paths, and only fields the family actually carries
-	// (familyFields returns nil for a family's absent labels/embeddings). The
+	// (familyFields yields a nil pointer for a family's absent labels/embeddings). The
 	// primary reaches this path only via Reinstall; Install/InstallOrReplace route
 	// it to replacePrimaryVariant instead. The primary's label set is embedded, so a
 	// primary variant never ships a labels file (labelsPath is always "" for it), but
