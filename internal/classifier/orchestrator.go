@@ -106,13 +106,22 @@ type Orchestrator struct {
 	// service; readers use Snapshot() lock-free (model de-privilege epic, Phase 2a).
 	names *speciesindex.Service
 
-	// rebuildMu serializes rebuildSpeciesIndex so a union snapshot taken by one
-	// trigger cannot be published after a newer one's. It sits ABOVE o.mu in the
-	// lock order (o.rebuildMu -> o.mu -> entry.mu -> bn.mu): rebuildSpeciesIndex is
-	// its only holder and calls AllLabels (which takes o.mu.RLock and each
-	// entry.mu) while holding it, so it must never be taken with any other
+	// rebuildMu serializes the name-service rebuild (rebuildSpeciesIndex and
+	// RebuildNameResolver) so a working set taken by one trigger cannot be published
+	// after a newer one's. It sits ABOVE o.mu in the lock order (o.rebuildMu -> o.mu
+	// -> entry.mu -> bn.mu): the rebuild calls AllLabels (which takes o.mu.RLock and
+	// each entry.mu) while holding it, so it must never be taken with any other
 	// orchestrator lock already held.
 	rebuildMu sync.Mutex
+
+	// includedSpecies is the last range-filter inclusion list handed to
+	// RebuildNameResolver. It is unioned with AllLabels() to form the species-index
+	// working set on every rebuild, so the model-topology triggers (load, unload,
+	// reload) rebuild the index from the same set the range filter last established
+	// rather than dropping the inclusion list; the resolver working set (rebuilt only
+	// by RebuildNameResolver) is always a subset of it, so an inclusion-list species
+	// can never be in the resolver yet missing from the index. Guarded by rebuildMu.
+	includedSpecies []string
 
 	// Model management.
 	// NOTE: models map is keyed by ModelInfo.ID at construction time. If ReloadModel
@@ -852,20 +861,31 @@ func (o *Orchestrator) RebuildNameResolver(includedSpecies []string) error {
 	if o == nil || o.openfauna == nil {
 		return nil
 	}
-	// Working set: every loaded model's labels plus the current inclusion list
-	// (design 5.4). This is a superset of the previous seed (the inclusion list,
-	// or the primary's labels when it was empty), so every species that was
-	// pre-indexed before is pre-indexed after, and secondary-model species stop
-	// falling to the on-demand Lookup path. unionLabels dedups and drops empties.
-	working := unionLabels(o.AllLabels(), includedSpecies)
+	o.rebuildMu.Lock()
+	defer o.rebuildMu.Unlock()
+	// Record the inclusion list so the model-topology triggers (load, unload,
+	// reload) rebuild the index from the SAME working set the range filter last
+	// established, rather than dropping it back to AllLabels. The working set is the
+	// union of every loaded model's labels plus this inclusion list (design 5.4): a
+	// superset of the previous seed (the inclusion list, or the primary's labels when
+	// it was empty), so every species pre-indexed before stays pre-indexed, and
+	// secondary-model species stop falling to the on-demand Lookup path. Defensive
+	// copy: the caller may reuse or mutate the slice.
+	o.includedSpecies = slices.Clone(includedSpecies)
+	working := unionLabels(o.AllLabels(), o.includedSpecies)
 	locale := o.CurrentSettings().BirdNET.Locale
+	// This is the only path that refreshes the OpenFauna resolver working set;
+	// openfauna.Rebuild decompresses the embedded dataset, so the cheaper
+	// model-topology triggers deliberately skip it and rebuild only the index.
+	// Rebuild the resolver first: the index built next reads its localized names.
+	// The returned resolver-rebuild error is this method's contract.
 	if err := o.openfauna.Rebuild(scientificNamesFromLabels(working), locale); err != nil {
 		return err
 	}
-	// Publish the species-name snapshot second: its localized names come from the
-	// resolver just rebuilt, so the resolver must switch locale before the snapshot
-	// is built from it.
-	o.rebuildSpeciesIndex()
+	// Publish the index from the same union so the resolver and index stay in sync.
+	if o.names != nil {
+		o.names.Rebuild(working, locale)
+	}
 	return nil
 }
 

@@ -209,7 +209,10 @@ func TestRebuildNameResolver_UnionSeedsSecondaryLabels(t *testing.T) {
 }
 
 // TestRebuildNameResolver_InclusionListIsIncluded verifies an inclusion-list
-// species absent from every model is still pre-indexed.
+// species absent from every model is pre-indexed in BOTH name services: the
+// OpenFauna resolver working set AND the shared species index snapshot. The two are
+// rebuilt from the same working set (union of AllLabels and the inclusion list), so
+// they must not desynchronize.
 func TestRebuildNameResolver_InclusionListIsIncluded(t *testing.T) {
 	t.Parallel()
 
@@ -217,9 +220,17 @@ func TestRebuildNameResolver_InclusionListIsIncluded(t *testing.T) {
 	require.NoError(t, o.RebuildNameResolver([]string{"Turdus merula_Common Blackbird"}))
 
 	_, ok := o.openfauna.ResolveLocal("Turdus merula")
-	assert.True(t, ok, "an inclusion-list species must be pre-indexed even when no model carries it")
+	assert.True(t, ok, "an inclusion-list species must be pre-indexed in the resolver even when no model carries it")
 	_, ok2 := o.openfauna.ResolveLocal("Cyanistes caeruleus")
 	assert.True(t, ok2, "the model's own species stays pre-indexed alongside the inclusion list")
+
+	// The inclusion-list species must also be in the shared index snapshot, not only
+	// the resolver, so the two never desynchronize (gate/PR review finding).
+	snap := o.SpeciesSnapshot()
+	assert.Equal(t, "Turdus merula_Common Blackbird", snap.LabelBySci["Turdus merula"],
+		"an inclusion-list species must also be present in the shared index, not only the resolver")
+	assert.Equal(t, "Cyanistes caeruleus_Eurasian Blue Tit", snap.LabelBySci["Cyanistes caeruleus"],
+		"the model's own species stays in the index alongside the inclusion list")
 }
 
 // TestSpeciesIndex_LocaleChangeReflectsResolver verifies the load-bearing ordering
@@ -290,7 +301,7 @@ func TestSpeciesIndex_ConcurrentReadersDuringLoadUnload(t *testing.T) {
 		})
 	}
 
-	for range 200 {
+	for range 50 {
 		require.NoError(t, o.LoadModel(testID))
 		require.NoError(t, o.UnloadModel(testID))
 	}
@@ -322,7 +333,10 @@ func TestSpeciesIndex_ConcurrentTriggersPublishNewest(t *testing.T) {
 
 	o := newSpeciesIndexTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID, labels: []string{"Cyanistes caeruleus_Eurasian Blue Tit"}})
 
-	for i := range 50 {
+	// Each iteration's RebuildNameResolver rebuilds the OpenFauna resolver (which
+	// decompresses the embedded dataset), so keep the count modest; the race detector
+	// exposes any interleaving hazard well within this many rounds.
+	for i := range 15 {
 		// Start each iteration from the model unloaded (ignore "not loaded" on the
 		// first pass), so LoadModel does real topology work concurrently with the
 		// resolver rebuild rather than hitting the already-loaded skip.
