@@ -33,10 +33,9 @@ const (
 // name, mirroring the detection-side localized-name tests.
 func installExcludeTestResolver(t *testing.T, c *Controller) {
 	t.Helper()
-	c.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
+	seedNames(t, c, &analyticsBatchFakeResolver{batch: map[string]string{
 		testExcludeScientificName: testExcludeLocalizedName,
-	}})
-	c.UpdateCommonNameMap([]string{testExcludeScientificName})
+	}}, []string{testExcludeScientificName})
 }
 
 // patchSection drives UpdateSectionSettings for an arbitrary section. It asserts

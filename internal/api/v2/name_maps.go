@@ -1,23 +1,22 @@
 // internal/api/v2/name_maps.go
 //
 // Facade-owned BirdNET name-map plumbing. The cached scientific<->common lookup
-// maps and the authoritative name resolver live on the *Controller (the field
-// names in api.go, a *speciesindex.Service). They are shared infrastructure: the
+// maps and the authoritative name resolver live on the *Controller (the names
+// field in api.go, a *speciesindex.Service). They are shared infrastructure: the
 // analytics domain, the detections search resolver, the species image handler,
 // and the settings exclude-list canonicalization all read them through the
 // accessors below (analytics, detections, and species receive the accessors as
 // injected bound-method values; settings.go calls canonicalizeExcludeList
-// directly). UpdateCommonNameMap and SetNameResolver are part of the external
-// surface: internal/analysis drives them through *apiv2.Controller. Keeping the
-// plumbing here (rather than in a domain package) avoids any domain->domain or
-// domain->facade dependency. The maps themselves are built and owned by the
-// shared internal/speciesindex leaf package, so the api/v2 and datastore name
-// maps stay identical.
+// directly). Since Phase 2a the service is normally the orchestrator-owned shared
+// index injected via WithSpeciesIndex (the orchestrator is its only writer); a
+// facade that is never handed one (bare-struct tests, a manager-less setup) keeps
+// its own fallback, seeded from labels by initInsightsRoutes. The maps themselves
+// are built and owned by the shared internal/speciesindex leaf package, so the
+// api/v2 and datastore name maps stay identical.
 package api
 
 import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
-	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
@@ -59,12 +58,13 @@ func (c *Controller) canonicalizeExcludeList(exclude []string) []string {
 	return apicore.CanonicalizeExcludeList(c.loadCommonToScientificMap(), exclude)
 }
 
-// UpdateCommonNameMap rebuilds the cached name maps from updated BirdNET labels,
-// using the locale from the current settings (empty when settings are nil).
-// Called after locale or model changes to keep insights and search endpoints
-// current.
-func (c *Controller) UpdateCommonNameMap(labels []string) {
-	if c.names == nil {
+// seedFallbackNames rebuilds the facade's own fallback name maps from the given
+// labels, using the locale from the current settings (empty when settings are
+// nil). It is a no-op when the facade does not own the service (the
+// orchestrator-owned shared index injected via WithSpeciesIndex is rebuilt by the
+// orchestrator, never by the facade) or when no service is set.
+func (c *Controller) seedFallbackNames(labels []string) {
+	if c.names == nil || !c.ownsNames {
 		return
 	}
 	locale := ""
@@ -74,30 +74,22 @@ func (c *Controller) UpdateCommonNameMap(labels []string) {
 	c.names.Rebuild(labels, locale)
 }
 
-// SetNameResolver installs the authoritative localized name resolver, shared with
-// the classifier orchestrator. A nil resolver is ignored.
-func (c *Controller) SetNameResolver(r datastore.SpeciesNameResolver) {
-	if c.names == nil {
-		return
-	}
-	c.names.SetResolver(r)
-}
-
 // initInsightsRoutes seeds the facade-owned name maps and registers the analytics
 // domain's insights endpoints (/insights/* and /dashboard/kpis). The insights
 // repository and the route registration are owned by the analytics handler; the
 // name-map seeding stays here because the name maps are facade-owned and feed the
 // detections, species, and settings code paths as well as insights. It is gated on
 // the enhanced (v2) manager to preserve the original behavior: without it neither
-// the maps are seeded here nor the routes registered (the analysis pipeline still
-// seeds the maps via UpdateCommonNameMap on locale/model changes).
+// the maps are seeded here nor the routes registered. When the orchestrator-owned
+// shared index is injected (WithSpeciesIndex), seedFallbackNames is a no-op: the
+// orchestrator published its snapshot before the API server was constructed.
 func (c *Controller) initInsightsRoutes() {
 	if c.V2Manager == nil {
 		return
 	}
-	// Build both cached name maps once from the current labels.
+	// Build both cached name maps once from the current labels (fallback only).
 	if s := c.ControllerSettings(); s != nil {
-		c.UpdateCommonNameMap(s.BirdNET.Labels)
+		c.seedFallbackNames(s.BirdNET.Labels)
 	}
 	c.analytics.RegisterInsightsRoutes(c.Group)
 }

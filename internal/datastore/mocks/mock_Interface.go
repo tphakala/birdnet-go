@@ -5404,39 +5404,6 @@ func (_c *MockInterface_SetMetrics_Call) RunAndReturn(run func(*metrics.Datastor
 	return _c
 }
 
-// SetNameResolver provides a mock function with given fields: resolver
-func (_m *MockInterface) SetNameResolver(resolver datastore.SpeciesNameResolver) {
-	_m.Called(resolver)
-}
-
-// MockInterface_SetNameResolver_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetNameResolver'
-type MockInterface_SetNameResolver_Call struct {
-	*mock.Call
-}
-
-// SetNameResolver is a helper method to define mock.On call
-//   - resolver datastore.SpeciesNameResolver
-func (_e *MockInterface_Expecter) SetNameResolver(resolver interface{}) *MockInterface_SetNameResolver_Call {
-	return &MockInterface_SetNameResolver_Call{Call: _e.mock.On("SetNameResolver", resolver)}
-}
-
-func (_c *MockInterface_SetNameResolver_Call) Run(run func(resolver datastore.SpeciesNameResolver)) *MockInterface_SetNameResolver_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(datastore.SpeciesNameResolver))
-	})
-	return _c
-}
-
-func (_c *MockInterface_SetNameResolver_Call) Return() *MockInterface_SetNameResolver_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *MockInterface_SetNameResolver_Call) RunAndReturn(run func(datastore.SpeciesNameResolver)) *MockInterface_SetNameResolver_Call {
-	_c.Run(run)
-	return _c
-}
-
 // SetSunCalcMetrics provides a mock function with given fields: suncalcMetrics
 func (_m *MockInterface) SetSunCalcMetrics(suncalcMetrics interface{}) {
 	_m.Called(suncalcMetrics)
@@ -5670,39 +5637,6 @@ func (_c *MockInterface_UpdateDynamicThresholdExpiry_Call) Return(_a0 error) *Mo
 
 func (_c *MockInterface_UpdateDynamicThresholdExpiry_Call) RunAndReturn(run func(string, time.Time) error) *MockInterface_UpdateDynamicThresholdExpiry_Call {
 	_c.Call.Return(run)
-	return _c
-}
-
-// UpdateNameMaps provides a mock function with given fields: labels
-func (_m *MockInterface) UpdateNameMaps(labels []string) {
-	_m.Called(labels)
-}
-
-// MockInterface_UpdateNameMaps_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateNameMaps'
-type MockInterface_UpdateNameMaps_Call struct {
-	*mock.Call
-}
-
-// UpdateNameMaps is a helper method to define mock.On call
-//   - labels []string
-func (_e *MockInterface_Expecter) UpdateNameMaps(labels interface{}) *MockInterface_UpdateNameMaps_Call {
-	return &MockInterface_UpdateNameMaps_Call{Call: _e.mock.On("UpdateNameMaps", labels)}
-}
-
-func (_c *MockInterface_UpdateNameMaps_Call) Run(run func(labels []string)) *MockInterface_UpdateNameMaps_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].([]string))
-	})
-	return _c
-}
-
-func (_c *MockInterface_UpdateNameMaps_Call) Return() *MockInterface_UpdateNameMaps_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *MockInterface_UpdateNameMaps_Call) RunAndReturn(run func([]string)) *MockInterface_UpdateNameMaps_Call {
-	_c.Run(run)
 	return _c
 }
 
