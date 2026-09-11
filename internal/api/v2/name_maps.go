@@ -12,7 +12,7 @@
 // plumbing here (rather than in a domain package) avoids any domain->domain or
 // domain->facade dependency. The maps themselves are built and owned by the
 // shared internal/speciesindex leaf package, so the api/v2 and datastore name
-// maps stay byte-identical.
+// maps stay identical.
 package api
 
 import (
@@ -64,6 +64,9 @@ func (c *Controller) canonicalizeExcludeList(exclude []string) []string {
 // Called after locale or model changes to keep insights and search endpoints
 // current.
 func (c *Controller) UpdateCommonNameMap(labels []string) {
+	if c.names == nil {
+		return
+	}
 	locale := ""
 	if s := c.ControllerSettings(); s != nil {
 		locale = s.BirdNET.Locale
@@ -74,6 +77,9 @@ func (c *Controller) UpdateCommonNameMap(labels []string) {
 // SetNameResolver installs the authoritative localized name resolver, shared with
 // the classifier orchestrator. A nil resolver is ignored.
 func (c *Controller) SetNameResolver(r datastore.SpeciesNameResolver) {
+	if c.names == nil {
+		return
+	}
 	c.names.SetResolver(r)
 }
 

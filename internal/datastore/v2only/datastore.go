@@ -136,8 +136,8 @@ type Datastore struct {
 	// search maps plus the authoritative resolver) behind an atomic snapshot for
 	// lock-free reads and atomic swaps on locale or model change. Set once in New;
 	// a nil value (a bare-struct test) is treated as an empty index by the
-	// accessors below, preserving the zero-value safety of the previous
-	// atomic.Pointer fields it replaced.
+	// accessors and mutators below, preserving the zero-value safety of the
+	// previous atomic.Pointer fields it replaced.
 	names *speciesindex.Service
 
 	// speciesCodeMap provides O(1) lookup from scientific name to eBird species code.
@@ -345,6 +345,9 @@ func New(cfg *Config) (*Datastore, error) {
 // The new maps are built first, then atomically swapped in - readers are never blocked.
 // Also resets the missing-name warning deduplication so new mismatches are logged.
 func (ds *Datastore) UpdateNameMaps(labels []string) {
+	if ds.names == nil {
+		return
+	}
 	ds.names.Rebuild(labels, "")
 	ds.loggedMissingNames.Clear()
 }
@@ -353,6 +356,9 @@ func (ds *Datastore) UpdateNameMaps(labels []string) {
 // the classifier orchestrator. Safe to call concurrently with reads; a nil
 // resolver is ignored.
 func (ds *Datastore) SetNameResolver(r datastore.SpeciesNameResolver) {
+	if ds.names == nil {
+		return
+	}
 	ds.names.SetResolver(r)
 }
 

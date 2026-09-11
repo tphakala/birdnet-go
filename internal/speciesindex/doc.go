@@ -5,9 +5,9 @@
 // search (common -> scientific) stay in lockstep by construction.
 //
 // A Snapshot is an immutable set of maps built once from a label list and a
-// name resolver. It carries the three name maps the two builders produced,
-// byte for byte, plus a set of memo maps (canonical key per label, labels per
-// canonical key, label per scientific name) computed once at build time so no
+// name resolver. It carries the three name maps the two builders produced, with
+// identical contents, plus a set of memo maps (canonical key per label, labels
+// per canonical key, label per scientific name) computed once at build time so no
 // request path ever calls openfauna.CanonicalName per label.
 //
 // A Service owns the current Snapshot behind an atomic.Pointer for lock-free

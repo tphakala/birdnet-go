@@ -9,8 +9,8 @@ import (
 )
 
 // This file freezes the two legacy name-map builders as they existed before the
-// speciesindex fold, so the golden tests assert Build reproduces them byte for
-// byte. These are verbatim copies of internal/datastore/v2only.buildNameMaps and
+// speciesindex fold, so the golden tests assert Build reproduces their output
+// exactly. These are verbatim copies of internal/datastore/v2only.buildNameMaps and
 // internal/api/v2.buildNameMaps, with their folds inlined to the same expression
 // (strings.ToLower(norm.NFC.String(...))) they both used (the api/v2 side reached
 // it via apicore.NormalizeForLookup). Do not "simplify" them to call Fold: the

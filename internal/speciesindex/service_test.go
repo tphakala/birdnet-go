@@ -49,6 +49,15 @@ func TestService_SetResolverIgnoresNil(t *testing.T) {
 	// The resolver localizes the reverse map after a rebuild.
 	s.Rebuild([]string{"Myotis myotis"}, "")
 	assert.Equal(t, "Myotis myotis", s.Snapshot().CommonToSci["localized"])
+
+	// Installing a non-nil resolver via SetResolver (not New) takes effect on the
+	// next Rebuild.
+	s2 := New(nil)
+	require.Nil(t, s2.Resolver())
+	s2.SetResolver(localResolver{m: map[string]string{"Myotis myotis": "Installed"}})
+	require.NotNil(t, s2.Resolver())
+	s2.Rebuild([]string{"Myotis myotis"}, "")
+	assert.Equal(t, "Myotis myotis", s2.Snapshot().CommonToSci["installed"])
 }
 
 // localResolverPtr is a pointer-receiver resolver used to exercise the typed-nil

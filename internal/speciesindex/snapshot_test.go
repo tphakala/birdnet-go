@@ -81,6 +81,25 @@ func TestBuild_MalformedLabelsSkipped(t *testing.T) {
 	assert.Equal(t, "Strix aluco", s.CommonToSci["tawny owl"])
 }
 
+func TestBuild_MemoKeysTrimScientificName(t *testing.T) {
+	t.Parallel()
+
+	// A malformed label with stray spaces around "_": ResolveLabelNames trims the
+	// scientific name for the name maps, so the memo maps must key LabelBySci on the
+	// same trimmed name. Otherwise ResolveLabel misses the exact entry and returns a
+	// blank common name.
+	s := Build([]string{"Strix aluco _ Tawny Owl"}, nil, "")
+
+	assert.Equal(t, "Tawny Owl", s.SciToCommon["Strix aluco"])
+	assert.Equal(t, "Strix aluco _ Tawny Owl", s.LabelBySci["Strix aluco"],
+		"LabelBySci must key on the trimmed scientific name, matching SciToCommon")
+
+	label, common, ok := s.ResolveLabel("Strix aluco")
+	require.True(t, ok)
+	assert.Equal(t, "Strix aluco _ Tawny Owl", label)
+	assert.Equal(t, "Tawny Owl", common)
+}
+
 func TestBuild_MemoMaps(t *testing.T) {
 	t.Parallel()
 

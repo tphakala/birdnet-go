@@ -75,9 +75,9 @@ func Build(labels []string, resolver datastore.SpeciesNameResolver, locale strin
 		Locale:            locale,
 	}
 
-	// Name maps: byte-identical to both legacy builders. Ambiguous reverse keys
-	// are deleted, not last-writer-wins, so an ambiguous common name falls through
-	// to substring search rather than routing to an arbitrary species.
+	// Name maps: reproduce both legacy builders' output exactly. Ambiguous reverse
+	// keys are deleted, not last-writer-wins, so an ambiguous common name falls
+	// through to substring search rather than routing to an arbitrary species.
 	ambiguous := make(map[string]struct{})
 	for _, sn := range datastore.ResolveLabelNames(labels, resolver) {
 		s.SciToCommon[sn.Scientific] = sn.Common
@@ -105,7 +105,7 @@ func Build(labels []string, resolver datastore.SpeciesNameResolver, locale strin
 		}
 		seen[label] = struct{}{}
 
-		sci := detection.ExtractScientificName(label)
+		sci := scientificName(label)
 		if sci == "" {
 			continue
 		}
@@ -113,18 +113,31 @@ func Build(labels []string, resolver datastore.SpeciesNameResolver, locale strin
 		if _, ok := s.LabelBySci[sci]; !ok {
 			s.LabelBySci[sci] = label
 		}
-		ck := computeCanonicalKey(label)
+		ck := canonicalKeyForSci(sci)
 		s.CanonicalByLabel[label] = ck
 		s.LabelsByCanonical[ck] = append(s.LabelsByCanonical[ck], label)
 	}
 	return s
 }
 
+// scientificName extracts and trims the scientific-name key from a label, matching
+// the key space datastore.ResolveLabelNames uses for the name maps, so LabelBySci
+// keys align with SciToCommon keys even for a label with stray spaces around "_".
+func scientificName(label string) string {
+	return strings.TrimSpace(detection.ExtractScientificName(label))
+}
+
+// canonicalKeyForSci returns the canonical lookup key for an already-extracted
+// scientific name: the openfauna alias-map canonical name, lower-cased.
+func canonicalKeyForSci(sci string) string {
+	return strings.ToLower(openfauna.CanonicalName(sci))
+}
+
 // computeCanonicalKey is the canonical lookup key for a label: the extracted
 // scientific name run through the openfauna alias map, lower-cased. It is
 // identical to classifier.canonicalSpeciesKey, pinned by a classifier-side test.
 func computeCanonicalKey(label string) string {
-	return strings.ToLower(openfauna.CanonicalName(detection.ExtractScientificName(label)))
+	return canonicalKeyForSci(detection.ExtractScientificName(label))
 }
 
 // CanonicalKey returns the canonical key for a label, hitting the memo when the
@@ -149,10 +162,10 @@ func (s *Snapshot) ResolveLabel(sci string) (label, common string, ok bool) {
 	if lbl, found := s.LabelBySci[sci]; found {
 		return lbl, s.SciToCommon[sci], true
 	}
-	ck := strings.ToLower(openfauna.CanonicalName(detection.ExtractScientificName(sci)))
+	ck := computeCanonicalKey(sci)
 	if lbls := s.LabelsByCanonical[ck]; len(lbls) == 1 {
 		lbl := lbls[0]
-		return lbl, s.SciToCommon[detection.ExtractScientificName(lbl)], true
+		return lbl, s.SciToCommon[scientificName(lbl)], true
 	}
 	return "", "", false
 }

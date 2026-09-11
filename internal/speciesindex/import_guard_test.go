@@ -21,9 +21,10 @@ const goListTimeout = 60 * time.Second
 // speciesindexPkg is the import path of the package under test.
 const speciesindexPkg = "github.com/tphakala/birdnet-go/internal/speciesindex"
 
-// forbiddenPrefixes are import paths speciesindex must never pull in, so it stays
-// a leaf importable from classifier, api/v2 and analysis without a cycle. Only
-// leaf packages (datastore, detection, openfauna) are allowed.
+// forbiddenImports are the import groups speciesindex must never pull in, so it
+// stays a leaf importable from classifier, api/v2 and analysis without a cycle.
+// This is a denylist: it asserts the absence of these groups, not a positive
+// allowlist of every permitted package.
 var forbiddenImports = []struct {
 	label string
 	match func(dep string) bool

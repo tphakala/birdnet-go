@@ -72,8 +72,8 @@ func (c *Core) CurrentLocale() string {
 // for diacritics, so normalising both sides to NFC prevents silent misses
 // on species like "Lehtopöllö". Shared by the insights, search, and range
 // (display de-duplication) code so the keys stay consistent across them. It
-// delegates to speciesindex.Fold, the single fold used process-wide, so the
-// api/v2 search keys match the ones the shared name index builds.
+// delegates to speciesindex.Fold, the shared species-name fold, so the api/v2
+// search keys match the ones the shared name index builds.
 func NormalizeForLookup(s string) string {
 	return speciesindex.Fold(s)
 }
