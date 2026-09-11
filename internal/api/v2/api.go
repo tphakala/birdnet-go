@@ -268,14 +268,20 @@ type Controller struct {
 	// WithAuthService / WithNotificationService (see NewWithOptions).
 	appHandler *app.Handler
 
-	// names owns the facade's BirdNET name index (the scientific<->common maps
-	// plus the authoritative resolver; see name_maps.go). Shared infrastructure:
-	// the analytics, detections, and species domains read it via injected
-	// accessors, and internal/analysis drives it through
-	// UpdateCommonNameMap/SetNameResolver on *Controller. Constructed in
-	// NewWithOptions; the accessors treat a nil service (a bare-struct test) as an
-	// empty index.
+	// names points at the BirdNET name index the facade reads through the
+	// name_maps.go accessors (the scientific<->common maps plus the authoritative
+	// resolver). The analytics, detections, and species domains read it via
+	// injected bound accessors. NewWithOptions seeds a facade-owned fallback
+	// service; WithSpeciesIndex replaces it with the orchestrator-owned shared
+	// service (ownsNames then false). The accessors treat a nil service (a
+	// bare-struct test) as an empty index.
 	names *speciesindex.Service
+
+	// ownsNames reports whether names is the facade's own fallback service (true)
+	// or the orchestrator-owned shared service injected via WithSpeciesIndex
+	// (false). Only a facade-owned service is seeded from labels in
+	// initInsightsRoutes; the shared service is rebuilt by the orchestrator.
+	ownsNames bool
 
 	// analytics serves the /api/v2/analytics/* species/time/confidence/sun/sources
 	// endpoints, the geographic /range/heatmap endpoint, the /insights/* +
@@ -365,6 +371,22 @@ func WithModelManager(mm *classifier.ModelManager) Option {
 	}
 }
 
+// WithSpeciesIndex injects the orchestrator-owned species-name index, shared with
+// the datastore, so the facade reads the same snapshot the orchestrator rebuilds
+// from the union of loaded labels. When set, the facade does not own the service
+// and initInsightsRoutes does not seed it (the orchestrator is its only writer). A
+// nil service leaves the facade's own fallback in place. The domain handlers read
+// c.names at call time, so this may run after they were constructed.
+func WithSpeciesIndex(svc *speciesindex.Service) Option {
+	return func(c *Controller) {
+		if svc == nil {
+			return
+		}
+		c.names = svc
+		c.ownsNames = false
+	}
+}
+
 // WithHealthErrorBuffer injects a shared ErrorRingBuffer created at startup.
 // When set, the system handler's diagnostics initializer uses this buffer instead
 // of creating its own, enabling the logger to feed errors into the same buffer the
@@ -421,11 +443,14 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		isGlobalOwner: settings == conf.GetSettings(),
 	}
 
-	// Initialize the facade-owned species-name index before constructing any
-	// domain handler, since several capture the name-map accessors as bound
-	// methods. It stays empty until initInsightsRoutes / UpdateCommonNameMap seeds
-	// it from the current labels.
+	// Initialize the facade-owned fallback species-name index before constructing
+	// any domain handler, since several capture the name-map accessors as bound
+	// methods. It stays empty until initInsightsRoutes seeds it from the current
+	// labels; WithSpeciesIndex may replace it with the orchestrator-owned shared
+	// service during the functional-options loop below (the accessors read c.names
+	// at call time, so the late swap is observed).
 	c.names = speciesindex.New(nil)
+	c.ownsNames = true
 
 	// Construct domain handlers around the shared core. They hold the same
 	// *apicore.Core pointer and register their routes in initRoutes.

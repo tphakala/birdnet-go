@@ -35,10 +35,10 @@ func (a *analyticsBatchFakeResolver) ResolveLocalizedBatch(names []string) map[s
 	return out
 }
 
-// TestUpdateCommonNameMap_PopulatesAllMaps verifies that UpdateCommonNameMap
-// populates the display, folded-search, and exact-resolution maps from the same
-// label input, keeping them consistent.
-func TestUpdateCommonNameMap_PopulatesAllMaps(t *testing.T) {
+// TestNameMaps_PopulatesAllMaps verifies that a rebuild populates the display,
+// folded-search, and exact-resolution maps from the same label input, keeping them
+// consistent.
+func TestNameMaps_PopulatesAllMaps(t *testing.T) {
 	t.Parallel()
 
 	e := echo.New()
@@ -49,7 +49,7 @@ func TestUpdateCommonNameMap_PopulatesAllMaps(t *testing.T) {
 		"Strix aluco_Tawny Owl",
 		"Parus major_Great Tit",
 	}
-	c.UpdateCommonNameMap(labels)
+	seedNames(t, c, nil, labels)
 
 	// Verify the scientific-to-common map (used by insights endpoints).
 	sciToCommon := c.loadCommonNameMap()
@@ -111,14 +111,12 @@ func TestHandleSearch_LocalizedCommonName_SecondaryModelSpecies(t *testing.T) {
 
 	// Wire a batch-capable resolver so the scientific-only bat label
 	// "Barbastella barbastellus" (no underscore-separated common name in the
-	// label string) gets a Finnish localized name via the batch path.
-	controller.SetNameResolver(&analyticsBatchFakeResolver{batch: map[string]string{
+	// label string) gets a Finnish localized name via the batch path. Feeding the
+	// scientific-only label triggers the batchLocalizer path and populates
+	// commonToSci with "mopsilepakko" -> "Barbastella barbastellus".
+	seedNames(t, controller, &analyticsBatchFakeResolver{batch: map[string]string{
 		"Barbastella barbastellus": "mopsilepakko",
-	}})
-	// Feed the scientific-only label so UpdateCommonNameMap triggers the
-	// batchLocalizer path and populates commonToSci with
-	// "mopsilepakko" -> "Barbastella barbastellus".
-	controller.UpdateCommonNameMap([]string{"Barbastella barbastellus"})
+	}}, []string{"Barbastella barbastellus"})
 
 	// Capture the SearchFilters that reach the datastore.
 	var captured *datastore.SearchFilters
@@ -159,7 +157,7 @@ func TestHandleSearch_ExactCommonNamePreservesSubstringUnion(t *testing.T) {
 	t.Attr("feature", "common-name-substring-union")
 
 	e, mockDS, controller := setupTestEnvironment(t)
-	controller.UpdateCommonNameMap([]string{
+	seedNames(t, controller, nil, []string{
 		"Tyto alba_Barn Owl",
 		"Tyto furcata_American Barn Owl",
 	})

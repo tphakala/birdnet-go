@@ -132,13 +132,14 @@ type Datastore struct {
 	// classify Perch v2 (FSD50K) sound classes without a data race.
 	nonBirdLabelTypeIDs map[nonbird.Category]uint
 
-	// names owns the species-name lookup index (the forward display and reverse
-	// search maps plus the authoritative resolver) behind an atomic snapshot for
-	// lock-free reads and atomic swaps on locale or model change. Set once in New;
-	// a nil value (a bare-struct test) is treated as an empty index by the
-	// accessors and mutators below, preserving the zero-value safety of the
-	// previous atomic.Pointer fields it replaced.
-	names *speciesindex.Service
+	// names points at the species-name lookup index (the forward display and
+	// reverse search maps plus the authoritative resolver). New seeds a private
+	// fallback service from the configured labels; APIServerService.Start swaps in
+	// the orchestrator-owned shared service via SetSpeciesIndex. Held behind an
+	// atomic.Pointer so that swap is lock-free against concurrent readers. A nil
+	// pointer (a bare-struct test) is treated as an empty index by the accessors
+	// below.
+	names atomic.Pointer[speciesindex.Service]
 
 	// speciesCodeMap provides O(1) lookup from scientific name to eBird species code.
 	// Populated from the eBird taxonomy data passed via Config.SpeciesCodeMap.
@@ -323,13 +324,17 @@ func New(cfg *Config) (*Datastore, error) {
 		nonBirdLabelTypeIDs: nonBirdLabelTypeIDs,
 		speciesCodeMap:      speciesCodeMap,
 		dbCounters:          dbCounters,
-		names:               speciesindex.New(nil),
 	}
 
-	// Build the species-name maps from labels. The OpenFauna resolver is injected
-	// later via SetNameResolver (owned by the orchestrator, constructed
-	// separately), so the maps are localized on the first post-wiring rebuild.
-	ds.names.Rebuild(cfg.Labels, "")
+	// Seed a private fallback species-name index from the configured labels. A
+	// datastore later handed the orchestrator-owned shared index (via
+	// SetSpeciesIndex in APIServerService.Start) swaps this out; a datastore never
+	// handed one (file-analysis commands, fresh install, tests) keeps this
+	// fallback, byte-identical to Phase 1. The OpenFauna resolver is absent here;
+	// the shared service carries the orchestrator's resolver once injected.
+	fallback := speciesindex.New(nil)
+	fallback.Rebuild(cfg.Labels, "")
+	ds.names.Store(fallback)
 
 	// Start periodic WAL checkpoint for SQLite to prevent unbounded WAL growth.
 	// The auto-checkpoint mechanism may not fire reliably with connection pooling.
@@ -340,34 +345,27 @@ func New(cfg *Config) (*Datastore, error) {
 	return ds, nil
 }
 
-// UpdateNameMaps rebuilds species name lookup maps from updated BirdNET labels.
-// Called after locale or model changes to keep common name resolution current.
-// The new maps are built first, then atomically swapped in - readers are never blocked.
-// Also resets the missing-name warning deduplication so new mismatches are logged.
-func (ds *Datastore) UpdateNameMaps(labels []string) {
-	if ds.names == nil {
+// SetSpeciesIndex installs the orchestrator-owned species-name index, replacing
+// the fallback seeded in New. The datastore never writes to the shared service;
+// the classifier orchestrator is its only writer. A nil service is ignored. The
+// missing-name warning dedup is cleared so a name that goes missing under the new
+// index is logged once more (the one side effect the removed UpdateNameMaps had
+// that a shared rebuild no longer reaches).
+func (ds *Datastore) SetSpeciesIndex(svc *speciesindex.Service) {
+	if svc == nil {
 		return
 	}
-	ds.names.Rebuild(labels, "")
+	ds.names.Store(svc)
 	ds.loggedMissingNames.Clear()
-}
-
-// SetNameResolver installs the authoritative localized name resolver, shared with
-// the classifier orchestrator. Safe to call concurrently with reads; a nil
-// resolver is ignored.
-func (ds *Datastore) SetNameResolver(r datastore.SpeciesNameResolver) {
-	if ds.names == nil {
-		return
-	}
-	ds.names.SetResolver(r)
 }
 
 // loadNameResolver returns the installed resolver, or nil if none has been set.
 func (ds *Datastore) loadNameResolver() datastore.SpeciesNameResolver {
-	if ds.names == nil {
+	svc := ds.names.Load()
+	if svc == nil {
 		return nil
 	}
-	return ds.names.Resolver()
+	return svc.Resolver()
 }
 
 // Open is a no-op since the manager is already open.
@@ -377,10 +375,11 @@ func (ds *Datastore) Open() error {
 
 // loadNameMaps returns the current name maps. Always returns a non-nil value.
 func (ds *Datastore) loadNameMaps() *speciesindex.Snapshot {
-	if ds.names == nil {
+	svc := ds.names.Load()
+	if svc == nil {
 		return speciesindex.Empty()
 	}
-	return ds.names.Snapshot()
+	return svc.Snapshot()
 }
 
 // filterLookupDeps builds the dependency set used by repository filter resolution (species and
