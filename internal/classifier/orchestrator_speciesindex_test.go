@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/openfauna"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
@@ -134,9 +135,41 @@ func TestSpeciesIndex_RebuiltOnRebuildNameResolver(t *testing.T) {
 	assert.Equal(t, "Turdus merula_Common Blackbird", after.LabelBySci["Turdus merula"])
 }
 
-// TestSpeciesIndex_EqualsLegacySeed is the I1 pin for units B and C: the
-// orchestrator's published snapshot must equal a snapshot built the legacy way,
-// from AllLabels() with the same resolver and locale.
+// TestSpeciesIndex_RebuiltOnPrimaryReload verifies the two primary-reload paths
+// (ReloadModel and ReloadPrimaryForVariantSwap) republish the species index. Both
+// go through reloadPrimaryModel, which requires a real *BirdNET primary, so this is
+// skipped when the model is unavailable in the test environment. Without the rebuild
+// trigger, a locale or model change via reload_birdnet would leave the datastore and
+// facade serving a stale species-name snapshot.
+func TestSpeciesIndex_RebuiltOnPrimaryReload(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	o, err := NewOrchestrator(settings)
+	if err != nil {
+		t.Skipf("Skipping: model not available in test environment: %v", err)
+	}
+	t.Cleanup(func() { o.Delete() })
+
+	// Sequential subtests share o; each reload must publish a fresh snapshot pointer.
+	// Deleting the rebuildSpeciesIndex call from either caller makes the matching
+	// subtest fail (Same pointer).
+	t.Run("ReloadModel", func(t *testing.T) {
+		before := o.SpeciesSnapshot()
+		require.NoError(t, o.ReloadModel())
+		assert.NotSame(t, before, o.SpeciesSnapshot(), "ReloadModel must republish the species index")
+	})
+	t.Run("ReloadPrimaryForVariantSwap", func(t *testing.T) {
+		before := o.SpeciesSnapshot()
+		require.NoError(t, o.ReloadPrimaryForVariantSwap())
+		assert.NotSame(t, before, o.SpeciesSnapshot(), "ReloadPrimaryForVariantSwap must republish the species index")
+	})
+}
+
+// TestSpeciesIndex_EqualsLegacySeed pins that the orchestrator's published snapshot
+// equals a fresh snapshot built from AllLabels() with the same resolver and locale:
+// Build is deterministic over those inputs, and the orchestrator feeds it the label
+// union (not a primary-only seed) with o's own resolver and locale. It is not a full
+// reconstruction of the pre-Phase-2a inclusion-list seed; the I1 equivalence of the
+// wider working set is argued in the plan and covered by the resolver/union tests.
 func TestSpeciesIndex_EqualsLegacySeed(t *testing.T) {
 	t.Parallel()
 
@@ -189,13 +222,13 @@ func TestRebuildNameResolver_InclusionListIsIncluded(t *testing.T) {
 	assert.True(t, ok2, "the model's own species stays pre-indexed alongside the inclusion list")
 }
 
-// TestSpeciesIndex_LocaleChangeReflectsResolver verifies the published snapshot's
-// localized names follow the resolver's locale after RebuildNameResolver. Uses
-// the real vendored OpenFauna dataset, so it is skipped under -short.
+// TestSpeciesIndex_LocaleChangeReflectsResolver verifies the load-bearing ordering
+// in RebuildNameResolver: the OpenFauna resolver switches locale first, then the
+// snapshot is republished from it, so the published localized names follow the new
+// locale. It runs unconditionally (not gated behind -short) because it is the only
+// guard on that ordering; it uses the vendored OpenFauna dataset, which is embedded
+// and always available (no network).
 func TestSpeciesIndex_LocaleChangeReflectsResolver(t *testing.T) {
-	if testing.Short() {
-		t.Skip("uses the real OpenFauna dataset")
-	}
 	t.Parallel()
 
 	of := openfauna.NewResolver()
@@ -268,9 +301,15 @@ func TestSpeciesIndex_ConcurrentReadersDuringLoadUnload(t *testing.T) {
 	assert.Equal(t, "Cyanistes caeruleus_Eurasian Blue Tit", o.SpeciesSnapshot().LabelBySci["Cyanistes caeruleus"])
 }
 
-// TestSpeciesIndex_ConcurrentTriggersPublishNewest pins the rebuildMu guarantee:
-// with LoadModel(A) and RebuildNameResolver racing, the final published snapshot
-// must contain A rather than a stale union that blocked behind a newer one.
+// TestSpeciesIndex_ConcurrentTriggersPublishNewest pins the rebuildMu convergence
+// guarantee: after any interleaving of concurrent rebuild triggers quiesces, the
+// published snapshot reflects the LIVE topology (its Labels equal AllLabels), never
+// a stale union that sampled the model set before a concurrent load but published
+// after it. rebuildSpeciesIndex samples AllLabels and publishes under o.rebuildMu;
+// without that lock the sample happens outside the publish critical section, so a
+// slow trigger could overwrite a newer snapshot with an older union. Each iteration
+// starts from the model unloaded so a real load races a resolver rebuild; the
+// convergence assertion fails if a stale union is published last. Run under -race.
 func TestSpeciesIndex_ConcurrentTriggersPublishNewest(t *testing.T) {
 	const testID = "SpeciesIndex_ConcurrentPublish"
 	ModelRegistry[testID] = ModelInfo{ID: testID}
@@ -283,11 +322,24 @@ func TestSpeciesIndex_ConcurrentTriggersPublishNewest(t *testing.T) {
 
 	o := newSpeciesIndexTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID, labels: []string{"Cyanistes caeruleus_Eurasian Blue Tit"}})
 
-	var wg sync.WaitGroup
-	wg.Go(func() { require.NoError(t, o.LoadModel(testID)) })
-	wg.Go(func() { require.NoError(t, o.RebuildNameResolver(nil)) })
-	wg.Wait()
+	for i := range 50 {
+		// Start each iteration from the model unloaded (ignore "not loaded" on the
+		// first pass), so LoadModel does real topology work concurrently with the
+		// resolver rebuild rather than hitting the already-loaded skip.
+		_ = o.UnloadModel(testID)
 
-	assert.Equal(t, "Turdus merula_Common Blackbird", o.SpeciesSnapshot().LabelBySci["Turdus merula"],
-		"the last published snapshot must reflect the loaded model")
+		var wg sync.WaitGroup
+		wg.Go(func() { assert.NoError(t, o.LoadModel(testID)) })
+		wg.Go(func() { assert.NoError(t, o.RebuildNameResolver(nil)) })
+		wg.Wait()
+
+		// The model is loaded and never unloaded within the iteration, so the live
+		// union contains its species; the last published snapshot must match the
+		// live union exactly (rebuildMu convergence), not a stale pre-load union.
+		snap := o.SpeciesSnapshot()
+		assert.Equal(t, o.AllLabels(), snap.Labels,
+			"published snapshot must equal the live label union after concurrent triggers (iteration %d)", i)
+		assert.Equal(t, "Turdus merula_Common Blackbird", snap.LabelBySci["Turdus merula"],
+			"the loaded model's species must be present after the race (iteration %d)", i)
+	}
 }

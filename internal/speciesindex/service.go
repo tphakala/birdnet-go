@@ -31,8 +31,7 @@ func New(resolver datastore.SpeciesNameResolver) *Service {
 }
 
 // SetResolver installs the authoritative localized name resolver. A nil resolver
-// is ignored (mirrors both sites' SetNameResolver). The change takes effect on
-// the next Rebuild.
+// is ignored. The change takes effect on the next Rebuild.
 func (s *Service) SetResolver(r datastore.SpeciesNameResolver) {
 	if datastore.IsNilResolver(r) {
 		return

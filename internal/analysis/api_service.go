@@ -140,8 +140,8 @@ func (s *APIServerService) Start(ctx context.Context) error {
 	// Install the orchestrator-owned species-name index on the datastore so its
 	// common-name resolution reads the same snapshot the orchestrator rebuilds from
 	// the union of loaded labels. This runs before processor.New (and thus before
-	// the audio sources and the first detection save), earlier than the old
-	// installNameResolver in NewControlMonitor. The legacy DataStore does not
+	// the audio sources and the first detection save), earlier than the old startup
+	// name-resolver wiring in NewControlMonitor. The legacy DataStore does not
 	// implement the setter and stays on its own maps.
 	installSpeciesIndex(dataStore, bn.SpeciesIndex())
 

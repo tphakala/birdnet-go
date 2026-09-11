@@ -326,9 +326,9 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	o.nameResolvers = []NameResolver{ofResolver, resolver}
 	o.openfauna = ofResolver
 	// The orchestrator owns the single species-name index and is its only writer.
-	// Seed it with the same OpenFauna resolver installNameResolver used to hand the
-	// datastore and facade; rebuildSpeciesIndex below (and every topology trigger)
-	// republishes it from the union of loaded labels.
+	// Seed it with the orchestrator's OpenFauna resolver (the same resolver the old
+	// startup wiring handed the datastore and facade); rebuildSpeciesIndex below
+	// (and every topology trigger) republishes it from the union of loaded labels.
 	o.names = speciesindex.New(ofResolver)
 	o.models[bn.ModelInfo.ID] = &modelEntry{instance: bn}
 	o.primary = bn
@@ -863,9 +863,8 @@ func (o *Orchestrator) RebuildNameResolver(includedSpecies []string) error {
 		return err
 	}
 	// Publish the species-name snapshot second: its localized names come from the
-	// resolver just rebuilt, so the resolver must switch locale first (the same
-	// ordering handleReloadBirdnet enforced when it rebuilt the maps after the
-	// range filter).
+	// resolver just rebuilt, so the resolver must switch locale before the snapshot
+	// is built from it.
 	o.rebuildSpeciesIndex()
 	return nil
 }

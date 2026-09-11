@@ -11,9 +11,9 @@
 // monolith that have not been extracted yet, so the facade injects them as
 // function values (the tls-domain facade-dependency-injection precedent):
 //   - commonNameMap: a read accessor over the shared scientific-to-common name
-//     map. The name-map plumbing (UpdateCommonNameMap/SetNameResolver) stays in
-//     the facade package because control_monitor drives it and several domains
-//     share it; species only needs read access.
+//     map. The name-map plumbing lives in the facade package because several
+//     domains share it (the index itself is orchestrator-owned since Phase 2a);
+//     species only needs read access.
 //   - serveImageProxy: the media domain's bird-image proxy handler, which the
 //     species thumbnail endpoint delegates to. When media is extracted this can
 //     point at the media handler instead.

@@ -131,3 +131,15 @@ func TestController_NameMaps_ScientificOnlyLabelSearchable(t *testing.T) {
 	_, ok := bare.loadCommonNameMap()["Myotis myotis"]
 	assert.False(t, ok)
 }
+
+// TestSeedFallbackNames_OwnedServiceRebuilds exercises the active (owned-service)
+// branch of seedFallbackNames directly, the path initInsightsRoutes uses to seed a
+// facade that was never handed the orchestrator's shared index.
+func TestSeedFallbackNames_OwnedServiceRebuilds(t *testing.T) {
+	t.Parallel()
+
+	c := newNameMapController(t) // ownsNames == true
+	c.seedFallbackNames([]string{"Turdus merula_Common Blackbird"})
+	assert.Equal(t, "Common Blackbird", c.loadCommonNameMap()["Turdus merula"],
+		"seedFallbackNames must rebuild a facade-owned index from labels")
+}

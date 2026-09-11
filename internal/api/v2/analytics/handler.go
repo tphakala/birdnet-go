@@ -17,10 +17,9 @@
 //   - loadCommonNameMap / loadCommonToScientificMap: the cached BirdNET name maps
 //     (facade name_maps.go), used to localize species names in insights responses
 //     and to resolve a localized species query to its scientific name in the
-//     analytics species filter (resolveSpeciesToScientific). The facade owns the
-//     name-map plumbing (UpdateCommonNameMap/SetNameResolver) because it is shared
-//     with detections, species, settings, and the external internal/analysis
-//     callers; analytics only reads it.
+//     analytics species filter (resolveSpeciesToScientific). The facade holds the
+//     name-map plumbing because it is shared with detections, species and settings
+//     (the index itself is orchestrator-owned since Phase 2a); analytics only reads it.
 package analytics
 
 import (

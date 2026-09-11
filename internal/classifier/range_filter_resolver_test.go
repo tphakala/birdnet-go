@@ -74,7 +74,13 @@ func TestBuildRangeFilter_TriggersNameResolverRebuild(t *testing.T) {
 
 	// Negative control: a real dataset species that is neither a label nor scored
 	// stays off the fast-path index, proving the rebuilt index is still working-set
-	// scoped and not the whole dataset. Its on-demand Resolve would still find it.
+	// scoped and not the whole dataset.
 	_, ok = o.openfauna.ResolveLocal(offWorkingSetSci)
 	assert.False(t, ok, "a species outside the label union and inclusion list must not be in the fast-path index")
+
+	// The control is only meaningful if the species genuinely exists in the dataset
+	// (so its absence from the fast path proves working-set scoping, rather than the
+	// species simply not existing). Its on-demand Resolve must still find it.
+	assert.NotEmpty(t, o.openfauna.Resolve(offWorkingSetSci, localeEN),
+		"the negative-control species must be a real dataset species resolvable on demand")
 }
