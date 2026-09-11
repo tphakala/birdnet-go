@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
 // clearExcludedSpeciesList resets the species exclude list for a clean test start.
@@ -78,6 +79,7 @@ func TestCanonicalizeExcludeList(t *testing.T) {
 	t.Parallel()
 
 	c := &Controller{Core: &apicore.Core{}}
+	c.names = speciesindex.New(nil)
 	installExcludeTestResolver(t, c)
 
 	tests := []struct {

@@ -6,11 +6,9 @@ package apicore
 import (
 	"fmt"
 	"strconv"
-	"strings"
-
-	"golang.org/x/text/unicode/norm"
 
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
 // BirdNET week-model constants, shared across api/v2 domains. BirdNET uses a
@@ -73,9 +71,11 @@ func (c *Core) CurrentLocale() string {
 // on macOS or with composing keyboards may submit decomposed (NFD) bytes
 // for diacritics, so normalising both sides to NFC prevents silent misses
 // on species like "Lehtopöllö". Shared by the insights, search, and range
-// (display de-duplication) code so the keys stay consistent across them.
+// (display de-duplication) code so the keys stay consistent across them. It
+// delegates to speciesindex.Fold, the single fold used process-wide, so the
+// api/v2 search keys match the ones the shared name index builds.
 func NormalizeForLookup(s string) string {
-	return strings.ToLower(norm.NFC.String(s))
+	return speciesindex.Fold(s)
 }
 
 // ParseFloat64 parses a string to float64. Shared by the range and heatmap

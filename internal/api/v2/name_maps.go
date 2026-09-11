@@ -1,8 +1,8 @@
 // internal/api/v2/name_maps.go
 //
 // Facade-owned BirdNET name-map plumbing. The cached scientific<->common lookup
-// maps and the authoritative name resolver live on the *Controller (the fields
-// nameMaps and nameResolver in api.go). They are shared infrastructure: the
+// maps and the authoritative name resolver live on the *Controller (the field
+// names in api.go, a *speciesindex.Service). They are shared infrastructure: the
 // analytics domain, the detections search resolver, the species image handler,
 // and the settings exclude-list canonicalization all read them through the
 // accessors below (analytics, detections, and species receive the accessors as
@@ -10,98 +10,44 @@
 // directly). UpdateCommonNameMap and SetNameResolver are part of the external
 // surface: internal/analysis drives them through *apiv2.Controller. Keeping the
 // plumbing here (rather than in a domain package) avoids any domain->domain or
-// domain->facade dependency.
+// domain->facade dependency. The maps themselves are built and owned by the
+// shared internal/speciesindex leaf package, so the api/v2 and datastore name
+// maps stay byte-identical.
 package api
 
 import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
-// nameMaps holds the BirdNET display, folded-search, and exact-resolution maps.
-// Grouping them lets a single atomic.Value Store swap one consistent snapshot,
-// avoiding any window where readers could see a partially updated set.
-type nameMaps struct {
-	// sciToCommon maps scientific name -> common name.
-	sciToCommon map[string]string
-	// sciToCommonFolded maps scientific name -> NFC-normalised, lowercased common
-	// name for allocation-free substring matching on the search hot path.
-	sciToCommonFolded map[string]string
-	// commonToSci maps NFC-normalised, lowercased common name -> scientific name.
-	commonToSci map[string]string
-}
-
-// buildNameMaps parses a BirdNET label list ("ScientificName_CommonName")
-// and builds both lookup maps in a single pass. If two or more labels share
-// the same normalised common name but map to different scientific names,
-// the common-name key is removed from commonToSci so that search queries
-// matching an ambiguous common name pass through untranslated; resolving
-// them to an arbitrary species based on label order would silently hide
-// valid matches. sciToCommon is not affected because scientific names are
-// unique per label.
-// When resolver is non-nil, each label's common name is overridden by the
-// resolver (authoritative/localized), so insights display (sciToCommon) and
-// search (commonToSci) both reflect the localized name. Labels the resolver does
-// not cover keep their embedded common name.
-func buildNameMaps(labels []string, resolver datastore.SpeciesNameResolver) *nameMaps {
-	nm := &nameMaps{
-		sciToCommon:       make(map[string]string, len(labels)),
-		sciToCommonFolded: make(map[string]string, len(labels)),
-		commonToSci:       make(map[string]string, len(labels)),
+// loadNameMaps returns the current species-name snapshot. Always returns a
+// non-nil snapshot with non-nil inner maps (Empty() before the first rebuild, or
+// when the service is unset on a bare-struct test), so callers index without
+// guards.
+func (c *Controller) loadNameMaps() *speciesindex.Snapshot {
+	if c.names == nil {
+		return speciesindex.Empty()
 	}
-	ambiguous := make(map[string]struct{})
-	for _, sn := range datastore.ResolveLabelNames(labels, resolver) {
-		nm.sciToCommon[sn.Scientific] = sn.Common
-
-		key := apicore.NormalizeForLookup(sn.Common)
-		nm.sciToCommonFolded[sn.Scientific] = key
-		if _, seen := ambiguous[key]; seen {
-			continue
-		}
-		if existing, exists := nm.commonToSci[key]; exists && existing != sn.Scientific {
-			ambiguous[key] = struct{}{}
-			delete(nm.commonToSci, key)
-			continue
-		}
-		nm.commonToSci[key] = sn.Scientific
-	}
-	return nm
-}
-
-// emptyNameMaps is returned by loadNameMaps when the atomic.Value has not been
-// populated yet (a narrow startup window before initInsightsRoutes runs). It
-// avoids allocating a fresh struct and empty maps on every cold-path call.
-var emptyNameMaps = &nameMaps{
-	sciToCommon:       map[string]string{},
-	sciToCommonFolded: map[string]string{},
-	commonToSci:       map[string]string{},
-}
-
-// loadNameMaps returns the current name-maps struct. Always returns a non-nil
-// struct with non-nil inner maps so callers can index without guards.
-func (c *Controller) loadNameMaps() *nameMaps {
-	if nm, ok := c.nameMaps.Load().(*nameMaps); ok && nm != nil {
-		return nm
-	}
-	return emptyNameMaps
+	return c.names.Snapshot()
 }
 
 // loadCommonToScientificMap returns the current common-to-scientific lookup map.
 // Always returns a non-nil map.
 func (c *Controller) loadCommonToScientificMap() map[string]string {
-	return c.loadNameMaps().commonToSci
+	return c.loadNameMaps().CommonToSci
 }
 
 // loadCommonNameMap returns the current scientific-to-common lookup map.
 // Always returns a non-nil map.
 func (c *Controller) loadCommonNameMap() map[string]string {
-	return c.loadNameMaps().sciToCommon
+	return c.loadNameMaps().SciToCommon
 }
 
 // loadFoldedCommonNameMap returns the current scientific-to-normalized-common
 // lookup map used by substring search. Always returns a non-nil map.
 func (c *Controller) loadFoldedCommonNameMap() map[string]string {
-	return c.loadNameMaps().sciToCommonFolded
+	return c.loadNameMaps().SciToCommonFolded
 }
 
 // canonicalizeExcludeList canonicalizes the species exclude list (resolve each
@@ -113,27 +59,22 @@ func (c *Controller) canonicalizeExcludeList(exclude []string) []string {
 	return apicore.CanonicalizeExcludeList(c.loadCommonToScientificMap(), exclude)
 }
 
-// UpdateCommonNameMap rebuilds both cached name maps from updated BirdNET labels.
-// Called after locale or model changes to keep insights and search endpoints current.
+// UpdateCommonNameMap rebuilds the cached name maps from updated BirdNET labels,
+// using the locale from the current settings (empty when settings are nil).
+// Called after locale or model changes to keep insights and search endpoints
+// current.
 func (c *Controller) UpdateCommonNameMap(labels []string) {
-	c.nameMaps.Store(buildNameMaps(labels, c.loadNameResolver()))
+	locale := ""
+	if s := c.ControllerSettings(); s != nil {
+		locale = s.BirdNET.Locale
+	}
+	c.names.Rebuild(labels, locale)
 }
 
 // SetNameResolver installs the authoritative localized name resolver, shared with
 // the classifier orchestrator. A nil resolver is ignored.
 func (c *Controller) SetNameResolver(r datastore.SpeciesNameResolver) {
-	if datastore.IsNilResolver(r) {
-		return
-	}
-	c.nameResolver.Store(&r)
-}
-
-// loadNameResolver returns the installed resolver, or nil if none has been set.
-func (c *Controller) loadNameResolver() datastore.SpeciesNameResolver {
-	if p := c.nameResolver.Load(); p != nil {
-		return *p
-	}
-	return nil
+	c.names.SetResolver(r)
 }
 
 // initInsightsRoutes seeds the facade-owned name maps and registers the analytics
