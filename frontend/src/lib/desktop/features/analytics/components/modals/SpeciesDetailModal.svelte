@@ -54,7 +54,9 @@
   let displayName = $derived(
     localizeSpeciesName(displaySpecies?.scientific_name, displaySpecies?.common_name)
   );
-  let wikipediaUrl = $derived(getWikipediaUrl(displayName, getLocale()));
+  let wikipediaUrl = $derived(
+    getWikipediaUrl(displayName, getLocale(), displaySpecies?.common_name ?? '')
+  );
 
   function formatPercentage(value: number): string {
     return (value * 100).toFixed(1) + '%';

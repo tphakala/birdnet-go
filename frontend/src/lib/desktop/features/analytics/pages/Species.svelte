@@ -687,7 +687,11 @@
                             <ExternalLink class="inline size-3.5 ml-1" />
                           </a>
                           <a
-                            href={getWikipediaUrl(displayName, getLocale())}
+                            href={getWikipediaUrl(
+                              displayName,
+                              getLocale(),
+                              species.common_name
+                            )}
                             target="_blank"
                             rel="noopener noreferrer"
                             class="link link-hover ml-2"
