@@ -65,10 +65,10 @@ func TestApplyRangeFilterConfigForInstall_ClearsStaleOppositePath(t *testing.T) 
 			rf.ModelPath = staleModelPath
 			rf.LabelsPath = staleLabelsPath
 
-			entry := &CatalogEntry{GeomodelVersion: "v3", Files: tt.files}
+			entry := &CatalogEntry{GeomodelVersion: geomodelRangeFilterVersion, Files: tt.files}
 			mm.applyRangeFilterConfigForInstall(updated, entry)
 
-			assert.Equal(t, "v3", rf.Model, "the geomodel version must be written")
+			assert.Equal(t, geomodelRangeFilterVersion, rf.Model, "the geomodel version must be written")
 			assert.Equal(t, tt.wantModelPath(sharedDir), rf.ModelPath,
 				"model path must be the entry's shared model file, or cleared when the entry omits the model role")
 			assert.Equal(t, tt.wantLabels(sharedDir), rf.LabelsPath,
@@ -88,7 +88,7 @@ func TestApplyRangeFilterConfigForInstall_NonGeomodelEntryIsNoop(t *testing.T) {
 
 	updated := conftest.GetTestSettings()
 	rf := updated.RangeFilterConfig()
-	rf.Model = "v3"
+	rf.Model = geomodelRangeFilterVersion
 	rf.ModelPath = "/existing/geomodel.onnx"
 	rf.LabelsPath = "/existing/geomodel-labels.txt"
 
@@ -96,7 +96,7 @@ func TestApplyRangeFilterConfigForInstall_NonGeomodelEntryIsNoop(t *testing.T) {
 	entry := &CatalogEntry{Files: []CatalogFile{{Role: RoleModel, LocalName: "classifier.onnx"}}}
 	mm.applyRangeFilterConfigForInstall(updated, entry)
 
-	assert.Equal(t, "v3", rf.Model, "a non-geomodel install must not touch the range-filter version")
+	assert.Equal(t, geomodelRangeFilterVersion, rf.Model, "a non-geomodel install must not touch the range-filter version")
 	assert.Equal(t, "/existing/geomodel.onnx", rf.ModelPath, "a non-geomodel install must not touch the model path")
 	assert.Equal(t, "/existing/geomodel-labels.txt", rf.LabelsPath, "a non-geomodel install must not touch the labels path")
 }

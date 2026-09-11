@@ -1526,7 +1526,7 @@ func TestGetTopBirdsData_SpeciesCode(t *testing.T) {
 	cfg.SpeciesCodeMap = speciesCodeMap
 	ds, err := New(cfg)
 	require.NoError(t, err)
-	defer func() { assert.NoError(t, ds.Close()); cfgCleanup() }() // nolint:testifylint // assert not require: cfgCleanup must still run if Close errors; require would Goexit and skip it
+	t.Cleanup(func() { assert.NoError(t, ds.Close()); cfgCleanup() }) // nolint:testifylint // assert not require: cfgCleanup must still run if Close errors; require would Goexit and skip it
 
 	now := time.Now().UTC()
 	dateStr := now.Format(time.DateOnly)
@@ -1687,7 +1687,7 @@ func TestGetSpeciesSummaryData_NoDateFilter(t *testing.T) {
 	cfg.SpeciesCodeMap = speciesCodeMap
 	ds, err := New(cfg)
 	require.NoError(t, err)
-	defer func() { assert.NoError(t, ds.Close()); cfgCleanup() }() // nolint:testifylint // assert not require: cfgCleanup must still run if Close errors; require would Goexit and skip it
+	t.Cleanup(func() { assert.NoError(t, ds.Close()); cfgCleanup() }) // nolint:testifylint // assert not require: cfgCleanup must still run if Close errors; require would Goexit and skip it
 
 	now := time.Now().UTC()
 
