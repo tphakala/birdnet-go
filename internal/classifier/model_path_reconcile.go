@@ -310,25 +310,27 @@ func (o *Orchestrator) planPathCorrection(current *conf.Settings, pc *pendingPat
 		resolved string
 	}
 
-	// familyPathFields is the single source of truth for the family-to-settings-field
+	// familyFields is the single source of truth for the family-to-settings-field
 	// mapping. A nil labels/embeddings pointer means the family has no such field and
-	// it must NOT be written: the primary is deliberately model-only (its label set
-	// is embedded and identical across variants, which is why applyConfigForPrimarySwap
-	// writes BirdNET.ModelPath alone and a user-configured BirdNET.LabelPath must
-	// survive a variant swap), and every family but bat carries no embeddings path.
-	model, labels, embeddings, ok := familyPathFields(updated, pc.registryID)
+	// it must NOT be written. The primary now exposes a Labels pointer like every
+	// other family, but its label path is still never rewritten here: the "model
+	// only" rule for a variant swap lives in applyConfigForVariantSwap, and
+	// resolvePrimaryModelPath only ever resolves a model path, so the primary's
+	// labels field always has fc.resolved == "" and is skipped by the guard below.
+	// Every family but bat carries no embeddings path.
+	fs, ok := familyFields(updated, pc.registryID)
 	if !ok {
 		// Unknown registry: nothing to plan. Return nil rather than current so no
 		// caller can mutate the live published snapshot through the result.
 		return nil, correctionUnknownFamily
 	}
 	fields := make([]fieldCorrection, 0, 3)
-	fields = append(fields, fieldCorrection{model, pc.resolved.model})
-	if labels != nil {
-		fields = append(fields, fieldCorrection{labels, pc.resolved.labels})
+	fields = append(fields, fieldCorrection{fs.Model, pc.resolved.model})
+	if fs.Labels != nil {
+		fields = append(fields, fieldCorrection{fs.Labels, pc.resolved.labels})
 	}
-	if embeddings != nil {
-		fields = append(fields, fieldCorrection{embeddings, pc.resolved.embeddings})
+	if fs.Embeddings != nil {
+		fields = append(fields, fieldCorrection{fs.Embeddings, pc.resolved.embeddings})
 	}
 
 	// A substitution that is not repairable must never reach the field loop: the

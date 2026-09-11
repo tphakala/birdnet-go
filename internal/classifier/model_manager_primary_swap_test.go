@@ -14,7 +14,7 @@ import (
 )
 
 // isolateTestConfig points conf.ConfigPath at a throwaway file under t.TempDir()
-// and restores the original in cleanup. Without it, applyConfigForPrimarySwap ->
+// and restores the original in cleanup. Without it, applyConfigForVariantSwap ->
 // conf.SaveSettings resolves the default user config path and overwrites the
 // developer's real ~/.config/birdnet-go/config.yaml during the test run.
 func isolateTestConfig(t *testing.T) {
