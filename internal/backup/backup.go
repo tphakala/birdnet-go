@@ -161,6 +161,7 @@ func sanitizeConfig(config *conf.Settings) *conf.Settings {
 	sanitized.Output.MySQL.Password = ""
 	sanitized.Realtime.MQTT.Password = ""
 	sanitized.Realtime.Weather.OpenWeather.APIKey = ""
+	sanitized.Realtime.Weather.Wunderground.APIKey = ""
 	sanitized.Realtime.Weather.PirateWeather.APIKey = ""
 
 	return &sanitized

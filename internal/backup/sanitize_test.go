@@ -24,15 +24,17 @@ func TestSanitizeConfigStripsEverySecret(t *testing.T) {
 
 	// Each value is distinctive so finding it in the output is unambiguous.
 	secrets := map[string]string{
-		"basic auth password":  "SECRET-basic-auth-password",
-		"basic auth client":    "SECRET-basic-auth-client",
-		"google client secret": "SECRET-google-client",
-		"github client secret": "SECRET-github-client",
-		"session secret":       "SECRET-session",
-		"profiling token":      "SECRET-profiling-token",
-		"mysql password":       "SECRET-mysql",
-		"mqtt password":        "SECRET-mqtt",
-		"openweather api key":  "SECRET-openweather",
+		"basic auth password":   "SECRET-basic-auth-password",
+		"basic auth client":     "SECRET-basic-auth-client",
+		"google client secret":  "SECRET-google-client",
+		"github client secret":  "SECRET-github-client",
+		"session secret":        "SECRET-session",
+		"profiling token":       "SECRET-profiling-token",
+		"mysql password":        "SECRET-mysql",
+		"mqtt password":         "SECRET-mqtt",
+		"openweather api key":   "SECRET-openweather",
+		"wunderground api key":  "SECRET-wunderground",
+		"pirateweather api key": "SECRET-pirateweather",
 	}
 
 	settings := &conf.Settings{}
@@ -45,6 +47,8 @@ func TestSanitizeConfigStripsEverySecret(t *testing.T) {
 	settings.Output.MySQL.Password = secrets["mysql password"]
 	settings.Realtime.MQTT.Password = secrets["mqtt password"]
 	settings.Realtime.Weather.OpenWeather.APIKey = secrets["openweather api key"]
+	settings.Realtime.Weather.Wunderground.APIKey = secrets["wunderground api key"]
+	settings.Realtime.Weather.PirateWeather.APIKey = secrets["pirateweather api key"]
 
 	// Prove the setup actually plants every secret, so a renamed field cannot
 	// turn this into a test that passes because it asserts on nothing.

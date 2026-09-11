@@ -806,7 +806,7 @@ func (c *Handler) testWeatherAuthentication(ctx context.Context, settings *conf.
 			}
 		}()
 
-		if resp.StatusCode == http.StatusUnauthorized {
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 			return "", fmt.Errorf("invalid API key - please check your OpenWeather API key")
 		}
 
@@ -849,7 +849,7 @@ func (c *Handler) testWeatherAuthentication(ctx context.Context, settings *conf.
 			}
 		}()
 
-		if resp.StatusCode == http.StatusUnauthorized {
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 			return "", fmt.Errorf("invalid API key - please check your Pirate Weather API key")
 		}
 

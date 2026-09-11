@@ -133,6 +133,29 @@ func TestPirateWeatherProvider_FetchWeather_Unauthorized_ReturnsSentinel(t *test
 	assert.Equal(t, 1, callCount, "a 401 must not be retried")
 }
 
+// TestPirateWeatherProvider_FetchWeather_Forbidden_ReturnsSentinel guards the
+// 403 classification, mirroring the 401 sentinel test above.
+func TestPirateWeatherProvider_FetchWeather_Forbidden_ReturnsSentinel(t *testing.T) {
+	setupHTTPMock(t)
+
+	callCount := 0
+	httpmock.RegisterResponder("GET", `=~^https://api\.pirateweather\.net/forecast/`,
+		func(_ *http.Request) (*http.Response, error) {
+			callCount++
+			return httpmock.NewStringResponse(http.StatusForbidden, `{"error": true, "message": "forbidden"}`), nil
+		})
+
+	provider := NewPirateWeatherProvider(nil)
+	settings := createTestSettings(t, "pirateweather")
+
+	data, err := provider.FetchWeather(t.Context(), settings)
+
+	require.Error(t, err)
+	assert.Nil(t, data)
+	require.ErrorIs(t, err, ErrWeatherAuthFailed, "403 must map to the auth-failed sentinel")
+	assert.Equal(t, 1, callCount, "a 403 must not be retried")
+}
+
 func TestPirateWeatherProvider_FetchWeather_InvalidJSON(t *testing.T) {
 	setupHTTPMock(t)
 

@@ -182,8 +182,10 @@ func standardHandleResponse(provider string) weatherResponseHandler {
 		// the body closed if a read panics, matching WundergroundProvider.executeRequest.
 		defer func() { _ = resp.Body.Close() }()
 
-		// HTTP 401: authentication failed — don't retry, return sentinel.
-		if resp.StatusCode == http.StatusUnauthorized {
+		// HTTP 401/403: authentication failed — don't retry, return sentinel.
+		// 403 is included alongside 401 since some providers (e.g. an
+		// over-quota or access-restricted key) signal auth problems that way.
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 			_, _ = io.ReadAll(resp.Body)
 			attemptLog.Error("Weather API authentication failed — check your API key")
 			return nil, false, ErrWeatherAuthFailed
