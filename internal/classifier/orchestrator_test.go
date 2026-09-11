@@ -107,8 +107,10 @@ func TestNewOrchestrator_SyncsSharedState(t *testing.T) {
 
 	// Verify shared state is synced from primary model
 	assert.Equal(t, o.primary.ModelInfo, o.ModelInfo, "ModelInfo should be synced")
-	assert.NotNil(t, o.TaxonomyMap, "TaxonomyMap should be populated")
-	assert.NotNil(t, o.ScientificIndex, "ScientificIndex should be populated")
+	if assert.NotNil(t, o.taxonomy, "taxonomy service should be populated") {
+		assert.NotEmpty(t, o.taxonomy.taxonomyMap, "taxonomy map should be populated")
+		assert.NotEmpty(t, o.taxonomy.sciIndex, "scientific index should be populated")
+	}
 	assert.Equal(t, settings, o.Settings, "Settings should be the same pointer")
 }
 

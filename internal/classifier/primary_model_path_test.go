@@ -336,9 +336,9 @@ func TestNewBirdNET_NilResolverUsesConfiguredPathVerbatim(t *testing.T) {
 // stale-path bug would get a second, louder bug on their very next settings save
 // (a locale change, a threshold edit).
 //
-// No native model is needed: an unreadable TaxonomyPath fails the reload at the
+// No native model is needed: an unreadable LabelPath fails the reload at the
 // first fallible step, which runs AFTER the identity switch. So the error text
-// distinguishes the two outcomes precisely: reaching the taxonomy step proves
+// distinguishes the two outcomes precisely: reaching the load-labels step proves
 // the identity gate let the reload through, and a veto never gets that far.
 func TestReloadModelInternal_RecoveredPathDoesNotVetoReload(t *testing.T) {
 	newServing := func(t *testing.T, configuredPath, liveCustomPath string, resolve primaryPathResolver) *BirdNET {
@@ -346,6 +346,7 @@ func TestReloadModelInternal_RecoveredPathDoesNotVetoReload(t *testing.T) {
 		settings := conftest.GetTestSettings()
 		settings.BirdNET.Version = ""
 		settings.BirdNET.ModelPath = configuredPath
+		settings.BirdNET.LabelPath = filepath.Join(t.TempDir(), "does-not-exist-labels.txt")
 		conftest.SetTestSettings(settings)
 		t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
@@ -353,7 +354,6 @@ func TestReloadModelInternal_RecoveredPathDoesNotVetoReload(t *testing.T) {
 			classifier:     &rollbackFakeClassifier{},
 			Settings:       settings,
 			ModelInfo:      customBirdNETV24ModelInfo(liveCustomPath),
-			TaxonomyPath:   filepath.Join(t.TempDir(), "does-not-exist-taxonomy.json"),
 			speciesCache:   make(map[string]*speciesCacheEntry),
 			resolvePrimary: resolve,
 		}
@@ -381,9 +381,9 @@ func TestReloadModelInternal_RecoveredPathDoesNotVetoReload(t *testing.T) {
 
 		err := bn.reloadModelInternal(false)
 
-		require.Error(t, err, "the reload still fails at the taxonomy step; that is the probe, not the subject")
-		assert.Contains(t, err.Error(), "taxonomy",
-			"the reload must reach the taxonomy step, which proves the identity gate let it through")
+		require.Error(t, err, "the reload still fails at the load-labels step; that is the probe, not the subject")
+		assert.Contains(t, err.Error(), "does-not-exist-labels",
+			"the reload must reach the load-labels step, which proves the identity gate let it through")
 		assert.NotContains(t, err.Error(), "requires orchestrator restart",
 			"re-resolving the recovered path is what stops a recovered start from failing its next settings save")
 	})
@@ -417,15 +417,16 @@ func TestReloadModelInternal_RecoveredPathDoesNotVetoReload(t *testing.T) {
 // detection was attributed to a model that was not running.
 //
 // The discriminator, as in the recovered-path test above, is an unreadable
-// TaxonomyPath that fails the reload at the first fallible step AFTER the identity
-// switch: reaching "taxonomy" would prove the guard let the fall-through through
-// (the bug), while "requires orchestrator restart" proves it refused (the fix).
+// LabelPath that fails the reload at the first fallible step AFTER the identity
+// switch: reaching the load-labels step would prove the guard let the fall-through
+// through (the bug), while "requires orchestrator restart" proves it refused (the fix).
 func TestReloadModelInternal_ClearingPathWhileCustomRunningIsRefused(t *testing.T) {
 	liveCustom := "/srv/models/my_custom_primary.tflite"
 
 	settings := conftest.GetTestSettings()
 	settings.BirdNET.Version = ""
 	settings.BirdNET.ModelPath = "" // the user just cleared the configured path
+	settings.BirdNET.LabelPath = filepath.Join(t.TempDir(), "does-not-exist-labels.txt")
 	conftest.SetTestSettings(settings)
 	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
@@ -433,7 +434,6 @@ func TestReloadModelInternal_ClearingPathWhileCustomRunningIsRefused(t *testing.
 		classifier:   &rollbackFakeClassifier{},
 		Settings:     settings,
 		ModelInfo:    customBirdNETV24ModelInfo(liveCustom), // a custom model is live
-		TaxonomyPath: filepath.Join(t.TempDir(), "does-not-exist-taxonomy.json"),
 		speciesCache: make(map[string]*speciesCacheEntry),
 		// The resolver mirrors production: a cleared configured path resolves to the
 		// empty result (substituted=false), which is exactly the case the dropped
@@ -452,7 +452,7 @@ func TestReloadModelInternal_ClearingPathWhileCustomRunningIsRefused(t *testing.
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "requires orchestrator restart",
 		"clearing the model path while a custom model runs is a model-identity change and must be refused")
-	assert.NotContains(t, err.Error(), "taxonomy",
+	assert.NotContains(t, err.Error(), "does-not-exist-labels",
 		"the reload must refuse in the identity switch, never fall through to load the baseline under the custom identity")
 }
 
@@ -705,6 +705,7 @@ func TestReloadModelInternal_BuiltinFallbackSteadyStateReloadsCleanly(t *testing
 	settings := conftest.GetTestSettings()
 	settings.BirdNET.Version = ""
 	settings.BirdNET.ModelPath = "/gone/primary_dft.onnx"
+	settings.BirdNET.LabelPath = filepath.Join(t.TempDir(), "does-not-exist-labels.txt")
 	conftest.SetTestSettings(settings)
 	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
@@ -714,7 +715,6 @@ func TestReloadModelInternal_BuiltinFallbackSteadyStateReloadsCleanly(t *testing
 		classifier:     &rollbackFakeClassifier{},
 		Settings:       settings,
 		ModelInfo:      stockPrimaryModelInfo(),
-		TaxonomyPath:   filepath.Join(t.TempDir(), "does-not-exist-taxonomy.json"),
 		speciesCache:   make(map[string]*speciesCacheEntry),
 		resolvePrimary: func(string) pathResolution { return pathResolution{substituted: true} },
 	}
@@ -724,9 +724,9 @@ func TestReloadModelInternal_BuiltinFallbackSteadyStateReloadsCleanly(t *testing
 
 	err := bn.reloadModelInternal(false)
 
-	require.Error(t, err, "the reload still fails at the taxonomy step; that is the probe, not the subject")
-	assert.Contains(t, err.Error(), "taxonomy",
-		"the reload must reach the taxonomy step, which proves the identity gate let it through")
+	require.Error(t, err, "the reload still fails at the load-labels step; that is the probe, not the subject")
+	assert.Contains(t, err.Error(), "does-not-exist-labels",
+		"the reload must reach the load-labels step, which proves the identity gate let it through")
 	assert.NotContains(t, err.Error(), "requires orchestrator restart",
 		"a steady-state baseline reload must not be refused, or every settings save fails forever")
 }
@@ -757,7 +757,6 @@ func TestReloadModelInternal_VanishedRunningModelIsRefused(t *testing.T) {
 		classifier:     &rollbackFakeClassifier{},
 		Settings:       previous,
 		ModelInfo:      customBirdNETV24ModelInfo(oldPath),
-		TaxonomyPath:   filepath.Join(t.TempDir(), "does-not-exist-taxonomy.json"),
 		speciesCache:   make(map[string]*speciesCacheEntry),
 		resolvePrimary: func(string) pathResolution { return pathResolution{substituted: true} },
 	}
@@ -795,7 +794,6 @@ func TestReloadModelInternal_UnknownVersionNamesTheRequestedVersion(t *testing.T
 		classifier:   &rollbackFakeClassifier{},
 		Settings:     previous,
 		ModelInfo:    ModelRegistry[DefaultModelVersion],
-		TaxonomyPath: filepath.Join(t.TempDir(), "does-not-exist-taxonomy.json"),
 		speciesCache: make(map[string]*speciesCacheEntry),
 	}
 	bn.settingsAtomic.Store(previous)
