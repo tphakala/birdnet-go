@@ -2118,13 +2118,22 @@ func (mm *ModelManager) removeDownloading(catalogID string) {
 // applyRangeFilterConfigForInstall points the range filter at entry's geomodel
 // companion files under {modelsDir}/shared when the entry carries them. It writes
 // into updated (a settings clone); the caller stores and saves. A no-op for an
-// entry without geomodel files.
+// entry without geomodel files. Both role paths are cleared before the entry's
+// files are written, so a half-tuple entry (only one geomodel role) leaves the
+// omitted role's path empty rather than at a stale earlier value.
 func (mm *ModelManager) applyRangeFilterConfigForInstall(updated *conf.Settings, entry *CatalogEntry) {
 	if !HasGeomodelFiles(entry) || entry.GeomodelVersion == "" {
 		return
 	}
 	rf := updated.RangeFilterConfig()
 	rf.Model = entry.GeomodelVersion
+	// Clear both role paths before the loop so a half-tuple entry (only one geomodel
+	// role, reachable only via a hand-edited catalog) cannot leave the opposite path at
+	// a stale value from an earlier config. The shipped catalog always pairs both roles,
+	// so this is byte-identical there; survivingGeomodelEntry guarantees a full tuple on
+	// the uninstall re-point path.
+	rf.ModelPath = ""
+	rf.LabelsPath = ""
 	for _, f := range entry.Files {
 		switch f.Role {
 		case RoleGeomodelModel:

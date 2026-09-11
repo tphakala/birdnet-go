@@ -13,7 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"golang.org/x/text/unicode/norm"
+	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
 // =============================================================================
@@ -557,7 +557,7 @@ func ResolveCommonNameToLabelIDs(ctx context.Context, deps *FilterLookupDeps, sp
 		return nil, nil
 	}
 
-	needle := strings.ToLower(norm.NFC.String(species))
+	needle := speciesindex.Fold(species)
 	matchedScientific := make([]string, 0, 16)
 	collect := func(sci, foldedCommon string) {
 		if strings.Contains(foldedCommon, needle) {
@@ -570,7 +570,7 @@ func ResolveCommonNameToLabelIDs(ctx context.Context, deps *FilterLookupDeps, sp
 		}
 	} else {
 		for sci, common := range deps.SciToCommon {
-			collect(sci, strings.ToLower(norm.NFC.String(common)))
+			collect(sci, speciesindex.Fold(common))
 		}
 	}
 	if len(matchedScientific) == 0 {
