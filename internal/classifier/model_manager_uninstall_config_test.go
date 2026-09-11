@@ -208,11 +208,13 @@ func TestApplyConfigForUninstall_NilSettingsIsNoop(t *testing.T) {
 	assert.Equal(t, "/keep/perch.onnx", current.Perch.ModelPath, "a nil settings receiver must be a no-op")
 }
 
-// TestApplyRangeFilterConfigForUninstall_RetainsWhenOtherGeomodelInstalled verifies the
-// geomodel range filter config is kept when another installed entry still carries
-// geomodel files; it is only cleared when the last geomodel-bearing model is removed
-// (that clear path is covered by TestModelManager_Uninstall_GeomodelConfigClearing).
-func TestApplyRangeFilterConfigForUninstall_RetainsWhenOtherGeomodelInstalled(t *testing.T) {
+// TestApplyRangeFilterConfigForUninstall_RepointsWhenOtherGeomodelInstalled verifies the
+// geomodel range filter config is re-pointed at a surviving geomodel-bearing entry when one
+// remains. For the shipped catalog every geomodel entry shares one canonical tuple, so the
+// re-point recomputes identical paths (under mm.modelsDir); the config is only cleared when
+// the last geomodel-bearing model is removed (that clear path is covered by
+// TestModelManager_Uninstall_GeomodelConfigClearing).
+func TestApplyRangeFilterConfigForUninstall_RepointsWhenOtherGeomodelInstalled(t *testing.T) {
 	// Not parallel: mutates the global active catalog via setActiveCatalog.
 	geomodelFiles := []CatalogFile{
 		{RemotePath: "geo.onnx", LocalName: "geomodel_v3.onnx", Role: RoleGeomodelModel},
@@ -227,7 +229,8 @@ func TestApplyRangeFilterConfigForUninstall_RetainsWhenOtherGeomodelInstalled(t 
 	setActiveCatalog(withEntries)
 	t.Cleanup(func() { setActiveCatalog(nil) })
 
-	mm := NewModelManager(t.TempDir(), nil, &conf.Settings{})
+	modelsDir := t.TempDir()
+	mm := NewModelManager(modelsDir, nil, &conf.Settings{})
 	mm.installed["geo-remaining"] = InstalledModel{CatalogID: "geo-remaining"}
 
 	updated := &conf.Settings{}
@@ -237,7 +240,181 @@ func TestApplyRangeFilterConfigForUninstall_RetainsWhenOtherGeomodelInstalled(t 
 
 	mm.applyRangeFilterConfigForUninstall(updated, &removed)
 
-	assert.Equal(t, "v3", updated.BirdNET.RangeFilter.Model, "config must be retained while another geomodel remains")
-	assert.Equal(t, "/models/shared/geomodel_v3.onnx", updated.BirdNET.RangeFilter.ModelPath, "model path must be retained")
+	assert.Equal(t, "v3", updated.BirdNET.RangeFilter.Model, "config must reflect the surviving geomodel")
+	assert.Equal(t, filepath.Join(modelsDir, sharedDirName, "geomodel_v3.onnx"), updated.BirdNET.RangeFilter.ModelPath,
+		"model path must re-point to the survivor's shared file")
+	assert.Equal(t, filepath.Join(modelsDir, sharedDirName, "geomodel_v3_labels.txt"), updated.BirdNET.RangeFilter.LabelsPath,
+		"labels path must re-point to the survivor's shared file")
 	assert.True(t, updated.BirdNET.RangeFilter.PassUnmappedSpecies, "PassUnmappedSpecies must be retained")
+}
+
+// TestApplyRangeFilterConfigForUninstall_RepointsToSurvivorWithDifferentTuple pins the fix
+// for the retain-only bug: when the surviving geomodel entry declares a DIFFERENT geomodel
+// tuple than the entry being uninstalled, the range-filter config must be re-pointed at the
+// survivor's present files, not left pointing at the removed entry's now-absent files. This
+// is only reachable with a hand-edited catalog; the shipped catalog shares one canonical v3
+// tuple across every geomodel entry.
+func TestApplyRangeFilterConfigForUninstall_RepointsToSurvivorWithDifferentTuple(t *testing.T) {
+	// Not parallel: mutates the global active catalog via setActiveCatalog.
+	removedFiles := []CatalogFile{
+		{RemotePath: "geo_removed.onnx", LocalName: "geomodel_removed.onnx", Role: RoleGeomodelModel},
+		{RemotePath: "geo_removed_labels.txt", LocalName: "geomodel_removed_labels.txt", Role: RoleGeomodelLabels},
+	}
+	survivorFiles := []CatalogFile{
+		{RemotePath: "geo_survivor.onnx", LocalName: "geomodel_survivor.onnx", Role: RoleGeomodelModel},
+		{RemotePath: "geo_survivor_labels.txt", LocalName: "geomodel_survivor_labels.txt", Role: RoleGeomodelLabels},
+	}
+	removed := CatalogEntry{ID: "geo-removed", RegistryID: RegistryIDPerchV2, Category: CategoryWildlife, GeomodelVersion: "v3", Files: removedFiles}
+	survivor := CatalogEntry{ID: "geo-survivor", RegistryID: RegistryIDBirdNETV3, Category: CategoryWildlife, GeomodelVersion: "v3", Files: survivorFiles}
+
+	withEntries := make([]CatalogEntry, len(EmbeddedCatalog), len(EmbeddedCatalog)+2)
+	copy(withEntries, EmbeddedCatalog)
+	withEntries = append(withEntries, removed, survivor)
+	setActiveCatalog(withEntries)
+	t.Cleanup(func() { setActiveCatalog(nil) })
+
+	modelsDir := t.TempDir()
+	mm := NewModelManager(modelsDir, nil, &conf.Settings{})
+	mm.installed["geo-survivor"] = InstalledModel{CatalogID: "geo-survivor"}
+
+	// Config currently points at the entry being uninstalled.
+	updated := &conf.Settings{}
+	updated.BirdNET.RangeFilter.Model = "v3"
+	updated.BirdNET.RangeFilter.ModelPath = filepath.Join(modelsDir, sharedDirName, "geomodel_removed.onnx")
+	updated.BirdNET.RangeFilter.LabelsPath = filepath.Join(modelsDir, sharedDirName, "geomodel_removed_labels.txt")
+	updated.BirdNET.RangeFilter.PassUnmappedSpecies = true
+
+	mm.applyRangeFilterConfigForUninstall(updated, &removed)
+
+	assert.Equal(t, "v3", updated.BirdNET.RangeFilter.Model, "model version must reflect the survivor")
+	assert.Equal(t, filepath.Join(modelsDir, sharedDirName, "geomodel_survivor.onnx"), updated.BirdNET.RangeFilter.ModelPath,
+		"model path must re-point to the survivor's present files, not the removed entry's")
+	assert.Equal(t, filepath.Join(modelsDir, sharedDirName, "geomodel_survivor_labels.txt"), updated.BirdNET.RangeFilter.LabelsPath,
+		"labels path must re-point to the survivor's present files")
+	assert.True(t, updated.BirdNET.RangeFilter.PassUnmappedSpecies, "PassUnmappedSpecies must be retained across a re-point")
+}
+
+// TestApplyRangeFilterConfigForUninstall_ClearsWhenSurvivorHasNoGeomodelVersion verifies
+// that a surviving entry which carries geomodel files but declares no GeomodelVersion is not
+// a usable range-filter source: the config is cleared rather than left pointing at the
+// removed entry's files, because applyRangeFilterConfigForInstall would refuse the empty
+// version anyway.
+func TestApplyRangeFilterConfigForUninstall_ClearsWhenSurvivorHasNoGeomodelVersion(t *testing.T) {
+	// Not parallel: mutates the global active catalog via setActiveCatalog.
+	geomodelFiles := []CatalogFile{
+		{RemotePath: "geo.onnx", LocalName: "geomodel_v3.onnx", Role: RoleGeomodelModel},
+		{RemotePath: "geo_labels.txt", LocalName: "geomodel_v3_labels.txt", Role: RoleGeomodelLabels},
+	}
+	removed := CatalogEntry{ID: "geo-removed", RegistryID: RegistryIDPerchV2, Category: CategoryWildlife, GeomodelVersion: "v3", Files: geomodelFiles}
+	versionless := CatalogEntry{ID: "geo-versionless", RegistryID: RegistryIDBirdNETV3, Category: CategoryWildlife, GeomodelVersion: "", Files: geomodelFiles}
+
+	withEntries := make([]CatalogEntry, len(EmbeddedCatalog), len(EmbeddedCatalog)+2)
+	copy(withEntries, EmbeddedCatalog)
+	withEntries = append(withEntries, removed, versionless)
+	setActiveCatalog(withEntries)
+	t.Cleanup(func() { setActiveCatalog(nil) })
+
+	mm := NewModelManager(t.TempDir(), nil, &conf.Settings{})
+	mm.installed["geo-versionless"] = InstalledModel{CatalogID: "geo-versionless"}
+
+	updated := &conf.Settings{}
+	updated.BirdNET.RangeFilter.Model = "v3"
+	updated.BirdNET.RangeFilter.ModelPath = "/models/shared/geomodel_v3.onnx"
+	updated.BirdNET.RangeFilter.PassUnmappedSpecies = true
+
+	mm.applyRangeFilterConfigForUninstall(updated, &removed)
+
+	assert.Empty(t, updated.BirdNET.RangeFilter.Model, "a versionless geomodel survivor is not usable; config must clear")
+	assert.Empty(t, updated.BirdNET.RangeFilter.ModelPath, "model path must clear when no usable geomodel survivor remains")
+	assert.False(t, updated.BirdNET.RangeFilter.PassUnmappedSpecies, "PassUnmappedSpecies must reset on clear")
+}
+
+// TestApplyRangeFilterConfigForUninstall_ClearsWhenSurvivorLacksLabelsRole verifies that a
+// surviving entry carrying only a geomodel MODEL file (no geomodel labels role) is not a
+// usable range-filter tuple: the config is cleared rather than re-pointed, so it can never
+// keep the uninstalled entry's now-absent labels path. Reachable only via a hand-edited
+// catalog; the shipped catalog always pairs both geomodel roles.
+func TestApplyRangeFilterConfigForUninstall_ClearsWhenSurvivorLacksLabelsRole(t *testing.T) {
+	// Not parallel: mutates the global active catalog via setActiveCatalog.
+	removedFiles := []CatalogFile{
+		{RemotePath: "geo_removed.onnx", LocalName: "geomodel_removed.onnx", Role: RoleGeomodelModel},
+		{RemotePath: "geo_removed_labels.txt", LocalName: "geomodel_removed_labels.txt", Role: RoleGeomodelLabels},
+	}
+	modelOnlyFiles := []CatalogFile{
+		{RemotePath: "geo_survivor.onnx", LocalName: "geomodel_survivor.onnx", Role: RoleGeomodelModel},
+	}
+	removed := CatalogEntry{ID: "geo-removed", RegistryID: RegistryIDPerchV2, Category: CategoryWildlife, GeomodelVersion: "v3", Files: removedFiles}
+	modelOnly := CatalogEntry{ID: "geo-modelonly", RegistryID: RegistryIDBirdNETV3, Category: CategoryWildlife, GeomodelVersion: "v3", Files: modelOnlyFiles}
+
+	withEntries := make([]CatalogEntry, len(EmbeddedCatalog), len(EmbeddedCatalog)+2)
+	copy(withEntries, EmbeddedCatalog)
+	withEntries = append(withEntries, removed, modelOnly)
+	setActiveCatalog(withEntries)
+	t.Cleanup(func() { setActiveCatalog(nil) })
+
+	modelsDir := t.TempDir()
+	mm := NewModelManager(modelsDir, nil, &conf.Settings{})
+	mm.installed["geo-modelonly"] = InstalledModel{CatalogID: "geo-modelonly"}
+
+	// Config currently points at the (full-tuple) entry being uninstalled.
+	updated := &conf.Settings{}
+	updated.BirdNET.RangeFilter.Model = "v3"
+	updated.BirdNET.RangeFilter.ModelPath = filepath.Join(modelsDir, sharedDirName, "geomodel_removed.onnx")
+	updated.BirdNET.RangeFilter.LabelsPath = filepath.Join(modelsDir, sharedDirName, "geomodel_removed_labels.txt")
+	updated.BirdNET.RangeFilter.PassUnmappedSpecies = true
+
+	mm.applyRangeFilterConfigForUninstall(updated, &removed)
+
+	assert.Empty(t, updated.BirdNET.RangeFilter.Model, "a half-tuple survivor is not usable; config must clear")
+	assert.Empty(t, updated.BirdNET.RangeFilter.ModelPath, "model path must clear, never keep the removed entry's file")
+	assert.Empty(t, updated.BirdNET.RangeFilter.LabelsPath, "labels path must clear, never keep the removed entry's now-absent file")
+	assert.False(t, updated.BirdNET.RangeFilter.PassUnmappedSpecies, "PassUnmappedSpecies must reset on clear")
+}
+
+// TestApplyRangeFilterConfigForUninstall_RepointsToLowestCatalogIDSurvivor pins the
+// deterministic pick: with two surviving full-tuple geomodel entries carrying different
+// tuples, the re-point chooses the lowest catalog ID (sorted), not a random map-order entry.
+func TestApplyRangeFilterConfigForUninstall_RepointsToLowestCatalogIDSurvivor(t *testing.T) {
+	// Not parallel: mutates the global active catalog via setActiveCatalog.
+	removedFiles := []CatalogFile{
+		{RemotePath: "geo_removed.onnx", LocalName: "geomodel_removed.onnx", Role: RoleGeomodelModel},
+		{RemotePath: "geo_removed_labels.txt", LocalName: "geomodel_removed_labels.txt", Role: RoleGeomodelLabels},
+	}
+	aFiles := []CatalogFile{
+		{RemotePath: "geo_a.onnx", LocalName: "geomodel_a.onnx", Role: RoleGeomodelModel},
+		{RemotePath: "geo_a_labels.txt", LocalName: "geomodel_a_labels.txt", Role: RoleGeomodelLabels},
+	}
+	bFiles := []CatalogFile{
+		{RemotePath: "geo_b.onnx", LocalName: "geomodel_b.onnx", Role: RoleGeomodelModel},
+		{RemotePath: "geo_b_labels.txt", LocalName: "geomodel_b_labels.txt", Role: RoleGeomodelLabels},
+	}
+	removed := CatalogEntry{ID: "geo-removed", RegistryID: RegistryIDPerchV2, Category: CategoryWildlife, GeomodelVersion: "v3", Files: removedFiles}
+	survivorA := CatalogEntry{ID: "geo-aaa", RegistryID: RegistryIDBirdNETV3, Category: CategoryWildlife, GeomodelVersion: "v3", Files: aFiles}
+	survivorB := CatalogEntry{ID: "geo-bbb", RegistryID: RegistryIDBirdNETV3, Category: CategoryWildlife, GeomodelVersion: "v3", Files: bFiles}
+
+	withEntries := make([]CatalogEntry, len(EmbeddedCatalog), len(EmbeddedCatalog)+3)
+	copy(withEntries, EmbeddedCatalog)
+	withEntries = append(withEntries, removed, survivorA, survivorB)
+	setActiveCatalog(withEntries)
+	t.Cleanup(func() { setActiveCatalog(nil) })
+
+	modelsDir := t.TempDir()
+	mm := NewModelManager(modelsDir, nil, &conf.Settings{})
+	// Insert in reverse ID order so a map-order pick would tend to choose the wrong one.
+	mm.installed["geo-bbb"] = InstalledModel{CatalogID: "geo-bbb"}
+	mm.installed["geo-aaa"] = InstalledModel{CatalogID: "geo-aaa"}
+
+	// Pre-point both paths at the entry being uninstalled so the assertions prove the
+	// survivor OVERWRITES them, not merely populates an empty field.
+	updated := &conf.Settings{}
+	updated.BirdNET.RangeFilter.Model = "v3"
+	updated.BirdNET.RangeFilter.ModelPath = filepath.Join(modelsDir, sharedDirName, "geomodel_removed.onnx")
+	updated.BirdNET.RangeFilter.LabelsPath = filepath.Join(modelsDir, sharedDirName, "geomodel_removed_labels.txt")
+
+	mm.applyRangeFilterConfigForUninstall(updated, &removed)
+
+	assert.Equal(t, filepath.Join(modelsDir, sharedDirName, "geomodel_a.onnx"), updated.BirdNET.RangeFilter.ModelPath,
+		"the re-point must pick the lowest catalog ID survivor (geo-aaa), not geo-bbb")
+	assert.Equal(t, filepath.Join(modelsDir, sharedDirName, "geomodel_a_labels.txt"), updated.BirdNET.RangeFilter.LabelsPath,
+		"labels must come from the lowest catalog ID survivor")
 }

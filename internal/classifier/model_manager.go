@@ -2135,26 +2135,60 @@ func (mm *ModelManager) applyRangeFilterConfigForInstall(updated *conf.Settings,
 	}
 }
 
-// applyRangeFilterConfigForUninstall clears the geomodel range filter config when no
-// other installed entry carries geomodel files. mm.installed must no longer contain
-// the uninstalled entry; caller holds mm.mu. It writes into updated (a settings
-// clone). A no-op for an entry without geomodel files or when another geomodel-
-// dependent model remains installed.
+// applyRangeFilterConfigForUninstall keeps the shared geomodel range-filter config
+// pointing at files that exist after an uninstall. When another installed entry still
+// carries a full geomodel tuple it re-points the config at that survivor's files (via
+// applyRangeFilterConfigForInstall); otherwise it clears the config. Because it re-points
+// at gallery-managed shared files, a hand-edited custom range-filter path is overwritten,
+// which is consistent with applyRangeFilterConfigForInstall on the install side. mm.installed
+// must no longer contain the uninstalled entry; caller holds mm.mu. It writes into updated
+// (a settings clone), and is a no-op for an entry without geomodel files.
 func (mm *ModelManager) applyRangeFilterConfigForUninstall(updated *conf.Settings, entry *CatalogEntry) {
 	if !HasGeomodelFiles(entry) {
 		return
 	}
-	for id := range mm.installed {
-		other, found := GetCatalogEntry(id)
-		if found && HasGeomodelFiles(&other) {
-			return // another geomodel-dependent model remains; keep the config
-		}
+	// The geomodel range filter is a shared service, not a per-family setting:
+	// applyRangeFilterConfigForInstall points the config at one specific installed entry's
+	// shared files. If that entry is the one being uninstalled and a survivor declares a
+	// different geomodel tuple, retaining the config alone would leave it pointing at the
+	// removed entry's now-absent files. So re-point at a deterministically chosen surviving
+	// geomodel entry's present files instead of only retaining; this recomputes identical
+	// paths for the shipped catalog, where every geomodel entry shares one canonical v3
+	// tuple, and self-corrects a hand-edited catalog that mixes tuples. Only clear when the
+	// last usable geomodel-bearing model is removed.
+	if survivor, found := mm.survivingGeomodelEntry(); found {
+		mm.applyRangeFilterConfigForInstall(updated, &survivor)
+		return
 	}
 	rf := updated.RangeFilterConfig()
 	rf.Model = ""
 	rf.ModelPath = ""
 	rf.LabelsPath = ""
 	rf.PassUnmappedSpecies = false
+}
+
+// survivingGeomodelEntry returns a deterministically chosen installed catalog entry that
+// still carries a usable geomodel tuple: BOTH geomodel role files (model and labels) plus a
+// non-empty GeomodelVersion. Both roles are required because applyRangeFilterConfigForInstall
+// sets ModelPath and LabelsPath independently, so re-pointing to a half-tuple survivor would
+// leave the other path at the uninstalled entry's absent file; a non-empty version is required
+// because that function refuses an empty one. Selection is by sorted catalog ID for
+// determinism, matching replacementInstall. mm.installed no longer contains the uninstalled
+// entry when this runs (deleted by the caller).
+func (mm *ModelManager) survivingGeomodelEntry() (CatalogEntry, bool) {
+	candidates := make([]string, 0, len(mm.installed))
+	for id := range mm.installed {
+		other, found := GetCatalogEntry(id)
+		if found && hasGeomodelTuple(&other) && other.GeomodelVersion != "" {
+			candidates = append(candidates, id)
+		}
+	}
+	if len(candidates) == 0 {
+		return CatalogEntry{}, false
+	}
+	slices.Sort(candidates)
+	survivor, _ := GetCatalogEntry(candidates[0])
+	return survivor, true
 }
 
 // applyConfigForInstall updates settings to reflect a newly installed model.
