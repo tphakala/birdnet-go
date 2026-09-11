@@ -467,39 +467,82 @@ func variantByModelHint(entry *CatalogEntry, subdir, modelBasenameHint string) (
 	return InstalledModel{}, false
 }
 
+// familyFieldSet is the set of settings fields one model family owns. A nil
+// pointer means the family has no such field and callers must NOT read or write
+// it. It replaces the four-return familyPathFields so the threshold, override and
+// locale fields can be reached through the same single mapping (Phase 2 builds the
+// orchestrator-owned services on this seam).
+type familyFieldSet struct {
+	Model             *string
+	Labels            *string
+	Embeddings        *string
+	Threshold         *float64
+	OverrideThreshold *bool
+	Locale            *string
+}
+
+// familyFields is the single family-to-settings-field mapping. It returns pointers
+// into s so callers can read or write a family's fields without naming the conf
+// struct; a nil pointer means the family has no such field and it must NOT be
+// written. ok is false for a nil settings pointer or an unknown registry ID.
+//
+// The primary's Labels pointer is &s.BirdNET.LabelPath like every other family:
+// the "a variant swap must not disturb a user-configured label path" rule lives in
+// applyConfigForVariantSwap (which writes the model field alone), not in this
+// accessor. planPathCorrection never rewrites the primary's label path because
+// resolvePrimaryModelPath only ever resolves a model path, so its fc.resolved == ""
+// guard skips the label field.
+func familyFields(s *conf.Settings, registryID string) (familyFieldSet, bool) {
+	if s == nil {
+		return familyFieldSet{}, false
+	}
+	switch registryID {
+	case permanentRegistryID:
+		return familyFieldSet{
+			Model:     &s.BirdNET.ModelPath,
+			Labels:    &s.BirdNET.LabelPath,
+			Threshold: &s.BirdNET.Threshold,
+			Locale:    &s.BirdNET.Locale,
+		}, true
+	case RegistryIDPerchV2:
+		return familyFieldSet{
+			Model:             &s.Perch.ModelPath,
+			Labels:            &s.Perch.LabelPath,
+			Threshold:         &s.Perch.Threshold,
+			OverrideThreshold: &s.Perch.OverrideThreshold,
+			Locale:            &s.Perch.Locale,
+		}, true
+	case RegistryIDBirdNETV3:
+		return familyFieldSet{
+			Model:             &s.BirdNETV3.ModelPath,
+			Labels:            &s.BirdNETV3.LabelPath,
+			Threshold:         &s.BirdNETV3.Threshold,
+			OverrideThreshold: &s.BirdNETV3.OverrideThreshold,
+			Locale:            &s.BirdNETV3.Locale,
+		}, true
+	case RegistryIDBSG:
+		return familyFieldSet{
+			Model:  &s.BSG.ModelPath,
+			Labels: &s.BSG.LabelPath,
+			Locale: &s.BSG.Locale,
+		}, true
+	case RegistryIDBat:
+		return familyFieldSet{
+			Model:      &s.Bat.ClassifierModel,
+			Labels:     &s.Bat.LabelPath,
+			Embeddings: &s.Bat.EmbeddingModel,
+			Threshold:  &s.Bat.Threshold,
+			Locale:     &s.Bat.Locale,
+		}, true
+	default:
+		return familyFieldSet{}, false
+	}
+}
+
 // installedModelBasenameHint returns the basename of the model path recorded in
 // settings for the given registry ID, or "" when settings are absent or the
 // family carries no path. It is the tie-break scanVariantEntry uses to resolve an
 // ambiguous multi-variant on-disk state to the variant the loader actually opens.
-// familyPathFields returns pointers to the model, labels, and embeddings path
-// fields in s for registryID, so the family-to-settings-field mapping lives in ONE
-// place instead of the copies that had drifted apart (the newest omitted BSG). A
-// nil labels or embeddings pointer means the family has no such field and it must
-// NOT be written: the primary is model-only (its label set is embedded and
-// identical across variants, so applyConfigForPrimarySwap writes BirdNET.ModelPath
-// alone and a user-configured BirdNET.LabelPath must survive a variant swap), and
-// every family but bat carries no embeddings path. ok is false for an unknown
-// registry ID or a nil settings pointer.
-func familyPathFields(s *conf.Settings, registryID string) (model, labels, embeddings *string, ok bool) {
-	if s == nil {
-		return nil, nil, nil, false
-	}
-	switch registryID {
-	case permanentRegistryID:
-		return &s.BirdNET.ModelPath, nil, nil, true
-	case RegistryIDPerchV2:
-		return &s.Perch.ModelPath, &s.Perch.LabelPath, nil, true
-	case RegistryIDBirdNETV3:
-		return &s.BirdNETV3.ModelPath, &s.BirdNETV3.LabelPath, nil, true
-	case RegistryIDBSG:
-		return &s.BSG.ModelPath, &s.BSG.LabelPath, nil, true
-	case RegistryIDBat:
-		return &s.Bat.ClassifierModel, &s.Bat.LabelPath, &s.Bat.EmbeddingModel, true
-	default:
-		return nil, nil, nil, false
-	}
-}
-
 func installedModelBasenameHint(settings *conf.Settings, registryID string, loadedPaths map[string]string) string {
 	// Prefer the file the LOADED instance is actually running. After a stale-path
 	// recovery the settings field still names the pre-recovery file, so keying the
@@ -521,12 +564,12 @@ func installedModelBasenameHint(settings *conf.Settings, registryID string, load
 	// No loaded instance for this family: fall back to the configured model path.
 	// The permanent BirdNET v2.4 slot records its selected DFT-truncated file in
 	// BirdNET.ModelPath (empty means the embedded BuiltIn baseline); each secondary
-	// records its own. familyPathFields is the single source of that mapping.
-	model, _, _, ok := familyPathFields(settings, registryID)
-	if !ok || *model == "" {
+	// records its own. familyFields is the single source of that mapping.
+	fs, ok := familyFields(settings, registryID)
+	if !ok || *fs.Model == "" {
 		return ""
 	}
-	return filepath.Base(*model)
+	return filepath.Base(*fs.Model)
 }
 
 // installedFromVariant builds the InstalledModel for a specific variant if its
@@ -666,7 +709,7 @@ func (mm *ModelManager) applyInstalledGeomodelConfig(log logger.Logger, entry *C
 	// check and the store, overwriting it with stale data.
 	settingsWriteMu.Lock()
 	current := conf.GetSettings()
-	rf := current.BirdNET.RangeFilter
+	rf := current.RangeFilterConfig()
 	if rf.Model == entry.GeomodelVersion &&
 		rf.ModelPath == expectedModelPath &&
 		rf.LabelsPath == expectedLabelsPath {
@@ -681,9 +724,10 @@ func (mm *ModelManager) applyInstalledGeomodelConfig(log logger.Logger, entry *C
 		logger.String("geomodel_version", entry.GeomodelVersion))
 
 	updated := conf.CloneSettings(current)
-	updated.BirdNET.RangeFilter.Model = entry.GeomodelVersion
-	updated.BirdNET.RangeFilter.ModelPath = expectedModelPath
-	updated.BirdNET.RangeFilter.LabelsPath = expectedLabelsPath
+	urf := updated.RangeFilterConfig()
+	urf.Model = entry.GeomodelVersion
+	urf.ModelPath = expectedModelPath
+	urf.LabelsPath = expectedLabelsPath
 	conf.StoreSettings(updated)
 	if err := conf.SaveSettings(); err != nil {
 		log.Warn("Failed to persist geomodel config",
@@ -731,24 +775,25 @@ func (mm *ModelManager) healOrphanGeomodelConfig(log logger.Logger) {
 	// check above is independent of settings, so it stays outside the lock.
 	settingsWriteMu.Lock()
 	current := conf.GetSettings()
-	rf := current.BirdNET.RangeFilter
-	action := decideGeomodelOrphanAction(&rf, expectedModelPath, expectedLabelsPath, filesPresent)
+	rf := current.RangeFilterConfig()
+	action := decideGeomodelOrphanAction(rf, expectedModelPath, expectedLabelsPath, filesPresent)
 	if action == geomodelOrphanNone {
 		settingsWriteMu.Unlock()
 		return
 	}
 
 	updated := conf.CloneSettings(current)
+	urf := updated.RangeFilterConfig()
 	switch action {
 	case geomodelOrphanPromote:
 		log.Info("Promoting orphaned geomodel range filter config to v3 (shared files present)")
-		updated.BirdNET.RangeFilter.Model = geomodelRangeFilterVersion
+		urf.Model = geomodelRangeFilterVersion
 	case geomodelOrphanClear:
 		log.Info("Clearing orphaned geomodel range filter config (shared files absent)")
-		updated.BirdNET.RangeFilter.Model = ""
-		updated.BirdNET.RangeFilter.ModelPath = ""
-		updated.BirdNET.RangeFilter.LabelsPath = ""
-		updated.BirdNET.RangeFilter.PassUnmappedSpecies = false
+		urf.Model = ""
+		urf.ModelPath = ""
+		urf.LabelsPath = ""
+		urf.PassUnmappedSpecies = false
 	case geomodelOrphanNone:
 		// Unreachable: handled by the early return above.
 	}
@@ -1559,7 +1604,7 @@ func (mm *ModelManager) replacePrimaryVariant(ctx context.Context, entry *Catalo
 	// 3. Persist BirdNET.ModelPath (set for a DFT build, cleared for the baseline)
 	//    BEFORE reloading, so the primary loader resolves the new file and a
 	//    crash/restart before step 4 still resolves the new variant.
-	mm.applyConfigForPrimarySwap(newModelPath)
+	mm.applyConfigForVariantSwap(permanentRegistryID, newModelPath)
 
 	// 4. Activate the new variant by reloading the primary in place. A reload failure
 	//    rolls back (the running model was already kept alive transactionally).
@@ -1608,7 +1653,7 @@ func (mm *ModelManager) rollbackPrimaryVariantSwap(log logger.Logger, entry *Cat
 	mm.mu.Lock()
 	mm.installed[entry.ID] = *old
 	mm.mu.Unlock()
-	mm.applyConfigForPrimarySwap(old.ModelPath)
+	mm.applyConfigForVariantSwap(permanentRegistryID, old.ModelPath)
 
 	// The new variant is unusable on this host: remove its downloaded files (none for
 	// the BuiltIn baseline) so disk state matches the restored record.
@@ -1629,14 +1674,15 @@ func (mm *ModelManager) rollbackPrimaryVariantSwap(log logger.Logger, entry *Cat
 	return switchErr
 }
 
-// applyConfigForPrimarySwap persists the primary classifier's selected model file
-// path for a within-model BirdNET v2.4 variant swap: it sets BirdNET.ModelPath to
-// the new DFT-truncated file, or clears it (empty modelPath) to revert to the
-// embedded BuiltIn baseline. It never touches BirdNET.LabelPath: the v2.4 label set
-// is embedded and identical across variants, so a swap must not disturb a
-// user-configured custom label path. Uses clone-mutate-publish + SaveSettings so the
-// change survives restarts and is visible to concurrent readers.
-func (mm *ModelManager) applyConfigForPrimarySwap(modelPath string) {
+// applyConfigForVariantSwap persists the selected model file for a within-family
+// variant swap. It writes ONLY the family's model field: a family's label set is
+// identical across its variants (embedded for BirdNET v2.4), so a swap must never
+// disturb a user-configured label path. An empty modelPath reverts to the family's
+// built-in/default source (for the primary, the embedded BuiltIn baseline). Uses
+// clone-mutate-publish + SaveSettings so the change survives restarts and is visible
+// to concurrent readers. A nil settings receiver or an unknown registry ID is a
+// no-op (nothing stored, nothing saved).
+func (mm *ModelManager) applyConfigForVariantSwap(registryID, modelPath string) {
 	if mm.settings == nil {
 		return
 	}
@@ -1644,10 +1690,15 @@ func (mm *ModelManager) applyConfigForPrimarySwap(modelPath string) {
 	defer settingsWriteMu.Unlock()
 
 	updated := conf.CloneSettings(conf.GetSettings())
-	updated.BirdNET.ModelPath = modelPath
+	fs, ok := familyFields(updated, registryID)
+	if !ok {
+		return
+	}
+	*fs.Model = modelPath
 	conf.StoreSettings(updated)
 	if err := conf.SaveSettings(); err != nil {
-		GetLogger().Warn("Failed to persist settings after primary variant swap",
+		GetLogger().Warn("Failed to persist settings after variant swap",
+			logger.String("registry_id", registryID),
 			logger.Error(err))
 	}
 }
@@ -2064,6 +2115,48 @@ func (mm *ModelManager) removeDownloading(catalogID string) {
 	delete(mm.downloading, catalogID)
 }
 
+// applyRangeFilterConfigForInstall points the range filter at entry's geomodel
+// companion files under {modelsDir}/shared when the entry carries them. It writes
+// into updated (a settings clone); the caller stores and saves. A no-op for an
+// entry without geomodel files.
+func (mm *ModelManager) applyRangeFilterConfigForInstall(updated *conf.Settings, entry *CatalogEntry) {
+	if !HasGeomodelFiles(entry) || entry.GeomodelVersion == "" {
+		return
+	}
+	rf := updated.RangeFilterConfig()
+	rf.Model = entry.GeomodelVersion
+	for _, f := range entry.Files {
+		switch f.Role {
+		case RoleGeomodelModel:
+			rf.ModelPath = filepath.Join(mm.modelsDir, sharedDirName, f.LocalName)
+		case RoleGeomodelLabels:
+			rf.LabelsPath = filepath.Join(mm.modelsDir, sharedDirName, f.LocalName)
+		}
+	}
+}
+
+// applyRangeFilterConfigForUninstall clears the geomodel range filter config when no
+// other installed entry carries geomodel files. mm.installed must no longer contain
+// the uninstalled entry; caller holds mm.mu. It writes into updated (a settings
+// clone). A no-op for an entry without geomodel files or when another geomodel-
+// dependent model remains installed.
+func (mm *ModelManager) applyRangeFilterConfigForUninstall(updated *conf.Settings, entry *CatalogEntry) {
+	if !HasGeomodelFiles(entry) {
+		return
+	}
+	for id := range mm.installed {
+		other, found := GetCatalogEntry(id)
+		if found && HasGeomodelFiles(&other) {
+			return // another geomodel-dependent model remains; keep the config
+		}
+	}
+	rf := updated.RangeFilterConfig()
+	rf.Model = ""
+	rf.ModelPath = ""
+	rf.LabelsPath = ""
+	rf.PassUnmappedSpecies = false
+}
+
 // applyConfigForInstall updates settings to reflect a newly installed model.
 // Only fields with non-empty paths are set. The caller must hold no locks
 // other than settingsWriteMu (acquired internally).
@@ -2081,33 +2174,27 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 	updated := conf.CloneSettings(conf.GetSettings())
 
 	// Set only the non-empty paths, and only fields the family actually carries
-	// (familyPathFields returns nil for a family's absent labels/embeddings). The
-	// primary is not gallery-installed through this path, so a permanent registry ID
-	// never reaches here; if it did, familyPathFields would expose model only.
-	if model, labels, embeddings, ok := familyPathFields(updated, entry.RegistryID); ok {
+	// (familyFields yields a nil pointer for a family's absent labels/embeddings). The
+	// primary reaches this path only via Reinstall; Install/InstallOrReplace route
+	// it to replacePrimaryVariant instead. The primary's label set is embedded, so a
+	// primary variant never ships a labels file (labelsPath is always "" for it), but
+	// familyFields now exposes the primary's Labels pointer, so guard the Labels write
+	// on permanentRegistryID as well to keep a user's custom BirdNET.LabelPath
+	// structurally protected even if that ever changes.
+	if fs, ok := familyFields(updated, entry.RegistryID); ok {
 		if modelPath != "" {
-			*model = modelPath
+			*fs.Model = modelPath
 		}
-		if labels != nil && labelsPath != "" {
-			*labels = labelsPath
+		if fs.Labels != nil && labelsPath != "" && entry.RegistryID != permanentRegistryID {
+			*fs.Labels = labelsPath
 		}
-		if embeddings != nil && embeddingsPath != "" {
-			*embeddings = embeddingsPath
+		if fs.Embeddings != nil && embeddingsPath != "" {
+			*fs.Embeddings = embeddingsPath
 		}
 	}
 
 	// Apply geomodel range filter config if this entry includes geomodel files.
-	if HasGeomodelFiles(entry) && entry.GeomodelVersion != "" {
-		updated.BirdNET.RangeFilter.Model = entry.GeomodelVersion
-		for _, f := range entry.Files {
-			switch f.Role {
-			case RoleGeomodelModel:
-				updated.BirdNET.RangeFilter.ModelPath = filepath.Join(mm.modelsDir, sharedDirName, f.LocalName)
-			case RoleGeomodelLabels:
-				updated.BirdNET.RangeFilter.LabelsPath = filepath.Join(mm.modelsDir, sharedDirName, f.LocalName)
-			}
-		}
-	}
+	mm.applyRangeFilterConfigForInstall(updated, entry)
 
 	// Add config alias to Models.Enabled so the model appears in source config.
 	alias := ConfigAliasForRegistry(entry.RegistryID)
@@ -2123,6 +2210,39 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 			logger.String("catalog_id", entry.ID),
 			logger.Error(err))
 	}
+}
+
+// replacementInstall returns another installed catalog entry that writes the SAME
+// settings family as entry (same RegistryID and Category), choosing the lowest
+// catalog ID so the pick is deterministic. mm.installed must no longer contain
+// entry; caller holds mm.mu. The Category match is belt and braces: a catalog
+// invariant test pins that entries sharing a RegistryID share a Category.
+func (mm *ModelManager) replacementInstall(entry *CatalogEntry) (InstalledModel, CatalogEntry, bool) {
+	candidates := make([]string, 0, len(mm.installed))
+	for id := range mm.installed {
+		other, found := GetCatalogEntry(id)
+		if found && other.RegistryID == entry.RegistryID && other.Category == entry.Category {
+			candidates = append(candidates, id)
+		}
+	}
+	if len(candidates) == 0 {
+		return InstalledModel{}, CatalogEntry{}, false
+	}
+	slices.Sort(candidates)
+	id := candidates[0]
+	replEntry, _ := GetCatalogEntry(id)
+	return mm.installed[id], replEntry, true
+}
+
+// sharedFilePathForRole returns {modelsDir}/shared/{LocalName} for entry's first
+// file with the given shared role, or "" when the entry carries no such file.
+func (mm *ModelManager) sharedFilePathForRole(entry *CatalogEntry, role string) string {
+	for _, f := range entry.Files {
+		if f.Role == role {
+			return filepath.Join(mm.modelsDir, sharedDirName, f.LocalName)
+		}
+	}
+	return ""
 }
 
 // applyConfigForUninstall updates settings to reflect a removed model.
@@ -2144,66 +2264,40 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 	updated := conf.CloneSettings(conf.GetSettings())
 	retainAlias := false
 
-	switch entry.RegistryID {
-	case RegistryIDBat:
-		// Find another installed bat model to re-point config to.
-		var replacement *InstalledModel
-		var replacementEntry CatalogEntry
-		for id, inst := range mm.installed {
-			other, found := GetCatalogEntry(id)
-			if found && other.Category == CategoryBat {
-				replacement = &inst
-				replacementEntry = other
-				break
-			}
-		}
-		if replacement == nil {
-			updated.Bat.ClassifierModel = ""
-			updated.Bat.LabelPath = ""
-			updated.Bat.EmbeddingModel = ""
-		} else {
+	// Re-point or clear the uninstalled family's settings. familyFields is the
+	// single family-to-settings-field mapping. When another installed catalog entry
+	// writes the SAME family (same RegistryID) it takes over the paths and the config
+	// alias is retained; otherwise the family's fields are cleared. Keying on
+	// RegistryID (not Category) is required: birdnet-v3.0 and perch-v2 are both
+	// CategoryWildlife but write different families, so a category-keyed rule would
+	// re-point one family's config onto the other. Today the only multi-entry family
+	// is bat, so for every other family this degenerates to "clear". The primary is
+	// never uninstalled (Uninstall refuses permanentRegistryID) and an unknown
+	// registry ID yields ok=false, so both are safe no-ops here.
+	if fs, ok := familyFields(updated, entry.RegistryID); ok {
+		if repl, replEntry, found := mm.replacementInstall(entry); found {
 			retainAlias = true
-			updated.Bat.ClassifierModel = replacement.ModelPath
-			updated.Bat.LabelPath = replacement.LabelsPath
-			updated.Bat.EmbeddingModel = ""
-			for _, f := range replacementEntry.Files {
-				if f.Role == RoleEmbeddings {
-					updated.Bat.EmbeddingModel = filepath.Join(mm.modelsDir, sharedDirName, f.LocalName)
-					break
-				}
+			*fs.Model = repl.ModelPath
+			if fs.Labels != nil {
+				*fs.Labels = repl.LabelsPath
 			}
-		}
-	default:
-		// The single-model families (Perch, BirdNET v3.0, BSG) just clear their
-		// paths; familyPathFields is the single source of that mapping. The primary
-		// is never uninstalled (Uninstall refuses permanentRegistryID) and an unknown
-		// registry ID yields ok=false, so both are safely no-ops here.
-		if model, labels, _, ok := familyPathFields(updated, entry.RegistryID); ok {
-			*model = ""
-			if labels != nil {
-				*labels = ""
+			if fs.Embeddings != nil {
+				*fs.Embeddings = mm.sharedFilePathForRole(&replEntry, RoleEmbeddings)
+			}
+		} else {
+			*fs.Model = ""
+			if fs.Labels != nil {
+				*fs.Labels = ""
+			}
+			if fs.Embeddings != nil {
+				*fs.Embeddings = ""
 			}
 		}
 	}
 
 	// Reset geomodel range filter config if no other geomodel-dependent model remains.
 	// mm.installed no longer contains the uninstalled entry (deleted by caller).
-	if HasGeomodelFiles(entry) {
-		otherGeomodel := false
-		for id := range mm.installed {
-			other, found := GetCatalogEntry(id)
-			if found && HasGeomodelFiles(&other) {
-				otherGeomodel = true
-				break
-			}
-		}
-		if !otherGeomodel {
-			updated.BirdNET.RangeFilter.Model = ""
-			updated.BirdNET.RangeFilter.ModelPath = ""
-			updated.BirdNET.RangeFilter.LabelsPath = ""
-			updated.BirdNET.RangeFilter.PassUnmappedSpecies = false
-		}
-	}
+	mm.applyRangeFilterConfigForUninstall(updated, entry)
 
 	// Remove config alias from Models.Enabled and from any source/stream that
 	// references it, but only when no replacement model of the same category exists.

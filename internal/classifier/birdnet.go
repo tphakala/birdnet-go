@@ -626,7 +626,8 @@ func resolveRangeFilterBackend(rf *conf.RangeFilterSettings) rangeFilterBackend 
 // must surface as unhealthy rather than silently filtering against the v2.4 labels.
 func (bn *BirdNET) hasNativeRangeFilter() bool {
 	// ONNX-only builds (notflite) have no embedded TFLite range filter to fall back to.
-	return tfliteBackendAvailable && isBirdNETV24Family(bn.ModelInfo.ID)
+	// Only the v2.4 MData-compatible classifier has an embedded native filter.
+	return tfliteBackendAvailable && rangeFilterCompatFor(bn.ModelInfo.ID) == rangeFilterCompatMDataV24
 }
 
 func (bn *BirdNET) initializeMetaModel(settings *conf.Settings) error {
@@ -2060,10 +2061,10 @@ func shouldAutoSelectV3Geomodel(modelID, modelsDir string) bool {
 	if modelsDir == "" {
 		return false
 	}
-	switch modelID {
-	case RegistryIDPerchV2, RegistryIDBirdNETV3:
-		// eligible classifier; check files below
-	default:
+	// Only classifiers whose label space fits the mapped geomodel v3 backend qualify.
+	// Looking up by ID (not a copied ModelInfo) keeps this identical to the previous
+	// explicit {Perch_V2, BirdNET_V3.0} switch, including for Custom and unknown IDs.
+	if rangeFilterCompatFor(modelID) != rangeFilterCompatGeomodel {
 		return false
 	}
 	sharedDir := filepath.Join(modelsDir, sharedDirName)

@@ -15,7 +15,7 @@ import (
 
 // writePrimaryGalleryModel installs a BirdNET v2.4 primary variant's model file
 // into the gallery layout and returns its path. The primary family is
-// model-only: applyConfigForPrimarySwap writes BirdNET.ModelPath and documents
+// model-only: applyConfigForVariantSwap writes BirdNET.ModelPath and documents
 // that it never touches BirdNET.LabelPath, because the v2.4 label set is
 // embedded and identical across variants.
 func writePrimaryGalleryModel(t *testing.T, modelsDir string) string {
@@ -458,10 +458,12 @@ func TestReloadModelInternal_ClearingPathWhileCustomRunningIsRefused(t *testing.
 
 // TestPlanPathCorrection_PrimaryRepairsModelPathOnly pins the primary family's
 // settings mapping. BirdNET.LabelPath must be left alone: the v2.4 label set is
-// embedded and identical across variants, which is why applyConfigForPrimarySwap
+// embedded and identical across variants, which is why applyConfigForVariantSwap
 // writes ModelPath alone and documents that a user-configured custom label path
 // has to survive a variant swap. Repairing LabelPath here would break that
-// contract from the other direction.
+// contract from the other direction. familyFields now exposes the primary's Labels
+// pointer, so the protection rests entirely on resolvePrimaryModelPath never
+// resolving a labels path (pinned by TestResolvePrimaryModelPath_ResolvesModelOnly).
 func TestPlanPathCorrection_PrimaryRepairsModelPathOnly(t *testing.T) {
 	t.Parallel()
 
@@ -493,6 +495,29 @@ func TestPlanPathCorrection_PrimaryRepairsModelPathOnly(t *testing.T) {
 	assert.Equal(t, installed, updated.BirdNET.ModelPath, "the stale primary model path must be repaired")
 	assert.Equal(t, customLabels, updated.BirdNET.LabelPath,
 		"the primary family is model-only; a user's custom label path must never be rewritten")
+}
+
+// TestResolvePrimaryModelPath_ResolvesModelOnly turns the invariant planPathCorrection
+// now relies on into a pinned contract: a recovered primary resolution carries a model
+// path only, never a labels or embeddings path. Because familyFields exposes the
+// primary's Labels pointer, this empty resolved.labels is the single reason
+// planPathCorrection's fc.resolved == "" guard skips the primary's label field and a
+// user's custom BirdNET.LabelPath survives.
+func TestResolvePrimaryModelPath_ResolvesModelOnly(t *testing.T) {
+	t.Parallel()
+
+	modelsDir := t.TempDir()
+	installed := writePrimaryGalleryModel(t, modelsDir)
+
+	o := &Orchestrator{ortAvailable: func(string) bool { return true }}
+	o.SetModelsDir(modelsDir)
+
+	res := o.resolvePrimaryModelPath(filepath.Join(t.TempDir(), "gone", "primary.onnx"))
+
+	require.True(t, res.substituted, "precondition: a confirmed-absent path recovers the installed variant")
+	assert.Equal(t, installed, res.resolved.model, "the recovered variant's model path")
+	assert.Empty(t, res.resolved.labels, "the primary resolution must never carry a labels path")
+	assert.Empty(t, res.resolved.embeddings, "the primary resolution must never carry an embeddings path")
 }
 
 // TestQueuePathCorrection_PrimaryFamily covers the queueing RULE the primary
