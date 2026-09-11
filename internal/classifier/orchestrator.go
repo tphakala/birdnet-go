@@ -863,16 +863,12 @@ func (o *Orchestrator) RebuildNameResolver(includedSpecies []string) error {
 	}
 	o.rebuildMu.Lock()
 	defer o.rebuildMu.Unlock()
-	// Record the inclusion list so the model-topology triggers (load, unload,
-	// reload) rebuild the index from the SAME working set the range filter last
-	// established, rather than dropping it back to AllLabels. The working set is the
-	// union of every loaded model's labels plus this inclusion list (design 5.4): a
-	// superset of the previous seed (the inclusion list, or the primary's labels when
-	// it was empty), so every species pre-indexed before stays pre-indexed, and
-	// secondary-model species stop falling to the on-demand Lookup path. Defensive
-	// copy: the caller may reuse or mutate the slice.
-	o.includedSpecies = slices.Clone(includedSpecies)
-	working := unionLabels(o.AllLabels(), o.includedSpecies)
+	// The working set is the union of every loaded model's labels plus this inclusion
+	// list (design 5.4): a superset of the previous seed (the inclusion list, or the
+	// primary's labels when it was empty), so every species pre-indexed before stays
+	// pre-indexed, and secondary-model species stop falling to the on-demand Lookup
+	// path.
+	working := unionLabels(o.AllLabels(), includedSpecies)
 	locale := o.CurrentSettings().BirdNET.Locale
 	// This is the only path that refreshes the OpenFauna resolver working set;
 	// openfauna.Rebuild decompresses the embedded dataset, so the cheaper
@@ -882,6 +878,11 @@ func (o *Orchestrator) RebuildNameResolver(includedSpecies []string) error {
 	if err := o.openfauna.Rebuild(scientificNamesFromLabels(working), locale); err != nil {
 		return err
 	}
+	// Record the inclusion list only after the resolver has adopted it, so a failed
+	// rebuild does not leave o.includedSpecies ahead of the resolver working set (the
+	// model-topology triggers union it into the index, so it must not reference
+	// species the resolver never took). Defensive copy: the caller may reuse the slice.
+	o.includedSpecies = slices.Clone(includedSpecies)
 	// Publish the index from the same union so the resolver and index stay in sync.
 	if o.names != nil {
 		o.names.Rebuild(working, locale)

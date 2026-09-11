@@ -13,6 +13,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
+// Stress-test iteration counts for the concurrent species-index tests. Kept modest
+// because concurrentPublishIterations drives RebuildNameResolver, which decompresses
+// the embedded OpenFauna dataset per call; the race detector exposes any interleaving
+// hazard well within these counts.
+const (
+	loadUnloadCycles            = 50
+	concurrentPublishIterations = 15
+)
+
 // newSpeciesIndexTestOrchestrator builds an Orchestrator wired with the
 // orchestrator-owned species-name index and its OpenFauna resolver, seeded from
 // the given mock models, without any real model files. It performs the initial
@@ -301,7 +310,7 @@ func TestSpeciesIndex_ConcurrentReadersDuringLoadUnload(t *testing.T) {
 		})
 	}
 
-	for range 50 {
+	for range loadUnloadCycles {
 		require.NoError(t, o.LoadModel(testID))
 		require.NoError(t, o.UnloadModel(testID))
 	}
@@ -333,10 +342,7 @@ func TestSpeciesIndex_ConcurrentTriggersPublishNewest(t *testing.T) {
 
 	o := newSpeciesIndexTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID, labels: []string{"Cyanistes caeruleus_Eurasian Blue Tit"}})
 
-	// Each iteration's RebuildNameResolver rebuilds the OpenFauna resolver (which
-	// decompresses the embedded dataset), so keep the count modest; the race detector
-	// exposes any interleaving hazard well within this many rounds.
-	for i := range 15 {
+	for i := range concurrentPublishIterations {
 		// Start each iteration from the model unloaded (ignore "not loaded" on the
 		// first pass), so LoadModel does real topology work concurrently with the
 		// resolver rebuild rather than hitting the already-loaded skip.
