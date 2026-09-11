@@ -16,11 +16,14 @@ import (
 // paths rebuild the resolver elsewhere and on-demand Resolve masks a stale index.
 //
 // The assertion targets the in-memory fast-path index via ResolveLocal, which is
-// empty until Rebuild runs and only ever holds the working set. So a removed
-// trigger leaves the index empty and this test fails.
+// empty until Rebuild runs. Since Phase 2a the working set is the union of every
+// loaded model's labels plus the inclusion list (a strict superset of the old
+// "inclusion list, else primary labels" seed), so a removed trigger leaves the
+// index empty and this test fails.
 func TestBuildRangeFilter_TriggersNameResolverRebuild(t *testing.T) {
-	const workingSetSci = "Turdus merula" // scores in the geomodel -> enters the working set
-	const outOfSetSci = "Parus major"     // real OpenFauna species, kept OUT of the working set
+	const scoredLabelSci = "Turdus merula"  // scores in the geomodel AND is a label
+	const unscoredLabelSci = "Parus major"  // a label, but never scores
+	const offWorkingSetSci = "Corvus corax" // real OpenFauna species, in neither labels nor scores
 	const localeEN = "en"
 
 	settings := conftest.GetTestSettings()
@@ -30,18 +33,18 @@ func TestBuildRangeFilter_TriggersNameResolverRebuild(t *testing.T) {
 	settings.BirdNET.RangeFilter.Threshold = 0.01
 	settings.BirdNET.Locale = localeEN
 	settings.BirdNET.Labels = []string{
-		workingSetSci + "_Common Blackbird",
-		outOfSetSci + "_Great Tit",
+		scoredLabelSci + "_Common Blackbird",
+		unscoredLabelSci + "_Great Tit",
 	}
 	conftest.SetTestSettings(settings)
 	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
-	// Only Turdus merula scores in the geomodel, so the range-filter working set
-	// (includedSpecies) is exactly {Turdus merula}. Parus major is deliberately
-	// absent from the scores so it never enters the resolver's sparse index.
+	// Only Turdus merula scores in the geomodel, so the range-filter inclusion list
+	// is exactly {Turdus merula}. Parus major never scores, but it is a loaded label,
+	// so it enters the working set via the label union (Phase 2a).
 	rf := &fakeUniversalRangeFilter{
-		geoLabels: []string{workingSetSci + "_Common Blackbird", outOfSetSci + "_Great Tit"},
-		scores:    []SpeciesScore{{Score: 0.9, Label: workingSetSci + "_Common Blackbird"}},
+		geoLabels: []string{scoredLabelSci + "_Common Blackbird", unscoredLabelSci + "_Great Tit"},
+		scores:    []SpeciesScore{{Score: 0.9, Label: scoredLabelSci + "_Common Blackbird"}},
 		rawScores: []float32{0.9},
 	}
 
@@ -49,23 +52,29 @@ func TestBuildRangeFilter_TriggersNameResolverRebuild(t *testing.T) {
 	o.openfauna = openfauna.NewResolver()
 
 	// Precondition: the fast-path index is empty before BuildRangeFilter runs.
-	_, ok := o.openfauna.ResolveLocal(workingSetSci)
+	_, ok := o.openfauna.ResolveLocal(scoredLabelSci)
 	require.False(t, ok, "fast-path index should be empty before BuildRangeFilter")
 
 	require.NoError(t, BuildRangeFilter(o))
 
-	// The trigger rebuilt the sparse index for the working set, so the in-memory
-	// fast path now resolves the working-set species without a dataset scan.
-	name, ok := o.openfauna.ResolveLocal(workingSetSci)
+	// The trigger rebuilt the index for the working set, so the in-memory fast path
+	// now resolves the scored label without a dataset scan.
+	name, ok := o.openfauna.ResolveLocal(scoredLabelSci)
 	assert.True(t, ok,
 		"BuildRangeFilter must rebuild the OpenFauna name resolver for the working set (is the RebuildNameResolver trigger missing?)")
 	assert.NotEmpty(t, name)
-	assert.NotEqual(t, workingSetSci, name,
+	assert.NotEqual(t, scoredLabelSci, name,
 		"resolved value should be the localized common name, not the scientific name echoed back")
 
-	// Negative control: a real dataset species outside the working set stays off the
-	// fast-path index, proving the rebuilt index is working-set-scoped (sparse) and
-	// not the whole dataset. Its on-demand Resolve would still find it.
-	_, ok = o.openfauna.ResolveLocal(outOfSetSci)
-	assert.False(t, ok, "out-of-working-set species must not be in the fast-path index")
+	// A loaded label that never scored is still pre-indexed: the working set is now
+	// the union of loaded labels plus the inclusion list, so secondary/primary
+	// species no longer fall to the on-demand Lookup path (Phase 2a).
+	_, ok = o.openfauna.ResolveLocal(unscoredLabelSci)
+	assert.True(t, ok, "a loaded label must be in the fast-path index even when it does not score")
+
+	// Negative control: a real dataset species that is neither a label nor scored
+	// stays off the fast-path index, proving the rebuilt index is still working-set
+	// scoped and not the whole dataset. Its on-demand Resolve would still find it.
+	_, ok = o.openfauna.ResolveLocal(offWorkingSetSci)
+	assert.False(t, ok, "a species outside the label union and inclusion list must not be in the fast-path index")
 }

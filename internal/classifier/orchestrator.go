@@ -22,6 +22,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/openfauna"
+	"github.com/tphakala/birdnet-go/internal/speciesindex"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -97,6 +98,21 @@ type Orchestrator struct {
 	// typed handle so refresh triggers can Rebuild its sparse index on
 	// range-filter/model/locale change. Always also present in nameResolvers.
 	openfauna *openfauna.Resolver
+
+	// names is the single process-wide species-name index. The orchestrator is its
+	// only writer, rebuilding it from the union of every loaded model's labels
+	// (AllLabels) on model load, unload, reload, range-filter rebuild and locale
+	// change. The datastore and the api/v2 facade hold pointers to this same
+	// service; readers use Snapshot() lock-free (model de-privilege epic, Phase 2a).
+	names *speciesindex.Service
+
+	// rebuildMu serializes rebuildSpeciesIndex so a union snapshot taken by one
+	// trigger cannot be published after a newer one's. It sits ABOVE o.mu in the
+	// lock order (o.rebuildMu -> o.mu -> entry.mu -> bn.mu): rebuildSpeciesIndex is
+	// its only holder and calls AllLabels (which takes o.mu.RLock and each
+	// entry.mu) while holding it, so it must never be taken with any other
+	// orchestrator lock already held.
+	rebuildMu sync.Mutex
 
 	// Model management.
 	// NOTE: models map is keyed by ModelInfo.ID at construction time. If ReloadModel
@@ -309,6 +325,11 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// ResolveName is consulted (display + inference).
 	o.nameResolvers = []NameResolver{ofResolver, resolver}
 	o.openfauna = ofResolver
+	// The orchestrator owns the single species-name index and is its only writer.
+	// Seed it with the same OpenFauna resolver installNameResolver used to hand the
+	// datastore and facade; rebuildSpeciesIndex below (and every topology trigger)
+	// republishes it from the union of loaded labels.
+	o.names = speciesindex.New(ofResolver)
 	o.models[bn.ModelInfo.ID] = &modelEntry{instance: bn}
 	o.primary = bn
 	o.settingsAtomic.Store(settings)
@@ -339,6 +360,12 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 		o.Delete()
 		return nil, err
 	}
+
+	// Publish the initial species-name snapshot from the union of every loaded
+	// model's labels. Kept here (rather than relying on the first BuildRangeFilter)
+	// so cmd/benchmark and cmd/rangefilter, which build an orchestrator and never
+	// call BuildRangeFilter, still get a populated index.
+	o.rebuildSpeciesIndex()
 
 	return o, nil
 }
@@ -825,19 +852,22 @@ func (o *Orchestrator) RebuildNameResolver(includedSpecies []string) error {
 	if o == nil || o.openfauna == nil {
 		return nil
 	}
-	sciNames := scientificNamesFromLabels(includedSpecies)
-	if len(sciNames) == 0 {
-		// Snapshot primary under the read lock so a concurrent Delete (which sets
-		// o.primary = nil) cannot race the Labels() read.
-		o.mu.RLock()
-		primary := o.primary
-		o.mu.RUnlock()
-		if primary != nil {
-			sciNames = scientificNamesFromLabels(primary.Labels())
-		}
-	}
+	// Working set: every loaded model's labels plus the current inclusion list
+	// (design 5.4). This is a superset of the previous seed (the inclusion list,
+	// or the primary's labels when it was empty), so every species that was
+	// pre-indexed before is pre-indexed after, and secondary-model species stop
+	// falling to the on-demand Lookup path. unionLabels dedups and drops empties.
+	working := unionLabels(o.AllLabels(), includedSpecies)
 	locale := o.CurrentSettings().BirdNET.Locale
-	return o.openfauna.Rebuild(sciNames, locale)
+	if err := o.openfauna.Rebuild(scientificNamesFromLabels(working), locale); err != nil {
+		return err
+	}
+	// Publish the species-name snapshot second: its localized names come from the
+	// resolver just rebuilt, so the resolver must switch locale first (the same
+	// ordering handleReloadBirdnet enforced when it rebuilt the maps after the
+	// range filter).
+	o.rebuildSpeciesIndex()
+	return nil
 }
 
 // scientificNamesFromLabels extracts the scientific-name portion of each
@@ -1479,7 +1509,13 @@ func (o *Orchestrator) RunFilterProcess(dateStr string, week float32) {
 // Acquires the per-model lock before reload to prevent concurrent inference,
 // then the write lock to re-key the models map.
 func (o *Orchestrator) ReloadModel() error {
-	return o.reloadPrimaryModel(func(primary *BirdNET) error { return primary.ReloadModel() })
+	if err := o.reloadPrimaryModel(func(primary *BirdNET) error { return primary.ReloadModel() }); err != nil {
+		return err
+	}
+	// Rebuild after reloadPrimaryModel returns: it holds o.mu.Lock via defer through
+	// step 2, and rebuildSpeciesIndex must run with no orchestrator lock held.
+	o.rebuildSpeciesIndex()
+	return nil
 }
 
 // ReloadPrimaryForVariantSwap reloads the primary classifier in place for a
@@ -1491,7 +1527,12 @@ func (o *Orchestrator) ReloadModel() error {
 // the re-key is a no-op in practice. Transactional rollback to the previous model
 // lives in reloadModelInternal, so a failed swap leaves the previous variant serving.
 func (o *Orchestrator) ReloadPrimaryForVariantSwap() error {
-	return o.reloadPrimaryModel(func(primary *BirdNET) error { return primary.reloadForVariantSwap() })
+	if err := o.reloadPrimaryModel(func(primary *BirdNET) error { return primary.reloadForVariantSwap() }); err != nil {
+		return err
+	}
+	// See ReloadModel: rebuild only after reloadPrimaryModel released o.mu.
+	o.rebuildSpeciesIndex()
+	return nil
 }
 
 // reloadPrimaryModel performs the shared locking, per-instance reload, shared-state
@@ -1680,6 +1721,9 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 	// o.mu. See resolveSiblingSet for the full rationale on this lock-free read.
 
 	var firstErr error
+	// swapped tracks whether any entry's instance was actually replaced, so the
+	// species-name index is rebuilt at most once, after the loop.
+	swapped := false
 	for _, ref := range refs {
 		// Per-entry gate: read the triplet this entry's instance was built against
 		// under entry.mu and skip the rebuild when it already matches the current
@@ -1781,6 +1825,7 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 		ref.entry.backend = triplet
 		dropInferenceFailureStreak(ref.id) // fresh instance, fresh streak
 		ref.entry.mu.Unlock()
+		swapped = true
 
 		// Close the old instance after releasing entry.mu: native teardown can be
 		// slow, and no goroutine can reach the old instance once the swap is
@@ -1798,6 +1843,15 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 			logger.String("backend", triplet.backend),
 			logger.String("ov_device", triplet.ovDevice),
 			logger.Int("threads", triplet.threads))
+	}
+
+	// Rebuild once if any instance was swapped, with no orchestrator lock held.
+	// A backend/device/threads swap keeps the label set, so the union is
+	// unchanged; the rebuild keeps the "last trigger in a reload sequence
+	// republishes with the newest-locale resolver" ordering guarantee cheap and
+	// uniform across triggers.
+	if swapped {
+		o.rebuildSpeciesIndex()
 	}
 
 	return firstErr
@@ -2039,6 +2093,12 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 		return err
 	}
 
+	// Republish the species-name index from the new union now that this model's
+	// labels are loaded. Runs after the locked closure released o.mu, and before
+	// the deferred warm-up and path-correction drains (neither reads the index, so
+	// the order relative to them is immaterial).
+	o.rebuildSpeciesIndex()
+
 	return nil
 }
 
@@ -2192,32 +2252,41 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 	}
 	o.mu.Unlock()
 
-	// Close the model instance outside the map lock. Acquire the per-model
-	// lock to wait for any in-flight inference to complete before deleting
-	// the counter (prevents re-creation by in-flight RecordInvoke).
-	entry.mu.Lock()
-	defer entry.mu.Unlock()
+	// Close the model instance outside the map lock, in an inner func so entry.mu
+	// is released before rebuildSpeciesIndex runs. Acquire the per-model lock to
+	// wait for any in-flight inference to complete before deleting the counter
+	// (prevents re-creation by in-flight RecordInvoke). Rebuilding while still
+	// holding entry.mu would take entry.mu -> o.mu (via AllLabels), inverting the
+	// documented o.mu -> entry.mu order.
+	func() {
+		entry.mu.Lock()
+		defer entry.mu.Unlock()
 
-	globalInferenceCounters.Delete(registryID)
-	dropInferenceFailureStreak(registryID)
+		globalInferenceCounters.Delete(registryID)
+		dropInferenceFailureStreak(registryID)
 
-	o.rssMu.Lock()
-	delete(o.modelRSS, registryID)
-	o.rssMu.Unlock()
+		o.rssMu.Lock()
+		delete(o.modelRSS, registryID)
+		o.rssMu.Unlock()
 
-	if entry.instance != nil {
-		modelID := entry.instance.ModelID()
-		if err := entry.instance.Close(); err != nil {
-			log.Warn("failed to close model instance during unload",
-				logger.String("model_id", modelID),
-				logger.Error(err))
+		if entry.instance != nil {
+			modelID := entry.instance.ModelID()
+			if err := entry.instance.Close(); err != nil {
+				log.Warn("failed to close model instance during unload",
+					logger.String("model_id", modelID),
+					logger.Error(err))
+			}
+			entry.instance = nil
+
+			log.Info("Model unloaded",
+				logger.String("registry_id", registryID),
+				logger.String("model_id", modelID))
 		}
-		entry.instance = nil
+	}()
 
-		log.Info("Model unloaded",
-			logger.String("registry_id", registryID),
-			logger.String("model_id", modelID))
-	}
+	// Republish the species-name index from the new (smaller) union now that this
+	// model's labels are gone, with no orchestrator lock held.
+	o.rebuildSpeciesIndex()
 
 	return nil
 }
