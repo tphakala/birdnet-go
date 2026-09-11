@@ -1685,6 +1685,64 @@ func TestHasGeomodelFiles(t *testing.T) {
 	}
 }
 
+func TestHasGeomodelTuple(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, hasGeomodelTuple(nil), "a nil entry carries no tuple")
+
+	tests := []struct {
+		name  string
+		entry CatalogEntry
+		want  bool
+	}{
+		{
+			name:  "no files",
+			entry: CatalogEntry{Files: nil},
+			want:  false,
+		},
+		{
+			name: "geomodel model role only",
+			entry: CatalogEntry{Files: []CatalogFile{
+				{Role: RoleModel},
+				{Role: RoleGeomodelModel},
+			}},
+			want: false,
+		},
+		{
+			name: "geomodel labels role only",
+			entry: CatalogEntry{Files: []CatalogFile{
+				{Role: RoleGeomodelLabels},
+			}},
+			want: false,
+		},
+		{
+			name: "both geomodel roles",
+			entry: CatalogEntry{Files: []CatalogFile{
+				{Role: RoleGeomodelModel},
+				{Role: RoleGeomodelLabels},
+			}},
+			want: true,
+		},
+		{
+			name: "both geomodel roles plus unrelated files",
+			entry: CatalogEntry{Files: []CatalogFile{
+				{Role: RoleModel},
+				{Role: RoleGeomodelLabels},
+				{Role: RoleLabels},
+				{Role: RoleGeomodelModel},
+			}},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, hasGeomodelTuple(&tt.entry))
+		})
+	}
+}
+
 func TestCatalog_GeomodelFilesOnPerchAndBirdNET(t *testing.T) {
 	t.Parallel()
 

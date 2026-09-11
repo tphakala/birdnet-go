@@ -640,6 +640,30 @@ func HasGeomodelFiles(entry *CatalogEntry) bool {
 	return false
 }
 
+// hasGeomodelTuple reports whether a catalog entry carries BOTH geomodel role files (model
+// and labels), i.e. a complete geomodel range-filter tuple. HasGeomodelFiles is satisfied by
+// either role alone; a range-filter survivor needs both, because the config sets ModelPath
+// and LabelsPath independently and a half-tuple survivor would leave the other path pointing
+// at an uninstalled entry's absent file.
+func hasGeomodelTuple(entry *CatalogEntry) bool {
+	if entry == nil {
+		return false
+	}
+	var hasModel, hasLabels bool
+	for _, f := range entry.Files {
+		switch f.Role {
+		case RoleGeomodelModel:
+			hasModel = true
+		case RoleGeomodelLabels:
+			hasLabels = true
+		}
+		if hasModel && hasLabels {
+			return true
+		}
+	}
+	return false
+}
+
 // HasEmbeddingsFiles reports whether a catalog entry includes shared embeddings files.
 func HasEmbeddingsFiles(entry *CatalogEntry) bool {
 	if entry == nil {
