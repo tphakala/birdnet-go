@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -137,7 +136,7 @@ func (p *OpenWeatherProvider) FetchWeather(ctx context.Context, settings *conf.S
 	req.Header.Set("User-Agent", UserAgent())
 
 	// Execute request with retry via the shared executor.
-	body, err := executeWeatherRequest(ctx, p.httpClient, req, openWeatherProviderName, providerLogger, p.handleResponse)
+	body, err := executeWeatherRequest(ctx, p.httpClient, req, openWeatherProviderName, providerLogger, standardHandleResponse(openWeatherProviderName))
 	if err != nil {
 		return nil, err
 	}
@@ -163,43 +162,6 @@ func (p *OpenWeatherProvider) FetchWeather(ctx context.Context, settings *conf.S
 		logger.String("city", mappedData.Location.City),
 		logger.Float64("temp", mappedData.Temperature.Current))
 	return mappedData, nil
-}
-
-// handleResponse classifies a single OpenWeather HTTP response for the shared
-// retry executor. A 401 maps to the auth-failed sentinel without retrying; any
-// other non-200 retries until the final attempt; a 200 returns the body.
-func (p *OpenWeatherProvider) handleResponse(resp *http.Response, attemptLog logger.Logger, isLastAttempt bool) (body []byte, retry bool, err error) {
-	// Close the body on every return path; the error-status branches still drain
-	// it first so the shared keep-alive connection can be reused. This also keeps
-	// the body closed if a read panics, matching WundergroundProvider.executeRequest.
-	defer func() { _ = resp.Body.Close() }()
-
-	// HTTP 401: authentication failed — don't retry, return sentinel.
-	if resp.StatusCode == http.StatusUnauthorized {
-		_, _ = io.ReadAll(resp.Body)
-		attemptLog.Error("Weather API authentication failed — check your API key")
-		return nil, false, ErrWeatherAuthFailed
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		_, _ = io.ReadAll(resp.Body)
-		attemptLog.Warn("Received non-OK status code", logger.Int("status_code", resp.StatusCode))
-		if isLastAttempt {
-			return nil, false, newWeatherErrorWithRetries(
-				fmt.Errorf("received non-200 response (%d)", resp.StatusCode),
-				errors.CategoryNetwork,
-				"weather_api_response",
-				openWeatherProviderName,
-			)
-		}
-		return nil, true, nil
-	}
-
-	body, err = io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, false, newWeatherError(err, errors.CategoryNetwork, "read_response_body", openWeatherProviderName)
-	}
-	return body, false, nil
 }
 
 // mapOpenWeatherResponse converts OpenWeatherResponse to WeatherData

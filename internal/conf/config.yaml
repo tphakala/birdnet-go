@@ -291,6 +291,9 @@ realtime:
       endpoint: "https://api.openweathermap.org/data/2.5/weather" # OpenWeather API endpoint
       units: metric     # metric or imperial
       language: en      # language code
+    pirateweather:
+      apikey: ""        # Pirate Weather API key
+      endpoint: "https://api.pirateweather.net/forecast" # Pirate Weather API endpoint
 
   mqtt:
     enabled: false        # true to enable MQTT

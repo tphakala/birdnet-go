@@ -426,6 +426,7 @@ func TestValidateWeatherSettings_InvalidProvider(t *testing.T) {
 		{"yrno provider allowed", "yrno", false},
 		{"openweather provider allowed", "openweather", false},
 		{"wunderground provider allowed", "wunderground", false},
+		{"pirateweather provider allowed", "pirateweather", false},
 		{"unknown provider rejected", "invalid_provider", true},
 		{"whitespace-only rejected", "  ", true},
 	}
@@ -439,6 +440,9 @@ func TestValidateWeatherSettings_InvalidProvider(t *testing.T) {
 				Wunderground: WundergroundSettings{
 					APIKey:    "testkey",
 					StationID: "KTEST1",
+				},
+				PirateWeather: PirateWeatherSettings{
+					APIKey: "testkey",
 				},
 			}
 

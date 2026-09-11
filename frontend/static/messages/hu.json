@@ -3293,7 +3293,8 @@
             "none": "Nincs",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3314,6 +3315,16 @@
             "helpText": "Válassza ki a hőmérséklet és szélsebesség egységeit (m = Metrikus, e = Imperiális, h = UK hibrid)."
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "Pirate Weather API kulcs",
+            "helpText": "Adja meg a Pirate Weather API kulcsát. Az időjárási adatokhoz szükséges."
+          },
+          "endpoint": {
+            "label": "API végpont",
+            "helpText": "Felülbírálhatja az alapértelmezett Pirate Weather API végpontot, ha szükséges. Ha üresen hagyja, az alapértelmezett https://api.pirateweather.net/forecast."
+          }
+        },
         "notes": {
           "none": "Nem lesz időjárási adat lekérve.",
           "yrno": {
@@ -3321,7 +3332,8 @@
             "freeService": "Az Yr egy ingyenes időjárás adat szolgáltatás. További információkért látogasson el a <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a> oldalra."
           },
           "openweather": "Az OpenWeather használatához API kulcs szükséges, regisztráljon ingyenes API kulcsért a <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a> oldalon.",
-          "wunderground": "Weather Underground API kulcs és érvényes PWS állomás ID szükséges. Lásd <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> részletekért."
+          "wunderground": "Weather Underground API kulcs és érvényes PWS állomás ID szükséges. Lásd <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> részletekért.",
+          "pirateweather": "A Pirate Weather használatához API kulcs szükséges, regisztráljon a <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a> oldalon."
         },
         "apiKey": {
           "label": "API kulcs",
@@ -5103,6 +5115,7 @@
       "birdweatherClientFailed": "A BirdWeather kliens létrehozása sikertelen",
       "noWeatherProvider": "Nincs időjárás szolgáltató kiválasztva",
       "openWeatherKeyRequired": "Az OpenWeather API kulcs kötelező",
+      "pirateWeatherKeyRequired": "A Pirate Weather API kulcs kötelező",
       "processorUnavailable": "A processzor nem elérhető",
       "discoveryFailed": "A Home Assistant felfedezés indítása sikertelen"
     },

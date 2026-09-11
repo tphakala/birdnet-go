@@ -211,6 +211,22 @@ var OpenWeatherToIcon = map[string]IconCode{
 	"50n": IconFog,
 }
 
+// PirateWeatherToIcon maps Pirate Weather (Dark Sky-compatible) icon codes to
+// standardized icon codes. "wind" has no standardized equivalent and is
+// intentionally omitted, falling back to IconUnknown via GetStandardIconCode.
+var PirateWeatherToIcon = map[string]IconCode{
+	"clear-day":           IconClearSky,
+	"clear-night":         IconClearSky,
+	"partly-cloudy-day":   IconPartlyCloudy,
+	"partly-cloudy-night": IconPartlyCloudy,
+	"cloudy":              IconCloudy,
+	"fog":                 IconFog,
+	"rain":                IconRain,
+	"snow":                IconSnow,
+	"sleet":               IconSleet,
+	"thunderstorm":        IconThunderstorm,
+}
+
 // IconDescription maps standardized icon codes to human-readable descriptions
 var IconDescription = map[IconCode]string{
 	IconClearSky:     "Clear Sky",
@@ -237,6 +253,10 @@ func GetStandardIconCode(code, provider string) IconCode {
 		}
 	case openWeatherProviderName:
 		if iconCode, ok := OpenWeatherToIcon[code]; ok {
+			return iconCode
+		}
+	case pirateWeatherProviderName:
+		if iconCode, ok := PirateWeatherToIcon[code]; ok {
 			return iconCode
 		}
 	}

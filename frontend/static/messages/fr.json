@@ -3293,7 +3293,8 @@
             "none": "Aucun",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3314,6 +3315,16 @@
             "helpText": "Sélectionnez les unités pour la température et la vitesse du vent (m = Métrique, e = Impérial, h = Hybride UK)."
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "Clé API Pirate Weather",
+            "helpText": "Entrez votre clé API Pirate Weather. Requise pour les données météo."
+          },
+          "endpoint": {
+            "label": "Point de terminaison API",
+            "helpText": "Remplacez le point de terminaison API Pirate Weather par défaut si nécessaire. Par défaut https://api.pirateweather.net/forecast si laissé vide."
+          }
+        },
         "notes": {
           "none": "Aucune donnée météo ne sera récupérée.",
           "yrno": {
@@ -3321,7 +3332,8 @@
             "freeService": "Yr est un service de données météorologiques gratuit. Pour plus d'informations, visitez <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "L'utilisation d'OpenWeather nécessite une clé API, inscrivez-vous pour obtenir une clé API gratuite sur <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Nécessite une clé API Weather Underground et un ID de station PWS valide. Voir <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> pour plus de détails."
+          "wunderground": "Nécessite une clé API Weather Underground et un ID de station PWS valide. Voir <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> pour plus de détails.",
+          "pirateweather": "L'utilisation de Pirate Weather nécessite une clé API, inscrivez-vous sur <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
         },
         "apiKey": {
           "label": "Clé API",
@@ -5103,6 +5115,7 @@
       "birdweatherClientFailed": "Impossible de créer le client BirdWeather",
       "noWeatherProvider": "Aucun fournisseur météo sélectionné",
       "openWeatherKeyRequired": "La clé API OpenWeather est requise",
+      "pirateWeatherKeyRequired": "La clé API Pirate Weather est requise",
       "processorUnavailable": "Processeur non disponible",
       "discoveryFailed": "Impossible de déclencher la découverte Home Assistant"
     },

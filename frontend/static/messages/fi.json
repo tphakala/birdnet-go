@@ -3293,7 +3293,8 @@
             "none": "Ei mitään",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3314,6 +3315,16 @@
             "helpText": "Valitse lämpötilan näyttöyksiköt"
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "Pirate Weather API-avain",
+            "helpText": "Pirate Weather API-avaimesi. Pidä tämä salassa!"
+          },
+          "endpoint": {
+            "label": "API-päätepiste",
+            "helpText": "Korvaa tarvittaessa Pirate Weatherin oletus-API-päätepiste. Oletuksena käytetään https://api.pirateweather.net/forecast jos jätetään tyhjäksi."
+          }
+        },
         "notes": {
           "none": "Säätietoja ei haeta.",
           "yrno": {
@@ -3321,7 +3332,8 @@
             "freeService": "Yr on ilmainen säätietopalvelu. Lisätietoja: <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "OpenWeatherin käyttö vaatii API-avaimen, rekisteröidy ilmaiselle API-avaimelle osoitteessa <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Vaatii Weather Underground API-avaimen ja kelvollisen PWS-asematunnuksen. Katso lisätietoja <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a>."
+          "wunderground": "Vaatii Weather Underground API-avaimen ja kelvollisen PWS-asematunnuksen. Katso lisätietoja <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a>.",
+          "pirateweather": "Pirate Weatherin käyttö vaatii API-avaimen, rekisteröidy osoitteessa <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
         },
         "apiKey": {
           "label": "API-avain",
@@ -5103,6 +5115,7 @@
       "birdweatherClientFailed": "BirdWeather-asiakasohjelman luominen epäonnistui",
       "noWeatherProvider": "Sääpalvelua ei ole valittu",
       "openWeatherKeyRequired": "OpenWeather API-avain on pakollinen",
+      "pirateWeatherKeyRequired": "Pirate Weather API-avain on pakollinen",
       "processorUnavailable": "Prosessori ei ole käytettävissä",
       "discoveryFailed": "Home Assistant -laitteen löytäminen epäonnistui"
     },

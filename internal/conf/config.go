@@ -359,11 +359,12 @@ type EBirdSettings struct {
 
 // WeatherSettings contains all weather-related settings
 type WeatherSettings struct {
-	Provider     string               `yaml:"provider" json:"provider"`         // "none", "yrno", "openweather", or "wunderground"
-	PollInterval int                  `yaml:"pollinterval" json:"pollInterval"` // weather data polling interval in minutes
-	Debug        bool                 `yaml:"debug" json:"debug"`               // true to enable debug mode
-	OpenWeather  OpenWeatherSettings  `yaml:"openweather" json:"openWeather"`   // OpenWeather integration settings
-	Wunderground WundergroundSettings `yaml:"wunderground" json:"wunderground"` // WeatherUnderground integration settings
+	Provider      string                `yaml:"provider" json:"provider"`           // "none", "yrno", "openweather", "wunderground", or "pirateweather"
+	PollInterval  int                   `yaml:"pollinterval" json:"pollInterval"`   // weather data polling interval in minutes
+	Debug         bool                  `yaml:"debug" json:"debug"`                 // true to enable debug mode
+	OpenWeather   OpenWeatherSettings   `yaml:"openweather" json:"openWeather"`     // OpenWeather integration settings
+	Wunderground  WundergroundSettings  `yaml:"wunderground" json:"wunderground"`   // WeatherUnderground integration settings
+	PirateWeather PirateWeatherSettings `yaml:"pirateweather" json:"pirateWeather"` // Pirate Weather integration settings
 }
 
 // ---------------- Notification push configuration -----------------
@@ -499,6 +500,15 @@ type OpenWeatherSettings struct {
 	Endpoint string `yaml:"endpoint" json:"endpoint"` // OpenWeather API endpoint
 	Units    string `yaml:"units" json:"units"`       // units of measurement: standard, metric, or imperial
 	Language string `yaml:"language" json:"language"` // language code for the response
+}
+
+// PirateWeatherSettings contains settings for Pirate Weather integration.
+// Pirate Weather is a Dark Sky-API-compatible drop-in service; only an API
+// key and an optional endpoint override are needed (unlike OpenWeather it has
+// no units/language options here — the provider always requests SI units).
+type PirateWeatherSettings struct {
+	APIKey   string `yaml:"apikey" json:"apiKey"`     // Pirate Weather API key
+	Endpoint string `yaml:"endpoint" json:"endpoint"` // Pirate Weather API endpoint
 }
 
 // PrivacyFilterSettings contains settings for the privacy filter.
@@ -2012,10 +2022,11 @@ func GenerateRandomSecret() (string, error) {
 type WeatherProvider string
 
 const (
-	WeatherNone         WeatherProvider = "none"
-	WeatherYrNo         WeatherProvider = "yrno"
-	WeatherOpenWeather  WeatherProvider = "openweather"
-	WeatherWunderground WeatherProvider = "wunderground"
+	WeatherNone          WeatherProvider = "none"
+	WeatherYrNo          WeatherProvider = "yrno"
+	WeatherOpenWeather   WeatherProvider = "openweather"
+	WeatherWunderground  WeatherProvider = "wunderground"
+	WeatherPirateWeather WeatherProvider = "pirateweather"
 )
 
 // Prefer explicit settings return to avoid confusion at call sites.
@@ -2026,6 +2037,8 @@ func (s *Settings) GetWeatherProvider() (provider WeatherProvider, settings any)
 		return WeatherOpenWeather, s.Realtime.Weather.OpenWeather
 	case string(WeatherWunderground):
 		return WeatherWunderground, s.Realtime.Weather.Wunderground
+	case string(WeatherPirateWeather):
+		return WeatherPirateWeather, s.Realtime.Weather.PirateWeather
 	case string(WeatherYrNo), string(WeatherNone):
 		return WeatherProvider(p), nil
 	default:
@@ -2045,6 +2058,14 @@ func (w *WundergroundSettings) ValidateWunderground() error {
 	}
 	if w.StationID == "" {
 		return fmt.Errorf("wunderground.stationId is required when provider is wunderground")
+	}
+	return nil
+}
+
+// ValidatePirateWeather validates Pirate Weather settings when the provider is "pirateweather"
+func (p *PirateWeatherSettings) ValidatePirateWeather() error {
+	if p.APIKey == "" {
+		return fmt.Errorf("pirateweather.apiKey is required when provider is pirateweather")
 	}
 	return nil
 }
