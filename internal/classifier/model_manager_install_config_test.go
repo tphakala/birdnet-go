@@ -88,7 +88,11 @@ func TestApplyRangeFilterConfigForInstall_NonGeomodelEntryIsNoop(t *testing.T) {
 
 	updated := conftest.GetTestSettings()
 	rf := updated.RangeFilterConfig()
-	rf.Model = geomodelRangeFilterVersion
+	// Seed a pre-existing version distinct from any value a geomodel install would
+	// write, so the assertion proves the field is untouched rather than coincidentally
+	// matching what an erroneous overwrite would set.
+	const existingRangeFilterVersion = "existing-range-filter-version"
+	rf.Model = existingRangeFilterVersion
 	rf.ModelPath = "/existing/geomodel.onnx"
 	rf.LabelsPath = "/existing/geomodel-labels.txt"
 
@@ -96,7 +100,7 @@ func TestApplyRangeFilterConfigForInstall_NonGeomodelEntryIsNoop(t *testing.T) {
 	entry := &CatalogEntry{Files: []CatalogFile{{Role: RoleModel, LocalName: "classifier.onnx"}}}
 	mm.applyRangeFilterConfigForInstall(updated, entry)
 
-	assert.Equal(t, geomodelRangeFilterVersion, rf.Model, "a non-geomodel install must not touch the range-filter version")
+	assert.Equal(t, existingRangeFilterVersion, rf.Model, "a non-geomodel install must not touch the range-filter version")
 	assert.Equal(t, "/existing/geomodel.onnx", rf.ModelPath, "a non-geomodel install must not touch the model path")
 	assert.Equal(t, "/existing/geomodel-labels.txt", rf.LabelsPath, "a non-geomodel install must not touch the labels path")
 }
