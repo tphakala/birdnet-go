@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/openfauna"
+	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
 // fakeResolver is a minimal datastore.SpeciesNameResolver for tests.
@@ -20,8 +21,11 @@ func (f fakeResolver) ResolveLocal(sci string) (string, bool) {
 }
 
 func TestResolveCommonName_ResolverOverridesLabelMap(t *testing.T) {
-	ds := &Datastore{log: logger.NewConsoleLogger("v2only_test", logger.LogLevelError)}
-	ds.names.Store(buildNameMaps([]string{"Turdus merula_LabelName"}, nil))
+	ds := &Datastore{
+		log:   logger.NewConsoleLogger("v2only_test", logger.LogLevelError),
+		names: speciesindex.New(nil),
+	}
+	ds.names.Rebuild([]string{"Turdus merula_LabelName"}, "")
 
 	// Without a resolver: the label map wins.
 	assert.Equal(t, "LabelName", ds.resolveCommonName("Turdus merula"))
@@ -41,8 +45,11 @@ func TestResolveCommonName_RealOpenFaunaOverrides(t *testing.T) {
 	r := openfauna.NewResolver()
 	require.NoError(t, r.Rebuild([]string{"Turdus merula"}, "en"))
 
-	ds := &Datastore{log: logger.NewConsoleLogger("v2only_test", logger.LogLevelError)}
-	ds.names.Store(buildNameMaps([]string{"Turdus merula_WRONG"}, nil))
+	ds := &Datastore{
+		log:   logger.NewConsoleLogger("v2only_test", logger.LogLevelError),
+		names: speciesindex.New(nil),
+	}
+	ds.names.Rebuild([]string{"Turdus merula_WRONG"}, "")
 	ds.SetNameResolver(r)
 
 	got := ds.resolveCommonName("Turdus merula")
@@ -50,24 +57,7 @@ func TestResolveCommonName_RealOpenFaunaOverrides(t *testing.T) {
 	assert.NotEmpty(t, got)
 }
 
-func TestBuildNameMaps_ScientificOnlyLabelSearchable(t *testing.T) {
-	// Scientific-only labels (no "_", e.g. Perch v2 / bats) become searchable when
-	// the resolver supplies a common name.
-	nm := buildNameMaps([]string{"Myotis myotis"},
-		fakeResolver{m: map[string]string{"Myotis myotis": "Mustakorvayokko"}})
-	assert.Equal(t, "Mustakorvayokko", nm.common["Myotis myotis"])
-	assert.Equal(t, "Myotis myotis", nm.species["mustakorvayokko"])
-
-	// Without a resolver, a scientific-only label has no common name and is skipped.
-	bare := buildNameMaps([]string{"Myotis myotis"}, nil)
-	_, ok := bare.common["Myotis myotis"]
-	assert.False(t, ok)
-}
-
-func TestBuildNameMaps_ResolverLocalizesReverseMap(t *testing.T) {
-	// The reverse (search) maps must carry the localized name so search matches display.
-	nm := buildNameMaps([]string{"Turdus merula_LabelName"},
-		fakeResolver{m: map[string]string{"Turdus merula": "Mustarastas"}})
-	assert.Equal(t, "Mustarastas", nm.common["Turdus merula"])
-	assert.Equal(t, "Turdus merula", nm.species["mustarastas"])
-}
+// Note: the name-map construction behaviors previously exercised here through
+// buildNameMaps directly (scientific-only labels searchable via a resolver, and
+// resolver-localized reverse maps) now live in internal/speciesindex, where the
+// shared builder is owned and golden-tested.

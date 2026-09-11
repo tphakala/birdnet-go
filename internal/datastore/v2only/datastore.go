@@ -41,8 +41,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	obmetrics "github.com/tphakala/birdnet-go/internal/observability/metrics"
+	"github.com/tphakala/birdnet-go/internal/speciesindex"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
-	"golang.org/x/text/unicode/norm"
 	"gorm.io/gorm"
 )
 
@@ -104,19 +104,6 @@ func parseDetectionTimestamp(date, timeStr string, tz *time.Location) int64 {
 	return time.Now().Unix()
 }
 
-// nameMaps holds the species name lookup maps. Stored behind an atomic.Pointer
-// so readers are lock-free and UpdateNameMaps can swap atomically.
-type nameMaps struct {
-	// common maps scientific name → common name (display lookup).
-	common map[string]string
-	// commonFolded maps scientific name → lower-cased NFC-normalized common name. Precomputed
-	// once here so common-name search (ResolveCommonNameToLabelIDs) does not normalize every map
-	// value on every query.
-	commonFolded map[string]string
-	// species maps lowercase common name → scientific name (reverse lookup).
-	species map[string]string
-}
-
 // Datastore implements datastore.Interface using only v2 repositories.
 type Datastore struct {
 	manager      v2.Manager
@@ -145,14 +132,13 @@ type Datastore struct {
 	// classify Perch v2 (FSD50K) sound classes without a data race.
 	nonBirdLabelTypeIDs map[nonbird.Category]uint
 
-	// names holds the species name lookup maps behind an atomic.Pointer
-	// for lock-free reads and atomic swaps when locale changes.
-	names atomic.Pointer[nameMaps]
-
-	// nameResolver, when set, is the authoritative localized name source shared
-	// with the classifier orchestrator. It overrides the label-derived maps and
-	// resolves historic out-of-working-set species via on-demand lookup.
-	nameResolver atomic.Pointer[datastore.SpeciesNameResolver]
+	// names owns the species-name lookup index (the forward display and reverse
+	// search maps plus the authoritative resolver) behind an atomic snapshot for
+	// lock-free reads and atomic swaps on locale or model change. Set once in New;
+	// a nil value (a bare-struct test) is treated as an empty index by the
+	// accessors below, preserving the zero-value safety of the previous
+	// atomic.Pointer fields it replaced.
+	names *speciesindex.Service
 
 	// speciesCodeMap provides O(1) lookup from scientific name to eBird species code.
 	// Populated from the eBird taxonomy data passed via Config.SpeciesCodeMap.
@@ -310,11 +296,6 @@ func New(cfg *Config) (*Datastore, error) {
 		tz = time.Local
 	}
 
-	// Build species name maps from labels. The OpenFauna resolver is injected
-	// later via SetNameResolver (it is owned by the orchestrator, constructed
-	// separately), so the maps are localized on the first post-wiring rebuild.
-	nm := buildNameMaps(cfg.Labels, nil)
-
 	// Use species code map from taxonomy data (injected via config).
 	speciesCodeMap := cfg.SpeciesCodeMap
 	if speciesCodeMap == nil {
@@ -342,8 +323,13 @@ func New(cfg *Config) (*Datastore, error) {
 		nonBirdLabelTypeIDs: nonBirdLabelTypeIDs,
 		speciesCodeMap:      speciesCodeMap,
 		dbCounters:          dbCounters,
+		names:               speciesindex.New(nil),
 	}
-	ds.names.Store(nm)
+
+	// Build the species-name maps from labels. The OpenFauna resolver is injected
+	// later via SetNameResolver (owned by the orchestrator, constructed
+	// separately), so the maps are localized on the first post-wiring rebuild.
+	ds.names.Rebuild(cfg.Labels, "")
 
 	// Start periodic WAL checkpoint for SQLite to prevent unbounded WAL growth.
 	// The auto-checkpoint mechanism may not fire reliably with connection pooling.
@@ -354,44 +340,12 @@ func New(cfg *Config) (*Datastore, error) {
 	return ds, nil
 }
 
-// buildNameMaps parses BirdNET labels ("ScientificName_CommonName" format)
-// into lookup maps for common<->scientific name resolution.
-// When resolver is non-nil, each label's common name is overridden by the
-// resolver (authoritative/localized); labels the resolver does not cover keep
-// their embedded common name. This keeps the reverse (search) maps consistent
-// with what resolveCommonName displays.
-func buildNameMaps(labels []string, resolver datastore.SpeciesNameResolver) *nameMaps {
-	speciesMap := make(map[string]string, len(labels))
-	commonMap := make(map[string]string, len(labels))
-	commonFoldedMap := make(map[string]string, len(labels))
-	// Ambiguous reverse keys are deleted, not last-writer-wins: an ambiguous common
-	// name must fall through to substring search (which returns all matches) rather
-	// than route to an arbitrary species.
-	ambiguous := make(map[string]struct{})
-	for _, sn := range datastore.ResolveLabelNames(labels, resolver) {
-		commonMap[sn.Scientific] = sn.Common
-		folded := strings.ToLower(norm.NFC.String(sn.Common))
-		commonFoldedMap[sn.Scientific] = folded
-
-		if _, seen := ambiguous[folded]; seen {
-			continue
-		}
-		if existing, exists := speciesMap[folded]; exists && existing != sn.Scientific {
-			ambiguous[folded] = struct{}{}
-			delete(speciesMap, folded)
-			continue
-		}
-		speciesMap[folded] = sn.Scientific
-	}
-	return &nameMaps{common: commonMap, commonFolded: commonFoldedMap, species: speciesMap}
-}
-
 // UpdateNameMaps rebuilds species name lookup maps from updated BirdNET labels.
 // Called after locale or model changes to keep common name resolution current.
 // The new maps are built first, then atomically swapped in - readers are never blocked.
 // Also resets the missing-name warning deduplication so new mismatches are logged.
 func (ds *Datastore) UpdateNameMaps(labels []string) {
-	ds.names.Store(buildNameMaps(labels, ds.loadNameResolver()))
+	ds.names.Rebuild(labels, "")
 	ds.loggedMissingNames.Clear()
 }
 
@@ -399,18 +353,15 @@ func (ds *Datastore) UpdateNameMaps(labels []string) {
 // the classifier orchestrator. Safe to call concurrently with reads; a nil
 // resolver is ignored.
 func (ds *Datastore) SetNameResolver(r datastore.SpeciesNameResolver) {
-	if datastore.IsNilResolver(r) {
-		return
-	}
-	ds.nameResolver.Store(&r)
+	ds.names.SetResolver(r)
 }
 
 // loadNameResolver returns the installed resolver, or nil if none has been set.
 func (ds *Datastore) loadNameResolver() datastore.SpeciesNameResolver {
-	if p := ds.nameResolver.Load(); p != nil {
-		return *p
+	if ds.names == nil {
+		return nil
 	}
-	return nil
+	return ds.names.Resolver()
 }
 
 // Open is a no-op since the manager is already open.
@@ -419,26 +370,22 @@ func (ds *Datastore) Open() error {
 }
 
 // loadNameMaps returns the current name maps. Always returns a non-nil value.
-func (ds *Datastore) loadNameMaps() *nameMaps {
-	if m := ds.names.Load(); m != nil {
-		return m
+func (ds *Datastore) loadNameMaps() *speciesindex.Snapshot {
+	if ds.names == nil {
+		return speciesindex.Empty()
 	}
-	return &nameMaps{
-		common:       make(map[string]string),
-		commonFolded: make(map[string]string),
-		species:      make(map[string]string),
-	}
+	return ds.names.Snapshot()
 }
 
 // filterLookupDeps builds the dependency set used by repository filter resolution (species and
 // device lookups, plus common-name search via the active-locale name maps).
 func (ds *Datastore) filterLookupDeps() *repository.FilterLookupDeps {
-	nm := ds.loadNameMaps()
+	snap := ds.loadNameMaps()
 	return &repository.FilterLookupDeps{
 		LabelRepo:         ds.label,
 		SourceRepo:        ds.source,
-		SciToCommon:       nm.common,
-		SciToCommonFolded: nm.commonFolded,
+		SciToCommon:       snap.SciToCommon,
+		SciToCommonFolded: snap.SciToCommonFolded,
 	}
 }
 
@@ -3732,8 +3679,8 @@ func (ds *Datastore) resolveCommonName(scientificName string) string {
 			return name
 		}
 	}
-	nm := ds.loadNameMaps()
-	if cn, ok := nm.common[sciName]; ok {
+	snap := ds.loadNameMaps()
+	if cn, ok := snap.SciToCommon[sciName]; ok {
 		return cn
 	}
 	// Log once per missing species when maps are populated (not during startup with empty maps).
@@ -3743,11 +3690,11 @@ func (ds *Datastore) resolveCommonName(scientificName string) string {
 	// Guard ds.log: it may be nil when the datastore is constructed without a logger,
 	// matching the other logging sites in this file. Skipping the LoadOrStore when there
 	// is no logger is harmless: the dedup set only exists to rate-limit this log line.
-	if ds.log != nil && len(nm.common) > 0 {
+	if ds.log != nil && len(snap.SciToCommon) > 0 {
 		if _, alreadyLogged := ds.loggedMissingNames.LoadOrStore(sciName, struct{}{}); !alreadyLogged {
 			ds.log.Info("common name not found in name maps, falling back to scientific name",
 				logger.String("scientific_name", sciName),
-				logger.Int("name_map_size", len(nm.common)))
+				logger.Int("name_map_size", len(snap.SciToCommon)))
 		}
 	}
 	return sciName
@@ -3758,8 +3705,8 @@ func (ds *Datastore) resolveCommonName(scientificName string) string {
 // Uses the pre-built species name map (lowercase common name → scientific name).
 // Falls back to the input unchanged if no mapping is found.
 func (ds *Datastore) resolveToScientificName(name string) string {
-	normalized := strings.ToLower(norm.NFC.String(strings.TrimSpace(name)))
-	species := ds.loadNameMaps().species
+	normalized := speciesindex.Fold(strings.TrimSpace(name))
+	species := ds.loadNameMaps().CommonToSci
 	if sci, ok := species[normalized]; ok {
 		return sci
 	}

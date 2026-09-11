@@ -1835,50 +1835,11 @@ func TestV2OnlyDatastore_UpdateNameMaps_ConcurrentAccess(t *testing.T) {
 	wg.Wait()
 }
 
-// batchFakeResolver misses ResolveLocal (the cold-path branch) and resolves only via the
-// batch seam, like the real resolver does for out-of-working-set bats.
-type batchFakeResolver struct{ batch map[string]string }
-
-func (b *batchFakeResolver) Resolve(string, string) string      { return "" }
-func (b *batchFakeResolver) ResolveLocal(string) (string, bool) { return "", false }
-func (b *batchFakeResolver) ResolveLocalizedBatch(names []string) map[string]string {
-	out := make(map[string]string, len(names))
-	for _, n := range names {
-		if v, ok := b.batch[n]; ok {
-			out[n] = v
-		}
-	}
-	return out
-}
-
-func TestBuildNameMaps_SecondaryModelScientificOnlyLabelIsReverseSearchable(t *testing.T) {
-	t.Parallel()
-
-	r := &batchFakeResolver{batch: map[string]string{"Barbastella barbastellus": "mopsilepakko"}}
-	nm := buildNameMaps([]string{"Barbastella barbastellus"}, r)
-
-	// Reverse exact map is NFC-folded, lowercased.
-	assert.Equal(t, "Barbastella barbastellus", nm.species["mopsilepakko"])
-	// Forward + substring maps present too.
-	assert.Equal(t, "mopsilepakko", nm.common["Barbastella barbastellus"])
-	assert.Equal(t, "mopsilepakko", nm.commonFolded["Barbastella barbastellus"])
-}
-
-func TestBuildNameMaps_AmbiguousCommonNameDeletedNotLastWriterWins(t *testing.T) {
-	t.Parallel()
-
-	// Two scientific names sharing one common name must not silently route to an
-	// arbitrary winner; the ambiguous reverse key is dropped.
-	nm := buildNameMaps([]string{"Strix aluco_Owl", "Bubo bubo_Owl"}, nil)
-	_, ok := nm.species["owl"]
-	assert.False(t, ok, "ambiguous common name must be deleted from the exact reverse map")
-
-	// The forward display maps must still contain both species so their common names
-	// are shown correctly in the UI. Ambiguity handling must only drop the reverse
-	// lookup key, not the forward display names.
-	assert.Equal(t, "Owl", nm.common["Strix aluco"], "forward map must retain common name for Strix aluco")
-	assert.Equal(t, "Owl", nm.common["Bubo bubo"], "forward map must retain common name for Bubo bubo")
-}
+// Note: the name-map builder behaviors previously exercised here through
+// buildNameMaps directly (scientific-only labels reverse-searchable via the batch
+// seam, and the ambiguous-common-name drop) now live in internal/speciesindex,
+// where the shared builder is owned and golden-tested against both former
+// builders.
 
 // TestUnixTimeOrZero verifies that a non-positive epoch yields the zero time (so the
 // API renders an empty timestamp) instead of the 1970 epoch origin, while a positive
