@@ -112,7 +112,7 @@ func setupTestDatastore(t *testing.T) (ds *Datastore, cleanup func()) {
 	cfg, cfgCleanup := buildTestConfig(t, nil)
 	ds, err := New(cfg)
 	require.NoError(t, err)
-	return ds, func() { _ = ds.Close(); cfgCleanup() }
+	return ds, func() { assert.NoError(t, ds.Close()); cfgCleanup() } // nolint:testifylint // assert not require: cfgCleanup must still run if Close errors; require would Goexit and skip it
 }
 
 // setupTestDatastoreWithLabels creates a V2OnlyDatastore with species label mappings for testing.
@@ -123,7 +123,7 @@ func setupTestDatastoreWithLabels(t *testing.T, labels []string) (ds *Datastore,
 	cfg, cfgCleanup := buildTestConfig(t, labels)
 	ds, err := New(cfg)
 	require.NoError(t, err)
-	return ds, func() { _ = ds.Close(); cfgCleanup() }
+	return ds, func() { assert.NoError(t, ds.Close()); cfgCleanup() } // nolint:testifylint // assert not require: cfgCleanup must still run if Close errors; require would Goexit and skip it
 }
 
 // seedDetection creates (or reuses) a label for sciName and inserts one detection
@@ -1526,7 +1526,7 @@ func TestGetTopBirdsData_SpeciesCode(t *testing.T) {
 	cfg.SpeciesCodeMap = speciesCodeMap
 	ds, err := New(cfg)
 	require.NoError(t, err)
-	defer func() { _ = ds.Close(); cfgCleanup() }()
+	t.Cleanup(func() { assert.NoError(t, ds.Close()); cfgCleanup() }) // nolint:testifylint // assert not require: cfgCleanup must still run if Close errors; require would Goexit and skip it
 
 	now := time.Now().UTC()
 	dateStr := now.Format(time.DateOnly)
@@ -1687,7 +1687,7 @@ func TestGetSpeciesSummaryData_NoDateFilter(t *testing.T) {
 	cfg.SpeciesCodeMap = speciesCodeMap
 	ds, err := New(cfg)
 	require.NoError(t, err)
-	defer func() { _ = ds.Close(); cfgCleanup() }()
+	t.Cleanup(func() { assert.NoError(t, ds.Close()); cfgCleanup() }) // nolint:testifylint // assert not require: cfgCleanup must still run if Close errors; require would Goexit and skip it
 
 	now := time.Now().UTC()
 
