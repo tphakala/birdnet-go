@@ -30,7 +30,9 @@
   }
 
   let displayName = $derived(localizeSpeciesName(species.scientific_name, species.common_name));
-  let wikipediaUrl = $derived(getWikipediaUrl(displayName, getLocale()));
+  let wikipediaUrl = $derived(
+    getWikipediaUrl(displayName, getLocale(), species.common_name)
+  );
 </script>
 
 <div class={cn('card bg-[var(--color-base-200)]', className)}>

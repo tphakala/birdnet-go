@@ -23,10 +23,20 @@ describe('getWikipediaUrl', () => {
   });
 
   it('uses the localized Wikipedia host for the selected UI language', () => {
-    expect(getWikipediaUrl('Haubenmeise', 'de')).toBe('https://de.wikipedia.org/wiki/Haubenmeise');
+    expect(getWikipediaUrl('Haubenmeise', 'de', 'Tufted Titmouse')).toBe(
+      'https://de.wikipedia.org/wiki/Haubenmeise'
+    );
   });
 
   it("maps Norwegian Bokmal to Wikipedia's no domain", () => {
-    expect(getWikipediaUrl('Toppmeis', 'nb')).toBe('https://no.wikipedia.org/wiki/Toppmeis');
+    expect(getWikipediaUrl('Toppmeis', 'nb', 'Great Tit')).toBe(
+      'https://no.wikipedia.org/wiki/Toppmeis'
+    );
+  });
+
+  it('uses English Wikipedia when the display name is the English fallback', () => {
+    expect(getWikipediaUrl('House Sparrow', 'de', 'House Sparrow')).toBe(
+      'https://en.wikipedia.org/wiki/House_Sparrow'
+    );
   });
 });
