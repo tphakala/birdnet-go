@@ -2019,6 +2019,8 @@
       "subtitle": "Vollständige Liste aller erkannten Vogelarten",
       "speciesList": "Artenliste",
       "switchToGrid": "Zur Gitteransicht wechseln",
+      "openAllAboutBirds": "Diese Art auf All About Birds ansehen",
+      "openWikipedia": "Diese Art auf Wikipedia ansehen",
       "switchToList": "Zur Listenansicht wechseln",
       "noSpeciesFound": "Keine Arten gefunden, die Ihren Filtern entsprechen.",
       "headers": {

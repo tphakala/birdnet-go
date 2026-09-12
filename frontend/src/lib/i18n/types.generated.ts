@@ -1575,6 +1575,8 @@ export type TranslationKey =
   | 'analytics.species.speciesList'
   | 'analytics.species.switchToGrid'
   | 'analytics.species.switchToList'
+  | 'analytics.species.openAllAboutBirds'
+  | 'analytics.species.openWikipedia'
   | 'analytics.species.noSpeciesFound'
   | 'analytics.species.headers.species'
   | 'analytics.species.headers.detections'

@@ -1,9 +1,11 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
-  import { t } from '$lib/i18n';
+  import { t, getLocale } from '$lib/i18n';
   import { formatDate } from '$lib/utils/formatters';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { getAllAboutBirdsUrl, getWikipediaUrl } from '$lib/utils/speciesLinks';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
+  import { ExternalLink } from '@lucide/svelte';
 
   interface SpeciesData {
     common_name: string;
@@ -28,6 +30,9 @@
   }
 
   let displayName = $derived(localizeSpeciesName(species.scientific_name, species.common_name));
+  let wikipediaUrl = $derived(
+    getWikipediaUrl(displayName, getLocale(), species.common_name)
+  );
 </script>
 
 <div class={cn('card bg-[var(--color-base-200)]', className)}>
@@ -44,7 +49,31 @@
     </div>
   </figure>
   <div class="card-body p-4">
-    <h3 class="card-title text-base">{displayName}</h3>
+    <div class="flex items-center gap-2 min-w-0">
+      <h3 class="card-title text-base min-w-0 flex-1 truncate">{displayName}</h3>
+      <div class="flex shrink-0 items-center gap-1">
+        <a
+          href={getAllAboutBirdsUrl(species.common_name)}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="btn btn-ghost btn-sm btn-square"
+          aria-label={`${t('analytics.species.openAllAboutBirds')}: ${displayName}`}
+          title={t('analytics.species.openAllAboutBirds')}
+        >
+          <ExternalLink class="size-4" />
+        </a>
+        <a
+          href={wikipediaUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="btn btn-ghost btn-sm btn-square"
+          aria-label={`${t('analytics.species.openWikipedia')}: ${displayName}`}
+          title={t('analytics.species.openWikipedia')}
+        >
+          <span class="text-xs font-serif font-bold">W</span>
+        </a>
+      </div>
+    </div>
     <p class="text-sm text-[var(--color-base-content)] opacity-60 italic">
       {species.scientific_name}
     </p>

@@ -2019,6 +2019,8 @@
       "subtitle": "Elenco completo di tutte le specie di uccelli che sono state rilevate",
       "speciesList": "Elenco Specie",
       "switchToGrid": "Passa alla vista griglia",
+      "openAllAboutBirds": "Visualizza questa specie su All About Birds",
+      "openWikipedia": "Visualizza questa specie su Wikipedia",
       "switchToList": "Passa alla vista elenco",
       "noSpeciesFound": "Nessuna specie trovata corrispondente ai tuoi filtri.",
       "headers": {

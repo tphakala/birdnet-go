@@ -1,10 +1,12 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import Modal from '$lib/desktop/components/ui/Modal.svelte';
-  import { t } from '$lib/i18n';
+  import { t, getLocale } from '$lib/i18n';
   import { formatDate } from '$lib/utils/formatters';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { getAllAboutBirdsUrl, getWikipediaUrl } from '$lib/utils/speciesLinks';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
+  import { ExternalLink } from '@lucide/svelte';
 
   interface SpeciesData {
     common_name: string;
@@ -51,6 +53,9 @@
   let displaySpecies = $derived(species ?? cachedSpecies);
   let displayName = $derived(
     localizeSpeciesName(displaySpecies?.scientific_name, displaySpecies?.common_name)
+  );
+  let wikipediaUrl = $derived(
+    getWikipediaUrl(displayName, getLocale(), displaySpecies?.common_name ?? '')
   );
 
   function formatPercentage(value: number): string {
@@ -120,6 +125,27 @@
           </div>
         {/if}
       </div>
+
+      <a
+        href={getAllAboutBirdsUrl(displaySpecies.common_name)}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="btn btn-outline btn-sm mt-4 w-full"
+        aria-label={`${t('analytics.species.openAllAboutBirds')}: ${displayName}`}
+      >
+        <ExternalLink class="size-4" />
+        {t('analytics.species.openAllAboutBirds')}
+      </a>
+      <a
+        href={wikipediaUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="btn btn-outline btn-sm mt-2 w-full"
+        aria-label={`${t('analytics.species.openWikipedia')}: ${displayName}`}
+      >
+        <span class="text-xs font-serif font-bold">W</span>
+        {t('analytics.species.openWikipedia')}
+      </a>
     {/if}
   {/snippet}
 

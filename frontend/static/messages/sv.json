@@ -2019,6 +2019,8 @@
       "subtitle": "Komplett lista över alla fågelarter som har detekterats",
       "speciesList": "Artlista",
       "switchToGrid": "Byt till rutnätsvy",
+      "openAllAboutBirds": "Visa denna art på All About Birds",
+      "openWikipedia": "Visa denna art på Wikipedia",
       "switchToList": "Byt till listvy",
       "noSpeciesFound": "Inga arter hittades som matchar dina filter.",
       "headers": {

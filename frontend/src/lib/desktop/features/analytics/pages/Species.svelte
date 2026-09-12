@@ -7,7 +7,9 @@
   import { getStoredValue, setStoredValue } from '$lib/utils/storage';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { getAllAboutBirdsUrl, getWikipediaUrl } from '$lib/utils/speciesLinks';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
+  import { ExternalLink } from '@lucide/svelte';
   import { onMount, onDestroy } from 'svelte';
   import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
   import SpeciesFilterForm from '../components/forms/SpeciesFilterForm.svelte';
@@ -673,7 +675,31 @@
                       </div>
                       <div>
                         <div class="font-bold">
-                          {displayName}
+                          <a
+                            href={getAllAboutBirdsUrl(species.common_name)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="link link-hover"
+                            aria-label={`${t('analytics.species.openAllAboutBirds')}: ${displayName}`}
+                            title={t('analytics.species.openAllAboutBirds')}
+                          >
+                            {displayName}
+                            <ExternalLink class="inline size-3.5 ml-1" />
+                          </a>
+                          <a
+                            href={getWikipediaUrl(
+                              displayName,
+                              getLocale(),
+                              species.common_name
+                            )}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="link link-hover ml-2"
+                            aria-label={`${t('analytics.species.openWikipedia')}: ${displayName}`}
+                            title={t('analytics.species.openWikipedia')}
+                          >
+                            <span class="text-xs font-serif font-bold">W</span>
+                          </a>
                         </div>
                         <div class="text-sm opacity-50 italic">{species.scientific_name}</div>
                       </div>

@@ -2019,6 +2019,8 @@
       "subtitle": "Liste complète de toutes les espèces d'oiseaux qui ont été détectées",
       "speciesList": "Liste des espèces",
       "switchToGrid": "Passer à la vue en grille",
+      "openAllAboutBirds": "Voir cette espèce sur All About Birds",
+      "openWikipedia": "Voir cette espèce sur Wikipédia",
       "switchToList": "Passer à la vue en liste",
       "noSpeciesFound": "Aucune espèce trouvée correspondant à vos filtres.",
       "headers": {

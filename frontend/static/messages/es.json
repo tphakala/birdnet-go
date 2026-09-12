@@ -2019,6 +2019,8 @@
       "subtitle": "Lista completa de todas las especies de aves que han sido detectadas",
       "speciesList": "Lista de especies",
       "switchToGrid": "Cambiar a vista de cuadrícula",
+      "openAllAboutBirds": "Ver esta especie en All About Birds",
+      "openWikipedia": "Ver esta especie en Wikipedia",
       "switchToList": "Cambiar a vista de lista",
       "noSpeciesFound": "No se encontraron especies que coincidan con tus filtros.",
       "headers": {

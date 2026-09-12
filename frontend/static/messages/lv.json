@@ -2019,6 +2019,8 @@
       "subtitle": "Pilns visu atpazīto putnu sugu saraksts",
       "speciesList": "Sugu saraksts",
       "switchToGrid": "Pārslēgt uz režģa skatu",
+      "openAllAboutBirds": "Skatīt šo sugu All About Birds",
+      "openWikipedia": "Skatīt šo sugu Vikipēdijā",
       "switchToList": "Pārslēgt uz saraksta skatu",
       "noSpeciesFound": "Sugas, kas atbilst jūsu filtriem, nav atrastas.",
       "headers": {
