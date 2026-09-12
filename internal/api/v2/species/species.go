@@ -412,10 +412,16 @@ func (c *Handler) getSpeciesInfo(ctx context.Context, scientificName string) (*S
 			Build()
 	}
 
-	// Search the full multi-model label union (primary plus secondary models such
-	// as the bat/Perch classifiers) so a secondary-model scientific name resolves
-	// instead of 404ing. The snapshot's Labels field is the orchestrator-owned
-	// union that used to be materialized per request by bn.AllLabels().
+	// Resolve against the orchestrator-owned species-index snapshot, the same set
+	// the /species/all picker reads. Its label set is a SUPERSET of the loaded
+	// models' labels: it is unionLabels(AllLabels, the range-filter inclusion list),
+	// so besides the primary and secondary (bat/Perch) model labels it also covers
+	// the species the active range filter currently includes at this location. This
+	// is a deliberate widening from the previous bn.AllLabels() request-path read: a
+	// range-filter-included species that is not a label of any loaded model now
+	// resolves here (200) instead of 404ing, matching what the picker already lists.
+	// It is additive: every name that resolved before still resolves, and AllLabels
+	// members sort first in the union so exact-before-alias ordering is unchanged.
 	snap := c.speciesSnapshot()
 	matchedLabel, commonName := resolveSpeciesLabel(snap, scientificName)
 

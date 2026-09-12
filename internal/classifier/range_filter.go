@@ -638,12 +638,12 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 		}
 
 		sort.Sort(ByScore(speciesScores))
-		// Wrap the geomodel vocabulary in a *LabelVocabulary so the species
-		// endpoint answers coverage from a precomputed canonical-key memo instead
-		// of an openfauna.CanonicalName scan per label. Gate on a non-nil label
-		// slice so the returned vocabulary is nil exactly when the raw labels were
-		// nil, preserving the "isUniversal := geomodel != nil" check at every caller.
-		var geomodel *LabelVocabulary
+		// Wrap the geomodel vocabulary in a *LabelVocabulary (the named return) so
+		// the species endpoint answers coverage from a precomputed canonical-key
+		// memo instead of an openfauna.CanonicalName scan per label. Gate on a
+		// non-nil label slice so the returned vocabulary is nil exactly when the raw
+		// labels were nil, preserving the "isUniversal := geomodel != nil" check at
+		// every caller.
 		if allGeoLabels != nil {
 			if mrf, ok := rf.(*mappedRangeFilter); ok {
 				geomodel = mrf.vocab

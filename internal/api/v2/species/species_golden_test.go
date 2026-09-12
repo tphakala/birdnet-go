@@ -108,7 +108,7 @@ func loadLabelLines(tb testing.TB, path string) []string {
 	tb.Helper()
 	f, err := os.Open(path) //nolint:gosec // test-only read of a repo-vendored label file
 	require.NoError(tb, err, "open label file %s", path)
-	tb.Cleanup(func() { _ = f.Close() })
+	tb.Cleanup(func() { assert.NoError(tb, f.Close()) })
 
 	var out []string
 	sc := bufio.NewScanner(f)
@@ -162,15 +162,18 @@ func goldenContexts(classifierLabels []string) map[string]classifier.RarityConte
 	}
 
 	// Override: the universal context plus the rows addUserOverrideSpeciesScores
-	// appends. A synthetic 1.0 twin for robin (which also has a native 0.9) must
-	// not shadow the native score; a synthetic 1.0 for a species outside the
-	// vocabulary (the bat) must not read as covered.
+	// appends. The synthetic 1.0 rows are placed BEFORE the native scores on
+	// purpose: robin's synthetic 1.0 precedes its native 0.9, so the golden of 0.9
+	// only holds if findNativeSpeciesScore skips the synthetic row in the exact pass
+	// (without the skip the 1.0 sentinel would win first and the golden would flip to
+	// 1.0). A synthetic 1.0 for a species outside the vocabulary (the bat) must not
+	// read as covered.
 	overrideScores := make([]classifier.SpeciesScore, 0, len(universalScores)+2)
-	overrideScores = append(overrideScores, universalScores...)
 	overrideScores = append(overrideScores,
 		classifier.SpeciesScore{Label: syntheticLabel(goldRobin), Score: 1.0, IsSyntheticOverride: true, IsManuallyIncluded: true},
 		classifier.SpeciesScore{Label: syntheticLabel(goldBat), Score: 1.0, IsSyntheticOverride: true, IsManuallyIncluded: true},
 	)
+	overrideScores = append(overrideScores, universalScores...)
 
 	// Legacy backend: no geomodel vocabulary, so coverage falls back to the
 	// classifier labels.

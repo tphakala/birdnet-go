@@ -734,6 +734,33 @@ func TestResolveSpeciesLabel_Empty(t *testing.T) {
 	assert.Empty(t, gotCommon)
 }
 
+// TestGetSpeciesInfo_ResolvesSnapshotUnionSpecies pins the deliberate additive
+// widening in this change: getSpeciesInfo resolves against the orchestrator
+// snapshot (a superset of the loaded-model labels that also carries the
+// range-filter inclusion list), not bn.AllLabels() alone. A species present in the
+// snapshot but not a loaded-model label (a stand-in for a range-filter-included
+// species) must resolve with 200, matching what /species/all already lists, rather
+// than 404. The golden corpus tests cannot see this because they build the snapshot
+// directly, so this pins the widening at the request path explicitly.
+func TestGetSpeciesInfo_ResolvesSnapshotUnionSpecies(t *testing.T) {
+	t.Parallel()
+
+	const inclusionSci = "Zzz Inclusiononly"
+	snap := speciesindex.Build([]string{inclusionSci + "_Included Species"}, nil, "en")
+	h := &Handler{
+		Core:                   &apicore.Core{},
+		speciesSnapshot:        func() *speciesindex.Snapshot { return snap },
+		speciesBackendOverride: &goldenBackend{rc: classifier.RarityContext{FilterActive: false, Settings: goldenSettings()}},
+	}
+	h.Settings.Store(goldenSettings())
+
+	info, err := h.getSpeciesInfo(t.Context(), inclusionSci)
+	require.NoError(t, err, "a species in the snapshot union must resolve, not 404")
+	require.NotNil(t, info)
+	assert.Equal(t, inclusionSci, info.ScientificName)
+	assert.Equal(t, "Included Species", info.CommonName)
+}
+
 func TestComputeRarity(t *testing.T) {
 	t.Parallel()
 
