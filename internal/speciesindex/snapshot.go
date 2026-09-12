@@ -133,8 +133,10 @@ func canonicalKeyForSci(sci string) string {
 	return strings.ToLower(openfauna.CanonicalName(sci))
 }
 
-// CanonicalKey is the canonical lookup key for a label: the extracted scientific
-// name run through the openfauna alias map, lower-cased. It is identical to
+// CanonicalKey is the canonical lookup key for a "Scientific_Common" label or a
+// bare scientific name (ExtractScientificName returns the whole string when there
+// is no common part, so both forms are accepted): the extracted scientific name
+// run through the openfauna alias map, lower-cased. It is identical to
 // classifier.canonicalSpeciesKey, pinned by a classifier-side test. The species
 // endpoint uses it to key an incoming request name into a snapshot's memo maps
 // without materializing the label set per request.

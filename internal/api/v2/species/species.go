@@ -91,6 +91,13 @@ func (c *Handler) backend() speciesBackend {
 // dependencies the species handlers delegate to (the species-index snapshot
 // accessor and the media image-proxy handler).
 func New(core *apicore.Core, speciesSnapshot func() *speciesindex.Snapshot, serveImageProxy echo.HandlerFunc) *Handler {
+	// GetAllSpecies and getSpeciesInfo call speciesSnapshot() and index its result
+	// without a nil guard, so default a nil accessor to the empty snapshot rather
+	// than panicking at request time. The facade's loadNameMaps never returns nil,
+	// so this only guards a misconfigured caller.
+	if speciesSnapshot == nil {
+		speciesSnapshot = speciesindex.Empty
+	}
 	return &Handler{Core: core, speciesSnapshot: speciesSnapshot, serveImageProxy: serveImageProxy}
 }
 

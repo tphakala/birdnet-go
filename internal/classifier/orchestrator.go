@@ -2690,7 +2690,11 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 // the scores were produced from. See GetRarityContext for the per-field semantics and the
 // consistency guarantees.
 type RarityContext struct {
-	Scores           []SpeciesScore
+	Scores []SpeciesScore
+	// Geomodel is the universal geomodel's label vocabulary paired with Scores. It
+	// is nil unless the universal geomodel path ran; when non-nil it is built from
+	// the same range-filter instance that produced Scores. Coverage reads its
+	// canonical-key memo, and a nil value means fall back to ClassifierLabels.
 	Geomodel         *LabelVocabulary
 	ClassifierLabels []string
 	FilterActive     bool
