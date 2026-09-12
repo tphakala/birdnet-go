@@ -782,11 +782,18 @@ func (c *Handler) GetSpeciesTaxonomy(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, taxonomyInfo)
 }
 
-// Metadata source and note for a taxonomy response derived only from the requested
-// name, used when the embedded database does not cover it and eBird did not answer.
+// Metadata source and notes for a taxonomy response derived only from the
+// requested name, used when the embedded database does not cover it and eBird did
+// not answer. The note depends on whether eBird was consulted: recommending eBird
+// to a user who already has it enabled would be a misleading no-op.
 const (
 	taxonomySourceUnresolved = "unresolved"
-	taxonomyUnresolvedNote   = "species not found in the embedded taxonomy; configure eBird for taxonomy of species outside the bundled dataset"
+	// eBird not configured: point the user at eBird as an optional source for
+	// species outside the bundled dataset.
+	taxonomyUnresolvedNote = "species not found in the embedded taxonomy; configure eBird for taxonomy of species outside the bundled dataset"
+	// eBird consulted but also unable to resolve the species: eBird is already
+	// enabled, so do not tell the user to configure it.
+	taxonomyUnresolvedNoteEBirdOn = "species not found in the embedded taxonomy or eBird"
 )
 
 // getDetailedTaxonomy retrieves detailed taxonomy information for a species.
@@ -837,6 +844,12 @@ func (c *Handler) getDetailedTaxonomy(ctx context.Context, scientificName, local
 	if client != nil {
 		info, err := c.getEBirdTaxonomy(ctx, client, scientificName, locale, includeSubspecies)
 		if err == nil {
+			// getEBirdTaxonomy always builds the hierarchy; honor include_hierarchy
+			// here so an eBird hit behaves like a local hit (tryLocalTaxonomy) when
+			// the caller asked to omit it. Subspecies and species code are unaffected.
+			if !includeHierarchy {
+				info.Taxonomy = TaxonomyHierarchy{}
+			}
 			return info, nil
 		}
 		// eBird is enrichment, not a hard dependency: a species eBird does not carry
@@ -846,12 +859,13 @@ func (c *Handler) getDetailedTaxonomy(ctx context.Context, scientificName, local
 		if !errors.IsNotFound(err) {
 			return nil, err
 		}
-		c.Debug("eBird has no taxonomy for %s: %v; returning derived taxonomy", scientificName, err)
+		c.Debug("eBird has no taxonomy for %s: %v; returning unresolved response", scientificName, err)
 	}
 
 	// Embedded database does not cover this name and eBird did not answer: mark the
-	// result unresolved rather than hard-erroring (#4105).
-	return deriveMinimalTaxonomy(scientificName), nil
+	// result unresolved rather than hard-erroring (#4105). Whether eBird was
+	// consulted selects the note (see the const block).
+	return deriveMinimalTaxonomy(scientificName, client != nil), nil
 }
 
 // deriveMinimalTaxonomy builds the fallback response for a species the embedded
@@ -864,13 +878,18 @@ func (c *Handler) getDetailedTaxonomy(ctx context.Context, scientificName, local
 // result "unresolved" in metadata: an HTTP 200 that degrades gracefully (#4105) and
 // is machine-detectable, rather than a misleading error. A consumer that renders a
 // fixed rank list then omits the absent taxonomy block instead of showing empty
-// rank rows.
-func deriveMinimalTaxonomy(scientificName string) *TaxonomyInfo {
+// rank rows. eBirdConfigured selects the note so a user who already has eBird
+// enabled is not told to configure it.
+func deriveMinimalTaxonomy(scientificName string, eBirdConfigured bool) *TaxonomyInfo {
+	note := taxonomyUnresolvedNote
+	if eBirdConfigured {
+		note = taxonomyUnresolvedNoteEBirdOn
+	}
 	return &TaxonomyInfo{
 		ScientificName: scientificName,
 		Metadata: map[string]any{
 			"source": taxonomySourceUnresolved,
-			"note":   taxonomyUnresolvedNote,
+			"note":   note,
 		},
 	}
 }

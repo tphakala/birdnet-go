@@ -494,7 +494,25 @@ func TestGetSpeciesTaxonomyEBirdFallback(t *testing.T) {
 		require.NoError(t, err, "an eBird not-found must degrade, not propagate")
 		require.NotNil(t, info)
 		assert.Equal(t, taxonomySourceUnresolved, info.Metadata["source"])
+		assert.Equal(t, taxonomyUnresolvedNoteEBirdOn, info.Metadata["note"],
+			"the note must not tell an eBird-configured user to configure eBird")
 		assert.Equal(t, TaxonomyHierarchy{}, info.Taxonomy)
+	})
+
+	t.Run("eBird hit honors include_hierarchy=false", func(t *testing.T) {
+		t.Parallel()
+		c := newHandler(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[{"sciName":"Zzyzxus fictus","comName":"Fake Species","speciesCode":"fake1","category":"species","order":"Testiformes","familySciName":"Testidae","familyComName":"Test Family"}]`))
+		})
+		info, err := c.getDetailedTaxonomy(t.Context(), missName, "", false, false)
+		require.NoError(t, err)
+		require.NotNil(t, info)
+		assert.Equal(t, "ebird", info.Metadata["source"], "still an eBird-sourced result")
+		assert.Equal(t, TaxonomyHierarchy{}, info.Taxonomy,
+			"the hierarchy must be omitted when include_hierarchy is false")
+		assert.Equal(t, "fake1", info.SpeciesCode,
+			"clearing the hierarchy must preserve sibling fields such as the species code")
 	})
 
 	t.Run("genuine eBird error propagates", func(t *testing.T) {
