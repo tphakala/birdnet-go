@@ -1,6 +1,7 @@
 package classifier
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -36,8 +37,11 @@ func TestParticipatesInRangeFilter_MatchesLegacyGate(t *testing.T) {
 	// Unknown/custom IDs resolve to the default BirdNET model info under the legacy
 	// gate and so were filtered; the capability path must preserve that.
 	unknownIDs := []string{"", "__not_a_model__", "/path/to/custom/model.tflite", "perch-v2"}
-	for _, id := range unknownIDs {
-		t.Run("unknown/"+id, func(t *testing.T) {
+	for i, id := range unknownIDs {
+		// Index the subtest name: some fixture IDs contain "/" or are empty, which
+		// would produce nested or trailing-slash subtest names. The ID under test stays
+		// in the assertion messages.
+		t.Run("unknown/"+strconv.Itoa(i), func(t *testing.T) {
 			t.Parallel()
 			assert.True(t, legacyShouldRangeFilter(id), "sanity: legacy gate filters unknown ID %q", id)
 			assert.True(t, ParticipatesInRangeFilter(id), "unknown ID %q must still participate (behavior preserved)", id)
