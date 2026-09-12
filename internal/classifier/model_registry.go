@@ -553,6 +553,27 @@ func DetectionModelInfoForID(modelID string) detection.ModelInfo {
 	return detection.DefaultModelInfo()
 }
 
+// ParticipatesInRangeFilter reports whether detections from the model with the
+// given registry ID should be gated by the geographic range filter. Registry
+// models participate when their label space is range-filter compatible
+// (rangeFilterCompat != rangeFilterCompatNone): BirdNET v2.4 (MData), BirdNET v3.0
+// and Perch (mapped geomodel). Bat and BSG classify their own label spaces and do
+// not participate.
+//
+// An ID absent from the registry (a custom or otherwise unknown classifier)
+// participates too. This preserves the historical gate, which resolved the ID
+// through DetectionModelInfoForID and matched the default BirdNET name for any
+// unknown ID, so custom models have always been range-filtered. Whether that is
+// the right long-term behavior is a separate, deliberate decision, not one made
+// by this behavior-preserving accessor.
+func ParticipatesInRangeFilter(registryID string) bool {
+	info, known := ModelRegistry[registryID]
+	if !known {
+		return true
+	}
+	return info.rangeFilterCompat != rangeFilterCompatNone
+}
+
 // IsLocaleSupported checks if a locale is supported by the given model.
 func IsLocaleSupported(modelInfo *ModelInfo, locale string) bool {
 	// If it's a custom model with no specified locales, assume all are supported.

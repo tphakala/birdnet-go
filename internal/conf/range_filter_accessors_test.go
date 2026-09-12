@@ -27,6 +27,34 @@ func TestSettings_RangeFilterConfig(t *testing.T) {
 	assert.Nil(t, nilSettings.RangeFilterConfig(), "a nil receiver must return nil")
 }
 
+// TestSettings_Location pins the location accessor: it returns the configured
+// coordinates and flag, and a nil receiver returns the zero triple.
+func TestSettings_Location(t *testing.T) {
+	t.Parallel()
+
+	s := &Settings{}
+	s.BirdNET.Latitude = 60.17
+	s.BirdNET.Longitude = 24.94
+	s.BirdNET.LocationConfigured = true
+
+	lat, lon, configured := s.Location()
+	assert.InDelta(t, 60.17, lat, 1e-9, "latitude must round-trip")
+	assert.InDelta(t, 24.94, lon, 1e-9, "longitude must round-trip")
+	assert.True(t, configured, "LocationConfigured must round-trip")
+
+	unset := &Settings{}
+	lat, lon, configured = unset.Location()
+	assert.Zero(t, lat)
+	assert.Zero(t, lon)
+	assert.False(t, configured, "an unconfigured location must report false")
+
+	var nilSettings *Settings
+	lat, lon, configured = nilSettings.Location()
+	assert.Zero(t, lat)
+	assert.Zero(t, lon)
+	assert.False(t, configured, "a nil receiver must return (0, 0, false)")
+}
+
 // TestSettings_RangeFilterConfig_CloneIndependence verifies the accessor honours the
 // clone-mutate-publish discipline: the clone's accessor points into the clone, so a
 // write through it never reaches the original.
