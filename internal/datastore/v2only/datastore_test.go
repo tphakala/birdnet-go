@@ -1945,6 +1945,14 @@ func TestV2OnlyDatastore_NewSpeciesWindowAfterMidnightReload(t *testing.T) {
 		BeginTime: first, EndTime: savedAt,
 	}
 	require.NoError(t, ds.Save(note, nil))
+	// Reproduce mixed history through the supported Save boundary: an epoch-zero
+	// audio start is persisted as integer zero, not SQL NULL.
+	missing := *note
+	missing.ID = 0
+	missing.Time = savedAt.Add(time.Minute).Format(time.TimeOnly)
+	missing.BeginTime = time.UnixMilli(0)
+	missing.EndTime = time.Time{}
+	require.NoError(t, ds.Save(&missing, nil))
 	got, err := ds.GetNewSpeciesDetections(t.Context(), "1900-01-01", savedAt.Format(time.DateOnly), 100, 0)
 	require.NoError(t, err)
 	require.Len(t, got, 1)

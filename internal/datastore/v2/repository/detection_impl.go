@@ -1726,6 +1726,7 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 	// count_in_period is a correlated subquery evaluated once per reported species (a handful per
 	// window, each an index lookup by label and time), joined on scientific_name so it counts the
 	// species across every model's label, not just the label of the first detection.
+	const noBeginTimeMillis int64 = 0
 	fpFilter := string(entities.VerificationFalsePositive)
 	rawSQL := fmt.Sprintf(`
 		SELECT
@@ -1750,7 +1751,7 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 				l2.scientific_name,
 				MIN(d2.detected_at) as lifetime_first,
 				MAX(d2.detected_at) as lifetime_last,
-				MIN(d2.begin_time) as first_begin_time
+				MIN(NULLIF(d2.begin_time, ?)) as first_begin_time
 			FROM %s d2
 			JOIN %s l2 ON l2.id = d2.label_id
 			LEFT JOIN %s dr2 ON dr2.detection_id = d2.id
@@ -1769,7 +1770,7 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 
 	// Placeholders in text order: the count_in_period subquery in the SELECT list, then the
 	// species_first derived table, then the outer WHERE, then LIMIT/OFFSET.
-	err := r.db.WithContext(ctx).Raw(rawSQL, start, end, fpFilter, fpFilter, start, end, fpFilter, limit, offset).Scan(&results).Error
+	err := r.db.WithContext(ctx).Raw(rawSQL, start, end, fpFilter, noBeginTimeMillis, fpFilter, start, end, fpFilter, limit, offset).Scan(&results).Error
 	return results, err
 }
 
