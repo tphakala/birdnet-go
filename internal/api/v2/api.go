@@ -106,9 +106,9 @@ type Controller struct {
 	// (species info, rarity, the all-species picker, the dictionary, thumbnails,
 	// and genus/family/tree lookups). Besides the shared *apicore.Core it receives
 	// two facade-owned function dependencies: a read accessor over the shared
-	// scientific-to-common name map (loadCommonNameMap) and the media domain's
-	// species-image proxy handler (ServeSpeciesImageProxy), both still owned by
-	// package api until their domains are extracted.
+	// orchestrator-owned species-index snapshot (loadNameMaps) and the media
+	// domain's species-image proxy handler (ServeSpeciesImageProxy), both still
+	// owned by package api until their domains are extracted.
 	species *species.Handler
 
 	// models serves the /api/v2/models/* endpoints (listing enabled classifier
@@ -504,12 +504,12 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// because species injects c.media.ServeSpeciesImageProxy (a method value on
 	// the media handler) for its thumbnail endpoint.
 	c.media = mediaapi.New(c.Core)
-	// The species handler delegates to two dependencies: loadCommonNameMap (the
-	// shared name-map read accessor, facade-owned in name_maps.go) and the media
-	// domain's species-image proxy handler
+	// The species handler delegates to two dependencies: loadNameMaps (the shared
+	// species-index snapshot read accessor, facade-owned in name_maps.go) and the
+	// media domain's species-image proxy handler
 	// (c.media.ServeSpeciesImageProxy). They are passed as bound method values; c
 	// is fully constructed here, so the method values are stable for its lifetime.
-	c.species = species.New(c.Core, c.loadCommonNameMap, c.media.ServeSpeciesImageProxy)
+	c.species = species.New(c.Core, c.loadNameMaps, c.media.ServeSpeciesImageProxy)
 	// The support handler needs only the shared core (settings, datastore, V2
 	// manager, and the error/log/goroutine helpers all promote from it).
 	c.support = support.New(c.Core)

@@ -15,12 +15,13 @@ import (
 // changing predictFilter() or any downstream code.
 type mappedRangeFilter struct {
 	inner           inference.RangeFilter
-	classifierToGeo []int          // classifierIndex -> geomodelIndex; -1 means no match
-	numClassifier   int            // len(classifierLabels)
-	mappedCount     int            // number of classifier species with a geomodel match
-	unmappedScore   float32        // score for classifier species absent from geomodel
-	geomodelLabels  []string       // geomodel label set in geomodel output order
-	geomodelIndex   map[string]int // label -> index for O(1) lookup
+	classifierToGeo []int            // classifierIndex -> geomodelIndex; -1 means no match
+	numClassifier   int              // len(classifierLabels)
+	mappedCount     int              // number of classifier species with a geomodel match
+	unmappedScore   float32          // score for classifier species absent from geomodel
+	geomodelLabels  []string         // geomodel label set in geomodel output order
+	geomodelIndex   map[string]int   // label -> index for O(1) lookup
+	vocab           *LabelVocabulary // geomodelLabels plus their canonical-key memo, for the species endpoint
 }
 
 // canonicalSpeciesKey returns the match key for a model label: its scientific
@@ -97,6 +98,7 @@ func newMappedRangeFilter(inner inference.RangeFilter, classifierLabels, geomode
 		unmappedScore:   unmappedScore,
 		geomodelLabels:  geomodelLabels,
 		geomodelIndex:   geoIdx,
+		vocab:           NewLabelVocabulary(geomodelLabels),
 	}
 }
 
@@ -141,7 +143,7 @@ func (m *mappedRangeFilter) PredictSpeciesScores(lat, lon, week, threshold float
 // override matching, where the caller needs to search all known species
 // (not just those passing the range filter threshold).
 func (m *mappedRangeFilter) GeomodelLabels() []string {
-	return m.geomodelLabels
+	return m.vocab.Labels
 }
 
 // NumSpecies returns the number of classifier labels (not geomodel labels).

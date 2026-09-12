@@ -17,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/dto"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
 // Species fixtures for the name-resolution and rarity tests. testAliasName and
@@ -40,13 +41,28 @@ const (
 )
 
 // newSpeciesHandler builds a minimal species Handler with valid default settings
-// for validation tests. The injected facade dependencies (commonNameMap,
+// for validation tests. The injected facade dependencies (speciesSnapshot,
 // serveImageProxy) are left nil because the validation paths exercised here never
 // reach them.
 func newSpeciesHandler() *Handler {
 	h := &Handler{Core: &apicore.Core{}}
 	h.Settings.Store(apitest.NewValidTestSettings())
 	return h
+}
+
+// testSnap builds a species-index snapshot from labels for the resolver tests. A
+// nil name resolver keeps the real openfauna canonical memo maps, so alias and
+// colliding-species behaviour is exercised against the vendored dataset.
+func testSnap(labels []string) *speciesindex.Snapshot {
+	return speciesindex.Build(labels, nil, "")
+}
+
+// testComputeRarity calls computeRarity with an empty snapshot. The snapshot is a
+// canonical-key memo only: an empty one computes the same keys the request path
+// would find memoized, so the rarity logic is exercised identically without a built
+// label set.
+func testComputeRarity(rc *classifier.RarityContext, targetSci string) (float64, RarityStatus) {
+	return computeRarity(rc, speciesindex.Empty(), speciesindex.CanonicalKey(targetSci), targetSci)
 }
 
 // TestCalculateRarityStatus tests the calculateRarityStatus helper function.
@@ -198,11 +214,12 @@ func TestFindNativeSpeciesScore(t *testing.T) {
 		{Label: "Amazona viridigenalis_Red-crowned Amazon", Score: 0.95},
 	}
 
-	score, found := findNativeSpeciesScore("amazona VIRIDIGENALIS", scores)
+	keyOf := speciesindex.CanonicalKey
+	score, found := findNativeSpeciesScore("amazona VIRIDIGENALIS", speciesindex.CanonicalKey("amazona VIRIDIGENALIS"), scores, keyOf)
 	require.True(t, found)
 	assert.InDelta(t, 0.95, score, 1e-9)
 
-	_, found = findNativeSpeciesScore("Amazona viridigenalis", scores[:1])
+	_, found = findNativeSpeciesScore("Amazona viridigenalis", speciesindex.CanonicalKey("Amazona viridigenalis"), scores[:1], keyOf)
 	assert.False(t, found, "synthetic override scores must not drive rarity")
 }
 
@@ -541,11 +558,11 @@ func TestGetAllSpecies_LocalizedSecondaryModel(t *testing.T) {
 	e := echo.New()
 	handler := &Handler{
 		Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")},
-		commonNameMap: func() map[string]string {
-			return map[string]string{
+		speciesSnapshot: func() *speciesindex.Snapshot {
+			return &speciesindex.Snapshot{SciToCommon: map[string]string{
 				"Barbastella barbastellus": "mopsilepakko", // localized bat name (secondary model)
 				"Parus major":              "Great Tit",
-			}
+			}}
 		},
 	}
 	handler.Settings.Store(&conf.Settings{})
@@ -627,8 +644,8 @@ func TestGetAllSpecies(t *testing.T) {
 			// allModelLabels() (which reads settings.BirdNET.Labels here, since
 			// Processor is nil).
 			handler := &Handler{
-				Core:          &apicore.Core{Echo: e, Group: e.Group("/api/v2")},
-				commonNameMap: func() map[string]string { return nil },
+				Core:            &apicore.Core{Echo: e, Group: e.Group("/api/v2")},
+				speciesSnapshot: speciesindex.Empty,
 			}
 			handler.Settings.Store(settings)
 
@@ -703,7 +720,7 @@ func TestResolveSpeciesLabel(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			gotLabel, gotCommon := resolveSpeciesLabel(tt.targetSci, allLabels)
+			gotLabel, gotCommon := resolveSpeciesLabel(testSnap(allLabels), tt.targetSci)
 			assert.Equal(t, tt.wantLabel, gotLabel)
 			assert.Equal(t, tt.wantCommon, gotCommon)
 		})
@@ -712,9 +729,36 @@ func TestResolveSpeciesLabel(t *testing.T) {
 
 func TestResolveSpeciesLabel_Empty(t *testing.T) {
 	t.Parallel()
-	gotLabel, gotCommon := resolveSpeciesLabel("Turdus migratorius", nil)
+	gotLabel, gotCommon := resolveSpeciesLabel(speciesindex.Empty(), "Turdus migratorius")
 	assert.Empty(t, gotLabel)
 	assert.Empty(t, gotCommon)
+}
+
+// TestGetSpeciesInfo_ResolvesSnapshotUnionSpecies pins the deliberate additive
+// widening in this change: getSpeciesInfo resolves against the orchestrator
+// snapshot (a superset of the loaded-model labels that also carries the
+// range-filter inclusion list), not bn.AllLabels() alone. A species present in the
+// snapshot but not a loaded-model label (a stand-in for a range-filter-included
+// species) must resolve with 200, matching what /species/all already lists, rather
+// than 404. The golden corpus tests cannot see this because they build the snapshot
+// directly, so this pins the widening at the request path explicitly.
+func TestGetSpeciesInfo_ResolvesSnapshotUnionSpecies(t *testing.T) {
+	t.Parallel()
+
+	const inclusionSci = "Zzz Inclusiononly"
+	snap := speciesindex.Build([]string{inclusionSci + "_Included Species"}, nil, "en")
+	h := &Handler{
+		Core:                   &apicore.Core{},
+		speciesSnapshot:        func() *speciesindex.Snapshot { return snap },
+		speciesBackendOverride: &goldenBackend{rc: classifier.RarityContext{FilterActive: false, Settings: goldenSettings()}},
+	}
+	h.Settings.Store(goldenSettings())
+
+	info, err := h.getSpeciesInfo(t.Context(), inclusionSci)
+	require.NoError(t, err, "a species in the snapshot union must resolve, not 404")
+	require.NotNil(t, info)
+	assert.Equal(t, inclusionSci, info.ScientificName)
+	assert.Equal(t, "Included Species", info.CommonName)
 }
 
 func TestComputeRarity(t *testing.T) {
@@ -776,10 +820,10 @@ func TestComputeRarity(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			gotScore, gotStatus := computeRarity(&classifier.RarityContext{
+			gotScore, gotStatus := testComputeRarity(&classifier.RarityContext{
 				FilterActive:     true,
 				Scores:           scores,
-				GeomodelLabels:   geomodelLabels,
+				Geomodel:         classifier.NewLabelVocabulary(geomodelLabels),
 				ClassifierLabels: classifierLabels,
 			}, tt.targetSci)
 			assert.InDelta(t, tt.wantScore, gotScore, 0.001)
@@ -790,7 +834,7 @@ func TestComputeRarity(t *testing.T) {
 
 func TestComputeRarity_Empty(t *testing.T) {
 	t.Parallel()
-	gotScore, gotStatus := computeRarity(&classifier.RarityContext{FilterActive: true}, "Turdus migratorius")
+	gotScore, gotStatus := testComputeRarity(&classifier.RarityContext{FilterActive: true}, "Turdus migratorius")
 	assert.InDelta(t, 0.0, gotScore, 0.001)
 	assert.Equal(t, RarityUnknown, gotStatus)
 }
@@ -809,10 +853,10 @@ func TestComputeRarity_InactiveFilterReportsUnknown(t *testing.T) {
 	// means the 0.0 score is synthetic and must report unknown, not very rare.
 	scores := []classifier.SpeciesScore{{Label: testSciName + "_" + testCommonName, Score: 0.0}}
 
-	score, status := computeRarity(&classifier.RarityContext{
+	score, status := testComputeRarity(&classifier.RarityContext{
 		FilterActive:     false,
 		Scores:           scores,
-		GeomodelLabels:   labels,
+		Geomodel:         classifier.NewLabelVocabulary(labels),
 		ClassifierLabels: labels,
 	}, testSciName)
 	assert.InDelta(t, 0.0, score, 0.001)
@@ -832,17 +876,17 @@ func TestComputeRarity_GeomodelLabelsTakePrecedence(t *testing.T) {
 		testSciName + "_" + testCommonName,
 	}
 
-	_, status := computeRarity(&classifier.RarityContext{
+	_, status := testComputeRarity(&classifier.RarityContext{
 		FilterActive:     true,
-		GeomodelLabels:   geomodelLabels,
+		Geomodel:         classifier.NewLabelVocabulary(geomodelLabels),
 		ClassifierLabels: classifierLabels,
 	}, testSciName)
 	assert.Equal(t, RarityUnknown, status,
 		"classifier-only species has no geomodel occurrence probability")
 
-	_, status = computeRarity(&classifier.RarityContext{
+	_, status = testComputeRarity(&classifier.RarityContext{
 		FilterActive:     true,
-		GeomodelLabels:   geomodelLabels,
+		Geomodel:         classifier.NewLabelVocabulary(geomodelLabels),
 		ClassifierLabels: classifierLabels,
 	}, testCanonName)
 	assert.Equal(t, RarityVeryRare, status,
@@ -887,7 +931,7 @@ func TestComputeRarity_NoGeomodelLabels(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			gotScore, gotStatus := computeRarity(&classifier.RarityContext{
+			gotScore, gotStatus := testComputeRarity(&classifier.RarityContext{
 				FilterActive:     true,
 				ClassifierLabels: classifierLabels,
 			}, tt.targetSci)
@@ -909,12 +953,12 @@ func TestResolveSpeciesLabel_CollidingSpecies(t *testing.T) {
 		collidingSciB + "_" + collidingCommonB,
 	}
 
-	gotLabel, gotCommon := resolveSpeciesLabel(collidingSciB, allLabels)
+	gotLabel, gotCommon := resolveSpeciesLabel(testSnap(allLabels), collidingSciB)
 	assert.Equal(t, collidingSciB+"_"+collidingCommonB, gotLabel,
 		"an exact scientific-name match must win over the alias collapse")
 	assert.Equal(t, collidingCommonB, gotCommon)
 
-	gotLabel, gotCommon = resolveSpeciesLabel(collidingSciA, allLabels)
+	gotLabel, gotCommon = resolveSpeciesLabel(testSnap(allLabels), collidingSciA)
 	assert.Equal(t, collidingSciA+"_"+collidingCommonA, gotLabel)
 	assert.Equal(t, collidingCommonA, gotCommon)
 }
@@ -927,7 +971,7 @@ func TestResolveSpeciesLabel_LegacyLabelCanonicalTarget(t *testing.T) {
 
 	allLabels := []string{testAliasName + "_" + testCanonCommon}
 
-	gotLabel, gotCommon := resolveSpeciesLabel(testCanonName, allLabels)
+	gotLabel, gotCommon := resolveSpeciesLabel(testSnap(allLabels), testCanonName)
 	assert.Equal(t, testAliasName+"_"+testCanonCommon, gotLabel,
 		"canonicalization must apply to the label side, not only the request side")
 	assert.Equal(t, testCanonCommon, gotCommon)
@@ -948,19 +992,19 @@ func TestComputeRarity_CollidingSpecies(t *testing.T) {
 		{Label: collidingSciB + "_" + collidingCommonB, Score: 0.1},
 	}
 
-	gotScore, gotStatus := computeRarity(&classifier.RarityContext{
+	gotScore, gotStatus := testComputeRarity(&classifier.RarityContext{
 		FilterActive:     true,
 		Scores:           scores,
-		GeomodelLabels:   labels,
+		Geomodel:         classifier.NewLabelVocabulary(labels),
 		ClassifierLabels: labels,
 	}, collidingSciB)
 	assert.InDelta(t, 0.1, gotScore, 0.001, "the merged species must keep its own score")
 	assert.Equal(t, RarityRare, gotStatus)
 
-	gotScore, gotStatus = computeRarity(&classifier.RarityContext{
+	gotScore, gotStatus = testComputeRarity(&classifier.RarityContext{
 		FilterActive:     true,
 		Scores:           scores,
-		GeomodelLabels:   labels,
+		Geomodel:         classifier.NewLabelVocabulary(labels),
 		ClassifierLabels: labels,
 	}, collidingSciA)
 	assert.InDelta(t, 0.9, gotScore, 0.001)
@@ -998,10 +1042,10 @@ func TestComputeRarity_SyntheticScoresReportUnknown(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			scores := []classifier.SpeciesScore{{Label: unmappedSci + "_Brandt's Bat", Score: tt.score}}
-			gotScore, gotStatus := computeRarity(&classifier.RarityContext{
+			gotScore, gotStatus := testComputeRarity(&classifier.RarityContext{
 				FilterActive:     true,
 				Scores:           scores,
-				GeomodelLabels:   geomodelLabels,
+				Geomodel:         classifier.NewLabelVocabulary(geomodelLabels),
 				ClassifierLabels: classifierLabels,
 			}, unmappedSci)
 			assert.Equal(t, RarityUnknown, gotStatus, tt.why)

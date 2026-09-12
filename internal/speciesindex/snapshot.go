@@ -133,10 +133,14 @@ func canonicalKeyForSci(sci string) string {
 	return strings.ToLower(openfauna.CanonicalName(sci))
 }
 
-// computeCanonicalKey is the canonical lookup key for a label: the extracted
-// scientific name run through the openfauna alias map, lower-cased. It is
-// identical to classifier.canonicalSpeciesKey, pinned by a classifier-side test.
-func computeCanonicalKey(label string) string {
+// CanonicalKey is the canonical lookup key for a "Scientific_Common" label or a
+// bare scientific name (ExtractScientificName returns the whole string when there
+// is no common part, so both forms are accepted): the extracted scientific name
+// run through the openfauna alias map, lower-cased. It is identical to
+// classifier.canonicalSpeciesKey, pinned by a classifier-side test. The species
+// endpoint uses it to key an incoming request name into a snapshot's memo maps
+// without materializing the label set per request.
+func CanonicalKey(label string) string {
 	return canonicalKeyForSci(detection.ExtractScientificName(label))
 }
 
@@ -146,7 +150,7 @@ func (s *Snapshot) CanonicalKey(label string) string {
 	if ck, ok := s.CanonicalByLabel[label]; ok {
 		return ck
 	}
-	return computeCanonicalKey(label)
+	return CanonicalKey(label)
 }
 
 // ResolveLabel returns the full label and localized common name for a scientific
@@ -162,7 +166,7 @@ func (s *Snapshot) ResolveLabel(sci string) (label, common string, ok bool) {
 	if lbl, found := s.LabelBySci[sci]; found {
 		return lbl, s.SciToCommon[sci], true
 	}
-	ck := computeCanonicalKey(sci)
+	ck := CanonicalKey(sci)
 	if lbls := s.LabelsByCanonical[ck]; len(lbls) == 1 {
 		lbl := lbls[0]
 		return lbl, s.SciToCommon[scientificName(lbl)], true
