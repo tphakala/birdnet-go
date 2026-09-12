@@ -17,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/dto"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
 // Species fixtures for the name-resolution and rarity tests. testAliasName and
@@ -541,11 +542,11 @@ func TestGetAllSpecies_LocalizedSecondaryModel(t *testing.T) {
 	e := echo.New()
 	handler := &Handler{
 		Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")},
-		commonNameMap: func() map[string]string {
-			return map[string]string{
+		speciesSnapshot: func() *speciesindex.Snapshot {
+			return &speciesindex.Snapshot{SciToCommon: map[string]string{
 				"Barbastella barbastellus": "mopsilepakko", // localized bat name (secondary model)
 				"Parus major":              "Great Tit",
-			}
+			}}
 		},
 	}
 	handler.Settings.Store(&conf.Settings{})
@@ -627,8 +628,8 @@ func TestGetAllSpecies(t *testing.T) {
 			// allModelLabels() (which reads settings.BirdNET.Labels here, since
 			// Processor is nil).
 			handler := &Handler{
-				Core:          &apicore.Core{Echo: e, Group: e.Group("/api/v2")},
-				commonNameMap: func() map[string]string { return nil },
+				Core:            &apicore.Core{Echo: e, Group: e.Group("/api/v2")},
+				speciesSnapshot: speciesindex.Empty,
 			}
 			handler.Settings.Store(settings)
 

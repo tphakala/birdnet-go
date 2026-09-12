@@ -10,10 +10,13 @@
 // Two dependencies the species handlers need are owned by other parts of the
 // monolith that have not been extracted yet, so the facade injects them as
 // function values (the tls-domain facade-dependency-injection precedent):
-//   - commonNameMap: a read accessor over the shared scientific-to-common name
-//     map. The name-map plumbing lives in the facade package because several
-//     domains share it (the index itself is orchestrator-owned since Phase 2a);
-//     species only needs read access.
+//   - speciesSnapshot: a read accessor over the shared, orchestrator-owned
+//     species-index snapshot (the scientific-to-common name map plus the
+//     label-union canonical memo maps). The name-map plumbing lives in the facade
+//     package because several domains share it (the index itself is
+//     orchestrator-owned since Phase 2a); species only needs read access, and it
+//     answers the endpoint from the precomputed memo maps instead of scanning
+//     every label per request.
 //   - serveImageProxy: the media domain's bird-image proxy handler, which the
 //     species thumbnail endpoint delegates to. When media is extracted this can
 //     point at the media handler instead.
@@ -36,6 +39,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/openfauna"
+	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
 // Handler serves the species domain endpoints. It embeds *apicore.Core BY
@@ -44,10 +48,18 @@ import (
 type Handler struct {
 	*apicore.Core
 
-	// commonNameMap returns the current scientific-to-common lookup map, owned by
-	// the facade's name-map plumbing and injected so species stays read-only over
-	// it. Always returns a non-nil map.
-	commonNameMap func() map[string]string
+	// speciesSnapshot returns the current orchestrator-owned species-index
+	// snapshot (the scientific-to-common map plus the label-union canonical memo
+	// maps), owned by the facade's name-map plumbing and injected so species stays
+	// read-only over it. Always returns a non-nil snapshot.
+	speciesSnapshot func() *speciesindex.Snapshot
+
+	// speciesBackendOverride, when non-nil, replaces Processor.Bn as the model
+	// backend the species-info path localizes names and reads rarity through. Only
+	// tests and benchmarks set it, so they can exercise the endpoint without
+	// loading a native model; production leaves it nil and backend() falls through
+	// to Processor.Bn.
+	speciesBackendOverride speciesBackend
 
 	// serveImageProxy is the media domain's species-image proxy handler. The
 	// thumbnail endpoint resolves a species code to a scientific name and then
@@ -55,11 +67,32 @@ type Handler struct {
 	serveImageProxy echo.HandlerFunc
 }
 
+// speciesBackend is the minimal slice of the model orchestrator the species-info
+// path needs: localize a name and read the rarity context. *classifier.Orchestrator
+// satisfies it; tests and benchmarks inject a fake via speciesBackendOverride so the
+// endpoint can be exercised without loading a native model.
+type speciesBackend interface {
+	ResolveName(scientificName, locale string) string
+	GetRarityContext(date time.Time) (classifier.RarityContext, error)
+}
+
+// backend returns the injected test backend when set, otherwise the live
+// orchestrator (Processor.Bn), or nil when no orchestrator is available.
+func (c *Handler) backend() speciesBackend {
+	if c.speciesBackendOverride != nil {
+		return c.speciesBackendOverride
+	}
+	if proc := c.Processor; proc != nil && proc.Bn != nil {
+		return proc.Bn
+	}
+	return nil
+}
+
 // New builds a species Handler around the shared core and the two facade-owned
-// dependencies the species handlers delegate to (the common-name map accessor
-// and the media image-proxy handler).
-func New(core *apicore.Core, commonNameMap func() map[string]string, serveImageProxy echo.HandlerFunc) *Handler {
-	return &Handler{Core: core, commonNameMap: commonNameMap, serveImageProxy: serveImageProxy}
+// dependencies the species handlers delegate to (the species-index snapshot
+// accessor and the media image-proxy handler).
+func New(core *apicore.Core, speciesSnapshot func() *speciesindex.Snapshot, serveImageProxy echo.HandlerFunc) *Handler {
+	return &Handler{Core: core, speciesSnapshot: speciesSnapshot, serveImageProxy: serveImageProxy}
 }
 
 // RegisterRoutes registers all species-related API endpoints on the supplied API
@@ -156,14 +189,14 @@ func (c *Handler) lookupTaxonomyEitherName(ctx context.Context, primary, seconda
 // resolveEitherName localizes a common name under whichever of the two scientific names
 // the resolver's working set is keyed on, for the reason lookupTaxonomyEitherName
 // documents.
-func (c *Handler) resolveEitherName(bn *classifier.Orchestrator, primary, secondary string) string {
-	if resolved := bn.ResolveName(primary, c.CurrentLocale()); resolved != "" {
+func (c *Handler) resolveEitherName(backend speciesBackend, primary, secondary string) string {
+	if resolved := backend.ResolveName(primary, c.CurrentLocale()); resolved != "" {
 		return resolved
 	}
 	if strings.EqualFold(primary, secondary) {
 		return ""
 	}
-	return bn.ResolveName(secondary, c.CurrentLocale())
+	return backend.ResolveName(secondary, c.CurrentLocale())
 }
 
 // lookupTaxonomyTree attempts to find taxonomy for a species, trying local DB first then eBird.
@@ -216,7 +249,7 @@ func (c *Handler) GetAllSpecies(ctx echo.Context) error {
 		logger.String("path", path),
 	)
 
-	speciesList := buildAllSpeciesList(c.commonNameMap(), c.allModelLabels())
+	speciesList := buildAllSpeciesList(c.speciesSnapshot().SciToCommon, c.allModelLabels())
 
 	c.LogInfoIfEnabled("All species labels retrieved successfully",
 		logger.Int("count", len(speciesList)),
@@ -363,21 +396,22 @@ func (c *Handler) GetSpeciesInfo(ctx echo.Context) error {
 
 // getSpeciesInfo retrieves species information including rarity status
 func (c *Handler) getSpeciesInfo(ctx context.Context, scientificName string) (*SpeciesInfo, error) {
-	// Snapshot to avoid TOCTOU race on c.Processor
-	proc := c.Processor
-	if proc == nil || proc.Bn == nil {
+	// Snapshot the backend once to avoid a TOCTOU race on c.Processor and to let
+	// tests inject a fake orchestrator without loading a native model.
+	backend := c.backend()
+	if backend == nil {
 		return nil, errors.Newf("BirdNET processor not available").
 			Category(errors.CategorySystem).
 			Component("api-species").
 			Build()
 	}
 
-	bn := proc.Bn
-
 	// Search the full multi-model label union (primary plus secondary models such
 	// as the bat/Perch classifiers) so a secondary-model scientific name resolves
-	// instead of 404ing.
-	matchedLabel, commonName := resolveSpeciesLabel(scientificName, bn.AllLabels())
+	// instead of 404ing. The snapshot's Labels field is the orchestrator-owned
+	// union that used to be materialized per request by bn.AllLabels().
+	snap := c.speciesSnapshot()
+	matchedLabel, commonName := resolveSpeciesLabel(scientificName, snap.Labels)
 
 	// If species not found in any loaded model's labels, return error
 	if matchedLabel == "" {
@@ -401,7 +435,7 @@ func (c *Handler) getSpeciesInfo(ctx context.Context, scientificName string) (*S
 	// name) as "needs localizing" and resolve through the orchestrator's
 	// OpenFauna-authoritative resolver, passing the configured locale explicitly.
 	if commonName == "" || strings.EqualFold(commonName, matchedSci) {
-		if resolved := c.resolveEitherName(bn, matchedSci, scientificName); resolved != "" {
+		if resolved := c.resolveEitherName(backend, matchedSci, scientificName); resolved != "" {
 			commonName = resolved
 		}
 	}
@@ -416,7 +450,7 @@ func (c *Handler) getSpeciesInfo(ctx context.Context, scientificName string) (*S
 	}
 
 	// Get rarity information
-	rarityInfo, err := c.getSpeciesRarityInfo(bn, matchedLabel)
+	rarityInfo, err := c.getSpeciesRarityInfo(backend, matchedLabel)
 	if err != nil {
 		// Log error but don't fail the request
 		c.Debug("Failed to get rarity info for species %s: %v", scientificName, err)
@@ -556,7 +590,7 @@ func computeRarity(rc *classifier.RarityContext, targetSci string) (float64, Rar
 	return 0.0, RarityVeryRare
 }
 
-func (c *Handler) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLabel string) (SpeciesRarityInfo, error) {
+func (c *Handler) getSpeciesRarityInfo(backend speciesBackend, speciesLabel string) (SpeciesRarityInfo, error) {
 	// Get current local date
 	today := conf.LocalNoon(time.Now())
 
@@ -567,7 +601,7 @@ func (c *Handler) getSpeciesRarityInfo(bn *classifier.Orchestrator, speciesLabel
 	// GetRarityContext returns the settings snapshot it scored against, so location,
 	// threshold, coordinates and filterActive below all describe one settings generation;
 	// a concurrent reload cannot desynchronise the rarity number from its metadata.
-	rc, err := bn.GetRarityContext(today)
+	rc, err := backend.GetRarityContext(today)
 	if err != nil {
 		return SpeciesRarityInfo{}, errors.New(err).
 			Category(errors.CategoryProcessing).

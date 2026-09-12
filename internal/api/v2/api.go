@@ -509,7 +509,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// domain's species-image proxy handler
 	// (c.media.ServeSpeciesImageProxy). They are passed as bound method values; c
 	// is fully constructed here, so the method values are stable for its lifetime.
-	c.species = species.New(c.Core, c.loadCommonNameMap, c.media.ServeSpeciesImageProxy)
+	c.species = species.New(c.Core, c.loadNameMaps, c.media.ServeSpeciesImageProxy)
 	// The support handler needs only the shared core (settings, datastore, V2
 	// manager, and the error/log/goroutine helpers all promote from it).
 	c.support = support.New(c.Core)
