@@ -164,28 +164,28 @@ func goldenContexts(classifierLabels []string) map[string]classifier.RarityConte
 	return map[string]classifier.RarityContext{
 		"universal": {
 			Scores:           universalScores,
-			GeomodelLabels:   universalVocab,
+			Geomodel:         classifier.NewLabelVocabulary(universalVocab),
 			ClassifierLabels: classifierLabels,
 			FilterActive:     true,
 			Settings:         settings,
 		},
 		"override": {
 			Scores:           overrideScores,
-			GeomodelLabels:   universalVocab,
+			Geomodel:         classifier.NewLabelVocabulary(universalVocab),
 			ClassifierLabels: classifierLabels,
 			FilterActive:     true,
 			Settings:         settings,
 		},
 		"legacy": {
 			Scores:           legacyScores,
-			GeomodelLabels:   nil,
+			Geomodel:         nil,
 			ClassifierLabels: classifierLabels,
 			FilterActive:     true,
 			Settings:         settings,
 		},
 		"inactive": {
 			Scores:           nil,
-			GeomodelLabels:   nil,
+			Geomodel:         nil,
 			ClassifierLabels: classifierLabels,
 			FilterActive:     false,
 			Settings:         settings,

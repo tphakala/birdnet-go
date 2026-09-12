@@ -38,7 +38,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/openfauna"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
@@ -347,19 +346,26 @@ func (c *Handler) allModelLabels() []string {
 // the alias fallback then answers a request for the absent member with the present one's
 // label, which is the same behaviour any alias resolution has and is still better than
 // reporting nothing, but it is not a guarantee that the two never cross.
-func resolveSpeciesLabel(targetSci string, allLabels []string) (matchedLabel, commonName string) {
-	for _, label := range allLabels {
+//
+// Both passes run over snap.LabelsByCanonical[key(target)], the group of labels
+// sharing the request's canonical key. That group holds every label an exact or an
+// alias match could return, appended in the snapshot's label-union order, so the
+// exact-before-alias rule and "first match in union order" are preserved while the
+// per-request openfauna.CanonicalName scan over every label is gone.
+func resolveSpeciesLabel(snap *speciesindex.Snapshot, targetSci string) (matchedLabel, commonName string) {
+	if snap == nil {
+		return "", ""
+	}
+	candidates := snap.LabelsByCanonical[speciesindex.CanonicalKey(targetSci)]
+	for _, label := range candidates {
 		if strings.EqualFold(detection.ExtractScientificName(label), targetSci) {
 			return label, detection.ParseSpeciesString(label).CommonName
 		}
 	}
-	// No label carries this exact name, so fall back to the taxonomic alias and let a
-	// request naming a species by a legacy synonym resolve to its current name.
-	canonicalTarget := openfauna.CanonicalName(targetSci)
-	for _, label := range allLabels {
-		if labelMatchesSpecies(label, canonicalTarget) {
-			return label, detection.ParseSpeciesString(label).CommonName
-		}
+	// No candidate carries this exact name, so fall back to the taxonomic alias: any
+	// candidate shares the canonical key, so the first in union order is the alias hit.
+	if len(candidates) > 0 {
+		return candidates[0], detection.ParseSpeciesString(candidates[0]).CommonName
 	}
 	return "", ""
 }
@@ -411,7 +417,7 @@ func (c *Handler) getSpeciesInfo(ctx context.Context, scientificName string) (*S
 	// instead of 404ing. The snapshot's Labels field is the orchestrator-owned
 	// union that used to be materialized per request by bn.AllLabels().
 	snap := c.speciesSnapshot()
-	matchedLabel, commonName := resolveSpeciesLabel(scientificName, snap.Labels)
+	matchedLabel, commonName := resolveSpeciesLabel(snap, scientificName)
 
 	// If species not found in any loaded model's labels, return error
 	if matchedLabel == "" {
@@ -450,7 +456,7 @@ func (c *Handler) getSpeciesInfo(ctx context.Context, scientificName string) (*S
 	}
 
 	// Get rarity information
-	rarityInfo, err := c.getSpeciesRarityInfo(backend, matchedLabel)
+	rarityInfo, err := c.getSpeciesRarityInfo(backend, snap, matchedLabel)
 	if err != nil {
 		// Log error but don't fail the request
 		c.Debug("Failed to get rarity info for species %s: %v", scientificName, err)
@@ -473,44 +479,37 @@ func (c *Handler) getSpeciesInfo(ctx context.Context, scientificName string) (*S
 	return info, nil
 }
 
-// labelMatchesSpecies reports whether a "Scientific_Common" label denotes the same
-// taxon as canonicalTarget, which the caller must have already passed through
-// openfauna.CanonicalName. Both sides are canonicalized so a legacy synonym in the
-// label (or in the request) matches the current name, and compared case-insensitively
-// because CanonicalName preserves the input's case for names it has no alias for.
-func labelMatchesSpecies(label, canonicalTarget string) bool {
-	return strings.EqualFold(openfauna.CanonicalName(detection.ExtractScientificName(label)), canonicalTarget)
-}
-
 // speciesHasGeomodelCoverage reports whether the active range filter can produce an
-// occurrence probability for the scientific name. It answers against the geomodel's own
+// occurrence probability for the canonical key. It answers against the geomodel's own
 // vocabulary, which for the universal geomodel is much larger than the primary
 // classifier's (it spans birds, bats, other mammals and insects), so a species the
-// classifier cannot name still gets a real rarity.
+// classifier cannot name still gets a real rarity. The geomodel vocabulary carries a
+// precomputed canonical-key memo, so this is an O(1) map lookup with no per-label
+// openfauna.CanonicalName scan.
 //
-// geomodelLabels is empty for every backend other than the universal geomodel: the
-// TFLite meta model and the plain ONNX range filter are keyed to the classifier's own
-// labels, so falling back to classifierLabels is the correct vocabulary for those, not a
-// degraded approximation.
+// rc.Geomodel is nil (or empty) for every backend other than the universal geomodel:
+// the TFLite meta model and the plain ONNX range filter are keyed to the classifier's
+// own labels, so falling back to rc.ClassifierLabels is the correct vocabulary for
+// those, not a degraded approximation. The fallback scans the classifier labels through
+// the snapshot's canonical memo (every classifier label is in the union, so the scan is
+// allocation-free) and MUST NOT use the snapshot's union membership: the union includes
+// secondary-model labels, and the classifier-backed answer is against the primary's
+// labels only.
 //
-// It is also empty in two states where the fallback grants nominal coverage to every
+// The classifier fallback also runs in two states that grant nominal coverage to every
 // classifier species even though nothing is scoring them, so each reports "very rare" at
 // score 0: no location configured, and no range filter loaded. Only the first is visible
-// to a client, via SpeciesRarityInfo.LocationBased; a range filter that failed to load
-// leaves LocationBased true, so a caller cannot currently distinguish that state from a
-// genuine result. That predates this function's signature and is not something callers
-// can guard against today.
+// to a client, via SpeciesRarityInfo.LocationBased. That predates this function and is
+// not something callers can guard against today.
 //
 // A species in neither vocabulary (a secondary-model-only species the geomodel does not
 // cover) has no occurrence probability to base a rarity on.
-func speciesHasGeomodelCoverage(targetSci string, geomodelLabels, classifierLabels []string) bool {
-	labels := geomodelLabels
-	if len(labels) == 0 {
-		labels = classifierLabels
+func speciesHasGeomodelCoverage(key string, rc *classifier.RarityContext, snap *speciesindex.Snapshot) bool {
+	if rc.Geomodel != nil && len(rc.Geomodel.Labels) > 0 {
+		return rc.Geomodel.HasCanonical(key)
 	}
-	canonicalTarget := openfauna.CanonicalName(targetSci)
-	for _, label := range labels {
-		if labelMatchesSpecies(label, canonicalTarget) {
+	for _, label := range rc.ClassifierLabels {
+		if snap.CanonicalKey(label) == key {
 			return true
 		}
 	}
@@ -519,13 +518,20 @@ func speciesHasGeomodelCoverage(targetSci string, geomodelLabels, classifierLabe
 
 // findNativeSpeciesScore returns the native occurrence score for targetSci from a
 // probable-species list, ignoring force-added score-1.0 override rows. It matches on
-// the exact scientific name across the whole list before trying any alias, for the
+// the exact scientific name across the whole list before trying any alias key, for the
 // reason resolveSpeciesLabel documents: the alias map merges pairs the classifier
 // ships as separate species, and an alias-first match would report one bird's
 // occurrence probability for the other. As there, the separation holds only while
 // both members are in the list; the probable-species list carries only species above
 // today's threshold, so one member being absent is the common case.
-func findNativeSpeciesScore(targetSci string, speciesScores []classifier.SpeciesScore) (float64, bool) {
+//
+// Rows tagged IsSyntheticOverride (the force-include 1.0 sentinels appended by
+// addUserOverrideSpeciesScores) are skipped in BOTH passes: membership in a vocabulary
+// cannot express that distinction, and reading the sentinel as a rarity reintroduces
+// the #3975 leak. The skip runs before keyOf is consulted, so a synthetic row costs
+// nothing and can never be returned. keyOf memoizes the canonical key per label
+// (geomodel labels via the vocabulary, classifier labels via the snapshot).
+func findNativeSpeciesScore(targetSci, key string, speciesScores []classifier.SpeciesScore, keyOf func(string) string) (float64, bool) {
 	for _, ss := range speciesScores {
 		if ss.IsSyntheticOverride {
 			continue
@@ -534,12 +540,11 @@ func findNativeSpeciesScore(targetSci string, speciesScores []classifier.Species
 			return ss.Score, true
 		}
 	}
-	canonicalTarget := openfauna.CanonicalName(targetSci)
 	for _, ss := range speciesScores {
 		if ss.IsSyntheticOverride {
 			continue
 		}
-		if labelMatchesSpecies(ss.Label, canonicalTarget) {
+		if keyOf(ss.Label) == key {
 			return ss.Score, true
 		}
 	}
@@ -565,11 +570,12 @@ func findNativeSpeciesScore(targetSci string, speciesScores []classifier.Species
 //
 // A covered species present in the list is scored directly; one that is covered but
 // absent is below today's threshold and therefore genuinely very rare.
-// It takes the whole RarityContext (by pointer, since it is a large struct) rather than
-// its fields spread positionally: the two label vocabularies are adjacent same-typed
-// []string fields on that struct, so passing them loose invited a silent
-// geomodel/classifier swap.
-func computeRarity(rc *classifier.RarityContext, targetSci string) (float64, RarityStatus) {
+//
+// It takes the whole RarityContext by pointer (a large struct) plus the snapshot and
+// the request's precomputed canonical key: coverage and the alias score pass both key
+// off it, so it is computed once by the caller (getSpeciesRarityInfo) rather than
+// recomputed per pass.
+func computeRarity(rc *classifier.RarityContext, snap *speciesindex.Snapshot, key, targetSci string) (float64, RarityStatus) {
 	// Without an active range filter the probable-species list is synthetic zero
 	// scores for every label, so a covered species would score 0.0 and be
 	// misreported as "very rare" at "0%". The occurrence probability is genuinely
@@ -579,18 +585,31 @@ func computeRarity(rc *classifier.RarityContext, targetSci string) (float64, Rar
 		return 0.0, RarityUnknown
 	}
 
-	if !speciesHasGeomodelCoverage(targetSci, rc.GeomodelLabels, rc.ClassifierLabels) {
+	if !speciesHasGeomodelCoverage(key, rc, snap) {
 		return 0.0, RarityUnknown
 	}
 
-	if score, found := findNativeSpeciesScore(targetSci, rc.Scores); found {
+	// keyOf memoizes the canonical key per probable-species label: geomodel labels
+	// via the vocabulary's precomputed memo, everything else via the snapshot. It is
+	// consulted only after the synthetic-override skip and the exact pass, so it runs
+	// at most once per native row.
+	keyOf := func(label string) string {
+		if rc.Geomodel != nil {
+			if k, ok := rc.Geomodel.CanonicalByLabel[label]; ok {
+				return k
+			}
+		}
+		return snap.CanonicalKey(label)
+	}
+
+	if score, found := findNativeSpeciesScore(targetSci, key, rc.Scores, keyOf); found {
 		return score, calculateRarityStatus(score)
 	}
 
 	return 0.0, RarityVeryRare
 }
 
-func (c *Handler) getSpeciesRarityInfo(backend speciesBackend, speciesLabel string) (SpeciesRarityInfo, error) {
+func (c *Handler) getSpeciesRarityInfo(backend speciesBackend, snap *speciesindex.Snapshot, speciesLabel string) (SpeciesRarityInfo, error) {
 	// Get current local date
 	today := conf.LocalNoon(time.Now())
 
@@ -640,9 +659,11 @@ func (c *Handler) getSpeciesRarityInfo(backend speciesBackend, speciesLabel stri
 	}
 
 	// Resolve the score and status together; computeRarity documents how an absent
-	// species is split between "very rare" and "unknown" by geomodel coverage.
+	// species is split between "very rare" and "unknown" by geomodel coverage. The
+	// matched label is in the union, so its canonical key is a snapshot memo hit.
+	key := snap.CanonicalKey(speciesLabel)
 	targetSci := detection.ExtractScientificName(speciesLabel)
-	rarityInfo.Score, rarityInfo.Status = computeRarity(&rc, targetSci)
+	rarityInfo.Score, rarityInfo.Status = computeRarity(&rc, snap, key, targetSci)
 
 	return rarityInfo, nil
 }

@@ -532,7 +532,7 @@ func (bn *BirdNET) GetProbableSpeciesWithSettings(date time.Time, week float32, 
 // describe one consistent snapshot, with no separate read that could race a
 // concurrent unload (used by GetRarityContext to avoid reporting a synthetic zero
 // as "very rare", #3935).
-func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *conf.Settings) (probableSpecies []SpeciesScore, geomodelLabels []string, filterActive bool, err error) {
+func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *conf.Settings) (probableSpecies []SpeciesScore, geomodel *LabelVocabulary, filterActive bool, err error) {
 	bn.Debug("Applying range filter")
 
 	// Build the exclude matcher once: it reverse-resolves localized common-name exclude
@@ -638,7 +638,20 @@ func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *co
 		}
 
 		sort.Sort(ByScore(speciesScores))
-		return speciesScores, allGeoLabels, true, nil
+		// Wrap the geomodel vocabulary in a *LabelVocabulary so the species
+		// endpoint answers coverage from a precomputed canonical-key memo instead
+		// of an openfauna.CanonicalName scan per label. Gate on a non-nil label
+		// slice so the returned vocabulary is nil exactly when the raw labels were
+		// nil, preserving the "isUniversal := geomodel != nil" check at every caller.
+		var geomodel *LabelVocabulary
+		if allGeoLabels != nil {
+			if mrf, ok := rf.(*mappedRangeFilter); ok {
+				geomodel = mrf.vocab
+			} else {
+				geomodel = NewLabelVocabulary(allGeoLabels)
+			}
+		}
+		return speciesScores, geomodel, true, nil
 	}
 	bn.mu.Unlock()
 
