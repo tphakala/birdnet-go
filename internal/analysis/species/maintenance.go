@@ -96,6 +96,7 @@ func (t *SpeciesTracker) pruneLifetimeEntriesLocked(now time.Time) int {
 	for scientificName, firstSeen := range t.speciesFirstSeen {
 		if dateOnlyBefore(firstSeen, lifetimeCutoff) {
 			delete(t.speciesFirstSeen, scientificName)
+			delete(t.speciesFirstAudioDate, scientificName)
 			pruned++
 		}
 	}

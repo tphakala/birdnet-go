@@ -177,6 +177,15 @@ CleanupOldNotificationRecords(currentTime time.Time) int
 
 **BG-17 Fix**: Notification suppression state is now persisted to the database via the `notification_histories` table. This prevents duplicate "new species" notifications after application restarts. The state is automatically loaded during `InitFromDatabase()` and saved asynchronously when notifications are sent.
 
+New-species notification eligibility uses an exclusive elapsed-time window of
+`NewSpeciesWindowDays × 24 hours`, starting at local midnight on the first detection
+day. Historical loads also check the stored audio start, so a recording that
+crosses midnight retains its original day after a reload. Unlike the inclusive
+calendar-day badge window, it cannot outlast an equally long notification
+suppression interval (#4013). Shorter suppression
+intervals and disabled suppression keep their configured behavior within this
+notification window.
+
 ### Maintenance
 
 ```go
