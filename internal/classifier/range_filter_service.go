@@ -204,10 +204,13 @@ func (rfs *rangeFilterService) runtimeState() (active, fellBack bool) {
 }
 
 // mappedView returns the active backend as a *mappedRangeFilter (the geomodel
-// path), lock-free. ok is false when no geomodel range filter is loaded. The
-// returned pointer is immutable after publication, so callers may read its fields
-// without a lock; a concurrent reload only swaps the state pointer, it never
-// mutates a published mappedRangeFilter.
+// path), lock-free. ok is false when no geomodel range filter is loaded. Its
+// build-time fields (geomodelLabels, geomodelIndex, vocab, classifierToGeo) are
+// immutable after publication, so the lock-free callers here (GeomodelSpeciesInfo
+// and the heatmap service) may read them without a lock; a concurrent reload swaps
+// the whole state pointer rather than mutating those fields. The one exception is
+// unmappedScore, which universalPredict updates under rfs.mu; no lock-free caller
+// reads it, so this accessor stays lock-free.
 func (rfs *rangeFilterService) mappedView() (mrf *mappedRangeFilter, ok bool) {
 	mrf, ok = rfs.loadState().backend.(*mappedRangeFilter)
 	return mrf, ok
@@ -218,7 +221,18 @@ func (rfs *rangeFilterService) mappedView() (mrf *mappedRangeFilter, ok bool) {
 // backend session is not goroutine-safe. The caller MUST call the release func.
 func (rfs *rangeFilterService) lockedBatchFilter() (*mappedRangeFilter, func(), error) {
 	rfs.mu.Lock()
-	mrf, ok := rfs.loadState().backend.(*mappedRangeFilter)
+	backend := rfs.loadState().backend
+	// Keep the two error cases distinct (as the former lockedMappedRangeFilter did):
+	// "not loaded" for a nil backend versus "not batch-capable" for a non-mapped one,
+	// so callers can tell a missing range filter from a legacy/strict one.
+	if backend == nil {
+		rfs.mu.Unlock()
+		return nil, func() {}, errors.Newf("range filter not loaded").
+			Component("classifier.rangefilter").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+	mrf, ok := backend.(*mappedRangeFilter)
 	if !ok {
 		rfs.mu.Unlock()
 		return nil, func() {}, errors.Newf("range filter does not support batch inference").

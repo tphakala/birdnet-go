@@ -242,3 +242,25 @@ func TestBirdNET_ConcurrentInferenceAndBackendReload_NoRace(t *testing.T) {
 		})
 	}
 }
+
+// TestRangeFilterService_ReloadAfterCloseDoesNotPublish is the regression guard for
+// the teardown-vs-reload native leak: reload() and close() both run unlocked relative
+// to o.mu, so a reload can race an orchestrator Delete. Once close() has torn the
+// service down, a later reload() must abort at its buildMu-guarded `closed` check and
+// publish no backend; otherwise the freshly built backend's native session would leak
+// because close() will never run again. This exercises reload's closed guard directly,
+// which swapTestBackend does not.
+func TestRangeFilterService_ReloadAfterCloseDoesNotPublish(t *testing.T) {
+	t.Parallel()
+
+	rfs := newTestRangeFilterService(nil)
+	rfs.close()
+
+	// Settings that would otherwise drive a backend build; reload must not reach the
+	// build because close() set closed=true under buildMu.
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.LocationConfigured = true
+
+	require.NoError(t, rfs.reload(settings, classifierView{id: "BirdNET_V2.4"}))
+	require.Nil(t, rfs.loadState().backend, "no backend may be published by a reload after close()")
+}
