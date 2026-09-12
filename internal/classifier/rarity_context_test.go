@@ -70,6 +70,19 @@ func TestBuildOccurrenceIndexAndLookup(t *testing.T) {
 	}
 }
 
+func TestBuildOccurrenceIndex_IgnoresSyntheticOverrideScores(t *testing.T) {
+	scores := []SpeciesScore{
+		{Label: aliasLegacyLabel, Score: 1.0, IsSyntheticOverride: true},
+		{Label: aliasCanonicalLabel, Score: 0.4},
+	}
+	index := buildOccurrenceIndex(scores)
+
+	got, found := lookupOccurrence(index, aliasLegacyLabel)
+	require.True(t, found)
+	assert.InDelta(t, 0.4, got, 0.001,
+		"legacy alias must resolve to the native geomodel probability, not the override sentinel")
+}
+
 // TestBuildOccurrenceIndex_CollidingSpeciesKeepOwnScores guards the defect that an
 // earlier revision of this code shipped: keying the occurrence cache on the canonical
 // name alone merged Dicrurus adsimilis and D. divaricatus, so both reported whichever

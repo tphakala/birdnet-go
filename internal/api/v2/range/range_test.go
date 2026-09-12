@@ -177,6 +177,37 @@ func TestTestRangeFilterWithoutProcessor(t *testing.T) {
 	assert.Contains(t, response.Message, "BirdNET service not available")
 }
 
+// TestGetRangeFilterSpeciesScoresWithoutProcessor covers the raw-score endpoint's
+// instance-availability guard. Like the other range endpoints, its happy path needs
+// a live *classifier.Orchestrator (a real model), which this API-package harness
+// cannot inject, so the native-vs-synthetic score filtering the endpoint applies is
+// unit-tested at the helper level instead (see TestNativeSpeciesScores). This test
+// pins the handler's own guard: a missing BirdNET instance must return 500, not panic.
+func TestGetRangeFilterSpeciesScoresWithoutProcessor(t *testing.T) {
+	// Setup
+	e, _, controller := setupRangeTestEnvironment(t)
+
+	// Ensure no BirdNET instance is reachable.
+	controller.Processor = nil
+
+	// Create request
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/range/species/scores?lat=60.1699&lon=24.9384", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/range/species/scores")
+
+	// Test
+	require.NoError(t, controller.GetRangeFilterSpeciesScores(c))
+
+	// Check response code (should be 500 due to missing processor)
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+
+	// Parse error response
+	var response apicore.ErrorResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	assert.Contains(t, response.Message, "BirdNET service not available")
+}
+
 // TestTestRangeFilterValidation tests input validation for the test endpoint
 func TestTestRangeFilterValidation(t *testing.T) {
 	// Setup
