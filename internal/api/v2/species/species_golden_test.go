@@ -27,6 +27,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -34,8 +35,25 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
+
+// TestCorpusScientificNamesAreASCII pins the assumption resolveSpeciesLabel relies
+// on: scientific names in every label set are ASCII, so strings.EqualFold (exact
+// pass) and strings.ToLower via CanonicalKey (the candidate group) agree. A dataset
+// refresh that introduced a non-ASCII scientific name would break the
+// exact-before-alias equivalence silently, so fail loudly here instead.
+func TestCorpusScientificNamesAreASCII(t *testing.T) {
+	t.Parallel()
+	for _, label := range goldenCorpus(t) {
+		sci := detection.ExtractScientificName(label)
+		for i := range len(sci) {
+			require.Less(t, sci[i], byte(utf8.RuneSelf),
+				"non-ASCII byte in scientific name %q (from label %q)", sci, label)
+		}
+	}
+}
 
 var updateGolden = flag.Bool("update", false, "update species golden files")
 
@@ -86,11 +104,11 @@ func goldenSettings() *conf.Settings {
 }
 
 // loadLabelLines reads a newline-delimited label file, trimming blanks.
-func loadLabelLines(t *testing.T, path string) []string {
-	t.Helper()
+func loadLabelLines(tb testing.TB, path string) []string {
+	tb.Helper()
 	f, err := os.Open(path) //nolint:gosec // test-only read of a repo-vendored label file
-	require.NoError(t, err, "open label file %s", path)
-	t.Cleanup(func() { _ = f.Close() })
+	require.NoError(tb, err, "open label file %s", path)
+	tb.Cleanup(func() { _ = f.Close() })
 
 	var out []string
 	sc := bufio.NewScanner(f)
@@ -99,18 +117,18 @@ func loadLabelLines(t *testing.T, path string) []string {
 			out = append(out, line)
 		}
 	}
-	require.NoError(t, sc.Err())
+	require.NoError(tb, sc.Err())
 	return out
 }
 
 // goldenCorpus loads the vendored v2.4 corpus plus the Perch- and bat-like
 // testdata, concatenated. The union exercises embedded-common (v2.4/bat) and
 // scientific-only (Perch) labels and the real alias pairs.
-func goldenCorpus(t *testing.T) []string {
-	t.Helper()
-	corpus := loadLabelLines(t, filepath.Join("..", "..", "..", "classifier", "data", "labels", "V2.4", "BirdNET_GLOBAL_6K_V2.4_Labels_en_uk.txt"))
-	perch := loadLabelLines(t, filepath.Join("..", "..", "..", "speciesindex", "testdata", "perch_like_labels.txt"))
-	bat := loadLabelLines(t, filepath.Join("..", "..", "..", "speciesindex", "testdata", "bat_like_labels.txt"))
+func goldenCorpus(tb testing.TB) []string {
+	tb.Helper()
+	corpus := loadLabelLines(tb, filepath.Join("..", "..", "..", "classifier", "data", "labels", "V2.4", "BirdNET_GLOBAL_6K_V2.4_Labels_en_uk.txt"))
+	perch := loadLabelLines(tb, filepath.Join("..", "..", "..", "speciesindex", "testdata", "perch_like_labels.txt"))
+	bat := loadLabelLines(tb, filepath.Join("..", "..", "..", "speciesindex", "testdata", "bat_like_labels.txt"))
 	all := make([]string, 0, len(corpus)+len(perch)+len(bat))
 	all = append(all, corpus...)
 	all = append(all, perch...)
