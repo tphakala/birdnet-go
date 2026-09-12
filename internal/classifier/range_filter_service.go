@@ -72,6 +72,14 @@ type rangeFilterState struct {
 	// fellBack is true when the configured ONNX geomodel could not be loaded and the
 	// classifier fell back to its embedded TFLite range filter. Reported for health.
 	fellBack bool
+	// generation is a monotonic counter bumped on every backend swap, written only
+	// under rfs.mu and read lock-free via loadState() elsewhere. It makes the
+	// swap+cache-invalidate atomic to the occurrence-cache readers, which take
+	// speciesCacheMu rather than rfs.mu: a speciesCacheEntry is tagged with the
+	// generation it was computed under and served only while that generation is still
+	// current, so an entry produced against a superseded backend is rejected the instant
+	// the swap publishes a new generation, without waiting for clearSpeciesCache to run.
+	generation uint64
 }
 
 // rangeFilterService owns the range-filter backend and occurrence cache.
@@ -163,7 +171,12 @@ func (rfs *rangeFilterService) reload(settings *conf.Settings, cv classifierView
 
 	rfs.mu.Lock()
 	old := rfs.loadState()
-	rfs.state.Store(&rangeFilterState{backend: backend, fellBack: fellBack})
+	// Bump the generation with the swap so cache entries computed against the old
+	// backend become logically stale to readers the moment this store is published,
+	// even before clearSpeciesCache runs below. generation is only ever written here
+	// (and in close/swapTestBackend), always under rfs.mu, so the increment cannot
+	// race another writer.
+	rfs.state.Store(&rangeFilterState{backend: backend, fellBack: fellBack, generation: old.generation + 1})
 	// Close the replaced backend under rfs.mu: every prediction is serialized by the
 	// same lock, so none is using the old backend at close time (issue #3336).
 	if old.backend != nil && old.backend != backend {
@@ -188,7 +201,9 @@ func (rfs *rangeFilterService) close() {
 
 	rfs.mu.Lock()
 	old := rfs.loadState()
-	rfs.state.Store(&rangeFilterState{})
+	// Bump the generation on teardown too, so any cache entry that outlives the clear
+	// below is rejected by a concurrent reader on generation mismatch.
+	rfs.state.Store(&rangeFilterState{generation: old.generation + 1})
 	if old.backend != nil {
 		old.backend.Close()
 	}
@@ -527,9 +542,19 @@ func (rfs *rangeFilterService) getCachedSpeciesScores(targetDate time.Time, sett
 		settings.BirdNET.RangeFilter.Model,
 	)
 
-	// FAST PATH: read under RLock and return a defensive copy.
+	// FAST PATH: read under RLock and return a defensive copy. Serve an entry only
+	// while its generation matches the currently-published backend generation. reload
+	// swaps the backend into a new *rangeFilterState (bumping generation) under rfs.mu,
+	// then clears the cache OUTSIDE rfs.mu; cache readers take speciesCacheMu, not
+	// rfs.mu, so widening the backend lock cannot exclude them. Tagging entries with
+	// their generation and rejecting a mismatch closes the window between the swap and
+	// the clear: an entry computed against the superseded backend carries the old
+	// generation and is skipped the instant the swap publishes. Reading
+	// the generation via loadState (an atomic load) gives the needed happens-before: a
+	// reader that observes the new state also observes the new generation.
+	curGen := rfs.loadState().generation
 	rfs.speciesCacheMu.RLock()
-	if entry, ok := rfs.speciesCache[cacheKey]; ok && entry.key == cacheKey {
+	if entry, ok := rfs.speciesCache[cacheKey]; ok && entry.key == cacheKey && entry.generation == curGen {
 		out := make(map[string]float64, len(entry.scores))
 		maps.Copy(out, entry.scores)
 		rfs.speciesCacheMu.RUnlock()
@@ -537,7 +562,10 @@ func (rfs *rangeFilterService) getCachedSpeciesScores(targetDate time.Time, sett
 	}
 	rfs.speciesCacheMu.RUnlock()
 
-	// MISS PATH: use the same settings snapshot as the cache key.
+	// MISS PATH: use the same settings snapshot as the cache key. Sample the generation
+	// just before predicting so the write path can detect a backend swap that raced the
+	// prediction.
+	genBefore := rfs.loadState().generation
 	speciesScores, _, _, err := rfs.probableSpecies(targetDate, 0.0, settings)
 	if err != nil {
 		return nil, err
@@ -546,24 +574,33 @@ func (rfs *rangeFilterService) getCachedSpeciesScores(targetDate time.Time, sett
 
 	// WRITE PATH: double-check, evict old entries, publish new results.
 	rfs.speciesCacheMu.Lock()
-	if entry, ok := rfs.speciesCache[cacheKey]; ok && entry.key == cacheKey {
+	genNow := rfs.loadState().generation
+	if entry, ok := rfs.speciesCache[cacheKey]; ok && entry.key == cacheKey && entry.generation == genNow {
 		out := make(map[string]float64, len(entry.scores))
 		maps.Copy(out, entry.scores)
 		rfs.speciesCacheMu.Unlock()
 		return out, nil
 	}
-	// Keep cache bounded: evict one arbitrary entry when limit is reached. Each key
-	// encodes date+lat+lon+model, so a small limit is sufficient.
-	const maxSpeciesCacheEntries = 8
-	if len(rfs.speciesCache) >= maxSpeciesCacheEntries {
-		for k := range rfs.speciesCache {
-			delete(rfs.speciesCache, k)
-			break
+	// Cache only when no reload swapped the backend across the prediction. generation is
+	// monotonic and written only under rfs.mu, so genBefore == genNow proves
+	// probableSpecies scored against exactly the genNow backend and the entry is safe to
+	// tag with genNow. If a reload intervened, the fresh scores may reflect a superseded
+	// backend, so hand them to this caller without caching (they are never served again).
+	if genBefore == genNow {
+		// Keep cache bounded: evict one arbitrary entry when limit is reached. Each key
+		// encodes date+lat+lon+model, so a small limit is sufficient.
+		const maxSpeciesCacheEntries = 8
+		if len(rfs.speciesCache) >= maxSpeciesCacheEntries {
+			for k := range rfs.speciesCache {
+				delete(rfs.speciesCache, k)
+				break
+			}
 		}
-	}
-	rfs.speciesCache[cacheKey] = &speciesCacheEntry{
-		key:    cacheKey,
-		scores: scores,
+		rfs.speciesCache[cacheKey] = &speciesCacheEntry{
+			key:        cacheKey,
+			scores:     scores,
+			generation: genNow,
+		}
 	}
 	out := make(map[string]float64, len(scores))
 	maps.Copy(out, scores)
