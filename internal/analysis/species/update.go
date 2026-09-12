@@ -207,7 +207,18 @@ func (t *SpeciesTracker) checkAndUpdateLifetimeLocked(scientificName string, det
 
 	// Calculate calendar days since first seen (DST-safe, clamped to 0)
 	daysSince := calculateDaysSince(detectionTime, firstSeen)
-	return daysSince <= t.windowDays, daysSince
+	if audioDate, ok := t.speciesFirstAudioDate[scientificName]; ok && audioDate.Before(firstSeen) {
+		firstSeen = audioDate
+	}
+	// Notification eligibility must expire before an equally long suppression
+	// interval does (#4013). The inclusive calendar-day window used for badges
+	// can outlast that interval, especially across a daylight-saving transition.
+	// Anchor to the first audio day's local midnight: historical loads retain
+	// that calendar date (parsed in UTC), keeping the deadline stable on reload.
+	year, month, day := firstSeen.Date()
+	start := time.Date(year, month, day, 0, 0, 0, 0, detectionTime.Location())
+	window := time.Duration(t.windowDays) * hoursPerDay * time.Hour
+	return detectionTime.Before(start.Add(window)), daysSince
 }
 
 // addYearlyIfNewLocked adds species to yearly tracking if not already present. Assumes lock is held.
@@ -237,14 +248,15 @@ func (t *SpeciesTracker) addSeasonalIfNewLocked(scientificName string, detection
 // CheckAndUpdateSpecies atomically checks if a species is new and updates the tracker
 // This prevents race conditions where multiple concurrent detections of the same species
 // could all be considered "new" before any of them update the tracker.
-// Returns (isNew, daysSinceFirstSeen)
+// Returns (eligible for a new-species notification, calendar days since first seen).
+// Badge visibility uses the separate calendar-day window in GetSpeciesStatus.
 func (t *SpeciesTracker) CheckAndUpdateSpecies(scientificName string, detectionTime time.Time) (isNew bool, daysSinceFirstSeen int) {
 	isNew, daysSinceFirstSeen, _ = t.CheckAndUpdateSpeciesWithNovelty(scientificName, detectionTime)
 	return
 }
 
-// CheckAndUpdateSpeciesWithNovelty atomically checks species status, updates
-// tracking, and returns novelty episode details for alert rules.
+// CheckAndUpdateSpeciesWithNovelty atomically checks new-species notification
+// eligibility, updates tracking, and returns novelty episode details for alert rules.
 func (t *SpeciesTracker) CheckAndUpdateSpeciesWithNovelty(scientificName string, detectionTime time.Time) (isNew bool, daysSinceFirstSeen int, novelty NoveltyStatus) {
 	// While warming, suppress new-species/novelty and skip recording so the empty
 	// maps cannot produce a spurious first-detection. Checked before t.mu so it

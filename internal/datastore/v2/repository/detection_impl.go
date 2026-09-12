@@ -1733,6 +1733,7 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 			species_first.scientific_name,
 			species_first.lifetime_first as first_detected,
 			species_first.lifetime_last as last_detected,
+			species_first.first_begin_time,
 			MIN(d.id) as detection_id,
 			MAX(d.confidence) as confidence,
 			(
@@ -1748,7 +1749,8 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 			SELECT
 				l2.scientific_name,
 				MIN(d2.detected_at) as lifetime_first,
-				MAX(d2.detected_at) as lifetime_last
+				MAX(d2.detected_at) as lifetime_last,
+				MIN(d2.begin_time) as first_begin_time
 			FROM %s d2
 			JOIN %s l2 ON l2.id = d2.label_id
 			LEFT JOIN %s dr2 ON dr2.detection_id = d2.id
@@ -1760,7 +1762,7 @@ func (r *detectionRepository) GetNewSpecies(ctx context.Context, start, end int6
 		JOIN %s d ON d.label_id = l.id AND d.detected_at = species_first.lifetime_first
 		LEFT JOIN %s dr ON dr.detection_id = d.id
 		WHERE (dr.verified IS NULL OR dr.verified != ?)
-		GROUP BY species_first.scientific_name, species_first.lifetime_first, species_first.lifetime_last
+		GROUP BY species_first.scientific_name, species_first.lifetime_first, species_first.lifetime_last, species_first.first_begin_time
 		ORDER BY first_detected DESC
 		LIMIT ? OFFSET ?
 	`, r.tableName(), r.labelsTable(), r.reviewsTable(), r.tableName(), r.labelsTable(), r.reviewsTable(), r.labelsTable(), r.tableName(), r.reviewsTable())

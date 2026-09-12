@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	speciestracker "github.com/tphakala/birdnet-go/internal/analysis/species"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	v2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
@@ -1926,6 +1928,39 @@ func TestConvertToNewSpeciesData_ZeroEpoch(t *testing.T) {
 	assert.Empty(t, got[0].LastSeenDate)
 	assert.NotEmpty(t, got[1].FirstSeenDate)
 	assert.NotEmpty(t, got[1].LastSeenDate)
+}
+
+func TestV2OnlyDatastore_NewSpeciesWindowAfterMidnightReload(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
+	t.Cleanup(cleanup)
+	location, err := time.LoadLocation("Europe/Amsterdam")
+	require.NoError(t, err)
+	ds.timezone = location
+	day := time.Now().In(location).AddDate(0, 0, -7)
+	first := time.Date(day.Year(), day.Month(), day.Day(), 23, 59, 50, 0, location)
+	savedAt := first.Add(15 * time.Second)
+	note := &datastore.Note{
+		ScientificName: "Parus major", Confidence: 0.95,
+		Date: savedAt.Format(time.DateOnly), Time: savedAt.Format(time.TimeOnly),
+		BeginTime: first, EndTime: savedAt,
+	}
+	require.NoError(t, ds.Save(note, nil))
+	got, err := ds.GetNewSpeciesDetections(t.Context(), "1900-01-01", savedAt.Format(time.DateOnly), 100, 0)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, savedAt.Format(time.DateOnly), got[0].FirstSeenDate)
+	assert.True(t, first.Equal(got[0].FirstBeginTime))
+	assert.Equal(t, first.Format(time.DateOnly), got[0].FirstBeginTime.Format(time.DateOnly))
+
+	tracker := speciestracker.NewTrackerFromSettings(ds, &conf.SpeciesTrackingSettings{
+		Enabled: true, NewSpeciesWindowDays: 7, NotificationSuppressionHours: 168,
+	})
+	t.Cleanup(func() { assert.NoError(t, tracker.Close()) })
+	require.NoError(t, tracker.InitFromDatabase())
+	isNew, _, novelty := tracker.CheckAndUpdateSpeciesWithNovelty("Parus major", first.Add(168*time.Hour))
+	assert.False(t, isNew, "reloading must not extend notification eligibility past suppression")
+	assert.True(t, novelty.NoveltyEpisodeActive, "restoring the audio date must preserve the first-ever novelty episode")
+	assert.GreaterOrEqual(t, novelty.NoveltyEpisodeDays, 7, "first-ever metadata must still match novelty alert rules")
 }
 
 // TestV2OnlyDatastore_GetSpeciesDiversityData_TimezoneBucketing verifies the date grouping in
