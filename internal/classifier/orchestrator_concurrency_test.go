@@ -66,8 +66,7 @@ func TestOrchestrator_AccessorsConcurrentWithPrimaryClear_NoRace(t *testing.T) {
 	settings.BirdNET.Labels = []string{"Turdus merula_Common Blackbird", "Parus major_Great Tit"}
 
 	bn := &BirdNET{
-		Settings:     settings,
-		speciesCache: make(map[string]*speciesCacheEntry),
+		Settings: settings,
 	}
 	bn.ModelInfo = ModelInfo{ID: "BirdNET_V3", Name: "BirdNET v3.0"}
 
@@ -149,8 +148,7 @@ func TestBirdNET_SetModelsDirConcurrentWithCoverage_NoRace(t *testing.T) {
 	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 	bn := &BirdNET{
-		Settings:     v3,
-		speciesCache: make(map[string]*speciesCacheEntry),
+		Settings: v3,
 	}
 	bn.ModelInfo = ModelInfo{ID: "BirdNET_V3", Name: "BirdNET v3.0"}
 
@@ -166,7 +164,10 @@ func TestBirdNET_SetModelsDirConcurrentWithCoverage_NoRace(t *testing.T) {
 	wg.Go(func() {
 		<-start
 		for range iterations {
-			_, _, _, _ = bn.PrimaryRangeFilterCoverage()
+			// primaryClassifierCoverage reads bn.modelsDir under bn.mu; SetModelsDir
+			// writes it under bn.mu. This is the surviving half of the former
+			// PrimaryRangeFilterCoverage modelsDir race after the Phase 2b split.
+			_, _ = bn.primaryClassifierCoverage()
 		}
 	})
 	close(start)

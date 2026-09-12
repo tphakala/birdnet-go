@@ -115,13 +115,9 @@ func TestBuildRangeFilter_BareLocalizedCommonNameOverride_DoesNotPolluteNameReso
 func TestGetProbableSpecies_BareLocalizedCommonNameOverride_CanonicalizesLabel(t *testing.T) {
 	settings, rf := overrideTestSettings(t, "fi")
 
-	bn := &BirdNET{
-		Settings:     settings,
-		rangeFilter:  rf,
-		speciesCache: make(map[string]*speciesCacheEntry),
-	}
+	rfs := newTestRangeFilterService(rf)
 
-	scores, _, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
+	scores, _, _, err := rfs.probableSpecies(time.Now(), 0, settings)
 	require.NoError(t, err)
 
 	labels := make([]string, 0, len(scores))
@@ -173,13 +169,9 @@ func TestGetProbableSpecies_NonPrimaryLocalizedCommonOverride_ReverseResolvesToS
 	settings, rf := overrideTestSettings(t, "fi")
 	settings.Realtime.Species.Include = []string{"Kettu"}
 
-	bn := &BirdNET{
-		Settings:     settings,
-		rangeFilter:  rf,
-		speciesCache: make(map[string]*speciesCacheEntry),
-	}
+	rfs := newTestRangeFilterService(rf)
 
-	scores, _, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
+	scores, _, _, err := rfs.probableSpecies(time.Now(), 0, settings)
 	require.NoError(t, err)
 
 	labels := make([]string, 0, len(scores))
@@ -254,16 +246,12 @@ func TestGetProbableSpecies_LegacyPath_NonPrimaryLocalizedCommonOverride_Reverse
 	settings, _ := overrideTestSettings(t, "fi")
 	settings.Realtime.Species.Include = []string{"Kettu"}
 
-	bn := &BirdNET{
-		Settings: settings,
-		// Non-universal range filter: forces the legacy getProbableSpecies branch.
-		// Two scores aligned with the two classifier labels; only the first clears
-		// the threshold, so the legacy filter contributes Turdus merula.
-		rangeFilter:  &fakeRangeFilter{scores: []float32{0.9, 0.0}},
-		speciesCache: make(map[string]*speciesCacheEntry),
-	}
+	// Non-universal range filter: forces the legacy probableSpecies branch.
+	// Two scores aligned with the two classifier labels; only the first clears
+	// the threshold, so the legacy filter contributes Turdus merula.
+	rfs := newTestRangeFilterService(&fakeRangeFilter{scores: []float32{0.9, 0.0}})
 
-	scores, _, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
+	scores, _, _, err := rfs.probableSpecies(time.Now(), 0, settings)
 	require.NoError(t, err)
 
 	labels := make([]string, 0, len(scores))
@@ -324,12 +312,8 @@ func requireScoreForLabel(t *testing.T, scores []SpeciesScore, label string) Spe
 // probableSpeciesFor runs the override-appending path over the given settings.
 func probableSpeciesFor(t *testing.T, settings *conf.Settings, rf *fakeUniversalRangeFilter) []SpeciesScore {
 	t.Helper()
-	bn := &BirdNET{
-		Settings:     settings,
-		rangeFilter:  rf,
-		speciesCache: make(map[string]*speciesCacheEntry),
-	}
-	scores, _, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
+	rfs := newTestRangeFilterService(rf)
+	scores, _, _, err := rfs.probableSpecies(time.Now(), 0, settings)
 	require.NoError(t, err)
 	return scores
 }

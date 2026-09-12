@@ -123,10 +123,9 @@ func TestHasNativeRangeFilter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			info, ok := ModelRegistry[tt.modelID]
+			_, ok := ModelRegistry[tt.modelID]
 			require.True(t, ok, "model %s must exist in registry", tt.modelID)
-			bn := &BirdNET{ModelInfo: info}
-			assert.Equal(t, tt.want, bn.hasNativeRangeFilter())
+			assert.Equal(t, tt.want, hasNativeRangeFilter(tt.modelID))
 		})
 	}
 
@@ -135,7 +134,6 @@ func TestHasNativeRangeFilter(t *testing.T) {
 	// unhealthy instead of silently filtering against mismatched labels.
 	t.Run("custom non-v2.4 TFLite model has no native range filter", func(t *testing.T) {
 		t.Parallel()
-		bn := &BirdNET{ModelInfo: ModelInfo{ID: "Custom_TFLite", Backend: BackendTFLite}}
-		assert.False(t, bn.hasNativeRangeFilter())
+		assert.False(t, hasNativeRangeFilter("Custom_TFLite"))
 	})
 }

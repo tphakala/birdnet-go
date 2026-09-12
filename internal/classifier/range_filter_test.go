@@ -8,7 +8,32 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/inference"
 )
+
+// newTestRangeFilterService returns a range-filter service whose state holds the
+// given backend, for tests that inject a fake range filter without loading real
+// model files. Phase 2b of the model de-privilege epic moved the range filter off
+// *BirdNET into this orchestrator-owned service, so tests set the backend here
+// instead of assigning bn.rangeFilter. A nil backend means "no filter loaded".
+func newTestRangeFilterService(backend inference.RangeFilter) *rangeFilterService {
+	rfs := newRangeFilterService(nil)
+	rfs.state.Store(&rangeFilterState{backend: backend})
+	return rfs
+}
+
+// swapTestBackend atomically installs backend as the current range-filter backend
+// and closes the previous one, under rfs.mu, mirroring reload's swap step without
+// building from disk. Test seam for the backend-lifecycle race test.
+func (rfs *rangeFilterService) swapTestBackend(backend inference.RangeFilter) {
+	rfs.mu.Lock()
+	old := rfs.loadState().backend
+	rfs.state.Store(&rangeFilterState{backend: backend})
+	if old != nil && old != backend {
+		old.Close()
+	}
+	rfs.mu.Unlock()
+}
 
 // fakeUniversalRangeFilter implements inference.RangeFilter and
 // UniversalSpeciesPredictor for testing BuildRangeFilter.
@@ -49,20 +74,19 @@ func (f *fakeUniversalRangeFilter) GeomodelLabels() []string {
 func buildTestOrchestrator(t *testing.T, settings *conf.Settings, rf interface{ Close() }) *Orchestrator {
 	t.Helper()
 	bn := &BirdNET{
-		Settings:     settings,
-		speciesCache: make(map[string]*speciesCacheEntry),
+		Settings: settings,
 	}
-	if irf, ok := rf.(interface {
-		Predict(float32, float32, float32) ([]float32, error)
-		NumSpecies() int
-		Close()
-	}); ok {
-		bn.rangeFilter = irf
-	}
-	return &Orchestrator{
+	o := &Orchestrator{
 		Settings: settings,
 		primary:  bn,
 	}
+	o.settingsAtomic.Store(settings)
+	var backend inference.RangeFilter
+	if irf, ok := rf.(inference.RangeFilter); ok {
+		backend = irf
+	}
+	o.rangeFilter = newTestRangeFilterService(backend)
+	return o
 }
 
 func TestBuildRangeFilter_PassUnmappedSpecies(t *testing.T) {
@@ -208,15 +232,7 @@ func TestBuildRangeFilter_UpdatesUnmappedScore(t *testing.T) {
 	conftest.SetTestSettings(settings)
 	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
-	bn := &BirdNET{
-		Settings:     settings,
-		rangeFilter:  mrf,
-		speciesCache: make(map[string]*speciesCacheEntry),
-	}
-	o := &Orchestrator{
-		Settings: settings,
-		primary:  bn,
-	}
+	o := buildTestOrchestrator(t, settings, mrf)
 
 	err := BuildRangeFilter(o)
 	require.NoError(t, err)
@@ -284,13 +300,9 @@ func TestGetProbableSpecies_PassUnmappedSpecies(t *testing.T) {
 				rawScores: []float32{0.9, 0.8},
 			}
 
-			bn := &BirdNET{
-				Settings:     settings,
-				rangeFilter:  rf,
-				speciesCache: make(map[string]*speciesCacheEntry),
-			}
+			rfs := newTestRangeFilterService(rf)
 
-			scores, _, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
+			scores, _, _, err := rfs.probableSpecies(time.Now(), 0, settings)
 			require.NoError(t, err)
 			assert.GreaterOrEqual(t, len(scores), tt.wantMinSpecies)
 

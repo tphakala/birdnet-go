@@ -6,7 +6,6 @@ import (
 	"bytes"
 	_ "embed" // Embedding data directly into the binary.
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -77,22 +76,18 @@ type modelIdentity struct {
 
 // BirdNET struct represents the BirdNET model with interpreters and configuration.
 type BirdNET struct {
-	// classifier and rangeFilter are the native inference backends (TFLite/ONNX).
-	// They are NOT goroutine-safe and free native resources in Close(). Per the mu
-	// invariant below, callers read the field and run the native call (Predict /
-	// PredictSpeciesScores) under mu, and Close() the backend under mu, so a
-	// concurrent reload or Delete can never free an interpreter mid-call (issue #3336).
-	classifier  inference.Classifier  // species classification backend
-	rangeFilter inference.RangeFilter // geographic range filter backend (may be nil)
-	// rangeFilterFellBack is true when the configured ONNX geomodel could not be loaded
-	// and the classifier fell back to its embedded TFLite range filter. Read for health
-	// reporting; guarded by mu alongside rangeFilter.
-	rangeFilterFellBack bool
-	Settings            *conf.Settings // Deprecated: use settingsAtomic instead. Kept for struct-literal compatibility in tests.
-	settingsAtomic      atomic.Pointer[conf.Settings]
-	ModelInfo           ModelInfo // Information about the current model
-	modelVersion        string    // Human-readable model version string (per-instance to avoid shared global state)
-	modelsDir           string    // base directory for gallery-installed models (set by Orchestrator)
+	// classifier is the native species-classification backend (TFLite/ONNX). It is
+	// NOT goroutine-safe and frees native resources in Close(). Per the mu invariant
+	// below, callers read the field and run the native call (Predict) under mu, and
+	// Close() the backend under mu, so a concurrent reload or Delete can never free
+	// an interpreter mid-call (issue #3336). The range filter used to live here too;
+	// since epic #1682 Phase 2b it is owned by the orchestrator's rangeFilterService.
+	classifier     inference.Classifier // species classification backend
+	Settings       *conf.Settings       // Deprecated: use settingsAtomic instead. Kept for struct-literal compatibility in tests.
+	settingsAtomic atomic.Pointer[conf.Settings]
+	ModelInfo      ModelInfo // Information about the current model
+	modelVersion   string    // Human-readable model version string (per-instance to avoid shared global state)
+	modelsDir      string    // base directory for gallery-installed models (set by Orchestrator)
 	// primaryPath is the outcome of resolving settings.BirdNET.ModelPath for this
 	// instance: which primary classifier model file it actually loads from, and
 	// whether that differs from what the user configured. resolved.model differs
@@ -129,21 +124,16 @@ type BirdNET struct {
 	// been installed (teardown of the failed backend, restore of the previous one and
 	// the runtime triplet / modelVersion) without needing a native model.
 	reloadInitFn func() error
-	// mu guards the inference backends (classifier, rangeFilter, rangeFilterFellBack).
-	// Inference holds mu for the full duration of the native call, not just the field
-	// read: the backends are not goroutine-safe and reload/Delete Close() them under
-	// mu, so dropping mu before the native call would reintroduce the issue #3336
-	// use-after-free segfault. (ModelInfo is written under mu by reloadModelInternal;
-	// the identity fields the getters expose are mirrored into the lock-free identity
-	// snapshot above, and the remaining ModelInfo reads run under mu or before the
-	// instance is shared.)
+	// mu guards the classifier inference backend. Inference holds mu for the full
+	// duration of the native call, not just the field read: the backend is not
+	// goroutine-safe and reload/Delete Close() it under mu, so dropping mu before the
+	// native call would reintroduce the issue #3336 use-after-free segfault.
+	// (ModelInfo is written under mu by reloadModelInternal; the identity fields the
+	// getters expose are mirrored into the lock-free identity snapshot above, and the
+	// remaining ModelInfo reads run under mu or before the instance is shared.)
 	mu               sync.Mutex
 	resultsBuffer    []datastore.Results // Pre-allocated buffer for results to reduce allocations
 	confidenceBuffer []float32           // Pre-allocated buffer for confidence values to reduce allocations
-
-	// Species occurrence cache to avoid repeated GetProbableSpecies calls within same day
-	speciesCacheMu sync.RWMutex
-	speciesCache   map[string]*speciesCacheEntry
 }
 
 // currentSettings returns the latest settings snapshot so UI changes to
@@ -225,7 +215,6 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo, resolvePrimary pr
 	bn := &BirdNET{
 		Settings:       settings,
 		modelVersion:   defaultModelVersionString,
-		speciesCache:   make(map[string]*speciesCacheEntry),
 		resolvePrimary: resolvePrimary,
 	}
 	bn.settingsAtomic.Store(settings)
@@ -346,12 +335,10 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo, resolvePrimary pr
 		}
 	}()
 
-	if err := bn.initializeMetaModel(settings); err != nil {
-		GetLogger().Warn("Range filter initialization failed, starting without species filtering (fix via Settings > Species)",
-			logger.Error(err),
-			logger.String("range_filter_model", settings.BirdNET.RangeFilter.Model),
-			logger.String("model_path", settings.BirdNET.RangeFilter.ModelPath))
-	}
+	// The range filter is initialized by the orchestrator's rangeFilterService after
+	// construction (epic #1682 Phase 2b); NewBirdNET no longer owns it. A standalone
+	// *BirdNET (the rangefilter CLI, tests) has no range filter until the orchestrator
+	// wires one, matching the previous non-fatal init behavior.
 
 	// Validate model and labels, which will also allocate the results buffer
 	if err := bn.validateModelAndLabels(); err != nil {
@@ -484,86 +471,12 @@ func (bn *BirdNET) initializeTFLiteModel() error {
 	return nil
 }
 
-// getMetaModelData returns the appropriate meta model data based on the settings.
-func (bn *BirdNET) getMetaModelData(settings *conf.Settings) ([]byte, error) {
-	rf := settings.BirdNET.RangeFilter
+// The range-filter model bytes loader, backend init and TFLite/ONNX builders that
+// used to live here moved to internal/classifier/range_filter_service.go in epic
+// #1682 Phase 2b (getMetaModelData, initializeMetaModel, fallbackToEmbeddedRangeFilter,
+// initializeTFLiteMetaModel and the ONNX builders in model_onnx.go). Only the
+// backend-selection type below stays here, next to resolveRangeFilterBackend.
 
-	// Check if external model path is specified
-	if rf.ModelPath != "" {
-		modelPath := rf.ModelPath
-
-		// Expand environment variables and ~ prefix
-		modelPath = os.ExpandEnv(modelPath)
-		modelPath, err := conf.ExpandTildePath(modelPath)
-		if err != nil {
-			return nil, errors.New(err).
-				Category(errors.CategoryFileIO).
-				Context("path", rf.ModelPath).
-				Build()
-		}
-
-		// Load model from external file
-		data, err := os.ReadFile(modelPath) //nolint:gosec // G304: modelPath is from application settings
-		if err != nil {
-			return nil, errors.New(err).
-				Category(errors.CategoryFileIO).
-				Context("path", modelPath).
-				Context("range_filter_model", rf.Model).
-				Build()
-		}
-
-		GetLogger().Info("Loaded range filter model", logger.String("path", modelPath))
-		return data, nil
-	}
-
-	// No model path specified, try standard paths first (for noembed builds)
-	if !hasEmbeddedModels {
-		// Determine which model file to look for based on the model version
-		modelFileName := DefaultRangeFilterV2ModelName
-		if rf.Model == "legacy" {
-			modelFileName = DefaultRangeFilterV1ModelName
-			GetLogger().Warn("Looking for legacy range filter model")
-		}
-
-		data, path, err := tryLoadModelFromStandardPaths(modelFileName, "range filter")
-		if err != nil {
-			return nil, errors.Wrap(err).
-				Context("range_filter_model", rf.Model).
-				Build()
-		}
-		GetLogger().Info("Loaded range filter model from standard path", logger.String("path", path))
-		bn.Debug("Loaded range filter model from standard path: %s", path)
-		return data, nil
-	}
-
-	// Fall back to embedded models
-	var data []byte
-	if rf.Model == "legacy" {
-		GetLogger().Warn("Using legacy range filter model")
-		data = metaModelDataV1
-	} else {
-		data = metaModelDataV2
-	}
-
-	if data == nil {
-		return nil, errors.Newf("range filter model not available: embedded model is nil").
-			Category(errors.CategoryModelLoad).
-			Context("embedded_models", hasEmbeddedModels).
-			Context("range_filter_model", rf.Model).
-			Build()
-	}
-
-	return data, nil
-}
-
-// initializeMetaModel loads and initializes the meta model used for range filtering.
-// Reads range filter config from the latest published settings (not the instance's
-// potentially stale bn.Settings) so that config changes from install/uninstall
-// are reflected without restarting the instance.
-//
-// Auto-selection of the v3 geomodel is used only for local routing; settings are
-// NOT published here. The caller (ensureGeomodelConfig, applyConfigForInstall)
-// is responsible for persisting config after the backend is confirmed working.
 // rangeFilterBackend identifies which range-filter implementation a config resolves to.
 type rangeFilterBackend int
 
@@ -600,144 +513,6 @@ func resolveRangeFilterBackend(rf *conf.RangeFilterSettings) rangeFilterBackend 
 		return rangeFilterBackendONNXStrict
 	}
 	return rangeFilterBackendTFLite
-}
-
-// hasNativeRangeFilter reports whether the active classifier can fall back to the
-// embedded MData range filter when an ONNX geomodel cannot be loaded. The MData
-// range filter is BirdNET v2.4 specific, so the v2.4 family qualifies: both the
-// TFLite default and the INT8-ARM ONNX entry, which carry the same v2.4 labels.
-// Perch v2 and BirdNET v3.0 rely solely on the geomodel, and any other classifier
-// must surface as unhealthy rather than silently filtering against the v2.4 labels.
-func (bn *BirdNET) hasNativeRangeFilter() bool {
-	// ONNX-only builds (notflite) have no embedded TFLite range filter to fall back to.
-	// Only the v2.4 MData-compatible classifier has an embedded native filter.
-	return tfliteBackendAvailable && rangeFilterCompatFor(bn.ModelInfo.ID) == rangeFilterCompatMDataV24
-}
-
-func (bn *BirdNET) initializeMetaModel(settings *conf.Settings) error {
-	log := GetLogger()
-	rf := settings.BirdNET.RangeFilter
-
-	log.Info("Initializing range filter",
-		logger.String("model", rf.Model),
-		logger.String("model_path", rf.ModelPath),
-		logger.String("labels_path", rf.LabelsPath),
-		logger.String("classifier", bn.ModelInfo.ID),
-		logger.String("models_dir", bn.modelsDir))
-
-	// Reset fallback state so reloads recompute it from scratch.
-	bn.rangeFilterFellBack = false
-
-	// Auto-select v3 geomodel for compatible classifiers when files exist on disk.
-	// Only applies locally for routing; does NOT publish settings to avoid
-	// inconsistency if the backend fails to initialize. Skipped when an explicit
-	// rangefilter.modelpath is set, so a user-provided range-filter path is never
-	// overridden by the stock geomodel (mirrors the arm64 default gate below).
-	if shouldAutoSelectV3GeomodelForConfig(rf.Model, rf.ModelPath, bn.ModelInfo.ID, bn.modelsDir) {
-		localSettings := conf.CloneSettings(settings)
-		applyAutoSelectedGeomodelPaths(localSettings, bn.modelsDir)
-		settings = localSettings
-		rf = settings.BirdNET.RangeFilter
-		log.Info("Auto-selected v3.0 geomodel for compatible classifier",
-			logger.String("classifier", bn.ModelInfo.ID),
-			logger.String("models_dir", bn.modelsDir))
-	}
-
-	// On arm64 (container images ship the ONNX range filter instead of the TFLite
-	// MData models), prefer the ONNX MData range filter when the range filter is left
-	// on auto-select ("" or the "latest" default), no explicit model path is set, and
-	// the v3 geomodel was not auto-selected above. Gated to the BirdNET v2.4 family:
-	// the MData V2 model outputs the v2.4 species set, and the strict ONNX path (no
-	// labels file) requires the model output dimension to equal the classifier label
-	// count, so it only fits a v2.4-family classifier. Without this, the "latest"
-	// default dead-ends at the TFLite backend, which has no model file on ONNX-only
-	// arm64 images, leaving the instance unfiltered (#3932). Routed locally only;
-	// settings are not published.
-	if path, ok := shouldSelectDefaultONNXRangeFilter(rf.Model, rf.ModelPath, bn.ModelInfo.ID, runtime.GOARCH, findModelPathInStandardPaths); ok {
-		localSettings := conf.CloneSettings(settings)
-		localSettings.BirdNET.RangeFilter.ModelPath = path
-		settings = localSettings
-		rf = settings.BirdNET.RangeFilter
-		log.Info("Selected ONNX range filter (arm64 default)",
-			logger.String("model_path", path))
-	}
-
-	switch resolveRangeFilterBackend(&rf) {
-	case rangeFilterBackendMappedGeomodel, rangeFilterBackendONNXStrict:
-		// Both subpaths run through the ONNX backend. A genuine load failure (ORT
-		// unavailable, missing/corrupt model or labels file) falls back to the embedded
-		// TFLite range filter when the classifier has one (BirdNET v2.4); otherwise it
-		// surfaces as unhealthy instead of silently running unfiltered.
-		if err := bn.initializeONNXMetaModel(settings); err != nil {
-			return bn.fallbackToEmbeddedRangeFilter(settings, err)
-		}
-		return nil
-	default:
-		return bn.initializeTFLiteMetaModel(settings)
-	}
-}
-
-// fallbackToEmbeddedRangeFilter attempts to recover from an ONNX range-filter load
-// failure by using the classifier's embedded TFLite range filter. Only BirdNET v2.4 has
-// one; for classifiers without a native filter (Perch v2, BirdNET v3.0) the original
-// error is propagated so the failure surfaces via the range_filter health check and the
-// Species page banner instead of silently running unfiltered.
-func (bn *BirdNET) fallbackToEmbeddedRangeFilter(settings *conf.Settings, cause error) error {
-	if !bn.hasNativeRangeFilter() {
-		return cause
-	}
-
-	GetLogger().Warn("Range filter (ONNX geomodel) failed to load; falling back to the classifier's embedded TFLite range filter",
-		logger.Error(cause),
-		logger.String("classifier", bn.ModelInfo.ID))
-
-	// getMetaModelData honors a non-empty rangefilter.modelpath first and would re-read
-	// the failing geomodel file, so force the embedded MData model via empty paths.
-	fallbackSettings := conf.CloneSettings(settings)
-	fallbackSettings.BirdNET.RangeFilter.Model = ""
-	fallbackSettings.BirdNET.RangeFilter.ModelPath = ""
-	fallbackSettings.BirdNET.RangeFilter.LabelsPath = ""
-
-	if err := bn.initializeTFLiteMetaModel(fallbackSettings); err != nil {
-		return errors.New(err).
-			Component("birdnet").
-			Category(errors.CategoryModelInit).
-			Context("operation", "range_filter_embedded_fallback").
-			Build()
-	}
-
-	bn.rangeFilterFellBack = true
-	return nil
-}
-
-// initializeTFLiteMetaModel loads and initializes a TFLite range filter model.
-func (bn *BirdNET) initializeTFLiteMetaModel(settings *conf.Settings) error {
-	start := time.Now()
-	log := GetLogger()
-
-	metaModelData, err := bn.getMetaModelData(settings)
-	if err != nil {
-		return err
-	}
-
-	rangeFilter, err := tflite.NewTFLiteRangeFilter(metaModelData, func(msg string) {
-		log.Error("TFLite meta model error", logger.String("message", msg))
-	})
-	if err != nil {
-		return errors.New(err).
-			Category(errors.CategoryModelInit).
-			Context("model_type", "range_filter").
-			Context("range_filter_model", settings.BirdNET.RangeFilter.Model).
-			Timing("meta-model-init", time.Since(start)).
-			Build()
-	}
-
-	log.Info("TFLite range filter initialized",
-		logger.Int("species", rangeFilter.NumSpecies()),
-		logger.String("duration", time.Since(start).String()))
-
-	bn.rangeFilter = rangeFilter
-	return nil
 }
 
 // loadLabels extracts and loads labels from either the embedded files or an external file
@@ -891,14 +666,6 @@ func (bn *BirdNET) loadLabelsFromText(file *os.File) error {
 	return scanner.Err()
 }
 
-// clearSpeciesCache clears the species occurrence cache.
-// This should be called when model/labels change, node is deleted, or location is updated.
-func (bn *BirdNET) clearSpeciesCache() {
-	bn.speciesCacheMu.Lock()
-	clear(bn.speciesCache)
-	bn.speciesCacheMu.Unlock()
-}
-
 // rawSpeciesKey reduces a species label to its scientific name, lowercased but NOT
 // resolved through the alias map. It is the exact-match counterpart to
 // canonicalSpeciesKey; see lookupOccurrence for why both are needed.
@@ -968,120 +735,17 @@ func buildOccurrenceIndex(speciesScores []SpeciesScore) map[string]float64 {
 	return scores
 }
 
-// getCachedSpeciesScores returns species occurrence scores with caching to avoid repeated calls within same day
-func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]float64, error) {
-	settings := bn.currentSettings()
-	// Build composite cache key: date + rounded lat/lon + model
-	day := targetDate.Format(time.DateOnly)
-	cacheKey := fmt.Sprintf("%s|%.4f,%.4f|%s",
-		day,
-		settings.BirdNET.Latitude,
-		settings.BirdNET.Longitude,
-		settings.BirdNET.RangeFilter.Model,
-	)
-
-	// FAST PATH: read under RLock and return a defensive copy
-	bn.speciesCacheMu.RLock()
-	if entry, ok := bn.speciesCache[cacheKey]; ok && entry.key == cacheKey {
-		out := make(map[string]float64, len(entry.scores))
-		maps.Copy(out, entry.scores)
-		bn.speciesCacheMu.RUnlock()
-		return out, nil
-	}
-	bn.speciesCacheMu.RUnlock()
-
-	// MISS PATH: use the same settings snapshot as the cache key
-	speciesScores, err := bn.GetProbableSpeciesWithSettings(targetDate, 0.0, settings)
-	if err != nil {
-		return nil, err
-	}
-	scores := buildOccurrenceIndex(speciesScores)
-
-	// WRITE PATH: double-check, evict old entries, and publish new results
-	bn.speciesCacheMu.Lock()
-	if entry, ok := bn.speciesCache[cacheKey]; ok && entry.key == cacheKey {
-		out := make(map[string]float64, len(entry.scores))
-		maps.Copy(out, entry.scores)
-		bn.speciesCacheMu.Unlock()
-		return out, nil
-	}
-	// Keep cache bounded: evict one arbitrary entry when limit is reached.
-	// Each key encodes date+lat+lon+model, so a small limit is sufficient.
-	const maxSpeciesCacheEntries = 8
-	if len(bn.speciesCache) >= maxSpeciesCacheEntries {
-		for k := range bn.speciesCache {
-			delete(bn.speciesCache, k)
-			break
-		}
-	}
-	bn.speciesCache[cacheKey] = &speciesCacheEntry{
-		key:    cacheKey,
-		scores: scores,
-	}
-	out := make(map[string]float64, len(scores))
-	maps.Copy(out, scores)
-	bn.speciesCacheMu.Unlock()
-	return out, nil
-}
-
-// Delete releases resources used by the inference backends. The backends are
-// Closed under mu so the native free cannot race with an in-flight inference,
-// which would otherwise be a use-after-free segfault (issue #3336).
+// Delete releases resources used by the classifier inference backend. It is Closed
+// under mu so the native free cannot race with an in-flight inference, which would
+// otherwise be a use-after-free segfault (issue #3336). The range filter is owned by
+// the orchestrator's rangeFilterService since Phase 2b and is closed there.
 func (bn *BirdNET) Delete() {
 	bn.mu.Lock()
 	if bn.classifier != nil {
 		bn.classifier.Close()
 		bn.classifier = nil
 	}
-	if bn.rangeFilter != nil {
-		bn.rangeFilter.Close()
-		bn.rangeFilter = nil
-	}
 	bn.mu.Unlock()
-	bn.clearSpeciesCache()
-}
-
-// ReloadRangeFilter reinitializes just the range filter backend from current
-// settings. This is lighter than ReloadModel and is used when the geomodel
-// config changes (e.g., after a model gallery install adds v3 geomodel files)
-// without requiring a full classifier reload.
-// Holds bn.mu for the entire operation to prevent races with concurrent
-// reads in GetSpeciesOccurrenceAtTime and writes in Delete/ReloadModel.
-func (bn *BirdNET) ReloadRangeFilter() error {
-	log := GetLogger()
-	log.Info("Reloading range filter from updated settings")
-
-	bn.mu.Lock()
-	defer bn.mu.Unlock()
-
-	oldRangeFilter := bn.rangeFilter
-	oldFellBack := bn.rangeFilterFellBack
-
-	if err := bn.initializeMetaModel(bn.currentSettings()); err != nil {
-		// Rollback: restore old range filter (and its fallback state) if init created a
-		// partial one. initializeMetaModel resets rangeFilterFellBack on entry, so the
-		// flag must be restored alongside the filter to keep the health report accurate.
-		if bn.rangeFilter != nil && bn.rangeFilter != oldRangeFilter {
-			bn.rangeFilter.Close()
-		}
-		bn.rangeFilter = oldRangeFilter
-		bn.rangeFilterFellBack = oldFellBack
-
-		return errors.New(err).
-			Component("birdnet").
-			Category(errors.CategoryModelInit).
-			Context("operation", "reload_range_filter").
-			Build()
-	}
-
-	// Close old range filter if it was replaced
-	if oldRangeFilter != nil && bn.rangeFilter != oldRangeFilter {
-		oldRangeFilter.Close()
-	}
-
-	bn.clearSpeciesCache()
-	log.Info("Range filter reloaded successfully")
-	return nil
 }
 
 // DefaultBirdNETModelName is the expected filesystem basename for the main BirdNET analysis model file.
@@ -1408,10 +1072,11 @@ func (bn *BirdNET) reloadModelInternal(allowPathChange bool) error {
 	oldSettings := bn.Settings
 	bn.Settings = settingsCopy
 
-	// Snapshot all mutable state for transactional rollback on failure.
+	// Snapshot all mutable state for transactional rollback on failure. The range
+	// filter is no longer part of this transaction: it is owned by the orchestrator's
+	// rangeFilterService and rebuilt by the caller (o.ReloadModel /
+	// o.ReloadPrimaryForVariantSwap) after this classifier reload commits (Phase 2b).
 	oldClassifier := bn.classifier
-	oldRangeFilter := bn.rangeFilter
-	oldFellBack := bn.rangeFilterFellBack
 	oldModelInfo := bn.ModelInfo
 	// initializeModel republishes the runtime triplet (and modelVersion on the
 	// TFLite custom-path branch) before the later reload steps (meta model,
@@ -1440,14 +1105,7 @@ func (bn *BirdNET) reloadModelInternal(allowPathChange bool) error {
 		if bn.classifier != nil && bn.classifier != oldClassifier {
 			bn.classifier.Close()
 		}
-		if bn.rangeFilter != nil && bn.rangeFilter != oldRangeFilter {
-			bn.rangeFilter.Close()
-		}
 		bn.classifier = oldClassifier
-		bn.rangeFilter = oldRangeFilter
-		// initializeMetaModel resets rangeFilterFellBack on entry; restore it so a failed
-		// reload does not leave the health report claiming the geomodel is active.
-		bn.rangeFilterFellBack = oldFellBack
 		bn.ModelInfo = oldModelInfo
 		// Restore the runtime triplet and model-version string alongside the
 		// classifier so RuntimeInfo / ModelVersion describe the restored model
@@ -1617,17 +1275,11 @@ func (bn *BirdNET) reloadModelInternal(allowPathChange bool) error {
 	}
 	bn.Debug("Model initialized successfully")
 
-	// Initialize new meta model
-	if err := bn.initializeMetaModel(settingsCopy); err != nil {
-		rollback()
-		return errors.New(err).
-			Component("birdnet").
-			Category(errors.CategoryModelInit).
-			Context("operation", "reload_model").
-			Context("step", "initialize_meta_model").
-			Build()
-	}
-	bn.Debug("Meta model initialized successfully")
+	// The range-filter backend is rebuilt by the orchestrator after this classifier
+	// reload commits (o.ReloadModel / o.ReloadPrimaryForVariantSwap ->
+	// rangeFilterService.reload), not here. A locale change or a v2.4 variant swap
+	// keeps the same species set and scientific names, so the range-filter mapping is
+	// unchanged and a stale backend serving in the brief gap stays correct (#1682).
 
 	// Validate that the model and labels match
 	if err := bn.validateModelAndLabels(); err != nil {
@@ -1649,15 +1301,9 @@ func (bn *BirdNET) reloadModelInternal(allowPathChange bool) error {
 	if oldClassifier != nil {
 		oldClassifier.Close()
 	}
-	if oldRangeFilter != nil {
-		oldRangeFilter.Close()
-	}
 
 	// Publish the new settings atomically
 	bn.updateSettings(settingsCopy)
-
-	// Clear species cache as model/labels have changed
-	bn.clearSpeciesCache()
 
 	// Republish the getter-visible identity for the new model now that the reload
 	// has committed (ModelInfo and modelVersion are final).
@@ -1673,57 +1319,6 @@ func (bn *BirdNET) Debug(format string, v ...any) {
 	if bn.currentSettings().BirdNET.Debug {
 		GetLogger().Debug(fmt.Sprintf(format, v...))
 	}
-}
-
-// GetSpeciesOccurrence returns the occurrence probability for a given species based on current location and time
-// Returns 0.0 if the species is not found or range filter is not enabled
-func (bn *BirdNET) GetSpeciesOccurrence(species string) float64 {
-	return bn.GetSpeciesOccurrenceAtTime(species, time.Now())
-}
-
-// GetSpeciesOccurrenceAtTime returns the occurrence probability for a species at a specific time
-func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time.Time) float64 {
-	// Fast-path: if range filter is not initialized, return 0.
-	// Read under lock to avoid data race with Delete().
-	bn.mu.Lock()
-	hasRangeFilter := bn.rangeFilter != nil
-	bn.mu.Unlock()
-	if !hasRangeFilter {
-		return 0.0
-	}
-
-	// If location not configured, range filter is not active, return 0
-	if !bn.currentSettings().BirdNET.LocationConfigured {
-		return 0.0
-	}
-
-	// Try to get cached scores first
-	cachedScores, err := bn.getCachedSpeciesScores(detectionTime)
-	if err == nil && len(cachedScores) > 0 {
-		if occurrence, found := lookupOccurrence(cachedScores, species); found {
-			return clampOccurrence(occurrence)
-		}
-	}
-
-	// Fallback to calculating probable species if cache miss. Anchor to the
-	// local calendar day (matching getCachedSpeciesScores, which keys on the
-	// local DateOnly of detectionTime) rather than UTC-truncating, so the
-	// fallback computes the same geomodel week as the cache path.
-	day := conf.LocalNoon(detectionTime)
-	speciesScores, err := bn.GetProbableSpecies(day, 0.0)
-	if err != nil {
-		bn.Debug("Error getting probable species for occurrence: %v", err)
-		return 0.0
-	}
-
-	// Resolve through the same index the cache uses, so a cache miss cannot answer
-	// differently from a cache hit for the same species.
-	if occurrence, found := lookupOccurrence(buildOccurrenceIndex(speciesScores), species); found {
-		return clampOccurrence(occurrence)
-	}
-
-	// Species not found in range filter results
-	return 0.0
 }
 
 // publishIdentity snapshots the current ModelInfo identity and modelVersion into
@@ -1882,73 +1477,29 @@ type RangeFilterStatusResponse struct {
 	MappedSpecies int `json:"mappedSpecies"`
 }
 
-// PrimaryRangeFilterCoverage returns the geomodel info and coverage stats for
-// the primary classifier. The orchestrator calls this and then adds coverage
-// for additional models.
-func (bn *BirdNET) PrimaryRangeFilterCoverage() (geomodel *GeomodelStatus, primary ClassifierCoverage, geoLabels []string, autoSelected bool) {
-	settings := bn.currentSettings()
-	rf := settings.BirdNET.RangeFilter
-
+// primaryClassifierCoverage returns the classifier identity and label count for the
+// primary. The geomodel coverage stats and runtime state are owned by the
+// orchestrator's rangeFilterService (Phase 2b); the orchestrator combines the two.
+// modelsDir is snapshotted here under bn.mu so the caller's auto-select check does
+// not race a concurrent SetModelsDir write.
+func (bn *BirdNET) primaryClassifierCoverage() (primary ClassifierCoverage, modelsDir string) {
 	bn.mu.Lock()
-	primary = ClassifierCoverage{
+	defer bn.mu.Unlock()
+	return ClassifierCoverage{
 		ID:           bn.ModelInfo.ID,
 		Name:         bn.ModelInfo.Name,
 		TotalSpecies: len(bn.Settings.BirdNET.Labels),
-	}
-	// Snapshot modelsDir under bn.mu; the auto-select check below runs after the
-	// unlock and would otherwise race a concurrent SetModelsDir write.
-	modelsDir := bn.modelsDir
-
-	mrf, isMapped := bn.rangeFilter.(*mappedRangeFilter)
-	if isMapped {
-		primary.WithRangeData = mrf.mappedCount
-		primary.WithoutRangeData = mrf.numClassifier - mrf.mappedCount
-		geoLabels = mrf.geomodelLabels
-
-		version := rf.Model
-		if version == "v3" {
-			version = "v3.0"
-		}
-
-		geomodel = &GeomodelStatus{
-			Version:      version,
-			TotalSpecies: mrf.inner.NumSpecies(),
-		}
-	}
-	// No geomodel active: leave WithRangeData and WithoutRangeData at zero.
-	bn.mu.Unlock()
-
-	if rf.Model == "v3" && modelsDir != "" {
-		sharedDir := filepath.Join(modelsDir, sharedDirName)
-		expectedONNX := filepath.Join(sharedDir, conf.GeomodelONNXLocalName)
-		expectedLabels := filepath.Join(sharedDir, conf.GeomodelLabelsLocalName)
-		autoSelected = rf.ModelPath == expectedONNX && rf.LabelsPath == expectedLabels
-	}
-
-	if geomodel != nil {
-		geomodel.AutoSelected = autoSelected
-	}
-
-	return geomodel, primary, geoLabels, autoSelected
-}
-
-// rangeFilterRuntimeState reports whether a range-filter backend is loaded and whether
-// it is the embedded TFLite fallback engaged after an ONNX geomodel failed to load.
-// Reads are guarded by mu alongside rangeFilter mutations.
-func (bn *BirdNET) rangeFilterRuntimeState() (active, fellBack bool) {
-	bn.mu.Lock()
-	defer bn.mu.Unlock()
-	return bn.rangeFilter != nil, bn.rangeFilterFellBack
+	}, bn.modelsDir
 }
 
 // SetModelsDir sets the base directory for gallery-installed models.
 // Called by the Orchestrator after creation so auto-selection can
 // resolve geomodel paths from the installed models directory.
 func (bn *BirdNET) SetModelsDir(dir string) {
-	// Guard the write under bn.mu: bn.modelsDir is read under bn.mu by
-	// initializeMetaModel (via NewBirdNET / ReloadRangeFilter / reloadModelInternal)
-	// and snapshotted under bn.mu by PrimaryRangeFilterCoverage. No caller of this
-	// method holds bn.mu, so locking here cannot self-deadlock.
+	// Guard the write under bn.mu: bn.modelsDir is snapshotted under bn.mu by
+	// primaryClassifierView (which the range-filter service reads when building its
+	// backend) and by primaryClassifierCoverage. No caller of this method holds
+	// bn.mu, so locking here cannot self-deadlock.
 	bn.mu.Lock()
 	defer bn.mu.Unlock()
 	bn.modelsDir = dir

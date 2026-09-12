@@ -53,14 +53,10 @@ func unmappedBoundsFixture(t *testing.T) (*conf.Settings, *mappedRangeFilter) {
 func TestGetProbableSpecies_PassUnmapped_MappingLongerThanSnapshotLabels_NoPanic(t *testing.T) {
 	settings, mrf := unmappedBoundsFixture(t)
 
-	bn := &BirdNET{
-		Settings:     settings,
-		rangeFilter:  mrf,
-		speciesCache: make(map[string]*speciesCacheEntry),
-	}
+	rfs := newTestRangeFilterService(mrf)
 
 	require.NotPanics(t, func() {
-		scores, _, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
+		scores, _, _, err := rfs.probableSpecies(time.Now(), 0, settings)
 		require.NoError(t, err)
 		labels := make([]string, 0, len(scores))
 		for _, ss := range scores {

@@ -524,20 +524,15 @@ func (o *Orchestrator) GetHeatmapService() *HeatmapInferenceService {
 
 	o.mu.RLock()
 	primary := o.primary
+	rfs := o.rangeFilter
 	o.mu.RUnlock()
-	if primary == nil {
+	if primary == nil || rfs == nil {
 		return nil
 	}
 
-	// Get labels from the mapped range filter
-	primary.mu.Lock()
-	rf := primary.rangeFilter
-	primary.mu.Unlock()
-	if rf == nil {
-		return nil
-	}
-
-	mrf, ok := rf.(*mappedRangeFilter)
+	// Get labels from the mapped range filter, read lock-free from the immutable
+	// published state (Phase 2b; the range filter is owned by the service now).
+	mrf, ok := rfs.mappedView()
 	if !ok {
 		return nil
 	}

@@ -354,7 +354,6 @@ func TestReloadModelInternal_RecoveredPathDoesNotVetoReload(t *testing.T) {
 			classifier:     &rollbackFakeClassifier{},
 			Settings:       settings,
 			ModelInfo:      customBirdNETV24ModelInfo(liveCustomPath),
-			speciesCache:   make(map[string]*speciesCacheEntry),
 			resolvePrimary: resolve,
 		}
 		bn.primaryPath = pathResolution{resolved: modelFileSet{model: liveCustomPath}}
@@ -431,10 +430,9 @@ func TestReloadModelInternal_ClearingPathWhileCustomRunningIsRefused(t *testing.
 	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
 	bn := &BirdNET{
-		classifier:   &rollbackFakeClassifier{},
-		Settings:     settings,
-		ModelInfo:    customBirdNETV24ModelInfo(liveCustom), // a custom model is live
-		speciesCache: make(map[string]*speciesCacheEntry),
+		classifier: &rollbackFakeClassifier{},
+		Settings:   settings,
+		ModelInfo:  customBirdNETV24ModelInfo(liveCustom), // a custom model is live
 		// The resolver mirrors production: a cleared configured path resolves to the
 		// empty result (substituted=false), which is exactly the case the dropped
 		// conjunct used to let fall through.
@@ -710,7 +708,6 @@ func TestReloadModelInternal_BuiltinFallbackSteadyStateReloadsCleanly(t *testing
 		classifier:     &rollbackFakeClassifier{},
 		Settings:       settings,
 		ModelInfo:      stockPrimaryModelInfo(),
-		speciesCache:   make(map[string]*speciesCacheEntry),
 		resolvePrimary: func(string) pathResolution { return pathResolution{substituted: true} },
 	}
 	bn.primaryPath = pathResolution{substituted: true}
@@ -752,7 +749,6 @@ func TestReloadModelInternal_VanishedRunningModelIsRefused(t *testing.T) {
 		classifier:     &rollbackFakeClassifier{},
 		Settings:       previous,
 		ModelInfo:      customBirdNETV24ModelInfo(oldPath),
-		speciesCache:   make(map[string]*speciesCacheEntry),
 		resolvePrimary: func(string) pathResolution { return pathResolution{substituted: true} },
 	}
 	// Was running a real custom file; the new resolution finds nothing.
@@ -786,10 +782,9 @@ func TestReloadModelInternal_UnknownVersionNamesTheRequestedVersion(t *testing.T
 	previous.BirdNET.Version = "2.4"
 
 	bn := &BirdNET{
-		classifier:   &rollbackFakeClassifier{},
-		Settings:     previous,
-		ModelInfo:    ModelRegistry[DefaultModelVersion],
-		speciesCache: make(map[string]*speciesCacheEntry),
+		classifier: &rollbackFakeClassifier{},
+		Settings:   previous,
+		ModelInfo:  ModelRegistry[DefaultModelVersion],
 	}
 	bn.settingsAtomic.Store(previous)
 	bn.publishIdentity()
