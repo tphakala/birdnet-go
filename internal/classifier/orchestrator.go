@@ -659,14 +659,7 @@ func (o *Orchestrator) resolveInstalledPaths(registryID string) (modelPath, labe
 		// variant's own files and return the one whose model file exists (a
 		// completed switch leaves exactly one), so a non-default install still
 		// resolves here when settings carry no path. Flat entries probe entry.Files.
-		fileSets := [][]CatalogFile{entry.Files}
-		if len(entry.Variants) > 0 {
-			fileSets = make([][]CatalogFile, 0, len(entry.Variants))
-			for j := range entry.Variants {
-				fileSets = append(fileSets, entry.Variants[j].Files)
-			}
-		}
-		for _, files := range fileSets {
+		for _, files := range entryFileSets(entry) {
 			var mp, lp, ep string
 			for _, f := range files {
 				switch f.Role {
