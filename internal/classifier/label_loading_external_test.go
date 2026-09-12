@@ -21,9 +21,8 @@ func newExternalLabelBirdNET(labelPath string) *BirdNET {
 	settings := &conf.Settings{}
 	settings.BirdNET.LabelPath = labelPath
 	return &BirdNET{
-		Settings:     settings,
-		speciesCache: make(map[string]*speciesCacheEntry),
-		ModelInfo:    ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4"},
+		Settings:  settings,
+		ModelInfo: ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4"},
 	}
 }
 

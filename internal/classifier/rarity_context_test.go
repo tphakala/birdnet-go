@@ -110,7 +110,7 @@ func TestBuildOccurrenceIndex_CollidingSpeciesKeepOwnScores(t *testing.T) {
 // newAliasedGeomodelBirdNET builds a primary model whose classifier labels use the
 // legacy synonym while the geomodel labels use the current name, the configuration
 // that separates the occurrence cache's keys from the caller's lookup key.
-func newAliasedGeomodelBirdNET(t *testing.T, geoScore float32) (*BirdNET, *fakeRangeFilter) {
+func newAliasedGeomodelBirdNET(t *testing.T, geoScore float32) (*Orchestrator, *fakeRangeFilter) {
 	t.Helper()
 
 	classifierLabels := []string{aliasLegacyLabel, "Turdus merula_Common Blackbird"}
@@ -129,14 +129,20 @@ func newAliasedGeomodelBirdNET(t *testing.T, geoScore float32) (*BirdNET, *fakeR
 	mapped := newMappedRangeFilter(inner, classifierLabels, geomodelLabels, 0.0)
 
 	bn := &BirdNET{
-		Settings:     settings,
-		speciesCache: make(map[string]*speciesCacheEntry),
-		ModelInfo:    ModelInfo{ID: RegistryIDBirdNETV3, Name: ModelNameBirdNETv30},
-		rangeFilter:  mapped,
+		Settings:  settings,
+		ModelInfo: ModelInfo{ID: RegistryIDBirdNETV3, Name: ModelNameBirdNETv30},
 	}
-	t.Cleanup(bn.Delete)
+	bn.settingsAtomic.Store(settings)
+	o := &Orchestrator{
+		Settings:    settings,
+		ModelInfo:   bn.ModelInfo,
+		primary:     bn,
+		rangeFilter: newTestRangeFilterService(mapped),
+	}
+	o.settingsAtomic.Store(settings)
+	t.Cleanup(o.Delete)
 
-	return bn, inner
+	return o, inner
 }
 
 // TestGetSpeciesOccurrenceAtTime_AliasHitsCache guards the split that made the
@@ -147,16 +153,16 @@ func newAliasedGeomodelBirdNET(t *testing.T, geoScore float32) (*BirdNET, *fakeR
 // 0.0 because the fallback scan compared raw names too.
 func TestGetSpeciesOccurrenceAtTime_AliasHitsCache(t *testing.T) {
 	const wantScore = 0.42
-	bn, inner := newAliasedGeomodelBirdNET(t, wantScore)
+	o, inner := newAliasedGeomodelBirdNET(t, wantScore)
 	at := time.Date(2026, 5, 14, 12, 0, 0, 0, time.Local)
 
-	got := bn.GetSpeciesOccurrenceAtTime(aliasLegacyLabel, at)
+	got := o.GetSpeciesOccurrenceAtTime(aliasLegacyLabel, at)
 	assert.InDelta(t, wantScore, got, 0.001,
 		"legacy classifier label must resolve to the geomodel's canonical score")
 	require.Equal(t, 1, inner.calls,
 		"first lookup should populate the cache and answer from it, not also run the fallback")
 
-	got = bn.GetSpeciesOccurrenceAtTime(aliasLegacyLabel, at)
+	got = o.GetSpeciesOccurrenceAtTime(aliasLegacyLabel, at)
 	assert.InDelta(t, wantScore, got, 0.001)
 	assert.Equal(t, 1, inner.calls, "second lookup must be served entirely from cache")
 }
@@ -166,34 +172,33 @@ func TestGetSpeciesOccurrenceAtTime_AliasHitsCache(t *testing.T) {
 // must resolve against a classifier whose labels are still legacy.
 func TestGetSpeciesOccurrenceAtTime_CanonicalNameAlsoResolves(t *testing.T) {
 	const wantScore = 0.42
-	bn, _ := newAliasedGeomodelBirdNET(t, wantScore)
+	o, _ := newAliasedGeomodelBirdNET(t, wantScore)
 	at := time.Date(2026, 5, 14, 12, 0, 0, 0, time.Local)
 
-	got := bn.GetSpeciesOccurrenceAtTime(aliasCanonicalLabel, at)
+	got := o.GetSpeciesOccurrenceAtTime(aliasCanonicalLabel, at)
 	assert.InDelta(t, wantScore, got, 0.001)
 }
 
 // TestGetSpeciesOccurrenceAtTime_UnknownSpecies exercises the uncached fallback scan,
 // which the cache-hit tests above never reach.
 func TestGetSpeciesOccurrenceAtTime_UnknownSpecies(t *testing.T) {
-	bn, inner := newAliasedGeomodelBirdNET(t, 0.42)
+	o, inner := newAliasedGeomodelBirdNET(t, 0.42)
 	at := time.Date(2026, 5, 14, 12, 0, 0, 0, time.Local)
 
-	got := bn.GetSpeciesOccurrenceAtTime("Myotis brandtii_Brandt's Bat", at)
+	got := o.GetSpeciesOccurrenceAtTime("Myotis brandtii_Brandt's Bat", at)
 	assert.InDelta(t, 0.0, got, 0.001, "a species the range filter cannot score has no occurrence")
 	assert.Equal(t, 2, inner.calls,
 		"a cache miss must reach the uncached fallback, which recomputes the probable list")
 }
 
 func TestGetRarityContext_UniversalGeomodel(t *testing.T) {
-	bn, _ := newAliasedGeomodelBirdNET(t, 0.5)
-	orch := &Orchestrator{Settings: bn.Settings, ModelInfo: bn.ModelInfo, primary: bn}
+	orch, _ := newAliasedGeomodelBirdNET(t, 0.5)
 
 	rc, err := orch.GetRarityContext(time.Now())
 	require.NoError(t, err)
 	scores, classifierLabels, filterActive := rc.Scores, rc.ClassifierLabels, rc.FilterActive
 
-	assert.Same(t, bn.Settings, rc.Settings, "GetRarityContext returns the exact settings snapshot the scores were produced from")
+	assert.Same(t, orch.Settings, rc.Settings, "GetRarityContext returns the exact settings snapshot the scores were produced from")
 	assert.True(t, filterActive, "a loaded range filter reports active so rarity is honest (#3935)")
 	assert.NotEmpty(t, scores, "universal geomodel path should return scored species")
 	require.NotNil(t, rc.Geomodel, "universal geomodel path should return a geomodel vocabulary")
@@ -208,7 +213,7 @@ func TestGetRarityContext_UniversalGeomodel(t *testing.T) {
 	// PrimaryRangeFilterCoverage and RangeFilterStatus also return it), so this
 	// asymmetry is contractual rather than accidental.
 	classifierLabels[0] = "mutated"
-	assert.Equal(t, aliasLegacyLabel, bn.Settings.BirdNET.Labels[0])
+	assert.Equal(t, aliasLegacyLabel, orch.Settings.BirdNET.Labels[0])
 }
 
 // TestGetRarityContext_NoGeomodel covers the case where no universal geomodel produced
@@ -223,13 +228,16 @@ func TestGetRarityContext_NoGeomodel(t *testing.T) {
 	publishTestSettings(t, settings)
 
 	bn := &BirdNET{
-		Settings:     settings,
-		speciesCache: make(map[string]*speciesCacheEntry),
-		ModelInfo:    ModelInfo{ID: BirdNET_V2_4, Name: ModelNameBirdNETv24},
-		rangeFilter:  &fakeRangeFilter{scores: []float32{0.5}},
+		Settings:  settings,
+		ModelInfo: ModelInfo{ID: BirdNET_V2_4, Name: ModelNameBirdNETv24},
 	}
-	t.Cleanup(bn.Delete)
-	orch := &Orchestrator{Settings: settings, ModelInfo: bn.ModelInfo, primary: bn}
+	orch := &Orchestrator{
+		Settings:    settings,
+		ModelInfo:   bn.ModelInfo,
+		primary:     bn,
+		rangeFilter: newTestRangeFilterService(&fakeRangeFilter{scores: []float32{0.5}}),
+	}
+	t.Cleanup(orch.Delete)
 
 	rc, err := orch.GetRarityContext(time.Now())
 	require.NoError(t, err)

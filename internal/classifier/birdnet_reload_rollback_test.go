@@ -68,11 +68,9 @@ func TestReloadModelInternal_RollbackRestoresPreviousModel(t *testing.T) {
 
 		bn := &BirdNET{
 			classifier:   fake,
-			rangeFilter:  nil,
 			Settings:     oldSettings,
 			ModelInfo:    oldInfo,
 			modelVersion: staleVersion,
-			speciesCache: make(map[string]*speciesCacheEntry),
 		}
 		bn.settingsAtomic.Store(oldSettings)
 		bn.setRuntimeInfo(devDevice, devBackend, devPrecision)

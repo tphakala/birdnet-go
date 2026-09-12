@@ -14,15 +14,17 @@ import (
 // Regression guard for issue #3336: potential CGO segfault on model reload.
 //
 // The TFLite/ONNX classifier and range-filter interpreters are not
-// goroutine-safe and free their native resources in Close(). BirdNET protects
-// them with bn.mu: every native inference call (Predict / PredictSpeciesScores)
-// and every backend Close() must hold bn.mu for its full duration. If a path
-// dropped the lock before calling into the backend, a concurrent reload/Delete
-// could Close() the interpreter mid-call, a use-after-free segfault.
+// goroutine-safe and free their native resources in Close(). The classifier is
+// protected by bn.mu; since epic #1682 Phase 2b the range filter is owned by the
+// orchestrator's rangeFilterService and protected by its leaf lock rfs.mu. Every
+// native inference call (Predict / PredictSpeciesScores) and every backend Close()
+// must hold the relevant lock for its full duration. If a path dropped the lock
+// before calling into the backend, a concurrent reload/Delete could Close() the
+// interpreter mid-call, a use-after-free segfault.
 //
 // The fakes below model that native lifecycle: Predict() reads `live` (the
 // interpreter buffer) and Close() frees it. Run under `go test -race`, an
-// inference call that no longer holds bn.mu races on `live` against the
+// inference call that no longer holds its lock races on `live` against the
 // concurrent Close(), so this test fails the moment the invariant is broken.
 
 // lifecycleStats counts inference calls that actually reached a live backend
@@ -154,13 +156,16 @@ func TestBirdNET_ConcurrentInferenceAndBackendReload_NoRace(t *testing.T) {
 			settings.BirdNET.RangeFilter.Threshold = 0.0
 
 			bn := &BirdNET{
-				Settings:     settings,
-				speciesCache: make(map[string]*speciesCacheEntry),
-				ModelInfo:    ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4"},
-				classifier:   newLifecycleClassifier(len(labels), stats),
-				rangeFilter:  tt.newFilter(stats),
+				Settings:   settings,
+				ModelInfo:  ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4"},
+				classifier: newLifecycleClassifier(len(labels), stats),
 			}
 			bn.settingsAtomic.Store(settings)
+			// Since epic #1682 Phase 2b the range filter is owned by the orchestrator's
+			// service, so its native lifecycle is protected by rfs.mu, not bn.mu.
+			// Exercise both concurrently: the classifier under bn.mu, the range filter
+			// under rfs.mu.
+			rfs := newTestRangeFilterService(tt.newFilter(stats))
 
 			const iterations = 250
 			ctx := t.Context()
@@ -170,11 +175,9 @@ func TestBirdNET_ConcurrentInferenceAndBackendReload_NoRace(t *testing.T) {
 			// Warm up both inference paths on the initial live backends before the
 			// concurrent storm. The fakes count the call as they enter the native
 			// step, so this guarantees each path is exercised at least once even if
-			// the Delete writer below keeps the backends nil for much of the run.
-			// It makes the call-count assertions deterministic rather than relying
-			// on the scheduler to land a read on a live backend.
+			// the teardown writer below keeps the backends nil for much of the run.
 			_, _ = bn.Predict(ctx, sample)
-			_, _ = bn.GetProbableSpeciesWithSettings(now, 0, settings)
+			_, _, _, _ = rfs.probableSpecies(now, 0, settings)
 
 			var wg sync.WaitGroup
 			start := make(chan struct{})
@@ -187,19 +190,20 @@ func TestBirdNET_ConcurrentInferenceAndBackendReload_NoRace(t *testing.T) {
 				}
 			})
 
-			// Reader: range-filter inference. The explicit-settings variant uses the
-			// location-configured snapshot deterministically so the native Predict /
-			// PredictSpeciesScores call is actually reached every iteration.
+			// Reader: range-filter inference through the service. The explicit-settings
+			// snapshot is location-configured so the native Predict / PredictSpeciesScores
+			// call is actually reached every iteration.
 			wg.Go(func() {
 				<-start
 				for range iterations {
-					_, _ = bn.GetProbableSpeciesWithSettings(now, 0, settings)
+					_, _, _, _ = rfs.probableSpecies(now, 0, settings)
 				}
 			})
 
-			// Writer: simulate ReloadModel / ReloadRangeFilter by closing the old
-			// backends and installing fresh ones under bn.mu, exactly as the
-			// production reload paths do (the Close happens while the lock is held).
+			// Writer: simulate ReloadModel by closing the old classifier and installing
+			// a fresh one under bn.mu, and ReloadRangeFilter by build-then-swapping the
+			// range-filter backend under rfs.mu, exactly as the production reload paths do
+			// (the Close happens while the respective lock is held).
 			wg.Go(func() {
 				<-start
 				for range iterations {
@@ -208,21 +212,20 @@ func TestBirdNET_ConcurrentInferenceAndBackendReload_NoRace(t *testing.T) {
 						bn.classifier.Close()
 					}
 					bn.classifier = newLifecycleClassifier(len(labels), stats)
-					if bn.rangeFilter != nil {
-						bn.rangeFilter.Close()
-					}
-					bn.rangeFilter = tt.newFilter(stats)
 					bn.mu.Unlock()
+					rfs.swapTestBackend(tt.newFilter(stats))
 				}
 			})
 
-			// Writer: exercise the Delete() teardown path. Delete closes and nils both
-			// backends under bn.mu; the reload writer reinstalls them and the readers
+			// Writer: exercise the teardown path. bn.Delete() closes and nils the
+			// classifier under bn.mu; rfs.close() closes and clears the range-filter
+			// backend under rfs.mu. The reload writer reinstalls both and the readers
 			// tolerate a nil backend.
 			wg.Go(func() {
 				<-start
 				for range iterations {
 					bn.Delete()
+					rfs.close()
 				}
 			})
 
@@ -238,4 +241,26 @@ func TestBirdNET_ConcurrentInferenceAndBackendReload_NoRace(t *testing.T) {
 				"range-filter inference path never ran on a live backend")
 		})
 	}
+}
+
+// TestRangeFilterService_ReloadAfterCloseDoesNotPublish is the regression guard for
+// the teardown-vs-reload native leak: reload() and close() both run unlocked relative
+// to o.mu, so a reload can race an orchestrator Delete. Once close() has torn the
+// service down, a later reload() must abort at its buildMu-guarded `closed` check and
+// publish no backend; otherwise the freshly built backend's native session would leak
+// because close() will never run again. This exercises reload's closed guard directly,
+// which swapTestBackend does not.
+func TestRangeFilterService_ReloadAfterCloseDoesNotPublish(t *testing.T) {
+	t.Parallel()
+
+	rfs := newTestRangeFilterService(nil)
+	rfs.close()
+
+	// Settings that would otherwise drive a backend build; reload must not reach the
+	// build because close() set closed=true under buildMu.
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.LocationConfigured = true
+
+	require.NoError(t, rfs.reload(settings, classifierView{id: permanentRegistryID}))
+	require.Nil(t, rfs.loadState().backend, "no backend may be published by a reload after close()")
 }

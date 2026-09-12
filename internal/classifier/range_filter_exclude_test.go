@@ -140,13 +140,9 @@ func TestBuildRangeFilter_LocalizedExclude_DropsScientificOnlyNonPrimaryLabel(t 
 func TestGetProbableSpecies_LocalizedExclude_DropsScientificOnlyNonPrimaryLabel(t *testing.T) {
 	settings, rf := excludeTestSettings(t)
 
-	bn := &BirdNET{
-		Settings:     settings,
-		rangeFilter:  rf,
-		speciesCache: make(map[string]*speciesCacheEntry),
-	}
+	rfs := newTestRangeFilterService(rf)
 
-	scores, _, _, err := bn.getProbableSpecies(time.Now(), 0, settings)
+	scores, _, _, err := rfs.probableSpecies(time.Now(), 0, settings)
 	require.NoError(t, err)
 
 	labels := make([]string, 0, len(scores))

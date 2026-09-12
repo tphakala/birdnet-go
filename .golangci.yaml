@@ -23,10 +23,11 @@ linters:
       # always returns a non-nil error, so staticcheck's SA4023 flags the
       # `if err != nil` guards (and their related-information notes) as "always
       # true" under -tags notflite. Those guards are real runtime checks in the
-      # default tflite build; suppress the stub-only false positive for this
-      # file. CI never lints the notflite tag (it is a compile check only), so
-      # this only affects the notflite lint lane.
-      - path: internal/classifier/birdnet.go
+      # default tflite build; suppress the stub-only false positive. CI never
+      # lints the notflite tag (it is a compile check only), so this only affects
+      # the notflite lint lane. NewTFLiteClassifier is in birdnet.go;
+      # NewTFLiteRangeFilter moved to range_filter_service.go in epic #1682 Phase 2b.
+      - path: internal/classifier/(birdnet|range_filter_service)\.go
         text: "SA4023"
         linters:
           - staticcheck

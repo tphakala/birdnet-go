@@ -38,18 +38,17 @@ func TestOrchestrator_ConcurrentReloadAndReads_NoRace(t *testing.T) {
 	}
 
 	bn := &BirdNET{
-		Settings:     settings,
-		speciesCache: make(map[string]*speciesCacheEntry),
-		rangeFilter:  rf,
+		Settings: settings,
 	}
 	bn.ModelInfo = ModelInfo{ID: primaryID, Name: "BirdNET v3.0"}
 
 	nonPrimary := &mockModelInstance{id: "Perch_V2", labels: []string{"Aratinga solstitialis"}}
 
 	o := &Orchestrator{
-		Settings:  settings,
-		ModelInfo: bn.ModelInfo, // o.mu-guarded copy, mirrors the primary (as NewOrchestrator wires it)
-		primary:   bn,
+		Settings:    settings,
+		ModelInfo:   bn.ModelInfo, // o.mu-guarded copy, mirrors the primary (as NewOrchestrator wires it)
+		primary:     bn,
+		rangeFilter: newTestRangeFilterService(rf),
 		models: map[string]*modelEntry{
 			primaryID:  {instance: bn},
 			"Perch_V2": {instance: nonPrimary},
@@ -206,12 +205,10 @@ func TestBirdNET_ConcurrentSettingsReadsAndWrites_NoRace(t *testing.T) {
 	settings := &conf.Settings{}
 	// Construct via struct literal (not NewBirdNET) so the test runs under the
 	// noembed build tag, where the embedded model is unavailable. The settings
-	// accessors and reader methods exercised below do not require a loaded model;
-	// GetProbableSpecies returns early when the range filter is nil.
+	// accessors exercised below do not require a loaded model.
 	bn := &BirdNET{
-		Settings:     settings,
-		speciesCache: make(map[string]*speciesCacheEntry),
-		ModelInfo:    ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4"},
+		Settings:  settings,
+		ModelInfo: ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4"},
 	}
 	bn.settingsAtomic.Store(settings)
 
@@ -231,18 +228,16 @@ func TestBirdNET_ConcurrentSettingsReadsAndWrites_NoRace(t *testing.T) {
 		}
 	})
 
-	// Reader: concurrently calls currentSettings, Debug, Labels, and
-	// GetProbableSpecies. GetProbableSpecies is the path that previously read
-	// bn.Settings without synchronization; it now reads via the atomic accessor
-	// and this exercises that fix under -race.
+	// Reader: concurrently calls the bn settings accessors that read the atomic
+	// settings pointer. The range-filter prediction that used to read bn.Settings
+	// here moved to the orchestrator's service in Phase 2b; its own settings-read
+	// safety is covered by the service and orchestrator race tests.
 	wg.Go(func() {
 		<-start
-		now := time.Now()
 		for range iterations {
 			_ = bn.currentSettings()
 			bn.Debug("test debug message")
 			_ = bn.Labels()
-			_, _ = bn.GetProbableSpecies(now, 0)
 		}
 	})
 
@@ -257,16 +252,19 @@ func TestOrchestrator_ConcurrentSettingsReadsAndWrites_NoRace(t *testing.T) {
 	// Construct via struct literals (not NewOrchestrator) so the test runs under
 	// the noembed build tag, where the embedded model is unavailable.
 	bn := &BirdNET{
-		Settings:     settings,
-		speciesCache: make(map[string]*speciesCacheEntry),
-		ModelInfo:    ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4"},
+		Settings:  settings,
+		ModelInfo: ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4"},
 	}
 	bn.settingsAtomic.Store(settings)
 	o := &Orchestrator{
 		Settings:  settings,
 		ModelInfo: bn.ModelInfo,
 		primary:   bn,
-		models:    map[string]*modelEntry{bn.ModelInfo.ID: {instance: bn}},
+		// A nil-backend service so o.GetProbableSpecies enters the service's
+		// probableSpecies and actually reads the settings snapshot under the race,
+		// instead of returning early on a nil range filter.
+		rangeFilter: newTestRangeFilterService(nil),
+		models:      map[string]*modelEntry{bn.ModelInfo.ID: {instance: bn}},
 	}
 	o.settingsAtomic.Store(settings)
 

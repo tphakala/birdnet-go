@@ -47,18 +47,16 @@ func buildAllSpeciesOrchestrator(t *testing.T, settings *conf.Settings, rf *fake
 	const primaryID = "BirdNET_V3"
 
 	bn := &BirdNET{
-		Settings:     settings,
-		speciesCache: make(map[string]*speciesCacheEntry),
+		Settings: settings,
 	}
 	bn.ModelInfo.ID = primaryID
-	bn.rangeFilter = rf
 
 	nonPrimary := &mockModelInstance{
 		id:     nonPrimaryID,
 		labels: nonPrimaryLabels,
 	}
 
-	return &Orchestrator{
+	o := &Orchestrator{
 		Settings:  settings,
 		ModelInfo: bn.ModelInfo, // mirror the primary, as NewOrchestrator does
 		primary:   bn,
@@ -67,6 +65,9 @@ func buildAllSpeciesOrchestrator(t *testing.T, settings *conf.Settings, rf *fake
 			nonPrimaryID: {instance: nonPrimary},
 		},
 	}
+	o.settingsAtomic.Store(settings)
+	o.rangeFilter = newTestRangeFilterService(rf)
+	return o
 }
 
 // universalSettings returns settings configured so the primary routes through
@@ -244,11 +245,9 @@ func TestGetAllProbableSpecies_NonUniversalPrimary(t *testing.T) {
 	primaryRF := &fakeRangeFilter{scores: []float32{0.9}}
 
 	bn := &BirdNET{
-		Settings:     settings,
-		speciesCache: make(map[string]*speciesCacheEntry),
+		Settings: settings,
 	}
 	bn.ModelInfo.ID = "BirdNET_V2.4"
-	bn.rangeFilter = primaryRF
 
 	nonPrimary := &mockModelInstance{
 		id: "Perch_V2",
@@ -260,9 +259,10 @@ func TestGetAllProbableSpecies_NonUniversalPrimary(t *testing.T) {
 	}
 
 	o := &Orchestrator{
-		Settings:  settings,
-		ModelInfo: bn.ModelInfo, // mirror the primary, as NewOrchestrator does
-		primary:   bn,
+		Settings:    settings,
+		ModelInfo:   bn.ModelInfo, // mirror the primary, as NewOrchestrator does
+		primary:     bn,
+		rangeFilter: newTestRangeFilterService(primaryRF),
 		models: map[string]*modelEntry{
 			"BirdNET_V2.4": {instance: bn},
 			"Perch_V2":     {instance: nonPrimary},
@@ -312,11 +312,9 @@ func TestGetAllProbableSpecies_BatModelAlwaysActive(t *testing.T) {
 
 	const primaryID = "BirdNET_V3"
 	bn := &BirdNET{
-		Settings:     settings,
-		speciesCache: make(map[string]*speciesCacheEntry),
+		Settings: settings,
 	}
 	bn.ModelInfo.ID = primaryID
-	bn.rangeFilter = rf
 
 	batModel := &mockModelInstance{
 		id: RegistryIDBat,
@@ -327,9 +325,10 @@ func TestGetAllProbableSpecies_BatModelAlwaysActive(t *testing.T) {
 	}
 
 	o := &Orchestrator{
-		Settings:  settings,
-		ModelInfo: bn.ModelInfo, // mirror the primary, as NewOrchestrator does
-		primary:   bn,
+		Settings:    settings,
+		ModelInfo:   bn.ModelInfo, // mirror the primary, as NewOrchestrator does
+		primary:     bn,
+		rangeFilter: newTestRangeFilterService(rf),
 		models: map[string]*modelEntry{
 			primaryID:     {instance: bn},
 			RegistryIDBat: {instance: batModel},
@@ -369,11 +368,9 @@ func TestGetAllProbableSpecies_SortedByScoreDescending(t *testing.T) {
 
 	const primaryID = "BirdNET_V3"
 	bn := &BirdNET{
-		Settings:     settings,
-		speciesCache: make(map[string]*speciesCacheEntry),
+		Settings: settings,
 	}
 	bn.ModelInfo.ID = primaryID
-	bn.rangeFilter = rf
 
 	batModel := &mockModelInstance{
 		id:     RegistryIDBat,
@@ -381,9 +378,10 @@ func TestGetAllProbableSpecies_SortedByScoreDescending(t *testing.T) {
 	}
 
 	o := &Orchestrator{
-		Settings:  settings,
-		ModelInfo: bn.ModelInfo, // mirror the primary, as NewOrchestrator does
-		primary:   bn,
+		Settings:    settings,
+		ModelInfo:   bn.ModelInfo, // mirror the primary, as NewOrchestrator does
+		primary:     bn,
+		rangeFilter: newTestRangeFilterService(rf),
 		models: map[string]*modelEntry{
 			primaryID:     {instance: bn},
 			RegistryIDBat: {instance: batModel},
@@ -421,11 +419,9 @@ func TestGetAllProbableSpecies_BatModelDedupedByScientificName(t *testing.T) {
 
 	const primaryID = "BirdNET_V3"
 	bn := &BirdNET{
-		Settings:     settings,
-		speciesCache: make(map[string]*speciesCacheEntry),
+		Settings: settings,
 	}
 	bn.ModelInfo.ID = primaryID
-	bn.rangeFilter = rf
 
 	// A non-bat secondary model emits the same scientific name (geomodel-unmapped,
 	// so it passes through at 1.0); the bat model must not duplicate it.
@@ -433,9 +429,10 @@ func TestGetAllProbableSpecies_BatModelDedupedByScientificName(t *testing.T) {
 	batModel := &mockModelInstance{id: RegistryIDBat, labels: []string{"Myotis daubentonii"}}
 
 	o := &Orchestrator{
-		Settings:  settings,
-		ModelInfo: bn.ModelInfo, // mirror the primary, as NewOrchestrator does
-		primary:   bn,
+		Settings:    settings,
+		ModelInfo:   bn.ModelInfo, // mirror the primary, as NewOrchestrator does
+		primary:     bn,
+		rangeFilter: newTestRangeFilterService(rf),
 		models: map[string]*modelEntry{
 			primaryID:     {instance: bn},
 			"Perch_V2":    {instance: perch},
@@ -474,11 +471,9 @@ func TestGetAllProbableSpecies_DeterministicDedupByModelID(t *testing.T) {
 
 	const primaryID = "BirdNET_V3"
 	bn := &BirdNET{
-		Settings:     settings,
-		speciesCache: make(map[string]*speciesCacheEntry),
+		Settings: settings,
 	}
 	bn.ModelInfo.ID = primaryID
-	bn.rangeFilter = rf
 
 	// Both secondary models emit the same scientific name (geomodel-unmapped, so
 	// it passes through) but with different label strings. The lower model ID
@@ -487,9 +482,10 @@ func TestGetAllProbableSpecies_DeterministicDedupByModelID(t *testing.T) {
 	higher := &mockModelInstance{id: "zzz_model", labels: []string{"Aratinga solstitialis_Sun Parakeet"}}
 
 	o := &Orchestrator{
-		Settings:  settings,
-		ModelInfo: bn.ModelInfo, // mirror the primary, as NewOrchestrator does
-		primary:   bn,
+		Settings:    settings,
+		ModelInfo:   bn.ModelInfo, // mirror the primary, as NewOrchestrator does
+		primary:     bn,
+		rangeFilter: newTestRangeFilterService(rf),
 		models: map[string]*modelEntry{
 			primaryID:   {instance: bn},
 			"aaa_model": {instance: lower},
