@@ -580,12 +580,7 @@ func TestApplyPathCorrection_NotificationVariants(t *testing.T) {
 	SetPathCorrectionPersistenceDisabled(false)
 	t.Cleanup(func() { SetPathCorrectionPersistenceDisabled(false) })
 
-	notification.ResetForTest()
-	t.Cleanup(notification.ResetForTest)
-	notification.Initialize(notification.DefaultServiceConfig())
-	svc := notification.GetService()
-	require.NotNil(t, svc)
-	t.Cleanup(svc.Stop)
+	svc := setupTestNotification(t)
 
 	stale := &conf.Settings{}
 	stale.BirdNET.ModelPath = "/gone/primary_dft.onnx"
@@ -857,12 +852,7 @@ func TestPrimaryRegistryID(t *testing.T) {
 // its permissions.
 func TestEmitPathSubstitutedNotification_UnreadableIsNotDerivedFromRepairable(t *testing.T) {
 	// Not parallel: mutates the global notification service.
-	notification.ResetForTest()
-	t.Cleanup(notification.ResetForTest)
-	notification.Initialize(notification.DefaultServiceConfig())
-	svc := notification.GetService()
-	require.NotNil(t, svc)
-	t.Cleanup(svc.Stop)
+	svc := setupTestNotification(t)
 
 	// Present but unreadable: EACCES on a NAS mount.
 	emitPathSubstitutedNotification(&pendingPathCorrection{

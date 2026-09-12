@@ -2590,7 +2590,10 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 func (c *Controller) sendReconfigActions(actions []string, debugEnabled bool) {
 	defer func() {
 		if r := recover(); r != nil {
-			c.LogWarnIfEnabled("Recovered from send on closed controlChan during shutdown",
+			// Use the system logger (c.log), not the access logger (c.LogWarnIfEnabled):
+			// this is a background/shutdown warning with no request context, and c.log()
+			// is never nil, so the warning is not silently dropped when APILogger is unset.
+			c.log().Warn("Recovered from send on closed controlChan during shutdown",
 				logger.Any("panic", r))
 		}
 	}()
