@@ -4,6 +4,7 @@ package species
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -15,6 +16,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/ebird"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // TestGetGenusSpecies tests the GET /api/v2/taxonomy/genus/:genus endpoint
@@ -355,16 +359,205 @@ func TestGetSpeciesTaxonomyLocalDB(t *testing.T) {
 	}
 }
 
-// TestGetSpeciesTaxonomyWithoutLocalDB tests fallback when local DB unavailable
+// TestGetSpeciesTaxonomyWithoutLocalDB verifies that a nil embedded taxonomy
+// database is surfaced as an accurate system fault, not the old misleading
+// "no local database or eBird API" configuration message (#4105). The embedded
+// database is compiled in via go:embed and always loads in a healthy binary, so a
+// nil database is a build/deploy defect worth an error, distinct from a normal
+// per-species miss (which degrades gracefully, see the tests below).
 func TestGetSpeciesTaxonomyWithoutLocalDB(t *testing.T) {
 	t.Parallel()
 
 	c := &Handler{Core: &apicore.Core{TaxonomyDB: nil}}
 	c.Settings.Store(apitest.NewValidTestSettings())
+	require.Nil(t, c.EBird(), "eBird must be off for this test")
 
-	// This should fail gracefully
 	_, err := c.getDetailedTaxonomy(t.Context(), "Turdus migratorius", "", false, true)
+	require.Error(t, err, "a nil taxonomy database must surface a system error")
+	assert.True(t, errors.IsCategory(err, errors.CategorySystem),
+		"a nil DB is a system fault, not a configuration miss")
+	assert.NotContains(t, err.Error(), "no local database",
+		"the misleading 'no local database' wording must be gone")
+}
 
-	require.Error(t, err, "Expected error when both local DB and eBird client unavailable")
-	t.Logf("Correctly returned error: %v", err)
+// TestGetSpeciesTaxonomyNilDBWithEBirdConfigured verifies that a nil embedded
+// database fails fast as a system fault even when eBird is configured, i.e. the
+// nil-DB check is not masked by the eBird fallback (#4105). The eBird path is never
+// reached (no network call), because the nil-DB check short-circuits first.
+func TestGetSpeciesTaxonomyNilDBWithEBirdConfigured(t *testing.T) {
+	// Not parallel: mutates the global conf singleton so ReconfigureEBird can build
+	// a client. Snapshot and restore it around the test.
+	orig := conf.GetSettings()
+	t.Cleanup(func() { conf.StoreSettings(orig) })
+
+	settings := apitest.NewValidTestSettings()
+	settings.Realtime.EBird.Enabled = true
+	settings.Realtime.EBird.APIKey = "test-api-key"
+	conf.StoreSettings(settings)
+
+	c := &Handler{Core: &apicore.Core{TaxonomyDB: nil}}
+	c.Settings.Store(settings)
+	require.NotNil(t, c.ReconfigureEBird(), "eBird client must build from the configured key")
+	require.NotNil(t, c.EBird(), "eBird client must be available after configuring it")
+
+	_, err := c.getDetailedTaxonomy(t.Context(), "Turdus migratorius", "", false, true)
+	require.Error(t, err, "a nil DB must fail even when eBird is configured")
+	assert.True(t, errors.IsCategory(err, errors.CategorySystem),
+		"a nil DB must fail fast as a system fault, not be masked by the eBird path")
+}
+
+// TestGetSpeciesTaxonomyLocalMissDegradesGracefully verifies that a species absent
+// from the embedded taxonomy, with eBird off, degrades to an "unresolved" 200
+// response instead of hard-erroring (#4105). No taxonomy hierarchy is fabricated:
+// the requested name may be a non-organism noise label, so not even kingdom or
+// genus is safe to assert, and include_hierarchy makes no difference to the
+// fallback.
+func TestGetSpeciesTaxonomyLocalMissDegradesGracefully(t *testing.T) {
+	t.Parallel()
+
+	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
+	require.NoError(t, err, "Failed to load taxonomy database")
+
+	c := &Handler{Core: &apicore.Core{TaxonomyDB: taxonomyDB}}
+	c.Settings.Store(apitest.NewValidTestSettings())
+	require.Nil(t, c.EBird(), "eBird must be off for this test")
+
+	// A validly-formatted binomial (len >= 3, contains a space) guaranteed to be
+	// absent from the frozen embedded snapshot.
+	const missName = "Zzyzxus fictus"
+
+	for _, includeHierarchy := range []bool{true, false} {
+		t.Run(fmt.Sprintf("include_hierarchy=%t", includeHierarchy), func(t *testing.T) {
+			t.Parallel()
+			info, err := c.getDetailedTaxonomy(t.Context(), missName, "", false, includeHierarchy)
+			require.NoError(t, err, "a local miss with eBird off must degrade gracefully, not error")
+			require.NotNil(t, info)
+
+			assert.Equal(t, missName, info.ScientificName)
+			assert.Equal(t, taxonomySourceUnresolved, info.Metadata["source"],
+				"source must mark the response as unresolved")
+			assert.Equal(t, taxonomyUnresolvedNote, info.Metadata["note"],
+				"the explanatory note must be present")
+			assert.Equal(t, TaxonomyHierarchy{}, info.Taxonomy,
+				"no rank may be fabricated for an unresolved species")
+		})
+	}
+}
+
+// TestGetSpeciesTaxonomyEBirdFallback drives the eBird-configured local-miss branch
+// against an httptest eBird server via the eBirdClientOverride seam. It locks the
+// decision at the heart of #4105: an eBird not-found (which every non-avian label
+// hits, since eBird is a bird database) degrades to the unresolved 200, an eBird
+// hit returns full taxonomy, and a genuine eBird error (auth/network) propagates
+// rather than being misread as not-found.
+func TestGetSpeciesTaxonomyEBirdFallback(t *testing.T) {
+	t.Parallel()
+
+	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
+	require.NoError(t, err, "Failed to load taxonomy database")
+
+	// A binomial absent from the embedded snapshot, so the local lookup misses and
+	// the eBird branch is exercised.
+	const missName = "Zzyzxus fictus"
+
+	newHandler := func(t *testing.T, h http.HandlerFunc) *Handler {
+		t.Helper()
+		srv := httptest.NewServer(h)
+		t.Cleanup(srv.Close)
+		client, err := ebird.NewClient(ebird.Config{BaseURL: srv.URL, APIKey: "test-key"})
+		require.NoError(t, err, "eBird client must build")
+		c := &Handler{Core: &apicore.Core{TaxonomyDB: taxonomyDB}, eBirdClientOverride: client}
+		c.Settings.Store(apitest.NewValidTestSettings())
+		return c
+	}
+
+	t.Run("eBird hit returns full taxonomy", func(t *testing.T) {
+		t.Parallel()
+		c := newHandler(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[{"sciName":"Zzyzxus fictus","comName":"Fake Species","speciesCode":"fake1","category":"species","order":"Testiformes","familySciName":"Testidae","familyComName":"Test Family"}]`))
+		})
+		info, err := c.getDetailedTaxonomy(t.Context(), missName, "", false, true)
+		require.NoError(t, err)
+		require.NotNil(t, info)
+		assert.Equal(t, "ebird", info.Metadata["source"], "an eBird hit must be sourced from eBird")
+		assert.Equal(t, "Testidae", info.Taxonomy.Family)
+	})
+
+	t.Run("eBird not-found degrades to unresolved", func(t *testing.T) {
+		t.Parallel()
+		c := newHandler(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[]`)) // taxonomy present but does not contain the species
+		})
+		info, err := c.getDetailedTaxonomy(t.Context(), missName, "", false, true)
+		require.NoError(t, err, "an eBird not-found must degrade, not propagate")
+		require.NotNil(t, info)
+		assert.Equal(t, taxonomySourceUnresolved, info.Metadata["source"])
+		assert.Equal(t, TaxonomyHierarchy{}, info.Taxonomy)
+	})
+
+	t.Run("genuine eBird error propagates", func(t *testing.T) {
+		t.Parallel()
+		// 401 maps to CategoryConfiguration (not CategoryNotFound) and is not
+		// retried, so it is fast and must propagate as an error, never be swallowed.
+		c := newHandler(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+		})
+		_, err := c.getDetailedTaxonomy(t.Context(), missName, "", false, true)
+		require.Error(t, err, "a non-not-found eBird error must propagate, not be swallowed")
+		assert.False(t, errors.IsCategory(err, errors.CategoryNotFound),
+			"the propagated error must not be a not-found")
+		assert.True(t, errors.IsCategory(err, errors.CategoryConfiguration),
+			"a 401 must surface as a configuration error, confirming it was not swallowed")
+	})
+}
+
+// TestGetSpeciesTaxonomyHandlerContract locks the observable HTTP contract through
+// the exported handler (not just the internal helper): a local miss with eBird off
+// returns 200 with metadata.source="unresolved" and no taxonomy block, and a nil
+// embedded database returns 500 (#4105).
+func TestGetSpeciesTaxonomyHandlerContract(t *testing.T) {
+	t.Parallel()
+
+	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
+	require.NoError(t, err, "Failed to load taxonomy database")
+
+	t.Run("local miss with eBird off returns 200 unresolved", func(t *testing.T) {
+		t.Parallel()
+		c := &Handler{Core: &apicore.Core{TaxonomyDB: taxonomyDB}}
+		c.Settings.Store(apitest.NewValidTestSettings())
+
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodGet,
+			"/api/v2/species/taxonomy?scientific_name="+url.QueryEscape("Zzyzxus fictus"), http.NoBody)
+		rec := httptest.NewRecorder()
+		echoCtx := e.NewContext(req, rec)
+
+		require.NoError(t, c.GetSpeciesTaxonomy(echoCtx))
+		assert.Equal(t, http.StatusOK, rec.Code, "a local miss must be a graceful 200, not an error")
+
+		var resp map[string]any
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		meta, ok := resp["metadata"].(map[string]any)
+		require.True(t, ok, "metadata must be present")
+		assert.Equal(t, taxonomySourceUnresolved, meta["source"])
+		_, hasTaxonomy := resp["taxonomy"]
+		assert.False(t, hasTaxonomy, "no taxonomy block for an unresolved species")
+	})
+
+	t.Run("nil DB returns 500", func(t *testing.T) {
+		t.Parallel()
+		c := &Handler{Core: &apicore.Core{TaxonomyDB: nil}}
+		c.Settings.Store(apitest.NewValidTestSettings())
+
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodGet,
+			"/api/v2/species/taxonomy?scientific_name="+url.QueryEscape("Turdus migratorius"), http.NoBody)
+		rec := httptest.NewRecorder()
+		echoCtx := e.NewContext(req, rec)
+
+		err := c.GetSpeciesTaxonomy(echoCtx)
+		apitest.AssertControllerError(t, err, rec, http.StatusInternalServerError, "Failed to get taxonomy information")
+	})
 }

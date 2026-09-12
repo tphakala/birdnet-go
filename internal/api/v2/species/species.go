@@ -60,6 +60,13 @@ type Handler struct {
 	// to Processor.Bn.
 	speciesBackendOverride speciesBackend
 
+	// eBirdClientOverride, when non-nil, replaces the Core's live eBird client for
+	// the taxonomy path. Only tests set it (mirroring speciesBackendOverride), so
+	// they can drive the eBird branches against an httptest server without a real
+	// API key; production leaves it nil and ebirdClient() falls through to
+	// Core.EBird().
+	eBirdClientOverride *ebird.Client
+
 	// serveImageProxy is the media domain's species-image proxy handler. The
 	// thumbnail endpoint resolves a species code to a scientific name and then
 	// delegates to it.
@@ -85,6 +92,17 @@ func (c *Handler) backend() speciesBackend {
 		return proc.Bn
 	}
 	return nil
+}
+
+// ebirdClient returns the eBird client the taxonomy path should use: the test
+// override when set, otherwise the Core's live client. Mirrors backend() /
+// speciesBackendOverride so tests can exercise the eBird branches without a real
+// key or network; production leaves the override nil.
+func (c *Handler) ebirdClient() *ebird.Client {
+	if c.eBirdClientOverride != nil {
+		return c.eBirdClientOverride
+	}
+	return c.EBird()
 }
 
 // New builds a species Handler around the shared core and the two facade-owned
@@ -764,32 +782,97 @@ func (c *Handler) GetSpeciesTaxonomy(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, taxonomyInfo)
 }
 
-// getDetailedTaxonomy retrieves detailed taxonomy information
-// Tries local database first, falls back to eBird API if needed
+// Metadata source and note for a taxonomy response derived only from the requested
+// name, used when the embedded database does not cover it and eBird did not answer.
+const (
+	taxonomySourceUnresolved = "unresolved"
+	taxonomyUnresolvedNote   = "species not found in the embedded taxonomy; configure eBird for taxonomy of species outside the bundled dataset"
+)
+
+// getDetailedTaxonomy retrieves detailed taxonomy information for a species.
+//
+// The embedded genus/family taxonomy is the authority: it ships in the binary and
+// answers offline, so eBird is pure enrichment (subspecies, locale common names),
+// never a hard dependency for a basic lookup (#4105). Resolution order:
+//
+//  1. A missing embedded database (c.TaxonomyDB == nil) is a fatal build/deploy
+//     fault, since the data is compiled in via go:embed and always loads in a
+//     healthy binary. Surface it as a system error immediately, before eBird, so a
+//     broken binary fails fast instead of being masked by whatever eBird returns.
+//  2. Local lookup. A hit returns the full hierarchy (optionally enriched by eBird).
+//  3. On a local miss, eBird is consulted only when configured, and only as
+//     enrichment: a species eBird genuinely does not carry (every non-avian label,
+//     such as frogs, bats and insects, falls here because eBird is a bird database)
+//     must not fail the request, so an eBird not-found degrades to the derived
+//     response below. A real eBird transport/API error still propagates.
+//  4. Otherwise return an explicit "unresolved" marker (HTTP 200) rather than
+//     erroring, so a user without eBird still gets a graceful, machine-detectable
+//     answer instead of a misleading failure.
 func (c *Handler) getDetailedTaxonomy(ctx context.Context, scientificName, locale string, includeSubspecies, includeHierarchy bool) (*TaxonomyInfo, error) {
+	// A nil embedded database is a system fault, not a per-species miss: fail fast
+	// regardless of eBird configuration (see step 1 above).
+	if c.TaxonomyDB == nil {
+		return nil, errors.Newf("taxonomy database not loaded").
+			Category(errors.CategorySystem).
+			Context("scientific_name", scientificName).
+			Component("api-species").
+			Build()
+	}
+
 	// Load the eBird client once for the whole request and thread it through the
 	// helpers below. The client can be swapped concurrently by a settings
 	// hot-reload (ReconfigureEBird); re-reading it in each helper would risk a
 	// nil-after-check TOCTOU across method boundaries.
-	client := c.EBird()
+	client := c.ebirdClient()
 
 	// Try local taxonomy database first
 	if info := c.tryLocalTaxonomy(ctx, client, scientificName, locale, includeSubspecies, includeHierarchy); info != nil {
 		return info, nil
 	}
 
-	// Fall back to eBird API
+	// Local miss: consult eBird only as enrichment. A not-found there is not an
+	// error for this endpoint (eBird cannot cover non-avian labels and does not
+	// carry every name shape), so fall through to the derived response; any other
+	// eBird failure (network, API) still propagates.
 	if client != nil {
-		return c.getEBirdTaxonomy(ctx, client, scientificName, locale, includeSubspecies)
+		info, err := c.getEBirdTaxonomy(ctx, client, scientificName, locale, includeSubspecies)
+		if err == nil {
+			return info, nil
+		}
+		// eBird is enrichment, not a hard dependency: a species eBird does not carry
+		// (every non-avian label, and any name outside its taxonomy) surfaces as a
+		// not-found, which must degrade to the derived response rather than fail the
+		// request. Any other eBird failure (network, API) still propagates.
+		if !errors.IsNotFound(err) {
+			return nil, err
+		}
+		c.Debug("eBird has no taxonomy for %s: %v; returning derived taxonomy", scientificName, err)
 	}
 
-	// Neither local DB nor eBird API available
-	return nil, errors.Newf("taxonomy data not available (no local database or eBird API)").
-		Category(errors.CategoryConfiguration).
-		Priority(errors.PriorityLow).
-		Context("scientific_name", scientificName).
-		Component("api-species").
-		Build()
+	// Embedded database does not cover this name and eBird did not answer: mark the
+	// result unresolved rather than hard-erroring (#4105).
+	return deriveMinimalTaxonomy(scientificName), nil
+}
+
+// deriveMinimalTaxonomy builds the fallback response for a species the embedded
+// database does not cover and eBird did not resolve. It intentionally returns NO
+// taxonomy hierarchy. GetSpeciesTaxonomy accepts any string that merely looks like
+// a binomial (a length check plus a space), and BirdNET-Go's label set includes
+// non-organism noise classes such as "Human vocal" and "Power tools", so deriving
+// a genus from the first token or asserting Kingdom "Animalia" would fabricate a
+// wrong taxonomy for those. Instead it echoes the requested name and marks the
+// result "unresolved" in metadata: an HTTP 200 that degrades gracefully (#4105) and
+// is machine-detectable, rather than a misleading error. A consumer that renders a
+// fixed rank list then omits the absent taxonomy block instead of showing empty
+// rank rows.
+func deriveMinimalTaxonomy(scientificName string) *TaxonomyInfo {
+	return &TaxonomyInfo{
+		ScientificName: scientificName,
+		Metadata: map[string]any{
+			"source": taxonomySourceUnresolved,
+			"note":   taxonomyUnresolvedNote,
+		},
+	}
 }
 
 // tryLocalTaxonomy attempts to retrieve taxonomy from the local database.
