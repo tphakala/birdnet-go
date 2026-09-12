@@ -172,7 +172,7 @@ func TestCleanupOldNotificationRecordsLockedComprehensive(t *testing.T) {
 		// Lock and cleanup
 		now := time.Now()
 		tracker.mu.Lock()
-		tracker.cleanupOldNotificationRecordsLocked(now)
+		tracker.cleanupOldNotificationRecordsLocked(tracker.notificationLastSent, now, tracker.notificationSuppressionWindow)
 		tracker.mu.Unlock()
 
 		// Should not panic and map should be empty
@@ -201,7 +201,7 @@ func TestCleanupOldNotificationRecordsLockedComprehensive(t *testing.T) {
 
 		// Lock and cleanup
 		tracker.mu.Lock()
-		tracker.cleanupOldNotificationRecordsLocked(now)
+		tracker.cleanupOldNotificationRecordsLocked(tracker.notificationLastSent, now, tracker.notificationSuppressionWindow)
 		tracker.mu.Unlock()
 
 		// Check results
@@ -232,7 +232,7 @@ func TestCleanupOldNotificationRecordsLockedComprehensive(t *testing.T) {
 
 		// Lock and cleanup
 		tracker.mu.Lock()
-		tracker.cleanupOldNotificationRecordsLocked(now)
+		tracker.cleanupOldNotificationRecordsLocked(tracker.notificationLastSent, now, tracker.notificationSuppressionWindow)
 		tracker.mu.Unlock()
 
 		// Check results
@@ -265,7 +265,7 @@ func TestCleanupOldNotificationRecordsLockedComprehensive(t *testing.T) {
 
 		// Lock and cleanup
 		tracker.mu.Lock()
-		tracker.cleanupOldNotificationRecordsLocked(now)
+		tracker.cleanupOldNotificationRecordsLocked(tracker.notificationLastSent, now, tracker.notificationSuppressionWindow)
 		tracker.mu.Unlock()
 
 		// All should be preserved

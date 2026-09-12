@@ -33,6 +33,10 @@ func (m *MockDatastoreAdapter) GetActiveNotificationHistory(ctx context.Context,
 	return m.ds.GetActiveNotificationHistory(ctx, after)
 }
 
+func (m *MockDatastoreAdapter) GetActiveNotificationHistoryByType(ctx context.Context, notificationType string, after time.Time) ([]datastore.NotificationHistory, error) {
+	return m.ds.GetActiveNotificationHistoryByType(ctx, notificationType, after)
+}
+
 func (m *MockDatastoreAdapter) SaveNotificationHistory(ctx context.Context, history *datastore.NotificationHistory) error {
 	return m.ds.SaveNotificationHistory(ctx, history)
 }

@@ -27,6 +27,10 @@ func (m *mockSpeciesDatastore) GetActiveNotificationHistory(_ context.Context, a
 	return []datastore.NotificationHistory{}, nil
 }
 
+func (m *mockSpeciesDatastore) GetActiveNotificationHistoryByType(_ context.Context, _ string, _ time.Time) ([]datastore.NotificationHistory, error) {
+	return []datastore.NotificationHistory{}, nil
+}
+
 func (m *mockSpeciesDatastore) SaveNotificationHistory(_ context.Context, history *datastore.NotificationHistory) error {
 	return nil
 }
@@ -95,6 +99,170 @@ func TestNotificationSuppression(t *testing.T) {
 	// Recent notifications should still be tracked
 	assert.True(t, tracker.ShouldSuppressNotification(species1, now.Add(30*time.Minute)),
 		"Recent notification should still suppress within window")
+}
+
+// TestLiferNotificationSuppression exercises the lifer suppression path
+// (ShouldSuppressLiferNotification / RecordLiferNotificationSent): first
+// notification not suppressed, immediate repeat suppressed, different
+// species not suppressed, and cleanup removes old records. The
+// NotificationSuppressionHours setting below is deliberately NOT what governs
+// lifer suppression — it uses the fixed liferNotificationSuppressionWindow
+// (5 minutes) regardless — see TestLiferNotificationSuppression_FixedWindowIndependentOfSetting
+// for a test that isolates that independence explicitly.
+func TestLiferNotificationSuppression(t *testing.T) {
+	mockDS := &mockSpeciesDatastore{}
+
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:                      true,
+		NewSpeciesWindowDays:         7,
+		NotificationSuppressionHours: 1,
+		SyncIntervalMinutes:          60,
+	}
+
+	tracker := NewTrackerFromSettings(mockDS, settings)
+
+	species1 := "Cardinalis cardinalis" //nolint:misspell // Scientific name, not a misspelling
+	species2 := "Turdus migratorius"
+	now := time.Now()
+
+	assert.False(t, tracker.ShouldSuppressLiferNotification(species1, now),
+		"First lifer notification should not be suppressed")
+
+	tracker.RecordLiferNotificationSent(species1, now)
+
+	assert.True(t, tracker.ShouldSuppressLiferNotification(species1, now.Add(1*time.Minute)),
+		"Second lifer notification within suppression window should be suppressed")
+
+	assert.False(t, tracker.ShouldSuppressLiferNotification(species2, now),
+		"Different species should not be suppressed")
+
+	futureTime := now.Add(2 * time.Hour)
+	assert.False(t, tracker.ShouldSuppressLiferNotification(species1, futureTime),
+		"Lifer notification after suppression window should not be suppressed")
+
+	oldTime := now.Add(-3 * time.Hour)
+	tracker.RecordLiferNotificationSent("Old Species", oldTime)
+
+	cleaned := tracker.CleanupOldNotificationRecords(now)
+	require.Equal(t, 1, cleaned, "Expected to clean 1 old lifer record")
+
+	assert.False(t, tracker.ShouldSuppressLiferNotification("Old Species", now),
+		"Old species should have been cleaned up and not suppress")
+}
+
+// TestLiferNotificationSuppression_FixedWindowIndependentOfSetting proves
+// lifer suppression uses the fixed liferNotificationSuppressionWindow (5
+// minutes) rather than the user-configurable NotificationSuppressionHours: a
+// generous 30-day new-species window has no bearing on the lifer re-alert
+// interval, which stays short so an unresolved lifer keeps reminding the user.
+func TestLiferNotificationSuppression_FixedWindowIndependentOfSetting(t *testing.T) {
+	mockDS := &mockSpeciesDatastore{}
+
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:                      true,
+		NewSpeciesWindowDays:         7,
+		NotificationSuppressionHours: 720, // 30 days — must NOT govern lifer suppression
+		SyncIntervalMinutes:          60,
+	}
+
+	tracker := NewTrackerFromSettings(mockDS, settings)
+	require.Equal(t, 720*time.Hour, tracker.notificationSuppressionWindow,
+		"sanity check: new-species window really is the configured 30 days")
+
+	species := "Cardinalis cardinalis" //nolint:misspell // Scientific name, not a misspelling
+	now := time.Now()
+
+	tracker.RecordLiferNotificationSent(species, now)
+
+	assert.True(t, tracker.ShouldSuppressLiferNotification(species, now.Add(4*time.Minute)),
+		"still within the fixed 5-minute lifer window, should suppress")
+	assert.False(t, tracker.ShouldSuppressLiferNotification(species, now.Add(6*time.Minute)),
+		"past the fixed 5-minute lifer window, should re-alert — despite a 30-day new-species setting")
+}
+
+// TestLiferNotificationSuppression_IndependentOfNewSpecies verifies that
+// recording a "new_species" notification and a "lifer" notification for the
+// same scientific name maintain independent suppression timers, since a
+// species can be new to this install but not a lifer (or vice versa once a
+// life list is uploaded) — see liferNotificationLastSent's doc comment.
+func TestLiferNotificationSuppression_IndependentOfNewSpecies(t *testing.T) {
+	mockDS := &mockSpeciesDatastore{}
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:                      true,
+		NewSpeciesWindowDays:         7,
+		NotificationSuppressionHours: 1,
+		SyncIntervalMinutes:          60,
+	}
+	tracker := NewTrackerFromSettings(mockDS, settings)
+
+	species := "Cardinalis cardinalis" //nolint:misspell // Scientific name, not a misspelling
+	now := time.Now()
+
+	// Recording a new-species notification must not suppress a lifer
+	// notification for the same species, and vice versa.
+	tracker.RecordNotificationSent(species, now)
+	assert.False(t, tracker.ShouldSuppressLiferNotification(species, now),
+		"A new-species notification must not suppress an independent lifer notification")
+
+	tracker.RecordLiferNotificationSent(species, now)
+	assert.True(t, tracker.ShouldSuppressNotification(species, now),
+		"New-species suppression should be unaffected, still suppressed from its own record")
+	assert.True(t, tracker.ShouldSuppressLiferNotification(species, now),
+		"Lifer notification should now be suppressed from its own record")
+}
+
+// TestLiferNotificationSuppression_PrunedWhenSuppressionDisabled guards a
+// memory leak. RecordLiferNotificationSent always writes the in-memory lifer
+// map, even with NotificationSuppressionHours=0, because lifer suppression uses
+// the fixed liferNotificationSuppressionWindow. Cleanup must therefore also run
+// with the setting at 0 — that map, unlike the database rows, is not empty just
+// because the user disabled new-species suppression.
+//
+// Asserts on map length rather than only on ShouldSuppressLiferNotification:
+// the latter returns false past the window whether or not the entry was
+// actually pruned, so a behaviour-only assertion passes against the bug.
+func TestLiferNotificationSuppression_PrunedWhenSuppressionDisabled(t *testing.T) {
+	mockDS := &mockSpeciesDatastore{}
+
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:                      true,
+		NewSpeciesWindowDays:         7,
+		NotificationSuppressionHours: 0, // disabled — must NOT disable lifer pruning
+		SyncIntervalMinutes:          60,
+	}
+
+	tracker := NewTrackerFromSettings(mockDS, settings)
+	require.Equal(t, time.Duration(0), tracker.notificationSuppressionWindow,
+		"sanity check: new-species suppression really is disabled")
+
+	species := "Cardinalis cardinalis" //nolint:misspell // Scientific name, not a misspelling
+	now := time.Now()
+
+	// Suppression itself still works with the setting at 0 (fixed 5-minute window).
+	tracker.RecordLiferNotificationSent(species, now)
+	require.Len(t, tracker.liferNotificationLastSent, 1,
+		"lifer record must be written in-memory even with suppression disabled")
+	assert.True(t, tracker.ShouldSuppressLiferNotification(species, now.Add(1*time.Minute)),
+		"fixed 5-minute lifer window applies regardless of NotificationSuppressionHours")
+
+	// A record older than the fixed window must be pruned, or the map leaks.
+	tracker.RecordLiferNotificationSent("Turdus migratorius", now.Add(-6*time.Minute))
+	require.Len(t, tracker.liferNotificationLastSent, 2)
+
+	cleaned := tracker.CleanupOldNotificationRecords(now)
+	assert.Equal(t, 1, cleaned,
+		"the record past the fixed 5-minute window must be cleaned even with the setting at 0")
+	assert.Len(t, tracker.liferNotificationLastSent, 1,
+		"only the still-current record should remain")
+
+	// PruneOldEntries (the periodic maintenance path that actually runs in
+	// production) must prune it too. It uses time.Now() internally, so seed the
+	// stale record well past the 5-minute window.
+	tracker.RecordLiferNotificationSent("Passer domesticus", time.Now().Add(-10*time.Minute))
+	require.Len(t, tracker.liferNotificationLastSent, 2)
+	tracker.PruneOldEntries()
+	assert.Len(t, tracker.liferNotificationLastSent, 1,
+		"PruneOldEntries must prune the lifer map with suppression disabled")
 }
 
 // TestNotificationSuppressionThreadSafety tests thread safety of notification suppression

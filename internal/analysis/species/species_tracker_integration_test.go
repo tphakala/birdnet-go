@@ -498,7 +498,7 @@ func TestFullWorkflow_NotificationSystem(t *testing.T) {
 	tracker.notificationLastSent["Old_Species_2"] = currentTime.Add(-15 * 24 * time.Hour)
 	tracker.notificationLastSent["Recent_Species"] = currentTime.Add(-1 * time.Hour)
 
-	tracker.cleanupOldNotificationRecordsLocked(currentTime)
+	tracker.cleanupOldNotificationRecordsLocked(tracker.notificationLastSent, currentTime, tracker.notificationSuppressionWindow)
 	tracker.mu.Unlock()
 
 	// Check cleanup results

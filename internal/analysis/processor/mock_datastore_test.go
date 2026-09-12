@@ -379,6 +379,9 @@ func (m *ActionMockDatastore) GetNotificationHistory(_ context.Context, _, _ str
 func (m *ActionMockDatastore) GetActiveNotificationHistory(_ context.Context, _ time.Time) ([]datastore.NotificationHistory, error) {
 	return nil, nil
 }
+func (m *ActionMockDatastore) GetActiveNotificationHistoryByType(_ context.Context, _ string, _ time.Time) ([]datastore.NotificationHistory, error) {
+	return nil, nil
+}
 func (m *ActionMockDatastore) DeleteExpiredNotificationHistory(_ context.Context, _ time.Time) (int64, error) {
 	return 0, nil
 }
