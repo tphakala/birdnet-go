@@ -126,6 +126,7 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 		ImageCacheRepo:     imageCacheRepo,
 		ThresholdRepo:      thresholdRepo,
 		NotificationRepo:   notificationRepo,
+		V2DB:               v2DB,
 		Logger:             migrationLogger,
 		DefaultModelID:     defaultModel.ID,
 		SpeciesLabelTypeID: speciesLabelType.ID,

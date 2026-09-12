@@ -76,6 +76,15 @@ BirdNET-Go follows **Privacy by Design** principles:
 - **OpenWeather**: Requires user API key for enhanced weather data
 - **Data sent**: HTTP requests with coordinates and API key
 
+**Species Guide** (disabled by default):
+
+- **Purpose**: Enrich detected species with taxonomy, localized common names, external links, similar-species information, and optional descriptions
+- **Services BirdNET-Go itself contacts**: None by default — taxonomy, common names, and the link addresses are resolved from the embedded OpenFauna dataset with no network access. The Wikipedia Action API is the only service the application contacts, and only when the "Wikipedia descriptions" option is enabled
+- **Data sent**: Nothing unless Wikipedia descriptions are enabled, in which case HTTP requests contain only the scientific name of detected species and a language code. Note that with pre-fetch enabled, such a request is made as each species is detected, and startup warming requests the station's most-detected species — so request timing reflects detection activity
+- **Sites the guide links to**: The guide renders outbound reference links. These are contacted by **your browser only when you click them**, never by BirdNET-Go in the background, and they are opened with `rel="noopener noreferrer"` so no referring page is disclosed. Destinations are Wikipedia, iNaturalist, GBIF, Wikidata and eBird; enabling "supplementary links" adds Xeno-canto and a computed Wikipedia link for species the offline dataset does not cover
+- **Requires**: User enables the feature in settings; online descriptions additionally require enabling the Wikipedia option (off by default), as do supplementary links
+- **Privacy**: No personal data, coordinates, or audio transmitted - only public taxonomic names
+
 ### Telemetry Data Collection (Opt-In Only)
 
 **IMPORTANT: The following telemetry data is ONLY collected when you explicitly enable it. By default, NO telemetry data is collected.**
@@ -213,6 +222,13 @@ BirdNET-Go uses a **unique System ID** for correlating error reports:
 - **Purpose**: Encrypted backup storage
 - **Data**: Encrypted database and configuration backups
 - **User control**: Complete control over storage location and credentials
+
+**Species Guide — Wikipedia descriptions** (when enabled):
+
+- **Service**: Wikipedia Action API (Wikimedia Foundation servers)
+- **Purpose**: Article descriptions for detected species
+- **Data**: Scientific name and language code only; outbound request timing reflects detection activity
+- **User control**: Off by default; requires enabling both the species guide and the Wikipedia option
 
 ### Error Telemetry (Opt-In Only)
 

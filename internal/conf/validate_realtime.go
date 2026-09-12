@@ -282,7 +282,33 @@ func validateDashboardSettings(settings *Dashboard) error {
 		logger.Bool("raw", settings.Spectrogram.Raw),
 		logger.String("style", settings.Spectrogram.Style))
 
+	validateSpeciesGuideSettings(&settings.SpeciesGuide)
+
 	return nil
+}
+
+// validateSpeciesGuideSettings clamps the species guide's startup-warm target.
+// EnableWikipedia is a plain bool needing no normalization; settings only matter
+// when the feature is enabled.
+func validateSpeciesGuideSettings(settings *SpeciesGuideConfig) {
+	if !settings.Enabled {
+		return
+	}
+
+	// Clamp the startup-warm target to a sane range. A negative value is
+	// meaningless (treated as "off"); an absurdly large one would force a huge
+	// slice preallocation in the warm path, so cap it.
+	switch {
+	case settings.WarmTopN < 0:
+		GetLogger().Warn("Species guide warmTopN is negative, disabling warm",
+			logger.Int("invalid_value", settings.WarmTopN))
+		settings.WarmTopN = 0
+	case settings.WarmTopN > SpeciesGuideMaxWarmTopN:
+		GetLogger().Warn("Species guide warmTopN out of range, clamping",
+			logger.Int("invalid_value", settings.WarmTopN),
+			logger.Int("max", SpeciesGuideMaxWarmTopN))
+		settings.WarmTopN = SpeciesGuideMaxWarmTopN
+	}
 }
 
 // validWeatherProviders contains all recognized weather provider values.
