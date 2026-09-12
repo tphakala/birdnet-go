@@ -168,7 +168,8 @@ func (t *SpeciesTracker) UpdateSpecies(scientificName string, detectionTime time
 	return isNewSpecies
 }
 
-// IsNewSpecies checks if a species is considered "new" within the configured window
+// IsNewSpecies checks the inclusive calendar-day badge window, like GetSpeciesStatus.
+// Notification eligibility uses the separate elapsed-time window in CheckAndUpdateSpecies.
 func (t *SpeciesTracker) IsNewSpecies(scientificName string) bool {
 	// Suppress while warming: the maps are empty mid-load, so an unguarded check
 	// would report every species as never-seen-before.

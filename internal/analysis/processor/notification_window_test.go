@@ -23,6 +23,8 @@ func TestDatabaseAction_NewSpeciesWindow(t *testing.T) {
 		first time.Time
 	}{
 		{"audio_crosses_midnight", time.Date(reference.Year(), reference.Month(), reference.Day(), 23, 59, 50, 0, location)},
+		// These historical cases fall outside the notification-history lookback;
+		// after reload, eligibility must stop duplicates without relying on suppression.
 		{"midnight", time.Date(2025, 9, 5, 0, 0, 0, 0, location)},
 		{"morning", time.Date(2025, 9, 5, 7, 3, 0, 0, location)},
 		{"late_evening", time.Date(2025, 9, 5, 23, 59, 0, 0, location)},
