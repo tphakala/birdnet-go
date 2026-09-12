@@ -261,6 +261,6 @@ func TestRangeFilterService_ReloadAfterCloseDoesNotPublish(t *testing.T) {
 	settings := conftest.GetTestSettings()
 	settings.BirdNET.LocationConfigured = true
 
-	require.NoError(t, rfs.reload(settings, classifierView{id: "BirdNET_V2.4"}))
+	require.NoError(t, rfs.reload(settings, classifierView{id: permanentRegistryID}))
 	require.Nil(t, rfs.loadState().backend, "no backend may be published by a reload after close()")
 }
