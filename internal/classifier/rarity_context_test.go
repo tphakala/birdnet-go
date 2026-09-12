@@ -70,6 +70,19 @@ func TestBuildOccurrenceIndexAndLookup(t *testing.T) {
 	}
 }
 
+func TestBuildOccurrenceIndex_IgnoresSyntheticOverrideScores(t *testing.T) {
+	scores := []SpeciesScore{
+		{Label: aliasLegacyLabel, Score: 1.0, IsSyntheticOverride: true},
+		{Label: aliasCanonicalLabel, Score: 0.4},
+	}
+	index := buildOccurrenceIndex(scores)
+
+	got, found := lookupOccurrence(index, aliasLegacyLabel)
+	require.True(t, found)
+	assert.InDelta(t, 0.4, got, 0.001,
+		"legacy alias must resolve to the native geomodel probability, not the override sentinel")
+}
+
 // TestBuildOccurrenceIndex_CollidingSpeciesKeepOwnScores guards the defect that an
 // earlier revision of this code shipped: keying the occurrence cache on the canonical
 // name alone merged Dicrurus adsimilis and D. divaricatus, so both reported whichever
@@ -178,19 +191,20 @@ func TestGetRarityContext_UniversalGeomodel(t *testing.T) {
 
 	rc, err := orch.GetRarityContext(time.Now())
 	require.NoError(t, err)
-	scores, geomodelLabels, classifierLabels, filterActive := rc.Scores, rc.GeomodelLabels, rc.ClassifierLabels, rc.FilterActive
+	scores, classifierLabels, filterActive := rc.Scores, rc.ClassifierLabels, rc.FilterActive
 
 	assert.Same(t, bn.Settings, rc.Settings, "GetRarityContext returns the exact settings snapshot the scores were produced from")
 	assert.True(t, filterActive, "a loaded range filter reports active so rarity is honest (#3935)")
 	assert.NotEmpty(t, scores, "universal geomodel path should return scored species")
-	assert.Contains(t, geomodelLabels, aliasCanonicalLabel,
+	require.NotNil(t, rc.Geomodel, "universal geomodel path should return a geomodel vocabulary")
+	assert.Contains(t, rc.Geomodel.Labels, aliasCanonicalLabel,
 		"geomodel vocabulary should come back so coverage is checked against it")
 	assert.Contains(t, classifierLabels, aliasLegacyLabel,
 		"classifier vocabulary should come back as the fallback for non-geomodel backends")
 
 	// The classifier labels must be a copy: a caller mutating them must not corrupt the
-	// live settings the model classifies against. geomodelLabels is deliberately NOT
-	// copied (it aliases the range filter's immutable label slice, as
+	// live settings the model classifies against. The geomodel vocabulary's Labels are
+	// deliberately NOT copied (they alias the range filter's immutable label slice, as
 	// PrimaryRangeFilterCoverage and RangeFilterStatus also return it), so this
 	// asymmetry is contractual rather than accidental.
 	classifierLabels[0] = "mutated"
@@ -219,14 +233,14 @@ func TestGetRarityContext_NoGeomodel(t *testing.T) {
 
 	rc, err := orch.GetRarityContext(time.Now())
 	require.NoError(t, err)
-	geomodelLabels, classifierLabels, filterActive := rc.GeomodelLabels, rc.ClassifierLabels, rc.FilterActive
+	classifierLabels, filterActive := rc.ClassifierLabels, rc.FilterActive
 
 	assert.Same(t, settings, rc.Settings, "GetRarityContext returns the exact settings snapshot the scores were produced from")
 	// Location is unconfigured here, so getProbableSpecies returns synthetic zero
 	// scores even though a filter is loaded; filterActive must be false so rarity is
 	// reported as unknown rather than a bogus "very rare" (#3935).
 	assert.False(t, filterActive, "unconfigured location yields synthetic zeros, so the filter is not active for rarity")
-	assert.Empty(t, geomodelLabels, "no universal geomodel means no geomodel vocabulary")
+	assert.Nil(t, rc.Geomodel, "no universal geomodel means no geomodel vocabulary")
 	assert.Contains(t, classifierLabels, "Turdus merula_Common Blackbird")
 }
 
@@ -242,7 +256,7 @@ func TestGetRarityContext_NilPrimary(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, rc.FilterActive, "no primary model means no active range filter")
 	assert.Nil(t, rc.Scores)
-	assert.Nil(t, rc.GeomodelLabels)
+	assert.Nil(t, rc.Geomodel)
 	assert.Nil(t, rc.ClassifierLabels)
 	assert.Same(t, distinct, rc.Settings, "with no primary, GetRarityContext returns the orchestrator's current settings snapshot")
 }

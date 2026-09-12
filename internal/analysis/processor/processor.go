@@ -1020,21 +1020,19 @@ func (p *Processor) parseAndValidateSpecies(settings *conf.Settings, result data
 }
 
 // shouldApplyRangeFilter returns true if the given model should have its
-// detections filtered by the geographic range filter.
-// BirdNET (any version), Perch, and unknown models are filtered. Perch returns
-// scientific-name labels, and the included-species set stores scientific names
-// for O(1) lookup, so the normal range list applies even when the active range
-// model is the embedded BirdNET geomodel rather than v3.
-// Bat/BSG: never filtered (independent species sets, no geomodel coverage).
+// detections filtered by the geographic range filter. The decision is a registry
+// capability, not a display-name check: BirdNET (any version) and Perch participate
+// (their label spaces are range-filter compatible), while Bat and BSG classify their
+// own label spaces and never participate. An unknown or custom model ID participates
+// too, matching the historical behavior for classifiers absent from the registry.
+// Perch returns scientific-name labels, and the included-species set stores
+// scientific names for O(1) lookup, so the normal range list applies even when the
+// active range model is the embedded BirdNET geomodel rather than v3.
 func shouldApplyRangeFilter(modelID string, settings *conf.Settings) bool {
 	if settings == nil || !settings.BirdNET.LocationConfigured {
 		return false
 	}
-	mInfo := classifier.DetectionModelInfoForID(modelID)
-	if mInfo.Name == detection.DefaultModelName || mInfo.Name == classifier.DetectionNamePerch {
-		return true
-	}
-	return false
+	return classifier.ParticipatesInRangeFilter(modelID)
 }
 
 // nonFiniteConfidenceWarned guards the once-per-(model, source) warning for

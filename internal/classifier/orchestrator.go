@@ -659,14 +659,7 @@ func (o *Orchestrator) resolveInstalledPaths(registryID string) (modelPath, labe
 		// variant's own files and return the one whose model file exists (a
 		// completed switch leaves exactly one), so a non-default install still
 		// resolves here when settings carry no path. Flat entries probe entry.Files.
-		fileSets := [][]CatalogFile{entry.Files}
-		if len(entry.Variants) > 0 {
-			fileSets = make([][]CatalogFile, 0, len(entry.Variants))
-			for j := range entry.Variants {
-				fileSets = append(fileSets, entry.Variants[j].Files)
-			}
-		}
-		for _, files := range fileSets {
+		for _, files := range entryFileSets(entry) {
 			var mp, lp, ep string
 			for _, f := range files {
 				switch f.Role {
@@ -1049,11 +1042,17 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 	// ReloadRangeFilter cannot desync them. geoLabels is non-nil only on the
 	// universal (v3 geomodel) path, where it covers every scientific name the
 	// geomodel knows regardless of threshold.
-	scores, geoLabels, _, err := primary.getProbableSpecies(date, week, settings)
+	scores, geo, _, err := primary.getProbableSpecies(date, week, settings)
 	if err != nil {
 		return nil, err
 	}
-	isUniversal := geoLabels != nil
+	isUniversal := geo != nil
+	// geo is non-nil only on the universal path; read its label slice (nil
+	// otherwise) so the geomodel-coverage dedup below is byte-for-byte unchanged.
+	var geoLabels []string
+	if geo != nil {
+		geoLabels = geo.Labels
+	}
 
 	// Dedup by scientific name (lowercased). seenSci holds species already
 	// represented via the primary scores; geoCovered holds every scientific
@@ -2684,8 +2683,12 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 // the scores were produced from. See GetRarityContext for the per-field semantics and the
 // consistency guarantees.
 type RarityContext struct {
-	Scores           []SpeciesScore
-	GeomodelLabels   []string
+	Scores []SpeciesScore
+	// Geomodel is the universal geomodel's label vocabulary paired with Scores. It
+	// is nil unless the universal geomodel path ran; when non-nil it is built from
+	// the same range-filter instance that produced Scores. Coverage reads its
+	// canonical-key memo, and a nil value means fall back to ClassifierLabels.
+	Geomodel         *LabelVocabulary
 	ClassifierLabels []string
 	FilterActive     bool
 	Settings         *conf.Settings
@@ -2700,9 +2703,9 @@ type RarityContext struct {
 // synthetic always-active scores to secondary-model species that have no real
 // occurrence probability.
 //
-// Consistency, stated precisely because the guarantee is partial: scores and
-// geomodelLabels always describe the same range-filter instance, because
-// getProbableSpecies captures the geomodel vocabulary under the same bn.mu hold that
+// Consistency, stated precisely because the guarantee is partial: scores and the
+// geomodel vocabulary (Geomodel) always describe the same range-filter instance,
+// because getProbableSpecies captures the geomodel vocabulary under the same bn.mu hold that
 // produces the scores. classifierLabels comes from the settings snapshot read here,
 // which is the same snapshot getProbableSpecies indexes for zeroScoresForAllLabels and
 // the unmapped-species mapping, so it agrees with the scores; but the range-filter
@@ -2714,7 +2717,7 @@ type RarityContext struct {
 // the globally published snapshot; an in-place model reload republishes only to the
 // instance, so classifierLabels can lag a label-set change until the next restart.
 //
-// geomodelLabels is nil unless the universal geomodel path ran. It is nil for the
+// Geomodel is nil unless the universal geomodel path ran. It is nil for the
 // TFLite meta model and the plain ONNX range filter, and when no range filter or
 // location is configured; in every one of those cases the scores are labeled with the
 // classifier's own vocabulary, so callers must fall back to classifierLabels.
@@ -2753,10 +2756,10 @@ func (o *Orchestrator) GetRarityContext(date time.Time) (RarityContext, error) {
 	// filterActive=true with synthetic zeros, and it also covers the no-location case
 	// a bare rangeFilter!=nil check missed, so a caller never reports a synthetic zero
 	// as "very rare" (#3935).
-	scores, geomodelLabels, filterActive, err := primary.getProbableSpecies(date, 0.0, settings)
+	scores, geomodel, filterActive, err := primary.getProbableSpecies(date, 0.0, settings)
 	return RarityContext{
 		Scores:           scores,
-		GeomodelLabels:   geomodelLabels,
+		Geomodel:         geomodel,
 		ClassifierLabels: slices.Clone(settings.BirdNET.Labels),
 		FilterActive:     filterActive,
 		Settings:         settings,

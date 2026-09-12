@@ -330,14 +330,7 @@ func (o *Orchestrator) resolveSiblingSet(registryID, modelPath string) (set mode
 		if entry.RegistryID != registryID {
 			continue
 		}
-		fileSets := [][]CatalogFile{entry.Files}
-		if len(entry.Variants) > 0 {
-			fileSets = fileSets[:0]
-			for j := range entry.Variants {
-				fileSets = append(fileSets, entry.Variants[j].Files)
-			}
-		}
-		for _, files := range fileSets {
+		for _, files := range entryFileSets(entry) {
 			if !declaresModelFile(files, base) {
 				continue
 			}
@@ -367,6 +360,27 @@ func declaresModelFile(files []CatalogFile, localName string) bool {
 		}
 	}
 	return false
+}
+
+// entryFileSets returns the catalog file sets to probe for entry: each variant's
+// files when the entry declares variants, otherwise the entry's own files.
+//
+// A variant entry's resolved top-level Files name only the DEFAULT variant
+// (resolveVariantDefaults overwrites them, and validateCatalogEntryFiles forbids an
+// entry from declaring both Files and Variants), so a non-default install is found
+// only by probing each variant's own files. For a flat entry the single set is
+// entry.Files. Callers that stop at the first match (isGalleryManagedPath) are
+// unaffected by no longer searching the default variant twice, because the default
+// remains one of the returned variant sets.
+func entryFileSets(entry *CatalogEntry) [][]CatalogFile {
+	if len(entry.Variants) > 0 {
+		sets := make([][]CatalogFile, 0, len(entry.Variants))
+		for j := range entry.Variants {
+			sets = append(sets, entry.Variants[j].Files)
+		}
+		return sets
+	}
+	return [][]CatalogFile{entry.Files}
 }
 
 // isGalleryManagedPath reports whether path looks like a file the model gallery
@@ -436,13 +450,9 @@ func (o *Orchestrator) isGalleryManagedPath(registryID, path string) bool {
 		if entry.RegistryID != registryID {
 			continue
 		}
-		// Check the entry's own files and every variant's files as a union: the
-		// stale configured path could name any installed variant's file.
-		fileSets := [][]CatalogFile{entry.Files}
-		for j := range entry.Variants {
-			fileSets = append(fileSets, entry.Variants[j].Files)
-		}
-		for _, files := range fileSets {
+		// Probe the flat entry's files or each variant's files; see entryFileSets.
+		// The stale configured path could name any installed variant's file.
+		for _, files := range entryFileSets(entry) {
 			for _, f := range files {
 				if f.LocalName != base {
 					continue

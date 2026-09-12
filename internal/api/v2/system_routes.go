@@ -163,7 +163,10 @@ func (c *Controller) scheduleAudioSourceReconfigure() {
 func (c *Controller) sendAudioSourceReconfigure() {
 	defer func() {
 		if r := recover(); r != nil {
-			c.LogWarnIfEnabled("Recovered from send on closed controlChan during audio source reconfigure",
+			// Use the system logger (c.log), not the access logger (c.LogWarnIfEnabled):
+			// this is a controller/shutdown warning, and c.log() is never nil, so the
+			// warning is not silently dropped on a controller whose APILogger is unset.
+			c.log().Warn("Recovered from send on closed controlChan during audio source reconfigure",
 				logger.Any("panic", r))
 		}
 	}()

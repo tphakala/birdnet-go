@@ -1,0 +1,302 @@
+[
+  {
+    "query": "Turdus migratorius",
+    "status": 200,
+    "body": {
+      "common_name": "American Robin",
+      "metadata": {
+        "source": "local"
+      },
+      "rarity": {
+        "latitude": 60.1699,
+        "location_based": false,
+        "longitude": 24.9384,
+        "score": 0,
+        "status": "unknown",
+        "threshold_applied": 0.029999999329447746
+      },
+      "scientific_name": "Turdus migratorius",
+      "taxonomy": {
+        "class": "Aves",
+        "family": "Turdidae",
+        "family_common": "Thrushes and Allies",
+        "genus": "Turdus",
+        "kingdom": "Animalia",
+        "order": "Passeriformes",
+        "phylum": "Chordata",
+        "species": "Turdus migratorius",
+        "species_common": "",
+        "updated_at": "2026-05-20T17:57:27Z"
+      }
+    }
+  },
+  {
+    "query": "turdus MIGRATORIUS",
+    "status": 200,
+    "body": {
+      "common_name": "American Robin",
+      "metadata": {
+        "source": "local"
+      },
+      "rarity": {
+        "latitude": 60.1699,
+        "location_based": false,
+        "longitude": 24.9384,
+        "score": 0,
+        "status": "unknown",
+        "threshold_applied": 0.029999999329447746
+      },
+      "scientific_name": "turdus MIGRATORIUS",
+      "taxonomy": {
+        "class": "Aves",
+        "family": "Turdidae",
+        "family_common": "Thrushes and Allies",
+        "genus": "Turdus",
+        "kingdom": "Animalia",
+        "order": "Passeriformes",
+        "phylum": "Chordata",
+        "species": "Turdus migratorius",
+        "species_common": "",
+        "updated_at": "2026-05-20T17:57:27Z"
+      }
+    }
+  },
+  {
+    "query": "Spilopelia senegalensis",
+    "status": 200,
+    "body": {
+      "common_name": "Laughing Dove",
+      "metadata": {
+        "source": "local"
+      },
+      "rarity": {
+        "latitude": 60.1699,
+        "location_based": false,
+        "longitude": 24.9384,
+        "score": 0,
+        "status": "unknown",
+        "threshold_applied": 0.029999999329447746
+      },
+      "scientific_name": "Spilopelia senegalensis",
+      "taxonomy": {
+        "class": "Aves",
+        "family": "Columbidae",
+        "family_common": "Pigeons and Doves",
+        "genus": "Streptopelia",
+        "kingdom": "Animalia",
+        "order": "Columbiformes",
+        "phylum": "Chordata",
+        "species": "Streptopelia senegalensis",
+        "species_common": "",
+        "updated_at": "2026-05-20T17:57:27Z"
+      }
+    }
+  },
+  {
+    "query": "Streptopelia senegalensis",
+    "status": 200,
+    "body": {
+      "common_name": "Laughing Dove",
+      "metadata": {
+        "source": "local"
+      },
+      "rarity": {
+        "latitude": 60.1699,
+        "location_based": false,
+        "longitude": 24.9384,
+        "score": 0,
+        "status": "unknown",
+        "threshold_applied": 0.029999999329447746
+      },
+      "scientific_name": "Streptopelia senegalensis",
+      "taxonomy": {
+        "class": "Aves",
+        "family": "Columbidae",
+        "family_common": "Pigeons and Doves",
+        "genus": "Streptopelia",
+        "kingdom": "Animalia",
+        "order": "Columbiformes",
+        "phylum": "Chordata",
+        "species": "Streptopelia senegalensis",
+        "species_common": "",
+        "updated_at": "2026-05-20T17:57:27Z"
+      }
+    }
+  },
+  {
+    "query": "Dicrurus adsimilis",
+    "status": 200,
+    "body": {
+      "common_name": "Fork-tailed Drongo",
+      "metadata": {
+        "source": "local"
+      },
+      "rarity": {
+        "latitude": 60.1699,
+        "location_based": false,
+        "longitude": 24.9384,
+        "score": 0,
+        "status": "unknown",
+        "threshold_applied": 0.029999999329447746
+      },
+      "scientific_name": "Dicrurus adsimilis",
+      "taxonomy": {
+        "class": "Aves",
+        "family": "Dicruridae",
+        "family_common": "Drongos",
+        "genus": "Dicrurus",
+        "kingdom": "Animalia",
+        "order": "Passeriformes",
+        "phylum": "Chordata",
+        "species": "Dicrurus adsimilis",
+        "species_common": "",
+        "updated_at": "2026-05-20T17:57:27Z"
+      }
+    }
+  },
+  {
+    "query": "Dicrurus divaricatus",
+    "status": 200,
+    "body": {
+      "common_name": "Glossy-backed Drongo",
+      "metadata": {
+        "source": "local"
+      },
+      "rarity": {
+        "latitude": 60.1699,
+        "location_based": false,
+        "longitude": 24.9384,
+        "score": 0,
+        "status": "unknown",
+        "threshold_applied": 0.029999999329447746
+      },
+      "scientific_name": "Dicrurus divaricatus",
+      "taxonomy": {
+        "class": "Aves",
+        "family": "Dicruridae",
+        "family_common": "Drongos",
+        "genus": "Dicrurus",
+        "kingdom": "Animalia",
+        "order": "Passeriformes",
+        "phylum": "Chordata",
+        "species": "Dicrurus divaricatus",
+        "species_common": "",
+        "updated_at": "2026-05-20T17:57:27Z"
+      }
+    }
+  },
+  {
+    "query": "Turdus merula",
+    "status": 200,
+    "body": {
+      "common_name": "Eurasian Blackbird",
+      "metadata": {
+        "source": "local"
+      },
+      "rarity": {
+        "latitude": 60.1699,
+        "location_based": false,
+        "longitude": 24.9384,
+        "score": 0,
+        "status": "unknown",
+        "threshold_applied": 0.029999999329447746
+      },
+      "scientific_name": "Turdus merula",
+      "taxonomy": {
+        "class": "Aves",
+        "family": "Turdidae",
+        "family_common": "Thrushes and Allies",
+        "genus": "Turdus",
+        "kingdom": "Animalia",
+        "order": "Passeriformes",
+        "phylum": "Chordata",
+        "species": "Turdus merula",
+        "species_common": "",
+        "updated_at": "2026-05-20T17:57:27Z"
+      }
+    }
+  },
+  {
+    "query": "Tachyspiza badia",
+    "status": 200,
+    "body": {
+      "common_name": "Shikra",
+      "metadata": {
+        "source": "local"
+      },
+      "rarity": {
+        "latitude": 60.1699,
+        "location_based": false,
+        "longitude": 24.9384,
+        "score": 0,
+        "status": "unknown",
+        "threshold_applied": 0.029999999329447746
+      },
+      "scientific_name": "Tachyspiza badia",
+      "taxonomy": {
+        "class": "Aves",
+        "family": "Accipitridae",
+        "family_common": "Hawks, Eagles, and Kites",
+        "genus": "Tachyspiza",
+        "kingdom": "Animalia",
+        "order": "Accipitriformes",
+        "phylum": "Chordata",
+        "species": "Tachyspiza badia",
+        "species_common": "",
+        "updated_at": "2026-05-20T17:57:27Z"
+      }
+    }
+  },
+  {
+    "query": "Myotis daubentonii",
+    "status": 200,
+    "body": {
+      "common_name": "Water Bat",
+      "rarity": {
+        "latitude": 60.1699,
+        "location_based": false,
+        "longitude": 24.9384,
+        "score": 0,
+        "status": "unknown",
+        "threshold_applied": 0.029999999329447746
+      },
+      "scientific_name": "Myotis daubentonii"
+    }
+  },
+  {
+    "query": "Zzz Geomodelonly",
+    "status": 404,
+    "body": {
+      "code": 404,
+      "error": "Species not found",
+      "message": "Species not found"
+    }
+  },
+  {
+    "query": "Unknown species",
+    "status": 404,
+    "body": {
+      "code": 404,
+      "error": "Species not found",
+      "message": "Species not found"
+    }
+  },
+  {
+    "query": "Turdus",
+    "status": 400,
+    "body": {
+      "code": 400,
+      "error": "Invalid scientific name format",
+      "message": "Invalid scientific name format"
+    }
+  },
+  {
+    "query": "",
+    "status": 400,
+    "body": {
+      "code": 400,
+      "error": "Missing required parameter",
+      "message": "Missing required parameter"
+    }
+  }
+]

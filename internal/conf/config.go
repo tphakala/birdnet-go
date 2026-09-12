@@ -1983,6 +1983,17 @@ func (s *Settings) RangeFilterConfig() *RangeFilterSettings {
 	return &s.BirdNET.RangeFilter
 }
 
+// Location returns the configured recording coordinates and whether the user has
+// explicitly configured a location. It reads BirdNET.Latitude, BirdNET.Longitude and
+// BirdNET.LocationConfigured through one accessor so their storage location can change
+// without updating every caller. It returns (0, 0, false) for a nil receiver.
+func (s *Settings) Location() (lat, lon float64, configured bool) {
+	if s == nil {
+		return 0, 0, false
+	}
+	return s.BirdNET.Latitude, s.BirdNET.Longitude, s.BirdNET.LocationConfigured
+}
+
 // ResolveEQOverride returns the per-source or per-stream EQ override for the
 // given source display name. Returns nil when no override exists (use global).
 // Audio sources are checked first, then RTSP streams.
