@@ -39,6 +39,10 @@ const defaultModelVersionString = ModelNameBirdNETv24 + " FP32"
 type speciesCacheEntry struct {
 	key    string             // Composite cache key: date + rounded lat/lon + model id
 	scores map[string]float64 // Species occurrence scores keyed by scientific name
+	// generation is the rangeFilterState generation the scores were computed under.
+	// A reader serves the entry only while this matches the current generation, so a
+	// backend swap invalidates it without racing clearSpeciesCache.
+	generation uint64
 }
 
 // runtimeInfo is the immutable device/backend/precision triplet describing how a
