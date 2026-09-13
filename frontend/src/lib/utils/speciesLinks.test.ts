@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getAllAboutBirdsUrl, getWikipediaUrl } from './speciesLinks';
+import { getAllAboutBirdsSoundsUrl, getAllAboutBirdsUrl, getWikipediaUrl } from './speciesLinks';
 
 describe('getAllAboutBirdsUrl', () => {
   it('builds the guide URL from the server-provided common name', () => {
@@ -11,6 +11,20 @@ describe('getAllAboutBirdsUrl', () => {
   it('encodes names with punctuation that is not safe in a URL path', () => {
     expect(getAllAboutBirdsUrl('Black-throated Blue Warbler')).toBe(
       'https://www.allaboutbirds.org/guide/Black-throated_Blue_Warbler/id'
+    );
+  });
+});
+
+describe('getAllAboutBirdsSoundsUrl', () => {
+  it('builds the sounds page URL from the server-provided common name', () => {
+    expect(getAllAboutBirdsSoundsUrl("Wilson's Warbler")).toBe(
+      'https://www.allaboutbirds.org/guide/Wilsons_Warbler/sounds'
+    );
+  });
+
+  it('encodes names with punctuation that is not safe in a URL path', () => {
+    expect(getAllAboutBirdsSoundsUrl('Black-throated Blue Warbler')).toBe(
+      'https://www.allaboutbirds.org/guide/Black-throated_Blue_Warbler/sounds'
     );
   });
 });

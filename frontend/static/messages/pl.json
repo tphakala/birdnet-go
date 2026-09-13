@@ -585,6 +585,8 @@
       "collapseDetails": "Zwiń szczegóły dla {species}",
       "playAudio": "Odtwórz dźwięk dla {species}",
       "viewDetails": "Wyświetl szczegóły dla {species}",
+      "detectionDetail": "Detection detail",
+      "detectionDetailFor": "Detection detail for {species}",
       "unknownSpecies": "Nieznany gatunek",
       "clickToCollapse": "Kliknij, aby zwinąć"
     },
@@ -734,7 +736,8 @@
         "ignoreSpecies": "Ignoruj gatunek",
         "lockDetection": "Zablokuj detekcję",
         "unlockDetection": "Odblokuj detekcję",
-        "deleteDetection": "Usuń detekcję"
+        "deleteDetection": "Usuń detekcję",
+        "compareSounds": "Dźwięki referencyjne"
       },
       "noDetections": "Brak ostatnich detekcji",
       "errors": {
@@ -825,6 +828,7 @@
       "hourly": "Wyniki Godzinowe dla {hour}:00 dnia {date}",
       "hourlyRange": "Wyniki Godzinowe od {startHour}:00 do {endHour}:00 dnia {date}",
       "species": "Wyniki dla {species} dnia {date}",
+      "speciesAll": "Wyniki dla {species}",
       "search": "Wyniki Wyszukiwania dla \"{query}\"",
       "allDetections": "Wszystkie Detekcje dla {date}"
     },
@@ -833,6 +837,9 @@
       "observation": "Obserwacja",
       "aria": {
         "downloadAudioClip": "Pobierz klip audio dla detekcji {name}",
+        "compareSounds": "Odsłuchaj nagrania identyfikacyjne dla {name} w serwisie All About Birds (otwiera się w nowej karcie)",
+        "viewOnAllAboutBirds": "Zobacz {name} w serwisie All About Birds (otwiera się w nowej karcie)",
+        "viewOnWikipedia": "Zobacz {name} w Wikipedii (otwiera się w nowej karcie)",
         "audioRecordingFor": "Nagranie audio i spektrogram dla {name}",
         "scientificName": "Nazwa naukowa",
         "classificationBadges": "Odznaki klasyfikacji gatunku",
@@ -979,7 +986,10 @@
     },
     "media": {
       "title": "Nagranie i Spektrogram",
-      "clipHint": "Kliknij i przeciągnij na spektrogramie, aby wybrać zakres do eksportu"
+      "clipHint": "Kliknij i przeciągnij na spektrogramie, aby wybrać zakres do eksportu",
+      "compareSounds": "Dźwięki referencyjne",
+      "viewOnAllAboutBirds": "All About Birds",
+      "viewOnWikipedia": "Wikipedia"
     },
     "tabs": {
       "overview": "Przegląd",
@@ -2019,12 +2029,14 @@
       "subtitle": "Kompleksowa lista wszystkich wykrytych gatunków ptaków",
       "speciesList": "Lista Gatunków",
       "switchToGrid": "Przełącz na widok siatki",
+      "switchToList": "Przełącz na widok listy",
       "openAllAboutBirds": "Zobacz ten gatunek na All About Birds",
       "openWikipedia": "Zobacz ten gatunek w Wikipedii",
-      "switchToList": "Przełącz na widok listy",
+      "viewDetections": "Wyświetl wszystkie wykrycia gatunku {species}",
       "noSpeciesFound": "Nie znaleziono gatunków pasujących do twoich filtrów.",
       "headers": {
         "species": "Gatunek",
+        "links": "Linki",
         "detections": "Detekcje",
         "avgConfidence": "Średnia Pewność",
         "maxConfidence": "Maks. Pewność",

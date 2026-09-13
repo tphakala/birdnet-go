@@ -29,12 +29,14 @@
     Download,
     CircleCheck,
     CircleX,
+    ExternalLink,
   } from '@lucide/svelte';
   import { dropdown } from '$lib/utils/transitions';
   import { portal } from '$lib/utils/portal';
   import { computeAnchorPosition, applyAnchorPosition } from '$lib/utils/anchorPosition';
   import { auth } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
+  import { getAllAboutBirdsSoundsUrl } from '$lib/utils/speciesLinks';
 
   let canEdit = $derived(!$auth.security.enabled || $auth.security.accessAllowed);
 
@@ -86,6 +88,10 @@
     onMenuClose,
     ...rest
   }: Props = $props();
+
+  // Reference link is informational (not an edit action), so it's available to any
+  // viewer as long as the detection has a species name to build the URL from.
+  let hasReferenceLink = $derived(!!detection.commonName?.trim());
 
   let isOpen = $state(false);
   // svelte-ignore non_reactive_update
@@ -203,7 +209,7 @@
   });
 </script>
 
-{#if canEdit || onDownload}
+{#if canEdit || onDownload || hasReferenceLink}
   <div {...rest} class={cn('relative', className)}>
     <button
       bind:this={buttonElement}
@@ -313,6 +319,27 @@
                 {/if}
               </div>
             </button>
+          </li>
+        {/if}
+
+        {#if hasReferenceLink}
+          <li>
+            <a
+              href={getAllAboutBirdsSoundsUrl(detection.commonName)}
+              target="_blank"
+              rel="noopener noreferrer"
+              onclick={() => handleAction(undefined)}
+              class={cn(
+                'block text-sm w-full text-left px-3 py-2 rounded-md transition-colors',
+                itemHoverClass
+              )}
+              role="menuitem"
+            >
+              <div class="flex items-center gap-2">
+                <ExternalLink class="size-4" />
+                <span>{t('dashboard.recentDetections.actions.compareSounds')}</span>
+              </div>
+            </a>
           </li>
         {/if}
 

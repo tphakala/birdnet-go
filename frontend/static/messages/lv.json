@@ -585,6 +585,8 @@
       "collapseDetails": "Sakļaut detaļas par {species}",
       "playAudio": "Atskaņot audio par {species}",
       "viewDetails": "Skatīt detaļas par {species}",
+      "detectionDetail": "Detection detail",
+      "detectionDetailFor": "Detection detail for {species}",
       "unknownSpecies": "Nezināma suga",
       "clickToCollapse": "Noklikšķiniet, lai sakļautu"
     },
@@ -734,7 +736,8 @@
         "ignoreSpecies": "Ignorēt sugu",
         "lockDetection": "Bloķēt atklāšanu",
         "unlockDetection": "Atbloķēt atklāšanu",
-        "deleteDetection": "Dzēst atklāšanu"
+        "deleteDetection": "Dzēst atklāšanu",
+        "compareSounds": "Atsauces skaņas"
       },
       "noDetections": "Nav neseno atklāšanu",
       "errors": {
@@ -825,6 +828,7 @@
       "hourly": "Stundu rezultāti plkst. {hour}:00, {date}",
       "hourlyRange": "Stundu rezultāti no {startHour}:00 līdz {endHour}:00, {date}",
       "species": "Rezultāti sugai {species}, {date}",
+      "speciesAll": "Rezultāti sugai {species}",
       "search": "Meklēšanas rezultāti vaicājumam \"{query}\"",
       "allDetections": "Visas atklāšanas datumā {date}"
     },
@@ -833,6 +837,9 @@
       "observation": "Novērojums",
       "aria": {
         "downloadAudioClip": "Lejupielādēt audio fragmentu {name} noteikšanai",
+        "compareSounds": "Klausīties {name} noteikšanas ierakstus vietnē All About Birds (atveras jaunā cilnē)",
+        "viewOnAllAboutBirds": "Skatīt {name} vietnē All About Birds (atveras jaunā cilnē)",
+        "viewOnWikipedia": "Skatīt {name} Vikipēdijā (atveras jaunā cilnē)",
         "audioRecordingFor": "Audio ieraksts un spektrogramma {name}",
         "scientificName": "Zinātniskais nosaukums",
         "classificationBadges": "Sugas klasifikācijas nozīmītes",
@@ -979,7 +986,10 @@
     },
     "media": {
       "title": "Ieraksts un spektrogramma",
-      "clipHint": "Noklikšķiniet un velciet uz spektrogrammas, lai atlasītu diapazonu klipu eksportam"
+      "clipHint": "Noklikšķiniet un velciet uz spektrogrammas, lai atlasītu diapazonu klipu eksportam",
+      "compareSounds": "Atsauces skaņas",
+      "viewOnAllAboutBirds": "All About Birds",
+      "viewOnWikipedia": "Vikipēdija"
     },
     "tabs": {
       "overview": "Pārskats",
@@ -2019,12 +2029,14 @@
       "subtitle": "Pilns visu atpazīto putnu sugu saraksts",
       "speciesList": "Sugu saraksts",
       "switchToGrid": "Pārslēgt uz režģa skatu",
+      "switchToList": "Pārslēgt uz saraksta skatu",
       "openAllAboutBirds": "Skatīt šo sugu All About Birds",
       "openWikipedia": "Skatīt šo sugu Vikipēdijā",
-      "switchToList": "Pārslēgt uz saraksta skatu",
+      "viewDetections": "Skatīt visus {species} novērojumus",
       "noSpeciesFound": "Sugas, kas atbilst jūsu filtriem, nav atrastas.",
       "headers": {
         "species": "Suga",
+        "links": "Saites",
         "detections": "Atpazīšanas",
         "avgConfidence": "Vid. ticamība",
         "maxConfidence": "Maks. ticamība",

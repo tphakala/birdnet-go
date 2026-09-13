@@ -4,7 +4,9 @@
   import { formatDate } from '$lib/utils/formatters';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import { getAllAboutBirdsUrl, getWikipediaUrl } from '$lib/utils/speciesLinks';
+  import { buildSpeciesSearchUrl } from '$lib/utils/detectionUrls';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
+  import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import { ExternalLink } from '@lucide/svelte';
 
   interface SpeciesData {
@@ -30,13 +32,21 @@
   }
 
   let displayName = $derived(localizeSpeciesName(species.scientific_name, species.common_name));
-  let wikipediaUrl = $derived(
-    getWikipediaUrl(displayName, getLocale(), species.common_name)
+  let wikipediaUrl = $derived(getWikipediaUrl(displayName, getLocale(), species.common_name));
+  let detectionsUrl = $derived(buildSpeciesSearchUrl(species.scientific_name));
+  let viewDetectionsLabel = $derived(
+    t('analytics.species.viewDetections', { species: displayName })
   );
 </script>
 
 <div class={cn('card bg-[var(--color-base-200)]', className)}>
-  <figure class="px-4 pt-4">
+  <a
+    href={detectionsUrl}
+    onclick={handleAppLinkClick}
+    class="px-4 pt-4 block hover:opacity-80 transition-opacity"
+    aria-label={viewDetectionsLabel}
+    title={viewDetectionsLabel}
+  >
     <div class="rounded-xl w-full aspect-[4/3] overflow-hidden bg-[var(--color-base-300)]">
       {#if species.thumbnail_url}
         <img
@@ -47,10 +57,21 @@
         />
       {/if}
     </div>
-  </figure>
+  </a>
   <div class="card-body p-4">
-    <div class="flex items-center gap-2 min-w-0">
-      <h3 class="card-title text-base min-w-0 flex-1 truncate">{displayName}</h3>
+    <div class="flex items-start gap-2 min-w-0">
+      <a
+        href={detectionsUrl}
+        onclick={handleAppLinkClick}
+        class="min-w-0 flex-1 hover:opacity-80 transition-opacity"
+        aria-label={viewDetectionsLabel}
+        title={viewDetectionsLabel}
+      >
+        <h3 class="card-title text-base truncate">{displayName}</h3>
+        <p class="text-sm text-[var(--color-base-content)] opacity-60 italic truncate">
+          {species.scientific_name}
+        </p>
+      </a>
       <div class="flex shrink-0 items-center gap-1">
         <a
           href={getAllAboutBirdsUrl(species.common_name)}
@@ -74,9 +95,6 @@
         </a>
       </div>
     </div>
-    <p class="text-sm text-[var(--color-base-content)] opacity-60 italic">
-      {species.scientific_name}
-    </p>
     <div class="text-sm space-y-1 mt-2">
       <div class="flex justify-between">
         <span class="text-[var(--color-base-content)] opacity-60"

@@ -585,6 +585,8 @@
       "collapseDetails": "Skjul detaljer for {species}",
       "playAudio": "Afspil lyd for {species}",
       "viewDetails": "Se detaljer for {species}",
+      "detectionDetail": "Detection detail",
+      "detectionDetailFor": "Detection detail for {species}",
       "unknownSpecies": "Ukendt art",
       "clickToCollapse": "Klik for at skjule"
     },
@@ -734,7 +736,8 @@
         "ignoreSpecies": "Ignorér art",
         "lockDetection": "Lås registrering",
         "unlockDetection": "Lås registrering op",
-        "deleteDetection": "Slet registrering"
+        "deleteDetection": "Slet registrering",
+        "compareSounds": "Referencelyde"
       },
       "noDetections": "Ingen seneste registreringer",
       "errors": {
@@ -825,6 +828,7 @@
       "hourly": "Timeresultater for {hour}:00 den {date}",
       "hourlyRange": "Timeresultater fra {startHour}:00 til {endHour}:00 den {date}",
       "species": "Resultater for {species} den {date}",
+      "speciesAll": "Resultater for {species}",
       "search": "Søgeresultater for \"{query}\"",
       "allDetections": "Alle registreringer for {date}"
     },
@@ -833,6 +837,9 @@
       "observation": "Observation",
       "aria": {
         "downloadAudioClip": "Download lydklip for {name} detektion",
+        "compareSounds": "Lyt til identifikationsoptagelser for {name} på All About Birds (åbner i en ny fane)",
+        "viewOnAllAboutBirds": "Se {name} på All About Birds (åbner i en ny fane)",
+        "viewOnWikipedia": "Se {name} på Wikipedia (åbner i en ny fane)",
         "audioRecordingFor": "Lydoptagelse og spektrogram for {name}",
         "scientificName": "Videnskabeligt navn",
         "classificationBadges": "Mærker for artsklassifikation",
@@ -979,7 +986,10 @@
     },
     "media": {
       "title": "Optagelse og spektrogram",
-      "clipHint": "Klik og træk på spektrogrammet for at vælge et interval til klipeksport"
+      "clipHint": "Klik og træk på spektrogrammet for at vælge et interval til klipeksport",
+      "compareSounds": "Referencelyde",
+      "viewOnAllAboutBirds": "All About Birds",
+      "viewOnWikipedia": "Wikipedia"
     },
     "tabs": {
       "overview": "Oversigt",
@@ -2019,12 +2029,14 @@
       "subtitle": "Komplet liste over alle fuglearter der er blevet registreret",
       "speciesList": "Artsliste",
       "switchToGrid": "Skift til gittervisning",
+      "switchToList": "Skift til listevisning",
       "openAllAboutBirds": "Se denne art på All About Birds",
       "openWikipedia": "Se denne art på Wikipedia",
-      "switchToList": "Skift til listevisning",
+      "viewDetections": "Se alle registreringer af {species}",
       "noSpeciesFound": "Ingen arter fundet der matcher dine filtre.",
       "headers": {
         "species": "Art",
+        "links": "Links",
         "detections": "Registreringer",
         "avgConfidence": "Gns. sikkerhed",
         "maxConfidence": "Maks. sikkerhed",

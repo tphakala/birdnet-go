@@ -585,6 +585,8 @@
       "collapseDetails": "Details für {species} einklappen",
       "playAudio": "Audio für {species} abspielen",
       "viewDetails": "Details für {species} anzeigen",
+      "detectionDetail": "Detection detail",
+      "detectionDetailFor": "Detection detail for {species}",
       "unknownSpecies": "Unbekannte Art",
       "clickToCollapse": "Zum Einklappen klicken"
     },
@@ -734,7 +736,8 @@
         "ignoreSpecies": "Art ignorieren",
         "lockDetection": "Erkennung sperren",
         "unlockDetection": "Erkennung entsperren",
-        "deleteDetection": "Erkennung löschen"
+        "deleteDetection": "Erkennung löschen",
+        "compareSounds": "Referenzaufnahmen"
       },
       "noDetections": "Keine aktuellen Erkennungen",
       "errors": {
@@ -825,6 +828,7 @@
       "hourly": "Stündliche Ergebnisse für {hour}:00 Uhr am {date}",
       "hourlyRange": "Stündliche Ergebnisse von {startHour}:00 bis {endHour}:00 Uhr am {date}",
       "species": "Ergebnisse für {species} am {date}",
+      "speciesAll": "Ergebnisse für {species}",
       "search": "Suchergebnisse für \"{query}\"",
       "allDetections": "Alle Erkennungen vom {date}"
     },
@@ -833,6 +837,9 @@
       "observation": "Beobachtung",
       "aria": {
         "downloadAudioClip": "Audioclip für {name}-Erkennung herunterladen",
+        "compareSounds": "Bestimmungsaufnahmen für {name} auf All About Birds anhören (öffnet in einem neuen Tab)",
+        "viewOnAllAboutBirds": "{name} auf All About Birds ansehen (öffnet in einem neuen Tab)",
+        "viewOnWikipedia": "{name} auf Wikipedia ansehen (öffnet in einem neuen Tab)",
         "audioRecordingFor": "Audioaufnahme und Spektrogramm für {name}",
         "scientificName": "Wissenschaftlicher Name",
         "classificationBadges": "Badges zur Artklassifizierung",
@@ -979,7 +986,10 @@
     },
     "media": {
       "title": "Aufnahme & Spektrogramm",
-      "clipHint": "Klicken und ziehen Sie auf dem Spektrogramm, um einen Bereich für den Clip-Export auszuwählen"
+      "clipHint": "Klicken und ziehen Sie auf dem Spektrogramm, um einen Bereich für den Clip-Export auszuwählen",
+      "compareSounds": "Referenzaufnahmen",
+      "viewOnAllAboutBirds": "All About Birds",
+      "viewOnWikipedia": "Wikipedia"
     },
     "tabs": {
       "overview": "Übersicht",
@@ -2019,12 +2029,14 @@
       "subtitle": "Vollständige Liste aller erkannten Vogelarten",
       "speciesList": "Artenliste",
       "switchToGrid": "Zur Gitteransicht wechseln",
+      "switchToList": "Zur Listenansicht wechseln",
       "openAllAboutBirds": "Diese Art auf All About Birds ansehen",
       "openWikipedia": "Diese Art auf Wikipedia ansehen",
-      "switchToList": "Zur Listenansicht wechseln",
+      "viewDetections": "Alle Nachweise von {species} anzeigen",
       "noSpeciesFound": "Keine Arten gefunden, die Ihren Filtern entsprechen.",
       "headers": {
         "species": "Art",
+        "links": "Links",
         "detections": "Erkennungen",
         "avgConfidence": "Durchschn. Konfidenz",
         "maxConfidence": "Max. Konfidenz",

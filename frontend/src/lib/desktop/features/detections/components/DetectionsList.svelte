@@ -123,6 +123,14 @@
         return t('detections.titles.species', { species: data.species, date: data.date });
 
       case 'search':
+        // The species analytics page links here as queryType=search with only
+        // a species filter (no free-text query) so it can show a species'
+        // full history instead of being pinned to one day like queryType=species
+        // requires. Fall back to a species-only title instead of the quoted
+        // "{query}" one, which would otherwise render literally with nothing to fill in.
+        if (!data.search && data.species) {
+          return t('detections.titles.speciesAll', { species: data.species });
+        }
         return t('detections.titles.search', { query: data.search });
 
       default:
