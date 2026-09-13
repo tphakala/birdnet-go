@@ -330,8 +330,8 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// Log any labels missing from the taxonomy at debug level, reproducing the
 	// diagnostics BirdNET used to emit from loadLabels now that the taxonomy is
 	// orchestrator-owned.
-	if o.primary != nil {
-		o.logMissingTaxonomyCodes(o.primary, o.primary.Labels())
+	if _, anchorBN, ok := o.rangeFilterAnchor(); ok {
+		o.logMissingTaxonomyCodes(anchorBN, anchorBN.Labels())
 	}
 
 	// Publish the initial species-name snapshot from the union of every loaded
@@ -1304,12 +1304,17 @@ func (o *Orchestrator) AllLabels() []string {
 // pick a different winner for a duplicate scientific name in the reverse name maps. The
 // caller reads each secondary entry's instance under entry.mu.
 func (o *Orchestrator) orderedEntryRefs() (primary *BirdNET, refs []entryRef) {
+	// The range-filter anchor (v2.4) leads; every other entry follows, sorted
+	// byte-wise by registry ID, so a duplicate scientific name resolves to the same
+	// label regardless of Go's randomized map iteration order. The anchor entry is
+	// dropped from refs only when it resolved to a *BirdNET (returned as primary);
+	// if some other instance occupies that key it stays in refs so its labels are
+	// not lost.
+	_, primary, _ = o.rangeFilterAnchor()
 	o.mu.RLock()
-	primary = o.primary
-	primaryID := o.ModelInfo.ID
 	refs = make([]entryRef, 0, len(o.models))
 	for id, entry := range o.models {
-		if primary != nil && id == primaryID {
+		if primary != nil && id == RegistryIDBirdNETV24 {
 			continue
 		}
 		refs = append(refs, entryRef{id: id, entry: entry})
@@ -2520,13 +2525,9 @@ func (o *Orchestrator) GeomodelSpeciesInfo(label string) (speciesIdx, numGeoSpec
 
 // Debug prints debug messages if debug mode is enabled.
 func (o *Orchestrator) Debug(format string, v ...any) {
-	o.mu.RLock()
-	primary := o.primary
-	o.mu.RUnlock()
-	if primary == nil {
-		return
+	if s := o.CurrentSettings(); s != nil && s.BirdNET.Debug {
+		GetLogger().Debug(fmt.Sprintf(format, v...))
 	}
-	primary.Debug(format, v...)
 }
 
 // PrimaryModelID returns the registry ID of the primary model. It reads the
