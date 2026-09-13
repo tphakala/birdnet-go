@@ -145,7 +145,7 @@ func TestInitializeFreshInstall_NoDatabase(t *testing.T) {
 // literal "any" for every detection, no matter when it occurred.
 func TestInitializeFreshInstall_WiresSunCalcForTimeOfDay(t *testing.T) {
 	v2.ResetDatabaseMode()
-	defer v2.ResetDatabaseMode()
+	t.Cleanup(v2.ResetDatabaseMode)
 
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "birdnet.db")
@@ -162,7 +162,12 @@ func TestInitializeFreshInstall_WiresSunCalcForTimeOfDay(t *testing.T) {
 
 	ds, err := InitializeFreshInstall(settings, nil, nil)
 	require.NoError(t, err)
-	defer func() { _ = ds.Close() }()
+	// Cleanups run LIFO, so this closes the datastore before ResetDatabaseMode
+	// runs. The close error is asserted rather than discarded: silently leaking
+	// the SQLite handle would make later tests in this package flaky.
+	t.Cleanup(func() {
+		require.NoError(t, ds.Close())
+	})
 
 	require.NotNil(t, ds.suncalc,
 		"InitializeFreshInstall must wire a SunCalc instance so calculateTimeOfDay can classify "+

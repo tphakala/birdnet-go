@@ -17,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
 // setupWeatherTestEnvironment creates a test environment with Echo, a mock
@@ -731,4 +732,58 @@ func TestFindHourlyWeatherByHourString(t *testing.T) {
 	// Mismatch test: requesting 12:xx local time should fail to match 12:00 UTC
 	respMismatch := controller.findHourlyWeatherByHourString(hwList, "12:30:00", "test-id", "127.0.0.1", "/api")
 	assert.Empty(t, respMismatch.Time)
+}
+
+// TestGetSunTimesResolvesDateInStationTimezone is a regression test for the sun
+// times endpoint answering for the wrong day.
+//
+// The requested date names a day at the station, but the handler parsed it with
+// time.Parse (midnight UTC) and passed that instant to SunCalc, which re-derives
+// the calendar day in the station's own zone. At any station west of UTC,
+// midnight UTC is still the afternoon before, so /weather/sun/2025-03-20 came
+// back with 2025-03-19's sunrise and sunset.
+func TestGetSunTimesResolvesDateInStationTimezone(t *testing.T) {
+	t.Attr("component", "weather")
+	t.Attr("type", "regression")
+	t.Attr("feature", "sun-times")
+
+	// Honolulu: UTC-10, far enough west that midnight UTC lands on the previous
+	// local afternoon.
+	const (
+		honoluluLatitude  = 21.3069
+		honoluluLongitude = -157.8583
+		requestedDate     = "2025-03-20"
+	)
+
+	e := echo.New()
+	sunCalc := suncalc.NewSunCalc(honoluluLatitude, honoluluLongitude)
+	core := apitest.NewCore(t,
+		apitest.WithEcho(e),
+		apitest.WithDatastore(mocks.NewMockInterface(t)),
+		apitest.WithSunCalc(sunCalc),
+	)
+	controller := New(core)
+
+	stationZone, err := time.LoadLocation(sunCalc.LocationName())
+	require.NoError(t, err, "station timezone %q must be loadable", sunCalc.LocationName())
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/weather/sun/"+requestedDate, http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/weather/sun/:date")
+	c.SetParamNames("date")
+	c.SetParamValues(requestedDate)
+
+	require.NoError(t, controller.GetSunTimes(c))
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var response sunTimesResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+
+	assert.Equal(t, requestedDate, response.Date)
+	assert.Equal(t, stationZone.String(), response.Timezone)
+	assert.Equal(t, requestedDate, response.Sunrise.In(stationZone).Format(time.DateOnly),
+		"sunrise must fall on the requested station day, not the one before it")
+	assert.Equal(t, requestedDate, response.Sunset.In(stationZone).Format(time.DateOnly),
+		"sunset must fall on the requested station day, not the one before it")
 }
