@@ -32,7 +32,7 @@ type BirdNET struct {
 
 The package provides methods for analyzing audio samples and producing detection results:
 
-- `Predict()` - Performs inference on audio samples to detect bird species
+- `PredictModel()` - Performs inference on audio samples with a chosen model to detect bird species
 
 ### Model Registry
 
@@ -144,13 +144,14 @@ A typical usage pattern involves:
 
 ```go
 // Create new classifier orchestrator
-orchestrator, err := birdnet.NewOrchestrator(settings)
+orchestrator, err := classifier.NewOrchestrator(settings)
 if err != nil {
     // Handle error
 }
 
-// Process audio chunk
-results, err := orchestrator.Predict(audioSample)
+// Process an audio chunk with a specific model (the built-in BirdNET v2.4 here)
+ctx := context.Background()
+results, err := orchestrator.PredictModel(ctx, classifier.RegistryIDBirdNETV24, audioSample)
 if err != nil {
     // Handle error
 }

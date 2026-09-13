@@ -53,10 +53,21 @@ type classifierBackend interface {
 	IsModelLoaded(modelID string) bool
 	IsModelActive(modelID string) bool
 	ModelInfos() []classifier.ModelInfo
-	PrimaryModelInfo() classifier.ModelInfo
+	DefaultTargets() []classifier.ModelInfo
 	PredictModel(ctx context.Context, modelID string, sample [][]float32) ([]datastore.Results, error)
 	CurrentSettings() *conf.Settings
 	ModelSpecFor(modelID string) (classifier.ModelSpec, bool)
+}
+
+// firstDefaultTarget returns the single fallback analysis target and whether one
+// exists, reproducing the old PrimaryModelInfo() fallback with a len guard so an empty
+// DefaultTargets() (no default model loaded) never panics a caller that indexed [0].
+func firstDefaultTarget(bn classifierBackend) (classifier.ModelInfo, bool) {
+	targets := bn.DefaultTargets()
+	if len(targets) == 0 {
+		return classifier.ModelInfo{}, false
+	}
+	return targets[0], true
 }
 
 // BufferManager handles the lifecycle of analysis buffer monitors
@@ -180,12 +191,13 @@ func (m *BufferManager) AddMonitor(source string) error {
 		configs = append(configs, buildMonitorConfig(source, &allInfos[i]))
 	}
 
-	// Fallback to primary model for backward compatibility when no
+	// Fallback to the default target for backward compatibility when no
 	// models are registered via the orchestrator's model map.
 	if len(configs) == 0 {
-		primaryInfo := m.bn.PrimaryModelInfo()
-		cfg := buildMonitorConfig(source, &primaryInfo)
-		configs = []monitorConfig{cfg}
+		if info, ok := firstDefaultTarget(m.bn); ok {
+			cfg := buildMonitorConfig(source, &info)
+			configs = []monitorConfig{cfg}
+		}
 	}
 
 	return m.AddMonitors(source, configs)

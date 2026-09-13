@@ -566,9 +566,12 @@ func (p *AudioPipelineService) applyPrimaryModelDims() {
 	if bn == nil {
 		return
 	}
-	primaryInfo := bn.PrimaryModelInfo()
-	clipBytes, overlapBytes, readSize := primaryInfo.Spec.BufferDimensions(primaryInfo.Overlap)
-	p.engine.SetPrimaryModel(primaryInfo.ID, clipBytes, overlapBytes, readSize)
+	// The zero ModelInfo when no default target is loaded yields ID "" and zero
+	// dimensions, so AddSource refuses the primary buffer exactly as it did for a
+	// zero PrimaryModelInfo().
+	info, _ := firstDefaultTarget(bn)
+	clipBytes, overlapBytes, readSize := info.Spec.BufferDimensions(info.Overlap)
+	p.engine.SetPrimaryModel(info.ID, clipBytes, overlapBytes, readSize)
 }
 
 // RestartSource tears down and reinitializes a single audio source.
@@ -1162,8 +1165,9 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 		allModelInfos[modelInfoSlice[i].ID] = modelInfoSlice[i]
 	}
 
-	// Primary model fallback targets for sources with no model config.
-	primaryTargets := []classifier.ModelInfo{p.bnAnalyzer.BirdNET().PrimaryModelInfo()}
+	// Default-target fallback for sources with no model config (the loaded v2.4
+	// entry, or empty when none is loaded).
+	primaryTargets := p.bnAnalyzer.BirdNET().DefaultTargets()
 
 	bufMgr := p.engine.BufferManager()
 	currentSettings := conf.Setting()
@@ -1434,7 +1438,9 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		for i := range modelInfoSlice {
 			loadedModels[modelInfoSlice[i].ID] = modelInfoSlice[i]
 		}
-		primaryModelID = p.bnAnalyzer.BirdNET().PrimaryModelID()
+		if info, ok := firstDefaultTarget(p.bnAnalyzer.BirdNET()); ok {
+			primaryModelID = info.ID
+		}
 	}
 	bufMgr := p.engine.BufferManager()
 
@@ -2108,7 +2114,7 @@ func (p *AudioPipelineService) buildMonitorConfigs(sourceModelMap map[string][]s
 		loadedModels[modelInfoSlice[i].ID] = modelInfoSlice[i]
 	}
 
-	primaryInfo := p.bnAnalyzer.BirdNET().PrimaryModelInfo()
+	primaryTargets := p.bnAnalyzer.BirdNET().DefaultTargets()
 	result := make(map[string][]monitorConfig, len(sourceIDs))
 
 	for _, sid := range sourceIDs {
@@ -2124,7 +2130,7 @@ func (p *AudioPipelineService) buildMonitorConfigs(sourceModelMap map[string][]s
 			}
 		}
 		if len(infos) == 0 {
-			infos = []classifier.ModelInfo{primaryInfo}
+			infos = primaryTargets
 		}
 
 		configs := make([]monitorConfig, len(infos))

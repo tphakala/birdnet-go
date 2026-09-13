@@ -1312,15 +1312,46 @@ func (o *Orchestrator) AllLabels() []string {
 	if o == nil {
 		return nil
 	}
+	primary, refs := o.orderedEntryRefs()
+
+	sets := make([][]string, 0, len(refs)+1)
+	// Include the primary explicitly via the pointer (as before this refactor), so its
+	// labels are covered even when its map entry is absent (a test-only construction
+	// with o.primary set but o.models empty). primary.Labels() is safe without entry.mu
+	// because BirdNET.Labels takes the model's own lock internally.
+	if primary != nil {
+		sets = append(sets, primary.Labels())
+	}
+	for _, ref := range refs {
+		// Capture the instance under entry.mu, release the lock, THEN call Labels().
+		// BirdNET.Labels takes bn.mu, so holding entry.mu across it would stall
+		// PredictModel on the inference hot path (the hazard the ModelInfos comment
+		// calls out). Mirrors ModelInfos / LoadedModelPaths.
+		ref.entry.mu.Lock()
+		instance := ref.entry.instance
+		ref.entry.mu.Unlock()
+		var labels []string
+		if instance != nil {
+			labels = instance.Labels()
+		}
+		sets = append(sets, labels)
+	}
+	return unionLabels(sets...)
+}
+
+// orderedEntryRefs returns the primary instance (via the o.primary pointer, or nil)
+// plus the SECONDARY model entries byte-sorted by ID. When a primary is set its own
+// map entry is skipped, because its labels are taken from the pointer above (unionLabels
+// dedupes regardless). This reproduces the pre-refactor AllLabels ordering exactly:
+// primary first, then secondaries byte-sorted, so Go's randomized map iteration cannot
+// pick a different winner for a duplicate scientific name in the reverse name maps. The
+// caller reads each secondary entry's instance under entry.mu.
+func (o *Orchestrator) orderedEntryRefs() (primary *BirdNET, refs []entryRef) {
 	o.mu.RLock()
-	primary := o.primary
+	primary = o.primary
 	primaryID := o.ModelInfo.ID
-	refs := make([]entryRef, 0, len(o.models))
+	refs = make([]entryRef, 0, len(o.models))
 	for id, entry := range o.models {
-		// When a primary is set, skip its map entry: its labels are unioned explicitly
-		// below via the *BirdNET pointer, so including it here would snapshot them twice.
-		// When primary is nil, do not skip, so the primary model's labels are still
-		// covered via the map entry. unionLabels dedupes regardless.
 		if primary != nil && id == primaryID {
 			continue
 		}
@@ -1328,28 +1359,8 @@ func (o *Orchestrator) AllLabels() []string {
 	}
 	o.mu.RUnlock()
 
-	// Sort secondary models by ID so the union (and the reverse maps built from it) is
-	// stable across rebuilds; Go's randomized map iteration would otherwise pick a
-	// different winner for duplicate scientific names, matching GetAllProbableSpeciesWithSettings.
 	slices.SortFunc(refs, func(a, b entryRef) int { return strings.Compare(a.id, b.id) })
-
-	// Include the primary explicitly. primary.Labels() is safe without entry.mu because
-	// BirdNET.Labels takes the model's own lock internally, matching Labels() and
-	// GetAllProbableSpeciesWithSettings; only secondary entries are read under entry.mu.
-	sets := make([][]string, 0, len(refs)+1)
-	if primary != nil {
-		sets = append(sets, primary.Labels())
-	}
-	for _, ref := range refs {
-		ref.entry.mu.Lock()
-		var labels []string
-		if ref.entry.instance != nil {
-			labels = ref.entry.instance.Labels()
-		}
-		ref.entry.mu.Unlock()
-		sets = append(sets, labels)
-	}
-	return unionLabels(sets...)
+	return primary, refs
 }
 
 // logMissingTaxonomyCodes emits, at debug level, the labels absent from the
@@ -2590,14 +2601,57 @@ func (o *Orchestrator) PrimaryModelInfo() ModelInfo {
 	return info
 }
 
+// DefaultTargets returns the models a source with an empty model list analyzes with.
+// Phase 3 (temporary): the v2.4 entry when loaded, else nil, which is exactly the
+// pre-Phase-3 primary fallback (a zero PrimaryModelInfo yields no target). Phase 4
+// gives this its final semantics when N != v2.4 and N = 0 become reachable. It is the
+// neutral replacement for PrimaryModelInfo() at the pipeline fallback sites.
+func (o *Orchestrator) DefaultTargets() []ModelInfo {
+	info := o.PrimaryModelInfo() // zero ModelInfo when no primary is set
+	if info.ID == "" {
+		return nil
+	}
+	return []ModelInfo{info}
+}
+
+// ResolvedModelPathForID returns the model file the loaded registryID instance is
+// actually running: "" when the instance runs its built-in/default source, when the
+// ID is not loaded, or when the models map is not initialized. For
+// RegistryIDBirdNETV24 this equals PrimaryResolvedModelPath(). It snapshots the entry
+// under o.mu, captures the instance under entry.mu and releases both before calling
+// the lock-free ResolvedModelPath(), mirroring LoadedModelPaths so it adds no
+// lock-ordering edge.
+func (o *Orchestrator) ResolvedModelPathForID(registryID string) string {
+	o.mu.RLock()
+	entry := o.models[registryID]
+	o.mu.RUnlock()
+	if entry == nil {
+		return ""
+	}
+	entry.mu.Lock()
+	instance := entry.instance
+	entry.mu.Unlock()
+	if instance == nil {
+		return ""
+	}
+	return instance.ResolvedModelPath()
+}
+
+// liveModelInfoProvider is implemented by instances whose effective identity
+// (Backend, Quantization, CustomPath) is resolved at build time and can differ from
+// the static ModelRegistry template. ModelInfos prefers it over the template for ANY
+// instance that implements it, so no registry ID is special-cased. Today only *BirdNET
+// implements it; secondaries fall through to the registry template.
+type liveModelInfoProvider interface{ LiveModelInfo() ModelInfo }
+
 // ModelInfos returns ModelInfo for all registered models. Thread-safe.
 // Used by the pipeline to build ModelTarget lists for buffer fan-out.
-// For the primary model entry, the live o.ModelInfo is returned rather than the
-// static registry template, so the reported Backend and Quantization match the
-// actually loaded model (e.g. ONNX/INT8 on the arm64 container default).
-// NumSpecies is always sourced from the live instance (not the template) so a
-// sliced or custom model reports its actual loaded label count rather than the
-// stock catalog number.
+// For an instance that reports a live identity (liveModelInfoProvider), that live
+// ModelInfo is returned rather than the static registry template, so the reported
+// Backend and Quantization match the actually loaded model (e.g. ONNX/INT8 on the
+// arm64 container default). NumSpecies is always sourced from the live instance (not
+// the template) so a sliced or custom model reports its actual loaded label count
+// rather than the stock catalog number.
 func (o *Orchestrator) ModelInfos() []ModelInfo {
 	o.mu.RLock()
 	if o.models == nil {
@@ -2608,11 +2662,6 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 	for id, entry := range o.models {
 		refs = append(refs, entryRef{id: id, entry: entry})
 	}
-	// Snapshot the live primary identity and info under the same RLock so the
-	// read is consistent with the models-map snapshot above. o.ModelInfo is
-	// written only under o.mu.Lock() (in reloadModelInternal), so RLock is sufficient.
-	primaryID := o.ModelInfo.ID
-	primaryInfo := o.ModelInfo
 	o.mu.RUnlock()
 
 	// Resolve overlap against the live settings snapshot (independently
@@ -2636,10 +2685,12 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 			continue
 		}
 		var info ModelInfo
-		if ref.id == primaryID {
-			// Return the live primary info so Backend/Quantization reflect the
-			// actually loaded model, not the static registry template.
-			info = primaryInfo
+		if p, ok := instance.(liveModelInfoProvider); ok {
+			// Prefer the instance's live identity so Backend/Quantization reflect the
+			// actually loaded model, not the static registry template. LiveModelInfo
+			// takes the instance's own lock; entry.mu is already released above, so this
+			// does not deepen the o.mu -> entry.mu nesting.
+			info = p.LiveModelInfo()
 		} else {
 			var exists bool
 			info, exists = ModelRegistry[ref.id]
