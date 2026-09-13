@@ -131,9 +131,9 @@ type Orchestrator struct {
 	includedSpecies []string
 
 	// Model management.
-	// NOTE: models map is keyed by ModelInfo.ID at construction time. If ReloadModel
-	// changes the model ID, the key goes stale. Delete() iterates values so cleanup
-	// is unaffected. ReloadModel re-keys the map after reload.
+	// NOTE: models map is keyed by the model's registry ID. The v2.4 reload keeps the
+	// same ID, so the key stays valid and there is no re-key; Delete() iterates values
+	// so cleanup is unaffected regardless.
 	mu          sync.RWMutex // protects the models map
 	inferenceMu sync.Mutex   // serializes inference across all models
 	models      map[string]*modelEntry
@@ -1528,9 +1528,9 @@ func (o *Orchestrator) RunFilterProcess(dateStr string, week float32) {
 	PrintSpeciesScores(parsedDate, speciesScores)
 }
 
-// ReloadModel reloads the primary model and re-syncs shared state.
+// ReloadModel reloads the v2.4 model in place and re-syncs shared state.
 // Acquires the per-model lock before reload to prevent concurrent inference,
-// then the write lock to re-key the models map.
+// then the write lock to re-sync shared state.
 func (o *Orchestrator) ReloadModel() error {
 	if err := o.reloadBirdNETV24InPlace(func(primary *BirdNET) error { return primary.ReloadModel() }); err != nil {
 		return err
@@ -1571,7 +1571,7 @@ func (o *Orchestrator) reloadPrimaryRangeFilter() {
 // refuse as a model-identity change. It shares reloadBirdNETV24InPlace's locking and
 // shared-state re-sync, differing only in delegating to BirdNET.reloadForVariantSwap
 // (allowPathChange=true). The model ID is invariant across a v2.4 variant swap, so
-// the re-key is a no-op in practice. Transactional rollback to the previous model
+// there is no models-map re-key. Transactional rollback to the previous model
 // lives in reloadModelInternal, so a failed swap leaves the previous variant serving.
 func (o *Orchestrator) ReloadPrimaryForVariantSwap() error {
 	if err := o.reloadBirdNETV24InPlace(func(primary *BirdNET) error { return primary.reloadForVariantSwap() }); err != nil {
@@ -1584,8 +1584,9 @@ func (o *Orchestrator) ReloadPrimaryForVariantSwap() error {
 	return nil
 }
 
-// reloadBirdNETV24InPlace performs the shared locking, per-instance reload, shared-state
-// re-sync, and models-map re-key for a primary-model reload. It delegates the actual
+// reloadBirdNETV24InPlace performs the shared locking, per-instance reload, and
+// shared-state re-sync for the v2.4 reload (the model ID is invariant, so there is no
+// models-map re-key). It delegates the actual
 // per-instance reload to reload(primary); ReloadModel passes BirdNET.ReloadModel (a
 // settings reload, path change refused) and ReloadPrimaryForVariantSwap passes
 // BirdNET.reloadForVariantSwap (an in-place variant swap, path change accepted).
@@ -2235,7 +2236,8 @@ func (o *Orchestrator) modelIDEnabled(registryID string) bool {
 }
 
 // UnloadModel removes a model from the Orchestrator and releases its resources.
-// Called by ModelManager during uninstall. Refuses to unload the primary model.
+// Called by ModelManager during uninstall. The built-in v2.4 model is protected
+// from uninstall by ModelManager (Uninstall refuses the permanent model), not here.
 // Thread-safe.
 func (o *Orchestrator) UnloadModel(registryID string) error {
 	log := GetLogger()
@@ -2639,14 +2641,13 @@ func (o *Orchestrator) loadEnabledModels(threadAlloc map[string]int) error {
 	// so this reads the same as the sibling drain in LoadModel; on the happy path
 	// it still runs exactly where it did, immediately before the return.
 	//
-	// Note what "every exit path" would mean if this function ever gained an error
-	// return: the drain would then also rewrite config.yaml on a startup that goes
-	// on to fail, where the previous placement skipped it. It has exactly one
-	// return today, so that case does not arise, but anyone adding an early error
-	// return here should decide whether a failed startup may still repair the
-	// configuration. The paths written are consistent with what was actually
-	// loaded either way, since a correction is only queued after a successful
-	// build.
+	// Note what "every exit path" means now that this function has an early error
+	// return (the fatal v2.4 failure below): the drain would rewrite config.yaml on
+	// a startup that goes on to fail. That case is harmless here because v2.4 loads
+	// first, before any path correction is queued, so on the fatal-v2.4 return the
+	// queue is empty and the drain is a no-op. The paths written are consistent with
+	// what was actually loaded either way, since a correction is only queued after a
+	// successful build.
 	//
 	// Warm-ups are drained per-iteration INSIDE the loop below, so they still
 	// complete before this does: the config write must not land inside the window

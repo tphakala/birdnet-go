@@ -672,10 +672,10 @@ func TestUnionLabels_SkipsEmptyEntries(t *testing.T) {
 }
 
 // TestModelInfos_LivePrimaryInfo verifies that ModelInfos returns the live
-// o.ModelInfo for the primary model entry rather than the static registry
-// template. This matters for the arm64 ONNX default, where o.ModelInfo
-// carries Backend=ONNX and Quantization=INT8 while the registry template has
-// Backend=TFLite and Quantization=FP32.
+// ModelInfo (from the instance's liveModelInfoProvider) for the v2.4 entry rather
+// than the static registry template. This matters for the arm64 ONNX default, where
+// the live info carries Backend=ONNX and Quantization=INT8 while the registry
+// template has Backend=TFLite and Quantization=FP32.
 // liveInfoMock is a mock instance that also reports a live ModelInfo, so it exercises
 // the liveModelInfoProvider capability branch in ModelInfos (the branch that reports
 // the actually-loaded Backend/Quantization/CustomPath instead of the static registry
@@ -721,8 +721,8 @@ func TestModelInfos_LivePrimaryInfo(t *testing.T) {
 // TestModelInfos_LiveInfoCapability pins the capability dispatch generically: a
 // liveModelInfoProvider instance reports its live identity, while a plain instance
 // (no capability) falls through to the static registry template. This is the seam
-// that lets Phase 3 drop the o.primary special-case without changing what ModelInfos
-// reports for the v2.4 slot.
+// that lets Phase 3 de-privilege the v2.4 slot without changing what ModelInfos
+// reports for it.
 func TestModelInfos_LiveInfoCapability(t *testing.T) {
 	t.Parallel()
 
@@ -757,8 +757,8 @@ func TestModelInfos_LiveInfoCapability(t *testing.T) {
 }
 
 // TestModelInfos_ReportsLiveSpeciesCount verifies ModelInfos sources NumSpecies
-// from the loaded instance, not the static registry (secondary) or o.ModelInfo
-// (primary) template. A user can load a sliced or custom model whose label file
+// from the loaded instance, not the static registry template. A user can load a
+// sliced or custom model whose label file
 // has a different class count than the stock catalog entry (e.g. a regional
 // Perch v2 slice with 383 species vs the stock 14,795); the AI Models panel must
 // report the actually-loaded count, not the template number.
@@ -826,8 +826,9 @@ func TestModelInfos_ReportsLiveSpeciesCount(t *testing.T) {
 // union of primary and secondary model labels, including scientific-only bat labels.
 // This is the label source used by the reverse name-search maps, so a secondary
 // model label must appear for localized search to find it.
-// When o.primary is nil (as in unit tests that avoid real model files), AllLabels
-// iterates o.models only; unionLabels deduplicates, so the result is still correct.
+// When no v2.4 anchor instance is present (as in unit tests that avoid real model
+// files), AllLabels iterates o.models only; unionLabels deduplicates, so the result
+// is still correct.
 func TestAllLabels_IncludesSecondaryModelLabels(t *testing.T) {
 	t.Parallel()
 
@@ -840,8 +841,9 @@ func TestAllLabels_IncludesSecondaryModelLabels(t *testing.T) {
 		labels: []string{"Barbastella barbastellus", "Myotis daubentonii"},
 	}
 
-	// newTestOrchestrator builds o.models but leaves o.primary nil, which is fine:
-	// AllLabels handles nil primary by iterating all entries in o.models.
+	// newTestOrchestrator registers the v2.4 entry as a mock (not a *BirdNET), so the
+	// range-filter anchor resolves to nil and AllLabels covers it via the entry
+	// iteration; unionLabels dedupes.
 	o := newTestOrchestrator(t, bird, bat)
 
 	got := o.AllLabels()

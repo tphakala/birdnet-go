@@ -15,9 +15,9 @@ import (
 )
 
 // TestOrchestrator_AccessorsNilPrimary_NoPanic verifies the teardown contract:
-// after Delete() clears o.primary, every primary-delegating accessor must return
-// its zero value instead of dereferencing a nil o.primary and panicking. A
-// minimal Orchestrator with no primary reproduces the post-Delete state exactly.
+// when no v2.4 model is loaded (as after Delete() clears o.models), every
+// anchor-gated accessor must return its zero value instead of panicking. A minimal
+// Orchestrator with no models reproduces that state exactly.
 func TestOrchestrator_AccessorsNilPrimary_NoPanic(t *testing.T) {
 	t.Parallel()
 
