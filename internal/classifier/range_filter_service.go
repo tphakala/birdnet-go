@@ -420,7 +420,6 @@ type predictResult struct {
 // backend captured under the lock but dereferenced after release, which is safe because
 // those fields are immutable for the backend's lifetime and Close() frees only the inner
 // session (mappedView relies on the same invariant).
-
 func (rfs *rangeFilterService) predict(settings *conf.Settings, week, threshold float32, syncUnmappedScore bool) (predictResult, error) {
 	rfs.mu.Lock()
 	rf := rfs.loadState().backend
