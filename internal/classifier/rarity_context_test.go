@@ -252,6 +252,44 @@ func TestGetRarityContext_NoGeomodel(t *testing.T) {
 	assert.Contains(t, classifierLabels, "Turdus merula_Common Blackbird")
 }
 
+// TestGetRarityContext_NoBackend covers the synthetic-zeros state distinct from
+// TestGetRarityContext_NoGeomodel: a configured location but NO range-filter backend
+// loaded (the geomodel failed to load, or none is configured). probableSpecies must
+// still report filterActive=false and a nil geomodel so rarity is reported unknown
+// rather than a bogus score, keeping computeRarity's !FilterActive short-circuit honest.
+func TestGetRarityContext_NoBackend(t *testing.T) {
+	settings := &conf.Settings{}
+	settings.BirdNET.Labels = []string{"Turdus merula_Common Blackbird"}
+	settings.BirdNET.LocationConfigured = true
+	settings.BirdNET.Latitude = 60.1
+	settings.BirdNET.Longitude = 24.9
+	publishTestSettings(t, settings)
+
+	bn := &BirdNET{
+		Settings:  settings,
+		ModelInfo: ModelInfo{ID: BirdNET_V2_4, Name: ModelNameBirdNETv24},
+	}
+	orch := &Orchestrator{
+		Settings:    settings,
+		ModelInfo:   bn.ModelInfo,
+		primary:     bn,
+		rangeFilter: newTestRangeFilterService(nil), // no backend loaded
+	}
+	t.Cleanup(orch.Delete)
+
+	rc, err := orch.GetRarityContext(time.Now())
+	require.NoError(t, err)
+	classifierLabels, filterActive := rc.ClassifierLabels, rc.FilterActive
+
+	assert.Same(t, settings, rc.Settings, "GetRarityContext returns the exact settings snapshot the scores were produced from")
+	// Location is configured but no backend is loaded, so predict returns predictNotLoaded
+	// and probableSpecies hands back synthetic zeros; filterActive must be false so rarity
+	// is reported unknown rather than a bogus "very rare" (#3935).
+	assert.False(t, filterActive, "a configured location with no range-filter backend yields synthetic zeros, so the filter is not active for rarity")
+	assert.Nil(t, rc.Geomodel, "no backend means no geomodel vocabulary")
+	assert.Contains(t, classifierLabels, "Turdus merula_Common Blackbird")
+}
+
 func TestGetRarityContext_NilPrimary(t *testing.T) {
 	// Publish a distinct snapshot so the no-primary branch has a known settings value to
 	// return, and assert GetRarityContext hands back exactly that rather than nil or a
