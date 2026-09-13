@@ -25,9 +25,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-// permanentRegistryID is the registry ID for the built-in BirdNET model
-// that cannot be uninstalled.
-const permanentRegistryID = "BirdNET_V2.4"
+// RegistryIDBirdNETV24 is the registry ID of the built-in BirdNET v2.4 model, the
+// canonical exported name for its slot. It is the model that cannot be uninstalled
+// while embedded. Phase 3 de-privileges this slot; PR 1 introduces the exported name
+// additively, PR 2 removes the permanentRegistryID alias below.
+const RegistryIDBirdNETV24 = "BirdNET_V2.4"
+
+// permanentRegistryID is a temporary alias for RegistryIDBirdNETV24 kept so existing
+// in-package readers do not change in PR 1. Removed in Phase 3 PR 2.
+const permanentRegistryID = RegistryIDBirdNETV24
 
 // sharedDirName is the gallery subdirectory that holds files shared across a
 // family's variants (the bat embedding extractor, the geomodel range filter).
