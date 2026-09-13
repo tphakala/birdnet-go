@@ -69,16 +69,20 @@ func (a *BirdNETAnalyzer) Start(_ context.Context) error {
 
 	a.bn = bn
 
-	// species_count is the live label count of the v2.4 model. Read it from ModelInfos
-	// (which sources NumSpecies from the loaded instance) by registry ID: byte-identical
-	// to the previous o.NumSpecies() for a v2.4 install and independent of the o.primary
-	// accessor removed in Phase 3.
+	// species_count is the live label count of the default (primary) model. Resolve the
+	// default target's ID, then read its live NumSpecies from ModelInfos (which sources
+	// the count from the loaded instance). Byte-identical to the previous o.NumSpecies()
+	// for any primary family (not only v2.4), and independent of the o.primary accessor
+	// removed in Phase 3.
 	speciesCount := 0
-	infos := bn.ModelInfos()
-	for i := range infos {
-		if infos[i].ID == classifier.RegistryIDBirdNETV24 {
-			speciesCount = infos[i].NumSpecies
-			break
+	if targets := bn.DefaultTargets(); len(targets) > 0 {
+		primaryID := targets[0].ID
+		infos := bn.ModelInfos()
+		for i := range infos {
+			if infos[i].ID == primaryID {
+				speciesCount = infos[i].NumSpecies
+				break
+			}
 		}
 	}
 

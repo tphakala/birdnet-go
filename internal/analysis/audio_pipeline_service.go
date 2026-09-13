@@ -1438,8 +1438,8 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		for i := range modelInfoSlice {
 			loadedModels[modelInfoSlice[i].ID] = modelInfoSlice[i]
 		}
-		if t := p.bnAnalyzer.BirdNET().DefaultTargets(); len(t) > 0 {
-			primaryModelID = t[0].ID
+		if info, ok := firstDefaultTarget(p.bnAnalyzer.BirdNET()); ok {
+			primaryModelID = info.ID
 		}
 	}
 	bufMgr := p.engine.BufferManager()

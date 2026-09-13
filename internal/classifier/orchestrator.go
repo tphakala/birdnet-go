@@ -1312,8 +1312,16 @@ func (o *Orchestrator) AllLabels() []string {
 	if o == nil {
 		return nil
 	}
-	refs := o.orderedEntryRefs()
-	sets := make([][]string, 0, len(refs))
+	primary, refs := o.orderedEntryRefs()
+
+	sets := make([][]string, 0, len(refs)+1)
+	// Include the primary explicitly via the pointer (as before this refactor), so its
+	// labels are covered even when its map entry is absent (a test-only construction
+	// with o.primary set but o.models empty). primary.Labels() is safe without entry.mu
+	// because BirdNET.Labels takes the model's own lock internally.
+	if primary != nil {
+		sets = append(sets, primary.Labels())
+	}
 	for _, ref := range refs {
 		// Capture the instance under entry.mu, release the lock, THEN call Labels().
 		// BirdNET.Labels takes bn.mu, so holding entry.mu across it would stall
@@ -1331,35 +1339,28 @@ func (o *Orchestrator) AllLabels() []string {
 	return unionLabels(sets...)
 }
 
-// orderedEntryRefs returns the loaded model entries in the canonical AllLabels order:
-// the primary/anchor entry first (when o.primary is set and present in the models
-// map), then the remaining entries byte-sorted by ID. Go's randomized map iteration
-// would otherwise pick a different winner for a duplicate scientific name in the
-// reverse name maps, so this order must stay stable across rebuilds. The anchor's
-// labels come from its own map entry (whose instance is o.primary), so no separate
-// pointer prepend is needed. The caller reads each entry's instance under entry.mu.
-func (o *Orchestrator) orderedEntryRefs() []entryRef {
+// orderedEntryRefs returns the primary instance (via the o.primary pointer, or nil)
+// plus the SECONDARY model entries byte-sorted by ID. When a primary is set its own
+// map entry is skipped, because its labels are taken from the pointer above (unionLabels
+// dedupes regardless). This reproduces the pre-refactor AllLabels ordering exactly:
+// primary first, then secondaries byte-sorted, so Go's randomized map iteration cannot
+// pick a different winner for a duplicate scientific name in the reverse name maps. The
+// caller reads each secondary entry's instance under entry.mu.
+func (o *Orchestrator) orderedEntryRefs() (primary *BirdNET, refs []entryRef) {
 	o.mu.RLock()
-	primary := o.primary
+	primary = o.primary
 	primaryID := o.ModelInfo.ID
-	refs := make([]entryRef, 0, len(o.models))
-	var anchor *entryRef
+	refs = make([]entryRef, 0, len(o.models))
 	for id, entry := range o.models {
-		ref := entryRef{id: id, entry: entry}
 		if primary != nil && id == primaryID {
-			a := ref // place first below
-			anchor = &a
 			continue
 		}
-		refs = append(refs, ref)
+		refs = append(refs, entryRef{id: id, entry: entry})
 	}
 	o.mu.RUnlock()
 
 	slices.SortFunc(refs, func(a, b entryRef) int { return strings.Compare(a.id, b.id) })
-	if anchor != nil {
-		refs = append([]entryRef{*anchor}, refs...)
-	}
-	return refs
+	return primary, refs
 }
 
 // logMissingTaxonomyCodes emits, at debug level, the labels absent from the

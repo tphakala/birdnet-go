@@ -28,6 +28,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -52,7 +53,7 @@ const phase3FixedLocale = "en-us"
 type phase3Snapshot struct {
 	LoadedIDs          []string       // sorted
 	ModelInfos         []ModelInfo    // sorted by ID; full struct incl. Backend, Quantization, NumSpecies, Overlap
-	DefaultTargetIDs   []string       // recorder uses PrimaryModelInfo().ID before PR 1's DefaultTargets() lands
+	DefaultTargetIDs   []string       // recorder reads the pre-Phase-3 PrimaryModelInfo().ID (== DefaultTargets()[0].ID)
 	EngineDims         [3]int         // clipBytes, overlapBytes, readSize of the default target
 	ThreadAllocation   map[string]int // per-model thread budget
 	AllLabelsCount     int
@@ -87,7 +88,9 @@ func buildPhase3Snapshot(t *testing.T, o *Orchestrator) phase3Snapshot {
 	slices.Sort(loadedIDs)
 
 	// Default target: the primary's live ModelInfo (PrimaryModelInfo already stamps the
-	// effective overlap). PR 1 swaps this recorder to DefaultTargets() (identical value).
+	// effective overlap). The recorder intentionally stays on the pre-Phase-3 accessor so
+	// the snapshot reads only accessors that exist on pristine main; the value equals
+	// DefaultTargets()[0], pinned by TestPhase3NeutralAccessors_EquivalentToPrimary.
 	primaryInfo := o.PrimaryModelInfo()
 	var defaultTargetIDs []string
 	var engineDims [3]int
@@ -145,14 +148,7 @@ func (o *Orchestrator) phase3RangeFilterKind() string {
 }
 
 func phase3KindString(active, fellBack, universal bool) string {
-	return "active=" + boolStr(active) + ";fellBack=" + boolStr(fellBack) + ";universal=" + boolStr(universal)
-}
-
-func boolStr(b bool) string {
-	if b {
-		return "true"
-	}
-	return "false"
+	return "active=" + strconv.FormatBool(active) + ";fellBack=" + strconv.FormatBool(fellBack) + ";universal=" + strconv.FormatBool(universal)
 }
 
 // phase3ResolverChainLen returns the length of the name-resolver chain under o.mu,
@@ -227,6 +223,18 @@ func phase3NewOrchestrator(t *testing.T, settings *conf.Settings) *Orchestrator 
 		t.Skipf("Skipping: embedded model not available in test environment: %v", err)
 	}
 	t.Cleanup(func() { o.Delete() })
+
+	// The goldens were recorded on the default build, where the embedded v2.4 model
+	// runs the TFLite backend at FP32. On arm64, or under -tags onnx/openvino, the live
+	// backend differs (e.g. ONNX/INT8) and ModelInfos reports it, so the golden's
+	// Backend/Quantization would legitimately not match. Skip rather than assert a
+	// build-specific mismatch; the amd64 default-build gate is the enforcement point.
+	infos := o.ModelInfos()
+	for i := range infos {
+		if infos[i].ID == RegistryIDBirdNETV24 && infos[i].Backend != BackendTFLite {
+			t.Skipf("Skipping: golden recorded for the TFLite default build; live v2.4 backend is %s", infos[i].Backend)
+		}
+	}
 	return o
 }
 
@@ -309,6 +317,13 @@ func TestResolvedModelPathForID(t *testing.T) {
 
 	bare := &Orchestrator{}
 	assert.Empty(t, bare.ResolvedModelPathForID("anything"), "a bare orchestrator resolves to empty")
+
+	// An entry present in the map but carrying a nil instance resolves to empty.
+	nilInst := &Orchestrator{
+		models:   map[string]*modelEntry{"nil-instance": {instance: nil}},
+		modelRSS: make(map[string]int64),
+	}
+	assert.Empty(t, nilInst.ResolvedModelPathForID("nil-instance"), "an entry with a nil instance resolves to empty")
 }
 
 // TestPhase3Invariance_DefaultConfig pins scenario (a): the default configuration with
@@ -437,12 +452,16 @@ func TestPhase3Invariance_RefusedReload(t *testing.T) {
 	assert.Equal(t, before, after, "a refused reload must leave the observable surface unchanged")
 }
 
-// TestPhase3Invariance_ModelsDirNoAutoSelect pins scenario (e): with an empty
-// range-filter model path, pointing the models dir at a directory does NOT auto-select
-// the geomodel for the v2.4 anchor. The auto-select gate requires geomodel
-// range-filter compatibility (birdnet.go), and v2.4 is MData-compatible, so file
-// presence in the models dir is irrelevant for the v2.4 anchor; the range filter stays
-// the embedded MData backend (universal=false).
+// TestPhase3Invariance_ModelsDirNoAutoSelect pins scenario (e): the observable
+// range-filter surface stays stable across SetModelsDir + ReloadRangeFilter, and the
+// v2.4 anchor keeps the embedded MData backend (universal=false).
+//
+// NOTE on scope: the models dir here is an empty temp dir, so this pins surface
+// stability across the reload, NOT the auto-select gate itself (there is no geomodel
+// file present to select). The stronger case, "geomodel files ARE present but the
+// MData-compatible v2.4 anchor still does not auto-select them", needs valid geomodel
+// artifacts on disk and is covered by a dedicated unit test in a later Phase 3 PR (per
+// the phase plan's test section); it is out of scope for this additive PR.
 func TestPhase3Invariance_ModelsDirNoAutoSelect(t *testing.T) {
 	// Not parallel: publishes the process-global settings snapshot.
 	settings := phase3BaseSettings(t)
