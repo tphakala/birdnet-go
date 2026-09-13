@@ -119,7 +119,6 @@ func TestSpeciesIndex_RebuiltOnReloadSecondaryModels(t *testing.T) {
 		openfauna: of,
 		names:     speciesindex.New(of),
 	}
-	o.ModelInfo.ID = permanentRegistryID
 	// Loaded on a different backend so the per-entry gate fires and the swap runs.
 	o.models[testSecondaryID] = &modelEntry{instance: &reloadFakeModel{id: testSecondaryID}, backend: secondaryBackendKey{backend: "onnx"}}
 	registerTestSecondaryBuilder(t, testSecondaryID, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {

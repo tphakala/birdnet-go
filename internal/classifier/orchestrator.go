@@ -83,7 +83,6 @@ type Orchestrator struct {
 	// Public fields, same layout as BirdNET for drop-in caller migration.
 	Settings       *conf.Settings // Deprecated: use CurrentSettings() instead.
 	settingsAtomic atomic.Pointer[conf.Settings]
-	ModelInfo      ModelInfo
 
 	// published becomes true once NewOrchestrator is about to hand the orchestrator
 	// to its caller. loadBirdNETV24 reads it to decide whether the v2.4 build may
@@ -138,7 +137,6 @@ type Orchestrator struct {
 	mu          sync.RWMutex // protects the models map
 	inferenceMu sync.Mutex   // serializes inference across all models
 	models      map[string]*modelEntry
-	primary     *BirdNET // direct access to the primary model
 	// rangeFilter is the orchestrator-owned range-filter and occurrence service
 	// (model de-privilege epic, Phase 2b). It replaces the range filter that used to
 	// live on the privileged primary *BirdNET, so occurrence, rarity and the species
@@ -304,14 +302,11 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 		return nil, err
 	}
 
-	// TEMPORARY (Phase 3 PR 2, this commit): mirror the loaded v2.4 entry into the
-	// legacy primary slot so the not-yet-migrated o.primary / o.ModelInfo readers
-	// and the invariance snapshot keep observing the same values. The next PR-2
-	// commit moves those readers to the range-filter anchor and deletes this block.
+	// Append the BirdNET v2.4 label resolver as chain[1], built from the loaded
+	// entry's labels (a construction-time snapshot, never refreshed on reload),
+	// preserving the pre-Phase-3 wiring exactly.
 	if entry, ok := o.models[RegistryIDBirdNETV24]; ok {
 		if bn, isBirdNET := entry.instance.(*BirdNET); isBirdNET {
-			o.primary = bn
-			o.ModelInfo = bn.ModelInfo
 			o.nameResolvers = []NameResolver{ofResolver, NewBirdNETLabelResolver(bn.Labels())}
 		}
 	}
@@ -377,14 +372,11 @@ func primaryRegistryID(settings *conf.Settings) string {
 
 // SetModelsDir sets the base directory for gallery-installed models.
 // Called by ModelManager after creation so model loaders can resolve
-// paths from the installed models directory when config paths are empty.
-// Also propagates the directory to the primary BirdNET instance for
-// geomodel auto-selection, and registers the taxonomy resolver if
-// taxonomy.csv is available on disk.
+// paths from the installed models directory when config paths are empty,
+// and registers the taxonomy resolver if taxonomy.csv is available on disk.
 func (o *Orchestrator) SetModelsDir(dir string) {
-	// Guard the o.modelsDir write and the o.primary read under o.mu: the model
-	// loaders read o.modelsDir under o.mu, and o.primary is cleared by Delete()
-	// under o.mu.Lock().
+	// Guard the o.modelsDir write under o.mu: the model loaders read o.modelsDir
+	// under o.mu.
 	//
 	// The write is guarded, but NOT every read is, so this lock alone is not what
 	// makes the field safe. resolveInstalledPaths, resolveSiblingSet and
@@ -401,12 +393,8 @@ func (o *Orchestrator) SetModelsDir(dir string) {
 	// holding o.mu here would self-deadlock (the RWMutex is not reentrant).
 	o.mu.Lock()
 	o.modelsDir = dir
-	primary := o.primary
 	o.mu.Unlock()
 
-	if primary != nil {
-		primary.SetModelsDir(dir)
-	}
 	o.registerTaxonomyResolver(dir)
 }
 
@@ -701,13 +689,6 @@ func inferenceFailureLogsAtError(streak int64) bool {
 	return streak == 1 || streak%inferenceFailureLogEvery == 0
 }
 
-func (o *Orchestrator) Predict(ctx context.Context, sample [][]float32) ([]datastore.Results, error) {
-	o.mu.RLock()
-	id := o.ModelInfo.ID
-	o.mu.RUnlock()
-	return o.PredictModel(ctx, id, sample)
-}
-
 // PredictModel runs inference on a specific model identified by modelID.
 // It uses a three-level locking protocol: a read lock on the models map to
 // fetch the entry (fast), then inferenceMu to serialize inference across all
@@ -865,21 +846,6 @@ func scientificNamesFromLabels(labels []string) []string {
 	return out
 }
 
-// PrimaryResolvedModelPath returns the model file the primary classifier is
-// actually running (empty when the built-in baseline runs, or when no primary is
-// loaded). Cross-package consumers must prefer it over settings.BirdNET.ModelPath,
-// which after a stale-path recovery names a file the instance is not running. The
-// o.primary read is guarded by o.mu; the resolved-path read itself is lock-free.
-func (o *Orchestrator) PrimaryResolvedModelPath() string {
-	o.mu.RLock()
-	primary := o.primary
-	o.mu.RUnlock()
-	if primary == nil {
-		return ""
-	}
-	return primary.ResolvedModelPath()
-}
-
 // LoadedModelPaths returns, for each currently-loaded model family (keyed by its
 // registry ID, which is also the o.models key), the model file that instance is
 // actually running. A family PRESENT in the map with an EMPTY value is loaded and
@@ -970,10 +936,15 @@ func (o *Orchestrator) rangeFilterAnchor() (cv classifierView, inst *BirdNET, ok
 // anchorCoverage returns the range-filter anchor's classifier identity and label
 // count, snapshotted under the instance lock so it does not race a concurrent
 // reload. RangeFilterStatus reads the models directory from o.modelsDir directly
-// (HQ3), so the modelsDir the underlying accessor also returns is discarded here.
+// (HQ3).
 func anchorCoverage(inst *BirdNET) ClassifierCoverage {
-	cov, _ := inst.primaryClassifierCoverage()
-	return cov
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return ClassifierCoverage{
+		ID:           inst.ModelInfo.ID,
+		Name:         inst.ModelInfo.Name,
+		TotalSpecies: len(inst.Settings.BirdNET.Labels),
+	}
 }
 
 // GetProbableSpecies returns species scores from the range filter.
@@ -1213,28 +1184,6 @@ func (o *Orchestrator) GetSpeciesOccurrenceAtTime(species string, detectionTime 
 		return 0
 	}
 	return rfs.occurrenceAtTime(species, detectionTime, o.CurrentSettings())
-}
-
-// NumSpecies returns the number of species labels of the primary model.
-func (o *Orchestrator) NumSpecies() int {
-	o.mu.RLock()
-	primary := o.primary
-	o.mu.RUnlock()
-	if primary == nil {
-		return 0
-	}
-	return primary.NumSpecies()
-}
-
-// Labels returns a copy of the species labels of the primary model.
-func (o *Orchestrator) Labels() []string {
-	o.mu.RLock()
-	primary := o.primary
-	o.mu.RUnlock()
-	if primary == nil {
-		return nil
-	}
-	return primary.Labels()
 }
 
 // unionLabels returns the deduplicated concatenation of the given label sets,
@@ -1717,11 +1666,9 @@ func (o *Orchestrator) reloadBirdNETV24InPlace(reload func(primary *BirdNET) err
 			Build()
 	}
 
-	info := primary.ReloadSnapshot()
-	// The reloaded primary is a fresh snapshot: drop its streak so a stale one does
-	// not linger. The ID is stable across a v2.4 reload, so a single drop suffices.
-	dropInferenceFailureStreak(info.ID)
-	o.ModelInfo = info
+	// Drop the reloaded instance's failure streak so a stale one does not linger.
+	// The ID is stable across a v2.4 reload.
+	dropInferenceFailureStreak(RegistryIDBirdNETV24)
 
 	// Update settings atomically.
 	o.updateSettings(primary.currentSettings())
@@ -1978,7 +1925,6 @@ func (o *Orchestrator) Delete() {
 	if s := o.scheduler.Swap(nil); s != nil {
 		s.stop()
 	}
-	o.primary = nil
 	o.models = nil
 	o.mu.Unlock()
 
@@ -2332,18 +2278,6 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 			Build()
 	}
 
-	// Refuse to unload the primary model. Compare against o.ModelInfo.ID
-	// (o.mu-guarded, held here as a write lock) rather than
-	// o.primary.ModelInfo.ID, which BirdNET.ReloadModel mutates under bn.mu.
-	if o.primary != nil && o.ModelInfo.ID == registryID {
-		o.mu.Unlock()
-		return errors.Newf("cannot unload the primary model %s", registryID).
-			Component("classifier.orchestrator").
-			Category(errors.CategoryValidation).
-			Context("registry_id", registryID).
-			Build()
-	}
-
 	entry, exists := o.models[registryID]
 	if !exists {
 		o.mu.Unlock()
@@ -2506,42 +2440,20 @@ func (o *Orchestrator) Debug(format string, v ...any) {
 	}
 }
 
-// PrimaryModelID returns the registry ID of the primary model. It reads the
-// o.mu-guarded primary identity under the read lock, so it is safe to call
-// concurrently with model reloads. Returns "" if no primary is set.
-func (o *Orchestrator) PrimaryModelID() string {
-	o.mu.RLock()
-	defer o.mu.RUnlock()
-	return o.ModelInfo.ID
-}
-
-// PrimaryModelInfo returns a copy of the primary model's live ModelInfo, read
-// under o.mu so callers outside the package get a consistent value instead of
-// racing reloadModelInternal's o.mu-guarded write to o.ModelInfo. The result is
-// a snapshot copy; it does not track subsequent reloads. Returns the zero
-// ModelInfo if no primary is set.
-func (o *Orchestrator) PrimaryModelInfo() ModelInfo {
-	o.mu.RLock()
-	info := o.ModelInfo
-	o.mu.RUnlock()
-	// Stamp the effective overlap from the live settings so buffer allocation
-	// and cadence consumers honor birdnet.overlap (bat stays fixed at 50%).
-	// CurrentSettings is independently synchronized, so resolve outside o.mu.
-	info.Overlap = ResolveModelOverlap(info.ID, info.Spec, o.CurrentSettings())
-	return info
-}
-
 // DefaultTargets returns the models a source with an empty model list analyzes with.
-// Phase 3 (temporary): the v2.4 entry when loaded, else nil, which is exactly the
-// pre-Phase-3 primary fallback (a zero PrimaryModelInfo yields no target). Phase 4
-// gives this its final semantics when N != v2.4 and N = 0 become reachable. It is the
-// neutral replacement for PrimaryModelInfo() at the pipeline fallback sites.
+// Phase 3 (temporary): the BirdNET v2.4 entry's live ModelInfo when it is loaded,
+// else nil, which is exactly the pre-Phase-3 primary fallback (a zero PrimaryModelInfo
+// yielded no target). The info carries the live Backend/Quantization/NumSpecies and the
+// effective overlap, stamped by ModelInfos. Phase 4 gives this its final semantics when
+// N != v2.4 and N = 0 become reachable.
 func (o *Orchestrator) DefaultTargets() []ModelInfo {
-	info := o.PrimaryModelInfo() // zero ModelInfo when no primary is set
-	if info.ID == "" {
-		return nil
+	infos := o.ModelInfos()
+	for i := range infos {
+		if infos[i].ID == RegistryIDBirdNETV24 {
+			return []ModelInfo{infos[i]}
+		}
 	}
-	return []ModelInfo{info}
+	return nil
 }
 
 // ResolvedModelPathForID returns the model file the loaded registryID instance is

@@ -87,11 +87,12 @@ func buildPhase3Snapshot(t *testing.T, o *Orchestrator) phase3Snapshot {
 	}
 	slices.Sort(loadedIDs)
 
-	// Default target: the primary's live ModelInfo (PrimaryModelInfo already stamps the
-	// effective overlap). The recorder intentionally stays on the pre-Phase-3 accessor so
-	// the snapshot reads only accessors that exist on pristine main; the value equals
-	// DefaultTargets()[0], pinned by TestPhase3NeutralAccessors_EquivalentToPrimary.
-	primaryInfo := o.PrimaryModelInfo()
+	// Default target: the v2.4 entry's live ModelInfo (DefaultTargets stamps the
+	// effective overlap and live NumSpecies via ModelInfos).
+	var primaryInfo ModelInfo
+	if dt := o.DefaultTargets(); len(dt) > 0 {
+		primaryInfo = dt[0]
+	}
 	var defaultTargetIDs []string
 	var engineDims [3]int
 	if primaryInfo.ID != "" {
@@ -257,48 +258,26 @@ func assertPhase3Golden(t *testing.T, name string, snap *phase3Snapshot) {
 	assert.Equal(t, string(want), string(data), "phase 3 invariance golden drift for %q", name)
 }
 
-// TestPhase3NeutralAccessors_EquivalentToPrimary pins the three PR 1 equivalence
-// claims on a real orchestrator: DefaultTargets()[0] == PrimaryModelInfo() and
-// ResolvedModelPathForID(v24) == PrimaryResolvedModelPath(), plus the not-loaded
-// zero-value cases. It exists only to prove the neutral accessors match what they
-// shadow; PR 2 removes it together with the Primary* accessors it compares against.
-func TestPhase3NeutralAccessors_EquivalentToPrimary(t *testing.T) {
-	t.Parallel()
-
-	settings := conftest.GetTestSettings()
-	o, err := NewOrchestrator(settings)
-	if err != nil {
-		t.Skipf("Skipping: embedded model not available in test environment: %v", err)
-	}
-	t.Cleanup(func() { o.Delete() })
-
-	dt := o.DefaultTargets()
-	require.Len(t, dt, 1, "a loaded v2.4 yields exactly one default target")
-	assert.Equal(t, o.PrimaryModelInfo(), dt[0], "DefaultTargets()[0] must equal PrimaryModelInfo()")
-
-	assert.Equal(t, o.PrimaryResolvedModelPath(), o.ResolvedModelPathForID(RegistryIDBirdNETV24),
-		"ResolvedModelPathForID(v24) must equal PrimaryResolvedModelPath()")
-
-	// Not-loaded / zero-value cases.
-	bare := &Orchestrator{}
-	assert.Nil(t, bare.DefaultTargets(), "no primary yields no default targets")
-	assert.Empty(t, bare.ResolvedModelPathForID(RegistryIDBirdNETV24), "not loaded resolves to empty")
-	assert.Empty(t, o.ResolvedModelPathForID("nonexistent-id"), "unknown ID resolves to empty")
-}
-
 // TestDefaultTargets covers the neutral default-target accessor without the embedded
-// model: not loaded yields nil, loaded yields the single PrimaryModelInfo().
+// model: no v2.4 entry yields nil, a loaded v2.4 entry yields its single ModelInfo.
 func TestDefaultTargets(t *testing.T) {
 	t.Parallel()
 
 	bare := &Orchestrator{}
-	assert.Nil(t, bare.DefaultTargets(), "no primary yields nil")
+	assert.Nil(t, bare.DefaultTargets(), "no v2.4 entry yields nil")
 
-	want := ModelInfo{ID: RegistryIDBirdNETV24, Name: "BirdNET v2.4", Spec: ModelSpec{SampleRate: 48000}}
-	o := &Orchestrator{ModelInfo: want}
+	o := &Orchestrator{
+		models: map[string]*modelEntry{
+			RegistryIDBirdNETV24: {instance: &mockModelInstance{
+				id:     RegistryIDBirdNETV24,
+				spec:   ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+				labels: []string{"Turdus merula_Common Blackbird", "Parus major_Great Tit"},
+			}},
+		},
+	}
 	dt := o.DefaultTargets()
-	require.Len(t, dt, 1)
-	assert.Equal(t, o.PrimaryModelInfo(), dt[0], "the single default target is PrimaryModelInfo(), overlap stamped")
+	require.Len(t, dt, 1, "a loaded v2.4 entry yields exactly one default target")
+	assert.Equal(t, RegistryIDBirdNETV24, dt[0].ID, "the single default target is the v2.4 entry")
 }
 
 // TestResolvedModelPathForID covers the neutral resolved-path accessor with mock

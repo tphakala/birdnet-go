@@ -79,20 +79,23 @@ func newTestOrchestrator(t *testing.T, mocks ...*mockModelInstance) *Orchestrato
 	}
 }
 
-// TestPrimaryModelInfo covers the o.mu-guarded primary-identity accessors that
-// callers outside the package use instead of reading o.ModelInfo directly.
-func TestPrimaryModelInfo(t *testing.T) {
+// TestOrchestrator_DefaultTargets covers the neutral default-target accessor
+// that callers use to resolve the default model (v2.4 when loaded).
+func TestOrchestrator_DefaultTargets(t *testing.T) {
 	t.Parallel()
 
-	want := ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4", Spec: ModelSpec{SampleRate: 48000}}
-	o := &Orchestrator{ModelInfo: want}
-	assert.Equal(t, want, o.PrimaryModelInfo())
-	assert.Equal(t, want.ID, o.PrimaryModelID())
+	o := &Orchestrator{}
+	registerTestV24(o, &mockModelInstance{
+		id:   RegistryIDBirdNETV24,
+		spec: ModelSpec{SampleRate: 48000},
+	})
+	dt := o.DefaultTargets()
+	require.Len(t, dt, 1)
+	assert.Equal(t, RegistryIDBirdNETV24, dt[0].ID)
 
-	// Zero value when no primary is set.
+	// Zero value when no v2.4 model is registered.
 	empty := &Orchestrator{}
-	assert.Equal(t, ModelInfo{}, empty.PrimaryModelInfo())
-	assert.Empty(t, empty.PrimaryModelID())
+	assert.Nil(t, empty.DefaultTargets())
 }
 
 func TestNewOrchestrator_SyncsSharedState(t *testing.T) {
@@ -105,8 +108,11 @@ func TestNewOrchestrator_SyncsSharedState(t *testing.T) {
 	}
 	t.Cleanup(func() { o.Delete() })
 
-	// Verify shared state is synced from primary model
-	assert.Equal(t, o.primary.ModelInfo, o.ModelInfo, "ModelInfo should be synced")
+	// Verify shared state is synced from loaded v2.4 model
+	dt := o.DefaultTargets()
+	require.Len(t, dt, 1)
+	assert.Equal(t, RegistryIDBirdNETV24, dt[0].ID)
+	assert.True(t, o.IsModelLoaded(RegistryIDBirdNETV24), "v2.4 model should be loaded")
 	if assert.NotNil(t, o.taxonomy, "taxonomy service should be populated") {
 		assert.NotEmpty(t, o.taxonomy.taxonomyMap, "taxonomy map should be populated")
 		assert.NotEmpty(t, o.taxonomy.sciIndex, "scientific index should be populated")
@@ -124,8 +130,8 @@ func TestOrchestrator_PrimaryIsModelInstance(t *testing.T) {
 	}
 	t.Cleanup(func() { o.Delete() })
 
-	// Verify primary model satisfies ModelInstance
-	var mi ModelInstance = o.primary
+	// Verify the v2.4 entry is present and exposes the ModelInstance surface.
+	mi := o.instanceFor(RegistryIDBirdNETV24)
 	require.NotNil(t, mi)
 	assert.NotEmpty(t, mi.ModelID())
 	assert.NotEmpty(t, mi.ModelName())
@@ -149,9 +155,10 @@ func TestOrchestrator_ModelsMapPopulated(t *testing.T) {
 	t.Cleanup(func() { o.Delete() })
 
 	assert.Len(t, o.models, 1, "Should have exactly one model in Phase 3b")
-	entry, exists := o.models[o.ModelInfo.ID]
-	require.True(t, exists, "Primary model should be registered by ID")
-	assert.Equal(t, o.primary, entry.instance)
+	entry, exists := o.models[RegistryIDBirdNETV24]
+	require.True(t, exists, "v2.4 model should be registered by ID")
+	assert.NotNil(t, entry.instance)
+	assert.Equal(t, RegistryIDBirdNETV24, entry.instance.ModelID())
 }
 
 func TestOrchestrator_PredictModel_Success(t *testing.T) {
@@ -743,15 +750,11 @@ func TestModelInfos_ReportsLiveSpeciesCount(t *testing.T) {
 			"secondary model must report the live label count, not the registry's stock 14795")
 	})
 
-	t.Run("primary model overrides stale template count", func(t *testing.T) {
+	t.Run("v2.4 model reports live label count", func(t *testing.T) {
 		t.Parallel()
 		const customPrimarySpecies = 500
-		const staleTemplateSpecies = 9999
-		const id = "BirdNET_V2.4"
-		// o.ModelInfo carries an arbitrary stale template count; the loaded instance
-		// reports a custom label file with 500 species that must override it.
+		const id = RegistryIDBirdNETV24
 		o := &Orchestrator{
-			ModelInfo: ModelInfo{ID: id, Name: "BirdNET v2.4", NumSpecies: staleTemplateSpecies},
 			models: map[string]*modelEntry{
 				id: {instance: &mockModelInstance{id: id, numSpecies: customPrimarySpecies}},
 			},
@@ -762,7 +765,7 @@ func TestModelInfos_ReportsLiveSpeciesCount(t *testing.T) {
 		require.Len(t, infos, 1)
 		assert.Equal(t, id, infos[0].ID)
 		assert.Equal(t, customPrimarySpecies, infos[0].NumSpecies,
-			"primary model must report the live label count, not o.ModelInfo's template count")
+			"v2.4 model must report the live label count")
 	})
 
 	t.Run("unregistered secondary model uses live count", func(t *testing.T) {

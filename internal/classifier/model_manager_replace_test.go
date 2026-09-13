@@ -307,15 +307,19 @@ func TestModelManager_InstallOrReplace_RollsBackOnLoadFailure(t *testing.T) {
 // that when the old model cannot be unloaded (it is the primary), the switch
 // aborts with the old variant intact and the freshly downloaded new files removed.
 func TestModelManager_InstallOrReplace_UnloadFailureKeepsOldAndCleansNew(t *testing.T) {
+	// FIXME: Phase 3 PR 2 de-privileged the primary model and removed the refusal to
+	// unload primary models from UnloadModel. UnloadModel now unconditionally succeeds
+	// for any loaded model, so this unload-failure branch in InstallOrReplace cannot be
+	// exercised without an error-injection seam on UnloadModel. Do not weaken assertions.
+	t.Skip("FIXME: UnloadModel no longer refuses loaded primary models; unload failure branch unreachable without an error seam")
+
 	entry, modelsDir, srvURL := twoVariantServerEntry(t)
 	entry.RegistryID = RegistryIDBSG
 
 	// Primary models are refused by UnloadModel, forcing the unload-failure path.
 	primary := &BirdNET{ModelInfo: ModelInfo{ID: entry.RegistryID}}
 	orch := &Orchestrator{
-		ModelInfo: primary.ModelInfo,
-		models:    map[string]*modelEntry{entry.RegistryID: {instance: primary}},
-		primary:   primary,
+		models: map[string]*modelEntry{entry.RegistryID: {instance: primary}},
 	}
 	orch.SetModelsDir(modelsDir)
 	mm := NewModelManager(modelsDir, orch, nil)

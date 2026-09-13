@@ -91,7 +91,6 @@ type BirdNET struct {
 	settingsAtomic atomic.Pointer[conf.Settings]
 	ModelInfo      ModelInfo // Information about the current model
 	modelVersion   string    // Human-readable model version string (per-instance to avoid shared global state)
-	modelsDir      string    // base directory for gallery-installed models (set by Orchestrator)
 	// primaryPath is the outcome of resolving settings.BirdNET.ModelPath for this
 	// instance: which primary classifier model file it actually loads from, and
 	// whether that differs from what the user configured. resolved.model differs
@@ -1487,34 +1486,6 @@ type RangeFilterStatusResponse struct {
 	// (only meaningful when Geomodel is non-nil). Zero means the geomodel filters out all
 	// detections for the primary classifier.
 	MappedSpecies int `json:"mappedSpecies"`
-}
-
-// primaryClassifierCoverage returns the classifier identity and label count for the
-// primary. The geomodel coverage stats and runtime state are owned by the
-// orchestrator's rangeFilterService (Phase 2b); the orchestrator combines the two.
-// modelsDir is snapshotted here under bn.mu so the caller's auto-select check does
-// not race a concurrent SetModelsDir write.
-func (bn *BirdNET) primaryClassifierCoverage() (primary ClassifierCoverage, modelsDir string) {
-	bn.mu.Lock()
-	defer bn.mu.Unlock()
-	return ClassifierCoverage{
-		ID:           bn.ModelInfo.ID,
-		Name:         bn.ModelInfo.Name,
-		TotalSpecies: len(bn.Settings.BirdNET.Labels),
-	}, bn.modelsDir
-}
-
-// SetModelsDir sets the base directory for gallery-installed models.
-// Called by the Orchestrator after creation so auto-selection can
-// resolve geomodel paths from the installed models directory.
-func (bn *BirdNET) SetModelsDir(dir string) {
-	// Guard the write under bn.mu: bn.modelsDir is snapshotted under bn.mu by
-	// primaryClassifierView (which the range-filter service reads when building its
-	// backend) and by primaryClassifierCoverage. No caller of this method holds
-	// bn.mu, so locking here cannot self-deadlock.
-	bn.mu.Lock()
-	defer bn.mu.Unlock()
-	bn.modelsDir = dir
 }
 
 // shouldAutoSelectV3Geomodel reports whether the v3 geomodel should be

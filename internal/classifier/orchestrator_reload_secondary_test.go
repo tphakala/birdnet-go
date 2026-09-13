@@ -85,7 +85,6 @@ func TestReloadSecondaryModels_SwapsAndClosesOld(t *testing.T) {
 
 	old := &reloadFakeModel{id: testSecondaryID}
 	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
-	o.ModelInfo.ID = permanentRegistryID
 	// Loaded on a different backend so the per-entry gate fires.
 	o.models[testSecondaryID] = &modelEntry{instance: old, backend: secondaryBackendKey{backend: "onnx"}}
 
@@ -129,7 +128,6 @@ func TestReloadSecondaryModels_ThreadCountChangeForcesRebuild(t *testing.T) {
 
 	old := &reloadFakeModel{id: testSecondaryID}
 	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
-	o.ModelInfo.ID = permanentRegistryID
 	// Loaded with the SAME backend/device/path but a different thread count (4).
 	o.models[testSecondaryID] = &modelEntry{instance: old, backend: secondaryBackendKey{
 		backend: "openvino", ovDevice: "cpu", ovPath: "/opt/ov", threads: 4,
@@ -174,7 +172,6 @@ func TestReloadSecondaryModels_NoOpWhenThreadsUnchangedNonZero(t *testing.T) {
 
 	old := &reloadFakeModel{id: testSecondaryID}
 	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
-	o.ModelInfo.ID = permanentRegistryID
 	// Already built with the exact current key, including threads:4.
 	o.models[testSecondaryID] = &modelEntry{instance: old, backend: secondaryBackendKey{
 		backend: "openvino", ovDevice: "cpu", ovPath: "/opt/ov", threads: 4,
@@ -202,7 +199,6 @@ func TestReloadSecondaryModels_WarmupHoldsInferenceMu(t *testing.T) {
 
 	old := &reloadFakeModel{id: testSecondaryID}
 	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
-	o.ModelInfo.ID = permanentRegistryID
 	// Loaded on a different backend so the per-entry gate fires and the rebuild runs.
 	o.models[testSecondaryID] = &modelEntry{instance: old, backend: secondaryBackendKey{backend: "onnx"}}
 
@@ -256,7 +252,6 @@ func TestReloadSecondaryModels_NoOpWhenTripletUnchanged(t *testing.T) {
 
 	old := &reloadFakeModel{id: testSecondaryID}
 	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
-	o.ModelInfo.ID = permanentRegistryID
 	// Already on the current triplet: reload must be a no-op.
 	o.models[testSecondaryID] = &modelEntry{instance: old, backend: secondaryBackendKey{backend: "openvino", ovDevice: "gpu", ovPath: "/opt/ov"}}
 
@@ -278,7 +273,6 @@ func TestReloadSecondaryModels_KeepsOldOnBuildFailure(t *testing.T) {
 
 	old := &reloadFakeModel{id: testSecondaryID}
 	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
-	o.ModelInfo.ID = permanentRegistryID
 	o.models[testSecondaryID] = &modelEntry{instance: old, backend: secondaryBackendKey{backend: "onnx"}}
 
 	buildErr := errors.Newf("simulated build failure").Build()
@@ -306,7 +300,6 @@ func TestReloadSecondaryModels_SkipsNonOVCapableSecondary(t *testing.T) {
 	const ortOnlyID = "ORTOnlySecondary"
 	ortOnly := &reloadFakeModel{id: ortOnlyID}
 	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
-	o.ModelInfo.ID = permanentRegistryID
 	o.models[ortOnlyID] = &modelEntry{instance: ortOnly}
 
 	require.NoError(t, o.ReloadSecondaryModels())
@@ -330,7 +323,6 @@ func TestReloadSecondaryModels_OrphanedEntrySkipsSwapAndClosesNew(t *testing.T) 
 	setGlobalBackend(t, "openvino", "gpu", "")
 
 	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
-	o.ModelInfo.ID = permanentRegistryID
 	// The entry has a live instance and a stale triplet, so the per-entry gate
 	// fires and the build runs. The builder simulates a concurrent Delete/Unload
 	// tearing the entry down (instance == nil) WHILE the slow build is in flight;
@@ -363,7 +355,6 @@ func TestReloadSecondaryModels_AlreadyOrphanedSkipsBuild(t *testing.T) {
 	setGlobalBackend(t, "openvino", "gpu", "")
 
 	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
-	o.ModelInfo.ID = permanentRegistryID
 	// Already orphaned, with a stale triplet that would otherwise fire the gate.
 	o.models[testSecondaryID] = &modelEntry{instance: nil, backend: secondaryBackendKey{backend: "onnx"}}
 
@@ -385,7 +376,6 @@ func TestReloadSecondaryModels_PartialFailureAmongMultiple(t *testing.T) {
 	oldOK := &reloadFakeModel{id: testSecondaryID}
 	oldFail := &reloadFakeModel{id: testSecondaryID2}
 	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
-	o.ModelInfo.ID = permanentRegistryID
 	// Both entries are on a different backend so the per-entry gate fires for each.
 	o.models[testSecondaryID] = &modelEntry{instance: oldOK, backend: secondaryBackendKey{backend: "onnx"}}
 	o.models[testSecondaryID2] = &modelEntry{instance: oldFail, backend: secondaryBackendKey{backend: "onnx"}}
@@ -417,7 +407,6 @@ func TestReloadSecondaryModels_RaceWithPredict(t *testing.T) {
 	setGlobalBackend(t, "openvino", "gpu", "")
 
 	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
-	o.ModelInfo.ID = permanentRegistryID
 	o.models[testSecondaryID] = &modelEntry{instance: &reloadFakeModel{id: testSecondaryID}, backend: secondaryBackendKey{backend: "onnx"}}
 
 	registerTestSecondaryBuilder(t, testSecondaryID, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
@@ -472,7 +461,6 @@ func TestReloadSecondaryModels_PerEntryTripletRebuildsOnlyStale(t *testing.T) {
 	upToDate := &reloadFakeModel{id: testSecondaryID}
 	stale := &reloadFakeModel{id: testSecondaryID2}
 	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
-	o.ModelInfo.ID = permanentRegistryID
 	// testSecondaryID is already on the current triplet; testSecondaryID2 is stale.
 	o.models[testSecondaryID] = &modelEntry{instance: upToDate, backend: currentTriplet}
 	o.models[testSecondaryID2] = &modelEntry{instance: stale, backend: secondaryBackendKey{backend: "onnx"}}
@@ -518,7 +506,6 @@ func TestReloadSecondaryModels_DiscardsPathResolution(t *testing.T) {
 	setGlobalBackend(t, "openvino", "gpu", "/opt/ov")
 
 	o := newTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID})
-	o.ModelInfo.ID = permanentRegistryID
 	o.models[testSecondaryID] = &modelEntry{
 		instance: &reloadFakeModel{id: testSecondaryID},
 		backend:  secondaryBackendKey{backend: "onnx"},

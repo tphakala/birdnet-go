@@ -82,7 +82,6 @@ func buildTestOrchestrator(t *testing.T, settings *conf.Settings, rf interface{ 
 	}
 	o := &Orchestrator{
 		Settings: settings,
-		primary:  bn,
 		// Register bn as the loaded v2.4 entry so the range-filter accessors, which
 		// key off the o.models anchor, resolve it (mirrors a real orchestrator).
 		models: map[string]*modelEntry{RegistryIDBirdNETV24: {instance: bn}},

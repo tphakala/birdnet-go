@@ -46,8 +46,6 @@ func TestOrchestrator_ConcurrentReloadAndReads_NoRace(t *testing.T) {
 
 	o := &Orchestrator{
 		Settings:    settings,
-		ModelInfo:   bn.ModelInfo, // o.mu-guarded copy, mirrors the primary (as NewOrchestrator wires it)
-		primary:     bn,
 		rangeFilter: newTestRangeFilterService(rf),
 		models: map[string]*modelEntry{
 			primaryID:  {instance: bn},
@@ -257,9 +255,7 @@ func TestOrchestrator_ConcurrentSettingsReadsAndWrites_NoRace(t *testing.T) {
 	}
 	bn.settingsAtomic.Store(settings)
 	o := &Orchestrator{
-		Settings:  settings,
-		ModelInfo: bn.ModelInfo,
-		primary:   bn,
+		Settings: settings,
 		// A nil-backend service so o.GetProbableSpecies enters the service's
 		// probableSpecies and actually reads the settings snapshot under the race,
 		// instead of returning early on a nil range filter.
@@ -284,15 +280,15 @@ func TestOrchestrator_ConcurrentSettingsReadsAndWrites_NoRace(t *testing.T) {
 		}
 	})
 
-	// Reader: concurrently calls CurrentSettings, Labels, NumSpecies, and
-	// GetProbableSpecies (which delegates to the primary's settings-reading path).
+	// Reader: concurrently calls CurrentSettings, AllLabels, DefaultTargets, and
+	// GetProbableSpecies (which delegates to the range filter's settings-reading path).
 	wg.Go(func() {
 		<-start
 		now := time.Now()
 		for range iterations {
 			_ = o.CurrentSettings()
-			_ = o.Labels()
-			_ = o.NumSpecies()
+			_ = o.AllLabels()
+			_ = o.DefaultTargets()
 			_, _ = o.GetProbableSpecies(now, 0)
 		}
 	})
