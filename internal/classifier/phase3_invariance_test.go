@@ -249,6 +249,68 @@ func assertPhase3Golden(t *testing.T, name string, snap *phase3Snapshot) {
 	assert.Equal(t, string(want), string(data), "phase 3 invariance golden drift for %q", name)
 }
 
+// TestPhase3NeutralAccessors_EquivalentToPrimary pins the three PR 1 equivalence
+// claims on a real orchestrator: DefaultTargets()[0] == PrimaryModelInfo() and
+// ResolvedModelPathForID(v24) == PrimaryResolvedModelPath(), plus the not-loaded
+// zero-value cases. It exists only to prove the neutral accessors match what they
+// shadow; PR 2 removes it together with the Primary* accessors it compares against.
+func TestPhase3NeutralAccessors_EquivalentToPrimary(t *testing.T) {
+	t.Parallel()
+
+	settings := conftest.GetTestSettings()
+	o, err := NewOrchestrator(settings)
+	if err != nil {
+		t.Skipf("Skipping: embedded model not available in test environment: %v", err)
+	}
+	t.Cleanup(func() { o.Delete() })
+
+	dt := o.DefaultTargets()
+	require.Len(t, dt, 1, "a loaded v2.4 yields exactly one default target")
+	assert.Equal(t, o.PrimaryModelInfo(), dt[0], "DefaultTargets()[0] must equal PrimaryModelInfo()")
+
+	assert.Equal(t, o.PrimaryResolvedModelPath(), o.ResolvedModelPathForID(RegistryIDBirdNETV24),
+		"ResolvedModelPathForID(v24) must equal PrimaryResolvedModelPath()")
+
+	// Not-loaded / zero-value cases.
+	bare := &Orchestrator{}
+	assert.Nil(t, bare.DefaultTargets(), "no primary yields no default targets")
+	assert.Empty(t, bare.ResolvedModelPathForID(RegistryIDBirdNETV24), "not loaded resolves to empty")
+	assert.Empty(t, o.ResolvedModelPathForID("nonexistent-id"), "unknown ID resolves to empty")
+}
+
+// TestDefaultTargets covers the neutral default-target accessor without the embedded
+// model: not loaded yields nil, loaded yields the single PrimaryModelInfo().
+func TestDefaultTargets(t *testing.T) {
+	t.Parallel()
+
+	bare := &Orchestrator{}
+	assert.Nil(t, bare.DefaultTargets(), "no primary yields nil")
+
+	want := ModelInfo{ID: RegistryIDBirdNETV24, Name: "BirdNET v2.4", Spec: ModelSpec{SampleRate: 48000}}
+	o := &Orchestrator{ModelInfo: want}
+	dt := o.DefaultTargets()
+	require.Len(t, dt, 1)
+	assert.Equal(t, o.PrimaryModelInfo(), dt[0], "the single default target is PrimaryModelInfo(), overlap stamped")
+}
+
+// TestResolvedModelPathForID covers the neutral resolved-path accessor with mock
+// instances: a built-in (empty) path, a custom path, an unknown ID, and a bare
+// orchestrator.
+func TestResolvedModelPathForID(t *testing.T) {
+	t.Parallel()
+
+	o := newTestOrchestrator(t,
+		&mockModelInstance{id: "builtin-model", resolvedPath: ""},
+		&mockModelInstance{id: "custom-model", resolvedPath: "/models/custom.onnx"},
+	)
+	assert.Empty(t, o.ResolvedModelPathForID("builtin-model"), "built-in source resolves to empty")
+	assert.Equal(t, "/models/custom.onnx", o.ResolvedModelPathForID("custom-model"))
+	assert.Empty(t, o.ResolvedModelPathForID("not-loaded"), "an unloaded ID resolves to empty")
+
+	bare := &Orchestrator{}
+	assert.Empty(t, bare.ResolvedModelPathForID("anything"), "a bare orchestrator resolves to empty")
+}
+
 // TestPhase3Invariance_DefaultConfig pins scenario (a): the default configuration with
 // only the embedded v2.4 model loaded.
 func TestPhase3Invariance_DefaultConfig(t *testing.T) {

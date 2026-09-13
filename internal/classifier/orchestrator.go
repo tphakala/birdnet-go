@@ -2590,6 +2590,42 @@ func (o *Orchestrator) PrimaryModelInfo() ModelInfo {
 	return info
 }
 
+// DefaultTargets returns the models a source with an empty model list analyzes with.
+// Phase 3 (temporary): the v2.4 entry when loaded, else nil, which is exactly the
+// pre-Phase-3 primary fallback (a zero PrimaryModelInfo yields no target). Phase 4
+// gives this its final semantics when N != v2.4 and N = 0 become reachable. It is the
+// neutral replacement for PrimaryModelInfo() at the pipeline fallback sites.
+func (o *Orchestrator) DefaultTargets() []ModelInfo {
+	info := o.PrimaryModelInfo() // zero ModelInfo when no primary is set
+	if info.ID == "" {
+		return nil
+	}
+	return []ModelInfo{info}
+}
+
+// ResolvedModelPathForID returns the model file the loaded registryID instance is
+// actually running: "" when the instance runs its built-in/default source, when the
+// ID is not loaded, or when the models map is not initialized. For
+// RegistryIDBirdNETV24 this equals PrimaryResolvedModelPath(). It snapshots the entry
+// under o.mu, captures the instance under entry.mu and releases both before calling
+// the lock-free ResolvedModelPath(), mirroring LoadedModelPaths so it adds no
+// lock-ordering edge.
+func (o *Orchestrator) ResolvedModelPathForID(registryID string) string {
+	o.mu.RLock()
+	entry := o.models[registryID]
+	o.mu.RUnlock()
+	if entry == nil {
+		return ""
+	}
+	entry.mu.Lock()
+	instance := entry.instance
+	entry.mu.Unlock()
+	if instance == nil {
+		return ""
+	}
+	return instance.ResolvedModelPath()
+}
+
 // liveModelInfoProvider is implemented by instances whose effective identity
 // (Backend, Quantization, CustomPath) is resolved at build time and can differ from
 // the static ModelRegistry template. ModelInfos prefers it over the template for ANY
