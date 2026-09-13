@@ -390,7 +390,7 @@ var EmbeddedCatalog = []CatalogEntry{
 		Region:        "",
 		SpeciesCount:  birdnetV24SpeciesCount,
 		Version:       "2.4",
-		RegistryID:    permanentRegistryID,
+		RegistryID:    RegistryIDBirdNETV24,
 		Hidden:        false,
 		// RequiresONNX is now per-variant: the BuiltIn baseline runs on the embedded
 		// TFLite model (no ONNX Runtime needed); the DFT-truncated builds are ONNX
@@ -815,7 +815,7 @@ func VariantSelectable(entry *CatalogEntry, variantID string) bool {
 // swapped (never uninstalled), and swaps through the dedicated primary-reload path
 // rather than the generic variant-replace flow.
 func IsPermanentEntry(entry *CatalogEntry) bool {
-	return entry != nil && entry.RegistryID == permanentRegistryID
+	return entry != nil && entry.RegistryID == RegistryIDBirdNETV24
 }
 
 // builtInVariant returns the entry's BuiltIn baseline variant (the embedded

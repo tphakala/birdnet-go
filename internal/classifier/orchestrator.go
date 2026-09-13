@@ -350,7 +350,7 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 // real model: inline, the only way to observe it was to construct an Orchestrator,
 // so removing the family check broke no test.
 func (o *Orchestrator) primaryPathResolverFor(settings *conf.Settings) primaryPathResolver {
-	if primaryRegistryID(settings) != permanentRegistryID {
+	if primaryRegistryID(settings) != RegistryIDBirdNETV24 {
 		return nil
 	}
 	return o.resolvePrimaryModelPath
@@ -362,7 +362,7 @@ func (o *Orchestrator) primaryPathResolverFor(settings *conf.Settings) primaryPa
 // guessing (NewBirdNET's Tier 2 reports the unknown version as an error).
 func primaryRegistryID(settings *conf.Settings) string {
 	if settings.BirdNET.Version == "" {
-		return permanentRegistryID
+		return RegistryIDBirdNETV24
 	}
 	if info, ok := ResolveBirdNETVersion(settings.BirdNET.Version); ok {
 		return info.ID

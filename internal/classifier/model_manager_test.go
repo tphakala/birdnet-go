@@ -638,7 +638,7 @@ func TestModelManager_UninstallRejectsPermanent(t *testing.T) {
 	// variant may be swapped, never removed.
 	entry, ok := GetCatalogEntry("birdnet-v2.4")
 	require.True(t, ok, "birdnet-v2.4 must be present in the catalog")
-	require.Equal(t, permanentRegistryID, entry.RegistryID, "birdnet-v2.4 must carry the permanent registry id")
+	require.Equal(t, RegistryIDBirdNETV24, entry.RegistryID, "birdnet-v2.4 must carry the permanent registry id")
 
 	mm := NewModelManager(t.TempDir(), nil, nil)
 	mm.ScanInstalled()

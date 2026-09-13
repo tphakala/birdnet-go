@@ -29,7 +29,7 @@ func isolateTestConfig(t *testing.T) {
 // permanentSwapEntry builds a synthetic permanent (BirdNET v2.4-style) catalog
 // entry with a file-less BuiltIn baseline and one downloadable DFT-truncated
 // variant served by a local test server. It mirrors the real birdnet-v2.4 shape
-// (RegistryID == permanentRegistryID) so InstallOrReplace routes it through the
+// (RegistryID == RegistryIDBirdNETV24) so InstallOrReplace routes it through the
 // dedicated primary-swap path, while using a small payload with a matching checksum
 // so the download verifies without the real multi-MB model file.
 func permanentSwapEntry(t *testing.T) (entry CatalogEntry, modelsDir, srvURL, dftLocalName string) {
@@ -51,7 +51,7 @@ func permanentSwapEntry(t *testing.T) (entry CatalogEntry, modelsDir, srvURL, df
 		Name:            "Test Primary v2.4",
 		Version:         "2.4",
 		Category:        CategoryBird,
-		RegistryID:      permanentRegistryID,
+		RegistryID:      RegistryIDBirdNETV24,
 		HuggingFaceRepo: "t/v2.4",
 		SpeciesCount:    birdnetV24SpeciesCount,
 		Variants: []CatalogVariant{

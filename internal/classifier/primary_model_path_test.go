@@ -43,7 +43,7 @@ func writePrimaryGalleryModel(t *testing.T, modelsDir string) string {
 func primaryCatalogEntry() (CatalogEntry, bool) {
 	catalog := ActiveCatalog()
 	for i := range catalog {
-		if catalog[i].RegistryID == permanentRegistryID && len(catalog[i].Variants) > 0 {
+		if catalog[i].RegistryID == RegistryIDBirdNETV24 && len(catalog[i].Variants) > 0 {
 			return catalog[i], true
 		}
 	}
@@ -484,7 +484,7 @@ func TestPlanPathCorrection_PrimaryRepairsModelPathOnly(t *testing.T) {
 	current.BirdNET.LabelPath = customLabels
 
 	updated, outcome := o.planPathCorrection(current, &pendingPathCorrection{
-		registryID: permanentRegistryID,
+		registryID: RegistryIDBirdNETV24,
 		resolved:   modelFileSet{model: installed},
 		repairable: true,
 	})
@@ -532,14 +532,14 @@ func TestQueuePathCorrection_PrimaryFamily(t *testing.T) {
 	t.Run("a substituted primary resolution is queued under the primary registry ID", func(t *testing.T) {
 		t.Parallel()
 		o := &Orchestrator{}
-		o.queuePathCorrection(permanentRegistryID, pathResolution{
+		o.queuePathCorrection(RegistryIDBirdNETV24, pathResolution{
 			resolved:    modelFileSet{model: "/models/birdnet-v2.4/recovered.onnx"},
 			substituted: true,
 			repairable:  true,
 		})
 
 		require.Len(t, o.pendingPathCorrections, 1)
-		assert.Equal(t, permanentRegistryID, o.pendingPathCorrections[0].registryID,
+		assert.Equal(t, RegistryIDBirdNETV24, o.pendingPathCorrections[0].registryID,
 			"a correction filed under any other ID would be planned against the wrong settings fields")
 		assert.True(t, o.pendingPathCorrections[0].repairable)
 	})
@@ -547,7 +547,7 @@ func TestQueuePathCorrection_PrimaryFamily(t *testing.T) {
 	t.Run("a clean primary resolution queues nothing", func(t *testing.T) {
 		t.Parallel()
 		o := &Orchestrator{}
-		o.queuePathCorrection(permanentRegistryID, pathResolution{
+		o.queuePathCorrection(RegistryIDBirdNETV24, pathResolution{
 			resolved: modelFileSet{model: "/models/configured.onnx"},
 		})
 		assert.Empty(t, o.pendingPathCorrections,
@@ -557,7 +557,7 @@ func TestQueuePathCorrection_PrimaryFamily(t *testing.T) {
 	t.Run("a built-in fallback is queued so the user is told, but is not repairable", func(t *testing.T) {
 		t.Parallel()
 		o := &Orchestrator{}
-		o.queuePathCorrection(permanentRegistryID, pathResolution{substituted: true})
+		o.queuePathCorrection(RegistryIDBirdNETV24, pathResolution{substituted: true})
 
 		require.Len(t, o.pendingPathCorrections, 1,
 			"running the built-in model instead of the configured one must not be silent")
@@ -591,7 +591,7 @@ func TestApplyPathCorrection_NotificationVariants(t *testing.T) {
 
 	// Built-in fallback: confirmed absent, nothing installed, so resolved is empty.
 	o.applyPathCorrection(&pendingPathCorrection{
-		registryID: permanentRegistryID,
+		registryID: RegistryIDBirdNETV24,
 		resolved:   modelFileSet{},
 		repairable: false,
 	})
@@ -810,8 +810,8 @@ func TestPrimaryRegistryID(t *testing.T) {
 		want    string
 		recover bool
 	}{
-		{"empty version is the default v2.4 family", "", permanentRegistryID, true},
-		{"explicit 2.4", "2.4", permanentRegistryID, true},
+		{"empty version is the default v2.4 family", "", RegistryIDBirdNETV24, true},
+		{"explicit 2.4", "2.4", RegistryIDBirdNETV24, true},
 		{"3.0 is a different family", "3.0", RegistryIDBirdNETV3, false},
 		{"an unknown version resolves to nothing", "9.9", "", false},
 	}
@@ -826,7 +826,7 @@ func TestPrimaryRegistryID(t *testing.T) {
 
 			// The gate as NewOrchestrator applies it, not just the helper: a nil
 			// resolver is what stops a non-v2.4 primary from being recovered onto a
-			// v2.4 model file, and what keeps the hard-wired permanentRegistryID
+			// v2.4 model file, and what keeps the hard-wired RegistryIDBirdNETV24
 			// correction label from ever being attached to another family.
 			o := &Orchestrator{}
 			resolver := o.primaryPathResolverFor(settings)
@@ -860,7 +860,7 @@ func TestEmitPathSubstitutedNotification_UnreadableIsNotDerivedFromRepairable(t 
 	// Confirmed ABSENT, and declined for rewriting because the configured path is
 	// written with a variable. Same repairable value, different truth.
 	emitPathSubstitutedNotification(&pendingPathCorrection{
-		registryID: permanentRegistryID,
+		registryID: RegistryIDBirdNETV24,
 		resolved:   modelFileSet{model: "/models/birdnet-v2.4/recovered.onnx"},
 		repairable: false,
 		unreadable: false,
