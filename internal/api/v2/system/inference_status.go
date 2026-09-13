@@ -499,7 +499,9 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 	var loadFailures map[string]int64
 	if orch != nil {
 		rss, resp.RuntimeBaselineBytes = orch.ModelRSS()
-		primaryID = orch.PrimaryModelID()
+		if t := orch.DefaultTargets(); len(t) > 0 {
+			primaryID = t[0].ID
+		}
 		loadFailures = orch.LoadFailures()
 	}
 	counters := classifier.GetInferenceCounters().PeekAll()
