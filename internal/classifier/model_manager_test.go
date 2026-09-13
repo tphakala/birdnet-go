@@ -1078,14 +1078,17 @@ func TestModelManager_UninstallSucceedsWhenModelNotLoaded(t *testing.T) {
 	}
 }
 
+// errInjectedUnloadFailure is the injected unload error the tests feed through the
+// ModelManager.unloadFn seam to force the unload-failure rollback branches of
+// Uninstall, Reinstall, and replaceVariant (unreachable after Phase 3 removed the
+// primary-model unload refusal, but still reachable in production via a concurrent
+// unload/delete racing the loaded-check). Its text is deliberately distinct from the
+// callers' "model still in use" wrapper so a test asserting that phrase proves the
+// caller built its own abort error rather than returning this verbatim.
+var errInjectedUnloadFailure = errors.Newf("injected unload failure").Build()
+
 func TestModelManager_UninstallAbortsOnUnloadFailure(t *testing.T) {
 	t.Parallel()
-
-	// FIXME: Phase 3 PR 2 de-privileged the primary model and removed the refusal to
-	// unload primary models from UnloadModel. UnloadModel now unconditionally succeeds
-	// for any loaded model, so this unload-failure branch in Uninstall cannot be
-	// exercised without an error-injection seam on UnloadModel. Do not weaken assertions.
-	t.Skip("FIXME: UnloadModel no longer refuses loaded primary models; unload failure branch unreachable without an error seam")
 
 	entry, ok := GetCatalogEntry("perch-v2")
 	require.True(t, ok, "expected perch-v2 catalog entry to exist")
@@ -1106,17 +1109,17 @@ func TestModelManager_UninstallAbortsOnUnloadFailure(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, f.LocalName), []byte("data"), 0o644))
 	}
 
-	// Orchestrator with the model present in the models map AND set as
-	// primary. IsModelLoaded returns true, but UnloadModel refuses to
-	// unload the primary model, simulating a "model still in use" failure.
-	primaryBN := &BirdNET{ModelInfo: ModelInfo{ID: entry.RegistryID}}
+	// The model is present in the orchestrator's map so IsModelLoaded returns true and
+	// Uninstall enters its unload step; the injected seam then fails that unload,
+	// exercising the abort branch.
 	orch := &Orchestrator{
 		models: map[string]*modelEntry{
-			entry.RegistryID: {instance: primaryBN},
+			entry.RegistryID: {},
 		},
 	}
 
 	mm := NewModelManager(modelsDir, orch, nil)
+	mm.unloadFn = func(_ string) error { return errInjectedUnloadFailure }
 	mm.ScanInstalled()
 	require.True(t, mm.IsInstalled(entry.ID), "model must be installed before uninstall attempt")
 
@@ -1207,20 +1210,13 @@ func TestModelManager_UninstallDeregistersWhenFileDeletionFails(t *testing.T) {
 		"model must be de-registered even when some files could not be deleted")
 }
 
-// TestModelManager_ReinstallRefusesLoadedPrimary documents and guards the
-// behavior of the new pre-overwrite unload step in Reinstall: when the target
-// is the loaded primary model (which UnloadModel refuses to unload), Reinstall
-// aborts with "model still in use" before touching any files, and the model
-// stays installed. This is a deliberate behavior change from the prior code,
-// which overwrote files in place even while the primary was loaded.
-func TestModelManager_ReinstallRefusesLoadedPrimary(t *testing.T) {
+// TestModelManager_ReinstallAbortsOnUnloadFailure documents and guards the
+// pre-overwrite unload step in Reinstall: when the loaded model cannot be unloaded,
+// Reinstall aborts with "model still in use" before touching any files, and the
+// model stays installed. The unload failure is injected via the unloadFn seam
+// (production reaches this only via a concurrent unload/delete race).
+func TestModelManager_ReinstallAbortsOnUnloadFailure(t *testing.T) {
 	t.Parallel()
-
-	// FIXME: Phase 3 PR 2 de-privileged the primary model and removed the refusal to
-	// unload primary models from UnloadModel. UnloadModel now unconditionally succeeds
-	// for any loaded model, so this unload-failure branch in Reinstall cannot be
-	// exercised without an error-injection seam on UnloadModel. Do not weaken assertions.
-	t.Skip("FIXME: UnloadModel no longer refuses loaded primary models; unload failure branch unreachable without an error seam")
 
 	entry, ok := GetCatalogEntry("perch-v2")
 	require.True(t, ok, "expected perch-v2 catalog entry to exist")
@@ -1240,23 +1236,23 @@ func TestModelManager_ReinstallRefusesLoadedPrimary(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, f.LocalName), []byte("data"), 0o644))
 	}
 
-	// Model loaded AND set as primary: UnloadModel refuses the primary, so the
-	// new pre-overwrite guard must abort the reinstall.
-	primaryBN := &BirdNET{ModelInfo: ModelInfo{ID: entry.RegistryID}}
+	// The model is loaded (present in the orchestrator map) so Reinstall enters its
+	// pre-overwrite unload step; the injected seam then fails it.
 	orch := &Orchestrator{
 		models: map[string]*modelEntry{
-			entry.RegistryID: {instance: primaryBN},
+			entry.RegistryID: {},
 		},
 	}
 
 	mm := NewModelManager(modelsDir, orch, nil)
+	mm.unloadFn = func(_ string) error { return errInjectedUnloadFailure }
 	mm.ScanInstalled()
 	require.True(t, mm.IsInstalled(entry.ID), "model must be installed before reinstall attempt")
 
 	entryCopy := entry
 	// baseURL is never reached: the unload guard aborts before any download.
 	err := mm.Reinstall(t.Context(), &entryCopy, "http://unused.invalid", nil)
-	require.Error(t, err, "Reinstall must abort when the loaded primary cannot be unloaded")
+	require.Error(t, err, "Reinstall must abort when the loaded model cannot be unloaded")
 	assert.Contains(t, err.Error(), "model still in use")
 	assert.True(t, mm.IsInstalled(entry.ID), "model must remain installed after a refused reinstall")
 }

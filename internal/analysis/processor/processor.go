@@ -1011,8 +1011,9 @@ func (p *Processor) parseAndValidateSpecies(settings *conf.Settings, result data
 // detections filtered by the geographic range filter. The decision is a registry
 // capability, not a display-name check: BirdNET (any version) and Perch participate
 // (their label spaces are range-filter compatible), while Bat and BSG classify their
-// own label spaces and never participate. An unknown or custom model ID participates
-// too, matching the historical behavior for classifiers absent from the registry.
+// own label spaces and never participate. An unknown or custom model ID does NOT
+// participate: its label space is arbitrary, and unregistered IDs never reach a live
+// detection anyway (LoadModel rejects them), so this only pins the intended semantics.
 // Perch returns scientific-name labels, and the included-species set stores
 // scientific names for O(1) lookup, so the normal range list applies even when the
 // active range model is the embedded BirdNET geomodel rather than v3.
