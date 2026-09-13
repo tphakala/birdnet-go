@@ -2419,14 +2419,21 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 		// buildTimeOfDayClause handles windows and daytime spans that cross midnight
 		// (for example a high-latitude summer sunset whose local wall-clock falls after
 		// 00:00), which a naive start<=end range test silently drops or inverts.
+		//
+		// sunTimes carries its wall clock in the station's coordinate-derived timezone
+		// (see suncalc.NewSunCalc), which does not necessarily match time.Local (the
+		// server process's OS timezone). notes.time is always written in time.Local
+		// (see the date parsing above), so every bound must be converted into time.Local
+		// before formatting - otherwise the two wall clocks are compared as if they were
+		// the same, shifting the filter by whatever offset separates the two zones.
 		query, args, ok := buildTimeOfDayClause(filters.TimeOfDay, &timeOfDayBounds{
 			date:         dateStr,
-			sunrise:      sunTimes.Sunrise.Format(time.TimeOnly),
-			sunset:       sunTimes.Sunset.Format(time.TimeOnly),
-			sunriseStart: sunTimes.Sunrise.Add(-window).Format(time.TimeOnly),
-			sunriseEnd:   sunTimes.Sunrise.Add(window).Format(time.TimeOnly),
-			sunsetStart:  sunTimes.Sunset.Add(-window).Format(time.TimeOnly),
-			sunsetEnd:    sunTimes.Sunset.Add(window).Format(time.TimeOnly),
+			sunrise:      sunTimes.Sunrise.In(time.Local).Format(time.TimeOnly),
+			sunset:       sunTimes.Sunset.In(time.Local).Format(time.TimeOnly),
+			sunriseStart: sunTimes.Sunrise.Add(-window).In(time.Local).Format(time.TimeOnly),
+			sunriseEnd:   sunTimes.Sunrise.Add(window).In(time.Local).Format(time.TimeOnly),
+			sunsetStart:  sunTimes.Sunset.Add(-window).In(time.Local).Format(time.TimeOnly),
+			sunsetEnd:    sunTimes.Sunset.Add(window).In(time.Local).Format(time.TimeOnly),
 		})
 		if !ok {
 			// Should not happen due to sanitise, but skip if it does
