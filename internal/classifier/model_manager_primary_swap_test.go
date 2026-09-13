@@ -227,10 +227,10 @@ func TestModelManager_PrimarySwap_SameVariantIsNoOp(t *testing.T) {
 }
 
 // TestModelManager_PrimarySwap_RollbackOnReloadFailure verifies the transactional
-// rollback: when the primary reload fails, the swap restores the previous variant's
+// rollback: when the in-place reload fails, the swap restores the previous variant's
 // record and config and removes the newly downloaded file. The reload is forced to
-// fail with a primary-less test orchestrator (ReloadPrimaryForVariantSwap returns
-// "primary model not available").
+// fail with a test orchestrator that has no v2.4 anchor loaded (reloadBirdNETV24InPlace
+// returns "BirdNET v2.4 anchor not available for reload").
 func TestModelManager_PrimarySwap_RollbackOnReloadFailure(t *testing.T) {
 	// Not parallel: mutates global settings via conf.StoreSettings.
 	entry, modelsDir, srvURL, dftLocalName := permanentSwapEntry(t)
@@ -242,7 +242,7 @@ func TestModelManager_PrimarySwap_RollbackOnReloadFailure(t *testing.T) {
 	settings := conftest.GetTestSettings()
 	conf.StoreSettings(settings)
 
-	orch := newTestOrchestrator(t) // no primary -> ReloadPrimaryForVariantSwap errors
+	orch := newTestOrchestrator(t) // no v2.4 anchor -> reloadBirdNETV24InPlace errors
 	mm := NewModelManager(modelsDir, orch, settings)
 
 	err := mm.InstallOrReplace(t.Context(), &entry, "fp32-dfttrunc", srvURL, nil)

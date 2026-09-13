@@ -920,12 +920,24 @@ func anchorCoverage(inst *BirdNET) ClassifierCoverage {
 	}
 }
 
+// rangeFilterReady reports whether the BirdNET v2.4 anchor is loaded and returns the
+// range-filter service, both under a SINGLE o.mu.RLock and WITHOUT taking entry.mu.
+// It is the cheap boolean gate the range-filter accessors use: they only need to know
+// whether v2.4 is loaded, not the instance itself. Avoiding entry.mu matters on the
+// per-detection path (GetProbableSpecies, GetSpeciesOccurrenceAtTime), which would
+// otherwise block behind an in-flight inference that holds entry.mu for the whole
+// Predict. Presence is a reliable "loaded" signal because UnloadModel deletes the
+// v2.4 entry under o.mu before it nils the instance, so a present entry always carries
+// a live instance. Accessors that need the *BirdNET instance call rangeFilterAnchor.
+func (o *Orchestrator) rangeFilterReady() (rfs *rangeFilterService, ok bool) {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	return o.rangeFilter, o.models[RegistryIDBirdNETV24] != nil
+}
+
 // GetProbableSpecies returns species scores from the range filter.
 func (o *Orchestrator) GetProbableSpecies(date time.Time, week float32) ([]SpeciesScore, error) {
-	_, _, ok := o.rangeFilterAnchor()
-	o.mu.RLock()
-	rfs := o.rangeFilter
-	o.mu.RUnlock()
+	rfs, ok := o.rangeFilterReady()
 	if !ok || rfs == nil {
 		return nil, nil
 	}
@@ -937,10 +949,7 @@ func (o *Orchestrator) GetProbableSpecies(date time.Time, week float32) ([]Speci
 // snapshot, allowing callers to test arbitrary coordinates and thresholds
 // without modifying global state.
 func (o *Orchestrator) GetProbableSpeciesWithSettings(date time.Time, week float32, settings *conf.Settings) ([]SpeciesScore, error) {
-	_, _, ok := o.rangeFilterAnchor()
-	o.mu.RLock()
-	rfs := o.rangeFilter
-	o.mu.RUnlock()
+	rfs, ok := o.rangeFilterReady()
 	if !ok || rfs == nil {
 		return nil, nil
 	}
@@ -993,20 +1002,18 @@ func (o *Orchestrator) GetProbableSpeciesWithSettings(date time.Time, week float
 // of a bird-only view.
 func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week float32, settings *conf.Settings) ([]SpeciesScore, error) {
 	// Gate on the range-filter anchor (v2.4) being loaded, as the pre-Phase-3
-	// nil-primary check did.
-	if _, _, ok := o.rangeFilterAnchor(); !ok {
+	// nil-primary check did, and bind the range-filter service under the same
+	// RLock so the read is synchronized.
+	rfs, ok := o.rangeFilterReady()
+	if !ok || rfs == nil {
 		return nil, nil
 	}
 
-	// Get the primary's range-filtered scores together with the geomodel's full
-	// label set, both from the same range-filter snapshot so a concurrent
-	// ReloadRangeFilter cannot desync them. geoLabels is non-nil only on the
-	// universal (v3 geomodel) path, where it covers every scientific name the
-	// geomodel knows regardless of threshold.
-	rfs := o.rangeFilter
-	if rfs == nil {
-		return nil, nil
-	}
+	// Get the range-filtered scores together with the geomodel's full label set,
+	// both from the same range-filter snapshot so a concurrent ReloadRangeFilter
+	// cannot desync them. geoLabels is non-nil only on the universal (v3 geomodel)
+	// path, where it covers every scientific name the geomodel knows regardless of
+	// threshold.
 	scores, geo, _, err := rfs.probableSpecies(date, week, settings)
 	if err != nil {
 		return nil, err
@@ -1020,7 +1027,7 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 	}
 
 	// Dedup by scientific name (lowercased). seenSci holds species already
-	// represented via the primary scores; geoCovered holds every scientific
+	// represented via the range-filter scores; geoCovered holds every scientific
 	// name the geomodel can predict at all.
 	seenSci := make(map[string]bool, len(scores))
 	for _, s := range scores {
@@ -1128,10 +1135,10 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 		}
 	}
 
-	// The primary's range-filtered scores arrive pre-sorted descending, but the
+	// The range-filtered scores arrive pre-sorted descending, but the
 	// secondary-model and bat species above are appended after that sort with a
 	// flat always-active score of 1.0. Re-sort the merged slice so the full set
-	// is ordered by score descending, matching the primary path's contract:
+	// is ordered by score descending, matching the range-filter path's contract:
 	// otherwise always-active species (the maximum 1.0) would trail behind
 	// low-probability birds in consumers that do not re-sort (the CSV export and
 	// the range-filter test preview). A stable sort keeps the deterministic append
@@ -1149,10 +1156,7 @@ func (o *Orchestrator) GetSpeciesOccurrence(species string) float64 {
 
 // GetSpeciesOccurrenceAtTime returns the occurrence probability for a species at a specific time.
 func (o *Orchestrator) GetSpeciesOccurrenceAtTime(species string, detectionTime time.Time) float64 {
-	_, _, ok := o.rangeFilterAnchor()
-	o.mu.RLock()
-	rfs := o.rangeFilter
-	o.mu.RUnlock()
+	rfs, ok := o.rangeFilterReady()
 	if !ok || rfs == nil {
 		return 0
 	}
@@ -1504,7 +1508,7 @@ func (o *Orchestrator) notifyRangeFilterReload() {
 // from the former BirdNET.RunFilterProcess onto the orchestrator so the rangefilter
 // CLI keeps working after the range filter moved to the service (Phase 2b).
 func (o *Orchestrator) RunFilterProcess(dateStr string, week float32) {
-	if _, _, ok := o.rangeFilterAnchor(); !ok {
+	if _, ok := o.rangeFilterReady(); !ok {
 		return
 	}
 
@@ -1600,7 +1604,7 @@ func (o *Orchestrator) reloadBirdNETV24InPlace(reload func(primary *BirdNET) err
 	entry := o.models[RegistryIDBirdNETV24]
 	o.mu.RUnlock()
 	if entry == nil {
-		return errors.Newf("primary model not available for reload").
+		return errors.Newf("BirdNET v2.4 anchor not available for reload").
 			Component("classifier.orchestrator").
 			Category(errors.CategoryValidation).
 			Build()
@@ -2321,13 +2325,10 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 // ONNX session is not goroutine-safe (Phase 2b; formerly lockedMappedRangeFilter
 // held primary.mu). On error no lock is held and the release func is a no-op.
 func (o *Orchestrator) lockedBatchRangeFilter() (*mappedRangeFilter, func(), error) {
-	_, _, ok := o.rangeFilterAnchor()
-	o.mu.RLock()
-	rfs := o.rangeFilter
-	o.mu.RUnlock()
+	rfs, ok := o.rangeFilterReady()
 
 	if !ok || rfs == nil {
-		return nil, func() {}, errors.Newf("primary model not available").
+		return nil, func() {}, errors.Newf("range filter not available: BirdNET v2.4 anchor not loaded").
 			Component("classifier.orchestrator").
 			Category(errors.CategoryValidation).
 			Build()
@@ -2340,10 +2341,10 @@ func (o *Orchestrator) lockedBatchRangeFilter() (*mappedRangeFilter, func(), err
 // inputs. The caller provides a flat slice of [lat, lon, week] triples and a batch
 // size. Returns a flat slice of [batchSize * numGeoSpecies] scores in row-major order.
 //
-// Acquires primary.mu (not inferenceMu) because the range filter and classifier use
-// independent ONNX sessions. Callers that need to process many grid points should
-// chunk externally and call this method once per chunk, allowing the detection
-// pipeline to interleave between calls.
+// Acquires the range-filter service lock (not inferenceMu) because the range filter
+// and classifier use independent ONNX sessions. Callers that need to process many
+// grid points should chunk externally and call this method once per chunk, allowing
+// the detection pipeline to interleave between calls.
 func (o *Orchestrator) BatchRangeFilterInference(inputs []float32, batchSize int) ([]float32, error) {
 	const inputWidth = 3 // [lat, lon, week]
 	if batchSize <= 0 {
@@ -2557,29 +2558,37 @@ func enabledModels(settings *conf.Settings) iter.Seq[enabledModel] {
 }
 
 // effectiveEnabledModels yields the configured enabled models with BirdNET v2.4
-// prepended when no configured entry resolves to it. v2.4 is embedded and
-// implicitly enabled (through Phase 5), and it loads first so the range-filter
-// anchor and the label resolver chain are aligned to it, matching the pre-Phase-3
-// order where the primary was always constructed before the secondaries. When a
-// config entry already resolves to v2.4 (the usual case: "birdnet" is listed), its
-// own entry stands and nothing is prepended, so v2.4 is never yielded twice.
-// Phase 4 migrates "birdnet" into models.enabled and drops the implicit prepend.
+// always yielded FIRST. v2.4 is embedded and implicitly enabled (through Phase 5),
+// and yielding it first (even when models.enabled lists it later, or not at all)
+// guarantees it loads before any secondary, so the range-filter anchor and the
+// label resolver chain are aligned to it, matching the pre-Phase-3 order where the
+// primary was always constructed before the secondaries. A configured entry that
+// resolves to v2.4 is skipped in the second pass so v2.4 is never yielded twice.
+// Phase 4 migrates "birdnet" into models.enabled and drops the implicit lead.
 func effectiveEnabledModels(settings *conf.Settings) iter.Seq[enabledModel] {
 	return func(yield func(enabledModel) bool) {
-		hasV24 := false
+		// Yield v2.4 first UNCONDITIONALLY, so it always loads before any secondary
+		// regardless of where (or whether) it appears in models.enabled. This keeps
+		// the anchor-loads-first invariant and guarantees no secondary has queued a
+		// path correction before the fatal-v2.4 branch in loadEnabledModels can
+		// return. When a configured entry resolves to v2.4, report v2.4 under that
+		// entry's spelling so the yielded configID still matches models.enabled, and
+		// skip that entry in the second pass so v2.4 is not yielded twice.
+		v24ConfigID := conf.ModelIDBirdNET
 		for _, configID := range settings.Models.Enabled {
 			if registryID, _ := ResolveConfigModelID(configID); registryID == RegistryIDBirdNETV24 {
-				hasV24 = true
+				v24ConfigID = configID
 				break
 			}
 		}
-		if !hasV24 {
-			if !yield(enabledModel{configID: conf.ModelIDBirdNET, registryID: RegistryIDBirdNETV24, known: true}) {
-				return
-			}
+		if !yield(enabledModel{configID: v24ConfigID, registryID: RegistryIDBirdNETV24, known: true}) {
+			return
 		}
 		for _, configID := range settings.Models.Enabled {
 			registryID, known := ResolveConfigModelID(configID)
+			if known && registryID == RegistryIDBirdNETV24 {
+				continue // already yielded first
+			}
 			if !yield(enabledModel{configID: configID, registryID: registryID, known: known}) {
 				return
 			}
@@ -2781,18 +2790,16 @@ type RarityContext struct {
 // settings have been published (i.e. in a running app); it can be nil only for an
 // uninitialised orchestrator, so a caller that may run before startup must nil-check it.
 func (o *Orchestrator) GetRarityContext(date time.Time) (RarityContext, error) {
-	// Gate on the range-filter anchor (v2.4) being loaded, then drive every read
-	// below from o.CurrentSettings() so scores and labels come from one snapshot.
-	if _, _, ok := o.rangeFilterAnchor(); !ok {
+	// Gate on the range-filter anchor (v2.4) being loaded, binding the range-filter
+	// service under the same RLock so the read is synchronized, then drive every
+	// read below from o.CurrentSettings() so scores and labels come from one snapshot.
+	rfs, ok := o.rangeFilterReady()
+	if !ok || rfs == nil {
 		// No anchor, so no scores: hand back the orchestrator's current snapshot.
 		return RarityContext{Settings: o.CurrentSettings()}, nil
 	}
 
 	settings := o.CurrentSettings()
-	rfs := o.rangeFilter
-	if rfs == nil {
-		return RarityContext{Settings: settings}, nil
-	}
 	// filterActive is decided inside probableSpecies, in the same locked section
 	// that produced the scores: it is false whenever those scores are the synthetic
 	// all-zero fallback (no range-filter backend loaded, OR no location configured).

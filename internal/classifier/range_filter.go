@@ -116,10 +116,7 @@ func BuildRangeFilter(o *Orchestrator) error {
 	// Gate on the range-filter anchor (v2.4) being loaded, then snapshot the
 	// range-filter service; reporting "no primary model" first preserves the
 	// pre-Phase-2b error contract for a torn-down orchestrator.
-	_, _, ok := o.rangeFilterAnchor()
-	o.mu.RLock()
-	rfs := o.rangeFilter
-	o.mu.RUnlock()
+	rfs, ok := o.rangeFilterReady()
 	if !ok {
 		return errors.Newf("orchestrator has no primary model").
 			Component("classifier.orchestrator").
