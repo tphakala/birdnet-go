@@ -1,6 +1,7 @@
 package classifier
 
 import (
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -14,9 +15,9 @@ import (
 
 // newTestRangeFilterService returns a range-filter service whose state holds the
 // given backend, for tests that inject a fake range filter without loading real
-// model files. Phase 2b of the model de-privilege epic moved the range filter off
-// *BirdNET into this orchestrator-owned service, so tests set the backend here
-// instead of assigning bn.rangeFilter. A nil backend means "no filter loaded".
+// model files. The range filter moved off *BirdNET into this orchestrator-owned
+// service, so tests set the backend here instead of assigning bn.rangeFilter. A nil
+// backend means "no filter loaded".
 func newTestRangeFilterService(backend inference.RangeFilter) *rangeFilterService {
 	rfs := newRangeFilterService(nil)
 	rfs.state.Store(&rangeFilterState{backend: backend})
@@ -165,6 +166,155 @@ func TestBuildRangeFilter_PassUnmappedSpecies(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestBuildRangeFilterMatchesProbableSpecies_UniversalDedup guards the shared-path
+// dedup: BuildRangeFilter and GetProbableSpecies now share one locked predict and one
+// scoring tail (scoreProbableSpecies), so the inclusion list BuildRangeFilter persists
+// must be the exact SET of labels GetProbableSpecies returns on the universal geomodel
+// path, including the pass-unmapped backfill. PassUnmappedSpecies is true here to cover
+// the backfill branch the invariance harness (which uses false) does not.
+func TestBuildRangeFilterMatchesProbableSpecies_UniversalDedup(t *testing.T) {
+	geoLabels := []string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit",
+	}
+	classifierLabels := []string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit",
+		"Ficedula hypoleuca_Pied Flycatcher", // not in geomodel -> unmapped
+		"Regulus regulus_Goldcrest",          // not in geomodel -> unmapped
+	}
+
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Latitude = 60.0
+	settings.BirdNET.Longitude = 25.0
+	settings.BirdNET.LocationConfigured = true
+	settings.BirdNET.RangeFilter.Threshold = 0.01
+	settings.BirdNET.RangeFilter.PassUnmappedSpecies = true
+	settings.BirdNET.Locale = "en-us"
+	settings.BirdNET.Labels = classifierLabels
+	settings.Realtime.Species.Exclude = nil
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	rf := &fakeUniversalRangeFilter{
+		geoLabels: geoLabels,
+		scores: []SpeciesScore{
+			{Score: 0.9, Label: "Turdus merula_Common Blackbird"},
+			{Score: 0.8, Label: "Parus major_Great Tit"},
+		},
+		rawScores: []float32{0.9, 0.8},
+	}
+	o := buildTestOrchestrator(t, settings, rf)
+	date := time.Date(2026, 5, 14, 12, 0, 0, 0, time.UTC)
+
+	scores, err := o.GetProbableSpeciesWithSettings(date, 0, settings)
+	require.NoError(t, err)
+	fromProbable := make([]string, 0, len(scores))
+	for _, s := range scores {
+		fromProbable = append(fromProbable, s.Label)
+	}
+	slices.Sort(fromProbable)
+
+	require.NoError(t, BuildRangeFilter(o))
+	fromBuild := slices.Clone(conf.GetSettings().GetIncludedSpecies())
+	slices.Sort(fromBuild)
+
+	assert.Equal(t, fromProbable, fromBuild,
+		"BuildRangeFilter inclusion list and GetProbableSpecies must agree on the universal path (shared predict and scoring tail)")
+
+	// Independently pin the full expected set: both mapped geomodel species (Blackbird,
+	// Great Tit) and both unmapped classifier species backfilled by PassUnmappedSpecies
+	// (Pied Flycatcher, Goldcrest). Asserting the exact set, not just Contains, catches a
+	// shared-tail regression that drops rows on BOTH paths, which the symmetric equality
+	// above would otherwise hide.
+	wantLabels := []string{
+		"Ficedula hypoleuca_Pied Flycatcher",
+		"Parus major_Great Tit",
+		"Regulus regulus_Goldcrest",
+		"Turdus merula_Common Blackbird",
+	}
+	slices.Sort(wantLabels)
+	assert.Equal(t, wantLabels, fromBuild,
+		"inclusion list must contain both mapped geomodel species and both unmapped classifier species")
+}
+
+// TestScoreProbableSpecies_ReturnsUnmappedAddedCount pins the pass-unmapped count that
+// the shared scoring tail returns for BuildRangeFilter's "unmapped_species_added" log.
+// It must count only the backfilled classifier species, never the geomodel-scored ones,
+// and must be zero when PassUnmappedSpecies is off.
+func TestScoreProbableSpecies_ReturnsUnmappedAddedCount(t *testing.T) {
+	classifierLabels := []string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit",
+		"Ficedula hypoleuca_Pied Flycatcher", // not in geomodel -> unmapped
+		"Regulus regulus_Goldcrest",          // not in geomodel -> unmapped
+	}
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Labels = classifierLabels
+	settings.BirdNET.Locale = "en-us"
+	settings.Realtime.Species.Exclude = nil
+	settings.Realtime.Species.Include = nil
+	settings.Realtime.Species.Config = nil
+
+	rawScores := []SpeciesScore{
+		{Score: 0.9, Label: "Turdus merula_Common Blackbird"},
+		{Score: 0.8, Label: "Parus major_Great Tit"},
+	}
+	allGeoLabels := []string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit",
+	}
+	excluder := newExcludeMatcher(settings.Realtime.Species.Exclude, settings.BirdNET.Locale)
+
+	settings.BirdNET.RangeFilter.PassUnmappedSpecies = true
+	scored, unmappedAdded := scoreProbableSpecies(nil, excluder, rawScores, allGeoLabels, nil, settings)
+	assert.Equal(t, 2, unmappedAdded, "both unmapped classifier species must be counted")
+	assert.Len(t, scored, 4, "two scored geomodel species plus two unmapped backfills")
+
+	settings.BirdNET.RangeFilter.PassUnmappedSpecies = false
+	scored, unmappedAdded = scoreProbableSpecies(nil, excluder, rawScores, allGeoLabels, nil, settings)
+	assert.Equal(t, 0, unmappedAdded, "no backfill when PassUnmappedSpecies is disabled")
+	assert.Len(t, scored, 2, "only the two scored geomodel species")
+}
+
+// TestBuildRangeFilter_LegacyBackendFallback covers the build-side legacy path: a
+// non-universal backend (fakeRangeFilter satisfies inference.RangeFilter but not
+// UniversalSpeciesPredictor) drives predict to predictLegacy, so BuildRangeFilter falls
+// back to o.GetProbableSpecies. The universal-path tests never reach this dispatch branch.
+func TestBuildRangeFilter_LegacyBackendFallback(t *testing.T) {
+	classifierLabels := []string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit",
+		"Corvus corax_Northern Raven",
+	}
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Latitude = 60.0
+	settings.BirdNET.Longitude = 25.0
+	settings.BirdNET.LocationConfigured = true
+	settings.BirdNET.RangeFilter.Threshold = 0.01
+	settings.BirdNET.RangeFilter.PassUnmappedSpecies = false
+	settings.BirdNET.Locale = "en-us"
+	settings.BirdNET.Labels = classifierLabels
+	settings.Realtime.Species.Exclude = nil
+	settings.Realtime.Species.Include = nil
+	settings.Realtime.Species.Config = nil
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	// Scores aligned to classifierLabels; all clear the 0.01 threshold.
+	rf := &fakeRangeFilter{scores: []float32{0.9, 0.05, 0.8}}
+	o := buildTestOrchestrator(t, settings, rf)
+
+	require.NoError(t, BuildRangeFilter(o))
+
+	included := slices.Clone(conf.GetSettings().GetIncludedSpecies())
+	slices.Sort(included)
+	want := slices.Clone(classifierLabels)
+	slices.Sort(want)
+	assert.Equal(t, want, included,
+		"legacy-backend BuildRangeFilter fallback must include every classifier species over the threshold")
 }
 
 func TestBuildRangeFilter_PassUnmappedSpecies_RespectsExcludeList(t *testing.T) {

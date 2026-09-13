@@ -2,13 +2,13 @@
 //
 // rangeFilterService owns the range-filter backend, its lifecycle, prediction,
 // scoring, occurrence cache and coverage/status, decoupled from the primary
-// classifier instance. Before Phase 2b of the model de-privilege epic this state
-// lived on the privileged primary *BirdNET (bn.rangeFilter, bn.speciesCache);
-// moving it to an orchestrator-owned service is a behavior-preserving refactor:
+// classifier instance. This state previously lived on the primary *BirdNET instance
+// (bn.rangeFilter, bn.speciesCache); moving it to an orchestrator-owned service is a
+// behavior-preserving refactor:
 // the backend is selected from the same settings, scored identically, and the
 // occurrence cache keys are unchanged. See internal/classifier/range_filter.go for
-// the shared scoring helpers (BuildRangeFilter, addUserOverrideSpeciesScores) that
-// this service reuses.
+// the shared scoring helpers (scoreProbableSpecies, addUserOverrideSpeciesScores) that
+// this service's predict path and BuildRangeFilter both use.
 //
 // Concurrency model (the load-bearing part):
 //   - state is an immutable *rangeFilterState published behind an atomic.Pointer.
@@ -224,8 +224,8 @@ func (rfs *rangeFilterService) runtimeState() (active, fellBack bool) {
 // immutable after publication, so the lock-free callers here (GeomodelSpeciesInfo
 // and the heatmap service) may read them without a lock; a concurrent reload swaps
 // the whole state pointer rather than mutating those fields. The one exception is
-// unmappedScore, which universalPredict updates under rfs.mu; no lock-free caller
-// reads it, so this accessor stays lock-free.
+// unmappedScore, which predict updates under rfs.mu on the BuildRangeFilter path; no
+// lock-free caller reads it, so this accessor stays lock-free.
 func (rfs *rangeFilterService) mappedView() (mrf *mappedRangeFilter, ok bool) {
 	mrf, ok = rfs.loadState().backend.(*mappedRangeFilter)
 	return mrf, ok
@@ -311,35 +311,50 @@ func (rfs *rangeFilterService) probableSpecies(date time.Time, week float32, set
 		week = getWeekForFilter(date)
 	}
 
-	// Resolve the backend and run the universal-path prediction under a SINGLE lock
-	// hold: the nil check and the UniversalSpeciesPredictor assertion must observe
-	// the same backend instance. Holding rfs.mu across PredictSpeciesScores is
-	// mandatory: the backend is not goroutine-safe, and reload Close()s it under the
-	// same lock, so it cannot free the backend mid-prediction (#3935 follow-up).
-	rfs.mu.Lock()
-	rf := rfs.loadState().backend
-	if rf == nil {
-		rfs.mu.Unlock()
+	// Run the shared universal-path prediction under a SINGLE lock hold (see predict).
+	// syncUnmappedScore is false on the read path: it must not mutate the published
+	// backend's batch-inference unmappedScore.
+	res, predErr := rfs.predict(settings, week, threshold, false)
+	switch res.kind {
+	case predictNotLoaded:
 		rfs.Debug("Range filter model not loaded, returning zero scores for all labels")
 		return zeroScoresForAllLabels(settings.BirdNET.Labels, excluder), nil, false, nil
-	}
 
-	// Universal geomodel path first: predict from the geomodel's own label set so
-	// all ~12K species are covered.
-	if up, isUniversal := rf.(UniversalSpeciesPredictor); isUniversal {
-		allGeoLabels := up.GeomodelLabels()
-		var cachedMapping []int
-		if mrf, ok := rf.(*mappedRangeFilter); ok {
-			cachedMapping = mrf.classifierToGeo
+	case predictLegacy:
+		// Legacy path: map geomodel scores to the classifier's label set. predictFilter
+		// re-acquires rfs.mu and re-checks nil itself, so a reload racing between
+		// predict's unlock and that re-lock still returns a "range filter was closed
+		// during prediction" error for the legacy TFLite backend. That residual race is
+		// accepted: this path is not the default (the universal geomodel path is).
+		filters, ferr := rfs.predictFilter(date, week, settings, threshold)
+		if ferr != nil {
+			return nil, nil, false, errors.New(ferr).
+				Category(errors.CategoryValidation).
+				Context("date", date.Format(time.DateOnly)).
+				Context("week", week).
+				Context("model", settings.BirdNET.RangeFilter.Model).
+				Build()
 		}
-		scores, predErr := up.PredictSpeciesScores(
-			float32(settings.BirdNET.Latitude),
-			float32(settings.BirdNET.Longitude),
-			week,
-			threshold,
-		)
-		rfs.mu.Unlock()
 
+		var speciesScores []SpeciesScore
+		for _, filter := range filters {
+			if !excluder.matches(filter.Label) {
+				speciesScores = append(speciesScores, SpeciesScore{Score: float64(filter.Score), Label: filter.Label})
+			} else {
+				rfs.Debug("Excluding species from range filter: %s", filter.Label)
+			}
+		}
+
+		// Apply user overrides through the shared resolver so the legacy path
+		// canonicalizes localized common names identically to the universal path. The
+		// legacy path has no geomodel label set, so resolution falls to the classifier
+		// labels and the reverse lookup.
+		addUserOverrideSpeciesScores(rfs.debug, &speciesScores, settings, nil)
+
+		sort.Sort(ByScore(speciesScores))
+		return speciesScores, nil, true, nil
+
+	case predictUniversal:
 		if predErr != nil {
 			return nil, nil, false, errors.New(predErr).
 				Category(errors.CategoryValidation).
@@ -349,131 +364,127 @@ func (rfs *rangeFilterService) probableSpecies(date time.Time, week float32, set
 				Build()
 		}
 
-		speciesScores := make([]SpeciesScore, 0, len(scores))
-		for _, ss := range scores {
-			if !excluder.matches(ss.Label) {
-				speciesScores = append(speciesScores, ss)
-			}
-		}
-
-		addUserOverrideSpeciesScores(rfs.debug, &speciesScores, settings, allGeoLabels)
-
-		if settings.BirdNET.RangeFilter.PassUnmappedSpecies {
-			seen := make(map[string]bool, len(speciesScores))
-			for _, ss := range speciesScores {
-				seen[ss.Label] = true
-			}
-			mapping := cachedMapping
-			if mapping == nil {
-				mapping = buildSpeciesMapping(settings.BirdNET.Labels, allGeoLabels)
-			}
-			// cachedMapping (mappedRangeFilter.classifierToGeo) is sized from the
-			// model's labels at load time and can be longer than the live settings
-			// snapshot during a concurrent model/settings reload, so bounds-check the
-			// snapshot index before reading it.
-			for i, geoIdx := range mapping {
-				if geoIdx == -1 && i < len(settings.BirdNET.Labels) {
-					label := settings.BirdNET.Labels[i]
-					if !seen[label] && !excluder.matches(label) {
-						speciesScores = append(speciesScores, SpeciesScore{Score: 0.0, Label: label})
-						seen[label] = true
-					}
-				}
-			}
-		}
-
+		// Shared scoring tail (exclude, user overrides, pass-unmapped backfill); the
+		// read path then sorts by score. The synthetic-override tagging is applied here
+		// so the species endpoint and occurrence index see the same rows as before.
+		speciesScores, _ := scoreProbableSpecies(rfs.debug, excluder, res.scores, res.allGeoLabels, res.cachedMapping, settings)
 		sort.Sort(ByScore(speciesScores))
-		// Wrap the geomodel vocabulary in a *LabelVocabulary (the named return) so the
-		// species endpoint answers coverage from a precomputed canonical-key memo
-		// instead of an openfauna.CanonicalName scan per label. Gate on a non-nil
-		// label slice so the returned vocabulary is nil exactly when the raw labels
-		// were nil, preserving the "isUniversal := geomodel != nil" check at every
-		// caller.
-		if allGeoLabels != nil {
-			if mrf, ok := rf.(*mappedRangeFilter); ok {
-				geomodel = mrf.vocab
-			} else {
-				geomodel = NewLabelVocabulary(allGeoLabels)
-			}
-		}
-		return speciesScores, geomodel, true, nil
-	}
-	rfs.mu.Unlock()
-
-	// Legacy path: map geomodel scores to the classifier's label set. predictFilter
-	// re-acquires rfs.mu and re-checks nil itself, so a reload racing between this
-	// unlock and that re-lock still returns a "range filter was closed during
-	// prediction" error for the legacy TFLite backend. That residual race is
-	// accepted: this path is not the default (the universal geomodel path above is).
-	filters, predErr := rfs.predictFilter(date, week, settings, threshold)
-	if predErr != nil {
-		return nil, nil, false, errors.New(predErr).
-			Category(errors.CategoryValidation).
-			Context("date", date.Format(time.DateOnly)).
-			Context("week", week).
-			Context("model", settings.BirdNET.RangeFilter.Model).
-			Build()
+		return speciesScores, res.geomodel, true, nil
 	}
 
-	var speciesScores []SpeciesScore
-	for _, filter := range filters {
-		if !excluder.matches(filter.Label) {
-			speciesScores = append(speciesScores, SpeciesScore{Score: float64(filter.Score), Label: filter.Label})
-		} else {
-			rfs.Debug("Excluding species from range filter: %s", filter.Label)
-		}
-	}
-
-	// Apply user overrides through the shared resolver so the legacy path
-	// canonicalizes localized common names identically to the universal path. The
-	// legacy path has no geomodel label set, so resolution falls to the classifier
-	// labels and the reverse lookup.
-	addUserOverrideSpeciesScores(rfs.debug, &speciesScores, settings, nil)
-
-	sort.Sort(ByScore(speciesScores))
-	return speciesScores, nil, true, nil
+	// Unreachable: predict returns only the three kinds handled above. The switch has no
+	// default on purpose, so the exhaustive linter flags a new predictKind that lacks a
+	// case here (failing golangci-lint in CI, not the Go compiler) rather than letting it
+	// silently fall into the universal scoring path. Fail safe to "no filter" if it is
+	// ever reached anyway.
+	return zeroScoresForAllLabels(settings.BirdNET.Labels, excluder), nil, false, nil
 }
 
-// universalPredict runs the universal (geomodel) backend prediction under a single
-// rfs.mu hold and returns the raw geomodel scores, the full geomodel label set and
-// the cached classifier->geomodel mapping. ok is false (and the other returns are
-// zero) when no universal backend is loaded or the location is unconfigured, in
-// which case the caller uses its legacy fallback. It is the service-owned port of
-// the locked section of BuildRangeFilter (range_filter.go), kept separate from
-// probableSpecies in Phase 2b; deduplicating the two is Forgejo #1666 (PR 3).
+// predictKind classifies the outcome of the shared locked prediction so each caller
+// reproduces its own fallback: probableSpecies returns zero scores for
+// predictNotLoaded, runs the legacy predictFilter path for predictLegacy, and scores
+// the geomodel rows for predictUniversal; BuildRangeFilter treats anything but
+// predictUniversal as its o.GetProbableSpecies fallback.
+type predictKind int
+
+const (
+	// predictNotLoaded: no backend is loaded, or the location is unconfigured. It is the
+	// zero value on purpose, so an unset predictResult{} degrades to this safe fallback
+	// rather than to the scoring path. The location check is folded in here so
+	// predictLegacy strictly means "a legacy backend with a configured location", the
+	// only state that should run predictFilter.
+	predictNotLoaded predictKind = iota
+	// predictLegacy: a non-universal backend is loaded; the caller runs predictFilter.
+	predictLegacy
+	// predictUniversal: a universal (geomodel) backend produced the raw scores.
+	predictUniversal
+)
+
+// predictResult carries the output of the shared locked prediction. kind selects the
+// path each caller then takes; scores, allGeoLabels and cachedMapping are populated
+// only for predictUniversal, and geomodel only when that prediction also succeeded.
+type predictResult struct {
+	kind          predictKind
+	scores        []SpeciesScore
+	allGeoLabels  []string
+	cachedMapping []int
+	geomodel      *LabelVocabulary
+}
+
+// predict runs the universal-geomodel prediction triple under a SINGLE rfs.mu hold
+// (load the backend, classify it, read GeomodelLabels, capture the classifier->geomodel
+// mapping, run PredictSpeciesScores) and returns with the lock released. It is the one
+// locked path shared by the probableSpecies read path and the BuildRangeFilter
+// rebuild; holding rfs.mu across PredictSpeciesScores is mandatory because the backend is not
+// goroutine-safe and reload Close()s it under the same lock (#3935/#4298).
 //
-// Like the original, it syncs mappedRangeFilter.unmappedScore with the current
-// PassUnmappedSpecies setting under the lock so the legacy Predict path sees the
-// right value without a full reload; this mutates the published backend, but only
-// under rfs.mu, exactly as BuildRangeFilter mutated it under bn.mu.
-func (rfs *rangeFilterService) universalPredict(settings *conf.Settings, date time.Time, threshold float32) (scores []SpeciesScore, allGeoLabels []string, cachedMapping []int, ok bool, err error) {
+// week and threshold are resolved by the caller (each clamps threshold its own way and
+// derives week from its date). syncUnmappedScore mirrors mappedRangeFilter.unmappedScore
+// with the current PassUnmappedSpecies setting under the lock so the legacy Predict path
+// (batch inference) sees the right value without a full reload; only BuildRangeFilter
+// does this (as it did under bn.mu), so the read path passes false and never mutates the
+// published backend. The returned geomodel vocabulary and cachedMapping are read from the
+// backend captured under the lock but dereferenced after release, which is safe because
+// those fields are immutable for the backend's lifetime and Close() frees only the inner
+// session (mappedView relies on the same invariant).
+func (rfs *rangeFilterService) predict(settings *conf.Settings, week, threshold float32, syncUnmappedScore bool) (predictResult, error) {
 	rfs.mu.Lock()
 	rf := rfs.loadState().backend
-	up, isUniversal := rf.(UniversalSpeciesPredictor)
-	if !isUniversal || !settings.BirdNET.LocationConfigured {
+	if rf == nil || !settings.BirdNET.LocationConfigured {
 		rfs.mu.Unlock()
-		return nil, nil, nil, false, nil
+		return predictResult{kind: predictNotLoaded}, nil
+	}
+	up, isUniversal := rf.(UniversalSpeciesPredictor)
+	if !isUniversal {
+		rfs.mu.Unlock()
+		return predictResult{kind: predictLegacy}, nil
 	}
 
-	allGeoLabels = up.GeomodelLabels()
+	allGeoLabels := up.GeomodelLabels()
 	// Sync unmappedScore with PassUnmappedSpecies and capture the pre-computed
 	// mapping so the caller can build the unmapped set after the lock is released.
+	var cachedMapping []int
 	if mrf, mok := rf.(*mappedRangeFilter); mok {
-		var score float32
-		if settings.BirdNET.RangeFilter.PassUnmappedSpecies {
-			score = 1.0
+		if syncUnmappedScore {
+			var score float32
+			if settings.BirdNET.RangeFilter.PassUnmappedSpecies {
+				score = 1.0
+			}
+			mrf.unmappedScore = score
 		}
-		mrf.unmappedScore = score
 		cachedMapping = mrf.classifierToGeo
 	}
-	scores, err = up.PredictSpeciesScores(
+	scores, err := up.PredictSpeciesScores(
 		float32(settings.BirdNET.Latitude),
 		float32(settings.BirdNET.Longitude),
-		getWeekForFilter(date),
+		week,
 		threshold,
 	)
 	rfs.mu.Unlock()
-	return scores, allGeoLabels, cachedMapping, true, err
+
+	res := predictResult{
+		kind:          predictUniversal,
+		scores:        scores,
+		allGeoLabels:  allGeoLabels,
+		cachedMapping: cachedMapping,
+	}
+	// Wrap the geomodel vocabulary so the species endpoint answers coverage from a
+	// precomputed canonical-key memo instead of an openfauna.CanonicalName scan per
+	// label. Gate on a non-nil label slice so the vocabulary is nil exactly when the
+	// raw labels were nil, preserving the "isUniversal := geomodel != nil" check at
+	// every caller. Skipped on error, matching the pre-dedup read path. Only
+	// *mappedRangeFilter implements UniversalSpeciesPredictor today, so this is the cheap
+	// mrf.vocab field read; the NewLabelVocabulary fallback is defensive. If a non-mapped
+	// universal backend is ever added, the BuildRangeFilter path (which discards geomodel)
+	// should gate this so it does not pay for a full vocab build it never reads.
+	if err == nil && allGeoLabels != nil {
+		if mrf, mok := rf.(*mappedRangeFilter); mok {
+			res.geomodel = mrf.vocab
+		} else {
+			res.geomodel = NewLabelVocabulary(allGeoLabels)
+		}
+	}
+	return res, err
 }
 
 // predictFilter applies the legacy (non-universal) range-filter backend to predict
