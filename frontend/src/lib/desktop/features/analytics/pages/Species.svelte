@@ -65,6 +65,12 @@
     displayName: string;
   }
 
+  // Narrower than the other columns: the max-confidence cell content is always a
+  // short "100.0%" string, so the default auto-layout share was mostly empty
+  // space. Wide enough to still fit the "Max Confidence" label + sort chevron on
+  // one line.
+  const MAX_CONFIDENCE_COLUMN_WIDTH = '140px';
+
   // Species name defaults to ascending (A→Z); every other column defaults to
   // descending (most/highest/most recent first) on first click.
   const SORTABLE_COLUMNS: {
@@ -97,10 +103,7 @@
       labelKey: 'analytics.species.headers.maxConfidence',
       asc: 'max_confidence_asc',
       desc: 'max_confidence_desc',
-      // Narrower than the other columns: the cell content is always a short
-      // "100.0%" string, so the default auto-layout share was mostly empty space.
-      // Wide enough to still fit the "Max Confidence" label + sort chevron on one line.
-      width: '140px',
+      width: MAX_CONFIDENCE_COLUMN_WIDTH,
     },
     {
       field: 'first_seen',

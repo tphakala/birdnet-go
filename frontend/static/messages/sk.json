@@ -585,8 +585,8 @@
       "collapseDetails": "Zbaliť podrobnosti pre {species}",
       "playAudio": "Prehrať zvuk pre {species}",
       "viewDetails": "Zobraziť podrobnosti pre {species}",
-      "detectionDetail": "Detection detail",
-      "detectionDetailFor": "Detection detail for {species}",
+      "detectionDetail": "Podrobnosti detekcie",
+      "detectionDetailFor": "Podrobnosti detekcie pre {species}",
       "unknownSpecies": "Neznámy druh",
       "clickToCollapse": "Kliknutím zbalíte"
     },

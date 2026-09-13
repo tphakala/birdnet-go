@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { getAllAboutBirdsSoundsUrl, getAllAboutBirdsUrl, getWikipediaUrl } from './speciesLinks';
+import {
+  getAllAboutBirdsSoundsUrl,
+  getAllAboutBirdsUrl,
+  getWikipediaUrl,
+  hasSpeciesReferenceName,
+} from './speciesLinks';
 
 describe('getAllAboutBirdsUrl', () => {
   it('builds the guide URL from the server-provided common name', () => {
@@ -52,5 +57,26 @@ describe('getWikipediaUrl', () => {
     expect(getWikipediaUrl('House Sparrow', 'de', 'House Sparrow')).toBe(
       'https://en.wikipedia.org/wiki/House_Sparrow'
     );
+  });
+});
+
+describe('hasSpeciesReferenceName', () => {
+  it('accepts a real common name', () => {
+    expect(hasSpeciesReferenceName('House Sparrow')).toBe(true);
+  });
+
+  it.each([
+    ['an empty string', ''],
+    ['whitespace only', '   '],
+    ['a tab', '\t'],
+  ])('rejects %s, which would build a guide URL for a page that does not exist', (_label, name) => {
+    expect(hasSpeciesReferenceName(name)).toBe(false);
+  });
+
+  it.each([
+    ['undefined', undefined],
+    ['null', null],
+  ])('rejects %s', (_label, name) => {
+    expect(hasSpeciesReferenceName(name)).toBe(false);
   });
 });

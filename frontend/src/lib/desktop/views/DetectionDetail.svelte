@@ -32,6 +32,7 @@
     getAllAboutBirdsSoundsUrl,
     getAllAboutBirdsUrl,
     getWikipediaUrl,
+    hasSpeciesReferenceName,
   } from '$lib/utils/speciesLinks';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
   import {
@@ -579,29 +580,33 @@
         </div>
       </div>
 
-      <!-- Reference links: same pair offered on expanded detection rows -->
-      <div class="species-reference-links">
-        <a
-          href={getAllAboutBirdsUrl(det.commonName)}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="media-compare-link"
-          aria-label={t('detections.detail.aria.viewOnAllAboutBirds', { name: displayName })}
-        >
-          <ExternalLink class="w-3.5 h-3.5" />
-          <span>{t('detections.media.viewOnAllAboutBirds')}</span>
-        </a>
-        <a
-          href={getWikipediaUrl(displayName, getLocale(), det.commonName)}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="media-compare-link"
-          aria-label={t('detections.detail.aria.viewOnWikipedia', { name: displayName })}
-        >
-          <span class="species-reference-wikipedia-icon">W</span>
-          <span>{t('detections.media.viewOnWikipedia')}</span>
-        </a>
-      </div>
+      <!-- Reference links: same pair offered on expanded detection rows. Both are
+           addressed by common name, so they are omitted when the detection has
+           none rather than linking to a guide page that does not exist. -->
+      {#if hasSpeciesReferenceName(det.commonName)}
+        <div class="species-reference-links">
+          <a
+            href={getAllAboutBirdsUrl(det.commonName)}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="media-compare-link"
+            aria-label={t('detections.detail.aria.viewOnAllAboutBirds', { name: displayName })}
+          >
+            <ExternalLink class="w-3.5 h-3.5" />
+            <span>{t('detections.media.viewOnAllAboutBirds')}</span>
+          </a>
+          <a
+            href={getWikipediaUrl(displayName, getLocale(), det.commonName)}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="media-compare-link"
+            aria-label={t('detections.detail.aria.viewOnWikipedia', { name: displayName })}
+          >
+            <span class="species-reference-wikipedia-icon">W</span>
+            <span>{t('detections.media.viewOnWikipedia')}</span>
+          </a>
+        </div>
+      {/if}
     </div>
 
     <!-- Taxonomy Card -->
@@ -930,18 +935,20 @@
             <h2 id="media-heading" class="section-heading !mb-0">
               {t('detections.media.title')}
             </h2>
-            <a
-              href={getAllAboutBirdsSoundsUrl(detection.commonName)}
-              target="_blank"
-              rel="noopener noreferrer"
-              class="media-compare-link"
-              aria-label={t('detections.detail.aria.compareSounds', {
-                name: localizeSpeciesName(detection.scientificName, detection.commonName),
-              })}
-            >
-              <ExternalLink class="w-3.5 h-3.5" />
-              <span>{t('detections.media.compareSounds')}</span>
-            </a>
+            {#if hasSpeciesReferenceName(detection.commonName)}
+              <a
+                href={getAllAboutBirdsSoundsUrl(detection.commonName)}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="media-compare-link"
+                aria-label={t('detections.detail.aria.compareSounds', {
+                  name: localizeSpeciesName(detection.scientificName, detection.commonName),
+                })}
+              >
+                <ExternalLink class="w-3.5 h-3.5" />
+                <span>{t('detections.media.compareSounds')}</span>
+              </a>
+            {/if}
           </div>
           {#if clipExtractionEnabled}
             <p class="text-sm text-[var(--color-base-content)]/60 mt-0.5 mb-4">

@@ -28,6 +28,7 @@
     getAllAboutBirdsSoundsUrl,
     getAllAboutBirdsUrl,
     getWikipediaUrl,
+    hasSpeciesReferenceName,
   } from '$lib/utils/speciesLinks';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { ExternalLink } from '@lucide/svelte';
@@ -58,6 +59,9 @@
 
   const id = $derived(String(detectionId));
   const speciesLabel = $derived(displayName || t('search.detailsPanel.unknownSpecies'));
+  // A blank common name cannot address a guide page, so the reference links are
+  // dropped rather than pointed at a URL that 404s.
+  const hasReferenceLinks = $derived(hasSpeciesReferenceName(commonName));
 
   // Map user's temperature preference to TemperatureUnit format
   // Settings store uses 'celsius'/'fahrenheit', but formatters use 'metric'/'imperial'/'standard'
@@ -115,28 +119,30 @@
         fetchpriority="low"
       />
     </div>
-    <div class="species-reference-links">
-      <a
-        href={getAllAboutBirdsUrl(commonName)}
-        target="_blank"
-        rel="noopener noreferrer"
-        class="media-compare-link"
-        aria-label={t('detections.detail.aria.viewOnAllAboutBirds', { name: speciesLabel })}
-      >
-        <ExternalLink class="w-3.5 h-3.5" />
-        <span>{t('detections.media.viewOnAllAboutBirds')}</span>
-      </a>
-      <a
-        href={getWikipediaUrl(displayName || commonName, getLocale(), commonName)}
-        target="_blank"
-        rel="noopener noreferrer"
-        class="media-compare-link"
-        aria-label={t('detections.detail.aria.viewOnWikipedia', { name: speciesLabel })}
-      >
-        <span class="species-reference-wikipedia-icon">W</span>
-        <span>{t('detections.media.viewOnWikipedia')}</span>
-      </a>
-    </div>
+    {#if hasReferenceLinks}
+      <div class="species-reference-links">
+        <a
+          href={getAllAboutBirdsUrl(commonName)}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="media-compare-link"
+          aria-label={t('detections.detail.aria.viewOnAllAboutBirds', { name: speciesLabel })}
+        >
+          <ExternalLink class="w-3.5 h-3.5" />
+          <span>{t('detections.media.viewOnAllAboutBirds')}</span>
+        </a>
+        <a
+          href={getWikipediaUrl(displayName || commonName, getLocale(), commonName)}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="media-compare-link"
+          aria-label={t('detections.detail.aria.viewOnWikipedia', { name: speciesLabel })}
+        >
+          <span class="species-reference-wikipedia-icon">W</span>
+          <span>{t('detections.media.viewOnWikipedia')}</span>
+        </a>
+      </div>
+    {/if}
   </div>
 
   <!-- Audio Player (shown only when this detection has a clip) -->
@@ -146,16 +152,18 @@
         <h3 class="text-lg font-semibold">
           {t('search.detailsPanel.audioPlayer')}
         </h3>
-        <a
-          href={getAllAboutBirdsSoundsUrl(commonName)}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="media-compare-link"
-          aria-label={t('detections.detail.aria.compareSounds', { name: speciesLabel })}
-        >
-          <ExternalLink class="w-3.5 h-3.5" />
-          <span>{t('detections.media.compareSounds')}</span>
-        </a>
+        {#if hasReferenceLinks}
+          <a
+            href={getAllAboutBirdsSoundsUrl(commonName)}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="media-compare-link"
+            aria-label={t('detections.detail.aria.compareSounds', { name: speciesLabel })}
+          >
+            <ExternalLink class="w-3.5 h-3.5" />
+            <span>{t('detections.media.compareSounds')}</span>
+          </a>
+        {/if}
       </div>
       <AudioPlayer
         audioUrl={buildAppUrl(`/api/v2/audio/${id}`)}
