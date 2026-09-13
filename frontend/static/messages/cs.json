@@ -5530,7 +5530,11 @@
     },
     "bird": {
       "title": "Detekce ptáků",
-      "description": "Nakonfigurujte práh spolehlivosti, jazyk druhů a filtrování falešných detekcí pro klasifikátory ptáků."
+      "description": "Nakonfigurujte práh spolehlivosti, jazyk druhů a filtrování falešných detekcí pro klasifikátory ptáků.",
+      "firstDailyConsensus": {
+        "label": "Vyžadovat potvrzení první detekce druhu v daném dni dvěma modely",
+        "helpText": "Omezuje chybné záznamy nových druhů tím, že zahodí první detekci ptačího druhu v daném dni, pokud jej i druhý model nedetekuje nad svým běžným prahem v rámci téhož detekčního okna. Druh se zaznamená až z následujícího okna, ve kterém se dva modely shodnou. Platí pouze tehdy, pokud každý model pro rozpoznávání ptáků analyzující daný zdroj zvuku dokáže tento druh určit; netopýři, jiné než ptačí zvuky a sestavy s jediným modelem nejsou ovlivněny."
+      }
     },
     "bat": {
       "title": "Detekce netopýrů",

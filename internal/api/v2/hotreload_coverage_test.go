@@ -178,9 +178,10 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"Realtime.OpenWeather": {categories: []hotReloadCategory{hotReloadRuntime}},
 
 	// -- Filters --
-	"Realtime.PrivacyFilter":  {categories: []hotReloadCategory{hotReloadFresh}},
-	"Realtime.DogBarkFilter":  {categories: []hotReloadCategory{hotReloadFresh}},
-	"Realtime.DaylightFilter": {categories: []hotReloadCategory{hotReloadFresh}},
+	"Realtime.PrivacyFilter":       {categories: []hotReloadCategory{hotReloadFresh}},
+	"Realtime.DogBarkFilter":       {categories: []hotReloadCategory{hotReloadFresh}},
+	"Realtime.DaylightFilter":      {categories: []hotReloadCategory{hotReloadFresh}},
+	"Realtime.FirstDailyConsensus": {categories: []hotReloadCategory{hotReloadFresh}},
 
 	// -- RTSP --
 	"Realtime.RTSP.Streams.*.Name":        {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_rtsp_sources"},

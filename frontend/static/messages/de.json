@@ -5530,7 +5530,11 @@
     },
     "bird": {
       "title": "Vogelerkennung",
-      "description": "Konfigurieren Sie Konfidenzschwelle, Artensprache und Falsch-Positiv-Filterung für Vogelklassifikatoren."
+      "description": "Konfigurieren Sie Konfidenzschwelle, Artensprache und Falsch-Positiv-Filterung für Vogelklassifikatoren.",
+      "firstDailyConsensus": {
+        "label": "Erste Erkennung einer Art am Tag durch zwei Modelle bestätigen lassen",
+        "helpText": "Verringert fälschliche Einträge neuer Arten, indem die erste Erkennung einer Vogelart am Tag verworfen wird, sofern nicht auch ein zweites Modell sie innerhalb desselben Erkennungsfensters oberhalb seines normalen Schwellenwerts erkennt. Die Art wird ab dem nächsten Fenster erfasst, in dem zwei Modelle übereinstimmen. Gilt nur, wenn jedes Vogelmodell, das diese Audioquelle analysiert, die Art erkennen kann; Fledermäuse, andere Geräusche als Vogelstimmen und Konfigurationen mit nur einem Modell bleiben unbeeinflusst."
+      }
     },
     "bat": {
       "title": "Fledermauserkennung",

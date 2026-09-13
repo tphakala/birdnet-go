@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -495,4 +496,38 @@ func levelMultiplier(level int) float64 {
 	default:
 		return 1.0 // Level 0 = no reduction
 	}
+}
+
+// hasCustomThreshold reports whether the user configured a per-species threshold
+// (> 0) for the species. Such a threshold opts the species out of dynamic
+// adjustment. Species may be in Config only for custom actions or interval.
+func hasCustomThreshold(settings *conf.Settings, commonName, scientificName string) bool {
+	config, exists := lookupSpeciesConfig(settings.Realtime.Species.Config, commonName, scientificName)
+	return exists && config.Threshold > 0
+}
+
+// dynamicThresholdLowered reports whether the dynamic threshold stored under
+// speciesLowercase currently holds the applied threshold below baseThreshold.
+// Unlike getAdjustedConfidenceThreshold it has no side effects: it neither resets
+// an expired adjustment nor records a threshold event, so filtering decisions can
+// consult it freely.
+func (p *Processor) dynamicThresholdLowered(speciesLowercase string, baseThreshold float32, minThreshold float64, now time.Time) bool {
+	p.thresholdsMutex.RLock()
+	defer p.thresholdsMutex.RUnlock()
+	dt, exists := p.DynamicThresholds[speciesLowercase]
+	if !exists || now.After(dt.Timer) {
+		return false
+	}
+	base := float64(baseThreshold)
+	return effectiveDynamicThreshold(base, dt.Level, minThreshold) < base
+}
+
+// dynamicThresholdKey derives the DynamicThresholds map key for a species: the
+// lowercase common name, falling back to the scientific name. parseAndValidateSpecies
+// writes the map under this key, so every reader must derive it the same way.
+func dynamicThresholdKey(commonName, scientificName string) string {
+	if commonName == "" {
+		return strings.ToLower(scientificName)
+	}
+	return strings.ToLower(commonName)
 }

@@ -5530,7 +5530,11 @@
     },
     "bird": {
       "title": "Deteção de aves",
-      "description": "Configure o limiar de confiança, o idioma das espécies e a filtragem de falsos positivos para classificadores de aves."
+      "description": "Configure o limiar de confiança, o idioma das espécies e a filtragem de falsos positivos para classificadores de aves.",
+      "firstDailyConsensus": {
+        "label": "Exigir que dois modelos confirmem a primeira detecção do dia de uma espécie",
+        "helpText": "Reduz os registros incorretos de novas espécies ao descartar a primeira detecção do dia de uma espécie de ave, a menos que um segundo modelo também a detecte acima do seu limiar normal dentro da mesma janela de detecção. A espécie é registrada a partir da próxima janela em que dois modelos concordem. Aplica-se apenas quando todos os modelos de aves que analisam essa fonte de áudio conseguem identificar a espécie; não afeta morcegos, sons que não sejam de aves nem configurações com um único modelo."
+      }
     },
     "bat": {
       "title": "Deteção de morcegos",

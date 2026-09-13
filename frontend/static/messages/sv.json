@@ -5530,7 +5530,11 @@
     },
     "bird": {
       "title": "Fågeldetektering",
-      "description": "Konfigurera konfidenströskel, artspråk och filtrering av falska positiva för fågelklassificerare."
+      "description": "Konfigurera konfidenströskel, artspråk och filtrering av falska positiva för fågelklassificerare.",
+      "firstDailyConsensus": {
+        "label": "Kräv att två modeller bekräftar dagens första detektion av en art",
+        "helpText": "Minskar felaktiga registreringar av nya arter genom att förkasta dagens första detektion av en fågelart, om inte även en andra modell detekterar den över sitt normala tröskelvärde inom samma detektionsfönster. Arten registreras från och med nästa fönster där två modeller är överens. Gäller endast när alla fågelmodeller som analyserar den aktuella ljudkällan kan identifiera arten; fladdermöss, andra ljud än fågelläten och konfigurationer med en enda modell påverkas inte."
+      }
     },
     "bat": {
       "title": "Fladdermusdetektering",

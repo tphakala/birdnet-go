@@ -5530,7 +5530,11 @@
     },
     "bird": {
       "title": "Putnu noteikšana",
-      "description": "Konfigurējiet ticamības slieksni, sugu valodu un viltus pozitīvo filtrēšanu putnu klasifikatoriem."
+      "description": "Konfigurējiet ticamības slieksni, sugu valodu un viltus pozitīvo filtrēšanu putnu klasifikatoriem.",
+      "firstDailyConsensus": {
+        "label": "Pieprasīt, lai divi modeļi apstiprina sugas pirmo noteikšanu dienā",
+        "helpText": "Samazina kļūdainus jaunu sugu ierakstus, atmetot putnu sugas pirmo noteikšanu dienā, ja vien arī otrs modelis to nenosaka virs sava parastā sliekšņa tajā pašā noteikšanas laika logā. Suga tiek reģistrēta, sākot ar nākamo laika logu, kurā divu modeļu rezultāti sakrīt. Attiecas tikai uz gadījumiem, kad visi putnu modeļi, kas analizē šo skaņas avotu, spēj identificēt sugu; sikspārņi, skaņas, kas nav putnu skaņas, un konfigurācijas ar vienu modeli netiek ietekmētas."
+      }
     },
     "bat": {
       "title": "Sikspārņu noteikšana",

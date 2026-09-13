@@ -5530,7 +5530,11 @@
     },
     "bird": {
       "title": "Lintuhavainnot",
-      "description": "Määritä luottamuskynnys, lajikieli ja väärien positiivisten suodatus lintuluokittimille."
+      "description": "Määritä luottamuskynnys, lajikieli ja väärien positiivisten suodatus lintuluokittimille.",
+      "firstDailyConsensus": {
+        "label": "Vaadi kahta mallia vahvistamaan lajin päivän ensimmäinen havainto",
+        "helpText": "Vähentää virheellisiä uusien lajien kirjauksia hylkäämällä lintulajin päivän ensimmäisen havainnon, ellei toinenkin malli havaitse lajia oman normaalin kynnysarvonsa ylittävällä varmuudella saman havaintoikkunan aikana. Laji kirjataan seuraavasta ikkunasta alkaen, jossa kaksi mallia on yhtä mieltä. Käytössä vain, kun jokainen kyseistä äänilähdettä analysoiva lintumalli pystyy tunnistamaan lajin. Ei vaikuta lepakoihin, muihin kuin lintujen ääniin eikä yhden mallin kokoonpanoihin."
+      }
     },
     "bat": {
       "title": "Lepakkohavainnot",

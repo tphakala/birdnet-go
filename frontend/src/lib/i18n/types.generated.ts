@@ -4056,6 +4056,8 @@ export type TranslationKey =
   | 'analysis.gallery.optimize.licenseNote'
   | 'analysis.bird.title'
   | 'analysis.bird.description'
+  | 'analysis.bird.firstDailyConsensus.label'
+  | 'analysis.bird.firstDailyConsensus.helpText'
   | 'analysis.bat.title'
   | 'analysis.bat.description'
   | 'analysis.dynamicThreshold.birdOnlyNote'

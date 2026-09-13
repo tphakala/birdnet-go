@@ -5530,7 +5530,11 @@
     },
     "bird": {
       "title": "Rilevamento uccelli",
-      "description": "Configura la soglia di confidenza, la lingua delle specie e il filtraggio dei falsi positivi per i classificatori di uccelli."
+      "description": "Configura la soglia di confidenza, la lingua delle specie e il filtraggio dei falsi positivi per i classificatori di uccelli.",
+      "firstDailyConsensus": {
+        "label": "Richiedi che due modelli confermino il primo rilevamento del giorno di una specie",
+        "helpText": "Riduce le registrazioni errate di nuove specie scartando il primo rilevamento del giorno di una specie di uccello, a meno che anche un secondo modello non la rilevi al di sopra della propria soglia normale nella stessa finestra di rilevamento. La specie viene registrata a partire dalla successiva finestra in cui due modelli concordano. Si applica solo se tutti i modelli per uccelli che analizzano quella sorgente audio possono identificare la specie; non influisce su pipistrelli, suoni diversi da quelli degli uccelli e configurazioni con un solo modello."
+      }
     },
     "bat": {
       "title": "Rilevamento pipistrelli",
