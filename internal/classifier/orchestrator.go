@@ -1312,44 +1312,54 @@ func (o *Orchestrator) AllLabels() []string {
 	if o == nil {
 		return nil
 	}
+	refs := o.orderedEntryRefs()
+	sets := make([][]string, 0, len(refs))
+	for _, ref := range refs {
+		// Capture the instance under entry.mu, release the lock, THEN call Labels().
+		// BirdNET.Labels takes bn.mu, so holding entry.mu across it would stall
+		// PredictModel on the inference hot path (the hazard the ModelInfos comment
+		// calls out). Mirrors ModelInfos / LoadedModelPaths.
+		ref.entry.mu.Lock()
+		instance := ref.entry.instance
+		ref.entry.mu.Unlock()
+		var labels []string
+		if instance != nil {
+			labels = instance.Labels()
+		}
+		sets = append(sets, labels)
+	}
+	return unionLabels(sets...)
+}
+
+// orderedEntryRefs returns the loaded model entries in the canonical AllLabels order:
+// the primary/anchor entry first (when o.primary is set and present in the models
+// map), then the remaining entries byte-sorted by ID. Go's randomized map iteration
+// would otherwise pick a different winner for a duplicate scientific name in the
+// reverse name maps, so this order must stay stable across rebuilds. The anchor's
+// labels come from its own map entry (whose instance is o.primary), so no separate
+// pointer prepend is needed. The caller reads each entry's instance under entry.mu.
+func (o *Orchestrator) orderedEntryRefs() []entryRef {
 	o.mu.RLock()
 	primary := o.primary
 	primaryID := o.ModelInfo.ID
 	refs := make([]entryRef, 0, len(o.models))
+	var anchor *entryRef
 	for id, entry := range o.models {
-		// When a primary is set, skip its map entry: its labels are unioned explicitly
-		// below via the *BirdNET pointer, so including it here would snapshot them twice.
-		// When primary is nil, do not skip, so the primary model's labels are still
-		// covered via the map entry. unionLabels dedupes regardless.
+		ref := entryRef{id: id, entry: entry}
 		if primary != nil && id == primaryID {
+			a := ref // place first below
+			anchor = &a
 			continue
 		}
-		refs = append(refs, entryRef{id: id, entry: entry})
+		refs = append(refs, ref)
 	}
 	o.mu.RUnlock()
 
-	// Sort secondary models by ID so the union (and the reverse maps built from it) is
-	// stable across rebuilds; Go's randomized map iteration would otherwise pick a
-	// different winner for duplicate scientific names, matching GetAllProbableSpeciesWithSettings.
 	slices.SortFunc(refs, func(a, b entryRef) int { return strings.Compare(a.id, b.id) })
-
-	// Include the primary explicitly. primary.Labels() is safe without entry.mu because
-	// BirdNET.Labels takes the model's own lock internally, matching Labels() and
-	// GetAllProbableSpeciesWithSettings; only secondary entries are read under entry.mu.
-	sets := make([][]string, 0, len(refs)+1)
-	if primary != nil {
-		sets = append(sets, primary.Labels())
+	if anchor != nil {
+		refs = append([]entryRef{*anchor}, refs...)
 	}
-	for _, ref := range refs {
-		ref.entry.mu.Lock()
-		var labels []string
-		if ref.entry.instance != nil {
-			labels = ref.entry.instance.Labels()
-		}
-		ref.entry.mu.Unlock()
-		sets = append(sets, labels)
-	}
-	return unionLabels(sets...)
+	return refs
 }
 
 // logMissingTaxonomyCodes emits, at debug level, the labels absent from the
