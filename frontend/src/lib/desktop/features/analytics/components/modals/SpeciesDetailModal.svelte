@@ -5,7 +5,9 @@
   import { formatDate } from '$lib/utils/formatters';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import { getAllAboutBirdsUrl, getWikipediaUrl } from '$lib/utils/speciesLinks';
+  import { buildSpeciesSearchUrl } from '$lib/utils/detectionUrls';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
+  import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import { ExternalLink } from '@lucide/svelte';
 
   interface SpeciesData {
@@ -57,6 +59,10 @@
   let wikipediaUrl = $derived(
     getWikipediaUrl(displayName, getLocale(), displaySpecies?.common_name ?? '')
   );
+  let detectionsUrl = $derived(buildSpeciesSearchUrl(displaySpecies?.scientific_name ?? ''));
+  let viewDetectionsLabel = $derived(
+    t('analytics.species.viewDetections', { species: displayName })
+  );
 
   function formatPercentage(value: number): string {
     return (value * 100).toFixed(1) + '%';
@@ -78,14 +84,20 @@
   {#snippet header()}
     {#if displaySpecies}
       <div class="flex items-center justify-between">
-        <div class="min-w-0">
+        <a
+          href={detectionsUrl}
+          onclick={handleAppLinkClick}
+          class="min-w-0 hover:opacity-80 transition-opacity"
+          aria-label={viewDetectionsLabel}
+          title={viewDetectionsLabel}
+        >
           <h3 id="modal-title" class="font-bold text-lg truncate">
             {displayName}
           </h3>
           <p class="text-sm text-[var(--color-base-content)] opacity-70 italic truncate">
             {displaySpecies.scientific_name}
           </p>
-        </div>
+        </a>
       </div>
     {/if}
   {/snippet}
@@ -93,14 +105,20 @@
   {#snippet children()}
     {#if displaySpecies}
       {#if displaySpecies.thumbnail_url}
-        <div class="w-full aspect-[4/3] rounded-xl overflow-hidden bg-[var(--color-base-300)]">
+        <a
+          href={detectionsUrl}
+          onclick={handleAppLinkClick}
+          class="block w-full aspect-[4/3] rounded-xl overflow-hidden bg-[var(--color-base-300)] hover:opacity-80 transition-opacity"
+          aria-label={viewDetectionsLabel}
+          title={viewDetectionsLabel}
+        >
           <img
             src={displaySpecies.thumbnail_url}
             alt={displayName}
             class="w-full h-full object-cover"
             onerror={handleBirdImageError}
           />
-        </div>
+        </a>
       {/if}
 
       <div class="grid grid-cols-2 gap-3 text-sm mt-3">

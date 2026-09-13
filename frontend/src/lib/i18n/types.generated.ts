@@ -488,6 +488,8 @@ export type TranslationKey =
   | 'search.detailsPanel.collapseDetails' // params: species
   | 'search.detailsPanel.playAudio' // params: species
   | 'search.detailsPanel.viewDetails' // params: species
+  | 'search.detailsPanel.detectionDetail'
+  | 'search.detailsPanel.detectionDetailFor' // params: species
   | 'search.detailsPanel.unknownSpecies'
   | 'search.detailsPanel.clickToCollapse'
   | 'search.errors.searchFailed' // params: error
@@ -591,6 +593,7 @@ export type TranslationKey =
   | 'dashboard.recentDetections.actions.lockDetection'
   | 'dashboard.recentDetections.actions.unlockDetection'
   | 'dashboard.recentDetections.actions.deleteDetection'
+  | 'dashboard.recentDetections.actions.compareSounds'
   | 'dashboard.recentDetections.noDetections'
   | 'dashboard.recentDetections.errors.toggleSpeciesFailed'
   | 'dashboard.recentDetections.errors.toggleLockFailed'
@@ -664,11 +667,15 @@ export type TranslationKey =
   | 'detections.titles.hourly' // params: hour, date
   | 'detections.titles.hourlyRange' // params: startHour, endHour, date
   | 'detections.titles.species' // params: species, date
+  | 'detections.titles.speciesAll' // params: species
   | 'detections.titles.search' // params: query
   | 'detections.titles.allDetections' // params: date
   | 'detections.detail.species'
   | 'detections.detail.observation'
   | 'detections.detail.aria.downloadAudioClip' // params: name
+  | 'detections.detail.aria.compareSounds' // params: name
+  | 'detections.detail.aria.viewOnAllAboutBirds' // params: name
+  | 'detections.detail.aria.viewOnWikipedia' // params: name
   | 'detections.detail.aria.audioRecordingFor' // params: name
   | 'detections.detail.aria.scientificName'
   | 'detections.detail.aria.classificationBadges'
@@ -787,6 +794,9 @@ export type TranslationKey =
   | 'detections.row.imageFailedToLoad'
   | 'detections.media.title'
   | 'detections.media.clipHint'
+  | 'detections.media.compareSounds'
+  | 'detections.media.viewOnAllAboutBirds'
+  | 'detections.media.viewOnWikipedia'
   | 'detections.tabs.overview'
   | 'detections.tabs.taxonomy'
   | 'detections.tabs.history'
@@ -1577,8 +1587,10 @@ export type TranslationKey =
   | 'analytics.species.switchToList'
   | 'analytics.species.openAllAboutBirds'
   | 'analytics.species.openWikipedia'
+  | 'analytics.species.viewDetections' // params: species
   | 'analytics.species.noSpeciesFound'
   | 'analytics.species.headers.species'
+  | 'analytics.species.headers.links'
   | 'analytics.species.headers.detections'
   | 'analytics.species.headers.avgConfidence'
   | 'analytics.species.headers.maxConfidence'
@@ -4280,6 +4292,7 @@ export type TranslationParams = {
   'search.detailsPanel.collapseDetails': { species: string | number };
   'search.detailsPanel.playAudio': { species: string | number };
   'search.detailsPanel.viewDetails': { species: string | number };
+  'search.detailsPanel.detectionDetailFor': { species: string | number };
   'search.errors.searchFailed': { error: string | number };
   'search.pagination.page': { current: string | number; total: string | number };
   'dashboard.newSpeciesHighlights.categorySeasonNamed': { season: string | number };
@@ -4332,9 +4345,13 @@ export type TranslationParams = {
     date: string | number;
   };
   'detections.titles.species': { species: string | number; date: string | number };
+  'detections.titles.speciesAll': { species: string | number };
   'detections.titles.search': { query: string | number };
   'detections.titles.allDetections': { date: string | number };
   'detections.detail.aria.downloadAudioClip': { name: string | number };
+  'detections.detail.aria.compareSounds': { name: string | number };
+  'detections.detail.aria.viewOnAllAboutBirds': { name: string | number };
+  'detections.detail.aria.viewOnWikipedia': { name: string | number };
   'detections.detail.aria.audioRecordingFor': { name: string | number };
   'detections.detail.aria.confidence': { confidence: string | number };
   'detections.pagination.showing': {
@@ -4422,6 +4439,7 @@ export type TranslationParams = {
   'system.inference.sourcesDegraded': { count: string | number; total: string | number };
   'system.inference.coDetectedHelp': { seconds: string | number };
   'analytics.hub.card.notEnoughDataHint': { min: string | number };
+  'analytics.species.viewDetections': { species: string | number };
   'analytics.advanced.speciesSelection': { count: string | number; max: string | number };
   'analytics.advanced.detections': { count: string | number };
   'analytics.advanced.charts.accumulation.totalSpecies': { species: string | number };

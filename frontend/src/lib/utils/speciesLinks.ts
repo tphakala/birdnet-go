@@ -5,15 +5,32 @@ const WIKIPEDIA_LANGUAGE_CODES: Record<string, string> = {
 };
 
 /**
- * Build an All About Birds guide URL from a species common name.
+ * Build the All About Birds guide slug from a species common name.
  * Apostrophes are removed to match the site's guide URL convention.
  */
+function buildAllAboutBirdsGuideName(commonName: string): string {
+  return commonName.trim().replace(/['’]/g, '').replace(/\s+/g, '_');
+}
+
+function buildAllAboutBirdsUrl(commonName: string, page: 'id' | 'sounds'): string {
+  const guideName = buildAllAboutBirdsGuideName(commonName);
+  return `${ALL_ABOUT_BIRDS_GUIDE_URL}${encodeURIComponent(guideName)}/${page}`;
+}
+
+/**
+ * Build an All About Birds identification guide URL from a species common name.
+ */
 export function getAllAboutBirdsUrl(commonName: string): string {
-  const guideName = commonName
-    .trim()
-    .replace(/[\u0027\u2019]/g, '')
-    .replace(/\s+/g, '_');
-  return `${ALL_ABOUT_BIRDS_GUIDE_URL}${encodeURIComponent(guideName)}/id`;
+  return buildAllAboutBirdsUrl(commonName, 'id');
+}
+
+/**
+ * Build an All About Birds "Sounds" page URL from a species common name
+ * (e.g. `https://www.allaboutbirds.org/guide/Black-throated_Blue_Warbler/sounds`),
+ * for comparing a recorded detection against reference song/call recordings.
+ */
+export function getAllAboutBirdsSoundsUrl(commonName: string): string {
+  return buildAllAboutBirdsUrl(commonName, 'sounds');
 }
 
 /**
@@ -22,6 +39,11 @@ export function getAllAboutBirdsUrl(commonName: string): string {
  * than a localized host where that fallback name may not have an article.
  * Norwegian Bokmal (`nb`) maps to Wikipedia's `no` domain.
  */
+function localizedWikipediaLanguage(locale: string): string {
+  // eslint-disable-next-line security/detect-object-injection -- Safe: read-only lookup in a small fixed Record, falls back to the locale itself
+  return WIKIPEDIA_LANGUAGE_CODES[locale] ?? locale;
+}
+
 export function getWikipediaUrl(
   displayName: string,
   locale: string,
@@ -29,7 +51,7 @@ export function getWikipediaUrl(
 ): string {
   const hasLocalizedName = displayName.trim() !== englishName.trim();
   const language = hasLocalizedName
-    ? (WIKIPEDIA_LANGUAGE_CODES[locale] ?? locale)
+    ? localizedWikipediaLanguage(locale)
     : ENGLISH_WIKIPEDIA_LANGUAGE;
   const articleName = (hasLocalizedName ? displayName : englishName).trim().replace(/\s+/g, '_');
   return `https://${language}.wikipedia.org/wiki/${encodeURIComponent(articleName)}`;

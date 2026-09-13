@@ -164,6 +164,79 @@ describe('DetectionDetail audio download', () => {
     // supplies the canonical filename and extension.
     expect(downloadLink).toHaveAttribute('download', '');
   });
+
+  it('links to the species All About Birds sounds page next to the recording', async () => {
+    const detection = makeDetection({
+      id: 1239,
+      scientificName: 'Phalaenoptilus nuttallii',
+      commonName: 'Common Poorwill',
+      clipName: 'phalaenoptilus_nuttallii_88p_20260720T051601Z.m4a',
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        if (String(input).includes('/api/v2/detections/1239')) {
+          return Promise.resolve(jsonResponse(detection));
+        }
+        return Promise.resolve(jsonResponse({}));
+      })
+    );
+
+    const { container } = detailTest.render({ detectionId: '1239' });
+
+    await waitFor(() => {
+      expect(container.querySelector('.media-heading-row a.media-compare-link')).not.toBeNull();
+    });
+
+    const compareLink = container.querySelector<HTMLAnchorElement>(
+      '.media-heading-row a.media-compare-link'
+    );
+    expect(compareLink?.getAttribute('href')).toBe(
+      'https://www.allaboutbirds.org/guide/Common_Poorwill/sounds'
+    );
+    expect(compareLink).toHaveAttribute('target', '_blank');
+    expect(compareLink).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('links to the species All About Birds guide and Wikipedia article in the identity card', async () => {
+    const detection = makeDetection({
+      id: 1240,
+      scientificName: 'Dumetella carolinensis',
+      commonName: 'Gray Catbird',
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        if (String(input).includes('/api/v2/detections/1240')) {
+          return Promise.resolve(jsonResponse(detection));
+        }
+        return Promise.resolve(jsonResponse({}));
+      })
+    );
+
+    const { container } = detailTest.render({ detectionId: '1240' });
+
+    await waitFor(() => {
+      expect(container.querySelector('.species-reference-links')).not.toBeNull();
+    });
+
+    const referenceLinks = container.querySelectorAll<HTMLAnchorElement>(
+      '.species-reference-links a'
+    );
+    expect(referenceLinks).toHaveLength(2);
+    expect(referenceLinks[0].getAttribute('href')).toBe(
+      'https://www.allaboutbirds.org/guide/Gray_Catbird/id'
+    );
+    expect(referenceLinks[1].getAttribute('href')).toBe(
+      'https://en.wikipedia.org/wiki/Gray_Catbird'
+    );
+    referenceLinks.forEach(link => {
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    });
+  });
 });
 
 describe('DetectionDetail rarity location coordinates', () => {

@@ -65,6 +65,7 @@ describe('SpeciesDetailModal', () => {
 
     const links = Array.from(container.querySelectorAll('a'));
     expect(links.map(link => link.getAttribute('href'))).toEqual([
+      '/ui/detections?queryType=search&species=Passer+domesticus',
       'https://www.allaboutbirds.org/guide/House_Sparrow/id',
       'https://en.wikipedia.org/wiki/House_Sparrow',
     ]);
