@@ -112,6 +112,36 @@ func TestResolveStreamSampleRates(t *testing.T) {
 	}
 }
 
+// TestResolveStreamChannels covers independent channel recovery: a probe that
+// fails to report a channel count must recover it from the fallback so a
+// left/right selection is not silently downmixed (#4350).
+func TestResolveStreamChannels(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		probeChannels int
+		fallback      int
+		wantChannels  int
+		wantRetained  bool
+	}{
+		{"probe ok keeps probed channels", 2, 6, 2, false},
+		{"probe ok mono keeps mono", 1, 2, 1, false},
+		{"probe zero recovers fallback", 0, 2, 2, true},
+		{"probe zero no fallback stays zero", 0, 0, 0, false},
+		{"probe zero fallback mono recovers mono", 0, 1, 1, true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			gotChannels, gotRetained := resolveStreamChannels(tc.probeChannels, tc.fallback)
+			assert.Equal(t, tc.wantChannels, gotChannels, "channels")
+			assert.Equal(t, tc.wantRetained, gotRetained, "retained flag")
+		})
+	}
+}
+
 // TestStreamFallbackKnown verifies the guard that decides whether a fallback
 // carries any usable value.
 func TestStreamFallbackKnown(t *testing.T) {

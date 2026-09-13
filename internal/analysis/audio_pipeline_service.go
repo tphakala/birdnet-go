@@ -259,7 +259,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 
 	// Add audio sources, register consumers, and start buffer monitors.
 	apiAudioLevelChan := p.apiService.AudioLevelChan()
-	sourceIDs := p.setupAudioSources(apiAudioLevelChan, operationStart)
+	sourceIDs := p.setupAudioSources(apiAudioLevelChan, operationStart, nil)
 
 	if len(sourceIDs) == 0 {
 		audiocore.GetLogger().Warn("starting without active audio sources",
@@ -532,6 +532,13 @@ func (p *AudioPipelineService) restartAudioCapture() {
 	audiocore.GetLogger().Info("restarting audio capture",
 		logger.String("operation", "restart_audio_capture"))
 
+	// Snapshot every running source's last known rate/channels before removal, so
+	// a transient probe failure during the re-probe below does not collapse a
+	// high-rate source to the 48 kHz target or downmix a channel-selected source
+	// (#4350). removeAllSources empties the registry, so the rebuilt configs can
+	// no longer consult it.
+	fallbackSources := p.captureAllStreamFallbacks()
+
 	// Remove all existing sources.
 	p.removeAllSources(operationRestart)
 
@@ -542,7 +549,7 @@ func (p *AudioPipelineService) restartAudioCapture() {
 
 	// Re-add sources, register consumers, and update buffer monitors.
 	audioLevelChan := p.apiService.AudioLevelChan()
-	p.setupAudioSources(audioLevelChan, operationRestart)
+	p.setupAudioSources(audioLevelChan, operationRestart, fallbackSources)
 }
 
 // applyPrimaryModelDims resolves the primary model's analysis-buffer dimensions
@@ -710,13 +717,15 @@ func (p *AudioPipelineService) removeAllSources(operation string) {
 // updates buffer monitors. Returns the IDs of successfully added sources.
 // The audioLevelChan receives bridged audio level data for the API SSE endpoint.
 // The operation parameter is used in log messages to distinguish callers.
-func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.AudioLevelData, operation string) []string {
+func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.AudioLevelData, operation string, fallbackSources map[string]streamFallback) []string {
 	log := audiocore.GetLogger()
 
 	// Add audio sources via engine: this registers sources, allocates buffers,
-	// and starts capture (FFmpeg streams or device capture). Initial startup has
-	// no previously known rate to fall back on, so no fallback map is passed.
-	sourceConfigs := p.buildSourceConfigsWithModels(nil)
+	// and starts capture (FFmpeg streams or device capture). fallbackSources is
+	// nil on initial startup (no prior rate to fall back on) and carries the
+	// pre-removal snapshot on a full restart so a probe failure does not collapse
+	// a high-rate source (#4350).
+	sourceConfigs := p.buildSourceConfigsWithModels(fallbackSources)
 	sourceModelMap := make(map[string][]string, len(sourceConfigs))
 	var sourceIDs []string
 	for _, scm := range sourceConfigs {
@@ -1679,8 +1688,9 @@ type sourceConfigWithModels struct {
 }
 
 // streamFallback carries a stream's last known probed parameters, reused to
-// preserve them across a transient probe failure on reconnect (#4350). A failed
-// probe returns both fields as 0 together, so preservation is all-or-nothing.
+// preserve them across a transient probe failure on reconnect (#4350). The
+// sample rate and channel count are recovered independently, so known() reports
+// whether either value is usable.
 type streamFallback struct {
 	sampleRate int
 	channels   int
@@ -1715,6 +1725,38 @@ func (p *AudioPipelineService) captureStreamFallback(connStr string) map[string]
 	fallback := make(map[string]streamFallback, 1)
 	if src, ok := p.registrySourceByConnection(connStr); ok {
 		if fb := (streamFallback{sampleRate: src.SourceSampleRate, channels: src.SourceChannels}); fb.known() {
+			fallback[connStr] = fb
+		}
+	}
+	return fallback
+}
+
+// captureAllStreamFallbacks snapshots the last known probed parameters of every
+// currently registered source, keyed by connection string. restartAudioCapture
+// must call it BEFORE removeAllSources, because the full restart empties the
+// registry before setupAudioSources re-probes; without the snapshot a transient
+// probe failure during the restart would collapse every high-rate source to the
+// 48 kHz target and downmix channel-selected sources (#4350). Returns a non-nil
+// map that omits sources with no usable values.
+func (p *AudioPipelineService) captureAllStreamFallbacks() map[string]streamFallback {
+	if p.engine == nil {
+		return make(map[string]streamFallback)
+	}
+	registry := p.engine.Registry()
+	if registry == nil {
+		return make(map[string]streamFallback)
+	}
+	sources := registry.List()
+	fallback := make(map[string]streamFallback, len(sources))
+	for _, src := range sources {
+		fb := streamFallback{sampleRate: src.SourceSampleRate, channels: src.SourceChannels}
+		if !fb.known() {
+			continue
+		}
+		// List() returns safe copies with the connection string cleared, so read
+		// the raw string by ID to key the fallback the way the rebuilt configs
+		// look it up.
+		if connStr, ok := registry.ConnectionStringByID(src.ID); ok {
 			fallback[connStr] = fb
 		}
 	}
@@ -1757,18 +1799,18 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels(fallbackSources map[
 		probe := probeResults[stream.URL]
 		isBat := hasBatModel(stream.Models)
 
-		// On a failed probe fall back to this connection's last known parameters
-		// so a transient reconnect-time probe failure does not silently drop the
-		// stream to the 48 kHz target and resample away its high-frequency
+		// On a failed or partial probe fall back to this connection's last known
+		// parameters so a transient reconnect-time probe failure does not silently
+		// drop the stream to the 48 kHz target and resample away its high-frequency
 		// content, nor zero the channel count so a left/right selection silently
-		// downmixes (#4350). probeStreamSampleRate zeroes the sample rate and the
-		// channel count together on any failure (it returns streamProbeResult{}),
-		// so a single sampleRate==0 check covers both. The caller-supplied map
-		// (used by RestartSource, which removes the source before building) takes
-		// precedence over the live registry (used by reconfigure/startup while
-		// sources are still registered).
+		// downmixes (#4350). The sample rate and channel count are recovered
+		// independently: a probe reporting a valid rate but no channel count still
+		// recovers the channels, and vice versa. The caller-supplied map (used by
+		// RestartSource and restartAudioCapture, which remove sources before
+		// building) takes precedence over the live registry (used by
+		// reconfigure/startup while sources are still registered).
 		var fb streamFallback
-		if probe.sampleRate == 0 {
+		if probe.sampleRate == 0 || probe.channels == 0 {
 			fb = fallbackSources[stream.URL]
 			if !fb.known() {
 				if src, ok := p.registrySourceByConnection(stream.URL); ok {
@@ -1780,25 +1822,25 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels(fallbackSources map[
 		sourceSampleRate, sampleRate, retained, escalate := resolveStreamSampleRates(
 			probe.sampleRate, fb.sampleRate, conf.SampleRate, isBat)
 
-		sourceChannels := probe.channels
-		if sourceChannels == 0 && fb.channels > 0 {
-			sourceChannels = fb.channels
-		}
+		sourceChannels, channelsRetained := resolveStreamChannels(probe.channels, fb.channels)
 
-		// retained and escalate are mutually exclusive: escalate requires no rate
-		// fallback (retained == false), so the ordered switch cannot mask the
-		// escalation error behind the retention warning.
+		// Emit the escalation error first: it is the "no known rate for a high
+		// sample rate model" alarm and must not be masked by a channel-only
+		// retention warning. escalate requires no rate fallback, so it never
+		// coincides with a retained rate.
 		switch {
-		case retained:
-			GetLogger().Warn("stream probe failed on reconnect; retaining last known stream parameters to avoid silent resampling",
-				logger.String("stream", stream.Name),
-				logger.Int("retained_sample_rate", sourceSampleRate),
-				logger.Int("retained_channels", sourceChannels),
-				logger.String("operation", "probe_stream"))
 		case escalate:
 			GetLogger().Error("stream probe failed with no previously known sample rate; high sample rate model audio will be resampled to the target rate until the source is re-probed",
 				logger.String("stream", stream.Name),
 				logger.Int("target_sample_rate", conf.SampleRate),
+				logger.String("operation", "probe_stream"))
+		case retained || channelsRetained:
+			GetLogger().Warn("stream probe failed on reconnect; retaining last known stream parameters to avoid silent resampling",
+				logger.String("stream", stream.Name),
+				logger.Int("sample_rate", sourceSampleRate),
+				logger.Bool("sample_rate_retained", retained),
+				logger.Int("channels", sourceChannels),
+				logger.Bool("channels_retained", channelsRetained),
 				logger.String("operation", "probe_stream"))
 		}
 		if isBat && sourceSampleRate > 0 && sourceSampleRate < ffmpeg.MinBatSampleRate {
@@ -1943,6 +1985,21 @@ func resolveStreamSampleRates(probeRate, fallbackRate, targetRate int, isBatMode
 	}
 	escalate = probeRate == 0 && !retained && isBatModel
 	return sourceRate, outputRate, retained, escalate
+}
+
+// resolveStreamChannels decides the source channel count for a stream config
+// from a fresh probe result and a fallback count to use when the probe reported
+// no channels. Recovering the channel count on a probe failure keeps a left/right
+// channel selection from silently downmixing, because appendChannelArgs only
+// applies the pan filter when the source has more than one channel (#4350).
+// channelsRetained reports whether the fallback was used.
+func resolveStreamChannels(probeChannels, fallbackChannels int) (sourceChannels int, channelsRetained bool) {
+	sourceChannels = probeChannels
+	if sourceChannels == 0 && fallbackChannels > 0 {
+		sourceChannels = fallbackChannels
+		channelsRetained = true
+	}
+	return sourceChannels, channelsRetained
 }
 
 // probeAllStreams probes all streams concurrently to discover their actual

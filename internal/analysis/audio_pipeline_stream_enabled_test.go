@@ -190,3 +190,76 @@ func TestCaptureStreamFallback_NilEngine(t *testing.T) {
 	p := &AudioPipelineService{}
 	assert.Empty(t, p.captureStreamFallback("rtsp://cam.invalid/stream"), "nil engine must yield an empty map, not panic")
 }
+
+// TestCaptureAllStreamFallbacks verifies the full-restart snapshot used by
+// restartAudioCapture: it captures every registered source with usable params
+// (including a rate-only source, since known() is OR-based), keyed by connection
+// string, omits sources with nothing worth retaining, and its captured map,
+// handed back to buildSourceConfigsWithModels after the registry is emptied,
+// recovers the source parameters when the re-probe fails (#4350).
+func TestCaptureAllStreamFallbacks(t *testing.T) {
+	prev := conf.CloneSettings(conf.GetSettings())
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
+
+	const withParams = "rtsp://cam-a.invalid/stream"
+	const rateOnly = "rtsp://cam-c.invalid/stream"
+	const noParams = "rtsp://cam-b.invalid/stream"
+
+	// withParams is a bat stream in settings so the handover check can confirm the
+	// recovered rate drives the rebuilt config's output rate.
+	settings := &conf.Settings{}
+	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
+		{Name: "a", URL: withParams, Enabled: true, Type: conf.StreamTypeRTSP, ChannelMode: conf.ChannelModeLeft, Models: []string{conf.ModelIDBat}},
+	}
+	conftest.SetTestSettings(settings)
+
+	engine := enginepkg.New(t.Context(), &enginepkg.Config{}, nil)
+	_, err := engine.Registry().Register(&audiocore.SourceConfig{
+		DisplayName: "a", Type: audiocore.SourceTypeRTSP, ConnectionString: withParams,
+		SampleRate: 192000, SourceSampleRate: 192000, BitDepth: conf.BitDepth, Channels: 1, SourceChannels: 2,
+	})
+	require.NoError(t, err)
+	// Rate known, channels unknown: must still be captured because known() is OR-based.
+	_, err = engine.Registry().Register(&audiocore.SourceConfig{
+		DisplayName: "c", Type: audiocore.SourceTypeRTSP, ConnectionString: rateOnly,
+		SampleRate: 96000, SourceSampleRate: 96000, BitDepth: conf.BitDepth, Channels: 1,
+	})
+	require.NoError(t, err)
+	_, err = engine.Registry().Register(&audiocore.SourceConfig{
+		DisplayName: "b", Type: audiocore.SourceTypeRTSP, ConnectionString: noParams,
+		SampleRate: conf.SampleRate, BitDepth: conf.BitDepth, Channels: 1,
+	})
+	require.NoError(t, err)
+
+	p := &AudioPipelineService{engine: engine}
+	got := p.captureAllStreamFallbacks()
+
+	require.Contains(t, got, withParams, "a source with known params must be captured")
+	assert.Equal(t, 192000, got[withParams].sampleRate)
+	assert.Equal(t, 2, got[withParams].channels)
+	require.Contains(t, got, rateOnly, "a rate-only source must be captured (known() is OR-based)")
+	assert.Equal(t, 96000, got[rateOnly].sampleRate)
+	assert.NotContains(t, got, noParams, "a source with no known params must be omitted")
+
+	// Handover: empty the registry (as removeAllSources would during a full
+	// restart), then feed the captured map into buildSourceConfigsWithModels. The
+	// re-probe of the .invalid URL fails, so the bat stream must recover its rate
+	// and channels from the captured fallback rather than collapse to 48 kHz.
+	for _, s := range engine.Registry().List() {
+		require.NoError(t, engine.Registry().Unregister(s.ID))
+	}
+	configs := p.buildSourceConfigsWithModels(got)
+	cfg := findConfigByConnection(configs, withParams)
+	require.NotNil(t, cfg, "rebuilt bat stream config should be present")
+	assert.Equal(t, 192000, cfg.SourceSampleRate, "handover must recover the source rate")
+	assert.Equal(t, 192000, cfg.SampleRate, "handover must drive the bat output rate from the recovered rate")
+	assert.Equal(t, 2, cfg.SourceChannels, "handover must recover the channel count")
+	assert.True(t, cfg.SourceSampleRateEstimated, "a recovered rate must be flagged estimated")
+}
+
+// TestCaptureAllStreamFallbacks_NilEngine confirms nil-safety.
+func TestCaptureAllStreamFallbacks_NilEngine(t *testing.T) {
+	t.Parallel()
+	p := &AudioPipelineService{}
+	assert.Empty(t, p.captureAllStreamFallbacks(), "nil engine must yield an empty map, not panic")
+}
