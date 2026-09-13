@@ -761,6 +761,10 @@ func fallbackToEmbeddedRangeFilter(settings *conf.Settings, cv classifierView, c
 // hasNativeRangeFilter reports whether the classifier can fall back to the embedded
 // MData range filter (BirdNET v2.4 family only). Build-and-return port keyed on the
 // registry ID rather than a *BirdNET receiver.
+//
+// Kept keyed on the v2.4 family verbatim through Phase 3. Phase 4 (per-classifier
+// range-filter views) owns the decision to ungate the MData fallback for other
+// classifiers; do not change the gate before then.
 func hasNativeRangeFilter(classifierID string) bool {
 	// ONNX-only builds (notflite) have no embedded TFLite range filter to fall back to.
 	return tfliteBackendAvailable && rangeFilterCompatFor(classifierID) == rangeFilterCompatMDataV24

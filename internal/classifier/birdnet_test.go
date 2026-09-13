@@ -251,7 +251,8 @@ func TestPrimaryRangeFilterCoverage_NoFilter(t *testing.T) {
 		ModelInfo: ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4"},
 	}
 	bn.settingsAtomic.Store(settings)
-	o := &Orchestrator{Settings: settings, primary: bn, ModelInfo: bn.ModelInfo}
+	o := &Orchestrator{Settings: settings, primary: bn, ModelInfo: bn.ModelInfo,
+		models: map[string]*modelEntry{RegistryIDBirdNETV24: {instance: bn}}}
 	o.settingsAtomic.Store(settings)
 	o.rangeFilter = newTestRangeFilterService(nil)
 
@@ -313,7 +314,8 @@ func TestPrimaryRangeFilterCoverage_WithMappedFilter(t *testing.T) {
 		modelsDir: modelsDir,
 	}
 	bn.settingsAtomic.Store(settings)
-	o := &Orchestrator{Settings: settings, primary: bn, ModelInfo: bn.ModelInfo, modelsDir: modelsDir}
+	o := &Orchestrator{Settings: settings, primary: bn, ModelInfo: bn.ModelInfo, modelsDir: modelsDir,
+		models: map[string]*modelEntry{RegistryIDBirdNETV24: {instance: bn}}}
 	o.settingsAtomic.Store(settings)
 	o.rangeFilter = newTestRangeFilterService(mapped)
 

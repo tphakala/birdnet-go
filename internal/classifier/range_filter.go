@@ -113,14 +113,14 @@ func BuildRangeFilter(o *Orchestrator) error {
 
 	var includedSpecies []string
 
-	// Snapshot primary and the range-filter service under the read lock. primary is
-	// cleared by Delete() under o.mu.Lock(); reporting "no primary model" first
-	// preserves the pre-Phase-2b error contract for a torn-down orchestrator.
+	// Gate on the range-filter anchor (v2.4) being loaded, then snapshot the
+	// range-filter service; reporting "no primary model" first preserves the
+	// pre-Phase-2b error contract for a torn-down orchestrator.
+	_, _, ok := o.rangeFilterAnchor()
 	o.mu.RLock()
-	primary := o.primary
 	rfs := o.rangeFilter
 	o.mu.RUnlock()
-	if primary == nil {
+	if !ok {
 		return errors.Newf("orchestrator has no primary model").
 			Component("classifier.orchestrator").
 			Category(errors.CategorySystem).

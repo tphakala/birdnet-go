@@ -44,7 +44,7 @@ func hasScientificName(scores []SpeciesScore, sci string) bool {
 func buildAllSpeciesOrchestrator(t *testing.T, settings *conf.Settings, rf *fakeUniversalRangeFilter, nonPrimaryID string, nonPrimaryLabels []string) *Orchestrator {
 	t.Helper()
 
-	const primaryID = "BirdNET_V3"
+	const primaryID = RegistryIDBirdNETV24
 
 	bn := &BirdNET{
 		Settings: settings,
@@ -310,7 +310,7 @@ func TestGetAllProbableSpecies_BatModelAlwaysActive(t *testing.T) {
 		rawScores: []float32{0.9},
 	}
 
-	const primaryID = "BirdNET_V3"
+	const primaryID = RegistryIDBirdNETV24
 	bn := &BirdNET{
 		Settings: settings,
 	}
@@ -366,7 +366,7 @@ func TestGetAllProbableSpecies_SortedByScoreDescending(t *testing.T) {
 		rawScores: []float32{0.02},
 	}
 
-	const primaryID = "BirdNET_V3"
+	const primaryID = RegistryIDBirdNETV24
 	bn := &BirdNET{
 		Settings: settings,
 	}
@@ -417,7 +417,7 @@ func TestGetAllProbableSpecies_BatModelDedupedByScientificName(t *testing.T) {
 		rawScores: []float32{0.9},
 	}
 
-	const primaryID = "BirdNET_V3"
+	const primaryID = RegistryIDBirdNETV24
 	bn := &BirdNET{
 		Settings: settings,
 	}
@@ -469,7 +469,7 @@ func TestGetAllProbableSpecies_DeterministicDedupByModelID(t *testing.T) {
 		rawScores: []float32{0.9},
 	}
 
-	const primaryID = "BirdNET_V3"
+	const primaryID = RegistryIDBirdNETV24
 	bn := &BirdNET{
 		Settings: settings,
 	}

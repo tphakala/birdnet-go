@@ -319,7 +319,8 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// Build the range-filter backend against the primary/anchor view now that v2.4
 	// is loaded. A build failure is non-fatal: the process starts without species
 	// filtering and the user can fix it via Settings > Species.
-	if err := o.rangeFilter.reload(settings, o.primaryClassifierView()); err != nil {
+	anchorView, _, _ := o.rangeFilterAnchor()
+	if err := o.rangeFilter.reload(settings, anchorView); err != nil {
 		GetLogger().Warn("Range filter initialization failed, starting without species filtering (fix via Settings > Species)",
 			logger.Error(err),
 			logger.String("range_filter_model", settings.BirdNET.RangeFilter.Model),
@@ -938,36 +939,50 @@ func (o *Orchestrator) rangeFilterDebug(format string, v ...any) {
 	}
 }
 
-// primaryClassifierView snapshots the classifier identity the range-filter service
-// needs to build its backend: the primary's registry ID (from the o.mu-guarded
-// o.ModelInfo, not primary.ModelInfo which bn.mu guards) and the primary's models
-// directory. The models directory is read from the PRIMARY (bn.modelsDir), not from
-// o.modelsDir: the old NewBirdNET.initializeMetaModel used bn.modelsDir, which is
-// empty at construction (SetModelsDir runs later) and only set after SetModelsDir,
-// so reading it here keeps the initial build (no geomodel auto-select yet) and the
-// reload build (auto-select once the directory is set) byte-identical to the old
-// behavior, and consistent with RangeFilterStatus, which also reports coverage from
-// the primary's modelsDir. o.mu is released before reading bn.modelsDir so the build
-// still runs with no orchestrator lock held.
-func (o *Orchestrator) primaryClassifierView() classifierView {
+// rangeFilterAnchor snapshots the classifier the range-filter view is aligned to.
+// Phase 3: the BirdNET v2.4 entry when it is loaded (ok=true); otherwise ok=false,
+// which reproduces the pre-Phase-3 nil-primary behavior of every range-filter
+// accessor. Phase 4 replaces this single anchor with per-classifier views.
+//
+// The entry pointer is fetched under o.mu.RLock and the *BirdNET is snapshotted
+// under entry.mu with a nil check, so a concurrent UnloadModel/Delete that nils
+// entry.instance can never make the type assertion panic. classifierView.modelsDir
+// is o.modelsDir (HQ3): for the v2.4 family the models dir never influences backend
+// selection, so this matches the historical construction-time build that saw an
+// empty bn.modelsDir.
+func (o *Orchestrator) rangeFilterAnchor() (cv classifierView, inst *BirdNET, ok bool) {
 	o.mu.RLock()
-	primary := o.primary
-	id := o.ModelInfo.ID
+	entry := o.models[RegistryIDBirdNETV24]
+	modelsDir := o.modelsDir
 	o.mu.RUnlock()
-	cv := classifierView{id: id}
-	if primary != nil {
-		_, cv.modelsDir = primary.primaryClassifierCoverage()
+	if entry == nil {
+		return classifierView{}, nil, false
 	}
-	return cv
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	bn, isBirdNET := entry.instance.(*BirdNET)
+	if !isBirdNET {
+		return classifierView{}, nil, false
+	}
+	return classifierView{id: RegistryIDBirdNETV24, modelsDir: modelsDir}, bn, true
+}
+
+// anchorCoverage returns the range-filter anchor's classifier identity and label
+// count, snapshotted under the instance lock so it does not race a concurrent
+// reload. RangeFilterStatus reads the models directory from o.modelsDir directly
+// (HQ3), so the modelsDir the underlying accessor also returns is discarded here.
+func anchorCoverage(inst *BirdNET) ClassifierCoverage {
+	cov, _ := inst.primaryClassifierCoverage()
+	return cov
 }
 
 // GetProbableSpecies returns species scores from the range filter.
 func (o *Orchestrator) GetProbableSpecies(date time.Time, week float32) ([]SpeciesScore, error) {
+	_, _, ok := o.rangeFilterAnchor()
 	o.mu.RLock()
-	primary := o.primary
 	rfs := o.rangeFilter
 	o.mu.RUnlock()
-	if primary == nil || rfs == nil {
+	if !ok || rfs == nil {
 		return nil, nil
 	}
 	scores, _, _, err := rfs.probableSpecies(date, week, o.CurrentSettings())
@@ -978,11 +993,11 @@ func (o *Orchestrator) GetProbableSpecies(date time.Time, week float32) ([]Speci
 // snapshot, allowing callers to test arbitrary coordinates and thresholds
 // without modifying global state.
 func (o *Orchestrator) GetProbableSpeciesWithSettings(date time.Time, week float32, settings *conf.Settings) ([]SpeciesScore, error) {
+	_, _, ok := o.rangeFilterAnchor()
 	o.mu.RLock()
-	primary := o.primary
 	rfs := o.rangeFilter
 	o.mu.RUnlock()
-	if primary == nil || rfs == nil {
+	if !ok || rfs == nil {
 		return nil, nil
 	}
 	scores, _, _, err := rfs.probableSpecies(date, week, settings)
@@ -1033,11 +1048,9 @@ func (o *Orchestrator) GetProbableSpeciesWithSettings(date time.Time, week float
 // a BattyBirdNET setup sees its bat species in the active/probable list instead
 // of a bird-only view.
 func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week float32, settings *conf.Settings) ([]SpeciesScore, error) {
-	// Snapshot primary under read lock to avoid racing with Delete().
-	o.mu.RLock()
-	primary := o.primary
-	o.mu.RUnlock()
-	if primary == nil {
+	// Gate on the range-filter anchor (v2.4) being loaded, as the pre-Phase-3
+	// nil-primary check did.
+	if _, _, ok := o.rangeFilterAnchor(); !ok {
 		return nil, nil
 	}
 
@@ -1075,13 +1088,11 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 	}
 
 	o.mu.RLock()
-	// Read o.ModelInfo.ID, the o.mu-guarded copy of the primary's identity, not
-	// primary.ModelInfo.ID: the latter is mutated by BirdNET.ReloadModel under
-	// bn.mu and would race with a concurrent reload.
-	primaryID := o.ModelInfo.ID
 	refs := make([]entryRef, 0, len(o.models))
 	for id, entry := range o.models {
-		if id == primaryID || id == RegistryIDBat {
+		// Skip the range-filter anchor (v2.4, already covered by the scores above)
+		// and Bat (no geomodel; handled separately below).
+		if id == RegistryIDBirdNETV24 || id == RegistryIDBat {
 			continue
 		}
 		refs = append(refs, entryRef{id: id, entry: entry})
@@ -1194,11 +1205,11 @@ func (o *Orchestrator) GetSpeciesOccurrence(species string) float64 {
 
 // GetSpeciesOccurrenceAtTime returns the occurrence probability for a species at a specific time.
 func (o *Orchestrator) GetSpeciesOccurrenceAtTime(species string, detectionTime time.Time) float64 {
+	_, _, ok := o.rangeFilterAnchor()
 	o.mu.RLock()
-	primary := o.primary
 	rfs := o.rangeFilter
 	o.mu.RUnlock()
-	if primary == nil || rfs == nil {
+	if !ok || rfs == nil {
 		return 0
 	}
 	return rfs.occurrenceAtTime(species, detectionTime, o.CurrentSettings())
@@ -1392,22 +1403,23 @@ func (o *Orchestrator) EnrichResultWithTaxonomy(speciesLabel string) (scientific
 // RangeFilterStatus returns introspection data about the range filter,
 // including per-classifier geomodel coverage for all active non-bat models.
 func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
-	// Snapshot primary under read lock to avoid racing with Delete().
-	o.mu.RLock()
-	primary := o.primary
-	o.mu.RUnlock()
-	if primary == nil {
+	// Gate on the range-filter anchor (v2.4) being loaded; take the classifier
+	// identity/label count and the models directory from it.
+	cv, primary, ok := o.rangeFilterAnchor()
+	if !ok {
 		return RangeFilterStatusResponse{}
 	}
 
 	settings := primary.currentSettings()
 	rf := settings.BirdNET.RangeFilter
 
-	// The classifier identity/label count come from the primary; the geomodel
-	// coverage, runtime state and auto-select come from the orchestrator-owned range
-	// filter service (Phase 2b). This reproduces the former
-	// BirdNET.PrimaryRangeFilterCoverage + rangeFilterRuntimeState in one place.
-	primaryCoverage, modelsDir := primary.primaryClassifierCoverage()
+	// The classifier identity/label count come from the anchor instance; the
+	// geomodel coverage, runtime state and auto-select come from the
+	// orchestrator-owned range filter service (Phase 2b). This reproduces the
+	// former BirdNET.PrimaryRangeFilterCoverage + rangeFilterRuntimeState in one
+	// place.
+	primaryCoverage := anchorCoverage(primary)
+	modelsDir := cv.modelsDir
 	var (
 		geomodel  *GeomodelStatus
 		geoLabels []string
@@ -1465,12 +1477,9 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 
 	var refs []entryRef
 	o.mu.RLock()
-	// Compare against o.ModelInfo.ID, the o.mu-guarded copy of the primary's
-	// identity, not primary.ModelInfo.ID which is mutated by BirdNET.ReloadModel
-	// under bn.mu and would race with a concurrent reload.
-	primaryID := o.ModelInfo.ID
 	for id, entry := range o.models {
-		if id == primaryID || id == RegistryIDBat {
+		// Skip the range-filter anchor (v2.4, added above) and Bat.
+		if id == RegistryIDBirdNETV24 || id == RegistryIDBat {
 			continue
 		}
 		refs = append(refs, entryRef{id: id, entry: entry})
@@ -1526,15 +1535,15 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 // species inclusion list so the processor's detection filter reflects
 // the new backend immediately.
 func (o *Orchestrator) ReloadRangeFilter() error {
+	cv, _, ok := o.rangeFilterAnchor()
 	o.mu.RLock()
-	primary := o.primary
 	rfs := o.rangeFilter
 	o.mu.RUnlock()
-	if primary == nil || rfs == nil {
+	if !ok || rfs == nil {
 		return nil
 	}
 	GetLogger().Info("Reloading range filter from updated settings")
-	if err := rfs.reload(o.CurrentSettings(), o.primaryClassifierView()); err != nil {
+	if err := rfs.reload(o.CurrentSettings(), cv); err != nil {
 		return err
 	}
 	GetLogger().Info("Range filter reloaded successfully")
@@ -1569,10 +1578,7 @@ func (o *Orchestrator) notifyRangeFilterReload() {
 // from the former BirdNET.RunFilterProcess onto the orchestrator so the rangefilter
 // CLI keeps working after the range filter moved to the service (Phase 2b).
 func (o *Orchestrator) RunFilterProcess(dateStr string, week float32) {
-	o.mu.RLock()
-	primary := o.primary
-	o.mu.RUnlock()
-	if primary == nil {
+	if _, _, ok := o.rangeFilterAnchor(); !ok {
 		return
 	}
 
@@ -1626,7 +1632,8 @@ func (o *Orchestrator) reloadPrimaryRangeFilter() {
 	if rfs == nil {
 		return
 	}
-	if err := rfs.reload(o.CurrentSettings(), o.primaryClassifierView()); err != nil {
+	cv, _, _ := o.rangeFilterAnchor()
+	if err := rfs.reload(o.CurrentSettings(), cv); err != nil {
 		GetLogger().Warn("Range filter reload after model reload failed; keeping the previous range filter",
 			logger.Error(err))
 	}
@@ -2425,12 +2432,12 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 // ONNX session is not goroutine-safe (Phase 2b; formerly lockedMappedRangeFilter
 // held primary.mu). On error no lock is held and the release func is a no-op.
 func (o *Orchestrator) lockedBatchRangeFilter() (*mappedRangeFilter, func(), error) {
+	_, _, ok := o.rangeFilterAnchor()
 	o.mu.RLock()
-	primary := o.primary
 	rfs := o.rangeFilter
 	o.mu.RUnlock()
 
-	if primary == nil || rfs == nil {
+	if !ok || rfs == nil {
 		return nil, func() {}, errors.Newf("primary model not available").
 			Component("classifier.orchestrator").
 			Category(errors.CategoryValidation).
@@ -2912,18 +2919,14 @@ type RarityContext struct {
 // settings have been published (i.e. in a running app); it can be nil only for an
 // uninitialised orchestrator, so a caller that may run before startup must nil-check it.
 func (o *Orchestrator) GetRarityContext(date time.Time) (RarityContext, error) {
-	// Snapshot the primary once and drive every read below from it. Delegating to
-	// o.GetProbableSpecies would re-resolve o.primary under a fresh lock and could
-	// score against a different model than the labels describe.
-	o.mu.RLock()
-	primary := o.primary
-	o.mu.RUnlock()
-	if primary == nil {
-		// No primary, so no scores: hand back the orchestrator's current snapshot.
+	// Gate on the range-filter anchor (v2.4) being loaded, then drive every read
+	// below from o.CurrentSettings() so scores and labels come from one snapshot.
+	if _, _, ok := o.rangeFilterAnchor(); !ok {
+		// No anchor, so no scores: hand back the orchestrator's current snapshot.
 		return RarityContext{Settings: o.CurrentSettings()}, nil
 	}
 
-	settings := primary.currentSettings()
+	settings := o.CurrentSettings()
 	rfs := o.rangeFilter
 	if rfs == nil {
 		return RarityContext{Settings: settings}, nil
