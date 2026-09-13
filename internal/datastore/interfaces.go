@@ -433,6 +433,26 @@ func (ds *DataStore) SetSunCalcMetrics(suncalcMetrics any) {
 	}
 }
 
+// ReconfigureSunCalc repoints the datastore's sun calculator at new station
+// coordinates and reports whether anything changed. Both the SunCalc instance
+// and this datastore's own per-date cache hold values derived from the previous
+// observer, so the local cache is dropped whenever the coordinates actually
+// change.
+//
+// Without this, a location edit made in the UI would leave time-of-day
+// classification and the Search page's time-of-day filter answering from the
+// old observer until the process restarted.
+func (ds *DataStore) ReconfigureSunCalc(latitude, longitude float64) bool {
+	if ds.SunCalc == nil {
+		return false
+	}
+	if !ds.SunCalc.UpdateLocation(latitude, longitude) {
+		return false
+	}
+	ds.sunTimesCache.Clear()
+	return true
+}
+
 // Save stores a note and its associated results as a single transaction in the database.
 func (ds *DataStore) Save(note *Note, results []Results) error {
 	if note == nil {
@@ -2408,7 +2428,7 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 	// and sunset shift enough within a week to flip a window across midnight).
 	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
 		dateStr := d.Format(time.DateOnly)
-		sunTimes, err := sc.GetSunEventTimes(d)
+		sunTimes, err := sc.GetSunEventTimes(sunEventAnchor(d))
 		if err != nil {
 			GetLogger().Warn("Could not get sun times for date, skipping for TimeOfDay filter",
 				logger.String("date", dateStr),
@@ -2448,6 +2468,33 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 		logger.Int("day_range", int(endDate.Sub(startDate).Hours()/24)+1))
 
 	return conditions, nil
+}
+
+// sunEventAnchorHour is the hour-of-day used to pick which station-local date a
+// server-local calendar date's sun events are taken from. See sunEventAnchor.
+const sunEventAnchorHour = 12
+
+// sunEventAnchor returns the instant whose sun events represent a whole
+// server-local calendar date.
+//
+// notes.date is written in time.Local (the server process's OS timezone) while
+// SunCalc re-derives the calendar date in the station's coordinate-derived zone
+// (see suncalc.NewSunCalc/resolveTimezone). When the two zones differ, one
+// server-local date genuinely spans two station dates, so no single lookup is
+// right for every row on it. Server-local midnight is the worst pick: it sits on
+// the boundary and lands on the neighbouring station date whenever the station
+// is behind the server. Local noon is the day's midpoint, so it always resolves
+// to the station date covering the larger share of that day's rows.
+//
+// The value matters less than the fact that both sides use it: the SQL filter
+// (buildTimeOfDayConditions) and the per-row label (getSunEventsForDate) must
+// resolve the same sun events for a given notes.date, or a detection can be
+// returned by the "sunset" filter while being labelled "day".
+func sunEventAnchor(localDate time.Time) time.Time {
+	// Build noon on the calendar date directly rather than adding 12h to its
+	// midnight, which lands at 11:00 or 13:00 across a DST transition.
+	return time.Date(localDate.Year(), localDate.Month(), localDate.Day(),
+		sunEventAnchorHour, 0, 0, 0, localDate.Location())
 }
 
 // timeOfDayBounds carries the "HH:MM:SS" clock strings buildTimeOfDayClause needs
@@ -2671,7 +2718,7 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 			// Get or calculate sun times for this date, then delegate the
 			// sunrise/sunset/day/night classification to the shared,
 			// midnight-safe helper so every call site stays in lockstep.
-			sunEvents, err := ds.getSunEventsForDate(scanned.Date, timestamp)
+			sunEvents, err := ds.getSunEventsForDate(scanned.Date)
 			if err == nil {
 				timeOfDay = suncalc.ClassifyTimeOfDay(timestamp, &sunEvents)
 			}
@@ -2702,15 +2749,33 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 	return results, int(total), nil
 }
 
-// getSunEventsForDate retrieves sun times for a given date
-func (ds *DataStore) getSunEventsForDate(dateStr string, timestamp time.Time) (suncalc.SunEventTimes, error) {
+// getSunEventsForDate retrieves sun times for a given server-local date.
+//
+// The lookup is anchored on the date itself rather than on any one row's
+// timestamp. Results are cached under dateStr, so deriving them from a row's
+// timestamp made the whole date's events depend on which row happened to be
+// scanned first - two rows on the same date could seed different events across
+// queries, and neither necessarily matched the bounds the SQL filter
+// (buildTimeOfDayConditions) built for that date. Both sides now go through
+// sunEventAnchor, so the filter and the label always agree.
+func (ds *DataStore) getSunEventsForDate(dateStr string) (suncalc.SunEventTimes, error) {
 	// Check if the sun times are already cached
 	if cached, exists := ds.getCachedSunTimes(dateStr); exists {
 		return cached, nil
 	}
 
+	localDate, err := time.ParseInLocation(time.DateOnly, dateStr, time.Local)
+	if err != nil {
+		return suncalc.SunEventTimes{}, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryValidation).
+			Context("operation", "get_sun_events_for_date").
+			Context("date", dateStr).
+			Build()
+	}
+
 	// Calculate sun times for the given date
-	sunTimes, err := ds.SunCalc.GetSunEventTimes(timestamp)
+	sunTimes, err := ds.SunCalc.GetSunEventTimes(sunEventAnchor(localDate))
 	if err != nil {
 		return suncalc.SunEventTimes{}, errors.New(err).
 			Component("datastore").

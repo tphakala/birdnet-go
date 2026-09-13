@@ -492,6 +492,19 @@ func (ds *Datastore) SetSunCalcMetrics(suncalcMetrics any) {
 	}
 }
 
+// ReconfigureSunCalc repoints the datastore's sun calculator at new station
+// coordinates and reports whether anything changed, so that a location edit made
+// in the UI takes effect without a restart. Mirrors
+// (*datastore.DataStore).ReconfigureSunCalc; this datastore keeps no sun-time
+// cache of its own, so swapping the observer (which clears SunCalc's own cache)
+// is all that is required.
+func (ds *Datastore) ReconfigureSunCalc(latitude, longitude float64) bool {
+	if ds.suncalc == nil {
+		return false
+	}
+	return ds.suncalc.UpdateLocation(latitude, longitude)
+}
+
 // Optimize performs database optimization.
 func (ds *Datastore) Optimize(ctx context.Context) error {
 	if !ds.manager.IsMySQL() {
