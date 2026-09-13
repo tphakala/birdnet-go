@@ -299,12 +299,11 @@ type DatabaseStats struct {
 
 // DataStore implements StoreInterface using a GORM database.
 type DataStore struct {
-	DB            *gorm.DB          // GORM database instance
-	SunCalc       *suncalc.SunCalc  // Instance for calculating sun times (Assumed initialized)
-	sunTimesCache sync.Map          // Thread-safe map for caching sun times by date
-	metrics       *Metrics          // Metrics instance for tracking operations
-	metricsMu     sync.RWMutex      // Mutex to protect metrics field access
-	dbCounters    *dbstats.Counters // Atomic counters for query latency tracking
+	DB         *gorm.DB          // GORM database instance
+	SunCalc    *suncalc.SunCalc  // Instance for calculating sun times (Assumed initialized)
+	metrics    *Metrics          // Metrics instance for tracking operations
+	metricsMu  sync.RWMutex      // Mutex to protect metrics field access
+	dbCounters *dbstats.Counters // Atomic counters for query latency tracking
 
 	// Monitoring lifecycle management
 	monitoringCtx    context.Context    // Context for monitoring goroutines
@@ -422,23 +421,18 @@ func (ds *DataStore) SetSunCalcMetrics(suncalcMetrics any) {
 }
 
 // ReconfigureSunCalc repoints the datastore's sun calculator at new station
-// coordinates and reports whether anything changed. Both the SunCalc instance
-// and this datastore's own per-date cache hold values derived from the previous
-// observer, so the local cache is dropped whenever the coordinates actually
-// change.
+// coordinates and reports whether anything changed.
 //
 // Without this, a location edit made in the UI would leave time-of-day
 // classification and the Search page's time-of-day filter answering from the
-// old observer until the process restarted.
+// old observer until the process restarted. Invalidation lives entirely inside
+// SunCalc, which stamps its cached events with the location they were computed
+// under; the datastore keeps no sun-time cache of its own to go stale.
 func (ds *DataStore) ReconfigureSunCalc(latitude, longitude float64) bool {
 	if ds.SunCalc == nil {
 		return false
 	}
-	if !ds.SunCalc.UpdateLocation(latitude, longitude) {
-		return false
-	}
-	ds.sunTimesCache.Clear()
-	return true
+	return ds.SunCalc.UpdateLocation(latitude, longitude)
 }
 
 // Save stores a note and its associated results as a single transaction in the database.
@@ -2740,18 +2734,17 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 // getSunEventsForDate retrieves sun times for a given server-local date.
 //
 // The lookup is anchored on the date itself rather than on any one row's
-// timestamp. Results are cached under dateStr, so deriving them from a row's
-// timestamp made the whole date's events depend on which row happened to be
-// scanned first - two rows on the same date could seed different events across
+// timestamp. This used to memoize per date while deriving the value from a row's
+// timestamp, which made the whole date's events depend on which row happened to
+// be scanned first - two rows on the same date could seed different events across
 // queries, and neither necessarily matched the bounds the SQL filter
 // (buildTimeOfDayConditions) built for that date. Both sides now go through
 // sunEventAnchor, so the filter and the label always agree.
+//
+// There is deliberately no cache here: SunCalc already memoizes by date, and a
+// second layer could not see SunCalc's location changes, so it would keep serving
+// the old station's events after a location edit.
 func (ds *DataStore) getSunEventsForDate(dateStr string) (suncalc.SunEventTimes, error) {
-	// Check if the sun times are already cached
-	if cached, exists := ds.getCachedSunTimes(dateStr); exists {
-		return cached, nil
-	}
-
 	localDate, err := time.ParseInLocation(time.DateOnly, dateStr, time.Local)
 	if err != nil {
 		return suncalc.SunEventTimes{}, errors.New(err).
@@ -2773,22 +2766,5 @@ func (ds *DataStore) getSunEventsForDate(dateStr string) (suncalc.SunEventTimes,
 			Build()
 	}
 
-	// Cache the calculated sun times
-	ds.cacheSunTimes(dateStr, &sunTimes)
-
 	return sunTimes, nil
-}
-
-// getCachedSunTimes retrieves sun times from the cache
-func (ds *DataStore) getCachedSunTimes(dateStr string) (suncalc.SunEventTimes, bool) {
-	cached, exists := ds.sunTimesCache.Load(dateStr)
-	if exists {
-		return cached.(suncalc.SunEventTimes), true
-	}
-	return suncalc.SunEventTimes{}, false
-}
-
-// cacheSunTimes caches sun times
-func (ds *DataStore) cacheSunTimes(dateStr string, sunTimes *suncalc.SunEventTimes) {
-	ds.sunTimesCache.Store(dateStr, *sunTimes)
 }

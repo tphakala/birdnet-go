@@ -121,3 +121,47 @@ func TestUpdateLocationUnderConcurrentReads(t *testing.T) {
 	_, err := sc.GetSunEventTimes(baseDate)
 	require.NoError(t, err, "the calculator must still be usable after concurrent location changes")
 }
+
+// TestUpdateLocationDuringInFlightCalculation is a regression test for a stale
+// result repopulating the cache that UpdateLocation had just cleared.
+//
+// GetSunEventTimes snapshots the location, computes outside the lock, then takes
+// the write lock to insert. An UpdateLocation landing in that window clears the
+// cache and moves the station, and the in-flight call then inserted events
+// computed for the *old* station under the date key. Nothing re-cleared the
+// cache afterwards, so that date kept classifying against the previous
+// coordinates until eviction or the next location change. Entries now carry the
+// generation they were computed under, so a superseded one is never read back.
+func TestUpdateLocationDuringInFlightCalculation(t *testing.T) {
+	t.Parallel()
+
+	date := midsummerDate()
+
+	sc := NewSunCalc(testLatitude, testLongitude)
+
+	// The events each station produces for this date, computed in isolation so
+	// the expectation does not depend on the instance under test.
+	helsinki, err := NewSunCalc(testLatitude, testLongitude).GetSunEventTimes(date)
+	require.NoError(t, err)
+	sydney, err := NewSunCalc(sydneyLatitude, sydneyLongitude).GetSunEventTimes(date)
+	require.NoError(t, err)
+	require.False(t, helsinki.Sunrise.Equal(sydney.Sunrise), "test setup needs two distinct locations")
+
+	// Reproduce the window deterministically: take a snapshot for Helsinki, let
+	// the move to Sydney happen, then finish the Helsinki-era call. This is what
+	// an in-flight GetSunEventTimes does, with the interleaving forced.
+	snap := sc.snapshot()
+	require.True(t, sc.UpdateLocation(sydneyLatitude, sydneyLongitude))
+	stale, err := sc.sunEventTimes(date, snap)
+	require.NoError(t, err)
+	assert.True(t, helsinki.Sunrise.Equal(stale.Sunrise),
+		"the in-flight call returns what it computed, for the station it asked about")
+
+	// The cache must not now serve that stale value to anyone else.
+	fresh, err := sc.GetSunEventTimes(date)
+	require.NoError(t, err)
+	assert.True(t, sydney.Sunrise.Equal(fresh.Sunrise),
+		"a later caller must get the new station's events, not the stale insert")
+	assert.False(t, helsinki.Sunrise.Equal(fresh.Sunrise),
+		"the superseded entry must never be read back as a cache hit")
+}
