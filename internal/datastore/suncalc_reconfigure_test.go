@@ -18,12 +18,11 @@ const (
 	sydneyLongitude   = 151.2093
 )
 
-// TestReconfigureSunCalcInvalidatesCachedSunTimes covers the hot-reload path for
-// the station location: the datastore builds its SunCalc once at startup and
-// memoizes each date's events, so without an explicit invalidation a location
-// edited in the UI would leave time-of-day classification answering from the old
-// observer until the process restarted.
-func TestReconfigureSunCalcInvalidatesCachedSunTimes(t *testing.T) {
+// TestReconfigureSunCalcRecomputesForTheNewLocation covers the hot-reload path
+// for the station location: the datastore builds its SunCalc once at startup, so
+// without this a location edited in the UI would leave time-of-day
+// classification answering from the old observer until the process restarted.
+func TestReconfigureSunCalcRecomputesForTheNewLocation(t *testing.T) {
 	t.Parallel()
 
 	const dateStr = "2024-06-21"
@@ -32,13 +31,9 @@ func TestReconfigureSunCalcInvalidatesCachedSunTimes(t *testing.T) {
 
 	before, err := ds.getSunEventsForDate(dateStr)
 	require.NoError(t, err)
-	_, cached := ds.getCachedSunTimes(dateStr)
-	require.True(t, cached, "test setup must leave a warm cache entry to invalidate")
 
-	ds.ReconfigureSunCalc(sydneyLatitude, sydneyLongitude)
-
-	_, stillCached := ds.getCachedSunTimes(dateStr)
-	assert.False(t, stillCached, "a coordinate change must drop the memoized sun times")
+	assert.True(t, ds.ReconfigureSunCalc(sydneyLatitude, sydneyLongitude),
+		"a coordinate change must be reported as a change")
 
 	after, err := ds.getSunEventsForDate(dateStr)
 	require.NoError(t, err)
@@ -46,10 +41,10 @@ func TestReconfigureSunCalcInvalidatesCachedSunTimes(t *testing.T) {
 		"sun events must be recomputed for the new station location")
 }
 
-// TestReconfigureSunCalcKeepsCacheForUnchangedCoordinates documents that the
+// TestReconfigureSunCalcIsNoOpForUnchangedCoordinates documents that the
 // reconfigure path is safe to call from a broader "settings changed" signal:
-// re-passing the current coordinates must not throw away a warm cache.
-func TestReconfigureSunCalcKeepsCacheForUnchangedCoordinates(t *testing.T) {
+// re-passing the current coordinates changes nothing.
+func TestReconfigureSunCalcIsNoOpForUnchangedCoordinates(t *testing.T) {
 	t.Parallel()
 
 	const dateStr = "2024-06-21"
@@ -59,10 +54,11 @@ func TestReconfigureSunCalcKeepsCacheForUnchangedCoordinates(t *testing.T) {
 	before, err := ds.getSunEventsForDate(dateStr)
 	require.NoError(t, err)
 
-	ds.ReconfigureSunCalc(helsinkiLatitude, helsinkiLongitude)
+	assert.False(t, ds.ReconfigureSunCalc(helsinkiLatitude, helsinkiLongitude),
+		"unchanged coordinates must report no change")
 
-	after, cached := ds.getCachedSunTimes(dateStr)
-	assert.True(t, cached, "unchanged coordinates must leave the cache intact")
+	after, err := ds.getSunEventsForDate(dateStr)
+	require.NoError(t, err)
 	assert.True(t, before.Sunrise.Equal(after.Sunrise))
 }
 
