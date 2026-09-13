@@ -5533,7 +5533,7 @@
       "description": "Állítsa be a megbízhatósági küszöböt, a fajnyelvet és a hamis pozitív szűrést a madárosztályozókhoz.",
       "firstDailyConsensus": {
         "label": "Két modell erősítse meg egy faj első napi észlelését",
-        "helpText": "Csökkenti az új fajok téves bejegyzéseit azzal, hogy elveti egy madárfaj első napi észlelését, kivéve, ha egy második modell is a saját szokásos küszöbértéke felett észleli a fajt ugyanabban az észlelési időablakban. A fajt a következő olyan időablaktól kezdve rögzíti, amelyben két modell egyetért. Csak akkor érvényes, ha az adott hangforrást elemző összes madármodell képes azonosítani a fajt; a denevéreket, a nem madaraktól származó hangokat és az egyetlen modellt használó összeállításokat nem érinti."
+        "helpText": "Csökkenti az új fajok téves bejegyzéseit azzal, hogy elveti egy madárfaj első napi észlelését, kivéve, ha egy második modell is a saját szokásos küszöbértéke felett észleli a fajt ugyanabban az észlelési időablakban. A fajt a következő olyan időablaktól kezdve rögzíti, amelyben két modell egyetért. Csak akkor érvényes, ha az adott hangforrást elemző összes madármodell képes azonosítani a fajt, és nem akkor, amikor a dinamikus küszöbérték csökkentette az adott faj küszöbértékét; a denevéreket, a nem madaraktól származó hangokat és az egyetlen modellt használó összeállításokat nem érinti."
       }
     },
     "bat": {

@@ -5533,7 +5533,7 @@
       "description": "Konfigurer konfidenstærskel, artssprog og filtrering af falske positiver for fugleklassifikatorer.",
       "firstDailyConsensus": {
         "label": "Kræv, at to modeller bekræfter dagens første registrering af en art",
-        "helpText": "Reducerer fejlagtige registreringer af nye arter ved at kassere dagens første detektion af en fugleart, medmindre en anden model også detekterer den over sin normale tærskel inden for samme detektionsvindue. Arten registreres fra det næste vindue, hvor to modeller er enige. Gælder kun, når alle fuglemodeller, der analyserer den pågældende lydkilde, kan identificere arten; flagermus, andre lyde end fuglelyde og opsætninger med én model påvirkes ikke."
+        "helpText": "Reducerer fejlagtige registreringer af nye arter ved at kassere dagens første detektion af en fugleart, medmindre en anden model også detekterer den over sin normale tærskel inden for samme detektionsvindue. Arten registreres fra det næste vindue, hvor to modeller er enige. Gælder kun, når alle fuglemodeller, der analyserer den pågældende lydkilde, kan identificere arten, og ikke mens den dynamiske tærskel har sænket tærsklen for den pågældende art; flagermus, andre lyde end fuglelyde og opsætninger med én model påvirkes ikke."
       }
     },
     "bat": {

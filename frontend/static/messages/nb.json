@@ -5533,7 +5533,7 @@
       "description": "Konfigurer sikkerhetsterskel, artsspråk og falsk positiv-filtrering for fugleklassifikatorer.",
       "firstDailyConsensus": {
         "label": "Krev at to modeller bekrefter dagens første registrering av en art",
-        "helpText": "Reduserer feilaktige registreringer av nye arter ved å forkaste dagens første registrering av en fugleart, med mindre en annen modell også registrerer den over sin normale terskel innenfor samme deteksjonsvindu. Arten registreres fra det neste vinduet der to modeller er enige. Gjelder bare når alle fuglemodeller som analyserer den aktuelle lydkilden, kan identifisere arten; flaggermus, andre lyder enn fuglelyder og oppsett med én modell påvirkes ikke."
+        "helpText": "Reduserer feilaktige registreringer av nye arter ved å forkaste dagens første registrering av en fugleart, med mindre en annen modell også registrerer den over sin normale terskel innenfor samme deteksjonsvindu. Arten registreres fra det neste vinduet der to modeller er enige. Gjelder bare når alle fuglemodeller som analyserer den aktuelle lydkilden, kan identifisere arten, og ikke mens den dynamiske terskelen har senket terskelen for den arten; flaggermus, andre lyder enn fuglelyder og oppsett med én modell påvirkes ikke."
       }
     },
     "bat": {

@@ -19,6 +19,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
@@ -33,7 +34,7 @@ const (
 	firstDailyRetainedDays = 2
 
 	// firstDailySeedTimeout bounds the once-per-day datastore query that seeds the
-	// accepted-species set; it runs on the flusher goroutine and delays that tick.
+	// accepted-species set.
 	firstDailySeedTimeout = 5 * time.Second
 
 	// firstDailySeedRetry is how long a failed seed waits before it is retried. The
@@ -61,11 +62,35 @@ type firstDailyDay struct {
 	warned bool
 }
 
+// firstDailyApproval identifies a species approved during the current flush cycle.
+type firstDailyApproval struct {
+	day     string
+	species string
+}
+
+// firstDailySeed is the result of one datastore seed query, handed from the seed
+// goroutine back to the flusher.
+type firstDailySeed struct {
+	day     string
+	species []string
+	err     error
+}
+
 // firstDailyConsensus is the rule's in-memory state, keyed by calendar day. The
-// zero value is ready to use. It needs no lock: seeding, the gate and approvals all
-// run on the flusher goroutine, inside flushPendingDetections.
+// zero value is ready to use. Apart from the seed query, which runs on its own
+// goroutine and only communicates through seeds, it is only touched by the flusher
+// goroutine inside flushPendingDetections, so it needs no lock.
 type firstDailyConsensus struct {
 	days map[string]*firstDailyDay
+
+	// approved collects this flush cycle's approvals. They are committed to days at
+	// the start of the next cycle, so every entry flushed in one cycle is judged
+	// against the same accepted set regardless of map iteration order.
+	approved map[firstDailyApproval]struct{}
+
+	// seeds delivers seed results; seeding is true while a query is in flight.
+	seeds   chan firstDailySeed
+	seeding bool
 
 	// support answers the per-source model-support question; nil means p.Bn.
 	support speciesSupport
@@ -105,45 +130,53 @@ func (c *firstDailyConsensus) day(day string) *firstDailyDay {
 	return d
 }
 
-// prepareFirstDailyConsensus seeds today's accepted-species set from the datastore.
-// flushPendingDetections calls it before taking pendingMutex, so the query never
-// runs under the lock that detection ingestion also contends for.
-//
-// The seed merges into the set rather than replacing it: persistence is
-// asynchronous, so a detection approved moments ago may not be in the datastore
-// yet. Previous days need no seed of their own: a day's set was seeded while it was
-// today, and a pending detection cannot predate process start.
+// prepareFirstDailyConsensus runs at the start of every flush cycle, before
+// pendingMutex is taken. It applies a finished seed, commits the previous cycle's
+// approvals and, when today's set is not loaded yet, starts a seed query in the
+// background, so the datastore never delays a flush.
 func (p *Processor) prepareFirstDailyConsensus(now time.Time, settings *conf.Settings) {
+	c := &p.firstDaily
+	seed, received := c.receiveSeed()
 	if !settings.Realtime.FirstDailyConsensus.Enabled {
 		// Re-enabling must reseed rather than trust approvals it did not observe.
-		p.firstDaily.days = nil
+		c.days, c.approved = nil, nil
 		return
 	}
+	if received {
+		c.applySeed(seed, now)
+	}
+	for approval := range c.approved {
+		c.day(approval.day).accepted[approval.species] = true
+	}
+	c.approved = nil
+
 	// The genus taxonomy is loaded lazily; make sure its first load happens here
 	// rather than inside the gate, which runs under pendingMutex.
 	p.getTaxonomyDB()
-	if p.Ds == nil {
-		return
-	}
+	p.startFirstDailySeed(now)
+}
 
-	day := now.Format(time.DateOnly)
-	d := p.firstDaily.day(day)
-	if d.loaded || now.Before(d.retryAt) {
-		return
+// receiveSeed returns a finished seed result without blocking.
+func (c *firstDailyConsensus) receiveSeed() (seed firstDailySeed, received bool) {
+	select {
+	case seed = <-c.seeds:
+		c.seeding = false
+		return seed, true
+	default:
+		return firstDailySeed{}, false
 	}
+}
 
-	ctx := p.flusherCtx
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	ctx, cancel := context.WithTimeout(ctx, firstDailySeedTimeout)
-	defer cancel()
-	rows, err := p.Ds.GetSpeciesSummaryData(ctx, day, day)
-	if err != nil {
+// applySeed merges a seed result into its day. It merges rather than replaces:
+// persistence is asynchronous, so a detection approved moments ago may not be in
+// the datastore yet.
+func (c *firstDailyConsensus) applySeed(seed firstDailySeed, now time.Time) {
+	d := c.day(seed.day)
+	if seed.err != nil {
 		d.retryAt = now.Add(firstDailySeedRetry)
 		fields := []logger.Field{
-			logger.String("day", day),
-			logger.Error(err),
+			logger.String("day", seed.day),
+			logger.Error(seed.err),
 			logger.String("operation", "first_daily_consensus"),
 		}
 		const msg = "first daily consensus seed failed, rule inactive until retry"
@@ -156,16 +189,62 @@ func (p *Processor) prepareFirstDailyConsensus(now time.Time, settings *conf.Set
 		GetLogger().Warn(msg, fields...)
 		return
 	}
-	for i := range rows {
-		if key := speciesindex.CanonicalKey(rows[i].ScientificName); key != "" {
-			d.accepted[key] = true
-		}
+	for _, species := range seed.species {
+		d.accepted[species] = true
 	}
 	d.loaded = true
 }
 
+// startFirstDailySeed queries the datastore for today's species on its own
+// goroutine, unless today is already loaded, a query is in flight, or a failed
+// query is waiting out its retry delay. Previous days need no seed of their own: a
+// day's set was seeded while it was today, and a pending detection cannot predate
+// process start.
+func (p *Processor) startFirstDailySeed(now time.Time) {
+	c := &p.firstDaily
+	if p.Ds == nil || c.seeding {
+		return
+	}
+	day := now.Format(time.DateOnly)
+	if d := c.day(day); d.loaded || now.Before(d.retryAt) {
+		return
+	}
+	if c.seeds == nil {
+		// One buffered slot: at most one query is in flight, so its send never blocks.
+		c.seeds = make(chan firstDailySeed, 1)
+	}
+	c.seeding = true
+
+	ctx := p.flusherCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ds, seeds := p.Ds, c.seeds
+	go func() {
+		defer func() {
+			// A panic must still report back, or seeding would stay true and the
+			// rule would never load.
+			if r := recover(); r != nil {
+				seeds <- firstDailySeed{day: day, err: errors.Newf("first daily consensus seed panicked: %v", r).
+					Component("processor").Build()}
+			}
+		}()
+		ctx, cancel := context.WithTimeout(ctx, firstDailySeedTimeout)
+		defer cancel()
+		rows, err := ds.GetSpeciesSummaryData(ctx, day, day)
+		seed := firstDailySeed{day: day, err: err, species: make([]string, 0, len(rows))}
+		for i := range rows {
+			if key := speciesindex.CanonicalKey(rows[i].ScientificName); key != "" {
+				seed.species = append(seed.species, key)
+			}
+		}
+		seeds <- seed
+	}()
+}
+
 // noteAcceptedDetection records an approved detection so later detections of the
-// same species that day pass without waiting for asynchronous persistence.
+// same species that day pass without waiting for asynchronous persistence. The
+// approval takes effect from the next flush cycle; see firstDailyConsensus.approved.
 func (p *Processor) noteAcceptedDetection(item *PendingDetection, settings *conf.Settings) {
 	if !settings.Realtime.FirstDailyConsensus.Enabled {
 		return
@@ -175,7 +254,10 @@ func (p *Processor) noteAcceptedDetection(item *PendingDetection, settings *conf
 	if key == "" || result.Timestamp.IsZero() {
 		return
 	}
-	p.firstDaily.day(result.Date()).accepted[key] = true
+	if p.firstDaily.approved == nil {
+		p.firstDaily.approved = make(map[firstDailyApproval]struct{})
+	}
+	p.firstDaily.approved[firstDailyApproval{day: result.Date(), species: key}] = struct{}{}
 }
 
 // shouldDiscardFirstDailyDetection reports whether item is the first detection of
@@ -198,7 +280,7 @@ func (p *Processor) shouldDiscardFirstDailyDetection(item *PendingDetection, set
 	if d := p.firstDaily.days[day]; d == nil || !d.loaded || d.accepted[key] {
 		return false, ""
 	}
-	if !classifier.IsBirdCapableModel(item.BestModelID) || p.countConfirmingModels(settings, item) >= firstDailyMinModels {
+	if !classifier.IsBirdCapableModel(item.BestModelID) || countConfirmingModels(settings, item) >= firstDailyMinModels {
 		return false, ""
 	}
 	// A dynamic threshold that currently lowers the bar is the processor already
@@ -231,17 +313,28 @@ func (p *Processor) shouldDiscardFirstDailyDetection(item *PendingDetection, set
 }
 
 // countConfirmingModels counts the bird-capable models whose best score for this
-// species cleared that model's normal threshold. It uses the same strict
-// comparison admission does, and deliberately ignores dynamic lowering: a model
-// that only cleared a lowered bar is not independent confirmation.
-func (p *Processor) countConfirmingModels(settings *conf.Settings, item *PendingDetection) int {
+// species is strictly above that model's normal threshold, the same comparison
+// admission uses. The normal threshold is a positive per-species custom threshold,
+// else the model's global threshold: a species entry that only configures actions
+// carries a zero threshold, which must not turn any positive score into a
+// confirmation. Dynamic lowering is ignored: a model that only cleared a lowered
+// bar is not independent confirmation.
+func countConfirmingModels(settings *conf.Settings, item *PendingDetection) int {
 	species := item.Detection.Result.Species
+	var customThreshold float32
+	if config, exists := lookupSpeciesConfig(settings.Realtime.Species.Config, species.CommonName, species.ScientificName); exists && config.Threshold > 0 {
+		customThreshold = float32(config.Threshold)
+	}
 	count := 0
 	for modelID, contrib := range item.ModelContributions {
 		if !classifier.IsBirdCapableModel(modelID) {
 			continue
 		}
-		if float32(contrib.MaxConfidence) > p.getBaseConfidenceThreshold(settings, species.CommonName, species.ScientificName, modelID) {
+		threshold := customThreshold
+		if threshold == 0 {
+			threshold = modelGlobalConfidenceThreshold(settings, modelID)
+		}
+		if float32(contrib.MaxConfidence) > threshold {
 			count++
 		}
 	}

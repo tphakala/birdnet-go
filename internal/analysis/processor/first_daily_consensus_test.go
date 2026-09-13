@@ -48,8 +48,11 @@ func TestFirstDailyConsensusSeed(t *testing.T) {
 	item := &PendingDetection{Detection: Detections{Result: detection.Result{Timestamp: now, Species: detection.Species{ScientificName: "Parus major"}}}}
 	// Seeding must preserve approvals that have not reached asynchronous persistence yet.
 	p.noteAcceptedDetection(item, settings)
-	p.prepareFirstDailyConsensus(now, settings)
-	p.prepareFirstDailyConsensus(now, settings)
+	require.Eventually(t, func() bool {
+		p.prepareFirstDailyConsensus(now, settings)
+		d := p.firstDaily.days[day]
+		return d != nil && d.loaded
+	}, 5*time.Second, 5*time.Millisecond)
 	assert.True(t, p.firstDaily.days[day].loaded)
 	assert.True(t, p.firstDaily.days[day].accepted["passer domesticus"])
 	assert.True(t, p.firstDaily.days[day].accepted["parus major"])
@@ -68,13 +71,44 @@ func TestFirstDailyConsensusRetry(t *testing.T) {
 	ds.EXPECT().GetSpeciesSummaryData(mock.Anything, day, day).Return(nil, errors.Newf("seed unavailable").Component("processor").Build()).Once()
 	ds.EXPECT().GetSpeciesSummaryData(mock.Anything, day, day).Return(nil, nil).Once()
 	p := &Processor{Ds: ds}
-	p.prepareFirstDailyConsensus(now, settings)
+	require.Eventually(t, func() bool {
+		p.prepareFirstDailyConsensus(now, settings)
+		d := p.firstDaily.days[day]
+		return d != nil && d.warned && !d.retryAt.IsZero()
+	}, 5*time.Second, 5*time.Millisecond)
 	assert.False(t, p.firstDaily.days[day].loaded)
+	assert.Equal(t, now.Add(firstDailySeedRetry), p.firstDaily.days[day].retryAt)
 	// A failed seed must fail open without querying again before the retry deadline.
 	p.prepareFirstDailyConsensus(now.Add(firstDailySeedRetry/2), settings)
 	assert.False(t, p.firstDaily.days[day].loaded)
-	p.prepareFirstDailyConsensus(now.Add(firstDailySeedRetry), settings)
+	retryNow := now.Add(firstDailySeedRetry)
+	require.Eventually(t, func() bool {
+		p.prepareFirstDailyConsensus(retryNow, settings)
+		return p.firstDaily.days[day].loaded
+	}, 5*time.Second, 5*time.Millisecond)
 	assert.True(t, p.firstDaily.days[day].loaded)
+}
+
+func TestFirstDailyConsensusDisabledDrainsSeed(t *testing.T) {
+	t.Parallel()
+	now := firstDailyTestNow
+	day := now.Format(time.DateOnly)
+	settings := &conf.Settings{}
+	settings.Realtime.FirstDailyConsensus.Enabled = true
+	ds := mocks.NewMockInterface(t)
+	ds.EXPECT().GetSpeciesSummaryData(mock.Anything, day, day).Return([]datastore.SpeciesSummaryData{{ScientificName: firstDailyTestSpecies}}, nil).Once()
+	p := &Processor{Ds: ds}
+	p.prepareFirstDailyConsensus(now, settings)
+	require.True(t, p.firstDaily.seeding)
+
+	settings.Realtime.FirstDailyConsensus.Enabled = false
+	require.Eventually(t, func() bool {
+		p.prepareFirstDailyConsensus(now, settings)
+		return !p.firstDaily.seeding
+	}, 5*time.Second, 5*time.Millisecond)
+	// A result produced while disabled must be discarded so re-enabling reseeds.
+	assert.Nil(t, p.firstDaily.days)
+	assert.Nil(t, p.firstDaily.approved)
 }
 
 func TestFirstDailyConsensusRetention(t *testing.T) {
@@ -95,24 +129,45 @@ func TestFirstDailyConsensusRetention(t *testing.T) {
 func TestFirstDailyConsensusStrictThreshold(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name       string
-		confidence float64
-		want       int
+		name          string
+		confidence    float64
+		speciesConfig map[string]conf.SpeciesConfig
+		want          int
 	}{
 		{name: "at threshold", confidence: firstDailyTestThreshold, want: 0},
 		{name: "above threshold", confidence: firstDailyTestConfidence, want: 1},
+		{
+			name:          "below positive custom threshold",
+			confidence:    0.6,
+			speciesConfig: map[string]conf.SpeciesConfig{"passer domesticus": {Threshold: 0.7}},
+			want:          0,
+		},
+		{
+			name:          "above positive custom threshold",
+			confidence:    0.75,
+			speciesConfig: map[string]conf.SpeciesConfig{"passer domesticus": {Threshold: 0.7}},
+			want:          1,
+		},
+		{
+			name:          "action-only config uses global threshold",
+			confidence:    0.3,
+			speciesConfig: map[string]conf.SpeciesConfig{"house sparrow": {Actions: []conf.SpeciesAction{{Type: "ExecuteCommand"}}}},
+			want:          0,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			settings := &conf.Settings{}
 			settings.BirdNET.Threshold = firstDailyTestThreshold
-			p := &Processor{}
+			settings.Realtime.Species.Config = tt.speciesConfig
 			item := &PendingDetection{ModelContributions: map[string]ModelContribution{
 				firstDailyTestModel: {MaxConfidence: tt.confidence},
-			}}
+			}, Detection: Detections{Result: detection.Result{Species: detection.Species{
+				CommonName: "House Sparrow", ScientificName: firstDailyTestSpecies,
+			}}}}
 			// Equality cannot count as independent confirmation because admission uses strict >.
-			assert.Equal(t, tt.want, p.countConfirmingModels(settings, item))
+			assert.Equal(t, tt.want, countConfirmingModels(settings, item))
 		})
 	}
 }
@@ -213,6 +268,7 @@ func TestFirstDailyConsensusGate(t *testing.T) {
 		}},
 		{name: "species already accepted today", setup: func(p *Processor, settings *conf.Settings, item *PendingDetection) {
 			p.noteAcceptedDetection(item, settings)
+			p.prepareFirstDailyConsensus(item.Detection.Result.Timestamp, settings)
 		}},
 		{name: "seeded species with different case and whitespace", setup: func(p *Processor, settings *conf.Settings, item *PendingDetection) {
 			p.firstDaily.day(item.Detection.Result.Date()).accepted[speciesindex.CanonicalKey(" PASSER DOMESTICUS ")] = true
@@ -297,8 +353,52 @@ func TestFirstDailyConsensusAcceptanceSequence(t *testing.T) {
 	require.False(t, discarded)
 	require.Empty(t, reason)
 	p.noteAcceptedDetection(item, settings)
+	p.prepareFirstDailyConsensus(item.Detection.Result.Timestamp, settings)
 	delete(item.ModelContributions, firstDailyTestSecondModel)
 	discarded, reason = p.shouldDiscardFirstDailyDetection(item, settings)
 	assert.False(t, discarded)
 	assert.Empty(t, reason)
+}
+
+func TestFirstDailyConsensusDefersApprovalUntilNextCycle(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name             string
+		singleModelFirst bool
+	}{
+		{name: "single-model entry first", singleModelFirst: true},
+		{name: "two-model entry first"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p, settings, single := newFirstDailyConsensusGateTest(t, firstDailyTestSpecies)
+			confirmed := *single
+			confirmed.Source = firstDailyTestSource + "-second"
+			confirmed.ModelContributions = map[string]ModelContribution{
+				firstDailyTestModel:       {MaxConfidence: firstDailyTestConfidence},
+				firstDailyTestSecondModel: {MaxConfidence: firstDailyTestConfidence},
+			}
+
+			if tt.singleModelFirst {
+				discarded, _ := p.shouldDiscardFirstDailyDetection(single, settings)
+				assert.True(t, discarded)
+			}
+			discarded, reason := p.shouldDiscardFirstDailyDetection(&confirmed, settings)
+			require.False(t, discarded)
+			require.Empty(t, reason)
+			p.noteAcceptedDetection(&confirmed, settings)
+
+			// Both pending entries belong to one flush snapshot, so approval of one
+			// cannot make the result depend on randomized map iteration order.
+			discarded, reason = p.shouldDiscardFirstDailyDetection(single, settings)
+			assert.True(t, discarded)
+			assert.Equal(t, reasonFirstDailyConsensus, reason)
+
+			p.prepareFirstDailyConsensus(single.Detection.Result.Timestamp, settings)
+			discarded, reason = p.shouldDiscardFirstDailyDetection(single, settings)
+			assert.False(t, discarded)
+			assert.Empty(t, reason)
+		})
+	}
 }

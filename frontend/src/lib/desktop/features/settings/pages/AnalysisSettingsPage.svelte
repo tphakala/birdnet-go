@@ -1575,7 +1575,7 @@
 
       <div class="mt-4">
         <Checkbox
-          checked={firstDailyConsensus.enabled}
+          bind:checked={firstDailyConsensus.enabled}
           label={t('analysis.bird.firstDailyConsensus.label')}
           helpText={t('analysis.bird.firstDailyConsensus.helpText')}
           disabled={store.isLoading || store.isSaving}
