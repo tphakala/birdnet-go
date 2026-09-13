@@ -146,7 +146,7 @@ func TestSpeciesIndex_RebuiltOnRebuildNameResolver(t *testing.T) {
 
 // TestSpeciesIndex_RebuiltOnPrimaryReload verifies the two primary-reload paths
 // (ReloadModel and ReloadPrimaryForVariantSwap) republish the species index. Both
-// go through reloadPrimaryModel, which requires a real *BirdNET primary, so this is
+// go through reloadBirdNETV24InPlace, which requires a real *BirdNET primary, so this is
 // skipped when the model is unavailable in the test environment. Without the rebuild
 // trigger, a locale or model change via reload_birdnet would leave the datastore and
 // facade serving a stale species-name snapshot.

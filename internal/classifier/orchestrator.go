@@ -1611,13 +1611,13 @@ func (o *Orchestrator) RunFilterProcess(dateStr string, week float32) {
 // Acquires the per-model lock before reload to prevent concurrent inference,
 // then the write lock to re-key the models map.
 func (o *Orchestrator) ReloadModel() error {
-	if err := o.reloadPrimaryModel(func(primary *BirdNET) error { return primary.ReloadModel() }); err != nil {
+	if err := o.reloadBirdNETV24InPlace(func(primary *BirdNET) error { return primary.ReloadModel() }); err != nil {
 		return err
 	}
 	// Rebuild the range-filter backend against the reloaded classifier's labels, then
 	// rebuild the species index. Order matters: rebuildSpeciesIndex must see the new
 	// range filter's synthetic inclusions. Both run with no orchestrator lock held
-	// (reloadPrimaryModel released o.mu on return). A range-filter reload failure is
+	// (reloadBirdNETV24InPlace released o.mu on return). A range-filter reload failure is
 	// non-fatal: the classifier reload already committed, and the previous backend
 	// keeps serving (Phase 2b; see reloadPrimaryRangeFilter).
 	o.reloadPrimaryRangeFilter()
@@ -1647,63 +1647,65 @@ func (o *Orchestrator) reloadPrimaryRangeFilter() {
 // ReloadPrimaryForVariantSwap reloads the primary classifier in place for a
 // within-model variant swap (the gallery "optimize" flow for the permanent BirdNET
 // v2.4 model), accepting a changed or cleared model file path that ReloadModel would
-// refuse as a model-identity change. It shares reloadPrimaryModel's locking and
+// refuse as a model-identity change. It shares reloadBirdNETV24InPlace's locking and
 // shared-state re-sync, differing only in delegating to BirdNET.reloadForVariantSwap
 // (allowPathChange=true). The model ID is invariant across a v2.4 variant swap, so
 // the re-key is a no-op in practice. Transactional rollback to the previous model
 // lives in reloadModelInternal, so a failed swap leaves the previous variant serving.
 func (o *Orchestrator) ReloadPrimaryForVariantSwap() error {
-	if err := o.reloadPrimaryModel(func(primary *BirdNET) error { return primary.reloadForVariantSwap() }); err != nil {
+	if err := o.reloadBirdNETV24InPlace(func(primary *BirdNET) error { return primary.reloadForVariantSwap() }); err != nil {
 		return err
 	}
 	// See ReloadModel: rebuild the range-filter backend then the species index, both
-	// after reloadPrimaryModel released o.mu, with the range-filter reload non-fatal.
+	// after reloadBirdNETV24InPlace released o.mu, with the range-filter reload non-fatal.
 	o.reloadPrimaryRangeFilter()
 	o.rebuildSpeciesIndex()
 	return nil
 }
 
-// reloadPrimaryModel performs the shared locking, per-instance reload, shared-state
+// reloadBirdNETV24InPlace performs the shared locking, per-instance reload, shared-state
 // re-sync, and models-map re-key for a primary-model reload. It delegates the actual
 // per-instance reload to reload(primary); ReloadModel passes BirdNET.ReloadModel (a
 // settings reload, path change refused) and ReloadPrimaryForVariantSwap passes
 // BirdNET.reloadForVariantSwap (an in-place variant swap, path change accepted).
-func (o *Orchestrator) reloadPrimaryModel(reload func(primary *BirdNET) error) error {
-	// Step 1: acquire per-model lock to prevent concurrent inference during reload.
+func (o *Orchestrator) reloadBirdNETV24InPlace(reload func(primary *BirdNET) error) error {
+	// Fetch the v2.4 entry, then snapshot its instance under entry.mu so a
+	// concurrent unload that nils entry.instance cannot make the type assertion
+	// panic. The in-place reload swaps the instance's internals under bn.mu (never
+	// the *BirdNET pointer), so the snapshot stays valid for the shared-state sync
+	// below.
 	o.mu.RLock()
-	primary := o.primary
-	if primary == nil {
-		o.mu.RUnlock()
+	entry := o.models[RegistryIDBirdNETV24]
+	o.mu.RUnlock()
+	if entry == nil {
 		return errors.Newf("primary model not available for reload").
 			Component("classifier.orchestrator").
 			Category(errors.CategoryValidation).
 			Build()
 	}
-	// Key the lookup by o.ModelInfo.ID (o.mu-guarded), not primary.ModelInfo.ID
-	// which BirdNET.ReloadModel mutates under bn.mu. The two are always equal
-	// outside an in-progress reload (which holds o.mu.Lock), and the models map
-	// is keyed by this same ID, so the lookup is unchanged but race-free.
-	entry := o.models[o.ModelInfo.ID]
-	o.mu.RUnlock()
 
-	if entry == nil {
-		return errors.Newf("primary model entry not found for reload").
-			Component("classifier.orchestrator").
-			Category(errors.CategoryValidation).
-			Build()
-	}
-
+	var primary *BirdNET
 	var reloadErr error
 	func() {
 		entry.mu.Lock()
 		defer entry.mu.Unlock()
-		reloadErr = reload(primary)
+		bn, isBirdNET := entry.instance.(*BirdNET)
+		if !isBirdNET {
+			reloadErr = errors.Newf("primary model entry not found for reload").
+				Component("classifier.orchestrator").
+				Category(errors.CategoryValidation).
+				Build()
+			return
+		}
+		primary = bn
+		reloadErr = reload(bn)
 	}()
 	if reloadErr != nil {
 		return reloadErr
 	}
 
-	// Step 2: write lock to re-sync shared state and re-key if model ID changed.
+	// Step 2: write lock to re-sync shared state. The models map key never changes
+	// (a v2.4 reload keeps the same registry ID), so the pre-Phase-3 re-key is gone.
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
@@ -1715,45 +1717,19 @@ func (o *Orchestrator) reloadPrimaryModel(reload func(primary *BirdNET) error) e
 			Build()
 	}
 
-	info := o.primary.ReloadSnapshot()
-	// The reloaded primary is a fresh instance: drop its streak, and the previous
-	// ID's when the reload changed it, so neither lingers.
-	dropInferenceFailureStreak(o.ModelInfo.ID)
+	info := primary.ReloadSnapshot()
+	// The reloaded primary is a fresh snapshot: drop its streak so a stale one does
+	// not linger. The ID is stable across a v2.4 reload, so a single drop suffices.
 	dropInferenceFailureStreak(info.ID)
 	o.ModelInfo = info
 
-	// Re-key the models map in case the model ID changed after reload (Forgejo #270).
-	//
-	// Read each entry's instance and its ModelID under the entry's own e.mu. This is
-	// defensive, not a fix for a live bug: today ReloadModel and ReloadSecondaryModels
-	// (which swaps e.instance under e.mu, outside o.mu) are both invoked only from the
-	// single-goroutine monitor event loop, so they never interleave and this re-key,
-	// holding o.mu, already excludes every other e.instance writer. Keeping the
-	// ModelID() read inside e.mu removes reliance on that non-local serialization
-	// invariant (and on ModelID being an immutable accessor) so a future second caller
-	// cannot turn the re-key into a data race. e.mu is a leaf lock here (taken while
-	// holding o.mu and acquiring nothing else under it), so the established
-	// o.mu -> e.mu order holds and this cannot deadlock.
-	newModels := make(map[string]*modelEntry, len(o.models))
-	for _, e := range o.models {
-		e.mu.Lock()
-		if e.instance == nil {
-			e.mu.Unlock()
-			continue // skip entries closed by concurrent Delete
-		}
-		modelID := e.instance.ModelID()
-		e.mu.Unlock()
-		newModels[modelID] = e
-	}
-	o.models = newModels
-
-	// Update settings atomically
-	o.updateSettings(o.primary.currentSettings())
+	// Update settings atomically.
+	o.updateSettings(primary.currentSettings())
 
 	// Re-emit the missing-taxonomy diagnostics for the reloaded label set (e.g. a
 	// locale change), reproducing what BirdNET.loadLabels logged before the taxonomy
 	// moved to the orchestrator.
-	o.logMissingTaxonomyCodes(o.primary, o.primary.Labels())
+	o.logMissingTaxonomyCodes(primary, primary.Labels())
 
 	return nil
 }
