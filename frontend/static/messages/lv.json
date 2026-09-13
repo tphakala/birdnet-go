@@ -585,8 +585,8 @@
       "collapseDetails": "Sakļaut detaļas par {species}",
       "playAudio": "Atskaņot audio par {species}",
       "viewDetails": "Skatīt detaļas par {species}",
-      "detectionDetail": "Detection detail",
-      "detectionDetailFor": "Detection detail for {species}",
+      "detectionDetail": "Atklāšanas detaļas",
+      "detectionDetailFor": "Atklāšanas detaļas par {species}",
       "unknownSpecies": "Nezināma suga",
       "clickToCollapse": "Noklikšķiniet, lai sakļautu"
     },

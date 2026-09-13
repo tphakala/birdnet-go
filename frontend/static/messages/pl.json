@@ -585,8 +585,8 @@
       "collapseDetails": "Zwiń szczegóły dla {species}",
       "playAudio": "Odtwórz dźwięk dla {species}",
       "viewDetails": "Wyświetl szczegóły dla {species}",
-      "detectionDetail": "Detection detail",
-      "detectionDetailFor": "Detection detail for {species}",
+      "detectionDetail": "Szczegóły detekcji",
+      "detectionDetailFor": "Szczegóły detekcji dla {species}",
       "unknownSpecies": "Nieznany gatunek",
       "clickToCollapse": "Kliknij, aby zwinąć"
     },

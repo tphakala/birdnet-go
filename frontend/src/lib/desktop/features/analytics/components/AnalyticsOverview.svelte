@@ -37,7 +37,7 @@
     hydrateExcludedSpecies,
   } from '$lib/stores/excludedSpecies.svelte';
   import { navigation } from '$lib/stores/navigation.svelte';
-  import type { Detection } from '$lib/types/detection.types';
+  import type { Detection, TimeOfDayValue } from '$lib/types/detection.types';
 
   import StatCard from './ui/StatCard.svelte';
   import BarChart from './charts/d3/BarChart.svelte';
@@ -767,7 +767,7 @@
                 <div class="w-16 shrink-0 text-sm opacity-80">
                   <div class="flex items-center gap-1">
                     <TimeOfDayIcon
-                      timeOfDay={detection.timeOfDay as any}
+                      timeOfDay={detection.timeOfDay as TimeOfDayValue | undefined}
                       datetime={detection.timestamp}
                       className="size-4"
                     />

@@ -21,14 +21,11 @@
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
   import { getLocale, t } from '$lib/i18n';
-  import type { SourceInfo } from '$lib/types/detection.types';
+  import type { SourceInfo, TimeOfDayValue } from '$lib/types/detection.types';
   import { parseLocalDateString } from '$lib/utils/date';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { ChevronDown, Eye } from '@lucide/svelte';
   import type { Snippet } from 'svelte';
-
-  // Mirrors TimeOfDayIcon's accepted values; detections carry it as a plain string.
-  type TimeOfDayValue = 'day' | 'night' | 'sunrise' | 'sunset' | 'dawn' | 'dusk';
 
   interface Props {
     detectionId: number | string;
@@ -108,7 +105,10 @@
         datetime={timestamp}
         className="mr-1"
       />
-      <span>{timeOfDay || t('search.detailsPanel.unknownSpecies')}</span>
+      <!-- No fallback label: the icon already derives a value from the timestamp
+           when the detection carries no time-of-day, so an empty cell is the
+           honest rendering rather than an "unknown" string. -->
+      <span>{timeOfDay ?? ''}</span>
     </div>
   </td>
   <td>

@@ -5,6 +5,18 @@ const WIKIPEDIA_LANGUAGE_CODES: Record<string, string> = {
 };
 
 /**
+ * Whether a species common name can produce a usable reference URL.
+ *
+ * The detection API copies `CommonName` through without trimming (BirdNET-Pi
+ * imports copy `Com_Name` unchanged too), so a detection can carry an empty or
+ * whitespace-only name. Building a guide URL from one yields a link to a page
+ * that does not exist, so callers use this to omit the link entirely.
+ */
+export function hasSpeciesReferenceName(commonName: string | null | undefined): boolean {
+  return typeof commonName === 'string' && commonName.trim().length > 0;
+}
+
+/**
  * Build the All About Birds guide slug from a species common name.
  * Apostrophes are removed to match the site's guide URL convention.
  */
@@ -34,16 +46,20 @@ export function getAllAboutBirdsSoundsUrl(commonName: string): string {
 }
 
 /**
- * Build a Wikipedia URL using a localized name when one is available.
- * When the display name is the English fallback, use English Wikipedia rather
- * than a localized host where that fallback name may not have an article.
- * Norwegian Bokmal (`nb`) maps to Wikipedia's `no` domain.
+ * Map a UI locale to its Wikipedia subdomain. Most locales are the subdomain
+ * already; Norwegian Bokmal (`nb`) is the exception and maps to `no`.
  */
 function localizedWikipediaLanguage(locale: string): string {
   // eslint-disable-next-line security/detect-object-injection -- Safe: read-only lookup in a small fixed Record, falls back to the locale itself
   return WIKIPEDIA_LANGUAGE_CODES[locale] ?? locale;
 }
 
+/**
+ * Build a Wikipedia URL using a localized name when one is available.
+ * When the display name is the English fallback (it equals `englishName`), use
+ * English Wikipedia rather than a localized host where that fallback name would
+ * not have an article.
+ */
 export function getWikipediaUrl(
   displayName: string,
   locale: string,

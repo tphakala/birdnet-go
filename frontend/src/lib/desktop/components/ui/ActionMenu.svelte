@@ -36,7 +36,7 @@
   import { computeAnchorPosition, applyAnchorPosition } from '$lib/utils/anchorPosition';
   import { auth } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
-  import { getAllAboutBirdsSoundsUrl } from '$lib/utils/speciesLinks';
+  import { getAllAboutBirdsSoundsUrl, hasSpeciesReferenceName } from '$lib/utils/speciesLinks';
 
   let canEdit = $derived(!$auth.security.enabled || $auth.security.accessAllowed);
 
@@ -91,7 +91,7 @@
 
   // Reference link is informational (not an edit action), so it's available to any
   // viewer as long as the detection has a species name to build the URL from.
-  let hasReferenceLink = $derived(!!detection.commonName?.trim());
+  let hasReferenceLink = $derived(hasSpeciesReferenceName(detection.commonName));
 
   let isOpen = $state(false);
   // svelte-ignore non_reactive_update

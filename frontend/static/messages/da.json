@@ -585,8 +585,8 @@
       "collapseDetails": "Skjul detaljer for {species}",
       "playAudio": "Afspil lyd for {species}",
       "viewDetails": "Se detaljer for {species}",
-      "detectionDetail": "Detection detail",
-      "detectionDetailFor": "Detection detail for {species}",
+      "detectionDetail": "Registreringsdetaljer",
+      "detectionDetailFor": "Registreringsdetaljer for {species}",
       "unknownSpecies": "Ukendt art",
       "clickToCollapse": "Klik for at skjule"
     },

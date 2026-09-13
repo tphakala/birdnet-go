@@ -585,8 +585,8 @@
       "collapseDetails": "Részletek összecsukása: {species}",
       "playAudio": "Hang lejátszása: {species}",
       "viewDetails": "Részletek megtekintése: {species}",
-      "detectionDetail": "Detection detail",
-      "detectionDetailFor": "Detection detail for {species}",
+      "detectionDetail": "Detektálás részletei",
+      "detectionDetailFor": "Detektálás részletei: {species}",
       "unknownSpecies": "Ismeretlen faj",
       "clickToCollapse": "Kattintson az összecsukáshoz"
     },

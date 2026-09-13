@@ -585,8 +585,8 @@
       "collapseDetails": "Details für {species} einklappen",
       "playAudio": "Audio für {species} abspielen",
       "viewDetails": "Details für {species} anzeigen",
-      "detectionDetail": "Detection detail",
-      "detectionDetailFor": "Detection detail for {species}",
+      "detectionDetail": "Erkennungsdetails",
+      "detectionDetailFor": "Erkennungsdetails für {species}",
       "unknownSpecies": "Unbekannte Art",
       "clickToCollapse": "Zum Einklappen klicken"
     },

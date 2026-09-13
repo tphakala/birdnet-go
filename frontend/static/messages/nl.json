@@ -585,8 +585,8 @@
       "collapseDetails": "Minder details voor {species}",
       "playAudio": "Speel de opname voor {species} af",
       "viewDetails": "Toon details voor {species}",
-      "detectionDetail": "Detection detail",
-      "detectionDetailFor": "Detection detail for {species}",
+      "detectionDetail": "Details van waarneming",
+      "detectionDetailFor": "Details van waarneming voor {species}",
       "unknownSpecies": "Onbekende soort",
       "clickToCollapse": "Klik om in te klappen"
     },

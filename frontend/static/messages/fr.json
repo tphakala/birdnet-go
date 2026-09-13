@@ -585,8 +585,8 @@
       "collapseDetails": "Réduire les détails pour {species}",
       "playAudio": "Lire l'audio pour {species}",
       "viewDetails": "Voir les détails pour {species}",
-      "detectionDetail": "Detection detail",
-      "detectionDetailFor": "Detection detail for {species}",
+      "detectionDetail": "Détail de la détection",
+      "detectionDetailFor": "Détail de la détection pour {species}",
       "unknownSpecies": "Espèce inconnue",
       "clickToCollapse": "Cliquer pour réduire"
     },
