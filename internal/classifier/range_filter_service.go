@@ -354,7 +354,7 @@ func (rfs *rangeFilterService) probableSpecies(date time.Time, week float32, set
 		sort.Sort(ByScore(speciesScores))
 		return speciesScores, nil, true, nil
 
-	default: // predictUniversal
+	case predictUniversal:
 		if predErr != nil {
 			return nil, nil, false, errors.New(predErr).
 				Category(errors.CategoryValidation).
@@ -371,6 +371,12 @@ func (rfs *rangeFilterService) probableSpecies(date time.Time, week float32, set
 		sort.Sort(ByScore(speciesScores))
 		return speciesScores, res.geomodel, true, nil
 	}
+
+	// Unreachable: predict returns only the three kinds handled above. The switch has no
+	// default on purpose, so the exhaustive linter forces a new predictKind to get its
+	// own case here (a compile-time failure) rather than silently falling into the
+	// universal scoring path. Fail safe to "no filter" if it is ever reached anyway.
+	return zeroScoresForAllLabels(settings.BirdNET.Labels, excluder), nil, false, nil
 }
 
 // predictKind classifies the outcome of the shared locked prediction so each caller
