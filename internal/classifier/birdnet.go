@@ -85,7 +85,7 @@ type BirdNET struct {
 	// below, callers read the field and run the native call (Predict) under mu, and
 	// Close() the backend under mu, so a concurrent reload or Delete can never free
 	// an interpreter mid-call (issue #3336). The range filter used to live here too;
-	// since epic #1682 Phase 2b it is owned by the orchestrator's rangeFilterService.
+	// since the model de-privilege epic, Phase 2b it is owned by the orchestrator's rangeFilterService.
 	classifier     inference.Classifier // species classification backend
 	Settings       *conf.Settings       // Deprecated: use settingsAtomic instead. Kept for struct-literal compatibility in tests.
 	settingsAtomic atomic.Pointer[conf.Settings]
@@ -339,7 +339,7 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo, resolvePrimary pr
 	}()
 
 	// The range filter is initialized by the orchestrator's rangeFilterService after
-	// construction (epic #1682 Phase 2b); NewBirdNET no longer owns it. A standalone
+	// construction (the model de-privilege epic, Phase 2b); NewBirdNET no longer owns it. A standalone
 	// *BirdNET (the rangefilter CLI, tests) has no range filter until the orchestrator
 	// wires one, matching the previous non-fatal init behavior.
 
@@ -475,8 +475,8 @@ func (bn *BirdNET) initializeTFLiteModel() error {
 }
 
 // The range-filter model bytes loader, backend init and TFLite/ONNX builders that
-// used to live here moved to internal/classifier/range_filter_service.go in epic
-// #1682 Phase 2b (getMetaModelData, initializeMetaModel, fallbackToEmbeddedRangeFilter,
+// used to live here moved to internal/classifier/range_filter_service.go in the
+// model de-privilege epic, Phase 2b (getMetaModelData, initializeMetaModel, fallbackToEmbeddedRangeFilter,
 // initializeTFLiteMetaModel and the ONNX builders in model_onnx.go). Only the
 // backend-selection type below stays here, next to resolveRangeFilterBackend.
 
@@ -1282,7 +1282,7 @@ func (bn *BirdNET) reloadModelInternal(allowPathChange bool) error {
 	// reload commits (o.ReloadModel / o.ReloadPrimaryForVariantSwap ->
 	// rangeFilterService.reload), not here. A locale change or a v2.4 variant swap
 	// keeps the same species set and scientific names, so the range-filter mapping is
-	// unchanged and a stale backend serving in the brief gap stays correct (#1682).
+	// unchanged and a stale backend serving in the brief gap stays correct.
 
 	// Validate that the model and labels match
 	if err := bn.validateModelAndLabels(); err != nil {

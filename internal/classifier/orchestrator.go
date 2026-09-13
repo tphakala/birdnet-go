@@ -1580,7 +1580,7 @@ func (o *Orchestrator) ReloadModel() error {
 // committed by the time this runs, so a range-filter build failure must not roll the
 // classifier back. The service keeps its previous backend on failure, which stays
 // correct because a locale change or a v2.4 variant swap preserves the species set
-// and scientific names the mapping is keyed on (#1682).
+// and scientific names the mapping is keyed on.
 func (o *Orchestrator) reloadPrimaryRangeFilter() {
 	rfs := o.rangeFilter
 	if rfs == nil {

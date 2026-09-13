@@ -232,8 +232,8 @@ func matchingLabels(labels []string, speciesName string) []string {
 // them; the active classifier's labels carry "Scientific_LocalizedCommon"
 // (e.g. "Cyanistes caeruleus_sinitiainen") and do match. Resolving against both
 // keeps a localized override from being appended verbatim and then mis-keyed as
-// a scientific name by the inclusion gate and the OpenFauna name resolver
-// (issue #982). Returns nil when the entry matches no biological label (e.g.
+// a scientific name by the inclusion gate and the OpenFauna name resolver.
+// Returns nil when the entry matches no biological label (e.g.
 // non-bird classes like "drone"/"heatpump"), so callers append the raw entry
 // and the name resolver legitimately reports it as unresolved.
 func canonicalOverrideLabels(speciesName string, geoLabels, classifierLabels []string) []string {

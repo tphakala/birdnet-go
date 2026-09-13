@@ -448,7 +448,7 @@ func TestReloadSecondaryModels_RaceWithPredict(t *testing.T) {
 }
 
 // TestReloadSecondaryModels_PerEntryTripletRebuildsOnlyStale is the core
-// Forgejo #1119 behavior: with per-entry triplet tracking, a reload rebuilds only
+// Per-entry triplet tracking behavior: with per-entry triplet tracking, a reload rebuilds only
 // the secondaries whose own recorded triplet differs from the current settings.
 // One secondary is already on the current triplet (e.g. installed out-of-band by
 // LoadModel after the backend change, which records the entry's triplet at load);

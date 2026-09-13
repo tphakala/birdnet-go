@@ -637,7 +637,7 @@ func TestNewBirdNET_RecoversStaleConfiguredPath(t *testing.T) {
 	t.Parallel()
 
 	// Same reason as TestNewBirdNET_LocaleNormalization: the recovered file is a
-	// TFLite v2.4 model, which a notflite build cannot load. See #1553.
+	// TFLite v2.4 model, which a notflite build cannot load. See the notflite build-skip rationale.
 	if !tfliteBackendAvailable {
 		t.Skip("TFLite backend not linked (notflite build); this test recovers onto a TFLite v2.4 model")
 	}
