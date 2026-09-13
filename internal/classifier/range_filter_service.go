@@ -373,9 +373,10 @@ func (rfs *rangeFilterService) probableSpecies(date time.Time, week float32, set
 	}
 
 	// Unreachable: predict returns only the three kinds handled above. The switch has no
-	// default on purpose, so the exhaustive linter forces a new predictKind to get its
-	// own case here (a compile-time failure) rather than silently falling into the
-	// universal scoring path. Fail safe to "no filter" if it is ever reached anyway.
+	// default on purpose, so the exhaustive linter flags a new predictKind that lacks a
+	// case here (failing golangci-lint in CI, not the Go compiler) rather than letting it
+	// silently fall into the universal scoring path. Fail safe to "no filter" if it is
+	// ever reached anyway.
 	return zeroScoresForAllLabels(settings.BirdNET.Labels, excluder), nil, false, nil
 }
 
