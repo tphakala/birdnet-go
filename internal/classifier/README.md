@@ -144,12 +144,13 @@ A typical usage pattern involves:
 
 ```go
 // Create new classifier orchestrator
-orchestrator, err := birdnet.NewOrchestrator(settings)
+orchestrator, err := classifier.NewOrchestrator(settings)
 if err != nil {
     // Handle error
 }
 
-// Process audio chunk with a specific model (the built-in BirdNET v2.4 here)
+// Process an audio chunk with a specific model (the built-in BirdNET v2.4 here)
+ctx := context.Background()
 results, err := orchestrator.PredictModel(ctx, classifier.RegistryIDBirdNETV24, audioSample)
 if err != nil {
     // Handle error
