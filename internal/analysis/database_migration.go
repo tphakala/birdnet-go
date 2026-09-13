@@ -17,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
 // migrationSetupConfig holds configuration for migration infrastructure setup.
@@ -512,6 +513,10 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 	}
 
 	// Create V2OnlyDatastore
+	// SunCalc is shared with the legacy datastore's construction (internal/datastore/interfaces.go)
+	// so per-detection time-of-day classification (day/night/sunrise/sunset) reflects the
+	// configured station coordinates instead of always falling back to "any".
+	sunCalc := suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude)
 	ds, err := v2only.New(&v2only.Config{
 		Manager:        v2Manager,
 		Detection:      detectionRepo,
@@ -525,6 +530,7 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 		AppEvent:       appEventRepo,
 		Logger:         log,
 		Timezone:       time.Local,
+		SunCalc:        sunCalc,
 		Labels:         settings.BirdNET.Labels, // For common<->scientific name-map resolution
 		SpeciesCodeMap: scientificIndex,
 	})

@@ -227,7 +227,13 @@ func TestNightFilterExcludesSunriseSunsetWindows(t *testing.T) {
 
 	for _, tc := range testCases {
 		testTime := tc.reference.Add(tc.timeOffset)
-		timeStr := testTime.Format(time.TimeOnly)
+		// Notes always record their wall clock in time.Local (see
+		// datastore.NoteFromResult, which formats from a detection.Result.Timestamp
+		// built from time.Now()), which is not necessarily the same time.Location as
+		// sunTimes (SunCalc resolves its own location from the station's
+		// coordinates). Converting here mirrors that real write path so the test
+		// stays correct regardless of whether the two locations happen to agree.
+		timeStr := testTime.In(time.Local).Format(time.TimeOnly)
 
 		// Skip if we've already inserted this exact time (avoid duplicates)
 		if insertedTimes[timeStr] {
@@ -277,7 +283,7 @@ func TestNightFilterExcludesSunriseSunsetWindows(t *testing.T) {
 	// Run subtests to verify Night filter behavior
 	for _, tc := range testCases {
 		testTime := tc.reference.Add(tc.timeOffset)
-		timeStr := testTime.Format(time.TimeOnly)
+		timeStr := testTime.In(time.Local).Format(time.TimeOnly) // matches the write-side conversion above
 
 		// Skip duplicate time checks
 		if !insertedTimes[timeStr] {

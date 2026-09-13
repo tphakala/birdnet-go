@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -134,6 +135,50 @@ func TestInitializeFreshInstall_NoDatabase(t *testing.T) {
 	_, err := InitializeFreshInstall(settings, nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no database configured")
+}
+
+// TestInitializeFreshInstall_WiresSunCalcForTimeOfDay is a regression test for the Search
+// page's "Time of Day" column always showing "any" regardless of the actual detection
+// timestamp. The root cause was that InitializeFreshInstall (and initializeV2OnlyMode in
+// internal/analysis/database_migration.go) built the v2only.Config without a SunCalc
+// instance, so calculateTimeOfDay always hit its ds.suncalc == nil guard and returned the
+// literal "any" for every detection, no matter when it occurred.
+func TestInitializeFreshInstall_WiresSunCalcForTimeOfDay(t *testing.T) {
+	v2.ResetDatabaseMode()
+	defer v2.ResetDatabaseMode()
+
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "birdnet.db")
+
+	// Helsinki coordinates, used elsewhere in this codebase's suncalc tests.
+	const testLatitude = 60.1699
+	const testLongitude = 24.9384
+
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = dbPath
+	settings.BirdNET.Latitude = testLatitude
+	settings.BirdNET.Longitude = testLongitude
+
+	ds, err := InitializeFreshInstall(settings, nil, nil)
+	require.NoError(t, err)
+	defer func() { _ = ds.Close() }()
+
+	require.NotNil(t, ds.suncalc,
+		"InitializeFreshInstall must wire a SunCalc instance so calculateTimeOfDay can classify "+
+			"by the configured station coordinates instead of always falling back to \"any\"")
+
+	// A well-into-daytime and a well-into-nighttime UTC timestamp (mid-September, outside the
+	// midnight-sun/polar-night window) at these coordinates. The exact classification (day vs.
+	// night) is covered by internal/suncalc's own tests; here we only need to confirm the
+	// datastore no longer short-circuits to the "any" fallback now that SunCalc is configured.
+	day := time.Date(2024, 9, 15, 12, 0, 0, 0, time.UTC)
+	night := time.Date(2024, 9, 15, 0, 0, 0, 0, time.UTC)
+
+	assert.NotEqual(t, datastore.TimeOfDayAny, ds.calculateTimeOfDay(day, testLatitude, testLongitude),
+		"daytime detection must be classified, not the \"any\" fallback")
+	assert.NotEqual(t, datastore.TimeOfDayAny, ds.calculateTimeOfDay(night, testLatitude, testLongitude),
+		"nighttime detection must be classified, not the \"any\" fallback")
 }
 
 func TestInitializeFreshInstall_EmptySQLitePath(t *testing.T) {
