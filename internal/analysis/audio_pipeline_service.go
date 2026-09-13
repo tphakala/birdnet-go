@@ -1330,6 +1330,14 @@ func sourceNeedsReconfigure(running *audiocore.AudioSource, desired *audiocore.S
 	// global, which can be "udp", and hardcoding "tcp" would mask a real
 	// udp->tcp change (issue #4240 hot-reload path).
 	transportChanged := running.Transport != desired.Transport
+	// A source running on a fallback estimate must reconfigure once a fresh probe
+	// confirms the rate (estimated true -> false), so ReconfigureSource restarts it
+	// and SyncReconfiguredParams clears the marker; otherwise a same-rate
+	// confirmation leaves the stale estimate in place and FFmpeg keeps force-
+	// resampling (#4350). The check is deliberately one-directional: a false -> true
+	// transition (a probe blipping during an unrelated hot-reload) must NOT restart
+	// a healthy stream, which is the reconfigure churn this fix otherwise avoids.
+	estimateConfirmed := running.SourceSampleRateEstimated && !desired.SourceSampleRateEstimated
 	return running.SampleRate != desired.SampleRate ||
 		sourceSampleRateChanged ||
 		running.BitDepth != desired.BitDepth ||
@@ -1337,7 +1345,8 @@ func sourceNeedsReconfigure(running *audiocore.AudioSource, desired *audiocore.S
 		channelModeChanged ||
 		mediaModeChanged ||
 		transportChanged ||
-		sourceChannelsChanged
+		sourceChannelsChanged ||
+		estimateConfirmed
 }
 
 // rtspStreamTransport resolves the concrete transport for an rtsp.streams entry:
