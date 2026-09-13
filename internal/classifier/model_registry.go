@@ -560,16 +560,19 @@ func DetectionModelInfoForID(modelID string) detection.ModelInfo {
 // and Perch (mapped geomodel). Bat and BSG classify their own label spaces and do
 // not participate.
 //
-// An ID absent from the registry (a custom or otherwise unknown classifier)
-// participates too. This preserves the historical gate, which resolved the ID
-// through DetectionModelInfoForID and matched the default BirdNET name for any
-// unknown ID, so custom models have always been range-filtered. Whether that is
-// the right long-term behavior is a separate, deliberate decision, not one made
-// by this behavior-preserving accessor.
+// An ID absent from the registry (a custom or otherwise unknown classifier) does
+// NOT participate: its label space is arbitrary, so gating it against an inclusion
+// list built for a known label space would silently drop labels the geomodel never
+// scored, and the registry reports rangeFilterCompatNone for anything unknown. This
+// intentionally diverges from the historical display-name gate, which resolved
+// unknown IDs to the default BirdNET name and filtered them. The branch is
+// unreachable in production (LoadModel rejects unregistered IDs, so every detection
+// carries a known registry ID), so pinning the decision here is behavior-preserving
+// in practice while fixing the semantics for any future path that can reach it.
 func ParticipatesInRangeFilter(registryID string) bool {
 	info, known := ModelRegistry[registryID]
 	if !known {
-		return true
+		return false
 	}
 	return info.rangeFilterCompat != rangeFilterCompatNone
 }
