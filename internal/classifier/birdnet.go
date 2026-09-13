@@ -1436,6 +1436,14 @@ func (bn *BirdNET) ReloadSnapshot() ModelInfo {
 	return bn.ModelInfo
 }
 
+// LiveModelInfo returns the instance's live identity snapshot, whose Backend,
+// Quantization and CustomPath are resolved at build time and can differ from the
+// static ModelRegistry template (for example ONNX/INT8 on the arm64 container). It
+// satisfies liveModelInfoProvider so ModelInfos reports the actually-loaded identity
+// without special-casing any registry ID. Read under bn.mu; a thin alias over
+// ReloadSnapshot, removed with it in Phase 3 PR 3.
+func (bn *BirdNET) LiveModelInfo() ModelInfo { return bn.ReloadSnapshot() }
+
 // Close releases resources held by the BirdNET model.
 // Implements ModelInstance (io.Closer compatible).
 func (bn *BirdNET) Close() error {

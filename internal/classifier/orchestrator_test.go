@@ -632,15 +632,31 @@ func TestUnionLabels_SkipsEmptyEntries(t *testing.T) {
 // template. This matters for the arm64 ONNX default, where o.ModelInfo
 // carries Backend=ONNX and Quantization=INT8 while the registry template has
 // Backend=TFLite and Quantization=FP32.
+// liveInfoMock is a mock instance that also reports a live ModelInfo, so it exercises
+// the liveModelInfoProvider capability branch in ModelInfos (the branch that reports
+// the actually-loaded Backend/Quantization/CustomPath instead of the static registry
+// template). In production only *BirdNET implements the capability.
+type liveInfoMock struct {
+	*mockModelInstance
+	live ModelInfo
+}
+
+func (m *liveInfoMock) LiveModelInfo() ModelInfo { return m.live }
+
+// *BirdNET must satisfy the capability so ModelInfos reports its live identity.
+var _ liveModelInfoProvider = (*BirdNET)(nil)
+
 func TestModelInfos_LivePrimaryInfo(t *testing.T) {
 	t.Parallel()
 
 	primaryInfo := stockBirdNETV24ONNXVariant("/models/BirdNET_INT8_ARM.onnx", QuantizationINT8)
 
+	// A liveModelInfoProvider instance reports the live identity; ModelInfos must prefer
+	// it over the static registry template for that ID.
+	inst := &liveInfoMock{mockModelInstance: &mockModelInstance{id: primaryInfo.ID}, live: primaryInfo}
 	o := &Orchestrator{
-		ModelInfo: primaryInfo,
 		models: map[string]*modelEntry{
-			primaryInfo.ID: {instance: &mockModelInstance{id: primaryInfo.ID}},
+			primaryInfo.ID: {instance: inst},
 		},
 	}
 
@@ -656,6 +672,44 @@ func TestModelInfos_LivePrimaryInfo(t *testing.T) {
 	// Confirm ToDetectionModelInfo keeps attribution correct: IsStock keeps Variant "default".
 	det := got.ToDetectionModelInfo()
 	assert.Equal(t, "default", det.Variant, "IsStock stock model must attribute as default")
+}
+
+// TestModelInfos_LiveInfoCapability pins the capability dispatch generically: a
+// liveModelInfoProvider instance reports its live identity, while a plain instance
+// (no capability) falls through to the static registry template. This is the seam
+// that lets Phase 3 drop the o.primary special-case without changing what ModelInfos
+// reports for the v2.4 slot.
+func TestModelInfos_LiveInfoCapability(t *testing.T) {
+	t.Parallel()
+
+	live := stockBirdNETV24ONNXVariant("/models/BirdNET_INT8_ARM.onnx", QuantizationINT8)
+	provider := &liveInfoMock{mockModelInstance: &mockModelInstance{id: live.ID}, live: live}
+
+	// A plain (non-capability) instance whose ID is in the registry: ModelInfos must
+	// use the registry template's Backend for it.
+	plainID := RegistryIDPerchV2
+	plain := &mockModelInstance{id: plainID}
+
+	o := &Orchestrator{
+		models: map[string]*modelEntry{
+			live.ID: {instance: provider},
+			plainID: {instance: plain},
+		},
+		modelRSS: make(map[string]int64),
+	}
+
+	byID := make(map[string]ModelInfo)
+	for _, mi := range o.ModelInfos() {
+		byID[mi.ID] = mi
+	}
+
+	require.Contains(t, byID, live.ID)
+	assert.Equal(t, BackendONNX, byID[live.ID].Backend, "capability instance reports live backend")
+	assert.Equal(t, QuantizationINT8, byID[live.ID].Quantization)
+
+	require.Contains(t, byID, plainID)
+	assert.Equal(t, ModelRegistry[plainID].Backend, byID[plainID].Backend,
+		"non-capability instance falls through to the registry template backend")
 }
 
 // TestModelInfos_ReportsLiveSpeciesCount verifies ModelInfos sources NumSpecies

@@ -2590,14 +2590,21 @@ func (o *Orchestrator) PrimaryModelInfo() ModelInfo {
 	return info
 }
 
+// liveModelInfoProvider is implemented by instances whose effective identity
+// (Backend, Quantization, CustomPath) is resolved at build time and can differ from
+// the static ModelRegistry template. ModelInfos prefers it over the template for ANY
+// instance that implements it, so no registry ID is special-cased. Today only *BirdNET
+// implements it; secondaries fall through to the registry template.
+type liveModelInfoProvider interface{ LiveModelInfo() ModelInfo }
+
 // ModelInfos returns ModelInfo for all registered models. Thread-safe.
 // Used by the pipeline to build ModelTarget lists for buffer fan-out.
-// For the primary model entry, the live o.ModelInfo is returned rather than the
-// static registry template, so the reported Backend and Quantization match the
-// actually loaded model (e.g. ONNX/INT8 on the arm64 container default).
-// NumSpecies is always sourced from the live instance (not the template) so a
-// sliced or custom model reports its actual loaded label count rather than the
-// stock catalog number.
+// For an instance that reports a live identity (liveModelInfoProvider), that live
+// ModelInfo is returned rather than the static registry template, so the reported
+// Backend and Quantization match the actually loaded model (e.g. ONNX/INT8 on the
+// arm64 container default). NumSpecies is always sourced from the live instance (not
+// the template) so a sliced or custom model reports its actual loaded label count
+// rather than the stock catalog number.
 func (o *Orchestrator) ModelInfos() []ModelInfo {
 	o.mu.RLock()
 	if o.models == nil {
@@ -2608,11 +2615,6 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 	for id, entry := range o.models {
 		refs = append(refs, entryRef{id: id, entry: entry})
 	}
-	// Snapshot the live primary identity and info under the same RLock so the
-	// read is consistent with the models-map snapshot above. o.ModelInfo is
-	// written only under o.mu.Lock() (in reloadModelInternal), so RLock is sufficient.
-	primaryID := o.ModelInfo.ID
-	primaryInfo := o.ModelInfo
 	o.mu.RUnlock()
 
 	// Resolve overlap against the live settings snapshot (independently
@@ -2636,10 +2638,12 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 			continue
 		}
 		var info ModelInfo
-		if ref.id == primaryID {
-			// Return the live primary info so Backend/Quantization reflect the
-			// actually loaded model, not the static registry template.
-			info = primaryInfo
+		if p, ok := instance.(liveModelInfoProvider); ok {
+			// Prefer the instance's live identity so Backend/Quantization reflect the
+			// actually loaded model, not the static registry template. LiveModelInfo
+			// takes the instance's own lock; entry.mu is already released above, so this
+			// does not deepen the o.mu -> entry.mu nesting.
+			info = p.LiveModelInfo()
 		} else {
 			var exists bool
 			info, exists = ModelRegistry[ref.id]
