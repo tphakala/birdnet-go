@@ -588,7 +588,7 @@ func TestEmbeddedCatalog_BirdNETv24Variants(t *testing.T) {
 	assert.Equal(t, CategoryBird, entry.Category, "birdnet-v2.4 must be a bird model")
 	assert.False(t, entry.Hidden, "birdnet-v2.4 must be visible (wired into its variant set)")
 	assert.False(t, entry.RequiresONNX, "birdnet-v2.4 ORT need is per-variant, not entry-level")
-	assert.Equal(t, permanentRegistryID, entry.RegistryID,
+	assert.Equal(t, RegistryIDBirdNETV24, entry.RegistryID,
 		"birdnet-v2.4 must map to the permanent BirdNET v2.4 registry ID")
 	assert.Equal(t, "tphakala/BirdNET-v2.4", entry.HuggingFaceRepo, "birdnet-v2.4 repo")
 	assert.Equal(t, birdnetV24SpeciesCount, entry.SpeciesCount,

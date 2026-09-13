@@ -156,7 +156,7 @@ func (m *ModelInfo) DisplayName() string {
 // ModelRegistry is the single source of truth for all supported models.
 // All model identity lookups, config validation, and spec queries derive from this.
 var ModelRegistry = map[string]ModelInfo{
-	"BirdNET_V2.4": { //nolint:goconst // registry data-table key; canonical model ID also named by DefaultModelVersion/BirdNET_V2_4/permanentRegistryID
+	"BirdNET_V2.4": { //nolint:goconst // registry data-table key; canonical model ID also named by DefaultModelVersion/BirdNET_V2_4/RegistryIDBirdNETV24
 		ID:               "BirdNET_V2.4",
 		Name:             ModelNameBirdNETv24,
 		Backend:          BackendTFLite,

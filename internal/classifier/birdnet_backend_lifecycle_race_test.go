@@ -15,7 +15,7 @@ import (
 //
 // The TFLite/ONNX classifier and range-filter interpreters are not
 // goroutine-safe and free their native resources in Close(). The classifier is
-// protected by bn.mu; since epic #1682 Phase 2b the range filter is owned by the
+// protected by bn.mu; since the model de-privilege epic, Phase 2b the range filter is owned by the
 // orchestrator's rangeFilterService and protected by its leaf lock rfs.mu. Every
 // native inference call (Predict / PredictSpeciesScores) and every backend Close()
 // must hold the relevant lock for its full duration. If a path dropped the lock
@@ -161,7 +161,7 @@ func TestBirdNET_ConcurrentInferenceAndBackendReload_NoRace(t *testing.T) {
 				classifier: newLifecycleClassifier(len(labels), stats),
 			}
 			bn.settingsAtomic.Store(settings)
-			// Since epic #1682 Phase 2b the range filter is owned by the orchestrator's
+			// Since the model de-privilege epic, Phase 2b the range filter is owned by the orchestrator's
 			// service, so its native lifecycle is protected by rfs.mu, not bn.mu.
 			// Exercise both concurrently: the classifier under bn.mu, the range filter
 			// under rfs.mu.
@@ -261,6 +261,6 @@ func TestRangeFilterService_ReloadAfterCloseDoesNotPublish(t *testing.T) {
 	settings := conftest.GetTestSettings()
 	settings.BirdNET.LocationConfigured = true
 
-	require.NoError(t, rfs.reload(settings, classifierView{id: permanentRegistryID}))
+	require.NoError(t, rfs.reload(settings, classifierView{id: RegistryIDBirdNETV24}))
 	require.Nil(t, rfs.loadState().backend, "no backend may be published by a reload after close()")
 }

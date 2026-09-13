@@ -522,11 +522,8 @@ func (o *Orchestrator) GetHeatmapService() *HeatmapInferenceService {
 		return nil
 	}
 
-	o.mu.RLock()
-	primary := o.primary
-	rfs := o.rangeFilter
-	o.mu.RUnlock()
-	if primary == nil || rfs == nil {
+	rfs, ok := o.rangeFilterReady()
+	if !ok || rfs == nil {
 		return nil
 	}
 

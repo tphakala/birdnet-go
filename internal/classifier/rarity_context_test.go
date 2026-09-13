@@ -135,8 +135,7 @@ func newAliasedGeomodelBirdNET(t *testing.T, geoScore float32) (*Orchestrator, *
 	bn.settingsAtomic.Store(settings)
 	o := &Orchestrator{
 		Settings:    settings,
-		ModelInfo:   bn.ModelInfo,
-		primary:     bn,
+		models:      map[string]*modelEntry{RegistryIDBirdNETV24: {instance: bn}},
 		rangeFilter: newTestRangeFilterService(mapped),
 	}
 	o.settingsAtomic.Store(settings)
@@ -233,8 +232,7 @@ func TestGetRarityContext_NoGeomodel(t *testing.T) {
 	}
 	orch := &Orchestrator{
 		Settings:    settings,
-		ModelInfo:   bn.ModelInfo,
-		primary:     bn,
+		models:      map[string]*modelEntry{RegistryIDBirdNETV24: {instance: bn}},
 		rangeFilter: newTestRangeFilterService(&fakeRangeFilter{scores: []float32{0.5}}),
 	}
 	t.Cleanup(orch.Delete)
@@ -271,8 +269,7 @@ func TestGetRarityContext_NoBackend(t *testing.T) {
 	}
 	orch := &Orchestrator{
 		Settings:    settings,
-		ModelInfo:   bn.ModelInfo,
-		primary:     bn,
+		models:      map[string]*modelEntry{RegistryIDBirdNETV24: {instance: bn}},
 		rangeFilter: newTestRangeFilterService(nil), // no backend loaded
 	}
 	t.Cleanup(orch.Delete)

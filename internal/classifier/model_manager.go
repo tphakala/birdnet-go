@@ -27,13 +27,8 @@ import (
 
 // RegistryIDBirdNETV24 is the registry ID of the built-in BirdNET v2.4 model, the
 // canonical exported name for its slot. It is the model that cannot be uninstalled
-// while embedded. Phase 3 de-privileges this slot; PR 1 introduces the exported name
-// additively, PR 2 removes the permanentRegistryID alias below.
+// while embedded.
 const RegistryIDBirdNETV24 = "BirdNET_V2.4"
-
-// permanentRegistryID is a temporary alias for RegistryIDBirdNETV24 kept so existing
-// in-package readers do not change in PR 1. Removed in Phase 3 PR 2.
-const permanentRegistryID = RegistryIDBirdNETV24
 
 // sharedDirName is the gallery subdirectory that holds files shared across a
 // family's variants (the bat embedding extractor, the geomodel range filter).
@@ -503,7 +498,7 @@ func familyFields(s *conf.Settings, registryID string) (familyFieldSet, bool) {
 		return familyFieldSet{}, false
 	}
 	switch registryID {
-	case permanentRegistryID:
+	case RegistryIDBirdNETV24:
 		return familyFieldSet{
 			Model:     &s.BirdNET.ModelPath,
 			Labels:    &s.BirdNET.LabelPath,
@@ -829,14 +824,10 @@ func (mm *ModelManager) loadInstalledModels(log logger.Logger, installedIDs []st
 		if !found || entry.RegistryID == "" {
 			continue
 		}
-		// The permanent BirdNET v2.4 classifier is the primary model, resolved at
-		// startup by NewBirdNET, not loaded through the orchestrator's secondary
-		// loaders. It has no ModelLoaders entry, so calling LoadModel would only log
-		// a spurious "failed to load" warning. Skip it: it is always "installed" but
-		// never hot-loaded here.
-		if entry.RegistryID == permanentRegistryID {
-			continue
-		}
+		// BirdNET v2.4 always loads during NewOrchestrator, strictly before
+		// ScanInstalled runs, so the IsModelLoaded guard below skips it here without
+		// a dedicated special case: it is always "installed" but never hot-loaded a
+		// second time.
 		if mm.orchestrator.IsModelLoaded(entry.RegistryID) {
 			continue
 		}
@@ -959,7 +950,7 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 	}
 
 	// Reject uninstall of the permanent model.
-	if entry.RegistryID == permanentRegistryID {
+	if entry.RegistryID == RegistryIDBirdNETV24 {
 		return errors.Newf("cannot uninstall the built-in %s model", entry.Name).
 			Component("classifier.model_manager").
 			Category(errors.CategoryValidation).
@@ -1610,7 +1601,7 @@ func (mm *ModelManager) replacePrimaryVariant(ctx context.Context, entry *Catalo
 	// 3. Persist BirdNET.ModelPath (set for a DFT build, cleared for the baseline)
 	//    BEFORE reloading, so the primary loader resolves the new file and a
 	//    crash/restart before step 4 still resolves the new variant.
-	mm.applyConfigForVariantSwap(permanentRegistryID, newModelPath)
+	mm.applyConfigForVariantSwap(RegistryIDBirdNETV24, newModelPath)
 
 	// 4. Activate the new variant by reloading the primary in place. A reload failure
 	//    rolls back (the running model was already kept alive transactionally).
@@ -1659,7 +1650,7 @@ func (mm *ModelManager) rollbackPrimaryVariantSwap(log logger.Logger, entry *Cat
 	mm.mu.Lock()
 	mm.installed[entry.ID] = *old
 	mm.mu.Unlock()
-	mm.applyConfigForVariantSwap(permanentRegistryID, old.ModelPath)
+	mm.applyConfigForVariantSwap(RegistryIDBirdNETV24, old.ModelPath)
 
 	// The new variant is unusable on this host: remove its downloaded files (none for
 	// the BuiltIn baseline) so disk state matches the restored record.
@@ -2228,13 +2219,13 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 	// it to replacePrimaryVariant instead. The primary's label set is embedded, so a
 	// primary variant never ships a labels file (labelsPath is always "" for it), but
 	// familyFields now exposes the primary's Labels pointer, so guard the Labels write
-	// on permanentRegistryID as well to keep a user's custom BirdNET.LabelPath
+	// on RegistryIDBirdNETV24 as well to keep a user's custom BirdNET.LabelPath
 	// structurally protected even if that ever changes.
 	if fs, ok := familyFields(updated, entry.RegistryID); ok {
 		if modelPath != "" {
 			*fs.Model = modelPath
 		}
-		if fs.Labels != nil && labelsPath != "" && entry.RegistryID != permanentRegistryID {
+		if fs.Labels != nil && labelsPath != "" && entry.RegistryID != RegistryIDBirdNETV24 {
 			*fs.Labels = labelsPath
 		}
 		if fs.Embeddings != nil && embeddingsPath != "" {
@@ -2321,7 +2312,7 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 	// CategoryWildlife but write different families, so a category-keyed rule would
 	// re-point one family's config onto the other. Today the only multi-entry family
 	// is bat, so for every other family this degenerates to "clear". The primary is
-	// never uninstalled (Uninstall refuses permanentRegistryID) and an unknown
+	// never uninstalled (Uninstall refuses RegistryIDBirdNETV24) and an unknown
 	// registry ID yields ok=false, so both are safe no-ops here.
 	if fs, ok := familyFields(updated, entry.RegistryID); ok {
 		if repl, replEntry, found := mm.replacementInstall(entry); found {

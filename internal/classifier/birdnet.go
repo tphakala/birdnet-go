@@ -85,13 +85,12 @@ type BirdNET struct {
 	// below, callers read the field and run the native call (Predict) under mu, and
 	// Close() the backend under mu, so a concurrent reload or Delete can never free
 	// an interpreter mid-call (issue #3336). The range filter used to live here too;
-	// since epic #1682 Phase 2b it is owned by the orchestrator's rangeFilterService.
+	// since the model de-privilege epic, Phase 2b it is owned by the orchestrator's rangeFilterService.
 	classifier     inference.Classifier // species classification backend
 	Settings       *conf.Settings       // Deprecated: use settingsAtomic instead. Kept for struct-literal compatibility in tests.
 	settingsAtomic atomic.Pointer[conf.Settings]
 	ModelInfo      ModelInfo // Information about the current model
 	modelVersion   string    // Human-readable model version string (per-instance to avoid shared global state)
-	modelsDir      string    // base directory for gallery-installed models (set by Orchestrator)
 	// primaryPath is the outcome of resolving settings.BirdNET.ModelPath for this
 	// instance: which primary classifier model file it actually loads from, and
 	// whether that differs from what the user configured. resolved.model differs
@@ -340,7 +339,7 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo, resolvePrimary pr
 	}()
 
 	// The range filter is initialized by the orchestrator's rangeFilterService after
-	// construction (epic #1682 Phase 2b); NewBirdNET no longer owns it. A standalone
+	// construction (the model de-privilege epic, Phase 2b); NewBirdNET no longer owns it. A standalone
 	// *BirdNET (the rangefilter CLI, tests) has no range filter until the orchestrator
 	// wires one, matching the previous non-fatal init behavior.
 
@@ -476,8 +475,8 @@ func (bn *BirdNET) initializeTFLiteModel() error {
 }
 
 // The range-filter model bytes loader, backend init and TFLite/ONNX builders that
-// used to live here moved to internal/classifier/range_filter_service.go in epic
-// #1682 Phase 2b (getMetaModelData, initializeMetaModel, fallbackToEmbeddedRangeFilter,
+// used to live here moved to internal/classifier/range_filter_service.go in the
+// model de-privilege epic, Phase 2b (getMetaModelData, initializeMetaModel, fallbackToEmbeddedRangeFilter,
 // initializeTFLiteMetaModel and the ONNX builders in model_onnx.go). Only the
 // backend-selection type below stays here, next to resolveRangeFilterBackend.
 
@@ -538,9 +537,9 @@ func (bn *BirdNET) loadLabels() error {
 	// ModelInfo is seeded from the registry template, whose NumSpecies is the stock
 	// catalog figure (6522 for BirdNET v2.4) and can differ from the real loaded
 	// labels for a custom or regionally-sliced label file. loadLabels is the single
-	// place the label set changes, so refreshing here keeps bn.ModelInfo (and thus the
-	// orchestrator's PrimaryModelInfo()) reporting the live count. bn.NumSpecies()
-	// already reads len(labels) directly.
+	// place the label set changes, so refreshing here keeps bn.ModelInfo (and thus
+	// what the orchestrator's ModelInfos()/DefaultTargets() report for v2.4) reporting
+	// the live count. bn.NumSpecies() already reads len(labels) directly.
 	bn.ModelInfo.NumSpecies = len(bn.Settings.BirdNET.Labels)
 	return nil
 }
@@ -1283,7 +1282,7 @@ func (bn *BirdNET) reloadModelInternal(allowPathChange bool) error {
 	// reload commits (o.ReloadModel / o.ReloadPrimaryForVariantSwap ->
 	// rangeFilterService.reload), not here. A locale change or a v2.4 variant swap
 	// keeps the same species set and scientific names, so the range-filter mapping is
-	// unchanged and a stale backend serving in the brief gap stays correct (#1682).
+	// unchanged and a stale backend serving in the brief gap stays correct.
 
 	// Validate that the model and labels match
 	if err := bn.validateModelAndLabels(); err != nil {
@@ -1487,34 +1486,6 @@ type RangeFilterStatusResponse struct {
 	// (only meaningful when Geomodel is non-nil). Zero means the geomodel filters out all
 	// detections for the primary classifier.
 	MappedSpecies int `json:"mappedSpecies"`
-}
-
-// primaryClassifierCoverage returns the classifier identity and label count for the
-// primary. The geomodel coverage stats and runtime state are owned by the
-// orchestrator's rangeFilterService (Phase 2b); the orchestrator combines the two.
-// modelsDir is snapshotted here under bn.mu so the caller's auto-select check does
-// not race a concurrent SetModelsDir write.
-func (bn *BirdNET) primaryClassifierCoverage() (primary ClassifierCoverage, modelsDir string) {
-	bn.mu.Lock()
-	defer bn.mu.Unlock()
-	return ClassifierCoverage{
-		ID:           bn.ModelInfo.ID,
-		Name:         bn.ModelInfo.Name,
-		TotalSpecies: len(bn.Settings.BirdNET.Labels),
-	}, bn.modelsDir
-}
-
-// SetModelsDir sets the base directory for gallery-installed models.
-// Called by the Orchestrator after creation so auto-selection can
-// resolve geomodel paths from the installed models directory.
-func (bn *BirdNET) SetModelsDir(dir string) {
-	// Guard the write under bn.mu: bn.modelsDir is snapshotted under bn.mu by
-	// primaryClassifierView (which the range-filter service reads when building its
-	// backend) and by primaryClassifierCoverage. No caller of this method holds
-	// bn.mu, so locking here cannot self-deadlock.
-	bn.mu.Lock()
-	defer bn.mu.Unlock()
-	bn.modelsDir = dir
 }
 
 // shouldAutoSelectV3Geomodel reports whether the v3 geomodel should be

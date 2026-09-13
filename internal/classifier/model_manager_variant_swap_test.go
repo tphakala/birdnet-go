@@ -24,13 +24,13 @@ func TestApplyConfigForVariantSwap_PrimaryWritesModelPathOnly(t *testing.T) {
 	conf.StoreSettings(settings)
 	mm := NewModelManager(t.TempDir(), nil, settings)
 
-	mm.applyConfigForVariantSwap(permanentRegistryID, "/models/birdnet-v2.4/x.onnx")
+	mm.applyConfigForVariantSwap(RegistryIDBirdNETV24, "/models/birdnet-v2.4/x.onnx")
 	current := conf.GetSettings()
 	assert.Equal(t, "/models/birdnet-v2.4/x.onnx", current.BirdNET.ModelPath, "the model path must be persisted")
 	assert.Equal(t, "/srv/custom.txt", current.BirdNET.LabelPath, "a variant swap must never touch LabelPath")
 
 	// Revert to the baseline with an empty model path.
-	mm.applyConfigForVariantSwap(permanentRegistryID, "")
+	mm.applyConfigForVariantSwap(RegistryIDBirdNETV24, "")
 	current = conf.GetSettings()
 	assert.Empty(t, current.BirdNET.ModelPath, "an empty model path reverts to the embedded baseline")
 	assert.Equal(t, "/srv/custom.txt", current.BirdNET.LabelPath, "revert must still not touch LabelPath")
@@ -65,7 +65,7 @@ func TestApplyConfigForVariantSwap_NilSettingsIsNoop(t *testing.T) {
 	conf.StoreSettings(settings)
 	mm := NewModelManager(t.TempDir(), nil, nil) // nil settings receiver
 
-	mm.applyConfigForVariantSwap(permanentRegistryID, "/models/should-not-write.onnx")
+	mm.applyConfigForVariantSwap(RegistryIDBirdNETV24, "/models/should-not-write.onnx")
 	current := conf.GetSettings()
 	assert.Equal(t, "/keep/me.onnx", current.BirdNET.ModelPath, "a nil settings receiver must be a no-op")
 }

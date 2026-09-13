@@ -65,7 +65,7 @@ func TestSpeciesSnapshot_NeverNil(t *testing.T) {
 func TestSpeciesIndex_RebuiltOnLoadModel(t *testing.T) {
 	// Mutates package-global ModelRegistry/modelLoaders, so not parallel.
 	const testID = "SpeciesIndex_LoadTrigger"
-	o := newSpeciesIndexTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID, labels: []string{"Cyanistes caeruleus_Eurasian Blue Tit"}})
+	o := newSpeciesIndexTestOrchestrator(t, &mockModelInstance{id: RegistryIDBirdNETV24, labels: []string{"Cyanistes caeruleus_Eurasian Blue Tit"}})
 
 	// Precondition: the loaded model's species is not yet indexed.
 	_, present := o.SpeciesSnapshot().LabelBySci["Turdus merula"]
@@ -93,7 +93,7 @@ func TestSpeciesIndex_RebuiltOnUnloadModel(t *testing.T) {
 	t.Cleanup(func() { delete(ModelRegistry, secondary) })
 
 	o := newSpeciesIndexTestOrchestrator(t,
-		&mockModelInstance{id: permanentRegistryID, labels: []string{"Cyanistes caeruleus_Eurasian Blue Tit"}},
+		&mockModelInstance{id: RegistryIDBirdNETV24, labels: []string{"Cyanistes caeruleus_Eurasian Blue Tit"}},
 		&mockModelInstance{id: secondary, labels: []string{"Turdus merula_Common Blackbird"}},
 	)
 
@@ -114,12 +114,11 @@ func TestSpeciesIndex_RebuiltOnReloadSecondaryModels(t *testing.T) {
 
 	of := openfauna.NewResolver()
 	o := &Orchestrator{
-		models:    map[string]*modelEntry{permanentRegistryID: {instance: &mockModelInstance{id: permanentRegistryID}}},
+		models:    map[string]*modelEntry{RegistryIDBirdNETV24: {instance: &mockModelInstance{id: RegistryIDBirdNETV24}}},
 		modelRSS:  make(map[string]int64),
 		openfauna: of,
 		names:     speciesindex.New(of),
 	}
-	o.ModelInfo.ID = permanentRegistryID
 	// Loaded on a different backend so the per-entry gate fires and the swap runs.
 	o.models[testSecondaryID] = &modelEntry{instance: &reloadFakeModel{id: testSecondaryID}, backend: secondaryBackendKey{backend: "onnx"}}
 	registerTestSecondaryBuilder(t, testSecondaryID, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
@@ -136,7 +135,7 @@ func TestSpeciesIndex_RebuiltOnReloadSecondaryModels(t *testing.T) {
 func TestSpeciesIndex_RebuiltOnRebuildNameResolver(t *testing.T) {
 	t.Parallel()
 
-	o := newSpeciesIndexTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID, labels: []string{"Turdus merula_Common Blackbird"}})
+	o := newSpeciesIndexTestOrchestrator(t, &mockModelInstance{id: RegistryIDBirdNETV24, labels: []string{"Turdus merula_Common Blackbird"}})
 	before := o.SpeciesSnapshot()
 	require.NoError(t, o.RebuildNameResolver(nil))
 	after := o.SpeciesSnapshot()
@@ -146,7 +145,7 @@ func TestSpeciesIndex_RebuiltOnRebuildNameResolver(t *testing.T) {
 
 // TestSpeciesIndex_RebuiltOnPrimaryReload verifies the two primary-reload paths
 // (ReloadModel and ReloadPrimaryForVariantSwap) republish the species index. Both
-// go through reloadPrimaryModel, which requires a real *BirdNET primary, so this is
+// go through reloadBirdNETV24InPlace, which requires a real *BirdNET primary, so this is
 // skipped when the model is unavailable in the test environment. Without the rebuild
 // trigger, a locale or model change via reload_birdnet would leave the datastore and
 // facade serving a stale species-name snapshot.
@@ -183,7 +182,7 @@ func TestSpeciesIndex_EqualsLegacySeed(t *testing.T) {
 	t.Parallel()
 
 	o := newSpeciesIndexTestOrchestrator(t,
-		&mockModelInstance{id: permanentRegistryID, labels: []string{"Turdus merula_Common Blackbird"}},
+		&mockModelInstance{id: RegistryIDBirdNETV24, labels: []string{"Turdus merula_Common Blackbird"}},
 		&mockModelInstance{id: "Perch_like", labels: []string{"Cyanistes caeruleus_Eurasian Blue Tit", "Spilopelia senegalensis_Laughing Dove"}},
 	)
 
@@ -289,7 +288,7 @@ func TestSpeciesIndex_ConcurrentReadersDuringLoadUnload(t *testing.T) {
 	}
 	t.Cleanup(func() { delete(modelLoaders, testID) })
 
-	o := newSpeciesIndexTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID, labels: []string{"Cyanistes caeruleus_Eurasian Blue Tit"}})
+	o := newSpeciesIndexTestOrchestrator(t, &mockModelInstance{id: RegistryIDBirdNETV24, labels: []string{"Cyanistes caeruleus_Eurasian Blue Tit"}})
 
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
@@ -340,7 +339,7 @@ func TestSpeciesIndex_ConcurrentTriggersPublishNewest(t *testing.T) {
 	}
 	t.Cleanup(func() { delete(modelLoaders, testID) })
 
-	o := newSpeciesIndexTestOrchestrator(t, &mockModelInstance{id: permanentRegistryID, labels: []string{"Cyanistes caeruleus_Eurasian Blue Tit"}})
+	o := newSpeciesIndexTestOrchestrator(t, &mockModelInstance{id: RegistryIDBirdNETV24, labels: []string{"Cyanistes caeruleus_Eurasian Blue Tit"}})
 
 	for i := range concurrentPublishIterations {
 		// Start each iteration from the model unloaded (ignore "not loaded" on the

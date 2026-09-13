@@ -15,7 +15,7 @@ import (
 // PERSISTENCE of the correction is skipped.
 //
 // It is a process-level switch rather than an Orchestrator field on purpose: the
-// first correction drain runs INSIDE NewOrchestrator (loadAdditionalModels ->
+// first correction drain runs INSIDE NewOrchestrator (loadEnabledModels ->
 // runPendingPathCorrections), so a per-instance flag set after construction would
 // be too late to stop that write. Read-only diagnostic commands (benchmark,
 // rangefilter print) set it BEFORE constructing the Orchestrator so they never

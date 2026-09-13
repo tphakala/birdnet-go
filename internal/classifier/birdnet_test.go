@@ -221,14 +221,18 @@ func TestApplyAutoSelectedGeomodelPaths(t *testing.T) {
 	})
 }
 
-func TestBirdNET_SetModelsDir(t *testing.T) {
+func TestOrchestrator_SetModelsDir(t *testing.T) {
 	t.Parallel()
 
-	bn := &BirdNET{}
-	assert.Empty(t, bn.modelsDir)
+	o := &Orchestrator{}
+	o.mu.RLock()
+	assert.Empty(t, o.modelsDir)
+	o.mu.RUnlock()
 
-	bn.SetModelsDir("/some/path")
-	assert.Equal(t, "/some/path", bn.modelsDir)
+	o.SetModelsDir("/some/path")
+	o.mu.RLock()
+	assert.Equal(t, "/some/path", o.modelsDir)
+	o.mu.RUnlock()
 }
 
 func TestPrimaryRangeFilterCoverage_NoFilter(t *testing.T) {
@@ -251,7 +255,8 @@ func TestPrimaryRangeFilterCoverage_NoFilter(t *testing.T) {
 		ModelInfo: ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4"},
 	}
 	bn.settingsAtomic.Store(settings)
-	o := &Orchestrator{Settings: settings, primary: bn, ModelInfo: bn.ModelInfo}
+	o := &Orchestrator{Settings: settings,
+		models: map[string]*modelEntry{RegistryIDBirdNETV24: {instance: bn}}}
 	o.settingsAtomic.Store(settings)
 	o.rangeFilter = newTestRangeFilterService(nil)
 
@@ -310,10 +315,10 @@ func TestPrimaryRangeFilterCoverage_WithMappedFilter(t *testing.T) {
 	bn := &BirdNET{
 		Settings:  settings,
 		ModelInfo: ModelInfo{ID: RegistryIDBirdNETV3, Name: ModelNameBirdNETv30},
-		modelsDir: modelsDir,
 	}
 	bn.settingsAtomic.Store(settings)
-	o := &Orchestrator{Settings: settings, primary: bn, ModelInfo: bn.ModelInfo, modelsDir: modelsDir}
+	o := &Orchestrator{Settings: settings, modelsDir: modelsDir,
+		models: map[string]*modelEntry{RegistryIDBirdNETV24: {instance: bn}}}
 	o.settingsAtomic.Store(settings)
 	o.rangeFilter = newTestRangeFilterService(mapped)
 
@@ -379,7 +384,6 @@ func TestRangeFilterStatus_PerClassifierCoverage(t *testing.T) {
 	primary := &BirdNET{
 		Settings:  settings,
 		ModelInfo: ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4"},
-		modelsDir: modelsDir,
 	}
 
 	perchLabels := []string{
@@ -394,9 +398,7 @@ func TestRangeFilterStatus_PerClassifierCoverage(t *testing.T) {
 	}
 
 	orch := &Orchestrator{
-		Settings:  settings,
-		ModelInfo: primary.ModelInfo,
-		primary:   primary,
+		Settings: settings,
 		models: map[string]*modelEntry{
 			"BirdNET_V2.4":    {instance: primary},
 			RegistryIDPerchV2: {instance: perchInstance},
@@ -461,9 +463,7 @@ func TestRangeFilterStatus_BatExcluded(t *testing.T) {
 	}
 
 	orch := &Orchestrator{
-		Settings:  settings,
-		ModelInfo: primary.ModelInfo,
-		primary:   primary,
+		Settings: settings,
 		models: map[string]*modelEntry{
 			"BirdNET_V2.4": {instance: primary},
 			RegistryIDBat:  {instance: batInstance},
@@ -494,9 +494,7 @@ func TestRangeFilterStatus_NoGeomodel(t *testing.T) {
 	}
 
 	orch := &Orchestrator{
-		Settings:  settings,
-		ModelInfo: primary.ModelInfo,
-		primary:   primary,
+		Settings: settings,
 		models: map[string]*modelEntry{
 			"BirdNET_V2.4": {instance: primary},
 		},
@@ -531,7 +529,7 @@ func TestNewBirdNET_LocaleNormalization(t *testing.T) {
 
 	// This test constructs a TFLite v2.4 model to exercise locale normalization.
 	// A notflite build has no TFLite backend, so construction errors instead of
-	// running; skip so those builds stay green. See #1553.
+	// running; skip so those builds stay green. See the notflite build-skip rationale.
 	if !tfliteBackendAvailable {
 		t.Skip("TFLite backend not linked (notflite build); locale normalization uses a TFLite v2.4 model")
 	}

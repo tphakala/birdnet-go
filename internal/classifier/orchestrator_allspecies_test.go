@@ -44,7 +44,7 @@ func hasScientificName(scores []SpeciesScore, sci string) bool {
 func buildAllSpeciesOrchestrator(t *testing.T, settings *conf.Settings, rf *fakeUniversalRangeFilter, nonPrimaryID string, nonPrimaryLabels []string) *Orchestrator {
 	t.Helper()
 
-	const primaryID = "BirdNET_V3"
+	const primaryID = RegistryIDBirdNETV24
 
 	bn := &BirdNET{
 		Settings: settings,
@@ -57,9 +57,7 @@ func buildAllSpeciesOrchestrator(t *testing.T, settings *conf.Settings, rf *fake
 	}
 
 	o := &Orchestrator{
-		Settings:  settings,
-		ModelInfo: bn.ModelInfo, // mirror the primary, as NewOrchestrator does
-		primary:   bn,
+		Settings: settings,
 		models: map[string]*modelEntry{
 			primaryID:    {instance: bn},
 			nonPrimaryID: {instance: nonPrimary},
@@ -260,8 +258,6 @@ func TestGetAllProbableSpecies_NonUniversalPrimary(t *testing.T) {
 
 	o := &Orchestrator{
 		Settings:    settings,
-		ModelInfo:   bn.ModelInfo, // mirror the primary, as NewOrchestrator does
-		primary:     bn,
 		rangeFilter: newTestRangeFilterService(primaryRF),
 		models: map[string]*modelEntry{
 			"BirdNET_V2.4": {instance: bn},
@@ -310,7 +306,7 @@ func TestGetAllProbableSpecies_BatModelAlwaysActive(t *testing.T) {
 		rawScores: []float32{0.9},
 	}
 
-	const primaryID = "BirdNET_V3"
+	const primaryID = RegistryIDBirdNETV24
 	bn := &BirdNET{
 		Settings: settings,
 	}
@@ -326,8 +322,6 @@ func TestGetAllProbableSpecies_BatModelAlwaysActive(t *testing.T) {
 
 	o := &Orchestrator{
 		Settings:    settings,
-		ModelInfo:   bn.ModelInfo, // mirror the primary, as NewOrchestrator does
-		primary:     bn,
 		rangeFilter: newTestRangeFilterService(rf),
 		models: map[string]*modelEntry{
 			primaryID:     {instance: bn},
@@ -366,7 +360,7 @@ func TestGetAllProbableSpecies_SortedByScoreDescending(t *testing.T) {
 		rawScores: []float32{0.02},
 	}
 
-	const primaryID = "BirdNET_V3"
+	const primaryID = RegistryIDBirdNETV24
 	bn := &BirdNET{
 		Settings: settings,
 	}
@@ -379,8 +373,6 @@ func TestGetAllProbableSpecies_SortedByScoreDescending(t *testing.T) {
 
 	o := &Orchestrator{
 		Settings:    settings,
-		ModelInfo:   bn.ModelInfo, // mirror the primary, as NewOrchestrator does
-		primary:     bn,
 		rangeFilter: newTestRangeFilterService(rf),
 		models: map[string]*modelEntry{
 			primaryID:     {instance: bn},
@@ -417,7 +409,7 @@ func TestGetAllProbableSpecies_BatModelDedupedByScientificName(t *testing.T) {
 		rawScores: []float32{0.9},
 	}
 
-	const primaryID = "BirdNET_V3"
+	const primaryID = RegistryIDBirdNETV24
 	bn := &BirdNET{
 		Settings: settings,
 	}
@@ -430,8 +422,6 @@ func TestGetAllProbableSpecies_BatModelDedupedByScientificName(t *testing.T) {
 
 	o := &Orchestrator{
 		Settings:    settings,
-		ModelInfo:   bn.ModelInfo, // mirror the primary, as NewOrchestrator does
-		primary:     bn,
 		rangeFilter: newTestRangeFilterService(rf),
 		models: map[string]*modelEntry{
 			primaryID:     {instance: bn},
@@ -469,7 +459,7 @@ func TestGetAllProbableSpecies_DeterministicDedupByModelID(t *testing.T) {
 		rawScores: []float32{0.9},
 	}
 
-	const primaryID = "BirdNET_V3"
+	const primaryID = RegistryIDBirdNETV24
 	bn := &BirdNET{
 		Settings: settings,
 	}
@@ -483,8 +473,6 @@ func TestGetAllProbableSpecies_DeterministicDedupByModelID(t *testing.T) {
 
 	o := &Orchestrator{
 		Settings:    settings,
-		ModelInfo:   bn.ModelInfo, // mirror the primary, as NewOrchestrator does
-		primary:     bn,
 		rangeFilter: newTestRangeFilterService(rf),
 		models: map[string]*modelEntry{
 			primaryID:   {instance: bn},

@@ -79,20 +79,23 @@ func newTestOrchestrator(t *testing.T, mocks ...*mockModelInstance) *Orchestrato
 	}
 }
 
-// TestPrimaryModelInfo covers the o.mu-guarded primary-identity accessors that
-// callers outside the package use instead of reading o.ModelInfo directly.
-func TestPrimaryModelInfo(t *testing.T) {
+// TestOrchestrator_DefaultTargets covers the neutral default-target accessor
+// that callers use to resolve the default model (v2.4 when loaded).
+func TestOrchestrator_DefaultTargets(t *testing.T) {
 	t.Parallel()
 
-	want := ModelInfo{ID: "BirdNET_V2.4", Name: "BirdNET v2.4", Spec: ModelSpec{SampleRate: 48000}}
-	o := &Orchestrator{ModelInfo: want}
-	assert.Equal(t, want, o.PrimaryModelInfo())
-	assert.Equal(t, want.ID, o.PrimaryModelID())
+	o := &Orchestrator{}
+	registerTestV24(o, &mockModelInstance{
+		id:   RegistryIDBirdNETV24,
+		spec: ModelSpec{SampleRate: 48000},
+	})
+	dt := o.DefaultTargets()
+	require.Len(t, dt, 1)
+	assert.Equal(t, RegistryIDBirdNETV24, dt[0].ID)
 
-	// Zero value when no primary is set.
+	// Zero value when no v2.4 model is registered.
 	empty := &Orchestrator{}
-	assert.Equal(t, ModelInfo{}, empty.PrimaryModelInfo())
-	assert.Empty(t, empty.PrimaryModelID())
+	assert.Nil(t, empty.DefaultTargets())
 }
 
 func TestNewOrchestrator_SyncsSharedState(t *testing.T) {
@@ -105,8 +108,11 @@ func TestNewOrchestrator_SyncsSharedState(t *testing.T) {
 	}
 	t.Cleanup(func() { o.Delete() })
 
-	// Verify shared state is synced from primary model
-	assert.Equal(t, o.primary.ModelInfo, o.ModelInfo, "ModelInfo should be synced")
+	// Verify shared state is synced from loaded v2.4 model
+	dt := o.DefaultTargets()
+	require.Len(t, dt, 1)
+	assert.Equal(t, RegistryIDBirdNETV24, dt[0].ID)
+	assert.True(t, o.IsModelLoaded(RegistryIDBirdNETV24), "v2.4 model should be loaded")
 	if assert.NotNil(t, o.taxonomy, "taxonomy service should be populated") {
 		assert.NotEmpty(t, o.taxonomy.taxonomyMap, "taxonomy map should be populated")
 		assert.NotEmpty(t, o.taxonomy.sciIndex, "scientific index should be populated")
@@ -124,8 +130,8 @@ func TestOrchestrator_PrimaryIsModelInstance(t *testing.T) {
 	}
 	t.Cleanup(func() { o.Delete() })
 
-	// Verify primary model satisfies ModelInstance
-	var mi ModelInstance = o.primary
+	// Verify the v2.4 entry is present and exposes the ModelInstance surface.
+	mi := o.instanceFor(RegistryIDBirdNETV24)
 	require.NotNil(t, mi)
 	assert.NotEmpty(t, mi.ModelID())
 	assert.NotEmpty(t, mi.ModelName())
@@ -136,6 +142,41 @@ func TestOrchestrator_PrimaryIsModelInstance(t *testing.T) {
 	spec := mi.Spec()
 	assert.Equal(t, 48000, spec.SampleRate)
 	assert.Equal(t, 3*time.Second, spec.ClipLength)
+}
+
+// TestOrchestrator_UnloadReloadV24_RoundTrip exercises the post-publish v2.4 load
+// path (loadBirdNETV24 with o.published == true, which clones the settings before
+// building so a concurrent reader never sees loadLabels mutate the live snapshot)
+// and verifies the unload/reload round-trip: while v2.4 is unloaded the anchor-gated
+// accessors go empty, and after reload the model serves again and the species index
+// is republished. Run under -race, this is the only coverage of the clone branch.
+func TestOrchestrator_UnloadReloadV24_RoundTrip(t *testing.T) {
+	// Not parallel: NewOrchestrator publishes into the global settings snapshot.
+	settings := conftest.GetTestSettings()
+	o, err := NewOrchestrator(settings)
+	if err != nil {
+		t.Skipf("Skipping: embedded model not available in test environment: %v", err)
+	}
+	t.Cleanup(func() { o.Delete() })
+
+	require.True(t, o.IsModelLoaded(RegistryIDBirdNETV24), "v2.4 loads at construction")
+	require.Len(t, o.DefaultTargets(), 1, "the loaded v2.4 is the default target")
+	labelsBefore := o.AllLabels()
+	require.NotEmpty(t, labelsBefore)
+
+	// Unload: the entry is removed, so every anchor-gated accessor reports empty.
+	require.NoError(t, o.UnloadModel(RegistryIDBirdNETV24))
+	assert.False(t, o.IsModelLoaded(RegistryIDBirdNETV24), "v2.4 is unloaded")
+	assert.Nil(t, o.DefaultTargets(), "no default target while v2.4 is unloaded")
+	assert.Empty(t, o.RangeFilterStatus().Classifiers, "no range-filter anchor while v2.4 is unloaded")
+
+	// Reload through the post-publish clone path (o.published is true here).
+	require.NoError(t, o.LoadModel(RegistryIDBirdNETV24))
+	require.True(t, o.IsModelLoaded(RegistryIDBirdNETV24), "v2.4 serves again after reload")
+	require.Len(t, o.DefaultTargets(), 1, "the default target is restored")
+	assert.Equal(t, RegistryIDBirdNETV24, o.DefaultTargets()[0].ID)
+	assert.Equal(t, labelsBefore, o.AllLabels(), "the species index is republished with the same labels")
+	assert.NotEmpty(t, o.RangeFilterStatus().Classifiers, "the range-filter anchor is present again")
 }
 
 func TestOrchestrator_ModelsMapPopulated(t *testing.T) {
@@ -149,9 +190,10 @@ func TestOrchestrator_ModelsMapPopulated(t *testing.T) {
 	t.Cleanup(func() { o.Delete() })
 
 	assert.Len(t, o.models, 1, "Should have exactly one model in Phase 3b")
-	entry, exists := o.models[o.ModelInfo.ID]
-	require.True(t, exists, "Primary model should be registered by ID")
-	assert.Equal(t, o.primary, entry.instance)
+	entry, exists := o.models[RegistryIDBirdNETV24]
+	require.True(t, exists, "v2.4 model should be registered by ID")
+	assert.NotNil(t, entry.instance)
+	assert.Equal(t, RegistryIDBirdNETV24, entry.instance.ModelID())
 }
 
 func TestOrchestrator_PredictModel_Success(t *testing.T) {
@@ -370,12 +412,18 @@ func TestOrchestrator_LoadAdditionalModels_UnknownModelSkipped(t *testing.T) {
 	settings := &conf.Settings{}
 	settings.Models.Enabled = []string{"birdnet", "unknown_model"}
 
+	// Pre-register a stand-in v2.4 so loadEnabledModels treats it as already loaded
+	// and skips the heavyweight real build; this test only asserts that an unknown
+	// model ID is skipped without error.
 	o := &Orchestrator{
 		Settings: settings,
-		models:   map[string]*modelEntry{},
+		models: map[string]*modelEntry{
+			RegistryIDBirdNETV24: {instance: &mockModelInstance{id: RegistryIDBirdNETV24}},
+		},
+		modelRSS: make(map[string]int64),
 	}
 
-	err := o.loadAdditionalModels(map[string]int{})
+	err := o.loadEnabledModels(map[string]int{})
 	assert.NoError(t, err)
 }
 
@@ -465,46 +513,42 @@ func TestComputeThreadAllocation(t *testing.T) {
 	)
 
 	tests := []struct {
-		name      string
-		primaryID string
-		threads   int
-		enabled   []string
-		want      map[string]int
+		name    string
+		threads int
+		enabled []string
+		want    map[string]int
 	}{
 		{
-			name:      "primary only",
-			primaryID: BirdNET_V2_4,
-			threads:   fixedThreads,
-			enabled:   nil,
-			want:      map[string]int{BirdNET_V2_4: fixedThreads},
+			// v2.4 is implicitly enabled and prepended, so it appears even with an
+			// empty enabled list.
+			name:    "v2.4 only",
+			threads: fixedThreads,
+			enabled: nil,
+			want:    map[string]int{BirdNET_V2_4: fixedThreads},
 		},
 		{
-			name:      "primary plus a distinct enabled model",
-			primaryID: BirdNET_V2_4,
-			threads:   fixedThreads,
-			enabled:   []string{conf.ModelIDPerchV2},
-			want:      map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
+			name:    "v2.4 plus a distinct enabled model",
+			threads: fixedThreads,
+			enabled: []string{conf.ModelIDPerchV2},
+			want:    map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
 		},
 		{
-			name:      "case variants collapse to one entry",
-			primaryID: BirdNET_V2_4,
-			threads:   fixedThreads,
-			enabled:   []string{conf.ModelIDPerchV2, upperPerchV2ModelID},
-			want:      map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
+			name:    "case variants collapse to one entry",
+			threads: fixedThreads,
+			enabled: []string{conf.ModelIDPerchV2, upperPerchV2ModelID},
+			want:    map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
 		},
 		{
-			name:      "an enabled model resolving to the primary is not double counted",
-			primaryID: BirdNET_V2_4,
-			threads:   fixedThreads,
-			enabled:   []string{conf.ModelIDBirdNET},
-			want:      map[string]int{BirdNET_V2_4: fixedThreads},
+			name:    "an enabled model resolving to v2.4 is not double counted",
+			threads: fixedThreads,
+			enabled: []string{conf.ModelIDBirdNET},
+			want:    map[string]int{BirdNET_V2_4: fixedThreads},
 		},
 		{
-			name:      "unknown model IDs are skipped",
-			primaryID: BirdNET_V2_4,
-			threads:   fixedThreads,
-			enabled:   []string{unknownModelID, conf.ModelIDPerchV2},
-			want:      map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
+			name:    "unknown model IDs are skipped",
+			threads: fixedThreads,
+			enabled: []string{unknownModelID, conf.ModelIDPerchV2},
+			want:    map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
 		},
 	}
 
@@ -516,7 +560,7 @@ func TestComputeThreadAllocation(t *testing.T) {
 			settings.BirdNET.Threads = tt.threads
 
 			o := &Orchestrator{}
-			got := o.computeThreadAllocation(settings, tt.primaryID)
+			got := o.computeThreadAllocation(settings)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -532,7 +576,7 @@ func TestComputeThreadAllocation_NonPositiveThreadsUsesNumCPU(t *testing.T) {
 	settings.BirdNET.Threads = 0
 
 	o := &Orchestrator{}
-	got := o.computeThreadAllocation(settings, BirdNET_V2_4)
+	got := o.computeThreadAllocation(settings)
 
 	want := runtime.NumCPU()
 	require.Len(t, got, 2)
@@ -628,10 +672,10 @@ func TestUnionLabels_SkipsEmptyEntries(t *testing.T) {
 }
 
 // TestModelInfos_LivePrimaryInfo verifies that ModelInfos returns the live
-// o.ModelInfo for the primary model entry rather than the static registry
-// template. This matters for the arm64 ONNX default, where o.ModelInfo
-// carries Backend=ONNX and Quantization=INT8 while the registry template has
-// Backend=TFLite and Quantization=FP32.
+// ModelInfo (from the instance's liveModelInfoProvider) for the v2.4 entry rather
+// than the static registry template. This matters for the arm64 ONNX default, where
+// the live info carries Backend=ONNX and Quantization=INT8 while the registry
+// template has Backend=TFLite and Quantization=FP32.
 // liveInfoMock is a mock instance that also reports a live ModelInfo, so it exercises
 // the liveModelInfoProvider capability branch in ModelInfos (the branch that reports
 // the actually-loaded Backend/Quantization/CustomPath instead of the static registry
@@ -677,8 +721,8 @@ func TestModelInfos_LivePrimaryInfo(t *testing.T) {
 // TestModelInfos_LiveInfoCapability pins the capability dispatch generically: a
 // liveModelInfoProvider instance reports its live identity, while a plain instance
 // (no capability) falls through to the static registry template. This is the seam
-// that lets Phase 3 drop the o.primary special-case without changing what ModelInfos
-// reports for the v2.4 slot.
+// that lets Phase 3 de-privilege the v2.4 slot without changing what ModelInfos
+// reports for it.
 func TestModelInfos_LiveInfoCapability(t *testing.T) {
 	t.Parallel()
 
@@ -713,8 +757,8 @@ func TestModelInfos_LiveInfoCapability(t *testing.T) {
 }
 
 // TestModelInfos_ReportsLiveSpeciesCount verifies ModelInfos sources NumSpecies
-// from the loaded instance, not the static registry (secondary) or o.ModelInfo
-// (primary) template. A user can load a sliced or custom model whose label file
+// from the loaded instance, not the static registry template. A user can load a
+// sliced or custom model whose label file
 // has a different class count than the stock catalog entry (e.g. a regional
 // Perch v2 slice with 383 species vs the stock 14,795); the AI Models panel must
 // report the actually-loaded count, not the template number.
@@ -741,15 +785,11 @@ func TestModelInfos_ReportsLiveSpeciesCount(t *testing.T) {
 			"secondary model must report the live label count, not the registry's stock 14795")
 	})
 
-	t.Run("primary model overrides stale template count", func(t *testing.T) {
+	t.Run("v2.4 model reports live label count", func(t *testing.T) {
 		t.Parallel()
 		const customPrimarySpecies = 500
-		const staleTemplateSpecies = 9999
-		const id = "BirdNET_V2.4"
-		// o.ModelInfo carries an arbitrary stale template count; the loaded instance
-		// reports a custom label file with 500 species that must override it.
+		const id = RegistryIDBirdNETV24
 		o := &Orchestrator{
-			ModelInfo: ModelInfo{ID: id, Name: "BirdNET v2.4", NumSpecies: staleTemplateSpecies},
 			models: map[string]*modelEntry{
 				id: {instance: &mockModelInstance{id: id, numSpecies: customPrimarySpecies}},
 			},
@@ -760,7 +800,7 @@ func TestModelInfos_ReportsLiveSpeciesCount(t *testing.T) {
 		require.Len(t, infos, 1)
 		assert.Equal(t, id, infos[0].ID)
 		assert.Equal(t, customPrimarySpecies, infos[0].NumSpecies,
-			"primary model must report the live label count, not o.ModelInfo's template count")
+			"v2.4 model must report the live label count")
 	})
 
 	t.Run("unregistered secondary model uses live count", func(t *testing.T) {
@@ -786,8 +826,9 @@ func TestModelInfos_ReportsLiveSpeciesCount(t *testing.T) {
 // union of primary and secondary model labels, including scientific-only bat labels.
 // This is the label source used by the reverse name-search maps, so a secondary
 // model label must appear for localized search to find it.
-// When o.primary is nil (as in unit tests that avoid real model files), AllLabels
-// iterates o.models only; unionLabels deduplicates, so the result is still correct.
+// When no v2.4 anchor instance is present (as in unit tests that avoid real model
+// files), AllLabels iterates o.models only; unionLabels deduplicates, so the result
+// is still correct.
 func TestAllLabels_IncludesSecondaryModelLabels(t *testing.T) {
 	t.Parallel()
 
@@ -800,8 +841,9 @@ func TestAllLabels_IncludesSecondaryModelLabels(t *testing.T) {
 		labels: []string{"Barbastella barbastellus", "Myotis daubentonii"},
 	}
 
-	// newTestOrchestrator builds o.models but leaves o.primary nil, which is fine:
-	// AllLabels handles nil primary by iterating all entries in o.models.
+	// newTestOrchestrator registers the v2.4 entry as a mock (not a *BirdNET), so the
+	// range-filter anchor resolves to nil and AllLabels covers it via the entry
+	// iteration; unionLabels dedupes.
 	o := newTestOrchestrator(t, bird, bat)
 
 	got := o.AllLabels()
@@ -987,7 +1029,7 @@ func TestOrchestrator_LoadModel_FailureIncrementsLoadFailures(t *testing.T) {
 // TestOrchestrator_LoadAdditionalModels_RecordsLoadFailure verifies that a
 // startup (optional-model) loader failure is recorded in LoadFailures, so a later
 // "model not loaded" diagnosis can explain why the model is missing instead of
-// reporting a bare unknown-model error. Previously loadAdditionalModels only
+// reporting a bare unknown-model error. Previously loadEnabledModels only
 // logged the failure, leaving LoadFailures empty for a startup-failed model.
 func TestOrchestrator_LoadAdditionalModels_RecordsLoadFailure(t *testing.T) {
 	// Not parallel: mutates package-level ModelRegistry/modelLoaders and the
@@ -1007,8 +1049,12 @@ func TestOrchestrator_LoadAdditionalModels_RecordsLoadFailure(t *testing.T) {
 	conftest.SetTestSettings(settings)
 	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
-	o := &Orchestrator{Settings: settings, models: map[string]*modelEntry{}, modelRSS: make(map[string]int64)}
-	require.NoError(t, o.loadAdditionalModels(map[string]int{}))
+	// Stand-in v2.4 so loadEnabledModels skips the real build and only exercises the
+	// injected additional-model loader.
+	o := &Orchestrator{Settings: settings, models: map[string]*modelEntry{
+		RegistryIDBirdNETV24: {instance: &mockModelInstance{id: RegistryIDBirdNETV24}},
+	}, modelRSS: make(map[string]int64)}
+	require.NoError(t, o.loadEnabledModels(map[string]int{}))
 
 	assert.Equal(t, int64(1), o.LoadFailures()[testRegistryIDNotLoaded],
 		"a startup loader failure must be recorded so a later not-loaded diagnosis can explain it")
@@ -1043,12 +1089,16 @@ func TestOrchestrator_SuccessfulReload_ClearsStaleFailureError(t *testing.T) {
 	conftest.SetTestSettings(settings)
 	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
-	o := &Orchestrator{Settings: settings, models: map[string]*modelEntry{}, modelRSS: make(map[string]int64)}
+	// Stand-in v2.4 so loadEnabledModels skips the real build and only exercises the
+	// injected recovering secondary loader.
+	o := &Orchestrator{Settings: settings, models: map[string]*modelEntry{
+		RegistryIDBirdNETV24: {instance: &mockModelInstance{id: RegistryIDBirdNETV24}},
+	}, modelRSS: make(map[string]int64)}
 
 	// 1. First load attempt fails: records a cumulative failure and a stored error.
 	loadErr := fmt.Errorf("transient startup failure")
 	modelLoaders[regID] = func(_ *Orchestrator, _ int) error { return loadErr }
-	require.NoError(t, o.loadAdditionalModels(map[string]int{}))
+	require.NoError(t, o.loadEnabledModels(map[string]int{}))
 	require.Equal(t, int64(1), o.LoadFailures()[regID])
 
 	// 2. Second attempt succeeds: the loader registers the model, which must clear
@@ -1057,7 +1107,7 @@ func TestOrchestrator_SuccessfulReload_ClearsStaleFailureError(t *testing.T) {
 		orc.models[regID] = &modelEntry{instance: &mockModelInstance{id: regID}}
 		return nil
 	}
-	require.NoError(t, o.loadAdditionalModels(map[string]int{}))
+	require.NoError(t, o.loadEnabledModels(map[string]int{}))
 	require.True(t, o.IsModelLoaded(regID))
 	assert.Equal(t, int64(1), o.LoadFailures()[regID],
 		"the cumulative failure count survives a successful load")

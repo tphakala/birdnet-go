@@ -5,6 +5,7 @@ import (
 	"maps"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -518,6 +519,61 @@ func (s *Settings) MigrateModelIDAliases() bool {
 	}
 
 	return changed
+}
+
+// Legacy birdnet.version field values. The orchestrator no longer selects the
+// BirdNET family from birdnet.version (model de-privilege epic, Phase 3): the family
+// is loaded like any other model. NewBirdNET still branches on the field for its
+// Tier-2 identity fallback (removed in a later phase), which is why the migration
+// clears it, so that fallback is not taken. These values are recognized only so the
+// migration can retire the field cleanly.
+const (
+	legacyBirdNETVersionV24 = "2.4"
+	legacyBirdNETVersionV30 = "3.0"
+)
+
+// MigrateBirdNETVersion retires the birdnet.version field. It used to select the
+// BirdNET model family; v2.4 is now loaded like any other model and the orchestrator
+// no longer selects the family from it. The migration clears it (which also disables
+// NewBirdNET's remaining Tier-2 fallback on the field) and, for the "3.0" value,
+// enables the v3.0 model
+// as a gallery-managed model so the config keeps working. A "3.0" config that also
+// carried a custom birdnet.modelpath/labelpath (a manually obtained v3.0 model run
+// as the primary) has those cleared here: the primary slot is now the embedded v2.4
+// baseline, and leaving a v3.0 model file on it would mispair the v2.4 identity
+// (48 kHz / 3 s) with a v3.0 model, so the paths are dropped and the v3.0 model
+// serves through the enabled gallery entry instead. An unknown value (which
+// previously aborted startup) is dropped with a warning. Returns whether anything
+// changed.
+func (s *Settings) MigrateBirdNETVersion() bool {
+	version := s.BirdNET.Version
+	if version == "" {
+		return false
+	}
+
+	switch version {
+	case legacyBirdNETVersionV24:
+		// v2.4 is the built-in model and is always loaded; only the dead field
+		// needs clearing.
+	case legacyBirdNETVersionV30:
+		if !slices.Contains(s.Models.Enabled, ModelIDBirdNETV3) {
+			s.Models.Enabled = append(s.Models.Enabled, ModelIDBirdNETV3)
+		}
+		// Drop any custom v3.0 primary paths so they are not mispaired with the
+		// embedded v2.4 baseline that now occupies the primary slot.
+		clearedCustomPath := s.BirdNET.ModelPath != "" || s.BirdNET.LabelPath != ""
+		s.BirdNET.ModelPath = ""
+		s.BirdNET.LabelPath = ""
+		GetLogger().Info("Migrated legacy birdnet.version=3.0 by enabling the v3.0 model",
+			logger.String("model", ModelIDBirdNETV3),
+			logger.Bool("cleared_custom_primary_path", clearedCustomPath))
+	default:
+		GetLogger().Warn("Dropping unknown birdnet.version during migration; the field is no longer used",
+			logger.String("version", version))
+	}
+
+	s.BirdNET.Version = ""
+	return true
 }
 
 // ValidateModelConfig checks model-related configuration for errors and
