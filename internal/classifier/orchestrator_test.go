@@ -370,12 +370,18 @@ func TestOrchestrator_LoadAdditionalModels_UnknownModelSkipped(t *testing.T) {
 	settings := &conf.Settings{}
 	settings.Models.Enabled = []string{"birdnet", "unknown_model"}
 
+	// Pre-register a stand-in v2.4 so loadEnabledModels treats it as already loaded
+	// and skips the heavyweight real build; this test only asserts that an unknown
+	// model ID is skipped without error.
 	o := &Orchestrator{
 		Settings: settings,
-		models:   map[string]*modelEntry{},
+		models: map[string]*modelEntry{
+			RegistryIDBirdNETV24: {instance: &mockModelInstance{id: RegistryIDBirdNETV24}},
+		},
+		modelRSS: make(map[string]int64),
 	}
 
-	err := o.loadAdditionalModels(map[string]int{})
+	err := o.loadEnabledModels(map[string]int{})
 	assert.NoError(t, err)
 }
 
@@ -465,46 +471,42 @@ func TestComputeThreadAllocation(t *testing.T) {
 	)
 
 	tests := []struct {
-		name      string
-		primaryID string
-		threads   int
-		enabled   []string
-		want      map[string]int
+		name    string
+		threads int
+		enabled []string
+		want    map[string]int
 	}{
 		{
-			name:      "primary only",
-			primaryID: BirdNET_V2_4,
-			threads:   fixedThreads,
-			enabled:   nil,
-			want:      map[string]int{BirdNET_V2_4: fixedThreads},
+			// v2.4 is implicitly enabled and prepended, so it appears even with an
+			// empty enabled list.
+			name:    "v2.4 only",
+			threads: fixedThreads,
+			enabled: nil,
+			want:    map[string]int{BirdNET_V2_4: fixedThreads},
 		},
 		{
-			name:      "primary plus a distinct enabled model",
-			primaryID: BirdNET_V2_4,
-			threads:   fixedThreads,
-			enabled:   []string{conf.ModelIDPerchV2},
-			want:      map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
+			name:    "v2.4 plus a distinct enabled model",
+			threads: fixedThreads,
+			enabled: []string{conf.ModelIDPerchV2},
+			want:    map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
 		},
 		{
-			name:      "case variants collapse to one entry",
-			primaryID: BirdNET_V2_4,
-			threads:   fixedThreads,
-			enabled:   []string{conf.ModelIDPerchV2, upperPerchV2ModelID},
-			want:      map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
+			name:    "case variants collapse to one entry",
+			threads: fixedThreads,
+			enabled: []string{conf.ModelIDPerchV2, upperPerchV2ModelID},
+			want:    map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
 		},
 		{
-			name:      "an enabled model resolving to the primary is not double counted",
-			primaryID: BirdNET_V2_4,
-			threads:   fixedThreads,
-			enabled:   []string{conf.ModelIDBirdNET},
-			want:      map[string]int{BirdNET_V2_4: fixedThreads},
+			name:    "an enabled model resolving to v2.4 is not double counted",
+			threads: fixedThreads,
+			enabled: []string{conf.ModelIDBirdNET},
+			want:    map[string]int{BirdNET_V2_4: fixedThreads},
 		},
 		{
-			name:      "unknown model IDs are skipped",
-			primaryID: BirdNET_V2_4,
-			threads:   fixedThreads,
-			enabled:   []string{unknownModelID, conf.ModelIDPerchV2},
-			want:      map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
+			name:    "unknown model IDs are skipped",
+			threads: fixedThreads,
+			enabled: []string{unknownModelID, conf.ModelIDPerchV2},
+			want:    map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
 		},
 	}
 
@@ -516,7 +518,7 @@ func TestComputeThreadAllocation(t *testing.T) {
 			settings.BirdNET.Threads = tt.threads
 
 			o := &Orchestrator{}
-			got := o.computeThreadAllocation(settings, tt.primaryID)
+			got := o.computeThreadAllocation(settings)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -532,7 +534,7 @@ func TestComputeThreadAllocation_NonPositiveThreadsUsesNumCPU(t *testing.T) {
 	settings.BirdNET.Threads = 0
 
 	o := &Orchestrator{}
-	got := o.computeThreadAllocation(settings, BirdNET_V2_4)
+	got := o.computeThreadAllocation(settings)
 
 	want := runtime.NumCPU()
 	require.Len(t, got, 2)
@@ -987,7 +989,7 @@ func TestOrchestrator_LoadModel_FailureIncrementsLoadFailures(t *testing.T) {
 // TestOrchestrator_LoadAdditionalModels_RecordsLoadFailure verifies that a
 // startup (optional-model) loader failure is recorded in LoadFailures, so a later
 // "model not loaded" diagnosis can explain why the model is missing instead of
-// reporting a bare unknown-model error. Previously loadAdditionalModels only
+// reporting a bare unknown-model error. Previously loadEnabledModels only
 // logged the failure, leaving LoadFailures empty for a startup-failed model.
 func TestOrchestrator_LoadAdditionalModels_RecordsLoadFailure(t *testing.T) {
 	// Not parallel: mutates package-level ModelRegistry/modelLoaders and the
@@ -1007,8 +1009,12 @@ func TestOrchestrator_LoadAdditionalModels_RecordsLoadFailure(t *testing.T) {
 	conftest.SetTestSettings(settings)
 	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
-	o := &Orchestrator{Settings: settings, models: map[string]*modelEntry{}, modelRSS: make(map[string]int64)}
-	require.NoError(t, o.loadAdditionalModels(map[string]int{}))
+	// Stand-in v2.4 so loadEnabledModels skips the real build and only exercises the
+	// injected additional-model loader.
+	o := &Orchestrator{Settings: settings, models: map[string]*modelEntry{
+		RegistryIDBirdNETV24: {instance: &mockModelInstance{id: RegistryIDBirdNETV24}},
+	}, modelRSS: make(map[string]int64)}
+	require.NoError(t, o.loadEnabledModels(map[string]int{}))
 
 	assert.Equal(t, int64(1), o.LoadFailures()[testRegistryIDNotLoaded],
 		"a startup loader failure must be recorded so a later not-loaded diagnosis can explain it")
@@ -1043,12 +1049,16 @@ func TestOrchestrator_SuccessfulReload_ClearsStaleFailureError(t *testing.T) {
 	conftest.SetTestSettings(settings)
 	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 
-	o := &Orchestrator{Settings: settings, models: map[string]*modelEntry{}, modelRSS: make(map[string]int64)}
+	// Stand-in v2.4 so loadEnabledModels skips the real build and only exercises the
+	// injected recovering secondary loader.
+	o := &Orchestrator{Settings: settings, models: map[string]*modelEntry{
+		RegistryIDBirdNETV24: {instance: &mockModelInstance{id: RegistryIDBirdNETV24}},
+	}, modelRSS: make(map[string]int64)}
 
 	// 1. First load attempt fails: records a cumulative failure and a stored error.
 	loadErr := fmt.Errorf("transient startup failure")
 	modelLoaders[regID] = func(_ *Orchestrator, _ int) error { return loadErr }
-	require.NoError(t, o.loadAdditionalModels(map[string]int{}))
+	require.NoError(t, o.loadEnabledModels(map[string]int{}))
 	require.Equal(t, int64(1), o.LoadFailures()[regID])
 
 	// 2. Second attempt succeeds: the loader registers the model, which must clear
@@ -1057,7 +1067,7 @@ func TestOrchestrator_SuccessfulReload_ClearsStaleFailureError(t *testing.T) {
 		orc.models[regID] = &modelEntry{instance: &mockModelInstance{id: regID}}
 		return nil
 	}
-	require.NoError(t, o.loadAdditionalModels(map[string]int{}))
+	require.NoError(t, o.loadEnabledModels(map[string]int{}))
 	require.True(t, o.IsModelLoaded(regID))
 	assert.Equal(t, int64(1), o.LoadFailures()[regID],
 		"the cumulative failure count survives a successful load")

@@ -118,7 +118,7 @@ func buildPhase3Snapshot(t *testing.T, o *Orchestrator) phase3Snapshot {
 		ModelInfos:         infos,
 		DefaultTargetIDs:   defaultTargetIDs,
 		EngineDims:         engineDims,
-		ThreadAllocation:   o.computeThreadAllocation(o.CurrentSettings(), primaryInfo.ID),
+		ThreadAllocation:   o.computeThreadAllocation(o.CurrentSettings()),
 		AllLabelsCount:     len(labels),
 		AllLabelsHead:      head,
 		AllLabelsSHA256:    sha256Strings(labels),

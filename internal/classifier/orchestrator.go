@@ -85,6 +85,14 @@ type Orchestrator struct {
 	settingsAtomic atomic.Pointer[conf.Settings]
 	ModelInfo      ModelInfo
 
+	// published becomes true once NewOrchestrator is about to hand the orchestrator
+	// to its caller. loadBirdNETV24 reads it to decide whether the v2.4 build may
+	// write BirdNET.Labels into the live published settings object (startup load:
+	// false, the historical behavior) or must first clone it (a post-publish load:
+	// true), so a concurrent reader never observes loadLabels mutating the shared
+	// snapshot. Reloads always clone regardless.
+	published atomic.Bool
+
 	// taxonomy is the orchestrator-owned eBird taxonomy service, built once in
 	// NewOrchestrator and read-only afterwards. It replaces the taxonomy maps the
 	// primary model used to own, so a species-code lookup no longer depends on which
@@ -232,74 +240,36 @@ func (o *Orchestrator) updateSettings(s *conf.Settings) {
 // and loads any additional models from configuration.
 // This is the primary constructor - callers should use this instead of NewBirdNET.
 func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
-	// The primary model identity is resolved inside NewBirdNET rather than
-	// pre-seeded here. This used to build a *ModelInfo from settings.BirdNET.Version
-	// and settings.BirdNET.ModelPath before o existed, which is strictly earlier
-	// than o.modelsDir is known, so it could only ever see the RAW configured path
-	// and would defeat the stale-path recovery below. NewBirdNET's Tier 2 computes
-	// the identical ModelInfo from the same two settings (and returns the same error
-	// for an unknown version, which this block silently left to Tier 2 anyway). The
-	// two agree on everything except the path, and that difference is the entire
-	// point: Tier 2 sees the RESOLVED path, which is what this block could never
-	// do. Passing nil therefore loses nothing and lets the resolution happen once,
-	// in the one place that has it.
-
-	// Capture host RSS before the primary model allocates its arena. We need o
-	// to exist first (captureRSSBefore records the runtime baseline on first call),
-	// so build o with an empty models map and then insert the primary below.
+	// Build o with an empty models map; the models load below through the same
+	// modelLoaders path the secondaries use. The primary's identity is resolved
+	// inside NewBirdNET (Tier 2/3/4) rather than pre-seeded here, so it sees the
+	// RESOLVED model path and the stale-path recovery can take effect.
 	o := &Orchestrator{
 		Settings: settings,
 		models:   map[string]*modelEntry{},
 		modelRSS: make(map[string]int64),
 	}
+	o.settingsAtomic.Store(settings)
 
-	// Resolve the gallery models directory up front, before loadAdditionalModels
-	// runs below. ModelManager also sets it (via SetModelsDir) but is constructed
-	// only after this constructor returns, so without this the secondary loaders
-	// see an empty o.modelsDir on their very first attempt and resolveInstalledPaths
-	// cannot find an installed model. That made the fallback for a missing
-	// configured path structurally impossible at startup (GitHub #4201, #4204).
-	// Assigned directly rather than through SetModelsDir. SetModelsDir would run
-	// registerTaxonomyResolver, which appends a taxonomy resolver to
-	// o.nameResolvers, but the constructor overwrites that slice wholesale a few
-	// lines below (o.nameResolvers = []NameResolver{ofResolver, resolver}), so the
-	// registration would just be discarded. Its primary.SetModelsDir propagation is
-	// also skipped here, since o.primary is not set yet. No lock is needed for this
-	// write: o is not published until the constructor returns, so no other goroutine
-	// can observe it. On the analysis startup path ModelManager later calls
-	// SetModelsDir, which redoes both the resolver wiring and the primary
-	// propagation; cmd/benchmark and cmd/rangefilter construct an Orchestrator and
-	// never call SetModelsDir.
+	// Resolve the gallery models directory up front, before the loaders run below.
+	// ModelManager also sets it (via SetModelsDir) but is constructed only after
+	// this constructor returns, so without this the loaders see an empty
+	// o.modelsDir on their first attempt and resolveInstalledPaths cannot find an
+	// installed model (GitHub #4201, #4204). Assigned directly rather than through
+	// SetModelsDir, whose resolver wiring the constructor overwrites below anyway.
 	if modelsDir, ok := settings.ResolveModelsDir(); ok {
 		o.modelsDir = modelsDir
 	}
 
-	rssBefore := o.captureRSSBefore()
+	// Fix the process-wide RSS baseline before the first model allocates its arena.
+	// The loaders capture their own per-model "before" sample; this call only pins
+	// the runtime baseline (Go runtime + app) on its first invocation so the
+	// first-loaded model does not visually absorb the shared runtime cost. The
+	// returned value is intentionally discarded.
+	o.captureRSSBefore()
 
-	// Install the stale-path recovery ONLY when the primary slot really is the
-	// BirdNET v2.4 family.
-	//
-	// The slot is family-selectable through birdnet.version, but both the recovery
-	// target (resolveInstalledPaths) and the queued correction label are
-	// permanentRegistryID. A v3.0 primary with a stale path would therefore be
-	// "recovered" onto a v2.4 model file: a 32 kHz/5 s identity pinned to a
-	// 48 kHz/3 s model with a different label set, which fails late with a
-	// label-count mismatch or, were the counts ever to agree, would attribute every
-	// detection to the wrong model. That is exactly the cross-variant pairing
-	// hazard resolveFamilyPaths prevents for the secondaries.
-	//
-	// A nil resolver is the pre-recovery behaviour: the configured path is used
-	// verbatim, so any other family is left exactly as it was.
-	//
-	// o.resolvePrimaryModelPath is safe to hand over now. It reads o.modelsDir
-	// (assigned above), o.ortAvailable (nil in production) and o.currentSettings(),
-	// which falls back to the o.Settings the struct literal above already set. All
-	// three are populated before this point. NewBirdNET calls it once at
-	// construction and keeps it for its hot-reload path, so both resolve the same
-	// way. Passing the bound method rather than a precomputed value is what keeps
-	// the reload from re-deriving the identity off the raw configured string.
-	// Build the orchestrator-owned taxonomy service before the primary model. It
-	// loads the same embedded eBird taxonomy the primary used to load, via the same
+	// Build the orchestrator-owned taxonomy service before the models. It loads the
+	// same embedded eBird taxonomy the primary used to load, via the same
 	// LoadTaxonomyData path, so a load failure aborts construction exactly as before.
 	taxonomy, err := newTaxonomyService("")
 	if err != nil {
@@ -307,57 +277,48 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	}
 	o.taxonomy = taxonomy
 
-	bn, err := NewBirdNET(settings, nil, o.primaryPathResolverFor(settings))
-	if err != nil {
+	// Seed the name-resolution chain and the single species-name index with the
+	// OpenFauna resolver before any model loads. OpenFauna is chain[0] so it
+	// overrides label/taxonomy names everywhere ResolveName is consulted. The v2.4
+	// label resolver is appended as chain[1] after the models load, from the v2.4
+	// entry's labels (a construction-time snapshot, never refreshed on reload),
+	// preserving the previous wiring exactly.
+	ofResolver := openfauna.NewResolver()
+	o.openfauna = ofResolver
+	o.nameResolvers = []NameResolver{ofResolver}
+	o.names = speciesindex.New(ofResolver)
+
+	// Build the orchestrator-owned range-filter service with EMPTY state; its
+	// backend is built against the v2.4 anchor once the model is loaded, below.
+	o.rangeFilter = newRangeFilterService(o.rangeFilterDebug)
+
+	// Pre-compute the per-model thread allocation so each loader receives its share.
+	threadAlloc := o.computeThreadAllocation(settings)
+
+	// Load BirdNET v2.4 (prepended, so first) and every configured model through
+	// modelLoaders. A v2.4 failure is fatal (decision H): loadEnabledModels returns
+	// only that error, secondary failures stay warnings and recorded load failures.
+	if err := o.loadEnabledModels(threadAlloc); err != nil {
+		// Clean up all models registered so far (primary + any partially loaded).
+		o.Delete()
 		return nil, err
 	}
 
-	// Queue the primary's configuration repair, if its configured path was
-	// recovered. Queued here rather than inside NewBirdNET because the queue lives
-	// on the orchestrator, and applied by the existing drain at the end of
-	// loadAdditionalModels below, which runs on every path where NewBirdNET
-	// succeeded. Nothing is queued when the path resolved cleanly.
-	//
-	// No lock is taken: o is not published until this constructor returns, so no
-	// other goroutine can observe the queue. deferPathCorrection documents an
-	// o.mu-held precondition for the loader path; here there is nothing to race.
-	// Read the resolution NewBirdNET already performed rather than resolving a
-	// second time: a second call would repeat the stat work and, more visibly,
-	// duplicate every recovery log line for a single start.
-	//
-	// Routed through queuePathCorrection rather than calling deferPathCorrection
-	// directly, so the primary obeys the same queueing rule as the three
-	// secondaries. That rule has already been edited once (it now gates on
-	// substituted rather than repairable); a hand-rolled copy here is the one place
-	// the next such edit would silently miss.
-	o.queuePathCorrection(permanentRegistryID, bn.primaryPath)
+	// TEMPORARY (Phase 3 PR 2, this commit): mirror the loaded v2.4 entry into the
+	// legacy primary slot so the not-yet-migrated o.primary / o.ModelInfo readers
+	// and the invariance snapshot keep observing the same values. The next PR-2
+	// commit moves those readers to the range-filter anchor and deletes this block.
+	if entry, ok := o.models[RegistryIDBirdNETV24]; ok {
+		if bn, isBirdNET := entry.instance.(*BirdNET); isBirdNET {
+			o.primary = bn
+			o.ModelInfo = bn.ModelInfo
+			o.nameResolvers = []NameResolver{ofResolver, NewBirdNETLabelResolver(bn.Labels())}
+		}
+	}
 
-	resolver := NewBirdNETLabelResolver(bn.Labels())
-	ofResolver := openfauna.NewResolver()
-
-	// Populate the remaining fields now that bn is available.
-	o.ModelInfo = bn.ModelInfo
-	// OpenFauna first so it overrides label/taxonomy names everywhere
-	// ResolveName is consulted (display + inference).
-	o.nameResolvers = []NameResolver{ofResolver, resolver}
-	o.openfauna = ofResolver
-	// The orchestrator owns the single species-name index and is its only writer.
-	// Seed it with the orchestrator's OpenFauna resolver (the same resolver the old
-	// startup wiring handed the datastore and facade); rebuildSpeciesIndex below
-	// (and every topology trigger) republishes it from the union of loaded labels.
-	o.names = speciesindex.New(ofResolver)
-	o.models[bn.ModelInfo.ID] = &modelEntry{instance: bn}
-	o.primary = bn
-	o.settingsAtomic.Store(settings)
-
-	// Build the orchestrator-owned range-filter service and its backend (model
-	// de-privilege epic, Phase 2b). This replaces the initializeMetaModel call that
-	// used to run inside NewBirdNET, so it uses the same inputs: the primary's
-	// registry ID and the models directory as it stands now (empty until the caller
-	// invokes SetModelsDir, exactly as bn.modelsDir was empty during the old
-	// construction-time build). A build failure is non-fatal: the process starts
-	// without species filtering and the user can fix it via Settings > Species.
-	o.rangeFilter = newRangeFilterService(o.rangeFilterDebug)
+	// Build the range-filter backend against the primary/anchor view now that v2.4
+	// is loaded. A build failure is non-fatal: the process starts without species
+	// filtering and the user can fix it via Settings > Species.
 	if err := o.rangeFilter.reload(settings, o.primaryClassifierView()); err != nil {
 		GetLogger().Warn("Range filter initialization failed, starting without species filtering (fix via Settings > Species)",
 			logger.Error(err),
@@ -368,28 +329,8 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// Log any labels missing from the taxonomy at debug level, reproducing the
 	// diagnostics BirdNET used to emit from loadLabels now that the taxonomy is
 	// orchestrator-owned.
-	o.logMissingTaxonomyCodes(bn, bn.Labels())
-
-	// Each OV-capable secondary records the startup triplet on its own modelEntry
-	// when its loader registers it below (see loadPerch), so the first
-	// reload_birdnet for an unrelated setting (e.g. a locale change) sees a
-	// matching triplet and does not spuriously rebuild it. No orchestrator-wide
-	// gate to seed here anymore.
-
-	// Warm up the primary model and record RSS delta. This calls instance.Predict
-	// directly (single-threaded construction; no lock is held here).
-	o.warmupAndRecordRSS(bn.ModelInfo.ID, rssBefore, bn)
-
-	// Pre-compute thread allocation so model constructors receive their share.
-	// BirdNET already uses settings.BirdNET.Threads at construction; additional
-	// models get their allocated count passed to their constructor.
-	threadAlloc := o.computeThreadAllocation(settings, bn.ModelInfo.ID)
-
-	// Load additional models from configuration
-	if err := o.loadAdditionalModels(threadAlloc); err != nil {
-		// Clean up all models registered so far (primary + any partially loaded)
-		o.Delete()
-		return nil, err
+	if o.primary != nil {
+		o.logMissingTaxonomyCodes(o.primary, o.primary.Labels())
 	}
 
 	// Publish the initial species-name snapshot from the union of every loaded
@@ -397,6 +338,11 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// so cmd/benchmark and cmd/rangefilter, which build an orchestrator and never
 	// call BuildRangeFilter, still get a populated index.
 	o.rebuildSpeciesIndex()
+
+	// Mark the orchestrator published: a subsequent runtime LoadModel of v2.4 now
+	// clones settings before building (loadBirdNETV24) instead of mutating the live
+	// published snapshot under a concurrent reader.
+	o.published.Store(true)
 
 	return o, nil
 }
@@ -1863,7 +1809,6 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 			Category(errors.CategorySystem).
 			Build()
 	}
-	primaryID := o.ModelInfo.ID
 	refs := make([]entryRef, 0, len(openvinoCapableSecondaryBuilders))
 	for id, entry := range o.models {
 		if _, ok := openvinoCapableSecondaryBuilders[id]; ok {
@@ -1881,8 +1826,8 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 	}
 
 	// Full per-model thread budget (inference is serialized by inferenceMu),
-	// matching loadAdditionalModels.
-	threadAlloc := o.computeThreadAllocation(settings, primaryID)
+	// matching loadEnabledModels.
+	threadAlloc := o.computeThreadAllocation(settings)
 
 	// The builders below run outside o.mu. They construct from the settings
 	// snapshot and may read o.modelsDir (via resolveInstalledPaths and
@@ -2111,9 +2056,10 @@ func (o *Orchestrator) IsModelLoaded(registryID string) bool {
 // this map are recognized but not yet implemented; callers log a warning
 // and skip. Adding a new loader only requires one entry here.
 var modelLoaders = map[string]func(o *Orchestrator, threads int) error{
-	RegistryIDBirdNETV3: (*Orchestrator).loadBirdNETV3,
-	RegistryIDPerchV2:   (*Orchestrator).loadPerch,
-	RegistryIDBat:       (*Orchestrator).loadBat,
+	RegistryIDBirdNETV24: (*Orchestrator).loadBirdNETV24,
+	RegistryIDBirdNETV3:  (*Orchestrator).loadBirdNETV3,
+	RegistryIDPerchV2:    (*Orchestrator).loadPerch,
+	RegistryIDBat:        (*Orchestrator).loadBat,
 }
 
 // secondaryModelBuilder constructs (but does not register) a secondary model
@@ -2191,7 +2137,7 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 	// lock. Registered BEFORE the warm-up drain so that, defers being LIFO, it runs
 	// AFTER the warm-ups. The config write must not land inside the window the
 	// per-model RSS delta measures (see runPendingWarmups), matching the drain
-	// order in loadAdditionalModels (warm-ups first, config write after).
+	// order in loadEnabledModels (warm-ups first, config write after).
 	defer o.runPendingPathCorrections()
 
 	// Drain the deferred warm-up after o.mu is released, on every return path.
@@ -2347,7 +2293,7 @@ func (o *Orchestrator) modelNotLoadedReason(modelID string) string {
 	}
 	// A stored error means the model's most recent load attempt failed and has not
 	// since succeeded: a successful load clears the error (see LoadModel /
-	// loadAdditionalModels), so gate on the error's PRESENCE rather than the
+	// loadEnabledModels), so gate on the error's PRESENCE rather than the
 	// modelLoadFailures count, which is a cumulative lifetime counter (kept for the
 	// LoadFailures metric) that survives a later success. Without this gate, a model
 	// that failed once, recovered, then was cleanly unloaded would be misreported as
@@ -2372,7 +2318,7 @@ func (o *Orchestrator) modelNotLoadedReason(modelID string) string {
 // modelIDEnabled reports whether registryID corresponds to a model the user has
 // enabled: an entry in settings.Models.Enabled once its config alias is resolved
 // to a registry ID. Uses the shared enabledModels walk, so it agrees with
-// computeThreadAllocation and loadAdditionalModels on what "enabled" means.
+// computeThreadAllocation and loadEnabledModels on what "enabled" means.
 func (o *Orchestrator) modelIDEnabled(registryID string) bool {
 	for m := range enabledModels(o.currentSettings()) {
 		if m.known && m.registryID == registryID {
@@ -2726,10 +2672,10 @@ type enabledModel struct {
 // enabledModels yields each settings.Models.Enabled entry in config order,
 // resolved to its registry ID. It centralizes the settings.Models.Enabled ->
 // ResolveConfigModelID walk shared by modelIDEnabled, computeThreadAllocation,
-// and loadAdditionalModels so the three stay in step. Unknown config IDs are
+// and loadEnabledModels so the three stay in step. Unknown config IDs are
 // yielded with known=false so each caller decides whether to warn or skip;
 // deduplication is left to the callers that need it (computeThreadAllocation
-// tracks a seen-set, loadAdditionalModels relies on the models-map existence
+// tracks a seen-set, loadEnabledModels relies on the models-map existence
 // check), so the helper preserves each caller's existing behavior.
 func enabledModels(settings *conf.Settings) iter.Seq[enabledModel] {
 	return func(yield func(enabledModel) bool) {
@@ -2742,15 +2688,47 @@ func enabledModels(settings *conf.Settings) iter.Seq[enabledModel] {
 	}
 }
 
+// effectiveEnabledModels yields the configured enabled models with BirdNET v2.4
+// prepended when no configured entry resolves to it. v2.4 is embedded and
+// implicitly enabled (through Phase 5), and it loads first so the range-filter
+// anchor and the label resolver chain are aligned to it, matching the pre-Phase-3
+// order where the primary was always constructed before the secondaries. When a
+// config entry already resolves to v2.4 (the usual case: "birdnet" is listed), its
+// own entry stands and nothing is prepended, so v2.4 is never yielded twice.
+// Phase 4 migrates "birdnet" into models.enabled and drops the implicit prepend.
+func effectiveEnabledModels(settings *conf.Settings) iter.Seq[enabledModel] {
+	return func(yield func(enabledModel) bool) {
+		hasV24 := false
+		for _, configID := range settings.Models.Enabled {
+			if registryID, _ := ResolveConfigModelID(configID); registryID == RegistryIDBirdNETV24 {
+				hasV24 = true
+				break
+			}
+		}
+		if !hasV24 {
+			if !yield(enabledModel{configID: conf.ModelIDBirdNET, registryID: RegistryIDBirdNETV24, known: true}) {
+				return
+			}
+		}
+		for _, configID := range settings.Models.Enabled {
+			registryID, known := ResolveConfigModelID(configID)
+			if !yield(enabledModel{configID: configID, registryID: registryID, known: known}) {
+				return
+			}
+		}
+	}
+}
+
 // computeThreadAllocation pre-computes thread distribution for all models
 // that will be loaded. Inference is serialized by inferenceMu, so each model
 // gets the full thread budget (they never run simultaneously).
-func (o *Orchestrator) computeThreadAllocation(settings *conf.Settings, primaryID string) map[string]int {
-	// Collect unique model IDs that will be loaded. Deduplicates
-	// case variants like ["perch_v2", "PERCH_V2"] that resolve to the same ID.
-	seen := map[string]bool{primaryID: true}
-	modelIDs := []string{primaryID}
-	for m := range enabledModels(settings) {
+func (o *Orchestrator) computeThreadAllocation(settings *conf.Settings) map[string]int {
+	// Collect unique model IDs that will be loaded, walking the effective enable
+	// set (v2.4 prepended) so it matches loadEnabledModels. Deduplicates case
+	// variants like ["perch_v2", "PERCH_V2"] that resolve to the same ID.
+	seen := make(map[string]bool, len(settings.Models.Enabled)+1)
+	modelIDs := make([]string, 0, len(settings.Models.Enabled)+1)
+	for m := range effectiveEnabledModels(settings) {
 		if !m.known || seen[m.registryID] {
 			continue
 		}
@@ -2782,10 +2760,10 @@ func (o *Orchestrator) computeThreadAllocation(settings *conf.Settings, primaryI
 	return alloc
 }
 
-// loadAdditionalModels iterates settings.Models.Enabled and loads any
+// loadEnabledModels iterates settings.Models.Enabled and loads any
 // non-primary models. Each loaded model is registered in the models map.
 // threadAlloc provides the pre-computed thread count for each model.
-func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
+func (o *Orchestrator) loadEnabledModels(threadAlloc map[string]int) error {
 	log := GetLogger()
 
 	// Drain the queued configuration repairs on every exit path, including a
@@ -2812,7 +2790,7 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 	// o.Settings pointer, consistent with the per-model loaders (loadPerch/loadBat).
 	settings := o.currentSettings()
 
-	for m := range enabledModels(settings) {
+	for m := range effectiveEnabledModels(settings) {
 		if !m.known {
 			log.Warn("skipping unknown model ID in models.enabled",
 				logger.String("model_id", m.configID))
@@ -2849,6 +2827,14 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 			return nil
 		}()
 		if loadErr != nil {
+			// BirdNET v2.4 is embedded and load-bearing: its failure aborts
+			// construction exactly as the pre-Phase-3 NewBirdNET failure did. v2.4
+			// is prepended, so it loads first: no path correction has been queued
+			// yet, the deferred drain is a no-op, and the caller's Delete handles
+			// cleanup of anything already registered.
+			if registryID == RegistryIDBirdNETV24 {
+				return loadErr
+			}
 			// Record the failure (not just log it) so a later not-loaded predict on
 			// this model can report why it is missing instead of a bare unknown model.
 			o.recordLoadFailure(registryID, loadErr)
