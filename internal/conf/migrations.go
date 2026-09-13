@@ -533,11 +533,14 @@ const (
 // MigrateBirdNETVersion retires the birdnet.version field. It used to select the
 // BirdNET model family, but v2.4 is now loaded like any other model and the field
 // is dead. The migration clears it and, for the "3.0" value, enables the v3.0 model
-// so the config keeps working: a config carrying birdnet.version="3.0" could not
-// start before this change (v3.0 has no embedded model or labels, so startup
-// aborted), which is why enabling v3.0 introduces no behavior regression. An
-// unknown value (which previously aborted startup) is dropped with a warning.
-// Returns whether anything changed.
+// as a gallery-managed model so the config keeps working. A "3.0" config that also
+// carried a custom birdnet.modelpath/labelpath (a manually obtained v3.0 model run
+// as the primary) has those cleared here: the primary slot is now the embedded v2.4
+// baseline, and leaving a v3.0 model file on it would mispair the v2.4 identity
+// (48 kHz / 3 s) with a v3.0 model, so the paths are dropped and the v3.0 model
+// serves through the enabled gallery entry instead. An unknown value (which
+// previously aborted startup) is dropped with a warning. Returns whether anything
+// changed.
 func (s *Settings) MigrateBirdNETVersion() bool {
 	version := s.BirdNET.Version
 	if version == "" {
@@ -552,8 +555,14 @@ func (s *Settings) MigrateBirdNETVersion() bool {
 		if !slices.Contains(s.Models.Enabled, ModelIDBirdNETV3) {
 			s.Models.Enabled = append(s.Models.Enabled, ModelIDBirdNETV3)
 		}
+		// Drop any custom v3.0 primary paths so they are not mispaired with the
+		// embedded v2.4 baseline that now occupies the primary slot.
+		clearedCustomPath := s.BirdNET.ModelPath != "" || s.BirdNET.LabelPath != ""
+		s.BirdNET.ModelPath = ""
+		s.BirdNET.LabelPath = ""
 		GetLogger().Info("Migrated legacy birdnet.version=3.0 by enabling the v3.0 model",
-			logger.String("model", ModelIDBirdNETV3))
+			logger.String("model", ModelIDBirdNETV3),
+			logger.Bool("cleared_custom_primary_path", clearedCustomPath))
 	default:
 		GetLogger().Warn("Dropping unknown birdnet.version during migration; the field is no longer used",
 			logger.String("version", version))

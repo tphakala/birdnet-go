@@ -144,6 +144,41 @@ func TestOrchestrator_PrimaryIsModelInstance(t *testing.T) {
 	assert.Equal(t, 3*time.Second, spec.ClipLength)
 }
 
+// TestOrchestrator_UnloadReloadV24_RoundTrip exercises the post-publish v2.4 load
+// path (loadBirdNETV24 with o.published == true, which clones the settings before
+// building so a concurrent reader never sees loadLabels mutate the live snapshot)
+// and verifies the unload/reload round-trip: while v2.4 is unloaded the anchor-gated
+// accessors go empty, and after reload the model serves again and the species index
+// is republished. Run under -race, this is the only coverage of the clone branch.
+func TestOrchestrator_UnloadReloadV24_RoundTrip(t *testing.T) {
+	// Not parallel: NewOrchestrator publishes into the global settings snapshot.
+	settings := conftest.GetTestSettings()
+	o, err := NewOrchestrator(settings)
+	if err != nil {
+		t.Skipf("Skipping: embedded model not available in test environment: %v", err)
+	}
+	t.Cleanup(func() { o.Delete() })
+
+	require.True(t, o.IsModelLoaded(RegistryIDBirdNETV24), "v2.4 loads at construction")
+	require.Len(t, o.DefaultTargets(), 1, "the loaded v2.4 is the default target")
+	labelsBefore := o.AllLabels()
+	require.NotEmpty(t, labelsBefore)
+
+	// Unload: the entry is removed, so every anchor-gated accessor reports empty.
+	require.NoError(t, o.UnloadModel(RegistryIDBirdNETV24))
+	assert.False(t, o.IsModelLoaded(RegistryIDBirdNETV24), "v2.4 is unloaded")
+	assert.Nil(t, o.DefaultTargets(), "no default target while v2.4 is unloaded")
+	assert.Empty(t, o.RangeFilterStatus().Classifiers, "no range-filter anchor while v2.4 is unloaded")
+
+	// Reload through the post-publish clone path (o.published is true here).
+	require.NoError(t, o.LoadModel(RegistryIDBirdNETV24))
+	require.True(t, o.IsModelLoaded(RegistryIDBirdNETV24), "v2.4 serves again after reload")
+	require.Len(t, o.DefaultTargets(), 1, "the default target is restored")
+	assert.Equal(t, RegistryIDBirdNETV24, o.DefaultTargets()[0].ID)
+	assert.Equal(t, labelsBefore, o.AllLabels(), "the species index is republished with the same labels")
+	assert.NotEmpty(t, o.RangeFilterStatus().Classifiers, "the range-filter anchor is present again")
+}
+
 func TestOrchestrator_ModelsMapPopulated(t *testing.T) {
 	t.Parallel()
 

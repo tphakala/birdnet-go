@@ -797,49 +797,6 @@ func TestReloadModelInternal_UnknownVersionNamesTheRequestedVersion(t *testing.T
 		"naming the previously valid version tells the user a working setting is unknown")
 }
 
-// TestPrimaryRegistryID covers the family gate that decides whether the recovery
-// runs at all. Deleting that gate lets a stale BirdNET v3.0 primary path be
-// "recovered" onto a v2.4 model file: a 32 kHz/5 s identity pinned to a
-// 48 kHz/3 s model with a different label set.
-func TestPrimaryRegistryID(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		version string
-		want    string
-		recover bool
-	}{
-		{"empty version is the default v2.4 family", "", RegistryIDBirdNETV24, true},
-		{"explicit 2.4", "2.4", RegistryIDBirdNETV24, true},
-		{"3.0 is a different family", "3.0", RegistryIDBirdNETV3, false},
-		{"an unknown version resolves to nothing", "9.9", "", false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			settings := &conf.Settings{}
-			settings.BirdNET.Version = tt.version
-
-			got := primaryRegistryID(settings)
-			assert.Equal(t, tt.want, got)
-
-			// The gate as NewOrchestrator applies it, not just the helper: a nil
-			// resolver is what stops a non-v2.4 primary from being recovered onto a
-			// v2.4 model file, and what keeps the hard-wired RegistryIDBirdNETV24
-			// correction label from ever being attached to another family.
-			o := &Orchestrator{}
-			resolver := o.primaryPathResolverFor(settings)
-			if tt.recover {
-				assert.NotNil(t, resolver, "the v2.4 family must get the recovery")
-			} else {
-				assert.Nil(t, resolver,
-					"only the v2.4 family may use a recovery whose target and correction label are both hard-wired to it")
-			}
-		})
-	}
-}
-
 // TestEmitPathSubstitutedNotification_UnreadableIsNotDerivedFromRepairable pins
 // the distinction the explicit unreadable flag exists for. Both records below are
 // NOT repairable; only one of them describes a file that is present. Selecting the

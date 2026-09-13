@@ -107,3 +107,41 @@ func TestMigrateBirdNETVersion_Idempotent(t *testing.T) {
 	assert.False(t, s.MigrateBirdNETVersion(), "second run should be a no-op")
 	assert.Equal(t, []string{ModelIDBirdNET, ModelIDBirdNETV3}, s.Models.Enabled)
 }
+
+// TestMigrateBirdNETVersion_V30ClearsCustomPrimaryPath verifies that a legacy "3.0"
+// config that ran a custom v3.0 model as the primary has its birdnet.modelpath /
+// labelpath cleared, so the migrated v2.4 primary slot uses the embedded baseline
+// instead of mispairing the v2.4 identity with the v3.0 model file. The v3.0 model
+// is enabled as a gallery-managed model instead.
+func TestMigrateBirdNETVersion_V30ClearsCustomPrimaryPath(t *testing.T) {
+	t.Parallel()
+
+	s := &Settings{}
+	s.BirdNET.Version = "3.0"
+	s.BirdNET.ModelPath = "/custom/birdnet_v3.0.onnx"
+	s.BirdNET.LabelPath = "/custom/birdnet_v3.0_labels.txt"
+	s.Models.Enabled = []string{ModelIDBirdNET}
+
+	require.True(t, s.MigrateBirdNETVersion())
+	assert.Empty(t, s.BirdNET.Version, "version cleared")
+	assert.Empty(t, s.BirdNET.ModelPath, "custom v3.0 primary model path cleared")
+	assert.Empty(t, s.BirdNET.LabelPath, "custom v3.0 primary label path cleared")
+	assert.Equal(t, []string{ModelIDBirdNET, ModelIDBirdNETV3}, s.Models.Enabled,
+		"v3.0 enabled as a gallery model")
+}
+
+// TestMigrateBirdNETVersion_V24PreservesCustomPath verifies the "2.4" migration does
+// NOT clear a custom primary path: a v2.4 model file is valid for the v2.4 slot, so
+// only the dead version field is cleared.
+func TestMigrateBirdNETVersion_V24PreservesCustomPath(t *testing.T) {
+	t.Parallel()
+
+	s := &Settings{}
+	s.BirdNET.Version = "2.4"
+	s.BirdNET.ModelPath = "/custom/birdnet_v24_fp16.onnx"
+
+	require.True(t, s.MigrateBirdNETVersion())
+	assert.Empty(t, s.BirdNET.Version, "version cleared")
+	assert.Equal(t, "/custom/birdnet_v24_fp16.onnx", s.BirdNET.ModelPath,
+		"a v2.4 custom path stays valid for the v2.4 slot")
+}

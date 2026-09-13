@@ -343,33 +343,6 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	return o, nil
 }
 
-// primaryPathResolverFor returns the stale-path resolver to hand to NewBirdNET,
-// or nil when the primary slot is not the BirdNET v2.4 family.
-//
-// Extracted from NewOrchestrator so the decision is reachable without building a
-// real model: inline, the only way to observe it was to construct an Orchestrator,
-// so removing the family check broke no test.
-func (o *Orchestrator) primaryPathResolverFor(settings *conf.Settings) primaryPathResolver {
-	if primaryRegistryID(settings) != RegistryIDBirdNETV24 {
-		return nil
-	}
-	return o.resolvePrimaryModelPath
-}
-
-// primaryRegistryID reports which model family occupies the primary classifier
-// slot. An empty birdnet.version selects the default BirdNET v2.4 family; an
-// unrecognised version returns "" so callers treat it as "not v2.4" rather than
-// guessing (NewBirdNET's Tier 2 reports the unknown version as an error).
-func primaryRegistryID(settings *conf.Settings) string {
-	if settings.BirdNET.Version == "" {
-		return RegistryIDBirdNETV24
-	}
-	if info, ok := ResolveBirdNETVersion(settings.BirdNET.Version); ok {
-		return info.ID
-	}
-	return ""
-}
-
 // SetModelsDir sets the base directory for gallery-installed models.
 // Called by ModelManager after creation so model loaders can resolve
 // paths from the installed models directory when config paths are empty,
@@ -1221,10 +1194,9 @@ func (o *Orchestrator) AllLabels() []string {
 	primary, refs := o.orderedEntryRefs()
 
 	sets := make([][]string, 0, len(refs)+1)
-	// Include the primary explicitly via the pointer (as before this refactor), so its
-	// labels are covered even when its map entry is absent (a test-only construction
-	// with o.primary set but o.models empty). primary.Labels() is safe without entry.mu
-	// because BirdNET.Labels takes the model's own lock internally.
+	// Include the range-filter anchor (v2.4) explicitly via the returned pointer so
+	// its labels lead, matching the pre-refactor ordering. primary.Labels() is safe
+	// without entry.mu because BirdNET.Labels takes the model's own lock internally.
 	if primary != nil {
 		sets = append(sets, primary.Labels())
 	}
@@ -1245,13 +1217,13 @@ func (o *Orchestrator) AllLabels() []string {
 	return unionLabels(sets...)
 }
 
-// orderedEntryRefs returns the primary instance (via the o.primary pointer, or nil)
-// plus the SECONDARY model entries byte-sorted by ID. When a primary is set its own
-// map entry is skipped, because its labels are taken from the pointer above (unionLabels
-// dedupes regardless). This reproduces the pre-refactor AllLabels ordering exactly:
-// primary first, then secondaries byte-sorted, so Go's randomized map iteration cannot
-// pick a different winner for a duplicate scientific name in the reverse name maps. The
-// caller reads each secondary entry's instance under entry.mu.
+// orderedEntryRefs returns the range-filter anchor instance (the loaded BirdNET v2.4
+// model, or nil) plus the other model entries byte-sorted by ID. When the anchor is
+// present its own map entry is skipped, because its labels are taken from the returned
+// pointer (unionLabels dedupes regardless). This reproduces the pre-refactor AllLabels
+// ordering exactly: anchor first, then the rest byte-sorted, so Go's randomized map
+// iteration cannot pick a different winner for a duplicate scientific name in the
+// reverse name maps. The caller reads each other entry's instance under entry.mu.
 func (o *Orchestrator) orderedEntryRefs() (primary *BirdNET, refs []entryRef) {
 	// The range-filter anchor (v2.4) leads; every other entry follows, sorted
 	// byte-wise by registry ID, so a duplicate scientific name resolves to the same
@@ -1910,9 +1882,9 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 // Delete releases all resources held by the Orchestrator and its models.
 // After calling Delete, the Orchestrator must not be used.
 func (o *Orchestrator) Delete() {
-	// Snapshot the models, stop the scheduler, and clear o.primary/o.models under
-	// o.mu so the accessors (which snapshot o.primary under o.mu) observe the
-	// deleted state immediately and fail fast. Then release o.mu before the
+	// Snapshot the models, stop the scheduler, and clear o.models under o.mu so the
+	// accessors (which resolve the range-filter anchor from o.models under o.mu)
+	// observe the deleted state immediately and fail fast. Then release o.mu before the
 	// per-model Close() calls: Close does native teardown that can be slow, and
 	// holding o.mu across it would block every accessor for the duration of
 	// teardown. UnloadModel uses the same drop-lock-before-close shape.
@@ -1930,8 +1902,8 @@ func (o *Orchestrator) Delete() {
 
 	// Close the range-filter backend outside o.mu. close() empties the published
 	// state under rfs.mu, so any accessor that runs after teardown reads a nil
-	// backend and returns its zero value: the o.primary-guarded accessors fail fast
-	// on the nil primary set above, and the few that read the service directly
+	// backend and returns its zero value: the anchor-gated accessors fail fast because
+	// rangeFilterAnchor finds no v2.4 entry once o.models is nil, and the few that read the service directly
 	// (GeomodelSpeciesInfo via mappedView) get ok=false from the empty state. The
 	// service pointer is intentionally left set: GeomodelSpeciesInfo reads it without
 	// o.mu, so nilling it here would be a data race for no benefit.
@@ -2254,7 +2226,7 @@ func (o *Orchestrator) modelNotLoadedReason(modelID string) string {
 // to a registry ID. Uses the shared enabledModels walk, so it agrees with
 // computeThreadAllocation and loadEnabledModels on what "enabled" means.
 func (o *Orchestrator) modelIDEnabled(registryID string) bool {
-	for m := range enabledModels(o.currentSettings()) {
+	for m := range effectiveEnabledModels(o.currentSettings()) {
 		if m.known && m.registryID == registryID {
 			return true
 		}
@@ -2458,8 +2430,7 @@ func (o *Orchestrator) DefaultTargets() []ModelInfo {
 
 // ResolvedModelPathForID returns the model file the loaded registryID instance is
 // actually running: "" when the instance runs its built-in/default source, when the
-// ID is not loaded, or when the models map is not initialized. For
-// RegistryIDBirdNETV24 this equals PrimaryResolvedModelPath(). It snapshots the entry
+// ID is not loaded, or when the models map is not initialized. It snapshots the entry
 // under o.mu, captures the instance under entry.mu and releases both before calling
 // the lock-free ResolvedModelPath(), mirroring LoadedModelPaths so it adds no
 // lock-ordering edge.
@@ -2546,10 +2517,9 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 		}
 		// NumSpecies depends on the model's loaded label file, which a user can
 		// override with a sliced or custom model (e.g. a regional Perch v2 slice
-		// with far fewer classes than the stock 14,795). Both the primary template
-		// (o.ModelInfo) and the static registry template carry the stock catalog
-		// count, so source it from the live instance to report what is actually
-		// loaded.
+		// with far fewer classes than the stock 14,795). The static registry template
+		// carries the stock catalog count, so source it from the live instance to
+		// report what is actually loaded.
 		info.NumSpecies = instance.NumSpecies()
 		info.Overlap = ResolveModelOverlap(info.ID, info.Spec, settings)
 		infos = append(infos, info)
@@ -2656,9 +2626,11 @@ func (o *Orchestrator) computeThreadAllocation(settings *conf.Settings) map[stri
 	return alloc
 }
 
-// loadEnabledModels iterates settings.Models.Enabled and loads any
-// non-primary models. Each loaded model is registered in the models map.
-// threadAlloc provides the pre-computed thread count for each model.
+// loadEnabledModels iterates the effective enable set (the configured models with
+// BirdNET v2.4 prepended) and loads each one, v2.4 first. Each loaded model is
+// registered in the models map; an already-registered model is skipped.
+// threadAlloc provides the pre-computed thread count for each model. A v2.4 load
+// failure is fatal to construction; secondary failures are recorded and skipped.
 func (o *Orchestrator) loadEnabledModels(threadAlloc map[string]int) error {
 	log := GetLogger()
 

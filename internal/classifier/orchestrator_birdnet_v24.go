@@ -8,16 +8,12 @@ import (
 // buildBirdNETV24 constructs (without registering) a BirdNET v2.4 instance from
 // the given settings. NewBirdNET writes BirdNET.Labels onto that settings object,
 // so the caller decides whether it is the published snapshot (startup load) or a
-// private clone (a reload). Shared by the loader below and the reload builder so
-// both resolve the model path the same way, through o.resolvePrimaryModelPath.
+// private clone. The model path is resolved through o.resolvePrimaryModelPath.
 //
-// v2.4 derives its thread count from settings.BirdNET.Threads inside NewBirdNET,
-// exactly as the primary always has. computeThreadAllocation hands every model the
-// full thread budget, which for v2.4 equals settings.BirdNET.Threads, so the
-// threads argument is accepted for loader-signature uniformity and left to
-// NewBirdNET rather than applied a second time here.
-func (o *Orchestrator) buildBirdNETV24(settings *conf.Settings, threads int) (*BirdNET, pathResolution, error) {
-	_ = threads
+// v2.4 derives its thread count from settings.BirdNET.Threads inside NewBirdNET, so
+// there is no separate threads argument: computeThreadAllocation hands every model
+// the full budget, which for v2.4 already equals settings.BirdNET.Threads.
+func (o *Orchestrator) buildBirdNETV24(settings *conf.Settings) (*BirdNET, pathResolution, error) {
 	bn, err := NewBirdNET(settings, nil, o.resolvePrimaryModelPath)
 	if err != nil {
 		return nil, pathResolution{}, err
@@ -29,8 +25,10 @@ func (o *Orchestrator) buildBirdNETV24(settings *conf.Settings, threads int) (*B
 // RegistryIDBirdNETV24, following the same build/register/defer-warm-up shape as
 // the secondary loaders (loadPerch). v2.4 is embedded and implicitly enabled, so
 // it is prepended to the effective enable set and loads first during construction;
-// its failure is fatal to construction (handled by loadEnabledModels).
-func (o *Orchestrator) loadBirdNETV24(threads int) error {
+// its failure is fatal to construction (handled by loadEnabledModels). The thread
+// count is unused: v2.4 takes it from settings.BirdNET.Threads inside NewBirdNET,
+// so the parameter exists only to satisfy the shared modelLoaders signature.
+func (o *Orchestrator) loadBirdNETV24(_ int) error {
 	settings := o.currentSettings()
 
 	// Startup passes the published settings UNCLONED so construction-time loadLabels
@@ -46,7 +44,7 @@ func (o *Orchestrator) loadBirdNETV24(threads int) error {
 	}
 
 	before := o.captureRSSBefore()
-	bn, res, err := o.buildBirdNETV24(settings, threads)
+	bn, res, err := o.buildBirdNETV24(settings)
 	if err != nil {
 		return err
 	}

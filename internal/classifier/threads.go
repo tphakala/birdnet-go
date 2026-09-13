@@ -1,12 +1,13 @@
 package classifier
 
 // divideThreads distributes a total thread count among models.
-// Each model gets at least 1 thread. The remainder goes to the first model in
-// modelIDs (callers pass effectiveEnabledModels order, so BirdNET v2.4 leads).
+// Each model gets at least 1 thread. The remainder is assigned to the first model
+// in modelIDs by contract, so a caller that wants a specific model to absorb it
+// passes that model first.
 //
 // Note: the orchestrator gives each model the full thread budget because
-// inference is serialized (inferenceMu). This function is retained for
-// testing and potential future parallel-inference mode.
+// inference is serialized (inferenceMu), so it never calls this. It is retained for
+// testing and a potential future parallel-inference mode.
 func divideThreads(total int, modelIDs []string) map[string]int {
 	n := len(modelIDs)
 	if n == 0 {
