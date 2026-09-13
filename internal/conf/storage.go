@@ -131,6 +131,13 @@ func Load() (*Settings, error) {
 		persistMigration(settings, "model ID aliases")
 	}
 
+	// Retire the dead birdnet.version field (model de-privilege epic, Phase 3).
+	// Runs before validation so a migrated "3.0" config that now enables
+	// birdnet_v3.0 is validated in its post-migration shape.
+	if settings.MigrateBirdNETVersion() {
+		persistMigration(settings, "birdnet version")
+	}
+
 	// Validate multi-model configuration
 	if err := settings.applyModelValidation(); err != nil {
 		return nil, err

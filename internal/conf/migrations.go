@@ -5,6 +5,7 @@ import (
 	"maps"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -518,6 +519,48 @@ func (s *Settings) MigrateModelIDAliases() bool {
 	}
 
 	return changed
+}
+
+// Legacy birdnet.version field values. The classifier no longer reads
+// birdnet.version (model de-privilege epic, Phase 3): the BirdNET family is loaded
+// like any other model rather than selected from this field. These are recognized
+// only so the migration can retire the field cleanly.
+const (
+	legacyBirdNETVersionV24 = "2.4"
+	legacyBirdNETVersionV30 = "3.0"
+)
+
+// MigrateBirdNETVersion retires the birdnet.version field. It used to select the
+// BirdNET model family, but v2.4 is now loaded like any other model and the field
+// is dead. The migration clears it and, for the "3.0" value, enables the v3.0 model
+// so the config keeps working: a config carrying birdnet.version="3.0" could not
+// start before this change (v3.0 has no embedded model or labels, so startup
+// aborted), which is why enabling v3.0 introduces no behavior regression. An
+// unknown value (which previously aborted startup) is dropped with a warning.
+// Returns whether anything changed.
+func (s *Settings) MigrateBirdNETVersion() bool {
+	version := s.BirdNET.Version
+	if version == "" {
+		return false
+	}
+
+	switch version {
+	case legacyBirdNETVersionV24:
+		// v2.4 is the built-in model and is always loaded; only the dead field
+		// needs clearing.
+	case legacyBirdNETVersionV30:
+		if !slices.Contains(s.Models.Enabled, ModelIDBirdNETV3) {
+			s.Models.Enabled = append(s.Models.Enabled, ModelIDBirdNETV3)
+		}
+		GetLogger().Info("Migrated legacy birdnet.version=3.0 by enabling the v3.0 model",
+			logger.String("model", ModelIDBirdNETV3))
+	default:
+		GetLogger().Warn("Dropping unknown birdnet.version during migration; the field is no longer used",
+			logger.String("version", version))
+	}
+
+	s.BirdNET.Version = ""
+	return true
 }
 
 // ValidateModelConfig checks model-related configuration for errors and
