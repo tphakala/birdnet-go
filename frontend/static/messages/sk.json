@@ -5530,7 +5530,11 @@
     },
     "bird": {
       "title": "Detekcia vtákov",
-      "description": "Nakonfigurujte prah spoľahlivosti, jazyk druhov a filtrovanie falošných pozitív pre klasifikátory vtákov."
+      "description": "Nakonfigurujte prah spoľahlivosti, jazyk druhov a filtrovanie falošných pozitív pre klasifikátory vtákov.",
+      "firstDailyConsensus": {
+        "label": "Vyžadovať potvrdenie prvej detekcie druhu v daný deň dvoma modelmi",
+        "helpText": "Obmedzuje chybné záznamy nových druhov tým, že zahodí prvú detekciu vtáčieho druhu v daný deň, pokiaľ ho aj druhý model nedeteguje nad svojím bežným prahom v rámci toho istého detekčného okna. Druh sa zaznamená až z nasledujúceho okna, v ktorom sa dva modely zhodnú. Platí iba vtedy, ak každý model na rozpoznávanie vtákov analyzujúci daný zdroj zvuku dokáže tento druh určiť, a nie vtedy, keď dynamický prah znížil prah tohto druhu; netopiere, iné než vtáčie zvuky a zostavy s jediným modelom nie sú ovplyvnené."
+      }
     },
     "bat": {
       "title": "Detekcia netopierov",

@@ -302,6 +302,12 @@
       validHours: 24,
     }
   );
+  let firstDailyConsensus = $derived($realtimeSettings?.firstDailyConsensus ?? { enabled: false });
+
+  function updateFirstDailyConsensus(enabled: boolean) {
+    settingsActions.updateSection('realtime', { firstDailyConsensus: { enabled } });
+  }
+
   let falsePositiveFilter = $derived($realtimeSettings?.falsePositiveFilter ?? { level: 0 });
   let bat = $derived(
     $batSettings ?? {
@@ -1491,11 +1497,13 @@
         threshold: store.originalData.birdnet?.threshold,
         locale: store.originalData.birdnet?.locale,
         fpFilter: store.originalData.realtime?.falsePositiveFilter?.level ?? 0,
+        firstDailyConsensus: store.originalData.realtime?.firstDailyConsensus?.enabled ?? false,
       }}
       currentData={{
         threshold: birdnet?.threshold,
         locale: birdnet?.locale,
         fpFilter: falsePositiveFilter.level,
+        firstDailyConsensus: firstDailyConsensus.enabled,
       }}
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1564,6 +1572,16 @@
           <span>{t('settings.main.sections.falsePositiveFilter.hardwareNote')}</span>
         </SettingsNote>
       {/if}
+
+      <div class="mt-4">
+        <Checkbox
+          bind:checked={firstDailyConsensus.enabled}
+          label={t('analysis.bird.firstDailyConsensus.label')}
+          helpText={t('analysis.bird.firstDailyConsensus.helpText')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={updateFirstDailyConsensus}
+        />
+      </div>
     </SettingsSection>
 
     <!-- 2. Perch v2 threshold override (only when the Perch model is installed) -->

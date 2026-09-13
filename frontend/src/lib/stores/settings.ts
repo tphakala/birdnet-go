@@ -390,6 +390,11 @@ export interface DaylightFilterSettings {
   species: string[];
 }
 
+/** Controls confirmation of a bird species' first daily detection by two models. */
+export interface FirstDailyConsensusSettings {
+  enabled: boolean;
+}
+
 export interface EBirdSettings {
   enabled: boolean;
   apiKey: string;
@@ -607,6 +612,7 @@ export interface RealtimeSettings {
   privacyFilter?: PrivacyFilterSettings;
   dogBarkFilter?: DogBarkFilterSettings;
   daylightFilter?: DaylightFilterSettings;
+  firstDailyConsensus?: FirstDailyConsensusSettings;
   rtsp?: RTSPSettings;
   mqtt?: MQTTSettings;
   telemetry?: TelemetrySettings;
@@ -1024,6 +1030,7 @@ function createEmptySettings(): SettingsFormData {
         offset: 0,
         species: [],
       },
+      firstDailyConsensus: { enabled: false },
       extendedCapture: {
         enabled: false,
         maxDuration: 120,

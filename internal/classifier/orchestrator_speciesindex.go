@@ -64,6 +64,9 @@ func (o *Orchestrator) rebuildSpeciesIndex() {
 // RebuildNameResolver reuses it after refreshing the resolver, so both paths build
 // the index from the identical working set.
 func (o *Orchestrator) rebuildSpeciesIndexLocked() {
+	// This is the model-topology trigger, so the per-model species sets built from
+	// the previous label sets are stale too.
+	o.speciesSets.invalidate()
 	if o.names == nil {
 		return
 	}

@@ -538,6 +538,11 @@ type DaylightFilterSettings struct {
 	Species []string `yaml:"species" json:"species"` // species, families, orders, or genera to filter during daylight
 }
 
+// FirstDailyConsensusSettings configures the first-daily-detection consensus rule: a bird species' first detection of the day is discarded unless a second model also cleared its normal threshold within the same detection window; the species is recorded from the next window in which two models agree. It only applies when every bird model analyzing the audio source can identify the species, and not while a dynamic threshold is lowering that species' threshold (unless the species has a custom threshold).
+type FirstDailyConsensusSettings struct {
+	Enabled bool `yaml:"enabled" json:"enabled"` // true to require a second model to confirm a bird species' first detection each day
+}
+
 // RTSPHealthSettings contains settings for RTSP stream health monitoring.
 type RTSPHealthSettings struct {
 	HealthyDataThreshold int `yaml:"healthydatathreshold" json:"healthyDataThreshold"` // seconds before stream considered unhealthy (default: 60)
@@ -897,21 +902,22 @@ type RealtimeSettings struct {
 		Enabled bool   `yaml:"enabled" json:"enabled"` // true to enable OBS chat log
 		Path    string `yaml:"path" json:"path"`       // path to OBS chat log
 	} `yaml:"log" json:"log"`
-	LogDeduplication LogDeduplicationSettings `yaml:"logdeduplication" json:"logDeduplication"` // Log deduplication settings
-	Birdweather      BirdweatherSettings      `yaml:"birdweather" json:"birdweather"`           // Birdweather integration settings
-	EBird            EBirdSettings            `yaml:"ebird" json:"ebird"`                       // eBird integration settings
-	OpenWeather      OpenWeatherSettings      `yaml:"-" json:"-"`                               // OpenWeather integration settings
-	PrivacyFilter    PrivacyFilterSettings    `yaml:"privacyfilter" json:"privacyFilter"`       // Privacy filter settings
-	DogBarkFilter    DogBarkFilterSettings    `yaml:"dogbarkfilter" json:"dogBarkFilter"`       // Dog bark filter settings
-	DaylightFilter   DaylightFilterSettings   `yaml:"daylightfilter" json:"daylightFilter"`     // Daylight filter settings
-	RTSP             RTSPSettings             `yaml:"rtsp" json:"rtsp"`                         // RTSP settings
-	MQTT             MQTTSettings             `yaml:"mqtt" json:"mqtt"`                         // MQTT settings
-	Telemetry        TelemetrySettings        `yaml:"telemetry" json:"telemetry"`               // Telemetry settings
-	Monitoring       MonitoringSettings       `yaml:"monitoring" json:"monitoring"`             // System resource monitoring settings
-	Species          SpeciesSettings          `yaml:"species" json:"species"`                   // Custom thresholds and actions for species
-	Weather          WeatherSettings          `yaml:"weather" json:"weather"`                   // Weather provider related settings
-	SpeciesTracking  SpeciesTrackingSettings  `yaml:"speciestracking" json:"speciesTracking"`   // New species tracking settings
-	ExtendedCapture  ExtendedCaptureSettings  `yaml:"extendedcapture" json:"extendedCapture"`   // Extended capture for long calling species
+	LogDeduplication    LogDeduplicationSettings    `yaml:"logdeduplication" json:"logDeduplication"`       // Log deduplication settings
+	Birdweather         BirdweatherSettings         `yaml:"birdweather" json:"birdweather"`                 // Birdweather integration settings
+	EBird               EBirdSettings               `yaml:"ebird" json:"ebird"`                             // eBird integration settings
+	OpenWeather         OpenWeatherSettings         `yaml:"-" json:"-"`                                     // OpenWeather integration settings
+	PrivacyFilter       PrivacyFilterSettings       `yaml:"privacyfilter" json:"privacyFilter"`             // Privacy filter settings
+	DogBarkFilter       DogBarkFilterSettings       `yaml:"dogbarkfilter" json:"dogBarkFilter"`             // Dog bark filter settings
+	DaylightFilter      DaylightFilterSettings      `yaml:"daylightfilter" json:"daylightFilter"`           // Daylight filter settings
+	FirstDailyConsensus FirstDailyConsensusSettings `yaml:"firstdailyconsensus" json:"firstDailyConsensus"` // Require a second model to confirm each bird species' first detection of the day
+	RTSP                RTSPSettings                `yaml:"rtsp" json:"rtsp"`                               // RTSP settings
+	MQTT                MQTTSettings                `yaml:"mqtt" json:"mqtt"`                               // MQTT settings
+	Telemetry           TelemetrySettings           `yaml:"telemetry" json:"telemetry"`                     // Telemetry settings
+	Monitoring          MonitoringSettings          `yaml:"monitoring" json:"monitoring"`                   // System resource monitoring settings
+	Species             SpeciesSettings             `yaml:"species" json:"species"`                         // Custom thresholds and actions for species
+	Weather             WeatherSettings             `yaml:"weather" json:"weather"`                         // Weather provider related settings
+	SpeciesTracking     SpeciesTrackingSettings     `yaml:"speciestracking" json:"speciesTracking"`         // New species tracking settings
+	ExtendedCapture     ExtendedCaptureSettings     `yaml:"extendedcapture" json:"extendedCapture"`         // Extended capture for long calling species
 }
 
 // SpeciesAction represents a single action configuration

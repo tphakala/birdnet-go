@@ -133,6 +133,9 @@ type Processor struct {
 	// Periodic pipeline stats (inference activity per source/model)
 	pipelineStats *PipelineStats
 
+	// First-daily-detection consensus state (see first_daily_consensus.go).
+	firstDaily firstDailyConsensus
+
 	// Per-model recent-detection cache: a fixed-capacity, most-recent-first feed of
 	// the last lastDetectionCap detections per model, throttled per species so a
 	// continuously singing bird does not flood it. lastDetectionMu guards
@@ -997,10 +1000,7 @@ func (p *Processor) parseAndValidateSpecies(settings *conf.Settings, result data
 	}
 
 	// Convert species to lowercase for case-insensitive comparison
-	speciesLowercase = strings.ToLower(commonName)
-	if speciesLowercase == "" && scientificName != "" {
-		speciesLowercase = strings.ToLower(scientificName)
-	}
+	speciesLowercase = dynamicThresholdKey(commonName, scientificName)
 
 	return
 }
@@ -1086,11 +1086,8 @@ func (p *Processor) shouldFilterDetection(settings *conf.Settings, result datast
 
 	// Determine confidence threshold
 	if settings.Realtime.DynamicThreshold.Enabled {
-		// Check if this species has a custom user-configured threshold (> 0)
-		// Species may be in Config only for custom actions/interval without threshold set
-		// Use lookupSpeciesConfig to support both common name and scientific name lookups
-		config, exists := lookupSpeciesConfig(settings.Realtime.Species.Config, commonName, scientificName)
-		isCustomThreshold := exists && config.Threshold > 0
+		// A custom user-configured threshold opts the species out of dynamic adjustment.
+		isCustomThreshold := hasCustomThreshold(settings, commonName, scientificName)
 		confidenceThreshold = p.getAdjustedConfidenceThreshold(speciesLowercase, baseThreshold, isCustomThreshold)
 	} else {
 		confidenceThreshold = baseThreshold
@@ -1636,7 +1633,8 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 		}
 	}
 
-	return false, ""
+	// Last, so the cheaper filters above decide first.
+	return p.shouldDiscardFirstDailyDetection(item, settings)
 }
 
 // processApprovedDetection handles an approved detection by sending it to the worker queue
@@ -1793,6 +1791,7 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 	now := time.Now()
 	settings := p.currentSettings()
 	visThresholds := precomputeVisibilityThresholds(settings)
+	p.prepareFirstDailyConsensus(now, settings)
 
 	var terminalNotifs []SSEPendingDetection
 	var broadcastSnapshot []SSEPendingDetection
@@ -1849,6 +1848,7 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 			logger.String("operation", "flush_detection"))
 
 		p.processApprovedDetection(&item, speciesName)
+		p.noteAcceptedDetection(&item, settings)
 		delete(p.pendingDetections, mapKey)
 		flushedCount++
 

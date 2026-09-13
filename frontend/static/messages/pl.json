@@ -5530,7 +5530,11 @@
     },
     "bird": {
       "title": "Wykrywanie ptaków",
-      "description": "Skonfiguruj próg pewności, język gatunków i filtrowanie fałszywych trafień dla klasyfikatorów ptaków."
+      "description": "Skonfiguruj próg pewności, język gatunków i filtrowanie fałszywych trafień dla klasyfikatorów ptaków.",
+      "firstDailyConsensus": {
+        "label": "Wymagaj potwierdzenia pierwszego wykrycia gatunku w danym dniu przez dwa modele",
+        "helpText": "Ogranicza błędne wpisy nowych gatunków, odrzucając pierwsze wykrycie gatunku ptaka w danym dniu, chyba że drugi model również wykryje go powyżej swojego zwykłego progu w tym samym oknie wykrywania. Gatunek jest rejestrowany od następnego okna, w którym dwa modele są zgodne. Dotyczy tylko sytuacji, w których każdy model ptaków analizujący dane źródło dźwięku potrafi rozpoznać ten gatunek, i nie wtedy, gdy dynamiczny próg obniżył próg tego gatunku; nie wpływa na nietoperze, dźwięki inne niż ptasie ani konfiguracje z jednym modelem."
+      }
     },
     "bat": {
       "title": "Wykrywanie nietoperzy",

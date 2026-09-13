@@ -5530,7 +5530,11 @@
     },
     "bird": {
       "title": "Vogeldetectie",
-      "description": "Configureer betrouwbaarheidsdrempel, soortentaal en vals-positief filtering voor vogelclassificatoren."
+      "description": "Configureer betrouwbaarheidsdrempel, soortentaal en vals-positief filtering voor vogelclassificatoren.",
+      "firstDailyConsensus": {
+        "label": "Vereis dat twee modellen de eerste detectie van een soort op een dag bevestigen",
+        "helpText": "Vermindert onterechte registraties van nieuwe soorten door de eerste detectie van een vogelsoort op een dag te verwerpen, tenzij een tweede model de soort ook boven zijn normale drempelwaarde detecteert binnen hetzelfde detectievenster. De soort wordt geregistreerd vanaf het volgende venster waarin twee modellen overeenstemmen. Geldt alleen als elk vogelmodel dat die audiobron analyseert de soort kan herkennen, en niet wanneer de dynamische drempelwaarde de drempelwaarde van die soort heeft verlaagd; vleermuizen, andere geluiden dan vogelgeluiden en configuraties met één model blijven ongemoeid."
+      }
     },
     "bat": {
       "title": "Vleermuisdetectie",

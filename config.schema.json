@@ -1031,6 +1031,17 @@
       "type": "object",
       "description": "FileOutput represents file logging configuration."
     },
+    "FirstDailyConsensusSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to require a second model to confirm a bird species' first detection each day"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "FirstDailyConsensusSettings configures the first-daily-detection consensus rule: a bird species' first detection of the day is discarded unless a second model also cleared its normal threshold within the same detection window; the species is recorded from the next window in which two models agree."
+    },
     "HealthCheckConfig": {
       "properties": {
         "enabled": {
@@ -1925,6 +1936,10 @@
         "daylightfilter": {
           "$ref": "#/$defs/DaylightFilterSettings",
           "description": "Daylight filter settings"
+        },
+        "firstdailyconsensus": {
+          "$ref": "#/$defs/FirstDailyConsensusSettings",
+          "description": "Require a second model to confirm each bird species' first detection of the day"
         },
         "rtsp": {
           "$ref": "#/$defs/RTSPSettings",

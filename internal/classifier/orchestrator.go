@@ -106,6 +106,10 @@ type Orchestrator struct {
 	// service; readers use Snapshot() lock-free (model de-privilege epic, Phase 2a).
 	names *speciesindex.Service
 
+	// speciesSets memoizes per-model canonical species keys for
+	// SpeciesSharedByBirdModels; rebuildSpeciesIndexLocked invalidates it.
+	speciesSets modelSpeciesSets
+
 	// rebuildMu serializes the name-service rebuild (rebuildSpeciesIndex and
 	// RebuildNameResolver) so a working set taken by one trigger cannot be published
 	// after a newer one's. It sits ABOVE o.mu in the lock order (o.rebuildMu -> o.mu
@@ -1341,13 +1345,7 @@ func (o *Orchestrator) AllLabels() []string {
 		sets = append(sets, primary.Labels())
 	}
 	for _, ref := range refs {
-		ref.entry.mu.Lock()
-		var labels []string
-		if ref.entry.instance != nil {
-			labels = ref.entry.instance.Labels()
-		}
-		ref.entry.mu.Unlock()
-		sets = append(sets, labels)
+		sets = append(sets, labelsOf(ref, nil, ""))
 	}
 	return unionLabels(sets...)
 }
