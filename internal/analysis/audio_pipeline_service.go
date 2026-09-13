@@ -1839,9 +1839,15 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels(fallbackSources map[
 		// coincides with a retained rate.
 		switch {
 		case escalate:
+			// Carry the channel-retention state even on the escalation path: the
+			// rate is lost, but a channel count may still have been recovered, and
+			// that recovery must not be silent (the exact class of hidden behavior
+			// this change surfaces).
 			GetLogger().Error("stream probe failed with no previously known sample rate; high sample rate model audio will be resampled to the target rate until the source is re-probed",
 				logger.String("stream", stream.Name),
 				logger.Int("target_sample_rate", conf.SampleRate),
+				logger.Int("channels", sourceChannels),
+				logger.Bool("channels_retained", channelsRetained),
 				logger.String("operation", "probe_stream"))
 		case retained || channelsRetained:
 			GetLogger().Warn("stream probe failed on reconnect; retaining last known stream parameters to avoid silent resampling",
