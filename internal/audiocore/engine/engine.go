@@ -362,18 +362,19 @@ func (e *AudioEngine) StartStream(sourceID, url, transport string) error {
 		bitDepth = defaultBitDepth
 	}
 	spec := e.buildStreamSpec(&audiocore.StreamSpec{
-		SourceID:         sourceID,
-		SourceName:       src.DisplayName,
-		URL:              url,
-		Type:             src.Type,
-		SampleRate:       sampleRate,
-		SourceSampleRate: src.SourceSampleRate,
-		BitDepth:         bitDepth,
-		Channels:         channels,
-		SourceChannels:   src.SourceChannels,
-		ChannelMode:      src.ChannelMode,
-		MediaMode:        src.MediaMode,
-		Transport:        transport,
+		SourceID:                  sourceID,
+		SourceName:                src.DisplayName,
+		URL:                       url,
+		Type:                      src.Type,
+		SampleRate:                sampleRate,
+		SourceSampleRate:          src.SourceSampleRate,
+		SourceSampleRateEstimated: src.SourceSampleRateEstimated,
+		BitDepth:                  bitDepth,
+		Channels:                  channels,
+		SourceChannels:            src.SourceChannels,
+		ChannelMode:               src.ChannelMode,
+		MediaMode:                 src.MediaMode,
+		Transport:                 transport,
 	})
 	if err := e.streamMgr.StartStream(spec); err != nil {
 		_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
@@ -502,18 +503,19 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 	// 5. Start capture based on source type.
 	if isStreamType(cfg.Type) {
 		spec := e.buildStreamSpec(&audiocore.StreamSpec{
-			SourceID:         sourceID,
-			SourceName:       src.DisplayName,
-			URL:              cfg.ConnectionString,
-			Type:             cfg.Type,
-			SampleRate:       sampleRate,
-			SourceSampleRate: cfg.SourceSampleRate,
-			BitDepth:         bitDepth,
-			Channels:         channels,
-			SourceChannels:   cfg.SourceChannels,
-			ChannelMode:      cfg.ChannelMode,
-			MediaMode:        cfg.MediaMode,
-			Transport:        e.resolveTransport(cfg.Transport),
+			SourceID:                  sourceID,
+			SourceName:                src.DisplayName,
+			URL:                       cfg.ConnectionString,
+			Type:                      cfg.Type,
+			SampleRate:                sampleRate,
+			SourceSampleRate:          cfg.SourceSampleRate,
+			SourceSampleRateEstimated: cfg.SourceSampleRateEstimated,
+			BitDepth:                  bitDepth,
+			Channels:                  channels,
+			SourceChannels:            cfg.SourceChannels,
+			ChannelMode:               cfg.ChannelMode,
+			MediaMode:                 cfg.MediaMode,
+			Transport:                 e.resolveTransport(cfg.Transport),
 		})
 		if err := e.streamMgr.StartStream(spec); err != nil {
 			e.bufferMgr.DeallocateSource(sourceID)
@@ -704,18 +706,19 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 
 	if isStreamType(newType) {
 		spec := e.buildStreamSpec(&audiocore.StreamSpec{
-			SourceID:         sourceID,
-			SourceName:       src.DisplayName,
-			URL:              newCfg.ConnectionString,
-			Type:             newType,
-			SampleRate:       sampleRate,
-			SourceSampleRate: newCfg.SourceSampleRate,
-			BitDepth:         bitDepth,
-			Channels:         channels,
-			SourceChannels:   newCfg.SourceChannels,
-			ChannelMode:      newCfg.ChannelMode,
-			MediaMode:        newCfg.MediaMode,
-			Transport:        e.resolveTransport(newCfg.Transport),
+			SourceID:                  sourceID,
+			SourceName:                src.DisplayName,
+			URL:                       newCfg.ConnectionString,
+			Type:                      newType,
+			SampleRate:                sampleRate,
+			SourceSampleRate:          newCfg.SourceSampleRate,
+			SourceSampleRateEstimated: newCfg.SourceSampleRateEstimated,
+			BitDepth:                  bitDepth,
+			Channels:                  channels,
+			SourceChannels:            newCfg.SourceChannels,
+			ChannelMode:               newCfg.ChannelMode,
+			MediaMode:                 newCfg.MediaMode,
+			Transport:                 e.resolveTransport(newCfg.Transport),
 		})
 		if err := e.streamMgr.StartStream(spec); err != nil {
 			e.bufferMgr.DeallocateSource(sourceID)
@@ -751,7 +754,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 	// snapshots and emits the SourceReconfigured event with the fully updated entry.
 	// Without the sync, a channel/media-mode-only change re-triggers on every later
 	// reconfigure and restarts the stream indefinitely.
-	syncedModes := e.registry.SyncReconfiguredParams(sourceID, newCfg.ChannelMode, newCfg.MediaMode, newCfg.Transport, newCfg.SourceSampleRate, newCfg.SourceChannels)
+	syncedModes := e.registry.SyncReconfiguredParams(sourceID, newCfg.ChannelMode, newCfg.MediaMode, newCfg.Transport, newCfg.SourceSampleRate, newCfg.SourceChannels, newCfg.SourceSampleRateEstimated)
 	syncedParams := e.registry.UpdateAudioParams(sourceID, sampleRate, bitDepth, channels)
 	if !syncedModes || !syncedParams {
 		// The source was fetched at the top of this function and the reconfigure

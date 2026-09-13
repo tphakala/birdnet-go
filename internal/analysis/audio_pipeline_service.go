@@ -586,6 +586,14 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 		return fmt.Errorf("restart source: source %s not found in registry", sourceID)
 	}
 
+	// Capture the running source's last known probed parameters before removal.
+	// The source is removed below before buildSourceConfigsWithModels re-probes,
+	// so a transient probe failure during the restart would otherwise collapse a
+	// high-rate source to the 48 kHz target and silently resample it, and zero the
+	// channel count so a left/right selection silently downmixes (#4350). Passing
+	// the captured parameters lets the rebuilt config retain the true values.
+	fallbackSources := p.captureStreamFallback(connStr)
+
 	// 1. Clean up overrun tracker state.
 	RemoveOverrunTrackers(sourceID)
 
@@ -610,8 +618,11 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 		return fmt.Errorf("restart source: remove failed: %w", err)
 	}
 
-	// 5. Rebuild source config from current settings.
-	sourceConfigs := p.buildSourceConfigsWithModels()
+	// 5. Rebuild source config from current settings. Pass the captured parameters
+	// as a fallback: the source was removed above, so buildSourceConfigsWithModels
+	// can no longer read them from the registry when the reconnect-time re-probe
+	// fails.
+	sourceConfigs := p.buildSourceConfigsWithModels(fallbackSources)
 	var targetConfig *sourceConfigWithModels
 	for i := range sourceConfigs {
 		if sourceConfigs[i].config.ConnectionString == connStr {
@@ -703,8 +714,9 @@ func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.A
 	log := audiocore.GetLogger()
 
 	// Add audio sources via engine: this registers sources, allocates buffers,
-	// and starts capture (FFmpeg streams or device capture).
-	sourceConfigs := p.buildSourceConfigsWithModels()
+	// and starts capture (FFmpeg streams or device capture). Initial startup has
+	// no previously known rate to fall back on, so no fallback map is passed.
+	sourceConfigs := p.buildSourceConfigsWithModels(nil)
 	sourceModelMap := make(map[string][]string, len(sourceConfigs))
 	var sourceIDs []string
 	for _, scm := range sourceConfigs {
@@ -1384,7 +1396,10 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	log := audiocore.GetLogger()
 
 	// Build desired config keyed by connection string, including model IDs.
-	desiredConfigs := p.buildSourceConfigsWithModels()
+	// Sources are still registered here, so buildSourceConfigsWithModels consults
+	// the live registry for a fallback rate when a probe fails; no explicit map
+	// is needed.
+	desiredConfigs := p.buildSourceConfigsWithModels(nil)
 	desired := make(map[string]sourceConfigWithModels, len(desiredConfigs))
 	for _, scm := range desiredConfigs {
 		desired[scm.config.ConnectionString] = scm
@@ -1663,9 +1678,63 @@ type sourceConfigWithModels struct {
 	modelIDs []string // config-level IDs, e.g., ["birdnet", "perch_v2"]
 }
 
+// streamFallback carries a stream's last known probed parameters, reused to
+// preserve them across a transient probe failure on reconnect (#4350). A failed
+// probe returns both fields as 0 together, so preservation is all-or-nothing.
+type streamFallback struct {
+	sampleRate int
+	channels   int
+}
+
+// known reports whether the fallback carries any usable value.
+func (f streamFallback) known() bool { return f.sampleRate > 0 || f.channels > 0 }
+
+// registrySourceByConnection looks up a running source by its connection string,
+// returning (nil, false) when the engine or its registry is not yet wired (for
+// example a minimal service constructed in a unit test). It lets the probe
+// fallback consult the live registry without assuming the engine is present.
+func (p *AudioPipelineService) registrySourceByConnection(connStr string) (*audiocore.AudioSource, bool) {
+	if p.engine == nil {
+		return nil, false
+	}
+	registry := p.engine.Registry()
+	if registry == nil {
+		return nil, false
+	}
+	return registry.GetByConnection(connStr)
+}
+
+// captureStreamFallback snapshots a running source's last known probed sample
+// rate and channel count, keyed by its connection string, for use as a
+// probe-failure fallback. RestartSource must call it BEFORE removing the source,
+// because buildSourceConfigsWithModels re-probes after the source is gone from
+// the registry and would otherwise lose the true rate on a transient
+// reconnect-time probe failure (#4350). Returns a non-nil map that is empty when
+// the source is unknown or carries no usable values.
+func (p *AudioPipelineService) captureStreamFallback(connStr string) map[string]streamFallback {
+	fallback := make(map[string]streamFallback, 1)
+	if src, ok := p.registrySourceByConnection(connStr); ok {
+		if fb := (streamFallback{sampleRate: src.SourceSampleRate, channels: src.SourceChannels}); fb.known() {
+			fallback[connStr] = fb
+		}
+	}
+	return fallback
+}
+
 // buildSourceConfigsWithModels constructs audiocore.SourceConfig entries from
 // the current settings, paired with their configured model IDs.
-func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWithModels {
+//
+// fallbackSources maps a stream connection string to that stream's previously
+// known probed parameters, consulted only when a fresh probe fails (returns 0).
+// RTSP probes transiently fail while the upstream is mid-reconnect; without a
+// fallback the config would collapse to the 48 kHz target and silently resample
+// away a high-rate source (e.g. an ultrasonic bat mic), and would zero the source
+// channel count so a left/right channel selection silently downmixes, until a
+// full container restart (#4350). Callers that still have the running source in
+// the registry may pass nil, in which case the live registry supplies the
+// fallback; RestartSource removes the source before building, so it captures the
+// parameters first and passes them here.
+func (p *AudioPipelineService) buildSourceConfigsWithModels(fallbackSources map[string]streamFallback) []sourceConfigWithModels {
 	settings := conf.Setting()
 	var result []sourceConfigWithModels
 
@@ -1686,33 +1755,75 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 	// RTSP streams.
 	for _, stream := range enabledStreams {
 		probe := probeResults[stream.URL]
-		sampleRate := conf.SampleRate
-		if hasBatModel(stream.Models) {
-			if probe.sampleRate > conf.SampleRate {
-				sampleRate = probe.sampleRate
-			}
-			if probe.sampleRate > 0 && probe.sampleRate < ffmpeg.MinBatSampleRate {
-				GetLogger().Warn("stream sample rate below bat model minimum",
-					logger.String("stream", stream.Name),
-					logger.Int("sample_rate", probe.sampleRate),
-					logger.Int("minimum", ffmpeg.MinBatSampleRate),
-					logger.String("operation", "probe_stream"))
+		isBat := hasBatModel(stream.Models)
+
+		// On a failed probe fall back to this connection's last known parameters
+		// so a transient reconnect-time probe failure does not silently drop the
+		// stream to the 48 kHz target and resample away its high-frequency
+		// content, nor zero the channel count so a left/right selection silently
+		// downmixes (#4350). probeStreamSampleRate zeroes the sample rate and the
+		// channel count together on any failure (it returns streamProbeResult{}),
+		// so a single sampleRate==0 check covers both. The caller-supplied map
+		// (used by RestartSource, which removes the source before building) takes
+		// precedence over the live registry (used by reconfigure/startup while
+		// sources are still registered).
+		var fb streamFallback
+		if probe.sampleRate == 0 {
+			fb = fallbackSources[stream.URL]
+			if !fb.known() {
+				if src, ok := p.registrySourceByConnection(stream.URL); ok {
+					fb = streamFallback{sampleRate: src.SourceSampleRate, channels: src.SourceChannels}
+				}
 			}
 		}
+
+		sourceSampleRate, sampleRate, retained, escalate := resolveStreamSampleRates(
+			probe.sampleRate, fb.sampleRate, conf.SampleRate, isBat)
+
+		sourceChannels := probe.channels
+		if sourceChannels == 0 && fb.channels > 0 {
+			sourceChannels = fb.channels
+		}
+
+		// retained and escalate are mutually exclusive: escalate requires no rate
+		// fallback (retained == false), so the ordered switch cannot mask the
+		// escalation error behind the retention warning.
+		switch {
+		case retained:
+			GetLogger().Warn("stream probe failed on reconnect; retaining last known stream parameters to avoid silent resampling",
+				logger.String("stream", stream.Name),
+				logger.Int("retained_sample_rate", sourceSampleRate),
+				logger.Int("retained_channels", sourceChannels),
+				logger.String("operation", "probe_stream"))
+		case escalate:
+			GetLogger().Error("stream probe failed with no previously known sample rate; high sample rate model audio will be resampled to the target rate until the source is re-probed",
+				logger.String("stream", stream.Name),
+				logger.Int("target_sample_rate", conf.SampleRate),
+				logger.String("operation", "probe_stream"))
+		}
+		if isBat && sourceSampleRate > 0 && sourceSampleRate < ffmpeg.MinBatSampleRate {
+			GetLogger().Warn("stream sample rate below bat model minimum",
+				logger.String("stream", stream.Name),
+				logger.Int("sample_rate", sourceSampleRate),
+				logger.Int("minimum", ffmpeg.MinBatSampleRate),
+				logger.String("operation", "probe_stream"))
+		}
+
 		result = append(result, sourceConfigWithModels{
 			config: &audiocore.SourceConfig{
-				DisplayName:      stream.Name,
-				Type:             audiocore.StreamTypeToSourceType(stream.Type),
-				ConnectionString: stream.URL,
-				SampleRate:       sampleRate,
-				SourceSampleRate: probe.sampleRate,
-				BitDepth:         conf.BitDepth,
-				Channels:         1,
-				SourceChannels:   probe.channels,
-				ChannelMode:      string(stream.ChannelMode),
-				MediaMode:        string(stream.MediaMode),
-				Transport:        rtspStreamTransport(stream, &settings.Realtime.RTSP),
-				Gain:             stream.Gain,
+				DisplayName:               stream.Name,
+				Type:                      audiocore.StreamTypeToSourceType(stream.Type),
+				ConnectionString:          stream.URL,
+				SampleRate:                sampleRate,
+				SourceSampleRate:          sourceSampleRate,
+				SourceSampleRateEstimated: retained,
+				BitDepth:                  conf.BitDepth,
+				Channels:                  1,
+				SourceChannels:            sourceChannels,
+				ChannelMode:               string(stream.ChannelMode),
+				MediaMode:                 string(stream.MediaMode),
+				Transport:                 rtspStreamTransport(stream, &settings.Realtime.RTSP),
+				Gain:                      stream.Gain,
 			},
 			modelIDs: stream.Models,
 		})
@@ -1800,6 +1911,38 @@ func hasBatModel(modelIDs []string) bool {
 		}
 	}
 	return false
+}
+
+// resolveStreamSampleRates decides the source and output sample rates for a
+// stream config from a fresh probe result and a fallback rate to use when the
+// probe failed.
+//
+// A probe returns probeRate 0 on failure. RTSP probes transiently fail while the
+// upstream is mid-reconnect; falling back to targetRate would silently resample a
+// high-rate source (e.g. a 250 kHz ultrasonic bat mic) down to 48 kHz and keep it
+// there across restarts until a full container restart (#4350). When the probe
+// failed and a positive fallbackRate is known, that rate is reused so the
+// pipeline keeps the correct geometry (retained=true).
+//
+// outputRate is the target rate, raised to the source rate only for bat models,
+// which analyse at the source's native high rate; other models always analyse at
+// targetRate and rely on downstream resampling.
+//
+// escalate reports a genuine loss: the probe failed, no fallback was available,
+// and the stream uses a high-sample-rate (bat) model, so its audio will be
+// resampled to targetRate until a successful re-probe. Callers should log this.
+func resolveStreamSampleRates(probeRate, fallbackRate, targetRate int, isBatModel bool) (sourceRate, outputRate int, retained, escalate bool) {
+	sourceRate = probeRate
+	if sourceRate == 0 && fallbackRate > 0 {
+		sourceRate = fallbackRate
+		retained = true
+	}
+	outputRate = targetRate
+	if isBatModel && sourceRate > targetRate {
+		outputRate = sourceRate
+	}
+	escalate = probeRate == 0 && !retained && isBatModel
+	return sourceRate, outputRate, retained, escalate
 }
 
 // probeAllStreams probes all streams concurrently to discover their actual
