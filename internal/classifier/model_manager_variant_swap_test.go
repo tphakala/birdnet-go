@@ -12,7 +12,7 @@ import (
 // rule that used to live in familyFields and now lives in the swap helper: the
 // family's model field is persisted and nothing else, so a user's custom
 // BirdNET.LabelPath survives a swap and a revert. An empty model path reverts to the
-// embedded baseline (the DFT->baseline path in replacePrimaryVariant).
+// embedded baseline (the DFT->baseline path in replaceVariant).
 func TestApplyConfigForVariantSwap_PrimaryWritesModelPathOnly(t *testing.T) {
 	// Not parallel: mutates global settings via conf.StoreSettings.
 	origSettings := conf.GetSettings()

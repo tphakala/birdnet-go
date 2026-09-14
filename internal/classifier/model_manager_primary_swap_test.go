@@ -30,7 +30,7 @@ func isolateTestConfig(t *testing.T) {
 // entry with a file-less BuiltIn baseline and one downloadable DFT-truncated
 // variant served by a local test server. It mirrors the real birdnet-v2.4 shape
 // (RegistryID == RegistryIDBirdNETV24) so InstallOrReplace routes it through the
-// dedicated primary-swap path, while using a small payload with a matching checksum
+// unified variant-swap path, while using a small payload with a matching checksum
 // so the download verifies without the real multi-MB model file.
 func permanentSwapEntry(t *testing.T) (entry CatalogEntry, modelsDir, srvURL, dftLocalName string) {
 	t.Helper()

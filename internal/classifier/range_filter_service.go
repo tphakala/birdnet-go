@@ -87,7 +87,7 @@ type rangeFilterService struct {
 	// buildMu serializes reloads with each other. It is held across the whole
 	// reload (the unlocked build AND the swap), because reload is reachable
 	// concurrently: ReloadModel runs on the monitor goroutine while
-	// ReloadPrimaryForVariantSwap and ReloadRangeFilter run on API HTTP goroutines
+	// ReloadForVariantSwap and ReloadRangeFilter run on API HTTP goroutines
 	// (model install/uninstall/variant-swap). Serializing here replaces the bn.mu
 	// hold that previously serialized every range-filter rebuild, without blocking
 	// predictions (which take mu, not buildMu). Lock order: buildMu is taken before

@@ -1363,10 +1363,11 @@ func (mm *ModelManager) InstallOrReplace(ctx context.Context, entry *CatalogEntr
 	}
 	current, installed := mm.installed[entry.ID]
 
-	// Permanent primary model (BirdNET v2.4): always "installed", and its variant is
-	// swapped through the dedicated primary-reload path, never the generic
-	// orchestrator unload/load. If ScanInstalled has not run yet, treat the current
-	// state as the embedded BuiltIn baseline so the swap still has a rollback target.
+	// Permanent primary model (BirdNET v2.4): always "installed". Its variant swap runs
+	// through the unified replaceVariant like every other family; the v2.4 anchor is
+	// always loaded, so it takes the gapless build-then-swap path. If ScanInstalled has
+	// not run yet, treat the current state as the embedded BuiltIn baseline so the swap
+	// still has a rollback target.
 	if IsPermanentEntry(entry) {
 		if !installed {
 			current = InstalledModel{CatalogID: entry.ID, Version: entry.Version}
@@ -1527,8 +1528,8 @@ func (mm *ModelManager) replaceVariant(ctx context.Context, entry *CatalogEntry,
 // build, so a failure means the old model never stopped serving: this restores the
 // install record, re-persists the old variant's config (step 3 wrote the new one),
 // removes the new variant's downloaded files, and reports the failure. It never reloads,
-// because nothing was swapped. It is the family-generic successor to the deleted
-// rollbackPrimaryVariantSwap and keeps that error text for callers that match on it.
+// because nothing was swapped. It serves every family; the "failed to load" phrasing is
+// kept stable for the API/SSE surface and the tests that match on it.
 func (mm *ModelManager) rollbackVariantSwap(log logger.Logger, entry *CatalogEntry, old *InstalledModel, newVariantID string, cause error, progress chan<- DownloadState) error {
 	log.Warn("New variant failed to build; rolled back to the previous variant",
 		logger.String("catalog_id", entry.ID),
@@ -1636,26 +1637,6 @@ func (mm *ModelManager) rollbackVariantSwitch(log logger.Logger, entry *CatalogE
 	return switchErr
 }
 
-// replacePrimaryVariant swaps the permanent primary classifier (BirdNET v2.4)
-// between its embedded BuiltIn baseline and a DFT-truncated ONNX build, in place,
-// without a pipeline restart. It mirrors replaceVariant's download-before-delete and
-// rollback discipline, but the primary cannot be orchestrator-unloaded/loaded, so it
-// activates through the dedicated primary-reload path
-// (Orchestrator.ReloadPrimaryForVariantSwap). The target's files (none for the
-// BuiltIn baseline) are fetched first while the old model keeps running, then
-// BirdNET.ModelPath is set (or cleared for the baseline) and the primary is reloaded.
-// A reload failure restores the previous variant's config and record; the running
-// model was already kept alive by the primary reload (a failed build never swaps), so a
-// failed swap never strands the classifier. The caller must have registered entry.ID
-// in mm.downloading; replacePrimaryVariant clears it (or schedules cleanup on
-// failure) before returning.
-// rollbackPrimaryVariantSwap restores the previously-active primary variant after a
-// failed reload of the new one. The primary reload already kept the previous model
-// serving because a failed build never swaps, so this only re-records the old variant,
-// re-persists its config, and removes the new variant's now-unused files; it does
-// NOT reload again (that would put a working model at risk for no gain). It reports
-// the swap as failed over the progress stream. The caller must have registered
-// entry.ID in mm.downloading; rollbackPrimaryVariantSwap schedules its cleanup.
 // applyConfigForVariantSwap persists the selected model file for a within-family
 // variant swap. It writes ONLY the family's model field: a family's label set is
 // identical across its variants (embedded for BirdNET v2.4), so a swap must never
@@ -2200,8 +2181,9 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 
 	// Set only the non-empty paths, and only fields the family actually carries
 	// (familyFields yields a nil pointer for a family's absent labels/embeddings). The
-	// primary reaches this path only via Reinstall; Install/InstallOrReplace route
-	// it to replacePrimaryVariant instead. The primary's label set is embedded, so a
+	// primary reaches this path only via Reinstall; InstallOrReplace routes its variant
+	// swap to replaceVariant, which writes the primary's config via applyConfigForVariantSwap
+	// (model-only) instead. The primary's label set is embedded, so a
 	// primary variant never ships a labels file (labelsPath is always "" for it), but
 	// familyFields now exposes the primary's Labels pointer, so guard the Labels write
 	// on RegistryIDBirdNETV24 as well to keep a user's custom BirdNET.LabelPath
