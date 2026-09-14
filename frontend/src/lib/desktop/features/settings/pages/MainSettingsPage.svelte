@@ -57,11 +57,7 @@
   import { loggers } from '$lib/utils/logger';
   import { safeArrayAccess } from '$lib/utils/security';
   import { formatBytes } from '$lib/utils/formatters';
-  import {
-    wundergroundDefaults,
-    pirateWeatherDefaults,
-    weatherDefaults,
-  } from '$lib/utils/weatherDefaults';
+  import { wundergroundDefaults, weatherDefaults } from '$lib/utils/weatherDefaults';
   import {
     MAP_CONFIG,
     createMapStyle as createMapStyleFromConfig,
@@ -810,7 +806,7 @@
     settingsActions.updateSection('realtime', {
       weather: {
         ...settings.weather,
-        provider: provider as 'none' | 'yrno' | 'openweather' | 'wunderground' | 'pirateweather',
+        provider: provider as 'none' | 'yrno' | 'openweather' | 'wunderground',
       },
     });
   }
@@ -827,18 +823,6 @@
         ...settings.weather,
         wunderground: {
           ...(settings.weather?.wunderground ?? wundergroundDefaults),
-          [key]: value,
-        },
-      },
-    });
-  }
-
-  function updatePirateWeatherSetting(key: keyof typeof pirateWeatherDefaults, value: string) {
-    settingsActions.updateSection('realtime', {
-      weather: {
-        ...settings.weather,
-        pirateWeather: {
-          ...(settings.weather?.pirateWeather ?? pirateWeatherDefaults),
           [key]: value,
         },
       },
@@ -870,10 +854,6 @@
           stationId: currentWeather.wunderground?.stationId ?? '',
           endpoint: currentWeather.wunderground?.endpoint ?? '',
           units: currentWeather.wunderground?.units ?? 'm',
-        },
-        pirateWeather: {
-          apiKey: currentWeather.pirateWeather?.apiKey ?? '',
-          endpoint: currentWeather.pirateWeather?.endpoint ?? '',
         },
       };
 
@@ -1232,11 +1212,6 @@
               label: t('settings.integration.weather.provider.options.wunderground'),
               providerCode: 'wunderground',
             },
-            {
-              value: 'pirateweather',
-              label: t('settings.integration.weather.provider.options.pirateweather'),
-              providerCode: 'pirateweather',
-            },
           ] as WeatherOption[]}
           value={settings.weather.provider}
           label={t('settings.integration.weather.provider.label')}
@@ -1325,31 +1300,6 @@
               disabled={store.isLoading || store.isSaving}
             />
           </div>
-        {:else if settings.weather.provider === 'pirateweather'}
-          <SettingsNote>
-            <span>{@html t('settings.integration.weather.notes.pirateweather')}</span>
-          </SettingsNote>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <PasswordField
-              label={t('settings.integration.weather.pirateweather.apiKey.label')}
-              value={settings.weather.pirateWeather?.apiKey ?? ''}
-              onUpdate={apiKey => updatePirateWeatherSetting('apiKey', apiKey)}
-              placeholder=""
-              helpText={t('settings.integration.weather.pirateweather.apiKey.helpText')}
-              disabled={store.isLoading || store.isSaving}
-              allowReveal={true}
-            />
-
-            <TextInput
-              label={t('settings.integration.weather.pirateweather.endpoint.label')}
-              value={settings.weather.pirateWeather?.endpoint ?? ''}
-              onchange={endpoint => updatePirateWeatherSetting('endpoint', endpoint)}
-              placeholder="https://api.pirateweather.net/forecast"
-              helpText={t('settings.integration.weather.pirateweather.endpoint.helpText')}
-              disabled={store.isLoading || store.isSaving}
-            />
-          </div>
         {/if}
 
         {#if settings.weather.provider !== 'none'}
@@ -1365,8 +1315,6 @@
                   (settings.weather.provider === 'wunderground' &&
                     (!settings.weather.wunderground?.apiKey ||
                       !settings.weather.wunderground?.stationId)) ||
-                  (settings.weather.provider === 'pirateweather' &&
-                    !settings.weather.pirateWeather?.apiKey) ||
                   weatherTestState.isRunning}
               >
                 {t('settings.integration.weather.test.button')}
@@ -1375,8 +1323,6 @@
                 {#if settings.weather.provider === 'openweather' && !settings.weather.openWeather?.apiKey}
                   {t('settings.integration.weather.test.apiKeyRequired')}
                 {:else if settings.weather.provider === 'wunderground' && (!settings.weather.wunderground?.apiKey || !settings.weather.wunderground?.stationId)}
-                  {t('settings.integration.weather.test.apiKeyRequired')}
-                {:else if settings.weather.provider === 'pirateweather' && !settings.weather.pirateWeather?.apiKey}
                   {t('settings.integration.weather.test.apiKeyRequired')}
                 {:else if weatherTestState.isRunning}
                   {t('settings.integration.weather.test.inProgress')}

@@ -3293,8 +3293,7 @@
             "none": "Geen",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground",
-            "pirateweather": "Pirate Weather"
+            "wunderground": "Weather Underground"
           }
         },
         "wunderground": {
@@ -3315,16 +3314,6 @@
             "helpText": "Selecteer eenheden voor temperatuur en wind snelheid (m = Metrisch, e = Imperial, h = UK Hybrid)."
           }
         },
-        "pirateweather": {
-          "apiKey": {
-            "label": "Pirate Weather API Sleutel",
-            "helpText": "Voer jouw Pirate Weather API sleutel in. Vereist voor weer gegevens."
-          },
-          "endpoint": {
-            "label": "API-eindpunt",
-            "helpText": "Overschrijf het standaard Pirate Weather API endpoint indien nodig. Standaard https://api.pirateweather.net/forecast indien leeg gelaten."
-          }
-        },
         "notes": {
           "none": "Geen weer gegevens worden opgehaald.",
           "yrno": {
@@ -3332,8 +3321,7 @@
             "freeService": "Yr is een gratis weer gegevens service. Voor meer informatie, bezoek <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "Gebruik van OpenWeather vereist een API sleutel, registreer voor een gratis API sleutel bij <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Vereist een Weather Underground API sleutel en een geldig PWS station ID. Zie <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> voor details.",
-          "pirateweather": "Gebruik van Pirate Weather vereist een API sleutel, registreer bij <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
+          "wunderground": "Vereist een Weather Underground API sleutel en een geldig PWS station ID. Zie <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> voor details."
         },
         "apiKey": {
           "label": "API Sleutel",
@@ -5115,7 +5103,6 @@
       "birdweatherClientFailed": "Kan BirdWeather-client niet aanmaken",
       "noWeatherProvider": "Geen weerprovider geselecteerd",
       "openWeatherKeyRequired": "OpenWeather API-sleutel is vereist",
-      "pirateWeatherKeyRequired": "Pirate Weather API-sleutel is vereist",
       "processorUnavailable": "Processor niet beschikbaar",
       "discoveryFailed": "Kan Home Assistant-detectie niet activeren"
     },

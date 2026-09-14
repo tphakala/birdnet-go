@@ -37,10 +37,9 @@ import (
 // are owned by the integrations domain (the only consumer) and name the provider
 // the settings UI selects.
 const (
-	WeatherProviderOpenWeather   = "openweather"
-	WeatherProviderWunderground  = "wunderground"
-	WeatherProviderYrno          = "yrno"
-	WeatherProviderPirateWeather = "pirateweather"
+	WeatherProviderOpenWeather  = "openweather"
+	WeatherProviderWunderground = "wunderground"
+	WeatherProviderYrno         = "yrno"
 )
 
 // Integration constants (file-local)
@@ -589,12 +588,11 @@ type EBirdTestRequest struct {
 
 // WeatherTestRequest represents a request to test weather provider connectivity
 type WeatherTestRequest struct {
-	Provider      string                     `json:"provider"`
-	PollInterval  int                        `json:"pollInterval"`
-	Debug         bool                       `json:"debug"`
-	OpenWeather   conf.OpenWeatherSettings   `json:"openWeather"`
-	Wunderground  conf.WundergroundSettings  `json:"wunderground"`
-	PirateWeather conf.PirateWeatherSettings `json:"pirateWeather"`
+	Provider     string                    `json:"provider"`
+	PollInterval int                       `json:"pollInterval"`
+	Debug        bool                      `json:"debug"`
+	OpenWeather  conf.OpenWeatherSettings  `json:"openWeather"`
+	Wunderground conf.WundergroundSettings `json:"wunderground"`
 }
 
 // WeatherTestStage represents the result of a weather test stage
@@ -622,7 +620,6 @@ func (c *Handler) TestWeatherConnection(ctx echo.Context) error {
 	current := c.CurrentSettings()
 	apicore.RestoreRedactedSecret(current.Realtime.Weather.OpenWeather.APIKey, &request.OpenWeather.APIKey)
 	apicore.RestoreRedactedSecret(current.Realtime.Weather.Wunderground.APIKey, &request.Wunderground.APIKey)
-	apicore.RestoreRedactedSecret(current.Realtime.Weather.PirateWeather.APIKey, &request.PirateWeather.APIKey)
 
 	// Validate provider
 	if request.Provider == "" || request.Provider == "none" {
@@ -634,23 +631,17 @@ func (c *Handler) TestWeatherConnection(ctx echo.Context) error {
 		return c.HandleErrorWithKey(ctx, nil, "OpenWeather API key is required", http.StatusBadRequest, notification.MsgErrIntegOWKeyRequired, nil)
 	}
 
-	// Validate Pirate Weather specific requirements
-	if request.Provider == WeatherProviderPirateWeather && request.PirateWeather.APIKey == "" {
-		return c.HandleErrorWithKey(ctx, nil, "Pirate Weather API key is required", http.StatusBadRequest, notification.MsgErrIntegPWKeyRequired, nil)
-	}
-
 	// Set up streaming response
 	setStreamingHeaders(ctx, mimeNDJSON)
 
 	// Clone current settings and override only Weather fields from the request
 	testSettings := conf.CloneSettings(current)
 	testSettings.Realtime.Weather = conf.WeatherSettings{
-		Provider:      request.Provider,
-		Debug:         request.Debug,
-		PollInterval:  request.PollInterval,
-		OpenWeather:   request.OpenWeather,
-		Wunderground:  request.Wunderground,
-		PirateWeather: request.PirateWeather,
+		Provider:     request.Provider,
+		Debug:        request.Debug,
+		PollInterval: request.PollInterval,
+		OpenWeather:  request.OpenWeather,
+		Wunderground: request.Wunderground,
 	}
 
 	// Create test context with timeout
@@ -746,8 +737,6 @@ func (c *Handler) testWeatherAPIConnectivity(ctx context.Context, settings *conf
 		testURL = "https://api.openweathermap.org"
 	case WeatherProviderWunderground:
 		testURL = "https://api.weather.com"
-	case WeatherProviderPirateWeather:
-		testURL = "https://api.pirateweather.net"
 	default:
 		return "", fmt.Errorf("unsupported weather provider: %s", provider)
 	}
@@ -806,7 +795,7 @@ func (c *Handler) testWeatherAuthentication(ctx context.Context, settings *conf.
 			}
 		}()
 
-		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		if resp.StatusCode == http.StatusUnauthorized {
 			return "", fmt.Errorf("invalid API key - please check your OpenWeather API key")
 		}
 
@@ -816,44 +805,6 @@ func (c *Handler) testWeatherAuthentication(ctx context.Context, settings *conf.
 		// For Weather Underground, authentication is tested in the data fetch stage
 		// since there's no separate auth endpoint
 		return "Authentication will be verified during data fetch", nil
-
-	case WeatherProviderPirateWeather:
-		apiKey := settings.Realtime.Weather.PirateWeather.APIKey
-		endpoint := settings.Realtime.Weather.PirateWeather.Endpoint
-		if endpoint == "" {
-			endpoint = "https://api.pirateweather.net/forecast"
-		}
-
-		// The API key is part of the URL PATH for this API
-		// (/forecast/{apikey}/{lat},{lon}), not a query parameter.
-		testURL := fmt.Sprintf("%s/%s/0,0", strings.TrimSuffix(endpoint, "/"), neturl.PathEscape(apiKey))
-
-		client := httpclient.NewGuardedHTTPClient(integrationShortTimeout * time.Second)
-		req, err := http.NewRequestWithContext(ctx, "GET", testURL, http.NoBody)
-		if err != nil {
-			// Scrub before wrapping: the *url.Error embeds testURL, which carries
-			// the API key in its path, and this error is returned to the API
-			// client and logs.
-			return "", fmt.Errorf("failed to create authentication request: %w", privacy.WrapError(err))
-		}
-
-		req.Header.Set("User-Agent", "BirdNET-Go Weather Test")
-		resp, err := client.Do(req)
-		if err != nil {
-			// Scrub before wrapping: the transport *url.Error embeds the API key.
-			return "", fmt.Errorf("failed to authenticate with Pirate Weather API: %w", privacy.WrapError(err))
-		}
-		defer func() {
-			if err := resp.Body.Close(); err != nil {
-				apicore.GetLogger().Warn("Failed to close response body", logger.Error(err))
-			}
-		}()
-
-		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return "", fmt.Errorf("invalid API key - please check your Pirate Weather API key")
-		}
-
-		return "Successfully authenticated with Pirate Weather API", nil
 
 	default:
 		return "Authentication not required for this provider", nil
@@ -874,8 +825,6 @@ func (c *Handler) testWeatherDataFetch(ctx context.Context, settings *conf.Setti
 		provider = weather.NewOpenWeatherProvider(guarded)
 	case WeatherProviderWunderground:
 		provider = weather.NewWundergroundProvider(guarded)
-	case WeatherProviderPirateWeather:
-		provider = weather.NewPirateWeatherProvider(guarded)
 	default:
 		return "", fmt.Errorf("unsupported weather provider: %s", settings.Realtime.Weather.Provider)
 	}
@@ -908,8 +857,6 @@ func getProviderDisplayName(provider string) string {
 		return "OpenWeather"
 	case WeatherProviderWunderground:
 		return "Weather Underground"
-	case WeatherProviderPirateWeather:
-		return "Pirate Weather"
 	default:
 		// Simple capitalization for unknown providers
 		if provider != "" {

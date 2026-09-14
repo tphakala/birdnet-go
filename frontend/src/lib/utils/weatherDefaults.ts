@@ -7,7 +7,6 @@
 import type {
   OpenWeatherSettings,
   WundergroundSettings,
-  PirateWeatherSettings,
   WeatherSettings,
 } from '$lib/stores/settings';
 
@@ -33,14 +32,6 @@ export const wundergroundDefaults: WundergroundSettings = {
 };
 
 /**
- * Default configuration for Pirate Weather provider
- */
-export const pirateWeatherDefaults: PirateWeatherSettings = {
-  apiKey: '',
-  endpoint: 'https://api.pirateweather.net/forecast',
-};
-
-/**
  * Complete default weather configuration
  */
 export const weatherDefaults: WeatherSettings = {
@@ -49,7 +40,6 @@ export const weatherDefaults: WeatherSettings = {
   debug: false,
   openWeather: openWeatherDefaults,
   wunderground: wundergroundDefaults,
-  pirateWeather: pirateWeatherDefaults,
 };
 
 /**
@@ -57,14 +47,12 @@ export const weatherDefaults: WeatherSettings = {
  */
 export function getProviderDefaults(
   provider: WeatherSettings['provider']
-): OpenWeatherSettings | WundergroundSettings | PirateWeatherSettings | null {
+): OpenWeatherSettings | WundergroundSettings | null {
   switch (provider) {
     case 'openweather':
       return openWeatherDefaults;
     case 'wunderground':
       return wundergroundDefaults;
-    case 'pirateweather':
-      return pirateWeatherDefaults;
     case 'none':
     case 'yrno':
       return null;

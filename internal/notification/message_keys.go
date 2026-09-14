@@ -143,7 +143,6 @@ const (
 	MsgErrIntegBWClientFailed    = "errors.integration.birdweatherClientFailed"
 	MsgErrIntegNoWeatherProvider = "errors.integration.noWeatherProvider"
 	MsgErrIntegOWKeyRequired     = "errors.integration.openWeatherKeyRequired"
-	MsgErrIntegPWKeyRequired     = "errors.integration.pirateWeatherKeyRequired"
 	MsgErrIntegProcessorUnavail  = "errors.integration.processorUnavailable"
 	MsgErrIntegDiscoveryFailed   = "errors.integration.discoveryFailed"
 

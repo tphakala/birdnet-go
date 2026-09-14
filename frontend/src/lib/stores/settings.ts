@@ -459,18 +459,12 @@ export interface WundergroundSettings {
   units: 'm' | 'e' | 'h'; // m=metric, e=imperial/english, h=UK hybrid
 }
 
-export interface PirateWeatherSettings {
-  apiKey: string;
-  endpoint: string;
-}
-
 export interface WeatherSettings {
-  provider: 'none' | 'yrno' | 'openweather' | 'wunderground' | 'pirateweather';
+  provider: 'none' | 'yrno' | 'openweather' | 'wunderground';
   pollInterval: number;
   debug: boolean;
   openWeather: OpenWeatherSettings;
   wunderground: WundergroundSettings;
-  pirateWeather: PirateWeatherSettings;
 }
 
 // New array-based OAuth provider configuration
