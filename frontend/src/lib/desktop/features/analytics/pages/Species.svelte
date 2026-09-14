@@ -7,7 +7,11 @@
   import { getStoredValue, setStoredValue } from '$lib/utils/storage';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { getAllAboutBirdsUrl, getWikipediaUrl } from '$lib/utils/speciesLinks';
+  import { buildSpeciesSearchUrl } from '$lib/utils/detectionUrls';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
+  import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
+  import { ExternalLink } from '@lucide/svelte';
   import { onMount, onDestroy } from 'svelte';
   import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
   import SpeciesFilterForm from '../components/forms/SpeciesFilterForm.svelte';
@@ -61,6 +65,12 @@
     displayName: string;
   }
 
+  // Narrower than the other columns: the max-confidence cell content is always a
+  // short "100.0%" string, so the default auto-layout share was mostly empty
+  // space. Wide enough to still fit the "Max Confidence" label + sort chevron on
+  // one line.
+  const MAX_CONFIDENCE_COLUMN_WIDTH = '140px';
+
   // Species name defaults to ascending (A→Z); every other column defaults to
   // descending (most/highest/most recent first) on first click.
   const SORTABLE_COLUMNS: {
@@ -68,6 +78,7 @@
     labelKey: TranslationKey;
     asc: SortOrder;
     desc: SortOrder;
+    width?: string;
   }[] = [
     {
       field: 'species',
@@ -92,6 +103,7 @@
       labelKey: 'analytics.species.headers.maxConfidence',
       asc: 'max_confidence_asc',
       desc: 'max_confidence_desc',
+      width: MAX_CONFIDENCE_COLUMN_WIDTH,
     },
     {
       field: 'first_seen',
@@ -635,14 +647,23 @@
           <table class="table w-full hidden sm:table">
             <thead>
               <tr>
-                {#each SORTABLE_COLUMNS as { field, labelKey } (field)}
+                {#each SORTABLE_COLUMNS as { field, labelKey, width } (field)}
                   <SortableHeader
                     label={t(labelKey)}
                     {field}
                     activeField={sortField}
                     direction={sortDirection}
                     onSort={handleSort}
+                    {width}
                   />
+                  {#if field === SPECIES_COLUMN_FIELD}
+                    <!-- Not sortable: just the external reference-site icons, kept out
+                         of the species cell so it can be one clickable link to the
+                         species' filtered detections without nesting anchors. -->
+                    <th scope="col">
+                      <span class="sr-only">{t('analytics.species.headers.links')}</span>
+                    </th>
+                  {/if}
                 {/each}
               </tr>
             </thead>
@@ -658,7 +679,13 @@
                     : 'bg-[var(--color-base-200)]'}
                 >
                   <td>
-                    <div class="flex items-center gap-3">
+                    <a
+                      href={buildSpeciesSearchUrl(species.scientific_name)}
+                      onclick={handleAppLinkClick}
+                      class="flex items-center gap-3 hover:opacity-80 transition-opacity"
+                      aria-label={t('analytics.species.viewDetections', { species: displayName })}
+                      title={t('analytics.species.viewDetections', { species: displayName })}
+                    >
                       <div class="avatar">
                         <div class="mask mask-squircle w-12 h-12 bg-[var(--color-base-300)]">
                           {#if species.thumbnail_url}
@@ -672,11 +699,33 @@
                         </div>
                       </div>
                       <div>
-                        <div class="font-bold">
-                          {displayName}
-                        </div>
+                        <div class="font-bold sp-species-name">{displayName}</div>
                         <div class="text-sm opacity-50 italic">{species.scientific_name}</div>
                       </div>
+                    </a>
+                  </td>
+                  <td>
+                    <div class="flex items-center gap-1">
+                      <a
+                        href={getAllAboutBirdsUrl(species.common_name)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="btn btn-ghost btn-sm btn-square"
+                        aria-label={`${t('analytics.species.openAllAboutBirds')}: ${displayName}`}
+                        title={t('analytics.species.openAllAboutBirds')}
+                      >
+                        <ExternalLink class="size-4" />
+                      </a>
+                      <a
+                        href={getWikipediaUrl(displayName, getLocale(), species.common_name)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="btn btn-ghost btn-sm btn-square"
+                        aria-label={`${t('analytics.species.openWikipedia')}: ${displayName}`}
+                        title={t('analytics.species.openWikipedia')}
+                      >
+                        <span class="text-xs font-serif font-bold">W</span>
+                      </a>
                     </div>
                   </td>
                   <td class="font-semibold">{species.count}</td>

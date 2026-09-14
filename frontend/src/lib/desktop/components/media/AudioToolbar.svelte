@@ -370,12 +370,18 @@
   .audio-toolbar {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    flex-wrap: wrap;
+    gap: 0.375rem 0.5rem;
     padding: 0.375rem 0.5rem;
     background: var(--color-base-200);
     border: 1px solid var(--color-base-300);
     border-radius: var(--radius-field);
     font-size: 0.75rem;
+
+    /* Prevent long-lived children (fixed-width sliders/labels) from ever
+       pushing the toolbar past its container - they wrap to a new line
+       instead of overflowing the rounded box they sit in. */
+    max-width: 100%;
   }
 
   .toolbar-group {

@@ -23,9 +23,14 @@ type SunEventTimes struct {
 	CivilDusk time.Time // Civil dusk in local time
 }
 
-// cacheEntry holds the cached sun event times for a given date
+// cacheEntry holds the cached sun event times for a given date, stamped with the
+// location generation they were computed under. A calculation that starts before
+// an UpdateLocation can finish after it and insert into the freshly cleared
+// cache; stamping lets that stale entry be recognized and ignored on read rather
+// than served until the next eviction.
 type cacheEntry struct {
-	times SunEventTimes // Sun event times in local time
+	times      SunEventTimes // Sun event times in local time
+	generation uint64        // Location generation these times were computed under
 }
 
 // maxCacheEntries caps the number of cached dates to prevent unbounded
@@ -41,11 +46,15 @@ const sunEventsOperation = "get_sun_events"
 
 // SunCalc handles caching and calculation of sun event times
 type SunCalc struct {
-	cache    map[string]cacheEntry   // Cache of sun event times for dates
-	lock     sync.RWMutex            // Lock for cache access
-	observer astral.Observer         // Observer for sun event calculations
-	location *time.Location          // Timezone derived from observer coordinates
-	metrics  *metrics.SunCalcMetrics // Metrics for observability
+	cache    map[string]cacheEntry // Cache of sun event times for dates
+	lock     sync.RWMutex          // Lock for cache access
+	observer astral.Observer       // Observer for sun event calculations
+	location *time.Location        // Timezone derived from observer coordinates
+	// generation increments on every location change. Cache entries carry the
+	// generation they were computed under so a result calculated against a
+	// superseded location can never be read back as a hit.
+	generation uint64
+	metrics    *metrics.SunCalcMetrics // Metrics for observability
 }
 
 // NewSunCalc creates a new SunCalc instance
@@ -64,14 +73,65 @@ func (sc *SunCalc) SetMetrics(m *metrics.SunCalcMetrics) {
 	sc.metrics = m
 }
 
+// UpdateLocation repoints the calculator at new station coordinates and reports
+// whether anything changed. It exists so that a location edit made in the UI
+// takes effect without a restart: holders keep their *SunCalc pointer and the
+// observer is swapped underneath them, which avoids having to thread a pointer
+// swap through every long-lived struct that shares the instance.
+//
+// Cached sun events belong to the old observer, so they are discarded. Passing
+// the current coordinates is a no-op and keeps the cache, which lets callers
+// invoke this from a broader "settings changed" path without paying for a
+// needless cache rebuild.
+func (sc *SunCalc) UpdateLocation(latitude, longitude float64) bool {
+	sc.lock.Lock()
+	defer sc.lock.Unlock()
+
+	if sc.observer.Latitude == latitude && sc.observer.Longitude == longitude {
+		return false
+	}
+
+	sc.observer = astral.Observer{Latitude: latitude, Longitude: longitude}
+	sc.location = resolveTimezone(latitude, longitude)
+	sc.generation++
+	clear(sc.cache)
+	return true
+}
+
+// locationSnapshot is one coherent view of where the calculator is pointed.
+// Every public entry point takes exactly one and threads it through, so a
+// concurrent UpdateLocation can never make a single call mix coordinates from
+// one location with the timezone or cached events of another.
+type locationSnapshot struct {
+	observer   astral.Observer
+	location   *time.Location
+	generation uint64
+}
+
+// snapshot reads the observer, its derived timezone and the current generation
+// under one lock. The three are replaced together by UpdateLocation, so they are
+// never read from the struct individually.
+func (sc *SunCalc) snapshot() locationSnapshot {
+	sc.lock.RLock()
+	defer sc.lock.RUnlock()
+	return locationSnapshot{observer: sc.observer, location: sc.location, generation: sc.generation}
+}
+
 // GetSunEventTimes returns the sun event times for a given date, using cache if available
 func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
+	return sc.sunEventTimes(date, sc.snapshot())
+}
+
+// sunEventTimes resolves date against one already-taken location snapshot.
+// Every public entry point funnels through here so the cache key, the
+// calculation and the cache write all belong to the same location.
+func (sc *SunCalc) sunEventTimes(date time.Time, snap locationSnapshot) (SunEventTimes, error) {
 	start := time.Now()
 
 	// Normalize date to observer timezone before generating cache key.
 	// This ensures requests for the same local date hit the same cache entry,
 	// even if the input time has a different timezone (e.g., UTC).
-	localDate := date.In(sc.location)
+	localDate := date.In(snap.location)
 	dateKey := localDate.Format(time.DateOnly)
 
 	// Acquire a read lock and check if the date is in the cache.
@@ -90,8 +150,8 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 	}
 	sc.lock.RUnlock()
 
-	// If the date exists in the cache, return the cached times
-	if exists {
+	// An entry from a superseded location is not a hit, however it got there.
+	if exists && entry.generation == snap.generation {
 		if m != nil {
 			m.RecordSunCalcCacheHit(sunEventsOperation)
 			m.RecordSunCalcOperation(sunEventsOperation, "success")
@@ -107,8 +167,9 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 	// lock suffices here because this branch only reads; the authoritative
 	// insert double-check in the store path below runs under the write lock.
 	sc.lock.RLock()
-	if entry, ok := sc.cache[dateKey]; ok {
-		sc.lock.RUnlock()
+	entry, exists = sc.cache[dateKey]
+	sc.lock.RUnlock()
+	if exists && entry.generation == snap.generation {
 		if m != nil {
 			m.RecordSunCalcCacheHit(sunEventsOperation)
 			m.RecordSunCalcOperation(sunEventsOperation, "success")
@@ -116,7 +177,6 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 		}
 		return entry.times, nil
 	}
-	sc.lock.RUnlock()
 
 	// Record cache miss only after the double-check confirms it
 	if m != nil {
@@ -124,7 +184,7 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 	}
 
 	// Calculate outside the lock to avoid blocking readers.
-	times, err := sc.calculateSunEventTimes(localDate)
+	times, err := calculateSunEventTimes(snap.observer, snap.location, localDate)
 	if err != nil {
 		if m != nil {
 			m.RecordSunCalcOperation(sunEventsOperation, "error")
@@ -140,14 +200,20 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 	// another goroutine already populated dateKey we reuse its value and skip
 	// the clear/insert entirely. All callers for the date then return the same
 	// cached times.
+	//
+	// The entry carries snap.generation, so if UpdateLocation ran while this
+	// call was calculating, what lands here is stamped stale and no later
+	// caller can read it back as a hit. This caller still returns the value it
+	// computed: it asked before the location moved, and the next call gets the
+	// new location's events.
 	sc.lock.Lock()
-	if existing, ok := sc.cache[dateKey]; ok {
+	if existing, ok := sc.cache[dateKey]; ok && existing.generation == snap.generation {
 		times = existing.times
 	} else {
 		if len(sc.cache) >= maxCacheEntries {
 			clear(sc.cache)
 		}
-		sc.cache[dateKey] = cacheEntry{times: times}
+		sc.cache[dateKey] = cacheEntry{times: times, generation: snap.generation}
 	}
 	if m != nil {
 		m.UpdateCacheSize(float64(len(sc.cache)))
@@ -160,7 +226,7 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 		m.RecordSunCalcDuration(sunEventsOperation, time.Since(start).Seconds())
 
 		// Update sun time gauges for current day
-		if dateKey == time.Now().In(sc.location).Format(time.DateOnly) {
+		if dateKey == time.Now().In(snap.location).Format(time.DateOnly) {
 			m.UpdateSunTimes(
 				float64(times.Sunrise.Unix()),
 				float64(times.Sunset.Unix()),
@@ -173,10 +239,13 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 	return times, nil
 }
 
-// calculateSunEventTimes calculates the sun event times for a given date
-func (sc *SunCalc) calculateSunEventTimes(date time.Time) (SunEventTimes, error) {
+// calculateSunEventTimes calculates the sun event times for a given date.
+// The observer and its timezone are passed in rather than read from the
+// receiver so the whole calculation uses one consistent snapshot even if
+// UpdateLocation runs concurrently.
+func calculateSunEventTimes(observer astral.Observer, location *time.Location, date time.Time) (SunEventTimes, error) {
 	// Calculate sunrise
-	sunrise, err := astral.Sunrise(sc.observer, date)
+	sunrise, err := astral.Sunrise(observer, date)
 	if err != nil {
 		return SunEventTimes{}, errors.New(err).
 			Component("suncalc").
@@ -186,7 +255,7 @@ func (sc *SunCalc) calculateSunEventTimes(date time.Time) (SunEventTimes, error)
 	}
 
 	// Calculate sunset
-	sunset, err := astral.Sunset(sc.observer, date)
+	sunset, err := astral.Sunset(observer, date)
 	if err != nil {
 		return SunEventTimes{}, errors.New(err).
 			Component("suncalc").
@@ -196,27 +265,27 @@ func (sc *SunCalc) calculateSunEventTimes(date time.Time) (SunEventTimes, error)
 	}
 
 	// Convert sunrise and sunset from UTC to observer's local timezone
-	localSunrise := sunrise.In(sc.location)
-	localSunset := sunset.In(sc.location)
+	localSunrise := sunrise.In(location)
+	localSunset := sunset.In(location)
 
 	// Try to calculate civil dawn, but fall back to sunrise if it fails
 	// (this handles polar day conditions like midsummer in high latitudes)
-	civilDawn, err := astral.Dawn(sc.observer, date, astral.DepressionCivil)
+	civilDawn, err := astral.Dawn(observer, date, astral.DepressionCivil)
 	var localCivilDawn time.Time
 	if err != nil {
 		localCivilDawn = localSunrise
 	} else {
-		localCivilDawn = civilDawn.In(sc.location)
+		localCivilDawn = civilDawn.In(location)
 	}
 
 	// Try to calculate civil dusk, but fall back to sunset if it fails
 	// (this handles polar day conditions like midsummer in high latitudes)
-	civilDusk, err := astral.Dusk(sc.observer, date, astral.DepressionCivil)
+	civilDusk, err := astral.Dusk(observer, date, astral.DepressionCivil)
 	var localCivilDusk time.Time
 	if err != nil {
 		localCivilDusk = localSunset
 	} else {
-		localCivilDusk = civilDusk.In(sc.location)
+		localCivilDusk = civilDusk.In(location)
 	}
 
 	return SunEventTimes{
@@ -230,7 +299,31 @@ func (sc *SunCalc) calculateSunEventTimes(date time.Time) (SunEventTimes, error)
 // LocationName returns the IANA timezone name for the observer's location
 // (e.g., "Australia/Sydney", "America/Los_Angeles").
 func (sc *SunCalc) LocationName() string {
-	return sc.location.String()
+	return sc.snapshot().location.String()
+}
+
+// noonHour anchors a calendar date in the middle of its day. Midnight is the
+// wrong anchor: GetSunEventTimes re-derives the calendar date in the observer's
+// own timezone, so an instant on a day boundary resolves to the neighbouring
+// date as soon as the caller's zone differs from the station's.
+const noonHour = 12
+
+// GetSunEventTimesForDate returns the sun events for a calendar date read in the
+// station's own timezone. Only the year, month and day of date are used; its
+// clock time and location are ignored.
+//
+// Callers that mean "the station's day of 2025-03-20" should prefer this over
+// GetSunEventTimes, which takes an instant: handing that a date parsed in the
+// server's timezone silently resolves to the previous or next station date
+// whenever the two zones differ.
+func (sc *SunCalc) GetSunEventTimesForDate(date time.Time) (SunEventTimes, error) {
+	// One snapshot builds the anchor and resolves it, so the anchor can never be
+	// constructed in one station's timezone and then evaluated against another's.
+	snap := sc.snapshot()
+	// Build noon on the station's calendar date directly rather than adding 12h to
+	// its midnight, which lands at 11:00 or 13:00 across a DST transition.
+	anchor := time.Date(date.Year(), date.Month(), date.Day(), noonHour, 0, 0, 0, snap.location)
+	return sc.sunEventTimes(anchor, snap)
 }
 
 // GetSunriseTime returns the sunrise time for a given date

@@ -585,6 +585,8 @@
       "collapseDetails": "Zbaliť podrobnosti pre {species}",
       "playAudio": "Prehrať zvuk pre {species}",
       "viewDetails": "Zobraziť podrobnosti pre {species}",
+      "detectionDetail": "Podrobnosti detekcie",
+      "detectionDetailFor": "Podrobnosti detekcie pre {species}",
       "unknownSpecies": "Neznámy druh",
       "clickToCollapse": "Kliknutím zbalíte"
     },
@@ -734,7 +736,8 @@
         "ignoreSpecies": "Ignorovať druh",
         "lockDetection": "Uzamknúť detekciu",
         "unlockDetection": "Odomknúť detekciu",
-        "deleteDetection": "Odstrániť detekciu"
+        "deleteDetection": "Odstrániť detekciu",
+        "compareSounds": "Referenčné zvuky"
       },
       "noDetections": "Žiadne nedávne detekcie",
       "errors": {
@@ -825,6 +828,7 @@
       "hourly": "Hodinové výsledky pre {hour}:00 dňa {date}",
       "hourlyRange": "Hodinové výsledky od {startHour}:00 do {endHour}:00 dňa {date}",
       "species": "Výsledky pre druh {species} dňa {date}",
+      "speciesAll": "Výsledky pre druh {species}",
       "search": "Výsledky vyhľadávania pre \"{query}\"",
       "allDetections": "Všetky detekcie pre dátum {date}"
     },
@@ -833,6 +837,9 @@
       "observation": "Pozorovanie",
       "aria": {
         "downloadAudioClip": "Stiahnuť zvukový záznam pre detekciu {name}",
+        "compareSounds": "Vypočuť si identifikačné nahrávky druhu {name} na All About Birds (otvorí sa na novej karte)",
+        "viewOnAllAboutBirds": "Zobraziť {name} na All About Birds (otvorí sa na novej karte)",
+        "viewOnWikipedia": "Zobraziť {name} na Wikipédii (otvorí sa na novej karte)",
         "audioRecordingFor": "Zvukový záznam a spektrogram pre {name}",
         "scientificName": "Vedecký názov",
         "classificationBadges": "Odznaky klasifikácie druhu",
@@ -979,7 +986,10 @@
     },
     "media": {
       "title": "Nahrávka a spektrogram",
-      "clipHint": "Kliknite a potiahnite na spektrograme na výber rozsahu pre export"
+      "clipHint": "Kliknite a potiahnite na spektrograme na výber rozsahu pre export",
+      "compareSounds": "Referenčné zvuky",
+      "viewOnAllAboutBirds": "All About Birds",
+      "viewOnWikipedia": "Wikipédia"
     },
     "tabs": {
       "overview": "Prehľad",
@@ -2020,9 +2030,13 @@
       "speciesList": "Zoznam druhov",
       "switchToGrid": "Prepnúť na mriežku",
       "switchToList": "Prepnúť na zoznam",
+      "openAllAboutBirds": "Zobraziť tento druh na All About Birds",
+      "openWikipedia": "Zobraziť tento druh na Wikipédii",
+      "viewDetections": "Zobraziť všetky detekcie druhu {species}",
       "noSpeciesFound": "Nenašli sa žiadne druhy zodpovedajúce vašim filtrom.",
       "headers": {
         "species": "Druh",
+        "links": "Odkazy",
         "detections": "Detekcie",
         "avgConfidence": "Priemerná istota",
         "maxConfidence": "Maximálna istota",

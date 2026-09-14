@@ -585,6 +585,8 @@
       "collapseDetails": "Collapse details for {species}",
       "playAudio": "Play audio for {species}",
       "viewDetails": "View details for {species}",
+      "detectionDetail": "Detection detail",
+      "detectionDetailFor": "Detection detail for {species}",
       "unknownSpecies": "Unknown species",
       "clickToCollapse": "Click to collapse"
     },
@@ -734,7 +736,8 @@
         "ignoreSpecies": "Ignore species",
         "lockDetection": "Lock detection",
         "unlockDetection": "Unlock detection",
-        "deleteDetection": "Delete detection"
+        "deleteDetection": "Delete detection",
+        "compareSounds": "Reference sounds"
       },
       "noDetections": "No recent detections",
       "errors": {
@@ -825,6 +828,7 @@
       "hourly": "Hourly Results for {hour}:00 on {date}",
       "hourlyRange": "Hourly Results from {startHour}:00 to {endHour}:00 on {date}",
       "species": "Results for {species} on {date}",
+      "speciesAll": "Results for {species}",
       "search": "Search Results for \"{query}\"",
       "allDetections": "All Detections for {date}"
     },
@@ -833,6 +837,9 @@
       "observation": "Observation",
       "aria": {
         "downloadAudioClip": "Download audio clip for {name} detection",
+        "compareSounds": "Listen to identification recordings for {name} on All About Birds (opens in a new tab)",
+        "viewOnAllAboutBirds": "View {name} on All About Birds (opens in a new tab)",
+        "viewOnWikipedia": "View {name} on Wikipedia (opens in a new tab)",
         "audioRecordingFor": "Audio recording and spectrogram for {name}",
         "scientificName": "Scientific name",
         "classificationBadges": "Species classification badges",
@@ -979,7 +986,10 @@
     },
     "media": {
       "title": "Recording & Spectrogram",
-      "clipHint": "Click and drag on the spectrogram to select a range for clip export"
+      "clipHint": "Click and drag on the spectrogram to select a range for clip export",
+      "compareSounds": "Reference sounds",
+      "viewOnAllAboutBirds": "All About Birds",
+      "viewOnWikipedia": "Wikipedia"
     },
     "tabs": {
       "overview": "Overview",
@@ -2020,9 +2030,13 @@
       "speciesList": "Species List",
       "switchToGrid": "Switch to grid view",
       "switchToList": "Switch to list view",
+      "openAllAboutBirds": "View this species on All About Birds",
+      "openWikipedia": "View this species on Wikipedia",
+      "viewDetections": "View all detections of {species}",
       "noSpeciesFound": "No species found matching your filters.",
       "headers": {
         "species": "Species",
+        "links": "Links",
         "detections": "Detections",
         "avgConfidence": "Avg Confidence",
         "maxConfidence": "Max Confidence",

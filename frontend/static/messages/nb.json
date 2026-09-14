@@ -585,6 +585,8 @@
       "collapseDetails": "Skjul detaljer for {species}",
       "playAudio": "Spill av lyd for {species}",
       "viewDetails": "Vis detaljer for {species}",
+      "detectionDetail": "Registreringsdetaljer",
+      "detectionDetailFor": "Registreringsdetaljer for {species}",
       "unknownSpecies": "Ukjent art",
       "clickToCollapse": "Klikk for å skjule"
     },
@@ -734,7 +736,8 @@
         "ignoreSpecies": "Ignorer art",
         "lockDetection": "Lås registrering",
         "unlockDetection": "Lås opp registrering",
-        "deleteDetection": "Slett registrering"
+        "deleteDetection": "Slett registrering",
+        "compareSounds": "Referanselyder"
       },
       "noDetections": "Ingen siste registreringer",
       "errors": {
@@ -825,6 +828,7 @@
       "hourly": "Timeresultater for {hour}:00 den {date}",
       "hourlyRange": "Timeresultater fra {startHour}:00 til {endHour}:00 den {date}",
       "species": "Resultater for {species} den {date}",
+      "speciesAll": "Resultater for {species}",
       "search": "Søkeresultater for «{query}»",
       "allDetections": "Alle registreringer for {date}"
     },
@@ -833,6 +837,9 @@
       "observation": "Observasjon",
       "aria": {
         "downloadAudioClip": "Last ned lydklipp for {name}-deteksjon",
+        "compareSounds": "Lytt til identifikasjonsopptak for {name} på All About Birds (åpnes i en ny fane)",
+        "viewOnAllAboutBirds": "Vis {name} på All About Birds (åpnes i en ny fane)",
+        "viewOnWikipedia": "Vis {name} på Wikipedia (åpnes i en ny fane)",
         "audioRecordingFor": "Lydopptak og spektrogram for {name}",
         "scientificName": "Vitenskapelig navn",
         "classificationBadges": "Merker for artsklassifisering",
@@ -979,7 +986,10 @@
     },
     "media": {
       "title": "Opptak og spektrogram",
-      "clipHint": "Klikk og dra på spektrogrammet for å velge et område til klippeksport"
+      "clipHint": "Klikk og dra på spektrogrammet for å velge et område til klippeksport",
+      "compareSounds": "Referanselyder",
+      "viewOnAllAboutBirds": "All About Birds",
+      "viewOnWikipedia": "Wikipedia"
     },
     "tabs": {
       "overview": "Oversikt",
@@ -2020,9 +2030,13 @@
       "speciesList": "Artsliste",
       "switchToGrid": "Bytt til rutenettvisning",
       "switchToList": "Bytt til listevisning",
+      "openAllAboutBirds": "Vis denne arten på All About Birds",
+      "openWikipedia": "Vis denne arten på Wikipedia",
+      "viewDetections": "Vis alle observasjoner av {species}",
       "noSpeciesFound": "Ingen arter funnet som matcher filtrene dine.",
       "headers": {
         "species": "Art",
+        "links": "Lenker",
         "detections": "Registreringer",
         "avgConfidence": "Gjsn. sikkerhet",
         "maxConfidence": "Maks. sikkerhet",

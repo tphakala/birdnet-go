@@ -11,6 +11,14 @@ export interface SourceInfo {
   displayName?: string;
 }
 
+/**
+ * The time-of-day categories the backend classifier emits (see
+ * `internal/suncalc.ClassifyTimeOfDay`) and that TimeOfDayIcon renders.
+ * Detections carry `timeOfDay` as a plain string because the API models it as
+ * one, so narrowing to this union is what the icon's prop expects.
+ */
+export type TimeOfDayValue = 'day' | 'night' | 'sunrise' | 'sunset' | 'dawn' | 'dusk';
+
 export interface Detection {
   id: number;
   date: string;

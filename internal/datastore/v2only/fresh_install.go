@@ -13,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
 // InitializeFreshInstall creates a new v2-only datastore for fresh installations.
@@ -167,6 +168,11 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger, speciesC
 			Build()
 	}
 
+	// SunCalc mirrors the legacy datastore's construction (internal/datastore/interfaces.go)
+	// so per-detection time-of-day classification (day/night/sunrise/sunset) reflects the
+	// configured station coordinates instead of always falling back to "any".
+	sunCalc := suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude)
+
 	ds, err := New(&Config{
 		Manager:            manager,
 		Detection:          detectionRepo,
@@ -180,6 +186,7 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger, speciesC
 		AppEvent:           appEventRepo,
 		Logger:             log,
 		Timezone:           time.Local,
+		SunCalc:            sunCalc,
 		DefaultModelID:     defaultModel.ID,
 		SpeciesLabelTypeID: speciesLabelType.ID,
 		AvesClassID:        &avesClassID,

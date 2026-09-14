@@ -150,3 +150,62 @@ func TestConcurrentAccess(t *testing.T) {
 		}
 	}
 }
+
+// TestGetSunEventTimesForDateUsesTheStationCalendarDate covers the date-based
+// entry point. GetSunEventTimes takes an instant and re-derives the calendar day
+// in the observer's own zone, so callers holding a date parsed somewhere else
+// (a UTC-parsed API parameter, say) would silently get the neighbouring day.
+// This entry point reads only the year/month/day and resolves them at the
+// station.
+func TestGetSunEventTimesForDateUsesTheStationCalendarDate(t *testing.T) {
+	t.Parallel()
+
+	// Honolulu, UTC-10: midnight UTC on any date is still the afternoon before
+	// there, which is the case the instant-based call gets wrong.
+	const (
+		honoluluLatitude  = 21.3069
+		honoluluLongitude = -157.8583
+	)
+
+	sc := NewSunCalc(honoluluLatitude, honoluluLongitude)
+	stationZone, err := time.LoadLocation(sc.LocationName())
+	require.NoError(t, err)
+
+	const dateStr = "2025-03-20"
+	midnightUTC, err := time.ParseInLocation(time.DateOnly, dateStr, time.UTC)
+	require.NoError(t, err)
+
+	times, err := sc.GetSunEventTimesForDate(midnightUTC)
+	require.NoError(t, err)
+
+	assert.Equal(t, dateStr, times.Sunrise.In(stationZone).Format(time.DateOnly),
+		"sunrise must fall on the requested station date")
+	assert.Equal(t, dateStr, times.Sunset.In(stationZone).Format(time.DateOnly),
+		"sunset must fall on the requested station date")
+
+	// The instant-based call on the same value is off by a day here; that gap is
+	// the whole reason this entry point exists.
+	viaInstant, err := sc.GetSunEventTimes(midnightUTC)
+	require.NoError(t, err)
+	assert.Equal(t, "2025-03-19", viaInstant.Sunrise.In(stationZone).Format(time.DateOnly),
+		"the instant-based call is expected to resolve the previous station date here")
+}
+
+// TestGetSunEventTimesForDateIgnoresTheInputClockAndZone documents that only the
+// calendar fields of the argument are read, so callers need not normalize it.
+func TestGetSunEventTimesForDateIgnoresTheInputClockAndZone(t *testing.T) {
+	t.Parallel()
+
+	sc := newTestSunCalc()
+
+	fromMidnightUTC, err := sc.GetSunEventTimesForDate(
+		time.Date(2024, 6, 21, 0, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+
+	fromLateEveningElsewhere, err := sc.GetSunEventTimesForDate(
+		time.Date(2024, 6, 21, 23, 45, 0, 0, time.FixedZone("elsewhere", -9*3600)))
+	require.NoError(t, err)
+
+	assert.True(t, fromMidnightUTC.Sunrise.Equal(fromLateEveningElsewhere.Sunrise))
+	assert.True(t, fromMidnightUTC.Sunset.Equal(fromLateEveningElsewhere.Sunset))
+}
