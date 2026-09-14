@@ -225,6 +225,8 @@ func weatherAuthConfigKey(settings *conf.Settings) [32]byte {
 		fields = []string{w.Provider, w.OpenWeather.APIKey, w.OpenWeather.Endpoint}
 	case wundergroundProviderName:
 		fields = []string{w.Provider, w.Wunderground.APIKey, w.Wunderground.StationID, w.Wunderground.Endpoint}
+	case pirateWeatherProviderName:
+		fields = []string{w.Provider, w.PirateWeather.APIKey, w.PirateWeather.Endpoint}
 	default:
 		// yr.no (and "none"/unset) have no API key, so the provider name alone
 		// is the whole auth-relevant config.
@@ -314,6 +316,9 @@ func NewService(settings *conf.Settings, db datastore.Interface, weatherMetrics 
 	case conf.WeatherWunderground:
 		provider = NewWundergroundProvider(weatherClient)
 		providerName = wundergroundProviderName
+	case conf.WeatherPirateWeather:
+		provider = NewPirateWeatherProvider(weatherClient)
+		providerName = pirateWeatherProviderName
 	case "":
 		// Not configured - default to yr.no
 		provider = NewYrNoProvider(weatherClient)

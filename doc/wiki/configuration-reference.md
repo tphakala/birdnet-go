@@ -301,7 +301,7 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.species.include` | string[] | Always include these species |
 | `realtime.species.exclude` | string[] | Always exclude these species |
 | `realtime.species.config` | any |  |
-| `realtime.weather.provider` | string | "none", "yrno", "openweather", or "wunderground" |
+| `realtime.weather.provider` | string | "none", "yrno", "openweather", "wunderground", or "pirateweather" |
 | `realtime.weather.pollinterval` | integer | weather data polling interval in minutes |
 | `realtime.weather.debug` | boolean | true to enable debug mode |
 | `realtime.weather.openweather.enabled` | boolean | true to enable OpenWeather integration, for legacy support |
@@ -313,6 +313,8 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.weather.wunderground.stationid` | string | WeatherUnderground station ID |
 | `realtime.weather.wunderground.endpoint` | string | WeatherUnderground API endpoint |
 | `realtime.weather.wunderground.units` | string | units of measurement: "e" (imperial), "m" (metric), "h" (UK hybrid) |
+| `realtime.weather.pirateweather.apikey` | string | Pirate Weather API key |
+| `realtime.weather.pirateweather.endpoint` | string | Pirate Weather API endpoint |
 | `realtime.speciestracking.enabled` | boolean | true to enable new species tracking |
 | `realtime.speciestracking.newspecieswindowdays` | integer | Days to consider a species "new" (default: 7) |
 | `realtime.speciestracking.syncintervalminutes` | integer | Interval to sync with database (default: 60) |
