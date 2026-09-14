@@ -30,7 +30,7 @@ func isolateTestConfig(t *testing.T) {
 // entry with a file-less BuiltIn baseline and one downloadable DFT-truncated
 // variant served by a local test server. It mirrors the real birdnet-v2.4 shape
 // (RegistryID == RegistryIDBirdNETV24) so InstallOrReplace routes it through the
-// dedicated primary-swap path, while using a small payload with a matching checksum
+// unified variant-swap path, while using a small payload with a matching checksum
 // so the download verifies without the real multi-MB model file.
 func permanentSwapEntry(t *testing.T) (entry CatalogEntry, modelsDir, srvURL, dftLocalName string) {
 	t.Helper()
@@ -227,10 +227,11 @@ func TestModelManager_PrimarySwap_SameVariantIsNoOp(t *testing.T) {
 }
 
 // TestModelManager_PrimarySwap_RollbackOnReloadFailure verifies the transactional
-// rollback: when the in-place reload fails, the swap restores the previous variant's
-// record and config and removes the newly downloaded file. The reload is forced to
-// fail with a test orchestrator that has no v2.4 anchor loaded (reloadBirdNETV24InPlace
-// returns "BirdNET v2.4 anchor not available for reload").
+// rollback of the unified variant swap: when activating the new v2.4 variant fails, the
+// swap restores the previous variant's record and config (clearing BirdNET.ModelPath
+// back to the embedded baseline) and removes the newly downloaded file. The failure is
+// forced with a fake DFT payload that is not a valid ONNX model, so loading the new
+// variant fails and the swap rolls back to the builtin baseline.
 func TestModelManager_PrimarySwap_RollbackOnReloadFailure(t *testing.T) {
 	// Not parallel: mutates global settings via conf.StoreSettings.
 	entry, modelsDir, srvURL, dftLocalName := permanentSwapEntry(t)
@@ -242,7 +243,12 @@ func TestModelManager_PrimarySwap_RollbackOnReloadFailure(t *testing.T) {
 	settings := conftest.GetTestSettings()
 	conf.StoreSettings(settings)
 
-	orch := newTestOrchestrator(t) // no v2.4 anchor -> reloadBirdNETV24InPlace errors
+	// Seed the v2.4 anchor as loaded so the swap takes the LOADED gapless path (in
+	// production the anchor is always loaded): ReloadForVariantSwap(v2.4) rebuilds from
+	// the invalid DFT payload, the build fails, and rollbackVariantSwap restores the
+	// baseline record and clears BirdNET.ModelPath. The mock anchor is never touched past
+	// the failed build (reloadEntry returns before the swap).
+	orch := newTestOrchestrator(t, &mockModelInstance{id: RegistryIDBirdNETV24})
 	mm := NewModelManager(modelsDir, orch, settings)
 
 	err := mm.InstallOrReplace(t.Context(), &entry, "fp32-dfttrunc", srvURL, nil)

@@ -371,9 +371,9 @@ var EmbeddedCatalog = []CatalogEntry{
 	// The entry is visible so the gallery can offer an in-place "optimize" swap between
 	// the builtin baseline and a compatible DFT-truncated build. The primary BirdNET
 	// v2.4 classifier is resolved at startup from config and the standard model paths
-	// (see NewBirdNET), NOT from a generic gallery loader, so the swap runs through a
-	// dedicated primary-reload path (ModelManager.replacePrimaryVariant ->
-	// Orchestrator.ReloadPrimaryForVariantSwap), not the generic replaceVariant flow.
+	// (see NewBirdNET). Its within-model variant swap runs through the unified
+	// ModelManager.replaceVariant like every other family, activating the always-loaded
+	// anchor gaplessly via Orchestrator.ReloadForVariantSwap.
 	// RegistryID is the permanent BirdNET v2.4 ID: the model is always installed (the
 	// BuiltIn baseline needs no files), it is never hot-loaded by loadInstalledModels
 	// (there is no secondary loader for the primary), and Uninstall refuses the entry
@@ -812,8 +812,8 @@ func VariantSelectable(entry *CatalogEntry, variantID string) bool {
 
 // IsPermanentEntry reports whether entry is the permanent built-in BirdNET v2.4
 // classifier. The permanent entry is always installed, can only have its variant
-// swapped (never uninstalled), and swaps through the dedicated primary-reload path
-// rather than the generic variant-replace flow.
+// swapped (never uninstalled), and swaps through the unified variant-replace path
+// (ReloadForVariantSwap on the always-loaded anchor) like every other family.
 func IsPermanentEntry(entry *CatalogEntry) bool {
 	return entry != nil && entry.RegistryID == RegistryIDBirdNETV24
 }

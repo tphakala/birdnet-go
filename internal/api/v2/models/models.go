@@ -729,7 +729,7 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 	// Hidden entries are foundation-only: excluded from the gallery and not meant to
 	// be installed by ID. The permanent BirdNET v2.4 entry is intentionally NOT
 	// hidden: it is always installed, and an install request against it is a
-	// within-model variant swap routed to InstallOrReplace -> replacePrimaryVariant.
+	// within-model variant swap routed to InstallOrReplace -> replaceVariant.
 	if entry.Hidden {
 		return c.HandleError(ctx, nil, "catalog entry "+catalogID+" is not available for installation", http.StatusNotFound)
 	}
