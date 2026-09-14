@@ -44,6 +44,7 @@ import { getLogger } from '$lib/utils/logger';
 import { safeGet, safeSpread } from '$lib/utils/security';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { coerceSettings } from '$lib/utils/settingsCoercion';
+import { SPECIES_GUIDE_DEFAULT_WARM_TOP_N } from '$lib/utils/speciesGuideLimits';
 import { DEFAULT_REGION_MODE } from '$lib/utils/variantSelection';
 import { weatherDefaults } from '$lib/utils/weatherDefaults';
 import { derived, get, writable } from 'svelte/store';
@@ -638,6 +639,23 @@ export interface Dashboard {
   logoStyle?: string; // Logo display style: "gradient" or "solid"
   layout?: DashboardLayout; // Configurable dashboard element layout
   defaultAudioGain?: number; // Default playback gain in dB (0-24)
+  speciesGuide?: SpeciesGuideSettings; // Species guide settings (offline OpenFauna + optional Wikipedia)
+}
+
+// Species guide settings. Taxonomy, localized common names, and external links
+// always come from the offline OpenFauna dataset; enableWikipedia opts into online
+// Wikipedia article descriptions (the one thing OpenFauna can't provide), off by default.
+// The show* flags default to true when absent (matches backend *bool semantics).
+export interface SpeciesGuideSettings {
+  enabled: boolean;
+  enableWikipedia: boolean; // opt in to online Wikipedia descriptions (default off)
+  enableSupplementaryLinks?: boolean; // opt in to computed fallback links (Xeno-canto + Wikipedia gap-fill); default off
+  warmTopN?: number;
+  preFetchEnabled?: boolean;
+  showNotes?: boolean;
+  showEnrichments?: boolean;
+  showSimilarSpecies?: boolean;
+  showTaxonomy?: boolean;
 }
 
 // Dashboard layout configuration
@@ -1091,6 +1109,17 @@ function createEmptySettings(): SettingsFormData {
           ],
         },
         defaultAudioGain: 0,
+        speciesGuide: {
+          enabled: false,
+          enableWikipedia: false,
+          enableSupplementaryLinks: false,
+          warmTopN: SPECIES_GUIDE_DEFAULT_WARM_TOP_N,
+          preFetchEnabled: true,
+          showNotes: true,
+          showEnrichments: true,
+          showSimilarSpecies: true,
+          showTaxonomy: true,
+        },
       },
     },
     webServer: {},
@@ -1227,6 +1256,27 @@ export const speciesSettings = derived(settingsStore, $store => $store.formData.
 export const dashboardSettings = derived(
   settingsStore,
   $store => $store.formData.realtime?.dashboard
+);
+
+/**
+ * The species guide settings, or null until the authenticated settings load has
+ * actually populated them.
+ *
+ * Consumers must NOT read `$dashboardSettings?.speciesGuide` directly to decide
+ * whether the store knows anything: `createEmptySettings()` seeds a fully-formed
+ * speciesGuide object (enabled:false), so that expression is a truthy object from
+ * the very first render, for guests and authenticated users alike. Gating on it
+ * makes the public-endpoint fallback in resolveSpeciesGuideConfig unreachable, and
+ * an unauthenticated visitor — whose settings load never runs — is pinned at
+ * enabled:false forever even though the guide endpoints are deliberately public.
+ *
+ * Keying on dataLoaded distinguishes "the store has real settings" from "the store
+ * is still at its seeded defaults", which is the actual question. It also stays
+ * correct if a public-settings load path is later added to the store: that path
+ * sets dataLoaded, and this derived starts serving guests without further change.
+ */
+export const speciesGuideStoreSettings = derived(settingsStore, $store =>
+  $store.dataLoaded ? ($store.formData.realtime?.dashboard?.speciesGuide ?? null) : null
 );
 
 export const dashboardLayout = derived(

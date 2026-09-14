@@ -68,6 +68,9 @@ func CloneSettings(src *Settings) *Settings {
 	}
 	dst.Realtime.Dashboard.Layout.Elements = cloneDashboardElements(src.Realtime.Dashboard.Layout.Elements)
 
+	// Realtime.Dashboard.SpeciesGuide: all fields are value types (plain bool/int),
+	// so they ride the shallow `dst := *src` copy with no aliasing — no deep copy needed.
+
 	// Realtime.DogBarkFilter.
 	dst.Realtime.DogBarkFilter.Species = slices.Clone(src.Realtime.DogBarkFilter.Species)
 

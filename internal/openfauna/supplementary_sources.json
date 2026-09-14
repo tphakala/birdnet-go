@@ -1,0 +1,14 @@
+{
+  "xeno-canto": {
+    "name": "Xeno-canto",
+    "order": 40,
+    "icon": "xeno-canto",
+    "url": "https://xeno-canto.org/explore?query={sci}"
+  },
+  "wikipedia": {
+    "name": "Wikipedia",
+    "order": 10,
+    "icon": "wikipedia",
+    "url": "https://{lang}.wikipedia.org/wiki/{sci_underscored}"
+  }
+}

@@ -113,11 +113,12 @@ func TestAuxiliaryMigrationResult_Sections(t *testing.T) {
 	r.Thresholds.Total = 2
 	r.ThresholdEvents.Total = 3
 	r.Notifications.Total = 4
+	r.SpeciesNotes.Total = 5
 
 	sections := r.sections()
-	assert.Len(t, sections, 4, "expected 4 standard sections")
+	assert.Len(t, sections, 5, "expected 5 standard sections")
 
-	expectedNames := []string{"image cache", "threshold", "threshold events", "notifications"}
+	expectedNames := []string{"image cache", "threshold", "threshold events", "notifications", "species notes"}
 	for i, s := range sections {
 		assert.Equal(t, expectedNames[i], s.name)
 		assert.Equal(t, i+1, s.total)
