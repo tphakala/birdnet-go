@@ -41,6 +41,16 @@ type NoteWithBirdImage struct {
 	SourceID    string                  `json:"sourceId"`             // Audio source ID for HA filtering (added for HA discovery)
 	SourceName  string                  `json:"sourceName,omitempty"` // Display name for stable source mapping (#2799)
 	BirdImage   imageprovider.BirdImage `json:"BirdImage"`            // PascalCase for backward compatibility - DO NOT CHANGE
+	// SpeciesFirstDetectedAt is the species' earliest previous detection
+	// (all-time, excluding the current detection). Null when this is the
+	// species' first-ever detection, or when the lookup fails or no datastore
+	// is wired. No omitempty: the key is always present.
+	SpeciesFirstDetectedAt *time.Time `json:"speciesFirstDetectedAt"`
+	// SpeciesLastDetectedAt is the species' most-recent previous detection
+	// (all-time, excluding the current detection). Null when this is the
+	// species' first-ever detection, or when the lookup fails or no datastore
+	// is wired. No omitempty: the key is always present.
+	SpeciesLastDetectedAt *time.Time `json:"speciesLastDetectedAt"`
 }
 
 // Execute sends the note to the BirdWeather API
@@ -200,7 +210,7 @@ func (a *BirdWeatherAction) Execute(_ context.Context, data any) error {
 // Transient connection errors (EOF, not connected) are logged as warnings and
 // do NOT fail the CompositeAction — the detection is already saved to the database.
 // This eliminates the TOCTOU race at Layer 2 (GitHub #2397).
-func (a *MqttAction) Execute(_ context.Context, data any) error {
+func (a *MqttAction) Execute(ctx context.Context, data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -263,13 +273,41 @@ func (a *MqttAction) Execute(_ context.Context, data any) error {
 	// gracefully, or use the detection ID-based audio endpoint which has
 	// built-in wait-for-encoding support.
 
+	// Fetch the species' first-ever and most-recent previous detection times
+	// (all-time; the strict before bound in the query excludes the current
+	// detection, which DatabaseAction persisted earlier in the CompositeAction
+	// sequence). This must run before the publish-timeout context is created
+	// below so it derives from the action's context. Non-fatal: on any failure
+	// the payload is published with null fields, matching this action's
+	// "transient errors are non-fatal" philosophy (GitHub #2397).
+	var firstSeen, lastSeen *time.Time
+	if a.SpeciesTimeSource != nil {
+		qctx, qcancel := context.WithTimeout(ctx, speciesTimeQueryTimeout)
+		var qerr error
+		firstSeen, lastSeen, qerr = a.SpeciesTimeSource.GetSpeciesFirstAndLastDetectionTimeBefore(qctx, a.Result.Species.ScientificName, a.Result.Timestamp)
+		qcancel()
+		if qerr != nil && !errors.Is(qerr, context.Canceled) {
+			// A canceled context is an expected shutdown interruption, not a
+			// degraded state; logging it would add per-detection noise on stop.
+			GetLogger().Warn("failed to fetch species detection times for MQTT",
+				logger.String("component", "analysis.processor.actions"),
+				logger.String("detection_id", a.CorrelationID),
+				logger.String("species", a.Result.Species.CommonName),
+				logger.String("scientific_name", a.Result.Species.ScientificName),
+				logger.Error(qerr),
+				logger.String("operation", "mqtt_species_detection_times"))
+		}
+	}
+
 	// Wrap note with bird image and include detection ID, SourceID, and SourceName
 	noteWithBirdImage := NoteWithBirdImage{
-		Note:        note,
-		DetectionID: detectionID, // Explicit field for URL construction (e.g., /api/v2/audio/{id})
-		SourceID:    note.Source.ID,
-		SourceName:  note.Source.DisplayName,
-		BirdImage:   birdImage,
+		Note:                   note,
+		DetectionID:            detectionID, // Explicit field for URL construction (e.g., /api/v2/audio/{id})
+		SourceID:               note.Source.ID,
+		SourceName:             note.Source.DisplayName,
+		BirdImage:              birdImage,
+		SpeciesFirstDetectedAt: firstSeen,
+		SpeciesLastDetectedAt:  lastSeen,
 	}
 
 	// Create a JSON representation of the note
