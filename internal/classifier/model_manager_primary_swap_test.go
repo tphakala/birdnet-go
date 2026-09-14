@@ -227,10 +227,11 @@ func TestModelManager_PrimarySwap_SameVariantIsNoOp(t *testing.T) {
 }
 
 // TestModelManager_PrimarySwap_RollbackOnReloadFailure verifies the transactional
-// rollback: when the in-place reload fails, the swap restores the previous variant's
-// record and config and removes the newly downloaded file. The reload is forced to
-// fail with a test orchestrator that has no v2.4 anchor loaded (reloadBirdNETV24InPlace
-// returns "BirdNET v2.4 anchor not available for reload").
+// rollback of the unified variant swap: when activating the new v2.4 variant fails, the
+// swap restores the previous variant's record and config (clearing BirdNET.ModelPath
+// back to the embedded baseline) and removes the newly downloaded file. The failure is
+// forced with a fake DFT payload that is not a valid ONNX model, so loading the new
+// variant fails and the swap rolls back to the builtin baseline.
 func TestModelManager_PrimarySwap_RollbackOnReloadFailure(t *testing.T) {
 	// Not parallel: mutates global settings via conf.StoreSettings.
 	entry, modelsDir, srvURL, dftLocalName := permanentSwapEntry(t)

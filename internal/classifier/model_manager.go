@@ -1383,7 +1383,7 @@ func (mm *ModelManager) InstallOrReplace(ctx context.Context, entry *CatalogEntr
 			Status:    StatusDownloading,
 		}
 		mm.mu.Unlock()
-		return mm.replacePrimaryVariant(ctx, entry, &current, target, baseURL, progress)
+		return mm.replaceVariant(ctx, entry, &current, target, baseURL, progress)
 	}
 
 	if installed && current.VariantID == target {
@@ -1469,11 +1469,7 @@ func (mm *ModelManager) replaceVariant(ctx context.Context, entry *CatalogEntry,
 	//    LabelPath, and its label set is embedded), while every other family writes
 	//    model/labels/embeddings, re-points the geomodel range-filter config, and re-appends
 	//    the Models.Enabled alias.
-	if IsPermanentEntry(entry) {
-		mm.applyConfigForVariantSwap(RegistryIDBirdNETV24, modelPath)
-	} else {
-		mm.applyConfigForInstall(entry, modelPath, labelsPath, embeddingsPath)
-	}
+	mm.persistVariantConfig(entry, modelPath, labelsPath, embeddingsPath)
 
 	// 4. Activate the new variant.
 	if mm.orchestrator != nil && entry.RegistryID != "" && mm.orchestrator.IsModelLoaded(entry.RegistryID) {
@@ -1545,23 +1541,8 @@ func (mm *ModelManager) rollbackVariantSwap(log logger.Logger, entry *CatalogEnt
 	mm.installed[entry.ID] = *old
 	mm.mu.Unlock()
 
-	// Re-persist the old variant's config, per family (mirrors step 3). Companion files
-	// are identical across a family's variants, so the old variant's embeddings path (bat
-	// only) is derived from its own file list for completeness.
-	if IsPermanentEntry(entry) {
-		mm.applyConfigForVariantSwap(RegistryIDBirdNETV24, old.ModelPath)
-	} else {
-		oldEmbeddings := ""
-		if oldFiles, ok := variantFilesByID(entry, old.VariantID); ok {
-			for _, f := range oldFiles {
-				if f.Role == RoleEmbeddings {
-					oldEmbeddings = filepath.Join(mm.modelsDir, sharedDirName, f.LocalName)
-					break
-				}
-			}
-		}
-		mm.applyConfigForInstall(entry, old.ModelPath, old.LabelsPath, oldEmbeddings)
-	}
+	// Re-persist the old variant's config, per family (mirrors replaceVariant step 3).
+	mm.persistVariantConfig(entry, old.ModelPath, old.LabelsPath, mm.variantEmbeddingsPath(entry, old.VariantID))
 
 	// The new variant is unusable on this host: remove its downloaded files (none for a
 	// BuiltIn target) so disk state matches the restored record.
@@ -1582,6 +1563,37 @@ func (mm *ModelManager) rollbackVariantSwap(log logger.Logger, entry *CatalogEnt
 	return switchErr
 }
 
+// persistVariantConfig writes the given variant's paths for entry, choosing the config
+// writer by family: the permanent BirdNET v2.4 entry writes ONLY its model field (and
+// clears it for the embedded baseline), because a variant swap must never touch a user's
+// custom LabelPath and its label set is embedded; every other family writes
+// model/labels/embeddings, re-points the geomodel range-filter config, and re-appends the
+// Models.Enabled alias. Shared by the swap and both rollback paths so config is persisted
+// and restored identically.
+func (mm *ModelManager) persistVariantConfig(entry *CatalogEntry, modelPath, labelsPath, embeddingsPath string) {
+	if IsPermanentEntry(entry) {
+		mm.applyConfigForVariantSwap(RegistryIDBirdNETV24, modelPath)
+		return
+	}
+	mm.applyConfigForInstall(entry, modelPath, labelsPath, embeddingsPath)
+}
+
+// variantEmbeddingsPath returns the shared embeddings companion path for the given
+// variant of entry ("" for a family with no embeddings role, i.e. everything but bat),
+// used when re-persisting a rolled-back variant's config.
+func (mm *ModelManager) variantEmbeddingsPath(entry *CatalogEntry, variantID string) string {
+	files, ok := variantFilesByID(entry, variantID)
+	if !ok {
+		return ""
+	}
+	for _, f := range files {
+		if f.Role == RoleEmbeddings {
+			return filepath.Join(mm.modelsDir, sharedDirName, f.LocalName)
+		}
+	}
+	return ""
+}
+
 // rollbackVariantSwitch restores the previously-installed variant after the new
 // variant was written and activated but failed to load. It re-records the old
 // variant, re-persists its paths, reloads it, and removes the new variant's
@@ -1600,19 +1612,10 @@ func (mm *ModelManager) rollbackVariantSwitch(log logger.Logger, entry *CatalogE
 	mm.installed[entry.ID] = *old
 	mm.mu.Unlock()
 
-	// Re-persist the old variant's paths (step 4 wrote the new ones) and reload it.
-	// Companion files are identical across a family's variants, so the old variant's
-	// embeddings path (bat only) is derived from its own file list for completeness.
-	oldEmbeddings := ""
-	if oldFiles, ok := variantFilesByID(entry, old.VariantID); ok {
-		for _, f := range oldFiles {
-			if f.Role == RoleEmbeddings {
-				oldEmbeddings = filepath.Join(mm.modelsDir, sharedDirName, f.LocalName)
-				break
-			}
-		}
-	}
-	mm.applyConfigForInstall(entry, old.ModelPath, old.LabelsPath, oldEmbeddings)
+	// Re-persist the old variant's config (step 3 wrote the new one) and reload it, per
+	// family (a v2.4 restore writes only the model field and clears it for the embedded
+	// baseline). Companion files are identical across a family's variants.
+	mm.persistVariantConfig(entry, old.ModelPath, old.LabelsPath, mm.variantEmbeddingsPath(entry, old.VariantID))
 	mm.hotLoadAfterInstall(log, entry)
 
 	// The new variant is unusable on this host: remove its files (keeping shared
@@ -1646,77 +1649,6 @@ func (mm *ModelManager) rollbackVariantSwitch(log logger.Logger, entry *CatalogE
 // failed swap never strands the classifier. The caller must have registered entry.ID
 // in mm.downloading; replacePrimaryVariant clears it (or schedules cleanup on
 // failure) before returning.
-func (mm *ModelManager) replacePrimaryVariant(ctx context.Context, entry *CatalogEntry, old *InstalledModel, newVariantID, baseURL string, progress chan<- DownloadState) error {
-	log := GetLogger()
-
-	targetIsBuiltIn := false
-	if v := resolveVariant(entry, newVariantID); v != nil {
-		targetIsBuiltIn = v.BuiltIn
-	}
-
-	// 1. Acquire the new variant's model file. The BuiltIn baseline is embedded, so
-	//    there is nothing to download; a DFT build is fetched (the old model keeps
-	//    running) and removed on a failed switch.
-	newModelPath := ""
-	if !targetIsBuiltIn {
-		_, modelPath, _, _, err := mm.downloadVariantFiles(ctx, entry, newVariantID, baseURL, progress, true)
-		if err != nil {
-			// downloadVariantFiles already marked the state failed; retain it briefly
-			// for SSE pollers, then clear. The old variant is untouched and running.
-			time.AfterFunc(failedStateRetention, func() {
-				mm.removeDownloading(entry.ID)
-			})
-			return err
-		}
-		newModelPath = modelPath
-	}
-
-	// 2. Swap the install record to the new variant. entry.ID stays in
-	//    mm.downloading (cleared in step 6) so a concurrent ScanInstalled treats the
-	//    switch as in-flight until the superseded files are removed.
-	mm.mu.Lock()
-	mm.installed[entry.ID] = InstalledModel{
-		CatalogID:   entry.ID,
-		VariantID:   newVariantID,
-		ModelPath:   newModelPath,
-		InstalledAt: time.Now(),
-		Version:     entry.Version,
-	}
-	mm.mu.Unlock()
-
-	// 3. Persist BirdNET.ModelPath (set for a DFT build, cleared for the baseline)
-	//    BEFORE reloading, so the primary loader resolves the new file and a
-	//    crash/restart before step 4 still resolves the new variant.
-	mm.applyConfigForVariantSwap(RegistryIDBirdNETV24, newModelPath)
-
-	// 4. Activate the new variant by reloading the primary in place. A reload failure
-	//    rolls back (the running model was already kept alive transactionally).
-	if mm.orchestrator != nil {
-		if reloadErr := mm.orchestrator.ReloadForVariantSwap(RegistryIDBirdNETV24); reloadErr != nil {
-			return mm.rollbackPrimaryVariantSwap(log, entry, old, newVariantID, reloadErr, progress)
-		}
-		mm.notifyTopologyChanged()
-	}
-
-	// 5. Remove the OLD variant's superseded files. Safe for builtin ids: the
-	//    BuiltIn baseline carries no files, so nothing is targeted when the old
-	//    variant was the baseline, and its files are removed when the old variant was
-	//    a DFT build superseded by the baseline.
-	mm.removeSupersededVariantFiles(log, entry, old.VariantID, newVariantID)
-
-	// 6. The switch is complete: clear the in-flight marker and report success.
-	mm.removeDownloading(entry.ID)
-	sendProgress(progress, entry.ID, StatusComplete)
-
-	log.Info("Primary model variant switched",
-		logger.String("catalog_id", entry.ID),
-		logger.String("from_variant", old.VariantID),
-		logger.String("to_variant", newVariantID),
-		logger.String("model_path", newModelPath))
-
-	return nil
-}
-
 // rollbackPrimaryVariantSwap restores the previously-active primary variant after a
 // failed reload of the new one. The primary reload already kept the previous model
 // serving because a failed build never swaps, so this only re-records the old variant,
@@ -1724,39 +1656,6 @@ func (mm *ModelManager) replacePrimaryVariant(ctx context.Context, entry *Catalo
 // NOT reload again (that would put a working model at risk for no gain). It reports
 // the swap as failed over the progress stream. The caller must have registered
 // entry.ID in mm.downloading; rollbackPrimaryVariantSwap schedules its cleanup.
-func (mm *ModelManager) rollbackPrimaryVariantSwap(log logger.Logger, entry *CatalogEntry, old *InstalledModel, newVariantID string, cause error, progress chan<- DownloadState) error {
-	log.Warn("New primary variant failed to reload; rolled back to the previous variant",
-		logger.String("catalog_id", entry.ID),
-		logger.String("failed_variant", newVariantID),
-		logger.String("restored_variant", old.VariantID),
-		logger.Error(cause))
-
-	// Restore the install record and re-persist the old variant's config (step 3
-	// wrote the new path). The running model is already the old one.
-	mm.mu.Lock()
-	mm.installed[entry.ID] = *old
-	mm.mu.Unlock()
-	mm.applyConfigForVariantSwap(RegistryIDBirdNETV24, old.ModelPath)
-
-	// The new variant is unusable on this host: remove its downloaded files (none for
-	// the BuiltIn baseline) so disk state matches the restored record.
-	mm.removeSupersededVariantFiles(log, entry, newVariantID, old.VariantID)
-
-	switchErr := errors.Newf("switched %s to variant %q but it failed to load; restored previous variant %q", entry.ID, newVariantID, old.VariantID).
-		Component("classifier.model_manager").
-		Category(errors.CategoryModelInit).
-		Context("catalog_id", entry.ID).
-		Context("failed_variant", newVariantID).
-		Context("restored_variant", old.VariantID).
-		Context("reload_error", cause.Error()).
-		Build()
-	mm.markFailed(entry.ID, switchErr, progress)
-	time.AfterFunc(failedStateRetention, func() {
-		mm.removeDownloading(entry.ID)
-	})
-	return switchErr
-}
-
 // applyConfigForVariantSwap persists the selected model file for a within-family
 // variant swap. It writes ONLY the family's model field: a family's label set is
 // identical across its variants (embedded for BirdNET v2.4), so a swap must never
