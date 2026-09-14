@@ -1,11 +1,14 @@
 package classifier
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -143,6 +146,7 @@ func TestReplaceVariant_LoadedSecondaryConcurrentPredictNoGap(t *testing.T) {
 	var wg sync.WaitGroup
 	stop := make(chan struct{})
 	var predictErr atomic.Pointer[error]
+	var served atomic.Int64 // successful predictions, the positive control
 	for range 4 {
 		wg.Go(func() {
 			for {
@@ -155,6 +159,7 @@ func TestReplaceVariant_LoadedSecondaryConcurrentPredictNoGap(t *testing.T) {
 					predictErr.CompareAndSwap(nil, &err)
 					return
 				}
+				served.Add(1)
 			}
 		})
 	}
@@ -165,7 +170,12 @@ func TestReplaceVariant_LoadedSecondaryConcurrentPredictNoGap(t *testing.T) {
 		swapDone <- mm.replaceVariant(t.Context(), &entry, old0, "int8-arm", srvURL, nil)
 	}()
 
-	<-building     // the new instance is mid-build; predictions are hitting the old one
+	<-building // the new instance is mid-build; predictions must be hitting the old one
+	// Positive control: prove at least one prediction is actually served against the old
+	// instance WHILE the builder is blocked, so "no gap" is not vacuously satisfied by
+	// predictions that never ran.
+	require.Eventually(t, func() bool { return served.Load() > 0 }, 2*time.Second, time.Millisecond,
+		"a prediction must be served against the old instance during the build window")
 	close(release) // let the build finish and the swap commit
 	require.NoError(t, <-swapDone)
 	close(stop)
@@ -174,5 +184,78 @@ func TestReplaceVariant_LoadedSecondaryConcurrentPredictNoGap(t *testing.T) {
 	if p := predictErr.Load(); p != nil {
 		t.Fatalf("a concurrent prediction saw an error during the gapless swap: %v", *p)
 	}
+	assert.Positive(t, served.Load(), "predictions must have been served across the swap")
 	assert.Same(t, ModelInstance(newInst), o.models[gaplessSecondaryID].instance, "the new instance must be swapped in")
+}
+
+// TestReplaceVariant_LoadedSecondaryGeomodelReloadsRangeFilter drives a gapless swap of a
+// geomodel-carrying secondary and pins the post-swap geomodel wiring: applyConfigForInstall
+// re-points the range-filter config, and the HasGeomodelFiles branch's ReloadRangeFilter
+// runs (nil-safe on the fake orchestrator). This is the branch the other gapless tests do
+// not exercise (twoVariantServerEntry carries no geomodel files).
+func TestReplaceVariant_LoadedSecondaryGeomodelReloadsRangeFilter(t *testing.T) {
+	// Not parallel: registers a global builder, mutates global settings and the config path.
+	geo, geoLabels := []byte("geo-model"), []byte("geo-labels")
+	v1, v2 := []byte("model-one"), []byte("model-two")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/m1.onnx":
+			_, _ = w.Write(v1)
+		case "/m2.onnx":
+			_, _ = w.Write(v2)
+		case "/geo.onnx":
+			_, _ = w.Write(geo)
+		case "/geo.txt":
+			_, _ = w.Write(geoLabels)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	geoFiles := []CatalogFile{
+		{RemotePath: "geo.onnx", LocalName: "geo.onnx", Role: RoleGeomodelModel, SHA256: sha256Hex(geo), SizeBytes: int64(len(geo))},
+		{RemotePath: "geo.txt", LocalName: "geo.txt", Role: RoleGeomodelLabels, SHA256: sha256Hex(geoLabels), SizeBytes: int64(len(geoLabels))},
+	}
+	v1Files := append([]CatalogFile{{RemotePath: "m1.onnx", LocalName: "model.onnx", Role: RoleModel, SHA256: sha256Hex(v1), SizeBytes: int64(len(v1))}}, geoFiles...)
+	v2Files := append([]CatalogFile{{RemotePath: "m2.onnx", LocalName: "model_v2.onnx", Role: RoleModel, SHA256: sha256Hex(v2), SizeBytes: int64(len(v2))}}, geoFiles...)
+	entry := CatalogEntry{
+		ID: "test-geomodel-secondary", Version: "1.0", HuggingFaceRepo: "t/g",
+		RegistryID: gaplessSecondaryID, GeomodelVersion: "v3",
+		Variants: []CatalogVariant{{ID: "v1", Default: true, Files: v1Files}, {ID: "v2", Files: v2Files}},
+		Files:    v1Files,
+	}
+	require.True(t, HasGeomodelFiles(&entry), "entry must carry geomodel files for this test")
+
+	modelsDir := t.TempDir()
+	settings := conftest.GetTestSettings()
+	conf.StoreSettings(settings)
+	t.Cleanup(func() { conf.StoreSettings(settings) })
+	isolateTestConfig(t)
+
+	old := &reloadFakeModel{id: gaplessSecondaryID}
+	o := newTestOrchestrator(t, &mockModelInstance{id: RegistryIDBirdNETV24})
+	o.models[gaplessSecondaryID] = &modelEntry{instance: old}
+	o.SetModelsDir(modelsDir)
+
+	newInst := &reloadFakeModel{id: gaplessSecondaryID}
+	registerTestSecondaryBuilder(t, gaplessSecondaryID, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
+		return newInst, nil
+	})
+
+	mm := NewModelManager(modelsDir, o, settings) // real settings: config is persisted
+	mm.mu.Lock()
+	mm.downloading[entry.ID] = &DownloadState{CatalogID: entry.ID, Status: StatusDownloading}
+	mm.mu.Unlock()
+
+	old0 := &InstalledModel{CatalogID: entry.ID, VariantID: "v1", ModelPath: filepath.Join(modelsDir, entry.ID, "model.onnx")}
+	require.NoError(t, mm.replaceVariant(t.Context(), &entry, old0, "v2", srv.URL, nil))
+
+	assert.Same(t, ModelInstance(newInst), o.models[gaplessSecondaryID].instance, "the new instance must be swapped in gaplessly")
+	// The geomodel branch ran: applyConfigForInstall re-pointed the range-filter config to
+	// this entry's shared geomodel files.
+	rf := conf.GetSettings().RangeFilterConfig()
+	assert.Equal(t, "v3", rf.Model, "the geomodel version must be persisted to the range-filter config")
+	assert.Equal(t, filepath.Join(modelsDir, sharedDirName, "geo.onnx"), rf.ModelPath, "the geomodel model path must be re-pointed")
+	assert.Equal(t, filepath.Join(modelsDir, sharedDirName, "geo.txt"), rf.LabelsPath, "the geomodel labels path must be re-pointed")
 }

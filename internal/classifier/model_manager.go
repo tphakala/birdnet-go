@@ -71,8 +71,8 @@ type ModelManager struct {
 	orchestrator *Orchestrator
 
 	// unloadFn, when non-nil, replaces the direct orchestrator UnloadModel call so
-	// tests can force the unload-failure rollback branches of Uninstall, Reinstall,
-	// and replaceVariant. Those branches are reachable in production only via a
+	// tests can force the unload-failure rollback branches of Uninstall and
+	// Reinstall. Those branches are reachable in production only via a
 	// concurrent unload/delete racing the loaded-check, so restoring their coverage
 	// needs an injected failure. Nil in production; same test-seam shape as freeSpaceFn.
 	unloadFn    func(registryID string) error
@@ -941,8 +941,8 @@ func (mm *ModelManager) GetDownloadState(catalogID string) *DownloadState {
 
 // unloadModel unloads registryID through the injected test seam when one is set,
 // otherwise through the live orchestrator. The seam exists only so tests can force
-// the unload-failure branches of Uninstall, Reinstall, and replaceVariant;
-// production always takes the orchestrator path. Callers must have already
+// the unload-failure branches of Uninstall and Reinstall; production always
+// takes the orchestrator path. Callers must have already
 // confirmed mm.orchestrator != nil (the guard preceding every unload site).
 func (mm *ModelManager) unloadModel(registryID string) error {
 	if mm.unloadFn != nil {
@@ -1413,14 +1413,17 @@ func (mm *ModelManager) InstallOrReplace(ctx context.Context, entry *CatalogEntr
 
 // replaceVariant switches an installed model to newVariantID using a
 // download-before-delete strategy: the new variant's files are downloaded and
-// verified first (the old model keeps running), then the old model is unloaded,
-// the install record and config are swapped to the new variant, the new model is
-// loaded, and only then are the old variant's superseded files removed. Any
-// failure before the swap leaves the old variant installed and loaded, so a
-// failed switch never strands the working model. The caller must have registered
-// entry.ID in mm.downloading; replaceVariant keeps it registered until the
-// superseded files are gone (so a concurrent ScanInstalled treats the switch as
-// in-flight) and clears it (or schedules cleanup on failure) before returning.
+// verified first (the old model keeps running), the install record and config are
+// swapped, and the new variant is activated. A LOADED family activates GAPLESSLY via
+// reloadEntry (the old instance keeps serving until the new one is built and swapped
+// in under entry.mu, then closed); a not-loaded family is fresh-loaded via
+// hotLoadAfterInstall. Only after a successful activation are the old variant's
+// superseded files removed. Any failure before the swap leaves the old variant
+// installed and loaded, so a failed switch never strands the working model. The
+// caller must have registered entry.ID in mm.downloading; replaceVariant keeps it
+// registered until the superseded files are gone (so a concurrent ScanInstalled
+// treats the switch as in-flight) and clears it (or schedules cleanup on failure)
+// before returning.
 func (mm *ModelManager) replaceVariant(ctx context.Context, entry *CatalogEntry, old *InstalledModel, newVariantID, baseURL string, progress chan<- DownloadState) error {
 	log := GetLogger()
 

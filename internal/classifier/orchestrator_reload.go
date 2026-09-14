@@ -14,6 +14,7 @@
 package classifier
 
 import (
+	"runtime"
 	"runtime/debug"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -280,10 +281,10 @@ func (o *Orchestrator) variantSwapBuilder(registryID string) (entryBuilder, bool
 // file that a settings hot-reload refuses: it passes no reloadCheck, so reloadEntry
 // build-then-swaps the new variant and a failed build leaves the previous variant
 // serving (gapless). Every family's within-model swap goes through this one path; it
-// replaces the v2.4-only ReloadPrimaryForVariantSwap. reloadEntry clones the currently
-// published settings, which ModelManager.replaceVariant has already updated with the new
-// variant's paths, so the builder resolves the new file. The v2.4 builder ignores the
-// thread budget (NewBirdNET reads settings.BirdNET.Threads); secondary builders use it.
+// replaces the former v2.4-only variant-swap reload path. ModelManager.replaceVariant has
+// already published the new variant's paths, so the builder resolves the new file. The
+// v2.4 builder ignores the thread budget (NewBirdNET reads settings.BirdNET.Threads);
+// secondary builders use it.
 func (o *Orchestrator) ReloadForVariantSwap(registryID string) error {
 	build, ok := o.variantSwapBuilder(registryID)
 	if !ok {
@@ -293,9 +294,23 @@ func (o *Orchestrator) ReloadForVariantSwap(registryID string) error {
 			Context("registry_id", registryID).
 			Build()
 	}
-	_, err := o.reloadEntry(registryID, build, reloadOpts{
-		threads: o.computeThreadAllocation(o.currentSettings())[registryID],
-	})
+	// Pin ONE settings snapshot for both the thread-budget lookup and the build, so a
+	// concurrent settings change cannot hand the builder a budget from one snapshot and
+	// content from another (reloadEntry uses opts.settings verbatim when non-nil). Mirrors
+	// ReloadSecondaryModels; the clone is private, so the v2.4 builder's loadLabels never
+	// mutates the published snapshot.
+	settings := conf.CloneSettings(o.currentSettings())
+	threads := o.computeThreadAllocation(settings)[registryID]
+	if threads <= 0 {
+		// A loaded secondary absent from settings.Models.Enabled is not keyed in the
+		// allocation; fall back to the full budget, matching ReloadSecondaryModels and
+		// LoadModel (inference is serialized by inferenceMu, so each model gets all threads).
+		threads = settings.BirdNET.Threads
+		if threads <= 0 {
+			threads = runtime.NumCPU()
+		}
+	}
+	_, err := o.reloadEntry(registryID, build, reloadOpts{settings: settings, threads: threads})
 	return err
 }
 
