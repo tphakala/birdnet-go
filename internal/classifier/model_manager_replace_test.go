@@ -271,17 +271,18 @@ func TestOrchestrator_ResolveInstalledPaths_NonDefaultVariant(t *testing.T) {
 }
 
 // TestModelManager_InstallOrReplace_RollsBackOnLoadFailure verifies that when the
-// new variant is downloaded and swapped in but fails to LOAD, the switch rolls
-// back to the previous variant and reports failure rather than reporting success
-// with no classifier loaded. BSG is a known registry id with no loader, so
-// LoadModel fails deterministically after the unload.
+// new variant is downloaded but fails to activate, the switch rolls back to the
+// previous variant and reports failure rather than reporting success with no
+// classifier loaded. BSG is a loaded registry id with no variant-swap reload
+// builder, so ReloadForVariantSwap refuses deterministically; nothing is unloaded
+// or swapped, so the old variant is still serving when rollback restores it.
 func TestModelManager_InstallOrReplace_RollsBackOnLoadFailure(t *testing.T) {
 	entry, modelsDir, srvURL := twoVariantServerEntry(t)
 	entry.RegistryID = RegistryIDBSG
 
-	// Fake orchestrator with the model "loaded" (non-primary, nil instance so the
-	// unload closes nothing). LoadModel(BSG) has no registered loader, so the switch
-	// cannot re-load after the unload -> rollback.
+	// Fake orchestrator with the model "loaded" (present in the map). BSG has no
+	// variantSwapBuilder, so the gapless swap refuses before building or swapping,
+	// and the switch rolls back to the previous variant.
 	orch := &Orchestrator{models: map[string]*modelEntry{entry.RegistryID: {}}}
 	orch.SetModelsDir(modelsDir)
 	mm := NewModelManager(modelsDir, orch, nil)
@@ -301,42 +302,6 @@ func TestModelManager_InstallOrReplace_RollsBackOnLoadFailure(t *testing.T) {
 	assert.FileExists(t, fp32Path, "the previous variant's file must be kept on rollback")
 	_, statErr := os.Stat(int8Path)
 	assert.True(t, os.IsNotExist(statErr), "the failed new variant's file must be removed on rollback")
-}
-
-// TestModelManager_InstallOrReplace_UnloadFailureKeepsOldAndCleansNew verifies
-// that when the old model cannot be unloaded, the switch aborts with the old
-// variant intact and the freshly downloaded new files removed. The unload failure
-// is injected via the unloadFn seam (production reaches it only via a concurrent
-// unload/delete race).
-func TestModelManager_InstallOrReplace_UnloadFailureKeepsOldAndCleansNew(t *testing.T) {
-	entry, modelsDir, srvURL := twoVariantServerEntry(t)
-	entry.RegistryID = RegistryIDBSG
-
-	// The model is loaded (present in the orchestrator map) so the variant switch
-	// reaches its unload step; the injected seam then fails that unload, forcing the
-	// "keep old, clean new" abort path. The first InstallOrReplace below is a fresh
-	// install (no unload), so the seam does not affect it.
-	orch := &Orchestrator{
-		models: map[string]*modelEntry{entry.RegistryID: {}},
-	}
-	orch.SetModelsDir(modelsDir)
-	mm := NewModelManager(modelsDir, orch, nil)
-	mm.unloadFn = func(_ string) error { return errInjectedUnloadFailure }
-
-	require.NoError(t, mm.InstallOrReplace(t.Context(), &entry, "", srvURL, nil))
-	fp32Path := filepath.Join(modelsDir, entry.ID, "model.onnx")
-	int8Path := filepath.Join(modelsDir, entry.ID, "model_int8.onnx")
-	require.FileExists(t, fp32Path)
-
-	err := mm.InstallOrReplace(t.Context(), &entry, "int8-arm", srvURL, nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "still in use")
-
-	assert.Equal(t, "fp32", installedByID(t, mm, entry.ID).VariantID,
-		"an unload failure must leave the old variant installed")
-	assert.FileExists(t, fp32Path, "the old variant's file must be intact")
-	_, statErr := os.Stat(int8Path)
-	assert.True(t, os.IsNotExist(statErr), "the aborted switch's new file must be cleaned up")
 }
 
 // TestModelManager_InstallOrReplace_RejectsWhileDownloading verifies the
