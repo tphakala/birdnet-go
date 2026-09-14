@@ -848,6 +848,11 @@ func TestGetSoxArgs_FileInput(t *testing.T) {
 
 	// Should contain spectrogram command
 	assert.True(t, slices.Contains(args, "spectrogram"), "should contain spectrogram command")
+	channelsIndex := slices.Index(args, "channels")
+	spectrogramIndex := slices.Index(args, "spectrogram")
+	require.NotEqual(t, -1, channelsIndex, "file input should be downmixed to mono")
+	assert.Equal(t, "1", args[channelsIndex+1], "file input should use one channel")
+	assert.Less(t, channelsIndex, spectrogramIndex, "downmix should occur before spectrogram generation")
 
 	// Should contain width and height
 	assert.True(t, slices.Contains(args, "-x"), "should contain -x flag")
