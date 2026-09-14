@@ -1575,7 +1575,7 @@ func (mm *ModelManager) rollbackVariantSwitch(log logger.Logger, entry *CatalogE
 // BuiltIn baseline) are fetched first while the old model keeps running, then
 // BirdNET.ModelPath is set (or cleared for the baseline) and the primary is reloaded.
 // A reload failure restores the previous variant's config and record; the running
-// model was already kept alive by reloadModelInternal's transactional rollback, so a
+// model was already kept alive by the primary reload (a failed build never swaps), so a
 // failed swap never strands the classifier. The caller must have registered entry.ID
 // in mm.downloading; replacePrimaryVariant clears it (or schedules cleanup on
 // failure) before returning.
@@ -1651,8 +1651,8 @@ func (mm *ModelManager) replacePrimaryVariant(ctx context.Context, entry *Catalo
 }
 
 // rollbackPrimaryVariantSwap restores the previously-active primary variant after a
-// failed reload of the new one. reloadModelInternal already kept the previous model
-// serving via its transactional rollback, so this only re-records the old variant,
+// failed reload of the new one. The primary reload already kept the previous model
+// serving because a failed build never swaps, so this only re-records the old variant,
 // re-persists its config, and removes the new variant's now-unused files; it does
 // NOT reload again (that would put a working model at risk for no gain). It reports
 // the swap as failed over the progress stream. The caller must have registered

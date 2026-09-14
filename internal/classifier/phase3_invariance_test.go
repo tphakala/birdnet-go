@@ -425,7 +425,10 @@ func TestPhase3Invariance_RefusedReload(t *testing.T) {
 
 	// An unknown birdnet.version on a plain settings reload is refused and rolled back.
 	settings.BirdNET.Version = "9.9-nonexistent"
-	require.Error(t, o.ReloadModel(), "an unknown model version on a settings reload must be refused")
+	reloadErr := o.ReloadModel()
+	require.Error(t, reloadErr, "an unknown model version on a settings reload must be refused")
+	assert.Contains(t, reloadErr.Error(), "9.9-nonexistent",
+		"the refusal must name the requested version, not the previous one")
 
 	after := buildPhase3Snapshot(t, o)
 	assert.Equal(t, before, after, "a refused reload must leave the observable surface unchanged")

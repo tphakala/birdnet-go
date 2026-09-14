@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -60,7 +59,7 @@ type runtimeInfo struct {
 // modelIdentity is the immutable identity snapshot the ModelInstance getters and
 // the inference span expose: model ID, human-readable name, version string, and
 // audio spec. Like runtimeInfo it is published behind an atomic pointer so those
-// reads are lock-free and never race reloadModelInternal's writes to bn.ModelInfo
+// reads are lock-free and never race the construction-time write of bn.ModelInfo
 // / bn.modelVersion, nor block on bn.mu (held by inference for the full native
 // call, issue #3336).
 type modelIdentity struct {
@@ -102,7 +101,8 @@ type BirdNET struct {
 	//
 	// settings.BirdNET.ModelPath itself is NEVER mutated; the repair goes through
 	// the orchestrator's correction queue, which reads the substituted/repairable
-	// flags kept here. Written under mu by reloadModelInternal, like ModelInfo.
+	// flags kept here. Written by NewBirdNET at construction, like ModelInfo (the
+	// model de-privilege epic Phase 3 build-then-swap reload never mutates it in place).
 	primaryPath pathResolution
 	// resolvePrimary re-resolves primaryPath on a hot reload. Nil outside the
 	// orchestrator path, in which case the configured value is used verbatim.
@@ -120,18 +120,11 @@ type BirdNET struct {
 	// ModelName, ModelVersion, Spec) and the inference span read it lock-free without
 	// blocking on an in-flight native call holding bn.mu (issue #3336).
 	identity atomic.Pointer[modelIdentity]
-	// reloadInitFn, when non-nil, replaces the model-initialization step of
-	// reloadModelInternal (the bn.initializeModel call). It is nil in production, so
-	// the real backend is loaded. Tests set it to install a fake backend and then
-	// return an error, exercising the transactional rollback AFTER a new backend has
-	// been installed (teardown of the failed backend, restore of the previous one and
-	// the runtime triplet / modelVersion) without needing a native model.
-	reloadInitFn func() error
 	// mu guards the classifier inference backend. Inference holds mu for the full
 	// duration of the native call, not just the field read: the backend is not
 	// goroutine-safe and reload/Delete Close() it under mu, so dropping mu before the
 	// native call would reintroduce the issue #3336 use-after-free segfault.
-	// (ModelInfo is written under mu by reloadModelInternal; the identity fields the
+	// (ModelInfo is written by NewBirdNET at construction; the identity fields the
 	// getters expose are mirrored into the lock-free identity snapshot above, and the
 	// remaining ModelInfo reads run under mu or before the instance is shared.)
 	mu               sync.Mutex
@@ -1010,312 +1003,6 @@ func (bn *BirdNET) validateModelAndLabels() error {
 	return nil
 }
 
-// ReloadModel safely reloads the BirdNET model and labels while handling ongoing analysis
-func (bn *BirdNET) ReloadModel() error {
-	err := bn.reloadModelInternal(false)
-	if err == nil {
-		// Return freed native pages to the OS. Both backends free native memory in
-		// Close(), but libc may retain freed pages. FreeOSMemory hints the
-		// runtime and libc to release them, reducing RSS after reload.
-		// Run outside the exclusive lock region because synchronous GC and memory
-		// release can take >100ms and stall concurrent requests.
-		debug.FreeOSMemory()
-	}
-	return err
-}
-
-// reloadForVariantSwap reloads the primary model in place, opting into a changed
-// (or cleared) model file path. It is the primary-model counterpart to the generic
-// variant-replace flow: the gallery uses it to switch the permanent BirdNET v2.4
-// classifier between its embedded BuiltIn baseline and a DFT-truncated ONNX build
-// WITHOUT a full pipeline restart. Unlike ReloadModel (which treats a path change as
-// a model-identity change requiring an orchestrator restart), this accepts a new
-// CustomPath, and a cleared BirdNET.ModelPath re-resolves the stock embedded
-// identity. The model ID stays BirdNET_V2.4 across the swap, so the orchestrator's
-// re-key is a no-op. Callers must have already persisted the new BirdNET.ModelPath
-// (or cleared it) so currentSettings() observes the target file. Transactional
-// rollback is inherited from reloadModelInternal.
-func (bn *BirdNET) reloadForVariantSwap() error {
-	err := bn.reloadModelInternal(true)
-	if err == nil {
-		debug.FreeOSMemory()
-	}
-	return err
-}
-
-// stockPrimaryModelInfo resolves the identity of the stock (non-custom) primary
-// classifier: the Tier-4 default (arm64 prefers the INT8-ARM ONNX model when it is
-// present, otherwise the embedded BirdNET v2.4 TFLite) with the arm64 v2.4->INT8
-// ONNX remap applied. reloadModelInternal's cleared-path branch uses it. It mirrors
-// NewBirdNET's Tier-4 resolution (defaultClassifierModelInfo, then the arm64 remap
-// that NewBirdNET applies across all tiers); NewBirdNET does not call it because that
-// remap is shared across all its tiers, so keep the two in sync by hand.
-func stockPrimaryModelInfo() ModelInfo {
-	info := defaultClassifierModelInfo(runtime.GOARCH, findModelPathInStandardPaths)
-	return remapV24ToONNXOnARM64(&info, runtime.GOARCH, tfliteBackendAvailable, findModelPathInStandardPaths)
-}
-
-// reloadModelInternal reloads the primary classifier in place under bn.mu, with
-// transactional rollback to the previously-serving model on any failure. When
-// allowPathChange is false (the settings-reload path, ReloadModel), a change of the
-// resolved model file path is treated as a model-identity change and refused so the
-// caller performs an orchestrator restart instead. When true (the variant-swap
-// path, reloadForVariantSwap), a changed CustomPath is accepted in place and a
-// cleared BirdNET.ModelPath re-resolves the stock embedded identity; a change of
-// model ID (a different BirdNET version) is still refused.
-func (bn *BirdNET) reloadModelInternal(allowPathChange bool) error {
-	bn.Debug("Acquiring mutex for model reload")
-	bn.mu.Lock()
-	defer bn.mu.Unlock()
-	bn.Debug("Acquired mutex for model reload")
-
-	// Get fresh settings so sub-methods see the latest config.
-	fresh := bn.currentSettings()
-	settingsCopy := conf.CloneSettings(fresh)
-	oldSettings := bn.Settings
-	bn.Settings = settingsCopy
-
-	// Snapshot all mutable state for transactional rollback on failure. The range
-	// filter is no longer part of this transaction: it is owned by the orchestrator's
-	// rangeFilterService and rebuilt by the caller (o.ReloadModel /
-	// o.ReloadPrimaryForVariantSwap) after this classifier reload commits (Phase 2b).
-	oldClassifier := bn.classifier
-	oldModelInfo := bn.ModelInfo
-	// initializeModel republishes the runtime triplet (and modelVersion on the
-	// TFLite custom-path branch) before the later reload steps (meta model,
-	// validation) that can still fail, so snapshot them too; otherwise a
-	// rolled-back reload leaves the status card and ModelVersion() describing the
-	// failed attempt instead of the previous (still-serving) model.
-	oldRuntime := bn.runtime.Load()
-	oldModelVersion := bn.modelVersion
-	oldPrimaryPath := bn.primaryPath
-
-	// Re-resolve the configured primary path for THIS reload, exactly as
-	// NewBirdNET does at construction. Without this the identity checks below would
-	// compare a re-derived identity built from the RAW configured string against a
-	// live identity built from the RECOVERED one, and a start that successfully
-	// recovered a stale path would fail its very next settings reload (a locale
-	// change, a threshold edit) with "requires orchestrator restart". A user who hit
-	// the original stale-path bug would get a second, louder bug on their next save.
-	//
-	// The resolution is deterministic, so recovered resolves to recovered both
-	// before and after the correction is persisted, and neither ordering produces a
-	// spurious veto. A genuine user edit to a different existing file still
-	// resolves to itself and is still refused on the settings-reload path.
-	bn.primaryPath = resolvePrimaryOrConfigured(bn.resolvePrimary, bn.Settings.BirdNET.ModelPath)
-
-	rollback := func() {
-		if bn.classifier != nil && bn.classifier != oldClassifier {
-			bn.classifier.Close()
-		}
-		bn.classifier = oldClassifier
-		bn.ModelInfo = oldModelInfo
-		// Restore the runtime triplet and model-version string alongside the
-		// classifier so RuntimeInfo / ModelVersion describe the restored model
-		// rather than the failed attempt.
-		bn.runtime.Store(oldRuntime)
-		bn.modelVersion = oldModelVersion
-		// Restore the resolved primary path with the rest of the identity, or a
-		// rolled-back reload would leave the still-serving model described by, and
-		// later reloads comparing against, the failed attempt's path.
-		bn.primaryPath = oldPrimaryPath
-		// Republish the getter-visible identity from the restored ModelInfo /
-		// modelVersion so ModelID/ModelName/ModelVersion/Spec revert too.
-		bn.publishIdentity()
-		bn.updateSettings(oldSettings)
-		// Degraded-but-recovered: make it explicit in the log that the previous
-		// model was restored, so a failed reload is not mistaken for a dead
-		// detector. The caller logs the underlying error separately.
-		GetLogger().Warn("BirdNET model reload failed; rolled back to previous model",
-			logger.String("model_id", oldModelInfo.ID))
-	}
-
-	// Resolve the target identity from config. A model version or file-path change
-	// requires the orchestrator to cold-restart the pipeline rather than reload in
-	// place, so those are refused here on the settings-reload path (allowPathChange
-	// false) and accepted on the variant-swap path (allowPathChange true).
-	switch {
-	case bn.Settings.BirdNET.Version != "":
-		newInfo, ok := ResolveBirdNETVersion(bn.Settings.BirdNET.Version)
-		if !ok {
-			// Captured BEFORE rollback(), for the same reason as the case below:
-			// rollback restores bn.Settings to the previous snapshot, so reading the
-			// version afterwards reports the PREVIOUS (valid) version as unknown, or
-			// an empty string when the user had not set one.
-			requestedVersion := bn.Settings.BirdNET.Version
-			rollback()
-			return errors.Newf("unknown BirdNET version: %s", requestedVersion).
-				Component("birdnet").
-				Category(errors.CategoryModelInit).
-				Context("operation", "reload_model").
-				Context("version", requestedVersion).
-				Build()
-		}
-		newInfo.CustomPath = bn.configuredModelPath()
-		// Mirror NewBirdNET (the remap at construction): on arm64 a v2.4 TFLite model
-		// resolved from version:"2.4" is remapped to the INT8 ONNX entry. Without this, a
-		// no-op reload re-resolves to the TFLite entry, and the identity check below
-		// misreads it as a model change requiring an orchestrator restart, so in-place
-		// hot-reloads fail and roll back.
-		newInfo = remapV24ToONNXOnARM64(&newInfo, runtime.GOARCH, tfliteBackendAvailable, findModelPathInStandardPaths)
-		// A change of model ID (a different BirdNET version) always requires an
-		// orchestrator restart. A change of only the CustomPath (same ID) is refused
-		// on the settings-reload path but accepted in place on the variant-swap path.
-		if newInfo.ID != bn.ModelInfo.ID || (!allowPathChange && newInfo.CustomPath != bn.ModelInfo.CustomPath) {
-			rollback()
-			return errors.Newf("model identity changed from %s to %s: requires orchestrator restart", bn.ModelInfo.ID, newInfo.ID).
-				Component("birdnet").
-				Category(errors.CategoryModelInit).
-				Context("operation", "reload_model").
-				Context("current_model", bn.ModelInfo.ID).
-				Context("requested_model", newInfo.ID).
-				Build()
-		}
-		bn.ModelInfo = newInfo
-	case bn.configuredModelPath() != "":
-		// Birdnet-slot model: re-derive the canonical BirdNET_V2.4 identity from
-		// the resolved path (mirrors NewBirdNET Tier 3). The ID stays
-		// BirdNET_V2.4 across reloads, so only a change of the model file path is
-		// treated as a model change requiring an orchestrator restart; a no-op
-		// reload (e.g. a locale change) stays in-place. On the variant-swap path a
-		// changed path IS the intended swap, so it is accepted in place.
-		newInfo := customBirdNETV24ModelInfo(bn.configuredModelPath())
-		if !allowPathChange && newInfo.CustomPath != bn.ModelInfo.CustomPath {
-			rollback()
-			return errors.Newf("birdnet model file changed from %q to %q: requires orchestrator restart", bn.ModelInfo.CustomPath, newInfo.CustomPath).
-				Component("birdnet").
-				Category(errors.CategoryModelInit).
-				Context("operation", "reload_model").
-				Context("current_model_path", bn.ModelInfo.CustomPath).
-				Context("requested_model_path", newInfo.CustomPath).
-				Build()
-		}
-		bn.ModelInfo = newInfo
-	case !allowPathChange &&
-		oldPrimaryPath.resolved.model != "" && bn.primaryPath.resolved.model == "":
-		// The file this instance is RUNNING is gone from the configuration: the
-		// previous resolution named a real file, this one resolves to nothing. Two
-		// ways in, both a model-identity change that the settings-reload path must
-		// refuse (the caller restarts the orchestrator instead):
-		//   - the configured file was CONFIRMED absent with no usable installed
-		//     variant, so resolvePrimaryModelPath substituted onto the empty
-		//     built-in (substituted=true, resolved.model=""); or
-		//   - the user CLEARED birdnet.modelpath while a custom model was running, so
-		//     resolvePrimaryModelPath("") returns the empty result verbatim
-		//     (substituted=false, resolved.model="").
-		// A substitution onto a REAL file has a non-empty configuredModelPath and is
-		// handled by the case above.
-		//
-		// The old-vs-new comparison is what makes this precise, and it is load
-		// bearing: it is what excludes the STEADY STATE after a successful startup
-		// recovery onto the built-in baseline. There config keeps the stale path (the
-		// recovery is deliberately not repairable), so every reload re-resolves to
-		// the same empty result, but the PREVIOUS resolution was already empty too
-		// (oldPrimaryPath.resolved.model == ""), so this case does not fire and
-		// settings saves keep succeeding. The guard deliberately does NOT test
-		// bn.primaryPath.substituted: gating on it would leave the cleared-path case
-		// (substituted=false) falling through, which is the silent-corruption bug
-		// below, while adding nothing to the steady-state exclusion the old!="" arm
-		// already provides.
-		//
-		// Falling through would instead be silent corruption: no case matches,
-		// bn.ModelInfo keeps naming the vanished file, initializeModel loads the
-		// baseline underneath it, and the reload reports success while every
-		// subsequent detection is attributed to a model that is not running.
-		//
-		// Refuse, and let the transactional rollback keep the ALREADY-LOADED model
-		// serving. That preserves the pre-recovery outcome (a settings save fails
-		// loudly rather than silently swapping models) while the running detector is
-		// untouched. The variant-swap path is excluded because there a cleared path
-		// IS the intended revert, handled by the next case.
-		// Captured BEFORE rollback(): rollback restores bn.Settings to the previous
-		// snapshot, so reading the path after it would name the OLD configured file
-		// and assert that a healthy path is unusable.
-		configuredPath := bn.Settings.BirdNET.ModelPath
-		rollback()
-		return errors.Newf("configured birdnet model file %q is no longer usable and no installed variant can replace it: requires orchestrator restart", configuredPath).
-			Component("birdnet").
-			Category(errors.CategoryModelInit).
-			Context("operation", "reload_model").
-			Context("current_model_path", bn.ModelInfo.CustomPath).
-			Context("configured_model_path", configuredPath).
-			Build()
-	case allowPathChange:
-		// Variant-swap path with a CLEARED BirdNET.ModelPath: the user reverted to
-		// the embedded BuiltIn baseline. Re-resolve the stock classifier identity so
-		// the in-place reload rebuilds the embedded model rather than keeping the old
-		// CustomPath. stockPrimaryModelInfo mirrors NewBirdNET's Tier-4 resolution.
-		bn.ModelInfo = stockPrimaryModelInfo()
-	}
-
-	// Reload labels before model initialization; ONNX models require labels
-	// at construction time for output dimension validation.
-	if err := bn.loadLabels(); err != nil {
-		rollback()
-		return errors.New(err).
-			Component("birdnet").
-			Category(errors.CategoryModelInit).
-			Context("operation", "reload_model").
-			Context("step", "load_labels").
-			Build()
-	}
-	bn.Debug("Labels loaded successfully")
-
-	// Initialize new model. reloadInitFn is a test seam (nil in production, so the
-	// real initializeModel runs); see the field comment on BirdNET.
-	initializeModel := bn.initializeModel
-	if bn.reloadInitFn != nil {
-		initializeModel = bn.reloadInitFn
-	}
-	if err := initializeModel(); err != nil {
-		rollback()
-		return errors.New(err).
-			Component("birdnet").
-			Category(errors.CategoryModelInit).
-			Context("operation", "reload_model").
-			Context("step", "initialize_model").
-			Build()
-	}
-	bn.Debug("Model initialized successfully")
-
-	// The range-filter backend is rebuilt by the orchestrator after this classifier
-	// reload commits (o.ReloadModel / o.ReloadPrimaryForVariantSwap ->
-	// rangeFilterService.reload), not here. A locale change or a v2.4 variant swap
-	// keeps the same species set and scientific names, so the range-filter mapping is
-	// unchanged and a stale backend serving in the brief gap stays correct.
-
-	// Validate that the model and labels match
-	if err := bn.validateModelAndLabels(); err != nil {
-		rollback()
-		return errors.New(err).
-			Component("birdnet").
-			Category(errors.CategoryModelInit).
-			Context("operation", "reload_model").
-			Context("step", "validate_model_labels").
-			Build()
-	}
-
-	// Explicitly close old backends to release native resources promptly. This runs
-	// under mu (held for the whole reload), so it cannot race with an in-flight
-	// inference, which also holds mu across its native call (issue #3336).
-	// ONNX Close() calls session.Destroy() which frees via ort_api->ReleaseSession().
-	// TFLite Close() calls interpreter.Delete() which immediately frees native
-	// resources via C.TfLiteInterpreterDelete and cascades to model/options/delegates.
-	if oldClassifier != nil {
-		oldClassifier.Close()
-	}
-
-	// Publish the new settings atomically
-	bn.updateSettings(settingsCopy)
-
-	// Republish the getter-visible identity for the new model now that the reload
-	// has committed (ModelInfo and modelVersion are final).
-	bn.publishIdentity()
-
-	bn.Debug("Model reload completed successfully")
-	return nil
-}
-
 // Debug prints debug messages if debug mode is enabled.
 // Uses the centralized logger for structured logging.
 func (bn *BirdNET) Debug(format string, v ...any) {
@@ -1427,21 +1114,26 @@ func (bn *BirdNET) RuntimeInfo() (device, backend, precision string) {
 	return ri.device, ri.backend, ri.precision
 }
 
-// ReloadSnapshot returns a copy of the model metadata safely under bn.mu. Used by
-// the Orchestrator to refresh its shared state after a model reload.
-func (bn *BirdNET) ReloadSnapshot() ModelInfo {
+// identitySnapshot returns the model's identity and resolved path together under
+// bn.mu. Post-Phase-3 both bn.ModelInfo and bn.primaryPath are written only by
+// NewBirdNET at construction (the in-place reload that mutated them is gone), so the
+// lock is defensive rather than strictly required; it keeps the paired read
+// unambiguous while the instance may still be serving inference. reloadEntry's
+// v24SettingsReloadCheck uses it to compare the serving instance against a freshly
+// built candidate.
+func (bn *BirdNET) identitySnapshot() (ModelInfo, pathResolution) {
 	bn.mu.Lock()
 	defer bn.mu.Unlock()
-	return bn.ModelInfo
+	return bn.ModelInfo, bn.primaryPath
 }
 
 // LiveModelInfo returns the instance's live identity snapshot, whose Backend,
 // Quantization and CustomPath are resolved at build time and can differ from the
 // static ModelRegistry template (for example ONNX/INT8 on the arm64 container). It
 // satisfies liveModelInfoProvider so ModelInfos reports the actually-loaded identity
-// without special-casing any registry ID. Read under bn.mu; a thin alias over
-// ReloadSnapshot, removed with it in Phase 3 PR 3.
-func (bn *BirdNET) LiveModelInfo() ModelInfo { return bn.ReloadSnapshot() }
+// without special-casing any registry ID. Reads the identity under bn.mu via
+// identitySnapshot.
+func (bn *BirdNET) LiveModelInfo() ModelInfo { info, _ := bn.identitySnapshot(); return info }
 
 // Close releases resources held by the BirdNET model.
 // Implements ModelInstance (io.Closer compatible).

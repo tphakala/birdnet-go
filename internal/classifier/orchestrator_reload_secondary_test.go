@@ -60,7 +60,7 @@ func (m *reloadFakeModel) ResolvedModelPath() string { return m.resolvedPath }
 // registerTestSecondaryBuilder adds a builder under id for the duration of the
 // test, restoring the global map on cleanup. The map is a package global, so the
 // tests that use it must not run in parallel.
-func registerTestSecondaryBuilder(t *testing.T, id string, build secondaryModelBuilder) {
+func registerTestSecondaryBuilder(t *testing.T, id string, build entryBuilder) {
 	t.Helper()
 	_, existed := openvinoCapableSecondaryBuilders[id]
 	require.False(t, existed, "test builder %s already registered", id)

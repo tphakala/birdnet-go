@@ -39,6 +39,12 @@ type modelEntry struct {
 	// that guards instance, so the triplet is always published with the instance it
 	// describes. Non-secondary entries (e.g. the primary) leave it at the zero value.
 	backend secondaryBackendKey
+
+	// generation counts how many times reloadEntry has swapped this entry's instance.
+	// Bumped under mu with every successful build-then-swap reload. Phase 3 introduces it
+	// as the primitive a later phase consumes to pair a species-index snapshot with the
+	// backend generation it was built from. Guarded by mu, alongside instance.
+	generation uint64
 }
 
 // entryRef pairs a registry ID with its model entry for the snapshot-then-iterate
@@ -74,11 +80,14 @@ type secondaryBackendKey struct {
 // Supports multiple models with per-model locking and name resolution.
 //
 // Lock ordering (acquire in this order to prevent deadlocks):
-//  1. mu (RWMutex) - protects models map; released before inference
-//  2. inferenceMu (Mutex) - serializes inference across all models
-//  3. entry.mu (Mutex) - per-model; guards instance lifecycle
+//  1. reloadMu (Mutex) - serializes a whole reloadEntry (build+swap+notify)
+//  2. rebuildMu (Mutex) - serializes the species-index/name-service rebuild
+//  3. mu (RWMutex) - protects models map; released before inference
+//  4. inferenceMu (Mutex) - serializes inference across all models
+//  5. entry.mu (Mutex) - per-model; guards instance lifecycle
+//  6. bn.mu (Mutex) - per-*BirdNET; guards its classifier/identity internals
 //
-// Delete/UnloadModel acquire mu + entry.mu but NOT inferenceMu.
+// Delete/UnloadModel acquire mu + entry.mu but NOT inferenceMu or reloadMu.
 type Orchestrator struct {
 	// Public fields, same layout as BirdNET for drop-in caller migration.
 	Settings       *conf.Settings // Deprecated: use CurrentSettings() instead.
@@ -113,10 +122,19 @@ type Orchestrator struct {
 	// service; readers use Snapshot() lock-free (model de-privilege epic, Phase 2a).
 	names *speciesindex.Service
 
+	// reloadMu serializes every reloadEntry call (settings reload, secondary reload,
+	// variant swap) across its whole build -> swap -> notify span, so the settings-monitor
+	// reload and the API variant-swap goroutine can never interleave their swap or their
+	// post-swap range-filter rebuild (the serialization the in-place reload got from
+	// holding bn.mu/entry.mu for its whole duration). It is the OUTERMOST orchestrator
+	// lock: o.reloadMu -> o.rebuildMu -> o.mu -> inferenceMu -> entry.mu -> bn.mu.
+	// Predictions, LoadModel, UnloadModel and Delete never take it.
+	reloadMu sync.Mutex
+
 	// rebuildMu serializes the name-service rebuild (rebuildSpeciesIndex and
 	// RebuildNameResolver) so a working set taken by one trigger cannot be published
-	// after a newer one's. It sits ABOVE o.mu in the lock order (o.rebuildMu -> o.mu
-	// -> entry.mu -> bn.mu): the rebuild calls AllLabels (which takes o.mu.RLock and
+	// after a newer one's. It sits ABOVE o.mu in the lock order (o.reloadMu -> o.rebuildMu
+	// -> o.mu -> entry.mu -> bn.mu): the rebuild calls AllLabels (which takes o.mu.RLock and
 	// each entry.mu) while holding it, so it must never be taken with any other
 	// orchestrator lock already held.
 	rebuildMu sync.Mutex
@@ -1532,32 +1550,26 @@ func (o *Orchestrator) RunFilterProcess(dateStr string, week float32) {
 	PrintSpeciesScores(parsedDate, speciesScores)
 }
 
-// ReloadModel reloads the v2.4 model in place and re-syncs shared state.
-// Acquires the per-model lock before reload to prevent concurrent inference,
-// then the write lock to re-sync shared state.
+// ReloadModel reloads the BirdNET v2.4 anchor through the single build-then-swap
+// reloadEntry path with settings-reload semantics: an identity or model-file change is
+// refused (v24SettingsReloadCheck) with the same "requires orchestrator restart" texts the
+// former in-place reload used. reloadEntry serializes the reload, publishes the reloaded
+// settings and labels, re-emits the missing-taxonomy diagnostics, then rebuilds the range
+// filter (non-fatal) and the species index. Inference keeps flowing on the previous
+// instance until the fresh one is swapped in.
 func (o *Orchestrator) ReloadModel() error {
-	if err := o.reloadBirdNETV24InPlace(func(primary *BirdNET) error { return primary.ReloadModel() }); err != nil {
-		return err
-	}
-	// Rebuild the range-filter backend against the reloaded classifier's labels, then
-	// rebuild the species index. Order matters: rebuildSpeciesIndex must see the new
-	// range filter's synthetic inclusions. Both run with no orchestrator lock held
-	// (reloadBirdNETV24InPlace released o.mu on return). A range-filter reload failure is
-	// non-fatal: the classifier reload already committed, and the previous backend
-	// keeps serving (Phase 2b; see reloadPrimaryRangeFilter).
-	o.reloadPrimaryRangeFilter()
-	o.rebuildSpeciesIndex()
-	return nil
+	_, err := o.reloadEntry(RegistryIDBirdNETV24, v24ReloadBuilder, reloadOpts{check: v24SettingsReloadCheck})
+	return err
 }
 
-// reloadPrimaryRangeFilter rebuilds the range-filter backend from the current
+// reloadAnchorRangeFilter rebuilds the range-filter backend from the current
 // settings after a full classifier reload. It is deliberately non-fatal: unlike the
-// former joint reloadModelInternal transaction, the classifier reload has already
+// former joint in-place reload transaction, the classifier reload has already
 // committed by the time this runs, so a range-filter build failure must not roll the
 // classifier back. The service keeps its previous backend on failure, which stays
 // correct because a locale change or a v2.4 variant swap preserves the species set
 // and scientific names the mapping is keyed on.
-func (o *Orchestrator) reloadPrimaryRangeFilter() {
+func (o *Orchestrator) reloadAnchorRangeFilter() {
 	rfs := o.rangeFilter
 	if rfs == nil {
 		return
@@ -1569,93 +1581,15 @@ func (o *Orchestrator) reloadPrimaryRangeFilter() {
 	}
 }
 
-// ReloadPrimaryForVariantSwap reloads the primary classifier in place for a
-// within-model variant swap (the gallery "optimize" flow for the permanent BirdNET
-// v2.4 model), accepting a changed or cleared model file path that ReloadModel would
-// refuse as a model-identity change. It shares reloadBirdNETV24InPlace's locking and
-// shared-state re-sync, differing only in delegating to BirdNET.reloadForVariantSwap
-// (allowPathChange=true). The model ID is invariant across a v2.4 variant swap, so
-// there is no models-map re-key. Transactional rollback to the previous model
-// lives in reloadModelInternal, so a failed swap leaves the previous variant serving.
+// ReloadPrimaryForVariantSwap reloads the BirdNET v2.4 anchor for a within-model variant
+// swap (the gallery "optimize" flow), accepting a changed or cleared model file path that
+// ReloadModel refuses: it passes no reloadCheck. Otherwise identical to ReloadModel;
+// reloadEntry build-then-swaps the new variant, and a failed build leaves the previous
+// variant serving because nothing is swapped. Kept as a thin wrapper until PR 4 folds every
+// family's within-model variant swap into replaceVariant.
 func (o *Orchestrator) ReloadPrimaryForVariantSwap() error {
-	if err := o.reloadBirdNETV24InPlace(func(primary *BirdNET) error { return primary.reloadForVariantSwap() }); err != nil {
-		return err
-	}
-	// See ReloadModel: rebuild the range-filter backend then the species index, both
-	// after reloadBirdNETV24InPlace released o.mu, with the range-filter reload non-fatal.
-	o.reloadPrimaryRangeFilter()
-	o.rebuildSpeciesIndex()
-	return nil
-}
-
-// reloadBirdNETV24InPlace performs the shared locking, per-instance reload, and
-// shared-state re-sync for the v2.4 reload (the model ID is invariant, so there is no
-// models-map re-key). It delegates the actual
-// per-instance reload to reload(primary); ReloadModel passes BirdNET.ReloadModel (a
-// settings reload, path change refused) and ReloadPrimaryForVariantSwap passes
-// BirdNET.reloadForVariantSwap (an in-place variant swap, path change accepted).
-func (o *Orchestrator) reloadBirdNETV24InPlace(reload func(primary *BirdNET) error) error {
-	// Fetch the v2.4 entry, then snapshot its instance under entry.mu so a
-	// concurrent unload that nils entry.instance cannot make the type assertion
-	// panic. The in-place reload swaps the instance's internals under bn.mu (never
-	// the *BirdNET pointer), so the snapshot stays valid for the shared-state sync
-	// below.
-	o.mu.RLock()
-	entry := o.models[RegistryIDBirdNETV24]
-	o.mu.RUnlock()
-	if entry == nil {
-		return errors.Newf("BirdNET v2.4 anchor not available for reload").
-			Component("classifier.orchestrator").
-			Category(errors.CategoryValidation).
-			Build()
-	}
-
-	var primary *BirdNET
-	var reloadErr error
-	func() {
-		entry.mu.Lock()
-		defer entry.mu.Unlock()
-		bn, isBirdNET := entry.instance.(*BirdNET)
-		if !isBirdNET {
-			reloadErr = errors.Newf("primary model entry not found for reload").
-				Component("classifier.orchestrator").
-				Category(errors.CategoryValidation).
-				Build()
-			return
-		}
-		primary = bn
-		reloadErr = reload(bn)
-	}()
-	if reloadErr != nil {
-		return reloadErr
-	}
-
-	// Step 2: write lock to re-sync shared state. The models map key never changes
-	// (a v2.4 reload keeps the same registry ID), so the pre-Phase-3 re-key is gone.
-	o.mu.Lock()
-	defer o.mu.Unlock()
-
-	if o.models == nil {
-		// Orchestrator has been deleted, abort the reload.
-		return errors.Newf("orchestrator has been deleted, cannot reload model").
-			Component("classifier.orchestrator").
-			Category(errors.CategorySystem).
-			Build()
-	}
-
-	// Drop the reloaded instance's failure streak so a stale one does not linger.
-	// The ID is stable across a v2.4 reload.
-	dropInferenceFailureStreak(RegistryIDBirdNETV24)
-
-	// Update settings atomically.
-	o.updateSettings(primary.currentSettings())
-
-	// Re-emit the missing-taxonomy diagnostics for the reloaded label set (e.g. a
-	// locale change), reproducing what BirdNET.loadLabels logged before the taxonomy
-	// moved to the orchestrator.
-	o.logMissingTaxonomyCodes(primary, primary.Labels())
-
-	return nil
+	_, err := o.reloadEntry(RegistryIDBirdNETV24, v24ReloadBuilder, reloadOpts{})
+	return err
 }
 
 // secondaryTripletFor returns the inference-backend key that OV-capable secondary
@@ -1706,13 +1640,23 @@ func secondaryTripletFor(settings *conf.Settings) secondaryBackendKey {
 func (o *Orchestrator) ReloadSecondaryModels() error {
 	log := GetLogger()
 
-	// Read the fresh settings published by the primary reload that ran just
-	// before this (ReloadModel atomically swapped the settings pointer).
-	settings := o.currentSettings()
+	// Read the fresh settings published by the primary reload that ran just before this
+	// (ReloadModel atomically swapped the settings pointer) and pin ONE clone for the whole
+	// batch, so the triplet, the thread budget, and every per-entry build stay on the same
+	// snapshot even if another reload commits concurrently mid-batch. Each reloadEntry is
+	// handed this snapshot via reloadOpts.settings instead of re-reading o.currentSettings().
+	settings := conf.CloneSettings(o.currentSettings())
 	triplet := secondaryTripletFor(settings)
 
-	// Snapshot the OV-capable secondary entries under o.mu, then release it before
-	// the per-entry gate checks and slow builds.
+	// Full per-model thread budget, computed once for the whole batch (inference is
+	// serialized by inferenceMu, so each model gets the full budget) and passed per entry
+	// into reloadEntry via reloadOpts.threads, so the allocation is not recomputed per
+	// secondary.
+	threadAlloc := o.computeThreadAllocation(settings)
+
+	// Snapshot the OV-capable secondary entries under o.mu, then release it before the
+	// per-entry gate checks and the reloadEntry calls (each of which takes o.reloadMu and,
+	// briefly, o.mu again).
 	o.mu.Lock()
 	if o.models == nil {
 		o.mu.Unlock()
@@ -1727,9 +1671,8 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 			refs = append(refs, entryRef{id: id, entry: entry})
 		}
 	}
-	// Sort by registry ID so the rebuild order (and thus logs and the returned
-	// firstErr when several secondaries fail) is deterministic across the random
-	// map iteration order.
+	// Sort by registry ID so the rebuild order (and thus logs and the returned firstErr when
+	// several secondaries fail) is deterministic across the random map iteration order.
 	slices.SortFunc(refs, func(a, b entryRef) int { return strings.Compare(a.id, b.id) })
 	o.mu.Unlock()
 
@@ -1737,29 +1680,16 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 		return nil
 	}
 
-	// Full per-model thread budget (inference is serialized by inferenceMu),
-	// matching loadEnabledModels.
-	threadAlloc := o.computeThreadAllocation(settings)
-
-	// The builders below run outside o.mu. They construct from the settings
-	// snapshot and may read o.modelsDir (via resolveInstalledPaths and
-	// resolveSiblingSet), which is set once at startup by SetModelsDir before the
-	// pipeline (and thus this reload path) starts, so the read is safe without
-	// o.mu. See resolveSiblingSet for the full rationale on this lock-free read.
-
 	var firstErr error
-	// swapped tracks whether any entry's instance was actually replaced, so the
-	// species-name index is rebuilt at most once, after the loop.
+	// swapped tracks whether any entry's instance was actually replaced, so the species-name
+	// index is rebuilt at most once, after the loop.
 	swapped := false
 	for _, ref := range refs {
-		// Per-entry gate: read the triplet this entry's instance was built against
-		// under entry.mu and skip the rebuild when it already matches the current
-		// settings. The read pairs with the swap below, which publishes the new
-		// triplet under the same lock. Also skip an entry whose instance was already
-		// torn down by a concurrent Delete/Unload (instance == nil): building a fresh
-		// (potentially multi-second, JIT-compiling) instance for a detached entry
-		// would only be discarded by the orphan guard at swap time. The post-build
-		// guard still covers a teardown that races the build itself.
+		// Per-entry gate (the caller's policy; reloadEntry owns the build/warm-up/swap/close):
+		// skip an entry whose instance was already torn down by a concurrent Delete/Unload, or
+		// one already built on the current triplet. The gate read pairs with the triplet write
+		// reloadEntry publishes under entry.mu with the swap (opts.backend). Skipping a detached
+		// entry here avoids a multi-second JIT build that the orphan guard would only discard.
 		ref.entry.mu.Lock()
 		current := ref.entry.backend
 		orphaned := ref.entry.instance == nil
@@ -1776,9 +1706,13 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 			continue
 		}
 
-		// A secondary present in o.models but absent from settings.Models.Enabled
-		// (e.g. installed at runtime then disabled in config) is not keyed in
-		// threadAlloc; fall back to the full budget, matching LoadModel's default
+		// Build-then-swap through the single reload path. reloadEntry warms up under
+		// inferenceMu, swaps instance+generation+backend atomically under entry.mu, closes the
+		// old instance after unlock, and cleans up an orphaned build; it computes the thread
+		// budget from the settings clone exactly as the previous inline builder did. The
+		// per-entry backend triplet is published with the swap so the gate above stays coherent.
+		// A secondary present in o.models but absent from settings.Models.Enabled is not
+		// keyed in threadAlloc; fall back to the full budget, matching LoadModel's default
 		// (inference is serialized by inferenceMu, so each model gets all threads).
 		threads := threadAlloc[ref.id]
 		if threads <= 0 {
@@ -1787,16 +1721,19 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 				threads = runtime.NumCPU()
 			}
 		}
-		before := o.captureRSSBefore()
-		newInst, err := openvinoCapableSecondaryBuilders[ref.id](o, settings, threads)
-		if err != nil {
+		sw, rerr := o.reloadEntry(ref.id, openvinoCapableSecondaryBuilders[ref.id], reloadOpts{
+			backend:          &triplet,
+			skipSpeciesIndex: true,
+			threads:          threads,
+			settings:         settings,
+		})
+		if rerr != nil {
 			if firstErr == nil {
-				firstErr = err
+				firstErr = rerr
 			}
-			// Hard build failure: keep the old instance serving, but advance this
-			// entry's gate (advance-always) so an unrelated reload does not retry the
-			// failed build. Skip the advance if the entry was torn down while building
-			// (a detached entry's gate is moot).
+			// Hard build failure: keep the old instance serving, but advance this entry's gate
+			// (advance-always) so an unrelated reload does not retry the failed build. Skip the
+			// advance if the entry was torn down while building (a detached entry's gate is moot).
 			ref.entry.mu.Lock()
 			if ref.entry.instance != nil {
 				ref.entry.backend = triplet
@@ -1807,76 +1744,23 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 				logger.String("backend", triplet.backend),
 				logger.String("ov_device", triplet.ovDevice),
 				logger.Int("threads", triplet.threads),
-				logger.Error(err))
+				logger.Error(rerr))
 			continue
 		}
-
-		// Warm up the freshly built (still private) instance before publishing it,
-		// so the first real inference does not pay the lazy-allocation cost, and
-		// re-measure its host RSS. newInst is not yet in the entry, so the warm-up
-		// needs no entry.mu, but it IS an inference: hold inferenceMu so it
-		// serializes with live PredictModel calls rather than running a second model
-		// session concurrently. That honors the inferenceMu invariant ("serializes
-		// inference across all models") and avoids the CPU/memory contention on
-		// constrained hardware that serialized inference exists to prevent. It never
-		// holds o.mu, so PredictModel/ModelInfos map readers are not blocked; it only
-		// queues briefly behind live inference (bounded by warmupTimeout).
-		func() {
-			o.inferenceMu.Lock()
-			defer o.inferenceMu.Unlock()
-			o.warmupAndRecordRSS(ref.id, before, newInst)
-		}()
-
-		// Swap the new instance into the existing entry under entry.mu so it
-		// cannot race an in-flight PredictModel. Keeping the same *modelEntry
-		// preserves the per-entry mutex identity and the globalInferenceCounters
-		// keying.
-		ref.entry.mu.Lock()
-		old := ref.entry.instance
-		if old == nil {
-			// Entry was torn down by a concurrent Delete/Unload; do not resurrect
-			// a detached entry. Close the freshly built instance and skip.
-			ref.entry.mu.Unlock()
-			if cerr := newInst.Close(); cerr != nil {
-				log.Warn("failed to close orphaned secondary model instance after reload",
-					logger.String("registry_id", ref.id),
-					logger.Error(cerr))
-			}
-			// Remove the RSS entry we just recorded since the model will not be published.
-			o.rssMu.Lock()
-			delete(o.modelRSS, ref.id)
-			o.rssMu.Unlock()
-			continue
-		}
-		ref.entry.instance = newInst
-		ref.entry.backend = triplet
-		dropInferenceFailureStreak(ref.id) // fresh instance, fresh streak
-		ref.entry.mu.Unlock()
-		swapped = true
-
-		// Close the old instance after releasing entry.mu: native teardown can be
-		// slow, and no goroutine can reach the old instance once the swap is
-		// published (PredictModel reads entry.instance under entry.mu on every
-		// call). Building the new instance before closing the old keeps the OV
-		// active-classifier counter from transiently dropping to zero.
-		if cerr := old.Close(); cerr != nil {
-			log.Warn("failed to close old secondary model instance after reload",
+		if sw {
+			swapped = true
+			log.Info("secondary model reloaded on new backend/device/threads",
 				logger.String("registry_id", ref.id),
-				logger.Error(cerr))
+				logger.String("backend", triplet.backend),
+				logger.String("ov_device", triplet.ovDevice),
+				logger.Int("threads", triplet.threads))
 		}
-
-		log.Info("secondary model reloaded on new backend/device/threads",
-			logger.String("registry_id", ref.id),
-			logger.String("backend", triplet.backend),
-			logger.String("ov_device", triplet.ovDevice),
-			logger.Int("threads", triplet.threads))
 	}
 
-	// Rebuild once if any instance was swapped, with no orchestrator lock held.
-	// A backend/device/threads swap keeps the label set, so the union is
-	// unchanged; the rebuild keeps the "last trigger in a reload sequence
-	// republishes with the newest-locale resolver" ordering guarantee cheap and
-	// uniform across triggers.
+	// Rebuild once if any instance was swapped, with no orchestrator lock held. A
+	// backend/device/threads swap keeps the label set, so the union is unchanged; the single
+	// rebuild keeps the "last trigger in a reload sequence republishes with the newest-locale
+	// resolver" ordering guarantee cheap and uniform across triggers.
 	if swapped {
 		o.rebuildSpeciesIndex()
 	}
@@ -1973,9 +1857,11 @@ var modelLoaders = map[string]func(o *Orchestrator, threads int) error{
 	RegistryIDBat:        (*Orchestrator).loadBat,
 }
 
-// secondaryModelBuilder constructs (but does not register) a secondary model
-// instance from a settings snapshot, for the transactional hot-reload path.
-type secondaryModelBuilder func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error)
+// entryBuilder constructs (but does not register) a fresh model instance from a
+// settings snapshot, for reloadEntry's transactional build-then-swap hot-reload path.
+// Used by both the OV-capable secondary builders and the v2.4 reload builder; the
+// pathResolution a builder computes is discarded (a reload never rewrites paths).
+type entryBuilder func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error)
 
 // openvinoCapableSecondaryBuilders maps the registry IDs of secondary models
 // whose construction honors the BirdNET inference backend / OpenVINO device
@@ -1985,7 +1871,7 @@ type secondaryModelBuilder func(o *Orchestrator, settings *conf.Settings, thread
 // embedding extractor honors the preference; the tiny bat classifier head always
 // runs on ORT. Giving a new secondary OpenVINO support is a one-line entry here,
 // paired with the OV fields on its loader config.
-var openvinoCapableSecondaryBuilders = map[string]secondaryModelBuilder{
+var openvinoCapableSecondaryBuilders = map[string]entryBuilder{
 	RegistryIDBirdNETV3: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
 		// Explicit nil-on-error return avoids the typed-nil interface trap (a
 		// nil *BirdNETV3 wrapped in a non-nil ModelInstance).

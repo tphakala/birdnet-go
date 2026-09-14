@@ -165,7 +165,7 @@ func TestOrchestrator_ConcurrentResolverRegistrationAndResolve_NoRace(t *testing
 	assert.Equal(t, 1, count, "exactly one taxonomy resolver must be registered under concurrent registration")
 }
 
-// TestOrchestrator_ConcurrentReloadSnapshot_NoRace verifies that calling ReloadSnapshot
+// TestOrchestrator_ConcurrentReloadSnapshot_NoRace verifies that calling LiveModelInfo
 // on the primary model concurrently with writes to its ModelInfo does not race.
 func TestOrchestrator_ConcurrentReloadSnapshot_NoRace(t *testing.T) {
 	bn := &BirdNET{}
@@ -185,11 +185,11 @@ func TestOrchestrator_ConcurrentReloadSnapshot_NoRace(t *testing.T) {
 		}
 	})
 
-	// Reader goroutine: simulates Step-2 reading the fields via ReloadSnapshot
+	// Reader goroutine: simulates Step-2 reading the fields via LiveModelInfo
 	wg.Go(func() {
 		<-start
 		for range iterations {
-			info := bn.ReloadSnapshot()
+			info := bn.LiveModelInfo()
 			_ = info
 		}
 	})
