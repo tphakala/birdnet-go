@@ -143,12 +143,12 @@ func TestSpeciesIndex_RebuiltOnRebuildNameResolver(t *testing.T) {
 	assert.Equal(t, "Turdus merula_Common Blackbird", after.LabelBySci["Turdus merula"])
 }
 
-// TestSpeciesIndex_RebuiltOnPrimaryReload verifies the two primary-reload paths
-// (ReloadModel and ReloadPrimaryForVariantSwap) republish the species index. Both
-// go through reloadBirdNETV24InPlace, which requires a real *BirdNET primary, so this is
-// skipped when the model is unavailable in the test environment. Without the rebuild
-// trigger, a locale or model change via reload_birdnet would leave the datastore and
-// facade serving a stale species-name snapshot.
+// TestSpeciesIndex_RebuiltOnPrimaryReload verifies the two v2.4 reload paths
+// (ReloadModel and ReloadForVariantSwap) republish the species index. Both go through
+// reloadEntry, which requires a real *BirdNET anchor, so this is skipped when the model
+// is unavailable in the test environment. Without the rebuild trigger, a locale or model
+// change via reload_birdnet would leave the datastore and facade serving a stale
+// species-name snapshot.
 func TestSpeciesIndex_RebuiltOnPrimaryReload(t *testing.T) {
 	settings := conftest.GetTestSettings()
 	o, err := NewOrchestrator(settings)
@@ -165,10 +165,10 @@ func TestSpeciesIndex_RebuiltOnPrimaryReload(t *testing.T) {
 		require.NoError(t, o.ReloadModel())
 		assert.NotSame(t, before, o.SpeciesSnapshot(), "ReloadModel must republish the species index")
 	})
-	t.Run("ReloadPrimaryForVariantSwap", func(t *testing.T) {
+	t.Run("ReloadForVariantSwap", func(t *testing.T) {
 		before := o.SpeciesSnapshot()
-		require.NoError(t, o.ReloadPrimaryForVariantSwap())
-		assert.NotSame(t, before, o.SpeciesSnapshot(), "ReloadPrimaryForVariantSwap must republish the species index")
+		require.NoError(t, o.ReloadForVariantSwap(RegistryIDBirdNETV24))
+		assert.NotSame(t, before, o.SpeciesSnapshot(), "ReloadForVariantSwap must republish the species index")
 	})
 }
 

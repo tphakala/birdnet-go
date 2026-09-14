@@ -262,6 +262,43 @@ func v24ReloadBuilder(o *Orchestrator, settings *conf.Settings, _ int) (ModelIns
 	return bn, nil
 }
 
+// variantSwapBuilder returns the build-then-swap builder for a within-model variant
+// swap of registryID: the v2.4 anchor builder for the permanent model, else the
+// OV-capable secondary builder. ok=false for a family with no reload builder (Bat is
+// single-variant so it never reaches a swap; BSG has no loader), so a swap of an
+// unbuildable loaded family is refused before anything is swapped or unloaded.
+func (o *Orchestrator) variantSwapBuilder(registryID string) (entryBuilder, bool) {
+	if registryID == RegistryIDBirdNETV24 {
+		return v24ReloadBuilder, true
+	}
+	build, ok := openvinoCapableSecondaryBuilders[registryID]
+	return build, ok
+}
+
+// ReloadForVariantSwap rebuilds the loaded registryID model for a within-model variant
+// swap (the gallery variant / "optimize" flow), accepting a changed or cleared model
+// file that a settings hot-reload refuses: it passes no reloadCheck, so reloadEntry
+// build-then-swaps the new variant and a failed build leaves the previous variant
+// serving (gapless). Every family's within-model swap goes through this one path; it
+// replaces the v2.4-only ReloadPrimaryForVariantSwap. reloadEntry clones the currently
+// published settings, which ModelManager.replaceVariant has already updated with the new
+// variant's paths, so the builder resolves the new file. The v2.4 builder ignores the
+// thread budget (NewBirdNET reads settings.BirdNET.Threads); secondary builders use it.
+func (o *Orchestrator) ReloadForVariantSwap(registryID string) error {
+	build, ok := o.variantSwapBuilder(registryID)
+	if !ok {
+		return errors.Newf("model %s has no variant-swap reload builder", registryID).
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Context("registry_id", registryID).
+			Build()
+	}
+	_, err := o.reloadEntry(registryID, build, reloadOpts{
+		threads: o.computeThreadAllocation(o.currentSettings())[registryID],
+	})
+	return err
+}
+
 // v24SettingsReloadCheck reproduces the reachable settings-reload refusals of the former
 // reloadModelInternal(false) with byte-identical error texts and telemetry context. old and
 // next are the serving and freshly built v2.4 instances.

@@ -1581,17 +1581,6 @@ func (o *Orchestrator) reloadAnchorRangeFilter() {
 	}
 }
 
-// ReloadPrimaryForVariantSwap reloads the BirdNET v2.4 anchor for a within-model variant
-// swap (the gallery "optimize" flow), accepting a changed or cleared model file path that
-// ReloadModel refuses: it passes no reloadCheck. Otherwise identical to ReloadModel;
-// reloadEntry build-then-swaps the new variant, and a failed build leaves the previous
-// variant serving because nothing is swapped. Kept as a thin wrapper until PR 4 folds every
-// family's within-model variant swap into replaceVariant.
-func (o *Orchestrator) ReloadPrimaryForVariantSwap() error {
-	_, err := o.reloadEntry(RegistryIDBirdNETV24, v24ReloadBuilder, reloadOpts{})
-	return err
-}
-
 // secondaryTripletFor returns the inference-backend key that OV-capable secondary
 // models build against. The secondaries share the primary's OpenVINO configuration
 // and CPU thread budget, so the key is derived from settings.BirdNET. Each

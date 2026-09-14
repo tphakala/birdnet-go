@@ -1625,7 +1625,7 @@ func (mm *ModelManager) replacePrimaryVariant(ctx context.Context, entry *Catalo
 	// 4. Activate the new variant by reloading the primary in place. A reload failure
 	//    rolls back (the running model was already kept alive transactionally).
 	if mm.orchestrator != nil {
-		if reloadErr := mm.orchestrator.ReloadPrimaryForVariantSwap(); reloadErr != nil {
+		if reloadErr := mm.orchestrator.ReloadForVariantSwap(RegistryIDBirdNETV24); reloadErr != nil {
 			return mm.rollbackPrimaryVariantSwap(log, entry, old, newVariantID, reloadErr, progress)
 		}
 		mm.notifyTopologyChanged()
