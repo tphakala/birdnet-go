@@ -27,7 +27,7 @@ func TestBuildPirateWeatherURL_RejectsSchemelessEndpoint(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			settings := createTestSettings(t, "pirateweather", func(s *conf.Settings) {
+			settings := createTestSettings(t, pirateWeatherProviderName, func(s *conf.Settings) {
 				s.Realtime.Weather.PirateWeather.Endpoint = tt.endpoint
 			})
 
@@ -46,7 +46,7 @@ func TestBuildPirateWeatherURL_RejectsSchemelessEndpoint(t *testing.T) {
 // coordinates are placed in the URL path (not the query string), matching
 // Pirate Weather's Dark-Sky-style /forecast/{apikey}/{lat},{lon} format.
 func TestBuildPirateWeatherURL_KeyAndCoordsInPath(t *testing.T) {
-	settings := createTestSettings(t, "pirateweather")
+	settings := createTestSettings(t, pirateWeatherProviderName)
 
 	apiURL, err := buildPirateWeatherURL(settings, "my-secret-key")
 
@@ -64,13 +64,21 @@ func TestMaskPirateWeatherURL_RedactsPath(t *testing.T) {
 	assert.Contains(t, masked, "https://api.pirateweather.net")
 }
 
+func TestMaskPirateWeatherURL_RedactsUserinfo(t *testing.T) {
+	masked := maskPirateWeatherURL("https://user:pass@api.pirateweather.net/forecast/my-secret-key/60.170,24.938?units=si")
+
+	assert.NotContains(t, masked, "user:pass")
+	assert.NotContains(t, masked, "my-secret-key")
+	assert.Contains(t, masked, "https://api.pirateweather.net")
+}
+
 func TestPirateWeatherProvider_FetchWeather_Success(t *testing.T) {
 	setupHTTPMock(t)
 
 	registerPirateWeatherResponder(t, http.StatusOK, pirateWeatherSuccessResponse())
 
 	provider := NewPirateWeatherProvider(nil)
-	settings := createTestSettings(t, "pirateweather")
+	settings := createTestSettings(t, pirateWeatherProviderName)
 
 	data, err := provider.FetchWeather(t.Context(), settings)
 
@@ -98,7 +106,7 @@ func TestPirateWeatherProvider_FetchWeather_Success(t *testing.T) {
 
 func TestPirateWeatherProvider_FetchWeather_NoAPIKey(t *testing.T) {
 	provider := NewPirateWeatherProvider(nil)
-	settings := createTestSettings(t, "pirateweather", func(s *conf.Settings) {
+	settings := createTestSettings(t, pirateWeatherProviderName, func(s *conf.Settings) {
 		s.Realtime.Weather.PirateWeather.APIKey = ""
 	})
 
@@ -123,7 +131,7 @@ func TestPirateWeatherProvider_FetchWeather_Unauthorized_ReturnsSentinel(t *test
 		})
 
 	provider := NewPirateWeatherProvider(nil)
-	settings := createTestSettings(t, "pirateweather")
+	settings := createTestSettings(t, pirateWeatherProviderName)
 
 	data, err := provider.FetchWeather(t.Context(), settings)
 
@@ -146,7 +154,7 @@ func TestPirateWeatherProvider_FetchWeather_Forbidden_ReturnsSentinel(t *testing
 		})
 
 	provider := NewPirateWeatherProvider(nil)
-	settings := createTestSettings(t, "pirateweather")
+	settings := createTestSettings(t, pirateWeatherProviderName)
 
 	data, err := provider.FetchWeather(t.Context(), settings)
 
@@ -162,7 +170,7 @@ func TestPirateWeatherProvider_FetchWeather_InvalidJSON(t *testing.T) {
 	registerPirateWeatherResponder(t, http.StatusOK, `{invalid json`)
 
 	provider := NewPirateWeatherProvider(nil)
-	settings := createTestSettings(t, "pirateweather")
+	settings := createTestSettings(t, pirateWeatherProviderName)
 
 	data, err := provider.FetchWeather(t.Context(), settings)
 

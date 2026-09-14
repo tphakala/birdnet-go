@@ -1345,7 +1345,7 @@
               label={t('settings.integration.weather.pirateweather.endpoint.label')}
               value={settings.weather.pirateWeather?.endpoint ?? ''}
               onchange={endpoint => updatePirateWeatherSetting('endpoint', endpoint)}
-              placeholder="https://api.pirateweather.net/forecast"
+              placeholder={pirateWeatherDefaults.endpoint}
               helpText={t('settings.integration.weather.pirateweather.endpoint.helpText')}
               disabled={store.isLoading || store.isSaving}
             />

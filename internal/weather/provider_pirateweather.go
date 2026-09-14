@@ -107,6 +107,10 @@ func maskPirateWeatherURL(rawURL string) string {
 	if err != nil {
 		return maskedURLOnError
 	}
+	// A user-configured endpoint could embed basic-auth credentials
+	// (https://user:pass@host/...); strip them along with any fragment.
+	parsed.User = nil
+	parsed.Fragment = ""
 	parsed.Path = "/forecast/" + redactedValue + "/" + redactedValue
 	parsed.RawQuery = ""
 	return parsed.String()
@@ -151,6 +155,16 @@ func (p *PirateWeatherProvider) FetchWeather(ctx context.Context, settings *conf
 	var weatherData PirateWeatherResponse
 	if err := json.Unmarshal(body, &weatherData); err != nil {
 		return nil, newWeatherError(err, errors.CategoryValidation, "unmarshal_weather_data", pirateWeatherProviderName)
+	}
+	// A missing/null "currently" block unmarshals to zero values rather than
+	// erroring; reject it instead of silently returning epoch-timestamped data.
+	if weatherData.Currently.Time <= 0 {
+		return nil, newWeatherError(
+			fmt.Errorf("current weather data is missing or has an invalid timestamp"),
+			errors.CategoryValidation,
+			"validate_weather_response",
+			pirateWeatherProviderName,
+		)
 	}
 
 	providerLogger.Info("Successfully received and parsed weather data")

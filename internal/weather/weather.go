@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"net/http"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -175,19 +176,24 @@ func (b *backoffState) snapshot() (authDisabled bool, failures int, inBackoff bo
 
 // Service handles weather data operations
 type Service struct {
-	provider Provider
-	// providerName is pinned at construction so logs and metrics always
-	// identify the actual provider implementation in use. Switching providers
-	// through the UI requires a service restart anyway (the provider interface
-	// implementation is selected once in NewService), so reading the provider
-	// string from the latest settings snapshot could misreport what the HTTP
-	// calls are actually hitting.
+	// provider/providerName are hot-reloadable: reconcileConfig rebuilds them
+	// under providerMu when the configured provider changes, so switching
+	// providers in the UI takes effect on the next poll cycle without a
+	// restart. Guarded separately from fetchMu so Status() (called from a
+	// health-check goroutine) can read providerName without blocking on an
+	// in-flight fetch.
+	providerMu   sync.RWMutex
+	provider     Provider
 	providerName string
-	db           datastore.Interface
-	settings     *conf.Settings
-	metrics      *metrics.WeatherMetrics
-	startupDelay time.Duration
-	backoff      backoffState
+	// weatherClient is the single SSRF-guarded HTTP client shared across every
+	// provider implementation for the service's lifetime, including across a
+	// hot-reload provider switch.
+	weatherClient *http.Client
+	db            datastore.Interface
+	settings      *conf.Settings
+	metrics       *metrics.WeatherMetrics
+	startupDelay  time.Duration
+	backoff       backoffState
 
 	// fetchMu serializes fetchAndSave so the exported Poll() and the StartPolling
 	// ticker cannot run a fetch concurrently. It also guards the hot-reload state
@@ -204,6 +210,56 @@ type Service struct {
 	// captured when auth was disabled; a change re-enables fetching (hot-reload
 	// of the API key).
 	authConfigKey [32]byte
+	// providerBaselined is set true once reconcileConfig has run at least once.
+	// Its first run adopts the Service's existing provider/providerName as the
+	// baseline rather than resolving/swapping against settings, so a Service
+	// assembled directly with an injected provider (e.g. test helpers building
+	// &Service{provider: mockProvider, ...} without going through NewService)
+	// is not silently replaced on its first fetch cycle. NewService sets this
+	// true immediately since its provider/providerName already match settings.
+	providerBaselined bool
+}
+
+// setProvider atomically replaces the active provider implementation and name.
+func (s *Service) setProvider(provider Provider, providerName string) {
+	s.providerMu.Lock()
+	s.provider = provider
+	s.providerName = providerName
+	s.providerMu.Unlock()
+}
+
+// activeProvider returns the currently active provider implementation and name.
+func (s *Service) activeProvider() (provider Provider, providerName string) {
+	s.providerMu.RLock()
+	defer s.providerMu.RUnlock()
+	return s.provider, s.providerName
+}
+
+// activeProviderName returns just the currently active provider's name, for
+// logging/metrics call sites that don't need the Provider implementation.
+func (s *Service) activeProviderName() string {
+	s.providerMu.RLock()
+	defer s.providerMu.RUnlock()
+	return s.providerName
+}
+
+// resolveWeatherProvider maps a configured provider string to its Provider
+// implementation and canonical name, sharing a single HTTP client across
+// providers. disabled is true for conf.WeatherNone and any unrecognized value,
+// matching NewService's original switch; an empty string defaults to yr.no.
+func resolveWeatherProvider(providerStr string, weatherClient *http.Client) (provider Provider, providerName string, disabled bool) {
+	switch conf.WeatherProvider(providerStr) {
+	case conf.WeatherYrNo, "":
+		return NewYrNoProvider(weatherClient), yrNoProviderName, false
+	case conf.WeatherOpenWeather:
+		return NewOpenWeatherProvider(weatherClient), openWeatherProviderName, false
+	case conf.WeatherWunderground:
+		return NewWundergroundProvider(weatherClient), wundergroundProviderName, false
+	case conf.WeatherPirateWeather:
+		return NewPirateWeatherProvider(weatherClient), pirateWeatherProviderName, false
+	default:
+		return nil, "", true
+	}
 }
 
 // weatherAuthConfigKey builds a fingerprint of the auth-relevant weather config
@@ -287,14 +343,10 @@ type Precipitation struct {
 // Returns ErrWeatherDisabled when the provider is empty or unrecognized,
 // which the caller should treat as "weather disabled" (no service to start).
 func NewService(settings *conf.Settings, db datastore.Interface, weatherMetrics *metrics.WeatherMetrics) (*Service, error) {
-	var (
-		provider     Provider
-		providerName string
-	)
-
-	// One HTTP client is shared across every fetch cycle and retry attempt for
-	// the service's lifetime, replacing the per-request clients the providers
-	// used to allocate. It is injected into whichever provider is selected.
+	// One HTTP client is shared across every fetch cycle, retry attempt, and
+	// hot-reload provider switch for the service's lifetime, replacing the
+	// per-request clients the providers used to allocate. It is injected into
+	// whichever provider is selected.
 	//
 	// The client is SSRF-guarded: OpenWeather and Wunderground expose a
 	// user-configurable endpoint, so the periodic fetch must not be pointable at
@@ -305,46 +357,32 @@ func NewService(settings *conf.Settings, db datastore.Interface, weatherMetrics 
 	// provider unit tests keep intercepting the default transport with httpmock.
 	weatherClient := httpclient.NewGuardedHTTPClient(RequestTimeout)
 
-	// Select weather provider based on configuration
-	switch conf.WeatherProvider(settings.Realtime.Weather.Provider) {
-	case conf.WeatherYrNo:
-		provider = NewYrNoProvider(weatherClient)
-		providerName = yrNoProviderName
-	case conf.WeatherOpenWeather:
-		provider = NewOpenWeatherProvider(weatherClient)
-		providerName = openWeatherProviderName
-	case conf.WeatherWunderground:
-		provider = NewWundergroundProvider(weatherClient)
-		providerName = wundergroundProviderName
-	case conf.WeatherPirateWeather:
-		provider = NewPirateWeatherProvider(weatherClient)
-		providerName = pirateWeatherProviderName
-	case "":
-		// Not configured - default to yr.no
-		provider = NewYrNoProvider(weatherClient)
-		providerName = yrNoProviderName
-	case conf.WeatherNone:
-		// Explicitly disabled
-		getLogger().Info("Weather provider set to none, weather service disabled")
-		return nil, ErrWeatherDisabled
-	default:
-		// Unrecognized provider: warn and treat as disabled rather than
-		// raising an error to Sentry (this is a user configuration issue)
-		getLogger().Warn("Unrecognized weather provider, weather service disabled",
-			logger.String("provider", settings.Realtime.Weather.Provider))
+	provider, providerName, disabled := resolveWeatherProvider(settings.Realtime.Weather.Provider, weatherClient)
+	if disabled {
+		if conf.WeatherProvider(settings.Realtime.Weather.Provider) == conf.WeatherNone {
+			// Explicitly disabled
+			getLogger().Info("Weather provider set to none, weather service disabled")
+		} else {
+			// Unrecognized provider: warn and treat as disabled rather than
+			// raising an error to Sentry (this is a user configuration issue)
+			getLogger().Warn("Unrecognized weather provider, weather service disabled",
+				logger.String("provider", settings.Realtime.Weather.Provider))
+		}
 		return nil, ErrWeatherDisabled
 	}
 
 	return &Service{
-		provider:     provider,
-		providerName: providerName,
-		db:           db,
-		settings:     settings,
-		metrics:      weatherMetrics,
-		sunCalc:      suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude),
-		sunCalcLat:   settings.BirdNET.Latitude,
-		sunCalcLon:   settings.BirdNET.Longitude,
-		startupDelay: DefaultStartupDelay,
+		provider:          provider,
+		providerName:      providerName,
+		weatherClient:     weatherClient,
+		db:                db,
+		settings:          settings,
+		metrics:           weatherMetrics,
+		sunCalc:           suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude),
+		sunCalcLat:        settings.BirdNET.Latitude,
+		sunCalcLon:        settings.BirdNET.Longitude,
+		startupDelay:      DefaultStartupDelay,
+		providerBaselined: true,
 	}, nil
 }
 
@@ -566,7 +604,7 @@ func (s *Service) StartPolling(stopChan <-chan struct{}) {
 
 	// Use the dedicated weather logger
 	getLogger().Info("Starting weather polling service",
-		logger.String("provider", s.providerName),
+		logger.String("provider", s.activeProviderName()),
 		logger.Int("interval_minutes", s.settings.Realtime.Weather.PollInterval))
 
 	// Delay initial fetch to reduce startup DB contention with other services
@@ -616,7 +654,7 @@ func (s *Service) safeFetchAndSave(ctx context.Context) {
 			// the panic unwind, so recordFailure only takes backoff.mu here.
 			backoff, failures := s.backoff.recordFailure()
 			getLogger().Error("Weather poll cycle panicked, recovering and backing off",
-				logger.String("provider", s.providerName),
+				logger.String("provider", s.activeProviderName()),
 				logger.Any("panic", r),
 				logger.String("backoff", backoff.String()),
 				logger.Int("consecutive_failures", failures),
@@ -651,19 +689,63 @@ func (s *Service) Poll(ctx context.Context) error {
 }
 
 // reconcileConfig applies hot-reloadable settings changes detected between poll
-// cycles so the weather service honors UI edits without a restart. It rebuilds
+// cycles so the weather service honors UI edits without a restart. It swaps
+// the provider implementation when the configured provider changes, rebuilds
 // sunCalc when the configured coordinates change (so sunrise/sunset track the
-// new location) and clears an auth lockout when the auth-relevant config (API
+// new location), and clears an auth lockout when the auth-relevant config (API
 // key, station, endpoint, or provider) changes (so a corrected key recovers on
 // the next cycle). Must be called under s.fetchMu, which guards sunCalc and
-// authConfigKey.
+// authConfigKey; provider/providerName are separately guarded by providerMu.
 func (s *Service) reconcileConfig(settings *conf.Settings) {
+	previousProviderName := s.activeProviderName()
+
+	if !s.providerBaselined {
+		// First reconciliation for this Service instance: adopt the provider
+		// name that settings currently resolve to as the baseline, WITHOUT
+		// swapping s.provider itself. NewService already set providerBaselined
+		// true, since the provider it constructed already matches settings;
+		// this path only runs for a Service assembled some other way (e.g. a
+		// test injecting a mock provider directly), so that injected provider
+		// isn't silently replaced, and later calls correctly detect only a
+		// genuine subsequent provider change instead of re-triggering a swap
+		// on every call because providerName was never updated to match.
+		if _, resolvedName, disabled := resolveWeatherProvider(settings.Realtime.Weather.Provider, s.weatherClient); !disabled {
+			s.providerMu.Lock()
+			s.providerName = resolvedName
+			s.providerMu.Unlock()
+			previousProviderName = resolvedName
+		}
+		s.providerBaselined = true
+	} else {
+		// Swap the provider implementation on a provider change. Resolve first
+		// and compare canonical names (not the raw settings string) so an
+		// empty/default configuration that resolves to the same provider
+		// doesn't trigger a spurious swap every cycle. An unrecognized or
+		// "none" value keeps the previous provider active with a warning,
+		// rather than tearing down a working service over a config typo; fully
+		// disabling weather goes through stopping the service, not this
+		// hot-reload.
+		newProvider, newProviderName, disabled := resolveWeatherProvider(settings.Realtime.Weather.Provider, s.weatherClient)
+		switch {
+		case disabled:
+			getLogger().Warn("Configured weather provider changed to an unsupported value, keeping previous provider active",
+				logger.String("previous_provider", previousProviderName),
+				logger.String("configured_provider", settings.Realtime.Weather.Provider))
+		case newProviderName != previousProviderName:
+			getLogger().Info("Weather provider changed, switching provider implementation",
+				logger.String("previous_provider", previousProviderName),
+				logger.String("new_provider", newProviderName))
+			s.setProvider(newProvider, newProviderName)
+			previousProviderName = newProviderName
+		}
+	}
+
 	// Rebuild sunCalc on a location change. Coordinates are PII, so the change
 	// is logged without the values themselves.
 	lat, lon := settings.BirdNET.Latitude, settings.BirdNET.Longitude
 	if lat != s.sunCalcLat || lon != s.sunCalcLon {
 		getLogger().Info("Weather location changed, rebuilding sun time calculator",
-			logger.String("provider", s.providerName))
+			logger.String("provider", previousProviderName))
 		s.sunCalc = suncalc.NewSunCalc(lat, lon)
 		s.sunCalcLat = lat
 		s.sunCalcLon = lon
@@ -674,7 +756,7 @@ func (s *Service) reconcileConfig(settings *conf.Settings) {
 	// true and no fetch runs, so a config delta is the only recovery trigger.
 	if s.backoff.isAuthDisabled() && weatherAuthConfigKey(settings) != s.authConfigKey {
 		getLogger().Info("Weather API configuration changed, re-enabling fetches after auth lockout",
-			logger.String("provider", s.providerName))
+			logger.String("provider", previousProviderName))
 		s.backoff.clearAuthDisabled()
 	}
 }
@@ -696,25 +778,27 @@ func (s *Service) fetchAndSave(ctx context.Context) error {
 	// settings UI take effect without restarting the weather service. The
 	// snapshot is captured once per cycle and passed to the provider so that
 	// coordinate/API-key reads inside the provider see a consistent view.
-	// Provider implementation stays pinned to what NewService selected:
-	// switching providers still requires a service restart, and s.providerName
-	// records the actually-used one for logs and metrics.
 	currentSettings := s.currentSettings()
 
 	// Apply hot-reloadable config changes detected since the last cycle before
 	// the backoff check, so a corrected API key clears the auth lockout that
-	// shouldSkip() would otherwise honor.
+	// shouldSkip() would otherwise honor, and a provider switch takes effect
+	// before FetchWeather is called below.
 	s.reconcileConfig(currentSettings)
+
+	// Snapshot the (possibly just-swapped) provider once for the rest of this
+	// cycle so every log/metric call below reports a consistent value.
+	provider, providerName := s.activeProvider()
 
 	// Check if we should skip this cycle due to backoff
 	if s.backoff.shouldSkip() {
 		if s.backoff.isAuthDisabled() {
 			// Already logged when auth was disabled; emit periodic reminder at Debug level
 			getLogger().Debug("Skipping weather fetch, API authentication disabled due to repeated 401 errors",
-				logger.String("provider", s.providerName))
+				logger.String("provider", providerName))
 		} else {
 			getLogger().Debug("Skipping weather fetch, backing off after previous failures",
-				logger.String("provider", s.providerName))
+				logger.String("provider", providerName))
 		}
 		return nil
 	}
@@ -723,7 +807,7 @@ func (s *Service) fetchAndSave(ctx context.Context) error {
 	fetchStart := time.Now()
 
 	// FetchWeather should now internally log its start/end/errors
-	data, err := s.provider.FetchWeather(ctx, currentSettings)
+	data, err := provider.FetchWeather(ctx, currentSettings)
 
 	if err != nil {
 		// A cancelled context means the service is shutting down (or an
@@ -737,7 +821,7 @@ func (s *Service) fetchAndSave(ctx context.Context) error {
 			// still observes the cancellation; the StartPolling loop ignores
 			// fetchAndSave's return value, so a background shutdown stays benign.
 			getLogger().Debug("Weather fetch cancelled",
-				logger.String("provider", s.providerName))
+				logger.String("provider", providerName))
 			return err
 		}
 
@@ -746,11 +830,11 @@ func (s *Service) fetchAndSave(ctx context.Context) error {
 		// not counted as errors.
 		if errors.Is(err, ErrWeatherDataNotModified) {
 			if s.metrics != nil {
-				s.metrics.RecordWeatherFetchDuration(s.providerName, time.Since(fetchStart).Seconds())
-				s.metrics.RecordWeatherFetch(s.providerName, "not_modified")
+				s.metrics.RecordWeatherFetchDuration(providerName, time.Since(fetchStart).Seconds())
+				s.metrics.RecordWeatherFetch(providerName, "not_modified")
 			}
 			getLogger().Debug("Weather data not modified since last fetch",
-				logger.String("provider", s.providerName))
+				logger.String("provider", providerName))
 			s.backoff.reset()
 			return nil
 		}
@@ -759,11 +843,11 @@ func (s *Service) fetchAndSave(ctx context.Context) error {
 		// This is a valid API response, not an error condition.
 		if errors.Is(err, ErrWeatherNoData) {
 			if s.metrics != nil {
-				s.metrics.RecordWeatherFetchDuration(s.providerName, time.Since(fetchStart).Seconds())
-				s.metrics.RecordWeatherFetch(s.providerName, "no_data")
+				s.metrics.RecordWeatherFetchDuration(providerName, time.Since(fetchStart).Seconds())
+				s.metrics.RecordWeatherFetch(providerName, "no_data")
 			}
 			getLogger().Debug("Weather station has no data available, will retry next cycle",
-				logger.String("provider", s.providerName))
+				logger.String("provider", providerName))
 			// HTTP 204 is a successful round-trip, so clear any transient-failure
 			// backoff like the 304 and success paths do. A station that starts
 			// returning 204 should not stay stuck in "degraded" after earlier
@@ -775,12 +859,12 @@ func (s *Service) fetchAndSave(ctx context.Context) error {
 
 	// Record fetch metrics for real errors and successes
 	if s.metrics != nil {
-		s.metrics.RecordWeatherFetchDuration(s.providerName, time.Since(fetchStart).Seconds())
+		s.metrics.RecordWeatherFetchDuration(providerName, time.Since(fetchStart).Seconds())
 		if err != nil {
-			s.metrics.RecordWeatherFetch(s.providerName, "error")
-			s.metrics.RecordWeatherFetchError(s.providerName, "fetch_error")
+			s.metrics.RecordWeatherFetch(providerName, "error")
+			s.metrics.RecordWeatherFetchError(providerName, "fetch_error")
 		} else {
-			s.metrics.RecordWeatherFetch(s.providerName, "success")
+			s.metrics.RecordWeatherFetch(providerName, "success")
 		}
 	}
 
@@ -794,11 +878,11 @@ func (s *Service) fetchAndSave(ctx context.Context) error {
 				s.authConfigKey = weatherAuthConfigKey(currentSettings)
 				getLogger().Error("Weather API authentication failed repeatedly, pausing retries. "+
 					"Update your API key in the settings and fetching resumes automatically on the next cycle (no restart needed).",
-					logger.String("provider", s.providerName),
+					logger.String("provider", providerName),
 					logger.Int("consecutive_failures", maxConsecutiveAuthFailures))
 			} else {
 				getLogger().Warn("Weather API authentication failed, will retry",
-					logger.String("provider", s.providerName),
+					logger.String("provider", providerName),
 					logger.Error(err))
 			}
 			return ErrWeatherAuthFailed
@@ -807,7 +891,7 @@ func (s *Service) fetchAndSave(ctx context.Context) error {
 		// General failure: apply exponential backoff
 		backoff, failures := s.backoff.recordFailure()
 		getLogger().Error("Failed to fetch weather data from provider, backing off",
-			logger.String("provider", s.providerName),
+			logger.String("provider", providerName),
 			logger.String("backoff", backoff.String()),
 			logger.Int("consecutive_failures", failures),
 			logger.Error(err))
@@ -816,7 +900,7 @@ func (s *Service) fetchAndSave(ctx context.Context) error {
 			Component("weather").
 			Category(errors.CategoryNetwork).
 			Context("operation", "fetch_weather_data").
-			Context("provider", s.providerName).
+			Context("provider", providerName).
 			Build()
 	}
 
@@ -828,7 +912,7 @@ func (s *Service) fetchAndSave(ctx context.Context) error {
 	localTimeForLog := data.Time.In(time.Local)
 
 	getLogger().Info("Successfully fetched weather data",
-		logger.String("provider", s.providerName),
+		logger.String("provider", providerName),
 		logger.String("time", localTimeForLog.Format("2006-01-02 15:04:05-07:00")),
 		logger.Float64("temp_c", data.Temperature.Current),
 		logger.Float64("wind_mps", data.Wind.Speed),
@@ -845,18 +929,19 @@ func (s *Service) fetchAndSave(ctx context.Context) error {
 // Returns (ok, statusMessage).
 func (s *Service) Status() (ok bool, msg string) {
 	authDisabled, failures, inBackoff := s.backoff.snapshot()
+	providerName := s.activeProviderName()
 
 	if authDisabled {
-		return false, fmt.Sprintf("Weather provider %s auth disabled", s.providerName)
+		return false, fmt.Sprintf("Weather provider %s auth disabled", providerName)
 	}
 
 	if inBackoff {
-		return false, fmt.Sprintf("Weather provider %s backing off (%d failures)", s.providerName, failures)
+		return false, fmt.Sprintf("Weather provider %s backing off (%d failures)", providerName, failures)
 	}
 
 	if failures > 0 {
-		return false, fmt.Sprintf("Weather provider %s degraded (%d failures)", s.providerName, failures)
+		return false, fmt.Sprintf("Weather provider %s degraded (%d failures)", providerName, failures)
 	}
 
-	return true, fmt.Sprintf("Weather provider %s healthy", s.providerName)
+	return true, fmt.Sprintf("Weather provider %s healthy", providerName)
 }

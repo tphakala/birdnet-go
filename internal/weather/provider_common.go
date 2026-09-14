@@ -18,6 +18,12 @@ const (
 	RequestTimeout = 10 * time.Second
 	RetryDelay     = 2 * time.Second
 	MaxRetries     = 3
+
+	// maxWeatherResponseBodySize caps how many bytes standardHandleResponse
+	// will read from a weather API response, guarding against a misbehaving
+	// or malicious endpoint forcing excessive memory use on one fetch. Real
+	// current-conditions payloads (OpenWeather, Pirate Weather) are a few KB.
+	maxWeatherResponseBodySize = 1 << 20 // 1 MiB
 )
 
 // UserAgent returns the HTTP User-Agent header value for outbound weather API
@@ -180,19 +186,27 @@ func standardHandleResponse(provider string) weatherResponseHandler {
 		// Close the body on every return path; the error-status branches still drain
 		// it first so the shared keep-alive connection can be reused. This also keeps
 		// the body closed if a read panics, matching WundergroundProvider.executeRequest.
-		defer func() { _ = resp.Body.Close() }()
+		defer func() {
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				attemptLog.Warn("Failed to close weather response body", logger.Error(closeErr))
+			}
+		}()
+
+		// limitedBody caps every read below at maxWeatherResponseBodySize so a
+		// misbehaving endpoint can't force unbounded memory use.
+		limitedBody := io.LimitReader(resp.Body, maxWeatherResponseBodySize+1)
 
 		// HTTP 401/403: authentication failed — don't retry, return sentinel.
 		// 403 is included alongside 401 since some providers (e.g. an
 		// over-quota or access-restricted key) signal auth problems that way.
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			_, _ = io.ReadAll(resp.Body)
+			_, _ = io.ReadAll(limitedBody)
 			attemptLog.Error("Weather API authentication failed — check your API key")
 			return nil, false, ErrWeatherAuthFailed
 		}
 
 		if resp.StatusCode != http.StatusOK {
-			_, _ = io.ReadAll(resp.Body)
+			_, _ = io.ReadAll(limitedBody)
 			attemptLog.Warn("Received non-OK status code", logger.Int("status_code", resp.StatusCode))
 			if isLastAttempt {
 				return nil, false, newWeatherErrorWithRetries(
@@ -205,9 +219,15 @@ func standardHandleResponse(provider string) weatherResponseHandler {
 			return nil, true, nil
 		}
 
-		body, err = io.ReadAll(resp.Body)
+		body, err = io.ReadAll(limitedBody)
 		if err != nil {
 			return nil, false, newWeatherError(err, errors.CategoryNetwork, "read_response_body", provider)
+		}
+		if len(body) > maxWeatherResponseBodySize {
+			return nil, false, newWeatherError(
+				fmt.Errorf("weather API response exceeded %d bytes", maxWeatherResponseBodySize),
+				errors.CategoryValidation, "read_response_body", provider,
+			)
 		}
 		return body, false, nil
 	}

@@ -852,6 +852,9 @@ func (c *Handler) testWeatherAuthentication(ctx context.Context, settings *conf.
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 			return "", fmt.Errorf("invalid API key - please check your Pirate Weather API key")
 		}
+		if resp.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("unexpected response from Pirate Weather API (status %d)", resp.StatusCode)
+		}
 
 		return "Successfully authenticated with Pirate Weather API", nil
 
