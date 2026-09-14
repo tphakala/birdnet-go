@@ -32,6 +32,13 @@ type reloadOpts struct {
 	// check, when non-nil, may refuse the reload after the build (the fresh instance is
 	// closed and the old one keeps serving).
 	check reloadCheck
+	// settings, when non-nil, is the pinned snapshot the builder builds from, so a batch
+	// caller (ReloadSecondaryModels) keeps every entry (and its batch-derived triplet and
+	// thread budget) on ONE snapshot even if settings change concurrently mid-batch. When
+	// nil, reloadEntry builds from a private clone of o.currentSettings(); the v2.4 anchor
+	// path uses this because NewBirdNET's loadLabels writes BirdNET.Labels into the object it
+	// receives and must not mutate the published snapshot other goroutines read.
+	settings *conf.Settings
 	// backend, when non-nil, is written onto the entry with the swap so the OV-capable
 	// secondary triplet gate stays published atomically with the instance it describes.
 	backend *secondaryBackendKey
@@ -81,16 +88,22 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 			Build()
 	}
 
-	// 2. Build from a PRIVATE settings clone. The in-place reload cloned before mutating
-	//    the instance; here NewBirdNET's loadLabels writes BirdNET.Labels into the clone,
-	//    never the published snapshot other goroutines read.
-	settings := conf.CloneSettings(o.currentSettings())
+	// 2. Determine the settings snapshot to build from. A batch caller passes one pinned
+	//    snapshot for the whole batch via opts.settings, so every entry and the batch-derived
+	//    triplet/thread budget stay consistent even if settings change concurrently mid-batch.
+	//    The v2.4 anchor path passes none and gets a PRIVATE clone, because NewBirdNET's
+	//    loadLabels writes BirdNET.Labels into the object it is handed and must never mutate
+	//    the published snapshot other goroutines read.
+	settings := opts.settings
+	if settings == nil {
+		settings = conf.CloneSettings(o.currentSettings())
+	}
 
-	// 3. Build with no lock held, using the caller-supplied thread budget (opts.threads):
+	// 3. Build holding only o.reloadMu (NOT o.mu / entry.mu / inferenceMu), so the build never
+	//    blocks inference on other models. Use the caller-supplied thread budget (opts.threads):
 	//    the v2.4 builder ignores it, secondary builders use it, and ReloadSecondaryModels
-	//    computes it once for the batch so the allocation is not recomputed per entry.
-	//    Capture RSS-before only when we will record it (step 5): the in-place v2.4 reload
-	//    never recorded modelRSS, so the anchor skips it.
+	//    computes it once for the batch. Capture RSS-before only when we will record it (step 5):
+	//    the in-place v2.4 reload never recorded modelRSS, so the anchor skips it.
 	recordRSS := registryID != RegistryIDBirdNETV24
 	var before uint64
 	if recordRSS {
@@ -109,7 +122,7 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 	entry.mu.Unlock()
 	if old == nil {
 		o.closeDiscardedReloadInstance(registryID, next)
-		return false, nil
+		return false, o.orphanReloadResult()
 	}
 	if opts.check != nil {
 		if cerr := opts.check(old, next); cerr != nil {
@@ -146,7 +159,7 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 			delete(o.modelRSS, registryID)
 			o.rssMu.Unlock()
 		}
-		return false, nil
+		return false, o.orphanReloadResult()
 	}
 	entry.instance = next
 	entry.generation++
@@ -195,6 +208,25 @@ func (o *Orchestrator) closeDiscardedReloadInstance(registryID string, inst Mode
 			logger.String("registry_id", registryID),
 			logger.Error(cerr))
 	}
+}
+
+// orphanReloadResult reports why an in-flight reload found its entry detached at swap time.
+// If the whole orchestrator was torn down (o.models == nil, a Delete racing the build/warm-up),
+// it returns the "orchestrator has been deleted" error the former in-place reload returned from
+// its post-reload re-check, so a caller relying on the error (a settings save) is not told the
+// reload succeeded when nothing was reloaded. A single model unloaded out from under the reload
+// (o.models != nil) is benign: there is nothing to reload and no error.
+func (o *Orchestrator) orphanReloadResult() error {
+	o.mu.RLock()
+	deleted := o.models == nil
+	o.mu.RUnlock()
+	if deleted {
+		return errors.Newf("orchestrator has been deleted, cannot reload model").
+			Component("classifier.orchestrator").
+			Category(errors.CategorySystem).
+			Build()
+	}
+	return nil
 }
 
 // logReloadFailure emits the operational warning that the in-place rollback logged, so a

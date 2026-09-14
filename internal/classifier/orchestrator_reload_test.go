@@ -346,3 +346,38 @@ func TestReloadEntry_LateOrphanClosesNewAndCleansRSS(t *testing.T) {
 	o.rssMu.Unlock()
 	assert.False(t, hasRSS, "the modelRSS entry must be cleaned up on the late-orphan path")
 }
+
+// TestReloadEntry_OrphanDuringDeleteReturnsError covers the distinction the former in-place
+// reload drew: when the orphan is a full orchestrator Delete (o.models goes nil), the reload
+// must surface the "orchestrator has been deleted" error rather than silently reporting
+// success, so a caller relying on the error (a settings save) is not misled. A single model
+// unloaded (o.models stays non-nil), covered above, stays a benign no-op.
+func TestReloadEntry_OrphanDuringDeleteReturnsError(t *testing.T) {
+	setTestGlobalSettings(t)
+	o := newTestOrchestrator(t)
+	entry := &modelEntry{instance: &reloadFakeModel{id: testSecondaryID}}
+	o.models[testSecondaryID] = entry
+
+	next := &warmupHookModel{}
+	next.id = testSecondaryID
+	next.onWarmup = func() {
+		// Simulate a full orchestrator Delete landing during warm-up: both o.models and the
+		// entry instance go nil.
+		o.mu.Lock()
+		o.models = nil
+		o.mu.Unlock()
+		entry.mu.Lock()
+		entry.instance = nil
+		entry.mu.Unlock()
+	}
+
+	triplet := secondaryBackendKey{backend: "onnx"}
+	sw, err := o.reloadEntry(testSecondaryID, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
+		return next, nil
+	}, reloadOpts{backend: &triplet, skipSpeciesIndex: true, threads: 1})
+
+	require.Error(t, err, "a reload racing a full orchestrator delete must not report success")
+	assert.False(t, sw)
+	assert.Contains(t, err.Error(), "has been deleted")
+	assert.Equal(t, int32(1), next.closes.Load(), "the freshly built instance must still be closed")
+}

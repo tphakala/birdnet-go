@@ -1641,9 +1641,11 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 	log := GetLogger()
 
 	// Read the fresh settings published by the primary reload that ran just before this
-	// (ReloadModel atomically swapped the settings pointer), and derive the backend triplet
-	// every OV-capable secondary is gated on.
-	settings := o.currentSettings()
+	// (ReloadModel atomically swapped the settings pointer) and pin ONE clone for the whole
+	// batch, so the triplet, the thread budget, and every per-entry build stay on the same
+	// snapshot even if another reload commits concurrently mid-batch. Each reloadEntry is
+	// handed this snapshot via reloadOpts.settings instead of re-reading o.currentSettings().
+	settings := conf.CloneSettings(o.currentSettings())
 	triplet := secondaryTripletFor(settings)
 
 	// Full per-model thread budget, computed once for the whole batch (inference is
@@ -1723,6 +1725,7 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 			backend:          &triplet,
 			skipSpeciesIndex: true,
 			threads:          threads,
+			settings:         settings,
 		})
 		if rerr != nil {
 			if firstErr == nil {
