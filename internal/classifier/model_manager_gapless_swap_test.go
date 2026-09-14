@@ -228,10 +228,13 @@ func TestReplaceVariant_LoadedSecondaryGeomodelReloadsRangeFilter(t *testing.T) 
 	require.True(t, HasGeomodelFiles(&entry), "entry must carry geomodel files for this test")
 
 	modelsDir := t.TempDir()
+	// Capture and restore the ORIGINAL global snapshot (not this test's own object) so the
+	// test's settings never leak into later tests, matching the primary-swap tests.
+	origSettings := conf.GetSettings()
+	t.Cleanup(func() { conf.StoreSettings(origSettings) })
+	isolateTestConfig(t)
 	settings := conftest.GetTestSettings()
 	conf.StoreSettings(settings)
-	t.Cleanup(func() { conf.StoreSettings(settings) })
-	isolateTestConfig(t)
 
 	old := &reloadFakeModel{id: gaplessSecondaryID}
 	o := newTestOrchestrator(t, &mockModelInstance{id: RegistryIDBirdNETV24})
