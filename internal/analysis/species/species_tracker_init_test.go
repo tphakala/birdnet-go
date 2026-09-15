@@ -274,9 +274,9 @@ func TestCheckAndUpdateSpecies_CriticalReliability(t *testing.T) {
 			func(tracker *SpeciesTracker, now time.Time) {
 				tracker.speciesFirstSeen["Boundary_Species"] = now.AddDate(0, 0, -14) // Exactly 14 days
 			},
-			true, // Exactly at boundary is still "new"
+			false, // The notification window has expired
 			14,
-			"Species exactly at window boundary should still be new",
+			"Species exactly at window boundary should no longer trigger new-species notifications",
 		},
 		{
 			"yearly_tracking_update",
