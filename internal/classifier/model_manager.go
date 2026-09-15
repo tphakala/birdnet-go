@@ -1567,10 +1567,17 @@ func (mm *ModelManager) rollbackVariant(log logger.Logger, entry *CatalogEntry, 
 
 	// The not-loaded path activated the new variant fresh, so the old one must be reloaded;
 	// the gapless path never stopped serving and must not reload. A failed reload here means
-	// the previous variant did not come back, so the error below reports that honestly.
+	// the previous variant did not come back: log it at the always-on manager logger (the
+	// returned error alone may only reach a disabled API logger) and report it honestly below.
 	var restoreErr error
 	if reload {
-		restoreErr = mm.hotLoadAfterInstall(log, entry)
+		if restoreErr = mm.hotLoadAfterInstall(log, entry); restoreErr != nil {
+			log.Warn("Previous variant failed to reload after a failed swap; model is unloaded until restart",
+				logger.String("catalog_id", entry.ID),
+				logger.String("failed_variant", newVariantID),
+				logger.String("restored_variant", old.VariantID),
+				logger.String("restore_error", restoreErr.Error()))
+		}
 	}
 
 	// The new variant is unusable on this host: remove its files (none for a BuiltIn
