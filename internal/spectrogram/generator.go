@@ -665,8 +665,11 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, settings 
 			Build()
 	}
 
-	// FFmpeg converts audio to Sox format and pipes to Sox
-	ffmpegArgs := []string{"-hide_banner", "-i", audioPath, "-f", "sox", "-"}
+	// FFmpeg converts audio to Sox format and pipes to Sox. Downmix to mono here
+	// (-ac) rather than in Sox: FFmpeg already decoded the file, so this avoids
+	// asking Sox to downmix audio it just received, and keeps the multi-channel
+	// fix in one place instead of splitting it across both stages.
+	ffmpegArgs := []string{"-hide_banner", "-i", audioPath, "-ac", strconv.Itoa(conf.NumChannels), "-f", "sox", "-"}
 	soxArgs := append([]string{"-t", "sox", "-"}, g.getSoxSpectrogramArgs(ctx, settings, audioPath, outputPath, width, raw, preValidatedDuration, profile)...)
 
 	ffmpegCmd := createCommandWithNice(ctx, ffmpegBinary, ffmpegArgs)
@@ -999,6 +1002,9 @@ func (g *Generator) getSoxArgs(ctx context.Context, settings *conf.Settings, aud
 	}
 
 	args = append(args, g.getSoxSpectrogramArgs(ctx, settings, audioPath, outputPath, width, raw, preValidatedDuration, profile)...)
+	if inputType == SoxInputFile {
+		args = slices.Insert(args, slices.Index(args, "spectrogram"), "channels", strconv.Itoa(conf.NumChannels))
+	}
 	return args
 }
 
