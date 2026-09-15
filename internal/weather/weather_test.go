@@ -277,6 +277,35 @@ func TestService_SaveWeatherData(t *testing.T) {
 		mockDB.AssertExpectations(t)
 	})
 
+	t.Run("tempest_persists_only_selected_extra_fields", func(t *testing.T) {
+		mockDB := mocks.NewMockInterface(t)
+		settings := createTestSettings(t, "tempest", func(s *conf.Settings) {
+			s.Realtime.Weather.Tempest.ExtraFields.Illuminance = true
+			s.Realtime.Weather.Tempest.ExtraFields.UVIndex = true
+		})
+		service := &Service{
+			provider: &TempestProvider{extras: &TempestExtras{
+				Illuminance:    1234,
+				UVIndex:        4.2,
+				SolarRadiation: 567,
+			}},
+			db:       mockDB,
+			settings: settings,
+		}
+
+		mockDB.On("SaveDailyEvents", mock.Anything).Run(func(args mock.Arguments) {
+			args.Get(0).(*datastore.DailyEvents).ID = 123
+		}).Return(nil).Once()
+		mockDB.On("SaveHourlyWeather", mock.Anything).Run(func(args mock.Arguments) {
+			hw := args.Get(0).(*datastore.HourlyWeather)
+			assert.NotNil(t, hw.TempestExtrasJSON)
+			assert.JSONEq(t, `{"illuminance":1234,"uv_index":4.2}`, *hw.TempestExtrasJSON)
+		}).Return(nil).Once()
+
+		require.NoError(t, service.saveWeatherData(createTestWeatherData(t)))
+		mockDB.AssertExpectations(t)
+	})
+
 	t.Run("daily_events_error_fallback_to_existing", func(t *testing.T) {
 		mockDB := mocks.NewMockInterface(t)
 
@@ -1324,6 +1353,22 @@ func TestRegisterUnregisterService(t *testing.T) {
 	ok, msg = GetStatus()
 	assert.False(t, ok)
 	assert.Contains(t, msg, "not started")
+}
+
+func TestWaitForTempestObservation_UsesRegisteredProviderCache(t *testing.T) {
+	settings := createTestSettings(t, "tempest")
+	want := createTestWeatherData(t)
+	provider := &TempestProvider{
+		latest:     want,
+		receivedAt: time.Now(),
+	}
+	RegisterService(&Service{provider: provider})
+	t.Cleanup(UnregisterService)
+
+	got, err := WaitForTempestObservation(t.Context(), settings, time.Second)
+	require.NoError(t, err)
+	assert.Equal(t, want.Time, got.Time)
+	assert.InDelta(t, want.Temperature.Current, got.Temperature.Current, 0.001)
 }
 
 // =============================================================================
