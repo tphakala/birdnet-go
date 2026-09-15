@@ -6,7 +6,7 @@
   @component
 -->
 <script lang="ts">
-  import { Cloud, RefreshCw, Sunrise, Sunset } from '@lucide/svelte';
+  import { Cloud, RefreshCw, Sunrise, Sunset, Sun, Zap } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import type { BannerConfig } from '$lib/stores/settings';
   import type { LatestWeatherResponse } from '$lib/types/detection.types';
@@ -264,6 +264,27 @@
             ></span
           >
         </div>
+      {/if}
+      {#if weatherData.tempest_extras}
+        {@const extras = weatherData.tempest_extras}
+        {@render sep()}
+        <div class="flex items-center gap-1.5" title={t('detections.weather.labels.uvIndex')}>
+          <Sun class="size-4 text-amber-500" />
+          <span>{t('detections.weather.labels.uvIndex')} {extras.uv_index.toFixed(1)}</span>
+        </div>
+        {#if extras.lightning_count > 0}
+          {@render sep()}
+          <div
+            class="flex items-center gap-1.5"
+            title={t('detections.weather.labels.lightningDistance')}
+          >
+            <Zap class="size-4 text-yellow-400" />
+            <span
+              >{t('detections.weather.labels.lightningCount', { count: extras.lightning_count })}
+              ({extras.lightning_distance.toFixed(1)} km)</span
+            >
+          </div>
+        {/if}
       {/if}
     </div>
   {/if}
