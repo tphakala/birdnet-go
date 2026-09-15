@@ -210,6 +210,7 @@ Join the [Discord server](https://discord.gg/gcSCFGUtsd) for support, discussion
 ### Mobile apps
 
 - [Perch](https://github.com/arunrajiah/perch): open-source Android/iOS companion app. Connects to BirdNET-Go via the BirdWeather API. Live detection feed, audio playback, species browser, 14-day chart, and notifications for favourite species. MIT licensed.
+- [BirdFeeder](https://github.com/kj7ppk): open-source Android audio streaming app. Publishes real-time RTSP audio for consumption as a BirdNET-GO stream.
 
 ## Contributing
 
