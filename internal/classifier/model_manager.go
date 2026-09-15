@@ -1550,7 +1550,8 @@ func (mm *ModelManager) rollbackVariant(log logger.Logger, entry *CatalogEntry, 
 		logger.String("failed_variant", newVariantID),
 		logger.String("restored_variant", old.VariantID))
 	if cause != nil {
-		warnFields = append(warnFields, logger.Error(cause))
+		// Scrub the underlying failure text: a model-load error can carry filesystem paths.
+		warnFields = append(warnFields, logger.SanitizedError(cause))
 	}
 	log.Warn("New variant failed to activate; rolling back to the previous variant", warnFields...)
 
@@ -1576,7 +1577,7 @@ func (mm *ModelManager) rollbackVariant(log logger.Logger, entry *CatalogEntry, 
 				logger.String("catalog_id", entry.ID),
 				logger.String("failed_variant", newVariantID),
 				logger.String("restored_variant", old.VariantID),
-				logger.String("restore_error", restoreErr.Error()))
+				logger.SanitizedString("restore_error", restoreErr.Error()))
 		}
 	}
 
