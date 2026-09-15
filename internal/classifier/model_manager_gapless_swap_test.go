@@ -109,6 +109,12 @@ func TestReplaceVariant_LoadedSecondaryRollbackOnBuildFailure(t *testing.T) {
 	err := mm.replaceVariant(t.Context(), &entry, old0, "int8-arm", srvURL, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to load", "the rollback must report the swap failure")
+	// The build failure is the activating cause; pin the renamed context key on the gapless
+	// path too, so a revert of reload_error->activation_error here cannot stay green.
+	var enhancedErr *errors.EnhancedError
+	require.ErrorAs(t, err, &enhancedErr)
+	assert.Contains(t, enhancedErr.GetContext(), "activation_error", "the gapless build failure records its cause under activation_error")
+	assert.NotContains(t, enhancedErr.GetContext(), "restore_error", "a gapless build failure never attempts a restore reload")
 
 	assert.Same(t, ModelInstance(old), o.models[gaplessSecondaryID].instance, "a build failure must leave the old instance serving")
 	assert.Equal(t, int32(0), old.closes.Load(), "the old instance must not be closed on a build failure")
@@ -173,9 +179,80 @@ func TestReplaceVariant_NotLoadedRollbackReloadsPreviousVariant(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to load", "the not-loaded rollback must report the load failure")
 
+	// The previous variant DID come back, so the error records the activating failure
+	// (the new variant) but no restore failure.
+	var restoredErr *errors.EnhancedError
+	require.ErrorAs(t, err, &restoredErr)
+	ctx := restoredErr.GetContext()
+	assert.Contains(t, ctx, "activation_error", "the new-variant load failure must be recorded")
+	assert.NotContains(t, ctx, "restore_error", "a successful restore must not record a restore failure")
+
 	assert.Equal(t, int32(2), loads.Load(), "load is attempted for the new variant, then again to restore the old (reload=true)")
 	assert.Equal(t, "fp32", installedByID(t, mm, entry.ID).VariantID, "rollback must restore the old variant record")
 	require.True(t, o.IsModelLoaded(notLoadedID), "rollback must reload the previous variant")
+	_, statErr := os.Stat(filepath.Join(modelsDir, entry.ID, "model_int8.onnx"))
+	assert.True(t, os.IsNotExist(statErr), "rollback must remove the failed new variant's file")
+}
+
+// TestReplaceVariant_NotLoadedRollbackReportsFailedRestore covers the double-failure case: when
+// the not-loaded swap path fails to load the new variant AND the rollback reload of the previous
+// variant ALSO fails, rollbackVariant must not claim a successful restoration. The returned
+// error signals the model is left unloaded until restart and carries a restore_error context,
+// and the model is genuinely not loaded afterwards.
+func TestReplaceVariant_NotLoadedRollbackReportsFailedRestore(t *testing.T) {
+	// Not parallel: mutates package-global ModelRegistry/modelLoaders and global settings.
+	settings := conftest.GetTestSettings()
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	entry, modelsDir, srvURL := twoVariantServerEntry(t)
+	const notLoadedID = "TestFailedRestore_OV"
+	entry.RegistryID = notLoadedID
+
+	ModelRegistry[notLoadedID] = ModelInfo{ID: notLoadedID}
+	t.Cleanup(func() {
+		delete(ModelRegistry, notLoadedID)
+		delete(modelLoaders, notLoadedID)
+	})
+
+	// The loader fails on EVERY attempt: the new variant's fresh load AND the rollback
+	// reload of the previous variant, mirroring a host where neither variant can load.
+	var loads atomic.Int32
+	loadErr := errors.Newf("synthetic load failure").Build()
+	modelLoaders[notLoadedID] = func(_ *Orchestrator, _ int) error {
+		loads.Add(1)
+		return loadErr
+	}
+
+	// v2.4 anchor loaded; the secondary is deliberately NOT in o.models, so replaceVariant
+	// takes the not-loaded (fresh-load) branch and, on load failure, the reload=true rollback.
+	o := newTestOrchestrator(t, &mockModelInstance{id: RegistryIDBirdNETV24})
+	o.Settings = settings
+	o.SetModelsDir(modelsDir)
+
+	mm := NewModelManager(modelsDir, o, nil)
+	mm.mu.Lock()
+	mm.downloading[entry.ID] = &DownloadState{CatalogID: entry.ID, Status: StatusDownloading}
+	mm.mu.Unlock()
+
+	old0 := &InstalledModel{CatalogID: entry.ID, VariantID: "fp32", ModelPath: filepath.Join(modelsDir, entry.ID, "model.onnx")}
+	err := mm.replaceVariant(t.Context(), &entry, old0, "int8-arm", srvURL, nil)
+	require.Error(t, err)
+	// Keeps the stable "failed to load" substring the SSE surface and tests match on, and
+	// additionally signals the previous variant did not come back.
+	assert.Contains(t, err.Error(), "failed to load")
+	assert.Contains(t, err.Error(), "unloaded until restart",
+		"a failed restore must not be reported as a successful restoration")
+
+	var enhancedErr *errors.EnhancedError
+	require.ErrorAs(t, err, &enhancedErr)
+	ctx := enhancedErr.GetContext()
+	assert.Contains(t, ctx, "restore_error", "the failed old-variant reload must be recorded")
+	assert.Contains(t, ctx, "activation_error", "the new-variant load failure must be recorded")
+
+	assert.Equal(t, int32(2), loads.Load(), "new variant load, then the restore reload, both attempted")
+	assert.False(t, o.IsModelLoaded(notLoadedID), "the model must be genuinely left unloaded")
+	assert.Equal(t, "fp32", installedByID(t, mm, entry.ID).VariantID, "rollback must restore the old variant record")
 	_, statErr := os.Stat(filepath.Join(modelsDir, entry.ID, "model_int8.onnx"))
 	assert.True(t, os.IsNotExist(statErr), "rollback must remove the failed new variant's file")
 }
