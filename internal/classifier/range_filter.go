@@ -193,6 +193,8 @@ func BuildRangeFilter(o *Orchestrator) error {
 			logger.String("duration", time.Since(start).String()))
 	}
 
+	o.logRangeFilterParticipation()
+
 	if settings.BirdNET.RangeFilter.Debug {
 		writeIncludedSpeciesDebug(includedSpecies)
 	}
@@ -207,6 +209,44 @@ func BuildRangeFilter(o *Orchestrator) error {
 	}
 	o.notifyRangeFilterReload()
 	return nil
+}
+
+// logRangeFilterParticipation emits one INFO per successful range-filter (re)build naming
+// the loaded model set and, within it, which models participate in range filtering and
+// which do not, plus the current range-filter anchor. The per-model participation decision
+// (ParticipatesInRangeFilter) is otherwise silent in the logs, so with several models loaded
+// there is no way to confirm from a running system which models are range-filtered and which
+// are not. Low-volume: once per (re)build, never per detection.
+func (o *Orchestrator) logRangeFilterParticipation() {
+	// LoadedModelPaths is the existing lock-correct snapshot of the loaded model set (its
+	// keys are the loaded families, i.e. instance != nil); reuse it rather than duplicating
+	// the snapshot-then-per-entry-lock walk.
+	loaded := o.LoadedModelPaths()
+	if len(loaded) == 0 {
+		return
+	}
+	ids := slices.Sorted(maps.Keys(loaded))
+
+	rangeFiltered := make([]string, 0, len(ids))
+	notFiltered := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if ParticipatesInRangeFilter(id) {
+			rangeFiltered = append(rangeFiltered, id)
+		} else {
+			notFiltered = append(notFiltered, id)
+		}
+	}
+
+	anchor := ""
+	if cv, _, ok := o.rangeFilterAnchor(); ok {
+		anchor = cv.id
+	}
+
+	GetLogger().Info("Range filter participation across the loaded model set",
+		logger.Any("loaded_models", ids),
+		logger.Any("range_filtered", rangeFiltered),
+		logger.Any("not_filtered", notFiltered),
+		logger.String("anchor", anchor))
 }
 
 // matchingLabels returns every label that matches speciesName by its common or

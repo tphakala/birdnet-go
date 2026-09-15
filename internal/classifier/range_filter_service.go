@@ -176,7 +176,8 @@ func (rfs *rangeFilterService) reload(settings *conf.Settings, cv classifierView
 	// even before clearSpeciesCache runs below. generation is only ever written here
 	// (and in close/swapTestBackend), always under rfs.mu, so the increment cannot
 	// race another writer.
-	rfs.state.Store(&rangeFilterState{backend: backend, fellBack: fellBack, generation: old.generation + 1})
+	newGen := old.generation + 1
+	rfs.state.Store(&rangeFilterState{backend: backend, fellBack: fellBack, generation: newGen})
 	// Close the replaced backend under rfs.mu: every prediction is serialized by the
 	// same lock, so none is using the old backend at close time (issue #3336).
 	if old.backend != nil && old.backend != backend {
@@ -185,6 +186,7 @@ func (rfs *rangeFilterService) reload(settings *conf.Settings, cv classifierView
 	rfs.mu.Unlock()
 
 	rfs.clearSpeciesCache()
+	rfs.Debug("range filter backend swapped; occurrence cache invalidated (generation %d, fell_back=%t)", newGen, fellBack)
 	return nil
 }
 

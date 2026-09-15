@@ -1482,7 +1482,7 @@ func (mm *ModelManager) replaceVariant(ctx context.Context, entry *CatalogEntry,
 		// the old variant serving (nothing swapped, nothing unloaded), so rollback only
 		// restores the record and config.
 		if reloadErr := mm.orchestrator.ReloadForVariantSwap(entry.RegistryID); reloadErr != nil {
-			return mm.rollbackVariantSwap(log, entry, old, newVariantID, reloadErr, progress)
+			return mm.rollbackVariant(log, entry, old, newVariantID, reloadErr, false, progress)
 		}
 		// A geomodel-carrying family (Perch, BirdNET v3.0) re-points and reloads the range
 		// filter, exactly as hotLoadAfterInstall does after an install. The v2.4 anchor
@@ -1503,7 +1503,7 @@ func (mm *ModelManager) replaceVariant(ctx context.Context, entry *CatalogEntry,
 		// new variant did not load, extending download-before-delete to a LOAD failure.
 		mm.hotLoadAfterInstall(log, entry)
 		if mm.orchestrator != nil && entry.RegistryID != "" && !mm.orchestrator.IsModelLoaded(entry.RegistryID) {
-			return mm.rollbackVariantSwitch(log, entry, old, newVariantID, progress)
+			return mm.rollbackVariant(log, entry, old, newVariantID, nil, true, progress)
 		}
 	}
 
@@ -1526,40 +1526,62 @@ func (mm *ModelManager) replaceVariant(ctx context.Context, entry *CatalogEntry,
 	return nil
 }
 
-// rollbackVariantSwap restores the previously-active variant after a GAPLESS build
-// failure (ReloadForVariantSwap). reloadEntry only swaps entry.instance on a successful
-// build, so a failure means the old model never stopped serving: this restores the
-// install record, re-persists the old variant's config (step 3 wrote the new one),
-// removes the new variant's downloaded files, and reports the failure. It never reloads,
-// because nothing was swapped. It serves every family; the "failed to load" phrasing is
-// kept stable for the API/SSE surface and the tests that match on it.
-func (mm *ModelManager) rollbackVariantSwap(log logger.Logger, entry *CatalogEntry, old *InstalledModel, newVariantID string, cause error, progress chan<- DownloadState) error {
-	log.Warn("New variant failed to build; rolled back to the previous variant",
+// rollbackVariant restores the previously-active variant after a failed swap to
+// newVariantID, re-persists its config and (optionally) reloads it, removes the new
+// variant's now-unused files, and reports the failure. It is the shared rollback for both
+// replaceVariant failure modes:
+//
+//   - reload=false: a GAPLESS build failure (ReloadForVariantSwap). reloadEntry only swaps
+//     entry.instance on a successful build, so the old model never stopped serving and
+//     nothing is reloaded. cause is the build error and is recorded as reload_error.
+//   - reload=true: the not-loaded path activated the new variant fresh but it failed to
+//     load, so the old variant is reloaded via hotLoadAfterInstall. cause is nil there (the
+//     load failure is already logged by hotLoadAfterInstall).
+//
+// It serves every family; the "failed to load" phrasing is kept stable for the API/SSE
+// surface and the tests that match on it.
+func (mm *ModelManager) rollbackVariant(log logger.Logger, entry *CatalogEntry, old *InstalledModel, newVariantID string, cause error, reload bool, progress chan<- DownloadState) error {
+	warnFields := make([]logger.Field, 0, 4)
+	warnFields = append(warnFields,
 		logger.String("catalog_id", entry.ID),
 		logger.String("failed_variant", newVariantID),
-		logger.String("restored_variant", old.VariantID),
-		logger.Error(cause))
+		logger.String("restored_variant", old.VariantID))
+	if cause != nil {
+		warnFields = append(warnFields, logger.Error(cause))
+	}
+	log.Warn("New variant failed to activate; rolling back to the previous variant", warnFields...)
 
-	// Restore the install record. The running model is already the old one.
+	// Restore the install record to the old variant. On the gapless path the running model
+	// is already the old one; on the not-loaded path it is reloaded below.
 	mm.mu.Lock()
 	mm.installed[entry.ID] = *old
 	mm.mu.Unlock()
 
-	// Re-persist the old variant's config, per family (mirrors replaceVariant step 3).
+	// Re-persist the old variant's config, per family (step 3 wrote the new one; the
+	// permanent v2.4 entry writes only its model field and clears it for the embedded
+	// baseline). Companion files are identical across a family's variants.
 	mm.persistVariantConfig(entry, old.ModelPath, old.LabelsPath, mm.variantEmbeddingsPath(entry, old.VariantID))
 
-	// The new variant is unusable on this host: remove its downloaded files (none for a
-	// BuiltIn target) so disk state matches the restored record.
+	// The not-loaded path activated the new variant fresh, so the old one must be reloaded;
+	// the gapless path never stopped serving and must not reload.
+	if reload {
+		mm.hotLoadAfterInstall(log, entry)
+	}
+
+	// The new variant is unusable on this host: remove its files (none for a BuiltIn
+	// target), keeping shared companions, so disk state matches the restored record.
 	mm.removeSupersededVariantFiles(log, entry, newVariantID, old.VariantID)
 
-	switchErr := errors.Newf("switched %s to variant %q but it failed to load; restored previous variant %q", entry.ID, newVariantID, old.VariantID).
+	eb := errors.Newf("switched %s to variant %q but it failed to load; restored previous variant %q", entry.ID, newVariantID, old.VariantID).
 		Component("classifier.model_manager").
 		Category(errors.CategoryModelInit).
 		Context("catalog_id", entry.ID).
 		Context("failed_variant", newVariantID).
-		Context("restored_variant", old.VariantID).
-		Context("reload_error", cause.Error()).
-		Build()
+		Context("restored_variant", old.VariantID)
+	if cause != nil {
+		eb = eb.Context("reload_error", cause.Error())
+	}
+	switchErr := eb.Build()
 	mm.markFailed(entry.ID, switchErr, progress)
 	time.AfterFunc(failedStateRetention, func() {
 		mm.removeDownloading(entry.ID)
@@ -1596,48 +1618,6 @@ func (mm *ModelManager) variantEmbeddingsPath(entry *CatalogEntry, variantID str
 		}
 	}
 	return ""
-}
-
-// rollbackVariantSwitch restores the previously-installed variant after the new
-// variant was written and activated but failed to load. It re-records the old
-// variant, re-persists its paths, reloads it, and removes the new variant's
-// now-unused files, so a load failure during a switch leaves the family running
-// its previous working variant rather than nothing. It reports the switch as
-// failed over the progress stream. The caller must have registered entry.ID in
-// mm.downloading; rollbackVariantSwitch schedules its cleanup.
-func (mm *ModelManager) rollbackVariantSwitch(log logger.Logger, entry *CatalogEntry, old *InstalledModel, newVariantID string, progress chan<- DownloadState) error {
-	log.Warn("New variant failed to load; rolling back to the previous variant",
-		logger.String("catalog_id", entry.ID),
-		logger.String("failed_variant", newVariantID),
-		logger.String("restored_variant", old.VariantID))
-
-	// Restore the install record to the old variant.
-	mm.mu.Lock()
-	mm.installed[entry.ID] = *old
-	mm.mu.Unlock()
-
-	// Re-persist the old variant's config (step 3 wrote the new one) and reload it, per
-	// family (a v2.4 restore writes only the model field and clears it for the embedded
-	// baseline). Companion files are identical across a family's variants.
-	mm.persistVariantConfig(entry, old.ModelPath, old.LabelsPath, mm.variantEmbeddingsPath(entry, old.VariantID))
-	mm.hotLoadAfterInstall(log, entry)
-
-	// The new variant is unusable on this host: remove its files (keeping shared
-	// companions) so disk state matches the restored record.
-	mm.removeSupersededVariantFiles(log, entry, newVariantID, old.VariantID)
-
-	switchErr := errors.Newf("switched %s to variant %q but it failed to load; restored previous variant %q", entry.ID, newVariantID, old.VariantID).
-		Component("classifier.model_manager").
-		Category(errors.CategoryModelInit).
-		Context("catalog_id", entry.ID).
-		Context("failed_variant", newVariantID).
-		Context("restored_variant", old.VariantID).
-		Build()
-	mm.markFailed(entry.ID, switchErr, progress)
-	time.AfterFunc(failedStateRetention, func() {
-		mm.removeDownloading(entry.ID)
-	})
-	return switchErr
 }
 
 // applyConfigForVariantSwap persists the selected model file for a within-family

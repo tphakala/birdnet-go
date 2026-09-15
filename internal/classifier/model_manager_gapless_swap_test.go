@@ -93,7 +93,7 @@ func TestReplaceVariant_LoadedSecondaryGaplessSwap(t *testing.T) {
 
 // TestReplaceVariant_LoadedSecondaryRollbackOnBuildFailure verifies the gapless
 // rollback: when the new variant fails to build, reloadEntry never swaps, so the old
-// instance is still serving. rollbackVariantSwap restores the record, removes the new
+// instance is still serving. rollbackVariant (reload=false) restores the record, removes the new
 // file, and reports failure, and the old instance is neither swapped nor closed.
 func TestReplaceVariant_LoadedSecondaryRollbackOnBuildFailure(t *testing.T) {
 	// Not parallel: registers a global builder and mutates global settings.
@@ -120,6 +120,64 @@ func TestReplaceVariant_LoadedSecondaryRollbackOnBuildFailure(t *testing.T) {
 	res, perr := o.models[gaplessSecondaryID].instance.Predict(t.Context(), nil)
 	require.NoError(t, perr)
 	assert.NotEmpty(t, res, "the previous instance must keep serving after a failed swap")
+}
+
+// TestReplaceVariant_NotLoadedRollbackReloadsPreviousVariant covers the not-loaded swap
+// path (reload=true) of the folded rollbackVariant: when the target family is installed but
+// NOT currently loaded, replaceVariant loads the new variant fresh; if that load fails, the
+// rollback restores the old record, reloads the previous variant, removes the failed new
+// file, and reports "failed to load". This is the reload=true branch that the loaded gapless
+// rollback test (reload=false) does not exercise.
+func TestReplaceVariant_NotLoadedRollbackReloadsPreviousVariant(t *testing.T) {
+	// Not parallel: mutates package-global ModelRegistry/modelLoaders and global settings.
+	settings := conftest.GetTestSettings()
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	entry, modelsDir, srvURL := twoVariantServerEntry(t)
+	const notLoadedID = "TestNotLoadedRollback_OV"
+	entry.RegistryID = notLoadedID
+
+	ModelRegistry[notLoadedID] = ModelInfo{ID: notLoadedID}
+	t.Cleanup(func() {
+		delete(ModelRegistry, notLoadedID)
+		delete(modelLoaders, notLoadedID)
+	})
+
+	// The loader fails the FIRST time (the new variant's fresh load) and succeeds the SECOND
+	// time (the rollback reloading the previous variant), mirroring a host where only the new
+	// variant is unloadable.
+	var loads atomic.Int32
+	loadErr := errors.Newf("synthetic load failure").Build()
+	modelLoaders[notLoadedID] = func(orc *Orchestrator, _ int) error {
+		if loads.Add(1) == 1 {
+			return loadErr
+		}
+		orc.models[notLoadedID] = &modelEntry{instance: &mockModelInstance{id: notLoadedID}}
+		return nil
+	}
+
+	// v2.4 anchor loaded; the secondary is deliberately NOT in o.models, so replaceVariant
+	// takes the not-loaded (fresh-load) branch and, on load failure, the reload=true rollback.
+	o := newTestOrchestrator(t, &mockModelInstance{id: RegistryIDBirdNETV24})
+	o.Settings = settings
+	o.SetModelsDir(modelsDir)
+
+	mm := NewModelManager(modelsDir, o, nil)
+	mm.mu.Lock()
+	mm.downloading[entry.ID] = &DownloadState{CatalogID: entry.ID, Status: StatusDownloading}
+	mm.mu.Unlock()
+
+	old0 := &InstalledModel{CatalogID: entry.ID, VariantID: "fp32", ModelPath: filepath.Join(modelsDir, entry.ID, "model.onnx")}
+	err := mm.replaceVariant(t.Context(), &entry, old0, "int8-arm", srvURL, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to load", "the not-loaded rollback must report the load failure")
+
+	assert.Equal(t, int32(2), loads.Load(), "load is attempted for the new variant, then again to restore the old (reload=true)")
+	assert.Equal(t, "fp32", installedByID(t, mm, entry.ID).VariantID, "rollback must restore the old variant record")
+	require.True(t, o.IsModelLoaded(notLoadedID), "rollback must reload the previous variant")
+	_, statErr := os.Stat(filepath.Join(modelsDir, entry.ID, "model_int8.onnx"))
+	assert.True(t, os.IsNotExist(statErr), "rollback must remove the failed new variant's file")
 }
 
 // TestReplaceVariant_LoadedSecondaryConcurrentPredictNoGap pins gaplessness under
