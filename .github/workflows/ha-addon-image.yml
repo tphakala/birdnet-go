@@ -1,0 +1,48 @@
+name: Build HA add-on image (lifer-mvp)
+
+# Builds this branch's BirdNET-Go with the repo's own top-level Dockerfile
+# (multi-arch, self-contained: BASE_IMAGE defaults to the local runtime-base
+# stage, so this needs no upstream secrets or pre-published base image) and
+# publishes it to GHCR so the Home Assistant "Birdnet-go (lifer-mvp)" add-on
+# can pull a prebuilt image instead of compiling on the HA host.
+
+on:
+  push:
+    branches: [pr/lifer-mvp]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            BUILD_VERSION=lifer-mvp-${{ github.sha }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/birdnet-go:lifer-mvp
+            ghcr.io/${{ github.repository_owner }}/birdnet-go:lifer-mvp-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          provenance: false
