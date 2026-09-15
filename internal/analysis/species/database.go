@@ -96,6 +96,18 @@ func (t *SpeciesTracker) initFromDatabaseContext(ctx context.Context) error {
 		// Continue initialization - the feature will work for new notifications going forward
 	}
 
+	// Step 5: Load lifer notification history, independently of Step 4 (see
+	// liferNotificationLastSent's doc comment for why these are separate
+	// suppression states). Same non-fatal design decision: a load failure
+	// degrades gracefully rather than blocking startup.
+	if err := t.loadLiferNotificationsFromDatabase(ctx, now); err != nil {
+		getLog().Error("Failed to load lifer notification history from database",
+			logger.Error(err),
+			logger.String("operation", "load_lifer_notification_history"),
+			logger.String("impact", "May send duplicate lifer notifications for species detected recently"))
+		// Continue initialization - the feature will work for new notifications going forward
+	}
+
 	t.lastSyncTime = now
 
 	// Drop any cached status computed against the pre-load maps. Status entries
@@ -571,6 +583,77 @@ func (t *SpeciesTracker) loadNotificationHistoryFromDatabase(ctx context.Context
 	getLog().Debug("Notification history loaded successfully",
 		logger.Int("notifications_loaded", len(histories)),
 		logger.Int("map_size", len(t.notificationLastSent)))
+
+	return nil
+}
+
+// loadLiferNotificationsFromDatabase loads recent lifer notification history
+// from the database, independently of loadNotificationHistoryFromDatabase
+// (see liferNotificationLastSent's doc comment). This prevents duplicate
+// lifer notifications after a restart, mirroring the BG-17 fix for
+// new-species notifications. Gated on the same NotificationSuppressionHours
+// switch as the new-species load: RecordLiferNotificationSent only persists
+// to the database under that same condition (see its doc comment), so there
+// would be nothing to load — and no expired rows to clean up — when it's
+// disabled. The in-memory lifer suppression check itself (ShouldSuppressLiferNotification)
+// is unaffected by this setting; only restart-survival is.
+func (t *SpeciesTracker) loadLiferNotificationsFromDatabase(ctx context.Context, now time.Time) error {
+	// Only load if notification suppression is enabled
+	if t.notificationSuppressionWindow <= 0 {
+		getLog().Debug("Notification suppression disabled, skipping lifer history load")
+		return nil
+	}
+
+	// Last load step; short-circuit on an already-cancelled load (shutdown
+	// during warm-up) to skip issuing one more query.
+	select {
+	case <-ctx.Done():
+		getLog().Debug("Lifer notification history load skipped: initialization cancelled")
+		return nil
+	default:
+	}
+
+	// Load notifications from past 2x suppression window to ensure coverage,
+	// mirroring loadNotificationHistoryFromDatabase's lookback.
+	lookbackTime := now.Add(-2 * liferNotificationSuppressionWindow)
+
+	getLog().Debug("Loading lifer notification history from database",
+		logger.String("lookback_time", lookbackTime.Format(time.DateTime)),
+		logger.Duration("suppression_window", liferNotificationSuppressionWindow))
+
+	histories, err := t.ds.GetActiveNotificationHistoryByType(ctx, notificationTypeLifer, lookbackTime)
+	if err != nil {
+		return errors.Newf("failed to load lifer notification history from database: %w", err).
+			Component("new-species-tracker").
+			Category(errors.CategoryDatabase).
+			Context("operation", "load_lifer_notification_history").
+			Context("lookback_time", lookbackTime.Format(time.DateTime)).
+			Build()
+	}
+
+	if t.liferNotificationLastSent == nil {
+		t.liferNotificationLastSent = make(map[string]time.Time, len(histories))
+	}
+
+	for i := range histories {
+		// GetActiveNotificationHistoryByType already filters server-side, but
+		// re-check defensively: mirrors loadNotificationHistoryFromDatabase's
+		// own client-side filter, in case a future backend implementation of
+		// the interface method doesn't filter.
+		if histories[i].NotificationType != notificationTypeLifer {
+			continue
+		}
+
+		keepLatest(t.liferNotificationLastSent, canonicalSpeciesName(histories[i].ScientificName), histories[i].LastSent)
+
+		getLog().Debug("Loaded lifer notification history",
+			logger.String("species", histories[i].ScientificName),
+			logger.String("last_sent", histories[i].LastSent.Format(time.DateTime)))
+	}
+
+	getLog().Debug("Lifer notification history loaded successfully",
+		logger.Int("notifications_loaded", len(histories)),
+		logger.Int("map_size", len(t.liferNotificationLastSent)))
 
 	return nil
 }

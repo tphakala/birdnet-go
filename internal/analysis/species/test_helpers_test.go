@@ -46,6 +46,14 @@ func createTestTrackerWithMocks(t *testing.T, settings *conf.SpeciesTrackingSett
 		Return([]datastore.NotificationHistory{}, nil).
 		Maybe() // Conditional - only called if NotificationSuppressionHours > 0
 
+	// Lifer notifications: InitFromDatabase also loads lifer suppression
+	// history independently of new-species history (see
+	// liferNotificationLastSent's doc comment).
+	mockDS.EXPECT().
+		GetActiveNotificationHistoryByType(mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).
+		Maybe() // Conditional - only called if NotificationSuppressionHours > 0
+
 	mockDS.EXPECT().
 		GetSpeciesFirstDetectionInPeriod(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil).
