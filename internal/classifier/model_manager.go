@@ -1577,13 +1577,21 @@ func (mm *ModelManager) rollbackVariant(log logger.Logger, entry *CatalogEntry, 
 	// target), keeping shared companions, so disk state matches the restored record.
 	mm.removeSupersededVariantFiles(log, entry, newVariantID, old.VariantID)
 
+	// Wrap the underlying failure(s) with %w so callers can still inspect them with
+	// errors.Is / errors.As after rollback, while the activation_error / restore_error
+	// context fields keep them readable in logs and telemetry.
 	var eb *errors.ErrorBuilder
-	if restoreErr != nil {
+	switch {
+	case restoreErr != nil:
 		// Reloading the previous variant failed too: it is not actually restored at runtime.
-		eb = errors.Newf("switched %s to variant %q but it failed to load; the previous variant %q also failed to reload (model unloaded until restart)", entry.ID, newVariantID, old.VariantID).
-			Context("restore_error", restoreErr.Error())
-	} else {
-		eb = errors.Newf("switched %s to variant %q but it failed to load; restored previous variant %q", entry.ID, newVariantID, old.VariantID)
+		eb = errors.Newf("switched %s to variant %q but it failed to load; the previous variant %q also failed to reload (model unloaded until restart): %w",
+			entry.ID, newVariantID, old.VariantID, errors.Join(cause, restoreErr))
+	case cause != nil:
+		eb = errors.Newf("switched %s to variant %q but it failed to load; restored previous variant %q: %w",
+			entry.ID, newVariantID, old.VariantID, cause)
+	default:
+		eb = errors.Newf("switched %s to variant %q but it failed to load; restored previous variant %q",
+			entry.ID, newVariantID, old.VariantID)
 	}
 	eb = eb.
 		Component("classifier.model_manager").
@@ -1593,6 +1601,9 @@ func (mm *ModelManager) rollbackVariant(log logger.Logger, entry *CatalogEntry, 
 		Context("restored_variant", old.VariantID)
 	if cause != nil {
 		eb = eb.Context("activation_error", cause.Error())
+	}
+	if restoreErr != nil {
+		eb = eb.Context("restore_error", restoreErr.Error())
 	}
 	switchErr := eb.Build()
 	mm.markFailed(entry.ID, switchErr, progress)
@@ -1980,8 +1991,9 @@ func (mm *ModelManager) downloadModelFiles(ctx context.Context, entry *CatalogEn
 	// A failed hot-load is not an install failure: the files are on disk and load on the next
 	// restart, so report the install complete and only warn about the deferred load.
 	if loadErr := mm.hotLoadAfterInstall(log, entry); loadErr != nil {
-		log.Warn("Model installed but hot-load failed (will be available after restart)",
+		log.Warn("Model installed but hot-load failed; a restart will retry loading it",
 			logger.String("catalog_id", entry.ID),
+			logger.String("registry_id", entry.RegistryID),
 			logger.Error(loadErr))
 	}
 	sendProgress(progress, entry.ID, StatusComplete)

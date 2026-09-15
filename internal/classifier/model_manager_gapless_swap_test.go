@@ -115,6 +115,7 @@ func TestReplaceVariant_LoadedSecondaryRollbackOnBuildFailure(t *testing.T) {
 	require.ErrorAs(t, err, &enhancedErr)
 	assert.Contains(t, enhancedErr.GetContext(), "activation_error", "the gapless build failure records its cause under activation_error")
 	assert.NotContains(t, enhancedErr.GetContext(), "restore_error", "a gapless build failure never attempts a restore reload")
+	require.ErrorIs(t, err, buildErr, "the build failure must stay inspectable via errors.Is")
 
 	assert.Same(t, ModelInstance(old), o.models[gaplessSecondaryID].instance, "a build failure must leave the old instance serving")
 	assert.Equal(t, int32(0), old.closes.Load(), "the old instance must not be closed on a build failure")
@@ -186,6 +187,7 @@ func TestReplaceVariant_NotLoadedRollbackReloadsPreviousVariant(t *testing.T) {
 	ctx := restoredErr.GetContext()
 	assert.Contains(t, ctx, "activation_error", "the new-variant load failure must be recorded")
 	assert.NotContains(t, ctx, "restore_error", "a successful restore must not record a restore failure")
+	require.ErrorIs(t, err, loadErr, "the activation failure must stay inspectable via errors.Is")
 
 	assert.Equal(t, int32(2), loads.Load(), "load is attempted for the new variant, then again to restore the old (reload=true)")
 	assert.Equal(t, "fp32", installedByID(t, mm, entry.ID).VariantID, "rollback must restore the old variant record")
@@ -217,11 +219,16 @@ func TestReplaceVariant_NotLoadedRollbackReportsFailedRestore(t *testing.T) {
 
 	// The loader fails on EVERY attempt: the new variant's fresh load AND the rollback
 	// reload of the previous variant, mirroring a host where neither variant can load.
+	// Distinct errors per attempt so the assertions below prove each context key carries
+	// its own error, not that both keys happened to be populated from one error.
 	var loads atomic.Int32
-	loadErr := errors.Newf("synthetic load failure").Build()
+	activationErr := errors.Newf("synthetic activation failure").Build()
+	restoreErr := errors.Newf("synthetic restore failure").Build()
 	modelLoaders[notLoadedID] = func(_ *Orchestrator, _ int) error {
-		loads.Add(1)
-		return loadErr
+		if loads.Add(1) == 1 {
+			return activationErr
+		}
+		return restoreErr
 	}
 
 	// v2.4 anchor loaded; the secondary is deliberately NOT in o.models, so replaceVariant
@@ -249,6 +256,11 @@ func TestReplaceVariant_NotLoadedRollbackReportsFailedRestore(t *testing.T) {
 	ctx := enhancedErr.GetContext()
 	assert.Contains(t, ctx, "restore_error", "the failed old-variant reload must be recorded")
 	assert.Contains(t, ctx, "activation_error", "the new-variant load failure must be recorded")
+	assert.Equal(t, activationErr.Error(), ctx["activation_error"], "activation_error must carry the new-variant load failure")
+	assert.Equal(t, restoreErr.Error(), ctx["restore_error"], "restore_error must carry the old-variant reload failure")
+	// Both underlying failures remain inspectable through the returned error chain.
+	require.ErrorIs(t, err, activationErr, "the activation failure must stay inspectable via errors.Is")
+	require.ErrorIs(t, err, restoreErr, "the restore failure must stay inspectable via errors.Is")
 
 	assert.Equal(t, int32(2), loads.Load(), "new variant load, then the restore reload, both attempted")
 	assert.False(t, o.IsModelLoaded(notLoadedID), "the model must be genuinely left unloaded")
