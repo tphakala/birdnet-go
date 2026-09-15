@@ -245,7 +245,7 @@ func TestModelManager_PrimarySwap_RollbackOnReloadFailure(t *testing.T) {
 
 	// Seed the v2.4 anchor as loaded so the swap takes the LOADED gapless path (in
 	// production the anchor is always loaded): ReloadForVariantSwap(v2.4) rebuilds from
-	// the invalid DFT payload, the build fails, and rollbackVariantSwap restores the
+	// the invalid DFT payload, the build fails, and rollbackVariant restores the
 	// baseline record and clears BirdNET.ModelPath. The mock anchor is never touched past
 	// the failed build (reloadEntry returns before the swap).
 	orch := newTestOrchestrator(t, &mockModelInstance{id: RegistryIDBirdNETV24})
