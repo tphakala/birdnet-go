@@ -3293,7 +3293,8 @@
             "none": "Nenhum",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3314,6 +3315,16 @@
             "helpText": "Selecione unidades para temperatura e velocidade do vento (m = Métrico, e = Imperial, h = Híbrido UK)."
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "Chave API do Pirate Weather",
+            "helpText": "Digite sua chave API do Pirate Weather. Necessária para dados meteorológicos."
+          },
+          "endpoint": {
+            "label": "Endpoint da API",
+            "helpText": "Substitua o endpoint padrão da API do Pirate Weather, se necessário. O padrão é https://api.pirateweather.net/forecast se deixado vazio."
+          }
+        },
         "notes": {
           "none": "Nenhum dado meteorológico será recuperado.",
           "yrno": {
@@ -3321,7 +3332,8 @@
             "freeService": "Yr é um serviço gratuito de dados meteorológicos. Para mais informações, visite <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "O uso do OpenWeather requer uma chave de API. Inscreva-se para uma chave de API gratuita em <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Requer uma chave API do Weather Underground e um ID de estação PWS válido. Veja <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> para detalhes."
+          "wunderground": "Requer uma chave API do Weather Underground e um ID de estação PWS válido. Veja <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> para detalhes.",
+          "pirateweather": "O uso do Pirate Weather requer uma chave de API, inscreva-se em <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
         },
         "apiKey": {
           "label": "Chave de API",
@@ -5103,6 +5115,7 @@
       "birdweatherClientFailed": "Não foi possível criar o cliente BirdWeather",
       "noWeatherProvider": "Nenhum fornecedor de meteorologia selecionado",
       "openWeatherKeyRequired": "A chave API do OpenWeather é obrigatória",
+      "pirateWeatherKeyRequired": "A chave API do Pirate Weather é obrigatória",
       "processorUnavailable": "Processador não disponível",
       "discoveryFailed": "Não foi possível iniciar a deteção do Home Assistant"
     },
