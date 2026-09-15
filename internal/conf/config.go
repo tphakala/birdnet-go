@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"iter"
+	"net"
 	"regexp"
 	"strings"
 	"time"
@@ -360,12 +361,13 @@ type EBirdSettings struct {
 
 // WeatherSettings contains all weather-related settings
 type WeatherSettings struct {
-	Provider      string                `yaml:"provider" json:"provider"`           // "none", "yrno", "openweather", "wunderground", or "pirateweather"
+	Provider      string                `yaml:"provider" json:"provider"`           // "none", "yrno", "openweather", "wunderground", "pirateweather", or "tempest"
 	PollInterval  int                   `yaml:"pollinterval" json:"pollInterval"`   // weather data polling interval in minutes
 	Debug         bool                  `yaml:"debug" json:"debug"`                 // true to enable debug mode
 	OpenWeather   OpenWeatherSettings   `yaml:"openweather" json:"openWeather"`     // OpenWeather integration settings
 	Wunderground  WundergroundSettings  `yaml:"wunderground" json:"wunderground"`   // WeatherUnderground integration settings
 	PirateWeather PirateWeatherSettings `yaml:"pirateweather" json:"pirateWeather"` // Pirate Weather integration settings
+	Tempest       TempestSettings       `yaml:"tempest" json:"tempest"`             // Local Tempest/WeatherFlow UDP integration settings
 }
 
 // ---------------- Notification push configuration -----------------
@@ -510,6 +512,43 @@ type OpenWeatherSettings struct {
 type PirateWeatherSettings struct {
 	APIKey   string `yaml:"apikey" json:"apiKey"`     // Pirate Weather API key
 	Endpoint string `yaml:"endpoint" json:"endpoint"` // Pirate Weather API endpoint
+}
+
+// TempestSettings contains settings for a local Tempest/WeatherFlow weather
+// station integration. Unlike the other providers, Tempest requires no API
+// key or account: observations arrive via an unauthenticated local UDP
+// broadcast (see internal/weather/provider_tempest.go), so the only
+// configurable field is which local address to listen on.
+type TempestSettings struct {
+	// ListenAddress is the local UDP address to listen on for Tempest hub
+	// broadcasts, e.g. ":50222" (all interfaces) or "192.168.1.50:50222" (a
+	// specific interface). Empty defaults to ":50222" - WeatherFlow's fixed,
+	// non-configurable broadcast port. Receiving these broadcasts requires the
+	// birdnet-go container/host to share the LAN's broadcast domain (e.g.
+	// Docker host networking or an ipvlan/macvlan network); a standard Docker
+	// bridge network will never receive them regardless of this setting.
+	ListenAddress string `yaml:"listenaddress" json:"listenAddress"`
+
+	// ExtraFields selects which Tempest sensor readings beyond the shared
+	// WeatherData fields get persisted alongside each hourly weather record
+	// (see HourlyWeather.TempestExtrasJSON). All false by default: this data
+	// is Tempest-specific and has no equivalent in the other providers, so it
+	// is opt-in per field rather than always stored.
+	ExtraFields TempestExtraFields `yaml:"extrafields" json:"extraFields"`
+}
+
+// TempestExtraFields selects which optional Tempest sensor readings to
+// persist. Every field maps 1:1 to a UI checkbox (see the Settings weather
+// page); this data is purely local (read from the on-network hub's own UDP
+// broadcast) and is never uploaded anywhere, including BirdWeather - which
+// has no weather-upload capability at all, only soundscapes and detections.
+type TempestExtraFields struct {
+	Illuminance       bool `yaml:"illuminance" json:"illuminance"`
+	UVIndex           bool `yaml:"uvindex" json:"uvIndex"`
+	SolarRadiation    bool `yaml:"solarradiation" json:"solarRadiation"`
+	LightningDistance bool `yaml:"lightningdistance" json:"lightningDistance"`
+	LightningCount    bool `yaml:"lightningcount" json:"lightningCount"`
+	WindLull          bool `yaml:"windlull" json:"windLull"`
 }
 
 // PrivacyFilterSettings contains settings for the privacy filter.
@@ -2063,6 +2102,7 @@ const (
 	WeatherOpenWeather   WeatherProvider = "openweather"
 	WeatherWunderground  WeatherProvider = "wunderground"
 	WeatherPirateWeather WeatherProvider = "pirateweather"
+	WeatherTempest       WeatherProvider = "tempest"
 )
 
 // Prefer explicit settings return to avoid confusion at call sites.
@@ -2075,6 +2115,8 @@ func (s *Settings) GetWeatherProvider() (provider WeatherProvider, settings any)
 		return WeatherWunderground, s.Realtime.Weather.Wunderground
 	case string(WeatherPirateWeather):
 		return WeatherPirateWeather, s.Realtime.Weather.PirateWeather
+	case string(WeatherTempest):
+		return WeatherTempest, s.Realtime.Weather.Tempest
 	case string(WeatherYrNo), string(WeatherNone):
 		return WeatherProvider(p), nil
 	default:
@@ -2102,6 +2144,20 @@ func (w *WundergroundSettings) ValidateWunderground() error {
 func (p *PirateWeatherSettings) ValidatePirateWeather() error {
 	if p.APIKey == "" {
 		return fmt.Errorf("pirateweather.apiKey is required when provider is pirateweather")
+	}
+	return nil
+}
+
+// ValidateTempest validates Tempest settings when the provider is "tempest".
+// Tempest requires no credentials (see TempestSettings), so this only checks
+// that a non-empty ListenAddress is a well-formed host:port pair; an empty
+// value is valid and defaults to ":50222" at the provider layer.
+func (t *TempestSettings) ValidateTempest() error {
+	if t.ListenAddress == "" {
+		return nil
+	}
+	if _, _, err := net.SplitHostPort(t.ListenAddress); err != nil {
+		return fmt.Errorf("tempest.listenAddress must be a valid host:port, got %q: %w", t.ListenAddress, err)
 	}
 	return nil
 }

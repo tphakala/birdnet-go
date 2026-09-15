@@ -7,6 +7,7 @@
 package weather
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
+	"github.com/tphakala/birdnet-go/internal/weather"
 	"gorm.io/gorm"
 )
 
@@ -81,23 +83,24 @@ type dailyWeatherResponse struct {
 
 // hourlyWeatherResponse represents the API response for hourly weather data
 type hourlyWeatherResponse struct {
-	Time              string  `json:"time"`
-	Temperature       float64 `json:"temperature"`
-	FeelsLike         float64 `json:"feels_like"`
-	TempMin           float64 `json:"temp_min,omitempty"`
-	TempMax           float64 `json:"temp_max,omitempty"`
-	Pressure          int     `json:"pressure,omitempty"`
-	Humidity          int     `json:"humidity,omitempty"`
-	Visibility        int     `json:"visibility,omitempty"`
-	WindSpeed         float64 `json:"wind_speed,omitempty"`
-	WindDeg           int     `json:"wind_deg,omitempty"`
-	WindGust          float64 `json:"wind_gust,omitempty"`
-	Clouds            int     `json:"clouds,omitempty"`
-	Precipitation     float64 `json:"precipitation,omitempty"`
-	PrecipitationType string  `json:"precipitation_type,omitempty"`
-	WeatherMain       string  `json:"weather_main,omitempty"`
-	WeatherDesc       string  `json:"weather_desc,omitempty"`
-	WeatherIcon       string  `json:"weather_icon,omitempty"`
+	Time              string                 `json:"time"`
+	Temperature       float64                `json:"temperature"`
+	FeelsLike         float64                `json:"feels_like"`
+	TempMin           float64                `json:"temp_min,omitempty"`
+	TempMax           float64                `json:"temp_max,omitempty"`
+	Pressure          int                    `json:"pressure,omitempty"`
+	Humidity          int                    `json:"humidity,omitempty"`
+	Visibility        int                    `json:"visibility,omitempty"`
+	WindSpeed         float64                `json:"wind_speed,omitempty"`
+	WindDeg           int                    `json:"wind_deg,omitempty"`
+	WindGust          float64                `json:"wind_gust,omitempty"`
+	Clouds            int                    `json:"clouds,omitempty"`
+	Precipitation     float64                `json:"precipitation,omitempty"`
+	PrecipitationType string                 `json:"precipitation_type,omitempty"`
+	WeatherMain       string                 `json:"weather_main,omitempty"`
+	WeatherDesc       string                 `json:"weather_desc,omitempty"`
+	WeatherIcon       string                 `json:"weather_icon,omitempty"`
+	TempestExtras     *tempestExtrasResponse `json:"tempest_extras,omitempty"`
 }
 
 // detectionWeatherResponse represents weather data associated with a detection
@@ -113,6 +116,21 @@ type moonResponse struct {
 	PhaseName    string  `json:"phase_name"`   // e.g. "Full Moon"
 	Illumination float64 `json:"illumination"` // 0-100 percentage
 	IconName     string  `json:"icon_name"`    // Basmilius icon name e.g. "moon-full"
+}
+
+// tempestExtrasResponse exposes the Tempest sensor readings the user has
+// opted into persisting (see conf.TempestExtraFields). Fields the user hasn't
+// checked are simply absent (nil) rather than a misleading zero. The JSON
+// shape matches weather.TempestExtras's on-disk encoding exactly, so a
+// persisted HourlyWeather.TempestExtrasJSON value unmarshals directly into
+// this struct with no extra translation step.
+type tempestExtrasResponse struct {
+	Illuminance       *float64 `json:"illuminance,omitempty"`        // lux
+	UVIndex           *float64 `json:"uv_index,omitempty"`           // index
+	SolarRadiation    *float64 `json:"solar_radiation,omitempty"`    // W/m^2
+	LightningDistance *float64 `json:"lightning_distance,omitempty"` // average strike distance, km
+	LightningCount    *int     `json:"lightning_count,omitempty"`    // strikes in the report interval
+	WindLull          *float64 `json:"wind_lull,omitempty"`          // m/s
 }
 
 // buildDailyWeatherResponse creates a dailyWeatherResponse from a DailyEvents struct
@@ -475,7 +493,7 @@ func (c *Handler) findClosestHourlyWeather(detectionTime time.Time, hourlyWeathe
 
 // buildHourlyWeatherResponse creates an hourlyWeatherResponse from an HourlyWeather struct
 func (c *Handler) buildHourlyWeatherResponse(hw *datastore.HourlyWeather) hourlyWeatherResponse {
-	return hourlyWeatherResponse{
+	resp := hourlyWeatherResponse{
 		Time:              hw.Time.In(time.Local).Format(time.TimeOnly),
 		Temperature:       hw.Temperature,
 		FeelsLike:         hw.FeelsLike,
@@ -494,6 +512,17 @@ func (c *Handler) buildHourlyWeatherResponse(hw *datastore.HourlyWeather) hourly
 		WeatherDesc:       hw.WeatherDesc,
 		WeatherIcon:       hw.WeatherIcon,
 	}
+
+	if hw.TempestExtrasJSON != nil {
+		var extras tempestExtrasResponse
+		if err := json.Unmarshal([]byte(*hw.TempestExtrasJSON), &extras); err != nil {
+			c.LogWarnIfEnabled("Failed to parse persisted Tempest extras", logger.Error(err))
+		} else {
+			resp.TempestExtras = &extras
+		}
+	}
+
+	return resp
 }
 
 // GetLatestWeather handles GET /api/v2/weather/latest
@@ -520,14 +549,32 @@ func (c *Handler) GetLatestWeather(ctx echo.Context) error {
 
 	// Build response with hourly data
 	response := struct {
-		Daily  *dailyWeatherResponse `json:"daily"`
-		Hourly hourlyWeatherResponse `json:"hourly"`
-		Moon   *moonResponse         `json:"moon,omitempty"`
-		Time   string                `json:"timestamp"`
+		Daily         *dailyWeatherResponse  `json:"daily"`
+		Hourly        hourlyWeatherResponse  `json:"hourly"`
+		Moon          *moonResponse          `json:"moon,omitempty"`
+		Time          string                 `json:"timestamp"`
+		TempestExtras *tempestExtrasResponse `json:"tempest_extras,omitempty"`
 	}{
 		Daily:  nil, // Will be populated if available
 		Hourly: c.buildHourlyWeatherResponse(latestWeather),
 		Time:   latestWeather.Time.Format(time.RFC3339),
+	}
+
+	// Tempest sensor extras (illuminance, UV, solar radiation, lightning) have
+	// no datastore column: they're only available live from the running
+	// service's provider cache, and only when Tempest is the active provider
+	// and has received at least one broadcast. Filtered to the same fields
+	// the user has opted into persisting (conf.TempestExtraFields), so the
+	// live "current conditions" view and the persisted historical view never
+	// disagree about which extras are exposed.
+	if extras, ok := weather.GetTempestExtras(); ok {
+		fields := c.CurrentSettings().Realtime.Weather.Tempest.ExtraFields
+		if extrasJSON, jsonErr := extras.SelectedJSON(fields); jsonErr == nil && extrasJSON != nil {
+			var filtered tempestExtrasResponse
+			if unmarshalErr := json.Unmarshal([]byte(*extrasJSON), &filtered); unmarshalErr == nil {
+				response.TempestExtras = &filtered
+			}
+		}
 	}
 
 	// Try to get daily weather data for this date

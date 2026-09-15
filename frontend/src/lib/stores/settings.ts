@@ -469,13 +469,30 @@ export interface PirateWeatherSettings {
   endpoint: string;
 }
 
+export interface TempestSettings {
+  // Local UDP address to listen on for Tempest hub broadcasts, e.g. ":50222".
+  // Empty defaults to ":50222", WeatherFlow's fixed broadcast port.
+  listenAddress: string;
+  extraFields: TempestExtraFields;
+}
+
+export interface TempestExtraFields {
+  illuminance: boolean;
+  uvIndex: boolean;
+  solarRadiation: boolean;
+  lightningDistance: boolean;
+  lightningCount: boolean;
+  windLull: boolean;
+}
+
 export interface WeatherSettings {
-  provider: 'none' | 'yrno' | 'openweather' | 'wunderground' | 'pirateweather';
+  provider: 'none' | 'yrno' | 'openweather' | 'wunderground' | 'pirateweather' | 'tempest';
   pollInterval: number;
   debug: boolean;
   openWeather: OpenWeatherSettings;
   wunderground: WundergroundSettings;
   pirateWeather: PirateWeatherSettings;
+  tempest: TempestSettings;
 }
 
 // New array-based OAuth provider configuration

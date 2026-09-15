@@ -23,9 +23,16 @@
   import OpenWeatherIcon from '$lib/assets/icons/weather/openweather.svg?raw';
   import WundergroundIcon from '$lib/assets/icons/weather/wunderground.svg?raw';
   import PirateWeatherIcon from '$lib/assets/icons/weather/pirateweather.svg?raw';
+  import TempestIcon from '$lib/assets/icons/weather/tempest.svg?raw';
 
   // Weather provider type definition
-  export type WeatherProvider = 'none' | 'yrno' | 'openweather' | 'wunderground' | 'pirateweather';
+  export type WeatherProvider =
+    | 'none'
+    | 'yrno'
+    | 'openweather'
+    | 'wunderground'
+    | 'pirateweather'
+    | 'tempest';
 
   interface Props extends HTMLAttributes<HTMLElement> {
     provider: WeatherProvider;
@@ -41,6 +48,7 @@
     openweather: OpenWeatherIcon,
     wunderground: WundergroundIcon,
     pirateweather: PirateWeatherIcon,
+    tempest: TempestIcon,
   };
 
   // Runtime type guard to satisfy static analysis (object injection sink warning)

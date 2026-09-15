@@ -162,6 +162,14 @@ type HourlyWeather struct {
 	// GORM model neither migrates nor reads/writes these columns.
 	Precipitation     float64 `gorm:"-"` // Precipitation amount in mm
 	PrecipitationType string  `gorm:"-"` // "rain", "snow", "sleet", or ""
+
+	// TempestExtrasJSON carries the user-selected subset of Tempest sensor
+	// readings (see conf.TempestExtraFields) as a JSON-encoded string. Like
+	// Precipitation above, it's transport-only here (gorm:"-") and only
+	// really persisted on the v2 hourly_weathers schema; nil for every
+	// provider except Tempest, and nil even for Tempest if no extra field is
+	// selected for persistence.
+	TempestExtrasJSON *string `gorm:"-"`
 }
 
 // ImageCache represents cached image metadata for species

@@ -933,11 +933,7 @@
         },
         "type": {
           "type": "string",
-          "description": "audio file type: wav, flac, aac, opus or mp3"
-        },
-        "ultrasonictype": {
-          "type": "string",
-          "description": "wav or flac only; used for bat/ultrasonic captures above 48 kHz"
+          "description": "audio file type, wav, mp3 or flac"
         },
         "bitrate": {
           "type": "string",
@@ -1298,9 +1294,12 @@
           "type": "string",
           "description": "base directory for downloaded model files"
         },
-        "autoenablemigrated": {
-          "type": "boolean",
-          "description": "AutoEnableMigrated is an internal marker recording that the classifier's one-shot legacy\nmodel auto-enable has run for this config file, so it never re-runs. Do not edit by hand;\na managed read-only config may set it true (with configversion: 2) to keep an explicit\nmodels.enabled from being re-seeded. Set by the classifier; hidden from the JSON API; the\ncompanion-marker rationale (why not ConfigVersion) lives in internal/conf/migrations.go."
+        "installed": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "list of installed model IDs managed by the model gallery"
         }
       },
       "additionalProperties": false,
@@ -1527,21 +1526,6 @@
       "additionalProperties": false,
       "type": "object",
       "description": "PerchConfig holds configuration for the Google Perch v2 model."
-    },
-    "PirateWeatherSettings": {
-      "properties": {
-        "apikey": {
-          "type": "string",
-          "description": "Pirate Weather API key"
-        },
-        "endpoint": {
-          "type": "string",
-          "description": "Pirate Weather API endpoint"
-        }
-      },
-      "additionalProperties": false,
-      "type": "object",
-      "description": "PirateWeatherSettings contains settings for Pirate Weather integration."
     },
     "PrivacyFilterSettings": {
       "properties": {
@@ -2208,10 +2192,6 @@
           "type": "boolean",
           "description": "true to enable debug mode"
         },
-        "configversion": {
-          "type": "integer",
-          "description": "ConfigVersion records the newest one-shot config migration applied to this file.\nIt is managed automatically by config loading and should not be edited by hand;\nit lets a migration whose precondition cannot be recovered from the data itself\nrun exactly once (see MigrateSourceTargetDefaults). Hidden from the settings API\nand preserved across saves by CloneSettings, so writers never drop it."
-        },
         "logging": {
           "$ref": "#/$defs/LoggingConfig",
           "description": "Logging configuration"
@@ -2627,6 +2607,46 @@
       "type": "object",
       "description": "TelemetrySettings contains settings for telemetry."
     },
+    "TempestExtraFields": {
+      "properties": {
+        "illuminance": {
+          "type": "boolean"
+        },
+        "uvindex": {
+          "type": "boolean"
+        },
+        "solarradiation": {
+          "type": "boolean"
+        },
+        "lightningdistance": {
+          "type": "boolean"
+        },
+        "lightningcount": {
+          "type": "boolean"
+        },
+        "windlull": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "TempestExtraFields selects which optional Tempest sensor readings to persist."
+    },
+    "TempestSettings": {
+      "properties": {
+        "listenaddress": {
+          "type": "string",
+          "description": "ListenAddress is the local UDP address to listen on for Tempest hub\nbroadcasts, e.g. \":50222\" (all interfaces) or \"192.168.1.50:50222\" (a\nspecific interface). Empty defaults to \":50222\" - WeatherFlow's fixed,\nnon-configurable broadcast port. Receiving these broadcasts requires the\nbirdnet-go container/host to share the LAN's broadcast domain (e.g.\nDocker host networking or an ipvlan/macvlan network); a standard Docker\nbridge network will never receive them regardless of this setting."
+        },
+        "extrafields": {
+          "$ref": "#/$defs/TempestExtraFields",
+          "description": "ExtraFields selects which Tempest sensor readings beyond the shared\nWeatherData fields get persisted alongside each hourly weather record\n(see HourlyWeather.TempestExtrasJSON). All false by default: this data\nis Tempest-specific and has no equivalent in the other providers, so it\nis opt-in per field rather than always stored."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "TempestSettings contains settings for a local Tempest/WeatherFlow weather station integration."
+    },
     "Thumbnails": {
       "properties": {
         "debug": {
@@ -2749,7 +2769,7 @@
       "properties": {
         "provider": {
           "type": "string",
-          "description": "\"none\", \"yrno\", \"openweather\", \"wunderground\", or \"pirateweather\""
+          "description": "\"none\", \"yrno\", \"openweather\", \"wunderground\", or \"tempest\""
         },
         "pollinterval": {
           "type": "integer",
@@ -2767,9 +2787,9 @@
           "$ref": "#/$defs/WundergroundSettings",
           "description": "WeatherUnderground integration settings"
         },
-        "pirateweather": {
-          "$ref": "#/$defs/PirateWeatherSettings",
-          "description": "Pirate Weather integration settings"
+        "tempest": {
+          "$ref": "#/$defs/TempestSettings",
+          "description": "Local Tempest/WeatherFlow UDP integration settings"
         }
       },
       "additionalProperties": false,

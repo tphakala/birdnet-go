@@ -286,7 +286,7 @@ func validateDashboardSettings(settings *Dashboard) error {
 }
 
 // validWeatherProviders contains all recognized weather provider values.
-var validWeatherProviders = []string{"none", "yrno", "openweather", "wunderground", "pirateweather"} //nolint:goconst // weather-provider value, not the RetentionPolicyNone constant
+var validWeatherProviders = []string{"none", "yrno", "openweather", "wunderground", "pirateweather", "tempest"} //nolint:goconst // weather-provider value, not the RetentionPolicyNone constant
 
 // validateWeatherSettings validates weather-specific settings
 func validateWeatherSettings(settings *WeatherSettings) error {
@@ -332,6 +332,16 @@ func validateWeatherSettings(settings *WeatherSettings) error {
 			return errors.New(err).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "pirateweather-settings").
+				Build()
+		}
+	}
+
+	// Validate Tempest settings if it's the selected provider
+	if settings.Provider == "tempest" {
+		if err := settings.Tempest.ValidateTempest(); err != nil {
+			return errors.New(err).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "tempest-settings").
 				Build()
 		}
 	}

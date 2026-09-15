@@ -41,6 +41,7 @@ const (
 	WeatherProviderWunderground  = "wunderground"
 	WeatherProviderYrno          = "yrno"
 	WeatherProviderPirateWeather = "pirateweather"
+	WeatherProviderTempest       = "tempest"
 )
 
 // Integration constants (file-local)
@@ -50,6 +51,14 @@ const (
 	integrationMediumTimeout  = 20  // Medium timeout in seconds
 	integrationLongTimeout    = 30  // Long timeout in seconds
 	integrationStageDelay     = 200 // Delay between stages in milliseconds
+
+	// tempestListenWaitTimeout bounds how long the weather test's "fetch"
+	// stage waits for a live UDP broadcast when probing a not-yet-running
+	// Tempest listener. Deliberately shorter than obs_st's ~60s broadcast
+	// interval (waiting a full interval would eat most of the shared 30s
+	// integrationLongTimeout test budget); the stage message says so
+	// explicitly, since "no packet in N seconds" isn't proof of a problem.
+	tempestListenWaitTimeout = 15 * time.Second
 )
 
 // Handler serves the integrations domain endpoints. It embeds *apicore.Core BY
@@ -595,6 +604,7 @@ type WeatherTestRequest struct {
 	OpenWeather   conf.OpenWeatherSettings   `json:"openWeather"`
 	Wunderground  conf.WundergroundSettings  `json:"wunderground"`
 	PirateWeather conf.PirateWeatherSettings `json:"pirateWeather"`
+	Tempest       conf.TempestSettings       `json:"tempest"`
 }
 
 // WeatherTestStage represents the result of a weather test stage
@@ -651,6 +661,7 @@ func (c *Handler) TestWeatherConnection(ctx echo.Context) error {
 		OpenWeather:   request.OpenWeather,
 		Wunderground:  request.Wunderground,
 		PirateWeather: request.PirateWeather,
+		Tempest:       request.Tempest,
 	}
 
 	// Create test context with timeout
@@ -748,6 +759,11 @@ func (c *Handler) testWeatherAPIConnectivity(ctx context.Context, settings *conf
 		testURL = "https://api.weather.com"
 	case WeatherProviderPirateWeather:
 		testURL = "https://api.pirateweather.net"
+	case WeatherProviderTempest:
+		// Tempest has no HTTP API to reach; it's a local UDP broadcast, so
+		// "connectivity" here means checking the listen port instead of an
+		// outbound request.
+		return c.testTempestConnectivity(settings)
 	default:
 		return "", fmt.Errorf("unsupported weather provider: %s", provider)
 	}
@@ -772,11 +788,28 @@ func (c *Handler) testWeatherAPIConnectivity(ctx context.Context, settings *conf
 	return fmt.Sprintf("Successfully connected to %s API", getProviderDisplayName(provider)), nil
 }
 
+// testTempestConnectivity checks whether Tempest's fixed local UDP port can
+// be bound, without leaving anything listening. A port already in use is
+// treated as a healthy sign (most likely the running Service's own Tempest
+// listener already owns it), not a failure.
+func (c *Handler) testTempestConnectivity(settings *conf.Settings) (string, error) {
+	busy, err := weather.CheckTempestListenAddress(settings.Realtime.Weather.Tempest.ListenAddress)
+	if err != nil {
+		return "", fmt.Errorf("cannot listen for Tempest broadcasts: %w", err)
+	}
+	if busy {
+		return "UDP port already in use, most likely by the running Tempest listener - assuming reachable", nil
+	}
+	return "UDP port is available and bindable", nil
+}
+
 // testWeatherAuthentication tests authentication with the weather API
 func (c *Handler) testWeatherAuthentication(ctx context.Context, settings *conf.Settings) (string, error) {
 	provider := settings.Realtime.Weather.Provider
 
 	switch provider {
+	case WeatherProviderTempest:
+		return "Authentication not required for Tempest (local broadcast, no credentials)", nil
 	case WeatherProviderOpenWeather:
 		apiKey := settings.Realtime.Weather.OpenWeather.APIKey
 		endpoint := settings.Realtime.Weather.OpenWeather.Endpoint
@@ -865,6 +898,10 @@ func (c *Handler) testWeatherAuthentication(ctx context.Context, settings *conf.
 
 // testWeatherDataFetch tests fetching actual weather data
 func (c *Handler) testWeatherDataFetch(ctx context.Context, settings *conf.Settings) (string, error) {
+	if settings.Realtime.Weather.Provider == WeatherProviderTempest {
+		return c.testTempestDataFetch(ctx, settings)
+	}
+
 	// Inject the SSRF-guarded client so a user-configured OpenWeather/Wunderground
 	// endpoint cannot be pointed at link-local / cloud-metadata targets during the
 	// data-fetch test. Matches the guarded client the running service uses.
@@ -902,6 +939,27 @@ func (c *Handler) testWeatherDataFetch(ctx context.Context, settings *conf.Setti
 		weatherData.Description), nil
 }
 
+// testTempestDataFetch waits for the running weather service's existing UDP
+// listener to cache a live Tempest broadcast. It must not bind another socket:
+// the service already owns the configured port while Tempest is active.
+func (c *Handler) testTempestDataFetch(ctx context.Context, settings *conf.Settings) (string, error) {
+	waitFor := tempestListenWaitTimeout
+	if deadline, ok := ctx.Deadline(); ok {
+		if remaining := time.Until(deadline); remaining < waitFor {
+			waitFor = remaining
+		}
+	}
+
+	data, err := weather.WaitForTempestObservation(ctx, settings, waitFor)
+	if err != nil {
+		return "", fmt.Errorf("no Tempest broadcast received by the running listener within %s (Tempest broadcasts roughly every 60s, so this does not necessarily indicate a problem - verify the container's networking mode and retry): %w",
+			waitFor.Round(time.Second), err)
+	}
+
+	return fmt.Sprintf("Received a live Tempest observation: temperature %.1f°C, wind %.1f m/s",
+		data.Temperature.Current, data.Wind.Speed), nil
+}
+
 // getProviderDisplayName returns a user-friendly name for the weather provider
 func getProviderDisplayName(provider string) string {
 	switch provider {
@@ -913,6 +971,8 @@ func getProviderDisplayName(provider string) string {
 		return "Weather Underground"
 	case WeatherProviderPirateWeather:
 		return "Pirate Weather"
+	case WeatherProviderTempest:
+		return "Tempest"
 	default:
 		// Simple capitalization for unknown providers
 		if provider != "" {

@@ -1,0 +1,18 @@
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <!-- Tempest (local Tempest/WeatherFlow UDP provider) - original abstract
+       weather-station design, not a reproduction of WeatherFlow's logo -->
+  <defs>
+    <linearGradient id="tempestGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2DD4BF"/>
+      <stop offset="100%" style="stop-color:#0EA5E9"/>
+    </linearGradient>
+  </defs>
+  <!-- Station mast -->
+  <rect x="11.25" y="10" width="1.5" height="10" rx="0.75" fill="url(#tempestGrad)"/>
+  <!-- Station base -->
+  <path d="M8 20h8" stroke="url(#tempestGrad)" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Disc sensor head -->
+  <circle cx="12" cy="7" r="5" fill="url(#tempestGrad)"/>
+  <!-- Lightning bolt accent (lightning-sensing capability) -->
+  <path d="M12.8 4.2 10.4 7.6h1.6l-0.8 2.6 2.6-3.6h-1.6z" fill="white"/>
+</svg>

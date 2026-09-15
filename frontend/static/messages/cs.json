@@ -947,7 +947,10 @@
         "wind": "Vítr",
         "humidity": "Vlhkost",
         "pressure": "Tlak",
-        "cloudCover": "Oblačnost"
+        "cloudCover": "Oblačnost",
+        "uvIndex": "UV Index",
+        "lightningDistance": "Average lightning strike distance",
+        "lightningCount": "{count} lightning strike(s)"
       },
       "units": {
         "temperature": "°C",
@@ -3333,7 +3336,8 @@
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
             "wunderground": "Weather Underground",
-            "pirateweather": "Pirate Weather"
+            "pirateweather": "Pirate Weather",
+            "tempest": "Tempest (local)"
           }
         },
         "wunderground": {
@@ -3372,7 +3376,9 @@
           },
           "openweather": "Použití OpenWeather vyžaduje API klíč, zaregistrujte se pro bezplatný API klíč na <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
           "wunderground": "Vyžaduje API klíč Weather Underground a platné ID stanice PWS. Podrobnosti najdete na <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a>.",
-          "pirateweather": "Použití Pirate Weather vyžaduje API klíč, zaregistrujte se na <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
+          "pirateweather": "Použití Pirate Weather vyžaduje API klíč, zaregistrujte se na <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>.",
+          "tempest": "Reads live observations broadcast locally over UDP by a Tempest/WeatherFlow weather station on your network. No API key, account, or internet connection required.",
+          "tempestNetworking": "Requires the birdnet-go container to share your LAN's broadcast domain (e.g. Docker <code>host</code> networking or an ipvlan/macvlan network such as Unraid's <code>br0</code>). A standard Docker bridge network will never receive these broadcasts, regardless of this setting."
         },
         "apiKey": {
           "label": "API klíč",
@@ -3401,6 +3407,23 @@
           "options": {
             "celsius": "Stupně Celsia (°C)",
             "fahrenheit": "Stupně Fahrenheita (°F)"
+          }
+        },
+        "tempest": {
+          "listenAddress": {
+            "label": "UDP Listen Address",
+            "helpText": "Local UDP address to listen on for Tempest hub broadcasts. Leave empty to use the default \":50222\" (WeatherFlow's fixed broadcast port)."
+          },
+          "extraFields": {
+            "title": "Doplňkové údaje stanice",
+            "description": "Vyberte, která měření specifická pro Tempest se mají ukládat s každým záznamem počasí.",
+            "illuminance": "Intenzita osvětlení",
+            "uvIndex": "UV index",
+            "solarRadiation": "Sluneční záření",
+            "lightningDistance": "Vzdálenost blesku",
+            "lightningCount": "Počet úderů blesku",
+            "windLull": "Minimální rychlost větru",
+            "localOnly": "Tyto hodnoty pocházejí přímo z vašeho místního centra Tempest a zůstávají v BirdNET-Go. Nikdy se neodesílají do BirdWeather ani do jiné meteorologické služby."
           }
         }
       },

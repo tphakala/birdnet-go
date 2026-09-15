@@ -42,6 +42,7 @@
     birdnetSettings,
     outputSettings,
     realtimeSettings,
+    type TempestExtraFields,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
@@ -61,6 +62,7 @@
     wundergroundDefaults,
     pirateWeatherDefaults,
     weatherDefaults,
+    tempestDefaults,
   } from '$lib/utils/weatherDefaults';
   import {
     MAP_CONFIG,
@@ -810,7 +812,13 @@
     settingsActions.updateSection('realtime', {
       weather: {
         ...settings.weather,
-        provider: provider as 'none' | 'yrno' | 'openweather' | 'wunderground' | 'pirateweather',
+        provider: provider as
+          | 'none'
+          | 'yrno'
+          | 'openweather'
+          | 'wunderground'
+          | 'pirateweather'
+          | 'tempest',
       },
     });
   }
@@ -845,6 +853,52 @@
     });
   }
 
+  function updateTempestSetting(key: keyof typeof tempestDefaults, value: string) {
+    settingsActions.updateSection('realtime', {
+      weather: {
+        ...settings.weather,
+        tempest: {
+          ...(settings.weather?.tempest ?? tempestDefaults),
+          [key]: value,
+        },
+      },
+    });
+  }
+
+  function updateTempestExtraField(key: keyof TempestExtraFields, value: boolean) {
+    settingsActions.updateSection('realtime', {
+      weather: {
+        ...settings.weather,
+        tempest: {
+          ...(settings.weather?.tempest ?? tempestDefaults),
+          extraFields: {
+            ...(settings.weather?.tempest?.extraFields ?? tempestDefaults.extraFields),
+            [key]: value,
+          },
+        },
+      },
+    });
+  }
+
+  function setAllTempestExtraFields(value: boolean) {
+    settingsActions.updateSection('realtime', {
+      weather: {
+        ...settings.weather,
+        tempest: {
+          ...(settings.weather?.tempest ?? tempestDefaults),
+          extraFields: {
+            illuminance: value,
+            uvIndex: value,
+            solarRadiation: value,
+            lightningDistance: value,
+            lightningCount: value,
+            windLull: value,
+          },
+        },
+      },
+    });
+  }
+
   // Weather test function
   async function testWeather() {
     weatherTestState.isRunning = true;
@@ -874,6 +928,10 @@
         pirateWeather: {
           apiKey: currentWeather.pirateWeather?.apiKey ?? '',
           endpoint: currentWeather.pirateWeather?.endpoint ?? '',
+        },
+        tempest: {
+          listenAddress: currentWeather.tempest?.listenAddress ?? '',
+          extraFields: currentWeather.tempest?.extraFields ?? tempestDefaults.extraFields,
         },
       };
 
@@ -1237,6 +1295,11 @@
               label: t('settings.integration.weather.provider.options.pirateweather'),
               providerCode: 'pirateweather',
             },
+            {
+              value: 'tempest',
+              label: t('settings.integration.weather.provider.options.tempest'),
+              providerCode: 'tempest',
+            },
           ] as WeatherOption[]}
           value={settings.weather.provider}
           label={t('settings.integration.weather.provider.label')}
@@ -1350,6 +1413,96 @@
               disabled={store.isLoading || store.isSaving}
             />
           </div>
+        {:else if settings.weather.provider === 'tempest'}
+          <SettingsNote>
+            <span>{@html t('settings.integration.weather.notes.tempest')}</span>
+          </SettingsNote>
+          <SettingsNote className="border border-[var(--color-warning)]">
+            <span>{@html t('settings.integration.weather.notes.tempestNetworking')}</span>
+          </SettingsNote>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <TextInput
+              label={t('settings.integration.weather.tempest.listenAddress.label')}
+              value={settings.weather.tempest?.listenAddress ?? ''}
+              onchange={listenAddress => updateTempestSetting('listenAddress', listenAddress)}
+              placeholder=":50222"
+              helpText={t('settings.integration.weather.tempest.listenAddress.helpText')}
+              disabled={store.isLoading || store.isSaving}
+            />
+          </div>
+
+          <div class="space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h4 class="font-medium">
+                  {t('settings.integration.weather.tempest.extraFields.title')}
+                </h4>
+                <p class="text-sm text-[var(--color-base-content)] opacity-70">
+                  {t('settings.integration.weather.tempest.extraFields.description')}
+                </p>
+              </div>
+              <div class="flex gap-2">
+                <SettingsButton
+                  variant="ghost"
+                  onclick={() => setAllTempestExtraFields(true)}
+                  disabled={store.isLoading || store.isSaving}
+                >
+                  {t('common.ui.selectAll')}
+                </SettingsButton>
+                <SettingsButton
+                  variant="ghost"
+                  onclick={() => setAllTempestExtraFields(false)}
+                  disabled={store.isLoading || store.isSaving}
+                >
+                  {t('common.ui.selectNone')}
+                </SettingsButton>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
+              <Checkbox
+                checked={settings.weather.tempest?.extraFields?.illuminance ?? false}
+                label={t('settings.integration.weather.tempest.extraFields.illuminance')}
+                disabled={store.isLoading || store.isSaving}
+                onchange={value => updateTempestExtraField('illuminance', value)}
+              />
+              <Checkbox
+                checked={settings.weather.tempest?.extraFields?.uvIndex ?? false}
+                label={t('settings.integration.weather.tempest.extraFields.uvIndex')}
+                disabled={store.isLoading || store.isSaving}
+                onchange={value => updateTempestExtraField('uvIndex', value)}
+              />
+              <Checkbox
+                checked={settings.weather.tempest?.extraFields?.solarRadiation ?? false}
+                label={t('settings.integration.weather.tempest.extraFields.solarRadiation')}
+                disabled={store.isLoading || store.isSaving}
+                onchange={value => updateTempestExtraField('solarRadiation', value)}
+              />
+              <Checkbox
+                checked={settings.weather.tempest?.extraFields?.lightningDistance ?? false}
+                label={t('settings.integration.weather.tempest.extraFields.lightningDistance')}
+                disabled={store.isLoading || store.isSaving}
+                onchange={value => updateTempestExtraField('lightningDistance', value)}
+              />
+              <Checkbox
+                checked={settings.weather.tempest?.extraFields?.lightningCount ?? false}
+                label={t('settings.integration.weather.tempest.extraFields.lightningCount')}
+                disabled={store.isLoading || store.isSaving}
+                onchange={value => updateTempestExtraField('lightningCount', value)}
+              />
+              <Checkbox
+                checked={settings.weather.tempest?.extraFields?.windLull ?? false}
+                label={t('settings.integration.weather.tempest.extraFields.windLull')}
+                disabled={store.isLoading || store.isSaving}
+                onchange={value => updateTempestExtraField('windLull', value)}
+              />
+            </div>
+          </div>
+
+          <SettingsNote>
+            <span>{t('settings.integration.weather.tempest.extraFields.localOnly')}</span>
+          </SettingsNote>
         {/if}
 
         {#if settings.weather.provider !== 'none'}

@@ -21,10 +21,14 @@ type HourlyWeather struct {
 	WindDeg           int
 	WindGust          float64
 	Clouds            int
-	Precipitation     float64   // Precipitation amount in mm for the observation window
-	PrecipitationType string    `gorm:"size:20"` // "rain", "snow", "sleet", or "" when none
-	WeatherMain       string    `gorm:"size:50"`
-	WeatherDesc       string    `gorm:"size:200"`
-	WeatherIcon       string    `gorm:"size:20"`
+	Precipitation     float64 // Precipitation amount in mm for the observation window
+	PrecipitationType string  `gorm:"size:20"` // "rain", "snow", "sleet", or "" when none
+	WeatherMain       string  `gorm:"size:50"`
+	WeatherDesc       string  `gorm:"size:200"`
+	WeatherIcon       string  `gorm:"size:20"`
+	// TempestExtrasJSON holds the user-selected subset of Tempest sensor
+	// readings (see conf.TempestExtraFields) as a JSON string. NULL for every
+	// non-Tempest provider, and NULL for Tempest too when nothing is selected.
+	TempestExtrasJSON *string   `gorm:"type:text"`
 	CreatedAt         time.Time `gorm:"autoCreateTime"`
 }

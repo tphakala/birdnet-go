@@ -947,7 +947,10 @@
         "wind": "Wind",
         "humidity": "Humidity",
         "pressure": "Pressure",
-        "cloudCover": "Cloud Cover"
+        "cloudCover": "Cloud Cover",
+        "uvIndex": "UV Index",
+        "lightningDistance": "Average lightning strike distance",
+        "lightningCount": "{count} lightning strike(s)"
       },
       "units": {
         "temperature": "°C",
@@ -3333,7 +3336,8 @@
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
             "wunderground": "Weather Underground",
-            "pirateweather": "Pirate Weather"
+            "pirateweather": "Pirate Weather",
+            "tempest": "Tempest (local)"
           }
         },
         "wunderground": {
@@ -3364,6 +3368,23 @@
             "helpText": "Override the default Pirate Weather API endpoint if needed. Defaults to https://api.pirateweather.net/forecast if left empty."
           }
         },
+        "tempest": {
+          "listenAddress": {
+            "label": "UDP Listen Address",
+            "helpText": "Local UDP address to listen on for Tempest hub broadcasts. Leave empty to use the default \":50222\" (WeatherFlow's fixed broadcast port)."
+          },
+          "extraFields": {
+            "title": "Additional station data",
+            "description": "Choose which Tempest-specific readings to store with each weather record.",
+            "illuminance": "Illuminance",
+            "uvIndex": "UV index",
+            "solarRadiation": "Solar radiation",
+            "lightningDistance": "Lightning distance",
+            "lightningCount": "Lightning strike count",
+            "windLull": "Wind lull",
+            "localOnly": "These readings come directly from your local Tempest hub and remain in BirdNET-Go. They are never uploaded to BirdWeather or another weather service."
+          }
+        },
         "notes": {
           "none": "No weather data will be retrieved.",
           "yrno": {
@@ -3372,7 +3393,9 @@
           },
           "openweather": "Use of OpenWeather requires an API key, sign up for a free API key at <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
           "wunderground": "Requires a Weather Underground API key and a valid PWS station ID. See <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> for details.",
-          "pirateweather": "Use of Pirate Weather requires an API key, sign up at <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
+          "pirateweather": "Use of Pirate Weather requires an API key, sign up at <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>.",
+          "tempest": "Reads live observations broadcast locally over UDP by a Tempest/WeatherFlow weather station on your network. No API key, account, or internet connection required.",
+          "tempestNetworking": "Requires the birdnet-go container to share your LAN's broadcast domain (e.g. Docker <code>host</code> networking or an ipvlan/macvlan network such as Unraid's <code>br0</code>). A standard Docker bridge network will never receive these broadcasts, regardless of this setting."
         },
         "apiKey": {
           "label": "API Key",
