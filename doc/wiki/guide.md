@@ -149,12 +149,21 @@ debug: false # Enable debug messages for troubleshooting
 main:
   name: BirdNET-Go # Name of this node, used to identify the source of notes
   timeas24h: true # true for 24-hour time format, false for 12-hour time format
-  log:
-    enabled: false # Enable main application logging
-    path: logs/birdnet.log # Path to log file
-    rotation: daily # Log rotation type: daily, weekly, or size
-    maxsize: 10485760 # Maximum log size in bytes for size rotation (10MB)
-    rotationday: Sunday # Day of the week for weekly rotation
+
+# Application logging settings
+logging:
+  default_level: info # Default log level for all modules: debug, info, warn, error
+  console:
+    enabled: true # Enable console output
+    level: info # Log level for console output
+  file_output:
+    enabled: true # Enable file output
+    path: logs/application.log # Path to log file
+    level: info # Log level for file output
+    max_size: 100 # Maximum size in MB before rotation (0 = disabled)
+    max_age: 30 # Maximum age in days to keep rotated logs (0 = no limit)
+    max_rotated_files: 10 # Maximum number of rotated log files to keep (0 = no limit)
+    compress: false # Compress rotated logs with gzip
 
 # BirdNET model specific settings
 birdnet:
@@ -351,12 +360,6 @@ webserver:
   debug: false # Enable debug mode for web server
   enabled: true # Enable web server
   port: "8080" # Port for web server
-  log:
-    enabled: false # Enable web server logging
-    path: logs/webserver.log # Path to log file
-    rotation: daily # Log rotation type: daily, weekly, or size
-    maxsize: 10485760 # Maximum log size in bytes for size rotation (10MB)
-    rotationday: Sunday # Day of the week for weekly rotation
 
 # Security settings
 security:
@@ -3487,10 +3490,6 @@ realtime:
 
 ## Log Rotation
 
-The application supports several log rotation strategies:
-
-- Daily rotation
-- Weekly rotation (on a specified day)
-- Size-based rotation (with configurable maximum size)
+Application log files are rotated by size: when the log file reaches `logging.file_output.max_size` (in MB), it is rotated. Retention of rotated files is controlled by `logging.file_output.max_age` (days), `max_rotated_files` (count), and `compress` (gzip rotated logs). See the [Configuration Reference](configuration-reference.md) `logging` section for all options.
 
 This helps manage log files for long-running installations.
