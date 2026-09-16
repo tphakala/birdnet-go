@@ -1092,6 +1092,24 @@
       "type": "object",
       "description": "InfrequentTrackingSettings contains settings for flagging species detected for the first time after a long absence (rare returning visitors)"
     },
+    "LifeListSettings": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "true to enable lifer notifications"
+        },
+        "species": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Life list entries, \"Scientific name_Common name\" format (same convention as SpeciesSettings.Include)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "LifeListSettings contains the user's real-world life list (e.g."
+    },
     "LiveStreamSettings": {
       "properties": {
         "debug": {
@@ -1957,6 +1975,10 @@
         "extendedcapture": {
           "$ref": "#/$defs/ExtendedCaptureSettings",
           "description": "Extended capture for long calling species"
+        },
+        "lifelist": {
+          "$ref": "#/$defs/LifeListSettings",
+          "description": "Real-world life list (e.g. imported from eBird) for lifer notifications"
         }
       },
       "additionalProperties": false,

@@ -330,6 +330,8 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.extendedcapture.maxduration` | integer |  |
 | `realtime.extendedcapture.capturebufferseconds` | integer |  |
 | `realtime.extendedcapture.species` | string[] |  |
+| `realtime.lifelist.enabled` | boolean | true to enable lifer notifications |
+| `realtime.lifelist.species` | string[] | Life list entries, "Scientific name_Common name" format (same convention as SpeciesSettings.Include) |
 
 ## webserver
 
