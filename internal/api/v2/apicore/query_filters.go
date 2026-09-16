@@ -6,6 +6,7 @@
 package apicore
 
 import (
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -80,6 +81,31 @@ func ParseConfidenceFilter(param string) *ConfidenceFilterResult {
 		Operator: operator,
 		Value:    confValue / PercentageMultiplier,
 	}
+}
+
+// ParseConfidenceBound parses a single confidence bound given as a bare
+// percentage in [0, 100] (e.g. "65") and returns it as a fraction in [0, 1],
+// matching the stored confidence column.
+//
+// Unlike ParseConfidenceFilter it takes no operator: the bound's meaning comes
+// from which end of a range it is. An empty parameter yields (nil, nil) so
+// callers can distinguish "not supplied" from "supplied as zero", which matters
+// because a zero minimum is a valid, and different, request from no minimum.
+func ParseConfidenceBound(param string) (*float64, error) {
+	if param == "" {
+		return nil, nil
+	}
+
+	value, err := strconv.ParseFloat(param, 64)
+	if err != nil {
+		return nil, fmt.Errorf("confidence bound %q is not a number", param)
+	}
+	if math.IsNaN(value) || value < 0 || value > 100 {
+		return nil, fmt.Errorf("confidence bound %q must be between 0 and 100", param)
+	}
+
+	fraction := value / PercentageMultiplier
+	return &fraction, nil
 }
 
 // HourFilterResult holds the parsed hour filter parameters.

@@ -54,6 +54,17 @@ const (
 	TimeOfDayUnknown = "unknown"
 )
 
+// Verification status filter constants for detection queries. They name the
+// three review verdicts a detection can be in, plus the "any" no-op. Both the
+// simple (SearchFilters) and advanced (AdvancedSearchFilters) search paths
+// accept these, so a caller can express "false positives only" on either.
+const (
+	VerifiedStatusAny           = "any"
+	VerifiedStatusCorrect       = "correct"
+	VerifiedStatusFalsePositive = "false_positive"
+	VerifiedStatusUnverified    = "unverified"
+)
+
 // Sentinel errors for not found cases
 var (
 	// ErrNoteReviewNotFound indicates the requested note review was not found.
@@ -2283,7 +2294,7 @@ func applyCommonFilters(query *gorm.DB, filters *SearchFilters, ds *DataStore) *
 
 	// --- Dynamic TimeOfDay Filter ---
 	if (filters.TimeOfDay == TimeOfDayDay || filters.TimeOfDay == TimeOfDayNight || filters.TimeOfDay == TimeOfDaySunrise || filters.TimeOfDay == TimeOfDaySunset) && ds.SunCalc != nil && ds.DB != nil { // Include sunrise/sunset
-		dateConditions, err := buildTimeOfDayConditions(filters, ds.SunCalc, ds.DB)
+		dateConditions, err := buildTimeOfDayConditions(filters.TimeOfDay, filters.DateStart, filters.DateEnd, ds.SunCalc, ds.DB)
 		switch {
 		case err != nil:
 			GetLogger().Warn("Failed to build TimeOfDay conditions, skipping filter",
@@ -2315,11 +2326,14 @@ func applyCommonFilters(query *gorm.DB, filters *SearchFilters, ds *DataStore) *
 	return query
 }
 
-// buildTimeOfDayConditions generates the WHERE conditions for day/night/sunrise/sunset filtering
-func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *gorm.DB) ([]*gorm.DB, error) {
-	startDateStr := filters.DateStart
-	endDateStr := filters.DateEnd
-
+// buildTimeOfDayConditions generates the WHERE conditions for day/night/sunrise/sunset
+// filtering of a single period over the [startDateStr, endDateStr] range.
+//
+// It takes the three values it needs rather than a *SearchFilters so the advanced
+// search path (which carries its date range as a *DateRange and its periods as a
+// slice) can reuse it instead of re-deriving sun events with a second, drifting
+// implementation. Each returned condition covers one calendar date; callers OR them.
+func buildTimeOfDayConditions(timeOfDay, startDateStr, endDateStr string, sc *suncalc.SunCalc, db *gorm.DB) ([]*gorm.DB, error) {
 	// Default to a reasonable date range if no dates are provided
 	switch {
 	case startDateStr == "" && endDateStr == "":
@@ -2428,7 +2442,7 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 		// (see the date parsing above), so every bound must be converted into time.Local
 		// before formatting - otherwise the two wall clocks are compared as if they were
 		// the same, shifting the filter by whatever offset separates the two zones.
-		query, args, ok := buildTimeOfDayClause(filters.TimeOfDay, &timeOfDayBounds{
+		query, args, ok := buildTimeOfDayClause(timeOfDay, &timeOfDayBounds{
 			date:         dateStr,
 			sunrise:      sunTimes.Sunrise.In(time.Local).Format(time.TimeOnly),
 			sunset:       sunTimes.Sunset.In(time.Local).Format(time.TimeOnly),

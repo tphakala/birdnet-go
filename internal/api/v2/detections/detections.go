@@ -236,12 +236,18 @@ type detectionQueryParams struct {
 	QueryType        string
 	// Advanced filter parameters
 	Confidence string
-	TimeOfDay  string
-	HourRange  string
-	Verified   string
-	Location   string
-	Source     string
-	Locked     string
+	// ConfidenceMin and ConfidenceMax are the two ends of an inclusive confidence
+	// band, given as bare percentages ("60"). They are independent of Confidence,
+	// which carries a single operator comparison (">85"); when both are supplied
+	// the intersection applies.
+	ConfidenceMin string
+	ConfidenceMax string
+	TimeOfDay     string
+	HourRange     string
+	Verified      string
+	Location      string
+	Source        string
+	Locked        string
 	// Sorting
 	SortBy string
 	// Include additional data
@@ -253,9 +259,9 @@ type detectionQueryParams struct {
 // species, location, source, which may be URIs) are quoted so a delimiter inside a value
 // cannot make two different requests share a key.
 func (p *detectionQueryParams) advancedSearchCacheKey() string {
-	return fmt.Sprintf("adv_search:%q:%q:%d:%d:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%d",
+	return fmt.Sprintf("adv_search:%q:%q:%d:%d:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%q:%d",
 		p.Search, strings.Join(p.SearchScientific, "\x00"), p.NumResults, p.Offset,
-		p.Confidence, p.TimeOfDay, p.HourRange,
+		p.Confidence, p.ConfidenceMin, p.ConfidenceMax, p.TimeOfDay, p.HourRange,
 		p.Verified, p.Location, p.Source, p.Locked,
 		p.Species, p.Date, p.StartDate, p.EndDate,
 		p.SortBy, p.QueryType, p.Hour, p.Duration)
@@ -272,13 +278,15 @@ func (c *Handler) parseDetectionQueryParams(ctx echo.Context) (*detectionQueryPa
 		EndDate:   ctx.QueryParam("end_date"),
 		QueryType: ctx.QueryParam("queryType"),
 		// Advanced filter parameters
-		Confidence: ctx.QueryParam("confidence"),
-		TimeOfDay:  ctx.QueryParam("timeOfDay"),
-		HourRange:  ctx.QueryParam("hourRange"),
-		Verified:   ctx.QueryParam("verified"),
-		Location:   ctx.QueryParam("location"),
-		Source:     ctx.QueryParam("source"),
-		Locked:     ctx.QueryParam("locked"),
+		Confidence:    ctx.QueryParam("confidence"),
+		ConfidenceMin: ctx.QueryParam("confidenceMin"),
+		ConfidenceMax: ctx.QueryParam("confidenceMax"),
+		TimeOfDay:     ctx.QueryParam("timeOfDay"),
+		HourRange:     ctx.QueryParam("hourRange"),
+		Verified:      ctx.QueryParam("verified"),
+		Location:      ctx.QueryParam("location"),
+		Source:        ctx.QueryParam("source"),
+		Locked:        ctx.QueryParam("locked"),
 		// Sorting
 		SortBy: ctx.QueryParam("sortBy"),
 		// Include weather data
@@ -337,6 +345,10 @@ func (c *Handler) parseDetectionQueryParams(ctx echo.Context) (*detectionQueryPa
 			return nil, echo.NewHTTPError(http.StatusBadRequest,
 				fmt.Sprintf("invalid sortBy parameter '%s'. Allowed values: %v", params.SortBy, allowedKeys))
 		}
+	}
+
+	if err := validateAdvancedFilterParams(params); err != nil {
+		return nil, err
 	}
 
 	// Auto-infer queryType from provided parameters when not explicitly set.
@@ -586,12 +598,120 @@ func (c *Handler) GetDetections(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, response)
 }
 
+// validateAdvancedFilterParams validates the filter parameters shared by the
+// detection list endpoint and the batch-resolve endpoint. Both must agree: a
+// filter combination that the list rejects but resolve accepts would let a
+// "select all matching" action operate on a different set than the one on screen.
+func validateAdvancedFilterParams(p *detectionQueryParams) error {
+	// Unlike the operator-style "confidence" parameter, which silently drops
+	// unparseable input, a malformed bound is reported: it is typed directly into a
+	// filter field, so silently widening the result set would look like the filter
+	// had been applied and matched more.
+	confMin, err := apicore.ParseConfidenceBound(p.ConfidenceMin)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			fmt.Sprintf("invalid confidenceMin parameter: %v", err))
+	}
+	confMax, err := apicore.ParseConfidenceBound(p.ConfidenceMax)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			fmt.Sprintf("invalid confidenceMax parameter: %v", err))
+	}
+	if confMin != nil && confMax != nil && *confMin > *confMax {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			"confidenceMin cannot be greater than confidenceMax")
+	}
+
+	if p.Verified != "" && !isValidVerifiedParam(p.Verified) {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			fmt.Sprintf("invalid verified parameter '%s'. Allowed values: %v",
+				p.Verified, allowedVerifiedParams()))
+	}
+
+	if p.TimeOfDay != "" && !isValidTimeOfDayParam(p.TimeOfDay) {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			fmt.Sprintf("invalid timeOfDay parameter '%s'. Allowed values: %v",
+				p.TimeOfDay, allowedTimeOfDayParams))
+	}
+
+	return nil
+}
+
+// allowedTimeOfDayParams lists the accepted "timeOfDay" values for error
+// messages. The legacy "dawn"/"dusk" aliases still parse but are omitted here so
+// error text steers callers to the canonical vocabulary.
+var allowedTimeOfDayParams = []string{
+	datastore.TimeOfDayAny,
+	datastore.TimeOfDayDay,
+	datastore.TimeOfDayNight,
+	datastore.TimeOfDaySunrise,
+	datastore.TimeOfDaySunset,
+}
+
+// isValidTimeOfDayParam reports whether the "timeOfDay" query parameter names a
+// recognized period. "any" is valid and means no constraint.
+func isValidTimeOfDayParam(param string) bool {
+	if strings.EqualFold(strings.TrimSpace(param), datastore.TimeOfDayAny) {
+		return true
+	}
+	return len(datastore.NormalizeTimeOfDayPeriods([]string{param})) > 0
+}
+
+// verifiedParamAliases maps the legacy boolean spellings of the "verified" query
+// parameter onto the three-state verdict vocabulary. "true"/"human" historically
+// meant "carries any verdict", which is not the same as "correct", so they keep
+// the two-state behaviour via legacyVerifiedBool rather than being folded into a
+// verdict that would silently narrow existing callers' results.
+var verifiedParamAliases = map[string]string{
+	datastore.VerifiedStatusCorrect:       datastore.VerifiedStatusCorrect,
+	datastore.VerifiedStatusFalsePositive: datastore.VerifiedStatusFalsePositive,
+	datastore.VerifiedStatusUnverified:    datastore.VerifiedStatusUnverified,
+	datastore.VerifiedStatusAny:           "",
+}
+
+// legacyVerifiedBool holds the boolean spellings of the "verified" parameter and
+// the reviewed/not-reviewed value each selects.
+var legacyVerifiedBool = map[string]bool{
+	queryValueTrue: true,
+	"human":        true,
+	"yes":          true,
+	"1":            true,
+	"false":        false,
+	"no":           false,
+	"0":            false,
+}
+
+// isValidVerifiedParam reports whether the "verified" query parameter names a
+// recognized verdict or legacy boolean.
+func isValidVerifiedParam(param string) bool {
+	key := strings.ToLower(strings.TrimSpace(param))
+	if _, ok := verifiedParamAliases[key]; ok {
+		return true
+	}
+	_, ok := legacyVerifiedBool[key]
+	return ok
+}
+
+// allowedVerifiedParams lists the accepted "verified" values for error messages.
+func allowedVerifiedParams() []string {
+	values := make([]string, 0, len(verifiedParamAliases)+len(legacyVerifiedBool))
+	for k := range verifiedParamAliases {
+		values = append(values, k)
+	}
+	for k := range legacyVerifiedBool {
+		values = append(values, k)
+	}
+	slices.Sort(values)
+	return values
+}
+
 // needsAdvancedRouting reports whether the query parameters require routing
 // through the advanced search path instead of the dedicated handlers.
 // It checks for advanced filters, non-default sort, and cross-type parameters
 // that the simple handlers would silently ignore.
 func (p *detectionQueryParams) needsAdvancedRouting() bool {
-	if p.Confidence != "" || p.TimeOfDay != "" ||
+	if p.Confidence != "" || p.ConfidenceMin != "" || p.ConfidenceMax != "" ||
+		p.TimeOfDay != "" ||
 		p.HourRange != "" || p.Verified != "" ||
 		p.Location != "" || p.Source != "" || p.Locked != "" ||
 		p.StartDate != "" || p.EndDate != "" {
@@ -1078,9 +1198,28 @@ func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams) datas
 		}
 	}
 
-	// Apply time of day filter
-	if params.TimeOfDay != "" {
-		filters.TimeOfDay = []string{params.TimeOfDay}
+	// Apply the confidence range. Bounds were validated during parsing, so a parse
+	// error here cannot happen; ignore it rather than silently substituting a
+	// different range.
+	confMin, _ := apicore.ParseConfidenceBound(params.ConfidenceMin)
+	confMax, _ := apicore.ParseConfidenceBound(params.ConfidenceMax)
+	if confMin != nil || confMax != nil {
+		confRange := &datastore.ConfidenceRangeFilter{}
+		if confMin != nil {
+			confRange.Min = *confMin
+		}
+		if confMax != nil {
+			confRange.Max = *confMax
+		} else {
+			confRange.Max = 1.0
+		}
+		filters.ConfidenceRange = confRange
+	}
+
+	// Apply time of day filter. Normalizing here keeps the legacy "dawn"/"dusk"
+	// spellings working while the datastore resolves a single vocabulary.
+	if periods := datastore.NormalizeTimeOfDayPeriods([]string{params.TimeOfDay}); len(periods) > 0 {
+		filters.TimeOfDay = periods
 	}
 
 	// Apply hour filter using shared helper
@@ -1118,10 +1257,15 @@ func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams) datas
 		filters.Source = []string{params.Source}
 	}
 
-	// Apply boolean filters
+	// Apply the verification filter. A verdict name sets the three-state status; a
+	// legacy boolean keeps the older reviewed/not-reviewed behaviour.
 	if params.Verified != "" {
-		verified := params.Verified == queryValueTrue || params.Verified == "human"
-		filters.Verified = &verified
+		key := strings.ToLower(strings.TrimSpace(params.Verified))
+		if status, ok := verifiedParamAliases[key]; ok {
+			filters.VerifiedStatus = status
+		} else if verified, ok := legacyVerifiedBool[key]; ok {
+			filters.Verified = &verified
+		}
 	}
 	if params.Locked != "" {
 		locked := params.Locked == queryValueTrue

@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -72,9 +73,10 @@ func TestTimeOfDayToHours(t *testing.T) {
 		assert.Nil(t, result)
 	})
 
-	t.Run("dawn returns hours 5-6", func(t *testing.T) {
+	t.Run("dawn aliases sunrise and returns hours 5-6", func(t *testing.T) {
 		result := TimeOfDayToHours([]string{"dawn"})
 		assert.ElementsMatch(t, []int{5, 6}, result)
+		assert.Equal(t, TimeOfDayToHours([]string{"sunrise"}), result)
 	})
 
 	t.Run("day returns hours 7-17", func(t *testing.T) {
@@ -83,9 +85,10 @@ func TestTimeOfDayToHours(t *testing.T) {
 		assert.ElementsMatch(t, expected, result)
 	})
 
-	t.Run("dusk returns hours 18-19", func(t *testing.T) {
+	t.Run("dusk aliases sunset and returns hours 18-19", func(t *testing.T) {
 		result := TimeOfDayToHours([]string{"dusk"})
 		assert.ElementsMatch(t, []int{18, 19}, result)
+		assert.Equal(t, TimeOfDayToHours([]string{"sunset"}), result)
 	})
 
 	t.Run("night returns hours 20-23 and 0-4", func(t *testing.T) {
@@ -109,6 +112,16 @@ func TestTimeOfDayToHours(t *testing.T) {
 	t.Run("unknown period ignored", func(t *testing.T) {
 		result := TimeOfDayToHours([]string{"unknown"})
 		assert.Nil(t, result)
+	})
+
+	t.Run("hours are returned in a stable sorted order", func(t *testing.T) {
+		// Callers build SQL IN clauses and cache keys from this list, so map
+		// iteration order must not leak into the result.
+		first := TimeOfDayToHours([]string{"night", "day"})
+		require.True(t, slices.IsSorted(first))
+		for range 10 {
+			assert.Equal(t, first, TimeOfDayToHours([]string{"night", "day"}))
+		}
 	})
 }
 
@@ -798,28 +811,48 @@ func TestSingleTimeOfDayToHours(t *testing.T) {
 		assert.Nil(t, singleTimeOfDayToHours("ANY"))
 	})
 
-	t.Run("day returns hours 5-19 (all daylight)", func(t *testing.T) {
+	// The simple and advanced search paths now share one period->hours mapping, so
+	// "day" here means the daylight arc *excluding* the sunrise and sunset windows,
+	// matching the advanced path and the sun-event classifier. It previously meant
+	// all daylight hours (5-19), which made the same filter return different sets
+	// depending on which endpoint served it.
+	t.Run("day excludes the sunrise and sunset windows", func(t *testing.T) {
 		result := singleTimeOfDayToHours("day")
-		// day = dawn + day + dusk (DawnStartHour through DuskEndHour)
-		expected := []int{5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}
+		expected := []int{7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17}
 		assert.Equal(t, expected, result)
 	})
 
-	t.Run("night returns hours 20-23 and 0-4", func(t *testing.T) {
+	t.Run("night returns hours 0-4 and 20-23", func(t *testing.T) {
 		result := singleTimeOfDayToHours("night")
-		// night = NightStartHour (20) through NightEndHour (4)
-		expected := []int{20, 21, 22, 23, 0, 1, 2, 3, 4}
+		expected := []int{0, 1, 2, 3, 4, 20, 21, 22, 23}
 		assert.Equal(t, expected, result)
 	})
 
-	t.Run("sunrise returns hours 5-7", func(t *testing.T) {
+	t.Run("sunrise returns the dawn window", func(t *testing.T) {
 		result := singleTimeOfDayToHours("sunrise")
-		assert.Equal(t, []int{5, 6, 7}, result)
+		assert.Equal(t, []int{5, 6}, result)
 	})
 
-	t.Run("sunset returns hours 17-19", func(t *testing.T) {
+	t.Run("sunset returns the dusk window", func(t *testing.T) {
 		result := singleTimeOfDayToHours("sunset")
-		assert.Equal(t, []int{17, 18, 19}, result)
+		assert.Equal(t, []int{18, 19}, result)
+	})
+
+	t.Run("legacy dawn and dusk aliases resolve to sunrise and sunset", func(t *testing.T) {
+		assert.Equal(t, singleTimeOfDayToHours("sunrise"), singleTimeOfDayToHours("dawn"))
+		assert.Equal(t, singleTimeOfDayToHours("sunset"), singleTimeOfDayToHours("dusk"))
+	})
+
+	t.Run("the four periods partition the day", func(t *testing.T) {
+		var all []int
+		for _, period := range []string{"sunrise", "day", "sunset", "night"} {
+			all = append(all, singleTimeOfDayToHours(period)...)
+		}
+		expected := make([]int, 0, 24)
+		for h := range 24 {
+			expected = append(expected, h)
+		}
+		assert.ElementsMatch(t, expected, all, "every hour belongs to exactly one period")
 	})
 
 	t.Run("case insensitive", func(t *testing.T) {
@@ -1015,7 +1048,8 @@ func TestConvertSearchFilters(t *testing.T) {
 		result, err := ConvertSearchFilters(ctx, filters, nil, tz)
 		require.NoError(t, err)
 
-		assert.Equal(t, []int{5, 6, 7}, result.IncludedHours)
+		// The sunrise window, shared with the advanced search path.
+		assert.Equal(t, []int{5, 6}, result.IncludedHours)
 	})
 
 	t.Run("sort options", func(t *testing.T) {
