@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/datastore/entities"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -765,4 +766,178 @@ func TestDatabasePerformance(t *testing.T) {
 	}
 	duration = time.Since(start)
 	assert.Less(t, duration.Milliseconds(), int64(paginationThresholdMs), "Paginated queries should complete within %dms", paginationThresholdMs)
+}
+
+// TestGetSpeciesFirstAndLastDetectionTimeBefore pins the legacy-schema
+// first/last previous-detection query used by the MQTT payload: the strict
+// before bound (the current detection is excluded), false-positive exclusion,
+// and the nil semantics for a species with no prior detections.
+func TestGetSpeciesFirstAndLastDetectionTimeBefore(t *testing.T) {
+	t.Parallel()
+
+	loc := Timezone()
+	before := time.Date(2024, 1, 16, 12, 0, 0, 0, loc)
+	at := func(day, hour, minute int) time.Time { return time.Date(2024, 1, day, hour, minute, 0, 0, loc) }
+
+	// The same instant as `before`, expressed in a fixed zone one hour ahead of
+	// the datastore timezone at that instant. Without conversion via
+	// Timezone(), the formatted bound would shift one hour and the 12:30 note
+	// would be incorrectly included.
+	_, offset := before.Zone()
+	beforeAlt := before.In(time.FixedZone("one-hour-ahead", offset+3600))
+
+	seedNote := func(t *testing.T, ds *DataStore, sci, date, tm string) {
+		t.Helper()
+		require.NoError(t, ds.DB.Create(&Note{
+			Date:           date,
+			Time:           tm,
+			ScientificName: sci,
+			CommonName:     sci,
+			Confidence:     0.9,
+		}).Error)
+	}
+
+	tests := []struct {
+		name      string
+		species   string
+		bound     time.Time
+		seed      func(t *testing.T, ds *DataStore, species string)
+		wantFirst *time.Time
+		wantLast  *time.Time
+	}{
+		{
+			name:    "returns the earliest and most-recent prior detections",
+			species: "Turdus migratorius",
+			bound:   before,
+			seed: func(t *testing.T, ds *DataStore, species string) {
+				t.Helper()
+				seedNote(t, ds, species, "2024-01-10", "08:00:00")
+				seedNote(t, ds, species, "2024-01-13", "18:30:00")
+				seedNote(t, ds, species, "2024-01-20", "09:00:00") // on/after before: excluded
+			},
+			wantFirst: new(at(10, 8, 0)),
+			wantLast:  new(at(13, 18, 30)),
+		},
+		{
+			name:    "first and last are equal with a single prior detection",
+			species: "Cyanocitta cristata",
+			bound:   before,
+			seed: func(t *testing.T, ds *DataStore, species string) {
+				t.Helper()
+				seedNote(t, ds, species, "2024-01-11", "06:15:00")
+			},
+			wantFirst: new(at(11, 6, 15)),
+			wantLast:  new(at(11, 6, 15)),
+		},
+		{
+			name:    "returns nils when the only detection is on or after the bound",
+			species: "Strix aluco",
+			bound:   before,
+			seed: func(t *testing.T, ds *DataStore, species string) {
+				t.Helper()
+				seedNote(t, ds, species, "2024-01-20", "09:00:00")
+			},
+		},
+		{
+			name:    "excludes a detection at exactly the bound instant",
+			species: "Cyanistes caeruleus",
+			bound:   before,
+			seed: func(t *testing.T, ds *DataStore, species string) {
+				t.Helper()
+				seedNote(t, ds, species, "2024-01-16", "12:00:00")
+			},
+		},
+		{
+			name:    "bound expressed in a different location compares as the same instant",
+			species: "Larus ridibundus",
+			bound:   beforeAlt,
+			seed: func(t *testing.T, ds *DataStore, species string) {
+				t.Helper()
+				seedNote(t, ds, species, "2024-01-16", "11:30:00") // strictly before the bound
+				seedNote(t, ds, species, "2024-01-16", "12:30:00") // after the bound, before the shifted one
+			},
+			wantFirst: new(at(16, 11, 30)),
+			wantLast:  new(at(16, 11, 30)),
+		},
+		{
+			name:    "excludes detections reviewed as false positive",
+			species: "Fringilla coelebs",
+			bound:   before,
+			seed: func(t *testing.T, ds *DataStore, species string) {
+				t.Helper()
+				note := Note{Date: "2024-01-10", Time: "08:00:00", ScientificName: species, CommonName: species, Confidence: 0.9}
+				require.NoError(t, ds.DB.Create(&note).Error)
+				require.NoError(t, ds.DB.Create(&NoteReview{
+					NoteID:   note.ID,
+					Verified: string(entities.VerificationFalsePositive),
+				}).Error)
+			},
+		},
+		{
+			name:    "returns nils for an unknown species",
+			species: "Nonexistent species",
+			bound:   before,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ds := setupTestDB(t)
+			if tt.seed != nil {
+				tt.seed(t, ds, tt.species)
+			}
+
+			first, last, err := ds.GetSpeciesFirstAndLastDetectionTimeBefore(t.Context(), tt.species, tt.bound)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantFirst, first)
+			assert.Equal(t, tt.wantLast, last)
+		})
+	}
+}
+
+// TestSpeciesDetectionTimeValue pins the dialect-dependent driver-value
+// normalization used by GetSpeciesFirstAndLastDetectionTimeBefore: the MySQL
+// driver returns time.Time (parseTime=True) while the SQLite driver returns a
+// "YYYY-MM-DD HH:MM:SS" string, and a NULL aggregate yields nil. The converter
+// must accept all of these and reject anything else.
+func TestSpeciesDetectionTimeValue(t *testing.T) {
+	t.Parallel()
+
+	loc := Timezone()
+	mysqlValue := time.Date(2024, 1, 13, 18, 30, 0, 0, loc) // as the MySQL driver would return
+	sqliteValue := "2024-01-10 08:00:00"                    // as the SQLite driver would return
+	expectedSQLite := time.Date(2024, 1, 10, 8, 0, 0, 0, loc)
+
+	tests := []struct {
+		name    string
+		value   any
+		want    *time.Time
+		wantErr bool
+	}{
+		{name: "nil aggregate yields nil", value: nil},
+		{name: "MySQL time.Time value passes through", value: mysqlValue, want: &mysqlValue},
+		{name: "SQLite string value is parsed in the local timezone", value: sqliteValue, want: &expectedSQLite},
+		{name: "empty string yields nil", value: ""},
+		{name: "byte slice value is parsed", value: []byte(sqliteValue), want: &expectedSQLite},
+		{name: "malformed string yields an error", value: "not-a-datetime", wantErr: true},
+		{name: "unsupported type yields an error", value: 42, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := speciesDetectionTimeValue(tt.value, "Turdus migratorius")
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Nil(t, got)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+			if got != nil {
+				assert.Equal(t, loc, got.Location())
+			}
+		})
+	}
 }
