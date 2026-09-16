@@ -79,23 +79,68 @@ func newTestOrchestrator(t *testing.T, mocks ...*mockModelInstance) *Orchestrato
 	}
 }
 
-// TestOrchestrator_DefaultTargets covers the neutral default-target accessor
-// that callers use to resolve the default model (v2.4 when loaded).
+// TestOrchestrator_DefaultTargets covers the final default-target semantics: every
+// loaded non-schedule-gated model, BirdNET v2.4 first then registry-ID byte order,
+// and nil when nothing qualifies. The bat model is schedule-gated and is never a
+// default target. Folds in the former phase3_invariance TestDefaultTargets (bare
+// orchestrator and single loaded v2.4).
 func TestOrchestrator_DefaultTargets(t *testing.T) {
 	t.Parallel()
 
-	o := &Orchestrator{}
-	registerTestV24(o, &mockModelInstance{
-		id:   RegistryIDBirdNETV24,
-		spec: ModelSpec{SampleRate: 48000},
-	})
-	dt := o.DefaultTargets()
-	require.Len(t, dt, 1)
-	assert.Equal(t, RegistryIDBirdNETV24, dt[0].ID)
+	tests := []struct {
+		name string
+		ids  []string
+		want []string // nil means DefaultTargets returns nil
+	}{
+		{"no models", nil, nil},
+		{"v2.4 only", []string{RegistryIDBirdNETV24}, []string{RegistryIDBirdNETV24}},
+		{
+			name: "v2.4 first then secondaries in byte order",
+			ids:  []string{RegistryIDPerchV2, RegistryIDBirdNETV3, RegistryIDBirdNETV24},
+			want: []string{RegistryIDBirdNETV24, RegistryIDBirdNETV3, RegistryIDPerchV2},
+		},
+		{
+			name: "the schedule-gated bat model is excluded",
+			ids:  []string{RegistryIDBirdNETV24, RegistryIDBat},
+			want: []string{RegistryIDBirdNETV24},
+		},
+		{"only the gated bat model yields nil", []string{RegistryIDBat}, nil},
+		{
+			name: "secondaries without v2.4 stay in byte order",
+			ids:  []string{RegistryIDPerchV2, RegistryIDBirdNETV3},
+			want: []string{RegistryIDBirdNETV3, RegistryIDPerchV2},
+		},
+		{
+			name: "an unregistered model is not gated and follows v2.4",
+			ids:  []string{"custom-model", RegistryIDBirdNETV24},
+			want: []string{RegistryIDBirdNETV24, "custom-model"},
+		},
+	}
 
-	// Zero value when no v2.4 model is registered.
-	empty := &Orchestrator{}
-	assert.Nil(t, empty.DefaultTargets())
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			mocks := make([]*mockModelInstance, 0, len(tt.ids))
+			for _, id := range tt.ids {
+				mocks = append(mocks, &mockModelInstance{
+					id:   id,
+					spec: ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+				})
+			}
+			o := newTestOrchestrator(t, mocks...)
+
+			dt := o.DefaultTargets()
+			if tt.want == nil {
+				assert.Nil(t, dt)
+				return
+			}
+			gotIDs := make([]string, len(dt))
+			for i := range dt {
+				gotIDs[i] = dt[i].ID
+			}
+			assert.Equal(t, tt.want, gotIDs)
+		})
+	}
 }
 
 func TestNewOrchestrator_SyncsSharedState(t *testing.T) {

@@ -151,7 +151,10 @@
     }
   ],
   "DefaultTargetIDs": [
-    "BirdNET_V2.4"
+    "BirdNET_V2.4",
+    "Phase3SecA",
+    "Phase3SecB",
+    "Phase3SecC"
   ],
   "EngineDims": [
     288000,
