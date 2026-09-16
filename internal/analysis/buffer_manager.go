@@ -85,6 +85,19 @@ func defaultTargetIDs(bn classifierBackend) []string {
 	return ids
 }
 
+// fallbackTargets returns the analysis targets for a source whose configured models
+// resolved to nothing. An empty config list means "the orchestrator's default
+// targets", so it fans out to every default. A non-empty list whose models are all
+// unknown or unloaded (a misconfigured source) falls back to the FIRST default only
+// (BirdNET v2.4 when loaded), preserving pre-Phase-4 behavior so an upgrade never adds
+// a model to it. Empty when no default target is loaded (N = 0).
+func fallbackTargets(configModelIDs []string, defaults []classifier.ModelInfo) []classifier.ModelInfo {
+	if len(configModelIDs) == 0 || len(defaults) == 0 {
+		return defaults
+	}
+	return defaults[:1]
+}
+
 // BufferManager handles the lifecycle of analysis buffer monitors
 type BufferManager struct {
 	monitors  sync.Map // keyed by monitorKey -> chan struct{}

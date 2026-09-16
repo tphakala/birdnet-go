@@ -1153,8 +1153,9 @@ func (p *AudioPipelineService) reportSourceRegistration(mm *classifier.ModelMana
 // registerConsumersForSources registers BufferConsumer and AudioLevelConsumer
 // on the AudioRouter for each source ID. The sourceModelMap carries the
 // config-level model IDs for each source so that buffer consumers fan out to
-// only the models assigned to that source. When a source has no configured
-// models (empty slice), the default targets are used as a fallback.
+// only the models assigned to that source. When a source has no configured models
+// the default targets are the fallback: every default for an empty list, the first
+// default only for a misconfigured (all-unresolvable) list.
 func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, sourceModelMap map[string][]string, audioLevelChan chan audiocore.AudioLevelData, operation string) {
 	log := audiocore.GetLogger()
 
@@ -1189,12 +1190,13 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 			sourceName = src.DisplayName
 		}
 
-		// Resolve per-source model targets. Fall back to primary if the
-		// source has no configured models or none could be resolved.
+		// Resolve per-source model targets. Fall back to the default targets when the
+		// source has no configured models or none resolve: every default for an empty
+		// list, the first default only for a misconfigured (unresolvable) list.
 		modelInfos, skippedModels := resolveModelTargets(sourceModelMap[sid], allModelInfos)
 		usedDefaultTargets := len(modelInfos) == 0
 		if usedDefaultTargets {
-			modelInfos = defaultTargets
+			modelInfos = fallbackTargets(sourceModelMap[sid], defaultTargets)
 		}
 
 		// Ensure analysis buffers exist for all target models. The engine
@@ -1258,10 +1260,9 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 
 		// Report only models the configuration actually assigns. When the source
 		// resolved to no loaded target and fell back to the default targets, the user
-		// assigned nothing here, so naming the built-in primary as "assigned to this
-		// source" would be false, and it points the user at a gallery entry that
-		// offers no action for a permanent model. Genuinely assigned but unresolvable
-		// models still reach the user through skippedModels.
+		// assigned nothing here, so naming a default target as "assigned to this source"
+		// would be false. Genuinely assigned but unresolvable models still reach the
+		// user through skippedModels.
 		assigned := modelInfos
 		if usedDefaultTargets {
 			assigned = nil
@@ -1381,7 +1382,15 @@ func resolveDesiredModelSet(desiredConfigIDs []string, loadedModels map[string]c
 		}
 	}
 	if len(set) == 0 {
-		for _, id := range defaultIDs {
+		// A source that named no models falls back to every default target. A source
+		// whose named models are all unknown or unloaded falls back to the first
+		// default only (v2.4 when loaded), preserving pre-Phase-4 behavior so an
+		// upgrade never adds a model to a misconfigured source.
+		fallback := defaultIDs
+		if len(desiredConfigIDs) > 0 && len(defaultIDs) > 0 {
+			fallback = defaultIDs[:1]
+		}
+		for _, id := range fallback {
 			set[id] = true
 		}
 	}
@@ -2130,7 +2139,7 @@ func (p *AudioPipelineService) buildMonitorConfigs(sourceModelMap map[string][]s
 			}
 		}
 		if len(infos) == 0 {
-			infos = defaultTargets
+			infos = fallbackTargets(sourceModelMap[sid], defaultTargets)
 		}
 
 		configs := make([]monitorConfig, len(infos))

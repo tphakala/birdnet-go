@@ -352,11 +352,20 @@ func TestSourceModelsChanged(t *testing.T) {
 			expected:         true,
 		},
 		{
-			name:             "unresolvable list falls back to every default, no change",
-			currentModels:    [][2]string{{src, birdnetID}, {src, perchID}},
+			// Phase 4 preserves I1: an unresolvable non-empty list falls back to the
+			// first default only (v2.4), never fanning out to a loaded secondary.
+			name:             "unresolvable list falls back to v2.4 only, matching a v2.4 source",
+			currentModels:    [][2]string{{src, birdnetID}},
 			desiredConfigIDs: []string{"unknown_model"},
 			defaultIDs:       []string{birdnetID, perchID},
 			expected:         false,
+		},
+		{
+			name:             "unresolvable list does not fan out; the stale perch buffer is a change",
+			currentModels:    [][2]string{{src, birdnetID}, {src, perchID}},
+			desiredConfigIDs: []string{"unknown_model"},
+			defaultIDs:       []string{birdnetID, perchID},
+			expected:         true,
 		},
 		{
 			name:             "no defaults and no buffers, no change",
@@ -424,6 +433,14 @@ func TestResolveDesiredModelSet(t *testing.T) {
 		assert.True(t, set["BirdNET_V2.4"])
 		assert.True(t, set["Perch_V2"])
 		assert.Len(t, set, 2)
+	})
+
+	t.Run("unresolvable non-empty list falls back to the first default only", func(t *testing.T) {
+		t.Parallel()
+		set := resolveDesiredModelSet([]string{"unknown"}, loaded, []string{"BirdNET_V2.4", "Perch_V2"})
+		assert.True(t, set["BirdNET_V2.4"])
+		assert.False(t, set["Perch_V2"], "an unresolvable list must not gain a secondary (I1)")
+		assert.Len(t, set, 1)
 	})
 
 	t.Run("empty config with no defaults yields an empty set with no phantom key", func(t *testing.T) {

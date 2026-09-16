@@ -100,6 +100,14 @@ func TestOrchestrator_DefaultTargets(t *testing.T) {
 			want: []string{RegistryIDBirdNETV24, RegistryIDBirdNETV3, RegistryIDPerchV2},
 		},
 		{
+			// RegistryIDBSG ("BSG") byte-sorts before "BirdNET_V2.4", so pure byte order
+			// would lead with BSG. defaultTargetRank must still put v2.4 first to keep
+			// the engine's pre-allocated buffer geometry (EngineDims) byte-identical (I1).
+			name: "v2.4 leads even when a default byte-sorts before it",
+			ids:  []string{RegistryIDBSG, RegistryIDBirdNETV24},
+			want: []string{RegistryIDBirdNETV24, RegistryIDBSG},
+		},
+		{
 			name: "the schedule-gated bat model is excluded",
 			ids:  []string{RegistryIDBirdNETV24, RegistryIDBat},
 			want: []string{RegistryIDBirdNETV24},

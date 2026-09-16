@@ -711,8 +711,9 @@ func sortInferenceModelsByName(models []InferenceModelStatus) {
 
 // buildSourceAttachments computes, per loaded model registry ID, the audio
 // sources attached to it. A source whose Models resolve to a loaded model
-// attaches there; a source with no resolvable model falls back to the primary
-// model with Fallback=true.
+// attaches there; a source with no resolvable model falls back to the default
+// targets (the first default only for a misconfigured, non-empty list) with
+// Fallback=true.
 //
 // running carries the audio router's actual per-source model set, keyed by
 // source display name (see (*Handler).runningModelsBySource). Configuration
@@ -761,12 +762,17 @@ func buildSourceAttachments(settings *conf.Settings, models []classifier.ModelIn
 		// replaced by a fallback row the runtime never creates. Keying the fallback on
 		// resolvedToLoaded restores parity with the pipeline.
 		if !resolvedToLoaded {
-			// One fallback row per default target, each with its own liveness verdict:
-			// a default whose analysis buffer is absent is not analyzing either, and
-			// reporting it as healthy is the "looks running while analyzing nothing"
-			// state this endpoint exists to remove. defaultIDs is empty at N = 0, so a
-			// source with no resolvable target gets no rows.
-			for _, id := range defaultIDs {
+			// One fallback row per fallback target, each with its own liveness verdict.
+			// An empty config list fans out to every default target; a non-empty but
+			// unresolvable list falls back to the first default only (v2.4), matching the
+			// runtime, which analyzes a misconfigured source with the primary alone so an
+			// upgrade never adds a model to it. Empty at N = 0, so such a source gets no
+			// rows.
+			fallbackIDs := defaultIDs
+			if len(configModels) > 0 && len(defaultIDs) > 0 {
+				fallbackIDs = defaultIDs[:1]
+			}
+			for _, id := range fallbackIDs {
 				out[id] = append(out[id], ModelSourceInfo{
 					ID: name, Name: name, Type: sourceType, Fallback: true,
 					NotRunning: haveLive && !live[id],

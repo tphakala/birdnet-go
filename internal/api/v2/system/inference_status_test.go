@@ -118,22 +118,26 @@ func TestBuildSourceAttachments_FallbackFansOutToEveryDefaultTarget(t *testing.T
 		{Name: "Cam1", Type: "rtsp", Models: []string{"unknown_model"}}, // unresolved: same
 	}
 
-	t.Run("both defaults get a fallback row with per-default liveness", func(t *testing.T) {
+	t.Run("empty list fans out to every default; unresolvable list stays on v2.4", func(t *testing.T) {
 		t.Parallel()
 		// Garage's audio reaches v2.4 but not v3.0.
 		running := map[string]map[string]bool{"Garage": {v24: true}}
 		got := buildSourceAttachments(settings, models, defaultIDs, running)
 
-		for _, id := range defaultIDs {
-			rows := got[id]
-			require.Len(t, rows, 2, "each default target gets Garage and Cam1")
+		// v2.4 (the first default) gets Garage (empty list fans out) AND Cam1 (the
+		// unresolvable stream falls back to the first default only).
+		require.Len(t, got[v24], 2, "v2.4 gets Garage and the unresolvable Cam1")
+		// v3.0 gets only Garage; the unresolvable Cam1 does not fan out to it (I1).
+		require.Len(t, got[v3], 1, "v3.0 gets only the empty-list Garage")
+		for id, rows := range got {
 			for _, r := range rows {
 				assert.True(t, r.Fallback, "attachment %q under %q must be a fallback", r.Name, id)
 			}
 		}
-		// Sources are appended before streams, so index 0 is Garage.
+		// Sources are appended before streams, so Garage is index 0 under v2.4.
 		assert.Equal(t, "Garage", got[v24][0].Name)
 		assert.False(t, got[v24][0].NotRunning, "Garage runs under v2.4")
+		assert.Equal(t, "Cam1", got[v24][1].Name, "the unresolvable stream falls back to v2.4")
 		assert.Equal(t, "Garage", got[v3][0].Name)
 		assert.True(t, got[v3][0].NotRunning, "Garage does not run under v3.0")
 	})
