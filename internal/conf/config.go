@@ -1853,12 +1853,11 @@ type DiagnosticsConfig struct {
 type Settings struct {
 	Debug bool `yaml:"debug" json:"debug"` // true to enable debug mode
 
-	// ConfigVersion records the newest one-shot migration applied to this file. It is
-	// written by conf.Load through persistMigration and hidden from the settings API
-	// (json:"-"): the UI never sends it, and every API update starts from
-	// CloneSettings(current), which copies it by value, so it survives saves. It
-	// exists for migrations whose precondition cannot be recovered from the data
-	// itself (see MigrateSourceTargetDefaults); a self-detecting migration needs none.
+	// ConfigVersion records the newest one-shot config migration applied to this file.
+	// It is managed automatically by config loading and should not be edited by hand;
+	// it lets a migration whose precondition cannot be recovered from the data itself
+	// run exactly once (see MigrateSourceTargetDefaults). Hidden from the settings API
+	// and preserved across saves by CloneSettings, so writers never drop it.
 	ConfigVersion int `yaml:"configversion,omitempty" json:"-"`
 
 	// Runtime values, not stored in config file

@@ -2192,6 +2192,10 @@
           "type": "boolean",
           "description": "true to enable debug mode"
         },
+        "configversion": {
+          "type": "integer",
+          "description": "ConfigVersion records the newest one-shot config migration applied to this file.\nIt is managed automatically by config loading and should not be edited by hand;\nit lets a migration whose precondition cannot be recovered from the data itself\nrun exactly once (see MigrateSourceTargetDefaults). Hidden from the settings API\nand preserved across saves by CloneSettings, so writers never drop it."
+        },
         "logging": {
           "$ref": "#/$defs/LoggingConfig",
           "description": "Logging configuration"
