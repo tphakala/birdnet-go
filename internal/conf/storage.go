@@ -112,6 +112,15 @@ func Load() (*Settings, error) {
 		persistMigration(settings, "source models")
 	}
 
+	// Pin every pre-Phase-4 empty source/stream model list to ["birdnet"] once, then
+	// stamp ConfigVersion. Before Phase 4 an empty list meant the built-in v2.4;
+	// afterwards it means the orchestrator's default targets. Runs before
+	// ReconcileMisplacedAudioSources so a relocated source is pinned before its list
+	// is copied to the new stream (model de-privilege epic, Phase 4).
+	if settings.MigrateSourceTargetDefaults() {
+		persistMigration(settings, "source target defaults")
+	}
+
 	// Relocate stream URLs misconfigured under realtime.audio.sources (meant
 	// for local sound cards) into realtime.rtsp.streams so the runtime opens
 	// them with FFmpeg instead of failing to open them as ALSA devices.

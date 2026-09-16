@@ -362,36 +362,60 @@ func (s *Settings) MigrateAudioSourceConfig() bool {
 	return true
 }
 
-// MigrateSourceModels migrates the legacy singular Model field to the new
-// Models list on AudioSourceConfig and StreamConfig. Sources with neither
-// Model nor Models set default to ["birdnet"]. Returns true if any migration
-// occurred.
+// MigrateSourceModels folds the legacy singular Model field into the Models list on
+// AudioSourceConfig. It no longer fills an empty list: an empty per-source model list
+// now means "the orchestrator's default targets" (model de-privilege epic, Phase 4),
+// and MigrateSourceTargetDefaults pins every pre-Phase-4 empty list once. StreamConfig
+// never had a singular field, so it is untouched here. Returns true if any source was
+// folded.
 func (s *Settings) MigrateSourceModels() bool {
 	migrated := false
 
 	for i := range s.Realtime.Audio.Sources {
 		src := &s.Realtime.Audio.Sources[i]
-		if len(src.Models) > 0 {
+		if len(src.Models) > 0 || src.Model == "" {
 			continue
 		}
-		if src.Model != "" {
-			src.Models = []string{src.Model}
-			src.Model = ""
-		} else {
-			src.Models = []string{ModelIDBirdNET}
-		}
-		migrated = true
-	}
-
-	for _, stream := range s.Realtime.RTSP.AllStreams() {
-		if len(stream.Models) > 0 {
-			continue
-		}
-		stream.Models = []string{ModelIDBirdNET}
+		src.Models = []string{src.Model}
+		src.Model = ""
 		migrated = true
 	}
 
 	return migrated
+}
+
+// configVersionSourceTargetDefaults is the config file version stamped by
+// MigrateSourceTargetDefaults. An empty per-source or per-stream model list changed
+// meaning from "the built-in BirdNET v2.4" to "the orchestrator's default targets"
+// (model de-privilege epic, Phase 4); the migration pins every pre-Phase-4 empty list
+// to ["birdnet"] once so no source changes targets. Later phases add higher versions.
+const configVersionSourceTargetDefaults = 1
+
+// MigrateSourceTargetDefaults writes ["birdnet"] into every source and stream whose
+// model list is empty, exactly once per config file, then stamps ConfigVersion.
+// Before Phase 4 an empty list meant BirdNET v2.4 (MigrateSourceModels filled it on
+// every load); after Phase 4 an empty list means DefaultTargets(), which can include
+// secondaries. Writing the old meaning out explicitly keeps every existing source on
+// exactly the models it analyzed with before the upgrade. v2.4 is embedded and
+// implicitly enabled at every config version below this one, so no runtime "is v2.4
+// loaded" check is needed: the version stamp is that evidence. Returns true when a
+// list or the stamp changed, so persistMigration writes the file.
+func (s *Settings) MigrateSourceTargetDefaults() bool {
+	if s.ConfigVersion >= configVersionSourceTargetDefaults {
+		return false
+	}
+	for i := range s.Realtime.Audio.Sources {
+		if src := &s.Realtime.Audio.Sources[i]; len(src.Models) == 0 {
+			src.Models = []string{ModelIDBirdNET}
+		}
+	}
+	for _, stream := range s.Realtime.RTSP.AllStreams() {
+		if len(stream.Models) == 0 {
+			stream.Models = []string{ModelIDBirdNET}
+		}
+	}
+	s.ConfigVersion = configVersionSourceTargetDefaults
+	return true
 }
 
 // normalizeRTSPStreamEnabledDefaults materializes enabled=true for legacy raw
