@@ -47,7 +47,7 @@ func TestBuildSourceAttachments(t *testing.T) {
 		{Name: "Cam1", Type: "rtsp", Models: []string{"unknown_model"}}, // unresolved: falls back to primary
 	}
 
-	got := buildSourceAttachments(settings, models, primaryID, nil)
+	got := buildSourceAttachments(settings, models, []string{primaryID}, nil)
 
 	// Perch_V2 should have exactly Front Yard, attached without fallback.
 	perch := got[classifier.RegistryIDPerchV2]
@@ -84,7 +84,7 @@ func TestBuildSourceAttachments_ResolvesButNotLoaded(t *testing.T) {
 		{Name: "Studio", Models: []string{conf.ModelIDPerchV2}},
 	}
 
-	got := buildSourceAttachments(settings, models, primaryID, nil)
+	got := buildSourceAttachments(settings, models, []string{primaryID}, nil)
 
 	// Perch_V2 should have NO attachments (not loaded).
 	perch := got[classifier.RegistryIDPerchV2]
@@ -95,6 +95,58 @@ func TestBuildSourceAttachments_ResolvesButNotLoaded(t *testing.T) {
 	require.Len(t, prim, 1, "primary attachments must have 1 entry (Studio)")
 	assert.Equal(t, "Studio", prim[0].Name, "primary source name")
 	assert.True(t, prim[0].Fallback, "primary source must be a fallback")
+}
+
+// TestBuildSourceAttachments_FallbackFansOutToEveryDefaultTarget verifies the Phase 4
+// fallback: a source with no resolvable target attaches a fallback row to EVERY
+// default target (DefaultTargets can return more than one model), each carrying its
+// own liveness verdict, and at N = 0 (no defaults) it attaches no rows at all.
+func TestBuildSourceAttachments_FallbackFansOutToEveryDefaultTarget(t *testing.T) {
+	t.Parallel()
+
+	const v24 = classifier.DefaultModelVersion
+	v3 := classifier.RegistryIDBirdNETV3
+
+	models := []classifier.ModelInfo{{ID: v24}, {ID: v3}}
+	defaultIDs := []string{v24, v3}
+
+	settings := &conf.Settings{}
+	settings.Realtime.Audio.Sources = []conf.AudioSourceConfig{
+		{Name: "Garage", Models: nil}, // no models: falls back to every default
+	}
+	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
+		{Name: "Cam1", Type: "rtsp", Models: []string{"unknown_model"}}, // unresolved: same
+	}
+
+	t.Run("empty list fans out to every default; unresolvable list stays on v2.4", func(t *testing.T) {
+		t.Parallel()
+		// Garage's audio reaches v2.4 but not v3.0.
+		running := map[string]map[string]bool{"Garage": {v24: true}}
+		got := buildSourceAttachments(settings, models, defaultIDs, running)
+
+		// v2.4 (the first default) gets Garage (empty list fans out) AND Cam1 (the
+		// unresolvable stream falls back to the first default only).
+		require.Len(t, got[v24], 2, "v2.4 gets Garage and the unresolvable Cam1")
+		// v3.0 gets only Garage; the unresolvable Cam1 does not fan out to it (I1).
+		require.Len(t, got[v3], 1, "v3.0 gets only the empty-list Garage")
+		for id, rows := range got {
+			for _, r := range rows {
+				assert.True(t, r.Fallback, "attachment %q under %q must be a fallback", r.Name, id)
+			}
+		}
+		// Sources are appended before streams, so Garage is index 0 under v2.4.
+		assert.Equal(t, "Garage", got[v24][0].Name)
+		assert.False(t, got[v24][0].NotRunning, "Garage runs under v2.4")
+		assert.Equal(t, "Cam1", got[v24][1].Name, "the unresolvable stream falls back to v2.4")
+		assert.Equal(t, "Garage", got[v3][0].Name)
+		assert.True(t, got[v3][0].NotRunning, "Garage does not run under v3.0")
+	})
+
+	t.Run("no defaults at N=0 yields no fallback rows", func(t *testing.T) {
+		t.Parallel()
+		got := buildSourceAttachments(settings, models, nil, nil)
+		assert.Empty(t, got, "no resolvable target and no defaults attaches nothing")
+	})
 }
 
 // TestBuildSourceAttachments_MultiModelSourceAttachesAll verifies that a single
@@ -120,7 +172,7 @@ func TestBuildSourceAttachments_MultiModelSourceAttachesAll(t *testing.T) {
 		{Name: "Äänikortti", Models: []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2, conf.ModelIDBat}},
 	}
 
-	got := buildSourceAttachments(settings, models, primaryID, nil)
+	got := buildSourceAttachments(settings, models, []string{primaryID}, nil)
 
 	// Every assigned, loaded model must show the source, none as a fallback.
 	for _, id := range []string{primaryID, classifier.RegistryIDPerchV2, classifier.RegistryIDBat} {
@@ -679,7 +731,7 @@ func TestBuildSourceAttachments_LiveRouterState(t *testing.T) {
 			"Front Yard": {primaryID: true},
 		}
 
-		got := buildSourceAttachments(settings, models, primaryID, running)
+		got := buildSourceAttachments(settings, models, []string{primaryID}, running)
 
 		perch := got[classifier.RegistryIDPerchV2]
 		require.Len(t, perch, 1)
@@ -700,7 +752,7 @@ func TestBuildSourceAttachments_LiveRouterState(t *testing.T) {
 			"Front Yard": {primaryID: true, classifier.RegistryIDPerchV2: true},
 		}
 
-		got := buildSourceAttachments(settings, models, primaryID, running)
+		got := buildSourceAttachments(settings, models, []string{primaryID}, running)
 
 		perch := got[classifier.RegistryIDPerchV2]
 		require.Len(t, perch, 1)
@@ -717,7 +769,7 @@ func TestBuildSourceAttachments_LiveRouterState(t *testing.T) {
 		// must not invent a fallback row the runtime never creates.
 		running := map[string]map[string]bool{"Front Yard": {}}
 
-		got := buildSourceAttachments(settings, models, primaryID, running)
+		got := buildSourceAttachments(settings, models, []string{primaryID}, running)
 
 		prim := got[primaryID]
 		require.Len(t, prim, 1, "only the genuine BirdNET assignment, no invented fallback row")
@@ -733,7 +785,7 @@ func TestBuildSourceAttachments_LiveRouterState(t *testing.T) {
 	t.Run("nil live state keeps the config-derived view unmarked", func(t *testing.T) {
 		t.Parallel()
 
-		got := buildSourceAttachments(settings, models, primaryID, nil)
+		got := buildSourceAttachments(settings, models, []string{primaryID}, nil)
 
 		perch := got[classifier.RegistryIDPerchV2]
 		require.Len(t, perch, 1)
@@ -750,7 +802,7 @@ func TestBuildSourceAttachments_LiveRouterState(t *testing.T) {
 		// though live evidence exists for a different source.
 		running := map[string]map[string]bool{"A Different Source": {primaryID: true}}
 
-		got := buildSourceAttachments(settings, models, primaryID, running)
+		got := buildSourceAttachments(settings, models, []string{primaryID}, running)
 
 		perch := got[classifier.RegistryIDPerchV2]
 		require.Len(t, perch, 1)
@@ -783,7 +835,7 @@ func TestBuildSourceAttachments_RTSPStream(t *testing.T) {
 	// The router feeds only BirdNET for this stream; Perch is assigned but idle.
 	running := map[string]map[string]bool{"Cam1": {primaryID: true}}
 
-	got := buildSourceAttachments(settings, models, primaryID, running)
+	got := buildSourceAttachments(settings, models, []string{primaryID}, running)
 
 	perch := got[classifier.RegistryIDPerchV2]
 	require.Len(t, perch, 1)
@@ -825,7 +877,7 @@ func TestBuildSourceAttachments_FallbackRowCarriesLiveness(t *testing.T) {
 			"Front Yard": {"SomeOtherModel": true},
 		}
 
-		got := buildSourceAttachments(settings, models, primaryID, running)
+		got := buildSourceAttachments(settings, models, []string{primaryID}, running)
 
 		prim := got[primaryID]
 		require.Len(t, prim, 1)
@@ -841,7 +893,7 @@ func TestBuildSourceAttachments_FallbackRowCarriesLiveness(t *testing.T) {
 			"Front Yard": {primaryID: true},
 		}
 
-		got := buildSourceAttachments(settings, models, primaryID, running)
+		got := buildSourceAttachments(settings, models, []string{primaryID}, running)
 
 		prim := got[primaryID]
 		require.Len(t, prim, 1)
@@ -855,7 +907,7 @@ func TestBuildSourceAttachments_FallbackRowCarriesLiveness(t *testing.T) {
 
 		// A nil router map means the pipeline has not reported yet. Absence of
 		// evidence must not be rendered as a failure.
-		got := buildSourceAttachments(settings, models, primaryID, nil)
+		got := buildSourceAttachments(settings, models, []string{primaryID}, nil)
 
 		prim := got[primaryID]
 		require.Len(t, prim, 1)

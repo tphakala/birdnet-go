@@ -32,6 +32,10 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	// --- Top-level ---
 	"Debug": {categories: []hotReloadCategory{hotReloadFresh}},
 
+	// ConfigVersion is a runtime-managed one-shot migration marker, set by config load
+	// and hidden from the settings API; it is never edited by a user, so no reload path.
+	"ConfigVersion": {categories: []hotReloadCategory{hotReloadRuntime}},
+
 	// --- Runtime values (yaml:"-") ---
 	"Version":            {categories: []hotReloadCategory{hotReloadRuntime}},
 	"BuildDate":          {categories: []hotReloadCategory{hotReloadRuntime}},

@@ -14,6 +14,12 @@
 |---------|------|-------------|
 | `debug` | boolean | true to enable debug mode |
 
+## configversion
+
+| Setting | Type | Description |
+|---------|------|-------------|
+| `configversion` | integer | ConfigVersion records the newest one-shot config migration applied to this file. It is managed automatically by config loading and should not be edited by hand; it lets a migration whose precondition cannot be recovered from the data itself run exactly once (see MigrateSourceTargetDefaults). Hidden from the settings API and preserved across saves by CloneSettings, so writers never drop it. |
+
 ## logging
 
 LoggingConfig represents logging configuration

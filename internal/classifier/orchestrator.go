@@ -481,11 +481,20 @@ func (o *Orchestrator) SetSunCalc(sc *suncalc.SunCalc) {
 // when a model is paused by the nighttime schedule (currently only the bat model).
 const scheduleReasonNight = "Night schedule"
 
-// IsModelActive returns whether a model should currently run inference.
-// For the bat model, this checks the nighttime scheduler. For all other
-// models, it always returns true.
+// isScheduleGated reports whether registryID runs only inside a schedule (today
+// the bat model's nighttime scheduler). It is the single predicate behind
+// IsModelActive, ModelScheduleStatus and DefaultTargets, read from the registry
+// table so adding a gated model is a one-line registry change. An unknown ID is
+// never gated: the zero-value ModelInfo has scheduleGated false.
+func isScheduleGated(registryID string) bool {
+	return ModelRegistry[registryID].scheduleGated
+}
+
+// IsModelActive returns whether a model should currently run inference. A
+// schedule-gated model (isScheduleGated, today only the bat model) runs only
+// while the nighttime scheduler has it active; every other model is always active.
 func (o *Orchestrator) IsModelActive(modelID string) bool {
-	if modelID != RegistryIDBat {
+	if !isScheduleGated(modelID) {
 		return true
 	}
 	s := o.scheduler.Load()
@@ -503,7 +512,7 @@ func (o *Orchestrator) IsModelActive(modelID string) bool {
 // (true, "") otherwise. Every other model returns (true, ""). The design is
 // general so a future gated model can return its own reason.
 func (o *Orchestrator) ModelScheduleStatus(modelID string) (active bool, reason string) {
-	if modelID != RegistryIDBat {
+	if !isScheduleGated(modelID) {
 		return true, ""
 	}
 	s := o.scheduler.Load()
@@ -2290,20 +2299,44 @@ func (o *Orchestrator) Debug(format string, v ...any) {
 	}
 }
 
-// DefaultTargets returns the models a source with an empty model list analyzes with.
-// Phase 3 (temporary): the BirdNET v2.4 entry's live ModelInfo when it is loaded,
-// else nil, which is exactly the pre-Phase-3 primary fallback (a zero PrimaryModelInfo
-// yielded no target). The info carries the live Backend/Quantization/NumSpecies and the
-// effective overlap, stamped by ModelInfos. Phase 4 gives this its final semantics when
-// N != v2.4 and N = 0 become reachable.
+// DefaultTargets returns the models a source with an empty model list analyzes
+// with: every loaded model that is not schedule-gated (isScheduleGated, today the
+// bat model), the BirdNET v2.4 entry first when it is loaded and the rest byte
+// ordered by registry ID, each carrying the live Backend/Quantization/NumSpecies
+// and effective overlap ModelInfos stamps. Nil when nothing qualifies (N = 0, or
+// only gated models loaded). v2.4 leads so the audio engine's pre-allocated analysis
+// buffer (applyPrimaryModelDims via firstDefaultTarget) keeps its geometry until the
+// engine's primary concept is removed in a later phase; past the first entry the
+// order only fixes what the status API and logs report.
 func (o *Orchestrator) DefaultTargets() []ModelInfo {
 	infos := o.ModelInfos()
+	targets := make([]ModelInfo, 0, len(infos))
 	for i := range infos {
-		if infos[i].ID == RegistryIDBirdNETV24 {
-			return []ModelInfo{infos[i]}
+		if isScheduleGated(infos[i].ID) {
+			continue
 		}
+		targets = append(targets, infos[i])
 	}
-	return nil
+	if len(targets) == 0 {
+		return nil
+	}
+	slices.SortFunc(targets, func(a, b ModelInfo) int {
+		if ra, rb := defaultTargetRank(a.ID), defaultTargetRank(b.ID); ra != rb {
+			return ra - rb
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
+	return targets
+}
+
+// defaultTargetRank orders the BirdNET v2.4 entry ahead of every other default
+// target so the engine's pre-allocated analysis buffer, keyed on v2.4 today, keeps
+// its geometry; every other model shares a rank and falls back to byte order.
+func defaultTargetRank(registryID string) int {
+	if registryID == RegistryIDBirdNETV24 {
+		return 0
+	}
+	return 1
 }
 
 // ResolvedModelPathForID returns the model file the loaded registryID instance is

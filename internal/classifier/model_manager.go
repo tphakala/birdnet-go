@@ -2335,34 +2335,30 @@ func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 	// mm.installed no longer contains the uninstalled entry (deleted by caller).
 	mm.applyRangeFilterConfigForUninstall(updated, entry)
 
-	// Remove config alias from Models.Enabled and from any source/stream that
-	// references it, but only when no replacement model of the same category exists.
+	// Remove the config alias from Models.Enabled and from every source and stream
+	// that names it, but only when no replacement model of the same category exists. A
+	// list left empty by this removal means the orchestrator's default targets
+	// (DefaultTargets); it is not re-pinned to birdnet (model de-privilege epic, Phase 4).
 	alias := ConfigAliasForRegistry(entry.RegistryID)
 	if alias != "" && !retainAlias {
 		updated.Models.Enabled = slices.DeleteFunc(updated.Models.Enabled, func(id string) bool {
 			return strings.EqualFold(id, alias)
 		})
 
-		// Remove from sound card sources.
+		// Remove from sound card sources. An emptied list means the default targets.
 		for i := range updated.Realtime.Audio.Sources {
 			src := &updated.Realtime.Audio.Sources[i]
 			src.Models = slices.DeleteFunc(src.Models, func(id string) bool {
 				return strings.EqualFold(id, alias)
 			})
-			if len(src.Models) == 0 {
-				src.Models = []string{conf.ModelIDBirdNET}
-			}
 		}
 
-		// Remove from RTSP/stream sources.
+		// Remove from RTSP/stream sources. An emptied list means the default targets.
 		for i := range updated.Realtime.RTSP.Streams {
 			stream := &updated.Realtime.RTSP.Streams[i]
 			stream.Models = slices.DeleteFunc(stream.Models, func(id string) bool {
 				return strings.EqualFold(id, alias)
 			})
-			if len(stream.Models) == 0 {
-				stream.Models = []string{conf.ModelIDBirdNET}
-			}
 		}
 	}
 

@@ -70,6 +70,34 @@ func firstDefaultTarget(bn classifierBackend) (classifier.ModelInfo, bool) {
 	return targets[0], true
 }
 
+// defaultTargetIDs returns the registry IDs of DefaultTargets() in order: the set a
+// source with no resolvable model list is analyzed with. Nil at N = 0 or when no
+// default target is loaded.
+func defaultTargetIDs(bn classifierBackend) []string {
+	targets := bn.DefaultTargets()
+	if len(targets) == 0 {
+		return nil
+	}
+	ids := make([]string, len(targets))
+	for i := range targets {
+		ids[i] = targets[i].ID
+	}
+	return ids
+}
+
+// fallbackTargets returns the analysis targets for a source whose configured models
+// resolved to nothing. An empty config list means "the orchestrator's default
+// targets", so it fans out to every default. A non-empty list whose models are all
+// unknown or unloaded (a misconfigured source) falls back to the FIRST default only
+// (BirdNET v2.4 when loaded), preserving pre-Phase-4 behavior so an upgrade never adds
+// a model to it. Empty when no default target is loaded (N = 0).
+func fallbackTargets(configModelIDs []string, defaults []classifier.ModelInfo) []classifier.ModelInfo {
+	if len(configModelIDs) == 0 || len(defaults) == 0 {
+		return defaults
+	}
+	return defaults[:1]
+}
+
 // BufferManager handles the lifecycle of analysis buffer monitors
 type BufferManager struct {
 	monitors  sync.Map // keyed by monitorKey -> chan struct{}
@@ -184,20 +212,14 @@ func (m *BufferManager) AddMonitor(source string) error {
 			Build()
 	}
 
-	// Build monitorConfigs for all loaded models.
+	// Build monitorConfigs for all loaded models. With no models loaded (N = 0) this
+	// is empty and AddMonitors starts no analysis monitors, which is correct. The
+	// former firstDefaultTarget fallback here was dead: DefaultTargets() draws from
+	// ModelInfos() and is empty whenever ModelInfos() is.
 	allInfos := m.bn.ModelInfos()
 	configs := make([]monitorConfig, 0, len(allInfos))
 	for i := range allInfos {
 		configs = append(configs, buildMonitorConfig(source, &allInfos[i]))
-	}
-
-	// Fallback to the default target for backward compatibility when no
-	// models are registered via the orchestrator's model map.
-	if len(configs) == 0 {
-		if info, ok := firstDefaultTarget(m.bn); ok {
-			cfg := buildMonitorConfig(source, &info)
-			configs = []monitorConfig{cfg}
-		}
 	}
 
 	return m.AddMonitors(source, configs)

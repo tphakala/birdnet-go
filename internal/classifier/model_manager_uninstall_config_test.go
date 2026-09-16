@@ -97,7 +97,8 @@ func TestApplyConfigForUninstall_BatPicksLowestCatalogID(t *testing.T) {
 
 // TestApplyConfigForUninstall_LastBatClearsFamilyAndAlias verifies that uninstalling
 // the only bat clears all three Bat fields, removes the alias from Models.Enabled, and
-// resets a source whose only model was bat back to the birdnet fallback.
+// leaves a source or stream whose only model was bat with an empty list, which now
+// means the orchestrator's default targets rather than a birdnet re-pin.
 func TestApplyConfigForUninstall_LastBatClearsFamilyAndAlias(t *testing.T) {
 	// Not parallel: mutates global settings via conf.StoreSettings.
 	origSettings := conf.GetSettings()
@@ -111,6 +112,7 @@ func TestApplyConfigForUninstall_LastBatClearsFamilyAndAlias(t *testing.T) {
 	settings.Bat.EmbeddingModel = filepath.Join(modelsDir, sharedDirName, batEmbeddingsLocalName)
 	settings.Models.Enabled = []string{conf.ModelIDBirdNET, conf.ModelIDBat}
 	settings.Realtime.Audio.Sources = []conf.AudioSourceConfig{{Name: "mic", Models: []string{conf.ModelIDBat}}}
+	settings.Realtime.RTSP.Streams = []conf.StreamConfig{{Name: "cam", URL: "rtsp://h/a", Models: []string{conf.ModelIDBat}}}
 	conf.StoreSettings(settings)
 
 	mm := NewModelManager(modelsDir, nil, settings) // no bat remains installed
@@ -125,8 +127,11 @@ func TestApplyConfigForUninstall_LastBatClearsFamilyAndAlias(t *testing.T) {
 	assert.Empty(t, current.Bat.EmbeddingModel, "the last bat uninstall must clear the embeddings path")
 	assert.NotContains(t, current.Models.Enabled, conf.ModelIDBat, "the bat alias must be removed")
 	require.Len(t, current.Realtime.Audio.Sources, 1)
-	assert.Equal(t, []string{conf.ModelIDBirdNET}, current.Realtime.Audio.Sources[0].Models,
-		"a source left with no models must fall back to the birdnet default")
+	assert.Empty(t, current.Realtime.Audio.Sources[0].Models,
+		"a source left with no models means the default targets, not a birdnet re-pin")
+	require.Len(t, current.Realtime.RTSP.Streams, 1)
+	assert.Empty(t, current.Realtime.RTSP.Streams[0].Models,
+		"a stream left with no models means the default targets, not a birdnet re-pin")
 }
 
 // TestApplyConfigForUninstall_SameCategoryDifferentFamilyIsNotARepoint is the guard

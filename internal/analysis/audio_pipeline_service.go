@@ -1153,8 +1153,9 @@ func (p *AudioPipelineService) reportSourceRegistration(mm *classifier.ModelMana
 // registerConsumersForSources registers BufferConsumer and AudioLevelConsumer
 // on the AudioRouter for each source ID. The sourceModelMap carries the
 // config-level model IDs for each source so that buffer consumers fan out to
-// only the models assigned to that source. When a source has no configured
-// models (empty slice), the primary model is used as a fallback.
+// only the models assigned to that source. When a source has no configured models
+// the default targets are the fallback: every default for an empty list, the first
+// default only for a misconfigured (all-unresolvable) list.
 func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, sourceModelMap map[string][]string, audioLevelChan chan audiocore.AudioLevelData, operation string) {
 	log := audiocore.GetLogger()
 
@@ -1167,7 +1168,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 
 	// Default-target fallback for sources with no model config (the loaded v2.4
 	// entry, or empty when none is loaded).
-	primaryTargets := p.bnAnalyzer.BirdNET().DefaultTargets()
+	defaultTargets := p.bnAnalyzer.BirdNET().DefaultTargets()
 
 	bufMgr := p.engine.BufferManager()
 	currentSettings := conf.Setting()
@@ -1189,12 +1190,13 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 			sourceName = src.DisplayName
 		}
 
-		// Resolve per-source model targets. Fall back to primary if the
-		// source has no configured models or none could be resolved.
+		// Resolve per-source model targets. Fall back to the default targets when the
+		// source has no configured models or none resolve: every default for an empty
+		// list, the first default only for a misconfigured (unresolvable) list.
 		modelInfos, skippedModels := resolveModelTargets(sourceModelMap[sid], allModelInfos)
-		usedPrimaryFallback := len(modelInfos) == 0
-		if usedPrimaryFallback {
-			modelInfos = primaryTargets
+		usedDefaultTargets := len(modelInfos) == 0
+		if usedDefaultTargets {
+			modelInfos = fallbackTargets(sourceModelMap[sid], defaultTargets)
 		}
 
 		// Ensure analysis buffers exist for all target models. The engine
@@ -1257,13 +1259,12 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 			sid, sourceName, sourceSampleRate, gainDB, targets, currentSettings, operation)
 
 		// Report only models the configuration actually assigns. When the source
-		// resolved to no loaded target and fell back to the primary, the user
-		// assigned nothing here, so naming the built-in primary as "assigned to this
-		// source" would be false, and it points the user at a gallery entry that
-		// offers no action for a permanent model. Genuinely assigned but unresolvable
-		// models still reach the user through skippedModels.
+		// resolved to no loaded target and fell back to the default targets, the user
+		// assigned nothing here, so naming a default target as "assigned to this source"
+		// would be false. Genuinely assigned but unresolvable models still reach the
+		// user through skippedModels.
 		assigned := modelInfos
-		if usedPrimaryFallback {
+		if usedDefaultTargets {
 			assigned = nil
 		}
 		// Report models that will not analyze this source, AFTER the buffer consumer
@@ -1366,10 +1367,10 @@ func rtspStreamTransport(stream *conf.StreamConfig, rtsp *conf.RTSPSettings) str
 }
 
 // resolveDesiredModelSet resolves config-level model IDs to registry IDs,
-// filtering out models that are unknown or not loaded. When the resolved set
-// is empty the primary model is used as a fallback, matching the behavior of
-// registerConsumersForSources.
-func resolveDesiredModelSet(desiredConfigIDs []string, loadedModels map[string]classifier.ModelInfo, primaryModelID string) map[string]bool {
+// filtering out models that are unknown or not loaded. When the resolved set is
+// empty the default targets are used as a fallback, matching the behavior of
+// registerConsumersForSources. defaultIDs is empty at N = 0, leaving the set empty.
+func resolveDesiredModelSet(desiredConfigIDs []string, loadedModels map[string]classifier.ModelInfo, defaultIDs []string) map[string]bool {
 	set := make(map[string]bool, len(desiredConfigIDs))
 	for _, configID := range desiredConfigIDs {
 		registryID, known := classifier.ResolveConfigModelID(configID)
@@ -1381,7 +1382,17 @@ func resolveDesiredModelSet(desiredConfigIDs []string, loadedModels map[string]c
 		}
 	}
 	if len(set) == 0 {
-		set[primaryModelID] = true
+		// A source that named no models falls back to every default target. A source
+		// whose named models are all unknown or unloaded falls back to the first
+		// default only (v2.4 when loaded), preserving pre-Phase-4 behavior so an
+		// upgrade never adds a model to a misconfigured source.
+		fallback := defaultIDs
+		if len(desiredConfigIDs) > 0 && len(defaultIDs) > 0 {
+			fallback = defaultIDs[:1]
+		}
+		for _, id := range fallback {
+			set[id] = true
+		}
 	}
 	return set
 }
@@ -1392,9 +1403,9 @@ func resolveDesiredModelSet(desiredConfigIDs []string, loadedModels map[string]c
 // considered; unknown or unloaded config IDs are ignored so that a model
 // appearing in the config but not yet installed does not trigger a spurious
 // rebuild on every hot-reload cycle.
-func sourceModelsChanged(bufMgr *buffer.Manager, sourceID string, desiredConfigIDs []string, loadedModels map[string]classifier.ModelInfo, primaryModelID string) bool {
+func sourceModelsChanged(bufMgr *buffer.Manager, sourceID string, desiredConfigIDs []string, loadedModels map[string]classifier.ModelInfo, defaultIDs []string) bool {
 	currentBuffers := bufMgr.AnalysisBuffers(sourceID)
-	desiredSet := resolveDesiredModelSet(desiredConfigIDs, loadedModels, primaryModelID)
+	desiredSet := resolveDesiredModelSet(desiredConfigIDs, loadedModels, defaultIDs)
 
 	if len(currentBuffers) != len(desiredSet) {
 		return true
@@ -1431,16 +1442,14 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	// The bnAnalyzer may be nil in minimal test setups that only exercise
 	// the add/remove paths; model-change detection is skipped in that case.
 	var loadedModels map[string]classifier.ModelInfo
-	var primaryModelID string
+	var defaultIDs []string
 	if p.bnAnalyzer != nil {
 		modelInfoSlice := p.bnAnalyzer.BirdNET().ModelInfos()
 		loadedModels = make(map[string]classifier.ModelInfo, len(modelInfoSlice))
 		for i := range modelInfoSlice {
 			loadedModels[modelInfoSlice[i].ID] = modelInfoSlice[i]
 		}
-		if info, ok := firstDefaultTarget(p.bnAnalyzer.BirdNET()); ok {
-			primaryModelID = info.ID
-		}
+		defaultIDs = defaultTargetIDs(p.bnAnalyzer.BirdNET())
 	}
 	bufMgr := p.engine.BufferManager()
 
@@ -1498,7 +1507,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 					reconfiguredIDs = append(reconfiguredIDs, src.ID)
 				}
 
-			case loadedModels != nil && sourceModelsChanged(bufMgr, src.ID, scm.modelIDs, loadedModels, primaryModelID):
+			case loadedModels != nil && sourceModelsChanged(bufMgr, src.ID, scm.modelIDs, loadedModels, defaultIDs):
 				// Model assignment changed (e.g., Perch added/removed):
 				// rebuild the consumer/buffer/monitor layer, keep capture running.
 				// Also pick up any simultaneous gain change.
@@ -1609,7 +1618,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		for _, sid := range modelChangedIDs {
 			p.engine.Router().RemoveAllRoutes(sid)
 			p.untrackSoundLevelConsumer(sid)
-			desiredSet := resolveDesiredModelSet(sourceModelMap[sid], loadedModels, primaryModelID)
+			desiredSet := resolveDesiredModelSet(sourceModelMap[sid], loadedModels, defaultIDs)
 			deallocateStaleAnalysisBuffers(bufMgr, sid, desiredSet)
 		}
 		p.registerConsumersForSources(modelChangedIDs, sourceModelMap, audioLevelChan, operationModelChange)
@@ -2114,7 +2123,7 @@ func (p *AudioPipelineService) buildMonitorConfigs(sourceModelMap map[string][]s
 		loadedModels[modelInfoSlice[i].ID] = modelInfoSlice[i]
 	}
 
-	primaryTargets := p.bnAnalyzer.BirdNET().DefaultTargets()
+	defaultTargets := p.bnAnalyzer.BirdNET().DefaultTargets()
 	result := make(map[string][]monitorConfig, len(sourceIDs))
 
 	for _, sid := range sourceIDs {
@@ -2130,7 +2139,7 @@ func (p *AudioPipelineService) buildMonitorConfigs(sourceModelMap map[string][]s
 			}
 		}
 		if len(infos) == 0 {
-			infos = primaryTargets
+			infos = fallbackTargets(sourceModelMap[sid], defaultTargets)
 		}
 
 		configs := make([]monitorConfig, len(infos))
