@@ -248,8 +248,8 @@ type ModelMemoryInfo struct {
 }
 
 // ModelSourceInfo describes one audio source attached to a model.
-// Fallback is true when the source is attached to the primary model by default
-// rather than by an explicit config selection.
+// Fallback is true when the source is attached as a default analysis target
+// (DefaultTargets) rather than by an explicit config selection.
 type ModelSourceInfo struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
@@ -487,7 +487,7 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 	if c.ModelManager != nil {
 		infos = c.ModelManager.ModelInfos()
 	}
-	// Fetch the orchestrator once: it is the live source for RSS, primary ID,
+	// Fetch the orchestrator once: it is the live source for RSS, default targets,
 	// load failures, per-model device, and per-model schedule status. The
 	// Processor guard mirrors the GetLastDetection guard below.
 	var orch *classifier.Orchestrator
@@ -495,17 +495,19 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 		orch = c.Processor.GetBirdNET()
 	}
 	var rss map[string]int64
-	primaryID := ""
+	var defaultIDs []string
 	var loadFailures map[string]int64
 	if orch != nil {
 		rss, resp.RuntimeBaselineBytes = orch.ModelRSS()
-		if t := orch.DefaultTargets(); len(t) > 0 {
-			primaryID = t[0].ID
+		targets := orch.DefaultTargets()
+		defaultIDs = make([]string, len(targets))
+		for i := range targets {
+			defaultIDs[i] = targets[i].ID
 		}
 		loadFailures = orch.LoadFailures()
 	}
 	counters := classifier.GetInferenceCounters().PeekAll()
-	attachments := buildSourceAttachments(settings, infos, primaryID, c.runningModelsBySource())
+	attachments := buildSourceAttachments(settings, infos, defaultIDs, c.runningModelsBySource())
 
 	// Compute per-model device, backend, precision, and schedule status from the
 	// live orchestrator. The device/backend/precision triplet is read in one
@@ -721,7 +723,7 @@ func sortInferenceModelsByName(models []InferenceModelStatus) {
 // (GitHub #4201, #4204). When running is nil the audio engine is not available
 // (the pipeline has not started, or this is a test), and the config-derived
 // view is the best answer available, so it is used unmarked.
-func buildSourceAttachments(settings *conf.Settings, models []classifier.ModelInfo, primaryID string, running map[string]map[string]bool) map[string][]ModelSourceInfo {
+func buildSourceAttachments(settings *conf.Settings, models []classifier.ModelInfo, defaultIDs []string, running map[string]map[string]bool) map[string][]ModelSourceInfo {
 	loaded := make(map[string]bool, len(models))
 	for i := range models {
 		loaded[models[i].ID] = true
@@ -751,22 +753,25 @@ func buildSourceAttachments(settings *conf.Settings, models []classifier.ModelIn
 				ID: name, Name: name, Type: sourceType, Fallback: false, NotRunning: notRunning,
 			})
 		}
-		// The runtime falls back to the primary model only when a source resolves to
-		// NO loaded target (see registerConsumersForSources). Liveness does not enter
-		// that decision: a configured model that is loaded but currently has no
-		// analysis buffer is still the resolved target (surfaced with NotRunning
-		// above), not replaced by a primary-fallback row the runtime never creates.
-		// Keying the fallback on resolvedToLoaded restores parity with the pipeline.
-		if !resolvedToLoaded && primaryID != "" {
-			// The fallback row describes the primary model that actually analyzes this
-			// source, so it carries the same liveness verdict as a resolved row. A
-			// primary whose own analysis buffer is absent is not analyzing either, and
+		// The runtime falls back to the default targets only when a source resolves to
+		// NO loaded target (see registerConsumersForSources, which then analyzes the
+		// source with every DefaultTargets() model). Liveness does not enter that
+		// decision: a configured model that is loaded but currently has no analysis
+		// buffer is still the resolved target (surfaced with NotRunning above), not
+		// replaced by a fallback row the runtime never creates. Keying the fallback on
+		// resolvedToLoaded restores parity with the pipeline.
+		if !resolvedToLoaded {
+			// One fallback row per default target, each with its own liveness verdict:
+			// a default whose analysis buffer is absent is not analyzing either, and
 			// reporting it as healthy is the "looks running while analyzing nothing"
-			// state this endpoint exists to remove.
-			out[primaryID] = append(out[primaryID], ModelSourceInfo{
-				ID: name, Name: name, Type: sourceType, Fallback: true,
-				NotRunning: haveLive && !live[primaryID],
-			})
+			// state this endpoint exists to remove. defaultIDs is empty at N = 0, so a
+			// source with no resolvable target gets no rows.
+			for _, id := range defaultIDs {
+				out[id] = append(out[id], ModelSourceInfo{
+					ID: name, Name: name, Type: sourceType, Fallback: true,
+					NotRunning: haveLive && !live[id],
+				})
+			}
 		}
 	}
 
