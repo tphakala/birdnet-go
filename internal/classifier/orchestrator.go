@@ -2304,10 +2304,11 @@ func (o *Orchestrator) Debug(format string, v ...any) {
 // bat model), the BirdNET v2.4 entry first when it is loaded and the rest byte
 // ordered by registry ID, each carrying the live Backend/Quantization/NumSpecies
 // and effective overlap ModelInfos stamps. Nil when nothing qualifies (N = 0, or
-// only gated models loaded). v2.4 leads so the audio engine's pre-allocated analysis
-// buffer (applyPrimaryModelDims via firstDefaultTarget) keeps its geometry until the
-// engine's primary concept is removed in a later phase; past the first entry the
-// order only fixes what the status API and logs report.
+// only gated models loaded). v2.4 leads so the first entry is stable: a source with
+// a non-empty but unresolvable model list falls back to the first default alone
+// (fallbackTargets), which must stay v2.4 so an upgrade never swaps a misconfigured
+// source onto a different model, and the species_count startup read keys on element
+// 0; past the first entry the order only fixes what the status API and logs report.
 func (o *Orchestrator) DefaultTargets() []ModelInfo {
 	infos := o.ModelInfos()
 	targets := make([]ModelInfo, 0, len(infos))
@@ -2330,8 +2331,9 @@ func (o *Orchestrator) DefaultTargets() []ModelInfo {
 }
 
 // defaultTargetRank orders the BirdNET v2.4 entry ahead of every other default
-// target so the engine's pre-allocated analysis buffer, keyed on v2.4 today, keeps
-// its geometry; every other model shares a rank and falls back to byte order.
+// target so the first default is stable: fallbackTargets uses defaults[:1] for a
+// misconfigured source (it must stay v2.4 for I1) and the species_count startup read
+// keys on element 0; every other model shares a rank and falls back to byte order.
 func defaultTargetRank(registryID string) int {
 	if registryID == RegistryIDBirdNETV24 {
 		return 0

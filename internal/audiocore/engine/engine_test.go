@@ -13,29 +13,18 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
-// newTestEngine creates an AudioEngine with a test context for testing.
-// The caller must call the returned stop function when done to avoid goroutine leaks.
-// testModelID is used by tests to verify analysis buffer allocation.
-const testModelID = "BirdNET_V2.4"
-
 // Named RTSP transport values for tests.
 const (
 	transportTCP = "tcp"
 	transportUDP = "udp"
 )
 
-// BirdNET v2.4 analysis buffer dimensions: 3s of 16-bit 48kHz mono audio.
-const (
-	testClipBytes    = 288000 // 48000 * 3 * 1 * 2
-	testOverlapBytes = 144000
-	testReadSize     = 144000
-)
-
+// newTestEngine creates an AudioEngine with a test context for testing.
+// The caller must call the returned stop function when done to avoid goroutine leaks.
 func newTestEngine(t *testing.T) (eng *AudioEngine, stop func()) {
 	t.Helper()
 	cfg := &Config{Logger: audiocore.GetLogger()}
 	eng = New(t.Context(), cfg, nil)
-	eng.SetPrimaryModel(testModelID, testClipBytes, testOverlapBytes, testReadSize)
 	return eng, eng.Stop
 }
 
@@ -126,26 +115,62 @@ func TestEngine_AddSource_Stream(t *testing.T) {
 	assert.Equal(t, "Test RTSP Stream", src.DisplayName)
 	assert.Equal(t, audiocore.SourceTypeRTSP, src.Type)
 
-	// Verify analysis buffer was allocated.
-	ab, err := eng.BufferManager().AnalysisBuffer("test_rtsp_001", testModelID)
-	require.NoError(t, err)
-	assert.NotNil(t, ab, "analysis buffer should be allocated")
-
-	// Verify capture buffer was allocated.
+	// Verify the capture buffer was allocated. The engine allocates only the
+	// capture buffer; per-model analysis buffers are allocated by the pipeline's
+	// registerConsumersForSources, not by AddSource.
 	cb, err := eng.BufferManager().CaptureBuffer("test_rtsp_001")
 	require.NoError(t, err)
 	assert.NotNil(t, cb, "capture buffer should be allocated")
+
+	// The engine must not allocate any analysis buffer.
+	assert.Empty(t, eng.BufferManager().AnalysisBuffers("test_rtsp_001"),
+		"AddSource must not allocate analysis buffers")
 
 	// Verify FFmpeg stream was started (it appears in AllStreamHealth).
 	health := eng.StreamManager().AllStreamHealth()
 	assert.Contains(t, health, "test_rtsp_001", "stream should appear in FFmpeg manager")
 }
 
+// TestEngine_AddSource_NoPrimaryModel verifies the Phase 4 PR 2 decouple: AddSource
+// no longer requires a primary model to be set (SetPrimaryModel is gone). The engine
+// allocates only the model-independent capture buffer; per-model analysis buffers are
+// the pipeline's responsibility (registerConsumersForSources).
+func TestEngine_AddSource_NoPrimaryModel(t *testing.T) {
+	t.Parallel()
+	eng := New(t.Context(), &Config{Logger: audiocore.GetLogger()}, nil)
+	t.Cleanup(eng.Stop)
+
+	cfg := &audiocore.SourceConfig{
+		ID:               "test_no_primary",
+		DisplayName:      "No Primary Model",
+		Type:             audiocore.SourceTypeRTSP,
+		ConnectionString: "rtsp://192.168.1.100/noprimary",
+		SampleRate:       48000,
+		BitDepth:         16,
+		Channels:         1,
+	}
+
+	require.NoError(t, eng.AddSource(cfg), "AddSource must succeed without a primary model")
+
+	src, ok := eng.Registry().Get("test_no_primary")
+	require.True(t, ok, "source should be registered")
+	assert.Equal(t, audiocore.SourceTypeRTSP, src.Type)
+
+	cb, err := eng.BufferManager().CaptureBuffer("test_no_primary")
+	require.NoError(t, err)
+	assert.NotNil(t, cb, "capture buffer should be allocated")
+
+	assert.Empty(t, eng.BufferManager().AnalysisBuffers("test_no_primary"),
+		"AddSource must not allocate any analysis buffer")
+}
+
 // TestEngine_AddSource_HighSampleRate verifies that a source with a sample rate
-// above 48kHz gets analysis buffers sized to the primary model's native
-// dimensions, not scaled by the source/model rate ratio. This is the core
-// regression test for issue #575: BufferConsumer resamples audio to the model's
-// target rate before writing, so the analysis buffer must match the model spec.
+// above 48kHz is accepted and gets its (model-independent) capture buffer, and that
+// AddSource allocates no analysis buffer. The #575 concern (analysis buffer sized to
+// the model spec, not scaled by source rate) is now structural: the engine allocates
+// no analysis buffer, and the pipeline's registerConsumersForSources sizes each one
+// from ModelSpec.BufferDimensions(overlap), which takes no source rate. That geometry
+// is guarded directly by TestModelSpec_BufferDimensions in internal/classifier.
 func TestEngine_AddSource_HighSampleRate(t *testing.T) {
 	t.Parallel()
 
@@ -178,21 +203,23 @@ func TestEngine_AddSource_HighSampleRate(t *testing.T) {
 			err := eng.AddSource(cfg)
 			require.NoError(t, err)
 
-			ab, err := eng.BufferManager().AnalysisBuffer(sourceID, testModelID)
+			// The engine allocates only the model-independent capture buffer for a
+			// source regardless of its sample rate. Per-model analysis buffers and
+			// their model-spec geometry are the pipeline's responsibility now
+			// (registerConsumersForSources sizes them from ModelSpec.BufferDimensions,
+			// which is source-rate-independent; guarded by TestModelSpec_BufferDimensions).
+			cb, err := eng.BufferManager().CaptureBuffer(sourceID)
 			require.NoError(t, err)
-			require.NotNil(t, ab, "analysis buffer should be allocated")
-
-			// Verify the actual buffer dimensions match the model spec, not
-			// a scaled value. On the old buggy code with rateScale, a 96kHz
-			// source would produce windowSize=576000 instead of 288000.
-			assert.Equal(t, testClipBytes, ab.WindowSize(),
-				"analysis buffer window should match model spec (overlap+readSize=%d), not be scaled by source rate", testClipBytes)
+			require.NotNil(t, cb, "capture buffer should be allocated for a high-rate source")
+			assert.Empty(t, eng.BufferManager().AnalysisBuffers(sourceID),
+				"AddSource must not allocate analysis buffers")
 		})
 	}
 }
 
 // TestEngine_ReconfigureSource_HighSampleRate verifies that reconfiguring a
-// source to a higher sample rate does not scale the analysis buffer.
+// source to a higher sample rate reallocates its capture buffer and allocates no
+// analysis buffer (analysis buffers are the pipeline's responsibility).
 func TestEngine_ReconfigureSource_HighSampleRate(t *testing.T) {
 	t.Parallel()
 	eng, stop := newTestEngine(t)
@@ -218,11 +245,11 @@ func TestEngine_ReconfigureSource_HighSampleRate(t *testing.T) {
 	}
 	require.NoError(t, eng.ReconfigureSource("test_reconfig_highrate", newCfg))
 
-	ab, err := eng.BufferManager().AnalysisBuffer("test_reconfig_highrate", testModelID)
+	cb, err := eng.BufferManager().CaptureBuffer("test_reconfig_highrate")
 	require.NoError(t, err)
-	require.NotNil(t, ab, "analysis buffer should be allocated after reconfigure to 96kHz")
-	assert.Equal(t, testClipBytes, ab.WindowSize(),
-		"analysis buffer window should match model spec after reconfigure to 96kHz")
+	require.NotNil(t, cb, "capture buffer should be allocated after reconfigure to 96kHz")
+	assert.Empty(t, eng.BufferManager().AnalysisBuffers("test_reconfig_highrate"),
+		"ReconfigureSource must not allocate analysis buffers")
 }
 
 // TestEngine_AddSource_Device adds an audio card source and verifies
@@ -251,9 +278,9 @@ func TestEngine_AddSource_Device(t *testing.T) {
 	// AddSource to clean up and return an error. On machines with audio
 	// hardware, it succeeds.
 	if err != nil {
-		// Verify cleanup happened: buffers should be deallocated.
-		_, abErr := eng.BufferManager().AnalysisBuffer("test_audio_001", testModelID)
-		require.Error(t, abErr, "analysis buffer should be cleaned up on failure")
+		// Verify cleanup happened: the capture buffer should be deallocated.
+		_, cbErr := eng.BufferManager().CaptureBuffer("test_audio_001")
+		require.Error(t, cbErr, "capture buffer should be cleaned up on failure")
 		return
 	}
 
@@ -297,10 +324,7 @@ func TestEngine_RemoveSource(t *testing.T) {
 	_, ok = eng.Registry().Get("test_remove_001")
 	assert.False(t, ok, "source should be unregistered after removal")
 
-	// Verify buffers are deallocated.
-	_, abErr := eng.BufferManager().AnalysisBuffer("test_remove_001", testModelID)
-	require.Error(t, abErr, "analysis buffer should be deallocated")
-
+	// Verify the capture buffer is deallocated.
 	_, cbErr := eng.BufferManager().CaptureBuffer("test_remove_001")
 	require.Error(t, cbErr, "capture buffer should be deallocated")
 
@@ -344,9 +368,9 @@ func TestEngine_ReconfigureSource(t *testing.T) {
 	_, ok := eng.Registry().Get("test_reconfig_001")
 	require.True(t, ok)
 
-	ab1, err := eng.BufferManager().AnalysisBuffer("test_reconfig_001", testModelID)
+	cb1, err := eng.BufferManager().CaptureBuffer("test_reconfig_001")
 	require.NoError(t, err)
-	require.NotNil(t, ab1)
+	require.NotNil(t, cb1)
 
 	// Reconfigure with new sample rate.
 	newCfg := &audiocore.SourceConfig{
@@ -363,14 +387,12 @@ func TestEngine_ReconfigureSource(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, audiocore.SourceTypeRTSP, src.Type)
 
-	// Verify new buffers are allocated.
-	ab2, err := eng.BufferManager().AnalysisBuffer("test_reconfig_001", testModelID)
-	require.NoError(t, err)
-	assert.NotNil(t, ab2, "new analysis buffer should be allocated after reconfigure")
-
+	// Verify a new capture buffer is allocated and no analysis buffer.
 	cb2, err := eng.BufferManager().CaptureBuffer("test_reconfig_001")
 	require.NoError(t, err)
 	assert.NotNil(t, cb2, "new capture buffer should be allocated after reconfigure")
+	assert.Empty(t, eng.BufferManager().AnalysisBuffers("test_reconfig_001"),
+		"ReconfigureSource must not allocate analysis buffers")
 
 	// Verify the FFmpeg stream was restarted.
 	health := eng.StreamManager().AllStreamHealth()
@@ -388,7 +410,6 @@ func TestEngine_ReconfigureSource_NonRTSPTransportStaysEmpty(t *testing.T) {
 	t.Parallel()
 	// Engine default is a concrete transport; the non-RTSP source must not pick it up.
 	eng := New(t.Context(), &Config{Logger: audiocore.GetLogger(), Transport: transportTCP}, nil)
-	eng.SetPrimaryModel(testModelID, testClipBytes, testOverlapBytes, testReadSize)
 	t.Cleanup(eng.Stop)
 
 	cfg := &audiocore.SourceConfig{

@@ -16,6 +16,18 @@ import (
 
 const bufferMonitorDebugEveryTicks = 300
 
+// bufferAllocGraceTicks bounds how long a monitor tolerates a missing analysis
+// buffer before it has ever read one. The stream-reset callback (fireReset)
+// starts a monitor for every loaded model the moment StartStream fires, which is
+// before registerConsumersForSources allocates this source's analysis buffers, so
+// a brief "not yet allocated" window is normal on every source (re)start. Polling
+// through this grace (pollInterval each) keeps a legitimate target's monitor alive
+// across that window instead of killing it on the first tick, while a model that
+// is not a target for the source (no buffer ever appears) still stops once the
+// grace elapses. At 100ms per tick this is a 5s window: far longer than the
+// sub-tick allocation normally takes, short enough to bound a non-target monitor.
+const bufferAllocGraceTicks = 50
+
 // monitorKey identifies a unique monitor (one per source x model).
 type monitorKey struct {
 	sourceID string
@@ -35,10 +47,15 @@ type monitorConfig struct {
 // calls by analysisBufferMonitor. hasReadBuffer flips the "buffer removed" log
 // level once the buffer has been seen at least once; notLoadedWarned is the
 // warn-once latch for the model-not-loaded skip, so a monitor that outlives its
-// model during a reconfigure logs one warning rather than one per window.
+// model during a reconfigure logs one warning rather than one per window;
+// notFoundTicks bounds the startup allocation grace before the buffer is first seen.
 type monitorTickState struct {
 	hasReadBuffer   bool
 	notLoadedWarned bool
+	// notFoundTicks counts consecutive ticks on which the analysis buffer was not
+	// found before it had ever been read, bounding the startup allocation grace in
+	// processMonitorTick (see bufferAllocGraceTicks). It resets once a buffer reads.
+	notFoundTicks int
 }
 
 // classifierBackend is the analysis package's view of *classifier.Orchestrator:
@@ -57,17 +74,6 @@ type classifierBackend interface {
 	PredictModel(ctx context.Context, modelID string, sample [][]float32) ([]datastore.Results, error)
 	CurrentSettings() *conf.Settings
 	ModelSpecFor(modelID string) (classifier.ModelSpec, bool)
-}
-
-// firstDefaultTarget returns the single fallback analysis target and whether one
-// exists, reproducing the old PrimaryModelInfo() fallback with a len guard so an empty
-// DefaultTargets() (no default model loaded) never panics a caller that indexed [0].
-func firstDefaultTarget(bn classifierBackend) (classifier.ModelInfo, bool) {
-	targets := bn.DefaultTargets()
-	if len(targets) == 0 {
-		return classifier.ModelInfo{}, false
-	}
-	return targets[0], true
 }
 
 // defaultTargetIDs returns the registry IDs of DefaultTargets() in order: the set a
@@ -213,9 +219,7 @@ func (m *BufferManager) AddMonitor(source string) error {
 	}
 
 	// Build monitorConfigs for all loaded models. With no models loaded (N = 0) this
-	// is empty and AddMonitors starts no analysis monitors, which is correct. The
-	// former firstDefaultTarget fallback here was dead: DefaultTargets() draws from
-	// ModelInfos() and is empty whenever ModelInfos() is.
+	// is empty and AddMonitors starts no analysis monitors, which is correct.
 	allInfos := m.bn.ModelInfos()
 	configs := make([]monitorConfig, 0, len(allInfos))
 	for i := range allInfos {
@@ -498,17 +502,32 @@ func (m *BufferManager) processMonitorTick(
 	ab, err := m.bufferMgr.AnalysisBuffer(cfg.sourceID, cfg.modelID)
 	if err != nil {
 		if state.hasReadBuffer {
+			// The buffer existed and is now gone: a reconfigure or source removal
+			// deallocated it, so stop the monitor.
 			m.logger.Info("analysis buffer removed, stopping monitor",
 				logger.String("source_id", cfg.sourceID),
 				logger.String("model_id", cfg.modelID))
-		} else {
-			m.logger.Warn("analysis buffer not found for monitor, may not be allocated",
-				logger.String("source_id", cfg.sourceID),
-				logger.String("model_id", cfg.modelID))
+			return false
 		}
+		// The buffer has never appeared yet. The stream-reset callback starts a
+		// monitor for every loaded model as soon as StartStream fires, before
+		// registerConsumersForSources allocates this source's analysis buffers, so a
+		// brief "not yet allocated" window is expected on every (re)start. Poll
+		// through a bounded grace so a legitimate target's monitor survives that
+		// startup race (its buffer appears within a tick or two); once the grace
+		// elapses, treat the continued absence as "this model is not a target for
+		// this source" and stop, warning once.
+		state.notFoundTicks++
+		if state.notFoundTicks <= bufferAllocGraceTicks {
+			return true
+		}
+		m.logger.Warn("analysis buffer not found for monitor after allocation grace, stopping",
+			logger.String("source_id", cfg.sourceID),
+			logger.String("model_id", cfg.modelID))
 		return false
 	}
 	state.hasReadBuffer = true
+	state.notFoundTicks = 0
 
 	data, release, readErr := ab.Read()
 	defer release()

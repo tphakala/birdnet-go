@@ -196,11 +196,6 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	dataStore := p.dbService.DataStore()
 	metrics := p.apiService.Metrics()
 
-	// Set the primary model ID and buffer dimensions on the engine so that
-	// analysis buffers are allocated from the model's spec, not hardcoded
-	// constants. This matches the secondary model allocation path.
-	p.applyPrimaryModelDims()
-
 	// Register all loaded models in the ai_models database table so they
 	// appear even before any detections are saved.
 	log := GetLogger()
@@ -542,36 +537,9 @@ func (p *AudioPipelineService) restartAudioCapture() {
 	// Remove all existing sources.
 	p.removeAllSources(operationRestart)
 
-	// Re-resolve the primary model's buffer dimensions from current settings
-	// before re-adding sources, so a hot-reloaded birdnet.overlap takes effect
-	// (engine.AddSource allocates the primary buffer from these cached dims).
-	p.applyPrimaryModelDims()
-
 	// Re-add sources, register consumers, and update buffer monitors.
 	audioLevelChan := p.apiService.AudioLevelChan()
 	p.setupAudioSources(audioLevelChan, operationRestart, fallbackSources)
-}
-
-// applyPrimaryModelDims resolves the primary model's analysis-buffer dimensions
-// from the current settings (honoring birdnet.overlap; the bat model stays fixed
-// at 50%) and pushes them to the engine, so subsequent AddSource calls allocate
-// the primary buffer at the current cadence. Called at startup and on every
-// audio-capture restart, so an overlap change routed through a restart
-// reallocates the primary buffer with the new dimensions.
-func (p *AudioPipelineService) applyPrimaryModelDims() {
-	if p.bnAnalyzer == nil {
-		return
-	}
-	bn := p.bnAnalyzer.BirdNET()
-	if bn == nil {
-		return
-	}
-	// The zero ModelInfo when no default target is loaded yields ID "" and zero
-	// dimensions, so AddSource refuses the primary buffer exactly as it did for a
-	// zero PrimaryModelInfo().
-	info, _ := firstDefaultTarget(bn)
-	clipBytes, overlapBytes, readSize := info.Spec.BufferDimensions(info.Overlap)
-	p.engine.SetPrimaryModel(info.ID, clipBytes, overlapBytes, readSize)
 }
 
 // RestartSource tears down and reinitializes a single audio source.
@@ -1199,11 +1167,11 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 			modelInfos = fallbackTargets(sourceModelMap[sid], defaultTargets)
 		}
 
-		// Ensure analysis buffers exist for all target models. The engine
-		// pre-allocates the primary model's buffer in AddSource(), so it
-		// usually exists already. Use HasAnalysis for all models uniformly
-		// to handle the case where a prior model-change reconfigure
-		// deallocated a buffer that is now needed again.
+		// Ensure analysis buffers exist for all target models. This loop is the
+		// sole analysis-buffer allocation path: the engine allocates only the
+		// capture buffer in AddSource(). Use HasAnalysis for all models uniformly
+		// so a model already allocated is skipped and one a prior model-change
+		// reconfigure deallocated is reallocated when needed again.
 		allocatedModels := make(map[string]bool, len(modelInfos))
 		for i := range modelInfos {
 			if bufMgr.HasAnalysis(sid, modelInfos[i].ID) {
@@ -1548,6 +1516,17 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 			if src, ok := registry.GetByConnection(connStr); ok {
 				newSourceIDs = append(newSourceIDs, src.ID)
 				sourceModelMap[src.ID] = scm.modelIDs
+			} else {
+				// The source was added to the engine but cannot be resolved back by
+				// connection string, so registerConsumersForSources never allocates its
+				// analysis buffers and it would capture without being analyzed. This is
+				// effectively unreachable (both operations hold sourcesMu and key on the
+				// same connection string) and the keepIDs sweep below drops the orphan so
+				// it is re-added next pass, but log it so the degraded state is visible
+				// (symmetric with setupAudioSources' warn on the same lookup failure).
+				log.Warn("source added during reconfigure but not found in registry by connection string",
+					logger.String("connection", privacy.SanitizeStreamUrl(connStr)),
+					logger.String("operation", operationReconfigureDiff))
 			}
 		}
 	}

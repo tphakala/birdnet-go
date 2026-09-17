@@ -90,7 +90,6 @@ func engineReconfigureCase(t *testing.T, ffmpegPath string, fixture streamtest.F
 		LogLevel:   "error",
 	}, nil)
 	t.Cleanup(eng.Stop)
-	eng.SetPrimaryModel(testModelID, testClipBytes, testOverlapBytes, testReadSize)
 
 	const sourceID = "engine-reconf"
 	baseCfg := func(mediaMode string) *audiocore.SourceConfig {

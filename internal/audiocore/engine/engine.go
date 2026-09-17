@@ -162,15 +162,6 @@ type AudioEngine struct {
 	ctx       context.Context
 	cancel    context.CancelCauseFunc
 
-	// primaryModelID is the model identifier used when allocating analysis
-	// buffers. Set via SetPrimaryModel before adding sources.
-	primaryModelID string
-	// primaryClipBytes, primaryOverlapBytes, primaryReadSize are the analysis
-	// buffer dimensions derived from the primary model's spec. Set via
-	// SetPrimaryModel before adding sources.
-	primaryClipBytes    int
-	primaryOverlapBytes int
-	primaryReadSize     int
 	// soxPath is the absolute path to the SoX binary.
 	soxPath string
 	// transport is the default RTSP transport protocol.
@@ -384,47 +375,13 @@ func (e *AudioEngine) StartStream(sourceID, url, transport string) error {
 	return nil
 }
 
-// SetPrimaryModel sets the model identifier and analysis buffer dimensions
-// for the primary model. This must be called before AddSource to ensure
-// buffers are allocated with the correct model key and size.
-// clipBytes, overlapBytes, and readSize should be derived from the model's
-// ModelSpec.BufferDimensions(overlap) with the resolved per-model overlap,
-// matching the secondary model allocation path.
-//
-// The primary* fields written here are not mutex-guarded: SetPrimaryModel and the
-// AddSource/RemoveSource readers must be serialized by the caller. The audio
-// pipeline does this with p.sourcesMu (startup and every restart hold it), so an
-// overlap hot-reload that re-applies these dims stays race-free.
-func (e *AudioEngine) SetPrimaryModel(id string, clipBytes, overlapBytes, readSize int) {
-	e.primaryModelID = id
-	e.primaryClipBytes = clipBytes
-	e.primaryOverlapBytes = overlapBytes
-	e.primaryReadSize = readSize
-	e.logger.Info("primary model buffer dimensions set",
-		logger.String("model_id", id),
-		logger.Int("clip_bytes", clipBytes),
-		logger.Int("overlap_bytes", overlapBytes),
-		logger.Int("read_size", readSize))
-}
-
-// PrimaryModelID returns the current primary model identifier.
-func (e *AudioEngine) PrimaryModelID() string {
-	return e.primaryModelID
-}
-
-// AddSource registers a new audio source and allocates its buffers.
+// AddSource registers a new audio source and allocates its capture buffer.
+// The capture buffer is model-independent; the per-model analysis buffers are
+// allocated by the pipeline's registerConsumersForSources after this returns.
 // For stream-type sources (RTSP, HTTP, HLS, RTMP, UDP), the FFmpeg manager
 // is started. For audio card sources, the device manager begins capture.
 // File-type sources are registered but no long-running capture is started.
 func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
-	if e.primaryModelID == "" {
-		return errors.Newf("SetPrimaryModel must be called before AddSource").
-			Component("audiocore.engine").
-			Category(errors.CategoryState).
-			Context("source_id", cfg.ID).
-			Build()
-	}
-
 	// 1. Register the source.
 	src, err := e.registry.Register(cfg)
 	if err != nil {
@@ -438,30 +395,12 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 
 	sourceID := src.ID
 
-	// 2. Allocate analysis buffer using the primary model's native dimensions.
-	// BufferConsumer resamples audio to the model's target rate before writing,
-	// so buffer size must match the model spec, not the source sample rate.
-	// Clear any stale buffers for this source ID (e.g., watchdog restart
-	// reuses the same source ID without going through ReconfigureSource).
+	// Clear any stale buffers for this source ID before allocating the capture
+	// buffer, so a watchdog restart that reuses the same source ID (without going
+	// through ReconfigureSource) does not hit an "already allocated" error.
 	e.bufferMgr.DeallocateSource(sourceID)
 
-	if err := e.bufferMgr.AllocateAnalysis(
-		sourceID,
-		e.primaryModelID,
-		e.primaryClipBytes,
-		e.primaryOverlapBytes,
-		e.primaryReadSize,
-	); err != nil {
-		_ = e.registry.Unregister(sourceID)
-		return errors.New(err).
-			Component("audiocore.engine").
-			Category(errors.CategoryBuffer).
-			Context("operation", "allocate_analysis_buffer").
-			Context("source_id", sourceID).
-			Build()
-	}
-
-	// 3. Default and validate sample rate and channels for capture buffer and stream config.
+	// 2. Default and validate sample rate and channels for capture buffer and stream config.
 	sampleRate := cfg.SampleRate
 	if sampleRate <= 0 {
 		sampleRate = defaultSampleRate
@@ -475,15 +414,9 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 		bitDepth = defaultBitDepth
 	}
 
-	e.logger.Info("allocated primary analysis buffer",
-		logger.String("source_id", sourceID),
-		logger.String("model_id", e.primaryModelID),
-		logger.Int("clip_bytes", e.primaryClipBytes),
-		logger.Int("overlap_bytes", e.primaryOverlapBytes),
-		logger.Int("read_size", e.primaryReadSize),
-		logger.Int("source_sample_rate", sampleRate))
-
-	// 4. Allocate capture buffer.
+	// 3. Allocate capture buffer. The per-model analysis buffers are allocated by
+	// the pipeline's registerConsumersForSources after AddSource returns; the
+	// engine no longer assumes a single primary model.
 	if err := e.bufferMgr.AllocateCapture(
 		sourceID,
 		e.captureBufferSeconds,
@@ -500,7 +433,7 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 			Build()
 	}
 
-	// 5. Start capture based on source type.
+	// 4. Start capture based on source type.
 	if isStreamType(cfg.Type) {
 		spec := e.buildStreamSpec(&audiocore.StreamSpec{
 			SourceID:                  sourceID,
@@ -554,9 +487,9 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 				Build()
 		}
 	}
-	// File-type sources: registered + buffers allocated, but no long-running capture.
+	// File-type sources: registered + capture buffer allocated, but no long-running capture.
 
-	// 6. Sync defaulted audio params back to registry so downstream consumers
+	// 5. Sync defaulted audio params back to registry so downstream consumers
 	// see the effective values (not the raw config which may have been zero).
 	e.registry.UpdateAudioParams(sourceID, sampleRate, bitDepth, channels)
 
@@ -564,9 +497,7 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 		logger.String("source_id", sourceID),
 		logger.String("type", cfg.Type.String()),
 		logger.Int("sample_rate", sampleRate),
-		logger.Int("source_sample_rate", cfg.SourceSampleRate),
-		logger.String("primary_model", e.primaryModelID),
-		logger.Int("analysis_clip_bytes", e.primaryClipBytes))
+		logger.Int("source_sample_rate", cfg.SourceSampleRate))
 
 	return nil
 }
@@ -614,14 +545,6 @@ func (e *AudioEngine) RemoveSource(sourceID string) error {
 // ReconfigureSource stops the existing capture for sourceID, reallocates
 // buffers with the new configuration, and restarts capture.
 func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.SourceConfig) error {
-	if e.primaryModelID == "" {
-		return errors.Newf("SetPrimaryModel must be called before ReconfigureSource").
-			Component("audiocore.engine").
-			Category(errors.CategoryState).
-			Context("source_id", sourceID).
-			Build()
-	}
-
 	src, ok := e.registry.Get(sourceID)
 	if !ok {
 		return fmt.Errorf("reconfigure source: %w: %s", audiocore.ErrSourceNotFound, sourceID)
@@ -647,7 +570,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 	// 3. Deallocate old buffers.
 	e.bufferMgr.DeallocateSource(sourceID)
 
-	// 4. Allocate new analysis buffer using the primary model's native dimensions.
+	// 4. Default and validate sample rate and channels for the capture buffer.
 	sampleRate := newCfg.SampleRate
 	if sampleRate <= 0 {
 		sampleRate = defaultSampleRate
@@ -660,28 +583,9 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 	if bitDepth <= 0 {
 		bitDepth = defaultBitDepth
 	}
-	if err := e.bufferMgr.AllocateAnalysis(
-		sourceID,
-		e.primaryModelID,
-		e.primaryClipBytes,
-		e.primaryOverlapBytes,
-		e.primaryReadSize,
-	); err != nil {
-		_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
-		return errors.New(err).
-			Component("audiocore.engine").
-			Category(errors.CategoryBuffer).
-			Context("operation", "reallocate_analysis_buffer").
-			Context("source_id", sourceID).
-			Build()
-	}
-	e.logger.Info("reallocated primary analysis buffer",
-		logger.String("source_id", sourceID),
-		logger.String("model_id", e.primaryModelID),
-		logger.Int("clip_bytes", e.primaryClipBytes),
-		logger.Int("overlap_bytes", e.primaryOverlapBytes),
-		logger.Int("read_size", e.primaryReadSize),
-		logger.Int("source_sample_rate", sampleRate))
+
+	// 5. Allocate the new capture buffer. The per-model analysis buffers are
+	// reallocated by the pipeline's registerConsumersForSources after this returns.
 	if err := e.bufferMgr.AllocateCapture(
 		sourceID,
 		e.captureBufferSeconds,
@@ -698,7 +602,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 			Build()
 	}
 
-	// 5. Restart capture with new config.
+	// 6. Restart capture with new config.
 	newType := newCfg.Type
 	if newType == "" || newType == audiocore.SourceTypeUnknown {
 		newType = src.Type
@@ -748,7 +652,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 		}
 	}
 
-	// 6. Update registry so downstream consumers see the new audio params. Sync the
+	// 7. Update registry so downstream consumers see the new audio params. Sync the
 	// mode and source-shape fields first (ReconfigureSource does not re-register, so
 	// the registry otherwise keeps the values from add time), then UpdateAudioParams
 	// snapshots and emits the SourceReconfigured event with the fully updated entry.

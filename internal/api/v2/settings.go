@@ -2676,10 +2676,10 @@ func birdnetSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 // the realtime analysis-buffer cadence (read/overlap size), so a change requires
 // reallocating the analysis buffers. Overlap is not a per-source audio property,
 // so the diff-based reconfigure_audio_sources cannot see it; instead this triggers
-// restart_audio_capture, a full teardown and rebuild that re-applies the primary
-// model dimensions and reallocates every source's analysis buffers with the new
-// overlap. This is separate from reload_birdnet (which rebuilds the model
-// instance, not the source buffers).
+// restart_audio_capture, a full teardown and rebuild that reallocates every source's
+// analysis buffers with the new overlap (the pipeline sizes each buffer from the model
+// spec in registerConsumersForSources). This is separate from reload_birdnet (which
+// rebuilds the model instance, not the source buffers).
 func analysisOverlapChanged(oldSettings, currentSettings *conf.Settings) bool {
 	return oldSettings.BirdNET.Overlap != currentSettings.BirdNET.Overlap
 }

@@ -148,6 +148,135 @@ func TestProcessMonitorTick_ResumesWhenModelReloads(t *testing.T) {
 		"the resume log fires once, not on every subsequent tick")
 }
 
+// TestProcessMonitorTick_ToleratesBufferAllocationRace verifies the startup grace
+// that keeps a monitor alive while its analysis buffer is still being allocated. The
+// stream-reset callback starts a monitor the moment StartStream fires, before
+// registerConsumersForSources allocates the source's analysis buffers, so a monitor
+// must poll through a bounded grace instead of dying on the first missing-buffer tick
+// (which would leave a legitimate target with no monitor: a silent analysis stop).
+func TestProcessMonitorTick_ToleratesBufferAllocationRace(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sourceID = "src"
+		modelID  = "BirdNET_V2.4"
+		readSize = 480
+	)
+
+	// A buffer manager with NO analysis buffer allocated yet for (sourceID, modelID).
+	mgr := buffer.NewManager(logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC))
+	bm := &BufferManager{
+		bn:        &classifier.Orchestrator{},
+		bufferMgr: mgr,
+		logger:    logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC),
+	}
+	cfg := &monitorConfig{sourceID: sourceID, modelID: modelID, readSize: readSize}
+	quit := make(chan struct{})
+	state := &monitorTickState{}
+
+	// While the buffer is missing and has never been read, the monitor keeps running
+	// for the whole grace window instead of stopping.
+	for tick := int64(1); tick <= bufferAllocGraceTicks; tick++ {
+		require.True(t, bm.processMonitorTick(quit, cfg, readSize, 0, state, tick),
+			"monitor must keep polling while its buffer is still being allocated (tick %d)", tick)
+	}
+	require.False(t, state.hasReadBuffer, "no buffer has been read yet")
+
+	// The buffer now appears (registerConsumersForSources finished) and receives a
+	// full analysis window: the monitor reads it and continues, and the not-found
+	// counter resets. IsModelLoaded is false on the empty orchestrator, so the tick
+	// stops before inference; the point is only that the monitor survived the race.
+	require.NoError(t, mgr.AllocateAnalysis(sourceID, modelID, readSize*2, 0, readSize))
+	ab, err := mgr.AnalysisBuffer(sourceID, modelID)
+	require.NoError(t, err)
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+	require.True(t, bm.processMonitorTick(quit, cfg, readSize, 0, state, bufferAllocGraceTicks+1),
+		"monitor must survive once its buffer is allocated")
+	assert.True(t, state.hasReadBuffer, "buffer has now been read")
+	assert.Zero(t, state.notFoundTicks, "the not-found counter resets once the buffer reads")
+}
+
+// TestProcessMonitorTick_StopsWhenBufferNeverAllocated verifies the other side of the
+// grace: a monitor started for a model that is not a target for the source (its buffer
+// is never allocated) stops once the grace elapses rather than polling forever.
+func TestProcessMonitorTick_StopsWhenBufferNeverAllocated(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sourceID = "src"
+		modelID  = "Perch_V2"
+		readSize = 480
+	)
+
+	mgr := buffer.NewManager(logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC))
+	var logBuf bytes.Buffer
+	bm := &BufferManager{
+		bn:        &classifier.Orchestrator{},
+		bufferMgr: mgr,
+		logger:    logger.NewSlogLogger(&logBuf, logger.LogLevelDebug, time.UTC),
+	}
+	cfg := &monitorConfig{sourceID: sourceID, modelID: modelID, readSize: readSize}
+	quit := make(chan struct{})
+	state := &monitorTickState{}
+
+	// Every tick within the grace keeps the monitor running.
+	for tick := int64(1); tick <= bufferAllocGraceTicks; tick++ {
+		require.True(t, bm.processMonitorTick(quit, cfg, readSize, 0, state, tick))
+	}
+	// The tick past the grace stops the monitor and warns once.
+	require.False(t, bm.processMonitorTick(quit, cfg, readSize, 0, state, bufferAllocGraceTicks+1),
+		"monitor must stop once the allocation grace elapses without a buffer")
+	assert.Contains(t, logBuf.String(), "analysis buffer not found for monitor after allocation grace, stopping")
+}
+
+// TestProcessMonitorTick_StopsWhenBufferRemovedAfterRead verifies the teardown path is
+// unaffected by the startup grace: once a monitor has successfully read its analysis
+// buffer, a later tick that finds the buffer gone (a reconfigure or source removal
+// deallocated it) stops the monitor immediately. The grace applies only before the
+// buffer has ever been read.
+func TestProcessMonitorTick_StopsWhenBufferRemovedAfterRead(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sourceID = "src"
+		modelID  = "BirdNET_V2.4"
+		readSize = 480
+	)
+
+	mgr := buffer.NewManager(logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC))
+	require.NoError(t, mgr.AllocateAnalysis(sourceID, modelID, readSize*2, 0, readSize))
+	ab, err := mgr.AnalysisBuffer(sourceID, modelID)
+	require.NoError(t, err)
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+
+	var logBuf bytes.Buffer
+	bm := &BufferManager{
+		bn:        &classifier.Orchestrator{},
+		bufferMgr: mgr,
+		logger:    logger.NewSlogLogger(&logBuf, logger.LogLevelDebug, time.UTC),
+	}
+	cfg := &monitorConfig{sourceID: sourceID, modelID: modelID, readSize: readSize}
+	quit := make(chan struct{})
+	state := &monitorTickState{}
+
+	// Tick 1: the buffer exists and is read, so the monitor keeps running and records
+	// that it has seen the buffer (IsModelLoaded is false on the empty orchestrator, so
+	// the tick returns before inference; the point is only hasReadBuffer flips to true).
+	require.True(t, bm.processMonitorTick(quit, cfg, readSize, 0, state, 1))
+	require.True(t, state.hasReadBuffer, "the buffer was read once")
+
+	// The buffer is now deallocated (a reconfigure or source removal).
+	mgr.DeallocateSource(sourceID)
+
+	// Tick 2: the buffer is gone after having been read, so the monitor stops
+	// immediately; the startup grace does not apply once hasReadBuffer is set.
+	logBuf.Reset()
+	require.False(t, bm.processMonitorTick(quit, cfg, readSize, 0, state, 2),
+		"a monitor whose buffer was removed after a successful read must stop")
+	assert.Contains(t, logBuf.String(), "analysis buffer removed, stopping monitor")
+	assert.Zero(t, state.notFoundTicks, "the startup grace counter is untouched on the teardown path")
+}
+
 func TestMonitorConfig_ReadSize(t *testing.T) {
 	t.Parallel()
 
