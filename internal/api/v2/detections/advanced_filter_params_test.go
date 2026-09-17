@@ -373,12 +373,12 @@ func TestValidateAdvancedFilterParams_SharedByListAndResolve(t *testing.T) {
 			resolveErr := validateAdvancedFilterParams(&resolveParams)
 
 			if tc.wantErr {
-				assert.Error(t, listErr, "list endpoint must reject")
-				assert.Error(t, resolveErr, "resolve endpoint must reject")
+				require.Error(t, listErr, "list endpoint must reject")
+				require.Error(t, resolveErr, "resolve endpoint must reject")
 				return
 			}
-			assert.NoError(t, listErr, "list endpoint must accept")
-			assert.NoError(t, resolveErr, "resolve endpoint must accept")
+			require.NoError(t, listErr, "list endpoint must accept")
+			require.NoError(t, resolveErr, "resolve endpoint must accept")
 		})
 	}
 }

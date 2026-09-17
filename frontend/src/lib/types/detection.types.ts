@@ -63,6 +63,60 @@ export interface PaginatedDetectionResponse {
   itemsPerPage?: number;
 }
 
+/**
+ * Review verdict a detection can be filtered by. The empty string means the
+ * filter is off; it is distinct from 'unverified', which selects detections that
+ * carry no verdict.
+ */
+export type DetectionVerifiedFilter = '' | 'correct' | 'false_positive' | 'unverified';
+
+/** Lock-state filter. The empty string means the filter is off. */
+export type DetectionLockedFilter = '' | 'true' | 'false';
+
+/**
+ * Time-of-day period filter. These are resolved against the station's real
+ * sunrise and sunset times, not fixed clock hours. The empty string means the
+ * filter is off.
+ */
+export type DetectionTimeOfDayFilter = '' | 'day' | 'night' | 'sunrise' | 'sunset';
+
+/**
+ * The filter set shown in the detections filter panel and carried in the URL
+ * query string, so a filtered view is shareable and survives reload and
+ * back/forward navigation.
+ *
+ * Confidence is held as whole percentages (0-100) because that is what the range
+ * inputs and the labels use; the API takes the same percentages and converts.
+ */
+export interface DetectionFilters {
+  /** Free-text species query, matched against scientific and common names. */
+  search: string;
+  /** Inclusive start of the date range (YYYY-MM-DD). */
+  startDate: string;
+  /** Inclusive end of the date range (YYYY-MM-DD). */
+  endDate: string;
+  confidenceMin: number;
+  confidenceMax: number;
+  verified: DetectionVerifiedFilter;
+  locked: DetectionLockedFilter;
+  timeOfDay: DetectionTimeOfDayFilter;
+  /** Audio source, by display name. Empty means all sources. */
+  source: string;
+}
+
+/** The filter values that mean "no constraint". */
+export const DEFAULT_DETECTION_FILTERS: DetectionFilters = {
+  search: '',
+  startDate: '',
+  endDate: '',
+  confidenceMin: 0,
+  confidenceMax: 100,
+  verified: '',
+  locked: '',
+  timeOfDay: '',
+  source: '',
+};
+
 export interface DetectionsListData {
   notes: Detection[];
   queryType: 'hourly' | 'species' | 'search' | 'all';
@@ -71,6 +125,13 @@ export interface DetectionsListData {
   duration?: number;
   species?: string;
   search?: string;
+  /**
+   * The active filter set. Bulk "select all matching" resolves the same query the
+   * user is looking at, so the list needs the filters to send to
+   * /detections/batch/resolve -- without them the resolved set would be wider
+   * than the visible one.
+   */
+  filters?: DetectionFilters;
   numResults: number;
   offset: number;
   totalResults: number;
@@ -107,6 +168,14 @@ export interface DetectionQueryParams {
   numResults?: number;
   offset?: number;
   sortBy?: DetectionSortBy;
+  // Advanced filters. Confidence bounds are whole percentages, matching the
+  // filter panel's inputs; the backend converts them to fractions.
+  confidenceMin?: number;
+  confidenceMax?: number;
+  verified?: DetectionVerifiedFilter;
+  locked?: DetectionLockedFilter;
+  timeOfDay?: DetectionTimeOfDayFilter;
+  source?: string;
 }
 
 export interface DetectionReviewRequest {

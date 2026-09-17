@@ -694,13 +694,8 @@ func isValidVerifiedParam(param string) bool {
 
 // allowedVerifiedParams lists the accepted "verified" values for error messages.
 func allowedVerifiedParams() []string {
-	values := make([]string, 0, len(verifiedParamAliases)+len(legacyVerifiedBool))
-	for k := range verifiedParamAliases {
-		values = append(values, k)
-	}
-	for k := range legacyVerifiedBool {
-		values = append(values, k)
-	}
+	values := slices.Collect(maps.Keys(verifiedParamAliases))
+	values = append(values, slices.Collect(maps.Keys(legacyVerifiedBool))...)
 	slices.Sort(values)
 	return values
 }

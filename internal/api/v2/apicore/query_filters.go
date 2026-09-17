@@ -93,6 +93,7 @@ func ParseConfidenceFilter(param string) *ConfidenceFilterResult {
 // because a zero minimum is a valid, and different, request from no minimum.
 func ParseConfidenceBound(param string) (*float64, error) {
 	if param == "" {
+		//nolint:nilnil // a nil bound with no error is the documented "not supplied" result; a sentinel error would force every caller to distinguish it from a real failure
 		return nil, nil
 	}
 

@@ -68,6 +68,10 @@
   import DetectionRow from './DetectionRow.svelte';
   import DetectionsCardView from './DetectionsCardView.svelte';
   import { appState } from '$lib/stores/appState.svelte';
+  import {
+    detectionFiltersToResolveBody,
+    hasActiveDetectionFilters,
+  } from '$lib/utils/detectionFilters';
 
   type SortField = 'dateTime' | 'species' | 'confidence' | 'status';
   type SortDirection = 'asc' | 'desc';
@@ -131,9 +135,21 @@
         if (!data.search && data.species) {
           return t('detections.titles.speciesAll', { species: data.species });
         }
+        if (!data.search) {
+          // Filters are active but none of them is a free-text query, so there is
+          // nothing to quote. The filter panel above states what is narrowing the
+          // list; a quoted empty string here would just read as a bug.
+          return t('detections.title');
+        }
         return t('detections.titles.search', { query: data.search });
 
       default:
+        // The date-stamped title is only truthful for the unfiltered single-day
+        // view. Once a filter spans dates, claiming "all detections for <today>"
+        // would misdescribe what is on screen.
+        if (data.filters && hasActiveDetectionFilters(data.filters)) {
+          return t('detections.title');
+        }
         return t('detections.titles.allDetections', { date: data.date });
     }
   });
@@ -339,10 +355,17 @@
           body: JSON.stringify({
             queryType: data.queryType,
             species: data.species,
-            date: data.date,
+            // The date pin only applies to the unfiltered single-day view; sending
+            // it for a filtered query would resolve a narrower set than the one on
+            // screen, so a bulk action would silently skip most matches.
+            date: data.filters && hasActiveDetectionFilters(data.filters) ? undefined : data.date,
             search: data.search,
             hour: data.hour !== undefined ? String(data.hour) : undefined,
             duration: data.duration !== undefined ? data.duration : undefined,
+            // Every advanced filter that narrows the visible list must narrow the
+            // resolved set too, or the action would reach detections the user
+            // filtered out of view.
+            ...(data.filters ? detectionFiltersToResolveBody(data.filters) : {}),
           }),
         }
       );

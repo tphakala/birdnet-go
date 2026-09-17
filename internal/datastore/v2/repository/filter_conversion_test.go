@@ -844,7 +844,7 @@ func TestSingleTimeOfDayToHours(t *testing.T) {
 	})
 
 	t.Run("the four periods partition the day", func(t *testing.T) {
-		var all []int
+		all := make([]int, 0, 24)
 		for _, period := range []string{"sunrise", "day", "sunset", "night"} {
 			all = append(all, singleTimeOfDayToHours(period)...)
 		}

@@ -246,15 +246,33 @@
     if (currentPage === 'detections') {
       const url = new URL(globalThis.window.location.href);
 
+      // A new query replaces the previous filter set, but not how the list is
+      // being viewed: page size and sort are view preferences, not filters, and
+      // losing them on every search would silently undo the user's choice.
+      const preserved = new URLSearchParams();
+      for (const key of ['numResults', 'sortBy']) {
+        const value = url.searchParams.get(key);
+        if (value) preserved.set(key, value);
+      }
+
       // Clear existing search parameters
       url.search = '';
+
+      preserved.forEach((value, key) => {
+        url.searchParams.set(key, value);
+      });
 
       // Add new parameters
       searchParams.forEach((value, key) => {
         url.searchParams.set(key, value);
       });
 
-      globalThis.window.history.replaceState({}, '', url.toString());
+      // A different result set invalidates the current page position.
+      url.searchParams.set('offset', '0');
+
+      // pushState, matching the filter panel, so the back button steps through
+      // searches instead of skipping the whole series.
+      globalThis.window.history.pushState({}, '', url.toString());
 
       // Trigger a custom event to notify the detections page of the search change
       globalThis.window.dispatchEvent(
