@@ -542,8 +542,12 @@ func (e *AudioEngine) RemoveSource(sourceID string) error {
 	return nil
 }
 
-// ReconfigureSource stops the existing capture for sourceID, reallocates
-// buffers with the new configuration, and restarts capture.
+// ReconfigureSource stops the existing capture for sourceID, reallocates its
+// model-independent capture buffer with the new configuration, and restarts
+// capture. It removes the source's per-model analysis buffers (via
+// DeallocateSource) and does not recreate them: the pipeline's
+// registerConsumersForSources must run after a successful reconfigure to
+// reallocate the analysis buffers, mirroring AddSource.
 func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.SourceConfig) error {
 	src, ok := e.registry.Get(sourceID)
 	if !ok {

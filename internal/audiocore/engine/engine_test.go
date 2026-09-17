@@ -19,21 +19,21 @@ const (
 	transportUDP = "udp"
 )
 
-// newTestEngine creates an AudioEngine with a test context for testing.
-// The caller must call the returned stop function when done to avoid goroutine leaks.
-func newTestEngine(t *testing.T) (eng *AudioEngine, stop func()) {
+// newTestEngine creates an AudioEngine with a test context for testing. The engine's
+// Stop is registered with t.Cleanup, so callers do not stop it themselves.
+func newTestEngine(t *testing.T) *AudioEngine {
 	t.Helper()
 	cfg := &Config{Logger: audiocore.GetLogger()}
-	eng = New(t.Context(), cfg, nil)
-	return eng, eng.Stop
+	eng := New(t.Context(), cfg, nil)
+	t.Cleanup(eng.Stop)
+	return eng
 }
 
 // TestEngine_NewAndStop verifies that an engine can be created and stopped
 // cleanly with all subsystems initialised.
 func TestEngine_NewAndStop(t *testing.T) {
 	t.Parallel()
-	eng, stop := newTestEngine(t)
-	defer stop()
+	eng := newTestEngine(t)
 
 	// All subsystems should be non-nil after construction.
 	assert.NotNil(t, eng.registry)
@@ -50,8 +50,7 @@ func TestEngine_NewAndStop(t *testing.T) {
 // subsystem references.
 func TestEngine_Accessors(t *testing.T) {
 	t.Parallel()
-	eng, stop := newTestEngine(t)
-	defer stop()
+	eng := newTestEngine(t)
 
 	assert.NotNil(t, eng.Registry(), "Registry() should return non-nil")
 	assert.NotNil(t, eng.Router(), "Router() should return non-nil")
@@ -93,8 +92,7 @@ func TestEngine_resolveTransport(t *testing.T) {
 // registered in the source registry and that buffers are allocated.
 func TestEngine_AddSource_Stream(t *testing.T) {
 	t.Parallel()
-	eng, stop := newTestEngine(t)
-	defer stop()
+	eng := newTestEngine(t)
 
 	cfg := &audiocore.SourceConfig{
 		ID:               "test_rtsp_001",
@@ -186,8 +184,7 @@ func TestEngine_AddSource_HighSampleRate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			eng, stop := newTestEngine(t)
-			defer stop()
+			eng := newTestEngine(t)
 
 			sourceID := fmt.Sprintf("test_highrate_%d", tt.sampleRate)
 			cfg := &audiocore.SourceConfig{
@@ -222,8 +219,7 @@ func TestEngine_AddSource_HighSampleRate(t *testing.T) {
 // analysis buffer (analysis buffers are the pipeline's responsibility).
 func TestEngine_ReconfigureSource_HighSampleRate(t *testing.T) {
 	t.Parallel()
-	eng, stop := newTestEngine(t)
-	defer stop()
+	eng := newTestEngine(t)
 
 	cfg := &audiocore.SourceConfig{
 		ID:               "test_reconfig_highrate",
@@ -257,8 +253,7 @@ func TestEngine_ReconfigureSource_HighSampleRate(t *testing.T) {
 // without real hardware, so we handle both success and failure paths.
 func TestEngine_AddSource_Device(t *testing.T) {
 	t.Parallel()
-	eng, stop := newTestEngine(t)
-	defer stop()
+	eng := newTestEngine(t)
 
 	cfg := &audiocore.SourceConfig{
 		ID:               "test_audio_001",
@@ -297,8 +292,7 @@ func TestEngine_AddSource_Device(t *testing.T) {
 // registry, buffers, and streams are all cleaned up.
 func TestEngine_RemoveSource(t *testing.T) {
 	t.Parallel()
-	eng, stop := newTestEngine(t)
-	defer stop()
+	eng := newTestEngine(t)
 
 	cfg := &audiocore.SourceConfig{
 		ID:               "test_remove_001",
@@ -337,8 +331,7 @@ func TestEngine_RemoveSource(t *testing.T) {
 // returns an appropriate error.
 func TestEngine_RemoveSource_NotFound(t *testing.T) {
 	t.Parallel()
-	eng, stop := newTestEngine(t)
-	defer stop()
+	eng := newTestEngine(t)
 
 	err := eng.RemoveSource("nonexistent_source")
 	require.Error(t, err)
@@ -349,8 +342,7 @@ func TestEngine_RemoveSource_NotFound(t *testing.T) {
 // sample rate, and verifies that fresh buffers are allocated.
 func TestEngine_ReconfigureSource(t *testing.T) {
 	t.Parallel()
-	eng, stop := newTestEngine(t)
-	defer stop()
+	eng := newTestEngine(t)
 
 	// Add initial source.
 	cfg := &audiocore.SourceConfig{
@@ -447,8 +439,7 @@ func TestEngine_ReconfigureSource_NonRTSPTransportStaysEmpty(t *testing.T) {
 // non-existent source returns an appropriate error.
 func TestEngine_ReconfigureSource_NotFound(t *testing.T) {
 	t.Parallel()
-	eng, stop := newTestEngine(t)
-	defer stop()
+	eng := newTestEngine(t)
 
 	err := eng.ReconfigureSource("nonexistent", &audiocore.SourceConfig{
 		ConnectionString: "rtsp://example.com/stream",
@@ -462,9 +453,12 @@ func TestEngine_ReconfigureSource_NotFound(t *testing.T) {
 // cancellation cause when Stop is called.
 func TestErrEngineStopped(t *testing.T) {
 	t.Parallel()
-	eng, _ := newTestEngine(t)
+	// Construct the engine directly (not newTestEngine) because this test stops it
+	// explicitly to assert the cancellation cause; letting t.Cleanup also stop it
+	// would call Stop twice.
+	eng := New(t.Context(), &Config{Logger: audiocore.GetLogger()}, nil)
 
-	// Stop the engine — this cancels the context with ErrEngineStopped.
+	// Stop the engine, which cancels the context with ErrEngineStopped.
 	eng.Stop()
 
 	// The engine's context should be done.
@@ -532,8 +526,7 @@ func TestEngine_AddSource_ZeroAudioParams(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			eng, stop := newTestEngine(t)
-			defer stop()
+			eng := newTestEngine(t)
 
 			sourceID := fmt.Sprintf("test_zero_%s", tt.name)
 			cfg := &audiocore.SourceConfig{
@@ -566,8 +559,7 @@ func TestEngine_AddSource_ZeroAudioParams(t *testing.T) {
 // is updated with the effective values.
 func TestEngine_ReconfigureSource_ZeroAudioParams(t *testing.T) {
 	t.Parallel()
-	eng, stop := newTestEngine(t)
-	defer stop()
+	eng := newTestEngine(t)
 
 	cfg := &audiocore.SourceConfig{
 		ID:               "test_reconfig_zero",
@@ -604,8 +596,7 @@ func TestEngine_ReconfigureSource_ZeroAudioParams(t *testing.T) {
 // StartStream must be independently safe.
 func TestEngine_StartStream_ZeroBitDepthFallback(t *testing.T) {
 	t.Parallel()
-	eng, stop := newTestEngine(t)
-	defer stop()
+	eng := newTestEngine(t)
 
 	cfg := &audiocore.SourceConfig{
 		ID:               "test_startstream_bitdepth",

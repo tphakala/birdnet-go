@@ -17,7 +17,7 @@ import (
 const bufferMonitorDebugEveryTicks = 300
 
 // bufferAllocGraceTicks bounds how long a monitor tolerates a missing analysis
-// buffer before it has ever read one. The stream-reset callback (fireReset)
+// buffer before that buffer is first found. The stream-reset callback (fireReset)
 // starts a monitor for every loaded model the moment StartStream fires, which is
 // before registerConsumersForSources allocates this source's analysis buffers, so
 // a brief "not yet allocated" window is normal on every source (re)start. Polling
@@ -48,13 +48,15 @@ type monitorConfig struct {
 // level once the buffer has been seen at least once; notLoadedWarned is the
 // warn-once latch for the model-not-loaded skip, so a monitor that outlives its
 // model during a reconfigure logs one warning rather than one per window;
-// notFoundTicks bounds the startup allocation grace before the buffer is first seen.
+// notFoundTicks bounds the startup allocation grace before the buffer is first found.
 type monitorTickState struct {
 	hasReadBuffer   bool
 	notLoadedWarned bool
 	// notFoundTicks counts consecutive ticks on which the analysis buffer was not
-	// found before it had ever been read, bounding the startup allocation grace in
-	// processMonitorTick (see bufferAllocGraceTicks). It resets once a buffer reads.
+	// found, before it has ever been found at all, bounding the startup allocation
+	// grace in processMonitorTick (see bufferAllocGraceTicks). It resets once the
+	// buffer is found: hasReadBuffer flips when AnalysisBuffer first succeeds (the
+	// buffer is found), before any window is read.
 	notFoundTicks int
 }
 
