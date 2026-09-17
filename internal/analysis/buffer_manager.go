@@ -488,11 +488,15 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg *monit
 // up the current AnalysisBuffer for (sourceID, modelID), reads one window,
 // and dispatches it to ProcessData when a full readSize window is present.
 //
-// Returns keepRunning=false when the buffer was not found OR the goroutine was
-// asked to shut down during a backoff. The per-monitor state (see
-// monitorTickState) is updated in place across ticks so the caller can toggle its
-// "once seen, log on later loss" log-level preference and hold the model-not-loaded
-// warn-once latch.
+// Returns keepRunning=false only after a bounded grace (bufferAllocGraceTicks) has
+// elapsed with the analysis buffer still absent, or when the goroutine was asked to
+// shut down during a backoff. While the buffer is missing but the grace has not
+// elapsed it returns keepRunning=true, so a monitor survives the (re)allocation window
+// on startup and across a kept-source reconfigure; a genuine (source, model) removal
+// is handled by closing the monitor's quit channel, not by this return. The
+// per-monitor state (see monitorTickState) is updated in place across ticks so the
+// caller can toggle its "once seen, log on later loss" log-level preference and hold
+// the model-not-loaded warn-once latch and the not-found grace counter.
 //
 // The window's backing slice is always returned to its pool via a
 // "defer release()" immediately after Read, so every exit path including the
