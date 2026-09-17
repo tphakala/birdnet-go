@@ -100,7 +100,7 @@ func TestResolveModelOverlap_NilSettingsIsZero(t *testing.T) {
 func TestResolveModelOverlap_ZeroClipLengthNeverNegative(t *testing.T) {
 	t.Parallel()
 	// A degenerate/unset spec (ClipLength 0) must resolve to a non-negative
-	// overlap, not a negative clamp target. Guards TestPrimaryModelInfo.
+	// overlap, not a negative clamp target.
 	spec := ModelSpec{SampleRate: 48000}
 	s := &conf.Settings{}
 	s.BirdNET.Overlap = 2.4

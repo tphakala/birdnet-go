@@ -54,7 +54,7 @@ type phase3Snapshot struct {
 	LoadedIDs          []string       // sorted
 	ModelInfos         []ModelInfo    // sorted by ID; full struct incl. Backend, Quantization, NumSpecies, Overlap
 	DefaultTargetIDs   []string       // the full ordered DefaultTargets() ID set (v2.4 first); EngineDims stays keyed on element 0
-	EngineDims         [3]int         // clipBytes, overlapBytes, readSize of the default target
+	EngineDims         [3]int         // clipBytes, overlapBytes, readSize of the first default target
 	ThreadAllocation   map[string]int // per-model thread budget
 	AllLabelsCount     int
 	AllLabelsHead      []string // first 50 labels in order
@@ -89,9 +89,12 @@ func buildPhase3Snapshot(t *testing.T, o *Orchestrator) phase3Snapshot {
 
 	// Default targets: every loaded non-schedule-gated model, BirdNET v2.4 first
 	// (DefaultTargets stamps effective overlap and live NumSpecies via ModelInfos).
-	// EngineDims stays derived from the first default target, the v2.4 geometry the
-	// audio engine pre-allocates today, so it is invariant across the Phase 4
-	// default-target expansion even as DefaultTargetIDs grows past a single entry.
+	// EngineDims records the first default target's analysis-buffer geometry. Since
+	// Phase 4 PR 2 the audio engine allocates only the capture buffer; the per-model
+	// analysis buffers are allocated by the pipeline (registerConsumersForSources)
+	// and the first default's geometry is what a misconfigured source falls back to
+	// (fallbackTargets[:1]). The value is unchanged by PR 2 because DefaultTargets is
+	// unchanged, so this golden stays invariant across the decouple.
 	dt := o.DefaultTargets()
 	var defaultTargetIDs []string
 	var engineDims [3]int

@@ -196,11 +196,6 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	dataStore := p.dbService.DataStore()
 	metrics := p.apiService.Metrics()
 
-	// Set the primary model ID and buffer dimensions on the engine so that
-	// analysis buffers are allocated from the model's spec, not hardcoded
-	// constants. This matches the secondary model allocation path.
-	p.applyPrimaryModelDims()
-
 	// Register all loaded models in the ai_models database table so they
 	// appear even before any detections are saved.
 	log := GetLogger()
@@ -542,36 +537,9 @@ func (p *AudioPipelineService) restartAudioCapture() {
 	// Remove all existing sources.
 	p.removeAllSources(operationRestart)
 
-	// Re-resolve the primary model's buffer dimensions from current settings
-	// before re-adding sources, so a hot-reloaded birdnet.overlap takes effect
-	// (engine.AddSource allocates the primary buffer from these cached dims).
-	p.applyPrimaryModelDims()
-
 	// Re-add sources, register consumers, and update buffer monitors.
 	audioLevelChan := p.apiService.AudioLevelChan()
 	p.setupAudioSources(audioLevelChan, operationRestart, fallbackSources)
-}
-
-// applyPrimaryModelDims resolves the primary model's analysis-buffer dimensions
-// from the current settings (honoring birdnet.overlap; the bat model stays fixed
-// at 50%) and pushes them to the engine, so subsequent AddSource calls allocate
-// the primary buffer at the current cadence. Called at startup and on every
-// audio-capture restart, so an overlap change routed through a restart
-// reallocates the primary buffer with the new dimensions.
-func (p *AudioPipelineService) applyPrimaryModelDims() {
-	if p.bnAnalyzer == nil {
-		return
-	}
-	bn := p.bnAnalyzer.BirdNET()
-	if bn == nil {
-		return
-	}
-	// The zero ModelInfo when no default target is loaded yields ID "" and zero
-	// dimensions, so AddSource refuses the primary buffer exactly as it did for a
-	// zero PrimaryModelInfo().
-	info, _ := firstDefaultTarget(bn)
-	clipBytes, overlapBytes, readSize := info.Spec.BufferDimensions(info.Overlap)
-	p.engine.SetPrimaryModel(info.ID, clipBytes, overlapBytes, readSize)
 }
 
 // RestartSource tears down and reinitializes a single audio source.
@@ -628,6 +596,19 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 		return fmt.Errorf("restart source: remove failed: %w", err)
 	}
 
+	// Tear down the old source's analysis-buffer monitors. engine.RemoveSource
+	// deallocated its buffers but does not touch the buffer-monitor goroutines, and
+	// RestartSource re-adds the source under a fresh ID via AddMonitor rather than
+	// reconciling the old one through UpdateMonitors. Since the allocation grace no
+	// longer lets a monitor self-terminate promptly on a missing buffer, remove the
+	// old monitors explicitly here so they do not poll out the grace before stopping.
+	if monErr := p.bufferMgr.RemoveMonitor(sourceID); monErr != nil {
+		log.Warn("failed to remove old source monitors during restart",
+			logger.String("source_id", sourceID),
+			logger.Error(monErr),
+			logger.String("operation", operationRestartSource))
+	}
+
 	// 5. Rebuild source config from current settings. Pass the captured parameters
 	// as a fallback: the source was removed above, so buildSourceConfigsWithModels
 	// can no longer read them from the registry when the reconnect-time re-probe
@@ -647,21 +628,16 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 		return fmt.Errorf("restart source: config for %s no longer exists in settings", sourceID)
 	}
 
-	// 6. Re-add source via engine.
-	if err := p.engine.AddSource(targetConfig.config); err != nil {
+	// 6. Re-add source via engine, using the registry-assigned ID it returns (the
+	// source may get a new ID).
+	newSourceID, err := p.engine.AddSource(targetConfig.config)
+	if err != nil {
 		log.Error("failed to re-add source during restart",
 			logger.String("source_id", sourceID),
 			logger.Error(err),
 			logger.String("operation", operationRestartSource))
 		return fmt.Errorf("restart source: add failed: %w", err)
 	}
-
-	// The source may get a new ID from the registry. Look it up.
-	newSrc, found := registry.GetByConnection(connStr)
-	if !found {
-		return fmt.Errorf("restart source: source re-added but not found in registry")
-	}
-	newSourceID := newSrc.ID
 
 	// 7. Re-register consumers and monitors.
 	audioLevelChan := p.apiService.AudioLevelChan()
@@ -732,7 +708,8 @@ func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.A
 	sourceModelMap := make(map[string][]string, len(sourceConfigs))
 	var sourceIDs []string
 	for _, scm := range sourceConfigs {
-		if addErr := p.engine.AddSource(scm.config); addErr != nil {
+		sid, addErr := p.engine.AddSource(scm.config)
+		if addErr != nil {
 			log.Error("failed to add audio source",
 				logger.String("source_id", scm.config.ID),
 				logger.String("source_type", string(scm.config.Type)),
@@ -741,30 +718,26 @@ func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.A
 				logger.String("operation", operation))
 			continue
 		}
-		if src, ok := p.engine.Registry().GetByConnection(scm.config.ConnectionString); ok {
-			sourceIDs = append(sourceIDs, src.ID)
-			sourceModelMap[src.ID] = scm.modelIDs
-		} else {
-			log.Warn("source added but not found in registry by connection string",
-				logger.String("connection", privacy.SanitizeStreamUrl(scm.config.ConnectionString)),
-				logger.String("operation", operation))
-		}
+		sourceIDs = append(sourceIDs, sid)
+		sourceModelMap[sid] = scm.modelIDs
 	}
 
 	// Register buffer, audio level, and sound level consumers for all sources.
 	p.registerConsumersForSources(sourceIDs, sourceModelMap, audioLevelChan, operation)
 	p.registerSoundLevelConsumers(sourceIDs, operation)
 
-	// Update buffer monitors for the new sources.
-	if len(sourceIDs) > 0 {
-		sourceMonitorConfigs := p.buildMonitorConfigs(sourceModelMap, sourceIDs)
-		if monErr := p.bufferMgr.UpdateMonitors(sourceMonitorConfigs); monErr != nil {
-			log.Warn("buffer monitor update completed with errors",
-				logger.Error(monErr),
-				logger.Int("source_count", len(sourceIDs)),
-				logger.String("component", "analysis.audio_pipeline"),
-				logger.String("operation", operation))
-		}
+	// Reconcile buffer monitors to exactly the successfully-added sources. Call
+	// UpdateMonitors unconditionally (even when sourceIDs is empty because every
+	// AddSource failed) so it closes any monitors left over from before the restart
+	// instead of leaving them to poll out the allocation grace, mirroring
+	// reconfigureChangedSources.
+	sourceMonitorConfigs := p.buildMonitorConfigs(sourceModelMap, sourceIDs)
+	if monErr := p.bufferMgr.UpdateMonitors(sourceMonitorConfigs); monErr != nil {
+		log.Warn("buffer monitor update completed with errors",
+			logger.Error(monErr),
+			logger.Int("source_count", len(sourceIDs)),
+			logger.String("component", "analysis.audio_pipeline"),
+			logger.String("operation", operation))
 	}
 
 	return sourceIDs
@@ -1199,11 +1172,11 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 			modelInfos = fallbackTargets(sourceModelMap[sid], defaultTargets)
 		}
 
-		// Ensure analysis buffers exist for all target models. The engine
-		// pre-allocates the primary model's buffer in AddSource(), so it
-		// usually exists already. Use HasAnalysis for all models uniformly
-		// to handle the case where a prior model-change reconfigure
-		// deallocated a buffer that is now needed again.
+		// Ensure analysis buffers exist for all target models. This loop is the
+		// sole analysis-buffer allocation path: the engine allocates only the
+		// capture buffer in AddSource(). Use HasAnalysis for all models uniformly
+		// so a model already allocated is skipped and one a prior model-change
+		// reconfigure deallocated is reallocated when needed again.
 		allocatedModels := make(map[string]bool, len(modelInfos))
 		for i := range modelInfos {
 			if bufMgr.HasAnalysis(sid, modelInfos[i].ID) {
@@ -1539,16 +1512,15 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 			log.Info("adding new stream from config",
 				logger.String("connection", privacy.SanitizeStreamUrl(connStr)),
 				logger.String("operation", operationReconfigureDiff))
-			if err := p.engine.AddSource(scm.config); err != nil {
+			sid, addErr := p.engine.AddSource(scm.config)
+			if addErr != nil {
 				log.Warn("failed to add source during reconfigure",
 					logger.String("connection", privacy.SanitizeStreamUrl(connStr)),
-					logger.Error(err))
+					logger.Error(addErr))
 				continue
 			}
-			if src, ok := registry.GetByConnection(connStr); ok {
-				newSourceIDs = append(newSourceIDs, src.ID)
-				sourceModelMap[src.ID] = scm.modelIDs
-			}
+			newSourceIDs = append(newSourceIDs, sid)
+			sourceModelMap[sid] = scm.modelIDs
 		}
 	}
 
