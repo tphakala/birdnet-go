@@ -596,6 +596,19 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 		return fmt.Errorf("restart source: remove failed: %w", err)
 	}
 
+	// Tear down the old source's analysis-buffer monitors. engine.RemoveSource
+	// deallocated its buffers but does not touch the buffer-monitor goroutines, and
+	// RestartSource re-adds the source under a fresh ID via AddMonitor rather than
+	// reconciling the old one through UpdateMonitors. Since the allocation grace no
+	// longer lets a monitor self-terminate promptly on a missing buffer, remove the
+	// old monitors explicitly here so they do not poll out the grace before stopping.
+	if monErr := p.bufferMgr.RemoveMonitor(sourceID); monErr != nil {
+		log.Warn("failed to remove old source monitors during restart",
+			logger.String("source_id", sourceID),
+			logger.Error(monErr),
+			logger.String("operation", operationRestartSource))
+	}
+
 	// 5. Rebuild source config from current settings. Pass the captured parameters
 	// as a fallback: the source was removed above, so buildSourceConfigsWithModels
 	// can no longer read them from the registry when the reconnect-time re-probe
