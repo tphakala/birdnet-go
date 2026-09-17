@@ -104,7 +104,7 @@ func TestEngine_AddSource_Stream(t *testing.T) {
 		Channels:         1,
 	}
 
-	err := eng.AddSource(cfg)
+	_, err := eng.AddSource(cfg)
 	require.NoError(t, err)
 
 	// Verify source is in the registry.
@@ -148,7 +148,8 @@ func TestEngine_AddSource_NoPrimaryModel(t *testing.T) {
 		Channels:         1,
 	}
 
-	require.NoError(t, eng.AddSource(cfg), "AddSource must succeed without a primary model")
+	_, err := eng.AddSource(cfg)
+	require.NoError(t, err, "AddSource must succeed without a primary model")
 
 	src, ok := eng.Registry().Get("test_no_primary")
 	require.True(t, ok, "source should be registered")
@@ -197,7 +198,7 @@ func TestEngine_AddSource_HighSampleRate(t *testing.T) {
 				Channels:         1,
 			}
 
-			err := eng.AddSource(cfg)
+			_, err := eng.AddSource(cfg)
 			require.NoError(t, err)
 
 			// The engine allocates only the model-independent capture buffer for a
@@ -230,7 +231,8 @@ func TestEngine_ReconfigureSource_HighSampleRate(t *testing.T) {
 		BitDepth:         16,
 		Channels:         1,
 	}
-	require.NoError(t, eng.AddSource(cfg))
+	_, addErr := eng.AddSource(cfg)
+	require.NoError(t, addErr)
 
 	// Reconfigure to 96kHz.
 	newCfg := &audiocore.SourceConfig{
@@ -267,7 +269,7 @@ func TestEngine_AddSource_Device(t *testing.T) {
 
 	// Device capture will likely fail without hardware, but the source
 	// should still be registered and buffers allocated up to that point.
-	err := eng.AddSource(cfg)
+	_, err := eng.AddSource(cfg)
 
 	// On a machine without audio hardware, StartCapture fails, which causes
 	// AddSource to clean up and return an error. On machines with audio
@@ -304,7 +306,8 @@ func TestEngine_RemoveSource(t *testing.T) {
 		Channels:         1,
 	}
 
-	require.NoError(t, eng.AddSource(cfg))
+	_, addErr := eng.AddSource(cfg)
+	require.NoError(t, addErr)
 
 	// Verify present before removal.
 	_, ok := eng.Registry().Get("test_remove_001")
@@ -354,7 +357,8 @@ func TestEngine_ReconfigureSource(t *testing.T) {
 		BitDepth:         16,
 		Channels:         1,
 	}
-	require.NoError(t, eng.AddSource(cfg))
+	_, addErr := eng.AddSource(cfg)
+	require.NoError(t, addErr)
 
 	// Verify initial state.
 	_, ok := eng.Registry().Get("test_reconfig_001")
@@ -414,7 +418,8 @@ func TestEngine_ReconfigureSource_NonRTSPTransportStaysEmpty(t *testing.T) {
 		Channels:         1,
 		// Transport intentionally empty: HLS does not use -rtsp_transport.
 	}
-	require.NoError(t, eng.AddSource(cfg))
+	_, addErr := eng.AddSource(cfg)
+	require.NoError(t, addErr)
 
 	src, ok := eng.Registry().Get("test_hls_transport")
 	require.True(t, ok)
@@ -539,7 +544,7 @@ func TestEngine_AddSource_ZeroAudioParams(t *testing.T) {
 				Channels:         tt.channels,
 			}
 
-			err := eng.AddSource(cfg)
+			_, err := eng.AddSource(cfg)
 			require.NoError(t, err)
 
 			src, ok := eng.Registry().Get(sourceID)
@@ -570,7 +575,8 @@ func TestEngine_ReconfigureSource_ZeroAudioParams(t *testing.T) {
 		BitDepth:         16,
 		Channels:         1,
 	}
-	require.NoError(t, eng.AddSource(cfg))
+	_, addErr := eng.AddSource(cfg)
+	require.NoError(t, addErr)
 
 	newCfg := &audiocore.SourceConfig{
 		ConnectionString: "rtsp://192.168.1.100/zero_v2",
@@ -607,7 +613,8 @@ func TestEngine_StartStream_ZeroBitDepthFallback(t *testing.T) {
 		BitDepth:         16,
 		Channels:         1,
 	}
-	require.NoError(t, eng.AddSource(cfg))
+	_, addErr := eng.AddSource(cfg)
+	require.NoError(t, addErr)
 
 	// Stop the stream started by AddSource so we can restart it.
 	require.NoError(t, eng.StreamManager().StopStream("test_startstream_bitdepth"))

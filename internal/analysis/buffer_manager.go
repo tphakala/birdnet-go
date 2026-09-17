@@ -17,15 +17,18 @@ import (
 const bufferMonitorDebugEveryTicks = 300
 
 // bufferAllocGraceTicks bounds how long a monitor tolerates a missing analysis
-// buffer before that buffer is first found. The stream-reset callback (fireReset)
-// starts a monitor for every loaded model the moment StartStream fires, which is
-// before registerConsumersForSources allocates this source's analysis buffers, so
-// a brief "not yet allocated" window is normal on every source (re)start. Polling
-// through this grace (pollInterval each) keeps a legitimate target's monitor alive
-// across that window instead of killing it on the first tick, while a model that
-// is not a target for the source (no buffer ever appears) still stops once the
-// grace elapses. At 100ms per tick this is a 5s window: far longer than the
-// sub-tick allocation normally takes, short enough to bound a non-target monitor.
+// buffer before it is (re)allocated. The buffer is transiently absent on every
+// source (re)start (the stream-reset callback starts the monitor before
+// registerConsumersForSources allocates the buffer) and across a kept-source
+// reconfigure (ReconfigureSource deallocates the buffer before
+// registerConsumersForSources reallocates it). Polling through this grace
+// (pollInterval each) keeps the monitor alive across that window instead of
+// dropping it, while a model that is not a target for the source (no buffer ever
+// appears) still stops once the grace elapses. Genuine (source, model) removal is
+// handled separately by closing the monitor's quit channel, so the grace never
+// keeps a removed monitor alive. At 100ms per tick this is a 5s window: far longer
+// than the sub-tick (re)allocation normally takes, short enough to bound a stuck
+// monitor.
 const bufferAllocGraceTicks = 50
 
 // monitorKey identifies a unique monitor (one per source x model).
@@ -53,10 +56,11 @@ type monitorTickState struct {
 	hasReadBuffer   bool
 	notLoadedWarned bool
 	// notFoundTicks counts consecutive ticks on which the analysis buffer was not
-	// found, before it has ever been found at all, bounding the startup allocation
-	// grace in processMonitorTick (see bufferAllocGraceTicks). It resets once the
-	// buffer is found: hasReadBuffer flips when AnalysisBuffer first succeeds (the
-	// buffer is found), before any window is read.
+	// found, bounding the (re)allocation grace in processMonitorTick (see
+	// bufferAllocGraceTicks); the grace applies both before the buffer is first found
+	// (startup) and after it disappears on a kept-source reconfigure. It resets once
+	// the buffer is found again. hasReadBuffer flips when AnalysisBuffer first
+	// succeeds (the buffer is found), before any window is read.
 	notFoundTicks int
 }
 
@@ -503,29 +507,36 @@ func (m *BufferManager) processMonitorTick(
 ) (keepRunning bool) {
 	ab, err := m.bufferMgr.AnalysisBuffer(cfg.sourceID, cfg.modelID)
 	if err != nil {
-		if state.hasReadBuffer {
-			// The buffer existed and is now gone: a reconfigure or source removal
-			// deallocated it, so stop the monitor.
-			m.logger.Info("analysis buffer removed, stopping monitor",
-				logger.String("source_id", cfg.sourceID),
-				logger.String("model_id", cfg.modelID))
-			return false
-		}
-		// The buffer has never appeared yet. The stream-reset callback starts a
-		// monitor for every loaded model as soon as StartStream fires, before
-		// registerConsumersForSources allocates this source's analysis buffers, so a
-		// brief "not yet allocated" window is expected on every (re)start. Poll
-		// through a bounded grace so a legitimate target's monitor survives that
-		// startup race (its buffer appears within a tick or two); once the grace
-		// elapses, treat the continued absence as "this model is not a target for
-		// this source" and stop, warning once.
+		// The analysis buffer is not currently allocated. This is transient in two
+		// cases, and the monitor must survive both rather than stop and be silently
+		// dropped:
+		//   - startup: the stream-reset callback (fireReset -> AddMonitor) starts this
+		//     monitor as soon as StartStream fires, before registerConsumersForSources
+		//     allocates the buffer;
+		//   - reconfigure: on a kept-source reconfigure, ReconfigureSource deallocates
+		//     the analysis buffer and registerConsumersForSources reallocates it a few
+		//     steps later, so a monitor that already read the old buffer briefly finds
+		//     none (this gap widens with the number of reconfigured sources).
+		// Poll through a bounded grace so the monitor picks the (re)allocated buffer
+		// back up instead of dying in the window. A genuinely removed (source, model)
+		// is torn down by UpdateMonitors/RemoveMonitor closing this monitor's quit
+		// channel, which analysisBufferMonitor's outer select exits on regardless of
+		// this grace, so the grace never keeps a removed monitor alive; it only bridges
+		// the reallocation gap. If the buffer never returns within the grace, stop as a
+		// safety net so a monitor cannot poll forever.
 		state.notFoundTicks++
 		if state.notFoundTicks <= bufferAllocGraceTicks {
 			return true
 		}
-		m.logger.Warn("analysis buffer not found for monitor after allocation grace, stopping",
-			logger.String("source_id", cfg.sourceID),
-			logger.String("model_id", cfg.modelID))
+		if state.hasReadBuffer {
+			m.logger.Info("analysis buffer removed and not reallocated within grace, stopping monitor",
+				logger.String("source_id", cfg.sourceID),
+				logger.String("model_id", cfg.modelID))
+		} else {
+			m.logger.Warn("analysis buffer not found for monitor after allocation grace, stopping",
+				logger.String("source_id", cfg.sourceID),
+				logger.String("model_id", cfg.modelID))
+		}
 		return false
 	}
 	state.hasReadBuffer = true

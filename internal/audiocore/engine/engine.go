@@ -375,17 +375,18 @@ func (e *AudioEngine) StartStream(sourceID, url, transport string) error {
 	return nil
 }
 
-// AddSource registers a new audio source and allocates its capture buffer.
-// The capture buffer is model-independent; the per-model analysis buffers are
-// allocated by the pipeline's registerConsumersForSources after this returns.
+// AddSource registers a new audio source, allocates its capture buffer, and returns
+// the registry-assigned source ID (which may differ from cfg.ID). The capture buffer
+// is model-independent; the per-model analysis buffers are allocated by the pipeline's
+// registerConsumersForSources after this returns, keyed on the returned ID.
 // For stream-type sources (RTSP, HTTP, HLS, RTMP, UDP), the FFmpeg manager
 // is started. For audio card sources, the device manager begins capture.
 // File-type sources are registered but no long-running capture is started.
-func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
+func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) (sourceID string, err error) {
 	// 1. Register the source.
 	src, err := e.registry.Register(cfg)
 	if err != nil {
-		return errors.New(err).
+		return "", errors.New(err).
 			Component("audiocore.engine").
 			Category(errors.CategoryAudioSource).
 			Context("operation", "register_source").
@@ -393,7 +394,7 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 			Build()
 	}
 
-	sourceID := src.ID
+	sourceID = src.ID
 
 	// Clear any stale buffers for this source ID before allocating the capture
 	// buffer, so a watchdog restart that reuses the same source ID (without going
@@ -425,7 +426,7 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 	); err != nil {
 		e.bufferMgr.DeallocateSource(sourceID)
 		_ = e.registry.Unregister(sourceID)
-		return errors.New(err).
+		return "", errors.New(err).
 			Component("audiocore.engine").
 			Category(errors.CategoryBuffer).
 			Context("operation", "allocate_capture_buffer").
@@ -453,7 +454,7 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 		if err := e.streamMgr.StartStream(spec); err != nil {
 			e.bufferMgr.DeallocateSource(sourceID)
 			_ = e.registry.Unregister(sourceID)
-			return errors.New(err).
+			return "", errors.New(err).
 				Component("audiocore.engine").
 				Category(errors.CategoryRTSP).
 				Context("operation", "start_stream").
@@ -479,7 +480,7 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 				logger.Error(err))
 			e.bufferMgr.DeallocateSource(sourceID)
 			_ = e.registry.Unregister(sourceID)
-			return errors.New(err).
+			return "", errors.New(err).
 				Component("audiocore.engine").
 				Category(errors.CategoryAudioSource).
 				Context("operation", "start_device_capture").
@@ -499,7 +500,7 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 		logger.Int("sample_rate", sampleRate),
 		logger.Int("source_sample_rate", cfg.SourceSampleRate))
 
-	return nil
+	return sourceID, nil
 }
 
 // RemoveSource stops capture, removes all routes, deallocates buffers, and

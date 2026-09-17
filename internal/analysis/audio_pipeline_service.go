@@ -615,21 +615,16 @@ func (p *AudioPipelineService) RestartSource(sourceID string) error {
 		return fmt.Errorf("restart source: config for %s no longer exists in settings", sourceID)
 	}
 
-	// 6. Re-add source via engine.
-	if err := p.engine.AddSource(targetConfig.config); err != nil {
+	// 6. Re-add source via engine, using the registry-assigned ID it returns (the
+	// source may get a new ID).
+	newSourceID, err := p.engine.AddSource(targetConfig.config)
+	if err != nil {
 		log.Error("failed to re-add source during restart",
 			logger.String("source_id", sourceID),
 			logger.Error(err),
 			logger.String("operation", operationRestartSource))
 		return fmt.Errorf("restart source: add failed: %w", err)
 	}
-
-	// The source may get a new ID from the registry. Look it up.
-	newSrc, found := registry.GetByConnection(connStr)
-	if !found {
-		return fmt.Errorf("restart source: source re-added but not found in registry")
-	}
-	newSourceID := newSrc.ID
 
 	// 7. Re-register consumers and monitors.
 	audioLevelChan := p.apiService.AudioLevelChan()
@@ -700,7 +695,8 @@ func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.A
 	sourceModelMap := make(map[string][]string, len(sourceConfigs))
 	var sourceIDs []string
 	for _, scm := range sourceConfigs {
-		if addErr := p.engine.AddSource(scm.config); addErr != nil {
+		sid, addErr := p.engine.AddSource(scm.config)
+		if addErr != nil {
 			log.Error("failed to add audio source",
 				logger.String("source_id", scm.config.ID),
 				logger.String("source_type", string(scm.config.Type)),
@@ -709,14 +705,8 @@ func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.A
 				logger.String("operation", operation))
 			continue
 		}
-		if src, ok := p.engine.Registry().GetByConnection(scm.config.ConnectionString); ok {
-			sourceIDs = append(sourceIDs, src.ID)
-			sourceModelMap[src.ID] = scm.modelIDs
-		} else {
-			log.Warn("source added but not found in registry by connection string",
-				logger.String("connection", privacy.SanitizeStreamUrl(scm.config.ConnectionString)),
-				logger.String("operation", operation))
-		}
+		sourceIDs = append(sourceIDs, sid)
+		sourceModelMap[sid] = scm.modelIDs
 	}
 
 	// Register buffer, audio level, and sound level consumers for all sources.
@@ -1507,27 +1497,15 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 			log.Info("adding new stream from config",
 				logger.String("connection", privacy.SanitizeStreamUrl(connStr)),
 				logger.String("operation", operationReconfigureDiff))
-			if err := p.engine.AddSource(scm.config); err != nil {
+			sid, addErr := p.engine.AddSource(scm.config)
+			if addErr != nil {
 				log.Warn("failed to add source during reconfigure",
 					logger.String("connection", privacy.SanitizeStreamUrl(connStr)),
-					logger.Error(err))
+					logger.Error(addErr))
 				continue
 			}
-			if src, ok := registry.GetByConnection(connStr); ok {
-				newSourceIDs = append(newSourceIDs, src.ID)
-				sourceModelMap[src.ID] = scm.modelIDs
-			} else {
-				// The source was added to the engine but cannot be resolved back by
-				// connection string, so registerConsumersForSources never allocates its
-				// analysis buffers and it would capture without being analyzed. This is
-				// effectively unreachable (both operations hold sourcesMu and key on the
-				// same connection string) and the keepIDs sweep below drops the orphan so
-				// it is re-added next pass, but log it so the degraded state is visible
-				// (symmetric with setupAudioSources' warn on the same lookup failure).
-				log.Warn("source added during reconfigure but not found in registry by connection string",
-					logger.String("connection", privacy.SanitizeStreamUrl(connStr)),
-					logger.String("operation", operationReconfigureDiff))
-			}
+			newSourceIDs = append(newSourceIDs, sid)
+			sourceModelMap[sid] = scm.modelIDs
 		}
 	}
 

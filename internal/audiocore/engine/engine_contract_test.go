@@ -106,7 +106,8 @@ func engineReconfigureCase(t *testing.T, ffmpegPath string, fixture streamtest.F
 		}
 	}
 
-	require.NoError(t, eng.AddSource(baseCfg("auto")))
+	_, err := eng.AddSource(baseCfg("auto"))
+	require.NoError(t, err)
 	require.Eventually(t, func() bool { return engineStreamHealthy(eng, sourceID) },
 		engineHealthyBudget, enginePollInterval, "stream should become healthy after AddSource")
 
