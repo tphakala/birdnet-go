@@ -726,16 +726,18 @@ func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.A
 	p.registerConsumersForSources(sourceIDs, sourceModelMap, audioLevelChan, operation)
 	p.registerSoundLevelConsumers(sourceIDs, operation)
 
-	// Update buffer monitors for the new sources.
-	if len(sourceIDs) > 0 {
-		sourceMonitorConfigs := p.buildMonitorConfigs(sourceModelMap, sourceIDs)
-		if monErr := p.bufferMgr.UpdateMonitors(sourceMonitorConfigs); monErr != nil {
-			log.Warn("buffer monitor update completed with errors",
-				logger.Error(monErr),
-				logger.Int("source_count", len(sourceIDs)),
-				logger.String("component", "analysis.audio_pipeline"),
-				logger.String("operation", operation))
-		}
+	// Reconcile buffer monitors to exactly the successfully-added sources. Call
+	// UpdateMonitors unconditionally (even when sourceIDs is empty because every
+	// AddSource failed) so it closes any monitors left over from before the restart
+	// instead of leaving them to poll out the allocation grace, mirroring
+	// reconfigureChangedSources.
+	sourceMonitorConfigs := p.buildMonitorConfigs(sourceModelMap, sourceIDs)
+	if monErr := p.bufferMgr.UpdateMonitors(sourceMonitorConfigs); monErr != nil {
+		log.Warn("buffer monitor update completed with errors",
+			logger.Error(monErr),
+			logger.Int("source_count", len(sourceIDs)),
+			logger.String("component", "analysis.audio_pipeline"),
+			logger.String("operation", operation))
 	}
 
 	return sourceIDs
