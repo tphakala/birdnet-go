@@ -1178,6 +1178,10 @@ type RangeFilterStatusResponse struct {
 	// (only meaningful when Geomodel is non-nil). Zero means the geomodel filters out all
 	// detections for the primary classifier.
 	MappedSpecies int `json:"mappedSpecies"`
+	// CoverageApplicable reports whether a classifier is loaded to compute coverage
+	// against. False at N = 0 (no acoustic model): Classifiers is empty and MappedSpecies
+	// is 0 because there is nothing to map, not because the geomodel matched nothing.
+	CoverageApplicable bool `json:"coverageApplicable"`
 }
 
 // shouldAutoSelectV3Geomodel reports whether the v3 geomodel should be

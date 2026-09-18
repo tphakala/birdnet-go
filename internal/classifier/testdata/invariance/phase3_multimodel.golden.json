@@ -261,7 +261,8 @@
     "lastUpdated": "0001-01-01T00:00:00Z",
     "active": true,
     "fellBack": false,
-    "mappedSpecies": 0
+    "mappedSpecies": 0,
+    "coverageApplicable": true
   },
   "RarityFilterActive": false,
   "SpeciesIndexSHA256": "d7074937acb899d412d2382d0fc34d11fb51905aa75481f5a8df1d098a898150",

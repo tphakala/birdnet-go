@@ -121,6 +121,15 @@ func Load() (*Settings, error) {
 		persistMigration(settings, "source target defaults")
 	}
 
+	// Write the implicit BirdNET v2.4 enable out to models.enabled once, before the
+	// implicit enable is dropped from the orchestrator, so every existing install keeps
+	// loading exactly the models it did (model de-privilege epic, Phase 4). Runs after
+	// MigrateSourceTargetDefaults (a version-0 file gets both) and before
+	// MigrateModelIDAliases, which then canonicalizes any catalog spelling.
+	if settings.MigrateModelsEnabledAuthoritative() {
+		persistMigration(settings, "models enabled authoritative")
+	}
+
 	// Relocate stream URLs misconfigured under realtime.audio.sources (meant
 	// for local sound cards) into realtime.rtsp.streams so the runtime opens
 	// them with FFmpeg instead of failing to open them as ALSA devices.
@@ -374,7 +383,15 @@ func initViper() error {
 	return nil
 }
 
-// createDefaultConfig creates a default config file and writes it to the default config path
+// stampConfigVersion prefixes a freshly generated config with the current config
+// version key. The one-shot migrations in migrations.go describe files written by
+// OLDER builds; a file this build creates must never be "migrated" (model de-privilege
+// epic, Phase 4).
+func stampConfigVersion(yamlText string) string {
+	return fmt.Sprintf("configversion: %d\n", currentConfigVersion) + yamlText
+}
+
+// createDefaultConfig creates a default config file and writes it to the default config path.
 func createDefaultConfig() error {
 	configPaths, err := GetDefaultConfigPaths()
 	if err != nil {
@@ -388,6 +405,12 @@ func createDefaultConfig() error {
 	if err != nil {
 		return err
 	}
+	// Stamp the freshly generated file at the current config version so this build's
+	// one-shot migrations never treat a file it just created as an older build's file
+	// (model de-privilege epic, Phase 4): otherwise MigrateSourceTargetDefaults would pin
+	// its default source to ["birdnet"] and MigrateModelsEnabledAuthoritative would re-add
+	// "birdnet" after a later fresh N=0 install removes it.
+	defaultConfig = stampConfigVersion(defaultConfig)
 
 	// If the basicauth secret is not set, generate a random one
 	if viper.GetString("security.basicauth.clientsecret") == "" {

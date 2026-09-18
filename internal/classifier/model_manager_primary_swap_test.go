@@ -264,3 +264,44 @@ func TestModelManager_PrimarySwap_RollbackOnReloadFailure(t *testing.T) {
 	_, statErr := os.Stat(dftPath)
 	assert.True(t, os.IsNotExist(statErr), "a failed swap must remove the newly downloaded file")
 }
+
+// TestModelManager_ScanInstalled_DoesNotEnableBuiltInBaseline pins the crux of Phase 4:
+// models.enabled is authoritative, so ScanInstalled no longer prepends "birdnet" and
+// skips the file-less BuiltIn v2.4 baseline in the enabled-alias sync. An intentional
+// N=0 (empty list) stays empty, and a secondary-only list is not force-prepended with
+// birdnet (model de-privilege epic, Phase 4).
+func TestModelManager_ScanInstalled_DoesNotEnableBuiltInBaseline(t *testing.T) {
+	// Not parallel: mutates global settings via conf.StoreSettings.
+	origSettings := conf.GetSettings()
+	t.Cleanup(func() { conf.StoreSettings(origSettings) })
+	isolateTestConfig(t)
+
+	cases := []struct {
+		name    string
+		enabled []string
+	}{
+		{"empty list stays N=0 (baseline not re-enabled)", []string{}},
+		{"secondary-only list is not prepended with birdnet", []string{conf.ModelIDPerchV2}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			settings := conftest.GetTestSettings()
+			settings.Models.Enabled = tc.enabled
+			// Keep the family hint sources empty so only models.enabled decides the sync.
+			settings.Bat.ClassifierModel = ""
+			settings.Perch.ModelPath = ""
+			settings.BSG.ModelPath = ""
+			conf.StoreSettings(settings)
+
+			modelsDir := t.TempDir() // empty: only the embedded v2.4 baseline is "installed"
+			mm := NewModelManager(modelsDir, nil, settings)
+			mm.ScanInstalled()
+
+			assert.True(t, mm.IsInstalled("birdnet-v2.4"), "the embedded baseline is always reported installed")
+			assert.NotContains(t, conf.GetSettings().Models.Enabled, conf.ModelIDBirdNET,
+				"the file-less v2.4 baseline must not add birdnet to models.enabled")
+			assert.Equal(t, tc.enabled, conf.GetSettings().Models.Enabled,
+				"models.enabled is left exactly as configured")
+		})
+	}
+}

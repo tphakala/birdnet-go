@@ -313,6 +313,10 @@ func (mm *ModelManager) ScanInstalled() {
 	}
 
 	installedIDs := slices.Collect(maps.Keys(mm.installed))
+	// Snapshot the installed records under the lock so Phase 2 (lock-free) can tell the
+	// file-less BuiltIn baseline (embedded BirdNET v2.4) from a downloaded model without
+	// re-taking mm.mu (model de-privilege epic, Phase 4).
+	installedSnapshot := maps.Clone(mm.installed)
 	log.Info("Model scan complete",
 		logger.Int("installed_count", len(mm.installed)))
 	mm.mu.Unlock()
@@ -323,12 +327,11 @@ func (mm *ModelManager) ScanInstalled() {
 		updated := conf.CloneSettings(conf.GetSettings())
 		changed := false
 
-		if !slices.ContainsFunc(updated.Models.Enabled, func(id string) bool {
-			return strings.EqualFold(id, conf.ModelIDBirdNET)
-		}) {
-			updated.Models.Enabled = append([]string{conf.ModelIDBirdNET}, updated.Models.Enabled...)
-			changed = true
-		}
+		// models.enabled is authoritative (model de-privilege epic, Phase 4): the scan no
+		// longer prepends birdnet. An install still implies enabled (addIfMissing below),
+		// but the file-less BuiltIn v2.4 baseline is skipped so an intentional empty list
+		// (N = 0) is not re-populated on every scan. MigrateModelsEnabledAuthoritative
+		// wrote the implicit enable out once for every pre-Phase-4 install.
 		addIfMissing := func(alias string) {
 			if alias != "" && !slices.ContainsFunc(updated.Models.Enabled, func(id string) bool {
 				return strings.EqualFold(id, alias)
@@ -340,7 +343,12 @@ func (mm *ModelManager) ScanInstalled() {
 
 		for _, catalogID := range installedIDs {
 			entry, found := GetCatalogEntry(catalogID)
-			if !found {
+			im := installedSnapshot[catalogID]
+			if !found || isBuiltInBaselineRecord(&im) {
+				// The file-less BuiltIn baseline (embedded BirdNET v2.4) is reported as
+				// installed for the gallery, but only models.enabled decides whether it
+				// loads. A downloaded v2.4 variant has a file on disk and implies enable
+				// like every other installed model.
 				continue
 			}
 			addIfMissing(ConfigAliasForRegistry(entry.RegistryID))
@@ -365,13 +373,21 @@ func (mm *ModelManager) ScanInstalled() {
 		}
 		settingsWriteMu.Unlock()
 
-		mm.loadInstalledModels(log, installedIDs)
+		mm.loadInstalledModels(log, installedIDs, installedSnapshot)
 
 		// After loading models, check if any installed model has geomodel
 		// companion files on disk. If so, ensure the range filter config is
 		// up to date and reload the filter. This handles the upgrade case
 		// where a new binary adds geomodel support to existing models.
 		mm.ensureGeomodelConfig(log, installedIDs)
+
+		// Evaluate the "no acoustic model" notification once startup loading is
+		// complete and the notification service is certainly up (model de-privilege
+		// epic, Phase 4). NewOrchestrator already tried, but the service may not have
+		// been up then; this is the reliable later evaluation.
+		if mm.orchestrator != nil {
+			mm.orchestrator.SyncAcousticModelsNotice()
+		}
 	}
 }
 
@@ -398,6 +414,16 @@ func modelAndLabelsFiles(files []CatalogFile) (modelFile, labelsFile string) {
 // loader will actually open. It then falls back to the default variant, then the
 // remaining variants in catalog order. ok is false when no variant's model file
 // is present on disk.
+// isBuiltInBaselineRecord reports whether an installed record is the file-less BuiltIn
+// baseline that scanVariantEntry emits for the embedded BirdNET v2.4 permanent entry.
+// The baseline is the only installed record with an empty ModelPath: a flat entry is
+// statted from disk (modelPath is always set) and a shared-only entry is not recorded
+// at all when its model file is missing (scanSharedOnlyEntry). Such a record never
+// implies an enabled or hot-loaded model, so only models.enabled decides whether v2.4
+// loads (model de-privilege epic, Phase 4). A downloaded v2.4 variant has a file on
+// disk (non-empty ModelPath) and is treated like every other installed model.
+func isBuiltInBaselineRecord(im *InstalledModel) bool { return im.ModelPath == "" }
+
 func scanVariantEntry(entry *CatalogEntry, subdir, modelBasenameHint string) (InstalledModel, bool) {
 	// Permanent entry with a BuiltIn baseline (BirdNET v2.4): the model is ALWAYS
 	// installed, but which variant is active is decided by the settings hint alone,
@@ -821,7 +847,7 @@ func (mm *ModelManager) healOrphanGeomodelConfig(log logger.Logger) {
 // loadInstalledModels loads any installed models that are not yet loaded in
 // the orchestrator. The caller must provide the list of installed catalog IDs
 // (collected while holding mm.mu) so this method runs lock-free.
-func (mm *ModelManager) loadInstalledModels(log logger.Logger, installedIDs []string) {
+func (mm *ModelManager) loadInstalledModels(log logger.Logger, installedIDs []string, installed map[string]InstalledModel) {
 	if mm.orchestrator == nil {
 		return
 	}
@@ -831,10 +857,16 @@ func (mm *ModelManager) loadInstalledModels(log logger.Logger, installedIDs []st
 		if !found || entry.RegistryID == "" {
 			continue
 		}
-		// BirdNET v2.4 always loads during NewOrchestrator, strictly before
-		// ScanInstalled runs, so the IsModelLoaded guard below skips it here without
-		// a dedicated special case: it is always "installed" but never hot-loaded a
-		// second time.
+		// The embedded BirdNET v2.4 baseline has no file on disk and loads only through
+		// models.enabled at construction (model de-privilege epic, Phase 4); it is never
+		// hot-loaded here, so an install that is not enabled stays unloaded (N = 0). A
+		// downloaded v2.4 variant has a file on disk and is hot-loaded like any other
+		// installed model. The IsModelLoaded guard below also skips a model already
+		// loaded during NewOrchestrator.
+		im := installed[catalogID]
+		if isBuiltInBaselineRecord(&im) {
+			continue
+		}
 		if mm.orchestrator.IsModelLoaded(entry.RegistryID) {
 			continue
 		}

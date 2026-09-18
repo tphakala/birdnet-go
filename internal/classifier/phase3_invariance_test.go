@@ -216,6 +216,10 @@ func phase3BaseSettings(t *testing.T) *conf.Settings {
 	settings := conftest.GetTestSettings()
 	settings.BirdNET.Locale = phase3FixedLocale
 	settings.BirdNET.Threads = phase3FixedThreads
+	// models.enabled is authoritative (model de-privilege epic, Phase 4): name v2.4 so
+	// the single-model scenarios load the embedded anchor. The multimodel scenario
+	// overrides this with its own list.
+	enableBirdNETV24(settings)
 	conftest.SetTestSettings(settings)
 	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 	return settings

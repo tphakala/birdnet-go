@@ -368,13 +368,17 @@ type RangeFilterTestRequest struct {
 
 // RangeFilterTestResponse represents the response for range filter testing
 type RangeFilterTestResponse struct {
-	Species    []dto.RangeFilterSpecies `json:"species"`
-	Count      int                      `json:"count"`
-	Threshold  float32                  `json:"threshold"`
-	Location   Location                 `json:"location"`
-	TestDate   time.Time                `json:"testDate"`
-	Week       int                      `json:"week"`
-	Parameters struct {
+	Species   []dto.RangeFilterSpecies `json:"species"`
+	Count     int                      `json:"count"`
+	Threshold float32                  `json:"threshold"`
+	Location  Location                 `json:"location"`
+	TestDate  time.Time                `json:"testDate"`
+	Week      int                      `json:"week"`
+	// FilterActive reports whether a range-filter backend was actually applied. False
+	// at N = 0 (no acoustic model loaded), where Species is empty (model de-privilege
+	// epic, Phase 4).
+	FilterActive bool `json:"filterActive"`
+	Parameters   struct {
 		InputLatitude  float64 `json:"inputLatitude"`
 		InputLongitude float64 `json:"inputLongitude"`
 		InputThreshold float32 `json:"inputThreshold"`
@@ -682,13 +686,19 @@ func (c *Handler) TestRangeFilter(ctx echo.Context) error {
 	}
 
 	speciesList := dedupeSpeciesForDisplay(convertSpeciesScores(speciesScores, birdnetInstance, c.CurrentLocale()))
+	// Never marshal species as null: at N = 0 GetAllProbableSpeciesWithSettings returns
+	// nothing, and the frontend indexes this array (model de-privilege epic, Phase 4).
+	if speciesList == nil {
+		speciesList = []dto.RangeFilterSpecies{}
+	}
 
 	response := RangeFilterTestResponse{
-		Species:   speciesList,
-		Count:     len(speciesList),
-		Threshold: req.Threshold,
-		TestDate:  testDate,
-		Week:      int(week),
+		Species:      speciesList,
+		Count:        len(speciesList),
+		Threshold:    req.Threshold,
+		TestDate:     testDate,
+		Week:         int(week),
+		FilterActive: birdnetInstance.RangeFilterStatus().Active,
 		Location: Location{
 			Latitude:  req.Latitude,
 			Longitude: req.Longitude,

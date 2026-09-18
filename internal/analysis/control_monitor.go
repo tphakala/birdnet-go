@@ -348,7 +348,22 @@ func (cm *ControlMonitor) handleReconfigureLiveStream() {
 	emitHotReload("livestream")
 }
 
-// handleRebuildRangeFilter rebuilds the range filter
+// reportRangeFilterRebuilt emits the "rebuilt successfully" toast only when a range
+// filter was actually built. At N = 0 (no acoustic model, or no v2.4 anchor loaded)
+// BuildRangeFilter is a no-op that returns nil, so a success toast would mislead; log
+// the off state instead (model de-privilege epic, Phase 4). CoverageApplicable is true
+// exactly when the anchor is loaded, so a location-less install with v2.4 still toasts
+// success as before. Called only on the no-error path, so it never masks a build failure.
+func (cm *ControlMonitor) reportRangeFilterRebuilt() {
+	if cm.bn.RangeFilterStatus().CoverageApplicable {
+		GetLogger().Info("Range filter rebuilt successfully")
+		cm.notifySuccess("Range filter rebuilt successfully")
+		return
+	}
+	GetLogger().Info("Range filter not rebuilt: no acoustic model loaded (species filtering off)")
+}
+
+// handleRebuildRangeFilter rebuilds the range filter.
 func (cm *ControlMonitor) handleRebuildRangeFilter() {
 	// Guard the orchestrator dereference for consistency with NewControlMonitor,
 	// which only wires bn-dependent surfaces when cm.bn != nil. In realtime
@@ -361,8 +376,7 @@ func (cm *ControlMonitor) handleRebuildRangeFilter() {
 		GetLogger().Error("Failed to rebuild range filter", logger.Error(err))
 		cm.notifyError("Failed to rebuild range filter", err)
 	} else {
-		GetLogger().Info("Range filter rebuilt successfully")
-		cm.notifySuccess("Range filter rebuilt successfully")
+		cm.reportRangeFilterRebuilt()
 		emitHotReload("range_filter")
 	}
 
@@ -402,8 +416,7 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 		GetLogger().Error("Failed to rebuild range filter after model reload", logger.Error(err))
 		cm.notifyError("Failed to rebuild range filter", err)
 	} else {
-		GetLogger().Info("Range filter rebuilt successfully")
-		cm.notifySuccess("Range filter rebuilt successfully")
+		cm.reportRangeFilterRebuilt()
 	}
 
 	// The species-name index is orchestrator-owned since Phase 2a: ReloadModel above

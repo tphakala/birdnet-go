@@ -118,10 +118,14 @@ func BuildRangeFilter(o *Orchestrator) error {
 	// pre-Phase-2b error contract for a torn-down orchestrator.
 	rfs, ok := o.rangeFilterReady()
 	if !ok {
-		return errors.Newf("orchestrator has no primary model").
-			Component("classifier.orchestrator").
-			Category(errors.CategorySystem).
-			Build()
+		// No range-filter anchor (v2.4) loaded: N = 0, or v2.4 is not enabled. There is
+		// nothing to filter and no classifier label space to map a geomodel onto, so
+		// there is no range filter to build. Clear any stale inclusion list left by a
+		// previous anchor (a runtime unload) and report success, so BirdNETAnalyzer.Start
+		// does not treat N = 0 as a fatal startup error (model de-privilege epic, Phase 4).
+		GetLogger().Info("No BirdNET v2.4 anchor loaded; range filter not built (species filtering off)")
+		conf.UpdateIncludedSpecies(nil)
+		return nil
 	}
 	if rfs == nil {
 		return errors.Newf("orchestrator has no range filter service").

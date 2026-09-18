@@ -450,7 +450,7 @@ func (c *Handler) getSpeciesInfo(ctx context.Context, scientificName string) (*S
 	snap := c.speciesSnapshot()
 	matchedLabel, commonName := resolveSpeciesLabel(snap, scientificName)
 
-	// If species not found in any loaded model's labels, return error
+	// If species not found in any loaded model's labels, return error.
 	if matchedLabel == "" {
 		return nil, errors.Newf("species '%s' not found in loaded model labels", scientificName).
 			Category(errors.CategoryNotFound).

@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 // testKnownIDs mirrors classifier.KnownConfigIDs() for testing without circular imports.
@@ -161,6 +162,106 @@ func TestMigrateSourceTargetDefaults(t *testing.T) {
 			assert.False(t, settings.MigrateSourceTargetDefaults(), "second run is a no-op")
 		})
 	}
+}
+
+// TestMigrateModelsEnabledAuthoritative covers the one-shot Phase 4 migration that
+// writes the implicit BirdNET v2.4 enable out to models.enabled (prepended) once and
+// stamps ConfigVersion, so every existing install keeps loading the same set.
+func TestMigrateModelsEnabledAuthoritative(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		version     int
+		enabled     []string
+		wantChanged bool
+		wantEnabled []string
+	}{
+		{
+			name:        "nil list at version 0 gains birdnet",
+			enabled:     nil,
+			wantChanged: true,
+			wantEnabled: []string{"birdnet"},
+		},
+		{
+			name:        "explicit empty list at version 0 still loaded v2.4 implicitly, so it is pinned",
+			enabled:     []string{},
+			wantChanged: true,
+			wantEnabled: []string{"birdnet"},
+		},
+		{
+			name:        "birdnet is prepended, not appended, ahead of a secondary",
+			enabled:     []string{"perch_v2"},
+			wantChanged: true,
+			wantEnabled: []string{"birdnet", "perch_v2"},
+		},
+		{
+			name:        "a list already naming birdnet is stamped but not changed",
+			enabled:     []string{"birdnet", "perch_v2"},
+			wantChanged: true,
+			wantEnabled: []string{"birdnet", "perch_v2"},
+		},
+		{
+			name:        "the config spelling is matched case-insensitively",
+			version:     configVersionSourceTargetDefaults,
+			enabled:     []string{"BIRDNET"},
+			wantChanged: true,
+			wantEnabled: []string{"BIRDNET"},
+		},
+		{
+			name:        "the catalog spelling counts as v2.4 so no duplicate is prepended",
+			version:     configVersionSourceTargetDefaults,
+			enabled:     []string{"birdnet-v2.4"},
+			wantChanged: true,
+			wantEnabled: []string{"birdnet-v2.4"},
+		},
+		{
+			name:        "an explicit empty list at version 2 means N=0 and survives untouched",
+			version:     configVersionModelsEnabledAuthoritative,
+			enabled:     []string{},
+			wantChanged: false,
+			wantEnabled: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			settings := &Settings{ConfigVersion: tt.version}
+			settings.Models.Enabled = tt.enabled
+
+			changed := settings.MigrateModelsEnabledAuthoritative()
+			assert.Equal(t, tt.wantChanged, changed)
+			assert.Equal(t, tt.wantEnabled, settings.Models.Enabled)
+			assert.Equal(t, configVersionModelsEnabledAuthoritative, settings.ConfigVersion,
+				"the version is stamped whether or not the list changed")
+
+			// Idempotent: a second call never changes anything again.
+			assert.False(t, settings.MigrateModelsEnabledAuthoritative(), "second run is a no-op")
+		})
+	}
+}
+
+func TestIsBirdNETV24ConfigID(t *testing.T) {
+	t.Parallel()
+	for _, id := range []string{"birdnet", "BirdNET", "BIRDNET", "birdnet-v2.4", "BirdNET-V2.4"} {
+		assert.True(t, isBirdNETV24ConfigID(id), "%q should be recognized as the v2.4 family", id)
+	}
+	for _, id := range []string{"birdnet_v3.0", "perch_v2", "bat", "", "birdnetv2.4"} {
+		assert.False(t, isBirdNETV24ConfigID(id), "%q should not be recognized as v2.4", id)
+	}
+}
+
+func TestStampConfigVersion(t *testing.T) {
+	t.Parallel()
+	stamped := stampConfigVersion("debug: false\n")
+
+	var settings Settings
+	require.NoError(t, yaml.Unmarshal([]byte(stamped), &settings))
+	assert.Equal(t, currentConfigVersion, settings.ConfigVersion,
+		"a freshly stamped config carries the current version")
+	assert.False(t, settings.MigrateSourceTargetDefaults(), "M1 never runs on a freshly stamped config")
+	assert.False(t, settings.MigrateModelsEnabledAuthoritative(), "M2 never runs on a freshly stamped config")
 }
 
 func TestValidateModelConfig_NoErrorsWithJustBirdNET(t *testing.T) {

@@ -155,6 +155,7 @@ func TestNewOrchestrator_SyncsSharedState(t *testing.T) {
 	t.Parallel()
 
 	settings := conftest.GetTestSettings()
+	enableBirdNETV24(settings) // models.enabled is authoritative (Phase 4); name v2.4 so it loads
 	o, err := NewOrchestrator(settings)
 	if err != nil {
 		t.Skipf("Skipping: model not available in test environment: %v", err)
@@ -177,6 +178,7 @@ func TestOrchestrator_PrimaryIsModelInstance(t *testing.T) {
 	t.Parallel()
 
 	settings := conftest.GetTestSettings()
+	enableBirdNETV24(settings) // models.enabled is authoritative (Phase 4); name v2.4 so it loads
 	o, err := NewOrchestrator(settings)
 	if err != nil {
 		t.Skipf("Skipping: model not available in test environment: %v", err)
@@ -206,6 +208,7 @@ func TestOrchestrator_PrimaryIsModelInstance(t *testing.T) {
 func TestOrchestrator_UnloadReloadV24_RoundTrip(t *testing.T) {
 	// Not parallel: NewOrchestrator publishes into the global settings snapshot.
 	settings := conftest.GetTestSettings()
+	enableBirdNETV24(settings) // models.enabled is authoritative (Phase 4); name v2.4 so it loads
 	o, err := NewOrchestrator(settings)
 	if err != nil {
 		t.Skipf("Skipping: embedded model not available in test environment: %v", err)
@@ -236,6 +239,7 @@ func TestOrchestrator_ModelsMapPopulated(t *testing.T) {
 	t.Parallel()
 
 	settings := conftest.GetTestSettings()
+	enableBirdNETV24(settings) // models.enabled is authoritative (Phase 4); name v2.4 so it loads
 	o, err := NewOrchestrator(settings)
 	if err != nil {
 		t.Skipf("Skipping: model not available in test environment: %v", err)
@@ -572,27 +576,27 @@ func TestComputeThreadAllocation(t *testing.T) {
 		want    map[string]int
 	}{
 		{
-			// v2.4 is implicitly enabled and prepended, so it appears even with an
-			// empty enabled list.
-			name:    "v2.4 only",
+			// models.enabled is authoritative (model de-privilege epic, Phase 4): an
+			// empty list means nothing is enabled, so nothing is allocated (N = 0).
+			name:    "empty list allocates nothing",
 			threads: fixedThreads,
 			enabled: nil,
-			want:    map[string]int{BirdNET_V2_4: fixedThreads},
+			want:    map[string]int{},
 		},
 		{
-			name:    "v2.4 plus a distinct enabled model",
+			name:    "two distinct enabled models each get the full thread budget",
 			threads: fixedThreads,
-			enabled: []string{conf.ModelIDPerchV2},
+			enabled: []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2},
 			want:    map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
 		},
 		{
 			name:    "case variants collapse to one entry",
 			threads: fixedThreads,
 			enabled: []string{conf.ModelIDPerchV2, upperPerchV2ModelID},
-			want:    map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
+			want:    map[string]int{RegistryIDPerchV2: fixedThreads},
 		},
 		{
-			name:    "an enabled model resolving to v2.4 is not double counted",
+			name:    "a single enabled model gets the full budget",
 			threads: fixedThreads,
 			enabled: []string{conf.ModelIDBirdNET},
 			want:    map[string]int{BirdNET_V2_4: fixedThreads},
@@ -601,7 +605,7 @@ func TestComputeThreadAllocation(t *testing.T) {
 			name:    "unknown model IDs are skipped",
 			threads: fixedThreads,
 			enabled: []string{unknownModelID, conf.ModelIDPerchV2},
-			want:    map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
+			want:    map[string]int{RegistryIDPerchV2: fixedThreads},
 		},
 	}
 
@@ -625,7 +629,7 @@ func TestComputeThreadAllocation(t *testing.T) {
 func TestComputeThreadAllocation_NonPositiveThreadsUsesNumCPU(t *testing.T) {
 	t.Parallel()
 	settings := &conf.Settings{}
-	settings.Models.Enabled = []string{conf.ModelIDPerchV2}
+	settings.Models.Enabled = []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2}
 	settings.BirdNET.Threads = 0
 
 	o := &Orchestrator{}

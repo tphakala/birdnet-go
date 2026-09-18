@@ -47,11 +47,11 @@ func TestOrchestrator_AccessorsNilPrimary_NoPanic(t *testing.T) {
 	assert.NotPanics(t, func() { o.RunFilterProcess(time.Now().Format(time.DateOnly), 0) })
 	assert.NotPanics(t, func() { o.Debug("noop %d", 1) })
 
-	// BuildRangeFilter snapshots the primary and returns a typed error rather than
-	// panicking when there is no primary.
+	// BuildRangeFilter is a no-op that returns nil (not an error, and never a panic)
+	// when there is no anchor loaded: N = 0 is a valid state, so the realtime service
+	// must start (model de-privilege epic, Phase 4).
 	err = BuildRangeFilter(o)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no primary model")
+	require.NoError(t, err)
 }
 
 // TestOrchestrator_AccessorsConcurrentWithPrimaryClear_NoRace is the regression

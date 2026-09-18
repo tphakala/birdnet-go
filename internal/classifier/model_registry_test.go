@@ -10,6 +10,19 @@ import (
 	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
+// TestModelRegistry_V24AliasesMatchConf pins the BirdNET v2.4 config aliases in lockstep
+// with the two spellings conf.isBirdNETV24ConfigID matches (model de-privilege epic,
+// Phase 4). The conf package cannot import the classifier registry (import cycle), so
+// MigrateModelsEnabledAuthoritative hardcodes {ModelIDBirdNET, ModelIDBirdNETCatalog}; if
+// a third v2.4 alias is ever added to the registry entry, this test fails so that the
+// conf-side matcher is updated in step rather than silently missing the new spelling.
+func TestModelRegistry_V24AliasesMatchConf(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, []string{conf.ModelIDBirdNET, conf.ModelIDBirdNETCatalog},
+		ModelRegistry[RegistryIDBirdNETV24].ConfigAliases,
+		"v2.4 config aliases must stay in lockstep with conf.isBirdNETV24ConfigID's two spellings")
+}
+
 func TestModelRegistry_ContainsExpectedModels(t *testing.T) {
 	t.Parallel()
 

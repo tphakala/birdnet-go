@@ -384,12 +384,28 @@ func (s *Settings) MigrateSourceModels() bool {
 	return migrated
 }
 
-// configVersionSourceTargetDefaults is the config file version stamped by
-// MigrateSourceTargetDefaults. An empty per-source or per-stream model list changed
-// meaning from "the built-in BirdNET v2.4" to "the orchestrator's default targets"
-// (model de-privilege epic, Phase 4); the migration pins every pre-Phase-4 empty list
-// to ["birdnet"] once so no source changes targets. Later phases add higher versions.
-const configVersionSourceTargetDefaults = 1
+// Config file versions. Each constant names the one-shot migration that raises the
+// file to that version; currentConfigVersion is the newest one this build applies.
+const (
+	// configVersionSourceTargetDefaults is the config file version stamped by
+	// MigrateSourceTargetDefaults. An empty per-source or per-stream model list changed
+	// meaning from "the built-in BirdNET v2.4" to "the orchestrator's default targets"
+	// (model de-privilege epic, Phase 4); the migration pins every pre-Phase-4 empty list
+	// to ["birdnet"] once so no source changes targets.
+	configVersionSourceTargetDefaults = 1
+
+	// configVersionModelsEnabledAuthoritative: models.enabled became the only source of
+	// the enabled model set (model de-privilege epic, Phase 4). Before it the orchestrator
+	// enabled BirdNET v2.4 implicitly, ahead of every listed model, whether or not the
+	// list named it; MigrateModelsEnabledAuthoritative writes that implicit entry out once
+	// so every existing install keeps loading the same models in the same order.
+	configVersionModelsEnabledAuthoritative = 2
+
+	// currentConfigVersion is the newest config version this build applies. A freshly
+	// generated config is stamped with it (stampConfigVersion) so this build's one-shot
+	// migrations never rewrite a file it just created.
+	currentConfigVersion = configVersionModelsEnabledAuthoritative
+)
 
 // MigrateSourceTargetDefaults writes ["birdnet"] into every source and stream whose
 // model list is empty, exactly once per config file, then stamps ConfigVersion.
@@ -416,6 +432,35 @@ func (s *Settings) MigrateSourceTargetDefaults() bool {
 	}
 	s.ConfigVersion = configVersionSourceTargetDefaults
 	return true
+}
+
+// MigrateModelsEnabledAuthoritative prepends "birdnet" to models.enabled when no entry
+// already names the BirdNET v2.4 family, exactly once per config file, then stamps
+// ConfigVersion. Runs after MigrateSourceTargetDefaults, so a version-0 file gets both.
+// Prepending (not appending) reproduces the load order the implicit enable produced
+// (v2.4 first). An explicit empty list at a lower version is pinned too, because that
+// file still loaded v2.4 implicitly; after this version an empty list means "no acoustic
+// model" and is left alone. Returns true when the list or the stamp changed.
+func (s *Settings) MigrateModelsEnabledAuthoritative() bool {
+	if s.ConfigVersion >= configVersionModelsEnabledAuthoritative {
+		return false
+	}
+	if !slices.ContainsFunc(s.Models.Enabled, isBirdNETV24ConfigID) {
+		s.Models.Enabled = append([]string{ModelIDBirdNET}, s.Models.Enabled...)
+	}
+	s.ConfigVersion = configVersionModelsEnabledAuthoritative
+	return true
+}
+
+// isBirdNETV24ConfigID reports whether a models.enabled entry names the BirdNET v2.4
+// family under either config spelling, case-insensitively. MigrateModelIDAliases runs
+// later in Load, so the catalog spelling ("birdnet-v2.4") can still be present here;
+// matching it keeps M2 from prepending a duplicate "birdnet". The conf package cannot
+// read the classifier registry (import cycle), so the two spellings are the alias set
+// from ModelRegistry[RegistryIDBirdNETV24].ConfigAliases; TestModelRegistry_V24AliasesMatchConf
+// pins the two lists in lockstep.
+func isBirdNETV24ConfigID(id string) bool {
+	return strings.EqualFold(id, ModelIDBirdNET) || strings.EqualFold(id, ModelIDBirdNETCatalog)
 }
 
 // normalizeRTSPStreamEnabledDefaults materializes enabled=true for legacy raw

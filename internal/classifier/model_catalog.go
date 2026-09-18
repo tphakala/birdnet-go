@@ -374,10 +374,12 @@ var EmbeddedCatalog = []CatalogEntry{
 	// (see NewBirdNET). Its within-model variant swap runs through the unified
 	// ModelManager.replaceVariant like every other family, activating the always-loaded
 	// anchor gaplessly via Orchestrator.ReloadForVariantSwap.
-	// RegistryID is the permanent BirdNET v2.4 ID: the model is always installed (the
-	// BuiltIn baseline needs no files), it is never hot-loaded by loadInstalledModels
-	// (there is no secondary loader for the primary), and Uninstall refuses the entry
-	// via the permanent-model guard, so only its variant may change. Labels are the
+	// RegistryID is the permanent BirdNET v2.4 ID: the BuiltIn baseline is always
+	// reported installed (it needs no files) but is never hot-loaded by
+	// loadInstalledModels; only models.enabled decides whether v2.4 loads (model
+	// de-privilege epic, Phase 4), and a downloaded v2.4 variant carries files and is
+	// hot-loaded like any other model. Uninstall refuses the entry via the
+	// permanent-model guard, so only its variant may change. Labels are the
 	// embedded v2.4 set (data/labels/V2.4), so no labels file is downloaded.
 	{
 		ID:            "birdnet-v2.4",

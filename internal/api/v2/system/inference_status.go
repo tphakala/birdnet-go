@@ -41,6 +41,13 @@ type InferenceStatusResponse struct {
 	VAD                  *VADStatusInfo `json:"vad,omitempty"`
 	RuntimeBaselineBytes int64          `json:"runtimeBaselineBytes,omitempty"`
 	SnapshotAtUnix       int64          `json:"snapshotAtUnix"`
+	// DefaultTargets are the registry IDs a source with an empty model list analyzes
+	// with (Orchestrator.DefaultTargets), in that order; empty at N = 0. The source
+	// editor pre-selects them for a new source (model de-privilege epic, Phase 4).
+	DefaultTargets []string `json:"defaultTargets"`
+	// AcousticModelsState is "ok", "none_installed" or "load_failed"; the dashboard
+	// shows its no-model banner whenever it is not "ok". Empty when no orchestrator.
+	AcousticModelsState string `json:"acousticModelsState"`
 }
 
 // VADStatusInfo reports the privacy-filter Silero VAD speech gate for the
@@ -505,6 +512,13 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 			defaultIDs[i] = targets[i].ID
 		}
 		loadFailures = orch.LoadFailures()
+		resp.AcousticModelsState = string(orch.AcousticModelsState())
+	}
+	// DefaultTargets never marshals as null (the frontend gates on it): it is empty at
+	// N = 0 or when no orchestrator is wired (model de-privilege epic, Phase 4).
+	resp.DefaultTargets = defaultIDs
+	if resp.DefaultTargets == nil {
+		resp.DefaultTargets = []string{}
 	}
 	counters := classifier.GetInferenceCounters().PeekAll()
 	attachments := buildSourceAttachments(settings, infos, defaultIDs, c.runningModelsBySource())

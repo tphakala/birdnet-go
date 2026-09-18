@@ -11,6 +11,10 @@ import (
 // It is populated from the classifier's range-filter status so the health package does
 // not depend on classifier internals.
 type RangeFilterStatusInfo struct {
+	// ClassifierLoaded reports whether an acoustic classifier is loaded for the filter
+	// to apply to. False at N = 0 (no acoustic model), where range filtering is not
+	// expected and its absence is not a fault (model de-privilege epic, Phase 4).
+	ClassifierLoaded bool
 	// LocationConfigured reports whether a location is set; range filtering only filters
 	// by location, so without one it is not applicable.
 	LocationConfigured bool
@@ -59,6 +63,12 @@ func (c *RangeFilterCheck) Run(_ context.Context) health.Result {
 	status := health.StatusHealthy
 	message := "Range filter active"
 	switch {
+	case !s.ClassifierLoaded:
+		// No acoustic model loaded (N = 0): there is nothing to filter, so range
+		// filtering is not applicable and its absence is not a fail-open fault. Without
+		// this case an N = 0 install with a location configured would raise a spurious
+		// Critical on top of the acoustic_models warning.
+		message = "Range filtering not applicable (no acoustic model loaded)"
 	case !s.LocationConfigured:
 		// Range filtering only filters by location; without one it is not applicable.
 		message = "Range filtering not applicable (no location configured)"
@@ -83,6 +93,7 @@ func (c *RangeFilterCheck) Run(_ context.Context) health.Result {
 		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
 		Timestamp:  time.Now(),
 		Details: map[string]any{
+			"classifier_loaded":   s.ClassifierLoaded,
 			"location_configured": s.LocationConfigured,
 			"active":              s.Active,
 			"fell_back":           s.FellBack,
