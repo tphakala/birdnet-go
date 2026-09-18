@@ -349,6 +349,12 @@ func (mm *ModelManager) captureLegacyAutoEnableOnce(log logger.Logger, installed
 	defer settingsWriteMu.Unlock()
 
 	updated := conf.CloneSettings(conf.GetSettings())
+	if updated == nil {
+		// No published settings snapshot yet. This should not happen at startup (ScanInstalled
+		// runs after conf.Load publishes the global snapshot), but guard against a nil deref so a
+		// caller without published settings degrades to a no-op instead of panicking.
+		return
+	}
 	if updated.Models.AutoEnableMigrated {
 		return
 	}
