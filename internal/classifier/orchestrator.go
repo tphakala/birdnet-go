@@ -1408,7 +1408,7 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 	)
 	if rfs := o.rangeFilter; rfs != nil {
 		active, fellBack = rfs.runtimeState()
-		kind = rfs.loadState().kind
+		kind = rfs.backendKind()
 		if mrf, ok := rfs.mappedView(); ok {
 			geoLabels = mrf.geomodelLabels
 			// mrf.mappedCount is the mapped count over coveredLabels (v2.4's labels on a
@@ -1436,12 +1436,18 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 		geomodel.AutoSelected = rf.ModelPath == expectedONNX && rf.LabelsPath == expectedLabels
 	}
 
-	// coveredByBackend: the universal geomodel covers every participant; the legacy
-	// v2.4-only MData backend covers only v2.4; no backend covers nothing.
+	// coveredByBackend reports whether the backend actually scores a participant's FULL
+	// label space, so the status surface is honest about which classifiers are really
+	// range-filtered. The universal geomodel maps onto coveredLabels: when v2.4 is loaded
+	// that is the v2.4 label space, so ONLY v2.4 is fully covered and a non-v2.4
+	// participant's exclusive species fall outside it and are dropped (the participant-union
+	// reconciliation deferred to a later PR); when v2.4 is NOT loaded coveredLabels is the
+	// participant union, so every participant is covered. The legacy v2.4-only MData backend
+	// covers only v2.4; no backend covers nothing.
 	coveredByBackend := func(id string) bool {
 		switch kind {
 		case rfKindGeomodelV3:
-			return true
+			return id == RegistryIDBirdNETV24 || view.v24Labels == nil
 		case rfKindMDataV2, rfKindMDataV1:
 			return id == RegistryIDBirdNETV24
 		default: // rfKindNone (or unknown): nothing is covered.

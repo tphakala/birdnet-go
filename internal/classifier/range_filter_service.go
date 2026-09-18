@@ -253,12 +253,26 @@ func (rfs *rangeFilterService) loadState() *rangeFilterState {
 	return &rangeFilterState{}
 }
 
+// backendKind returns the loaded backend kind, mapping the zero value (an unpublished
+// initial state or a torn-down service, whose kind is the empty string) to rfKindNone.
+// The status/health surfaces and the participation log report this as the JSON "backend"
+// field, whose contract is one of "geomodel_v3", "mdata_v2", "mdata_v1", or "none": the
+// empty string is never a valid value, so it must be normalized here rather than leaked.
+func (rfs *rangeFilterService) backendKind() rangeFilterBackendKind {
+	if k := rfs.loadState().kind; k != "" {
+		return k
+	}
+	return rfKindNone
+}
+
 // reload rebuilds the range-filter backend from settings and swaps it in
 // transactionally. The new backend is built entirely UNLOCKED; rfs.mu is taken
 // only for the atomic swap and to Close the replaced backend. On a build failure
-// nothing is swapped and the previous backend keeps serving (the rollback contract
-// that BirdNET.ReloadRangeFilter provided). The species cache is cleared on a
-// successful swap because the backend changed.
+// with a backend already loaded, nothing is swapped and the previous backend keeps
+// serving (the rollback contract that BirdNET.ReloadRangeFilter provided); on a
+// build failure with NO backend loaded, the fresh participant covered labels are
+// published with kind none so the service fails open (see the error branch below).
+// The species cache is cleared on a successful swap because the backend changed.
 func (rfs *rangeFilterService) reload(settings *conf.Settings, viewFn func() rangeFilterView) error {
 	// Serialize reloads: concurrent build+swap from the monitor and API goroutines
 	// would otherwise race the atomic swap (late-writer-wins) and double-Close.
@@ -290,6 +304,29 @@ func (rfs *rangeFilterService) reload(settings *conf.Settings, viewFn func() ran
 
 	backend, kind, fellBack, err := buildMetaModel(settings, view, rfs.debug)
 	if err != nil {
+		// Rollback contract: a build failure keeps a previously-loaded backend serving, so
+		// a transient reload error never tears down a working range filter. But when NO
+		// backend is currently loaded (the initial build failed, or a prior build produced
+		// none), the published state still carries the OLD covered-label space (nil on a
+		// fresh service). The fail-open paths score over coveredLabels, so leaving it nil
+		// would synthesize an EMPTY inclusion list and drop every detection on a
+		// location-configured Perch-only or v3.0-only install: the exact fail-closed
+		// regression this decoupling exists to prevent. Publish the fresh covered labels
+		// with no backend (kind none) so the service fails OPEN over the loaded
+		// participants, while still returning the error so the caller surfaces and logs the
+		// build failure.
+		rfs.mu.Lock()
+		if cur := rfs.loadState(); cur.backend == nil {
+			rfs.state.Store(&rangeFilterState{
+				kind:          rfKindNone,
+				coveredLabels: view.coveredLabels(settings),
+				generation:    cur.generation + 1,
+			})
+			rfs.mu.Unlock()
+			rfs.clearSpeciesCache()
+		} else {
+			rfs.mu.Unlock()
+		}
 		return errors.New(err).
 			Component("classifier.rangefilter").
 			Category(errors.CategoryModelInit).
@@ -302,9 +339,9 @@ func (rfs *rangeFilterService) reload(settings *conf.Settings, viewFn func() ran
 	old := rfs.loadState()
 	// Bump the generation with the swap so cache entries computed against the old
 	// backend become logically stale to readers the moment this store is published,
-	// even before clearSpeciesCache runs below. generation is only ever written here
-	// (and in close/swapTestBackend), always under rfs.mu, so the increment cannot
-	// race another writer.
+	// even before clearSpeciesCache runs below. Every generation write (this swap, the
+	// no-backend fail-open publish above, close, and swapTestBackend) happens under
+	// rfs.mu, so the increment cannot race another writer.
 	newGen := old.generation + 1
 	rfs.state.Store(&rangeFilterState{
 		backend:       backend,
@@ -958,7 +995,10 @@ func fallbackToEmbeddedRangeFilter(settings *conf.Settings, cause error, debug d
 
 	b, tfErr := buildTFLiteMetaModel(fallbackSettings, debug)
 	if tfErr != nil {
-		return nil, errors.New(tfErr).
+		// Join the original ONNX geomodel failure so reload and settings-save callers can
+		// still inspect why the geomodel load failed, not just why the embedded fallback
+		// did. cause is logged above but must also survive on the returned error.
+		return nil, errors.New(errors.Join(cause, tfErr)).
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
 			Context("operation", "range_filter_embedded_fallback").

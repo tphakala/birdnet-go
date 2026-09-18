@@ -1156,11 +1156,14 @@ type ClassifierCoverage struct {
 	TotalSpecies     int    `json:"totalSpecies"`
 	WithRangeData    int    `json:"withRangeData"`
 	WithoutRangeData int    `json:"withoutRangeData"`
-	// CoveredByBackend reports whether the loaded range-filter backend can score this
-	// classifier's label space at all: true for every participant under the universal
-	// geomodel, false for a non-v2.4 participant under the legacy v2.4-only MData
-	// backend (which maps only the 6522 v2.4 labels), so a mixed set with a legacy
-	// backend is honest about which classifiers are actually range-filtered.
+	// CoveredByBackend reports whether the loaded range-filter backend actually scores
+	// this classifier's full label space. Under the universal geomodel it is true for
+	// every participant when v2.4 is NOT loaded (the backend maps onto the participant
+	// union), but only for v2.4 itself when v2.4 IS loaded, because the covered label
+	// space is then the v2.4 set and a non-v2.4 participant's exclusive species are
+	// dropped. Under the legacy v2.4-only MData backend (which maps only the 6522 v2.4
+	// labels) it is true for v2.4 alone, and under no backend it is false for all, so a
+	// mixed set is honest about which classifiers are actually range-filtered.
 	CoveredByBackend bool `json:"coveredByBackend"`
 }
 

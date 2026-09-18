@@ -238,7 +238,7 @@ func (o *Orchestrator) logRangeFilterParticipation() {
 
 	backend := string(rfKindNone)
 	if rfs := o.rangeFilter; rfs != nil {
-		backend = string(rfs.loadState().kind)
+		backend = string(rfs.backendKind())
 	}
 
 	GetLogger().Info("Range filter participation across the loaded model set",
@@ -554,7 +554,15 @@ func zeroScoresForAllLabels(labels []string, excl excludeMatcher) []SpeciesScore
 // Perch-only or v3.0-only install with a location set does not drop every detection.
 func failOpenScores(coveredLabels []string, excluder excludeMatcher, settings *conf.Settings, debug debugFunc) []SpeciesScore {
 	scores := zeroScoresForAllLabels(coveredLabels, excluder)
-	addUserOverrideSpeciesScores(debug, &scores, settings, nil)
+	// Resolve overrides against coveredLabels (the participant classifier label space this
+	// fail-open list is built over), NOT nil. canonicalOverrideLabels' classifier fallback
+	// is settings.BirdNET.Labels, which is empty on a Perch-only or v3.0-only install, so
+	// passing nil would leave an override for a participant species unresolved; if that
+	// species is also excluded, zeroScoresForAllLabels dropped its canonical label and the
+	// override must restore it as the canonical covered label rather than the raw entry.
+	// There is no loaded geomodel on the fail-open path, so coveredLabels is the right
+	// preferred match source here.
+	addUserOverrideSpeciesScores(debug, &scores, settings, coveredLabels)
 	return scores
 }
 

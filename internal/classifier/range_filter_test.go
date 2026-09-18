@@ -288,6 +288,143 @@ func TestBuildRangeFilter_UniversalInferenceError_FailsOpen(t *testing.T) {
 	assert.Contains(t, included, "Parus major_Great Tit")
 }
 
+// TestReload_GeomodelBuildFailure_NoBackend_PublishesCoveredLabels guards the fail-open
+// publish on a FAILED reload: when a configured geomodel cannot be built and no backend is
+// currently loaded (a fresh Perch-only or v3.0-only install), reload must still publish the
+// covered participant labels with no backend, so the later fail-open path scores over them
+// instead of leaving coveredLabels nil and dropping every detection. Reproduces the
+// reload-early-return finding on PR #4385.
+func TestReload_GeomodelBuildFailure_NoBackend_PublishesCoveredLabels(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Latitude = 60.0
+	settings.BirdNET.Longitude = 25.0
+	settings.BirdNET.LocationConfigured = true
+	settings.BirdNET.Labels = nil // no BirdNET v2.4 label set (v2.4 not loaded)
+	// A configured geomodel that cannot build (model "v3" with no model path) forces
+	// buildMetaModel to error on a non-v2.4 install: there is no MData fallback, so the
+	// error propagates out of reload.
+	settings.BirdNET.RangeFilter.Model = "v3"
+	settings.BirdNET.RangeFilter.ModelPath = ""
+	settings.BirdNET.RangeFilter.LabelsPath = ""
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	perchLabels := []string{"Turdus merula_Common Blackbird", "Parus major_Great Tit"}
+	o := &Orchestrator{
+		Settings:  settings,
+		modelsDir: t.TempDir(), // empty: no auto-select geomodel files present
+		models: map[string]*modelEntry{
+			RegistryIDPerchV2: {instance: &mockModelInstance{id: RegistryIDPerchV2, labels: perchLabels, numSpecies: len(perchLabels)}},
+		},
+	}
+	o.settingsAtomic.Store(settings)
+	o.rangeFilter = newRangeFilterService(nil)
+
+	// The geomodel build fails, so reload surfaces the error and loads no backend...
+	require.Error(t, o.rangeFilter.reload(settings, o.rangeFilterView),
+		"a configured geomodel that cannot build must surface an error")
+	require.Nil(t, o.rangeFilter.loadState().backend, "no backend is loaded after the failed build")
+	// ...but it must have published the participant covered labels so the fail-open path has
+	// a non-empty label space to score over.
+	require.NotEmpty(t, o.rangeFilter.loadState().coveredLabels,
+		"a failed initial build must still publish the participant covered labels for fail-open")
+
+	require.NoError(t, BuildRangeFilter(o))
+	included := conf.GetSettings().GetIncludedSpecies()
+	require.NotEmpty(t, included,
+		"a failed geomodel build on a Perch-only install with a location must fail open, not drop every detection")
+	assert.Contains(t, included, "Turdus merula_Common Blackbird")
+	assert.Contains(t, included, "Parus major_Great Tit")
+}
+
+// TestFailOpenScores_ResolvesOverridesAgainstCoveredLabels guards that fail-open user
+// overrides resolve against the covered participant labels, not settings.BirdNET.Labels
+// (empty on a Perch-only or v3.0-only install). A species that is force-included AND
+// excluded must be restored as its canonical covered label, not the raw user entry.
+// Reproduces the fail-open override finding on PR #4385.
+func TestFailOpenScores_ResolvesOverridesAgainstCoveredLabels(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Labels = nil // Perch-only: no v2.4 classifier label set
+	settings.Realtime.Species.Exclude = []string{"Common Blackbird"}
+	settings.Realtime.Species.Include = []string{"Common Blackbird"}
+
+	covered := []string{"Turdus merula_Common Blackbird", "Parus major_Great Tit"}
+	excluder := newExcludeMatcher(settings.Realtime.Species.Exclude, settings.BirdNET.Locale)
+
+	labels := speciesScoreLabels(failOpenScores(covered, excluder, settings, nil))
+
+	// The excluded species is force-included by the override and must come back as its
+	// canonical covered label (resolved via coveredLabels), not the raw "Common Blackbird".
+	assert.Contains(t, labels, "Turdus merula_Common Blackbird",
+		"a force-included excluded species must be restored as its canonical covered label")
+	assert.NotContains(t, labels, "Common Blackbird",
+		"the raw override entry must not leak in unresolved")
+	// The other covered species stays in the fail-open list.
+	assert.Contains(t, labels, "Parus major_Great Tit")
+}
+
+// TestRangeFilterStatus_FreshServiceReportsNoneBackend pins the backendKind() contract: a
+// fresh service (its zero-value state has an empty kind) must report Backend "none" on the
+// status surface, never the empty string that would violate the JSON backend enum. Guards
+// the empty-kind normalization directly; without it, leaking loadState().kind ("") would
+// pass every other test.
+func TestRangeFilterStatus_FreshServiceReportsNoneBackend(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Labels = nil
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	o := &Orchestrator{Settings: settings, models: map[string]*modelEntry{}}
+	o.settingsAtomic.Store(settings)
+	o.rangeFilter = newRangeFilterService(nil) // zero-value state: kind == ""
+
+	status := o.RangeFilterStatus()
+	assert.Equal(t, string(rfKindNone), status.Backend,
+		"an unpublished (empty-kind) state must normalize to \"none\", never leak \"\"")
+	assert.False(t, status.Active, "a fresh service has no backend loaded")
+}
+
+// TestReload_GeomodelBuildFailure_PreservesLoadedBackend guards the rollback half of the
+// fail-open publish: a reload whose build fails while a backend IS loaded must keep that
+// backend serving and NOT republish a fail-open state (the fail-open publish is gated on
+// cur.backend == nil). Without the gate, a transient reload failure would tear down a
+// working range filter.
+func TestReload_GeomodelBuildFailure_PreservesLoadedBackend(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	settings.BirdNET.Latitude = 60.0
+	settings.BirdNET.Longitude = 25.0
+	settings.BirdNET.LocationConfigured = true
+	settings.BirdNET.Labels = nil
+	// A configured geomodel that cannot build, so the reload errors.
+	settings.BirdNET.RangeFilter.Model = "v3"
+	settings.BirdNET.RangeFilter.ModelPath = ""
+	settings.BirdNET.RangeFilter.LabelsPath = ""
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	perchLabels := []string{"Turdus merula_Common Blackbird", "Parus major_Great Tit"}
+	o := &Orchestrator{
+		Settings:  settings,
+		modelsDir: t.TempDir(),
+		models: map[string]*modelEntry{
+			RegistryIDPerchV2: {instance: &mockModelInstance{id: RegistryIDPerchV2, labels: perchLabels, numSpecies: len(perchLabels)}},
+		},
+	}
+	o.settingsAtomic.Store(settings)
+	o.rangeFilter = newRangeFilterService(nil)
+
+	// Pre-load a working backend; the failing reload must preserve it (rollback contract).
+	existing := &fakeUniversalRangeFilter{geoLabels: perchLabels}
+	o.rangeFilter.state.Store(&rangeFilterState{backend: existing, kind: rfKindGeomodelV3, coveredLabels: perchLabels, generation: 7})
+
+	require.Error(t, o.rangeFilter.reload(settings, o.rangeFilterView),
+		"a configured geomodel that cannot build must surface an error")
+	st := o.rangeFilter.loadState()
+	assert.Same(t, existing, st.backend, "a build failure must not discard the loaded backend")
+	assert.Equal(t, rfKindGeomodelV3, st.kind, "the loaded backend's kind must be preserved on rollback")
+	assert.Equal(t, uint64(7), st.generation, "no state republish (no generation bump) when a backend is already loaded")
+}
+
 // TestBuildRangeFilterMatchesProbableSpecies_UniversalDedup guards the shared-path
 // dedup: BuildRangeFilter and GetProbableSpecies now share one locked predict and one
 // scoring tail (scoreProbableSpecies), so the inclusion list BuildRangeFilter persists
