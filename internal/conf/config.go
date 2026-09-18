@@ -1425,7 +1425,6 @@ type BSGConfig struct {
 type ModelsConfig struct {
 	Enabled   []string `yaml:"enabled" json:"enabled"`                         // list of model IDs to load (e.g., "birdnet", "perch_v2")
 	Directory string   `yaml:"directory,omitempty" json:"directory,omitempty"` // base directory for downloaded model files
-	Installed []string `yaml:"installed,omitempty" json:"installed,omitempty"` // list of installed model IDs managed by the model gallery
 	// AutoEnableMigrated is an internal marker recording that the classifier's one-shot legacy
 	// model auto-enable has run for this config file, so it never re-runs. Do not edit by hand;
 	// a managed read-only config may set it true (with configversion: 2) to keep an explicit
