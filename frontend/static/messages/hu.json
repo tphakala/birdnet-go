@@ -474,6 +474,12 @@
         "notRegisteredTitle": "Egyetlen modell sem elemzi a következőt: {sourceName}",
         "notRegisteredMessage": "Nem jut el hang a(z) {models} számára a(z) \"{sourceName}\" hangforráson, így nem jönnek létre detektálások. Nyissa meg a Rendszer > AI Modellek menüpontot a forrásonkénti állapot ellenőrzéséhez, és győződjön meg róla, hogy a hangforrás csatlakoztatva van és hangot küld."
       },
+      "acousticModels": {
+        "noneTitle": "Nincs telepítve akusztikai modell",
+        "noneMessage": "Nincs betöltve akusztikai modell, így a rendszer rögzíti a hangot, de nem elemzi. Nyissa meg a modellgalériát a Beállítások > Elemzés menüpontban a telepítéshez.",
+        "loadFailedTitle": "Az akusztikai modellt nem sikerült betölteni",
+        "loadFailedMessage": "Egy engedélyezett akusztikai modellt nem sikerült betölteni, így a rendszer rögzíti a hangot, de nem elemzi. Ellenőrizze a modellt a Rendszer > AI Modellek oldalon."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Jelenlegi érték: {value}% (küszöbérték: {threshold}%)",

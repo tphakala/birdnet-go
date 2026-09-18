@@ -474,6 +474,12 @@
         "notRegisteredTitle": "Ingen modell analyserer {sourceName}",
         "notRegisteredMessage": "Ingen lyd når {models} på lydkilden \"{sourceName}\", så det produseres ingen registreringer. Åpne System > AI-modeller for å sjekke dens status per kilde, og bekreft at lydkilden er tilkoblet og sender lyd."
       },
+      "acousticModels": {
+        "noneTitle": "Ingen akustisk modell installert",
+        "noneMessage": "Ingen akustisk modell er lastet inn, så lyd tas opp, men analyseres ikke. Åpne modellgalleriet i Innstillinger > Analyse for å installere en.",
+        "loadFailedTitle": "Akustisk modell kunne ikke lastes inn",
+        "loadFailedMessage": "En aktivert akustisk modell kunne ikke lastes inn, så lyd tas opp, men analyseres ikke. Sjekk modellen på siden System > AI-modeller."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Gjeldende verdi: {value}% (terskel: {threshold}%)",

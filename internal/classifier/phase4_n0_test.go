@@ -9,6 +9,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 // overrideV24Loader forces the BirdNET v2.4 loader to fail with the given error for the
@@ -192,4 +193,108 @@ func TestLoadErrors(t *testing.T) {
 		assert.NotContains(t, o.LoadErrors(), RegistryIDPerchV2,
 			"a disabled model's error is filtered out of the live snapshot")
 	})
+}
+
+// TestSyncAcousticModelsNotice covers the persistent "no acoustic model" bell latch: one
+// notification raised at N = 0, no double-raise, cleared once a model loads (model
+// de-privilege epic, Phase 4).
+func TestSyncAcousticModelsNotice(t *testing.T) {
+	// Not parallel: uses the process-global notification service.
+	svc := setupTestNotification(t)
+	list := func() []*notification.Notification {
+		notes, err := svc.List(nil)
+		require.NoError(t, err)
+		return notes
+	}
+
+	o := newTestOrchestrator(t) // no models -> none_installed
+	o.syncAcousticModelsNotice()
+	notes := list()
+	require.Len(t, notes, 1, "N = 0 raises exactly one bell notification")
+	assert.Equal(t, "classifier", notes[0].Component)
+	assert.Equal(t, "none_installed", notes[0].Metadata["acoustic_models_state"])
+	assert.Contains(t, notes[0].Message, "install one")
+	require.NotEmpty(t, o.acousticNotice.id, "the notification id is latched")
+
+	o.syncAcousticModelsNotice()
+	assert.Len(t, list(), 1, "a second sync must not double-raise")
+
+	// A model loads -> ok -> the notice is cleared.
+	o.models[RegistryIDBirdNETV24] = &modelEntry{instance: &mockModelInstance{id: RegistryIDBirdNETV24}}
+	o.syncAcousticModelsNotice()
+	assert.Empty(t, list(), "the notice is deleted once a model is loaded")
+	assert.Empty(t, o.acousticNotice.id, "the latch is cleared")
+}
+
+// TestSyncAcousticModelsNotice_LoadFailedMessage pins that the load_failed state gets a
+// distinct message pointing at the inference page, not "install one" (model de-privilege
+// epic, Phase 4): a model IS installed but failed to load.
+func TestSyncAcousticModelsNotice_LoadFailedMessage(t *testing.T) {
+	// Not parallel: uses the process-global notification service and settings snapshot.
+	svc := setupTestNotification(t)
+	settings := conftest.GetTestSettings()
+	enableBirdNETV24(settings) // v2.4 enabled, so its load error counts as a live fault
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	o := newTestOrchestrator(t)
+	o.settingsAtomic.Store(settings)
+	o.recordLoadFailure(RegistryIDBirdNETV24, errors.NewStd("simulated load failure"))
+	require.Equal(t, AcousticModelsLoadFailed, o.AcousticModelsState())
+
+	o.syncAcousticModelsNotice()
+	notes, err := svc.List(nil)
+	require.NoError(t, err)
+	require.Len(t, notes, 1)
+	assert.Equal(t, "load_failed", notes[0].Metadata["acoustic_models_state"])
+	assert.Contains(t, notes[0].Message, "failed to load")
+	assert.Contains(t, notes[0].Message, "AI Models page")
+	assert.NotContains(t, notes[0].Message, "install one", "load_failed must not tell the user to install a model they already have")
+}
+
+// TestSyncAcousticModelsNotice_NilServiceNoPanic pins that a sync with no notification
+// service (not yet initialized, or a bare test) is a safe no-op that latches nothing.
+func TestSyncAcousticModelsNotice_NilServiceNoPanic(t *testing.T) {
+	notification.ResetForTest()
+	t.Cleanup(notification.ResetForTest)
+
+	o := newTestOrchestrator(t)
+	assert.NotPanics(t, func() { o.syncAcousticModelsNotice() })
+	assert.Empty(t, o.acousticNotice.id)
+}
+
+// TestSyncAcousticModelsNotice_TransitionRecreatesNotice pins the sentry-flagged transition:
+// when the state changes between two not-ok states (none_installed -> load_failed) the notice
+// is replaced so its remedy text is updated, without accumulating a second notice.
+func TestSyncAcousticModelsNotice_TransitionRecreatesNotice(t *testing.T) {
+	// Not parallel: uses the process-global notification service and settings snapshot.
+	svc := setupTestNotification(t)
+	settings := conftest.GetTestSettings()
+	enableBirdNETV24(settings) // v2.4 enabled, so its load error counts as a live fault
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+	list := func() []*notification.Notification {
+		notes, err := svc.List(nil)
+		require.NoError(t, err)
+		return notes
+	}
+
+	o := newTestOrchestrator(t) // none_installed
+	o.settingsAtomic.Store(settings)
+	o.syncAcousticModelsNotice()
+	notes := list()
+	require.Len(t, notes, 1)
+	require.Equal(t, "none_installed", notes[0].Metadata["acoustic_models_state"])
+	firstID := notes[0].ID
+
+	// none_installed -> load_failed: still exactly one notice, now carrying the load-failed
+	// state and remedy text (the stale install-one notice is replaced, not left behind).
+	o.recordLoadFailure(RegistryIDBirdNETV24, errors.NewStd("simulated load failure"))
+	require.Equal(t, AcousticModelsLoadFailed, o.AcousticModelsState())
+	o.syncAcousticModelsNotice()
+	notes = list()
+	require.Len(t, notes, 1, "a not-ok to not-ok transition must not accumulate notices")
+	assert.Equal(t, "load_failed", notes[0].Metadata["acoustic_models_state"])
+	assert.Contains(t, notes[0].Message, "failed to load")
+	assert.NotEqual(t, firstID, notes[0].ID, "the stale notice was deleted and a new one raised")
 }

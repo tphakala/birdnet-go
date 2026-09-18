@@ -474,6 +474,12 @@
         "notRegisteredTitle": "Žiadny model neanalyzuje {sourceName}",
         "notRegisteredMessage": "K {models} na zvukovom zdroji \"{sourceName}\" sa nedostáva žiadny zvuk, takže sa nevytvárajú žiadne detekcie. Otvorte Systém > Modely AI, skontrolujte jeho stav pre jednotlivé zdroje a overte, že je zdroj zvuku pripojený a odosiela zvuk."
       },
+      "acousticModels": {
+        "noneTitle": "Nie je nainštalovaný žiadny akustický model",
+        "noneMessage": "Nie je načítaný žiadny akustický model, takže zvuk sa zaznamenáva, ale neanalyzuje. Otvorte galériu modelov v Nastavenia > Analýza a nejaký nainštalujte.",
+        "loadFailedTitle": "Akustický model sa nepodarilo načítať",
+        "loadFailedMessage": "Povolený akustický model sa nepodarilo načítať, takže zvuk sa zaznamenáva, ale neanalyzuje. Skontrolujte model na stránke Systém > Modely AI."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuálna hodnota: {value}% (prahová hodnota: {threshold}%)",

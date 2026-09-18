@@ -474,6 +474,12 @@
         "notRegisteredTitle": "Mikään malli ei analysoi kohdetta {sourceName}",
         "notRegisteredMessage": "Ääni ei tavoita kohdetta {models} äänilähteessä \"{sourceName}\", joten havaintoja ei tuoteta. Avaa Järjestelmä > Tekoälymallit tarkistaaksesi sen lähdekohtaisen tilan ja varmistaaksesi, että äänilähde on yhdistetty ja lähettää ääntä."
       },
+      "acousticModels": {
+        "noneTitle": "Akustista mallia ei ole asennettu",
+        "noneMessage": "Akustista mallia ei ole ladattu, joten ääntä tallennetaan, mutta sitä ei analysoida. Avaa malligalleria kohdassa Asetukset > Analyysi asentaaksesi mallin.",
+        "loadFailedTitle": "Akustisen mallin lataus epäonnistui",
+        "loadFailedMessage": "Käytössä olevan akustisen mallin lataus epäonnistui, joten ääntä tallennetaan, mutta sitä ei analysoida. Tarkista malli sivulla Järjestelmä > Tekoälymallit."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Nykyinen arvo: {value}% (raja-arvo: {threshold}%)",

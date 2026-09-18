@@ -213,4 +213,14 @@ const (
 	// not receiving audio, so it produces no detections)
 	MsgModelNotRegisteredTitle   = "notifications.content.modelPath.notRegisteredTitle"
 	MsgModelNotRegisteredMessage = "notifications.content.modelPath.notRegisteredMessage"
+
+	// Acoustic-model notifications (no acoustic model is loaded, so audio is captured
+	// but not analyzed; N = 0 in the model de-privilege epic, Phase 4). The two states
+	// carry different remedies: none_installed points at the gallery to install a model,
+	// load_failed points at the inference page because a model is installed but failed
+	// to load (missing ONNX Runtime, a corrupt or incompatible file).
+	MsgAcousticModelsNoneTitle         = "notifications.content.acousticModels.noneTitle"
+	MsgAcousticModelsNoneMessage       = "notifications.content.acousticModels.noneMessage"
+	MsgAcousticModelsLoadFailedTitle   = "notifications.content.acousticModels.loadFailedTitle"
+	MsgAcousticModelsLoadFailedMessage = "notifications.content.acousticModels.loadFailedMessage"
 )

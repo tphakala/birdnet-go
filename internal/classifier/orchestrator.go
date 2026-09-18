@@ -202,6 +202,10 @@ type Orchestrator struct {
 	// conflating it with a model that never loaded. Lock-free.
 	modelUnloaded sync.Map
 
+	// acousticNotice latches the single persistent "no acoustic model" bell notification
+	// (N = 0, model de-privilege epic Phase 4); see syncAcousticModelsNotice.
+	acousticNotice acousticModelsNotice
+
 	// pendingWarmups queues deferred warm-ups recorded by model loaders while
 	// they hold o.mu (write lock). Drained by runPendingWarmups after o.mu is
 	// released, so the warm-up inference runs via the serialized inference path
@@ -352,6 +356,11 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// clones settings before building (loadBirdNETV24) instead of mutating the live
 	// published snapshot under a concurrent reader.
 	o.published.Store(true)
+
+	// Evaluate the persistent "no acoustic model" bell notice now the orchestrator is
+	// published. If the notification service is not up yet at construction, the sync latches
+	// nothing and ScanInstalled re-syncs it once startup loading completes.
+	o.syncAcousticModelsNotice()
 
 	return o, nil
 }
@@ -2012,6 +2021,11 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 		o.rebuildRangeFilterAfterModelChange()
 	}
 
+	// A successful load can clear the "no acoustic model" state (or, on a retry that still
+	// fails, this is unreachable because the loader returned an error above). Re-evaluate the
+	// notice after o.mu is released (the sync reads AcousticModelsState under o.mu.RLock).
+	o.syncAcousticModelsNotice()
+
 	return nil
 }
 
@@ -2270,6 +2284,11 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 	if ParticipatesInRangeFilter(registryID) {
 		o.rebuildRangeFilterAfterModelChange()
 	}
+
+	// Unloading may have reached N = 0 (or cleared a load failure): re-evaluate the
+	// acoustic-model notice. Called after the locked closures release o.mu, since the sync
+	// reads AcousticModelsState() under o.mu.RLock (acousticNotice.mu -> o.mu leaf edge).
+	o.syncAcousticModelsNotice()
 
 	return nil
 }

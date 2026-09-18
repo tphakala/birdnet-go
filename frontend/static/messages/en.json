@@ -474,6 +474,12 @@
         "notRegisteredTitle": "No model is analyzing {sourceName}",
         "notRegisteredMessage": "No audio is reaching {models} on audio source \"{sourceName}\", so no detections are produced. Open System > AI Models to check its per-source status, and confirm the audio source is connected and sending audio."
       },
+      "acousticModels": {
+        "noneTitle": "No acoustic model installed",
+        "noneMessage": "No acoustic model is loaded, so audio is captured but not analyzed. Open the model gallery in Settings > Analysis to install one.",
+        "loadFailedTitle": "Acoustic model failed to load",
+        "loadFailedMessage": "An enabled acoustic model failed to load, so audio is captured but not analyzed. Check the model on the System > AI Models page."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Current value: {value}% (threshold: {threshold}%)",

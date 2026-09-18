@@ -331,6 +331,13 @@ func (mm *ModelManager) ScanInstalled() {
 		// up to date and reload the filter. This handles the upgrade case
 		// where a new binary adds geomodel support to existing models.
 		mm.ensureGeomodelConfig(log, installedIDs)
+
+		// Startup loading is complete and the notification service is up by now, so evaluate
+		// the persistent "no acoustic model" notice. NewOrchestrator's earlier sync latched
+		// nothing if the notification service was not yet initialized at construction.
+		if mm.orchestrator != nil {
+			mm.orchestrator.SyncAcousticModelsNotice()
+		}
 	}
 }
 
