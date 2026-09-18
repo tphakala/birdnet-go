@@ -92,4 +92,54 @@ describe('SpeciesCardMobile', () => {
       expect(rebound).toHaveAttribute('src', '/api/v2/media/image/Corvus%20brachyrhynchos');
     });
   }
+
+  // The desktop analytics grid switched from the non-interactive SpeciesCard to this
+  // component's `card` variant, which is a <button> that opens the species detail
+  // modal. The thumbnail behaviour above already covered what the retired component
+  // was tested for; the click affordance it gained was not covered anywhere.
+  describe('card variant (desktop analytics grid)', () => {
+    it('renders as a button so the card is keyboard reachable', () => {
+      const { getByRole } = render(SpeciesCardMobile, {
+        props: { species: mockSpecies, variant: 'card', onClick: vi.fn() },
+      });
+
+      // getByRole throws when absent, so it both asserts and narrows to a non-null
+      // element — no conditional guard, and no type assertion.
+      expect(getByRole('button')).toBeInTheDocument();
+    });
+
+    it('invokes onClick with the species when activated', async () => {
+      const onClick = vi.fn();
+      const { getByRole } = render(SpeciesCardMobile, {
+        props: { species: mockSpecies, variant: 'card', onClick },
+      });
+
+      await fireEvent.click(getByRole('button'));
+
+      expect(onClick).toHaveBeenCalledTimes(1);
+      expect(onClick).toHaveBeenCalledWith(mockSpecies);
+    });
+
+    it('stays inert when no onClick handler is supplied', async () => {
+      // The grid always passes a handler, but the prop is optional; clicking without
+      // one must not throw. fireEvent rejects on a listener error, so an unhandled
+      // click surfaces as a failed assertion here.
+      const { getByRole } = render(SpeciesCardMobile, {
+        props: { species: mockSpecies, variant: 'card' },
+      });
+
+      await expect(fireEvent.click(getByRole('button'))).resolves.not.toThrow();
+    });
+
+    it('shows the species name and detection stats', () => {
+      const { getByText } = render(SpeciesCardMobile, {
+        props: { species: mockSpecies, variant: 'card', onClick: vi.fn() },
+      });
+
+      expect(getByText('House Sparrow')).toBeInTheDocument();
+      expect(getByText('Passer domesticus')).toBeInTheDocument();
+      expect(getByText('42')).toBeInTheDocument();
+      expect(getByText('85.0%')).toBeInTheDocument();
+    });
+  });
 });

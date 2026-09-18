@@ -6,6 +6,11 @@
  */
 
 import { CANDIDATE_SAMPLE_RATES } from '$lib/utils/audio/sampleRate';
+import {
+  SPECIES_GUIDE_DEFAULT_WARM_TOP_N,
+  SPECIES_GUIDE_MAX_WARM_TOP_N,
+  SPECIES_GUIDE_MIN_WARM_TOP_N,
+} from '$lib/utils/speciesGuideLimits';
 import type {
   BirdNetSettings,
   AudioSettings,
@@ -830,6 +835,67 @@ export function coercePrivacyFilterSettings(
 /**
  * Main coercion function for all settings
  */
+/**
+ * coerceSpeciesGuideSettings normalizes the species guide config.
+ *
+ * It coerces only the keys actually PRESENT on the input. Synthesizing the absent
+ * ones from defaults looks harmless — the defaults match the backend's *bool "unset
+ * means on" semantics — but this function also runs on the way OUT, over whatever
+ * object a caller is about to PATCH. Filling in the gaps there turns a partial
+ * update into a full overwrite: a request carrying only `enabled` silently rewrote
+ * `showNotes` back to true for a user who had turned it off, and reset `warmTopN`
+ * to 50. Absent means "leave alone"; the backend applies its own defaults on load.
+ */
+function coerceSpeciesGuideSettings(value: unknown): UnknownSettings {
+  const sg: Record<string, unknown> =
+    value != null && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+
+  const out: UnknownSettings = {};
+  const has = (key: string): boolean => Object.prototype.hasOwnProperty.call(sg, key);
+
+  // Taxonomy/common names/links come from the offline OpenFauna dataset; the only
+  // toggle is enableWikipedia (online descriptions), which defaults to off.
+  const booleans: Array<[string, boolean]> = [
+    ['enabled', false],
+    ['enableWikipedia', false],
+    ['enableSupplementaryLinks', false],
+    ['preFetchEnabled', true],
+    ['showNotes', true],
+    ['showEnrichments', true],
+    ['showSimilarSpecies', true],
+    ['showTaxonomy', true],
+  ];
+  for (const [key, fallback] of booleans) {
+    if (has(key)) {
+      // eslint-disable-next-line security/detect-object-injection -- key comes from the literal list above
+      out[key] = coerceBoolean(sg[key], fallback);
+    }
+  }
+  if (has('warmTopN')) {
+    out.warmTopN = coerceNumber(
+      sg.warmTopN,
+      SPECIES_GUIDE_MIN_WARM_TOP_N,
+      SPECIES_GUIDE_MAX_WARM_TOP_N,
+      SPECIES_GUIDE_DEFAULT_WARM_TOP_N
+    );
+  }
+  return out;
+}
+
+/** coerceDashboardSettings passes dashboard through, coercing known sub-sections. */
+function coerceDashboardSettings(value: unknown): UnknownSettings {
+  const dash: Record<string, unknown> =
+    value != null && typeof value === 'object' && !Array.isArray(value)
+      ? { ...(value as Record<string, unknown>) }
+      : {};
+  if (Object.prototype.hasOwnProperty.call(dash, 'speciesGuide')) {
+    dash.speciesGuide = coerceSpeciesGuideSettings(dash.speciesGuide);
+  }
+  return dash;
+}
+
 export function coerceSettings(section: string, data: UnknownSettings): UnknownSettings {
   switch (section) {
     case 'birdnet':
@@ -854,6 +920,10 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
 
       if (Object.prototype.hasOwnProperty.call(data, 'rtsp')) {
         coercedRealtime.rtsp = coerceRTSPSettings(data.rtsp);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(data, 'dashboard')) {
+        coercedRealtime.dashboard = coerceDashboardSettings(data.dashboard);
       }
 
       if (Object.prototype.hasOwnProperty.call(data, 'falsePositiveFilter')) {

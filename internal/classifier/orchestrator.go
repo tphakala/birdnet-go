@@ -2484,6 +2484,30 @@ func (o *Orchestrator) GeomodelSpeciesInfo(label string) (speciesIdx, numGeoSpec
 	return idx, len(mrf.geomodelLabels), true
 }
 
+// GeomodelLabels returns the geomodel's label vocabulary: the species the loaded
+// range-filter backend can produce an occurrence probability for. It returns nil
+// when no mapped geomodel is loaded (legacy MData, strict ONNX, or none), which
+// callers must read as "coverage unknown", not "not covered".
+//
+// Labels are full "Scientific_Common" strings, so callers matching on scientific
+// name must extract it, exactly as buildSpeciesMapping does.
+//
+// This reads the same immutable mapped view as GeomodelSpeciesInfo: the backend is
+// published behind an atomic pointer and its label set is read-only after
+// construction, so no lock is needed. The returned slice is the shared vocabulary
+// and must be treated as read-only.
+func (o *Orchestrator) GeomodelLabels() []string {
+	rfs := o.rangeFilter
+	if rfs == nil {
+		return nil
+	}
+	mrf, ok := rfs.mappedView()
+	if !ok {
+		return nil
+	}
+	return mrf.GeomodelLabels()
+}
+
 // Debug prints debug messages if debug mode is enabled.
 func (o *Orchestrator) Debug(format string, v ...any) {
 	if s := o.CurrentSettings(); s != nil && s.BirdNET.Debug {
