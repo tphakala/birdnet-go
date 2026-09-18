@@ -522,6 +522,10 @@
       "verifiedStatus": "Stato verifica",
       "lockedStatus": "Stato blocco",
       "timeOfDay": "Momento della giornata",
+      "hourRange": "Ora del giorno",
+      "hourRangeHelp": "Filtra i rilevamenti per ora dell'orologio, indipendentemente da alba e tramonto (lascia vuoto per tutte le ore)",
+      "hourStart": "Ora più presto",
+      "hourEnd": "Ora più tardi",
       "source": "Sorgente audio"
     },
     "advancedFilters": "Filtri avanzati",
@@ -543,6 +547,9 @@
       "night": "Solo notte",
       "sunrise": "Alba +/- 30min",
       "sunset": "Tramonto +/- 30min"
+    },
+    "hourOptions": {
+      "any": "Qualsiasi ora"
     },
     "sourceOptions": {
       "any": "Tutte le fonti"
@@ -592,7 +599,8 @@
     },
     "errors": {
       "searchFailed": "Ricerca fallita: {error}",
-      "minMaxConfidence": "La confidenza minima non può essere maggiore della confidenza massima."
+      "minMaxConfidence": "La confidenza minima non può essere maggiore della confidenza massima.",
+      "minMaxHour": "L'ora più presto non può essere successiva all'ora più tardi."
     },
     "pagination": {
       "page": "Pagina {current} di {total}",

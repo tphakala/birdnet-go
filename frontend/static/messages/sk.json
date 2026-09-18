@@ -522,6 +522,10 @@
       "verifiedStatus": "Stav overenia",
       "lockedStatus": "Stav uzamknutia",
       "timeOfDay": "Denná doba",
+      "hourRange": "Hodina dňa",
+      "hourRangeHelp": "Filtrovať detekcie podľa hodiny dňa, nezávisle od východu a západu slnka (prázdne = všetky hodiny)",
+      "hourStart": "Najskoršia hodina",
+      "hourEnd": "Najneskoršia hodina",
       "source": "Zvukový zdroj"
     },
     "advancedFilters": "Rozšírené filtre",
@@ -543,6 +547,9 @@
       "night": "Iba noc",
       "sunrise": "Východ slnka +/- 30min",
       "sunset": "Západ slnka +/- 30min"
+    },
+    "hourOptions": {
+      "any": "Ľubovoľná hodina"
     },
     "sourceOptions": {
       "any": "Všetky zdroje"
@@ -592,7 +599,8 @@
     },
     "errors": {
       "searchFailed": "Vyhľadávanie zlyhalo: {error}",
-      "minMaxConfidence": "Minimálna istota nemôže byť vyššia ako maximálna istota."
+      "minMaxConfidence": "Minimálna istota nemôže byť vyššia ako maximálna istota.",
+      "minMaxHour": "Najskoršia hodina nemôže byť neskôr ako najneskoršia hodina."
     },
     "pagination": {
       "page": "Strana {current} z {total}",

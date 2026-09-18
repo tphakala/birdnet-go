@@ -100,6 +100,16 @@ export interface DetectionFilters {
   verified: DetectionVerifiedFilter;
   locked: DetectionLockedFilter;
   timeOfDay: DetectionTimeOfDayFilter;
+  /**
+   * Inclusive clock-hour band, each end a whole hour as a bare number string
+   * ('0'-'23'); '' means that end is unbounded. This is the wall-clock companion
+   * to timeOfDay, which follows the station's sun events instead. A dashboard
+   * hourly drill-down arrives as `hour`/`duration` and is folded into this band,
+   * so the hour it is filtering by is visible in the panel rather than applied
+   * invisibly.
+   */
+  hourStart: string;
+  hourEnd: string;
   /** Audio source, by display name. Empty means all sources. */
   source: string;
 }
@@ -114,6 +124,8 @@ export const DEFAULT_DETECTION_FILTERS: DetectionFilters = {
   verified: '',
   locked: '',
   timeOfDay: '',
+  hourStart: '',
+  hourEnd: '',
   source: '',
 };
 
@@ -175,6 +187,8 @@ export interface DetectionQueryParams {
   verified?: DetectionVerifiedFilter;
   locked?: DetectionLockedFilter;
   timeOfDay?: DetectionTimeOfDayFilter;
+  /** Clock-hour band as the API spells it: '7' for a single hour, '6-9' for a range. */
+  hourRange?: string;
   source?: string;
 }
 

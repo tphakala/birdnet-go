@@ -522,6 +522,10 @@
       "verifiedStatus": "Verifizierungsstatus",
       "lockedStatus": "Sperrstatus",
       "timeOfDay": "Tageszeit",
+      "hourRange": "Tagesstunde",
+      "hourRangeHelp": "Erkennungen nach Uhrzeit filtern, unabhängig von Sonnenauf- und -untergang (leer lassen für alle Stunden)",
+      "hourStart": "Früheste Stunde",
+      "hourEnd": "Späteste Stunde",
       "source": "Audioquelle"
     },
     "advancedFilters": "Erweiterte Filter",
@@ -543,6 +547,9 @@
       "night": "Nur Nacht",
       "sunrise": "Sonnenaufgang +/- 30min",
       "sunset": "Sonnenuntergang +/- 30min"
+    },
+    "hourOptions": {
+      "any": "Beliebige Stunde"
     },
     "sourceOptions": {
       "any": "Alle Quellen"
@@ -592,7 +599,8 @@
     },
     "errors": {
       "searchFailed": "Suche fehlgeschlagen: {error}",
-      "minMaxConfidence": "Minimale Konfidenz kann nicht größer als maximale Konfidenz sein."
+      "minMaxConfidence": "Minimale Konfidenz kann nicht größer als maximale Konfidenz sein.",
+      "minMaxHour": "Die früheste Stunde darf nicht nach der spätesten Stunde liegen."
     },
     "pagination": {
       "page": "Seite {current} von {total}",

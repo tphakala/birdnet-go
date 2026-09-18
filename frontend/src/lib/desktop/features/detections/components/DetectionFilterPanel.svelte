@@ -58,6 +58,8 @@
       candidate.verified !== '' ||
       candidate.locked !== '' ||
       candidate.timeOfDay !== '' ||
+      candidate.hourStart !== '' ||
+      candidate.hourEnd !== '' ||
       candidate.source !== ''
     );
   }
@@ -67,7 +69,7 @@
   let advancedFilters = $state(untrack(() => usesAdvancedFilters(filters)));
 
   // Re-sync the draft when a different filter set arrives from the URL (a shared
-  // link, back/forward, or the header search box writing `search`). Comparing a
+  // link, a dashboard drill-down, or back/forward navigation). Comparing a
   // serialized signature avoids clobbering in-progress edits on every re-render,
   // which an unconditional copy would do.
   //
@@ -114,6 +116,21 @@
     return () => controller.abort();
   });
 
+  // Whole-hour choices for the clock-hour band, labelled as the hour they start
+  // ("07:00" selects 07:00-07:59), which is how the band is applied server-side.
+  const HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => ({
+    value: String(hour),
+    label: `${String(hour).padStart(2, '0')}:00`,
+  }));
+
+  // The ends are independent selects, so a user can pick a start after the end.
+  // Report it rather than silently swapping, matching the confidence band.
+  let hasHourError = $derived(
+    draft.hourStart !== '' &&
+      draft.hourEnd !== '' &&
+      Number(draft.hourStart) > Number(draft.hourEnd)
+  );
+
   // Today, recomputed once per day rather than on every state change.
   const today = $derived.by(() => {
     const daysSinceEpoch = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
@@ -158,7 +175,7 @@
 
   function handleSubmit(event: Event) {
     event.preventDefault();
-    if (hasConfidenceError || loading) return;
+    if (hasConfidenceError || hasHourError || loading) return;
     onApply({ ...draft, search: draft.search.trim(), source: draft.source.trim() });
   }
 
@@ -280,12 +297,24 @@
         <div class="space-y-2 pt-2" id="detectionAdvancedFilters">
           <!-- Confidence range -->
           <div class="form-control">
-            <label class="label" for="detectionFilterConfidenceMin">
+            <div class="label" id="detectionFilterConfidenceLabel">
               <span class="label-text">{t('search.fields.confidenceRange')}</span>
               <span class="label-text-alt">{draft.confidenceMin}% - {draft.confidenceMax}%</span>
-            </label>
-            <div class="gap-6 search-confidence-grid" role="group">
+            </div>
+            <div
+              class="gap-6 search-confidence-grid"
+              role="group"
+              aria-labelledby="detectionFilterConfidenceLabel"
+            >
+              <!-- Each slider carries a visible name and its own value. Two bare
+                   sliders under one "Confidence Range" heading are indistinguishable:
+                   dragging the wrong one filters by the opposite bound, which reads
+                   as the filter not working rather than as a mis-set control. -->
               <div>
+                <label class="sub-label" for="detectionFilterConfidenceMin">
+                  <span>{t('dataDisplay.stats.min')}</span>
+                  <span class="sub-label-value">{draft.confidenceMin}%</span>
+                </label>
                 <input
                   type="range"
                   min="0"
@@ -293,33 +322,30 @@
                   id="detectionFilterConfidenceMin"
                   bind:value={draft.confidenceMin}
                   class="range range-xs"
-                  aria-label={t('search.fields.confidenceMin')}
-                  aria-valuemin="0"
-                  aria-valuemax="100"
-                  aria-valuenow={draft.confidenceMin}
                   aria-valuetext="{draft.confidenceMin}%"
                 />
-                <div class="flex justify-between text-xs px-2">
+                <div class="flex justify-between text-xs px-2 opacity-60">
                   <span>0%</span>
-                  <span>{draft.confidenceMin}%</span>
+                  <span>100%</span>
                 </div>
               </div>
               <div>
+                <label class="sub-label" for="detectionFilterConfidenceMax">
+                  <span>{t('dataDisplay.stats.max')}</span>
+                  <span class="sub-label-value">{draft.confidenceMax}%</span>
+                </label>
                 <input
                   type="range"
                   min="0"
                   max="100"
+                  id="detectionFilterConfidenceMax"
                   bind:value={draft.confidenceMax}
                   class="range range-xs"
-                  aria-label={t('search.fields.confidenceMax')}
-                  aria-valuemin="0"
-                  aria-valuemax="100"
-                  aria-valuenow={draft.confidenceMax}
                   aria-valuetext="{draft.confidenceMax}%"
                 />
-                <div class="flex justify-between text-xs px-2">
+                <div class="flex justify-between text-xs px-2 opacity-60">
                   <span>0%</span>
-                  <span>{draft.confidenceMax}%</span>
+                  <span>100%</span>
                 </div>
               </div>
             </div>
@@ -376,19 +402,90 @@
               </select>
             </div>
 
-            {#if availableSources.length > 1}
-              <div class="form-control">
-                <label class="label" for="detectionFilterSource">
-                  <span class="label-text">{t('search.fields.source')}</span>
-                </label>
-                <select id="detectionFilterSource" bind:value={draft.source} class="select w-full">
-                  <option value="">{t('search.sourceOptions.any')}</option>
-                  {#each availableSources as source (source.id)}
-                    <option value={source.name}>{source.name}</option>
-                  {/each}
-                </select>
+            <!-- Clock-hour band. Distinct from the time-of-day filter above, which
+                 follows the station's sun events rather than the clock. -->
+            <div class="form-control">
+              <div class="label" id="detectionFilterHourLabel">
+                <span class="label-text">{t('search.fields.hourRange')}</span>
+                <span
+                  class="help-icon"
+                  onmouseenter={() => (showTooltip = 'hourRange')}
+                  onmouseleave={() => (showTooltip = null)}
+                  onfocus={() => (showTooltip = 'hourRange')}
+                  onblur={() => (showTooltip = null)}
+                  role="button"
+                  tabindex="0"
+                  aria-label={t('search.fields.hourRangeHelp')}
+                  aria-describedby="detectionFilterHourTooltip">ⓘ</span
+                >
               </div>
-            {/if}
+              <div
+                class="gap-2 search-hour-grid"
+                role="group"
+                aria-labelledby="detectionFilterHourLabel"
+              >
+                <!-- The two selects look identical once a value is picked, so each
+                     states which end of the band it sets, in the same From/To
+                     wording the date range above uses. -->
+                <div>
+                  <label class="sub-label" for="detectionFilterHourStart">
+                    <span>{t('search.fields.from')}</span>
+                  </label>
+                  <select
+                    id="detectionFilterHourStart"
+                    bind:value={draft.hourStart}
+                    class="select w-full"
+                  >
+                    <option value="">{t('search.hourOptions.any')}</option>
+                    {#each HOUR_OPTIONS as hour (hour.value)}
+                      <option value={hour.value}>{hour.label}</option>
+                    {/each}
+                  </select>
+                </div>
+                <div>
+                  <label class="sub-label" for="detectionFilterHourEnd">
+                    <span>{t('search.fields.to')}</span>
+                  </label>
+                  <select
+                    id="detectionFilterHourEnd"
+                    bind:value={draft.hourEnd}
+                    class="select w-full"
+                  >
+                    <option value="">{t('search.hourOptions.any')}</option>
+                    {#each HOUR_OPTIONS as hour (hour.value)}
+                      <option value={hour.value}>{hour.label}</option>
+                    {/each}
+                  </select>
+                </div>
+              </div>
+              {#if showTooltip === 'hourRange'}
+                <div class="tooltip" id="detectionFilterHourTooltip" role="tooltip">
+                  {t('search.fields.hourRangeHelp')}
+                </div>
+              {/if}
+              {#if hasHourError}
+                <div class="text-[var(--color-error)] text-sm mt-1" role="alert">
+                  {t('search.errors.minMaxHour')}
+                </div>
+              {/if}
+            </div>
+
+            <!-- The source list arrives from its own request. The field is rendered
+                 either way -- and stays enabled while the list is empty, rather
+                 than showing a disabled control with nothing to explain it -- so
+                 the options filling in later cannot resize the panel and push the
+                 results the user is reading down the page. -->
+            <div class="form-control">
+              <label class="label" for="detectionFilterSource">
+                <span class="label-text">{t('search.fields.source')}</span>
+              </label>
+              <select id="detectionFilterSource" bind:value={draft.source} class="select w-full">
+                <option value="">{t('search.sourceOptions.any')}</option>
+                {#each availableSources as source (source.id)}
+                  <option value={source.name}>{source.name}</option>
+                {/each}
+              </select>
+            </div>
           </div>
         </div>
       {/if}
@@ -406,9 +503,13 @@
         <button
           type="submit"
           class="btn btn-primary shrink-0"
-          disabled={loading || hasConfidenceError}
+          disabled={loading || hasConfidenceError || hasHourError}
           aria-label={t('common.search')}
-          title={hasConfidenceError ? t('search.errors.minMaxConfidence') : undefined}
+          title={hasConfidenceError
+            ? t('search.errors.minMaxConfidence')
+            : hasHourError
+              ? t('search.errors.minMaxHour')
+              : undefined}
         >
           <span class="mr-2" aria-hidden="true">
             <Search class="size-5" />
@@ -479,8 +580,39 @@
 
   @media (min-width: 768px) {
     .search-filters-grid {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+  }
+
+  @media (min-width: 1280px) {
+    .search-filters-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  /* Caption naming one half of a paired control (a range's start/end, a band's
+     min/max). Smaller and quieter than the field's own label, which names the
+     pair as a whole. */
+  .sub-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+    opacity: 0.75;
+    padding-inline: 0.125rem;
+  }
+
+  .sub-label-value {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    opacity: 1;
+  }
+
+  .search-hour-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .search-date-grid {

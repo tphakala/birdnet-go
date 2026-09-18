@@ -522,6 +522,10 @@
       "verifiedStatus": "Status verificado",
       "lockedStatus": "Status bloqueado",
       "timeOfDay": "Hora do dia",
+      "hourRange": "Hora do dia",
+      "hourRangeHelp": "Filtrar deteções por hora do relógio, independentemente do nascer e do pôr do sol (deixe vazio para todas as horas)",
+      "hourStart": "Hora mais cedo",
+      "hourEnd": "Hora mais tarde",
       "source": "Fonte de áudio"
     },
     "advancedFilters": "Filtros avançados",
@@ -543,6 +547,9 @@
       "night": "Apenas noite",
       "sunrise": "Nascer do sol +/- 30min",
       "sunset": "Pôr do sol +/- 30min"
+    },
+    "hourOptions": {
+      "any": "Qualquer hora"
     },
     "sourceOptions": {
       "any": "Todas as fontes"
@@ -592,7 +599,8 @@
     },
     "errors": {
       "searchFailed": "Pesquisa falhou: {error}",
-      "minMaxConfidence": "A confiança mínima não pode ser maior que a confiança máxima."
+      "minMaxConfidence": "A confiança mínima não pode ser maior que a confiança máxima.",
+      "minMaxHour": "A hora mais cedo não pode ser posterior à hora mais tarde."
     },
     "pagination": {
       "page": "Página {current} de {total}",

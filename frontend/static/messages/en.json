@@ -522,6 +522,10 @@
       "verifiedStatus": "Verified Status",
       "lockedStatus": "Locked Status",
       "timeOfDay": "Time of Day",
+      "hourRange": "Hour of Day",
+      "hourRangeHelp": "Filter detections by clock hour, independently of sunrise and sunset (leave empty for all hours)",
+      "hourStart": "Earliest hour",
+      "hourEnd": "Latest hour",
       "source": "Audio Source"
     },
     "advancedFilters": "Advanced Filters",
@@ -543,6 +547,9 @@
       "night": "Night Only",
       "sunrise": "Sunrise +/- 30min",
       "sunset": "Sunset +/- 30min"
+    },
+    "hourOptions": {
+      "any": "Any Hour"
     },
     "sourceOptions": {
       "any": "All Sources"
@@ -592,7 +599,8 @@
     },
     "errors": {
       "searchFailed": "Search failed: {error}",
-      "minMaxConfidence": "Minimum confidence cannot be greater than maximum confidence."
+      "minMaxConfidence": "Minimum confidence cannot be greater than maximum confidence.",
+      "minMaxHour": "Earliest hour cannot be later than latest hour."
     },
     "pagination": {
       "page": "Page {current} of {total}",

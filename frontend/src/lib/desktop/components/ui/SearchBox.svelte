@@ -29,7 +29,7 @@
     onSearch,
     onNavigate,
     size = 'sm',
-    showOnPages = ['dashboard', 'detections'],
+    showOnPages = ['dashboard'],
     currentPage = 'dashboard',
   }: Props = $props();
 
@@ -68,17 +68,6 @@
         } catch {
           searchHistory = [];
         }
-      }
-    }
-  });
-
-  // Initialize search query from URL if on detections page
-  $effect(() => {
-    if (typeof globalThis.window !== 'undefined' && currentPage === 'detections') {
-      const params = new URLSearchParams(globalThis.window.location.search);
-      const searchParam = params.get('search');
-      if (searchParam) {
-        searchQuery = searchParam;
       }
     }
   });
@@ -242,49 +231,10 @@
       searchParams.set(key, value);
     });
 
-    // If we're already on detections page, just update the URL without full navigation
-    if (currentPage === 'detections') {
-      const url = new URL(globalThis.window.location.href);
-
-      // A new query replaces the previous filter set, but not how the list is
-      // being viewed: page size and sort are view preferences, not filters, and
-      // losing them on every search would silently undo the user's choice.
-      const preserved = new URLSearchParams();
-      for (const key of ['numResults', 'sortBy']) {
-        const value = url.searchParams.get(key);
-        if (value) preserved.set(key, value);
-      }
-
-      // Clear existing search parameters
-      url.search = '';
-
-      preserved.forEach((value, key) => {
-        url.searchParams.set(key, value);
-      });
-
-      // Add new parameters
-      searchParams.forEach((value, key) => {
-        url.searchParams.set(key, value);
-      });
-
-      // A different result set invalidates the current page position.
-      url.searchParams.set('offset', '0');
-
-      // pushState, matching the filter panel, so the back button steps through
-      // searches instead of skipping the whole series.
-      globalThis.window.history.pushState({}, '', url.toString());
-
-      // Trigger a custom event to notify the detections page of the search change
-      globalThis.window.dispatchEvent(
-        new CustomEvent('searchUpdate', {
-          detail: { search: parsed.textQuery || query, filters: parsed.filters },
-        })
-      );
-    } else {
-      // Navigate to detections page with search query and filters
-      if (onNavigate) {
-        onNavigate(`/ui/detections?${searchParams.toString()}`);
-      }
+    // Hand off to the detections page, whose filter panel reads these parameters
+    // back out of the URL and displays them as its own fields.
+    if (onNavigate) {
+      onNavigate(`/ui/detections?${searchParams.toString()}`);
     }
 
     isSearching = false;
@@ -340,19 +290,6 @@
     showDropdown = false;
     selectedIndex = -1;
     inputRef?.focus();
-
-    // If on detections page, clear search and refresh
-    if (currentPage === 'detections') {
-      const url = new URL(globalThis.window.location.href);
-      url.searchParams.delete('search');
-      globalThis.window.history.replaceState({}, '', url.toString());
-
-      globalThis.window.dispatchEvent(
-        new CustomEvent('searchUpdate', {
-          detail: { search: '' },
-        })
-      );
-    }
   }
 
   // Handle keyboard navigation and search

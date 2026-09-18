@@ -443,6 +443,10 @@ export type TranslationKey =
   | 'search.fields.verifiedStatus'
   | 'search.fields.lockedStatus'
   | 'search.fields.timeOfDay'
+  | 'search.fields.hourRange'
+  | 'search.fields.hourRangeHelp'
+  | 'search.fields.hourStart'
+  | 'search.fields.hourEnd'
   | 'search.fields.source'
   | 'search.advancedFilters'
   | 'search.showAdvancedFilters'
@@ -458,6 +462,7 @@ export type TranslationKey =
   | 'search.timeOfDayOptions.night'
   | 'search.timeOfDayOptions.sunrise'
   | 'search.timeOfDayOptions.sunset'
+  | 'search.hourOptions.any'
   | 'search.sourceOptions.any'
   | 'search.sortOptions.dateDesc'
   | 'search.sortOptions.dateAsc'
@@ -494,6 +499,7 @@ export type TranslationKey =
   | 'search.detailsPanel.clickToCollapse'
   | 'search.errors.searchFailed' // params: error
   | 'search.errors.minMaxConfidence'
+  | 'search.errors.minMaxHour'
   | 'search.pagination.page' // params: current, total
   | 'search.pagination.goToPrevious'
   | 'search.pagination.goToNext'

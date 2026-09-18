@@ -522,6 +522,10 @@
       "verifiedStatus": "Verifieringsstatus",
       "lockedStatus": "Låsstatus",
       "timeOfDay": "Tid på dygnet",
+      "hourRange": "Timme på dygnet",
+      "hourRangeHelp": "Filtrera detektioner efter klockslag, oberoende av soluppgång och solnedgång (lämna tomt för alla timmar)",
+      "hourStart": "Tidigaste timme",
+      "hourEnd": "Senaste timme",
       "source": "Ljudkälla"
     },
     "advancedFilters": "Avancerade filter",
@@ -543,6 +547,9 @@
       "night": "Endast natt",
       "sunrise": "Soluppgång +/- 30min",
       "sunset": "Solnedgång +/- 30min"
+    },
+    "hourOptions": {
+      "any": "Valfri timme"
     },
     "sourceOptions": {
       "any": "Alla källor"
@@ -592,7 +599,8 @@
     },
     "errors": {
       "searchFailed": "Sökningen misslyckades: {error}",
-      "minMaxConfidence": "Lägsta konfidens kan inte vara större än högsta konfidens."
+      "minMaxConfidence": "Lägsta konfidens kan inte vara större än högsta konfidens.",
+      "minMaxHour": "Tidigaste timmen kan inte vara senare än senaste timmen."
     },
     "pagination": {
       "page": "Sida {current} av {total}",

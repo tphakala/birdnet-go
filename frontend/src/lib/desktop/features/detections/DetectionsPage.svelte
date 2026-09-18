@@ -18,6 +18,7 @@
     applyDetectionFiltersToParams,
     emptyDetectionFilters,
     hasActiveDetectionFilters,
+    hourBandToParam,
     parseDetectionFilters,
   } from '$lib/utils/detectionFilters';
 
@@ -36,6 +37,11 @@
   const RESULTS_PER_PAGE_KEY = 'birdnet-detections-results-per-page';
   const SORT_BY_KEY = 'birdnet-detections-sort-by';
 
+  /** Page sizes the results selector offers, and the one used when none is stored. */
+  const RESULTS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
+  const DEFAULT_RESULTS_PER_PAGE = 25;
+  const DEFAULT_SORT_BY: DetectionSortBy = 'date_desc';
+
   const ALLOWED_SORT_VALUES = new Set<string>([
     'date_desc',
     'date_asc',
@@ -53,19 +59,23 @@
       if (saved && !isNaN(parseInt(saved))) {
         const value = parseInt(saved);
         // Validate it's one of our allowed values
-        if ([10, 25, 50, 100].includes(value)) {
+        if (RESULTS_PER_PAGE_OPTIONS.includes(value)) {
           return value;
         }
       }
     }
-    return 25; // Default
+    return DEFAULT_RESULTS_PER_PAGE;
   }
 
   // Extract query parameters from URL
   function getQueryParams(): DetectionQueryParams {
     const params = new URLSearchParams(window.location.search);
     const activeFilters = parseDetectionFilters(params);
-    const search = activeFilters.search;
+    // The panel's species field is filled from either `search` or `species`, but
+    // the request has to keep them apart: `species` is an exact match and
+    // `search` a free-text one, so sending both would intersect them and narrow
+    // a drill-down to the rows that happen to match twice.
+    const search = params.get('search')?.trim() ?? '';
 
     // Set queryType to 'search' if a free-text query is present
     let queryType = params.get('queryType') as DetectionQueryParams['queryType'];
@@ -80,7 +90,7 @@
     let numResults = numResultsParam ? parseInt(numResultsParam) : getSavedResultsPerPage();
 
     // Validate numResults is one of allowed values
-    if (isNaN(numResults) || ![10, 25, 50, 100].includes(numResults)) {
+    if (isNaN(numResults) || !RESULTS_PER_PAGE_OPTIONS.includes(numResults)) {
       numResults = getSavedResultsPerPage();
     }
 
@@ -96,20 +106,38 @@
       }
     }
 
+    // A dashboard or analytics drill-down links in with `date`, `hour` and
+    // `duration`, which the dedicated hourly and species query paths read
+    // natively; the panel spells the same two constraints as a date range and an
+    // hour band. Both spellings describe one filter each, so exactly one of them
+    // is sent. The drill-down keeps its own spelling -- and with it the query type
+    // that gives the list its "07:00 on <date>" heading -- until the panel is
+    // submitted, at which point applyDetectionFiltersToParams has replaced it
+    // with the canonical parameters and removed the originals.
+    const isDrillDown = !params.has('start_date') && !params.has('end_date');
+    const explicitDate = isDrillDown ? params.get('date')?.trim() : undefined;
+
     // The unfiltered view is pinned to a single day, which is what makes the
     // default page useful. A filtered view must not inherit that pin: the backend
     // restricts results to that one date, so a search for a species last heard in
     // spring would come back empty. Any active filter (not just a free-text query)
     // therefore drops the implicit date.
-    const explicitDate = params.get('date')?.trim();
     const date =
       explicitDate || (hasActiveDetectionFilters(activeFilters) ? undefined : getLocalDateString());
+
+    // queryType=hourly is rejected without an `hour`, so a drill-down that still
+    // carries it keeps sending the pair rather than the equivalent band.
+    const sendsDrillDownHour = isDrillDown && Boolean(params.get('hour'));
+    const hourRange = hourBandToParam(activeFilters);
 
     return {
       queryType,
       date,
-      hour: params.get('hour') || undefined,
-      duration: params.get('duration') ? parseInt(params.get('duration')!) : undefined,
+      hour: sendsDrillDownHour ? (params.get('hour') ?? undefined) : undefined,
+      duration:
+        sendsDrillDownHour && params.get('duration')
+          ? parseInt(params.get('duration')!)
+          : undefined,
       species: params.get('species') || undefined,
       search: search || undefined,
       numResults,
@@ -117,13 +145,14 @@
       sortBy,
       // Advanced filters. Defaults are omitted so an unfiltered request stays on
       // the cheap query path and shares a cache key with other unfiltered ones.
-      start_date: activeFilters.startDate || undefined,
-      end_date: activeFilters.endDate || undefined,
+      start_date: isDrillDown ? undefined : activeFilters.startDate || undefined,
+      end_date: isDrillDown ? undefined : activeFilters.endDate || undefined,
       confidenceMin: activeFilters.confidenceMin > 0 ? activeFilters.confidenceMin : undefined,
       confidenceMax: activeFilters.confidenceMax < 100 ? activeFilters.confidenceMax : undefined,
       verified: activeFilters.verified || undefined,
       locked: activeFilters.locked || undefined,
       timeOfDay: activeFilters.timeOfDay || undefined,
+      hourRange: sendsDrillDownHour ? undefined : hourRange || undefined,
       source: activeFilters.source || undefined,
     };
   }
@@ -138,6 +167,34 @@
     dashboardSettings?: DetectionsListData['dashboardSettings'];
   }
 
+  /**
+   * Write the page size and sort order into the URL when they come from stored
+   * preferences rather than the link itself.
+   *
+   * Without this a shared or bookmarked link reproduces the filters but not the
+   * pagination, so the recipient sees a different slice of the same query than
+   * the sender did. It is a replaceState, not a push: the view has not changed,
+   * only its description, and a history entry here would make Back a no-op.
+   * Defaults are left out so the plain /ui/detections URL stays clean.
+   */
+  function syncViewPreferencesToUrl(queryParams: DetectionQueryParams) {
+    const params = new URLSearchParams(window.location.search);
+    let changed = false;
+
+    if (!params.has('numResults') && queryParams.numResults !== DEFAULT_RESULTS_PER_PAGE) {
+      params.set('numResults', String(queryParams.numResults));
+      changed = true;
+    }
+    if (!params.has('sortBy') && queryParams.sortBy && queryParams.sortBy !== DEFAULT_SORT_BY) {
+      params.set('sortBy', queryParams.sortBy);
+      changed = true;
+    }
+    if (!changed) return;
+
+    const query = params.toString();
+    window.history.replaceState({}, '', `${window.location.pathname}?${query}`);
+  }
+
   // Fetch detections data
   async function fetchDetections() {
     loading = true;
@@ -149,6 +206,7 @@
 
     try {
       const queryParams = getQueryParams();
+      syncViewPreferencesToUrl(queryParams);
       // Build query string
       const queryString = new URLSearchParams();
       Object.entries(queryParams).forEach(([key, value]) => {
@@ -166,7 +224,8 @@
 
       // Validate numResults before using
       const validatedNumResults =
-        queryParams.numResults !== undefined && [10, 25, 50, 100].includes(queryParams.numResults)
+        queryParams.numResults !== undefined &&
+        RESULTS_PER_PAGE_OPTIONS.includes(queryParams.numResults)
           ? queryParams.numResults
           : getSavedResultsPerPage();
 
@@ -257,7 +316,7 @@
     }
 
     const params = new URLSearchParams(window.location.search);
-    if (newSortBy && newSortBy !== 'date_desc') {
+    if (newSortBy && newSortBy !== DEFAULT_SORT_BY) {
       params.set('sortBy', newSortBy);
     } else {
       params.delete('sortBy');
@@ -270,22 +329,20 @@
    * Apply the filter panel's submission.
    *
    * A changed filter set invalidates the current page, so the offset resets. The
-   * implicit `date` pin is dropped too: it belongs to the unfiltered single-day
-   * view, and leaving it in place would silently restrict a filtered search to
-   * one day.
+   * drill-down parameters are dropped by applyDetectionFiltersToParams, which has
+   * already written the equivalent date range and hour band; what the panel shows
+   * is then the whole of what narrows the list.
    */
   function handleApplyFilters(newFilters: DetectionFilters) {
     const params = new URLSearchParams(window.location.search);
     applyDetectionFiltersToParams(params, newFilters);
     params.set('offset', '0');
 
-    if (hasActiveDetectionFilters(newFilters)) {
-      params.delete('date');
-      // queryType is inferred from the parameters server-side; a stale
-      // 'hourly'/'species' type would keep applying a drill-down the user has
-      // just replaced with an explicit filter set.
-      params.delete('queryType');
-    }
+    // queryType is inferred from the parameters server-side. A stale
+    // 'hourly'/'species' type would keep applying a drill-down the user has just
+    // replaced with an explicit filter set -- and 'hourly' is rejected outright
+    // once the `hour` it requires has been folded into the panel's hour band.
+    params.delete('queryType');
 
     navigateWithParams(params);
   }
@@ -304,13 +361,6 @@
     navigation.navigate(`/ui/detections/${id}`);
   }
 
-  // Listen for search updates from the header SearchBox, which writes its own
-  // parsed query and filters straight into the URL. Re-reading the URL here keeps
-  // the panel and the list consistent with whatever it wrote.
-  function handleSearchUpdate() {
-    fetchDetections();
-  }
-
   // Handle browser back/forward buttons
   function handlePopState() {
     fetchDetections();
@@ -319,14 +369,10 @@
   onMount(() => {
     fetchDetections();
 
-    // Listen for search updates from SearchBox
-    window.addEventListener('searchUpdate', handleSearchUpdate);
-
     // Listen for browser navigation
     window.addEventListener('popstate', handlePopState);
 
     return () => {
-      window.removeEventListener('searchUpdate', handleSearchUpdate);
       window.removeEventListener('popstate', handlePopState);
 
       // Clear any pending debounce timer

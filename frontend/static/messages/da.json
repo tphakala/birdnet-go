@@ -522,6 +522,10 @@
       "verifiedStatus": "Bekræftelsesstatus",
       "lockedStatus": "Låsestatus",
       "timeOfDay": "Tidspunkt på dagen",
+      "hourRange": "Klokkeslæt",
+      "hourRangeHelp": "Filtrér registreringer efter klokkeslæt, uafhængigt af solopgang og solnedgang (lad stå tomt for alle timer)",
+      "hourStart": "Tidligste time",
+      "hourEnd": "Seneste time",
       "source": "Lydkilde"
     },
     "advancedFilters": "Avancerede filtre",
@@ -543,6 +547,9 @@
       "night": "Kun nat",
       "sunrise": "Solopgang +/- 30 min",
       "sunset": "Solnedgang +/- 30 min"
+    },
+    "hourOptions": {
+      "any": "Alle timer"
     },
     "sourceOptions": {
       "any": "Alle kilder"
@@ -592,7 +599,8 @@
     },
     "errors": {
       "searchFailed": "Søgning fejlede: {error}",
-      "minMaxConfidence": "Minimum sikkerhed kan ikke være større end maksimum sikkerhed."
+      "minMaxConfidence": "Minimum sikkerhed kan ikke være større end maksimum sikkerhed.",
+      "minMaxHour": "Tidligste time kan ikke være senere end seneste time."
     },
     "pagination": {
       "page": "Side {current} af {total}",

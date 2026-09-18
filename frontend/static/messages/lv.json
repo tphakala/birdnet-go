@@ -522,6 +522,10 @@
       "verifiedStatus": "Verifikācijas statuss",
       "lockedStatus": "Bloķēšanas statuss",
       "timeOfDay": "Diennakts laiks",
+      "hourRange": "Diennakts stunda",
+      "hourRangeHelp": "Filtrēt atklājumus pēc pulksteņa stundas neatkarīgi no saullēkta un saulrieta (atstājiet tukšu visām stundām)",
+      "hourStart": "Agrākā stunda",
+      "hourEnd": "Vēlākā stunda",
       "source": "Audio avots"
     },
     "advancedFilters": "Papildu filtri",
@@ -543,6 +547,9 @@
       "night": "Tikai naktī",
       "sunrise": "Saullēkts +/- 30 min",
       "sunset": "Saulriets +/- 30 min"
+    },
+    "hourOptions": {
+      "any": "Jebkura stunda"
     },
     "sourceOptions": {
       "any": "Visi avoti"
@@ -592,7 +599,8 @@
     },
     "errors": {
       "searchFailed": "Meklēšana neizdevās: {error}",
-      "minMaxConfidence": "Minimālā ticamība nevar būt lielāka par maksimālo ticamību."
+      "minMaxConfidence": "Minimālā ticamība nevar būt lielāka par maksimālo ticamību.",
+      "minMaxHour": "Agrākā stunda nevar būt vēlāka par vēlāko stundu."
     },
     "pagination": {
       "page": "Lapa {current} no {total}",
