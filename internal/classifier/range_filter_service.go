@@ -142,12 +142,18 @@ const (
 // participant is loaded (N=0).
 func (v rangeFilterView) coveredLabels(settings *conf.Settings) []string {
 	if v.v24Labels != nil {
-		// v2.4 loaded: use the PUBLISHED v2.4 label set (settings.BirdNET.Labels), not
+		// v2.4 loaded: prefer the PUBLISHED v2.4 label set (settings.BirdNET.Labels), not
 		// the view's bn.Labels() clone. The two hold the same species but can differ in
 		// order (bn.Settings vs the atomic snapshot), and the pre-decouple fail-open and
-		// backfill paths indexed the published slice, so using it keeps the inclusion
-		// list and the name-resolver dedup byte-identical (invariant I1).
-		return settings.BirdNET.Labels
+		// backfill paths indexed the published slice, so using it keeps the inclusion list
+		// and the name-resolver dedup byte-identical (invariant I1). On the post-construction
+		// retry path (v2.4 failed at construction, loaded later via LoadModel), the global
+		// snapshot never received labels, so fall back to the loaded instance's own labels
+		// to avoid an empty covered set that would fail the inclusion list CLOSED.
+		if len(settings.BirdNET.Labels) > 0 {
+			return settings.BirdNET.Labels
+		}
+		return v.v24Labels
 	}
 	if len(v.participants) == 0 {
 		return nil
@@ -725,7 +731,8 @@ func (rfs *rangeFilterService) predictFilter(date time.Time, week float32, setti
 	// Re-check nil under lock in case a reload raced between the caller's nil check
 	// and this point.
 	rfs.mu.Lock()
-	backend := rfs.loadState().backend
+	st := rfs.loadState()
+	backend := st.backend
 	if backend == nil {
 		rfs.mu.Unlock()
 		return nil, fmt.Errorf("range filter was closed during prediction")
@@ -748,10 +755,16 @@ func (rfs *rangeFilterService) predictFilter(date time.Time, week float32, setti
 			Build()
 	}
 
+	// Label the MData scores from the backend's covered-label space, not settings.BirdNET.Labels
+	// directly: the two match byte-for-byte on a normal v2.4 install (coveredLabels prefers the
+	// published label set), but on the post-construction retry path the published set is empty,
+	// so reading it here would drop every species (fail closed). coveredLabels falls back to the
+	// loaded v2.4 instance's labels, which are in the same order as the MData scores.
+	covered := st.coveredLabels
 	var results []Filter
 	for i, score := range scores {
-		if score >= threshold && i < len(settings.BirdNET.Labels) {
-			results = append(results, Filter{Score: score, Label: settings.BirdNET.Labels[i]})
+		if score >= threshold && i < len(covered) {
+			results = append(results, Filter{Score: score, Label: covered[i]})
 		}
 	}
 

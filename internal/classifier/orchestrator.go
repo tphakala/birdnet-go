@@ -317,14 +317,10 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// enabled model failed to load). AcousticModelsState reports the degraded state.
 	o.loadEnabledModels(threadAlloc)
 
-	// Append the BirdNET v2.4 label resolver as chain[1], built from the loaded
-	// entry's labels (a construction-time snapshot, never refreshed on reload),
-	// preserving the pre-Phase-3 wiring exactly.
-	if entry, ok := o.models[RegistryIDBirdNETV24]; ok {
-		if bn, isBirdNET := entry.instance.(*BirdNET); isBirdNET {
-			o.nameResolvers = []NameResolver{ofResolver, NewBirdNETLabelResolver(bn.Labels())}
-		}
-	}
+	// The BirdNET v2.4 label resolver is wired into the chain by loadBirdNETV24 itself
+	// (withV24LabelResolverLocked), so it is refreshed on BOTH the construction load and a
+	// later retry via LoadModel, and dropped on unload; there is no construction-time
+	// snapshot to go stale.
 
 	// Build the range-filter backend from the loaded participant set now that the
 	// models are loaded, independent of BirdNET v2.4: a Perch-only or v3.0-only install
@@ -454,6 +450,43 @@ func (o *Orchestrator) hasTaxonomyResolverLocked() bool {
 		}
 	}
 	return false
+}
+
+// withV24LabelResolverLocked republishes the name-resolver chain with the BirdNET v2.4 label
+// resolver replaced (labels != nil) or removed (labels == nil). It builds a FRESH slice
+// (copy-on-write) rather than mutating the existing backing array, because ResolveName
+// iterates a lock-free snapshot of the chain after releasing its RLock, so mutating an
+// element in place would race that read. OpenFauna leads the chain, the v2.4 resolver sits
+// directly after it, and every other resolver (the taxonomy resolver) keeps its relative
+// order. The caller MUST hold o.mu for writing.
+func (o *Orchestrator) withV24LabelResolverLocked(labels []string) {
+	fresh := make([]NameResolver, 0, len(o.nameResolvers)+1)
+	if o.openfauna != nil {
+		fresh = append(fresh, o.openfauna) // OpenFauna always leads the chain
+	}
+	if labels != nil {
+		fresh = append(fresh, NewBirdNETLabelResolver(labels))
+	}
+	for _, r := range o.nameResolvers {
+		if r == o.openfauna {
+			continue // re-added above as the lead
+		}
+		if _, ok := r.(*BirdNETLabelResolver); ok {
+			continue // replaced above, or removed when labels == nil
+		}
+		fresh = append(fresh, r)
+	}
+	o.nameResolvers = fresh
+}
+
+// setV24LabelResolver takes o.mu only for the chain swap. The caller MUST compute labels
+// (e.g. bn.Labels(), which takes the model lock) BEFORE calling, never while holding o.mu,
+// so the o.mu -> model-lock edge is never taken on the inference hot path where PredictModel
+// holds the model lock for a full native inference.
+func (o *Orchestrator) setV24LabelResolver(labels []string) {
+	o.mu.Lock()
+	o.withV24LabelResolverLocked(labels)
+	o.mu.Unlock()
 }
 
 // SetSunCalc injects the sun calculator into the orchestrator and starts
@@ -770,10 +803,10 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 // ResolveName walks the resolver chain and returns the first non-empty
 // common name for the given scientific name and locale.
 func (o *Orchestrator) ResolveName(scientificName, locale string) string {
-	// Snapshot the resolver chain under RLock so a concurrent
-	// registerTaxonomyResolver append cannot corrupt the slice header.
-	// Resolvers are only ever appended (never mutated in place), so iterating
-	// the snapshot outside the lock is safe.
+	// Snapshot the resolver chain under RLock so a concurrent writer cannot corrupt the
+	// slice header. Writers (registerTaxonomyResolver append, withV24LabelResolverLocked
+	// replace/remove) only ever append or publish a FRESH slice, never mutate an element in
+	// place, so iterating this snapshot outside the lock is safe.
 	o.mu.RLock()
 	resolvers := o.nameResolvers
 	o.mu.RUnlock()
@@ -2188,6 +2221,11 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 			s.stop()
 		}
 	}
+	if registryID == RegistryIDBirdNETV24 {
+		// v2.4 is gone: drop its label resolver from the chain (copy-on-write under o.mu)
+		// so ResolveName falls through to OpenFauna.
+		o.withV24LabelResolverLocked(nil)
+	}
 	o.mu.Unlock()
 
 	// Close the model instance outside the map lock, in an inner func so entry.mu
@@ -2729,9 +2767,13 @@ func (o *Orchestrator) GetRarityContext(date time.Time) (RarityContext, error) {
 	// check missed, so a caller never reports a synthetic zero as "very rare" (#3935).
 	scores, geomodel, filterActive, err := rfs.probableSpecies(date, 0.0, settings)
 	return RarityContext{
-		Scores:           scores,
-		Geomodel:         geomodel,
-		ClassifierLabels: slices.Clone(settings.BirdNET.Labels),
+		Scores:   scores,
+		Geomodel: geomodel,
+		// ClassifierLabels is the backend's covered label space: v2.4's published labels on
+		// a v2.4 install (byte-identical to the former settings.BirdNET.Labels read), the
+		// participant union otherwise, and the loaded v2.4 instance's labels on the
+		// post-construction retry path where the global snapshot never received them.
+		ClassifierLabels: slices.Clone(rfs.loadState().coveredLabels),
 		FilterActive:     filterActive,
 		Settings:         settings,
 	}, err

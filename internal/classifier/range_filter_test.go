@@ -93,6 +93,15 @@ func buildTestOrchestrator(t *testing.T, settings *conf.Settings, rf interface{ 
 		backend = irf
 	}
 	o.rangeFilter = newTestRangeFilterService(backend)
+	// Publish the covered-label space and participant snapshot a real reload records, so the
+	// legacy predictFilter path (which labels MData scores from coveredLabels) and the shared
+	// display/gate helper see the v2.4 label set instead of an empty one.
+	o.rangeFilter.state.Store(&rangeFilterState{
+		backend:       backend,
+		coveredLabels: settings.BirdNET.Labels,
+		participants:  []participantLabels{{id: RegistryIDBirdNETV24, labels: settings.BirdNET.Labels}},
+		anchoredOnV24: true,
+	})
 	return o
 }
 
