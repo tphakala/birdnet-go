@@ -475,6 +475,12 @@
         "notRegisteredTitle": "Nessun modello sta analizzando {sourceName}",
         "notRegisteredMessage": "Nessun audio raggiunge {models} sulla sorgente audio \"{sourceName}\", quindi non vengono prodotti rilevamenti. Apri Sistema > Modelli IA per verificarne lo stato per sorgente e confermare che la sorgente audio sia connessa e invii audio."
       },
+      "acousticModels": {
+        "noneTitle": "Nessun modello acustico abilitato",
+        "noneMessage": "Nessun modello acustico è caricato, quindi l'audio viene acquisito ma non analizzato. Abilita un modello in Impostazioni > Analisi, o installane uno dalla galleria modelli.",
+        "loadFailedTitle": "Impossibile caricare il modello acustico",
+        "loadFailedMessage": "Un modello acustico abilitato non è stato caricato, quindi l'audio viene acquisito ma non analizzato. Controlla il modello nella pagina Sistema > Modelli IA."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valore attuale: {value}% (soglia: {threshold}%)",
@@ -2402,7 +2408,7 @@
           "title": "Filtro Falsi Positivi",
           "description": "Riduce i falsi rilevamenti richiedendo conferme multiple su segmenti audio sovrapposti",
           "level": {
-            "label": "Livello Filtro"
+            "label": "Intensità del Filtro Falsi Positivi"
           },
           "detectionCount": "{count} conferme richieste. {description}",
           "levels": {

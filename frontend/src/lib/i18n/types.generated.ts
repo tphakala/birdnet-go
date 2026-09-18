@@ -404,6 +404,10 @@ export type TranslationKey =
   | 'notifications.content.modelPath.builtinMessage' // params: modelName
   | 'notifications.content.modelPath.notRegisteredTitle' // params: sourceName
   | 'notifications.content.modelPath.notRegisteredMessage' // params: models, sourceName
+  | 'notifications.content.acousticModels.noneTitle'
+  | 'notifications.content.acousticModels.noneMessage'
+  | 'notifications.content.acousticModels.loadFailedTitle'
+  | 'notifications.content.acousticModels.loadFailedMessage'
   | 'notifications.content.alert.firedTitle' // params: rule_name
   | 'notifications.content.alert.metricExceeded' // params: value, threshold
   | 'notifications.content.alert.detectionOccurred' // params: species_name, confidence

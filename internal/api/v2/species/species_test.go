@@ -941,6 +941,38 @@ func TestComputeRarity_NoGeomodelLabels(t *testing.T) {
 	}
 }
 
+// TestSpeciesHasGeomodelCoverage_UnknownWhenFilterInactive pins the predicate's own
+// honesty independent of its caller: coverage is a property of an ACTIVE range filter,
+// so an inactive filter (nil geomodel, synthetic zeros) must report not-covered rather
+// than falling through to the classifier-label scan and granting nominal coverage to
+// every classifier species. computeRarity already short-circuits on !FilterActive, so
+// this guards the helper for any future caller.
+func TestSpeciesHasGeomodelCoverage_UnknownWhenFilterInactive(t *testing.T) {
+	t.Parallel()
+
+	snap := speciesindex.Empty()
+	label := testSciName + "_" + testCommonName
+	key := snap.CanonicalKey(label)
+
+	inactive := &classifier.RarityContext{
+		FilterActive:     false,
+		Geomodel:         nil,
+		ClassifierLabels: []string{label},
+	}
+	assert.False(t, speciesHasGeomodelCoverage(key, inactive, snap),
+		"an inactive range filter has no coverage, even for a classifier label")
+
+	// The active legacy (MData) path has no geomodel vocabulary, so its own classifier
+	// labels ARE the coverage set; the fallback must survive when the filter is active.
+	legacyActive := &classifier.RarityContext{
+		FilterActive:     true,
+		Geomodel:         nil,
+		ClassifierLabels: []string{label},
+	}
+	assert.True(t, speciesHasGeomodelCoverage(key, legacyActive, snap),
+		"an active legacy filter covers its own classifier labels")
+}
+
 // TestResolveSpeciesLabel_CollidingSpecies guards a defect an earlier revision shipped:
 // matching on the canonical name alone answered a request for one of these two species
 // with the other's label and common name, because the alias map merges them while

@@ -1117,25 +1117,33 @@ const (
 )
 
 // labelSource is the minimal view of the geomodel that coverage detection needs: the
-// primary model's classifiable label set. *classifier.Orchestrator satisfies it; tests
+// geomodel's classifiable label set. *classifier.Orchestrator satisfies it; tests
 // supply a fake so the memoization logic is exercisable without a loaded tflite model.
+//
+// This was Labels() (the primary model's label set) until #4357 de-privileged the
+// BirdNET v2.4 primary, removing that accessor. GeomodelLabels() is the faithful
+// replacement: the old comment already described the set as "the geomodel's
+// classifiable vocabulary", and reading the geomodel directly keeps
+// secondary-model-only species (bats) out of it, which is the whole point here.
+// AllLabels() would NOT work - it is the union including secondaries, so bats would
+// wrongly gain an "unexpected" rarity badge.
 type labelSource interface {
-	Labels() []string
+	GeomodelLabels() []string
 }
 
-// speciesHasGeomodelCoverage reports whether the scientific name is in the primary
-// model's label set (the geomodel's classifiable vocabulary). Secondary-model-only
+// speciesHasGeomodelCoverage reports whether the scientific name is in the
+// geomodel's classifiable vocabulary. Secondary-model-only
 // species (e.g. bats) are absent from it and so have no geomodel occurrence
 // probability to base a rarity on. It consults a memoized name set (see
-// geomodelCoverageNames) rather than re-scanning bn.Labels() on every call.
+// geomodelCoverageNames) rather than re-scanning bn.GeomodelLabels() on every call.
 func (c *Handler) speciesHasGeomodelCoverage(bn labelSource, scientificName string) bool {
 	set := c.geomodelCoverageNames(bn)
 	_, ok := set[strings.ToLower(detection.ExtractScientificName(scientificName))]
 	return ok
 }
 
-// geomodelCoverageNames returns the lowercased set of scientific names the primary
-// model can classify, building it once per loaded model. The label set is immutable
+// geomodelCoverageNames returns the lowercased set of scientific names the geomodel
+// can classify, building it once per loaded model. The label set is immutable
 // for a given classifier, so the result is memoized under geomodelCoverageMu and
 // keyed on the classifier pointer; a model reload swaps the pointer and rebuilds.
 // Lowercasing both sides (here and at lookup) is equivalent to the previous EqualFold
@@ -1157,7 +1165,7 @@ func (c *Handler) geomodelCoverageNames(bn labelSource) map[string]struct{} {
 	if c.geomodelCoverageBn == bn && c.geomodelCoverageSet != nil {
 		return c.geomodelCoverageSet
 	}
-	labels := bn.Labels()
+	labels := bn.GeomodelLabels()
 	set := make(map[string]struct{}, len(labels))
 	for _, label := range labels {
 		set[strings.ToLower(detection.ExtractScientificName(label))] = struct{}{}

@@ -24,7 +24,7 @@ type DetectionsMap map[string][]datastore.Results
 // Implements ModelInstance.
 func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore.Results, error) {
 	// Capture the model ID once via the lock-free identity snapshot, reused below, so
-	// this hot path never reads bn.ModelInfo directly (reloadModelInternal writes it).
+	// this hot path never reads bn.ModelInfo directly (it is written at construction).
 	modelID := bn.ModelID()
 	span, _ := startPredictSpan(ctx, modelID, sample)
 	defer span.Finish()
@@ -33,7 +33,7 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 	start := time.Now()
 
 	// This decoration runs BEFORE bn.mu is taken, so it must not read
-	// bn.primaryPath (written under bn.mu by reloadModelInternal). It reads the
+	// bn.primaryPath (written by NewBirdNET at construction). It reads the
 	// RESOLVED path lock-free from the published identity snapshot via
 	// bn.resolvedModelPath(), so after a stale-path recovery it names the file the
 	// instance is actually running rather than settings.BirdNET.ModelPath, which

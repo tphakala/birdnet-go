@@ -20,11 +20,11 @@ func TestModelRegistry_RangeFilterCompat(t *testing.T) {
 	t.Parallel()
 
 	want := map[string]rangeFilterCompat{
-		permanentRegistryID: rangeFilterCompatMDataV24,
-		RegistryIDBirdNETV3: rangeFilterCompatGeomodel,
-		RegistryIDPerchV2:   rangeFilterCompatGeomodel,
-		RegistryIDBat:       rangeFilterCompatNone,
-		RegistryIDBSG:       rangeFilterCompatNone,
+		RegistryIDBirdNETV24: rangeFilterCompatMDataV24,
+		RegistryIDBirdNETV3:  rangeFilterCompatGeomodel,
+		RegistryIDPerchV2:    rangeFilterCompatGeomodel,
+		RegistryIDBat:        rangeFilterCompatNone,
+		RegistryIDBSG:        rangeFilterCompatNone,
 	}
 	for id := range ModelRegistry {
 		w, ok := want[id]

@@ -1476,7 +1476,12 @@ type BSGConfig struct {
 type ModelsConfig struct {
 	Enabled   []string `yaml:"enabled" json:"enabled"`                         // list of model IDs to load (e.g., "birdnet", "perch_v2")
 	Directory string   `yaml:"directory,omitempty" json:"directory,omitempty"` // base directory for downloaded model files
-	Installed []string `yaml:"installed,omitempty" json:"installed,omitempty"` // list of installed model IDs managed by the model gallery
+	// AutoEnableMigrated is an internal marker recording that the classifier's one-shot legacy
+	// model auto-enable has run for this config file, so it never re-runs. Do not edit by hand;
+	// a managed read-only config may set it true (with configversion: 2) to keep an explicit
+	// models.enabled from being re-seeded. Set by the classifier; hidden from the JSON API; the
+	// companion-marker rationale (why not ConfigVersion) lives in internal/conf/migrations.go.
+	AutoEnableMigrated bool `yaml:"autoenablemigrated,omitempty" json:"-"`
 }
 
 // Low-memory mode constants for the manual override.
@@ -1903,6 +1908,13 @@ type DiagnosticsConfig struct {
 // Settings contains all configuration options for the BirdNET-Go application.
 type Settings struct {
 	Debug bool `yaml:"debug" json:"debug"` // true to enable debug mode
+
+	// ConfigVersion records the newest one-shot config migration applied to this file.
+	// It is managed automatically by config loading and should not be edited by hand;
+	// it lets a migration whose precondition cannot be recovered from the data itself
+	// run exactly once (see MigrateSourceTargetDefaults). Hidden from the settings API
+	// and preserved across saves by CloneSettings, so writers never drop it.
+	ConfigVersion int `yaml:"configversion,omitempty" json:"-"`
 
 	// Runtime values, not stored in config file
 	Version            string   `yaml:"-" json:"version,omitempty"`            // Version from build

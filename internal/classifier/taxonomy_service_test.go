@@ -104,10 +104,12 @@ func TestTaxonomyService_NameFromCode_MatchesFreeFunction(t *testing.T) {
 // only at shutdown).
 func TestOrchestrator_TaxonomyAccessors_AfterDelete(t *testing.T) {
 	settings := conftest.GetTestSettings()
+	enableBirdNETV24(settings) // models.enabled is authoritative (Phase 4); name v2.4 so it loads
 	o, err := NewOrchestrator(settings)
 	if err != nil {
 		t.Skipf("Skipping: model not available in test environment: %v", err)
 	}
+	requireV24Loaded(t, o) // skip when the embedded model is compiled out (noembed)
 
 	const label = "Turdus merula_Eurasian Blackbird"
 	wantCode, wantCodeOK := o.GetSpeciesCode(label)
@@ -133,10 +135,12 @@ func TestOrchestrator_TaxonomyAccessors_AfterDelete(t *testing.T) {
 // the public wrappers).
 func TestOrchestrator_TaxonomyWrappers(t *testing.T) {
 	settings := conftest.GetTestSettings()
+	enableBirdNETV24(settings) // models.enabled is authoritative (Phase 4); name v2.4 so it loads
 	o, err := NewOrchestrator(settings)
 	if err != nil {
 		t.Skipf("Skipping: model not available in test environment: %v", err)
 	}
+	requireV24Loaded(t, o) // skip when the embedded model is compiled out (noembed)
 	t.Cleanup(func() { o.Delete() })
 
 	// A species present in the taxonomy splits correctly and resolves to a code; a

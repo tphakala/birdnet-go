@@ -30,12 +30,17 @@ func geomodelPathsFromEnv(t *testing.T) (modelPath, labelsPath string) {
 	return modelPath, labelsPath
 }
 
-// TestInitializeMetaModel_OrphanGeomodelOnV24 is matrix row A: BirdNET v2.4 with an
-// orphaned geomodel config (rangefilter.model="" but modelpath/labelspath still pointing
-// at the geomodel). The dispatch fix must route this through the name-matching mapped
-// path and produce a working mappedRangeFilter with mappedCount>0, NOT a nil filter
-// (silent fail-open) and NOT a downgrade to the embedded TFLite range filter.
-func TestInitializeMetaModel_OrphanGeomodelOnV24(t *testing.T) {
+// TestBuildMetaModel_OrphanGeomodelOnV24 is matrix row A: BirdNET v2.4 with an orphaned
+// geomodel config (rangefilter.model="" but modelpath/labelspath still pointing at the
+// geomodel). The dispatch fix must route this through the name-matching mapped path and
+// produce a working mappedRangeFilter with mappedCount>0, NOT a nil filter (silent
+// fail-open) and NOT a downgrade to the embedded TFLite range filter.
+//
+// Phase 2b moved range-filter construction off *BirdNET onto the orchestrator-owned
+// rangeFilterService; buildMetaModel is the dispatch factory that initializeMetaModel
+// used to be. The rangeFilterView carries v24Labels (BirdNET v2.4 loaded), the family
+// that gates the embedded-TFLite fallback, and its coveredLabels drive the mapping.
+func TestBuildMetaModel_OrphanGeomodelOnV24(t *testing.T) {
 	modelPath, labelsPath := geomodelPathsFromEnv(t)
 
 	// Use a subset of the geomodel's own labels as the classifier labels so that
@@ -54,17 +59,17 @@ func TestInitializeMetaModel_OrphanGeomodelOnV24(t *testing.T) {
 	settings.BirdNET.RangeFilter.ModelPath = modelPath
 	settings.BirdNET.RangeFilter.LabelsPath = labelsPath
 
-	bn := &BirdNET{
-		Settings:     settings,
-		ModelInfo:    ModelRegistry[DefaultModelVersion], // BirdNET v2.4 (TFLite)
-		speciesCache: make(map[string]*speciesCacheEntry),
+	view := rangeFilterView{
+		v24Labels:    classifierLabels,
+		participants: []participantLabels{{id: RegistryIDBirdNETV24, labels: classifierLabels}},
 	}
-	t.Cleanup(bn.Delete)
+	backend, _, fellBack, err := buildMetaModel(settings, view, nil)
+	require.NoError(t, err)
+	require.NotNil(t, backend)
+	t.Cleanup(backend.Close)
 
-	require.NoError(t, bn.initializeMetaModel(settings))
-
-	mapped, ok := bn.rangeFilter.(*mappedRangeFilter)
-	require.True(t, ok, "orphan geomodel config must produce a mappedRangeFilter, got %T", bn.rangeFilter)
+	mapped, ok := backend.(*mappedRangeFilter)
+	require.True(t, ok, "orphan geomodel config must produce a mappedRangeFilter, got %T", backend)
 	assert.Positive(t, mapped.mappedCount, "expected at least one classifier species mapped to the geomodel")
-	assert.False(t, bn.rangeFilterFellBack, "must not fall back to embedded TFLite when the geomodel loads")
+	assert.False(t, fellBack, "must not fall back to embedded TFLite when the geomodel loads")
 }

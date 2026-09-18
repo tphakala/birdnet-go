@@ -996,11 +996,13 @@ func (p *Processor) parseAndValidateSpecies(settings *conf.Settings, result data
 	}
 
 	// Log placeholder taxonomy codes if a custom model is actually running. Read the
-	// RESOLVED primary path, not settings.BirdNET.ModelPath: after a stale-path
-	// recovery the configured value can name a file the instance is not running (or
-	// the built-in baseline is running while config still points at a custom path),
-	// so the raw setting would misclassify which model produced the code.
-	if p.Bn.PrimaryResolvedModelPath() != "" && settings.Debug && speciesCode != "" {
+	// RESOLVED path of the model that produced this detection, not
+	// settings.BirdNET.ModelPath: after a stale-path recovery the configured value can
+	// name a file the instance is not running (or the built-in baseline is running
+	// while config still points at a custom path), so the raw setting would
+	// misclassify which model produced the code. For a v2.4 install item.ModelID is
+	// RegistryIDBirdNETV24, so this is identical to the previous primary read.
+	if p.Bn.ResolvedModelPathForID(item.ModelID) != "" && settings.Debug && speciesCode != "" {
 		if len(speciesCode) == 8 && (speciesCode[:2] == "XX" || (speciesCode[0] >= 'A' && speciesCode[0] <= 'Z' && speciesCode[1] >= 'A' && speciesCode[1] <= 'Z')) {
 			GetLogger().Debug("using placeholder taxonomy code",
 				logger.String("taxonomy_code", speciesCode),
@@ -1023,8 +1025,9 @@ func (p *Processor) parseAndValidateSpecies(settings *conf.Settings, result data
 // detections filtered by the geographic range filter. The decision is a registry
 // capability, not a display-name check: BirdNET (any version) and Perch participate
 // (their label spaces are range-filter compatible), while Bat and BSG classify their
-// own label spaces and never participate. An unknown or custom model ID participates
-// too, matching the historical behavior for classifiers absent from the registry.
+// own label spaces and never participate. An unknown or custom model ID does NOT
+// participate: its label space is arbitrary, and unregistered IDs never reach a live
+// detection anyway (LoadModel rejects them), so this only pins the intended semantics.
 // Perch returns scientific-name labels, and the included-species set stores
 // scientific names for O(1) lookup, so the normal range list applies even when the
 // active range model is the embedded BirdNET geomodel rather than v3.

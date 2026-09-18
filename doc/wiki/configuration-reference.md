@@ -14,6 +14,12 @@
 |---------|------|-------------|
 | `debug` | boolean | true to enable debug mode |
 
+## configversion
+
+| Setting | Type | Description |
+|---------|------|-------------|
+| `configversion` | integer | ConfigVersion records the newest one-shot config migration applied to this file. It is managed automatically by config loading and should not be edited by hand; it lets a migration whose precondition cannot be recovered from the data itself run exactly once (see MigrateSourceTargetDefaults). Hidden from the settings API and preserved across saves by CloneSettings, so writers never drop it. |
+
 ## logging
 
 LoggingConfig represents logging configuration
@@ -137,7 +143,7 @@ ModelsConfig holds global model enablement and management settings.
 |---------|------|-------------|
 | `models.enabled` | string[] | list of model IDs to load (e.g., "birdnet", "perch_v2") |
 | `models.directory` | string | base directory for downloaded model files |
-| `models.installed` | string[] | list of installed model IDs managed by the model gallery |
+| `models.autoenablemigrated` | boolean | AutoEnableMigrated is an internal marker recording that the classifier's one-shot legacy model auto-enable has run for this config file, so it never re-runs. Do not edit by hand; a managed read-only config may set it true (with configversion: 2) to keep an explicit models.enabled from being re-seeded. Set by the classifier; hidden from the JSON API; the companion-marker rationale (why not ConfigVersion) lives in internal/conf/migrations.go. |
 
 ## lowmemory
 

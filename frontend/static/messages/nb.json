@@ -475,6 +475,12 @@
         "notRegisteredTitle": "Ingen modell analyserer {sourceName}",
         "notRegisteredMessage": "Ingen lyd når {models} på lydkilden \"{sourceName}\", så det produseres ingen registreringer. Åpne System > AI-modeller for å sjekke dens status per kilde, og bekreft at lydkilden er tilkoblet og sender lyd."
       },
+      "acousticModels": {
+        "noneTitle": "Ingen akustisk modell aktivert",
+        "noneMessage": "Ingen akustisk modell er lastet inn, så lyd tas opp, men analyseres ikke. Aktiver en modell i Innstillinger > Analyse, eller installer en fra modellgalleriet.",
+        "loadFailedTitle": "Akustisk modell kunne ikke lastes inn",
+        "loadFailedMessage": "En aktivert akustisk modell kunne ikke lastes inn, så lyd tas opp, men analyseres ikke. Sjekk modellen på siden System > AI-modeller."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Gjeldende verdi: {value}% (terskel: {threshold}%)",
@@ -2402,7 +2408,7 @@
           "title": "Falsk positiv-filter",
           "description": "Reduser falske deteksjoner ved å kreve flere bekreftelser på tvers av overlappende lydsegmenter",
           "level": {
-            "label": "Filternivå"
+            "label": "Styrke for falsk positiv-filter"
           },
           "detectionCount": "{count} bekreftelser kreves. {description}",
           "levels": {

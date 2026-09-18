@@ -475,6 +475,12 @@
         "notRegisteredTitle": "Mikään malli ei analysoi kohdetta {sourceName}",
         "notRegisteredMessage": "Ääni ei tavoita kohdetta {models} äänilähteessä \"{sourceName}\", joten havaintoja ei tuoteta. Avaa Järjestelmä > Tekoälymallit tarkistaaksesi sen lähdekohtaisen tilan ja varmistaaksesi, että äänilähde on yhdistetty ja lähettää ääntä."
       },
+      "acousticModels": {
+        "noneTitle": "Akustista mallia ei ole käytössä",
+        "noneMessage": "Akustista mallia ei ole ladattu, joten ääntä tallennetaan, mutta sitä ei analysoida. Ota malli käyttöön kohdassa Asetukset > Analyysi tai asenna sellainen malligalleriasta.",
+        "loadFailedTitle": "Akustisen mallin lataus epäonnistui",
+        "loadFailedMessage": "Käytössä olevan akustisen mallin lataus epäonnistui, joten ääntä tallennetaan, mutta sitä ei analysoida. Tarkista malli sivulla Järjestelmä > Tekoälymallit."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Nykyinen arvo: {value}% (raja-arvo: {threshold}%)",
@@ -2402,7 +2408,7 @@
           "title": "Väärien positiivisten suodatin",
           "description": "Vähentää virheellisiä havaintoja vaatimalla useita vahvistuksia päällekkäisistä äänisegmenteistä",
           "level": {
-            "label": "Suodatustaso"
+            "label": "Väärien positiivisten suodattimen voimakkuus"
           },
           "detectionCount": "{count} vahvistusta vaaditaan. {description}",
           "levels": {

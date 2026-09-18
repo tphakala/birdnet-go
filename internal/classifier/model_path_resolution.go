@@ -538,7 +538,7 @@ func (o *Orchestrator) resolvePrimaryModelPath(configured string) pathResolution
 
 	// CONFIRMED absent. Recover to the installed gallery variant when there is one
 	// AND that variant can actually run on this host.
-	if installed, _, _ := o.resolveInstalledPaths(permanentRegistryID); installed != "" && o.primaryVariantUsable(installed) {
+	if installed, _, _ := o.resolveInstalledPaths(RegistryIDBirdNETV24); installed != "" && o.primaryVariantUsable(installed) {
 		GetLogger().Info("configured primary model path is missing on disk, recovering the installed variant",
 			logger.String("configured_model_path", configured),
 			logger.String("resolved_model_path", installed))

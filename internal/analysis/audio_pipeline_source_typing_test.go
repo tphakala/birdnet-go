@@ -41,7 +41,7 @@ func TestBuildSourceConfigsWithModels_RTSPStreamCarriesGain(t *testing.T) {
 	conftest.SetTestSettings(settings)
 
 	p := &AudioPipelineService{}
-	configs := p.buildSourceConfigsWithModels()
+	configs := p.buildSourceConfigsWithModels(nil)
 
 	require.Len(t, configs, 1)
 	cfg := findConfigByConnection(configs, "rtsp://cam-gain")
@@ -72,7 +72,7 @@ func TestBuildSourceConfigsWithModels_RTSPStreamCarriesTransport(t *testing.T) {
 	conftest.SetTestSettings(settings)
 
 	p := &AudioPipelineService{}
-	configs := p.buildSourceConfigsWithModels()
+	configs := p.buildSourceConfigsWithModels(nil)
 
 	require.Len(t, configs, 1)
 	cfg := findConfigByConnection(configs, "rtsp://cam-udp")
@@ -103,7 +103,7 @@ func TestBuildSourceConfigsWithModels_RTSPStreamResolvesGlobalTransport(t *testi
 	conftest.SetTestSettings(settings)
 
 	p := &AudioPipelineService{}
-	configs := p.buildSourceConfigsWithModels()
+	configs := p.buildSourceConfigsWithModels(nil)
 
 	require.Len(t, configs, 1)
 	cfg := findConfigByConnection(configs, "rtsp://cam-global")
@@ -136,7 +136,7 @@ func TestBuildSourceConfigsWithModels_StreamURLInAudioSources(t *testing.T) {
 	conftest.SetTestSettings(settings)
 
 	p := &AudioPipelineService{}
-	configs := p.buildSourceConfigsWithModels()
+	configs := p.buildSourceConfigsWithModels(nil)
 
 	require.Len(t, configs, 2)
 
@@ -184,7 +184,7 @@ func TestBuildSourceConfigsWithModels_DuplicateURLPrefersRTSPStream(t *testing.T
 	conftest.SetTestSettings(settings)
 
 	p := &AudioPipelineService{}
-	configs := p.buildSourceConfigsWithModels()
+	configs := p.buildSourceConfigsWithModels(nil)
 
 	require.Len(t, configs, 1, "duplicate URL must yield exactly one desired config")
 	cfg := configs[0].config
@@ -232,7 +232,7 @@ func TestBuildSourceConfigsWithModels_DisabledStreamSuppressesAudioSourceDuplica
 	conftest.SetTestSettings(settings)
 
 	p := &AudioPipelineService{}
-	configs := p.buildSourceConfigsWithModels()
+	configs := p.buildSourceConfigsWithModels(nil)
 
 	// No config may reference the shared URL: the disabled stream is not built,
 	// and the audio.sources duplicate is suppressed by the dedup guard.
@@ -250,4 +250,74 @@ func TestBuildSourceConfigsWithModels_DisabledStreamSuppressesAudioSourceDuplica
 
 	// Nothing else is configured, so the whole result set is empty.
 	assert.Empty(t, configs, "no sources should be built from a lone disabled stream plus its duplicate")
+}
+
+// TestBuildSourceConfigsWithModels_FallbackPreservesParamsOnProbeFailure verifies
+// that when a stream's live probe fails (the bogus .invalid URL never resolves),
+// the caller-supplied fallback (the RestartSource capture) is used so a bat
+// source retains its true high sample rate and channel count instead of silently
+// collapsing to the 48 kHz target and downmixing (#4350).
+func TestBuildSourceConfigsWithModels_FallbackPreservesParamsOnProbeFailure(t *testing.T) {
+	prev := conf.CloneSettings(conf.GetSettings())
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
+
+	const url = "rtsp://cam-bat.invalid/stream"
+	settings := &conf.Settings{}
+	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
+		{
+			Name:        "bat-stream",
+			URL:         url,
+			Enabled:     true,
+			Type:        conf.StreamTypeRTSP,
+			ChannelMode: conf.ChannelModeLeft,
+			Models:      []string{conf.ModelIDBat},
+		},
+	}
+	conftest.SetTestSettings(settings)
+
+	p := &AudioPipelineService{}
+	fallback := map[string]streamFallback{
+		url: {sampleRate: 250000, channels: 2},
+	}
+	configs := p.buildSourceConfigsWithModels(fallback)
+
+	cfg := findConfigByConnection(configs, url)
+	require.NotNil(t, cfg, "rtsp stream config should be present")
+	assert.Equal(t, 250000, cfg.SourceSampleRate, "source rate should be retained from the fallback on probe failure")
+	assert.Equal(t, 250000, cfg.SampleRate, "bat output rate should be raised to the retained source rate, not left at 48 kHz")
+	assert.Equal(t, 2, cfg.SourceChannels, "channel count should be retained so left/right selection still applies")
+	assert.True(t, cfg.SourceSampleRateEstimated, "a retained rate must be flagged estimated so FFmpeg still force-resamples if the live rate changed")
+}
+
+// TestBuildSourceConfigsWithModels_NoFallbackCollapsesToTarget documents the
+// unavoidable cold-start behaviour: with no probe result and no fallback, a bat
+// stream collapses to the target rate with an unknown source rate. The escalation
+// path logs an error in this case so the loss is not silent (#4350).
+func TestBuildSourceConfigsWithModels_NoFallbackCollapsesToTarget(t *testing.T) {
+	prev := conf.CloneSettings(conf.GetSettings())
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
+
+	const url = "rtsp://cam-bat-cold.invalid/stream"
+	settings := &conf.Settings{}
+	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
+		{
+			Name:    "bat-stream-cold",
+			URL:     url,
+			Enabled: true,
+			Type:    conf.StreamTypeRTSP,
+			Models:  []string{conf.ModelIDBat},
+		},
+	}
+	conftest.SetTestSettings(settings)
+
+	// Nil engine: the registry consult is skipped, so with no fallback map the
+	// probe failure has nothing to fall back on.
+	p := &AudioPipelineService{}
+	configs := p.buildSourceConfigsWithModels(nil)
+
+	cfg := findConfigByConnection(configs, url)
+	require.NotNil(t, cfg, "rtsp stream config should be present")
+	assert.Equal(t, 0, cfg.SourceSampleRate, "unknown source rate stays 0 when nothing is known")
+	assert.Equal(t, conf.SampleRate, cfg.SampleRate, "output rate falls back to the analysis target")
+	assert.False(t, cfg.SourceSampleRateEstimated, "nothing was retained, so the rate is not flagged estimated (SourceSampleRate 0 already forces resampling)")
 }

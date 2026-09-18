@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -114,116 +113,79 @@ func BuildRangeFilter(o *Orchestrator) error {
 
 	var includedSpecies []string
 
-	// Snapshot primary under read lock to avoid racing with Delete(), which sets
-	// o.primary = nil under o.mu.Lock(). All callers reach BuildRangeFilter
-	// without holding o.mu, so taking RLock here cannot self-deadlock.
-	o.mu.RLock()
-	primary := o.primary
-	o.mu.RUnlock()
-	if primary == nil {
-		return errors.Newf("orchestrator has no primary model").
+	// Build the exclude matcher once for the whole rebuild: it reverse-resolves localized
+	// common-name exclude entries through OpenFauna a single time, so the per-score
+	// matches() in scoreProbableSpecies and the participant backfill below stay off the
+	// dataset scan. Every branch (universal, fail-open, legacy) shares it.
+	excluder := newExcludeMatcher(settings.Realtime.Species.Exclude, settings.BirdNET.Locale)
+
+	// The range-filter service is created once at construction and never reassigned, so
+	// a nil here means the orchestrator was torn down. NOT gated on BirdNET v2.4: the
+	// fail-open paths below produce a valid inclusion list for a non-v2.4 or N=0 runtime
+	// instead of dropping every detection.
+	rfs, ok := o.rangeFilterReady()
+	if !ok || rfs == nil {
+		return errors.Newf("orchestrator has no range filter service").
 			Component("classifier.orchestrator").
 			Category(errors.CategorySystem).
 			Build()
 	}
 
-	primary.mu.Lock()
-	rf := primary.rangeFilter
-	up, isUniversal := rf.(UniversalSpeciesPredictor)
+	// Silent threshold clamp, matching the previous BuildRangeFilter (the
+	// getProbableSpecies path logs a warning on an invalid value; this one did not).
+	threshold := settings.BirdNET.RangeFilter.Threshold
+	if threshold < 0 || threshold > 1 {
+		threshold = 0.01
+	}
 
-	if isUniversal && settings.BirdNET.LocationConfigured {
-		threshold := settings.BirdNET.RangeFilter.Threshold
-		if threshold < 0 || threshold > 1 {
-			threshold = 0.01
-		}
-
-		allGeoLabels := up.GeomodelLabels()
-		scores, err := up.PredictSpeciesScores(
-			float32(settings.BirdNET.Latitude),
-			float32(settings.BirdNET.Longitude),
-			getWeekForFilter(today),
-			threshold,
-		)
-		if err != nil {
-			primary.mu.Unlock()
-			return errors.New(err).
-				Category(errors.CategoryValidation).
-				Context("date", today.Format(time.DateOnly)).
-				Context("latitude", settings.BirdNET.Latitude).
-				Context("longitude", settings.BirdNET.Longitude).
-				Timing("range-filter-build", time.Since(start)).
-				Build()
-		}
-
-		// Sync unmappedScore with the current PassUnmappedSpecies setting so
-		// that the legacy predictFilter path (which calls Predict()) sees the
-		// correct value without requiring a full ReloadRangeFilter.
-		// Also capture the pre-computed classifier-to-geomodel mapping to
-		// avoid rebuilding it after the lock is released.
-		// Done after the error check so that a failed prediction does not
-		// leave unmappedScore inconsistent with the inclusion list.
-		var cachedMapping []int
-		if mrf, ok := rf.(*mappedRangeFilter); ok {
-			var score float32
-			if settings.BirdNET.RangeFilter.PassUnmappedSpecies {
-				score = 1.0
-			}
-			mrf.unmappedScore = score
-			cachedMapping = mrf.classifierToGeo
-		}
-		primary.mu.Unlock()
-
-		// Build the exclude matcher once per rebuild: it reverse-resolves localized
-		// common-name exclude entries through OpenFauna a single time so the per-score
-		// matches() below stays off the dataset scan.
-		excluder := newExcludeMatcher(settings.Realtime.Species.Exclude, settings.BirdNET.Locale)
-
-		includedSpecies = make([]string, 0, len(scores))
-		for _, ss := range scores {
-			if !excluder.matches(ss.Label) {
-				includedSpecies = append(includedSpecies, ss.Label)
-			}
-		}
-
-		addUserOverrideSpecies(&includedSpecies, settings, allGeoLabels)
-
-		// When PassUnmappedSpecies is enabled, add classifier species that
-		// have no corresponding entry in the geomodel so they are not
-		// silently blocked by the species inclusion check in the processor.
-		var unmappedCount int
-		if settings.BirdNET.RangeFilter.PassUnmappedSpecies {
-			seen := make(map[string]bool, len(includedSpecies))
-			for _, s := range includedSpecies {
-				seen[s] = true
-			}
-			mapping := cachedMapping
-			if mapping == nil {
-				mapping = buildSpeciesMapping(settings.BirdNET.Labels, allGeoLabels)
-			}
-			// cachedMapping (mappedRangeFilter.classifierToGeo) is sized from the
-			// model's labels at load time and can be longer than the live settings
-			// snapshot during a concurrent model/settings reload, so bounds-check the
-			// snapshot index before reading it.
-			for i, geoIdx := range mapping {
-				if geoIdx == -1 && i < len(settings.BirdNET.Labels) {
-					label := settings.BirdNET.Labels[i]
-					if !seen[label] && !excluder.matches(label) {
-						includedSpecies = append(includedSpecies, label)
-						seen[label] = true
-						unmappedCount++
-					}
-				}
-			}
-		}
+	// predict runs the geomodel prediction under the service lock and returns the raw
+	// geomodel scores, the full geomodel label set, the cached mapping and the covered
+	// label space. syncUnmappedScore is true here so the batch-inference Predict path
+	// sees the current PassUnmappedSpecies value without a full reload.
+	week := getWeekForFilter(today)
+	res, predErr := rfs.predict(settings, week, threshold, true)
+	switch {
+	case res.kind == predictUniversal && predErr == nil:
+		// Score with the shared tail (exclude, user overrides, pass-unmapped backfill
+		// over coveredLabels), then take the labels in order for the inclusion list.
+		// debug is nil so the per-override debug line stays specific to the read path.
+		scored, unmappedCount := scoreProbableSpecies(nil, excluder, res.scores, res.allGeoLabels, res.cachedMapping, res.coveredLabels, settings)
+		includedSpecies = speciesScoreLabels(scored)
+		// Add participants outside the mapping space (non-v2.4 classifiers when v2.4 is
+		// loaded) via the shared helper, so the gate list matches the Settings preview
+		// exactly (GetAllProbableSpeciesWithSettings uses the same helper). res.state is
+		// predict's snapshot, so the participant walk stays on predict's generation.
+		includedSpecies = append(includedSpecies, speciesScoreLabels(
+			rfs.uncoveredParticipantSpecies(res.state, settings, res.geomodel, excluder, seenFromLabels(includedSpecies)))...)
 
 		GetLogger().Info("Range filter updated via universal geomodel path",
-			logger.Int("geomodel_species", len(scores)),
+			logger.Int("geomodel_species", len(res.scores)),
 			logger.Int("included_species", len(includedSpecies)),
 			logger.Int("unmapped_species_added", unmappedCount),
 			logger.Float64("threshold", float64(threshold)),
 			logger.String("duration", time.Since(start).String()))
-	} else {
-		primary.mu.Unlock()
+
+	case res.kind == predictUniversal && predErr != nil:
+		// A geomodel inference error must NOT abort the rebuild and leave the inclusion
+		// list empty: with a location set that would drop every detection from a
+		// participating classifier. Fail open over the covered labels instead, so
+		// detections pass until the geomodel recovers.
+		includedSpecies = speciesScoreLabels(failOpenScores(res.state.coveredLabels, excluder, settings, nil))
+		// No geomodel vocabulary on the fail-open branch, so non-v2.4 participants fail
+		// open wholesale too (nil geo), keeping the gate and the display list in step.
+		// res.state is predict's snapshot, so covered labels and participants agree.
+		includedSpecies = append(includedSpecies, speciesScoreLabels(
+			rfs.uncoveredParticipantSpecies(res.state, settings, nil, excluder, seenFromLabels(includedSpecies)))...)
+		GetLogger().Warn("Geomodel range-filter inference failed during rebuild; failing open over the covered labels (detections are not location-filtered until it recovers)",
+			logger.Error(predErr),
+			logger.Int("included_species", len(includedSpecies)),
+			logger.String("duration", time.Since(start).String()))
+
+	default:
+		// Legacy classifier path, or the synthetic-zero fail-open list for a not-loaded
+		// backend or unconfigured location. GetProbableSpecies shares the scoring tail
+		// with the read path and, on the fail-open branch, returns failOpenScores over
+		// the covered labels.
 		speciesScores, err := o.GetProbableSpecies(today, 0.0)
 		if err != nil {
 			return errors.New(err).
@@ -234,15 +196,20 @@ func BuildRangeFilter(o *Orchestrator) error {
 				Timing("range-filter-build", time.Since(start)).
 				Build()
 		}
-		includedSpecies = make([]string, 0, len(speciesScores))
-		for _, speciesScore := range speciesScores {
-			includedSpecies = append(includedSpecies, speciesScore.Label)
-		}
+		includedSpecies = speciesScoreLabels(speciesScores)
+		// Legacy/none backend (mdata_v2, mdata_v1, or no backend): the backend maps only
+		// v2.4, so non-v2.4 participants are not covered and fail open wholesale via the
+		// shared helper (nil geo), matching the display list. res.state is predict's
+		// snapshot (predictNotLoaded/predictLegacy still carry it).
+		includedSpecies = append(includedSpecies, speciesScoreLabels(
+			rfs.uncoveredParticipantSpecies(res.state, settings, nil, excluder, seenFromLabels(includedSpecies)))...)
 
-		GetLogger().Info("Range filter updated via legacy classifier path",
+		GetLogger().Info("Range filter updated via classifier path",
 			logger.Int("included_species", len(includedSpecies)),
 			logger.String("duration", time.Since(start).String()))
 	}
+
+	o.logRangeFilterParticipation()
 
 	if settings.BirdNET.RangeFilter.Debug {
 		writeIncludedSpeciesDebug(includedSpecies)
@@ -258,6 +225,44 @@ func BuildRangeFilter(o *Orchestrator) error {
 	}
 	o.notifyRangeFilterReload()
 	return nil
+}
+
+// logRangeFilterParticipation emits one INFO per successful range-filter (re)build naming
+// the loaded model set and, within it, which models participate in range filtering and
+// which do not, plus the current range-filter anchor. The per-model participation decision
+// (ParticipatesInRangeFilter) is otherwise silent in the logs, so with several models loaded
+// there is no way to confirm from a running system which models are range-filtered and which
+// are not. Low-volume: once per (re)build, never per detection.
+func (o *Orchestrator) logRangeFilterParticipation() {
+	// LoadedModelPaths is the existing lock-correct snapshot of the loaded model set (its
+	// keys are the loaded families, i.e. instance != nil); reuse it rather than duplicating
+	// the snapshot-then-per-entry-lock walk.
+	loaded := o.LoadedModelPaths()
+	if len(loaded) == 0 {
+		return
+	}
+	ids := slices.Sorted(maps.Keys(loaded))
+
+	rangeFiltered := make([]string, 0, len(ids))
+	notFiltered := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if ParticipatesInRangeFilter(id) {
+			rangeFiltered = append(rangeFiltered, id)
+		} else {
+			notFiltered = append(notFiltered, id)
+		}
+	}
+
+	backend := string(rfKindNone)
+	if rfs := o.rangeFilter; rfs != nil {
+		backend = string(rfs.backendKind())
+	}
+
+	GetLogger().Info("Range filter participation across the loaded model set",
+		logger.Any("loaded_models", ids),
+		logger.Any("range_filtered", rangeFiltered),
+		logger.Any("not_filtered", notFiltered),
+		logger.String("backend", backend))
 }
 
 // matchingLabels returns every label that matches speciesName by its common or
@@ -280,8 +285,8 @@ func matchingLabels(labels []string, speciesName string) []string {
 // them; the active classifier's labels carry "Scientific_LocalizedCommon"
 // (e.g. "Cyanistes caeruleus_sinitiainen") and do match. Resolving against both
 // keeps a localized override from being appended verbatim and then mis-keyed as
-// a scientific name by the inclusion gate and the OpenFauna name resolver
-// (issue #982). Returns nil when the entry matches no biological label (e.g.
+// a scientific name by the inclusion gate and the OpenFauna name resolver.
+// Returns nil when the entry matches no biological label (e.g.
 // non-bird classes like "drone"/"heatpump"), so callers append the raw entry
 // and the name resolver legitimately reports it as unresolved.
 func canonicalOverrideLabels(speciesName string, geoLabels, classifierLabels []string) []string {
@@ -414,9 +419,10 @@ func resolveOverrideLabelsWithSource(settings *conf.Settings, geoLabels []string
 
 // addUserOverrideSpeciesScores appends species from the explicit include list
 // and species with configured actions to a SpeciesScore slice with score 1.0.
-// Used by the universal geomodel path in getProbableSpecies. Each entry is
-// canonicalized via resolveOverrideLabelsWithSource so localized common names
-// enter the set as their canonical model labels rather than the raw user string.
+// Used by both the universal and legacy scoring paths (via scoreProbableSpecies and
+// directly from probableSpecies). Each entry is canonicalized via
+// resolveOverrideLabelsWithSource so localized common names enter the set as their
+// canonical model labels rather than the raw user string.
 //
 // Every entry the overrides name also carries its provenance
 // (HasCustomConfig/IsManuallyIncluded), including entries the range filter had
@@ -434,7 +440,7 @@ func resolveOverrideLabelsWithSource(settings *conf.Settings, geoLabels []string
 // near-duplicates are collapsed for the user at the display boundary
 // (dedupeSpeciesForDisplay in internal/api/v2/range/range.go), not here, so the
 // functional inclusion set keeps every scientific name.
-func addUserOverrideSpeciesScores(bn *BirdNET, speciesScores *[]SpeciesScore, settings *conf.Settings, geoLabels []string) {
+func addUserOverrideSpeciesScores(debug debugFunc, speciesScores *[]SpeciesScore, settings *conf.Settings, geoLabels []string) {
 	labels, sources := resolveOverrideLabelsWithSource(settings, geoLabels)
 
 	// Flag the entries the range filter already scored. An override does not
@@ -458,7 +464,9 @@ func addUserOverrideSpeciesScores(bn *BirdNET, speciesScores *[]SpeciesScore, se
 			continue
 		}
 		src := sources[label]
-		bn.Debug("Adding override species with max score: %s", label)
+		if debug != nil {
+			debug("Adding override species with max score: %s", label)
+		}
 		*speciesScores = append(*speciesScores, SpeciesScore{
 			Score:               syntheticOverrideScore,
 			Label:               label,
@@ -470,226 +478,146 @@ func addUserOverrideSpeciesScores(bn *BirdNET, speciesScores *[]SpeciesScore, se
 	}
 }
 
-// addUserOverrideSpecies appends species from the explicit include list and
-// species with configured actions to the inclusion set. Each entry is
-// canonicalized via resolveOverrideLabels (geomodel labels, then the active
-// classifier's localized labels, then an OpenFauna reverse lookup for
-// scientific-only non-primary-model species). A resolved entry is appended in its
-// canonical label form so the scientific name map keys it correctly; an entry that
-// resolves to nothing (e.g. a non-fauna class) is appended verbatim.
-func addUserOverrideSpecies(includedSpecies *[]string, settings *conf.Settings, geoLabels []string) {
-	seen := make(map[string]bool, len(*includedSpecies))
-	for _, s := range *includedSpecies {
-		seen[s] = true
+// speciesScoreLabels extracts the label of each scored species in order, for callers
+// that need only the inclusion list (the scores and override provenance flags are
+// dropped). BuildRangeFilter uses it on both the universal and legacy paths.
+func speciesScoreLabels(scores []SpeciesScore) []string {
+	labels := make([]string, 0, len(scores))
+	for _, s := range scores {
+		labels = append(labels, s.Label)
 	}
-	for _, label := range resolveOverrideLabels(settings, geoLabels) {
-		if !seen[label] {
-			*includedSpecies = append(*includedSpecies, label)
-			seen[label] = true
-		}
-	}
+	return labels
 }
 
-// GetProbableSpecies filters and sorts bird species based on their scores.
-// Settings are read from the latest published snapshot (via conf.CurrentOrFallback)
-// so that UI changes to coordinates, threshold, or LocationConfigured take
-// effect immediately without restarting the service.
-func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesScore, error) {
-	scores, _, _, err := bn.getProbableSpecies(date, week, bn.currentSettings())
-	return scores, err
-}
-
-// GetProbableSpeciesWithSettings filters species using the supplied settings
-// snapshot instead of reading from the global atomic pointer. This allows the
-// test endpoint to evaluate arbitrary coordinates and thresholds without
-// publishing temporary values into the global settings, eliminating the race
-// where a concurrent BuildRangeFilter could pick up test data.
-func (bn *BirdNET) GetProbableSpeciesWithSettings(date time.Time, week float32, settings *conf.Settings) ([]SpeciesScore, error) {
-	scores, _, _, err := bn.getProbableSpecies(date, week, settings)
-	return scores, err
-}
-
-// getProbableSpecies is the shared implementation for both the global-settings
-// and explicit-settings entry points.
+// scoreProbableSpecies applies the unlocked scoring tail shared by probableSpecies
+// and BuildRangeFilter, taking the raw geomodel scores produced under the service
+// lock by rangeFilterService.predict. It drops excluded species, applies
+// the user overrides (tagging synthetic rows and flagging natively scored ones in
+// place), and backfills unmapped classifier species when PassUnmappedSpecies is set.
 //
-// When the range filter implements UniversalSpeciesPredictor (v3 geomodel),
-// species are predicted using the geomodel's own 12K label set, so the result
-// includes all taxa the geomodel covers (birds, mammals, insects, etc.)
-// regardless of which classifier is active. Otherwise, the legacy path maps
-// geomodel scores to the classifier's label set.
-//
-// The second return value is the geomodel's full label set, captured from the
-// same range-filter snapshot that produced the scores. It is non-nil only on
-// the universal path. Returning it here lets callers that need both avoid a
-// second lock that could observe a different range-filter instance after a
-// concurrent ReloadRangeFilter.
-//
-// The third return value, realScores, is true only when the returned scores are
-// genuine location-based predictions. It is false whenever the scores are the
-// synthetic all-zero fallback (no range-filter backend loaded, or no location
-// configured). Because it is decided inside the same locked section that produced
-// the scores, a caller can trust that "the filter was active" and "these scores"
-// describe one consistent snapshot, with no separate read that could race a
-// concurrent unload (used by GetRarityContext to avoid reporting a synthetic zero
-// as "very rare", #3935).
-func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *conf.Settings) (probableSpecies []SpeciesScore, geomodel *LabelVocabulary, filterActive bool, err error) {
-	bn.Debug("Applying range filter")
-
-	// Build the exclude matcher once: it reverse-resolves localized common-name exclude
-	// entries through OpenFauna a single time so the per-score matches() below (and
-	// zeroScoresForAllLabels) stay off the dataset scan.
-	excluder := newExcludeMatcher(settings.Realtime.Species.Exclude, settings.BirdNET.Locale)
-
-	// Skip filtering if location is not configured. This reads only the settings
-	// snapshot (no bn state), so it needs no lock and is checked before acquiring bn.mu.
-	// A nil range filter and an unconfigured location both return identical synthetic
-	// zero scores, so the order between the two checks is not observable beyond which
-	// debug line is logged when both hold.
-	if !settings.BirdNET.LocationConfigured {
-		bn.Debug("Location not configured, not using location based prediction filter")
-		return zeroScoresForAllLabels(settings.BirdNET.Labels, excluder), nil, false, nil
-	}
-
-	threshold := settings.BirdNET.RangeFilter.Threshold
-	if threshold < 0 || threshold > 1 {
-		GetLogger().Warn("Invalid LocationFilterThreshold value, using default",
-			logger.Float64("invalid_value", float64(threshold)),
-			logger.Float64("default_value", 0.01))
-		threshold = 0.01
-	}
-
-	if week == 0 {
-		week = getWeekForFilter(date)
-	}
-
-	// Resolve the range-filter backend and run the universal-path prediction under a
-	// SINGLE lock hold: the nil check and the UniversalSpeciesPredictor assertion must
-	// observe the same backend instance. Splitting them across two lock acquisitions (as
-	// before) let a concurrent Delete()/reload nil-out or swap the backend between the
-	// check and the assertion, which then fell through to the legacy path and surfaced a
-	// "range filter was closed during prediction" error instead of clean synthetic zeros
-	// with filterActive=false (#3935 follow-up). Holding bn.mu across PredictSpeciesScores
-	// is intentional and pre-existing: the backend is not goroutine-safe, and Delete()
-	// takes the same lock, so it cannot free the backend mid-prediction.
-	bn.mu.Lock()
-	rf := bn.rangeFilter
-	if rf == nil {
-		bn.mu.Unlock()
-		bn.Debug("Range filter model not loaded, returning zero scores for all labels")
-		return zeroScoresForAllLabels(settings.BirdNET.Labels, excluder), nil, false, nil
-	}
-
-	// Try the universal geomodel path first: predict from the geomodel's
-	// own label set so that all 12K species are covered.
-	if up, isUniversal := rf.(UniversalSpeciesPredictor); isUniversal {
-		allGeoLabels := up.GeomodelLabels()
-		var cachedMapping []int
-		if mrf, ok := rf.(*mappedRangeFilter); ok {
-			cachedMapping = mrf.classifierToGeo
+// It does NOT sort: the read path (probableSpecies) sorts by score afterwards, while
+// BuildRangeFilter keeps the geomodel-then-override-then-unmapped order for its
+// persisted inclusion list, so both stay byte-identical to their pre-dedup output.
+// unmappedAdded is the number of pass-unmapped rows appended, for BuildRangeFilter's
+// log (counting here avoids a fragile subtraction that miscounts overrides already
+// scored). debug is nil on the build path so its per-override log line stays specific
+// to the read path, as before; excluder is passed in so it is built once per call.
+func scoreProbableSpecies(debug debugFunc, excluder excludeMatcher, rawScores []SpeciesScore, allGeoLabels []string, cachedMapping []int, coveredLabels []string, settings *conf.Settings) (speciesScores []SpeciesScore, unmappedAdded int) {
+	speciesScores = make([]SpeciesScore, 0, len(rawScores))
+	for _, ss := range rawScores {
+		if !excluder.matches(ss.Label) {
+			speciesScores = append(speciesScores, ss)
 		}
-		scores, err := up.PredictSpeciesScores(
-			float32(settings.BirdNET.Latitude),
-			float32(settings.BirdNET.Longitude),
-			week,
-			threshold,
-		)
-		bn.mu.Unlock()
+	}
 
-		if err != nil {
-			return nil, nil, false, errors.New(err).
-				Category(errors.CategoryValidation).
-				Context("date", date.Format(time.DateOnly)).
-				Context("week", week).
-				Context("model", settings.BirdNET.RangeFilter.Model).
-				Build()
+	addUserOverrideSpeciesScores(debug, &speciesScores, settings, allGeoLabels)
+
+	if settings.BirdNET.RangeFilter.PassUnmappedSpecies {
+		seen := make(map[string]bool, len(speciesScores))
+		for _, ss := range speciesScores {
+			seen[ss.Label] = true
 		}
-
-		speciesScores := make([]SpeciesScore, 0, len(scores))
-		for _, ss := range scores {
-			if !excluder.matches(ss.Label) {
-				speciesScores = append(speciesScores, ss)
-			}
+		// coveredLabels is the classifier label space the backend's mapping was built
+		// from: v2.4's labels on a v2.4 install (byte-identical to the former
+		// settings.BirdNET.Labels backfill), the participant union otherwise. It is empty
+		// only for a non-mapped universal backend (none in production today; test fakes)
+		// or an N=0 runtime, where falling back to the configured labels keeps the
+		// backfill behaving as before.
+		labels := coveredLabels
+		if len(labels) == 0 {
+			labels = settings.BirdNET.Labels
 		}
-
-		addUserOverrideSpeciesScores(bn, &speciesScores, settings, allGeoLabels)
-
-		if settings.BirdNET.RangeFilter.PassUnmappedSpecies {
-			seen := make(map[string]bool, len(speciesScores))
-			for _, ss := range speciesScores {
-				seen[ss.Label] = true
-			}
-			mapping := cachedMapping
-			if mapping == nil {
-				mapping = buildSpeciesMapping(settings.BirdNET.Labels, allGeoLabels)
-			}
-			// cachedMapping (mappedRangeFilter.classifierToGeo) is sized from the
-			// model's labels at load time and can be longer than the live settings
-			// snapshot during a concurrent model/settings reload, so bounds-check the
-			// snapshot index before reading it.
-			for i, geoIdx := range mapping {
-				if geoIdx == -1 && i < len(settings.BirdNET.Labels) {
-					label := settings.BirdNET.Labels[i]
-					if !seen[label] && !excluder.matches(label) {
-						speciesScores = append(speciesScores, SpeciesScore{Score: 0.0, Label: label})
-						seen[label] = true
-					}
+		mapping := cachedMapping
+		if mapping == nil {
+			mapping = buildSpeciesMapping(labels, allGeoLabels)
+		}
+		// cachedMapping (mappedRangeFilter.classifierToGeo) is sized from labels at load
+		// time and can be longer than the live snapshot during a concurrent
+		// model/settings reload, so bounds-check the snapshot index before reading it.
+		for i, geoIdx := range mapping {
+			if geoIdx == -1 && i < len(labels) {
+				label := labels[i]
+				if !seen[label] && !excluder.matches(label) {
+					speciesScores = append(speciesScores, SpeciesScore{Score: 0.0, Label: label})
+					seen[label] = true
+					unmappedAdded++
 				}
 			}
 		}
+	}
 
-		sort.Sort(ByScore(speciesScores))
-		// Wrap the geomodel vocabulary in a *LabelVocabulary (the named return) so
-		// the species endpoint answers coverage from a precomputed canonical-key
-		// memo instead of an openfauna.CanonicalName scan per label. Gate on a
-		// non-nil label slice so the returned vocabulary is nil exactly when the raw
-		// labels were nil, preserving the "isUniversal := geomodel != nil" check at
-		// every caller.
-		if allGeoLabels != nil {
-			if mrf, ok := rf.(*mappedRangeFilter); ok {
-				geomodel = mrf.vocab
-			} else {
-				geomodel = NewLabelVocabulary(allGeoLabels)
+	return speciesScores, unmappedAdded
+}
+
+// seenFromLabels returns the set of canonical species keys present in labels, for
+// deduping additional inclusion-list rows against an already-built label list.
+func seenFromLabels(labels []string) map[string]bool {
+	seen := make(map[string]bool, len(labels))
+	for _, l := range labels {
+		seen[canonicalSpeciesKey(l)] = true
+	}
+	return seen
+}
+
+// uncoveredParticipantSpecies returns the always-active rows for range-filter
+// participants that lie OUTSIDE the loaded backend's mapping space, so the gate
+// (BuildRangeFilter) and the display (GetAllProbableSpeciesWithSettings) include the same
+// species and cannot disagree (Phase 4 PR B2).
+//
+// The mapping space is BirdNET v2.4 when v2.4 is loaded (state.anchoredOnV24): there
+// scoreProbableSpecies already backfilled v2.4's own residual over coveredLabels, so this
+// returns rows for the non-v2.4 participants. When v2.4 is NOT loaded, coveredLabels is the
+// participant union and scoreProbableSpecies already covered every participant, so this
+// returns nothing.
+//
+// For each such participant label (deduped by canonical scientific name against seen,
+// exclude honored):
+//   - geomodel backend, species IN the geomodel vocabulary: already decided by the
+//     geomodel scores (in range is in seen; out of range is deliberately excluded), skip.
+//   - geomodel backend, species NOT in the vocabulary: add iff PassUnmappedSpecies.
+//   - no geomodel vocabulary (legacy MData, strict ONNX, none, or a failed geomodel
+//     prediction): add wholesale, regardless of the toggle, because no backend maps the
+//     participant's labels so it fails open.
+//
+// Rows carry score 1.0 ("always active"), matching what the display has always shown for
+// secondary-model species; the gate uses only the labels. Lock-free: it reads only the
+// caller's immutable state snapshot and the immutable geomodel vocabulary, so it adds no
+// lock edges. The caller passes the SAME snapshot predict read (predictResult.state), so the
+// participant walk cannot straddle a concurrent reload and mix two generations into the list.
+func (rfs *rangeFilterService) uncoveredParticipantSpecies(state *rangeFilterState, settings *conf.Settings, geo *LabelVocabulary, excluder excludeMatcher, seen map[string]bool) []SpeciesScore {
+	if !state.anchoredOnV24 {
+		// coveredLabels is the participant union; scoreProbableSpecies already covered
+		// every participant, so nothing lies outside the mapping space.
+		return nil
+	}
+	passUnmapped := settings.BirdNET.RangeFilter.PassUnmappedSpecies
+	hasVocab := geo != nil
+	var out []SpeciesScore
+	for i := range state.participants {
+		p := state.participants[i]
+		if p.id == RegistryIDBirdNETV24 {
+			continue // v2.4 is the mapping space; its residual is scoreProbableSpecies' job
+		}
+		for _, label := range p.labels {
+			sci := canonicalSpeciesKey(label)
+			switch {
+			case seen[sci]:
+				continue
+			case hasVocab && geo.HasCanonical(sci):
+				// The geomodel knows this species but it is not above threshold, so the
+				// range filter excludes it (an in-range species is already in seen).
+				continue
+			case hasVocab && !passUnmapped:
+				continue // geomodel-unmapped and the user did not opt in
+			case excluder.matches(label):
+				continue
+			default:
+				out = append(out, SpeciesScore{Label: label, Score: 1.0})
+				seen[sci] = true
 			}
 		}
-		return speciesScores, geomodel, true, nil
 	}
-	bn.mu.Unlock()
-
-	// Legacy path: map geomodel scores to the classifier's label set. predictFilter
-	// re-acquires bn.mu and re-checks nil itself, so a Delete() racing between this
-	// unlock and that re-lock still returns a "range filter was closed during
-	// prediction" error for the legacy TFLite backend. That residual race is accepted:
-	// this path is not the default (the universal geomodel path above is), and closing
-	// it would mean threading the snapshotted backend through predictFilter, which still
-	// needs its own lock across the non-goroutine-safe Predict call.
-	filters, err := bn.predictFilter(date, week, settings, threshold)
-	if err != nil {
-		return nil, nil, false, errors.New(err).
-			Category(errors.CategoryValidation).
-			Context("date", date.Format(time.DateOnly)).
-			Context("week", week).
-			Context("model", settings.BirdNET.RangeFilter.Model).
-			Build()
-	}
-
-	var speciesScores []SpeciesScore
-	for _, filter := range filters {
-		if !excluder.matches(filter.Label) {
-			speciesScores = append(speciesScores, SpeciesScore{Score: float64(filter.Score), Label: filter.Label})
-		} else {
-			bn.Debug("Excluding species from range filter: %s", filter.Label)
-		}
-	}
-
-	// Apply user overrides through the shared resolver so the legacy path canonicalizes
-	// localized common names (including the OpenFauna reverse lookup for scientific-only
-	// non-primary-model species) identically to the universal path. The legacy path has
-	// no geomodel label set, so resolution falls to the classifier labels and the
-	// reverse lookup.
-	addUserOverrideSpeciesScores(bn, &speciesScores, settings, nil)
-
-	sort.Sort(ByScore(speciesScores))
-	return speciesScores, nil, true, nil
+	return out
 }
 
 // zeroScoresForAllLabels creates a slice of SpeciesScore with zero scores for all provided labels,
@@ -703,6 +631,27 @@ func zeroScoresForAllLabels(labels []string, excl excludeMatcher) []SpeciesScore
 		}
 	}
 	return speciesScores
+}
+
+// failOpenScores is the synthetic-zero inclusion list for the fail-open path (no
+// range-filter backend loaded, or no location configured): every covered label at
+// score 0, minus excludes, plus the user include-overrides. Applying overrides here
+// (they were previously only applied on the scored paths) keeps a force-included
+// species that is not a classifier label admitted even when there is no backend, and
+// keeps the inclusion list non-empty over the loaded participant union so a
+// Perch-only or v3.0-only install with a location set does not drop every detection.
+func failOpenScores(coveredLabels []string, excluder excludeMatcher, settings *conf.Settings, debug debugFunc) []SpeciesScore {
+	scores := zeroScoresForAllLabels(coveredLabels, excluder)
+	// Resolve overrides against coveredLabels (the participant classifier label space this
+	// fail-open list is built over), NOT nil. canonicalOverrideLabels' classifier fallback
+	// is settings.BirdNET.Labels, which is empty on a Perch-only or v3.0-only install, so
+	// passing nil would leave an override for a participant species unresolved; if that
+	// species is also excluded, zeroScoresForAllLabels dropped its canonical label and the
+	// override must restore it as the canonical covered label rather than the raw entry.
+	// There is no loaded geomodel on the fail-open path, so coveredLabels is the right
+	// preferred match source here.
+	addUserOverrideSpeciesScores(debug, &scores, settings, coveredLabels)
+	return scores
 }
 
 // excludeMatcher matches model labels against the user's realtime.species.exclude
@@ -765,61 +714,6 @@ func matchesSpecies(label, speciesName string) bool {
 	return strings.EqualFold(sp.ScientificName, speciesName) || strings.EqualFold(sp.CommonName, speciesName)
 }
 
-// predictFilter applies the range filter model to predict species based on location and date.
-// The caller supplies the settings snapshot and a pre-validated threshold so
-// that the same values are used consistently across the entire
-// GetProbableSpecies call.
-func (bn *BirdNET) predictFilter(date time.Time, week float32, settings *conf.Settings, threshold float32) ([]Filter, error) {
-	start := time.Now()
-
-	// If week is not set, use current date to get week
-	if week == 0 {
-		week = getWeekForFilter(date)
-	}
-
-	// Lock to prevent concurrent access to the range filter backend.
-	// The TFLite interpreter is not goroutine-safe. Also re-check nil
-	// under lock in case Delete() raced between the caller's nil check
-	// and this point.
-	bn.mu.Lock()
-	if bn.rangeFilter == nil {
-		bn.mu.Unlock()
-		return nil, fmt.Errorf("range filter was closed during prediction")
-	}
-	scores, err := bn.rangeFilter.Predict(
-		float32(settings.BirdNET.Latitude),
-		float32(settings.BirdNET.Longitude),
-		week,
-	)
-	bn.mu.Unlock()
-
-	if err != nil {
-		return nil, errors.New(err).
-			Category(errors.CategoryModelInit).
-			Context("model_type", "range_filter").
-			Context("latitude", settings.BirdNET.Latitude).
-			Context("longitude", settings.BirdNET.Longitude).
-			Context("week", week).
-			Timing("range-filter-invoke", time.Since(start)).
-			Build()
-	}
-
-	// Filter and label the results, but only for indices that exist in labels
-	var results []Filter
-	for i, score := range scores {
-		if score >= threshold && i < len(settings.BirdNET.Labels) {
-			results = append(results, Filter{Score: score, Label: settings.BirdNET.Labels[i]})
-		}
-	}
-
-	// Sort results by score in descending order
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Score > results[j].Score
-	})
-
-	return results, nil
-}
-
 // getWeekForFilter calculates the BirdNET week number for the filter model.
 // BirdNET assumes 4 weeks per month, so days 29-31 are clamped to week 4 of
 // their month; the result is always in [1, 48]. It delegates to the canonical
@@ -834,29 +728,6 @@ func getWeekForFilter(date time.Time) float32 {
 }
 
 // debug functions
-
-// RunFilterProcess executes the filter process on demand and prints the results.
-func (bn *BirdNET) RunFilterProcess(dateStr string, week float32) {
-	// If dateStr is not empty, parse the date
-	var parsedDate time.Time
-	var err error
-	if dateStr != "" {
-		parsedDate, err = time.Parse(time.DateOnly, dateStr)
-		if err != nil {
-			fmt.Printf("Error parsing date: %s\n", err)
-			return
-		}
-	}
-
-	// Get the probable species
-	speciesScores, err := bn.GetProbableSpecies(parsedDate, week)
-	if err != nil {
-		fmt.Printf("Error during species prediction: %s\n", err)
-		return
-	}
-
-	PrintSpeciesScores(parsedDate, speciesScores)
-}
 
 // PrintSpeciesScores prints out the list of species scores in a human-readable format.
 func PrintSpeciesScores(date time.Time, speciesScores []SpeciesScore) {

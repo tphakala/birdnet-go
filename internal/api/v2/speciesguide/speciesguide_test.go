@@ -439,7 +439,7 @@ const (
 )
 
 // fakeLabelSource is a labelSource returning a fixed label set so the geomodel-coverage
-// memoization is exercisable without a loaded classifier. calls counts Labels()
+// memoization is exercisable without a loaded classifier. calls counts GeomodelLabels()
 // invocations (atomic, since the double-checked build path may run concurrently) to
 // prove the label set is scanned once per model rather than on every lookup.
 type fakeLabelSource struct {
@@ -447,7 +447,7 @@ type fakeLabelSource struct {
 	calls  atomic.Int32
 }
 
-func (f *fakeLabelSource) Labels() []string {
+func (f *fakeLabelSource) GeomodelLabels() []string {
 	f.calls.Add(1)
 	return f.labels
 }

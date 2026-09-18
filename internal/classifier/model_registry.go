@@ -138,6 +138,11 @@ type ModelInfo struct {
 	// rangeFilterCompat is this classifier's range-filter capability (see the type).
 	// The zero value means it participates in no range-filter auto-selection.
 	rangeFilterCompat rangeFilterCompat
+	// scheduleGated marks a model that runs only inside a schedule (today the bat
+	// model's nighttime scheduler). Such a model is never a default analysis target
+	// (DefaultTargets) and is inactive outside its schedule (IsModelActive,
+	// ModelScheduleStatus), all read through isScheduleGated. Zero value: not gated.
+	scheduleGated bool
 	// IsStock marks the auto-resolved built-in default model. It is NOT set for
 	// user-supplied models (birdnet.modelpath) or gallery models, so detection
 	// attribution can treat the shipped default as "default" even when it loads
@@ -156,7 +161,7 @@ func (m *ModelInfo) DisplayName() string {
 // ModelRegistry is the single source of truth for all supported models.
 // All model identity lookups, config validation, and spec queries derive from this.
 var ModelRegistry = map[string]ModelInfo{
-	"BirdNET_V2.4": { //nolint:goconst // registry data-table key; canonical model ID also named by DefaultModelVersion/BirdNET_V2_4/permanentRegistryID
+	"BirdNET_V2.4": { //nolint:goconst // registry data-table key; canonical model ID also named by DefaultModelVersion/BirdNET_V2_4/RegistryIDBirdNETV24
 		ID:               "BirdNET_V2.4",
 		Name:             ModelNameBirdNETv24,
 		Backend:          BackendTFLite,
@@ -221,6 +226,10 @@ var ModelRegistry = map[string]ModelInfo{
 		// Bat classifies its own label space; it never participates in range-filter
 		// auto-selection. Explicit (not omitted) so the table documents the decision.
 		rangeFilterCompat: rangeFilterCompatNone,
+		// Bat runs only inside the nighttime scheduler, so it is never a default
+		// analysis target and is paused outside its schedule. Read by isScheduleGated
+		// (IsModelActive, ModelScheduleStatus, DefaultTargets).
+		scheduleGated: true,
 	},
 	RegistryIDBSG: {
 		ID:               RegistryIDBSG,
@@ -560,16 +569,19 @@ func DetectionModelInfoForID(modelID string) detection.ModelInfo {
 // and Perch (mapped geomodel). Bat and BSG classify their own label spaces and do
 // not participate.
 //
-// An ID absent from the registry (a custom or otherwise unknown classifier)
-// participates too. This preserves the historical gate, which resolved the ID
-// through DetectionModelInfoForID and matched the default BirdNET name for any
-// unknown ID, so custom models have always been range-filtered. Whether that is
-// the right long-term behavior is a separate, deliberate decision, not one made
-// by this behavior-preserving accessor.
+// An ID absent from the registry (a custom or otherwise unknown classifier) does
+// NOT participate: its label space is arbitrary, so gating it against an inclusion
+// list built for a known label space would silently drop labels the geomodel never
+// scored, and the registry reports rangeFilterCompatNone for anything unknown. This
+// intentionally diverges from the historical display-name gate, which resolved
+// unknown IDs to the default BirdNET name and filtered them. The branch is
+// unreachable in production (LoadModel rejects unregistered IDs, so every detection
+// carries a known registry ID), so pinning the decision here is behavior-preserving
+// in practice while fixing the semantics for any future path that can reach it.
 func ParticipatesInRangeFilter(registryID string) bool {
 	info, known := ModelRegistry[registryID]
 	if !known {
-		return true
+		return false
 	}
 	return info.rangeFilterCompat != rangeFilterCompatNone
 }

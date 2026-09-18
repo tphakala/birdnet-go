@@ -110,7 +110,7 @@ func TestBuildOccurrenceIndex_CollidingSpeciesKeepOwnScores(t *testing.T) {
 // newAliasedGeomodelBirdNET builds a primary model whose classifier labels use the
 // legacy synonym while the geomodel labels use the current name, the configuration
 // that separates the occurrence cache's keys from the caller's lookup key.
-func newAliasedGeomodelBirdNET(t *testing.T, geoScore float32) (*BirdNET, *fakeRangeFilter) {
+func newAliasedGeomodelBirdNET(t *testing.T, geoScore float32) (*Orchestrator, *fakeRangeFilter) {
 	t.Helper()
 
 	classifierLabels := []string{aliasLegacyLabel, "Turdus merula_Common Blackbird"}
@@ -129,14 +129,30 @@ func newAliasedGeomodelBirdNET(t *testing.T, geoScore float32) (*BirdNET, *fakeR
 	mapped := newMappedRangeFilter(inner, classifierLabels, geomodelLabels, 0.0)
 
 	bn := &BirdNET{
-		Settings:     settings,
-		speciesCache: make(map[string]*speciesCacheEntry),
-		ModelInfo:    ModelInfo{ID: RegistryIDBirdNETV3, Name: ModelNameBirdNETv30},
-		rangeFilter:  mapped,
+		Settings:  settings,
+		ModelInfo: ModelInfo{ID: RegistryIDBirdNETV3, Name: ModelNameBirdNETv30},
 	}
-	t.Cleanup(bn.Delete)
+	bn.settingsAtomic.Store(settings)
+	o := &Orchestrator{
+		Settings:    settings,
+		models:      map[string]*modelEntry{RegistryIDBirdNETV24: {instance: bn}},
+		rangeFilter: newTestRangeFilterService(mapped),
+	}
+	o.settingsAtomic.Store(settings)
+	// Publish the covered-label space a real reload records, so GetRarityContext (which
+	// reports ClassifierLabels from the built-over coveredLabels) sees the classifier
+	// vocabulary rather than an empty set.
+	o.rangeFilter.state.Store(&rangeFilterState{
+		backend:       mapped,
+		kind:          rfKindGeomodelV3,
+		coveredLabels: classifierLabels,
+		participants:  []participantLabels{{id: RegistryIDBirdNETV24, labels: classifierLabels}},
+		anchoredOnV24: true,
+		generation:    1,
+	})
+	t.Cleanup(o.Delete)
 
-	return bn, inner
+	return o, inner
 }
 
 // TestGetSpeciesOccurrenceAtTime_AliasHitsCache guards the split that made the
@@ -147,16 +163,16 @@ func newAliasedGeomodelBirdNET(t *testing.T, geoScore float32) (*BirdNET, *fakeR
 // 0.0 because the fallback scan compared raw names too.
 func TestGetSpeciesOccurrenceAtTime_AliasHitsCache(t *testing.T) {
 	const wantScore = 0.42
-	bn, inner := newAliasedGeomodelBirdNET(t, wantScore)
+	o, inner := newAliasedGeomodelBirdNET(t, wantScore)
 	at := time.Date(2026, 5, 14, 12, 0, 0, 0, time.Local)
 
-	got := bn.GetSpeciesOccurrenceAtTime(aliasLegacyLabel, at)
+	got := o.GetSpeciesOccurrenceAtTime(aliasLegacyLabel, at)
 	assert.InDelta(t, wantScore, got, 0.001,
 		"legacy classifier label must resolve to the geomodel's canonical score")
 	require.Equal(t, 1, inner.calls,
 		"first lookup should populate the cache and answer from it, not also run the fallback")
 
-	got = bn.GetSpeciesOccurrenceAtTime(aliasLegacyLabel, at)
+	got = o.GetSpeciesOccurrenceAtTime(aliasLegacyLabel, at)
 	assert.InDelta(t, wantScore, got, 0.001)
 	assert.Equal(t, 1, inner.calls, "second lookup must be served entirely from cache")
 }
@@ -166,34 +182,33 @@ func TestGetSpeciesOccurrenceAtTime_AliasHitsCache(t *testing.T) {
 // must resolve against a classifier whose labels are still legacy.
 func TestGetSpeciesOccurrenceAtTime_CanonicalNameAlsoResolves(t *testing.T) {
 	const wantScore = 0.42
-	bn, _ := newAliasedGeomodelBirdNET(t, wantScore)
+	o, _ := newAliasedGeomodelBirdNET(t, wantScore)
 	at := time.Date(2026, 5, 14, 12, 0, 0, 0, time.Local)
 
-	got := bn.GetSpeciesOccurrenceAtTime(aliasCanonicalLabel, at)
+	got := o.GetSpeciesOccurrenceAtTime(aliasCanonicalLabel, at)
 	assert.InDelta(t, wantScore, got, 0.001)
 }
 
 // TestGetSpeciesOccurrenceAtTime_UnknownSpecies exercises the uncached fallback scan,
 // which the cache-hit tests above never reach.
 func TestGetSpeciesOccurrenceAtTime_UnknownSpecies(t *testing.T) {
-	bn, inner := newAliasedGeomodelBirdNET(t, 0.42)
+	o, inner := newAliasedGeomodelBirdNET(t, 0.42)
 	at := time.Date(2026, 5, 14, 12, 0, 0, 0, time.Local)
 
-	got := bn.GetSpeciesOccurrenceAtTime("Myotis brandtii_Brandt's Bat", at)
+	got := o.GetSpeciesOccurrenceAtTime("Myotis brandtii_Brandt's Bat", at)
 	assert.InDelta(t, 0.0, got, 0.001, "a species the range filter cannot score has no occurrence")
 	assert.Equal(t, 2, inner.calls,
 		"a cache miss must reach the uncached fallback, which recomputes the probable list")
 }
 
 func TestGetRarityContext_UniversalGeomodel(t *testing.T) {
-	bn, _ := newAliasedGeomodelBirdNET(t, 0.5)
-	orch := &Orchestrator{Settings: bn.Settings, ModelInfo: bn.ModelInfo, primary: bn}
+	orch, _ := newAliasedGeomodelBirdNET(t, 0.5)
 
 	rc, err := orch.GetRarityContext(time.Now())
 	require.NoError(t, err)
 	scores, classifierLabels, filterActive := rc.Scores, rc.ClassifierLabels, rc.FilterActive
 
-	assert.Same(t, bn.Settings, rc.Settings, "GetRarityContext returns the exact settings snapshot the scores were produced from")
+	assert.Same(t, orch.Settings, rc.Settings, "GetRarityContext returns the exact settings snapshot the scores were produced from")
 	assert.True(t, filterActive, "a loaded range filter reports active so rarity is honest (#3935)")
 	assert.NotEmpty(t, scores, "universal geomodel path should return scored species")
 	require.NotNil(t, rc.Geomodel, "universal geomodel path should return a geomodel vocabulary")
@@ -208,7 +223,7 @@ func TestGetRarityContext_UniversalGeomodel(t *testing.T) {
 	// PrimaryRangeFilterCoverage and RangeFilterStatus also return it), so this
 	// asymmetry is contractual rather than accidental.
 	classifierLabels[0] = "mutated"
-	assert.Equal(t, aliasLegacyLabel, bn.Settings.BirdNET.Labels[0])
+	assert.Equal(t, aliasLegacyLabel, orch.Settings.BirdNET.Labels[0])
 }
 
 // TestGetRarityContext_NoGeomodel covers the case where no universal geomodel produced
@@ -223,13 +238,24 @@ func TestGetRarityContext_NoGeomodel(t *testing.T) {
 	publishTestSettings(t, settings)
 
 	bn := &BirdNET{
-		Settings:     settings,
-		speciesCache: make(map[string]*speciesCacheEntry),
-		ModelInfo:    ModelInfo{ID: BirdNET_V2_4, Name: ModelNameBirdNETv24},
-		rangeFilter:  &fakeRangeFilter{scores: []float32{0.5}},
+		Settings:  settings,
+		ModelInfo: ModelInfo{ID: BirdNET_V2_4, Name: ModelNameBirdNETv24},
 	}
-	t.Cleanup(bn.Delete)
-	orch := &Orchestrator{Settings: settings, ModelInfo: bn.ModelInfo, primary: bn}
+	rf := &fakeRangeFilter{scores: []float32{0.5}}
+	orch := &Orchestrator{
+		Settings:    settings,
+		models:      map[string]*modelEntry{RegistryIDBirdNETV24: {instance: bn}},
+		rangeFilter: newTestRangeFilterService(rf),
+	}
+	// Publish the covered-label space a reload records, so ClassifierLabels reports the
+	// classifier vocabulary (GetRarityContext reads state.coveredLabels).
+	orch.rangeFilter.state.Store(&rangeFilterState{
+		backend:       rf,
+		coveredLabels: settings.BirdNET.Labels,
+		participants:  []participantLabels{{id: RegistryIDBirdNETV24, labels: settings.BirdNET.Labels}},
+		anchoredOnV24: true,
+	})
+	t.Cleanup(orch.Delete)
 
 	rc, err := orch.GetRarityContext(time.Now())
 	require.NoError(t, err)
@@ -241,6 +267,50 @@ func TestGetRarityContext_NoGeomodel(t *testing.T) {
 	// reported as unknown rather than a bogus "very rare" (#3935).
 	assert.False(t, filterActive, "unconfigured location yields synthetic zeros, so the filter is not active for rarity")
 	assert.Nil(t, rc.Geomodel, "no universal geomodel means no geomodel vocabulary")
+	assert.Contains(t, classifierLabels, "Turdus merula_Common Blackbird")
+}
+
+// TestGetRarityContext_NoBackend covers the synthetic-zeros state distinct from
+// TestGetRarityContext_NoGeomodel: a configured location but NO range-filter backend
+// loaded (the geomodel failed to load, or none is configured). probableSpecies must
+// still report filterActive=false and a nil geomodel so rarity is reported unknown
+// rather than a bogus score, keeping computeRarity's !FilterActive short-circuit honest.
+func TestGetRarityContext_NoBackend(t *testing.T) {
+	settings := &conf.Settings{}
+	settings.BirdNET.Labels = []string{"Turdus merula_Common Blackbird"}
+	settings.BirdNET.LocationConfigured = true
+	settings.BirdNET.Latitude = 60.1
+	settings.BirdNET.Longitude = 24.9
+	publishTestSettings(t, settings)
+
+	bn := &BirdNET{
+		Settings:  settings,
+		ModelInfo: ModelInfo{ID: BirdNET_V2_4, Name: ModelNameBirdNETv24},
+	}
+	orch := &Orchestrator{
+		Settings:    settings,
+		models:      map[string]*modelEntry{RegistryIDBirdNETV24: {instance: bn}},
+		rangeFilter: newTestRangeFilterService(nil), // no backend loaded
+	}
+	// Even with no backend, a reload publishes the covered-label space (the fail-open set),
+	// so ClassifierLabels reports the classifier vocabulary.
+	orch.rangeFilter.state.Store(&rangeFilterState{
+		coveredLabels: settings.BirdNET.Labels,
+		participants:  []participantLabels{{id: RegistryIDBirdNETV24, labels: settings.BirdNET.Labels}},
+		anchoredOnV24: true,
+	})
+	t.Cleanup(orch.Delete)
+
+	rc, err := orch.GetRarityContext(time.Now())
+	require.NoError(t, err)
+	classifierLabels, filterActive := rc.ClassifierLabels, rc.FilterActive
+
+	assert.Same(t, settings, rc.Settings, "GetRarityContext returns the exact settings snapshot the scores were produced from")
+	// Location is configured but no backend is loaded, so predict returns predictNotLoaded
+	// and probableSpecies hands back synthetic zeros; filterActive must be false so rarity
+	// is reported unknown rather than a bogus "very rare" (#3935).
+	assert.False(t, filterActive, "a configured location with no range-filter backend yields synthetic zeros, so the filter is not active for rarity")
+	assert.Nil(t, rc.Geomodel, "no backend means no geomodel vocabulary")
 	assert.Contains(t, classifierLabels, "Turdus merula_Common Blackbird")
 }
 

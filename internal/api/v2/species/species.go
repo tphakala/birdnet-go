@@ -527,15 +527,25 @@ func (c *Handler) getSpeciesInfo(ctx context.Context, scientificName string) (*S
 // secondary-model labels, and the classifier-backed answer is against the primary's
 // labels only.
 //
-// The classifier fallback also runs in two states that grant nominal coverage to every
-// classifier species even though nothing is scoring them, so each reports "very rare" at
-// score 0: no location configured, and no range filter loaded. Only the first is visible
-// to a client, via SpeciesRarityInfo.LocationBased. That predates this function and is
-// not something callers can guard against today.
+// Coverage is meaningful only for an ACTIVE filter, so the early !FilterActive return
+// below reports not-covered when no filter is loaded or the location is unconfigured
+// (both surface as FilterActive=false with a nil geomodel). Without that guard the
+// classifier-label fallback would grant nominal coverage to every classifier species in
+// those states even though nothing is scoring them, so each would read "very rare" at
+// score 0 (#3935).
 //
 // A species in neither vocabulary (a secondary-model-only species the geomodel does not
 // cover) has no occurrence probability to base a rarity on.
 func speciesHasGeomodelCoverage(key string, rc *classifier.RarityContext, snap *speciesindex.Snapshot) bool {
+	// Coverage is a property of an ACTIVE range filter; with no active filter the
+	// probable-species list is synthetic zeros and rc.Geomodel is nil, so the
+	// classifier-label fallback below would falsely report coverage for every
+	// classifier species. Report not-covered instead (occurrence is genuinely unknown
+	// in that state, #3935). The sole caller computeRarity already short-circuits on
+	// !FilterActive; this keeps the predicate honest for any future caller.
+	if !rc.FilterActive {
+		return false
+	}
 	if rc.Geomodel != nil && len(rc.Geomodel.Labels) > 0 {
 		return rc.Geomodel.HasCanonical(key)
 	}

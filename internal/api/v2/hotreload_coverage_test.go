@@ -32,6 +32,10 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	// --- Top-level ---
 	"Debug": {categories: []hotReloadCategory{hotReloadFresh}},
 
+	// ConfigVersion is a runtime-managed one-shot migration marker, set by config load
+	// and hidden from the settings API; it is never edited by a user, so no reload path.
+	"ConfigVersion": {categories: []hotReloadCategory{hotReloadRuntime}},
+
 	// --- Runtime values (yaml:"-") ---
 	"Version":            {categories: []hotReloadCategory{hotReloadRuntime}},
 	"BuildDate":          {categories: []hotReloadCategory{hotReloadRuntime}},
@@ -101,7 +105,14 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"BSG": {categories: []hotReloadCategory{hotReloadRestart}},
 
 	// --- Models ---
-	"Models": {categories: []hotReloadCategory{hotReloadRestart}},
+	// Enabled is authoritative since Phase 4: a change loads/unloads models at runtime via
+	// the reconcile_models signal (modelsEnabledChanged in the detector table).
+	"Models.Enabled": {categories: []hotReloadCategory{hotReloadFresh}, action: "reconcile_models"},
+	// Directory is resolved once at startup (ResolveModelsDir / NewModelManager).
+	"Models.Directory": {categories: []hotReloadCategory{hotReloadRestart}},
+	// AutoEnableMigrated is a runtime-managed one-shot migration marker, set by the classifier
+	// and hidden from the settings API; never user-edited, so no reload path.
+	"Models.AutoEnableMigrated": {categories: []hotReloadCategory{hotReloadRuntime}},
 
 	// --- LowMemory (applied once at startup: mallopt before threads, GOMEMLIMIT) ---
 	"LowMemory": {categories: []hotReloadCategory{hotReloadRestart}},

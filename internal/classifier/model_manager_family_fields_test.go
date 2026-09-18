@@ -56,7 +56,7 @@ func TestFamilyFields(t *testing.T) {
 	}{
 		{
 			name:          "primary maps every field including Labels (LabelPath)",
-			registryID:    permanentRegistryID,
+			registryID:    RegistryIDBirdNETV24,
 			wantModel:     &s.BirdNET.ModelPath,
 			wantLabels:    &s.BirdNET.LabelPath,
 			wantThreshold: &s.BirdNET.Threshold,
@@ -157,7 +157,7 @@ func TestFamilyFields_NilSettings(t *testing.T) {
 func TestFamilyFields_PrimaryLabelsIsLabelPath(t *testing.T) {
 	t.Parallel()
 	s := &conf.Settings{}
-	fs, ok := familyFields(s, permanentRegistryID)
+	fs, ok := familyFields(s, RegistryIDBirdNETV24)
 	assert.True(t, ok)
 	assert.Same(t, &s.BirdNET.LabelPath, fs.Labels, "the primary's Labels pointer must be &BirdNET.LabelPath")
 }

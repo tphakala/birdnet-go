@@ -475,6 +475,12 @@
         "notRegisteredTitle": "Žádný model neanalyzuje {sourceName}",
         "notRegisteredMessage": "K {models} na zdroji zvuku \"{sourceName}\" se nedostává žádný zvuk, takže se nevytvářejí žádné detekce. Otevřete Systém > Modely AI, zkontrolujte jeho stav pro jednotlivé zdroje a ověřte, že je zdroj zvuku připojen a odesílá zvuk."
       },
+      "acousticModels": {
+        "noneTitle": "Není povolen žádný akustický model",
+        "noneMessage": "Není načten žádný akustický model, takže zvuk je zachycován, ale není analyzován. Povolte model v Nastavení > Analýza, nebo nějaký nainstalujte z galerie modelů.",
+        "loadFailedTitle": "Akustický model se nepodařilo načíst",
+        "loadFailedMessage": "Povolený akustický model se nepodařilo načíst, takže zvuk je zachycován, ale není analyzován. Zkontrolujte model na stránce Systém > Modely AI."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuální hodnota: {value} % (práh: {threshold} %)",
@@ -2402,7 +2408,7 @@
           "title": "Filtr falešně pozitivních detekcí",
           "description": "Sníží počet falešných detekcí vyžadováním více potvrzení napříč překrývajícími se zvukovými segmenty",
           "level": {
-            "label": "Úroveň filtru"
+            "label": "Síla filtru falešně pozitivních detekcí"
           },
           "detectionCount": "Vyžadováno {count} potvrzení. {description}",
           "levels": {
