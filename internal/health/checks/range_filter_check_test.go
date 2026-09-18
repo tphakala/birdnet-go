@@ -20,33 +20,38 @@ func TestRangeFilterCheck(t *testing.T) {
 		wantStatus health.Status
 	}{
 		{
+			name:       "no participant loaded is not applicable",
+			info:       RangeFilterStatusInfo{ParticipantsLoaded: false, LocationConfigured: true, Active: false},
+			wantStatus: health.StatusHealthy,
+		},
+		{
 			name:       "no location configured is not applicable",
-			info:       RangeFilterStatusInfo{LocationConfigured: false, Active: false},
+			info:       RangeFilterStatusInfo{ParticipantsLoaded: true, LocationConfigured: false, Active: false},
 			wantStatus: health.StatusHealthy,
 		},
 		{
 			name:       "location configured but no filter active is fail-open",
-			info:       RangeFilterStatusInfo{LocationConfigured: true, Active: false},
+			info:       RangeFilterStatusInfo{ParticipantsLoaded: true, LocationConfigured: true, Active: false},
 			wantStatus: health.StatusCritical,
 		},
 		{
 			name:       "fell back to embedded filter warns",
-			info:       RangeFilterStatusInfo{LocationConfigured: true, Active: true, FellBack: true},
+			info:       RangeFilterStatusInfo{ParticipantsLoaded: true, LocationConfigured: true, Active: true, FellBack: true},
 			wantStatus: health.StatusWarning,
 		},
 		{
 			name:       "geomodel mapped zero species warns",
-			info:       RangeFilterStatusInfo{LocationConfigured: true, Active: true, GeomodelActive: true, MappedSpecies: 0},
+			info:       RangeFilterStatusInfo{ParticipantsLoaded: true, LocationConfigured: true, Active: true, GeomodelActive: true, MappedSpecies: 0},
 			wantStatus: health.StatusWarning,
 		},
 		{
 			name:       "active geomodel with mapped species is healthy",
-			info:       RangeFilterStatusInfo{LocationConfigured: true, Active: true, GeomodelActive: true, MappedSpecies: 6500},
+			info:       RangeFilterStatusInfo{ParticipantsLoaded: true, LocationConfigured: true, Active: true, GeomodelActive: true, MappedSpecies: 6500},
 			wantStatus: health.StatusHealthy,
 		},
 		{
 			name:       "active embedded filter is healthy",
-			info:       RangeFilterStatusInfo{LocationConfigured: true, Active: true},
+			info:       RangeFilterStatusInfo{ParticipantsLoaded: true, LocationConfigured: true, Active: true},
 			wantStatus: health.StatusHealthy,
 		},
 	}

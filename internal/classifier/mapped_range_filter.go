@@ -14,14 +14,15 @@ import (
 // species) to work with any classifier (BirdNET v2.4, v3.0, Perch v2) without
 // changing predictFilter() or any downstream code.
 type mappedRangeFilter struct {
-	inner           inference.RangeFilter
-	classifierToGeo []int            // classifierIndex -> geomodelIndex; -1 means no match
-	numClassifier   int              // len(classifierLabels)
-	mappedCount     int              // number of classifier species with a geomodel match
-	unmappedScore   float32          // score for classifier species absent from geomodel
-	geomodelLabels  []string         // geomodel label set in geomodel output order
-	geomodelIndex   map[string]int   // label -> index for O(1) lookup
-	vocab           *LabelVocabulary // geomodelLabels plus their canonical-key memo, for the species endpoint
+	inner            inference.RangeFilter
+	classifierToGeo  []int            // classifierIndex -> geomodelIndex; -1 means no match
+	classifierLabels []string         // the classifier label space the mapping was built from (coveredLabels)
+	numClassifier    int              // len(classifierLabels)
+	mappedCount      int              // number of classifier species with a geomodel match
+	unmappedScore    float32          // score for classifier species absent from geomodel
+	geomodelLabels   []string         // geomodel label set in geomodel output order
+	geomodelIndex    map[string]int   // label -> index for O(1) lookup
+	vocab            *LabelVocabulary // geomodelLabels plus their canonical-key memo, for the species endpoint
 }
 
 // canonicalSpeciesKey returns the match key for a model label: its scientific
@@ -91,14 +92,15 @@ func newMappedRangeFilter(inner inference.RangeFilter, classifierLabels, geomode
 	}
 
 	return &mappedRangeFilter{
-		inner:           inner,
-		classifierToGeo: mapping,
-		numClassifier:   len(classifierLabels),
-		mappedCount:     mapped,
-		unmappedScore:   unmappedScore,
-		geomodelLabels:  geomodelLabels,
-		geomodelIndex:   geoIdx,
-		vocab:           NewLabelVocabulary(geomodelLabels),
+		inner:            inner,
+		classifierToGeo:  mapping,
+		classifierLabels: classifierLabels,
+		numClassifier:    len(classifierLabels),
+		mappedCount:      mapped,
+		unmappedScore:    unmappedScore,
+		geomodelLabels:   geomodelLabels,
+		geomodelIndex:    geoIdx,
+		vocab:            NewLabelVocabulary(geomodelLabels),
 	}
 }
 

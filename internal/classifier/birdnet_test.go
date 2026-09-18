@@ -318,7 +318,7 @@ func TestPrimaryRangeFilterCoverage_WithMappedFilter(t *testing.T) {
 	}
 	bn.settingsAtomic.Store(settings)
 	o := &Orchestrator{Settings: settings, modelsDir: modelsDir,
-		models: map[string]*modelEntry{RegistryIDBirdNETV24: {instance: bn}}}
+		models: map[string]*modelEntry{RegistryIDBirdNETV3: {instance: bn}}}
 	o.settingsAtomic.Store(settings)
 	o.rangeFilter = newTestRangeFilterService(mapped)
 
@@ -405,9 +405,18 @@ func TestRangeFilterStatus_PerClassifierCoverage(t *testing.T) {
 		},
 		modelsDir: modelsDir,
 	}
-	orch.rangeFilter = newTestRangeFilterService(mapped)
+	// Publish the state a real geomodel reload would: kind geomodel_v3, plus coveredLabels
+	// mirroring a real reload (the v2.4 label set, since v2.4 is loaded). The honest
+	// per-participant coverage asserted below is decided by whether v2.4 is a loaded
+	// PARTICIPANT (view.v24Labels != nil in rangeFilterView), not by this stored
+	// coveredLabels field; the field is set only to keep the published state realistic.
+	orch.rangeFilter = newRangeFilterService(nil)
+	orch.rangeFilter.state.Store(&rangeFilterState{backend: mapped, kind: rfKindGeomodelV3, coveredLabels: primaryLabels, generation: 1})
 
 	resp := orch.RangeFilterStatus()
+
+	// Backend must report a valid kind, never the empty string (JSON contract).
+	assert.Equal(t, string(rfKindGeomodelV3), resp.Backend)
 
 	require.NotNil(t, resp.Geomodel)
 	assert.Equal(t, "v3.0", resp.Geomodel.Version)
@@ -430,12 +439,20 @@ func TestRangeFilterStatus_PerClassifierCoverage(t *testing.T) {
 	assert.Equal(t, 4, birdnet.TotalSpecies)
 	assert.Equal(t, 3, birdnet.WithRangeData)
 	assert.Equal(t, 1, birdnet.WithoutRangeData)
+	// v2.4 is loaded, so coveredLabels is the v2.4 label space and the geomodel scores it:
+	// v2.4 is honestly covered.
+	assert.True(t, birdnet.CoveredByBackend, "v2.4's label space is what the geomodel maps onto when v2.4 is loaded")
 
 	perch := classifierByID[RegistryIDPerchV2]
 	assert.Equal(t, ModelNamePerchV2, perch.Name)
 	assert.Equal(t, 3, perch.TotalSpecies)
 	assert.Equal(t, 2, perch.WithRangeData)
 	assert.Equal(t, 1, perch.WithoutRangeData)
+	// Perch is NOT honestly covered in a mixed v2.4+Perch set: coveredLabels is the v2.4
+	// label space, so Perch's exclusive species fall outside it and are dropped. The status
+	// must not claim coverage the backend does not provide (the participant-union
+	// reconciliation is deferred to a later PR).
+	assert.False(t, perch.CoveredByBackend, "Perch's exclusive species are outside the v2.4 covered label space")
 }
 
 func TestRangeFilterStatus_BatExcluded(t *testing.T) {

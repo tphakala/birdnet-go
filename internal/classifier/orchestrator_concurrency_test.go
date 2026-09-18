@@ -47,11 +47,12 @@ func TestOrchestrator_AccessorsNilPrimary_NoPanic(t *testing.T) {
 	assert.NotPanics(t, func() { o.RunFilterProcess(time.Now().Format(time.DateOnly), 0) })
 	assert.NotPanics(t, func() { o.Debug("noop %d", 1) })
 
-	// BuildRangeFilter snapshots the primary and returns a typed error rather than
-	// panicking when there is no primary.
+	// BuildRangeFilter returns a typed error rather than panicking when the range
+	// filter service is absent (a bare orchestrator with no rangeFilter). Readiness is
+	// keyed on the service, not on BirdNET v2.4, since the range filter is decoupled.
 	err = BuildRangeFilter(o)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no primary model")
+	assert.Contains(t, err.Error(), "no range filter service")
 }
 
 // TestOrchestrator_AccessorsConcurrentWithPrimaryClear_NoRace is the regression

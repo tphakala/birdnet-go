@@ -231,28 +231,8 @@
         "name": "BirdNET v2.4",
         "totalSpecies": 6522,
         "withRangeData": 0,
-        "withoutRangeData": 0
-      },
-      {
-        "id": "Phase3SecA",
-        "name": "mock-Phase3SecA",
-        "totalSpecies": 1,
-        "withRangeData": 0,
-        "withoutRangeData": 0
-      },
-      {
-        "id": "Phase3SecB",
-        "name": "mock-Phase3SecB",
-        "totalSpecies": 1,
-        "withRangeData": 0,
-        "withoutRangeData": 0
-      },
-      {
-        "id": "Phase3SecC",
-        "name": "mock-Phase3SecC",
-        "totalSpecies": 1,
-        "withRangeData": 0,
-        "withoutRangeData": 0
+        "withoutRangeData": 0,
+        "coveredByBackend": true
       }
     ],
     "passUnmappedSpecies": false,
@@ -261,7 +241,9 @@
     "lastUpdated": "0001-01-01T00:00:00Z",
     "active": true,
     "fellBack": false,
-    "mappedSpecies": 0
+    "mappedSpecies": 0,
+    "backend": "mdata_v2",
+    "participantsLoaded": true
   },
   "RarityFilterActive": false,
   "SpeciesIndexSHA256": "d7074937acb899d412d2382d0fc34d11fb51905aa75481f5a8df1d098a898150",
