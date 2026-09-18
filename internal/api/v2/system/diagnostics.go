@@ -144,6 +144,7 @@ func (c *Handler) registerHealthChecks() {
 		checks.NewCaptureBufferCheck(c.buildCaptureBufferHealthProvider()),
 
 		// Analysis checks (multi-model aware)
+		checks.NewAcousticModelsCheck(c.buildAcousticModelsProvider()),
 		checks.NewModelsLoadedCheck(c.buildModelLoadInfoProvider()),
 		checks.NewPerModelInferenceLatencyCheck(c.buildPerModelInferenceProvider()),
 		checks.NewDetectionRateCheck(func(ctx context.Context, hours int) (int, error) {
@@ -343,6 +344,38 @@ func (c *Handler) buildModelLoadInfoProvider() func() []checks.ModelLoadInfo {
 			})
 		}
 		return result
+	}
+}
+
+// buildAcousticModelsProvider returns a closure that reports the aggregate acoustic-model
+// state for the acoustic_models health check (model de-privilege epic, Phase 4). A nil
+// Processor or orchestrator yields an empty State, which the check reports as Unknown
+// (matching how models_loaded treats a nil provider).
+func (c *Handler) buildAcousticModelsProvider() func() checks.AcousticModelsInfo {
+	return func() checks.AcousticModelsInfo {
+		p := c.Processor
+		if p == nil {
+			return checks.AcousticModelsInfo{}
+		}
+		bn := p.GetBirdNET()
+		if bn == nil {
+			return checks.AcousticModelsInfo{}
+		}
+		// Count distinct enabled models that resolve to a known registry ID, deduping
+		// case variants (["perch_v2","PERCH_V2"]) the way computeThreadAllocation does, so
+		// EnabledCount matches the loaded-model set rather than raw config entries.
+		seen := make(map[string]bool, len(c.CurrentSettings().Models.Enabled))
+		for _, id := range c.CurrentSettings().Models.Enabled {
+			if registryID, known := classifier.ResolveConfigModelID(id); known {
+				seen[registryID] = true
+			}
+		}
+		return checks.AcousticModelsInfo{
+			State:        string(bn.AcousticModelsState()),
+			LoadedCount:  len(bn.ModelInfos()),
+			EnabledCount: len(seen),
+			LoadFailures: len(bn.LoadErrors()),
+		}
 	}
 }
 

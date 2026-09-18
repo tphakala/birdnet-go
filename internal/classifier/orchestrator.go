@@ -1477,6 +1477,18 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 	return resp
 }
 
+// RangeFilterActive reports whether a range-filter backend is loaded (filtering is being
+// applied). It is the cheap, lock-free predicate for the range-test API's FilterActive
+// field: unlike RangeFilterStatus it does not recompute per-participant coverage over the
+// full label set. False at N = 0 or when no backend is loaded.
+func (o *Orchestrator) RangeFilterActive() bool {
+	if o.rangeFilter == nil {
+		return false
+	}
+	active, _ := o.rangeFilter.runtimeState()
+	return active
+}
+
 // ReloadRangeFilter reinitializes the range filter on the primary model
 // from current settings without a full model reload, then rebuilds the
 // species inclusion list so the processor's detection filter reflects
