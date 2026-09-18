@@ -143,6 +143,12 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
   // 'canplay' handler to resume playback once the reloaded clip is ready, so the
   // play intent is not lost when the transient error is suppressed.
   let playRequestedAfterRetry = false;
+  // True once playback has been asked for. With preload='none' the element still
+  // fires 'loadstart' when its src is assigned, but nothing is fetched and no
+  // 'canplay' follows, so treating that as "loading" would spin the play button
+  // on every row of a list until the canplay timeout expired. Only a load the
+  // user actually triggered is worth reporting.
+  let playbackEverRequested = false;
   let eventListeners: Array<{
     element: HTMLElement | HTMLAudioElement | Document | Window | null;
     event: string;
@@ -272,6 +278,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
     if (!audioElement) return;
 
     if (audioElement.paused) {
+      playbackEverRequested = true;
       await initAudioContext();
       try {
         await audioElement.play();
@@ -339,7 +346,13 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
     // Create audio element dynamically (iOS Safari workaround:
     // DOM-bound audio elements don't fire canplay events reliably)
     const audio = new globalThis.Audio();
-    audio.preload = 'metadata';
+    // No network until the user actually presses play. This composable backs the
+    // per-row player in the detections table, so preloading metadata meant every
+    // clip on the page was requested just for rendering the list -- a request per
+    // row, none of which anyone had asked to hear. Nothing here needs the
+    // duration before playback: the progress bar only appears once playing, and
+    // seek() refuses to act on an unknown duration.
+    audio.preload = 'none';
     audio.src = audioUrl;
     audioElement = audio;
 
@@ -376,6 +389,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
 
     // iOS Safari canplay timeout fallback
     addTrackedEventListener(audio, 'loadstart', () => {
+      if (!playbackEverRequested) return;
       isLoading = true;
       if (canplayTimeoutId) clearTimeout(canplayTimeoutId);
       canplayTimeoutId = setTimeout(() => {

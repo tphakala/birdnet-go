@@ -9,6 +9,18 @@
     totalPages?: number;
     onPageChange?: (_page: number) => void;
     disabled?: boolean;
+    /**
+     * Render numbered page buttons. Turning these off leaves only the previous
+     * and next arrows, which makes a long list navigable one page at a time and
+     * nothing else -- so keep them unless the surrounding UI offers another way
+     * to jump to a page.
+     */
+    showPageNumbers?: boolean;
+    /**
+     * Render a "Page 3 of 9" label in place of the numbers. Off when the caller
+     * states the position itself, as the detections list does with its
+     * "Showing 51 to 75 of 214" line.
+     */
     showPageInfo?: boolean;
     maxVisiblePages?: number;
     className?: string;
@@ -19,6 +31,7 @@
     totalPages = 1,
     onPageChange = () => {},
     disabled = false,
+    showPageNumbers = true,
     showPageInfo = true,
     maxVisiblePages = 5,
     className = '',
@@ -75,7 +88,7 @@
     </button>
 
     <!-- Page numbers -->
-    {#if showPageInfo && totalPages > 1}
+    {#if showPageNumbers && totalPages > 1}
       {@const pages = visiblePages}
       {@const firstPage = pages[0]}
       {@const lastPage = pages[pages.length - 1]}

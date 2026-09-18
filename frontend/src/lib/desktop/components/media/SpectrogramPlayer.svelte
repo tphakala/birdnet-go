@@ -222,9 +222,15 @@
     max-width: 200px;
   }
 
+  /* The container holds the row's height from first paint. Without a reserved
+     ratio the cell is zero-height until the image decodes and then jumps to its
+     natural height, so every row in a table of these shifts as its spectrogram
+     arrives -- and shifts again when the loading overlay, which had a ratio of
+     its own, is removed. Spectrograms are rendered 2:1 server-side. */
   .spectrogram-image-container {
     position: relative;
     width: 100%;
+    aspect-ratio: 2 / 1;
     background: linear-gradient(to bottom, rgb(128 128 128 / 0.1), rgb(128 128 128 / 0.05));
     border-radius: 0.375rem;
     overflow: hidden;
@@ -233,16 +239,21 @@
   .spectrogram-img {
     display: block;
     width: 100%;
-    height: auto;
+    height: 100%;
+
+    /* Fit inside the reserved box. An image whose real ratio differs from 2:1 is
+       letterboxed against the container's background rather than allowed to
+       resize the row, and no part of the spectrogram is cropped away. */
+    object-fit: contain;
     border-radius: 0.375rem;
   }
 
   .spectrogram-overlay {
+    position: absolute;
+    inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    aspect-ratio: 2 / 1;
-    width: 100%;
   }
 
   /* Play button: always visible at reduced opacity, full opacity on hover */

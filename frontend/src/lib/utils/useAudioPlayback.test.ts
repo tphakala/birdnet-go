@@ -338,12 +338,14 @@ describe('useAudioPlayback', () => {
   });
 
   // ---------------------------------------------------------------
-  // 5. isLoading set/cleared via loadstart/canplay events
+  // 5. isLoading tracks a load the user asked for, via loadstart/canplay
   // ---------------------------------------------------------------
-  it('sets isLoading on loadstart and clears on canplay', async () => {
+  it('sets isLoading on loadstart and clears on canplay once play was requested', async () => {
     await renderAndWait();
 
-    // Fire loadstart
+    // Pressing play is what starts a real load, so from here 'loadstart' means
+    // the clip is genuinely being fetched.
+    await getState().togglePlayPause();
     fireAudioEvent('loadstart');
 
     await waitFor(() => {
@@ -356,6 +358,20 @@ describe('useAudioPlayback', () => {
     await waitFor(() => {
       expect(getState().isLoading).toBe(false);
     });
+  });
+
+  // The element is created with preload='none', so assigning its src still fires
+  // 'loadstart' while nothing is fetched and no 'canplay' ever follows. Reporting
+  // that as loading would leave the play button spinning until the canplay
+  // timeout expired -- on every row of a list, none of which anyone asked to hear.
+  it('ignores the loadstart that mere src assignment fires, before any play request', async () => {
+    await renderAndWait();
+
+    fireAudioEvent('loadstart');
+
+    // Give any effect a chance to run, then assert nothing claimed to be loading.
+    await vi.advanceTimersByTimeAsync(0);
+    expect(getState().isLoading).toBe(false);
   });
 
   // ---------------------------------------------------------------
