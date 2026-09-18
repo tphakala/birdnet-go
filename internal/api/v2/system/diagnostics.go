@@ -174,6 +174,7 @@ func (c *Handler) registerHealthChecks() {
 			}
 			st := orch.RangeFilterStatus()
 			return checks.RangeFilterStatusInfo{
+				ParticipantsLoaded: st.ParticipantsLoaded,
 				LocationConfigured: st.LocationConfigured,
 				Active:             st.Active,
 				FellBack:           st.FellBack,

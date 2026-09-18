@@ -329,11 +329,12 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 		}
 	}
 
-	// Build the range-filter backend against the primary/anchor view now that v2.4
-	// is loaded. A build failure is non-fatal: the process starts without species
-	// filtering and the user can fix it via Settings > Species.
-	anchorView, _, _ := o.rangeFilterAnchor()
-	if err := o.rangeFilter.reload(settings, anchorView); err != nil {
+	// Build the range-filter backend from the loaded participant set now that the
+	// models are loaded, independent of BirdNET v2.4: a Perch-only or v3.0-only install
+	// with the geomodel builds a real backend. reload snapshots the participant view
+	// under its own lock. A build failure is non-fatal: the process starts without
+	// species filtering and the user can fix it via Settings > Species.
+	if err := o.rangeFilter.reload(settings, o.rangeFilterView); err != nil {
 		GetLogger().Warn("Range filter initialization failed, starting without species filtering (fix via Settings > Species)",
 			logger.Error(err),
 			logger.String("range_filter_model", settings.BirdNET.RangeFilter.Model),
@@ -342,8 +343,9 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 
 	// Log any labels missing from the taxonomy at debug level, reproducing the
 	// diagnostics BirdNET used to emit from loadLabels now that the taxonomy is
-	// orchestrator-owned.
-	if _, anchorBN, ok := o.rangeFilterAnchor(); ok {
+	// orchestrator-owned. Genuinely v2.4-specific: these diagnostics were only ever
+	// emitted for the v2.4 label set.
+	if anchorBN, ok := o.birdNETV24Instance(); ok {
 		o.logMissingTaxonomyCodes(anchorBN, anchorBN.Labels())
 	}
 
@@ -905,61 +907,93 @@ func (o *Orchestrator) rangeFilterDebug(format string, v ...any) {
 	}
 }
 
-// rangeFilterAnchor snapshots the classifier the range-filter view is aligned to.
-// Phase 3: the BirdNET v2.4 entry when it is loaded (ok=true); otherwise ok=false,
-// which reproduces the pre-Phase-3 nil-primary behavior of every range-filter
-// accessor. Phase 4 replaces this single anchor with per-classifier views.
-//
-// The entry pointer is fetched under o.mu.RLock and the *BirdNET is snapshotted
-// under entry.mu with a nil check, so a concurrent UnloadModel/Delete that nils
-// entry.instance can never make the type assertion panic. classifierView.modelsDir
-// is o.modelsDir (HQ3): for the v2.4 family the models dir never influences backend
-// selection, so this matches the historical construction-time build that saw an
-// empty bn.modelsDir.
-func (o *Orchestrator) rangeFilterAnchor() (cv classifierView, inst *BirdNET, ok bool) {
+// rangeFilterReady returns the orchestrator's range-filter service and whether it is
+// present. Readiness is keyed on the SERVICE existing (created once in NewOrchestrator,
+// never reassigned), NOT on BirdNET v2.4 being loaded, so it takes no lock. The two
+// genuinely v2.4-specific consumers call birdNETV24Instance instead.
+func (o *Orchestrator) rangeFilterReady() (rfs *rangeFilterService, ok bool) {
+	// Keyed on the range-filter SERVICE being present, not on BirdNET v2.4 being
+	// loaded. The service is created once in NewOrchestrator and never reassigned, so
+	// the read needs no lock; whether a backend is actually loaded (and thus whether
+	// filtering is active) is decided per call inside the service. Decoupling readiness
+	// from v2.4 is what lets a Perch-only or v3.0-only install with the geomodel filter,
+	// and lets an N=0 runtime fail open over an empty label set instead of dropping
+	// every detection.
+	rfs = o.rangeFilter
+	return rfs, rfs != nil
+}
+
+// birdNETV24Instance returns the loaded BirdNET v2.4 instance, if any. It serves the
+// two genuinely v2.4-specific consumers that survive the range-filter decoupling: the
+// NewBirdNETLabelResolver chain and logMissingTaxonomyCodes. Its name states the v2.4
+// privilege that range-filter readiness must no longer carry. Lock discipline mirrors
+// the former rangeFilterAnchor: snapshot the entry under o.mu, release, then take
+// entry.mu only to read the instance pointer.
+func (o *Orchestrator) birdNETV24Instance() (*BirdNET, bool) {
 	o.mu.RLock()
 	entry := o.models[RegistryIDBirdNETV24]
-	modelsDir := o.modelsDir
 	o.mu.RUnlock()
 	if entry == nil {
-		return classifierView{}, nil, false
+		return nil, false
 	}
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
 	bn, isBirdNET := entry.instance.(*BirdNET)
 	if !isBirdNET {
-		return classifierView{}, nil, false
+		return nil, false
 	}
-	return classifierView{id: RegistryIDBirdNETV24, modelsDir: modelsDir}, bn, true
+	return bn, true
 }
 
-// anchorCoverage returns the range-filter anchor's classifier identity and label
-// count, snapshotted under the instance lock so it does not race a concurrent
-// reload. RangeFilterStatus reads the models directory from o.modelsDir directly
-// (HQ3).
-func anchorCoverage(inst *BirdNET) ClassifierCoverage {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	return ClassifierCoverage{
-		ID:           inst.ModelInfo.ID,
-		Name:         inst.ModelInfo.Name,
-		TotalSpecies: len(inst.Settings.BirdNET.Labels),
-	}
-}
-
-// rangeFilterReady reports whether the BirdNET v2.4 anchor is loaded and returns the
-// range-filter service, both under a SINGLE o.mu.RLock and WITHOUT taking entry.mu.
-// It is the cheap boolean gate the range-filter accessors use: they only need to know
-// whether v2.4 is loaded, not the instance itself. Avoiding entry.mu matters on the
-// per-detection path (GetProbableSpecies, GetSpeciesOccurrenceAtTime), which would
-// otherwise block behind an in-flight inference that holds entry.mu for the whole
-// Predict. Presence is a reliable "loaded" signal because UnloadModel deletes the
-// v2.4 entry under o.mu before it nils the instance, so a present entry always carries
-// a live instance. Accessors that need the *BirdNET instance call rangeFilterAnchor.
-func (o *Orchestrator) rangeFilterReady() (rfs *rangeFilterService, ok bool) {
+// rangeFilterView snapshots every loaded classifier that participates in range
+// filtering, so the range-filter backend can be built independent of BirdNET v2.4.
+// It replaces rangeFilterAnchor, whose single-classifier view tied the whole range
+// filter to v2.4 being loaded.
+//
+// Lock discipline (mandatory): entries are snapshotted under o.mu (via
+// orderedEntryRefs), o.mu is released, then per entry entry.mu is taken ONLY to read
+// the instance pointer and released BEFORE calling Labels(). Holding entry.mu across
+// Labels() is a lock inversion (o.mu -> inferenceMu -> entry.mu -> bn.mu) that would
+// stall PredictModel on the inference hot path. This mirrors AllLabels exactly.
+func (o *Orchestrator) rangeFilterView() rangeFilterView {
 	o.mu.RLock()
-	defer o.mu.RUnlock()
-	return o.rangeFilter, o.models[RegistryIDBirdNETV24] != nil
+	modelsDir := o.modelsDir
+	o.mu.RUnlock()
+
+	// orderedEntryRefs returns the v2.4 instance first (as *BirdNET) and every other
+	// entry byte-sorted by ID, the deterministic ordering the union relies on.
+	primary, refs := o.orderedEntryRefs()
+
+	view := rangeFilterView{modelsDir: modelsDir}
+
+	// BirdNET v2.4 leads when loaded and participates. primary.Labels() is safe
+	// without entry.mu because BirdNET.Labels takes the model's own lock internally
+	// (the AllLabels contract).
+	if primary != nil && ParticipatesInRangeFilter(RegistryIDBirdNETV24) {
+		labels := primary.Labels()
+		view.participants = append(view.participants, participantLabels{id: RegistryIDBirdNETV24, labels: labels})
+		view.v24Labels = labels
+	}
+
+	for _, ref := range refs {
+		if !ParticipatesInRangeFilter(ref.id) {
+			continue
+		}
+		// Capture the instance under entry.mu, release, THEN call Labels(): see the
+		// lock-discipline note above.
+		ref.entry.mu.Lock()
+		instance := ref.entry.instance
+		ref.entry.mu.Unlock()
+		if instance == nil {
+			continue
+		}
+		view.participants = append(view.participants, participantLabels{id: ref.id, labels: instance.Labels()})
+		if rangeFilterCompatFor(ref.id) == rangeFilterCompatGeomodel {
+			view.wantsGeomodel = true
+		}
+	}
+
+	return view
 }
 
 // GetProbableSpecies returns species scores from the range filter.
@@ -1028,9 +1062,9 @@ func (o *Orchestrator) GetProbableSpeciesWithSettings(date time.Time, week float
 // a BattyBirdNET setup sees its bat species in the active/probable list instead
 // of a bird-only view.
 func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week float32, settings *conf.Settings) ([]SpeciesScore, error) {
-	// Gate on the range-filter anchor (v2.4) being loaded, as the pre-Phase-3
-	// nil-primary check did, and bind the range-filter service under the same
-	// RLock so the read is synchronized.
+	// Bind the range-filter service; it is present whenever the orchestrator is live, so
+	// this is NOT gated on BirdNET v2.4. A non-v2.4 install proceeds through the
+	// participant walk and bat handling below instead of early-returning nil.
 	rfs, ok := o.rangeFilterReady()
 	if !ok || rfs == nil {
 		return nil, nil
@@ -1262,7 +1296,7 @@ func (o *Orchestrator) orderedEntryRefs() (primary *BirdNET, refs []entryRef) {
 	// dropped from refs only when it resolved to a *BirdNET (returned as primary);
 	// if some other instance occupies that key it stays in refs so its labels are
 	// not lost.
-	_, primary, _ = o.rangeFilterAnchor()
+	primary, _ = o.birdNETV24Instance()
 	o.mu.RLock()
 	refs = make([]entryRef, 0, len(o.models))
 	for id, entry := range o.models {
@@ -1360,38 +1394,30 @@ func (o *Orchestrator) EnrichResultWithTaxonomy(speciesLabel string) (scientific
 // RangeFilterStatus returns introspection data about the range filter,
 // including per-classifier geomodel coverage for all active non-bat models.
 func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
-	// Gate on the range-filter anchor (v2.4) being loaded; take the classifier
-	// identity/label count and the models directory from it.
-	cv, primary, ok := o.rangeFilterAnchor()
-	if !ok {
-		return RangeFilterStatusResponse{}
-	}
-
-	settings := primary.currentSettings()
+	settings := o.CurrentSettings()
 	rf := settings.BirdNET.RangeFilter
+	view := o.rangeFilterView()
 
-	// The classifier identity/label count come from the anchor instance; the
-	// geomodel coverage, runtime state and auto-select come from the
-	// orchestrator-owned range filter service (Phase 2b). This reproduces the
-	// former BirdNET.PrimaryRangeFilterCoverage + rangeFilterRuntimeState in one
-	// place.
-	primaryCoverage := anchorCoverage(primary)
-	modelsDir := cv.modelsDir
 	var (
-		geomodel  *GeomodelStatus
-		geoLabels []string
-		active    bool
-		fellBack  bool
+		geomodel      *GeomodelStatus
+		geoLabels     []string
+		active        bool
+		fellBack      bool
+		mappedSpecies int
+		kind          = rfKindNone
 	)
 	if rfs := o.rangeFilter; rfs != nil {
 		active, fellBack = rfs.runtimeState()
+		kind = rfs.loadState().kind
 		if mrf, ok := rfs.mappedView(); ok {
-			primaryCoverage.WithRangeData = mrf.mappedCount
-			primaryCoverage.WithoutRangeData = mrf.numClassifier - mrf.mappedCount
 			geoLabels = mrf.geomodelLabels
+			// mrf.mappedCount is the mapped count over coveredLabels (v2.4's labels on a
+			// v2.4 install, the participant union otherwise), so this is byte-identical
+			// to the former primaryCoverage.WithRangeData for a v2.4 install.
+			mappedSpecies = mrf.mappedCount
 
 			version := rf.Model
-			if version == "v3" {
+			if version == conf.RangeFilterModelV3 {
 				version = "v3.0"
 			}
 			geomodel = &GeomodelStatus{
@@ -1403,80 +1429,56 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 
 	// Report whether an active v3 geomodel was auto-selected from the shared models
 	// directory (ported from PrimaryRangeFilterCoverage).
-	if geomodel != nil && rf.Model == "v3" && modelsDir != "" {
-		sharedDir := filepath.Join(modelsDir, sharedDirName)
+	if geomodel != nil && rf.Model == conf.RangeFilterModelV3 && view.modelsDir != "" {
+		sharedDir := filepath.Join(view.modelsDir, sharedDirName)
 		expectedONNX := filepath.Join(sharedDir, conf.GeomodelONNXLocalName)
 		expectedLabels := filepath.Join(sharedDir, conf.GeomodelLabelsLocalName)
 		geomodel.AutoSelected = rf.ModelPath == expectedONNX && rf.LabelsPath == expectedLabels
 	}
 
+	// coveredByBackend: the universal geomodel covers every participant; the legacy
+	// v2.4-only MData backend covers only v2.4; no backend covers nothing.
+	coveredByBackend := func(id string) bool {
+		switch kind {
+		case rfKindGeomodelV3:
+			return true
+		case rfKindMDataV2, rfKindMDataV1:
+			return id == RegistryIDBirdNETV24
+		default: // rfKindNone (or unknown): nothing is covered.
+			return false
+		}
+	}
+
+	// Per-participant coverage, built from the same rangeFilterView the backend build
+	// consumes. Bat/BSG are not range-filter participants, so rangeFilterView never
+	// includes them; a Perch-only or v3.0-only install is reported without a v2.4 gate.
+	classifiers := buildClassifierViews(view, geoLabels)
 	resp := RangeFilterStatusResponse{
 		Geomodel:            geomodel,
+		Classifiers:         make([]ClassifierCoverage, 0, len(classifiers)),
 		PassUnmappedSpecies: rf.PassUnmappedSpecies,
 		Threshold:           rf.Threshold,
 		LocationConfigured:  settings.BirdNET.LocationConfigured,
 		LastUpdated:         rf.LastUpdated,
 		Active:              active,
 		FellBack:            fellBack,
-		MappedSpecies:       primaryCoverage.WithRangeData,
+		MappedSpecies:       mappedSpecies,
+		Backend:             string(kind),
+		ParticipantsLoaded:  len(view.participants) > 0,
 	}
-
-	// Always include the primary classifier.
-	resp.Classifiers = append(resp.Classifiers, primaryCoverage)
-
-	// Collect additional model info under a brief lock, then compute
-	// coverage outside the lock to avoid blocking writers.
-	type modelTask struct {
-		id     string
-		name   string
-		labels []string
-	}
-
-	var refs []entryRef
-	o.mu.RLock()
-	for id, entry := range o.models {
-		// Skip the range-filter anchor (v2.4, added above) and Bat.
-		if id == RegistryIDBirdNETV24 || id == RegistryIDBat {
-			continue
-		}
-		refs = append(refs, entryRef{id: id, entry: entry})
-	}
-	o.mu.RUnlock()
-
-	var tasks []modelTask
-	for _, ref := range refs {
-		ref.entry.mu.Lock()
-		if ref.entry.instance == nil {
-			ref.entry.mu.Unlock()
-			continue
-		}
-		info, exists := ModelRegistry[ref.id]
-		name := ref.id
-		if exists {
+	for _, cm := range classifiers {
+		name := cm.id
+		if info, exists := ModelRegistry[cm.id]; exists {
 			name = info.Name
 		}
-		labels := ref.entry.instance.Labels()
-		ref.entry.mu.Unlock()
-		tasks = append(tasks, modelTask{
-			id:     ref.id,
-			name:   name,
-			labels: labels,
+		resp.Classifiers = append(resp.Classifiers, ClassifierCoverage{
+			ID:               cm.id,
+			Name:             name,
+			TotalSpecies:     len(cm.labels),
+			WithRangeData:    cm.mapped,
+			WithoutRangeData: cm.unmapped,
+			CoveredByBackend: coveredByBackend(cm.id),
 		})
-	}
-
-	for _, task := range tasks {
-		cov := ClassifierCoverage{
-			ID:           task.id,
-			Name:         task.name,
-			TotalSpecies: len(task.labels),
-		}
-		if len(geoLabels) > 0 {
-			cov.WithRangeData, cov.WithoutRangeData = ComputeGeomodelCoverage(
-				task.labels, geoLabels,
-			)
-		}
-		// No geomodel active: leave coverage counters at zero.
-		resp.Classifiers = append(resp.Classifiers, cov)
 	}
 
 	// Sort classifiers by ID for stable API output (map iteration is random).
@@ -1492,15 +1494,15 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 // species inclusion list so the processor's detection filter reflects
 // the new backend immediately.
 func (o *Orchestrator) ReloadRangeFilter() error {
-	cv, _, ok := o.rangeFilterAnchor()
-	o.mu.RLock()
 	rfs := o.rangeFilter
-	o.mu.RUnlock()
-	if !ok || rfs == nil {
+	if rfs == nil {
 		return nil
 	}
 	GetLogger().Info("Reloading range filter from updated settings")
-	if err := rfs.reload(o.CurrentSettings(), cv); err != nil {
+	// reload snapshots the participant view under its own lock, so this is not gated on
+	// v2.4: applyInstalledGeomodelConfig on a Perch-only or v3.0-only install can now
+	// light up the geomodel here.
+	if err := rfs.reload(o.CurrentSettings(), o.rangeFilterView); err != nil {
 		return err
 	}
 	GetLogger().Info("Range filter reloaded successfully")
@@ -1583,8 +1585,9 @@ func (o *Orchestrator) reloadAnchorRangeFilter() {
 	if rfs == nil {
 		return
 	}
-	cv, _, _ := o.rangeFilterAnchor()
-	if err := rfs.reload(o.CurrentSettings(), cv); err != nil {
+	// A v2.4 locale/variant reload can change the v2.4 label set the geomodel maps
+	// onto, so rebuild the range filter from the current participant view.
+	if err := rfs.reload(o.CurrentSettings(), o.rangeFilterView); err != nil {
 		GetLogger().Warn("Range filter reload after model reload failed; keeping the previous range filter",
 			logger.Error(err))
 	}
@@ -1789,9 +1792,9 @@ func (o *Orchestrator) Delete() {
 
 	// Close the range-filter backend outside o.mu. close() empties the published
 	// state under rfs.mu, so any accessor that runs after teardown reads a nil
-	// backend and returns its zero value: the anchor-gated accessors fail fast because
-	// rangeFilterAnchor finds no v2.4 entry once o.models is nil, and the few that read the service directly
-	// (GeomodelSpeciesInfo via mappedView) get ok=false from the empty state. The
+	// backend and returns its zero value: the range-filter accessors read the empty
+	// published state (no backend), so they fail open / return their zero value, and
+	// GeomodelSpeciesInfo via mappedView gets ok=false from that empty state. The
 	// service pointer is intentionally left set: GeomodelSpeciesInfo reads it without
 	// o.mu, so nilling it here would be a data race for no benefit.
 	if rfs != nil {
@@ -2022,6 +2025,14 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 	// the order relative to them is immaterial).
 	o.rebuildSpeciesIndex()
 
+	// A newly loaded range-filter participant changes the covered label set and can
+	// flip backend selection to the geomodel, so rebuild the range-filter backend and
+	// inclusion list; otherwise its species stay dropped until the next daily rebuild.
+	// Non-participants (Bat/BSG) do not affect range filtering, so they skip this.
+	if ParticipatesInRangeFilter(registryID) {
+		o.rebuildRangeFilterAfterModelChange()
+	}
+
 	return nil
 }
 
@@ -2200,7 +2211,40 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 	// model's labels are gone, with no orchestrator lock held.
 	o.rebuildSpeciesIndex()
 
+	// Removing a range-filter participant shrinks the covered label set (and can drop
+	// the geomodel back to MData or nothing), so rebuild the range-filter backend and
+	// inclusion list. Non-participants (Bat/BSG) do not affect range filtering.
+	if ParticipatesInRangeFilter(registryID) {
+		o.rebuildRangeFilterAfterModelChange()
+	}
+
 	return nil
+}
+
+// rebuildRangeFilterAfterModelChange rebuilds the range-filter backend and inclusion
+// list after a range-filter participant is installed or removed at runtime.
+// LoadModel/UnloadModel update the species-name index but not the range-filter backend
+// or the inclusion list (conf.IncludedScientificNames), so without this a newly
+// installed participant's species would be dropped, a removed one's kept, and
+// installing a geomodel-capable participant would not light up the geomodel until the
+// next daily rebuild. Both steps are non-fatal: on failure the previous range filter
+// keeps serving. Rare (a gallery install/uninstall), so the geomodel rebuild cost is
+// acceptable, and a full reload (rather than an in-place relabel) re-runs backend
+// selection and closes the old backend cleanly. Runs with no orchestrator lock held.
+func (o *Orchestrator) rebuildRangeFilterAfterModelChange() {
+	rfs := o.rangeFilter
+	if rfs == nil {
+		return
+	}
+	if err := rfs.reload(o.CurrentSettings(), o.rangeFilterView); err != nil {
+		GetLogger().Warn("Range filter reload after model load/unload failed; keeping the previous range filter",
+			logger.Error(err))
+		return
+	}
+	if err := BuildRangeFilter(o); err != nil {
+		GetLogger().Warn("Range filter inclusion-list rebuild after model load/unload failed",
+			logger.Error(err))
+	}
 }
 
 // lockedBatchRangeFilter returns the geomodel-backed mapped range filter for batch
@@ -2212,7 +2256,7 @@ func (o *Orchestrator) lockedBatchRangeFilter() (*mappedRangeFilter, func(), err
 	rfs, ok := o.rangeFilterReady()
 
 	if !ok || rfs == nil {
-		return nil, func() {}, errors.Newf("range filter not available: BirdNET v2.4 anchor not loaded").
+		return nil, func() {}, errors.Newf("range filter not available: no range filter service").
 			Component("classifier.orchestrator").
 			Category(errors.CategoryValidation).
 			Build()
@@ -2700,9 +2744,9 @@ type RarityContext struct {
 // settings have been published (i.e. in a running app); it can be nil only for an
 // uninitialised orchestrator, so a caller that may run before startup must nil-check it.
 func (o *Orchestrator) GetRarityContext(date time.Time) (RarityContext, error) {
-	// Gate on the range-filter anchor (v2.4) being loaded, binding the range-filter
-	// service under the same RLock so the read is synchronized, then drive every
-	// read below from o.CurrentSettings() so scores and labels come from one snapshot.
+	// Bind the range-filter service (present whenever the orchestrator is live; not
+	// gated on BirdNET v2.4), then drive every read below from o.CurrentSettings() so
+	// scores and labels come from one snapshot.
 	rfs, ok := o.rangeFilterReady()
 	if !ok || rfs == nil {
 		// No anchor, so no scores: hand back the orchestrator's current snapshot.

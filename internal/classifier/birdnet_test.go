@@ -318,7 +318,7 @@ func TestPrimaryRangeFilterCoverage_WithMappedFilter(t *testing.T) {
 	}
 	bn.settingsAtomic.Store(settings)
 	o := &Orchestrator{Settings: settings, modelsDir: modelsDir,
-		models: map[string]*modelEntry{RegistryIDBirdNETV24: {instance: bn}}}
+		models: map[string]*modelEntry{RegistryIDBirdNETV3: {instance: bn}}}
 	o.settingsAtomic.Store(settings)
 	o.rangeFilter = newTestRangeFilterService(mapped)
 

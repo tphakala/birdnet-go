@@ -147,7 +147,8 @@
         "name": "BirdNET v2.4",
         "totalSpecies": 6522,
         "withRangeData": 0,
-        "withoutRangeData": 0
+        "withoutRangeData": 0,
+        "coveredByBackend": true
       }
     ],
     "passUnmappedSpecies": false,
@@ -156,7 +157,9 @@
     "lastUpdated": "0001-01-01T00:00:00Z",
     "active": true,
     "fellBack": false,
-    "mappedSpecies": 0
+    "mappedSpecies": 0,
+    "backend": "mdata_v2",
+    "participantsLoaded": true
   },
   "RarityFilterActive": false,
   "SpeciesIndexSHA256": "3261d20f612a15e9c168aa99ff67ac35ff8ab3e8a322f3a958839638d5b536fd",

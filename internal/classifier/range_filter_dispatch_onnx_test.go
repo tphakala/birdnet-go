@@ -38,8 +38,8 @@ func geomodelPathsFromEnv(t *testing.T) (modelPath, labelsPath string) {
 //
 // Phase 2b moved range-filter construction off *BirdNET onto the orchestrator-owned
 // rangeFilterService; buildMetaModel is the dispatch factory that initializeMetaModel
-// used to be, and classifierView{id: RegistryIDBirdNETV24} identifies BirdNET v2.4, the
-// family that gates the embedded-TFLite fallback.
+// used to be. The rangeFilterView carries v24Labels (BirdNET v2.4 loaded), the family
+// that gates the embedded-TFLite fallback, and its coveredLabels drive the mapping.
 func TestBuildMetaModel_OrphanGeomodelOnV24(t *testing.T) {
 	modelPath, labelsPath := geomodelPathsFromEnv(t)
 
@@ -59,7 +59,11 @@ func TestBuildMetaModel_OrphanGeomodelOnV24(t *testing.T) {
 	settings.BirdNET.RangeFilter.ModelPath = modelPath
 	settings.BirdNET.RangeFilter.LabelsPath = labelsPath
 
-	backend, fellBack, err := buildMetaModel(settings, classifierView{id: RegistryIDBirdNETV24}, nil)
+	view := rangeFilterView{
+		v24Labels:    classifierLabels,
+		participants: []participantLabels{{id: RegistryIDBirdNETV24, labels: classifierLabels}},
+	}
+	backend, _, fellBack, err := buildMetaModel(settings, view, nil)
 	require.NoError(t, err)
 	require.NotNil(t, backend)
 	t.Cleanup(backend.Close)
