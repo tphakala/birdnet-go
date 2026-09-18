@@ -363,9 +363,14 @@ func (c *Handler) buildAcousticModelsProvider() func() checks.AcousticModelsInfo
 		}
 		// Count distinct enabled models that resolve to a known registry ID, deduping
 		// case variants (["perch_v2","PERCH_V2"]) the way computeThreadAllocation does, so
-		// EnabledCount matches the loaded-model set rather than raw config entries.
-		seen := make(map[string]bool, len(c.CurrentSettings().Models.Enabled))
-		for _, id := range c.CurrentSettings().Models.Enabled {
+		// EnabledCount matches the loaded-model set rather than raw config entries. Guard the
+		// settings snapshot (nil in isolated tests / early init) as the sibling providers do.
+		var enabled []string
+		if s := c.CurrentSettings(); s != nil {
+			enabled = s.Models.Enabled
+		}
+		seen := make(map[string]bool, len(enabled))
+		for _, id := range enabled {
 			if registryID, known := classifier.ResolveConfigModelID(id); known {
 				seen[registryID] = true
 			}

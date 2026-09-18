@@ -2148,9 +2148,9 @@ func (o *Orchestrator) LoadErrors() map[string]string {
 	return result
 }
 
-// AcousticModelsState is the coarse "is anything loaded" verdict. It is intended for the
-// acoustic_models health check and GET /api/v2/system/inference, which consume it in a later
-// paired change; in this change it has no non-test consumer yet.
+// AcousticModelsState is the coarse "is anything loaded" verdict. It is consumed by the
+// acoustic_models health check, GET /api/v2/system/inference, and the persistent no-model
+// bell notification (syncAcousticModelsNotice).
 type AcousticModelsState string
 
 const (
