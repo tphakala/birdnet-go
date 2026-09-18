@@ -2340,7 +2340,7 @@
           "title": "Filtr falešně pozitivních detekcí",
           "description": "Sníží počet falešných detekcí vyžadováním více potvrzení napříč překrývajícími se zvukovými segmenty",
           "level": {
-            "label": "Úroveň filtru"
+            "label": "Síla filtru falešně pozitivních detekcí"
           },
           "detectionCount": "Vyžadováno {count} potvrzení. {description}",
           "levels": {

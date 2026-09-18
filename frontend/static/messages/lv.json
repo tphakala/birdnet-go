@@ -2340,7 +2340,7 @@
           "title": "Viltus pozitīvo filtrs",
           "description": "Samazināt viltus noteikšanas, pieprasot vairākus apstiprinājumus pārklājošos audio segmentos",
           "level": {
-            "label": "Filtra līmenis"
+            "label": "Viltus pozitīvo filtra stiprums"
           },
           "detectionCount": "{count} apstiprinājumi nepieciešami. {description}",
           "levels": {

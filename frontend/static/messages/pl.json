@@ -2340,7 +2340,7 @@
           "title": "Filtr Fałszywych Pozytywów",
           "description": "Redukuje fałszywe wykrycia, wymagając wielu potwierdzeń z nakładających się segmentów audio",
           "level": {
-            "label": "Poziom Filtra"
+            "label": "Siła filtra fałszywych pozytywów"
           },
           "detectionCount": "Wymagane {count} potwierdzeń. {description}",
           "levels": {

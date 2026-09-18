@@ -2340,7 +2340,7 @@
           "title": "Falskpositivfilter",
           "description": "Minska felaktiga detektioner genom att kräva flera bekräftelser över överlappande ljudsegment",
           "level": {
-            "label": "Filternivå"
+            "label": "Styrka för falskpositivfilter"
           },
           "detectionCount": "{count} bekräftelser krävs. {description}",
           "levels": {

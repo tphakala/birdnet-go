@@ -2340,7 +2340,7 @@
           "title": "Vals Positief Filter",
           "description": "Vermindert valse detecties door meerdere bevestigingen te vereisen over overlappende audiosegmenten",
           "level": {
-            "label": "Filterniveau"
+            "label": "Sterkte van Vals Positief Filter"
           },
           "detectionCount": "{count} bevestigingen vereist. {description}",
           "levels": {

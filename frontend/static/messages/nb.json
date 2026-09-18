@@ -2340,7 +2340,7 @@
           "title": "Falsk positiv-filter",
           "description": "Reduser falske deteksjoner ved å kreve flere bekreftelser på tvers av overlappende lydsegmenter",
           "level": {
-            "label": "Filternivå"
+            "label": "Styrke for falsk positiv-filter"
           },
           "detectionCount": "{count} bekreftelser kreves. {description}",
           "levels": {

@@ -2340,7 +2340,7 @@
           "title": "False Positive Filter",
           "description": "Reduce false detections by requiring multiple confirmations across overlapping audio segments",
           "level": {
-            "label": "Filter Level"
+            "label": "False Positive Filter Strength"
           },
           "detectionCount": "{count} confirmations required. {description}",
           "levels": {

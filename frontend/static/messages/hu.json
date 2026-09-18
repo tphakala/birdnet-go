@@ -2340,7 +2340,7 @@
           "title": "Hamis pozitív szűrő",
           "description": "Csökkenti a hamis detektálásokat több megerősítést követelve az átfedő hangszegmensekben",
           "level": {
-            "label": "Szűrési szint"
+            "label": "Hamis pozitív szűrő erőssége"
           },
           "detectionCount": "{count} megerősítés szükséges. {description}",
           "levels": {

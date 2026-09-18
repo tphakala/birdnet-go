@@ -2340,7 +2340,7 @@
           "title": "Falsch-Positiv-Filter",
           "description": "Reduziert Fehlerkennungen, indem mehrere Bestätigungen über überlappende Audiosegmente hinweg verlangt werden",
           "level": {
-            "label": "Filterstufe"
+            "label": "Stärke des Falsch-Positiv-Filters"
           },
           "detectionCount": "{count} Bestätigungen erforderlich. {description}",
           "levels": {

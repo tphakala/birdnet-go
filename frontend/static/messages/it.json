@@ -2340,7 +2340,7 @@
           "title": "Filtro Falsi Positivi",
           "description": "Riduce i falsi rilevamenti richiedendo conferme multiple su segmenti audio sovrapposti",
           "level": {
-            "label": "Livello Filtro"
+            "label": "Intensità del Filtro Falsi Positivi"
           },
           "detectionCount": "{count} conferme richieste. {description}",
           "levels": {
