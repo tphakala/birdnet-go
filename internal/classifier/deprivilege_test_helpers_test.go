@@ -17,18 +17,32 @@ func registerTestV24(o *Orchestrator, inst ModelInstance) {
 	o.models[RegistryIDBirdNETV24] = &modelEntry{instance: inst}
 }
 
-// requireV24Loaded skips the test when BirdNET v2.4 is not in the loaded set. A
-// real-load test builds an orchestrator through NewOrchestrator and asserts against the
-// loaded v2.4 instance. Under the noembed build tag the embedded model is compiled out,
-// so v2.4 fails to load and (models.enabled being authoritative, Phase 4) construction
-// now SUCCEEDS at N=0 instead of returning an error. Without this skip those tests would
-// fail on the absent model rather than skip, so every real-load site calls it right
-// after construction.
+// requireV24Loaded guards a real-load test that builds an orchestrator through
+// NewOrchestrator and asserts against the loaded v2.4 instance. When v2.4 is loaded it
+// returns. When it is not, the outcome depends on the build: under the noembed tag the
+// embedded model is compiled out, so v2.4 legitimately cannot load and the test SKIPS;
+// on a normal (embedded) build the model is compiled in and always available, so a
+// missing v2.4 is a real regression and the test FAILS with the recorded load error,
+// rather than being masked by a skip.
+//
+// It also releases the orchestrator before skipping/failing: call sites register their
+// own t.Cleanup(o.Delete()) only AFTER this call (or, in one case, delete explicitly
+// later), so on the not-loaded path this Delete is the one that prevents a leak. On the
+// loaded path it does not delete; the caller's cleanup owns that.
 func requireV24Loaded(t *testing.T, o *Orchestrator) {
 	t.Helper()
-	if !o.IsModelLoaded(RegistryIDBirdNETV24) {
-		t.Skip("BirdNET v2.4 not loaded (embedded model unavailable, e.g. noembed build); skipping real-load test")
+	if o.IsModelLoaded(RegistryIDBirdNETV24) {
+		return
 	}
+	loadErr := o.LoadErrors()[RegistryIDBirdNETV24]
+	if loadErr == "" {
+		loadErr = "no load error was recorded"
+	}
+	o.Delete()
+	if !hasEmbeddedModels {
+		t.Skip("BirdNET v2.4 not loaded (embedded model compiled out, noembed build); skipping real-load test")
+	}
+	t.Fatalf("BirdNET v2.4 failed to load on an embedded build (real regression, not an environment gap): %s", loadErr)
 }
 
 // enableBirdNETV24 names BirdNET v2.4 in models.enabled so a real-load test (one that
