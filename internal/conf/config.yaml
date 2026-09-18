@@ -164,6 +164,14 @@ birdnet:
   modelregion: auto       # regional model preference: auto (from coordinates), global (all species), or a region slug (e.g. iberia)
   usexnnpack: true        # true to use XNNPACK delegate for inference acceleration
 
+# Global acoustic model configuration. models.enabled is the authoritative, ordered list of
+# acoustic models to load; "birdnet" is the built-in BirdNET v2.4. Entries load in order, so
+# the first one loads first. An empty list means no acoustic model is loaded (a valid state).
+# Gallery-installed models are added here (e.g. perch_v2, birdnet_v3.0).
+models:
+  enabled:
+    - birdnet             # BirdNET v2.4 (built-in)
+
 # Optional taxonomy synonym overrides for image lookups.
 # Built-in mappings are always loaded first; entries below override/add to them.
 # Format: "old scientific name": "new scientific name"

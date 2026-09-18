@@ -216,6 +216,7 @@ func phase3BaseSettings(t *testing.T) *conf.Settings {
 	settings := conftest.GetTestSettings()
 	settings.BirdNET.Locale = phase3FixedLocale
 	settings.BirdNET.Threads = phase3FixedThreads
+	enableBirdNETV24(settings) // models.enabled is authoritative (Phase 4); the multi-model cases override this
 	conftest.SetTestSettings(settings)
 	t.Cleanup(func() { conftest.SetTestSettings(nil) })
 	return settings
@@ -229,6 +230,7 @@ func phase3NewOrchestrator(t *testing.T, settings *conf.Settings) *Orchestrator 
 	if err != nil {
 		t.Skipf("Skipping: embedded model not available in test environment: %v", err)
 	}
+	requireV24Loaded(t, o) // skip when the embedded model is compiled out (noembed)
 	t.Cleanup(func() { o.Delete() })
 
 	// The goldens were recorded on the default build, where the embedded v2.4 model

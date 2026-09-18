@@ -313,57 +313,16 @@ func (mm *ModelManager) ScanInstalled() {
 	}
 
 	installedIDs := slices.Collect(maps.Keys(mm.installed))
+	// Sort so the one-shot auto-enable capture below appends aliases in a deterministic order
+	// and the startup load order (loadInstalledModels) is stable across scans.
+	slices.Sort(installedIDs)
 	log.Info("Model scan complete",
 		logger.Int("installed_count", len(mm.installed)))
 	mm.mu.Unlock()
 
 	// Phase 2: sync Models.Enabled and load models (lock-free).
 	if mm.settings != nil {
-		settingsWriteMu.Lock()
-		updated := conf.CloneSettings(conf.GetSettings())
-		changed := false
-
-		if !slices.ContainsFunc(updated.Models.Enabled, func(id string) bool {
-			return strings.EqualFold(id, conf.ModelIDBirdNET)
-		}) {
-			updated.Models.Enabled = append([]string{conf.ModelIDBirdNET}, updated.Models.Enabled...)
-			changed = true
-		}
-		addIfMissing := func(alias string) {
-			if alias != "" && !slices.ContainsFunc(updated.Models.Enabled, func(id string) bool {
-				return strings.EqualFold(id, alias)
-			}) {
-				updated.Models.Enabled = append(updated.Models.Enabled, alias)
-				changed = true
-			}
-		}
-
-		for _, catalogID := range installedIDs {
-			entry, found := GetCatalogEntry(catalogID)
-			if !found {
-				continue
-			}
-			addIfMissing(ConfigAliasForRegistry(entry.RegistryID))
-		}
-
-		if updated.Bat.ClassifierModel != "" {
-			addIfMissing(conf.ModelIDBat)
-		}
-		if updated.Perch.ModelPath != "" {
-			addIfMissing(conf.ModelIDPerchV2)
-		}
-		if updated.BSG.ModelPath != "" {
-			addIfMissing(conf.ModelIDBSG)
-		}
-
-		if changed {
-			conf.StoreSettings(updated)
-			if err := conf.SaveSettings(); err != nil {
-				log.Warn("Failed to persist Models.Enabled sync",
-					logger.Error(err))
-			}
-		}
-		settingsWriteMu.Unlock()
+		mm.captureLegacyAutoEnableOnce(log, installedIDs)
 
 		mm.loadInstalledModels(log, installedIDs)
 
@@ -372,6 +331,73 @@ func (mm *ModelManager) ScanInstalled() {
 		// up to date and reload the filter. This handles the upgrade case
 		// where a new binary adds geomodel support to existing models.
 		mm.ensureGeomodelConfig(log, installedIDs)
+	}
+}
+
+// captureLegacyAutoEnableOnce runs the one-shot pre-Phase-4 auto-enable capture exactly once
+// per config file. Before Phase 4 the orchestrator enabled BirdNET v2.4 implicitly and
+// auto-enabled every installed gallery model on each scan; models.enabled is now authoritative,
+// so this reproduces that behavior a single time, gated on the AutoEnableMigrated companion
+// marker. It is NOT gated on ConfigVersion: this runs after conf.Load(), where Part A
+// (MigrateModelsEnabledAuthoritative) already stamped ConfigVersion=2, so a ConfigVersion gate
+// would be a permanent no-op. After the capture, a downloaded-but-disabled model is no longer
+// auto-loaded (loadInstalledModels honors the enabled set). On a read-only config the marker
+// never persists, so the capture re-runs in memory each start, reproducing the pre-Phase-4
+// behavior. installedIDs must be sorted so the appended aliases are deterministic.
+func (mm *ModelManager) captureLegacyAutoEnableOnce(log logger.Logger, installedIDs []string) {
+	settingsWriteMu.Lock()
+	defer settingsWriteMu.Unlock()
+
+	updated := conf.CloneSettings(conf.GetSettings())
+	if updated == nil {
+		// No published settings snapshot yet. This should not happen at startup (ScanInstalled
+		// runs after conf.Load publishes the global snapshot), but guard against a nil deref so a
+		// caller without published settings degrades to a no-op instead of panicking.
+		return
+	}
+	if updated.Models.AutoEnableMigrated {
+		return
+	}
+
+	if !slices.ContainsFunc(updated.Models.Enabled, func(id string) bool {
+		return strings.EqualFold(id, conf.ModelIDBirdNET)
+	}) {
+		updated.Models.Enabled = append([]string{conf.ModelIDBirdNET}, updated.Models.Enabled...)
+	}
+	addIfMissing := func(alias string) {
+		if alias != "" && !slices.ContainsFunc(updated.Models.Enabled, func(id string) bool {
+			return strings.EqualFold(id, alias)
+		}) {
+			updated.Models.Enabled = append(updated.Models.Enabled, alias)
+		}
+	}
+
+	for _, catalogID := range installedIDs {
+		entry, found := GetCatalogEntry(catalogID)
+		if !found {
+			continue
+		}
+		addIfMissing(ConfigAliasForRegistry(entry.RegistryID))
+	}
+
+	if updated.Bat.ClassifierModel != "" {
+		addIfMissing(conf.ModelIDBat)
+	}
+	if updated.Perch.ModelPath != "" {
+		addIfMissing(conf.ModelIDPerchV2)
+	}
+	if updated.BSG.ModelPath != "" {
+		addIfMissing(conf.ModelIDBSG)
+	}
+
+	// Record that the capture has run so it never re-runs on a writable config. The marker
+	// change is itself a change, so this always persists. On a read-only config SaveSettings
+	// fails and the capture re-runs in memory on the next start.
+	updated.Models.AutoEnableMigrated = true
+	conf.StoreSettings(updated)
+	if err := conf.SaveSettings(); err != nil {
+		log.Warn("Failed to persist the one-shot models.enabled auto-enable capture; it will re-run in memory next start",
+			logger.Error(err))
 	}
 }
 
@@ -831,10 +857,20 @@ func (mm *ModelManager) loadInstalledModels(log logger.Logger, installedIDs []st
 		if !found || entry.RegistryID == "" {
 			continue
 		}
-		// BirdNET v2.4 always loads during NewOrchestrator, strictly before
-		// ScanInstalled runs, so the IsModelLoaded guard below skips it here without
-		// a dedicated special case: it is always "installed" but never hot-loaded a
-		// second time.
+		// models.enabled is authoritative (Phase 4): only hot-load an installed model the user
+		// has enabled. A downloaded-but-disabled gallery model stays on disk, unloaded, until it
+		// is enabled. This is the behavior change the one-shot capture (ScanInstalled Phase 2)
+		// makes safe: after the capture, the enabled set reflects the user's choices.
+		if !mm.orchestrator.modelIDEnabled(entry.RegistryID) {
+			log.Debug("skipping installed model not in models.enabled",
+				logger.String("catalog_id", catalogID),
+				logger.String("registry_id", entry.RegistryID))
+			continue
+		}
+		// BirdNET v2.4 loads during NewOrchestrator (when enabled), before ScanInstalled runs,
+		// so on the normal path the IsModelLoaded guard below skips it here. If its construction
+		// load failed (now non-fatal), it is enabled, and it is installed, this loop retries it
+		// via LoadModel like any other enabled installed model.
 		if mm.orchestrator.IsModelLoaded(entry.RegistryID) {
 			continue
 		}

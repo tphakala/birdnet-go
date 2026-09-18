@@ -311,14 +311,11 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// Pre-compute the per-model thread allocation so each loader receives its share.
 	threadAlloc := o.computeThreadAllocation(settings)
 
-	// Load BirdNET v2.4 (prepended, so first) and every configured model through
-	// modelLoaders. A v2.4 failure is fatal (decision H): loadEnabledModels returns
-	// only that error, secondary failures stay warnings and recorded load failures.
-	if err := o.loadEnabledModels(threadAlloc); err != nil {
-		// Clean up all models registered so far (primary + any partially loaded).
-		o.Delete()
-		return nil, err
-	}
+	// Load every model named in models.enabled (authoritative since Phase 4), in config
+	// order, through modelLoaders. No load failure is fatal: loadEnabledModels records each
+	// failure and continues, so construction succeeds even at N=0 (nothing enabled, or every
+	// enabled model failed to load). AcousticModelsState reports the degraded state.
+	o.loadEnabledModels(threadAlloc)
 
 	// Append the BirdNET v2.4 label resolver as chain[1], built from the loaded
 	// entry's labels (a construction-time snapshot, never refreshed on reload),
@@ -2066,6 +2063,75 @@ func (o *Orchestrator) LoadFailures() map[string]int64 {
 	return result
 }
 
+// LoadErrors returns the last load error text for each currently-enabled model whose most
+// recent load attempt failed and has not since succeeded. It is the live-fault view: it is
+// filtered to models.enabled so a disabled model's stale error is not reported, and a
+// successful load clears a model's entry (loadEnabledModels, LoadModel). The cumulative
+// LoadFailures counter is deliberately left unfiltered. The returned map is a copy; safe to
+// call concurrently. modelIDEnabled reads the published settings snapshot lock-free, so
+// this holds no orchestrator lock while calling it.
+func (o *Orchestrator) LoadErrors() map[string]string {
+	result := make(map[string]string)
+	o.modelLoadErrors.Range(func(key, value any) bool {
+		k, kok := key.(string)
+		v, vok := value.(string)
+		if kok && vok && o.modelIDEnabled(k) {
+			result[k] = v
+		}
+		return true
+	})
+	return result
+}
+
+// AcousticModelsState is the coarse "is anything loaded" verdict. It is intended for the
+// acoustic_models health check and GET /api/v2/system/inference, which consume it in a later
+// paired change; in this change it has no non-test consumer yet.
+type AcousticModelsState string
+
+const (
+	// AcousticModelsOK: at least one acoustic model is loaded.
+	AcousticModelsOK AcousticModelsState = "ok"
+	// AcousticModelsNoneInstalled: nothing loaded and no enabled model failed to load
+	// (nothing enabled, or nothing installed). This is the supported N=0 state.
+	AcousticModelsNoneInstalled AcousticModelsState = "none_installed"
+	// AcousticModelsLoadFailed: nothing loaded and at least one enabled model failed to
+	// load (a fault, not a fresh-install state).
+	AcousticModelsLoadFailed AcousticModelsState = "load_failed"
+)
+
+// AcousticModelsState reports ok when any acoustic model is loaded, load_failed when none
+// is and at least one ENABLED model has a load error still on record, and none_installed
+// otherwise (nothing enabled, nothing installed, or the orchestrator has been shut down).
+// The load_failed check is filtered to models.enabled so a disabled model's stale error
+// does not force the fault state; a stored error is cleared by a later successful load
+// (loadEnabledModels, LoadModel), so a recovered model does not keep the state at
+// load_failed. Safe to call concurrently (modelIDEnabled reads the settings snapshot
+// lock-free, and this holds no orchestrator lock while calling it).
+func (o *Orchestrator) AcousticModelsState() AcousticModelsState {
+	o.mu.RLock()
+	deleted := o.models == nil
+	loaded := len(o.models)
+	o.mu.RUnlock()
+	switch {
+	case loaded > 0:
+		return AcousticModelsOK
+	case deleted:
+		return AcousticModelsNoneInstalled
+	}
+	// Nothing loaded and not deleted: an ENABLED model may have failed to load. Only an
+	// enabled model's error counts as a live fault; a disabled model's stored error is
+	// ignored.
+	state := AcousticModelsNoneInstalled
+	o.modelLoadErrors.Range(func(key, _ any) bool {
+		if k, ok := key.(string); ok && o.modelIDEnabled(k) {
+			state = AcousticModelsLoadFailed
+			return false // the first enabled failure is enough
+		}
+		return true // keep scanning for an enabled failure
+	})
+	return state
+}
+
 // ErrModelNotLoaded is returned by PredictModel when the requested model is not
 // in the loaded set. It wraps a per-call reason (see modelNotLoadedReason);
 // callers match it with errors.Is. Plain sentinel: no telemetry registered at
@@ -2132,7 +2198,7 @@ func (o *Orchestrator) modelNotLoadedReason(modelID string) string {
 // to a registry ID. Uses the shared enabledModels walk, so it agrees with
 // computeThreadAllocation and loadEnabledModels on what "enabled" means.
 func (o *Orchestrator) modelIDEnabled(registryID string) bool {
-	for m := range effectiveEnabledModels(o.currentSettings()) {
+	for m := range enabledModels(o.currentSettings()) {
 		if m.known && m.registryID == registryID {
 			return true
 		}
@@ -2517,55 +2583,16 @@ func enabledModels(settings *conf.Settings) iter.Seq[enabledModel] {
 	}
 }
 
-// effectiveEnabledModels yields the configured enabled models with BirdNET v2.4
-// always yielded FIRST. v2.4 is embedded and implicitly enabled (through Phase 5),
-// and yielding it first (even when models.enabled lists it later, or not at all)
-// guarantees it loads before any secondary, so the range-filter anchor and the
-// label resolver chain are aligned to it, matching the pre-Phase-3 order where the
-// primary was always constructed before the secondaries. A configured entry that
-// resolves to v2.4 is skipped in the second pass so v2.4 is never yielded twice.
-// Phase 4 migrates "birdnet" into models.enabled and drops the implicit lead.
-func effectiveEnabledModels(settings *conf.Settings) iter.Seq[enabledModel] {
-	return func(yield func(enabledModel) bool) {
-		// Yield v2.4 first UNCONDITIONALLY, so it always loads before any secondary
-		// regardless of where (or whether) it appears in models.enabled. This keeps
-		// the anchor-loads-first invariant and guarantees no secondary has queued a
-		// path correction before the fatal-v2.4 branch in loadEnabledModels can
-		// return. When a configured entry resolves to v2.4, report v2.4 under that
-		// entry's spelling so the yielded configID still matches models.enabled, and
-		// skip that entry in the second pass so v2.4 is not yielded twice.
-		v24ConfigID := conf.ModelIDBirdNET
-		for _, configID := range settings.Models.Enabled {
-			if registryID, _ := ResolveConfigModelID(configID); registryID == RegistryIDBirdNETV24 {
-				v24ConfigID = configID
-				break
-			}
-		}
-		if !yield(enabledModel{configID: v24ConfigID, registryID: RegistryIDBirdNETV24, known: true}) {
-			return
-		}
-		for _, configID := range settings.Models.Enabled {
-			registryID, known := ResolveConfigModelID(configID)
-			if known && registryID == RegistryIDBirdNETV24 {
-				continue // already yielded first
-			}
-			if !yield(enabledModel{configID: configID, registryID: registryID, known: known}) {
-				return
-			}
-		}
-	}
-}
-
 // computeThreadAllocation pre-computes thread distribution for all models
 // that will be loaded. Inference is serialized by inferenceMu, so each model
 // gets the full thread budget (they never run simultaneously).
 func (o *Orchestrator) computeThreadAllocation(settings *conf.Settings) map[string]int {
-	// Collect unique model IDs that will be loaded, walking the effective enable
-	// set (v2.4 prepended) so it matches loadEnabledModels. Deduplicates case
+	// Collect unique model IDs that will be loaded, walking models.enabled in config order
+	// (authoritative since Phase 4) so it matches loadEnabledModels. Deduplicates case
 	// variants like ["perch_v2", "PERCH_V2"] that resolve to the same ID.
-	seen := make(map[string]bool, len(settings.Models.Enabled)+1)
-	modelIDs := make([]string, 0, len(settings.Models.Enabled)+1)
-	for m := range effectiveEnabledModels(settings) {
+	seen := make(map[string]bool, len(settings.Models.Enabled))
+	modelIDs := make([]string, 0, len(settings.Models.Enabled))
+	for m := range enabledModels(settings) {
 		if !m.known || seen[m.registryID] {
 			continue
 		}
@@ -2597,26 +2624,20 @@ func (o *Orchestrator) computeThreadAllocation(settings *conf.Settings) map[stri
 	return alloc
 }
 
-// loadEnabledModels iterates the effective enable set (the configured models with
-// BirdNET v2.4 prepended) and loads each one, v2.4 first. Each loaded model is
-// registered in the models map; an already-registered model is skipped.
-// threadAlloc provides the pre-computed thread count for each model. A v2.4 load
-// failure is fatal to construction; secondary failures are recorded and skipped.
-func (o *Orchestrator) loadEnabledModels(threadAlloc map[string]int) error {
+// loadEnabledModels iterates models.enabled in config order (authoritative since Phase 4)
+// and loads each one in that order. Each loaded model is registered in the models map; an
+// already-registered model is skipped.
+// threadAlloc provides the pre-computed thread count for each model. No load failure is
+// fatal now that models.enabled is authoritative and N=0 is a supported runtime state
+// (model de-privilege epic, Phase 4): every failure (v2.4 included) is recorded and the
+// rest still load, so this never returns an error.
+func (o *Orchestrator) loadEnabledModels(threadAlloc map[string]int) {
 	log := GetLogger()
 
 	// Drain the queued configuration repairs on every exit path, including a
 	// panic unwinding out of a loader. Deferred rather than called after the loop
 	// so this reads the same as the sibling drain in LoadModel; on the happy path
 	// it still runs exactly where it did, immediately before the return.
-	//
-	// Note what "every exit path" means now that this function has an early error
-	// return (the fatal v2.4 failure below): the drain would rewrite config.yaml on
-	// a startup that goes on to fail. That case is harmless here because v2.4 loads
-	// first, before any path correction is queued, so on the fatal-v2.4 return the
-	// queue is empty and the drain is a no-op. The paths written are consistent with
-	// what was actually loaded either way, since a correction is only queued after a
-	// successful build.
 	//
 	// Warm-ups are drained per-iteration INSIDE the loop below, so they still
 	// complete before this does: the config write must not land inside the window
@@ -2628,7 +2649,7 @@ func (o *Orchestrator) loadEnabledModels(threadAlloc map[string]int) error {
 	// o.Settings pointer, consistent with the per-model loaders (loadPerch/loadBat).
 	settings := o.currentSettings()
 
-	for m := range effectiveEnabledModels(settings) {
+	for m := range enabledModels(settings) {
 		if !m.known {
 			log.Warn("skipping unknown model ID in models.enabled",
 				logger.String("model_id", m.configID))
@@ -2665,18 +2686,16 @@ func (o *Orchestrator) loadEnabledModels(threadAlloc map[string]int) error {
 			return nil
 		}()
 		if loadErr != nil {
-			// BirdNET v2.4 is embedded and load-bearing: its failure aborts
-			// construction exactly as the pre-Phase-3 NewBirdNET failure did. v2.4
-			// is prepended, so it loads first: no path correction has been queued
-			// yet, the deferred drain is a no-op, and the caller's Delete handles
-			// cleanup of anything already registered.
-			if registryID == RegistryIDBirdNETV24 {
-				return loadErr
-			}
-			// Record the failure (not just log it) so a later not-loaded predict on
-			// this model can report why it is missing instead of a bare unknown model.
+			// No load failure is fatal now that models.enabled is authoritative and N=0 is
+			// a supported runtime state (model de-privilege epic, Phase 4). Record the
+			// failure (not just log it) so a later not-loaded predict on this model can
+			// report why it is missing instead of a bare unknown model, and keep loading
+			// the rest. A v2.4 failure (e.g. the embedded model compiled out under noembed)
+			// leaves the process running degraded rather than exiting; AcousticModelsState
+			// then reports load_failed. An installed enabled model is retried by the startup
+			// model scan (loadInstalledModels); a model with no on-disk install is not.
 			o.recordLoadFailure(registryID, loadErr)
-			log.Warn("optional model failed to load, will retry after gallery scan",
+			log.Warn("model failed to load, will retry on the next model scan if installed",
 				logger.String("registry_id", registryID),
 				logger.Error(loadErr))
 		}
@@ -2687,8 +2706,6 @@ func (o *Orchestrator) loadEnabledModels(threadAlloc map[string]int) error {
 		// before the next model allocates its arena.
 		o.runPendingWarmups()
 	}
-
-	return nil
 }
 
 // RarityContext bundles everything a caller needs to compute a species' rarity from one
