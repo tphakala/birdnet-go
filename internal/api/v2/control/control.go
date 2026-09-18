@@ -59,6 +59,7 @@ const (
 	SignalRestartAnalysis = "restart_analysis"
 	SignalReloadModel     = "reload_birdnet"
 	SignalRebuildFilter   = "rebuild_range_filter"
+	SignalReconcileModels = "reconcile_models"
 )
 
 // SourceRestarterFunc restarts a single audio source identified by sourceID.

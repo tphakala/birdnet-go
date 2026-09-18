@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"iter"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -2039,6 +2040,68 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 	o.syncAcousticModelsNotice()
 
 	return nil
+}
+
+// ReconcileEnabledModels loads every model named in models.enabled that is not currently
+// loaded and unloads every loaded acoustic model no longer named, so a runtime edit of
+// models.enabled takes effect without a restart (Phase 4, since models.enabled is
+// authoritative). Unloads run first to free memory on constrained hosts before loads
+// allocate. It holds no orchestrator lock across the loop (LoadModel/UnloadModel each take
+// o.mu themselves); a model that fails to load is recorded by the loader (recordLoadFailure)
+// and skipped so one bad model does not block the rest, matching startup loadEnabledModels.
+// The acoustic-model notice is re-evaluated once at the end regardless of per-model outcome.
+func (o *Orchestrator) ReconcileEnabledModels() (loaded, unloaded []string, err error) {
+	defer o.syncAcousticModelsNotice()
+
+	settings := o.currentSettings()
+
+	// Desired set: the known registry IDs named by models.enabled, in config order.
+	desired := make([]string, 0)
+	desiredSet := make(map[string]bool)
+	for m := range enabledModels(settings) {
+		if !m.known || desiredSet[m.registryID] {
+			continue
+		}
+		desiredSet[m.registryID] = true
+		desired = append(desired, m.registryID)
+	}
+
+	// Snapshot the currently loaded models.
+	o.mu.RLock()
+	loadedNow := slices.Collect(maps.Keys(o.models))
+	o.mu.RUnlock()
+
+	var errs []error
+
+	// Unload first: a loaded model no longer named. "not loaded" (a concurrent unload won the
+	// race) is benign and not reported.
+	for _, id := range loadedNow {
+		if desiredSet[id] {
+			continue
+		}
+		if uerr := o.UnloadModel(id); uerr != nil {
+			if !o.IsModelLoaded(id) {
+				continue
+			}
+			errs = append(errs, uerr)
+			continue
+		}
+		unloaded = append(unloaded, id)
+	}
+
+	// Then load desired models that are not already loaded.
+	for _, id := range desired {
+		if o.IsModelLoaded(id) {
+			continue
+		}
+		if lerr := o.LoadModel(id); lerr != nil {
+			errs = append(errs, lerr) // LoadModel already recorded the failure; keep going
+			continue
+		}
+		loaded = append(loaded, id)
+	}
+
+	return loaded, unloaded, errors.Join(errs...)
 }
 
 // recordLoadFailure atomically increments the load-failure counter for registryID

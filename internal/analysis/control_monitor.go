@@ -277,6 +277,8 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleRebuildRangeFilter()
 	case "reload_birdnet":
 		cm.handleReloadBirdnet()
+	case "reconcile_models":
+		cm.handleReconcileModels()
 	case "reconfigure_mqtt":
 		cm.handleReconfigureMQTT()
 	case "reconfigure_rtsp_sources":
@@ -388,14 +390,22 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 		GetLogger().Warn("Cannot reload BirdNET model: orchestrator not initialized")
 		return
 	}
-	if err := cm.bn.ReloadModel(); err != nil {
-		GetLogger().Error("Failed to reload BirdNET model", logger.Error(err))
-		cm.notifyError("Failed to reload BirdNET model", err)
-		return
+	// Since Phase 4, BirdNET v2.4 may not be loaded (a Perch-only or N=0 runtime). ReloadModel
+	// reloads the v2.4 primary and errors when it is absent, so only reload it when it is
+	// actually loaded. The range-filter rebuild and secondary reload below still run, so a
+	// BirdNET-section settings change (e.g. locale, threads) still takes effect on such an
+	// instance instead of failing with a "model not loaded" toast.
+	if cm.bn.IsModelLoaded(classifier.RegistryIDBirdNETV24) {
+		if err := cm.bn.ReloadModel(); err != nil {
+			GetLogger().Error("Failed to reload BirdNET model", logger.Error(err))
+			cm.notifyError("Failed to reload BirdNET model", err)
+			return
+		}
+		GetLogger().Info("BirdNET model reloaded successfully")
+		cm.notifySuccess("BirdNET model reloaded successfully")
+	} else {
+		GetLogger().Info("BirdNET v2.4 not loaded; skipping primary model reload")
 	}
-
-	GetLogger().Info("BirdNET model reloaded successfully")
-	cm.notifySuccess("BirdNET model reloaded successfully")
 
 	// Rebuild range filter after model reload
 	if err := classifier.BuildRangeFilter(cm.bn); err != nil {
@@ -426,6 +436,44 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 	if cm.apiController != nil {
 		cm.apiController.BroadcastInferenceTopologyChanged()
 	}
+}
+
+// handleReconcileModels loads or unloads acoustic models to match models.enabled after a
+// runtime edit of the enabled set (Phase 4, where models.enabled is authoritative and N=0 is
+// valid). LoadModel/UnloadModel each rebuild the range filter and sync the acoustic-model
+// notice, so on any actual topology change this only needs to run the same SSE broadcast and
+// debounced audio-source reconfigure a gallery install does, so the newly loaded models start
+// receiving audio without a restart.
+func (cm *ControlMonitor) handleReconcileModels() {
+	if cm.bn == nil {
+		GetLogger().Warn("Cannot reconcile enabled models: orchestrator not initialized")
+		return
+	}
+	loaded, unloaded, err := cm.bn.ReconcileEnabledModels()
+	if err != nil {
+		GetLogger().Error("Failed to reconcile some enabled models", logger.Error(err))
+		cm.notifyError("Failed to apply some enabled model changes", err)
+		// Fall through: models that did load/unload still need the topology reconcile below.
+	}
+	if len(loaded) == 0 && len(unloaded) == 0 {
+		if err == nil {
+			GetLogger().Info("Enabled models already match the loaded set; nothing to reconcile")
+		}
+		return
+	}
+	GetLogger().Info("Reconciled enabled models",
+		logger.Int("loaded", len(loaded)),
+		logger.Int("unloaded", len(unloaded)))
+	if err == nil {
+		cm.notifySuccess("Applied enabled model changes")
+	}
+	// A load or unload changed the model topology: refresh the AI Models page and reconcile
+	// per-source model registration so the new set starts (or stops) receiving audio, exactly
+	// as a gallery install does.
+	if cm.apiController != nil {
+		cm.apiController.OnModelTopologyChanged()
+	}
+	emitHotReload("models")
 }
 
 // handleReconfigureMQTT reconfigures the MQTT connection
