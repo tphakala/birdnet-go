@@ -193,6 +193,18 @@ type rangeFilterState struct {
 	// fail-open path and scoreProbableSpecies index this slice, so a Perch-only or
 	// v3.0-only install fails open over its own species instead of an empty v2.4 list.
 	coveredLabels []string
+	// participants is the participant snapshot (registry ID + label set) this state's
+	// backend was actually built over, in rangeFilterView order. The status surface and
+	// the inclusion-list backfill read it instead of the live view, so a failed rebuild
+	// that kept the previous backend (rollback) cannot report a just-loaded participant
+	// as covered, and the display and gate lists are built from the same set (the
+	// display/gate reconciliation in Phase 4 PR B2). Empty on a torn-down or fresh service.
+	participants []participantLabels
+	// anchoredOnV24 records that coveredLabels is BirdNET v2.4's label space because v2.4
+	// was loaded at build time; false means coveredLabels is the participant union. It
+	// lets the coverage and backfill rules key on what the backend was built over rather
+	// than re-reading the live view (which can have drifted since the build).
+	anchoredOnV24 bool
 }
 
 // rangeFilterService owns the range-filter backend and occurrence cache.
@@ -251,6 +263,19 @@ func (rfs *rangeFilterService) loadState() *rangeFilterState {
 		return s
 	}
 	return &rangeFilterState{}
+}
+
+// hasParticipant reports whether id is in the participant set this state's backend was
+// built over. Coverage is reported only for participants the active backend actually
+// mapped, so a participant loaded after a failed rebuild (which kept the old backend) is
+// not falsely reported as covered.
+func (s *rangeFilterState) hasParticipant(id string) bool {
+	for i := range s.participants {
+		if s.participants[i].id == id {
+			return true
+		}
+	}
+	return false
 }
 
 // backendKind returns the loaded backend kind, mapping the zero value (an unpublished
@@ -320,6 +345,8 @@ func (rfs *rangeFilterService) reload(settings *conf.Settings, viewFn func() ran
 			rfs.state.Store(&rangeFilterState{
 				kind:          rfKindNone,
 				coveredLabels: view.coveredLabels(settings),
+				participants:  view.participants,
+				anchoredOnV24: view.v24Labels != nil,
 				generation:    cur.generation + 1,
 			})
 			rfs.mu.Unlock()
@@ -348,6 +375,8 @@ func (rfs *rangeFilterService) reload(settings *conf.Settings, viewFn func() ran
 		kind:          kind,
 		fellBack:      fellBack,
 		coveredLabels: covered,
+		participants:  view.participants,
+		anchoredOnV24: view.v24Labels != nil,
 		generation:    newGen,
 	})
 	// Close the replaced backend under rfs.mu: every prediction is serialized by the

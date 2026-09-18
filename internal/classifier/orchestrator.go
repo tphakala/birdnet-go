@@ -1076,94 +1076,21 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 	if err != nil {
 		return nil, err
 	}
-	isUniversal := geo != nil
-	// geo is non-nil only on the universal path; read its label slice (nil
-	// otherwise) so the geomodel-coverage dedup below is byte-for-byte unchanged.
-	var geoLabels []string
-	if geo != nil {
-		geoLabels = geo.Labels
-	}
-
-	// Dedup by scientific name (lowercased). seenSci holds species already
-	// represented via the range-filter scores; geoCovered holds every scientific
-	// name the geomodel can predict at all.
+	// Dedup by canonical scientific name: seenSci holds every species already represented
+	// via the range-filter scores.
 	seenSci := make(map[string]bool, len(scores))
 	for _, s := range scores {
 		seenSci[canonicalSpeciesKey(s.Label)] = true
 	}
-	geoCovered := make(map[string]bool, len(geoLabels))
-	for _, label := range geoLabels {
-		geoCovered[canonicalSpeciesKey(label)] = true
-	}
 
-	o.mu.RLock()
-	refs := make([]entryRef, 0, len(o.models))
-	for id, entry := range o.models {
-		// Skip the range-filter anchor (v2.4, already covered by the scores above)
-		// and Bat (no geomodel; handled separately below).
-		if id == RegistryIDBirdNETV24 || id == RegistryIDBat {
-			continue
-		}
-		refs = append(refs, entryRef{id: id, entry: entry})
-	}
-	o.mu.RUnlock()
-
-	// Sort non-primary models by ID so dedup-by-scientific-name is
-	// deterministic. When two secondary models emit different labels for the
-	// same scientific name, the surviving label must not depend on Go's
-	// randomized map iteration order.
-	slices.SortFunc(refs, func(a, b entryRef) int { return strings.Compare(a.id, b.id) })
-
-	passUnmapped := settings.BirdNET.RangeFilter.PassUnmappedSpecies
-	// Build the exclude matcher once for this pass: it reverse-resolves localized
-	// common-name exclude entries through OpenFauna a single time so the per-label
-	// matches() below stays off the dataset scan.
+	// Add participants outside the loaded backend's mapping space (non-v2.4 classifiers
+	// when v2.4 is loaded) via the SAME shared helper BuildRangeFilter uses, so the
+	// displayed set and the inclusion (gate) set cannot disagree (Phase 4 PR B2). geo is
+	// the geomodel vocabulary on the universal path and nil otherwise, where the helper
+	// fails the uncovered participants open wholesale. It reads the built-over participant
+	// snapshot, so no o.mu/entry.mu walk is needed here.
 	excluder := newExcludeMatcher(settings.Realtime.Species.Exclude, settings.BirdNET.Locale)
-
-	for _, ref := range refs {
-		ref.entry.mu.Lock()
-		if ref.entry.instance == nil {
-			ref.entry.mu.Unlock()
-			continue
-		}
-		labels := ref.entry.instance.Labels()
-		ref.entry.mu.Unlock()
-
-		// Grow scores capacity once per model; an upper bound is one new entry
-		// per non-primary label.
-		if len(labels) > 0 {
-			scores = slices.Grow(scores, len(labels))
-		}
-
-		for _, label := range labels {
-			sci := canonicalSpeciesKey(label)
-			switch {
-			case seenSci[sci]:
-				// Already represented via the primary (or an earlier model).
-				continue
-			case isUniversal && geoCovered[sci]:
-				// Geomodel covers this species but it is not in the
-				// above-threshold set, so the range filter excludes it. Skip.
-				continue
-			default:
-				// Geomodel-unmapped, or the primary is not universal.
-				if !isUniversal {
-					// Legacy path: no geomodel to consult. Preserve prior
-					// behavior and include the species, deduped by scientific
-					// name, without gating on PassUnmappedSpecies.
-					if !excluder.matches(label) {
-						scores = append(scores, SpeciesScore{Label: label, Score: 1.0})
-						seenSci[sci] = true
-					}
-					continue
-				}
-				if passUnmapped && !excluder.matches(label) {
-					scores = append(scores, SpeciesScore{Label: label, Score: 1.0})
-					seenSci[sci] = true
-				}
-			}
-		}
-	}
+	scores = append(scores, rfs.uncoveredParticipantSpecies(settings, geo, excluder, seenSci)...)
 
 	// The bat model is intentionally skipped by the range-filter loop above: it
 	// has no geomodel, so its species can never be location-filtered. Include
@@ -1402,11 +1329,19 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 		fellBack      bool
 		mappedSpecies int
 		kind          = rfKindNone
+		state         *rangeFilterState
 	)
 	if rfs := o.rangeFilter; rfs != nil {
-		active, fellBack = rfs.runtimeState()
-		kind = rfs.backendKind()
-		if mrf, ok := rfs.mappedView(); ok {
+		// Take ONE state snapshot for the whole response so active, fellBack, kind, the
+		// mapped view and per-participant coverage all describe the same backend even if
+		// a concurrent reload swaps the state mid-build.
+		state = rfs.loadState()
+		active = state.backend != nil
+		fellBack = state.fellBack
+		if kind = state.kind; kind == "" {
+			kind = rfKindNone // normalize the zero value, mirroring backendKind()
+		}
+		if mrf, ok := state.backend.(*mappedRangeFilter); ok {
 			geoLabels = mrf.geomodelLabels
 			// mrf.mappedCount is the mapped count over coveredLabels (v2.4's labels on a
 			// v2.4 install, the participant union otherwise), so this is byte-identical
@@ -1433,18 +1368,26 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 		geomodel.AutoSelected = rf.ModelPath == expectedONNX && rf.LabelsPath == expectedLabels
 	}
 
-	// coveredByBackend reports whether the backend actually scores a participant's FULL
-	// label space, so the status surface is honest about which classifiers are really
-	// range-filtered. The universal geomodel maps onto coveredLabels: when v2.4 is loaded
-	// that is the v2.4 label space, so ONLY v2.4 is fully covered and a non-v2.4
-	// participant's exclusive species fall outside it and are dropped (the participant-union
-	// reconciliation deferred to a later PR); when v2.4 is NOT loaded coveredLabels is the
-	// participant union, so every participant is covered. The legacy v2.4-only MData backend
-	// covers only v2.4; no backend covers nothing.
+	// coveredByBackend reports whether the loaded backend actually scores a participant's
+	// species, so the status surface is honest about which classifiers are really
+	// range-filtered. It keys on the participant set the ACTIVE backend was built over
+	// (state.participants), not the live view: after a failed rebuild the service keeps the
+	// previous backend (rollback) while the live view already shows the just-loaded
+	// participant, so reading the live view would falsely report that participant as covered
+	// before the retained backend ever mapped its labels. A participant absent from the
+	// built-over set is never covered. The universal geomodel scores every built-over
+	// participant by canonical scientific name (the participant-union backfill in the range
+	// filter and the Settings preview keep the gate and display in step), so every
+	// participant under a geomodel is covered; the residual for geomodel-unknown species is
+	// governed by the "allow species without range data" toggle, not by coverage. The legacy
+	// v2.4-only MData backend covers only v2.4; no backend covers nothing.
 	coveredByBackend := func(id string) bool {
+		if state == nil || !state.hasParticipant(id) {
+			return false
+		}
 		switch kind {
 		case rfKindGeomodelV3:
-			return id == RegistryIDBirdNETV24 || view.v24Labels == nil
+			return true
 		case rfKindMDataV2, rfKindMDataV1:
 			return id == RegistryIDBirdNETV24
 		default: // rfKindNone (or unknown): nothing is covered.
