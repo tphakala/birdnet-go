@@ -155,10 +155,12 @@ func TestNewOrchestrator_SyncsSharedState(t *testing.T) {
 	t.Parallel()
 
 	settings := conftest.GetTestSettings()
+	enableBirdNETV24(settings) // models.enabled is authoritative (Phase 4); name v2.4 so it loads
 	o, err := NewOrchestrator(settings)
 	if err != nil {
 		t.Skipf("Skipping: model not available in test environment: %v", err)
 	}
+	requireV24Loaded(t, o) // skip when the embedded model is compiled out (noembed)
 	t.Cleanup(func() { o.Delete() })
 
 	// Verify shared state is synced from loaded v2.4 model
@@ -177,10 +179,12 @@ func TestOrchestrator_PrimaryIsModelInstance(t *testing.T) {
 	t.Parallel()
 
 	settings := conftest.GetTestSettings()
+	enableBirdNETV24(settings) // models.enabled is authoritative (Phase 4); name v2.4 so it loads
 	o, err := NewOrchestrator(settings)
 	if err != nil {
 		t.Skipf("Skipping: model not available in test environment: %v", err)
 	}
+	requireV24Loaded(t, o) // skip when the embedded model is compiled out (noembed)
 	t.Cleanup(func() { o.Delete() })
 
 	// Verify the v2.4 entry is present and exposes the ModelInstance surface.
@@ -206,10 +210,12 @@ func TestOrchestrator_PrimaryIsModelInstance(t *testing.T) {
 func TestOrchestrator_UnloadReloadV24_RoundTrip(t *testing.T) {
 	// Not parallel: NewOrchestrator publishes into the global settings snapshot.
 	settings := conftest.GetTestSettings()
+	enableBirdNETV24(settings) // models.enabled is authoritative (Phase 4); name v2.4 so it loads
 	o, err := NewOrchestrator(settings)
 	if err != nil {
 		t.Skipf("Skipping: embedded model not available in test environment: %v", err)
 	}
+	requireV24Loaded(t, o) // skip when the embedded model is compiled out (noembed)
 	t.Cleanup(func() { o.Delete() })
 
 	require.True(t, o.IsModelLoaded(RegistryIDBirdNETV24), "v2.4 loads at construction")
@@ -236,10 +242,12 @@ func TestOrchestrator_ModelsMapPopulated(t *testing.T) {
 	t.Parallel()
 
 	settings := conftest.GetTestSettings()
+	enableBirdNETV24(settings) // models.enabled is authoritative (Phase 4); name v2.4 so it loads
 	o, err := NewOrchestrator(settings)
 	if err != nil {
 		t.Skipf("Skipping: model not available in test environment: %v", err)
 	}
+	requireV24Loaded(t, o) // skip when the embedded model is compiled out (noembed)
 	t.Cleanup(func() { o.Delete() })
 
 	assert.Len(t, o.models, 1, "Should have exactly one model in Phase 3b")
@@ -476,8 +484,12 @@ func TestOrchestrator_LoadAdditionalModels_UnknownModelSkipped(t *testing.T) {
 		modelRSS: make(map[string]int64),
 	}
 
-	err := o.loadEnabledModels(map[string]int{})
-	assert.NoError(t, err)
+	o.loadEnabledModels(map[string]int{})
+
+	// The unknown model ID is skipped: only the stand-in v2.4 stays loaded and no load
+	// failure is recorded for the unresolvable entry (it never reaches a loader).
+	assert.True(t, o.IsModelLoaded(RegistryIDBirdNETV24))
+	assert.Empty(t, o.LoadFailures(), "an unknown model ID is skipped, not recorded as a load failure")
 }
 
 func TestEnabledModels(t *testing.T) {
@@ -572,36 +584,42 @@ func TestComputeThreadAllocation(t *testing.T) {
 		want    map[string]int
 	}{
 		{
-			// v2.4 is implicitly enabled and prepended, so it appears even with an
-			// empty enabled list.
-			name:    "v2.4 only",
+			// models.enabled is authoritative (Phase 4): an empty list allocates nothing,
+			// with no implicit v2.4 prepend.
+			name:    "empty enabled list yields no allocation",
 			threads: fixedThreads,
 			enabled: nil,
-			want:    map[string]int{BirdNET_V2_4: fixedThreads},
+			want:    map[string]int{},
 		},
 		{
-			name:    "v2.4 plus a distinct enabled model",
+			name:    "a single explicitly enabled model",
 			threads: fixedThreads,
 			enabled: []string{conf.ModelIDPerchV2},
-			want:    map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
+			want:    map[string]int{RegistryIDPerchV2: fixedThreads},
 		},
 		{
 			name:    "case variants collapse to one entry",
 			threads: fixedThreads,
 			enabled: []string{conf.ModelIDPerchV2, upperPerchV2ModelID},
-			want:    map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
+			want:    map[string]int{RegistryIDPerchV2: fixedThreads},
 		},
 		{
-			name:    "an enabled model resolving to v2.4 is not double counted",
+			name:    "an enabled model resolving to v2.4 is counted once",
 			threads: fixedThreads,
 			enabled: []string{conf.ModelIDBirdNET},
 			want:    map[string]int{BirdNET_V2_4: fixedThreads},
 		},
 		{
+			name:    "v2.4 and a secondary both explicitly enabled",
+			threads: fixedThreads,
+			enabled: []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2},
+			want:    map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
+		},
+		{
 			name:    "unknown model IDs are skipped",
 			threads: fixedThreads,
 			enabled: []string{unknownModelID, conf.ModelIDPerchV2},
-			want:    map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
+			want:    map[string]int{RegistryIDPerchV2: fixedThreads},
 		},
 	}
 
@@ -625,7 +643,8 @@ func TestComputeThreadAllocation(t *testing.T) {
 func TestComputeThreadAllocation_NonPositiveThreadsUsesNumCPU(t *testing.T) {
 	t.Parallel()
 	settings := &conf.Settings{}
-	settings.Models.Enabled = []string{conf.ModelIDPerchV2}
+	// models.enabled is authoritative (Phase 4): name both models so two are allocated.
+	settings.Models.Enabled = []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2}
 	settings.BirdNET.Threads = 0
 
 	o := &Orchestrator{}
@@ -1107,7 +1126,7 @@ func TestOrchestrator_LoadAdditionalModels_RecordsLoadFailure(t *testing.T) {
 	o := &Orchestrator{Settings: settings, models: map[string]*modelEntry{
 		RegistryIDBirdNETV24: {instance: &mockModelInstance{id: RegistryIDBirdNETV24}},
 	}, modelRSS: make(map[string]int64)}
-	require.NoError(t, o.loadEnabledModels(map[string]int{}))
+	o.loadEnabledModels(map[string]int{})
 
 	assert.Equal(t, int64(1), o.LoadFailures()[testRegistryIDNotLoaded],
 		"a startup loader failure must be recorded so a later not-loaded diagnosis can explain it")
@@ -1151,7 +1170,7 @@ func TestOrchestrator_SuccessfulReload_ClearsStaleFailureError(t *testing.T) {
 	// 1. First load attempt fails: records a cumulative failure and a stored error.
 	loadErr := fmt.Errorf("transient startup failure")
 	modelLoaders[regID] = func(_ *Orchestrator, _ int) error { return loadErr }
-	require.NoError(t, o.loadEnabledModels(map[string]int{}))
+	o.loadEnabledModels(map[string]int{})
 	require.Equal(t, int64(1), o.LoadFailures()[regID])
 
 	// 2. Second attempt succeeds: the loader registers the model, which must clear
@@ -1160,7 +1179,7 @@ func TestOrchestrator_SuccessfulReload_ClearsStaleFailureError(t *testing.T) {
 		orc.models[regID] = &modelEntry{instance: &mockModelInstance{id: regID}}
 		return nil
 	}
-	require.NoError(t, o.loadEnabledModels(map[string]int{}))
+	o.loadEnabledModels(map[string]int{})
 	require.True(t, o.IsModelLoaded(regID))
 	assert.Equal(t, int64(1), o.LoadFailures()[regID],
 		"the cumulative failure count survives a successful load")
