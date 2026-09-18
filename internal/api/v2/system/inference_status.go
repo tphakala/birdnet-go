@@ -45,8 +45,10 @@ type InferenceStatusResponse struct {
 	// with (Orchestrator.DefaultTargets), in that order; empty at N = 0. The source
 	// editor pre-selects them for a new source (model de-privilege epic, Phase 4).
 	DefaultTargets []string `json:"defaultTargets"`
-	// AcousticModelsState is "ok", "none_installed" or "load_failed"; the dashboard
-	// shows its no-model banner whenever it is not "ok". Empty when no orchestrator.
+	// AcousticModelsState is the classifier verdict: "ok", "none_installed" or
+	// "load_failed"; the dashboard shows its no-model banner whenever it is not "ok".
+	// The empty string ("") is an API-only sentinel meaning "unavailable": no processor
+	// or orchestrator is wired yet, so the classifier has produced no verdict.
 	AcousticModelsState string `json:"acousticModelsState"`
 }
 

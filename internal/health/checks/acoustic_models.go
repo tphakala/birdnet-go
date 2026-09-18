@@ -23,6 +23,16 @@ type AcousticModelsInfo struct {
 	LoadFailures int
 }
 
+// Acoustic-model state values. These mirror the classifier's AcousticModelsState
+// contract (internal/classifier defines "ok"/"none_installed"/"load_failed"); the health
+// package must not import the classifier, so the wire values are restated here. A drift
+// between the two surfaces as the default "Unknown acoustic model state" verdict in Run.
+const (
+	acousticStateOK            = "ok"
+	acousticStateNoneInstalled = "none_installed"
+	acousticStateLoadFailed    = "load_failed"
+)
+
 // AcousticModelsCheck reports whether any acoustic model is loaded. N = 0 (no model
 // installed) is a supported state and reports Warning, not Critical; an enabled model
 // that failed to load is a fault and reports Critical. The per-model models_loaded check
@@ -55,15 +65,16 @@ func (c *AcousticModelsCheck) Run(_ context.Context) health.Result {
 	status := health.StatusUnknown
 	message := fmt.Sprintf("Unknown acoustic model state %q", info.State)
 	switch info.State {
-	case "ok":
+	case acousticStateOK:
 		status = health.StatusHealthy
 		message = fmt.Sprintf("%d acoustic model(s) loaded", info.LoadedCount)
-	case "none_installed":
+	case acousticStateNoneInstalled:
 		// Not a fault: the process is healthy, audio is captured, but nothing is
-		// analyzed. The dashboard shows a banner to install a model.
+		// analyzed. This state also covers "installed but not enabled" (models.enabled
+		// empty), so the message avoids implying nothing is installed on disk.
 		status = health.StatusWarning
-		message = "No acoustic model installed"
-	case "load_failed":
+		message = "No acoustic model enabled or loaded"
+	case acousticStateLoadFailed:
 		status = health.StatusCritical
 		message = fmt.Sprintf("No acoustic model loaded: %d enabled model(s) failed to load (see the AI Models page)", info.LoadFailures)
 	case "":

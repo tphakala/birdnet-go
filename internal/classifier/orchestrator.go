@@ -1042,7 +1042,7 @@ func (o *Orchestrator) GetProbableSpecies(date time.Time, week float32) ([]Speci
 	if !ok || rfs == nil {
 		return nil, nil
 	}
-	scores, _, _, err := rfs.probableSpecies(date, week, o.CurrentSettings())
+	scores, _, _, _, err := rfs.probableSpecies(date, week, o.CurrentSettings())
 	return scores, err
 }
 
@@ -1054,7 +1054,7 @@ func (o *Orchestrator) GetProbableSpeciesWithSettings(date time.Time, week float
 	if !ok || rfs == nil {
 		return nil, nil
 	}
-	scores, _, _, err := rfs.probableSpecies(date, week, settings)
+	scores, _, _, _, err := rfs.probableSpecies(date, week, settings)
 	return scores, err
 }
 
@@ -1115,7 +1115,7 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 	// cannot desync them. geoLabels is non-nil only on the universal (v3 geomodel)
 	// path, where it covers every scientific name the geomodel knows regardless of
 	// threshold.
-	scores, geo, _, err := rfs.probableSpecies(date, week, settings)
+	scores, geo, _, rfState, err := rfs.probableSpecies(date, week, settings)
 	if err != nil {
 		return nil, err
 	}
@@ -1131,9 +1131,10 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 	// displayed set and the inclusion (gate) set cannot disagree (Phase 4 PR B2). geo is
 	// the geomodel vocabulary on the universal path and nil otherwise, where the helper
 	// fails the uncovered participants open wholesale. It reads the built-over participant
-	// snapshot, so no o.mu/entry.mu walk is needed here.
+	// snapshot from rfState, the SAME range-filter generation probableSpecies scored, so a
+	// concurrent reload cannot desync geo from the participant walk.
 	excluder := newExcludeMatcher(settings.Realtime.Species.Exclude, settings.BirdNET.Locale)
-	scores = append(scores, rfs.uncoveredParticipantSpecies(settings, geo, excluder, seenSci)...)
+	scores = append(scores, rfs.uncoveredParticipantSpecies(rfState, settings, geo, excluder, seenSci)...)
 
 	// The bat model is intentionally skipped by the range-filter loop above: it
 	// has no geomodel, so its species can never be location-filtered. Include
@@ -2859,7 +2860,7 @@ func (o *Orchestrator) GetRarityContext(date time.Time) (RarityContext, error) {
 	// where a concurrent unload between the two reads could pair filterActive=true with
 	// synthetic zeros, and it also covers the no-location case a bare backend!=nil
 	// check missed, so a caller never reports a synthetic zero as "very rare" (#3935).
-	scores, geomodel, filterActive, err := rfs.probableSpecies(date, 0.0, settings)
+	scores, geomodel, filterActive, rfState, err := rfs.probableSpecies(date, 0.0, settings)
 	return RarityContext{
 		Scores:   scores,
 		Geomodel: geomodel,
@@ -2867,7 +2868,10 @@ func (o *Orchestrator) GetRarityContext(date time.Time) (RarityContext, error) {
 		// a v2.4 install (byte-identical to the former settings.BirdNET.Labels read), the
 		// participant union otherwise, and the loaded v2.4 instance's labels on the
 		// post-construction retry path where the global snapshot never received them.
-		ClassifierLabels: slices.Clone(rfs.loadState().coveredLabels),
+		// Read from rfState (probableSpecies' own locked snapshot), not a fresh loadState(),
+		// so a concurrent reload cannot pair labels from one generation with scores from
+		// another (the same single-snapshot invariant BuildRangeFilter relies on).
+		ClassifierLabels: slices.Clone(rfState.coveredLabels),
 		FilterActive:     filterActive,
 		Settings:         settings,
 	}, err

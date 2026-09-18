@@ -141,12 +141,20 @@ func TestLoadModel_V24RetryAfterConstructionFailure(t *testing.T) {
 
 	o, err := NewOrchestrator(settings)
 	require.NoError(t, err, "a v2.4 construction failure must not be fatal")
-	t.Cleanup(func() { o.Delete() })
 	require.False(t, o.IsModelLoaded(RegistryIDBirdNETV24), "v2.4 fails at construction as designed")
 
-	// Retry the load exactly as loadInstalledModels does.
-	require.NoError(t, o.LoadModel(RegistryIDBirdNETV24))
-	requireV24Loaded(t, o) // skips under noembed, where the retry cannot succeed
+	// Retry the load exactly as loadInstalledModels does. Under the noembed build the
+	// embedded model is compiled out, so the retry legitimately cannot succeed; assert
+	// success only on an embedded build and let requireV24Loaded skip (noembed) or fail
+	// with the recorded load error (embedded) rather than failing on the gap here.
+	loadErr := o.LoadModel(RegistryIDBirdNETV24)
+	if hasEmbeddedModels {
+		require.NoError(t, loadErr, "the v2.4 retry must succeed on an embedded build")
+	}
+	requireV24Loaded(t, o) // deletes + skips under noembed; returns with v2.4 loaded on an embedded build
+	// Register cleanup only after requireV24Loaded: on the not-loaded (noembed) path it
+	// already deletes o before skipping, so registering earlier would double-delete.
+	t.Cleanup(func() { o.Delete() })
 
 	// Finding 1: the v2.4 label resolver is wired into the chain on the retry path.
 	n, leads := countV24Resolvers(o)

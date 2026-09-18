@@ -153,9 +153,10 @@ func BuildRangeFilter(o *Orchestrator) error {
 		includedSpecies = speciesScoreLabels(scored)
 		// Add participants outside the mapping space (non-v2.4 classifiers when v2.4 is
 		// loaded) via the shared helper, so the gate list matches the Settings preview
-		// exactly (GetAllProbableSpeciesWithSettings uses the same helper).
+		// exactly (GetAllProbableSpeciesWithSettings uses the same helper). res.state is
+		// predict's snapshot, so the participant walk stays on predict's generation.
 		includedSpecies = append(includedSpecies, speciesScoreLabels(
-			rfs.uncoveredParticipantSpecies(settings, res.geomodel, excluder, seenFromLabels(includedSpecies)))...)
+			rfs.uncoveredParticipantSpecies(res.state, settings, res.geomodel, excluder, seenFromLabels(includedSpecies)))...)
 
 		GetLogger().Info("Range filter updated via universal geomodel path",
 			logger.Int("geomodel_species", len(res.scores)),
@@ -169,11 +170,12 @@ func BuildRangeFilter(o *Orchestrator) error {
 		// list empty: with a location set that would drop every detection from a
 		// participating classifier. Fail open over the covered labels instead, so
 		// detections pass until the geomodel recovers.
-		includedSpecies = speciesScoreLabels(failOpenScores(rfs.loadState().coveredLabels, excluder, settings, nil))
+		includedSpecies = speciesScoreLabels(failOpenScores(res.state.coveredLabels, excluder, settings, nil))
 		// No geomodel vocabulary on the fail-open branch, so non-v2.4 participants fail
 		// open wholesale too (nil geo), keeping the gate and the display list in step.
+		// res.state is predict's snapshot, so covered labels and participants agree.
 		includedSpecies = append(includedSpecies, speciesScoreLabels(
-			rfs.uncoveredParticipantSpecies(settings, nil, excluder, seenFromLabels(includedSpecies)))...)
+			rfs.uncoveredParticipantSpecies(res.state, settings, nil, excluder, seenFromLabels(includedSpecies)))...)
 		GetLogger().Warn("Geomodel range-filter inference failed during rebuild; failing open over the covered labels (detections are not location-filtered until it recovers)",
 			logger.Error(predErr),
 			logger.Int("included_species", len(includedSpecies)),
@@ -197,9 +199,10 @@ func BuildRangeFilter(o *Orchestrator) error {
 		includedSpecies = speciesScoreLabels(speciesScores)
 		// Legacy/none backend (mdata_v2, mdata_v1, or no backend): the backend maps only
 		// v2.4, so non-v2.4 participants are not covered and fail open wholesale via the
-		// shared helper (nil geo), matching the display list.
+		// shared helper (nil geo), matching the display list. res.state is predict's
+		// snapshot (predictNotLoaded/predictLegacy still carry it).
 		includedSpecies = append(includedSpecies, speciesScoreLabels(
-			rfs.uncoveredParticipantSpecies(settings, nil, excluder, seenFromLabels(includedSpecies)))...)
+			rfs.uncoveredParticipantSpecies(res.state, settings, nil, excluder, seenFromLabels(includedSpecies)))...)
 
 		GetLogger().Info("Range filter updated via classifier path",
 			logger.Int("included_species", len(includedSpecies)),
@@ -577,10 +580,11 @@ func seenFromLabels(labels []string) map[string]bool {
 //     participant's labels so it fails open.
 //
 // Rows carry score 1.0 ("always active"), matching what the display has always shown for
-// secondary-model species; the gate uses only the labels. Lock-free: it reads the immutable
-// state snapshot and the immutable geomodel vocabulary only, so it adds no lock edges.
-func (rfs *rangeFilterService) uncoveredParticipantSpecies(settings *conf.Settings, geo *LabelVocabulary, excluder excludeMatcher, seen map[string]bool) []SpeciesScore {
-	state := rfs.loadState()
+// secondary-model species; the gate uses only the labels. Lock-free: it reads only the
+// caller's immutable state snapshot and the immutable geomodel vocabulary, so it adds no
+// lock edges. The caller passes the SAME snapshot predict read (predictResult.state), so the
+// participant walk cannot straddle a concurrent reload and mix two generations into the list.
+func (rfs *rangeFilterService) uncoveredParticipantSpecies(state *rangeFilterState, settings *conf.Settings, geo *LabelVocabulary, excluder excludeMatcher, seen map[string]bool) []SpeciesScore {
 	if !state.anchoredOnV24 {
 		// coveredLabels is the participant union; scoreProbableSpecies already covered
 		// every participant, so nothing lies outside the mapping space.

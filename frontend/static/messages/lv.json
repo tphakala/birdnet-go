@@ -475,8 +475,8 @@
         "notRegisteredMessage": "Audio nesasniedz {models} audio avotā \"{sourceName}\", tāpēc noteikšanas netiek veiktas. Atveriet Sistēma > MI Modeļi, lai pārbaudītu tā statusu katram avotam, un pārliecinieties, ka audio avots ir pievienots un sūta audio."
       },
       "acousticModels": {
-        "noneTitle": "Nav instalēts neviens akustiskais modelis",
-        "noneMessage": "Nav ielādēts neviens akustiskais modelis, tāpēc audio tiek ierakstīts, bet netiek analizēts. Atveriet modeļu galeriju sadaļā Iestatījumi > Analīze, lai to instalētu.",
+        "noneTitle": "Nav iespējots neviens akustiskais modelis",
+        "noneMessage": "Nav ielādēts neviens akustiskais modelis, tāpēc audio tiek ierakstīts, bet netiek analizēts. Iespējojiet modeli sadaļā Iestatījumi > Analīze, vai instalējiet to no modeļu galerijas.",
         "loadFailedTitle": "Neizdevās ielādēt akustisko modeli",
         "loadFailedMessage": "Iespējoto akustisko modeli neizdevās ielādēt, tāpēc audio tiek ierakstīts, bet netiek analizēts. Pārbaudiet modeli lapā Sistēma > MI Modeļi."
       },

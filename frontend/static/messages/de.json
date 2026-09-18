@@ -475,8 +475,8 @@
         "notRegisteredMessage": "Kein Audio erreicht {models} an der Audioquelle \"{sourceName}\", sodass keine Erkennungen erzeugt werden. Öffnen Sie System > KI-Modelle, um den Status pro Quelle zu überprüfen, und stellen Sie sicher, dass die Audioquelle verbunden ist und Audio sendet."
       },
       "acousticModels": {
-        "noneTitle": "Kein akustisches Modell installiert",
-        "noneMessage": "Es ist kein akustisches Modell geladen, sodass Audio zwar erfasst, aber nicht analysiert wird. Öffnen Sie die Modellgalerie unter Einstellungen > Analyse, um eines zu installieren.",
+        "noneTitle": "Kein akustisches Modell aktiviert",
+        "noneMessage": "Es ist kein akustisches Modell geladen, sodass Audio zwar erfasst, aber nicht analysiert wird. Aktivieren Sie ein Modell unter Einstellungen > Analyse, oder installieren Sie eines aus der Modellgalerie.",
         "loadFailedTitle": "Akustisches Modell konnte nicht geladen werden",
         "loadFailedMessage": "Ein aktiviertes akustisches Modell konnte nicht geladen werden, sodass Audio erfasst, aber nicht analysiert wird. Überprüfen Sie das Modell auf der Seite System > KI-Modelle."
       },

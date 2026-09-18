@@ -22,19 +22,19 @@ func TestAcousticModelsCheck(t *testing.T) {
 	}{
 		{
 			name:        "loaded model is healthy",
-			info:        AcousticModelsInfo{State: "ok", LoadedCount: 2, EnabledCount: 2},
+			info:        AcousticModelsInfo{State: acousticStateOK, LoadedCount: 2, EnabledCount: 2},
 			wantStatus:  health.StatusHealthy,
 			wantMessage: "acoustic model(s) loaded",
 		},
 		{
-			name:        "no model installed is a warning, not a fault",
-			info:        AcousticModelsInfo{State: "none_installed"},
+			name:        "no model enabled or loaded is a warning, not a fault",
+			info:        AcousticModelsInfo{State: acousticStateNoneInstalled},
 			wantStatus:  health.StatusWarning,
-			wantMessage: "No acoustic model installed",
+			wantMessage: "No acoustic model enabled or loaded",
 		},
 		{
 			name:        "a failed load is critical",
-			info:        AcousticModelsInfo{State: "load_failed", EnabledCount: 1, LoadFailures: 1},
+			info:        AcousticModelsInfo{State: acousticStateLoadFailed, EnabledCount: 1, LoadFailures: 1},
 			wantStatus:  health.StatusCritical,
 			wantMessage: "failed to load",
 		},

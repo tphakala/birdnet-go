@@ -474,7 +474,7 @@ HLS playlist and segment routes use token-based authentication instead of standa
 | GET    | `/system/audio/sources`          | `ListAudioSources`        | ✅   | Active audio sources (all types)     |
 | GET    | `/system/network-interfaces`     | `GetNetworkInterfaces`    | ✅   | IPv4 network interfaces for binding  |
 | GET    | `/system/models`                 | `GetActiveModels`         | ✅   | Active model metadata                |
-| GET    | `/system/inference`              | `GetInferenceStatus`      | ✅   | Read-only snapshot of the inference subsystem: hardware, backends, loaded models with stats/RAM/source attachment, audio pipeline metrics, per-model error rate, load failures, last detection, metric key names for time-series lookups, the default target models (`defaultTargets`, empty at N=0) and the aggregate acoustic-model state (`acousticModelsState`: ok, none_installed or load_failed). |
+| GET    | `/system/inference`              | `GetInferenceStatus`      | ✅   | Read-only snapshot of the inference subsystem: hardware, backends, loaded models with stats/RAM/source attachment, audio pipeline metrics, per-model error rate, load failures, last detection, metric key names for time-series lookups, the default target models (`defaultTargets`, empty at N=0) and the aggregate acoustic-model state (`acousticModelsState`: ok, none_installed or load_failed, or an empty string when the inference subsystem is not yet wired). |
 
 ### Events (`system/events.go`, `system/events_aggregation.go`)
 

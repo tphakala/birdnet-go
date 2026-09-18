@@ -809,14 +809,15 @@ func TestUncoveredParticipantSpecies_Table(t *testing.T) {
 			rfs.state.Store(&rangeFilterState{participants: participants, anchoredOnV24: tt.anchoredOnV24})
 			excluder := newExcludeMatcher([]string{"Pied Flycatcher"}, "en-us")
 
-			out := rfs.uncoveredParticipantSpecies(settings, tt.geo, excluder, map[string]bool{})
+			out := rfs.uncoveredParticipantSpecies(rfs.loadState(), settings, tt.geo, excluder, map[string]bool{})
 			assert.ElementsMatch(t, tt.want, labelsOf(out))
 		})
 	}
 }
 
-// TestUncoveredParticipantSpecies_Race runs the shared helper concurrently with state swaps
-// carrying different participant sets, to prove its lock-free read path is race-free.
+// TestUncoveredParticipantSpecies_Race runs loadState + the shared helper concurrently with
+// state swaps carrying different participant sets, to prove the load-and-use path is race-free
+// (the helper reads only the immutable snapshot it is handed, never rfs.state directly).
 func TestUncoveredParticipantSpecies_Race(t *testing.T) {
 	settings := conftest.GetTestSettings()
 	settings.BirdNET.RangeFilter.PassUnmappedSpecies = true
@@ -839,7 +840,7 @@ func TestUncoveredParticipantSpecies_Race(t *testing.T) {
 			case <-stop:
 				return
 			default:
-				_ = rfs.uncoveredParticipantSpecies(settings, geo, excluder, map[string]bool{})
+				_ = rfs.uncoveredParticipantSpecies(rfs.loadState(), settings, geo, excluder, map[string]bool{})
 			}
 		}
 	})
@@ -1180,7 +1181,7 @@ func TestGetProbableSpecies_PassUnmappedSpecies(t *testing.T) {
 
 			rfs := newTestRangeFilterService(rf)
 
-			scores, _, _, err := rfs.probableSpecies(time.Now(), 0, settings)
+			scores, _, _, _, err := rfs.probableSpecies(time.Now(), 0, settings)
 			require.NoError(t, err)
 			assert.GreaterOrEqual(t, len(scores), tt.wantMinSpecies)
 

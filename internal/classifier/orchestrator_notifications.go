@@ -121,14 +121,15 @@ func (o *Orchestrator) syncAcousticModelsNotice() {
 }
 
 // newAcousticModelsNotification builds the persistent bell notification for a not-ok
-// acoustic-model state. The two states carry different remedies: none_installed points at the
-// gallery to install a model; load_failed points at the inference page because a model is
+// acoustic-model state. The two states carry different remedies: none_installed covers both
+// "nothing installed" and "nothing enabled" (models.enabled is empty), so its text offers
+// enabling or installing; load_failed points at the inference page because a model is
 // installed but failed to load (missing ONNX Runtime, a corrupt or incompatible file), so
 // "install one" would misdirect the user. The message key carries the state so a localized
 // surface can differentiate further.
 func newAcousticModelsNotification(state AcousticModelsState) *notification.Notification {
-	title := "No acoustic model installed"
-	message := "No acoustic model is loaded, so audio is captured but not analyzed. Open the model gallery in Settings > Analysis to install one."
+	title := "No acoustic model enabled"
+	message := "No acoustic model is loaded, so audio is captured but not analyzed. Enable a model in Settings > Analysis, or install one from the model gallery."
 	titleKey := notification.MsgAcousticModelsNoneTitle
 	messageKey := notification.MsgAcousticModelsNoneMessage
 	if state == AcousticModelsLoadFailed {
