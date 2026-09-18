@@ -283,6 +283,37 @@ func TestGetInferenceStatus_HTTP200(t *testing.T) {
 	assert.NotZero(t, resp.SnapshotAtUnix, "SnapshotAtUnix must be a non-zero Unix timestamp")
 }
 
+// TestGetInferenceStatus_NoModelFieldsContract pins the Phase 4 no-model fields the
+// dashboard gates on: defaultTargets is always an array (never null), and
+// acousticModelsState is always present. This is the producer-side check that guards the
+// full-stack field-consumption contract (model de-privilege epic, Phase 4): with no
+// orchestrator wired (bare Core) the targets are empty and the state is "".
+func TestGetInferenceStatus_NoModelFieldsContract(t *testing.T) {
+	// NOT parallel: apitest.NewCore publishes settings to the process-global snapshot.
+	e := echo.New()
+	controller := &Handler{Core: apitest.NewCore(t, apitest.WithEcho(e))}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/inference", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, controller.GetInferenceStatus(ctx))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Assert against the raw JSON so a null-vs-[] regression (which a typed decode hides)
+	// is caught: the frontend indexes defaultTargets.
+	var raw map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &raw))
+
+	dt, ok := raw["defaultTargets"]
+	require.True(t, ok, "defaultTargets must always be present")
+	assert.Equal(t, "[]", string(dt), "defaultTargets must marshal as an empty array (never null) with no orchestrator")
+
+	st, ok := raw["acousticModelsState"]
+	require.True(t, ok, "acousticModelsState must always be present")
+	assert.Equal(t, `""`, string(st), "acousticModelsState is empty with no orchestrator")
+}
+
 // eventInferenceTopologyChangedName is asserted against the package constant so
 // the SSE event name stays the single source of truth shared with the frontend.
 const eventInferenceTopologyChangedName = "system.inference_topology_changed"

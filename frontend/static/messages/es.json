@@ -474,6 +474,12 @@
         "notRegisteredTitle": "Ningún modelo está analizando {sourceName}",
         "notRegisteredMessage": "No llega audio a {models} en la fuente de audio \"{sourceName}\", por lo que no se generan detecciones. Abra Sistema > Modelos de IA para comprobar su estado por fuente y confirmar que la fuente de audio esté conectada y enviando audio."
       },
+      "acousticModels": {
+        "noneTitle": "Ningún modelo acústico activado",
+        "noneMessage": "No hay ningún modelo acústico cargado, por lo que el audio se captura pero no se analiza. Active un modelo en Configuración > Análisis, o instale uno desde la galería de modelos.",
+        "loadFailedTitle": "No se pudo cargar el modelo acústico",
+        "loadFailedMessage": "Un modelo acústico activado no se pudo cargar, por lo que el audio se captura pero no se analiza. Compruebe el modelo en la página Sistema > Modelos de IA."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valor actual: {value}% (umbral: {threshold}%)",

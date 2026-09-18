@@ -142,7 +142,7 @@ func TestGetProbableSpecies_LocalizedExclude_DropsScientificOnlyNonPrimaryLabel(
 
 	rfs := newTestRangeFilterService(rf)
 
-	scores, _, _, err := rfs.probableSpecies(time.Now(), 0, settings)
+	scores, _, _, _, err := rfs.probableSpecies(time.Now(), 0, settings)
 	require.NoError(t, err)
 
 	labels := make([]string, 0, len(scores))

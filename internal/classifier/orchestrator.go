@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"iter"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -202,6 +203,10 @@ type Orchestrator struct {
 	// conflating it with a model that never loaded. Lock-free.
 	modelUnloaded sync.Map
 
+	// acousticNotice latches the single persistent "no acoustic model" bell notification
+	// (N = 0, model de-privilege epic Phase 4); see syncAcousticModelsNotice.
+	acousticNotice acousticModelsNotice
+
 	// pendingWarmups queues deferred warm-ups recorded by model loaders while
 	// they hold o.mu (write lock). Drained by runPendingWarmups after o.mu is
 	// released, so the warm-up inference runs via the serialized inference path
@@ -317,14 +322,10 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// enabled model failed to load). AcousticModelsState reports the degraded state.
 	o.loadEnabledModels(threadAlloc)
 
-	// Append the BirdNET v2.4 label resolver as chain[1], built from the loaded
-	// entry's labels (a construction-time snapshot, never refreshed on reload),
-	// preserving the pre-Phase-3 wiring exactly.
-	if entry, ok := o.models[RegistryIDBirdNETV24]; ok {
-		if bn, isBirdNET := entry.instance.(*BirdNET); isBirdNET {
-			o.nameResolvers = []NameResolver{ofResolver, NewBirdNETLabelResolver(bn.Labels())}
-		}
-	}
+	// The BirdNET v2.4 label resolver is wired into the chain by loadBirdNETV24 itself
+	// (withV24LabelResolverLocked), so it is refreshed on BOTH the construction load and a
+	// later retry via LoadModel, and dropped on unload; there is no construction-time
+	// snapshot to go stale.
 
 	// Build the range-filter backend from the loaded participant set now that the
 	// models are loaded, independent of BirdNET v2.4: a Perch-only or v3.0-only install
@@ -356,6 +357,11 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// clones settings before building (loadBirdNETV24) instead of mutating the live
 	// published snapshot under a concurrent reader.
 	o.published.Store(true)
+
+	// Evaluate the persistent "no acoustic model" bell notice now the orchestrator is
+	// published. If the notification service is not up yet at construction, the sync latches
+	// nothing and ScanInstalled re-syncs it once startup loading completes.
+	o.syncAcousticModelsNotice()
 
 	return o, nil
 }
@@ -454,6 +460,43 @@ func (o *Orchestrator) hasTaxonomyResolverLocked() bool {
 		}
 	}
 	return false
+}
+
+// withV24LabelResolverLocked republishes the name-resolver chain with the BirdNET v2.4 label
+// resolver replaced (labels != nil) or removed (labels == nil). It builds a FRESH slice
+// (copy-on-write) rather than mutating the existing backing array, because ResolveName
+// iterates a lock-free snapshot of the chain after releasing its RLock, so mutating an
+// element in place would race that read. OpenFauna leads the chain, the v2.4 resolver sits
+// directly after it, and every other resolver (the taxonomy resolver) keeps its relative
+// order. The caller MUST hold o.mu for writing.
+func (o *Orchestrator) withV24LabelResolverLocked(labels []string) {
+	fresh := make([]NameResolver, 0, len(o.nameResolvers)+1)
+	if o.openfauna != nil {
+		fresh = append(fresh, o.openfauna) // OpenFauna always leads the chain
+	}
+	if labels != nil {
+		fresh = append(fresh, NewBirdNETLabelResolver(labels))
+	}
+	for _, r := range o.nameResolvers {
+		if r == o.openfauna {
+			continue // re-added above as the lead
+		}
+		if _, ok := r.(*BirdNETLabelResolver); ok {
+			continue // replaced above, or removed when labels == nil
+		}
+		fresh = append(fresh, r)
+	}
+	o.nameResolvers = fresh
+}
+
+// setV24LabelResolver takes o.mu only for the chain swap. The caller MUST compute labels
+// (e.g. bn.Labels(), which takes the model lock) BEFORE calling, never while holding o.mu,
+// so the o.mu -> model-lock edge is never taken on the inference hot path where PredictModel
+// holds the model lock for a full native inference.
+func (o *Orchestrator) setV24LabelResolver(labels []string) {
+	o.mu.Lock()
+	o.withV24LabelResolverLocked(labels)
+	o.mu.Unlock()
 }
 
 // SetSunCalc injects the sun calculator into the orchestrator and starts
@@ -770,10 +813,10 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 // ResolveName walks the resolver chain and returns the first non-empty
 // common name for the given scientific name and locale.
 func (o *Orchestrator) ResolveName(scientificName, locale string) string {
-	// Snapshot the resolver chain under RLock so a concurrent
-	// registerTaxonomyResolver append cannot corrupt the slice header.
-	// Resolvers are only ever appended (never mutated in place), so iterating
-	// the snapshot outside the lock is safe.
+	// Snapshot the resolver chain under RLock so a concurrent writer cannot corrupt the
+	// slice header. Writers (registerTaxonomyResolver append, withV24LabelResolverLocked
+	// replace/remove) only ever append or publish a FRESH slice, never mutate an element in
+	// place, so iterating this snapshot outside the lock is safe.
 	o.mu.RLock()
 	resolvers := o.nameResolvers
 	o.mu.RUnlock()
@@ -999,7 +1042,7 @@ func (o *Orchestrator) GetProbableSpecies(date time.Time, week float32) ([]Speci
 	if !ok || rfs == nil {
 		return nil, nil
 	}
-	scores, _, _, err := rfs.probableSpecies(date, week, o.CurrentSettings())
+	scores, _, _, _, err := rfs.probableSpecies(date, week, o.CurrentSettings())
 	return scores, err
 }
 
@@ -1011,7 +1054,7 @@ func (o *Orchestrator) GetProbableSpeciesWithSettings(date time.Time, week float
 	if !ok || rfs == nil {
 		return nil, nil
 	}
-	scores, _, _, err := rfs.probableSpecies(date, week, settings)
+	scores, _, _, _, err := rfs.probableSpecies(date, week, settings)
 	return scores, err
 }
 
@@ -1072,98 +1115,26 @@ func (o *Orchestrator) GetAllProbableSpeciesWithSettings(date time.Time, week fl
 	// cannot desync them. geoLabels is non-nil only on the universal (v3 geomodel)
 	// path, where it covers every scientific name the geomodel knows regardless of
 	// threshold.
-	scores, geo, _, err := rfs.probableSpecies(date, week, settings)
+	scores, geo, _, rfState, err := rfs.probableSpecies(date, week, settings)
 	if err != nil {
 		return nil, err
 	}
-	isUniversal := geo != nil
-	// geo is non-nil only on the universal path; read its label slice (nil
-	// otherwise) so the geomodel-coverage dedup below is byte-for-byte unchanged.
-	var geoLabels []string
-	if geo != nil {
-		geoLabels = geo.Labels
-	}
-
-	// Dedup by scientific name (lowercased). seenSci holds species already
-	// represented via the range-filter scores; geoCovered holds every scientific
-	// name the geomodel can predict at all.
+	// Dedup by canonical scientific name: seenSci holds every species already represented
+	// via the range-filter scores.
 	seenSci := make(map[string]bool, len(scores))
 	for _, s := range scores {
 		seenSci[canonicalSpeciesKey(s.Label)] = true
 	}
-	geoCovered := make(map[string]bool, len(geoLabels))
-	for _, label := range geoLabels {
-		geoCovered[canonicalSpeciesKey(label)] = true
-	}
 
-	o.mu.RLock()
-	refs := make([]entryRef, 0, len(o.models))
-	for id, entry := range o.models {
-		// Skip the range-filter anchor (v2.4, already covered by the scores above)
-		// and Bat (no geomodel; handled separately below).
-		if id == RegistryIDBirdNETV24 || id == RegistryIDBat {
-			continue
-		}
-		refs = append(refs, entryRef{id: id, entry: entry})
-	}
-	o.mu.RUnlock()
-
-	// Sort non-primary models by ID so dedup-by-scientific-name is
-	// deterministic. When two secondary models emit different labels for the
-	// same scientific name, the surviving label must not depend on Go's
-	// randomized map iteration order.
-	slices.SortFunc(refs, func(a, b entryRef) int { return strings.Compare(a.id, b.id) })
-
-	passUnmapped := settings.BirdNET.RangeFilter.PassUnmappedSpecies
-	// Build the exclude matcher once for this pass: it reverse-resolves localized
-	// common-name exclude entries through OpenFauna a single time so the per-label
-	// matches() below stays off the dataset scan.
+	// Add participants outside the loaded backend's mapping space (non-v2.4 classifiers
+	// when v2.4 is loaded) via the SAME shared helper BuildRangeFilter uses, so the
+	// displayed set and the inclusion (gate) set cannot disagree (Phase 4 PR B2). geo is
+	// the geomodel vocabulary on the universal path and nil otherwise, where the helper
+	// fails the uncovered participants open wholesale. It reads the built-over participant
+	// snapshot from rfState, the SAME range-filter generation probableSpecies scored, so a
+	// concurrent reload cannot desync geo from the participant walk.
 	excluder := newExcludeMatcher(settings.Realtime.Species.Exclude, settings.BirdNET.Locale)
-
-	for _, ref := range refs {
-		ref.entry.mu.Lock()
-		if ref.entry.instance == nil {
-			ref.entry.mu.Unlock()
-			continue
-		}
-		labels := ref.entry.instance.Labels()
-		ref.entry.mu.Unlock()
-
-		// Grow scores capacity once per model; an upper bound is one new entry
-		// per non-primary label.
-		if len(labels) > 0 {
-			scores = slices.Grow(scores, len(labels))
-		}
-
-		for _, label := range labels {
-			sci := canonicalSpeciesKey(label)
-			switch {
-			case seenSci[sci]:
-				// Already represented via the primary (or an earlier model).
-				continue
-			case isUniversal && geoCovered[sci]:
-				// Geomodel covers this species but it is not in the
-				// above-threshold set, so the range filter excludes it. Skip.
-				continue
-			default:
-				// Geomodel-unmapped, or the primary is not universal.
-				if !isUniversal {
-					// Legacy path: no geomodel to consult. Preserve prior
-					// behavior and include the species, deduped by scientific
-					// name, without gating on PassUnmappedSpecies.
-					if !excluder.matches(label) {
-						scores = append(scores, SpeciesScore{Label: label, Score: 1.0})
-						seenSci[sci] = true
-					}
-					continue
-				}
-				if passUnmapped && !excluder.matches(label) {
-					scores = append(scores, SpeciesScore{Label: label, Score: 1.0})
-					seenSci[sci] = true
-				}
-			}
-		}
-	}
+	scores = append(scores, rfs.uncoveredParticipantSpecies(rfState, settings, geo, excluder, seenSci)...)
 
 	// The bat model is intentionally skipped by the range-filter loop above: it
 	// has no geomodel, so its species can never be location-filtered. Include
@@ -1402,11 +1373,19 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 		fellBack      bool
 		mappedSpecies int
 		kind          = rfKindNone
+		state         *rangeFilterState
 	)
 	if rfs := o.rangeFilter; rfs != nil {
-		active, fellBack = rfs.runtimeState()
-		kind = rfs.backendKind()
-		if mrf, ok := rfs.mappedView(); ok {
+		// Take ONE state snapshot for the whole response so active, fellBack, kind, the
+		// mapped view and per-participant coverage all describe the same backend even if
+		// a concurrent reload swaps the state mid-build.
+		state = rfs.loadState()
+		active = state.backend != nil
+		fellBack = state.fellBack
+		if kind = state.kind; kind == "" {
+			kind = rfKindNone // normalize the zero value, mirroring backendKind()
+		}
+		if mrf, ok := state.backend.(*mappedRangeFilter); ok {
 			geoLabels = mrf.geomodelLabels
 			// mrf.mappedCount is the mapped count over coveredLabels (v2.4's labels on a
 			// v2.4 install, the participant union otherwise), so this is byte-identical
@@ -1433,18 +1412,26 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 		geomodel.AutoSelected = rf.ModelPath == expectedONNX && rf.LabelsPath == expectedLabels
 	}
 
-	// coveredByBackend reports whether the backend actually scores a participant's FULL
-	// label space, so the status surface is honest about which classifiers are really
-	// range-filtered. The universal geomodel maps onto coveredLabels: when v2.4 is loaded
-	// that is the v2.4 label space, so ONLY v2.4 is fully covered and a non-v2.4
-	// participant's exclusive species fall outside it and are dropped (the participant-union
-	// reconciliation deferred to a later PR); when v2.4 is NOT loaded coveredLabels is the
-	// participant union, so every participant is covered. The legacy v2.4-only MData backend
-	// covers only v2.4; no backend covers nothing.
+	// coveredByBackend reports whether the loaded backend actually scores a participant's
+	// species, so the status surface is honest about which classifiers are really
+	// range-filtered. It keys on the participant set the ACTIVE backend was built over
+	// (state.participants), not the live view: after a failed rebuild the service keeps the
+	// previous backend (rollback) while the live view already shows the just-loaded
+	// participant, so reading the live view would falsely report that participant as covered
+	// before the retained backend ever mapped its labels. A participant absent from the
+	// built-over set is never covered. The universal geomodel scores every built-over
+	// participant by canonical scientific name (the participant-union backfill in the range
+	// filter and the Settings preview keep the gate and display in step), so every
+	// participant under a geomodel is covered; the residual for geomodel-unknown species is
+	// governed by the "allow species without range data" toggle, not by coverage. The legacy
+	// v2.4-only MData backend covers only v2.4; no backend covers nothing.
 	coveredByBackend := func(id string) bool {
+		if state == nil || !state.hasParticipant(id) {
+			return false
+		}
 		switch kind {
 		case rfKindGeomodelV3:
-			return id == RegistryIDBirdNETV24 || view.v24Labels == nil
+			return true
 		case rfKindMDataV2, rfKindMDataV1:
 			return id == RegistryIDBirdNETV24
 		default: // rfKindNone (or unknown): nothing is covered.
@@ -1490,6 +1477,18 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 	})
 
 	return resp
+}
+
+// RangeFilterActive reports whether a range-filter backend is loaded (filtering is being
+// applied). It is the cheap, lock-free predicate for the range-test API's FilterActive
+// field: unlike RangeFilterStatus it does not recompute per-participant coverage over the
+// full label set. False at N = 0 or when no backend is loaded.
+func (o *Orchestrator) RangeFilterActive() bool {
+	if o.rangeFilter == nil {
+		return false
+	}
+	active, _ := o.rangeFilter.runtimeState()
+	return active
 }
 
 // ReloadRangeFilter reinitializes the range filter on the primary model
@@ -2036,7 +2035,74 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 		o.rebuildRangeFilterAfterModelChange()
 	}
 
+	// A successful load can clear the "no acoustic model" state (or, on a retry that still
+	// fails, this is unreachable because the loader returned an error above). Re-evaluate the
+	// notice after o.mu is released (the sync reads AcousticModelsState under o.mu.RLock).
+	o.syncAcousticModelsNotice()
+
 	return nil
+}
+
+// ReconcileEnabledModels loads every model named in models.enabled that is not currently
+// loaded and unloads every loaded acoustic model no longer named, so a runtime edit of
+// models.enabled takes effect without a restart (Phase 4, since models.enabled is
+// authoritative). Unloads run first to free memory on constrained hosts before loads
+// allocate. It holds no orchestrator lock across the loop (LoadModel/UnloadModel each take
+// o.mu themselves); a model that fails to load is recorded by the loader (recordLoadFailure)
+// and skipped so one bad model does not block the rest, matching startup loadEnabledModels.
+// The acoustic-model notice is re-evaluated once at the end regardless of per-model outcome.
+func (o *Orchestrator) ReconcileEnabledModels() (loaded, unloaded []string, err error) {
+	defer o.syncAcousticModelsNotice()
+
+	settings := o.currentSettings()
+
+	// Desired set: the known registry IDs named by models.enabled, in config order.
+	desired := make([]string, 0)
+	desiredSet := make(map[string]bool)
+	for m := range enabledModels(settings) {
+		if !m.known || desiredSet[m.registryID] {
+			continue
+		}
+		desiredSet[m.registryID] = true
+		desired = append(desired, m.registryID)
+	}
+
+	// Snapshot the currently loaded models.
+	o.mu.RLock()
+	loadedNow := slices.Collect(maps.Keys(o.models))
+	o.mu.RUnlock()
+
+	var errs []error
+
+	// Unload first: a loaded model no longer named. "not loaded" (a concurrent unload won the
+	// race) is benign and not reported.
+	for _, id := range loadedNow {
+		if desiredSet[id] {
+			continue
+		}
+		if uerr := o.UnloadModel(id); uerr != nil {
+			if !o.IsModelLoaded(id) {
+				continue
+			}
+			errs = append(errs, uerr)
+			continue
+		}
+		unloaded = append(unloaded, id)
+	}
+
+	// Then load desired models that are not already loaded.
+	for _, id := range desired {
+		if o.IsModelLoaded(id) {
+			continue
+		}
+		if lerr := o.LoadModel(id); lerr != nil {
+			errs = append(errs, lerr) // LoadModel already recorded the failure; keep going
+			continue
+		}
+		loaded = append(loaded, id)
+	}
+
+	return loaded, unloaded, errors.Join(errs...)
 }
 
 // recordLoadFailure atomically increments the load-failure counter for registryID
@@ -2083,9 +2149,9 @@ func (o *Orchestrator) LoadErrors() map[string]string {
 	return result
 }
 
-// AcousticModelsState is the coarse "is anything loaded" verdict. It is intended for the
-// acoustic_models health check and GET /api/v2/system/inference, which consume it in a later
-// paired change; in this change it has no non-test consumer yet.
+// AcousticModelsState is the coarse "is anything loaded" verdict. It is consumed by the
+// acoustic_models health check, GET /api/v2/system/inference, and the persistent no-model
+// bell notification (syncAcousticModelsNotice).
 type AcousticModelsState string
 
 const (
@@ -2245,6 +2311,11 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 			s.stop()
 		}
 	}
+	if registryID == RegistryIDBirdNETV24 {
+		// v2.4 is gone: drop its label resolver from the chain (copy-on-write under o.mu)
+		// so ResolveName falls through to OpenFauna.
+		o.withV24LabelResolverLocked(nil)
+	}
 	o.mu.Unlock()
 
 	// Close the model instance outside the map lock, in an inner func so entry.mu
@@ -2289,6 +2360,11 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 	if ParticipatesInRangeFilter(registryID) {
 		o.rebuildRangeFilterAfterModelChange()
 	}
+
+	// Unloading may have reached N = 0 (or cleared a load failure): re-evaluate the
+	// acoustic-model notice. Called after the locked closures release o.mu, since the sync
+	// reads AcousticModelsState() under o.mu.RLock (acousticNotice.mu -> o.mu leaf edge).
+	o.syncAcousticModelsNotice()
 
 	return nil
 }
@@ -2784,11 +2860,18 @@ func (o *Orchestrator) GetRarityContext(date time.Time) (RarityContext, error) {
 	// where a concurrent unload between the two reads could pair filterActive=true with
 	// synthetic zeros, and it also covers the no-location case a bare backend!=nil
 	// check missed, so a caller never reports a synthetic zero as "very rare" (#3935).
-	scores, geomodel, filterActive, err := rfs.probableSpecies(date, 0.0, settings)
+	scores, geomodel, filterActive, rfState, err := rfs.probableSpecies(date, 0.0, settings)
 	return RarityContext{
-		Scores:           scores,
-		Geomodel:         geomodel,
-		ClassifierLabels: slices.Clone(settings.BirdNET.Labels),
+		Scores:   scores,
+		Geomodel: geomodel,
+		// ClassifierLabels is the backend's covered label space: v2.4's published labels on
+		// a v2.4 install (byte-identical to the former settings.BirdNET.Labels read), the
+		// participant union otherwise, and the loaded v2.4 instance's labels on the
+		// post-construction retry path where the global snapshot never received them.
+		// Read from rfState (probableSpecies' own locked snapshot), not a fresh loadState(),
+		// so a concurrent reload cannot pair labels from one generation with scores from
+		// another (the same single-snapshot invariant BuildRangeFilter relies on).
+		ClassifierLabels: slices.Clone(rfState.coveredLabels),
 		FilterActive:     filterActive,
 		Settings:         settings,
 	}, err

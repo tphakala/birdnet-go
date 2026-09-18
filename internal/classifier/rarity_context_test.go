@@ -139,6 +139,17 @@ func newAliasedGeomodelBirdNET(t *testing.T, geoScore float32) (*Orchestrator, *
 		rangeFilter: newTestRangeFilterService(mapped),
 	}
 	o.settingsAtomic.Store(settings)
+	// Publish the covered-label space a real reload records, so GetRarityContext (which
+	// reports ClassifierLabels from the built-over coveredLabels) sees the classifier
+	// vocabulary rather than an empty set.
+	o.rangeFilter.state.Store(&rangeFilterState{
+		backend:       mapped,
+		kind:          rfKindGeomodelV3,
+		coveredLabels: classifierLabels,
+		participants:  []participantLabels{{id: RegistryIDBirdNETV24, labels: classifierLabels}},
+		anchoredOnV24: true,
+		generation:    1,
+	})
 	t.Cleanup(o.Delete)
 
 	return o, inner
@@ -230,11 +241,20 @@ func TestGetRarityContext_NoGeomodel(t *testing.T) {
 		Settings:  settings,
 		ModelInfo: ModelInfo{ID: BirdNET_V2_4, Name: ModelNameBirdNETv24},
 	}
+	rf := &fakeRangeFilter{scores: []float32{0.5}}
 	orch := &Orchestrator{
 		Settings:    settings,
 		models:      map[string]*modelEntry{RegistryIDBirdNETV24: {instance: bn}},
-		rangeFilter: newTestRangeFilterService(&fakeRangeFilter{scores: []float32{0.5}}),
+		rangeFilter: newTestRangeFilterService(rf),
 	}
+	// Publish the covered-label space a reload records, so ClassifierLabels reports the
+	// classifier vocabulary (GetRarityContext reads state.coveredLabels).
+	orch.rangeFilter.state.Store(&rangeFilterState{
+		backend:       rf,
+		coveredLabels: settings.BirdNET.Labels,
+		participants:  []participantLabels{{id: RegistryIDBirdNETV24, labels: settings.BirdNET.Labels}},
+		anchoredOnV24: true,
+	})
 	t.Cleanup(orch.Delete)
 
 	rc, err := orch.GetRarityContext(time.Now())
@@ -272,6 +292,13 @@ func TestGetRarityContext_NoBackend(t *testing.T) {
 		models:      map[string]*modelEntry{RegistryIDBirdNETV24: {instance: bn}},
 		rangeFilter: newTestRangeFilterService(nil), // no backend loaded
 	}
+	// Even with no backend, a reload publishes the covered-label space (the fail-open set),
+	// so ClassifierLabels reports the classifier vocabulary.
+	orch.rangeFilter.state.Store(&rangeFilterState{
+		coveredLabels: settings.BirdNET.Labels,
+		participants:  []participantLabels{{id: RegistryIDBirdNETV24, labels: settings.BirdNET.Labels}},
+		anchoredOnV24: true,
+	})
 	t.Cleanup(orch.Delete)
 
 	rc, err := orch.GetRarityContext(time.Now())

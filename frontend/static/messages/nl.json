@@ -474,6 +474,12 @@
         "notRegisteredTitle": "Geen model analyseert {sourceName}",
         "notRegisteredMessage": "Er bereikt geen audio {models} op audiobron \"{sourceName}\", waardoor er geen detecties worden geproduceerd. Open Systeem > AI-modellen om de status per bron te controleren, en bevestig dat de audiobron is verbonden en audio verzendt."
       },
+      "acousticModels": {
+        "noneTitle": "Geen akoestisch model ingeschakeld",
+        "noneMessage": "Er is geen akoestisch model geladen, dus audio wordt opgenomen maar niet geanalyseerd. Schakel een model in via Instellingen > Analyse, of installeer er een vanuit de modellengalerij.",
+        "loadFailedTitle": "Akoestisch model kon niet worden geladen",
+        "loadFailedMessage": "Een ingeschakeld akoestisch model kon niet worden geladen, dus audio wordt opgenomen maar niet geanalyseerd. Controleer het model op de pagina Systeem > AI-modellen."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Huidige waarde: {value}% (drempelwaarde: {threshold}%)",

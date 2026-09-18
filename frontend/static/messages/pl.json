@@ -474,6 +474,12 @@
         "notRegisteredTitle": "Żaden model nie analizuje {sourceName}",
         "notRegisteredMessage": "Żaden dźwięk nie dociera do {models} na źródle audio \"{sourceName}\", więc nie są generowane żadne detekcje. Otwórz System > Modele AI, aby sprawdzić jego stan dla poszczególnych źródeł, i potwierdź, że źródło audio jest podłączone i wysyła dźwięk."
       },
+      "acousticModels": {
+        "noneTitle": "Brak włączonego modelu akustycznego",
+        "noneMessage": "Żaden model akustyczny nie jest załadowany, więc dźwięk jest przechwytywany, ale nie jest analizowany. Włącz model w Ustawienia > Analiza lub zainstaluj go z galerii modeli.",
+        "loadFailedTitle": "Nie udało się załadować modelu akustycznego",
+        "loadFailedMessage": "Nie udało się załadować włączonego modelu akustycznego, więc dźwięk jest przechwytywany, ale nie jest analizowany. Sprawdź model na stronie System > Modele AI."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Bieżąca wartość: {value}% (próg: {threshold}%)",

@@ -331,6 +331,13 @@ func (mm *ModelManager) ScanInstalled() {
 		// up to date and reload the filter. This handles the upgrade case
 		// where a new binary adds geomodel support to existing models.
 		mm.ensureGeomodelConfig(log, installedIDs)
+
+		// Startup loading is complete and the notification service is up by now, so evaluate
+		// the persistent "no acoustic model" notice. NewOrchestrator's earlier sync latched
+		// nothing if the notification service was not yet initialized at construction.
+		if mm.orchestrator != nil {
+			mm.orchestrator.SyncAcousticModelsNotice()
+		}
 	}
 }
 
@@ -1696,6 +1703,24 @@ func (mm *ModelManager) variantEmbeddingsPath(entry *CatalogEntry, variantID str
 // clone-mutate-publish + SaveSettings so the change survives restarts and is visible
 // to concurrent readers. A nil settings receiver or an unknown registry ID is a
 // no-op (nothing stored, nothing saved).
+// ensureModelEnabled adds registryID's config alias to s.Models.Enabled when it is not
+// already present (case-insensitive), so an installed or variant-swapped model is loaded on
+// the next reload. Returns true when it added the alias. Shared by applyConfigForInstall and
+// applyConfigForVariantSwap so both install paths keep the enabled set authoritative.
+func ensureModelEnabled(s *conf.Settings, registryID string) bool {
+	alias := ConfigAliasForRegistry(registryID)
+	if alias == "" {
+		return false
+	}
+	if slices.ContainsFunc(s.Models.Enabled, func(id string) bool {
+		return strings.EqualFold(id, alias)
+	}) {
+		return false
+	}
+	s.Models.Enabled = append(s.Models.Enabled, alias)
+	return true
+}
+
 func (mm *ModelManager) applyConfigForVariantSwap(registryID, modelPath string) {
 	if mm.settings == nil {
 		return
@@ -1709,6 +1734,12 @@ func (mm *ModelManager) applyConfigForVariantSwap(registryID, modelPath string) 
 		return
 	}
 	*fs.Model = modelPath
+	// Since models.enabled became authoritative (Phase 4), a variant install on an instance
+	// where the model is not enabled (reachable at N=0) must persist the enable, or the
+	// freshly installed variant would not load. This also runs on the rollback path
+	// (persistVariantConfig), which is intended: a rollback restores the model the user asked
+	// for, so it must stay enabled.
+	ensureModelEnabled(updated, registryID)
 	conf.StoreSettings(updated)
 	if err := conf.SaveSettings(); err != nil {
 		GetLogger().Warn("Failed to persist settings after variant swap",
@@ -2268,13 +2299,8 @@ func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, la
 	// Apply geomodel range filter config if this entry includes geomodel files.
 	mm.applyRangeFilterConfigForInstall(updated, entry)
 
-	// Add config alias to Models.Enabled so the model appears in source config.
-	alias := ConfigAliasForRegistry(entry.RegistryID)
-	if alias != "" && !slices.ContainsFunc(updated.Models.Enabled, func(id string) bool {
-		return strings.EqualFold(id, alias)
-	}) {
-		updated.Models.Enabled = append(updated.Models.Enabled, alias)
-	}
+	// Add the config alias to Models.Enabled so the installed model is loaded.
+	ensureModelEnabled(updated, entry.RegistryID)
 
 	conf.StoreSettings(updated)
 	if err := conf.SaveSettings(); err != nil {

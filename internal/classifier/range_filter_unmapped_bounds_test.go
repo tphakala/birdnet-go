@@ -56,7 +56,7 @@ func TestGetProbableSpecies_PassUnmapped_MappingLongerThanSnapshotLabels_NoPanic
 	rfs := newTestRangeFilterService(mrf)
 
 	require.NotPanics(t, func() {
-		scores, _, _, err := rfs.probableSpecies(time.Now(), 0, settings)
+		scores, _, _, _, err := rfs.probableSpecies(time.Now(), 0, settings)
 		require.NoError(t, err)
 		labels := make([]string, 0, len(scores))
 		for _, ss := range scores {

@@ -187,8 +187,14 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 	//    backend/device swap keeps the label set, and ReloadSecondaryModels reads the
 	//    settings the anchor reload already published.
 	if bn, ok := next.(*BirdNET); ok {
+		labels := bn.Labels()
 		o.updateSettings(bn.currentSettings())
-		o.logMissingTaxonomyCodes(bn, bn.Labels())
+		o.logMissingTaxonomyCodes(bn, labels)
+		// Refresh the v2.4 label resolver so a locale or label change on reload is reflected
+		// in name resolution. labels is read BEFORE setV24LabelResolver takes o.mu (bn.Labels()
+		// takes the model lock), so o.mu is never held while waiting on a serving instance's
+		// model lock, which PredictModel holds for a full inference.
+		o.setV24LabelResolver(labels)
 		debug.FreeOSMemory()
 	}
 	if registryID == RegistryIDBirdNETV24 {
