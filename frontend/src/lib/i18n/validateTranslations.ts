@@ -915,6 +915,9 @@ Examples:
     const ok = await validator.validate({
       ...options,
       allowUntranslated: false,
+      // Never fail the pre-write validation on untranslated entries: snapshotting
+      // them (new and grandfathered alike) is exactly what --update-baseline does.
+      failOnUntranslated: false,
       failOnWarnings: true,
       minCoverage: 100,
     });
@@ -1087,15 +1090,15 @@ Examples:
   // Suppress console output if generating report
   const generateReport = args.includes('--report');
   if (generateReport) {
+    // Only stdout carries the report, so mute console.log during validation to
+    // keep it clean. Leave console.error alone (as --json does) so the ACTION
+    // REQUIRED notice still reaches stderr; the CI report step captures it.
     const originalLog = console.log;
-    const originalError = console.error;
     console.log = () => {};
-    console.error = () => {};
 
     const passed = await validator.validate(options);
 
     console.log = originalLog;
-    console.error = originalError;
 
     const format = args.includes('--format=markdown') ? 'markdown' : 'json';
     const report = validator.generateReport(format);
