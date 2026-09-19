@@ -44,7 +44,9 @@
     fetchDeviceCapabilities as fetchCapabilities,
     coerceSupportedRate,
   } from '$lib/utils/audio/sampleRate';
-  import { DEFAULT_MODEL_ID } from '$lib/stores/models.svelte';
+  import { modelsLoading } from '$lib/stores/models.svelte';
+  import { acousticModelAvailability } from '$lib/stores/acousticModels.svelte';
+  import { defaultModelSelection } from '$lib/utils/defaultModelSelection';
   import SelectDropdown from './SelectDropdown.svelte';
   import InlineSlider from './InlineSlider.svelte';
   import ModelCheckboxList from './ModelCheckboxList.svelte';
@@ -78,10 +80,10 @@
 
   const logger = loggers.audio;
 
+  // Pre-selection for a source without an explicit list: the classifier's
+  // default targets when known, nothing at N=0, the legacy BirdNET pick otherwise.
   function getDefaultModels(): string[] {
-    const defaultModel = modelOptions.find(m => m.value === DEFAULT_MODEL_ID);
-    if (defaultModel) return [DEFAULT_MODEL_ID];
-    return modelOptions.length > 0 ? [modelOptions[0].value] : [DEFAULT_MODEL_ID];
+    return defaultModelSelection(acousticAvailability, availableModels);
   }
 
   interface Props {
@@ -142,12 +144,36 @@
     audioDevices.find(d => deviceMatches(d, source.device))?.name ?? source.device
   );
 
-  // Model display names (comma-separated for multiple)
-  let modelDisplayName = $derived(
-    (source.models?.length ?? 0) > 0
-      ? source.models.map(id => modelOptions.find(m => m.value === id)?.label ?? id).join(', ')
-      : (modelOptions[0]?.label ?? '')
-  );
+  const acousticAvailability = $derived(acousticModelAvailability());
+
+  let hasExplicitModels = $derived((source.models?.length ?? 0) > 0);
+
+  function modelLabels(ids: readonly string[]): string {
+    return ids.map(id => modelOptions.find(m => m.value === id)?.label ?? id).join(', ');
+  }
+
+  // Model display names (comma-separated for multiple). An empty list means
+  // "analyze with the server defaults": name them when the classifier reports
+  // them, say that no model is loaded when that is the verdict, hedge otherwise.
+  let modelDisplayName = $derived.by(() => {
+    if (hasExplicitModels) return modelLabels(source.models);
+    if (acousticAvailability.kind === 'none') return t('settings.audio.models.noneBadge');
+    const defaults = defaultModelSelection(acousticAvailability, availableModels);
+    if (acousticAvailability.kind === 'ready' && defaults.length > 0) {
+      return t('settings.audio.models.defaultBadge', { models: modelLabels(defaults) });
+    }
+    return t('settings.audio.models.defaultPendingBadge');
+  });
+
+  let modelBadgeIsWarning = $derived(!hasExplicitModels && acousticAvailability.kind === 'none');
+
+  // Tooltip for the no-model pill, so the badge explains itself on hover.
+  let modelBadgeTitle = $derived.by(() => {
+    if (hasExplicitModels || acousticAvailability.kind !== 'none') return undefined;
+    return acousticAvailability.reason === 'load_failed'
+      ? t('settings.audio.models.loadFailedWarning')
+      : t('settings.audio.models.noneEnabledHelp');
+  });
 
   // Device dropdown options: the current source's device plus devices not used by
   // other sources. The currently-configured device keeps its saved value (which
@@ -434,6 +460,8 @@
           selectedModels={editModels}
           sourceSampleRate={editSampleRate}
           isStream={false}
+          loading={modelsLoading()}
+          availability={acousticAvailability}
           {disabled}
           onToggle={models => (editModels = models)}
         />
@@ -541,7 +569,13 @@
               </span>
             {/if}
             <span
-              class="px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-info)]/15 text-[var(--color-info)]"
+              class={cn(
+                'px-2 py-0.5 rounded text-xs font-semibold',
+                modelBadgeIsWarning
+                  ? 'bg-[var(--color-warning)]/15 text-[var(--color-warning)]'
+                  : 'bg-[var(--color-info)]/15 text-[var(--color-info)]'
+              )}
+              title={modelBadgeTitle}
             >
               {modelDisplayName}
             </span>

@@ -125,3 +125,14 @@ const recentDetections = await response.json();
 - `start_date`: Start date for comparison
 - `end_date`: End date for comparison
 - `baseline_days`: Number of days to use as baseline (default: 30)
+
+### Acoustic Model State (no-model banner)
+
+**Endpoint:** `GET /api/v2/system/inference` (auth-protected; never called for guest viewers)
+
+Fields consumed by `AcousticModelBanner` and the audio source editors through `$lib/stores/acousticModels.svelte`:
+
+- `acousticModelsState`: `"ok"`, `"none_installed"`, `"load_failed"`, or `""` (no verdict yet). The banner renders only for the two no-model states.
+- `defaultTargets`: classifier registry IDs (not config aliases) that a source with an empty model list analyzes with; `[]` at N=0 and on load failure.
+
+**Live updates:** `GET /api/v2/system/metrics/stream?metrics=inference.topology` (SSE). The filter names no real metric, so only the `connected`, `heartbeat` and `system.inference_topology_changed` events flow. The store re-fetches the snapshot on the topology event and on every reconnect.

@@ -113,6 +113,10 @@ function makeSnapshot(
       metricKeys: { queueDepth: 'audio.queue_depth' },
     },
     snapshotAtUnix: 1750000000,
+    // Registry IDs of the default targets and the classifier verdict; the page
+    // under test ignores both, so a neutral pairing keeps the fixture valid.
+    defaultTargets: [],
+    acousticModelsState: models.length > 0 ? 'ok' : 'none_installed',
   };
 }
 

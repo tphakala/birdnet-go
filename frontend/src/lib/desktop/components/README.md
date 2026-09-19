@@ -151,6 +151,7 @@ The following components are located in their feature directories:
 
 ### Dashboard (`features/dashboard/components/`)
 
+- `AcousticModelBanner.svelte` - No-model banner (none installed / load failed) fed by the acoustic model store
 - `DailySummaryCard.svelte` - Daily species summary with hourly heatmap
 - `DetectionCardGrid.svelte` - Card grid view of recent detections
 - `DetectionCard.svelte` - Individual detection card with spectrogram background

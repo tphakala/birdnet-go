@@ -756,6 +756,14 @@
       "recentDetectionsLoad": "Fehler beim Laden aktueller Erkennungen",
       "configFetch": "Fehler beim Abrufen der Dashboard-Konfiguration: {status}"
     },
+    "acousticModels": {
+      "noneTitle": "No acoustic model enabled",
+      "noneMessage": "Audio is being captured but not analyzed. Enable a model in the gallery to start detecting species.",
+      "noneAction": "Open model gallery",
+      "loadFailedTitle": "Acoustic model failed to load",
+      "loadFailedMessage": "An enabled model could not be loaded, so no audio is being analyzed. The AI Models page shows which model failed and why.",
+      "loadFailedAction": "View AI Models status"
+    },
     "banner": {
       "title": "Titel",
       "titlePlaceholder": "Meine Vogelstation",
@@ -3829,7 +3837,17 @@
       },
       "models": {
         "recommendBoth": "Für die beste Artenerkennung wird empfohlen, sowohl BirdNET als auch Perch gemeinsam auszuführen.",
-        "perchOnlyWarning": "Perch allein erzeugt weniger Erkennungen. Senken Sie den Konfidenzschwellenwert auf 0.50 für aussagekräftige Ergebnisse, oder aktivieren Sie BirdNET für eine bessere Abdeckung."
+        "perchOnlyWarning": "Perch allein erzeugt weniger Erkennungen. Senken Sie den Konfidenzschwellenwert auf 0.50 für aussagekräftige Ergebnisse, oder aktivieren Sie BirdNET für eine bessere Abdeckung.",
+        "loading": "Loading detection models...",
+        "noneEnabledTitle": "No detection model enabled.",
+        "noneEnabledHelp": "You can still save this source. Its audio is analyzed by the default models as soon as one is enabled.",
+        "noneEnabledLink": "Open model gallery",
+        "noneAvailable": "No detection models are enabled on this server.",
+        "loadFailedWarning": "A detection model failed to load, so this source is not being analyzed until it recovers.",
+        "loadFailedLink": "View AI Models status",
+        "defaultBadge": "{models} (default)",
+        "defaultPendingBadge": "Default models",
+        "noneBadge": "No model loaded"
       }
     },
     "security": {

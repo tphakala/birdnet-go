@@ -756,6 +756,14 @@
       "recentDetectionsLoad": "Neizdevās ielādēt nesenās atklāšanas",
       "configFetch": "Neizdevās ielādēt informācijas paneļa konfigurāciju: {status}"
     },
+    "acousticModels": {
+      "noneTitle": "No acoustic model enabled",
+      "noneMessage": "Audio is being captured but not analyzed. Enable a model in the gallery to start detecting species.",
+      "noneAction": "Open model gallery",
+      "loadFailedTitle": "Acoustic model failed to load",
+      "loadFailedMessage": "An enabled model could not be loaded, so no audio is being analyzed. The AI Models page shows which model failed and why.",
+      "loadFailedAction": "View AI Models status"
+    },
     "banner": {
       "title": "Virsraksts",
       "titlePlaceholder": "Mana putnu stacija",
@@ -3829,7 +3837,17 @@
       },
       "models": {
         "recommendBoth": "Labākai sugu noteikšanas pārklājumam ieteicams izmantot gan BirdNET, gan Perch modeļus kopā.",
-        "perchOnlyWarning": "Perch vien rada mazāk noteikšanu. Samaziniet ticamības slieksni līdz 0.50, lai iegūtu jēgpilnus rezultātus, vai aktivizējiet arī BirdNET labākam pārklājumam."
+        "perchOnlyWarning": "Perch vien rada mazāk noteikšanu. Samaziniet ticamības slieksni līdz 0.50, lai iegūtu jēgpilnus rezultātus, vai aktivizējiet arī BirdNET labākam pārklājumam.",
+        "loading": "Loading detection models...",
+        "noneEnabledTitle": "No detection model enabled.",
+        "noneEnabledHelp": "You can still save this source. Its audio is analyzed by the default models as soon as one is enabled.",
+        "noneEnabledLink": "Open model gallery",
+        "noneAvailable": "No detection models are enabled on this server.",
+        "loadFailedWarning": "A detection model failed to load, so this source is not being analyzed until it recovers.",
+        "loadFailedLink": "View AI Models status",
+        "defaultBadge": "{models} (default)",
+        "defaultPendingBadge": "Default models",
+        "noneBadge": "No model loaded"
       }
     },
     "security": {

@@ -35,7 +35,9 @@
   import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
-  import { DEFAULT_MODEL_ID } from '$lib/stores/models.svelte';
+  import { modelsLoading } from '$lib/stores/models.svelte';
+  import { acousticModelAvailability } from '$lib/stores/acousticModels.svelte';
+  import { defaultModelSelection } from '$lib/utils/defaultModelSelection';
   import { maskUrlCredentials } from '$lib/utils/security';
   import StatusPill, { type StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
   import Checkbox from './Checkbox.svelte';
@@ -112,6 +114,8 @@
     onUpdate,
     onDelete,
   }: Props = $props();
+
+  const acousticAvailability = $derived(acousticModelAvailability());
 
   // Get the stream health state from context - the $state object is passed directly
   // Mutations to this object are reactive and will trigger re-renders
@@ -337,7 +341,9 @@
     editStreamType = stream.type;
     editEnabled = stream.enabled;
     editGain = stream.gain ?? 0;
-    editModels = stream.models?.length ? [...stream.models] : [DEFAULT_MODEL_ID];
+    editModels = stream.models?.length
+      ? [...stream.models]
+      : defaultModelSelection(acousticAvailability, availableModels);
     editEqualizer = stream.equalizer
       ? { ...stream.equalizer, filters: [...stream.equalizer.filters] }
       : { enabled: false, filters: [] };
@@ -640,6 +646,8 @@
           selectedModels={editModels}
           {sourceSampleRate}
           isStream={true}
+          loading={modelsLoading()}
+          availability={acousticAvailability}
           {disabled}
           onToggle={models => (editModels = models)}
         />
