@@ -528,6 +528,10 @@
       "verifiedStatus": "Status beoordeling",
       "lockedStatus": "Status vergrendeling",
       "timeOfDay": "Tijdstip",
+      "hourRange": "Uur van de dag",
+      "hourRangeHelp": "Filter detecties op klokuur, los van zonsopkomst en zonsondergang (leeg laten voor alle uren)",
+      "hourStart": "Vroegste uur",
+      "hourEnd": "Laatste uur",
       "source": "Audiobron"
     },
     "advancedFilters": "Uitgebreide filters",
@@ -549,6 +553,9 @@
       "night": "Alleen nacht",
       "sunrise": "Zonsopkomst +/- 30 min.",
       "sunset": "Zonsondergang +/- 30 min."
+    },
+    "hourOptions": {
+      "any": "Elk uur"
     },
     "sourceOptions": {
       "any": "Alle bronnen"
@@ -591,12 +598,15 @@
       "collapseDetails": "Minder details voor {species}",
       "playAudio": "Speel de opname voor {species} af",
       "viewDetails": "Toon details voor {species}",
+      "detectionDetail": "Details van waarneming",
+      "detectionDetailFor": "Details van waarneming voor {species}",
       "unknownSpecies": "Onbekende soort",
       "clickToCollapse": "Klik om in te klappen"
     },
     "errors": {
       "searchFailed": "Zoeken mislukt: {error}",
-      "minMaxConfidence": "Minimum betrouwbaarheid kan niet groter zijn dan maximum betrouwbaarheid."
+      "minMaxConfidence": "Minimum betrouwbaarheid kan niet groter zijn dan maximum betrouwbaarheid.",
+      "minMaxHour": "Het vroegste uur kan niet later zijn dan het laatste uur."
     },
     "pagination": {
       "page": "Pagina {current} van {total}",
@@ -740,7 +750,8 @@
         "ignoreSpecies": "Soort negeren",
         "lockDetection": "Herkenning vergrendelen",
         "unlockDetection": "Herkenning ontgrendelen",
-        "deleteDetection": "Herkenning verwijderen"
+        "deleteDetection": "Herkenning verwijderen",
+        "compareSounds": "Referentiegeluiden"
       },
       "noDetections": "Geen recente herkenning",
       "errors": {
@@ -839,6 +850,7 @@
       "hourly": "Herkend om {hour}:00 uur op {date}",
       "hourlyRange": "Herkend tussen {startHour}:00 en {endHour}:00 uur op {date}",
       "species": "{species}, herkend op {date}",
+      "speciesAll": "Resultaten voor {species}",
       "search": "Gevonden voor \"{query}\"",
       "allDetections": "Alles herkend op {date}"
     },
@@ -847,6 +859,9 @@
       "observation": "Waarneming",
       "aria": {
         "downloadAudioClip": "Audiofragment downloaden voor {name} detectie",
+        "compareSounds": "Luister naar determinatieopnames voor {name} op All About Birds (opent in een nieuw tabblad)",
+        "viewOnAllAboutBirds": "Bekijk {name} op All About Birds (opent in een nieuw tabblad)",
+        "viewOnWikipedia": "Bekijk {name} op Wikipedia (opent in een nieuw tabblad)",
         "audioRecordingFor": "Geluidsopname en spectrogram voor {name}",
         "scientificName": "Wetenschappelijke naam",
         "classificationBadges": "Soortclassificatie-badges",
@@ -993,7 +1008,10 @@
     },
     "media": {
       "title": "Geluid opname & Spectrogram",
-      "clipHint": "Klik en sleep op het spectrogram om een bereik te selecteren voor export"
+      "clipHint": "Klik en sleep op het spectrogram om een bereik te selecteren voor export",
+      "compareSounds": "Referentiegeluiden",
+      "viewOnAllAboutBirds": "All About Birds",
+      "viewOnWikipedia": "Wikipedia"
     },
     "tabs": {
       "overview": "Overzicht",
@@ -2034,9 +2052,13 @@
       "speciesList": "Soorten lijst",
       "switchToGrid": "Wissel naar tegel overzicht",
       "switchToList": "Wissel naar lijst overzicht",
+      "openAllAboutBirds": "Bekijk deze soort op All About Birds",
+      "openWikipedia": "Bekijk deze soort op Wikipedia",
+      "viewDetections": "Alle detecties van {species} bekijken",
       "noSpeciesFound": "Geen soorten gevonden voor jouw filters.",
       "headers": {
         "species": "Soort",
+        "links": "Links",
         "detections": "Aantal",
         "avgConfidence": "Gem. betrouwbaarheid",
         "maxConfidence": "Max. betrouwbaarheid",

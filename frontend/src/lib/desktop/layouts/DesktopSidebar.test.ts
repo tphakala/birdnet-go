@@ -155,14 +155,14 @@ describe('DesktopSidebar - flat task-grouped sections', () => {
     });
   });
 
-  it('renders every analytics item plus Search and navigates each to its route', async () => {
+  it('renders every analytics item plus Detections and navigates each to its route', async () => {
     const onNavigate = vi.fn();
     sidebarTest.render({ currentRoute: '/ui/dashboard', onNavigate });
 
     const expectations: Array<[string, string]> = [
       ['analytics.hub.tabs.summary', '/analytics/summary'],
       ['analytics.species.title', '/analytics/species'],
-      ['navigation.search', '/search'],
+      ['navigation.detections', '/detections'],
       ['analytics.hub.tabs.patterns', '/analytics/activity'],
       ['analytics.hub.tabs.trends', '/analytics/trends'],
       ['analytics.hub.tabs.nocturnal', '/analytics/nocturnal'],
@@ -201,8 +201,8 @@ describe('DesktopSidebar - flat task-grouped sections', () => {
     expect(exploreHeader.className).toContain('sr-only');
 
     // Collapsed items render icon-only (no visible label text) but still expose an aria-label.
-    const searchBtn = screen.getByRole('button', { name: 'navigation.search' });
-    expect(searchBtn).toBeInTheDocument();
+    const detectionsBtn = screen.getByRole('button', { name: 'navigation.detections' });
+    expect(detectionsBtn).toBeInTheDocument();
     const summaryBtn = screen.getByRole('button', { name: 'analytics.hub.tabs.summary' });
     expect(summaryBtn).toBeInTheDocument();
 
@@ -240,7 +240,7 @@ describe('DesktopSidebar - flat task-grouped sections', () => {
     const exploreLabels = exploreButtons.map(b => b.textContent.trim()).filter(Boolean);
     expect(exploreLabels[0]).toContain('analytics.hub.tabs.summary');
     expect(exploreLabels[1]).toContain('analytics.species.title');
-    expect(exploreLabels[2]).toContain('navigation.search');
+    expect(exploreLabels[2]).toContain('navigation.detections');
 
     // PATTERNS: Activity, Trends, Nocturnal, Biodiversity
     const patternsGroup = container
@@ -254,7 +254,7 @@ describe('DesktopSidebar - flat task-grouped sections', () => {
     expect(patternsLabels[3]).toContain('analytics.hub.tabs.biodiversity');
   });
 
-  it('deep-link: analytics item URLs carry the active query while Search/Dashboard stay query-less', async () => {
+  it('deep-link: analytics item URLs carry the active query while Detections/Dashboard stay query-less', async () => {
     const onNavigate = vi.fn();
     // Set a non-default filter so queryString is non-empty.
     analyticsControls.applyParams({ range: 'year' });
@@ -266,10 +266,11 @@ describe('DesktopSidebar - flat task-grouped sections', () => {
     await fireEvent.click(getBtn('analytics.hub.tabs.trends'));
     expect(onNavigate).toHaveBeenCalledWith('/analytics/trends?range=year');
 
-    // Search does not.
+    // Detections does not: its own filters live in its query string, so inheriting
+    // the analytics range would silently apply a filter the user never chose.
     onNavigate.mockClear();
-    await fireEvent.click(getBtn('navigation.search'));
-    expect(onNavigate).toHaveBeenCalledWith('/search');
+    await fireEvent.click(getBtn('navigation.detections'));
+    expect(onNavigate).toHaveBeenCalledWith('/detections');
 
     // Dashboard does not.
     onNavigate.mockClear();

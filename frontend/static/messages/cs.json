@@ -528,6 +528,10 @@
       "verifiedStatus": "Stav ověření",
       "lockedStatus": "Stav uzamčení",
       "timeOfDay": "Denní doba",
+      "hourRange": "Hodina dne",
+      "hourRangeHelp": "Filtrovat detekce podle hodiny dne, nezávisle na východu a západu slunce (prázdné = všechny hodiny)",
+      "hourStart": "Nejdřívější hodina",
+      "hourEnd": "Nejpozdější hodina",
       "source": "Zdroj zvuku"
     },
     "advancedFilters": "Pokročilé filtry",
@@ -549,6 +553,9 @@
       "night": "Pouze noc",
       "sunrise": "Východ slunce +/- 30 min",
       "sunset": "Západ slunce +/- 30 min"
+    },
+    "hourOptions": {
+      "any": "Libovolná hodina"
     },
     "sourceOptions": {
       "any": "Všechny zdroje"
@@ -591,12 +598,15 @@
       "collapseDetails": "Sbalit podrobnosti pro {species}",
       "playAudio": "Přehrát zvuk pro {species}",
       "viewDetails": "Zobrazit podrobnosti pro {species}",
+      "detectionDetail": "Podrobnosti detekce",
+      "detectionDetailFor": "Podrobnosti detekce pro {species}",
       "unknownSpecies": "Neznámý druh",
       "clickToCollapse": "Kliknutím sbalíte"
     },
     "errors": {
       "searchFailed": "Vyhledávání selhalo: {error}",
-      "minMaxConfidence": "Minimální spolehlivost nemůže být větší než maximální spolehlivost."
+      "minMaxConfidence": "Minimální spolehlivost nemůže být větší než maximální spolehlivost.",
+      "minMaxHour": "Nejdřívější hodina nemůže být pozdější než nejpozdější hodina."
     },
     "pagination": {
       "page": "Stránka {current} z {total}",
@@ -740,7 +750,8 @@
         "ignoreSpecies": "Ignorovat druh",
         "lockDetection": "Uzamknout detekci",
         "unlockDetection": "Odemknout detekci",
-        "deleteDetection": "Odstranit detekci"
+        "deleteDetection": "Odstranit detekci",
+        "compareSounds": "Referenční zvuky"
       },
       "noDetections": "Žádné nedávné detekce",
       "errors": {
@@ -839,6 +850,7 @@
       "hourly": "Hodinové výsledky pro {hour}:00 dne {date}",
       "hourlyRange": "Hodinové výsledky od {startHour}:00 do {endHour}:00 dne {date}",
       "species": "Výsledky pro druh {species} dne {date}",
+      "speciesAll": "Výsledky pro druh {species}",
       "search": "Výsledky vyhledávání pro „{query}“",
       "allDetections": "Všechny detekce ze dne {date}"
     },
@@ -847,6 +859,9 @@
       "observation": "Pozorování",
       "aria": {
         "downloadAudioClip": "Stáhnout zvukový záznam pro detekci {name}",
+        "compareSounds": "Poslechnout identifikační nahrávky druhu {name} na All About Birds (otevře se na nové kartě)",
+        "viewOnAllAboutBirds": "Zobrazit {name} na All About Birds (otevře se na nové kartě)",
+        "viewOnWikipedia": "Zobrazit {name} na Wikipedii (otevře se na nové kartě)",
         "audioRecordingFor": "Zvukový záznam a spektrogram pro {name}",
         "scientificName": "Vědecký název",
         "classificationBadges": "Odznaky klasifikace druhu",
@@ -993,7 +1008,10 @@
     },
     "media": {
       "title": "Nahrávka a spektrogram",
-      "clipHint": "Klikněte a táhněte na spektrogramu pro výběr rozsahu k exportu klipu"
+      "clipHint": "Klikněte a táhněte na spektrogramu pro výběr rozsahu k exportu klipu",
+      "compareSounds": "Referenční zvuky",
+      "viewOnAllAboutBirds": "All About Birds",
+      "viewOnWikipedia": "Wikipedie"
     },
     "tabs": {
       "overview": "Přehled",
@@ -2034,9 +2052,13 @@
       "speciesList": "Seznam druhů",
       "switchToGrid": "Přepnout na mřížku",
       "switchToList": "Přepnout na seznam",
+      "openAllAboutBirds": "Zobrazit tento druh na All About Birds",
+      "openWikipedia": "Zobrazit tento druh na Wikipedii",
+      "viewDetections": "Zobrazit všechny detekce druhu {species}",
       "noSpeciesFound": "Nebyly nalezeny žádné druhy odpovídající vašim filtrům.",
       "headers": {
         "species": "Druh",
+        "links": "Odkazy",
         "detections": "Detekce",
         "avgConfidence": "Průměrná spolehlivost",
         "maxConfidence": "Maximální spolehlivost",

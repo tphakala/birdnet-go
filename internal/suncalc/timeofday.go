@@ -33,12 +33,18 @@ const (
 // falls in both a transition window and the daytime span is reported as the
 // transition.
 //
-// Comparison is done on the wall-clock time of day (hours:minutes:seconds) of
-// each value in its own location, matching how sun events and detection times
-// are recorded, and is wraparound-safe: a transition window that straddles
-// midnight (for example a high-latitude summer sunset at 23:50, whose window
-// runs to 00:20) is handled correctly, where a naive lexical time-string
-// comparison would silently misclassify it.
+// Comparison is done on the wall-clock time of day (hours:minutes:seconds),
+// with detectionTime first converted into the same time.Location as sunEvents
+// (the station's coordinate-derived timezone). This makes the comparison
+// correct regardless of what location detectionTime happens to carry (for
+// example a server process running in UTC, or any other timezone that doesn't
+// match the detection's station coordinates) - without the conversion, two
+// wall clocks in different timezones would be compared as if they were the
+// same, shifting the result by the difference between the zones. It is also
+// wraparound-safe: a transition window that straddles midnight (for example a
+// high-latitude summer sunset at 23:50, whose window runs to 00:20) is handled
+// correctly, where a naive lexical time-string comparison would silently
+// misclassify it.
 //
 // If sunEvents is nil the timestamp cannot be classified and the empty string is
 // returned; callers that lack sun data should not call this.
@@ -47,7 +53,7 @@ func ClassifyTimeOfDay(detectionTime time.Time, sunEvents *SunEventTimes) string
 		return ""
 	}
 
-	det := clockOffset(detectionTime)
+	det := clockOffset(detectionTime.In(sunEvents.Sunrise.Location()))
 	sunrise := clockOffset(sunEvents.Sunrise)
 	sunset := clockOffset(sunEvents.Sunset)
 

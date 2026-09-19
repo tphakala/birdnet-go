@@ -528,6 +528,10 @@
       "verifiedStatus": "Status verificado",
       "lockedStatus": "Status bloqueado",
       "timeOfDay": "Hora do dia",
+      "hourRange": "Hora do dia",
+      "hourRangeHelp": "Filtrar deteções por hora do relógio, independentemente do nascer e do pôr do sol (deixe vazio para todas as horas)",
+      "hourStart": "Hora mais cedo",
+      "hourEnd": "Hora mais tarde",
       "source": "Fonte de áudio"
     },
     "advancedFilters": "Filtros avançados",
@@ -549,6 +553,9 @@
       "night": "Apenas noite",
       "sunrise": "Nascer do sol +/- 30min",
       "sunset": "Pôr do sol +/- 30min"
+    },
+    "hourOptions": {
+      "any": "Qualquer hora"
     },
     "sourceOptions": {
       "any": "Todas as fontes"
@@ -591,12 +598,15 @@
       "collapseDetails": "Recolher detalhes para {species}",
       "playAudio": "Reproduzir áudio para {species}",
       "viewDetails": "Ver detalhes para {species}",
+      "detectionDetail": "Detalhe da deteção",
+      "detectionDetailFor": "Detalhe da deteção de {species}",
       "unknownSpecies": "Espécie desconhecida",
       "clickToCollapse": "Clique para recolher"
     },
     "errors": {
       "searchFailed": "Pesquisa falhou: {error}",
-      "minMaxConfidence": "A confiança mínima não pode ser maior que a confiança máxima."
+      "minMaxConfidence": "A confiança mínima não pode ser maior que a confiança máxima.",
+      "minMaxHour": "A hora mais cedo não pode ser posterior à hora mais tarde."
     },
     "pagination": {
       "page": "Página {current} de {total}",
@@ -740,7 +750,8 @@
         "ignoreSpecies": "Ignorar espécie",
         "lockDetection": "Bloquear detecção",
         "unlockDetection": "Desbloquear detecção",
-        "deleteDetection": "Excluir detecção"
+        "deleteDetection": "Excluir detecção",
+        "compareSounds": "Sons de referência"
       },
       "noDetections": "Nenhuma detecção recente",
       "errors": {
@@ -839,6 +850,7 @@
       "hourly": "Resultados por hora às {hour}:00 em {date}",
       "hourlyRange": "Resultados por hora de {startHour}:00 a {endHour}:00 em {date}",
       "species": "Resultados para {species} em {date}",
+      "speciesAll": "Resultados para {species}",
       "search": "Resultados da pesquisa para \"{query}\"",
       "allDetections": "Todas as detecções em {date}"
     },
@@ -847,6 +859,9 @@
       "observation": "Observação",
       "aria": {
         "downloadAudioClip": "Baixar clipe de áudio para a detecção de {name}",
+        "compareSounds": "Ouvir gravações de identificação de {name} no All About Birds (abre numa nova aba)",
+        "viewOnAllAboutBirds": "Ver {name} no All About Birds (abre numa nova aba)",
+        "viewOnWikipedia": "Ver {name} na Wikipédia (abre numa nova aba)",
         "audioRecordingFor": "Gravação de áudio e espectrograma para {name}",
         "scientificName": "Nome científico",
         "classificationBadges": "Distintivos de classificação da espécie",
@@ -993,7 +1008,10 @@
     },
     "media": {
       "title": "Gravação e espectrograma",
-      "clipHint": "Clique e arraste no espectrograma para selecionar um intervalo para exportação"
+      "clipHint": "Clique e arraste no espectrograma para selecionar um intervalo para exportação",
+      "compareSounds": "Sons de referência",
+      "viewOnAllAboutBirds": "All About Birds",
+      "viewOnWikipedia": "Wikipédia"
     },
     "tabs": {
       "overview": "Visão geral",
@@ -2034,9 +2052,13 @@
       "speciesList": "Lista de espécies",
       "switchToGrid": "Mudar para visualização em grade",
       "switchToList": "Mudar para visualização em lista",
+      "openAllAboutBirds": "Ver esta espécie no All About Birds",
+      "openWikipedia": "Ver esta espécie na Wikipédia",
+      "viewDetections": "Ver todas as deteções de {species}",
       "noSpeciesFound": "Nenhuma espécie encontrada que corresponda aos seus filtros.",
       "headers": {
         "species": "Espécie",
+        "links": "Links",
         "detections": "Detecções",
         "avgConfidence": "Confiança média",
         "maxConfidence": "Confiança máx.",

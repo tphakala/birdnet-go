@@ -10,19 +10,34 @@
   recent-detections table are carried over unchanged.
 -->
 <script lang="ts">
-  import { untrack, type Snippet } from 'svelte';
-  import { XCircle } from '@lucide/svelte';
+  import { onMount, untrack, type Snippet } from 'svelte';
+  import { Volume2, XCircle } from '@lucide/svelte';
 
-  import { t, type TranslationKey } from '$lib/i18n';
+  import { getLocale, t, type TranslationKey } from '$lib/i18n';
   import { api } from '$lib/utils/api';
-  import { formatNumber, formatDateTime } from '$lib/utils/formatters';
+  import { formatNumber } from '$lib/utils/formatters';
   import { getLogger } from '$lib/utils/logger';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { parseLocalDateString } from '$lib/utils/date';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { downloadDetectionAudio } from '$lib/utils/audioDownload';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
+  import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
+  import TimeOfDayIcon from '$lib/desktop/components/ui/TimeOfDayIcon.svelte';
+  import DetectionExpandedPanel from '$lib/desktop/components/data/DetectionExpandedPanel.svelte';
+  import DetectionResultRow from '$lib/desktop/components/data/DetectionResultRow.svelte';
+  import MobileAudioPlayer from '$lib/desktop/components/media/MobileAudioPlayer.svelte';
+  import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
-  import type { SourceInfo } from '$lib/types/detection.types';
+  import { useDetectionActions } from '$lib/desktop/features/detections/composables/useDetectionActions.svelte';
+  import {
+    isExcluded as isSpeciesExcluded,
+    setExcluded,
+    hydrateExcludedSpecies,
+  } from '$lib/stores/excludedSpecies.svelte';
+  import { navigation } from '$lib/stores/navigation.svelte';
+  import type { Detection, TimeOfDayValue } from '$lib/types/detection.types';
 
   import StatCard from './ui/StatCard.svelte';
   import BarChart from './charts/d3/BarChart.svelte';
@@ -70,29 +85,6 @@
     // common name can localize per visitor while the lookup stays canonical.
     mostCommonScientific: string;
     mostCommonCount: number;
-  }
-
-  interface Detection {
-    id: string;
-    timestamp: string | null;
-    commonName: string;
-    scientificName: string;
-    confidence: number;
-    timeOfDay: string;
-    source?: SourceInfo | null;
-  }
-
-  // API response type (may have date/time instead of timestamp)
-  interface ApiDetection {
-    id: string;
-    timestamp?: string;
-    date?: string;
-    time?: string;
-    commonName: string;
-    scientificName: string;
-    confidence: number;
-    timeOfDay?: string;
-    source?: SourceInfo | null;
   }
 
   interface SpeciesData {
@@ -150,6 +142,69 @@
     timeOfDay: [],
     trend: null,
     newSpecies: [],
+  });
+
+  // --- Recent detections list state ---
+  // Mirrors Search's expandable-row list (same columns/actions), so this table and
+  // the search results table never drift into different formats or column sets.
+  let expandedDetectionIds = $state(new Set<number>());
+
+  function toggleExpand(detectionId: number) {
+    if (expandedDetectionIds.has(detectionId)) {
+      expandedDetectionIds.delete(detectionId);
+    } else {
+      expandedDetectionIds.add(detectionId);
+    }
+    expandedDetectionIds = new Set(expandedDetectionIds);
+  }
+
+  function isExpanded(detectionId: number) {
+    return expandedDetectionIds.has(detectionId);
+  }
+
+  // Mobile audio overlay state (mobile card list plays audio via overlay instead of
+  // expanding the row in place)
+  let showMobilePlayer = $state(false);
+  let selectedAudioUrl = $state('');
+  let selectedSpeciesName = $state('');
+  let selectedDetectionId = $state<number | undefined>(undefined);
+  let selectedModelType = $state('');
+
+  function openMobilePlayer(detection: Detection) {
+    selectedAudioUrl = buildAppUrl(`/api/v2/audio/${detection.id}`);
+    selectedSpeciesName = localizeSpeciesName(detection.scientificName, detection.commonName);
+    selectedDetectionId = detection.id;
+    selectedModelType = detection.modelType ?? '';
+    showMobilePlayer = true;
+  }
+
+  function closeMobilePlayer() {
+    showMobilePlayer = false;
+    selectedAudioUrl = '';
+    selectedSpeciesName = '';
+    selectedDetectionId = undefined;
+    selectedModelType = '';
+  }
+
+  // Format date/time to match Search's table exactly
+  function formatDate(dateString: string | undefined) {
+    if (!dateString) return '';
+    const date = parseLocalDateString(dateString);
+    if (!date) return '';
+    return date.toLocaleString(getLocale(), { dateStyle: 'medium', timeStyle: 'short' });
+  }
+
+  // Per-detection action handlers (review/correct/false-positive/ignore/lock/delete),
+  // shared with DetectionCardGrid/DetectionsList so this list's Actions column never
+  // diverges from the rest of the app.
+  const detectionActions = useDetectionActions({
+    onRefresh: () => fetchRecentDetections(analyticsFetchSeq),
+    isSpeciesExcluded,
+    onToggleExclusion: setExcluded,
+  });
+
+  onMount(() => {
+    void hydrateExcludedSpecies();
   });
 
   // Monotonic token guarding against stale-response races. Each fetchData() run
@@ -251,6 +306,7 @@
       mostCommonCount: 0,
     };
     recentDetections = [];
+    expandedDetectionIds.clear();
     chartData = { species: [], timeOfDay: [], trend: null, newSpecies: [] };
 
     logger.debug('Loading overview analytics', { startDate, endDate });
@@ -345,46 +401,22 @@
     }
   }
 
-  // Fetch recent detections
+  // Fetch recent detections. Fetches the same full Detection shape used by the
+  // dashboard and search (verified/locked/clipName/source/modelType included, plus
+  // weather/timeOfDay via includeWeather=true) so this table can share Search's
+  // exact columns, expandable-row content and ActionMenu actions.
   async function fetchRecentDetections(seq: number) {
     try {
-      const data = await api.get<ApiDetection[]>('/api/v2/detections/recent?limit=10');
+      const data = await api.get<Detection[]>(
+        '/api/v2/detections/recent?limit=10&includeWeather=true'
+      );
       if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
-      const detections = Array.isArray(data) ? data : [];
-
-      recentDetections = detections.map(detection => {
-        // Compute timestamp once to avoid 'undefined undefined' edge case
-        const computedTimestamp =
-          detection.timestamp ||
-          (detection.date && detection.time ? `${detection.date}T${detection.time}` : null);
-
-        return {
-          id: detection.id,
-          timestamp: computedTimestamp,
-          commonName: detection.commonName,
-          scientificName: detection.scientificName,
-          confidence: detection.confidence,
-          timeOfDay:
-            detection.timeOfDay || (computedTimestamp ? calculateTimeOfDay(computedTimestamp) : ''),
-          source: detection.source ?? null,
-        };
-      });
+      recentDetections = Array.isArray(data) ? data : [];
     } catch (err) {
       if (seq !== analyticsFetchSeq) return; // superseded by a newer fetch
       logger.error('Error fetching recent detections:', err);
       throw err; // rethrow so fetchData can detect a total-failure load
     }
-  }
-
-  // Calculate time of day from timestamp
-  function calculateTimeOfDay(timestamp: string) {
-    const date = new Date(timestamp);
-    const hour = date.getHours();
-
-    if (hour >= 5 && hour < 8) return 'Sunrise';
-    if (hour >= 8 && hour < 17) return 'Day';
-    if (hour >= 17 && hour < 20) return 'Sunset';
-    return 'Night';
   }
 
   // Fetch time of day data
@@ -618,130 +650,164 @@
     t('analytics.charts.noNewSpecies')
   )}
 
-  <!-- Data Table for Recent Detections -->
+  <!-- Recent Detections -->
+  <!-- Mirrors Search's results list exactly: same table columns, expandable rows
+       (weather/image/audio inline) and the same ActionMenu actions, so the two
+       lists never drift into different formats or column sets. -->
   <div class="card bg-[var(--color-base-100)] shadow-xs">
     <div class="card-body card-padding">
-      <h2 class="card-title">{t('analytics.recentDetections.title')}</h2>
+      <h2 class="card-title" id="analytics-recent-detections-heading">
+        {t('analytics.recentDetections.title')}
+      </h2>
       {#if isLoading}
         <div class="flex justify-center items-center p-8">
           <LoadingSpinner size="lg" />
         </div>
+      {:else if recentDetections.length === 0}
+        <div class="text-center py-8 text-[var(--color-base-content)] opacity-50">
+          {t('analytics.recentDetections.noRecentDetections')}
+        </div>
       {:else}
         <!-- Desktop/tablet table -->
-        <div class="overflow-x-auto hidden md:block">
-          <table class="table w-full">
+        <div
+          class="overflow-x-auto mt-4 hidden md:block"
+          aria-labelledby="analytics-recent-detections-heading"
+        >
+          <table class="table table-hover w-full">
             <thead>
               <tr>
-                <th>{t('analytics.recentDetections.headers.dateTime')}</th>
-                <th>{t('analytics.recentDetections.headers.species')}</th>
-                <th>{t('analytics.recentDetections.headers.confidence')}</th>
-                <th>{t('analytics.recentDetections.headers.source')}</th>
-                <th>{t('analytics.recentDetections.headers.timeOfDay')}</th>
+                <th scope="col">{t('search.tableHeaders.dateTime')}</th>
+                <th scope="col">{t('search.tableHeaders.timeOfDay')}</th>
+                <th scope="col">{t('search.tableHeaders.species')}</th>
+                <th scope="col">{t('search.tableHeaders.confidence')}</th>
+                <th scope="col">{t('search.tableHeaders.source')}</th>
+                <th scope="col">{t('search.tableHeaders.status')}</th>
+                <th scope="col">{t('search.tableHeaders.actions')}</th>
               </tr>
             </thead>
             <tbody>
-              {#each recentDetections as detection, index (detection.id ?? index)}
-                <tr
-                  class={index % 2 === 0
-                    ? 'bg-[var(--color-base-100)]'
-                    : 'bg-[var(--color-base-200)]'}
+              {#each recentDetections as detection, index (detection.id)}
+                {@const displayName = localizeSpeciesName(
+                  detection.scientificName,
+                  detection.commonName
+                )}
+                <DetectionResultRow
+                  detectionId={detection.id}
+                  rowId="analytics-expanded-row-{detection.id}"
+                  {index}
+                  timestamp={detection.timestamp}
+                  timeOfDay={detection.timeOfDay}
+                  scientificName={detection.scientificName}
+                  {displayName}
+                  confidence={detection.confidence}
+                  verified={detection.verified}
+                  locked={detection.locked}
+                  source={detection.source}
+                  expanded={isExpanded(detection.id)}
+                  onToggleExpand={() => toggleExpand(detection.id)}
+                  onViewDetails={() => navigation.navigate(`/ui/detections/${detection.id}`)}
                 >
-                  <td>{detection.timestamp ? formatDateTime(detection.timestamp) : '-'}</td>
-                  <td>
-                    <div class="flex items-center gap-2">
-                      <div class="w-8 h-8 rounded-full bg-[var(--color-base-200)] overflow-hidden">
-                        <!-- PERFORMANCE OPTIMIZATION: Enhanced image loading for species thumbnails -->
-                        <img
-                          src={buildAppUrl(
-                            `/api/v2/media/species-image?name=${encodeURIComponent(detection.scientificName ?? '')}`
-                          )}
-                          alt={detection.commonName ||
-                            t('analytics.recentDetections.unknownSpecies')}
-                          class="w-full h-full object-cover"
-                          onerror={handleBirdImageError}
-                          loading="lazy"
-                          decoding="async"
-                          fetchpriority="low"
+                  {#snippet actions()}
+                    <ActionMenu
+                      {detection}
+                      isExcluded={isSpeciesExcluded(detection.commonName)}
+                      onMarkCorrect={() => detectionActions.handleMarkCorrect(detection)}
+                      onMarkFalsePositive={() =>
+                        detectionActions.handleMarkFalsePositive(detection)}
+                      onReview={() => detectionActions.handleReview(detection)}
+                      onToggleSpecies={() => detectionActions.handleToggleSpecies(detection)}
+                      onToggleLock={() => detectionActions.handleToggleLock(detection)}
+                      onDelete={() => detectionActions.handleDelete(detection)}
+                      onDownload={detection.clipName
+                        ? () => downloadDetectionAudio(detection)
+                        : undefined}
+                    />
+                  {/snippet}
+                </DetectionResultRow>
+
+                <!-- Expanded row -->
+                {#if isExpanded(detection.id)}
+                  <tr class="expanded-row" id="analytics-expanded-row-{detection.id}">
+                    <td colspan="7" class="p-0 border-t-0">
+                      <div
+                        class="expanded-panel p-4 text-left {index % 2 === 0
+                          ? 'bg-[var(--color-base-100)]'
+                          : 'bg-[var(--color-base-200)]'}"
+                      >
+                        <DetectionExpandedPanel
+                          detectionId={detection.id}
+                          scientificName={detection.scientificName}
+                          commonName={detection.commonName}
+                          {displayName}
+                          hasAudio={Boolean(detection.clipName)}
+                          timestamp={detection.timestamp}
+                          modelType={detection.modelType}
+                          rowId="analytics-expanded-row-{detection.id}"
+                          onCollapse={() => toggleExpand(detection.id)}
                         />
                       </div>
-                      <div>
-                        <div class="font-medium">
-                          {localizeSpeciesName(detection.scientificName, detection.commonName) ||
-                            t('analytics.recentDetections.unknownSpecies')}
-                        </div>
-                        <div class="text-xs opacity-50">{detection.scientificName || ''}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    <div class="flex items-center gap-2">
-                      <div class="w-16 h-4 rounded-full overflow-hidden bg-[var(--color-base-200)]">
-                        <div
-                          class="h-full {detection.confidence >= 0.8
-                            ? 'bg-[var(--color-success)]'
-                            : detection.confidence >= 0.4
-                              ? 'bg-[var(--color-warning)]'
-                              : 'bg-[var(--color-error)]'}"
-                          style:width="{detection.confidence * 100}%"
-                        ></div>
-                      </div>
-                      <span class="text-sm">{formatPercentage(detection.confidence)}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <SourceBadge {detection} variant="inline" />
-                    {#if !detection.source}
-                      <span class="text-xs opacity-40">-</span>
-                    {/if}
-                  </td>
-                  <td>{detection.timeOfDay || t('analytics.recentDetections.unknown')}</td>
-                </tr>
-              {:else}
-                <tr>
-                  <td
-                    colspan="5"
-                    class="text-center py-4 text-[var(--color-base-content)] opacity-50"
-                    >{t('analytics.recentDetections.noRecentDetections')}</td
-                  >
-                </tr>
+                    </td>
+                  </tr>
+                {/if}
               {/each}
             </tbody>
           </table>
         </div>
 
-        <!-- Mobile list -->
-        <div class="md:hidden space-y-2">
-          {#each recentDetections as detection, index (detection.id ?? index)}
-            <div class="bg-[var(--color-base-100)] rounded-lg p-3">
+        <!-- Mobile card list -->
+        <div class="md:hidden mt-4 space-y-2" aria-labelledby="analytics-recent-detections-heading">
+          {#each recentDetections as detection (detection.id)}
+            {@const displayName = localizeSpeciesName(
+              detection.scientificName,
+              detection.commonName
+            )}
+            <section class="bg-[var(--color-base-100)] rounded-lg p-3">
               <div class="flex items-start gap-3">
-                <!-- Thumbnail -->
-                <div
-                  class="w-10 h-10 rounded-full bg-[var(--color-base-200)] overflow-hidden shrink-0"
-                >
-                  <img
-                    src={buildAppUrl(
-                      `/api/v2/media/species-image?name=${encodeURIComponent(detection.scientificName ?? '')}`
-                    )}
-                    alt={detection.commonName || t('analytics.recentDetections.unknownSpecies')}
-                    class="w-full h-full object-cover"
-                    onerror={handleBirdImageError}
-                    loading="lazy"
-                    decoding="async"
-                    fetchpriority="low"
-                  />
+                <!-- Time of Day + Date/Time -->
+                <div class="w-16 shrink-0 text-sm opacity-80">
+                  <div class="flex items-center gap-1">
+                    <TimeOfDayIcon
+                      timeOfDay={detection.timeOfDay as TimeOfDayValue | undefined}
+                      datetime={detection.timestamp}
+                      className="size-4"
+                    />
+                    <span class="capitalize">{detection.timeOfDay}</span>
+                  </div>
+                  <div class="mt-1 text-xs opacity-70 leading-tight">
+                    {formatDate(detection.timestamp)}
+                  </div>
                 </div>
-                <!-- Content -->
+
+                <!-- Thumbnail and names -->
                 <div class="flex-1 min-w-0">
-                  <div class="text-sm text-[var(--color-base-content)]/70">
-                    {detection.timestamp ? formatDateTime(detection.timestamp) : '-'}
+                  <div class="flex items-center gap-2">
+                    <div
+                      class="w-12 h-9 rounded-md overflow-hidden bg-[var(--color-base-200)] shrink-0"
+                    >
+                      <img
+                        src={buildAppUrl(
+                          `/api/v2/media/species-image?name=${encodeURIComponent(detection.scientificName)}`
+                        )}
+                        alt={displayName || t('search.detailsPanel.unknownSpecies')}
+                        class="w-full h-full object-cover"
+                        onerror={handleBirdImageError}
+                        loading="lazy"
+                        decoding="async"
+                        fetchpriority="low"
+                      />
+                    </div>
+                    <div class="min-w-0">
+                      <div class="font-semibold leading-tight truncate">
+                        {displayName || t('search.detailsPanel.unknownSpecies')}
+                      </div>
+                      <div class="text-xs opacity-60 truncate">
+                        {detection.scientificName || ''}
+                      </div>
+                    </div>
                   </div>
-                  <div class="font-medium leading-tight truncate">
-                    {localizeSpeciesName(detection.scientificName, detection.commonName) ||
-                      t('analytics.recentDetections.unknownSpecies')}
-                  </div>
-                  <div class="text-xs opacity-60 truncate">{detection.scientificName || ''}</div>
-                  <div class="mt-2 flex items-center justify-between">
-                    <!-- Confidence badge -->
+
+                  <!-- Confidence + Status -->
+                  <div class="mt-2 flex items-center gap-2">
                     <span
                       class="badge {detection.confidence >= 0.8
                         ? 'badge-success'
@@ -749,26 +815,108 @@
                           ? 'badge-warning'
                           : 'badge-error'}"
                     >
-                      {formatPercentage(detection.confidence)}
+                      {Math.round(detection.confidence * 100)}%
                     </span>
-                    <SourceBadge {detection} variant="inline" />
-                    <span class="text-xs opacity-70"
-                      >{detection.timeOfDay || t('analytics.recentDetections.unknown')}</span
+                    <div class="flex gap-1 flex-wrap">
+                      <div
+                        class="status-badge {detection.verified === 'correct'
+                          ? 'correct'
+                          : detection.verified === 'false_positive'
+                            ? 'false'
+                            : 'unverified'}"
+                      >
+                        {detection.verified === 'correct'
+                          ? t('search.statusBadges.verified')
+                          : detection.verified === 'false_positive'
+                            ? t('common.review.status.falsePositive')
+                            : t('search.statusBadges.unverified')}
+                      </div>
+                      <div class="status-badge {detection.locked ? 'locked' : 'unverified'}">
+                        {detection.locked
+                          ? t('search.statusBadges.locked')
+                          : t('search.statusBadges.unlocked')}
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Source -->
+                  {#if detection.source}
+                    <div class="mt-1">
+                      <SourceBadge {detection} variant="inline" />
+                    </div>
+                  {/if}
+
+                  <!-- Actions -->
+                  <div class="mt-2 flex items-center gap-2 flex-wrap">
+                    <ActionMenu
+                      {detection}
+                      isExcluded={isSpeciesExcluded(detection.commonName)}
+                      onMarkCorrect={() => detectionActions.handleMarkCorrect(detection)}
+                      onMarkFalsePositive={() =>
+                        detectionActions.handleMarkFalsePositive(detection)}
+                      onReview={() => detectionActions.handleReview(detection)}
+                      onToggleSpecies={() => detectionActions.handleToggleSpecies(detection)}
+                      onToggleLock={() => detectionActions.handleToggleLock(detection)}
+                      onDelete={() => detectionActions.handleDelete(detection)}
+                      onDownload={detection.clipName
+                        ? () => downloadDetectionAudio(detection)
+                        : undefined}
+                    />
+                    {#if detection.clipName}
+                      <button
+                        class="btn btn-primary btn-sm"
+                        onclick={() => openMobilePlayer(detection)}
+                        aria-label={t('search.detailsPanel.playAudio', {
+                          species: displayName || t('search.detailsPanel.unknownSpecies'),
+                        })}
+                      >
+                        <Volume2 class="size-4" />
+                        {t('common.actions.play')}
+                      </button>
+                    {/if}
+                    <button
+                      class="btn btn-outline btn-sm"
+                      onclick={() => navigation.navigate(`/ui/detections/${detection.id}`)}
+                      aria-label={t('search.detailsPanel.viewDetails', {
+                        species: displayName || t('search.detailsPanel.unknownSpecies'),
+                      })}
                     >
+                      {t('common.actions.view')}
+                    </button>
                   </div>
                 </div>
               </div>
-            </div>
-          {:else}
-            <div class="text-center py-4 text-[var(--color-base-content)] opacity-50">
-              {t('analytics.recentDetections.noRecentDetections')}
-            </div>
+            </section>
           {/each}
+
+          {#if showMobilePlayer}
+            <div class="md:hidden">
+              <MobileAudioPlayer
+                audioUrl={selectedAudioUrl}
+                speciesName={selectedSpeciesName}
+                detectionId={selectedDetectionId}
+                modelType={selectedModelType}
+                onClose={closeMobilePlayer}
+              />
+            </div>
+          {/if}
         </div>
       {/if}
     </div>
   </div>
 </div>
+
+<!-- Per-detection confirmation (review/ignore/lock/delete from a row or card) -->
+{#if detectionActions.selectedDetection}
+  <ConfirmModal
+    isOpen={detectionActions.showConfirmModal}
+    title={detectionActions.confirmModalConfig.title}
+    message={detectionActions.confirmModalConfig.message}
+    confirmLabel={detectionActions.confirmModalConfig.confirmLabel}
+    onClose={detectionActions.closeModal}
+    onConfirm={detectionActions.confirmModal}
+  />
+{/if}
 
 <!-- Shared card chrome for the overview charts (loading overlay + empty state). -->
 {#snippet chartCard(

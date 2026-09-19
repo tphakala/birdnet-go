@@ -76,14 +76,55 @@ func DateRangeToUnix(dr *datastore.DateRange, tz *time.Location) (start, end *in
 	return &s, &e
 }
 
-// TimeOfDayToHours converts time-of-day period strings to a list of hours.
-// Supported periods:
-//   - "dawn": hours 5, 6 (5:00 AM - 6:59 AM)
-//   - "day": hours 7-17 (7:00 AM - 5:59 PM)
-//   - "dusk": hours 18, 19 (6:00 PM - 7:59 PM)
-//   - "night": hours 20-23, 0-4 (8:00 PM - 4:59 AM)
+// timeOfDayPeriodHours returns the local hours covered by one canonical
+// time-of-day period ("sunrise", "day", "sunset", "night").
 //
-// Returns nil if periods is empty.
+// The four periods partition the 24-hour clock, mirroring the sun-event
+// classifier used by the legacy datastore (suncalc.ClassifyTimeOfDay), where
+// every detection carries exactly one label and "day" means the daylight arc
+// *outside* the sunrise and sunset transition windows. The normalized datastore
+// filters by hour buckets rather than per-date sun events, so these are fixed
+// approximations of that partition -- but they are the same approximation for
+// every caller, which is what keeps the simple and advanced search paths
+// agreeing with each other.
+//
+// Returns nil for an unrecognized period.
+func timeOfDayPeriodHours(period string) []int {
+	switch period {
+	case datastore.TimeOfDaySunrise:
+		return hourRange(DawnStartHour, DawnEndHour)
+	case datastore.TimeOfDayDay:
+		return hourRange(DayStartHour, DayEndHour)
+	case datastore.TimeOfDaySunset:
+		return hourRange(DuskStartHour, DuskEndHour)
+	case datastore.TimeOfDayNight:
+		// Night wraps around midnight.
+		return append(hourRange(NightStartHour, 23), hourRange(0, NightEndHour)...)
+	default:
+		return nil
+	}
+}
+
+// hourRange returns the inclusive hours from start to end. It does not wrap;
+// callers that need a wrapping span concatenate two ranges.
+func hourRange(start, end int) []int {
+	if end < start {
+		return nil
+	}
+	hours := make([]int, 0, end-start+1)
+	for h := start; h <= end; h++ {
+		hours = append(hours, h)
+	}
+	return hours
+}
+
+// TimeOfDayToHours converts time-of-day period strings to a list of hours.
+//
+// Periods are normalized first, so both the canonical vocabulary ("sunrise",
+// "day", "sunset", "night") and the legacy "dawn"/"dusk" aliases are accepted.
+// See timeOfDayPeriodHours for the hour boundaries. Multiple periods are unioned.
+//
+// Returns nil if periods is empty or names nothing recognized.
 func TimeOfDayToHours(periods []string) []int {
 	if len(periods) == 0 {
 		return nil
@@ -92,28 +133,9 @@ func TimeOfDayToHours(periods []string) []int {
 	// Use a map to deduplicate hours
 	hourSet := make(map[int]struct{})
 
-	for _, period := range periods {
-		switch strings.ToLower(period) {
-		case "dawn":
-			for h := DawnStartHour; h <= DawnEndHour; h++ {
-				hourSet[h] = struct{}{}
-			}
-		case "day":
-			for h := DayStartHour; h <= DayEndHour; h++ {
-				hourSet[h] = struct{}{}
-			}
-		case "dusk":
-			for h := DuskStartHour; h <= DuskEndHour; h++ {
-				hourSet[h] = struct{}{}
-			}
-		case "night":
-			// Night wraps around midnight
-			for h := NightStartHour; h <= 23; h++ {
-				hourSet[h] = struct{}{}
-			}
-			for h := 0; h <= NightEndHour; h++ {
-				hourSet[h] = struct{}{}
-			}
+	for _, period := range datastore.NormalizeTimeOfDayPeriods(periods) {
+		for _, h := range timeOfDayPeriodHours(period) {
+			hourSet[h] = struct{}{}
 		}
 	}
 
@@ -121,8 +143,12 @@ func TimeOfDayToHours(periods []string) []int {
 		return nil
 	}
 
-	// Convert map to slice
-	return slices.Collect(maps.Keys(hourSet))
+	// Sort so the hour list (and therefore the generated IN clause, and any cache
+	// key derived from these filters) is stable for a given set of periods. Map
+	// iteration order is randomized, which would otherwise vary per call.
+	hours := slices.Collect(maps.Keys(hourSet))
+	slices.Sort(hours)
+	return hours
 }
 
 // HourFilterToHours converts an HourFilter to a list of hours.
@@ -483,48 +509,19 @@ func parseDateString(dateStr string, tz *time.Location, endOfDay bool) (*int64, 
 }
 
 // singleTimeOfDayToHours converts a single time-of-day string to hour ranges.
-// This is used by ConvertSearchFilters which receives a single string, not a slice.
+// This is used by ConvertSearchFilters, which receives a single string rather
+// than a slice.
 //
-// For Simple Search API, "day" and "night" use broader ranges than Advanced Search:
-//   - "day" = all daylight hours (dawn + day + dusk): hours 5-19
-//   - "night" = true night only: hours 20-23, 0-4
+// It delegates to the same period mapping the advanced path uses, so the simple
+// and advanced search endpoints resolve a given period identically. They
+// previously disagreed: simple search counted the sunrise and sunset windows as
+// "day" (hours 5-19) while advanced search did not (hours 7-17), so the same
+// filter returned different sets depending on which endpoint served it.
 //
-// This provides intuitive filtering for casual users without requiring granular
-// period selection (dawn, day, dusk, night) available in Advanced Search.
-//
-// Supported values: "any", "day", "night", "sunrise", "sunset"
+// Supported values: "any", "day", "night", "sunrise", "sunset", plus the legacy
+// "dawn"/"dusk" aliases. Returns nil for "", "any" and unrecognized values.
 func singleTimeOfDayToHours(timeOfDay string) []int {
-	switch strings.ToLower(timeOfDay) {
-	case "", "any":
-		return nil
-	case "day":
-		// Simple Search "day" = all daylight hours (dawn + day + dusk)
-		// Using constants: DawnStartHour (5) through DuskEndHour (19)
-		hours := make([]int, 0, DuskEndHour-DawnStartHour+1)
-		for h := DawnStartHour; h <= DuskEndHour; h++ {
-			hours = append(hours, h)
-		}
-		return hours
-	case "night":
-		// Simple Search "night" = true night only
-		// Using constants: NightStartHour (20) through NightEndHour (4)
-		hours := make([]int, 0, (23-NightStartHour+1)+(NightEndHour+1))
-		for h := NightStartHour; h <= 23; h++ {
-			hours = append(hours, h)
-		}
-		for h := 0; h <= NightEndHour; h++ {
-			hours = append(hours, h)
-		}
-		return hours
-	case "sunrise":
-		// ±1 hour around typical sunrise
-		return []int{DawnStartHour, DawnEndHour, DayStartHour}
-	case "sunset":
-		// ±1 hour around typical sunset
-		return []int{DayEndHour, DuskStartHour, DuskEndHour}
-	default:
-		return nil
-	}
+	return TimeOfDayToHours([]string{timeOfDay})
 }
 
 // maxCommonNameLabelIDs bounds the number of common-name-matched label IDs returned. This keeps
@@ -882,15 +879,40 @@ func ConvertAdvancedFilters(
 	// Hour filtering (merge TimeOfDay and Hour filters)
 	sf.IncludedHours = MergeHourFilters(filters.TimeOfDay, filters.Hour)
 
-	// Confidence conversion
+	// Confidence conversion. The single-operator filter and the explicit range are
+	// independent inputs; when both are given the narrower of each bound wins, so
+	// the result is their intersection (matching the AND-ed SQL on the legacy path).
 	sf.MinConfidence, sf.MaxConfidence = ConfidenceFilterToMinMax(filters.Confidence)
+	if r := filters.ConfidenceRange; r != nil {
+		if r.Min > 0 && (sf.MinConfidence == nil || r.Min > *sf.MinConfidence) {
+			minConf := r.Min
+			sf.MinConfidence = &minConf
+		}
+		if r.Max > 0 && r.Max < 1.0 && (sf.MaxConfidence == nil || r.Max < *sf.MaxConfidence) {
+			maxConf := r.Max
+			sf.MaxConfidence = &maxConf
+		}
+	}
 
-	// Verified → IsReviewed conversion
-	// In AdvancedSearchFilters, Verified is a bool:
-	//   true = show only verified/reviewed detections
-	//   false = show only unverified/unreviewed detections
-	if filters.Verified != nil {
-		sf.IsReviewed = filters.Verified
+	// Verification status. VerifiedStatus is the three-state verdict filter and
+	// takes precedence; Verified is the legacy reviewed/not-reviewed boolean used
+	// when no status is given. The repository distinguishes Verified (a specific
+	// verdict) from IsReviewed (whether any verdict exists), which is what lets
+	// "false positives only" be expressed here at all.
+	switch strings.ToLower(strings.TrimSpace(filters.VerifiedStatus)) {
+	case datastore.VerifiedStatusCorrect:
+		verified := VerificationFilter(entities.VerificationCorrect)
+		sf.Verified = &verified
+	case datastore.VerifiedStatusFalsePositive:
+		verified := VerificationFilter(entities.VerificationFalsePositive)
+		sf.Verified = &verified
+	case datastore.VerifiedStatusUnverified:
+		isReviewed := false
+		sf.IsReviewed = &isReviewed
+	default:
+		if filters.Verified != nil {
+			sf.IsReviewed = filters.Verified
+		}
 	}
 
 	// Entity lookups (require deps)

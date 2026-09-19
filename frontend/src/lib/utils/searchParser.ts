@@ -4,8 +4,10 @@
  * Supports syntax like:
  * - "Robin confidence:>85"
  * - "confidence:>90 time:dawn"
- * - "Blue Jay date:today verified:true"
+ * - "Blue Jay date:today verified:correct"
  */
+
+import { getLocalDateString } from '$lib/utils/date';
 
 export type FilterOperator = '>' | '<' | '>=' | '<=' | '=' | ':';
 
@@ -42,8 +44,18 @@ export interface ParsedSearch {
   errors: string[];
 }
 
-// Valid time-of-day values
-const TIME_OF_DAY_VALUES = ['dawn', 'day', 'dusk', 'night'];
+// Valid time-of-day values. "sunrise"/"sunset" are canonical (they name real sun
+// events, which is how the backend resolves them); "dawn"/"dusk" are kept as
+// accepted aliases so existing saved searches and muscle memory keep working.
+const TIME_OF_DAY_CANONICAL = ['day', 'night', 'sunrise', 'sunset'];
+const TIME_OF_DAY_VALUES = [...TIME_OF_DAY_CANONICAL, 'dawn', 'dusk'];
+
+// Legacy period names mapped onto the canonical ones the API and the detections
+// filter panel both use.
+const TIME_OF_DAY_ALIASES: Record<string, string> = {
+  dawn: 'sunrise',
+  dusk: 'sunset',
+};
 
 // Date shortcuts
 const DATE_SHORTCUTS = ['today', 'yesterday', 'week', 'month'];
@@ -423,6 +435,18 @@ function parseVerifiedFilter(
 
   const lowerValue = value.toLowerCase();
 
+  // The three review verdicts, matching the detections filter panel's options.
+  if (['correct', 'false_positive', 'unverified'].includes(lowerValue)) {
+    return {
+      filter: {
+        type: 'verified',
+        operator: ':',
+        value: lowerValue,
+        raw,
+      },
+    };
+  }
+
   // Handle special case for "human" verification
   if (lowerValue === 'human') {
     return {
@@ -435,14 +459,18 @@ function parseVerifiedFilter(
     };
   }
 
-  // Convert to boolean
+  // Legacy boolean spellings, kept so existing saved searches keep parsing.
+  // formatFiltersForAPI maps them onto a verdict.
   let boolValue: boolean;
   if (['true', 'yes', '1'].includes(lowerValue)) {
     boolValue = true;
   } else if (['false', 'no', '0'].includes(lowerValue)) {
     boolValue = false;
   } else {
-    return { error: 'Verified value must be true, false, yes, no, 1, 0, or human' };
+    return {
+      error:
+        'Verified value must be correct, false_positive, unverified, or true, false, yes, no, 1, 0, human',
+    };
   }
 
   return {
@@ -566,17 +594,49 @@ export function formatFiltersForAPI(filters: SearchFilter[]): Record<string, str
 
   for (const filter of filters) {
     switch (filter.type) {
-      case 'confidence':
-        params.confidence = `${filter.operator}${filter.value}`;
+      // A comparison is expressed as one end of a confidence band rather than as
+      // an operator string. The band is what the detections filter panel shows, so
+      // "confidence:>85" typed in the search box appears there as a 85-100% range
+      // instead of as an invisible filter the panel cannot represent.
+      case 'confidence': {
+        const value = String(filter.value);
+        switch (filter.operator) {
+          case '>':
+          case '>=':
+            params.confidenceMin = value;
+            break;
+          case '<':
+          case '<=':
+            params.confidenceMax = value;
+            break;
+          case '=':
+          case ':':
+            // Equality: a band with both ends on the same value.
+            params.confidenceMin = value;
+            params.confidenceMax = value;
+            break;
+        }
         break;
+      }
 
-      case 'time':
-        params.timeOfDay = filter.value.toString();
+      case 'time': {
+        const period = filter.value.toString();
+        // eslint-disable-next-line security/detect-object-injection -- fixed local map, key already validated against TIME_OF_DAY_VALUES by parseTimeFilter
+        params.timeOfDay = TIME_OF_DAY_ALIASES[period] ?? period;
         break;
+      }
 
-      case 'date':
-        params.date = filter.value.toString();
+      // Shortcuts are resolved to concrete dates here. The API accepts only
+      // YYYY-MM-DD, so "date:today" used to be rejected outright; resolving it
+      // also lets the filter panel display the resulting range.
+      case 'date': {
+        const range = resolveDateShortcut(filter.value.toString());
+        if (range) {
+          params.start_date = range.start;
+          params.end_date = range.end;
+        }
         break;
+      }
 
       case 'hour':
         if (filter.value2) {
@@ -593,8 +653,11 @@ export function formatFiltersForAPI(filters: SearchFilter[]): Record<string, str
         params.end_date = filter.value2 ?? '';
         break;
 
+      // Emitted as a review verdict rather than a boolean. The boolean form meant
+      // "carries any verdict", which the filter panel has no control for, so the
+      // panel would have shown "Any status" while the list was filtered.
       case 'verified':
-        params.verified = filter.value.toString();
+        params.verified = normalizeVerifiedValue(filter.value);
         break;
 
       case 'species':
@@ -623,6 +686,54 @@ export function formatFiltersForAPI(filters: SearchFilter[]): Record<string, str
 }
 
 /**
+ * Map a parsed `verified:` value onto the three review verdicts.
+ *
+ * `verified:true` historically selected "has been reviewed at all", which reads
+ * as "verified correct" to most people and cannot be shown in the filter panel.
+ * It is mapped to the verdict a user most likely meant; `verified:false` becomes
+ * "unverified", which is what it already selected.
+ */
+function normalizeVerifiedValue(value: string | number | boolean): string {
+  if (value === true || value === 'human') return 'correct';
+  if (value === false) return 'unverified';
+  return String(value);
+}
+
+/**
+ * Resolve a date shortcut or literal date into an inclusive [start, end] range.
+ *
+ * "today" and "yesterday" are single days; "week" and "month" are the trailing 7
+ * and 30 days ending today, matching the backend's ParseDateShortcut. Returns
+ * null for anything unrecognized.
+ */
+function resolveDateShortcut(value: string): { start: string; end: string } | null {
+  const today = new Date();
+  const daysAgo = (days: number) => {
+    const date = new Date(today);
+    date.setDate(date.getDate() - days);
+    return getLocalDateString(date);
+  };
+
+  switch (value.toLowerCase()) {
+    case 'today':
+      return { start: getLocalDateString(today), end: getLocalDateString(today) };
+    case 'yesterday':
+      return { start: daysAgo(1), end: daysAgo(1) };
+    case 'week':
+      return { start: daysAgo(7), end: getLocalDateString(today) };
+    case 'month':
+      return { start: daysAgo(30), end: getLocalDateString(today) };
+    default:
+      // Already a literal YYYY-MM-DD date (the parser validated the format), which
+      // is a one-day range.
+      return ISO_DATE_ONLY_RE.test(value) ? { start: value, end: value } : null;
+  }
+}
+
+/** Literal calendar date, as `date:` accepts it. */
+const ISO_DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
  * Get filter suggestions based on partial input
  */
 export function getFilterSuggestions(partialInput: string): string[] {
@@ -638,7 +749,8 @@ export function getFilterSuggestions(partialInput: string): string[] {
         break;
 
       case 'time':
-        TIME_OF_DAY_VALUES.forEach(time => {
+        // Suggest only the canonical names; the aliases still parse.
+        TIME_OF_DAY_CANONICAL.forEach(time => {
           suggestions.push(`time:${time}`);
         });
         break;
@@ -651,7 +763,7 @@ export function getFilterSuggestions(partialInput: string): string[] {
         break;
 
       case 'verified':
-        suggestions.push('verified:true', 'verified:false', 'verified:human');
+        suggestions.push('verified:correct', 'verified:false_positive', 'verified:unverified');
         break;
 
       case 'locked':

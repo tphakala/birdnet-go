@@ -528,6 +528,10 @@
       "verifiedStatus": "Todennettu tila",
       "lockedStatus": "Lukittu tila",
       "timeOfDay": "Vuorokaudenaika",
+      "hourRange": "Vuorokaudenaika",
+      "hourRangeHelp": "Suodata havainnot kellonajan mukaan, auringonnoususta ja -laskusta riippumatta (tyhjä = kaikki tunnit)",
+      "hourStart": "Aikaisin tunti",
+      "hourEnd": "Myöhäisin tunti",
       "source": "Äänilähde"
     },
     "advancedFilters": "Lisäsuodattimet",
@@ -549,6 +553,9 @@
       "night": "Vain yöllä",
       "sunrise": "Auringonnousu +/- 30min",
       "sunset": "Auringonlasku +/- 30min"
+    },
+    "hourOptions": {
+      "any": "Mikä tahansa tunti"
     },
     "sourceOptions": {
       "any": "Kaikki lähteet"
@@ -591,12 +598,15 @@
       "collapseDetails": "Pienennä {species} tiedot",
       "playAudio": "Toista {species} ääni",
       "viewDetails": "Näytä {species} tiedot",
+      "detectionDetail": "Havainnon tiedot",
+      "detectionDetailFor": "Havainnon {species} tiedot",
       "unknownSpecies": "Tuntematon laji",
       "clickToCollapse": "Klikkaa pienentääksesi"
     },
     "errors": {
       "searchFailed": "Haku epäonnistui: {error}",
-      "minMaxConfidence": "Vähimmäisluottamus ei voi olla suurempi kuin enimmäisluottamus."
+      "minMaxConfidence": "Vähimmäisluottamus ei voi olla suurempi kuin enimmäisluottamus.",
+      "minMaxHour": "Aikaisin tunti ei voi olla myöhäisintä tuntia myöhempi."
     },
     "pagination": {
       "page": "Sivu {current}/{total}",
@@ -740,7 +750,8 @@
         "ignoreSpecies": "Ohita laji",
         "lockDetection": "Lukitse havainto",
         "unlockDetection": "Avaa lukitus",
-        "deleteDetection": "Poista havainto"
+        "deleteDetection": "Poista havainto",
+        "compareSounds": "Vertailuäänet"
       },
       "noDetections": "Ei viimeaikaisia havaintoja",
       "errors": {
@@ -839,6 +850,7 @@
       "hourly": "Tunnittaiset tulokset klo {hour}.00 päivänä {date}",
       "hourlyRange": "Tunnittaiset tulokset välillä {startHour}.00-{endHour}.00 päivänä {date}",
       "species": "{species} tulokset päivänä {date}",
+      "speciesAll": "{species} tulokset",
       "search": "Hakutulokset haulle \"{query}\"",
       "allDetections": "Kaikki havainnot päivänä {date}"
     },
@@ -847,6 +859,9 @@
       "observation": "Havainto",
       "aria": {
         "downloadAudioClip": "Lataa äänileike {name} havainnolle",
+        "compareSounds": "Kuuntele lajin {name} tunnistusäänitteitä All About Birds -sivustolla (avautuu uuteen välilehteen)",
+        "viewOnAllAboutBirds": "Näytä {name} All About Birds -sivustolla (avautuu uuteen välilehteen)",
+        "viewOnWikipedia": "Näytä {name} Wikipediassa (avautuu uuteen välilehteen)",
         "audioRecordingFor": "Äänitallenne ja spektrogrammi lajille {name}",
         "scientificName": "Tieteellinen nimi",
         "classificationBadges": "Lajin luokitusmerkit",
@@ -993,7 +1008,10 @@
     },
     "media": {
       "title": "Tallenne ja spektrogrammi",
-      "clipHint": "Valitse leike napsauttamalla ja vetämällä spektrogrammia"
+      "clipHint": "Valitse leike napsauttamalla ja vetämällä spektrogrammia",
+      "compareSounds": "Vertailuäänet",
+      "viewOnAllAboutBirds": "All About Birds",
+      "viewOnWikipedia": "Wikipedia"
     },
     "tabs": {
       "overview": "Yleiskatsaus",
@@ -2034,9 +2052,13 @@
       "speciesList": "Lajiluettelo",
       "switchToGrid": "Vaihda ruudukkonäkymään",
       "switchToList": "Vaihda listanäkymään",
+      "openAllAboutBirds": "Näytä tämä laji All About Birds -sivustolla",
+      "openWikipedia": "Näytä tämä laji Wikipediassa",
+      "viewDetections": "Näytä kaikki lajin {species} havainnot",
       "noSpeciesFound": "Suodattimia vastaavia lajeja ei löytynyt.",
       "headers": {
         "species": "Laji",
+        "links": "Linkit",
         "detections": "Havainnot",
         "avgConfidence": "Keskim. luottamus",
         "maxConfidence": "Maks. luottamus",
