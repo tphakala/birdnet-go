@@ -757,12 +757,12 @@
       "configFetch": "Nepodarilo sa získať konfiguráciu prehľadu: {status}"
     },
     "acousticModels": {
-      "noneTitle": "No acoustic model enabled",
-      "noneMessage": "Audio is being captured but not analyzed. Enable a model in the gallery to start detecting species.",
-      "noneAction": "Open model gallery",
-      "loadFailedTitle": "Acoustic model failed to load",
-      "loadFailedMessage": "An enabled model could not be loaded, so no audio is being analyzed. The AI Models page shows which model failed and why.",
-      "loadFailedAction": "View AI Models status"
+      "noneTitle": "Nie je povolený žiadny akustický model",
+      "noneMessage": "Zvuk sa zaznamenáva, ale neanalyzuje. Povoľte model v galérii modelov a začnite s detekciou druhov.",
+      "noneAction": "Otvoriť galériu modelov",
+      "loadFailedTitle": "Akustický model sa nepodarilo načítať",
+      "loadFailedMessage": "Povolený model sa nepodarilo načítať, takže sa zvuk neanalyzuje. Stránka Modely AI ukazuje, ktorý model zlyhal a prečo.",
+      "loadFailedAction": "Zobraziť stav Modely AI"
     },
     "banner": {
       "title": "Názov",
@@ -3838,16 +3838,16 @@
       "models": {
         "recommendBoth": "Pre najlepšie pokrytie detekcie druhov sa odporúča spustiť oba modely BirdNET a Perch spoločne.",
         "perchOnlyWarning": "Samotný Perch produkuje menej detekcií. Pre zmysluplné výsledky znížte prah spoľahlivosti na 0.50, alebo aktivujte aj BirdNET pre lepšie pokrytie.",
-        "loading": "Loading detection models...",
-        "noneEnabledTitle": "No detection model enabled.",
-        "noneEnabledHelp": "You can still save this source. Its audio is analyzed by the default models as soon as one is enabled.",
-        "noneEnabledLink": "Open model gallery",
-        "noneAvailable": "No detection models are enabled on this server.",
-        "loadFailedWarning": "A detection model failed to load, so this source is not being analyzed until it recovers.",
-        "loadFailedLink": "View AI Models status",
-        "defaultBadge": "{models} (default)",
-        "defaultPendingBadge": "Default models",
-        "noneBadge": "No model loaded"
+        "loading": "Načítavajú sa detekčné modely...",
+        "noneEnabledTitle": "Nie je povolený žiadny detekčný model.",
+        "noneEnabledHelp": "Tento zdroj môžete stále uložiť. Jeho zvuk bude analyzovaný predvolenými modelmi, hneď ako sa jeden povolí.",
+        "noneEnabledLink": "Otvoriť galériu modelov",
+        "noneAvailable": "Na tomto serveri nie sú povolené žiadne detekčné modely.",
+        "loadFailedWarning": "Detekčný model sa nepodarilo načítať, takže sa tento zdroj nebude analyzovať, kým sa neobnoví.",
+        "loadFailedLink": "Zobraziť stav Modely AI",
+        "defaultBadge": "{models} (predvolené)",
+        "defaultPendingBadge": "Predvolené modely",
+        "noneBadge": "Nie je načítaný žiadny model"
       }
     },
     "security": {

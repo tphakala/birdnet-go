@@ -757,12 +757,12 @@
       "configFetch": "Az irányítópult konfigurációjának betöltése sikertelen: {status}"
     },
     "acousticModels": {
-      "noneTitle": "No acoustic model enabled",
-      "noneMessage": "Audio is being captured but not analyzed. Enable a model in the gallery to start detecting species.",
-      "noneAction": "Open model gallery",
-      "loadFailedTitle": "Acoustic model failed to load",
-      "loadFailedMessage": "An enabled model could not be loaded, so no audio is being analyzed. The AI Models page shows which model failed and why.",
-      "loadFailedAction": "View AI Models status"
+      "noneTitle": "Nincs engedélyezve akusztikai modell",
+      "noneMessage": "A hang rögzítése folyamatban van, de nincs elemezve. Engedélyezzen egy modellt a modellgalériában a fajok detektálásának megkezdéséhez.",
+      "noneAction": "Modellgaléria megnyitása",
+      "loadFailedTitle": "Az akusztikai modellt nem sikerült betölteni",
+      "loadFailedMessage": "Egy engedélyezett modellt nem sikerült betölteni, így a hang nincs elemezve. Az AI Modellek oldal mutatja, hogy melyik modell hibásodott meg és miért.",
+      "loadFailedAction": "AI Modellek állapotának megtekintése"
     },
     "banner": {
       "title": "Cím",
@@ -3838,16 +3838,16 @@
       "models": {
         "recommendBoth": "A legjobb fajészlelési lefedettség érdekében javasolt a BirdNET és a Perch modellek együttes futtatása.",
         "perchOnlyWarning": "A Perch önmagában kevesebb észlelést produkál. Az érdemi eredményekhez csökkentse a megbízhatósági küszöböt 0.50-re, vagy aktiválja a BirdNET-et is a jobb lefedettség érdekében.",
-        "loading": "Loading detection models...",
-        "noneEnabledTitle": "No detection model enabled.",
-        "noneEnabledHelp": "You can still save this source. Its audio is analyzed by the default models as soon as one is enabled.",
-        "noneEnabledLink": "Open model gallery",
-        "noneAvailable": "No detection models are enabled on this server.",
-        "loadFailedWarning": "A detection model failed to load, so this source is not being analyzed until it recovers.",
-        "loadFailedLink": "View AI Models status",
-        "defaultBadge": "{models} (default)",
-        "defaultPendingBadge": "Default models",
-        "noneBadge": "No model loaded"
+        "loading": "Detekciós modellek betöltése...",
+        "noneEnabledTitle": "Nincs engedélyezve detekciós modell.",
+        "noneEnabledHelp": "Ezt a forrást továbbra is mentheti. A hangját az alapértelmezett modellek elemzik, amint egyet engedélyeznek.",
+        "noneEnabledLink": "Modellgaléria megnyitása",
+        "noneAvailable": "Ezen a szerveren nincsenek engedélyezve detekciós modellek.",
+        "loadFailedWarning": "Egy detekciós modellt nem sikerült betölteni, ezért ez a forrás nem lesz elemezve, amíg helyre nem áll.",
+        "loadFailedLink": "AI Modellek állapotának megtekintése",
+        "defaultBadge": "{models} (alapértelmezett)",
+        "defaultPendingBadge": "Alapértelmezett modellek",
+        "noneBadge": "Nincs betöltve modell"
       }
     },
     "security": {

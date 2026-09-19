@@ -757,12 +757,12 @@
       "configFetch": "Kunne ikke hente instrumentpanelkonfiguration: {status}"
     },
     "acousticModels": {
-      "noneTitle": "No acoustic model enabled",
-      "noneMessage": "Audio is being captured but not analyzed. Enable a model in the gallery to start detecting species.",
-      "noneAction": "Open model gallery",
-      "loadFailedTitle": "Acoustic model failed to load",
-      "loadFailedMessage": "An enabled model could not be loaded, so no audio is being analyzed. The AI Models page shows which model failed and why.",
-      "loadFailedAction": "View AI Models status"
+      "noneTitle": "Ingen akustisk model aktiveret",
+      "noneMessage": "Lyd optages, men analyseres ikke. Aktivér en model i modelgalleriet for at begynde at detektere arter.",
+      "noneAction": "Åbn modelgalleri",
+      "loadFailedTitle": "Akustisk model kunne ikke indlæses",
+      "loadFailedMessage": "En aktiveret model kunne ikke indlæses, så der analyseres ingen lyd. Siden AI-modeller viser, hvilken model der fejlede og hvorfor.",
+      "loadFailedAction": "Vis status for AI-modeller"
     },
     "banner": {
       "title": "Titel",
@@ -3838,16 +3838,16 @@
       "models": {
         "recommendBoth": "For bedste artsdækning anbefales det at køre både BirdNET og Perch sammen.",
         "perchOnlyWarning": "Perch alene producerer færre detektioner. Sænk konfidenstærsklen til 0.50 for meningsfulde resultater, eller aktiver BirdNET ved siden af for bedste dækning.",
-        "loading": "Loading detection models...",
-        "noneEnabledTitle": "No detection model enabled.",
-        "noneEnabledHelp": "You can still save this source. Its audio is analyzed by the default models as soon as one is enabled.",
-        "noneEnabledLink": "Open model gallery",
-        "noneAvailable": "No detection models are enabled on this server.",
-        "loadFailedWarning": "A detection model failed to load, so this source is not being analyzed until it recovers.",
-        "loadFailedLink": "View AI Models status",
-        "defaultBadge": "{models} (default)",
-        "defaultPendingBadge": "Default models",
-        "noneBadge": "No model loaded"
+        "loading": "Indlæser detektionsmodeller...",
+        "noneEnabledTitle": "Ingen detektionsmodel aktiveret.",
+        "noneEnabledHelp": "Du kan stadig gemme denne kilde. Dens lyd analyseres af standardmodellerne, så snart en er aktiveret.",
+        "noneEnabledLink": "Åbn modelgalleri",
+        "noneAvailable": "Ingen detektionsmodeller er aktiveret på denne server.",
+        "loadFailedWarning": "En detektionsmodel kunne ikke indlæses, så denne kilde analyseres ikke, før den kommer sig.",
+        "loadFailedLink": "Vis status for AI-modeller",
+        "defaultBadge": "{models} (standard)",
+        "defaultPendingBadge": "Standardmodeller",
+        "noneBadge": "Ingen model indlæst"
       }
     },
     "security": {

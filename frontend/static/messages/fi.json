@@ -757,12 +757,12 @@
       "configFetch": "Etusivun asetusten haku epäonnistui: {status}"
     },
     "acousticModels": {
-      "noneTitle": "No acoustic model enabled",
-      "noneMessage": "Audio is being captured but not analyzed. Enable a model in the gallery to start detecting species.",
-      "noneAction": "Open model gallery",
-      "loadFailedTitle": "Acoustic model failed to load",
-      "loadFailedMessage": "An enabled model could not be loaded, so no audio is being analyzed. The AI Models page shows which model failed and why.",
-      "loadFailedAction": "View AI Models status"
+      "noneTitle": "Akustista mallia ei ole käytössä",
+      "noneMessage": "Ääntä tallennetaan, mutta ei analysoida. Ota malli käyttöön malligalleriassa aloittaaksesi lajien tunnistuksen.",
+      "noneAction": "Avaa malligalleria",
+      "loadFailedTitle": "Akustisen mallin lataus epäonnistui",
+      "loadFailedMessage": "Käytössä olevaa mallia ei voitu ladata, joten ääntä ei analysoida. Tekoälymallit-sivu näyttää, mikä malli epäonnistui ja miksi.",
+      "loadFailedAction": "Näytä Tekoälymallit-tila"
     },
     "banner": {
       "title": "Otsikko",
@@ -3838,16 +3838,16 @@
       "models": {
         "recommendBoth": "Parhaan lajien havainnointikattavuuden saavuttamiseksi suositellaan käyttämään sekä BirdNET- että Perch-malleja yhdessä.",
         "perchOnlyWarning": "Perch yksinään tuottaa vähemmän havaintoja. Laske luottamuskynnys arvoon 0.50 mielekkäiden tulosten saamiseksi tai ota BirdNET käyttöön rinnalle paremman kattavuuden saavuttamiseksi.",
-        "loading": "Loading detection models...",
-        "noneEnabledTitle": "No detection model enabled.",
-        "noneEnabledHelp": "You can still save this source. Its audio is analyzed by the default models as soon as one is enabled.",
-        "noneEnabledLink": "Open model gallery",
-        "noneAvailable": "No detection models are enabled on this server.",
-        "loadFailedWarning": "A detection model failed to load, so this source is not being analyzed until it recovers.",
-        "loadFailedLink": "View AI Models status",
-        "defaultBadge": "{models} (default)",
-        "defaultPendingBadge": "Default models",
-        "noneBadge": "No model loaded"
+        "loading": "Ladataan tunnistusmalleja...",
+        "noneEnabledTitle": "Ei tunnistusmallia käytössä.",
+        "noneEnabledHelp": "Voit silti tallentaa tämän lähteen. Oletusmallit analysoivat sen äänen heti, kun jokin niistä on otettu käyttöön.",
+        "noneEnabledLink": "Avaa malligalleria",
+        "noneAvailable": "Tällä palvelimella ei ole käytössä tunnistusmalleja.",
+        "loadFailedWarning": "Tunnistusmallin lataus epäonnistui, joten tätä lähdettä ei analysoida ennen kuin se palautuu.",
+        "loadFailedLink": "Näytä Tekoälymallit-tila",
+        "defaultBadge": "{models} (oletus)",
+        "defaultPendingBadge": "Oletusmallit",
+        "noneBadge": "Ei ladattua mallia"
       }
     },
     "security": {

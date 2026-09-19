@@ -757,12 +757,12 @@
       "configFetch": "Impossibile recuperare la configurazione della dashboard: {status}"
     },
     "acousticModels": {
-      "noneTitle": "No acoustic model enabled",
-      "noneMessage": "Audio is being captured but not analyzed. Enable a model in the gallery to start detecting species.",
-      "noneAction": "Open model gallery",
-      "loadFailedTitle": "Acoustic model failed to load",
-      "loadFailedMessage": "An enabled model could not be loaded, so no audio is being analyzed. The AI Models page shows which model failed and why.",
-      "loadFailedAction": "View AI Models status"
+      "noneTitle": "Nessun modello acustico abilitato",
+      "noneMessage": "L'audio viene acquisito ma non analizzato. Abilita un modello nella galleria modelli per iniziare a rilevare le specie.",
+      "noneAction": "Apri galleria modelli",
+      "loadFailedTitle": "Impossibile caricare il modello acustico",
+      "loadFailedMessage": "Impossibile caricare un modello abilitato, quindi nessun audio viene analizzato. La pagina Modelli IA mostra quale modello ha fallito e perché.",
+      "loadFailedAction": "Visualizza stato Modelli IA"
     },
     "banner": {
       "title": "Titolo",
@@ -3838,16 +3838,16 @@
       "models": {
         "recommendBoth": "Per la migliore copertura di rilevamento delle specie, si consiglia di eseguire insieme sia BirdNET che Perch.",
         "perchOnlyWarning": "Perch da solo produce meno rilevamenti. Abbassare la soglia di confidenza a 0.50 per risultati significativi, oppure attivare BirdNET per una migliore copertura.",
-        "loading": "Loading detection models...",
-        "noneEnabledTitle": "No detection model enabled.",
-        "noneEnabledHelp": "You can still save this source. Its audio is analyzed by the default models as soon as one is enabled.",
-        "noneEnabledLink": "Open model gallery",
-        "noneAvailable": "No detection models are enabled on this server.",
-        "loadFailedWarning": "A detection model failed to load, so this source is not being analyzed until it recovers.",
-        "loadFailedLink": "View AI Models status",
-        "defaultBadge": "{models} (default)",
-        "defaultPendingBadge": "Default models",
-        "noneBadge": "No model loaded"
+        "loading": "Caricamento modelli di rilevamento...",
+        "noneEnabledTitle": "Nessun modello di rilevamento abilitato.",
+        "noneEnabledHelp": "Puoi ancora salvare questa fonte. Il suo audio verrà analizzato dai modelli predefiniti non appena ne verrà abilitato uno.",
+        "noneEnabledLink": "Apri galleria modelli",
+        "noneAvailable": "Nessun modello di rilevamento è abilitato su questo server.",
+        "loadFailedWarning": "Impossibile caricare un modello di rilevamento, quindi questa fonte non verrà analizzata finché non si riprenderà.",
+        "loadFailedLink": "Visualizza stato Modelli IA",
+        "defaultBadge": "{models} (predefinito)",
+        "defaultPendingBadge": "Modelli predefiniti",
+        "noneBadge": "Nessun modello caricato"
       }
     },
     "security": {

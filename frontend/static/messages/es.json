@@ -757,12 +757,12 @@
       "configFetch": "Error al obtener la configuración del panel: {status}"
     },
     "acousticModels": {
-      "noneTitle": "No acoustic model enabled",
-      "noneMessage": "Audio is being captured but not analyzed. Enable a model in the gallery to start detecting species.",
-      "noneAction": "Open model gallery",
-      "loadFailedTitle": "Acoustic model failed to load",
-      "loadFailedMessage": "An enabled model could not be loaded, so no audio is being analyzed. The AI Models page shows which model failed and why.",
-      "loadFailedAction": "View AI Models status"
+      "noneTitle": "Ningún modelo acústico activado",
+      "noneMessage": "El audio se está capturando, pero no analizando. Activa un modelo en la galería de modelos para comenzar a detectar especies.",
+      "noneAction": "Abrir galería de modelos",
+      "loadFailedTitle": "No se pudo cargar el modelo acústico",
+      "loadFailedMessage": "No se pudo cargar un modelo activado, por lo que no se está analizando el audio. La página Modelos de IA muestra qué modelo falló y por qué.",
+      "loadFailedAction": "Ver estado de Modelos de IA"
     },
     "banner": {
       "title": "Título",
@@ -3838,16 +3838,16 @@
       "models": {
         "recommendBoth": "Para la mejor cobertura de detección de especies, se recomienda ejecutar tanto BirdNET como Perch juntos.",
         "perchOnlyWarning": "Perch solo produce menos detecciones. Baje el umbral de confianza a 0.50 para resultados significativos, o active BirdNET junto con Perch para una mejor cobertura.",
-        "loading": "Loading detection models...",
-        "noneEnabledTitle": "No detection model enabled.",
-        "noneEnabledHelp": "You can still save this source. Its audio is analyzed by the default models as soon as one is enabled.",
-        "noneEnabledLink": "Open model gallery",
-        "noneAvailable": "No detection models are enabled on this server.",
-        "loadFailedWarning": "A detection model failed to load, so this source is not being analyzed until it recovers.",
-        "loadFailedLink": "View AI Models status",
-        "defaultBadge": "{models} (default)",
-        "defaultPendingBadge": "Default models",
-        "noneBadge": "No model loaded"
+        "loading": "Cargando modelos de detección...",
+        "noneEnabledTitle": "Ningún modelo de detección activado.",
+        "noneEnabledHelp": "Aún puedes guardar esta fuente. Su audio será analizado por los modelos predeterminados tan pronto como se active uno.",
+        "noneEnabledLink": "Abrir galería de modelos",
+        "noneAvailable": "No hay modelos de detección activados en este servidor.",
+        "loadFailedWarning": "Un modelo de detección no se pudo cargar, por lo que esta fuente no se analizará hasta que se recupere.",
+        "loadFailedLink": "Ver estado de Modelos de IA",
+        "defaultBadge": "{models} (predeterminado)",
+        "defaultPendingBadge": "Modelos predeterminados",
+        "noneBadge": "Ningún modelo cargado"
       }
     },
     "security": {
