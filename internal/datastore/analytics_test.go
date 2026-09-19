@@ -19,6 +19,9 @@ func setupTestDB(t *testing.T) *DataStore {
 	// Create in-memory SQLite database
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, sqlDB.Close()) })
 
 	// Create the notes and note_reviews table schemas
 	// note_reviews is now required for analytics queries that filter out false positives
@@ -26,6 +29,37 @@ func setupTestDB(t *testing.T) *DataStore {
 	require.NoError(t, err)
 
 	return &DataStore{DB: db}
+}
+
+func TestGetNewSpeciesDetections_AudioStart(t *testing.T) {
+	ds := setupTestDB(t)
+	location, err := time.LoadLocation("Europe/Amsterdam")
+	require.NoError(t, err)
+	first := time.Date(2026, 9, 5, 23, 59, 50, 0, location)
+	notes := []Note{
+		{ScientificName: "Parus major", Date: "2026-09-06", Time: "00:00:05", BeginTime: first},
+		// Equal audio timestamps must not duplicate a species in the query result.
+		{ScientificName: "Parus major", Date: "2026-09-06", Time: "00:00:06", BeginTime: first},
+		{ScientificName: "Parus major", Date: "2026-09-01", Time: "12:00:00", BeginTime: first.AddDate(0, 0, -4)},
+		// Older imports may have no audio timestamp.
+		{ScientificName: "Turdus merula", Date: "2026-09-06", Time: "12:00:00"},
+		{ScientificName: "Parus major", Date: "2026-09-06", Time: "12:00:00"},
+	}
+	require.NoError(t, ds.DB.Create(&notes).Error)
+	require.NoError(t, ds.DB.Create(&NoteReview{NoteID: notes[2].ID, Verified: "false_positive"}).Error)
+	got, err := ds.GetNewSpeciesDetections(t.Context(), "2026-09-01", "2026-09-30", 100, 0)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	for _, record := range got {
+		assert.Equal(t, "2026-09-06", record.FirstSeenDate, "analytics dates still use the saved detection date")
+		if record.ScientificName == "Parus major" {
+			assert.True(t, first.Equal(record.FirstBeginTime), "restore the earliest non-false-positive audio start")
+			assert.Equal(t, "2026-09-05", record.FirstBeginTime.Format(time.DateOnly), "preserve the audio's local date")
+			assert.Equal(t, 3, record.CountInPeriod)
+		} else {
+			assert.True(t, record.FirstBeginTime.IsZero())
+		}
+	}
 }
 
 // seedTestData adds test data to the database

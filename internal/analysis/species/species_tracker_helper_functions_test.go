@@ -67,7 +67,7 @@ func TestCheckAndUpdateLifetimeLocked_EdgeCases(t *testing.T) {
 			windowDays:            7,
 			existingFirstSeen:     new(time.Date(2025, 6, 1, 10, 0, 0, 0, time.UTC)),
 			detectionTime:         time.Date(2025, 6, 8, 10, 0, 0, 0, time.UTC), // exactly 7 days
-			expectedIsNew:         true,                                         // daysSince == windowDays is still "new"
+			expectedIsNew:         false,                                        // The notification window has expired
 			expectedDaysSince:     7,
 			expectedFirstSeenTime: time.Date(2025, 6, 1, 10, 0, 0, 0, time.UTC),
 		},
@@ -103,7 +103,7 @@ func TestCheckAndUpdateLifetimeLocked_EdgeCases(t *testing.T) {
 			windowDays:            0,
 			existingFirstSeen:     new(time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC)),
 			detectionTime:         time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC),
-			expectedIsNew:         true, // daysSince 0 <= windowDays 0
+			expectedIsNew:         false, // A zero-length notification window has expired
 			expectedDaysSince:     0,
 			expectedFirstSeenTime: time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC),
 		},
