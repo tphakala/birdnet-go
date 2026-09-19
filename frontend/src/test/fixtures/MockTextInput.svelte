@@ -11,14 +11,13 @@
   @component
 -->
 <script lang="ts">
-  let {
-    value = $bindable(''),
-    id,
-  }: {
+  interface MockTextInputProps {
     value?: string;
     id?: string;
     [key: string]: unknown;
-  } = $props();
+  }
+
+  let { value = $bindable(''), id }: MockTextInputProps = $props();
 </script>
 
 <input data-testid={id} {id} bind:value />

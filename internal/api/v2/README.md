@@ -564,8 +564,8 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
 ```json
 [
-  { "id": "birdnet", "name": "BirdNET GLOBAL 6K V2.4" },
-  { "id": "perch_v2", "name": "Google Perch V2" }
+  { "id": "birdnet", "name": "BirdNET GLOBAL 6K V2.4", "registryId": "BirdNET_V2.4", "category": "bird" },
+  { "id": "perch_v2", "name": "Google Perch V2", "registryId": "Perch_V2", "category": "bird" }
 ]
 ```
 

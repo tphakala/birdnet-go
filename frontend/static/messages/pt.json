@@ -761,7 +761,7 @@
       "noneMessage": "O áudio está sendo capturado, mas não analisado. Ative um modelo na galeria de modelos para começar a detectar espécies.",
       "noneAction": "Abrir galeria de modelos",
       "loadFailedTitle": "Não foi possível carregar o modelo acústico",
-      "loadFailedMessage": "Não foi possível carregar um modelo ativado, então nenhum áudio está sendo analisado. A página Modelos de IA mostra qual modelo falhou e por que.",
+      "loadFailedMessage": "Não foi possível carregar um modelo ativado, então nenhum áudio está sendo analisado. A página Modelos de IA mostra qual modelo falhou e por quê.",
       "loadFailedAction": "Ver status de Modelos de IA"
     },
     "banner": {

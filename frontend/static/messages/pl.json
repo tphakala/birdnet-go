@@ -762,7 +762,7 @@
       "noneAction": "Otwórz galerię modeli",
       "loadFailedTitle": "Nie udało się załadować modelu akustycznego",
       "loadFailedMessage": "Nie udało się załadować włączonego modelu, więc żaden dźwięk nie jest analizowany. Strona Modele AI pokazuje, który model uległ awarii i dlaczego.",
-      "loadFailedAction": "Wyświetl status Modele AI"
+      "loadFailedAction": "Wyświetl status modeli AI"
     },
     "banner": {
       "title": "Tytuł",
@@ -3844,7 +3844,7 @@
         "noneEnabledLink": "Otwórz galerię modeli",
         "noneAvailable": "Na tym serwerze nie włączono żadnych modeli detekcji.",
         "loadFailedWarning": "Nie udało się załadować modelu detekcji, więc to źródło nie będzie analizowane do czasu jego przywrócenia.",
-        "loadFailedLink": "Wyświetl status Modele AI",
+        "loadFailedLink": "Wyświetl status modeli AI",
         "defaultBadge": "{models} (domyślne)",
         "defaultPendingBadge": "Domyślne modele",
         "noneBadge": "Nie załadowano modelu"

@@ -3843,7 +3843,7 @@
         "noneEnabledHelp": "Puoi ancora salvare questa fonte. Il suo audio verrà analizzato dai modelli predefiniti non appena ne verrà abilitato uno.",
         "noneEnabledLink": "Apri galleria modelli",
         "noneAvailable": "Nessun modello di rilevamento è abilitato su questo server.",
-        "loadFailedWarning": "Impossibile caricare un modello di rilevamento, quindi questa fonte non verrà analizzata finché non si riprenderà.",
+        "loadFailedWarning": "Impossibile caricare un modello di rilevamento, quindi questa fonte non verrà analizzata finché il modello non sarà ripristinato.",
         "loadFailedLink": "Visualizza stato Modelli IA",
         "defaultBadge": "{models} (predefinito)",
         "defaultPendingBadge": "Modelli predefiniti",

@@ -758,7 +758,7 @@
     },
     "acousticModels": {
       "noneTitle": "Kein akustisches Modell aktiviert",
-      "noneMessage": "Audio wird erfasst, aber nicht analysiert. Aktiviere ein Modell in der Modellgalerie, um Arten zu erkennen.",
+      "noneMessage": "Audio wird erfasst, aber nicht analysiert. Aktivieren Sie ein Modell in der Modellgalerie, um Arten zu erkennen.",
       "noneAction": "Modellgalerie öffnen",
       "loadFailedTitle": "Akustisches Modell konnte nicht geladen werden",
       "loadFailedMessage": "Ein aktiviertes Modell konnte nicht geladen werden, daher wird kein Audio analysiert. Die Seite KI-Modelle zeigt, welches Modell fehlgeschlagen ist und warum.",
@@ -3840,7 +3840,7 @@
         "perchOnlyWarning": "Perch allein erzeugt weniger Erkennungen. Senken Sie den Konfidenzschwellenwert auf 0.50 für aussagekräftige Ergebnisse, oder aktivieren Sie BirdNET für eine bessere Abdeckung.",
         "loading": "Erkennungsmodelle werden geladen...",
         "noneEnabledTitle": "Kein Erkennungsmodell aktiviert.",
-        "noneEnabledHelp": "Du kannst diese Quelle trotzdem speichern. Das Audio wird von den Standardmodellen analysiert, sobald eines aktiviert ist.",
+        "noneEnabledHelp": "Sie können diese Quelle trotzdem speichern. Das Audio wird von den Standardmodellen analysiert, sobald eines aktiviert ist.",
         "noneEnabledLink": "Modellgalerie öffnen",
         "noneAvailable": "Auf diesem Server sind keine Erkennungsmodelle aktiviert.",
         "loadFailedWarning": "Ein Erkennungsmodell konnte nicht geladen werden, daher wird diese Quelle nicht analysiert, bis es wiederhergestellt ist.",
