@@ -61,8 +61,11 @@ jobs:
         id: validate-files
         working-directory: frontend
         run: |
-          # Run validation and capture JSON output (stderr goes to stderr naturally)
-          npx tsx src/lib/i18n/validateTranslations.ts --json --strict --min-coverage 100 --fail-on-warnings > validation-report.json || true
+          # Run validation and capture JSON output (stderr goes to stderr naturally).
+          # --fail-on-untranslated fails on a NEW English placeholder (a key back-filled
+          # by i18n:sync and not translated) that is not grandfathered in
+          # static/messages/.i18n-untranslated-baseline.json.
+          npx tsx src/lib/i18n/validateTranslations.ts --json --strict --min-coverage 100 --fail-on-warnings --fail-on-untranslated > validation-report.json || true
 
           # Verify JSON is valid and handle errors gracefully
           if [ ! -f validation-report.json ]; then
@@ -75,6 +78,15 @@ jobs:
             cat validation-report.json >> $GITHUB_STEP_SUMMARY
             echo '{"success":false,"error":"Invalid JSON in validation report"}' > validation-report.json
             echo "validation_failed=true" >> $GITHUB_OUTPUT
+          elif [ ! -s validation-report.json ] || ! jq -e 'has("success")' validation-report.json > /dev/null 2>&1; then
+            # Empty (0-byte) file passes `jq empty` (exit 0), so guard against a
+            # report that the validator never finished writing, e.g. it crashed
+            # before emitting JSON. Without this, `.success == false` is not true,
+            # the check falls through to the pass branch, and the job goes green
+            # on a run that never validated anything.
+            echo "validation_failed=true" >> $GITHUB_OUTPUT
+            echo "### ❌ Translation File Validation Failed" >> $GITHUB_STEP_SUMMARY
+            echo "The validation report is empty or missing the \`success\` field (the validator likely crashed before emitting JSON)." >> $GITHUB_STEP_SUMMARY
           elif jq -e '.success == false' validation-report.json > /dev/null; then
             echo "validation_failed=true" >> $GITHUB_OUTPUT
             echo "### ❌ Translation File Validation Failed" >> $GITHUB_STEP_SUMMARY
