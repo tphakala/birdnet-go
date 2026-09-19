@@ -756,6 +756,14 @@
       "recentDetectionsLoad": "Innlasting av siste registreringer mislyktes",
       "configFetch": "Henting av dashbordkonfigurasjon mislyktes: {status}"
     },
+    "acousticModels": {
+      "noneTitle": "Ingen akustisk modell aktivert",
+      "noneMessage": "Lyd fanges opp, men analyseres ikke. Aktiver en modell i modellgalleriet for å begynne å oppdage arter.",
+      "noneAction": "Åpne modellgalleri",
+      "loadFailedTitle": "Akustisk modell kunne ikke lastes inn",
+      "loadFailedMessage": "En aktivert modell kunne ikke lastes inn, så ingen lyd analyseres. Siden AI-modeller viser hvilken modell som feilet og hvorfor.",
+      "loadFailedAction": "Vis status for AI-modeller"
+    },
     "banner": {
       "title": "Tittel",
       "titlePlaceholder": "Min fuglestasjon",
@@ -3829,7 +3837,17 @@
       },
       "models": {
         "recommendBoth": "Det anbefales å kjøre BirdNET og Perch sammen for best artsdeteksjonsdekning.",
-        "perchOnlyWarning": "Perch alene gir færre registreringer. Senk sikkerhetsterskel til 0,50 for meningsfulle resultater, eller aktiver BirdNET i tillegg for best dekning."
+        "perchOnlyWarning": "Perch alene gir færre registreringer. Senk sikkerhetsterskel til 0,50 for meningsfulle resultater, eller aktiver BirdNET i tillegg for best dekning.",
+        "loading": "Laster inn deteksjonsmodeller...",
+        "noneEnabledTitle": "Ingen deteksjonsmodell aktivert.",
+        "noneEnabledHelp": "Du kan fortsatt lagre denne kilden. Lyden vil bli analysert av standardmodellene så snart en er aktivert.",
+        "noneEnabledLink": "Åpne modellgalleri",
+        "noneAvailable": "Ingen deteksjonsmodeller er aktivert på denne serveren.",
+        "loadFailedWarning": "En deteksjonsmodell kunne ikke lastes inn, så denne kilden analyseres ikke før den gjenopprettes.",
+        "loadFailedLink": "Vis status for AI-modeller",
+        "defaultBadge": "{models} (standard)",
+        "defaultPendingBadge": "Standardmodeller",
+        "noneBadge": "Ingen modell lastet inn"
       }
     },
     "security": {

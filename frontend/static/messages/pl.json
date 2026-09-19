@@ -756,6 +756,14 @@
       "recentDetectionsLoad": "Nie udało się załadować ostatnich detekcji",
       "configFetch": "Nie udało się pobrać konfiguracji panelu: {status}"
     },
+    "acousticModels": {
+      "noneTitle": "Brak włączonego modelu akustycznego",
+      "noneMessage": "Dźwięk jest przechwytywany, ale nie analizowany. Włącz model w galerii modeli, aby rozpocząć detekcję gatunków.",
+      "noneAction": "Otwórz galerię modeli",
+      "loadFailedTitle": "Nie udało się załadować modelu akustycznego",
+      "loadFailedMessage": "Nie udało się załadować włączonego modelu, więc żaden dźwięk nie jest analizowany. Strona Modele AI pokazuje, który model uległ awarii i dlaczego.",
+      "loadFailedAction": "Wyświetl status modeli AI"
+    },
     "banner": {
       "title": "Tytuł",
       "titlePlaceholder": "Moja stacja ptaków",
@@ -3829,7 +3837,17 @@
       },
       "models": {
         "recommendBoth": "Dla najlepszego pokrycia wykrywania gatunków zaleca się uruchamianie zarówno modelu BirdNET, jak i Perch jednocześnie.",
-        "perchOnlyWarning": "Sam Perch produkuje mniej wykryć. Obniż próg pewności do 0.50, aby uzyskać znaczące wyniki, lub włącz BirdNET obok Perch dla lepszego pokrycia."
+        "perchOnlyWarning": "Sam Perch produkuje mniej wykryć. Obniż próg pewności do 0.50, aby uzyskać znaczące wyniki, lub włącz BirdNET obok Perch dla lepszego pokrycia.",
+        "loading": "Ładowanie modeli detekcji...",
+        "noneEnabledTitle": "Brak włączonego modelu detekcji.",
+        "noneEnabledHelp": "Nadal możesz zapisać to źródło. Jego dźwięk zostanie poddany analizie przez modele domyślne, gdy tylko jeden z nich zostanie włączony.",
+        "noneEnabledLink": "Otwórz galerię modeli",
+        "noneAvailable": "Na tym serwerze nie włączono żadnych modeli detekcji.",
+        "loadFailedWarning": "Nie udało się załadować modelu detekcji, więc to źródło nie będzie analizowane do czasu jego przywrócenia.",
+        "loadFailedLink": "Wyświetl status modeli AI",
+        "defaultBadge": "{models} (domyślne)",
+        "defaultPendingBadge": "Domyślne modele",
+        "noneBadge": "Nie załadowano modelu"
       }
     },
     "security": {

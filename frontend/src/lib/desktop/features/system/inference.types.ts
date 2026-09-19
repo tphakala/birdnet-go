@@ -9,6 +9,8 @@
  * omitempty.
  */
 
+import type { AcousticModelsStateWire } from '$lib/types/models';
+
 /**
  * Single-board computer the host runs on, as named by its device tree. Absent
  * on hosts with no device tree, which is every PC.
@@ -278,4 +280,16 @@ export interface InferenceStatusResponse {
   vad?: InferenceVAD;
   runtimeBaselineBytes?: number;
   snapshotAtUnix: number;
+  /**
+   * Classifier REGISTRY IDs (e.g. "BirdNET_V2.4", never config aliases) that a
+   * source with an empty model list analyzes with, in DefaultTargets order
+   * (BirdNET v2.4 first when present). Always an array: empty at N=0 and on
+   * load failure.
+   */
+  defaultTargets: string[];
+  /**
+   * Classifier verdict on the acoustic model set ("ok" | "none_installed" |
+   * "load_failed"); "" is the API-only "no verdict yet" sentinel.
+   */
+  acousticModelsState: AcousticModelsStateWire;
 }

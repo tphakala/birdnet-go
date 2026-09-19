@@ -558,14 +558,14 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 | DELETE | `/models/installed/:id`        | `UninstallModel`        | ✅   | Remove an installed model from disk                   |
 | GET    | `/models/install/:id/progress` | `StreamInstallProgress` | ❌   | SSE stream for install/reinstall progress             |
 
-**GET /api/v2/models** - Returns all classifier models registered in the model registry. Each entry includes a config alias (used in audio source configuration) and a human-readable display name.
+**GET /api/v2/models** - Returns all classifier models registered in the model registry. Each entry includes a config alias (`id`, used in audio source configuration), a human-readable display name, and the classifier `registryId` (e.g. `BirdNET_V2.4`) that joins against the registry-ID `defaultTargets` list served by `GET /api/v2/system/inference`.
 
 **Response:**
 
 ```json
 [
-  { "id": "birdnet", "name": "BirdNET GLOBAL 6K V2.4" },
-  { "id": "perch_v2", "name": "Google Perch V2" }
+  { "id": "birdnet", "name": "BirdNET GLOBAL 6K V2.4", "registryId": "BirdNET_V2.4", "category": "bird" },
+  { "id": "perch_v2", "name": "Google Perch V2", "registryId": "Perch_V2", "category": "bird" }
 ]
 ```
 

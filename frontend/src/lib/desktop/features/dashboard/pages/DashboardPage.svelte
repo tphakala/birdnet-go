@@ -78,6 +78,7 @@ Performance Optimizations:
   import type { Dashboard, DashboardElement, DashboardLayout } from '$lib/stores/settings';
   import { dashboardEditMode } from '$lib/stores/dashboardEditMode';
   import BannerCard from '$lib/desktop/features/dashboard/components/BannerCard.svelte';
+  import AcousticModelBanner from '$lib/desktop/features/dashboard/components/AcousticModelBanner.svelte';
   import VideoEmbedCard from '$lib/desktop/features/dashboard/components/VideoEmbedCard.svelte';
   import MiniSpectrogram from '$lib/desktop/features/dashboard/components/MiniSpectrogram.svelte';
   import DashboardEditMode from '$lib/desktop/features/dashboard/components/DashboardEditMode.svelte';
@@ -1025,7 +1026,7 @@ Performance Optimizations:
       hour = 0;
     }
 
-    // Match by scientific_name — it's the unique key used by both the backend
+    // Match by scientific_name: it's the unique key used by both the backend
     // aggregation (analytics.go) and the Svelte {#each} loop in DailySummaryCard.
     // species_code is unreliable: v2 schema stores it as "" (omitted via omitempty),
     // so it's undefined in the frontend for all API-sourced entries.
@@ -1068,7 +1069,7 @@ Performance Optimizations:
       updateDailySummaryCacheEntry(selectedDate, dailySummary);
 
       // Clear animation flags after animation completes.
-      // Use scientificName for lookup — species_code may be undefined (v2 schema).
+      // Use scientificName for lookup; species_code may be undefined (v2 schema).
       scheduleAnimationCleanup(
         () => {
           const currentIndex = dailySummary.findIndex(
@@ -1132,7 +1133,7 @@ Performance Optimizations:
       updateDailySummaryCacheEntry(selectedDate, dailySummary);
 
       // Clear animation flag after animation completes.
-      // Use scientificName for lookup — species_code may be undefined (v2 schema).
+      // Use scientificName for lookup; species_code may be undefined (v2 schema).
       scheduleAnimationCleanup(
         () => {
           const currentIndex = dailySummary.findIndex(
@@ -1350,6 +1351,7 @@ Performance Optimizations:
 </script>
 
 <div class="col-span-12">
+  <AcousticModelBanner class="mb-6" />
   <DashboardEditMode
     layout={currentLayout}
     editMode={isEditing}

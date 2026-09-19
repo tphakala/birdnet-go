@@ -756,6 +756,14 @@
       "recentDetectionsLoad": "Kon Recent herkend niet weergeven",
       "configFetch": "Kon Overzicht instellingen niet inlezen: {status}"
     },
+    "acousticModels": {
+      "noneTitle": "Geen akoestisch model ingeschakeld",
+      "noneMessage": "Audio wordt opgenomen maar niet geanalyseerd. Schakel een model in via de modellengalerij om soorten te detecteren.",
+      "noneAction": "Modellengalerij openen",
+      "loadFailedTitle": "Akoestisch model kon niet worden geladen",
+      "loadFailedMessage": "Een ingeschakeld model kon niet worden geladen, waardoor er geen audio wordt geanalyseerd. De pagina AI-modellen toont welk model is mislukt en waarom.",
+      "loadFailedAction": "Bekijk de status van AI-modellen"
+    },
     "banner": {
       "title": "Titel",
       "titlePlaceholder": "Mijn vogelstation",
@@ -3829,7 +3837,17 @@
       },
       "models": {
         "recommendBoth": "Voor de beste soortdetectie wordt aanbevolen om zowel BirdNET als Perch samen te gebruiken.",
-        "perchOnlyWarning": "Perch alleen produceert minder detecties. Verlaag de betrouwbaarheidsdrempel naar 0.50 voor zinvolle resultaten, of activeer BirdNET erbij voor een betere dekking."
+        "perchOnlyWarning": "Perch alleen produceert minder detecties. Verlaag de betrouwbaarheidsdrempel naar 0.50 voor zinvolle resultaten, of activeer BirdNET erbij voor een betere dekking.",
+        "loading": "Detectiemodellen laden...",
+        "noneEnabledTitle": "Geen detectiemodel ingeschakeld.",
+        "noneEnabledHelp": "Je kunt deze bron nog steeds bewaren. De audio wordt geanalyseerd door de standaardmodellen zodra er een is ingeschakeld.",
+        "noneEnabledLink": "Modellengalerij openen",
+        "noneAvailable": "Er zijn geen detectiemodellen ingeschakeld op deze server.",
+        "loadFailedWarning": "Een detectiemodel kon niet worden geladen, dus deze bron wordt pas geanalyseerd als het is hersteld.",
+        "loadFailedLink": "Bekijk de status van AI-modellen",
+        "defaultBadge": "{models} (standaard)",
+        "defaultPendingBadge": "Standaardmodellen",
+        "noneBadge": "Geen model geladen"
       }
     },
     "security": {

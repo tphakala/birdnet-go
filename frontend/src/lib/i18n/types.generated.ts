@@ -604,6 +604,12 @@ export type TranslationKey =
   | 'dashboard.errors.recentDetectionsFetch' // params: status
   | 'dashboard.errors.recentDetectionsLoad'
   | 'dashboard.errors.configFetch' // params: status
+  | 'dashboard.acousticModels.noneTitle'
+  | 'dashboard.acousticModels.noneMessage'
+  | 'dashboard.acousticModels.noneAction'
+  | 'dashboard.acousticModels.loadFailedTitle'
+  | 'dashboard.acousticModels.loadFailedMessage'
+  | 'dashboard.acousticModels.loadFailedAction'
   | 'dashboard.banner.title'
   | 'dashboard.banner.titlePlaceholder'
   | 'dashboard.banner.description'
@@ -2806,6 +2812,16 @@ export type TranslationKey =
   | 'settings.audio.errors.invalidRetentionPolicy'
   | 'settings.audio.models.recommendBoth'
   | 'settings.audio.models.perchOnlyWarning'
+  | 'settings.audio.models.loading'
+  | 'settings.audio.models.noneEnabledTitle'
+  | 'settings.audio.models.noneEnabledHelp'
+  | 'settings.audio.models.noneEnabledLink'
+  | 'settings.audio.models.noneAvailable'
+  | 'settings.audio.models.loadFailedWarning'
+  | 'settings.audio.models.loadFailedLink'
+  | 'settings.audio.models.defaultBadge' // params: models
+  | 'settings.audio.models.defaultPendingBadge'
+  | 'settings.audio.models.noneBadge'
   | 'settings.security.pageLabel'
   | 'settings.security.baseUrlLabel'
   | 'settings.security.baseUrlHelp'
@@ -4523,6 +4539,7 @@ export type TranslationParams = {
   'settings.audio.clipRecording.preCaptureHelp': { max: string | number };
   'settings.audio.clipRecording.bitrateHelp': { min: string | number; max: string | number };
   'settings.audio.fileSettings.bitrateHelp': { min: string | number; max: string | number };
+  'settings.audio.models.defaultBadge': { models: string | number };
   'settings.security.oauth.providers.deleteConfirm': { provider: string | number };
   'settings.security.oauth.getCredentialsLabel': { provider: string | number };
   'settings.security.tls.autoTLSPrivateTLD': { tld: string | number };

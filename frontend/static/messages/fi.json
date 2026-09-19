@@ -756,6 +756,14 @@
       "recentDetectionsLoad": "Viimeaikaisten havaintojen lataus epäonnistui",
       "configFetch": "Etusivun asetusten haku epäonnistui: {status}"
     },
+    "acousticModels": {
+      "noneTitle": "Akustista mallia ei ole käytössä",
+      "noneMessage": "Ääntä tallennetaan, mutta ei analysoida. Ota malli käyttöön malligalleriassa aloittaaksesi lajien tunnistuksen.",
+      "noneAction": "Avaa malligalleria",
+      "loadFailedTitle": "Akustisen mallin lataus epäonnistui",
+      "loadFailedMessage": "Käytössä olevaa mallia ei voitu ladata, joten ääntä ei analysoida. Tekoälymallit-sivu näyttää, mikä malli epäonnistui ja miksi.",
+      "loadFailedAction": "Näytä Tekoälymallit-tila"
+    },
     "banner": {
       "title": "Otsikko",
       "titlePlaceholder": "Oma lintuasema",
@@ -3829,7 +3837,17 @@
       },
       "models": {
         "recommendBoth": "Parhaan lajien havainnointikattavuuden saavuttamiseksi suositellaan käyttämään sekä BirdNET- että Perch-malleja yhdessä.",
-        "perchOnlyWarning": "Perch yksinään tuottaa vähemmän havaintoja. Laske luottamuskynnys arvoon 0.50 mielekkäiden tulosten saamiseksi tai ota BirdNET käyttöön rinnalle paremman kattavuuden saavuttamiseksi."
+        "perchOnlyWarning": "Perch yksinään tuottaa vähemmän havaintoja. Laske luottamuskynnys arvoon 0.50 mielekkäiden tulosten saamiseksi tai ota BirdNET käyttöön rinnalle paremman kattavuuden saavuttamiseksi.",
+        "loading": "Ladataan tunnistusmalleja...",
+        "noneEnabledTitle": "Ei tunnistusmallia käytössä.",
+        "noneEnabledHelp": "Voit silti tallentaa tämän lähteen. Oletusmallit analysoivat sen äänen heti, kun jokin niistä on otettu käyttöön.",
+        "noneEnabledLink": "Avaa malligalleria",
+        "noneAvailable": "Tällä palvelimella ei ole käytössä tunnistusmalleja.",
+        "loadFailedWarning": "Tunnistusmallin lataus epäonnistui, joten tätä lähdettä ei analysoida ennen kuin se palautuu.",
+        "loadFailedLink": "Näytä Tekoälymallit-tila",
+        "defaultBadge": "{models} (oletus)",
+        "defaultPendingBadge": "Oletusmallit",
+        "noneBadge": "Ei ladattua mallia"
       }
     },
     "security": {

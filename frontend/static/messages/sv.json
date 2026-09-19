@@ -756,6 +756,14 @@
       "recentDetectionsLoad": "Kunde inte ladda senaste detekteringar",
       "configFetch": "Kunde inte hämta instrumentpanelens konfiguration: {status}"
     },
+    "acousticModels": {
+      "noneTitle": "Ingen akustisk modell aktiverad",
+      "noneMessage": "Ljud fångas, men analyseras inte. Aktivera en modell i modellgalleriet för att börja detektera arter.",
+      "noneAction": "Öppna modellgalleri",
+      "loadFailedTitle": "Akustisk modell kunde inte läsas in",
+      "loadFailedMessage": "En aktiverad modell kunde inte läsas in, så inget ljud analyseras. Sidan AI-modeller visar vilken modell som misslyckades och varför.",
+      "loadFailedAction": "Visa status för AI-modeller"
+    },
     "banner": {
       "title": "Titel",
       "titlePlaceholder": "Min fågelstation",
@@ -3829,7 +3837,17 @@
       },
       "models": {
         "recommendBoth": "För bästa artdetekteringstäckning rekommenderas att köra både BirdNET och Perch tillsammans.",
-        "perchOnlyWarning": "Perch ensamt ger färre detektioner. Sänk konfidensströskeln till 0.50 för meningsfulla resultat, eller aktivera BirdNET bredvid för bästa täckning."
+        "perchOnlyWarning": "Perch ensamt ger färre detektioner. Sänk konfidensströskeln till 0.50 för meningsfulla resultat, eller aktivera BirdNET bredvid för bästa täckning.",
+        "loading": "Laddar detektionsmodeller...",
+        "noneEnabledTitle": "Ingen detektionsmodell aktiverad.",
+        "noneEnabledHelp": "Du kan fortfarande spara den här källan. Dess ljud kommer att analyseras av standardmodellerna så snart en har aktiverats.",
+        "noneEnabledLink": "Öppna modellgalleri",
+        "noneAvailable": "Inga detektionsmodeller är aktiverade på den här servern.",
+        "loadFailedWarning": "En detektionsmodell kunde inte läsas in, så den här källan analyseras inte förrän den återställs.",
+        "loadFailedLink": "Visa status för AI-modeller",
+        "defaultBadge": "{models} (standard)",
+        "defaultPendingBadge": "Standardmodeller",
+        "noneBadge": "Ingen modell inläst"
       }
     },
     "security": {
