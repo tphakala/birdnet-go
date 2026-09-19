@@ -947,6 +947,13 @@ Examples:
     // the report internally consistent (success never coexists with errors).
     const failingUntranslated = (r: ValidationResult): string[] =>
       options.failOnUntranslated ? r.newUntranslated : [];
+    // The untranslated entries reported as warnings (everything not counted as a
+    // failing error). Uses a Set for membership so it stays O(n) even when a whole
+    // locale is untranslated (e.g. a missing baseline while the gate enforces).
+    const warningUntranslated = (r: ValidationResult): string[] => {
+      const failing = new Set(failingUntranslated(r));
+      return r.untranslated.filter(key => !failing.has(key));
+    };
     const jsonReport = {
       success: passed,
       timestamp: new Date().toISOString(),
@@ -1045,18 +1052,16 @@ Examples:
         // Untranslated debt that is not being reported as an error above stays a
         // warning: grandfathered entries always, and every untranslated entry
         // when the gate is not enforcing (--fail-on-untranslated absent).
-        ...r.untranslated
-          .filter(key => !failingUntranslated(r).includes(key))
-          .map(key => ({
-            type: 'untranslated',
-            locale: r.locale,
-            key,
-            severity: 'warning',
-            message: `Translation identical to English`,
-            file: `static/messages/${r.locale}.json`,
-            fixable: true,
-            suggestedFix: `Translate to ${r.locale}`,
-          })),
+        ...warningUntranslated(r).map(key => ({
+          type: 'untranslated',
+          locale: r.locale,
+          key,
+          severity: 'warning',
+          message: `Translation identical to English`,
+          file: `static/messages/${r.locale}.json`,
+          fixable: true,
+          suggestedFix: `Translate to ${r.locale}`,
+        })),
         ...r.extraKeys.map(key => ({
           type: 'extra_key',
           locale: r.locale,
