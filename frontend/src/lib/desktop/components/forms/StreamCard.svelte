@@ -95,6 +95,8 @@
     status?: StreamStatus;
     availableModels: Array<{
       id: string;
+      /** Classifier registry ID; the join key for default-target mapping. Absent on an older server. */
+      registryId?: string;
       name: string;
       category: string;
       minSampleRate?: number;
@@ -372,6 +374,14 @@
   function saveEdit() {
     if (needsTest) return;
     if (editName.trim() && editUrl.trim()) {
+      // Rewrite an empty model list to the defaults so a cleared selection saves
+      // the classifier defaults rather than []. This is a no-op at N=0, where
+      // defaultModelSelection returns [] (no acoustic model to map), preserving
+      // the empty-list save the backend resolves to its own defaults.
+      if (editModels.length === 0) {
+        editModels = defaultModelSelection(acousticAvailability, availableModels);
+      }
+
       const transformedEqualizer =
         editEqualizer.enabled || editEqualizer.filters.length > 0
           ? {

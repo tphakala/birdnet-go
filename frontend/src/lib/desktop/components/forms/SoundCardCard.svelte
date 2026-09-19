@@ -94,6 +94,8 @@
     modelOptions: Array<{ value: string; label: string }>;
     availableModels: Array<{
       id: string;
+      /** Classifier registry ID; the join key for default-target mapping. Absent on an older server. */
+      registryId?: string;
       name: string;
       category: string;
       minSampleRate?: number;

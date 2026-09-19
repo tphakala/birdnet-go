@@ -24,9 +24,10 @@ vi.mock('./SelectDropdown.svelte', async () => ({
   default: (await import('../../../../test/fixtures/MockSelectDropdown.svelte')).default,
 }));
 
-// Heavy children irrelevant to this flow are replaced with inert components.
+// The name field stays functional (bind:value) so the add-flow save test can
+// type a name and enable the Add button; other heavy children are inert.
 vi.mock('./TextInput.svelte', async () => ({
-  default: (await import('../../../../test/fixtures/MockEmpty.svelte')).default,
+  default: (await import('../../../../test/fixtures/MockTextInput.svelte')).default,
 }));
 vi.mock('./InlineSlider.svelte', async () => ({
   default: (await import('../../../../test/fixtures/MockEmpty.svelte')).default,
@@ -309,6 +310,46 @@ describe('SoundCardManager default model pre-selection (model de-privilege, N=0)
     await renderAndOpen();
 
     expect(screen.getByTestId(MODEL_LIST_TESTID).textContent).toBe('');
+  });
+
+  it('completing the add flow at N=0 saves models:[] with no phantom BirdNET', async () => {
+    vi.mocked(getAvailableModels).mockReturnValue([]);
+    vi.mocked(acousticModelAvailability).mockReturnValue({
+      kind: 'none',
+      reason: 'none_installed',
+    });
+
+    const onUpdateSources = vi.fn();
+    renderTyped(SoundCardManager, {
+      props: {
+        sources: [],
+        audioDevices: [{ index: 0, name: 'USB Mic', id: USB_MIC }],
+        audioDevicesLoading: false,
+        disabled: false,
+        onUpdateSources,
+        onRefreshDevices: vi.fn(),
+      },
+    });
+
+    // Open the add form; the pre-selection must be empty at N=0.
+    await fireEvent.click(screen.getByText(ADD_SOURCE_KEY));
+    expect(screen.getByTestId(MODEL_LIST_TESTID).textContent).toBe('');
+
+    // Pick a device and name the source so the Add button enables.
+    const deviceSelect = await screen.findByTestId(DEVICE_SELECT_TESTID);
+    await fireEvent.change(deviceSelect, { target: { value: USB_MIC } });
+    await fireEvent.input(screen.getByTestId('new-soundcard-name'), {
+      target: { value: 'Mic 1' },
+    });
+
+    // Complete the add flow via the Add button (not the heading of the same text).
+    await fireEvent.click(screen.getByRole('button', { name: ADD_SOURCE_KEY }));
+
+    expect(onUpdateSources).toHaveBeenCalledTimes(1);
+    const savedSources = onUpdateSources.mock.calls[0][0] as AudioSourceConfig[];
+    expect(savedSources).toHaveLength(1);
+    // The saved source carries an empty model list; no default is invented.
+    expect(savedSources[0].models).toEqual([]);
   });
 
   it('falls back to the legacy BirdNET pick when no verdict is available', async () => {

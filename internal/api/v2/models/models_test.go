@@ -64,6 +64,11 @@ func TestListModels_IncludesRegistryID(t *testing.T) {
 	require.NoError(t, h.ListModels(ctx))
 	require.Equal(t, http.StatusOK, rec.Code)
 
+	// Pin the on-the-wire key name: decoding into ModelListItem alone would
+	// tolerate a JSON-tag typo symmetrically, so assert the literal key the
+	// frontend join reads is present in the raw body.
+	assert.Contains(t, rec.Body.String(), `"registryId"`)
+
 	var items []ModelListItem
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &items))
 	require.NotEmpty(t, items, "enabling birdnet must list at least one model")

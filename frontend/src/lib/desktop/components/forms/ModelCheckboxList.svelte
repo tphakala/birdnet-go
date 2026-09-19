@@ -22,6 +22,8 @@
 
   interface ModelOption {
     id: string;
+    /** Classifier registry ID; the join key for default-target mapping. Absent on an older server. */
+    registryId?: string;
     name: string;
     category: string;
     minSampleRate?: number;
@@ -83,9 +85,7 @@
   let showLoadFailed = $derived(!showLoading && noModelReason === 'load_failed');
   // Fetched empty without a classifier verdict (older server, guest, or the
   // status fetch failed): still say why the list is empty.
-  let showNoneAvailable = $derived(
-    !showLoading && noModelReason === null && !loading && models.length === 0
-  );
+  let showNoneAvailable = $derived(noModelReason === null && !loading && models.length === 0);
 
   function handleToggle(modelId: string, checked: boolean) {
     if (checked) {
