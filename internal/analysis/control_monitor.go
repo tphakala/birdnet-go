@@ -350,6 +350,47 @@ func (cm *ControlMonitor) handleReconfigureLiveStream() {
 	emitHotReload("livestream")
 }
 
+// sunCalcReconfigurable is implemented by the datastores that own a
+// suncalc.SunCalc built from the station coordinates. It is an optional
+// capability rather than part of datastore.Interface: only the two concrete
+// stores hold a SunCalc, and mocks/test doubles have no reason to care.
+type sunCalcReconfigurable interface {
+	// ReconfigureSunCalc repoints the sun calculator at the given station
+	// coordinates and reports whether anything changed.
+	ReconfigureSunCalc(latitude, longitude float64) bool
+}
+
+// reconfigureDatastoreSunCalc points the datastore's sun calculator at the
+// currently configured station coordinates.
+//
+// The datastore builds its SunCalc once at startup, so without this a location
+// edit made in the UI would leave time-of-day classification and the Search
+// page's time-of-day filter answering from the old observer until the process
+// restarted. Coordinate changes already route through rebuild_range_filter (see
+// coordinatesChanged in internal/api/v2/settings.go), so this rides that signal;
+// ReconfigureSunCalc is a no-op when the coordinates have not actually changed,
+// which is the common case for the signal's other triggers.
+func (cm *ControlMonitor) reconfigureDatastoreSunCalc() {
+	if cm.proc == nil || cm.proc.Ds == nil {
+		return
+	}
+	ds, ok := cm.proc.Ds.(sunCalcReconfigurable)
+	if !ok {
+		return
+	}
+	settings := conf.GetSettings()
+	if settings == nil {
+		return
+	}
+	if !ds.ReconfigureSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude) {
+		// Unchanged coordinates: the common case, since this signal also fires for
+		// species lists and range-filter settings. Stay quiet.
+		return
+	}
+	// Coordinates are PII, so the change is logged without the values themselves.
+	GetLogger().Info("Station location changed, datastore sun calculator rebuilt")
+}
+
 // handleRebuildRangeFilter rebuilds the range filter
 func (cm *ControlMonitor) handleRebuildRangeFilter() {
 	// Guard the orchestrator dereference for consistency with NewControlMonitor,
@@ -367,6 +408,10 @@ func (cm *ControlMonitor) handleRebuildRangeFilter() {
 		cm.notifySuccess("Range filter rebuilt successfully")
 		emitHotReload("range_filter")
 	}
+
+	// Station coordinates share this signal with the range filter, so reconcile
+	// the datastore's sun calculator here too.
+	cm.reconfigureDatastoreSunCalc()
 
 	// Perform log deduplicator cleanup when range filter is rebuilt
 	// This coupling is for practicality - we wanted to avoid creating new goroutines

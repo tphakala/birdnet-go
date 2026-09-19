@@ -95,7 +95,12 @@ describe('Species (analytics page) — sortable column headers', () => {
   const originalFetch = globalThis.fetch;
 
   // Column order in SORTABLE_COLUMNS: species(0), count(1), avgConfidence(2), …
-  const COUNT_COLUMN_INDEX = 1;
+  // `th button` only exists on sortable headers, so it still lines up with
+  // SORTABLE_COLUMNS. The non-sortable "Links" <th> (external reference-site
+  // icons) sits right after the Species header in the full `th` list, shifting
+  // every later plain-`th` index by one.
+  const COUNT_BUTTON_INDEX = 1;
+  const COUNT_TH_INDEX = 2;
   // The grid/list view toggle renders two `.join` buttons; index 1 is the list/table view.
   const TABLE_VIEW_TOGGLE_INDEX = 1;
   // localStorage persists the sort order JSON-encoded.
@@ -166,7 +171,9 @@ describe('Species (analytics page) — sortable column headers', () => {
   }
 
   function rowNames(container: HTMLElement): string[] {
-    return Array.from(container.querySelectorAll('table tbody tr td .font-bold')).map(el =>
+    // Scoped to .sp-species-name (not the more generic .font-bold) so the bold
+    // "W" Wikipedia-link badge in the row's separate links cell isn't picked up too.
+    return Array.from(container.querySelectorAll('table tbody tr td .sp-species-name')).map(el =>
       el.textContent.trim()
     );
   }
@@ -176,31 +183,31 @@ describe('Species (analytics page) — sortable column headers', () => {
 
     expect(rowNames(container)).toEqual(['Blue Jay', 'Zebra Finch', 'American Robin']);
     expect(
-      container.querySelectorAll('table thead th')[COUNT_COLUMN_INDEX].getAttribute('aria-sort')
+      container.querySelectorAll('table thead th')[COUNT_TH_INDEX].getAttribute('aria-sort')
     ).toBe('descending');
   });
 
   it('toggles detection count to ascending on first header click and back on second', async () => {
     const { container } = await renderListView();
-    const countButton = container.querySelectorAll('table thead th button')[COUNT_COLUMN_INDEX];
+    const countButton = container.querySelectorAll('table thead th button')[COUNT_BUTTON_INDEX];
 
     await fireEvent.click(countButton);
     expect(rowNames(container)).toEqual(['American Robin', 'Zebra Finch', 'Blue Jay']);
     expect(
-      container.querySelectorAll('table thead th')[COUNT_COLUMN_INDEX].getAttribute('aria-sort')
+      container.querySelectorAll('table thead th')[COUNT_TH_INDEX].getAttribute('aria-sort')
     ).toBe('ascending');
 
     await fireEvent.click(countButton);
     expect(rowNames(container)).toEqual(['Blue Jay', 'Zebra Finch', 'American Robin']);
     expect(
-      container.querySelectorAll('table thead th')[COUNT_COLUMN_INDEX].getAttribute('aria-sort')
+      container.querySelectorAll('table thead th')[COUNT_TH_INDEX].getAttribute('aria-sort')
     ).toBe('descending');
   });
 
   it('persists the chosen sort order to localStorage', async () => {
     const { container } = await renderListView();
 
-    await fireEvent.click(container.querySelectorAll('table thead th button')[COUNT_COLUMN_INDEX]);
+    await fireEvent.click(container.querySelectorAll('table thead th button')[COUNT_BUTTON_INDEX]);
     expect(window.localStorage.getItem(SORT_STORAGE_KEY)).toBe(COUNT_ASC_STORED);
   });
 
@@ -211,7 +218,7 @@ describe('Species (analytics page) — sortable column headers', () => {
 
     expect(rowNames(container)).toEqual(['American Robin', 'Zebra Finch', 'Blue Jay']);
     expect(
-      container.querySelectorAll('table thead th')[COUNT_COLUMN_INDEX].getAttribute('aria-sort')
+      container.querySelectorAll('table thead th')[COUNT_TH_INDEX].getAttribute('aria-sort')
     ).toBe('ascending');
   });
 });

@@ -165,86 +165,88 @@
     {#if children}
       {@render children(weather)}
     {:else}
-      <div
-        class={cn(
-          'grid gap-2 text-sm',
-          compact ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2',
-          gridClassName
-        )}
-        aria-live="polite"
-      >
-        <!-- Temperature -->
-        <div class="flex items-center">
-          <Thermometer class="size-5 mr-2" />
-          <div>
-            <div class="text-[var(--color-base-content)]/70">
-              {t('detections.weather.labels.temperature')}
-            </div>
-            <div class="font-medium">{formatTemperature(weather.hourly?.temperature, units)}</div>
-          </div>
-        </div>
-
-        <!-- Weather condition -->
-        <div class="flex items-center">
-          <Sun class="size-5 mr-2" />
-          <div>
-            <div class="text-[var(--color-base-content)]/70">
-              {t('detections.weather.labels.weather')}
-            </div>
-            <div class="font-medium">{weather.hourly?.weatherMain || 'N/A'}</div>
-          </div>
-        </div>
-
-        <!-- Wind speed -->
-        <div class="flex items-center">
-          <Wind class="size-5 mr-2" />
-          <div>
-            <div class="text-[var(--color-base-content)]/70">
-              {t('detections.weather.labels.wind')}
-            </div>
-            <div class="font-medium">{formatWindSpeed(weather.hourly?.windSpeed, units)}</div>
-          </div>
-        </div>
-
-        <!-- Humidity -->
-        <div class="flex items-center">
-          <Droplets class="size-5 mr-2" />
-          <div>
-            <div class="text-[var(--color-base-content)]/70">
-              {t('detections.weather.labels.humidity')}
-            </div>
-            <div class="font-medium">{formatPercentage(weather.hourly?.humidity)}</div>
-          </div>
-        </div>
-
-        {#if !compact && weather.hourly?.pressure !== undefined}
-          <!-- Pressure (non-compact mode) -->
+      <div class="weather-info-grid-container">
+        <div
+          class={cn(
+            'weather-info-grid grid gap-2 text-sm',
+            compact ? 'compact' : '',
+            gridClassName
+          )}
+          aria-live="polite"
+        >
+          <!-- Temperature -->
           <div class="flex items-center">
-            <Gauge class="size-5 mr-2" />
+            <Thermometer class="size-5 mr-2 shrink-0" />
             <div>
               <div class="text-[var(--color-base-content)]/70">
-                {t('detections.weather.labels.pressure')}
+                {t('detections.weather.labels.temperature')}
               </div>
-              <div class="font-medium">
-                {weather.hourly.pressure}
-                {t('detections.weather.units.pressure')}
-              </div>
+              <div class="font-medium">{formatTemperature(weather.hourly?.temperature, units)}</div>
             </div>
           </div>
-        {/if}
 
-        {#if !compact && weather.hourly?.clouds !== undefined}
-          <!-- Cloud cover (non-compact mode) -->
+          <!-- Weather condition -->
           <div class="flex items-center">
-            <Cloud class="size-5 mr-2" />
+            <Sun class="size-5 mr-2 shrink-0" />
             <div>
               <div class="text-[var(--color-base-content)]/70">
-                {t('detections.weather.labels.cloudCover')}
+                {t('detections.weather.labels.weather')}
               </div>
-              <div class="font-medium">{formatPercentage(weather.hourly.clouds)}</div>
+              <div class="font-medium">{weather.hourly?.weatherMain || 'N/A'}</div>
             </div>
           </div>
-        {/if}
+
+          <!-- Wind speed -->
+          <div class="flex items-center">
+            <Wind class="size-5 mr-2 shrink-0" />
+            <div>
+              <div class="text-[var(--color-base-content)]/70">
+                {t('detections.weather.labels.wind')}
+              </div>
+              <div class="font-medium">{formatWindSpeed(weather.hourly?.windSpeed, units)}</div>
+            </div>
+          </div>
+
+          <!-- Humidity -->
+          <div class="flex items-center">
+            <Droplets class="size-5 mr-2 shrink-0" />
+            <div>
+              <div class="text-[var(--color-base-content)]/70">
+                {t('detections.weather.labels.humidity')}
+              </div>
+              <div class="font-medium">{formatPercentage(weather.hourly?.humidity)}</div>
+            </div>
+          </div>
+
+          {#if !compact && weather.hourly?.pressure !== undefined}
+            <!-- Pressure (non-compact mode) -->
+            <div class="flex items-center">
+              <Gauge class="size-5 mr-2 shrink-0" />
+              <div>
+                <div class="text-[var(--color-base-content)]/70">
+                  {t('detections.weather.labels.pressure')}
+                </div>
+                <div class="font-medium">
+                  {weather.hourly.pressure}
+                  {t('detections.weather.units.pressure')}
+                </div>
+              </div>
+            </div>
+          {/if}
+
+          {#if !compact && weather.hourly?.clouds !== undefined}
+            <!-- Cloud cover (non-compact mode) -->
+            <div class="flex items-center">
+              <Cloud class="size-5 mr-2 shrink-0" />
+              <div>
+                <div class="text-[var(--color-base-content)]/70">
+                  {t('detections.weather.labels.cloudCover')}
+                </div>
+                <div class="font-medium">{formatPercentage(weather.hourly.clouds)}</div>
+              </div>
+            </div>
+          {/if}
+        </div>
       </div>
     {/if}
   {:else}
@@ -254,3 +256,35 @@
     </div>
   {/if}
 </div>
+
+<style>
+  /* The metric grid below sizes itself off the actual width it is given
+     (e.g. a narrow sidebar column), not the viewport - a plain sm:/md:
+     breakpoint would stay at 2 columns even when the parent grid track is
+     too narrow to fit an icon + label, squeezing icons down to nothing.
+     A container query lets the grid drop to a single column whenever its
+     own box is tight, regardless of screen size. */
+  .weather-info-grid-container {
+    container-type: inline-size;
+  }
+
+  .weather-info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  @container (min-width: 210px) {
+    .weather-info-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .weather-info-grid.compact {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @container (min-width: 380px) {
+    .weather-info-grid.compact {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+</style>

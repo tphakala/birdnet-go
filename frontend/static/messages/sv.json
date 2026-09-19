@@ -591,6 +591,8 @@
       "collapseDetails": "Fäll ihop detaljer för {species}",
       "playAudio": "Spela upp ljud för {species}",
       "viewDetails": "Visa detaljer för {species}",
+      "detectionDetail": "Detekteringsdetaljer",
+      "detectionDetailFor": "Detekteringsdetaljer för {species}",
       "unknownSpecies": "Okänd art",
       "clickToCollapse": "Klicka för att fälla ihop"
     },
@@ -740,7 +742,8 @@
         "ignoreSpecies": "Ignorera art",
         "lockDetection": "Lås detektering",
         "unlockDetection": "Lås upp detektering",
-        "deleteDetection": "Ta bort detektering"
+        "deleteDetection": "Ta bort detektering",
+        "compareSounds": "Referensljud"
       },
       "noDetections": "Inga senaste detekteringar",
       "errors": {
@@ -839,6 +842,7 @@
       "hourly": "Timresultat för {hour}:00 den {date}",
       "hourlyRange": "Timresultat från {startHour}:00 till {endHour}:00 den {date}",
       "species": "Resultat för {species} den {date}",
+      "speciesAll": "Resultat för {species}",
       "search": "Sökresultat för \"{query}\"",
       "allDetections": "Alla detekteringar för {date}"
     },
@@ -847,6 +851,9 @@
       "observation": "Observation",
       "aria": {
         "downloadAudioClip": "Ladda ner ljudklipp för {name}-detektion",
+        "compareSounds": "Lyssna på identifieringsinspelningar för {name} på All About Birds (öppnas i en ny flik)",
+        "viewOnAllAboutBirds": "Visa {name} på All About Birds (öppnas i en ny flik)",
+        "viewOnWikipedia": "Visa {name} på Wikipedia (öppnas i en ny flik)",
         "audioRecordingFor": "Ljudinspelning och spektrogram för {name}",
         "scientificName": "Vetenskapligt namn",
         "classificationBadges": "Märken för artklassificering",
@@ -993,7 +1000,10 @@
     },
     "media": {
       "title": "Inspelning och spektrogram",
-      "clipHint": "Klicka och dra på spektrogrammet för att välja ett intervall för klippexport"
+      "clipHint": "Klicka och dra på spektrogrammet för att välja ett intervall för klippexport",
+      "compareSounds": "Referensljud",
+      "viewOnAllAboutBirds": "All About Birds",
+      "viewOnWikipedia": "Wikipedia"
     },
     "tabs": {
       "overview": "Översikt",
@@ -2034,9 +2044,13 @@
       "speciesList": "Artlista",
       "switchToGrid": "Byt till rutnätsvy",
       "switchToList": "Byt till listvy",
+      "openAllAboutBirds": "Visa denna art på All About Birds",
+      "openWikipedia": "Visa denna art på Wikipedia",
+      "viewDetections": "Visa alla observationer av {species}",
       "noSpeciesFound": "Inga arter hittades som matchar dina filter.",
       "headers": {
         "species": "Art",
+        "links": "Länkar",
         "detections": "Detektioner",
         "avgConfidence": "Snittkonfidens",
         "maxConfidence": "Maxkonfidens",

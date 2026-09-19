@@ -21,13 +21,19 @@
   import VerificationBadges from '$lib/desktop/components/ui/VerificationBadges.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
-  import { t } from '$lib/i18n';
+  import { t, getLocale } from '$lib/i18n';
   import type { Detection, ImageAttribution } from '$lib/types/detection.types';
   import { hasReviewPermission, isAuthenticated } from '$lib/utils/auth';
   import { formatLocalDateTime } from '$lib/utils/date';
   import { buildAppUrl, getCurrentPathWithQuery } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import {
+    getAllAboutBirdsSoundsUrl,
+    getAllAboutBirdsUrl,
+    getWikipediaUrl,
+    hasSpeciesReferenceName,
+  } from '$lib/utils/speciesLinks';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
   import {
     Download,
@@ -39,6 +45,7 @@
     Moon,
     Sunrise,
     Sunset,
+    ExternalLink,
   } from '@lucide/svelte';
 
   // Interface definitions for API responses
@@ -572,6 +579,34 @@
           <ConfidenceCircle confidence={det.confidence} size="xl" />
         </div>
       </div>
+
+      <!-- Reference links: same pair offered on expanded detection rows. Both are
+           addressed by common name, so they are omitted when the detection has
+           none rather than linking to a guide page that does not exist. -->
+      {#if hasSpeciesReferenceName(det.commonName)}
+        <div class="species-reference-links">
+          <a
+            href={getAllAboutBirdsUrl(det.commonName)}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="media-compare-link"
+            aria-label={t('detections.detail.aria.viewOnAllAboutBirds', { name: displayName })}
+          >
+            <ExternalLink class="w-3.5 h-3.5" />
+            <span>{t('detections.media.viewOnAllAboutBirds')}</span>
+          </a>
+          <a
+            href={getWikipediaUrl(displayName, getLocale(), det.commonName)}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="media-compare-link"
+            aria-label={t('detections.detail.aria.viewOnWikipedia', { name: displayName })}
+          >
+            <span class="species-reference-wikipedia-icon">W</span>
+            <span>{t('detections.media.viewOnWikipedia')}</span>
+          </a>
+        </div>
+      {/if}
     </div>
 
     <!-- Taxonomy Card -->
@@ -896,9 +931,25 @@
     {#if detection.clipName}
       <section class="surface-card" aria-labelledby="media-heading">
         <div class="p-5 md:p-6">
-          <h2 id="media-heading" class="section-heading !mb-0">
-            {t('detections.media.title')}
-          </h2>
+          <div class="media-heading-row">
+            <h2 id="media-heading" class="section-heading !mb-0">
+              {t('detections.media.title')}
+            </h2>
+            {#if hasSpeciesReferenceName(detection.commonName)}
+              <a
+                href={getAllAboutBirdsSoundsUrl(detection.commonName)}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="media-compare-link"
+                aria-label={t('detections.detail.aria.compareSounds', {
+                  name: localizeSpeciesName(detection.scientificName, detection.commonName),
+                })}
+              >
+                <ExternalLink class="w-3.5 h-3.5" />
+                <span>{t('detections.media.compareSounds')}</span>
+              </a>
+            {/if}
+          </div>
           {#if clipExtractionEnabled}
             <p class="text-sm text-[var(--color-base-content)]/60 mt-0.5 mb-4">
               {t('detections.media.clipHint')}
@@ -1191,6 +1242,58 @@
 
   .meta-download:hover {
     opacity: 1;
+  }
+
+  /* ----- Media section heading row (title + compare-sounds link) ----- */
+  .media-heading-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .media-compare-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--color-base-content);
+    opacity: 0.6;
+    transition: opacity 0.15s ease;
+    flex-shrink: 0;
+  }
+
+  .media-compare-link:hover {
+    opacity: 1;
+  }
+
+  /* Reference links sit under the identity row, aligned with the thumbnail */
+  .species-reference-links {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-100);
+  }
+
+  .species-reference-links .media-compare-link {
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .species-reference-links .media-compare-link:hover {
+    text-decoration: underline;
+  }
+
+  .species-reference-wikipedia-icon {
+    font-family: serif;
+    font-weight: 700;
+    font-size: 0.75rem;
+    line-height: 1;
   }
 
   /* Species thumbnail - 4:3 to match avicommons 320×240 source images */

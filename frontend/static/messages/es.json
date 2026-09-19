@@ -591,6 +591,8 @@
       "collapseDetails": "Contraer detalles para {species}",
       "playAudio": "Reproducir audio para {species}",
       "viewDetails": "Ver detalles para {species}",
+      "detectionDetail": "Detalle de la detección",
+      "detectionDetailFor": "Detalle de la detección de {species}",
       "unknownSpecies": "Especie desconocida",
       "clickToCollapse": "Clic para contraer"
     },
@@ -740,7 +742,8 @@
         "ignoreSpecies": "Ignorar especie",
         "lockDetection": "Bloquear detección",
         "unlockDetection": "Desbloquear detección",
-        "deleteDetection": "Eliminar detección"
+        "deleteDetection": "Eliminar detección",
+        "compareSounds": "Sonidos de referencia"
       },
       "noDetections": "No hay detecciones recientes",
       "errors": {
@@ -839,6 +842,7 @@
       "hourly": "Resultados por hora para las {hour}:00 del {date}",
       "hourlyRange": "Resultados por hora de {startHour}:00 a {endHour}:00 del {date}",
       "species": "Resultados para {species} el {date}",
+      "speciesAll": "Resultados para {species}",
       "search": "Resultados de búsqueda para \"{query}\"",
       "allDetections": "Todas las detecciones del {date}"
     },
@@ -847,6 +851,9 @@
       "observation": "Observación",
       "aria": {
         "downloadAudioClip": "Descargar clip de audio para la detección {name}",
+        "compareSounds": "Escuchar grabaciones de identificación de {name} en All About Birds (se abre en una pestaña nueva)",
+        "viewOnAllAboutBirds": "Ver {name} en All About Birds (se abre en una pestaña nueva)",
+        "viewOnWikipedia": "Ver {name} en Wikipedia (se abre en una pestaña nueva)",
         "audioRecordingFor": "Grabación de audio y espectrograma para {name}",
         "scientificName": "Nombre científico",
         "classificationBadges": "Insignias de clasificación de especie",
@@ -993,7 +1000,10 @@
     },
     "media": {
       "title": "Grabación y espectrograma",
-      "clipHint": "Haz clic y arrastra en el espectrograma para seleccionar un rango para exportar"
+      "clipHint": "Haz clic y arrastra en el espectrograma para seleccionar un rango para exportar",
+      "compareSounds": "Sonidos de referencia",
+      "viewOnAllAboutBirds": "All About Birds",
+      "viewOnWikipedia": "Wikipedia"
     },
     "tabs": {
       "overview": "Resumen",
@@ -2034,9 +2044,13 @@
       "speciesList": "Lista de especies",
       "switchToGrid": "Cambiar a vista de cuadrícula",
       "switchToList": "Cambiar a vista de lista",
+      "openAllAboutBirds": "Ver esta especie en All About Birds",
+      "openWikipedia": "Ver esta especie en Wikipedia",
+      "viewDetections": "Ver todas las detecciones de {species}",
       "noSpeciesFound": "No se encontraron especies que coincidan con tus filtros.",
       "headers": {
         "species": "Especie",
+        "links": "Enlaces",
         "detections": "Detecciones",
         "avgConfidence": "Confianza prom.",
         "maxConfidence": "Confianza máx.",
